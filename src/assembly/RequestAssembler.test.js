@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { RequestAssembler } from './RequestAssembler.js';
+import namedCity from './named-city.fixture.json';
 
 /** Minimal atlas blueprint slice shaped per ../atlas/CONTRACT.md. */
 function atlasWith( parcel ) {
@@ -101,8 +102,30 @@ describe( 'RequestAssembler', () => {
 
 		// a facade the word does not fit on wears none rather than failing
 		const bare = new RequestAssembler( atlasWith( { ...officeParcel, type: 'hotel' } ), connections )
-			.assemble( 'p7', { signage: false } );
+			.assemble( 'p7', { signage: 'none' } );
 		expect( bare.options.signage ).toBe( undefined );
+
+	} );
+
+	it( 'signs a named venue with its name, lettered for the marquee', () => {
+
+		const sign = ( atlas, parcelId, options ) => new RequestAssembler( atlas, connections ).assemble( parcelId, options ).options.signage;
+		const [ wharf, coffee ] = namedCity.parcels;
+
+		expect( sign( namedCity, 'p1' ) ).toEqual( { mode: 'marquee', text: 'THE SALT WHARF' } );
+
+		// the accent folds onto its letter, the quotes outside the atlas read as
+		// its space, and whole words stay while they fit the 40 character limit
+		expect( sign( namedCity, 'p2' ) ).toEqual( { mode: 'marquee', text: 'GRANDMOTHER LUDMILA\'S CAFE HUMMINGBIRD' } );
+
+		// the venue word when the name is empty or not even its first word fits
+		const unfit = { ...namedCity, parcels: [ { ...wharf, name: '' }, { ...coffee, name: 'X'.repeat( 41 ) } ] };
+		expect( sign( unfit, 'p1' ) ).toEqual( { mode: 'marquee', text: 'DINER' } );
+		expect( sign( unfit, 'p2' ) ).toEqual( { mode: 'marquee', text: 'COFFEE' } );
+
+		// the pipeline steps down to the word, then to no sign, when the facade is too small
+		expect( sign( namedCity, 'p1', { signage: 'venue' } ) ).toEqual( { mode: 'marquee', text: 'DINER' } );
+		expect( sign( namedCity, 'p1', { signage: 'none' } ) ).toBe( undefined );
 
 	} );
 

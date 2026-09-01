@@ -47,3 +47,12 @@ export function validateInteriorRequest( request ) {
 	return validate( request ) ? [] : validate.errors;
 
 }
+
+/** The longest marquee text exterior's request schema accepts, in characters. */
+export function marqueeTextLimit() {
+
+	const { oneOf } = instance().getSchema( 'urbe/exterior/building-request' ).schema.properties.options.properties.signage;
+
+	return oneOf.find( ( shape ) => shape.properties?.mode?.const === 'marquee' ).properties.text.maxLength;
+
+}

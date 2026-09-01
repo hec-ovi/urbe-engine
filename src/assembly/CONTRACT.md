@@ -3,7 +3,7 @@
 Purpose: turns the atlas blueprint plus the connections document into per-parcel exterior BuildingRequests, drives exterior to produce each building's GLB and blueprint, and optionally drives interior to fill the shell.
 
 ## In
-- atlas blueprint: `CityBlueprint` per ../../../atlas/CONTRACT.md; every CLI takes `--blueprint <path>` and defaults to the committed sample `../../../atlas/samples/city-urbe.json` (assemble-city requires it explicitly).
+- atlas blueprint: `CityBlueprint` per ../../../atlas/CONTRACT.md; every CLI takes `--blueprint <path>` and defaults to the committed sample `../../../atlas/samples/city-urbe.json` (assemble-city requires it explicitly). A named world per ../../../naming/CONTRACT.md (the same blueprint with `name` on its nameables and `meta.naming`) is taken through the same flag: parcel names become sign text, district names are not read.
 - connections document: `ConnectionsOutput` per ../../../connections/CONTRACT.md, produced in-process by `connectionsRunner.js` calling the library entry `generate(atlas, { seed })` with the atlas seed.
 
 ## Out
@@ -14,27 +14,28 @@ Purpose: turns the atlas blueprint plus the connections document into per-parcel
 - theme: `cyberpunk`
 - apertures: the connections apertures whose buildingId equals the parcel id, verbatim
 - options.glb: `merged` (engine runtime default) or `named`
-- options.signage: a `marquee` reading the venue type word for the parcel types a passer-by reads off the street (hotel HOTEL, coffee_shop COFFEE, commerce MARKET, clinic CLINIC, police POLICE, restaurant DINER); every other type gets none, because a blank sign is worse than no sign. `assemble(parcelId, { signage: false })` drops it, which is what a facade too small for the word gets.
+- options.signage: a `marquee` for the parcel types a passer-by reads off the street (hotel, coffee_shop, commerce, clinic, police, restaurant); every other type gets none, because a blank sign is worse than no sign. The text is the parcel's `name` lettered for exterior's atlas (`signText.js`): diacritics folded onto their base letter, uppercased, any character still outside the charset in ../../../exterior/CONTRACT.md read as the space it reserves (runs collapsed), then whole words in order while they fit the marquee limit exterior's request schema sets (40 characters). A parcel with no name, an empty one, or one whose first word alone passes the limit reads its venue word instead (hotel HOTEL, coffee_shop COFFEE, commerce MARKET, clinic CLINIC, police POLICE, restaurant DINER). `assemble(parcelId, { signage })` picks the rung: `name` (default), `venue` (the word), `none`.
 
 `assembleInterior(parcelId, { blueprint, shellGlb })` returns an `InteriorRequest` per ../../../interior/schemas/request.schema.json: same derived seed, building id/type/tier verbatim, the exterior blueprint and shell path, materialTheme `cyberpunk`; assignments omitted so interior derives floor kinds from the blueprint slots. `interiorRunner.js` calls interior's library entries `generateInterior(request)` and `coreFeasibility(blueprint)` as black boxes; the latter gates generation (footprint-shape driven, per ../../../interior/schemas/core-feasibility.json; modes standard, compact, walkup, none). Standard and compact flow straight through. When the gate reports walkup mode and the chosen floors exceed its cap, the CLI re-picks floors with `assemble(parcelId, { floorCap })` (the cap wins over the atlas envelope minimum, aperture-driven minimums stay hard) and regenerates the shell before running interior. Mode none fails as E_CORE_INFEASIBLE.
 
-The per-parcel chain lives in `BuildingPipeline.js` (assemble + validate, exterior CLI, core gate with walkup re-pick, interior files) and is shared by both CLIs. A facade the venue word does not fit on throws `E_SIGNAGE_TEXT_TOO_LONG`; that building is regenerated without a sign rather than failing the parcel. Interior accepts merged shells since its 0.5, so `merged` is the default everywhere.
+The per-parcel chain lives in `BuildingPipeline.js` (assemble + validate, exterior CLI, core gate with walkup re-pick, interior files) and is shared by both CLIs. A facade the sign text does not fit on throws `E_SIGNAGE_TEXT_TOO_LONG`; the building steps down one rung (name, venue word, no sign) and is regenerated rather than failing the parcel. Interior accepts merged shells since its 0.5, so `merged` is the default everywhere.
 
 CLI: `npm run assemble -- --parcel <id> --out <dir> [--blueprint <path>] [--glb merged|named] [--interior]` validates each request against its schema (ajv, draft 2020-12), writes `<id>.request.json` to `<dir>`, then runs exterior's CLI (`npm run generate` in ../../../exterior) so `<dir>` ends with request, GLB and blueprint. With `--interior` it also writes `<dir>/interior/`: `building.glb` (the whole furnished building, for the building viewer), `npc.json`, and per floor `floors/<tag>.json` plus `floors/<tag>.glb` (tag: zero-padded floor index, basements negative, `-001`), the floor's own geometry as interior's `floorGlbs` option returns it, which is what the game streams. Prints each output file with its size.
 
-City batch: `npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--parcel <id,id,...>]` runs connections once, then the pipeline (merged runtime GLB + blueprint + interior) for every parcel, N in parallel (default 4). Failures are recorded, never fatal; `<dir>/qa-report.json` carries per-parcel pass/fail with verbatim errors, timing and disk totals. Exit 0 only when every parcel passed.
+City batch: `npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--parcel <id,id,...>]` runs connections once, then the pipeline (merged runtime GLB + blueprint + interior) for every parcel, N in parallel (default 4). Failures are recorded, never fatal; `<dir>/qa-report.json` carries per-parcel pass/fail with verbatim errors, the sign text each building wears (null when none), timing and disk totals. Exit 0 only when every parcel passed.
 
-The out dir ends holding exactly the blueprint it was built from (`OutDir.js`). Folders for parcels the blueprint no longer has are removed before the run, and only folders assembly itself wrote (one carrying its own request or blueprint) are ever touched. `<dir>/manifest.json` is written last:
+The out dir ends holding exactly the blueprint it was built from (`OutDir.js`). Folders for parcels the blueprint no longer has are removed before the run, and only folders assembly itself wrote (one carrying its own request or blueprint) are ever touched. `<dir>/blueprint.json` is the blueprint the batch was built from (named or not), so the folder is the whole world the game loads; `<dir>/manifest.json` is written last:
 
 ```
 {
   "seed": "urbe-tiny", "atlasVersion": "0.2.4",
+  "named": true, "namingTheme": "rain-soaked port city",
   "parcels": [ "p0", "p1", ... ],
   "floors": { "p0": [ "-001", "000", "001" ], "p1": [ ... ], ... }
 }
 ```
 
-`parcels` is every id whose build is complete on disk (shell blueprint, `interior/building.glb`, `interior/npc.json`, and a GLB beside every floor document), so a parcel that failed halfway is not in it; `floors` lists each one's floor tags, lowest first. This is the only list of buildings and floors the game loads: a directory listing would pick up a folder from an older blueprint and stand its building inside the one that replaced it, and the seed and version let the game refuse an out dir assembled from a different blueprint outright.
+`named` says whether the blueprint's parcels carry names, and `namingTheme` is `meta.naming.theme` when the blueprint records one, else null. `parcels` is every id whose build is complete on disk (shell blueprint, `interior/building.glb`, `interior/npc.json`, and a GLB beside every floor document), so a parcel that failed halfway is not in it; `floors` lists each one's floor tags, lowest first. This is the only list of buildings and floors the game loads: a directory listing would pick up a folder from an older blueprint and stand its building inside the one that replaced it, and the seed and version let the game refuse an out dir assembled from a different blueprint outright.
 
 Simulation: `simulationRunner.js` calls simulation's `createSimulation(input)` as a black box. `npm run simulate -- --time <minutes> [--district <id>] [--blueprint <path>] [--interiors <dir>]` boots it over the blueprint, connections' networks and the npc.json of every assembled building under the interiors dir (default `out/`) (synthetic fallback elsewhere, default npcTypes and name pool), prints population stats, the scoped crowd slice, three instantiated lives (a sampled crowd agent's handle, coffee vendor at midday, a reservation), latency measurements and a conservation check; usage error exit 2, no live crowd agent exit 1.
 
@@ -59,4 +60,5 @@ Simulation: `simulationRunner.js` calls simulation's `createSimulation(input)` a
 - ../../../connections/CONTRACT.md
 - ../../../exterior/CONTRACT.md
 - ../../../interior/CONTRACT.md
+- ../../../naming/CONTRACT.md
 - ../../../simulation/CONTRACT.md

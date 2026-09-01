@@ -64,27 +64,34 @@ export class BuildingPipeline {
 	}
 
 	/**
-	 * The shell, with the parcel's venue sign on it. A facade too small for the
-	 * word throws E_SIGNAGE_TEXT_TOO_LONG; that building wears no sign rather
-	 * than failing the parcel.
+	 * The shell with its sign: the parcel's name, else its venue word, else
+	 * none. A facade too small for the text throws E_SIGNAGE_TEXT_TOO_LONG and
+	 * the building steps down one rung rather than failing the parcel.
 	 */
 	async #shell( parcelId, outDir, options ) {
 
-		const request = this.#assembleValidated( parcelId, options );
+		let previous = null;
 
-		try {
+		for ( const signage of [ 'name', 'venue', 'none' ] ) {
 
-			return { request, blueprint: await this.#generateExterior( request, outDir ) };
+			const request = this.#assembleValidated( parcelId, { ...options, signage } );
+			const text = request.options.signage?.text ?? null;
 
-		} catch ( error ) {
+			if ( text === previous ) continue;
 
-			if ( ! request.options.signage || ! error.message.includes( 'E_SIGNAGE_TEXT_TOO_LONG' ) ) throw error;
+			previous = text;
+
+			try {
+
+				return { request, blueprint: await this.#generateExterior( request, outDir ) };
+
+			} catch ( error ) {
+
+				if ( text === null || ! error.message.includes( 'E_SIGNAGE_TEXT_TOO_LONG' ) ) throw error;
+
+			}
 
 		}
-
-		const bare = this.#assembleValidated( parcelId, { ...options, signage: false } );
-
-		return { request: bare, blueprint: await this.#generateExterior( bare, outDir ) };
 
 	}
 

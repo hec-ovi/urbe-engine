@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "seed": "urbe-named",
+    "version": "0.2.4",
+    "naming": { "theme": "rain-soaked port city", "model": "hand", "namedAt": "2026-09-01T00:00:00Z" }
+  },
+  "parcels": [
+    {
+      "id": "p1",
+      "type": "restaurant",
+      "tier": "mid",
+      "name": "The Salt Wharf",
+      "footprint": [ [ 0, 0 ], [ 20, 0 ], [ 20, 14 ], [ 0, 14 ] ],
+      "access": { "edgeId": "e1", "point": [ 10, -2 ] },
+      "envelope": { "minFloors": 1, "maxFloors": 3, "floorHeight": 4, "maxHeight": 12 }
+    },
+    {
+      "id": "p2",
+      "type": "coffee_shop",
+      "tier": "poor",
+      "name": "Grandmother Ludmila's Café “Hummingbird” and Contraband Sweets",
+      "footprint": [ [ 30, 0 ], [ 50, 0 ], [ 50, 14 ], [ 30, 14 ] ],
+      "access": { "edgeId": "e2", "point": [ 40, -2 ] },
+      "envelope": { "minFloors": 1, "maxFloors": 3, "floorHeight": 4, "maxHeight": 12 }
+    }
+  ]
+}

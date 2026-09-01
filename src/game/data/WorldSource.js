@@ -3,6 +3,7 @@ import { runConnections } from '../../assembly/connectionsRunner.js';
 /** The out dir's own index, written by assemble-city (../assembly/CONTRACT.md). */
 const MANIFEST_FILE = 'manifest.json';
 const NPC_TYPES_FILE = 'npc-types.json';
+const BLUEPRINT_FILE = 'blueprint.json';
 
 /**
  * Everything the game reads off disk, and nothing else: the atlas blueprint,
@@ -40,7 +41,9 @@ export class WorldSource {
 	/** @returns { atlas, connections, buildings, unbuilt, npcTypes } */
 	async load() {
 
-		const atlas = await this.#json( this.blueprintUrl );
+		// The world folder carries the blueprint it was assembled from (named or
+		// not); the atlas sample is the fallback for a folder built before that.
+		const atlas = await this.#json( `${this.outBase}/${BLUEPRINT_FILE}` ).catch( () => this.#json( this.blueprintUrl ) );
 		const manifest = await this.#manifest( atlas );
 		const connections = await runConnections( atlas, { seed: atlas.meta.seed } );
 

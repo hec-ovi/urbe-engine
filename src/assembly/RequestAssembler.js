@@ -1,11 +1,13 @@
 import { pickInt } from './hash.js';
 import { loadFloorConstants, constantsForType, feasibleFloorRange } from './floorFeasibility.js';
+import { signText } from './signText.js';
+import { marqueeTextLimit } from './validators.js';
 
 const THEME = 'cyberpunk';
 
-// A sign says what the place is until the naming pass gives it a name. Only
-// parcel types a passer-by reads off the street are listed; every other type
-// gets no sign at all, because a blank one is worse than none.
+// A sign reads the parcel's name when the naming pass gave it one, else what
+// the place is. Only parcel types a passer-by reads off the street are listed;
+// every other type gets no sign at all, because a blank one is worse than none.
 const VENUE_SIGN = {
 	hotel: 'HOTEL',
 	coffee_shop: 'COFFEE',
@@ -41,6 +43,7 @@ export class RequestAssembler {
 
 		this.worldSeed = atlas.meta.seed;
 		this.floorConstants = floorConstants;
+		this.marqueeLimit = marqueeTextLimit();
 		this.parcels = new Map( atlas.parcels.map( ( p ) => [ p.id, p ] ) );
 		this.aperturesByBuilding = new Map();
 
@@ -60,12 +63,12 @@ export class RequestAssembler {
 	 * @param options.floorCap optional above-ground floor cap (interior walkup
 	 * mode); the cap wins over the atlas envelope minimum, aperture-driven
 	 * minimums stay hard
-	 * @param options.signage false drops the venue sign, for a facade that
-	 * cannot fit the letters
+	 * @param options.signage what the marquee reads: 'name' (default: the
+	 * parcel's name, else its venue word), 'venue' (the word), 'none'
 	 * @returns BuildingRequest per ../exterior/schemas/building-request.schema.json
 	 * @throws AssemblyError E_PARCEL_UNKNOWN | E_ENVELOPE_INFEASIBLE
 	 */
-	assemble( parcelId, { glb = 'merged', floorCap = null, signage = true } = {} ) {
+	assemble( parcelId, { glb = 'merged', floorCap = null, signage = 'name' } = {} ) {
 
 		const parcel = this.parcels.get( parcelId );
 
@@ -92,7 +95,7 @@ export class RequestAssembler {
 			options: { glb }
 		};
 
-		const text = signage ? VENUE_SIGN[ parcel.type ] : null;
+		const text = this.#signText( parcel, signage );
 		if ( text ) request.options.signage = { mode: 'marquee', text };
 
 		const basements = this.#chooseBasements( parcel, apertures );
@@ -160,6 +163,21 @@ export class RequestAssembler {
 		}
 
 		return pickInt( `${seed}:floors`, low, high );
+
+	}
+
+	/**
+	 * The marquee text, or null for a parcel type with no sign: the name the
+	 * naming pass gave the parcel, lettered per signText.js, else its venue word.
+	 */
+	#signText( parcel, signage ) {
+
+		const venue = VENUE_SIGN[ parcel.type ];
+
+		if ( ! venue || signage === 'none' ) return null;
+		if ( signage === 'venue' ) return venue;
+
+		return signText( parcel.name, this.marqueeLimit ) ?? venue;
 
 	}
 

@@ -2,6 +2,8 @@ import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync 
 import { join } from 'node:path';
 
 export const MANIFEST_FILE = 'manifest.json';
+/** The blueprint the world was assembled from, so the folder is the whole world. */
+export const BLUEPRINT_FILE = 'blueprint.json';
 
 /** Zero-padded floor file tag; basements keep their minus sign (-001). */
 export function floorTag( index ) {
@@ -106,9 +108,11 @@ export class OutDir {
 	}
 
 	/**
-	 * Writes the manifest: the blueprint this world came from, the parcels
-	 * standing in it and the floor files each one streams from. The game
-	 * refuses an out dir whose blueprint is not the one it is playing.
+	 * Writes the manifest: the blueprint this world came from, whether its
+	 * parcels carry names (and the naming theme when the blueprint records
+	 * one), the parcels standing in it and the floor files each one streams
+	 * from. The game refuses an out dir whose blueprint is not the one it is
+	 * playing.
 	 */
 	writeManifest( atlas, parcelIds ) {
 
@@ -116,11 +120,14 @@ export class OutDir {
 		const manifest = {
 			seed: atlas.meta.seed,
 			atlasVersion: atlas.meta.version,
+			named: atlas.parcels.some( ( parcel ) => Boolean( parcel.name ) ),
+			namingTheme: atlas.meta.naming?.theme ?? null,
 			parcels,
 			floors: Object.fromEntries( parcels.map( ( id ) => [ id, this.floorsOf( id ) ] ) )
 		};
 
 		writeFileSync( join( this.dir, MANIFEST_FILE ), JSON.stringify( manifest, null, 2 ) + '\n' );
+		writeFileSync( join( this.dir, BLUEPRINT_FILE ), JSON.stringify( atlas ) + '\n' );
 
 		return manifest;
 

@@ -2,8 +2,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { OutDir, MANIFEST_FILE } from './OutDir.js';
+import { OutDir, MANIFEST_FILE, BLUEPRINT_FILE } from './OutDir.js';
 import { writeInteriorFiles } from './BuildingPipeline.js';
+import namedCity from './named-city.fixture.json';
 
 /**
  * The out dir has to end up holding exactly the blueprint it was built from.
@@ -81,13 +82,35 @@ describe( 'OutDir', () => {
 		rmSync( join( dir, 'p2', 'interior', 'floors', '000.glb' ) );
 
 		const out = new OutDir( dir );
-		const atlas = { meta: { seed: 'urbe-tiny', version: '0.2.4' } };
+		const atlas = { meta: { seed: 'urbe-tiny', version: '0.2.4' }, parcels: [ parcel( 'p0' ) ] };
 		const manifest = out.writeManifest( atlas, out.built( [ 'p0', 'p1', 'p2', 'p3' ] ) );
 
 		expect( manifest ).toEqual( {
-			seed: 'urbe-tiny', atlasVersion: '0.2.4', parcels: [ 'p0' ], floors: { p0: [ '-001', '000' ] }
+			seed: 'urbe-tiny', atlasVersion: '0.2.4', named: false, namingTheme: null, parcels: [ 'p0' ], floors: { p0: [ '-001', '000' ] }
 		} );
 		expect( existsSync( join( dir, MANIFEST_FILE ) ) ).toBe( true );
+
+	} );
+
+	it( 'copies the blueprint it was built from beside the manifest', () => {
+
+		dir = worldWith( [ 'p0' ] );
+		new OutDir( dir ).writeManifest( namedCity, [ 'p0' ] );
+
+		expect( JSON.parse( readFileSync( join( dir, BLUEPRINT_FILE ), 'utf8' ) ) ).toEqual( namedCity );
+
+	} );
+
+	it( 'records a named world with its naming theme', () => {
+
+		dir = worldWith( [ 'p1', 'p2' ] );
+		const out = new OutDir( dir );
+
+		const manifest = out.writeManifest( namedCity, out.built( [ 'p1', 'p2' ] ) );
+
+		expect( manifest.named ).toBe( true );
+		expect( manifest.namingTheme ).toBe( 'rain-soaked port city' );
+		expect( JSON.parse( readFileSync( join( dir, MANIFEST_FILE ), 'utf8' ) ).named ).toBe( true );
 
 	} );
 

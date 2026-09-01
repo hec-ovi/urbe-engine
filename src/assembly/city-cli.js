@@ -99,11 +99,12 @@ async function worker() {
 				floors: request.building.floors,
 				basements: request.building.basements ?? 0,
 				coreMode,
+				sign: request.options.signage?.text ?? null,
 				ms: Math.round( performance.now() - t0 ),
 				bytes: dirBytes( parcelDir )
 			};
 			results.push( result );
-			console.log( `${id}  ok  ${result.floors}+${result.basements}b ${coreMode}  ${result.ms} ms  ${result.bytes} bytes` );
+			console.log( `${id}  ok  ${result.floors}+${result.basements}b ${coreMode}  ${result.sign ? `"${result.sign}"  ` : ''}${result.ms} ms  ${result.bytes} bytes` );
 
 		} catch ( error ) {
 
@@ -151,6 +152,7 @@ const manifest = out.writeManifest( atlas, out.built( parcelIds ) );
 console.log( `\n${totals.passed}/${totals.parcels} passed, ${totals.failed} failed, ${( totals.wallMs / 1000 ).toFixed( 1 )} s, ${( totals.bytes / 1e6 ).toFixed( 1 )} MB` );
 for ( const r of failed ) console.log( `  ${r.parcelId}  ${r.error}` );
 console.log( `qa report: ${join( outDir, 'qa-report.json' )}` );
-console.log( `manifest: ${join( outDir, MANIFEST_FILE )} (${manifest.parcels.length} buildings, atlas ${manifest.atlasVersion})` );
+const naming = manifest.named ? `, named${manifest.namingTheme ? `: ${manifest.namingTheme}` : ''}` : '';
+console.log( `manifest: ${join( outDir, MANIFEST_FILE )} (${manifest.parcels.length} buildings, atlas ${manifest.atlasVersion}${naming})` );
 
 process.exit( failed.length > 0 ? 1 : 0 );
