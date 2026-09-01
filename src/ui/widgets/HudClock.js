@@ -18,4 +18,13 @@ export class HudClock {
 
 	}
 
+	/** dawn, day, dusk or night, so the clock says what the sky is doing. */
+	setState( state ) {
+
+		if ( this.element.dataset.state === state ) return;
+
+		this.element.dataset.state = state;
+
+	}
+
 }

@@ -16,6 +16,7 @@ import { LaneMarkings } from './city/LaneMarkings.js';
 import { LitWindows } from './city/LitWindows.js';
 import { RoomView } from './city/RoomView.js';
 import { CityLights } from './light/CityLights.js';
+import { NightSwitch } from './light/NightSwitch.js';
 import { LightingSystem } from './light/LightingSystem.js';
 import { RoomLights } from './light/RoomLights.js';
 import { Haze } from './light/Haze.js';
@@ -38,6 +39,7 @@ import { CarModels } from './agents/CarModels.js';
 import { Traffic } from './agents/Traffic.js';
 import { SimBridge } from './sim/SimBridge.js';
 import { GameClock } from './time/GameClock.js';
+import { stopsFor } from './time/DayCycle.js';
 import { Locator } from './world/Locator.js';
 import { Bookmarks } from './world/Bookmarks.js';
 import { mapModel } from './world/MapModel.js';
@@ -154,6 +156,11 @@ export class GameApp {
 
 		this.view.step( 'raising the sky' );
 		this.sky = new NightSky( this.scene ).build( this.clock.hour );
+		// Everything the city lights itself with, switched together by the hour:
+		// taken off the built scene, so a new kind of lit surface joins by being
+		// added to the world rather than by being registered here.
+		this.night = new NightSwitch( this.lights )
+			.addGroup( neon.group ).addGroup( lamps.group ).addGroup( city.group );
 		this.fog = new NightFog( this.scene, { density: NIGHT_FOG_DENSITY, color: SKY_COLOR } );
 		this.probe = new EnvironmentProbe( this.renderer, this.scene, this.tier );
 
@@ -255,7 +262,11 @@ export class GameApp {
 	tick( delta ) {
 
 		this.clock.advance( delta );
-		this.sky.setHour( this.clock.hour );
+
+		const day = this.sky.setHour( this.clock.hour );
+		this.night.set( day.lampsOn );
+		this.exposure.setDaylight( stopsFor( day.state ) );
+		this.view.clock.setState( day.state );
 
 		this.physics.step( delta );
 

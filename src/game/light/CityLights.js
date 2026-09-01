@@ -32,6 +32,7 @@ export class CityLights {
 		this.group.name = 'city-lights';
 		this.lights = [];
 		this.timer = RESHUFFLE_INTERVAL;
+		this.dim = 1;
 
 		for ( const fixture of fixtures ) {
 
@@ -44,6 +45,20 @@ export class CityLights {
 			this.group.add( light );
 
 		}
+
+	}
+
+	/**
+	 * How much of each fixture's published flux is actually being emitted: 1
+	 * after dusk, 0 in full day. The lamps are switched, never re-authored, so
+	 * relative brightness across the city is the same at every hour.
+	 */
+	setDim( dim ) {
+
+		this.dim = dim;
+		this.group.visible = dim > 0;
+
+		for ( let i = 0; i < this.lights.length; i ++ ) this.lights[ i ].power = this.fixtures[ i ].lumens * dim;
 
 	}
 

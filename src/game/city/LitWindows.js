@@ -3,6 +3,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { attribute, vec3 } from 'three/tsl';
 import { Rng } from '../../city/Rng.js';
 import { openingRect } from './Openings.js';
+import { nightLevel } from '../light/NightSwitch.js';
 
 const LIT_SHARE = 0.42;
 const INSET = 0.16;
@@ -117,7 +118,8 @@ function paneMaterial() {
 	const material = new THREE.MeshBasicNodeMaterial( { side: THREE.DoubleSide, fog: true } );
 
 	material.colorNode = vec3( 0 );
-	material.emissiveNode = attribute( 'color', 'vec3' ).mul( PANE_LEVEL );
+	// The panes go out with the rest of the city's own light at sunrise.
+	material.emissiveNode = attribute( 'color', 'vec3' ).mul( PANE_LEVEL ).mul( nightLevel );
 
 	return material;
 

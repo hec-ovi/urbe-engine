@@ -5,6 +5,9 @@ import * as THREE from 'three/webgpu';
  * lights are in real photometric units, so relative brightness is already
  * correct everywhere and these only model the eye: stepping out of a lit room
  * into the street is a drop the player should feel.
+ *
+ * An interior keeps its offset at every hour: a lit room at noon is still
+ * darker than the street outside it, by the same amount.
  */
 const VOLUMES = {
 	exterior: 0,
@@ -37,7 +40,8 @@ export class Exposure {
 		this.renderer = renderer;
 		this.base = base;
 		this.stops = 0;
-		this.target = 0;
+		this.volume = 0;
+		this.daylight = 0;
 
 		renderer.toneMapping = THREE.AgXToneMapping;
 		renderer.toneMappingExposure = base;
@@ -47,16 +51,28 @@ export class Exposure {
 	/** @param volume one of VOLUMES */
 	enter( volume ) {
 
-		this.target = VOLUMES[ volume ] ?? 0;
+		this.volume = VOLUMES[ volume ] ?? 0;
+
+	}
+
+	/**
+	 * @param stops the hour's own offset (time/DayCycle.js). It moves with the
+	 * sun rather than adapting, so it is followed exactly and the eye's own
+	 * adaptation is left to model the doorway.
+	 */
+	setDaylight( stops ) {
+
+		this.daylight = stops;
 
 	}
 
 	update( delta ) {
 
+		const target = this.volume + this.daylight;
 		const step = delta / ADAPT;
-		const gap = this.target - this.stops;
+		const gap = target - this.stops;
 
-		if ( gap !== 0 ) this.stops = Math.abs( gap ) <= step ? this.target : this.stops + Math.sign( gap ) * step;
+		if ( gap !== 0 ) this.stops = Math.abs( gap ) <= step ? target : this.stops + Math.sign( gap ) * step;
 
 		this.renderer.toneMappingExposure = this.base * Math.pow( 2, this.stops );
 
