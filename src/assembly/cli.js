@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { join, resolve } from 'node:path';
 import { RequestAssembler } from './RequestAssembler.js';
 import { runConnections } from './connectionsRunner.js';
-import { runInterior } from './interiorRunner.js';
+import { runInterior, runCoreFeasibility } from './interiorRunner.js';
 import { validateExteriorRequest, validateInteriorRequest } from './validators.js';
 
 const ATLAS_SAMPLE = new URL( '../../../atlas/samples/city-urbe.json', import.meta.url );
@@ -149,6 +149,15 @@ if ( args.interior ) {
 		console.error( 'E_REQUEST_INVALID: request fails interior schema' );
 		printSchemaErrors( interiorErrors );
 		process.exit( 1 );
+
+	}
+
+	const core = await runCoreFeasibility( blueprint );
+
+	if ( ! core.fits ) {
+
+		fail( 'E_CORE_INFEASIBLE',
+			`band ${core.bandLength} m cannot hold core ${core.minCoreLength} m (crossDepthOk ${core.crossDepthOk})` );
 
 	}
 

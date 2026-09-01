@@ -14,3 +14,16 @@ export async function runInterior( request ) {
 	return generateInterior( request );
 
 }
+
+/**
+ * Pre-generation gate (footprint-shape driven, never floor-count driven):
+ * whether the blueprint's floors fit interior's vertical core plus egress.
+ * @returns { fits, bandLength, minCoreLength, maxElevators, crossDepthOk, frameAngleDeg }
+ */
+export async function runCoreFeasibility( blueprint ) {
+
+	const { coreFeasibility } = await import( INTERIOR_ENTRY );
+
+	return coreFeasibility( blueprint );
+
+}
