@@ -1,6 +1,8 @@
 import { pickInt } from './hash.js';
 import { loadFloorConstants, constantsForType, feasibleFloorRange } from './floorFeasibility.js';
 
+const THEME = 'cyberpunk';
+
 export class AssemblyError extends Error {
 
 	constructor( code, message ) {
@@ -68,7 +70,7 @@ export class RequestAssembler {
 				tier: parcel.tier,
 				floors: this.#chooseFloors( parcel, apertures, seed )
 			},
-			theme: 'cyberpunk',
+			theme: THEME,
 			apertures,
 			options: { glb }
 		};
@@ -77,6 +79,30 @@ export class RequestAssembler {
 		if ( basements > 0 ) request.building.basements = basements;
 
 		return request;
+
+	}
+
+	/**
+	 * @param parcelId atlas parcel id
+	 * @param options.blueprint the exterior blueprint document for this building
+	 * @param options.shellGlb path to the named-mode shell GLB
+	 * @returns InteriorRequest per ../interior/schemas/request.schema.json;
+	 * assignments omitted so interior derives kinds from the blueprint floor slots
+	 * @throws AssemblyError E_PARCEL_UNKNOWN
+	 */
+	assembleInterior( parcelId, { blueprint, shellGlb } ) {
+
+		const parcel = this.parcels.get( parcelId );
+
+		if ( ! parcel ) throw new AssemblyError( 'E_PARCEL_UNKNOWN', `no parcel ${parcelId} in atlas blueprint` );
+
+		return {
+			seed: `${this.worldSeed}:${parcelId}`,
+			building: { id: parcelId, type: parcel.type, tier: parcel.tier },
+			shellGlb,
+			blueprint,
+			materialTheme: THEME
+		};
 
 	}
 

@@ -1,8 +1,11 @@
 /**
- * npm run assemble -- --parcel <id> --out <dir> [--glb merged|named]
+ * npm run assemble -- --parcel <id> --out <dir> [--glb merged|named] [--interior]
  * Loads the atlas sample, generates the connections document, assembles the
  * parcel's BuildingRequest, validates it against exterior's schema, writes it,
  * then invokes exterior's CLI to produce the GLB and blueprint in <dir>.
+ * With --interior (named shell required, so merged mode is a usage error) it
+ * then assembles the InteriorRequest, validates it, runs interior's library and
+ * writes building.glb, floors/*.json and npc.json to <dir>/interior/.
  */
 
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
@@ -11,30 +14,69 @@ import { fileURLToPath } from 'node:url';
 import { join, resolve } from 'node:path';
 import { RequestAssembler } from './RequestAssembler.js';
 import { runConnections } from './connectionsRunner.js';
-import { validateRequest } from './validateRequest.js';
+import { runInterior } from './interiorRunner.js';
+import { validateExteriorRequest, validateInteriorRequest } from './validators.js';
 
 const ATLAS_SAMPLE = new URL( '../../../atlas/samples/city-urbe.json', import.meta.url );
 const EXTERIOR_DIR = fileURLToPath( new URL( '../../../exterior/', import.meta.url ) );
 
 function parseArgs( argv ) {
 
-	const args = { glb: 'merged' };
+	const args = { glb: null, interior: false };
 
-	for ( let i = 0; i < argv.length; i += 2 ) {
+	for ( let i = 0; i < argv.length; i ++ ) {
 
 		const key = argv[ i ];
-		const value = argv[ i + 1 ];
 
-		if ( key === '--parcel' ) args.parcel = value;
-		else if ( key === '--out' ) args.out = value;
-		else if ( key === '--glb' ) args.glb = value;
+		if ( key === '--interior' ) args.interior = true;
+		else if ( key === '--parcel' ) args.parcel = argv[ ++ i ];
+		else if ( key === '--out' ) args.out = argv[ ++ i ];
+		else if ( key === '--glb' ) args.glb = argv[ ++ i ];
 		else return null;
 
 	}
 
-	if ( ! args.parcel || ! args.out || ! [ 'merged', 'named' ].includes( args.glb ) ) return null;
+	if ( ! args.parcel || ! args.out ) return null;
+	if ( args.interior && args.glb === 'merged' ) return null;
+	if ( args.glb === null ) args.glb = args.interior ? 'named' : 'merged';
+	if ( ! [ 'merged', 'named' ].includes( args.glb ) ) return null;
 
 	return args;
+
+}
+
+function fail( code, detail ) {
+
+	console.error( detail ? `${code}: ${detail}` : code );
+	process.exit( 1 );
+
+}
+
+function printSchemaErrors( errors ) {
+
+	for ( const e of errors ) console.error( `  ${e.instancePath || '/'} ${e.message}` );
+
+}
+
+function listFiles( dir, prefix = '' ) {
+
+	for ( const name of readdirSync( dir ).sort() ) {
+
+		const path = join( dir, name );
+
+		if ( statSync( path ).isDirectory() ) listFiles( path, `${prefix}${name}/` );
+		else console.log( `${prefix}${name}  ${statSync( path ).size} bytes` );
+
+	}
+
+}
+
+/** Zero-padded floor file name; basements keep their minus sign (-001). */
+function floorFileName( index ) {
+
+	const digits = String( Math.abs( index ) ).padStart( 3, '0' );
+
+	return `${index < 0 ? '-' : ''}${digits}.json`;
 
 }
 
@@ -42,7 +84,8 @@ const args = parseArgs( process.argv.slice( 2 ) );
 
 if ( ! args ) {
 
-	console.error( 'usage: npm run assemble -- --parcel <id> --out <dir> [--glb merged|named]' );
+	console.error( 'usage: npm run assemble -- --parcel <id> --out <dir> [--glb merged|named] [--interior]' );
+	console.error( '  --interior needs the named shell; combining it with --glb merged is an error' );
 	process.exit( 2 );
 
 }
@@ -59,17 +102,16 @@ try {
 
 } catch ( error ) {
 
-	console.error( `${error.code ?? 'ERROR'}: ${error.message}` );
-	process.exit( 1 );
+	fail( error.code ?? 'ERROR', error.message );
 
 }
 
-const errors = validateRequest( request );
+const errors = validateExteriorRequest( request );
 
 if ( errors.length > 0 ) {
 
 	console.error( 'E_REQUEST_INVALID: request fails exterior schema' );
-	for ( const e of errors ) console.error( `  ${e.instancePath || '/'} ${e.message}` );
+	printSchemaErrors( errors );
 	process.exit( 1 );
 
 }
@@ -95,8 +137,44 @@ if ( result.status !== 0 ) {
 
 }
 
-for ( const name of readdirSync( outDir ).sort() ) {
+if ( args.interior ) {
 
-	console.log( `${name}  ${statSync( join( outDir, name ) ).size} bytes` );
+	const shellGlb = join( outDir, `${request.buildingId}.glb` );
+	const blueprint = JSON.parse( readFileSync( join( outDir, `${request.buildingId}.blueprint.json` ), 'utf8' ) );
+	const interiorRequest = assembler.assembleInterior( args.parcel, { blueprint, shellGlb } );
+	const interiorErrors = validateInteriorRequest( interiorRequest );
+
+	if ( interiorErrors.length > 0 ) {
+
+		console.error( 'E_REQUEST_INVALID: request fails interior schema' );
+		printSchemaErrors( interiorErrors );
+		process.exit( 1 );
+
+	}
+
+	let interior;
+
+	try {
+
+		interior = await runInterior( interiorRequest );
+
+	} catch ( error ) {
+
+		fail( 'E_INTERIOR_FAILED', `${error.code ?? error.name}: ${error.message}` );
+
+	}
+
+	const interiorDir = join( outDir, 'interior' );
+	mkdirSync( join( interiorDir, 'floors' ), { recursive: true } );
+	writeFileSync( join( interiorDir, 'building.glb' ), interior.glb );
+	writeFileSync( join( interiorDir, 'npc.json' ), JSON.stringify( interior.npc, null, 2 ) + '\n' );
+
+	for ( const floor of interior.floors ) {
+
+		writeFileSync( join( interiorDir, 'floors', floorFileName( floor.floor ) ), JSON.stringify( floor, null, 2 ) + '\n' );
+
+	}
 
 }
+
+listFiles( outDir );

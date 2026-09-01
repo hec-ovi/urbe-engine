@@ -68,6 +68,22 @@ describe( 'RequestAssembler', () => {
 
 	} );
 
+	it( 'same inputs produce an identical interior request', () => {
+
+		const blueprint = { buildingId: 'p7', floors: [ { index: 0, kind: 'lobby' } ] };
+		const inputs = [ 'p7', { blueprint, shellGlb: '/world/p7/p7.glb' } ];
+
+		const a = new RequestAssembler( atlasWith( officeParcel ), connections ).assembleInterior( ...inputs );
+		const b = new RequestAssembler( atlasWith( officeParcel ), connections ).assembleInterior( ...inputs );
+
+		expect( JSON.stringify( b ) ).toBe( JSON.stringify( a ) );
+		expect( a.seed ).toBe( 'urbe:p7' );
+		expect( a.building ).toEqual( { id: 'p7', type: 'offices', tier: 'rich' } );
+		expect( a.materialTheme ).toBe( 'cyberpunk' );
+		expect( 'assignments' in a ).toBe( false );
+
+	} );
+
 	it( 'chooses a floor count inside exterior\'s feasible range', () => {
 
 		// hotel constants 2.8/5.0, bases {8, 16} under maxHeight 22.4: recipe gives
