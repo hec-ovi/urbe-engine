@@ -14,6 +14,8 @@ Purpose: plays the assembled city as a first-person world at street level, at ni
   - `lanes=debug` paints every lane of the road graph end to end, `lanes=glow` restores the teal emissive centreline strips. Debug only; a normal run gets painted road markings.
   - `quality` (`low` | `medium` | `high` | `ultra`): what the frame is allowed to spend (src/game/look/CONTRACT.md). Unset follows the backend: `high` on WebGPU, `low` on the WebGL2 fallback.
   - `exposure` (default 0.024): the one number the whole look is graded at. Tuning only.
+  - `fog` (default 0.0006): street fog density per metre; the first block stays crisp, fog separates the skyline past it.
+  - `off` (comma list of `fog`, `bloom`, `probe`, `haze`, `interiors`): look stages left out of the run, for telling them apart on screen.
 - Atlas blueprint per ../../../atlas/CONTRACT.md.
 - Connections document, generated in-process from that blueprint by `connectionsRunner.js`; `signalStateAt` is consumed directly for signal state.
 - `<out>/manifest.json` (../assembly/CONTRACT.md): which blueprint the directory was assembled from and which parcels finished. It is the only list of buildings the game reads, so a folder left behind by an older blueprint is never loaded on top of the city that replaced it. A missing manifest, or one from another blueprint, fails the run with what to re-run.

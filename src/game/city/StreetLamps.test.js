@@ -73,6 +73,18 @@ describe( 'StreetLamps', () => {
 
 	} );
 
+	it( 'stands every post on the kerb side of the roadway the atlas drew', () => {
+
+		const roadway = atlas.volumetric.ground.filter( ( cover ) => cover.surface === 'roadway' ).map( ( cover ) => cover.polygon );
+		const onAsphalt = lamps.posts.filter( ( post ) => roadway.some( ( ring ) => pointInRing( post.x, post.z, ring ) ) );
+
+		// A junction or a wide road swallows the fixed kerb offset; the post
+		// has to step back onto the pavement rather than stand in the lane.
+		expect( onAsphalt.slice( 0, 5 ).map( ( p ) => `${p.x.toFixed( 1 )}, ${p.z.toFixed( 1 )}` ) ).toEqual( [] );
+		expect( lamps.posts.length ).toBeGreaterThan( 100 );
+
+	} );
+
 	it( 'keeps the posts it had: none in a plaza, none within six metres of another, none in an alley', () => {
 
 		const plazas = atlas.volumetric.ground.filter( ( c ) => c.surface === 'open' ).map( ( c ) => c.polygon );

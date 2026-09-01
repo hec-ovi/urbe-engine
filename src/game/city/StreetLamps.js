@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
-import { pointInRing } from '../ground/Polygons.js';
+import { pointInRing, ringBounds } from '../ground/Polygons.js';
 import { kelvinColor } from '../light/Color.js';
 
 const SPACING = 19;
@@ -76,6 +76,7 @@ export class StreetLamps {
 		const plazas = this.atlas.volumetric.ground
 			.filter( ( cover ) => cover.surface === 'open' )
 			.map( ( cover ) => cover.polygon );
+		const roadway = new Roadway( this.atlas.volumetric.ground );
 
 		// An alley is a few metres of pavement between two walls, so a 6.4 m pole
 		// with an arm over it would stand in the middle of the only way through,
@@ -83,10 +84,15 @@ export class StreetLamps {
 		// its mouth. The coverage pass lights these off the walls instead.
 		const alleys = this.atlas.streets.edges.filter( ( edge ) => edge.class === 'alley' );
 
+		// A post stands on the kerb side of the roadway edge the atlas drew, never
+		// on the asphalt: where a junction or a wide road swallows the offset
+		// spot, the post steps back out of it or is left out.
 		const spots = dedupe( [ ...this.#alongStreets(), ...this.#atCrossings() ]
 			.filter( ( spot ) => ! plazas.some( ( ring ) => pointInRing( spot.x, spot.z, ring ) ) )
 			.concat( this.#aroundPlazas( plazas ) )
-			.filter( ( spot ) => ! alleys.some( ( alley ) => onPavementOf( spot, alley ) ) ) );
+			.filter( ( spot ) => ! alleys.some( ( alley ) => onPavementOf( spot, alley ) ) )
+			.map( ( spot ) => roadway.offAsphalt( spot ) )
+			.filter( Boolean ) );
 
 		const structure = [];
 		const lenses = [];
@@ -409,6 +415,49 @@ export class StreetLamps {
 		} );
 
 		posts.push( { x, z, base, height: POLE_HEIGHT, radius: POLE_COLLIDER_RADIUS } );
+
+	}
+
+}
+
+/** How far a spot on the asphalt is walked back toward its kerb before it is given up. */
+const KERB_SEARCH = 4;
+const KERB_STEP = 0.5;
+
+/** The atlas roadway polygons, with a bounds test in front of the ring test. */
+class Roadway {
+
+	constructor( ground ) {
+
+		this.rings = ground
+			.filter( ( cover ) => cover.surface === 'roadway' )
+			.map( ( cover ) => ( { ring: cover.polygon, ...ringBounds( [ cover.polygon ] ) } ) );
+
+	}
+
+	covers( x, z ) {
+
+		return this.rings.some( ( { ring, min, max } ) =>
+			x >= min[ 0 ] && x <= max[ 0 ] && z >= min[ 1 ] && z <= max[ 1 ] && pointInRing( x, z, ring ) );
+
+	}
+
+	/**
+	 * The spot itself when it stands clear of the asphalt, else the first
+	 * point behind it (away from the road its arm faces) that does, else null.
+	 */
+	offAsphalt( spot ) {
+
+		for ( let back = 0; back <= KERB_SEARCH; back += KERB_STEP ) {
+
+			const x = spot.x - spot.ax * back;
+			const z = spot.z - spot.az * back;
+
+			if ( ! this.covers( x, z ) ) return back ? { ...spot, x, z } : spot;
+
+		}
+
+		return null;
 
 	}
 
