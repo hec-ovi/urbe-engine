@@ -3,7 +3,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { doorFrame } from './DoorGeometry.js';
 import { buildRooms, reflectanceOf } from './InteriorRooms.js';
-import { kelvinColor } from '../light/Kelvin.js';
+import { kelvinColor } from '../light/Color.js';
 
 // The GLB names its nodes `merged:<key>` and `interior:<key>`, but GLTFLoader
 // runs node names through PropertyBinding.sanitizeNodeName, which strips the

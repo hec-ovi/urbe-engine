@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { fog, uniform, exponentialHeightFogFactor, densityFogFactor } from 'three/tsl';
+import { luminance } from '../light/Color.js';
 
 /** Where the street's haze thins out. Above it a tower stands clear of it. */
 const HEIGHT = 80;
@@ -91,11 +92,5 @@ export class NightFog {
 		);
 
 	}
-
-}
-
-function luminance( color ) {
-
-	return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722;
 
 }

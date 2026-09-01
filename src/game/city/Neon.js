@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { Rng } from '../../city/Rng.js';
 import { signedArea } from '../ground/Polygons.js';
-import { kelvinColor } from '../light/Kelvin.js';
+import { kelvinColor } from '../light/Color.js';
 
 // Colours only ever drive the point lights that spill onto the street; the
 // panels themselves are lit by their own emission maps from the materials

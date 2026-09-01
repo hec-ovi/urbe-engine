@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { color, uniform, vec3 } from 'three/tsl';
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
+import { luminance } from '../light/Color.js';
 
 const SKY_SCALE = 45000;
 /** The colour the air takes where no fixture reaches it: moonlit, cold. */
@@ -92,9 +93,8 @@ export class NightSky {
 function skyglow() {
 
 	const glow = new THREE.Color( SKY_COLOR );
-	const luminance = glow.r * 0.2126 + glow.g * 0.7152 + glow.b * 0.0722;
 
-	return glow.multiplyScalar( SKYGLOW / Math.max( 1e-4, luminance ) );
+	return glow.multiplyScalar( SKYGLOW / Math.max( 1e-4, luminance( glow ) ) );
 
 }
 

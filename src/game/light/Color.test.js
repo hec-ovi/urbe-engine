@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { kelvinColor } from './Kelvin.js';
+import * as THREE from 'three/webgpu';
+import { kelvinColor, luminance } from './Color.js';
 
 /**
  * Warm against cold is what makes a dark frame readable, so the one promise
@@ -28,6 +29,13 @@ describe( 'kelvinColor', () => {
 			expect( Math.max( color.r, color.g, color.b ) ).toBeCloseTo( 1, 5 );
 
 		}
+
+	} );
+
+	it( 'weights a colour the way the eye does', () => {
+
+		expect( luminance( new THREE.Color( 0, 1, 0 ) ) ).toBeGreaterThan( luminance( new THREE.Color( 0, 0, 1 ) ) );
+		expect( luminance( new THREE.Color( 1, 1, 1 ) ) ).toBeCloseTo( 1, 5 );
 
 	} );
 

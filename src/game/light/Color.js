@@ -1,5 +1,12 @@
 import * as THREE from 'three/webgpu';
 
+/** Relative luminance, the one number that says how bright a colour is. */
+export function luminance( color ) {
+
+	return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722;
+
+}
+
 /**
  * Colour temperature to light colour. Every published fixture states a
  * blackbody temperature in kelvin and three ships no converter, so this walks

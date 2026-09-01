@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { pointInRing } from '../ground/Polygons.js';
 import { albedoOf } from '../light/RoomFill.js';
-import { kelvinColor } from '../light/Kelvin.js';
+import { kelvinColor, luminance } from '../light/Color.js';
 
 /** How far a triangle may sit outside a floor's own slab and still belong to it. */
 const FLOOR_MARGIN = 0.3;
@@ -287,7 +287,7 @@ function reflectanceColor( weighted, area, tint, target ) {
 
 	const level = area > 0 ? weighted / area : 0.4;
 	const hue = area > 0 ? _hue.copy( tint ).multiplyScalar( 1 / area ) : _hue.setRGB( 1, 1, 1 );
-	const luma = Math.max( 1e-4, hue.r * 0.2126 + hue.g * 0.7152 + hue.b * 0.0722 );
+	const luma = Math.max( 1e-4, luminance( hue ) );
 
 	return target.setRGB(
 		level * hue.r / luma,

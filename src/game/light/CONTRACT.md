@@ -15,7 +15,7 @@ Purpose: turns every fixture the world published into real light, in photometric
 - `RoomLights(factory, tier)`: `update(rooms, position, delta)` binds the nearest rooms to light slots and writes their fixtures and fill into them; `materialFor(binding, key)` is the material a room's mesh wears, and `dim` is the binding for interior geometry belonging to no room. Materials are node materials: a standard one loses `lightsNode` in the conversion the renderer does for it.
 - `RoomFill.apply(light, room, flux, color)`: writes the computed interreflected fill onto a hemisphere light. `albedoOf(key)` is the reflectance of a material kind.
 - `Haze.build(fixtures, { spread, cap }) -> Mesh | null`: one merged additive glow mesh, the air lit around each fixture.
-- `kelvinColor(kelvin) -> Color`: blackbody temperature to light colour.
+- `kelvinColor(kelvin) -> Color`: blackbody temperature to light colour. `luminance(color)` is its relative brightness.
 
 ## Units
 - `lumens` is luminous flux as the interior and exterior boxes publish it. Point lights take it through `power`, rect area lights through `power` after sizing, spot lights as candela over their own cone solid angle, because `power` assumes a 120 degree cone.

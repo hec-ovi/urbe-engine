@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { pointInRing } from '../ground/Polygons.js';
-import { kelvinColor } from '../light/Kelvin.js';
+import { kelvinColor } from '../light/Color.js';
 
 const SPACING = 19;
 const PLAZA_SPACING = 34;

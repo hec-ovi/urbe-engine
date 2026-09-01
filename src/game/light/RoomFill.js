@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { luminance } from './Color.js';
 
 /**
  * Diffuse reflectance per material kind, used to weight a room's own surfaces.
@@ -82,7 +83,7 @@ export class RoomFill {
 	static apply( light, room, flux, color ) {
 
 		const up = RoomFill.irradiance( room, flux, color, _up );
-		const lux = up.r * 0.2126 + up.g * 0.7152 + up.b * 0.0722;
+		const lux = luminance( up );
 
 		light.intensity = lux;
 
