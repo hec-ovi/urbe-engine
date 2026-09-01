@@ -3,6 +3,13 @@ import { join } from 'node:path';
 
 export const MANIFEST_FILE = 'manifest.json';
 
+/** Zero-padded floor file tag; basements keep their minus sign (-001). */
+export function floorTag( index ) {
+
+	return `${index < 0 ? '-' : ''}${String( Math.abs( index ) ).padStart( 3, '0' )}`;
+
+}
+
 /**
  * The assembled world on disk. A blueprint changes between runs (lots merge,
  * ids move), and a parcel folder left behind by the old one is a whole building
@@ -58,7 +65,10 @@ export class OutDir {
 
 	}
 
-	/** The parcels whose build is complete on disk: shell blueprint and interior. */
+	/**
+	 * The parcels whose build is complete on disk: shell blueprint, interior
+	 * NPC support, the whole-building GLB and every floor with its own GLB.
+	 */
 	built( parcelIds ) {
 
 		return parcelIds.filter( ( id ) => {
@@ -67,23 +77,47 @@ export class OutDir {
 
 			return existsSync( join( path, `${id}.blueprint.json` ) )
 				&& existsSync( join( path, 'interior', 'building.glb' ) )
-				&& existsSync( join( path, 'interior', 'npc.json' ) );
+				&& existsSync( join( path, 'interior', 'npc.json' ) )
+				&& this.floorsOf( id ) !== null;
 
 		} );
 
 	}
 
 	/**
-	 * Writes the manifest: the blueprint this world came from and the parcels
-	 * standing in it. The game refuses an out dir whose blueprint is not the
-	 * one it is playing.
+	 * The floor tags of one parcel, lowest first, or null when a floor document
+	 * has no GLB beside it (or there are no floors at all).
+	 */
+	floorsOf( parcelId ) {
+
+		const floorsDir = join( this.dir, parcelId, 'interior', 'floors' );
+
+		if ( ! existsSync( floorsDir ) ) return null;
+
+		const tags = readdirSync( floorsDir )
+			.filter( ( name ) => name.endsWith( '.json' ) )
+			.map( ( name ) => name.slice( 0, - 5 ) )
+			.sort( ( a, b ) => Number( a ) - Number( b ) );
+
+		if ( ! tags.length ) return null;
+
+		return tags.every( ( tag ) => existsSync( join( floorsDir, `${tag}.glb` ) ) ) ? tags : null;
+
+	}
+
+	/**
+	 * Writes the manifest: the blueprint this world came from, the parcels
+	 * standing in it and the floor files each one streams from. The game
+	 * refuses an out dir whose blueprint is not the one it is playing.
 	 */
 	writeManifest( atlas, parcelIds ) {
 
+		const parcels = [ ...parcelIds ].sort( ( a, b ) => a.localeCompare( b, undefined, { numeric: true } ) );
 		const manifest = {
 			seed: atlas.meta.seed,
 			atlasVersion: atlas.meta.version,
-			parcels: [ ...parcelIds ].sort( ( a, b ) => a.localeCompare( b, undefined, { numeric: true } ) )
+			parcels,
+			floors: Object.fromEntries( parcels.map( ( id ) => [ id, this.floorsOf( id ) ] ) )
 		};
 
 		writeFileSync( join( this.dir, MANIFEST_FILE ), JSON.stringify( manifest, null, 2 ) + '\n' );

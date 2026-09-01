@@ -87,6 +87,29 @@ describe( 'partition', () => {
 
 	} );
 
+	it( 'cuts one floor\'s own file to exactly that floor\'s share of the whole building', () => {
+
+		const upstairs = [
+			{ ...floors[ 0 ], floor: 1, elevation: 3, rooms: [ { id: 'r1', kind: 'living', polygon: floors[ 0 ].rooms[ 0 ].polygon } ], lights: [] }
+		];
+		const both = outlinesOf( [ ...floors, ...upstairs ] );
+		const floorFile = [
+			surface( 'cyberpunk/carpet/mid', [ [ [ 1, 3, 1 ], [ 3, 3, 1 ], [ 1, 3, 3 ] ] ] ),
+			surface( 'cyberpunk/concrete/mid', [ [ [ 9, 3, 9 ], [ 11, 3, 9 ], [ 9, 3, 11 ] ] ] )
+		];
+		const share = ( cut ) => ( {
+			rooms: cut.rooms.filter( ( room ) => room.floor === 1 ).map( ( room ) => [ room.id, room.area, room.surfaces.map( ( s ) => [ s.key, [ ...s.position ] ] ) ] ),
+			shared: cut.shared.filter( ( band ) => band.floor === 1 ).map( ( band ) => band.surfaces.map( ( s ) => [ s.key, [ ...s.position ] ] ) )
+		} );
+
+		const alone = share( partition( floorFile, both ) );
+
+		expect( alone.rooms ).toHaveLength( 1 );
+		expect( alone.shared ).toHaveLength( 1 );
+		expect( alone ).toEqual( share( partition( [ ...surfaces, ...floorFile ], both ) ) );
+
+	} );
+
 	it( 'measures the room the fill light is computed from', () => {
 
 		const [ room ] = rooms( cut() );

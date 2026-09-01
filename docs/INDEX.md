@@ -1,13 +1,13 @@
 # Box map
 
 - root box: see CONTRACT.md.
-- `src/assembly/`: world-assembly slice; atlas parcel + connections apertures -> exterior BuildingRequest, CLI drives exterior to GLB + blueprint and, with --interior, interior to the filled building; `npm run assemble-city` batches the whole blueprint with a QA report; `npm run simulate` boots the simulation library over the assembled world (src/assembly/CONTRACT.md). Depends on ../atlas, ../connections, ../exterior, ../interior, ../simulation contracts.
+- `src/assembly/`: world-assembly slice; atlas parcel + connections apertures -> exterior BuildingRequest, CLI drives exterior to GLB + blueprint and, with --interior, interior to the filled building plus one GLB per floor; `npm run assemble-city` batches the whole blueprint with a QA report and a manifest listing every parcel's floor files; `npm run simulate` boots the simulation library over the assembled world (src/assembly/CONTRACT.md). Depends on ../atlas, ../connections, ../exterior, ../interior, ../simulation contracts.
 - `src/building/`: building viewer logic; loads out/<parcel>/ GLBs, resolves material keys against ../materials' theme database (MaterialResolver), builds PBR materials with world-scale tiling and transmission (PbrMaterialFactory), TSL floor slice (FloorSlicer), orbit stage. Open with `npm run dev` then `/?mode=building&parcel=<id>`; unresolved keys render magenta and are listed. The vite config serves the materials database read-only under /materials/.
 
 - `src/game/`: the playable city (`?mode=game`); first-person controller on Rapier, night scene from the assembled GLBs, ground from the blueprint's cover polygons, neon and lit windows, simulation-driven crowd and lane-graph traffic, doors into continuous interiors (src/game/CONTRACT.md). Depends on ../atlas, ../connections, ../materials, ../simulation contracts.
   - `data/`: run config, world loading, signal state
   - `ground/`: cover polygons to geometry, curbs
-  - `city/`: shells and doors, neon, lit windows, lamps, road paint, interiors streamed per building and cut into rooms and floor bands, and which of them are in view
+  - `city/`: shells and doors, neon, lit windows, lamps, road paint, interiors streamed a floor at a time from each floor's own GLB and cut into rooms, and which of them are in view
   - `links/`: bridges, AC tubes, tunnels and wires from the connections links, swept from centerline plus cross-section and sliced onto the exact carved apertures (src/game/links/CONTRACT.md)
   - `transit/`: bus stop shelters and signs, buses driven by the timetables' closed-form vehicle positions, train and subway station entrances (src/game/transit/CONTRACT.md)
   - `props/`: seeded alley and service-corner dressing, bags, crates and boxes, clear of doorways and walk lines (src/game/props/CONTRACT.md)

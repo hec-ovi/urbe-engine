@@ -5,15 +5,17 @@ const MANIFEST_FILE = 'manifest.json';
 
 /**
  * Everything the game reads off disk, and nothing else: the atlas blueprint,
- * the connections document generated from it, and the per-parcel exterior
- * blueprint plus interior NPC support written by `npm run assemble-city`.
+ * the connections document generated from it, and per parcel the exterior
+ * blueprint, the interior NPC support and the floor documents written by
+ * `npm run assemble-city`, each floor carrying the URL of its own GLB.
  *
- * Which buildings exist is the out dir's manifest, never the directory
- * listing: a blueprint that merges two lots leaves the old parcel's folder
- * behind, and loading it would stand a whole building inside the one that
- * replaced it. The manifest also names the blueprint it was assembled from, so
- * a world built from a different one is refused instead of drawn wrong.
- * A blueprint parcel the batch could not build is reported as unbuilt.
+ * Which buildings exist, and which floors each has, is the out dir's
+ * manifest, never the directory listing: a blueprint that merges two lots
+ * leaves the old parcel's folder behind, and loading it would stand a whole
+ * building inside the one that replaced it. The manifest also names the
+ * blueprint it was assembled from, so a world built from a different one is
+ * refused instead of drawn wrong. A blueprint parcel the batch could not build
+ * is reported as unbuilt.
  */
 export class WorldSource {
 
@@ -45,7 +47,7 @@ export class WorldSource {
 		const listed = manifest.parcels.filter( ( id ) => known.has( id ) );
 
 		const buildings = new Map(
-			( await Promise.all( listed.map( ( id ) => this.#loadBuilding( id ) ) ) )
+			( await Promise.all( listed.map( ( id ) => this.#loadBuilding( id, manifest.floors[ id ] ) ) ) )
 				.map( ( building ) => [ building.parcelId, building ] )
 		);
 
@@ -82,53 +84,45 @@ export class WorldSource {
 
 		}
 
+		if ( ! manifest.floors ) throw new Error( `${this.outBase} lists no floor files: re-run assemble-city` );
+
 		return manifest;
 
 	}
 
-	async #loadBuilding( parcelId ) {
+	/** @param tags the parcel's floor file tags, as the manifest lists them */
+	async #loadBuilding( parcelId, tags ) {
 
 		const base = `${this.outBase}/${parcelId}`;
-		const [ blueprint, npc ] = await Promise.all( [
+		const [ blueprint, npc, floors ] = await Promise.all( [
 			this.#json( `${base}/${parcelId}.blueprint.json` ),
-			this.#json( `${base}/interior/npc.json` )
+			this.#json( `${base}/interior/npc.json` ),
+			this.#floors( base, tags )
 		] );
 
 		return {
 			parcelId,
 			blueprint,
 			npc,
-			floors: await this.#floors( base, blueprint ),
-			// The shell, under a megabyte, and the furnished interior, tens of
-			// them. They carry the identical shell, so the city loads the small
-			// one for every building and streams the big one near the player.
-			shellUrl: `${base}/${parcelId}.glb`,
-			glbUrl: `${base}/interior/building.glb`
+			floors,
+			// The shell, under a megabyte: the city loads it for every building.
+			shellUrl: `${base}/${parcelId}.glb`
 		};
 
 	}
 
 	/**
 	 * The interior floor documents, which carry the room polygons and the light
-	 * fixtures the game lights each room from. The exterior blueprint names
-	 * which floors exist; a floor the interior pass did not write is skipped
-	 * rather than failing the run, because its geometry is still in the GLB and
-	 * still worth showing.
+	 * fixtures the game lights each room from, each with the URL of the GLB
+	 * holding that floor's furnished geometry, which the game streams a floor at
+	 * a time.
 	 */
-	async #floors( base, blueprint ) {
+	#floors( base, tags ) {
 
-		const names = ( blueprint.floors ?? [] ).map( ( floor ) => {
-
-			const index = floor.index;
-
-			return `${index < 0 ? '-' : ''}${String( Math.abs( index ) ).padStart( 3, '0' )}`;
-
-		} );
-
-		const docs = await Promise.all( names.map( ( name ) =>
-			this.#json( `${base}/interior/floors/${name}.json` ).catch( () => null ) ) );
-
-		return docs.filter( Boolean );
+		return Promise.all( tags.map( async ( tag ) => ( {
+			...await this.#json( `${base}/interior/floors/${tag}.json` ),
+			glbUrl: `${base}/interior/floors/${tag}.glb`
+		} ) ) );
 
 	}
 

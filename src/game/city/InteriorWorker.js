@@ -3,14 +3,15 @@ import { bake, INTERIOR_PREFIX } from './BuildingsLoader.js';
 import { buffersOf, materialKey, partition } from './InteriorRooms.js';
 
 /**
- * The interior worker: everything about landing one furnished building that
- * needs no scene runs here, off the frame. The GLB is fetched, parsed, baked
- * to world space and cut into rooms and floor bands, and what goes back is
- * plain typed arrays, transferred rather than copied, so the frame that
- * receives them only wraps them in geometry.
+ * The interior worker: everything about landing one furnished floor that
+ * needs no scene runs here, off the frame. The floor's GLB is fetched, parsed,
+ * baked to world space and cut into the rooms the interior box published, and
+ * what goes back is plain typed arrays, transferred rather than copied, so the
+ * frame that receives them only wraps them in geometry.
  *
- * In: { id, url, outlines } per building. Out: { id, cut, bytes, cost } with
- * the milliseconds each step took, or { id, error }.
+ * In: { id, url, outlines } per floor, the outlines being the whole building's
+ * so a room is found whichever floor's file its triangles arrive in. Out:
+ * { id, cut, bytes, cost } with the milliseconds each step took, or { id, error }.
  */
 const loader = new GLTFLoader();
 

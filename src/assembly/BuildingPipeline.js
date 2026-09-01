@@ -3,19 +3,11 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { AssemblyError } from './RequestAssembler.js';
+import { floorTag } from './OutDir.js';
 import { runInterior, runCoreFeasibility } from './interiorRunner.js';
 import { validateExteriorRequest, validateInteriorRequest } from './validators.js';
 
 const EXTERIOR_DIR = fileURLToPath( new URL( '../../../exterior/', import.meta.url ) );
-
-/** Zero-padded floor file name; basements keep their minus sign (-001). */
-export function floorFileName( index ) {
-
-	const digits = String( Math.abs( index ) ).padStart( 3, '0' );
-
-	return `${index < 0 ? '-' : ''}${digits}.json`;
-
-}
 
 /**
  * The per-parcel chain shared by the single and city CLIs: assemble and
@@ -170,16 +162,33 @@ export class BuildingPipeline {
 
 		}
 
-		const interiorDir = join( outDir, 'interior' );
-		mkdirSync( join( interiorDir, 'floors' ), { recursive: true } );
-		writeFileSync( join( interiorDir, 'building.glb' ), interior.glb );
-		writeFileSync( join( interiorDir, 'npc.json' ), JSON.stringify( interior.npc, null, 2 ) + '\n' );
+		writeInteriorFiles( join( outDir, 'interior' ), interior );
 
-		for ( const floor of interior.floors ) {
+	}
 
-			writeFileSync( join( interiorDir, 'floors', floorFileName( floor.floor ) ), JSON.stringify( floor, null, 2 ) + '\n' );
+}
 
-		}
+/**
+ * One InteriorResult on disk: the whole building for the viewer, and per floor
+ * its document plus its own GLB under `floors/`, which is what the game streams.
+ */
+export function writeInteriorFiles( interiorDir, { glb, floorGlbs, floors, npc } ) {
+
+	const floorsDir = join( interiorDir, 'floors' );
+
+	mkdirSync( floorsDir, { recursive: true } );
+	writeFileSync( join( interiorDir, 'building.glb' ), glb );
+	writeFileSync( join( interiorDir, 'npc.json' ), JSON.stringify( npc, null, 2 ) + '\n' );
+
+	for ( const floor of floors ) {
+
+		writeFileSync( join( floorsDir, `${floorTag( floor.floor )}.json` ), JSON.stringify( floor, null, 2 ) + '\n' );
+
+	}
+
+	for ( const [ index, bytes ] of floorGlbs ) {
+
+		writeFileSync( join( floorsDir, `${floorTag( index )}.glb` ), bytes );
 
 	}
 

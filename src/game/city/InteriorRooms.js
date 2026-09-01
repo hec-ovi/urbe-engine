@@ -86,16 +86,17 @@ class FloorIndex {
 
 	}
 
-	/** The floor whose slab band holds `y`, or null over the roof or under the lowest slab. */
+	/**
+	 * The floor whose slab-to-slab band holds `y`; failing that, the one whose
+	 * margin does (a slab's underside, a stair landing over the top floor);
+	 * null over the roof or under the lowest slab. The exact band comes first
+	 * so a floor's own carpet and baseboards never go to the floor below.
+	 */
 	at( y ) {
 
-		for ( const floor of this.floors ) {
-
-			if ( y >= floor.low && y < floor.high ) return floor;
-
-		}
-
-		return null;
+		return this.floors.find( ( floor ) => y >= floor.elevation && y < floor.top )
+			?? this.floors.find( ( floor ) => y >= floor.low && y < floor.high )
+			?? null;
 
 	}
 
@@ -107,8 +108,10 @@ class FloorOutline {
 	constructor( { floor, elevation, height, rooms } ) {
 
 		this.index = floor;
+		this.elevation = elevation;
+		this.top = elevation + height;
 		this.low = elevation - FLOOR_MARGIN;
-		this.high = elevation + height + FLOOR_MARGIN;
+		this.high = this.top + FLOOR_MARGIN;
 		this.rooms = rooms.map( ( { id, kind, polygon } ) => ( {
 			id, kind, floor, elevation, height, polygon,
 			center: centreOf( polygon, elevation + height / 2 )

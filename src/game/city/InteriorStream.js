@@ -1,33 +1,42 @@
 import * as THREE from 'three/webgpu';
-import { assembleRooms, geometryOf, outlinesOf, plain, reflectanceOf, OUTSIDE_FLOORS } from './InteriorRooms.js';
+import { assembleRooms, geometryOf, outlinesOf, plain, reflectanceOf } from './InteriorRooms.js';
 import { Haze } from '../light/Haze.js';
 
-/** A building's interior is worth having in memory this close to its footprint. */
+/** A building's floors are worth fetching this close to its footprint. */
 const LOAD_RADIUS = 70;
-/** And is let go past this, with hysteresis so a boundary cannot thrash. */
+/** And the building is let go past this, with hysteresis so a boundary cannot thrash. */
 const DROP_RADIUS = 95;
-/** One building's interior at a time: the worker is one thread and the frame gets one landing. */
+/** One floor at a time: the worker is one thread and the frame gets one landing. */
 const CONCURRENCY = 1;
 /** The published key whose geometry the lifts take their sliding leaves from. */
 const ELEVATOR_DOOR = '/elevator_door/';
-/** Floors above and below the one the player is on that stay in the scene. */
+/** Floors above and below the one the player is on that are fetched and in the scene. */
 const BAND_REACH = 1;
-/** Main-thread work a landing interior may take in one frame before the rest waits for the next. */
+/** One floor further stays in memory, so a landing halfway up the stairs never refetches. */
+const KEEP_REACH = BAND_REACH + 1;
+/** Main-thread work the stream may take in one frame before the rest waits for the next. */
 const FRAME_BUDGET_MS = 8;
 
+const EMPTY = 'empty';
+const LOADING = 'loading';
+const LOADED = 'loaded';
+const FAILED = 'failed';
+
 /**
- * Interiors, streamed. A furnished tower is tens of megabytes and sixty floors
- * of geometry, and the player is only ever on one of them, so neither the file
- * nor the whole building belongs in the scene:
+ * Interiors, streamed a floor at a time. A furnished tower is tens of
+ * megabytes and sixty floors of geometry, and the player is only ever on one
+ * of them, so neither the file nor the building belongs in memory:
  *
- * - the interior GLB is fetched only while its building is within reach, and
- *   dropped again past a wider radius, so the city costs the buildings around
- *   the player rather than all of them;
- * - the fetch, the parse, the world-space bake and the cut into the rooms the
- *   interior box published and into floor bands all run in a worker
+ * - a building within reach is opened: its shafts are registered from its
+ *   floor documents and every floor gets a band, empty until it is wanted;
+ * - only the floors within one of the player's own are fetched, nearest
+ *   building first, and each floor's own GLB is parsed, baked to world space
+ *   and cut into the rooms the interior box published in a worker
  *   (InteriorWorker.js); the frame only wraps the arrays it posts back;
- * - only the bands within one floor of the player are in the scene and in the
- *   physics world. Walking up the stairs moves the window.
+ * - those same floors are in the scene and in the physics world, one more
+ *   above and below stays in memory, and a floor further away than that is
+ *   dropped, vertex data and all. Walking up the stairs moves the window;
+ * - past a wider radius the whole building is let go.
  *
  * The shells are not here: they load once for the whole city (BuildingsLoader)
  * because the skyline is visible from everywhere.
@@ -60,22 +69,22 @@ export class InteriorStream {
 
 	}
 
-	/** @param buildings Map<parcelId, { glbUrl, floors }> plus a footprint centre */
+	/**
+	 * @param buildings Map<parcelId, { floors }>, each floor document carrying
+	 * the `glbUrl` of its own geometry (WorldSource)
+	 * @param centers Map<parcelId, { x, z }> footprint centres
+	 */
 	register( buildings, centers ) {
 
 		for ( const [ parcelId, building ] of buildings ) {
 
-			this.pending.set( parcelId, {
-				parcelId,
-				glbUrl: building.glbUrl,
-				floors: building.floors,
-				center: centers.get( parcelId )
-			} );
+			this.pending.set( parcelId, { parcelId, floors: building.floors, center: centers.get( parcelId ) } );
 
 		}
 
 	}
 
+	/** Buildings open around the player, whatever their floors hold. */
 	get liveInteriors() {
 
 		return this.live.size;
@@ -83,51 +92,46 @@ export class InteriorStream {
 	}
 
 	/**
-	 * One pass over what should be in memory and what should be in the scene.
-	 * Cheap to call every frame: the distance test is a hypot per building and
-	 * the band test only runs on what is loaded.
+	 * One pass over what should be open, what should be in memory and what
+	 * should be in the scene. Cheap to call every frame: a hypot per building
+	 * and a subtraction per floor. Collider work shares one frame budget, and
+	 * whatever it leaves unfinished the next pass picks up.
+	 *
+	 * @returns whether the set of rooms in memory or in the scene changed
 	 */
 	update( feet ) {
 
 		this.changed = false;
 
-		// Nearest first: the building being walked into is the one whose rooms
-		// have to be there, and a queue in map order would load the far side of
-		// the block ahead of it.
-		if ( this.loading < CONCURRENCY ) {
+		for ( const entry of this.pending.values() ) {
 
-			let next = null;
-			let nearest = LOAD_RADIUS;
-
-			for ( const entry of this.pending.values() ) {
-
-				if ( this.live.has( entry.parcelId ) ) continue;
-
-				const distance = ground( entry.center, feet );
-
-				if ( distance < nearest ) {
-
-					nearest = distance;
-					next = entry;
-
-				}
-
-			}
-
-			if ( next ) this.#load( next );
+			if ( ! this.live.has( entry.parcelId ) && ground( entry.center, feet ) < LOAD_RADIUS ) this.#open( entry );
 
 		}
+
+		const budget = new FrameBudget( FRAME_BUDGET_MS );
+		let next = null;
 
 		for ( const [ parcelId, interior ] of this.live ) {
 
-			// A load in flight has no geometry to band and no centre to measure;
-			// it is dropped or kept once it lands.
-			if ( interior === PLACEHOLDER ) continue;
+			const distance = ground( interior.center, feet );
 
-			if ( ground( interior.center, feet ) > DROP_RADIUS ) this.#drop( parcelId );
-			else this.#band( interior, feet );
+			if ( distance > DROP_RADIUS ) {
+
+				this.#drop( parcelId );
+				continue;
+
+			}
+
+			const want = this.#band( interior, feet, budget );
+
+			// Nearest building first: the one being walked into is the one whose
+			// floor has to be there, and the far side of the block can wait.
+			if ( want && ( ! next || distance < next.distance ) ) next = { interior, band: want, distance };
 
 		}
+
+		if ( next && this.loading < CONCURRENCY ) this.#load( next.interior, next.band );
 
 		return this.changed;
 
@@ -142,90 +146,14 @@ export class InteriorStream {
 
 	}
 
-	/**
-	 * Which floors of one building are in the scene. The player's own floor is
-	 * whichever band holds their feet, so standing on the street puts the ground
-	 * floor and its neighbours in and leaves the tower above out.
-	 *
-	 * A band going live costs a collider, so once a frame has spent its budget
-	 * on them the rest wait: the pass is left unfinished and runs again next
-	 * frame, picking up the bands that still differ from where the player is.
-	 */
-	#band( interior, feet ) {
+	/** A building within reach: shafts from its floor documents, a band per floor. */
+	#open( entry ) {
 
-		const standing = floorAt( interior.bands, feet.y );
+		const interior = new Interior( entry );
 
-		if ( standing === interior.standing ) return;
-
-		const budget = new FrameBudget( FRAME_BUDGET_MS );
-
-		for ( const band of interior.bands ) {
-
-			const near = band.floor === OUTSIDE_FLOORS
-				|| Math.abs( band.floor - standing ) <= BAND_REACH;
-
-			if ( near === band.live ) continue;
-
-			band.live = near;
-			band.group.visible = near;
-			this.changed = true;
-
-			if ( ! near ) {
-
-				this.onDropBand?.( band.id );
-				continue;
-
-			}
-
-			const t = performance.now();
-			this.onColliderBand?.( band.id, band.collider() );
-			this.hitches?.note( `band ${band.id} collider`, performance.now() - t );
-
-			if ( budget.spent ) return;
-
-		}
-
-		interior.standing = standing;
-
-	}
-
-	async #load( entry ) {
-
-		this.loading ++;
-		this.live.set( entry.parcelId, PLACEHOLDER );
-
-		try {
-
-			const built = await this.#build( entry );
-
-			// A drop can have overtaken the load on a fast walk past a building.
-			if ( ! built ) return;
-
-			this.live.set( entry.parcelId, built );
-			this.group.add( built.group );
-			this.rooms.push( ...built.rooms );
-			this.changed = true;
-
-		} catch ( error ) {
-
-			// A load nobody waits for any more fails quietly.
-			if ( ! this.#waiting( entry ) ) return;
-
-			this.live.delete( entry.parcelId );
-			console.warn( `interior ${entry.parcelId}: ${error?.message ?? error}` );
-
-		} finally {
-
-			this.loading --;
-
-		}
-
-	}
-
-	/** Whether the building is still wanted since its load began. */
-	#waiting( entry ) {
-
-		return this.live.get( entry.parcelId ) === PLACEHOLDER;
+		this.elevators?.add( interior.parcelId, interior.floors, interior.group );
+		this.group.add( interior.group );
+		this.live.set( interior.parcelId, interior );
 
 	}
 
@@ -235,86 +163,178 @@ export class InteriorStream {
 
 		this.live.delete( parcelId );
 
-		if ( interior === PLACEHOLDER ) return;
-
-		for ( const band of interior.bands ) {
-
-			if ( band.live ) this.onDropBand?.( band.id );
-
-			band.dispose();
-
-		}
+		for ( const band of interior.bands ) this.#unload( interior, band );
 
 		this.elevators?.remove( parcelId );
 		this.group.remove( interior.group );
-		this.rooms = this.rooms.filter( ( room ) => room.parcelId !== parcelId );
-		this.changed = true;
 
 	}
 
 	/**
-	 * Lands one interior: the worker cuts it, the frame assembles rooms and
-	 * floor bands from what it posted, each step spread over as many frames as
-	 * its budget takes and noted with its thread time.
+	 * Which floors of one building are in memory and in the scene. The player's
+	 * own floor is whichever band holds their feet, so standing on the street
+	 * puts the ground floor and its neighbours in and leaves the tower above out.
 	 *
-	 * @returns the interior, or null when it stopped being wanted meanwhile
+	 * @returns the empty band nearest the player's floor that wants fetching, if any
 	 */
-	async #build( entry ) {
+	#band( interior, feet, budget ) {
 
+		const standing = floorAt( interior.bands, feet.y );
+		let want = null;
+
+		for ( const band of interior.bands ) {
+
+			const away = Math.abs( band.floor - standing );
+
+			if ( away > KEEP_REACH ) {
+
+				if ( band.state !== EMPTY && band.state !== FAILED ) this.#unload( interior, band );
+
+			} else if ( away > BAND_REACH ) {
+
+				if ( band.live ) this.#hide( band );
+
+			} else if ( band.state === EMPTY ) {
+
+				if ( ! want || away < Math.abs( want.floor - standing ) ) want = band;
+
+			} else if ( band.state === LOADED && ! band.live && ! budget.spent ) {
+
+				this.#show( band );
+
+			}
+
+		}
+
+		return want;
+
+	}
+
+	/** A loaded band goes into the scene and into the physics world. */
+	#show( band ) {
+
+		band.live = true;
+		band.group.visible = true;
+		this.changed = true;
+
+		const t = performance.now();
+		this.onColliderBand?.( band.id, band.collider() );
+		this.hitches?.note( `band ${band.id} collider`, performance.now() - t );
+
+	}
+
+	#hide( band ) {
+
+		band.live = false;
+		band.group.visible = false;
+		this.onDropBand?.( band.id );
+		this.changed = true;
+
+	}
+
+	/** Lets a floor go: out of the scene, out of the shafts, out of memory. */
+	#unload( interior, band ) {
+
+		if ( band.live ) this.#hide( band );
+
+		const gone = new Set( band.rooms );
+
+		if ( gone.size ) {
+
+			this.rooms = this.rooms.filter( ( room ) => ! gone.has( room ) );
+			this.changed = true;
+
+		}
+
+		this.elevators?.release( interior.parcelId, band.floor );
+		band.clear();
+
+	}
+
+	async #load( interior, band ) {
+
+		this.loading ++;
+		band.state = LOADING;
+
+		try {
+
+			const built = await this.#build( interior, band );
+
+			// A drop can have overtaken the load on a fast walk past a building.
+			if ( ! built ) return;
+
+			band.take( built );
+			this.rooms.push( ...built.rooms );
+			this.changed = true;
+
+		} catch ( error ) {
+
+			// A load nobody waits for any more fails quietly.
+			if ( ! this.#wanted( interior, band ) ) return;
+
+			band.state = FAILED;
+			console.warn( `floor ${band.id}: ${error?.message ?? error}` );
+
+		} finally {
+
+			this.loading --;
+
+		}
+
+	}
+
+	/** Whether the floor is still wanted since its load began. */
+	#wanted( interior, band ) {
+
+		return band.state === LOADING && this.live.get( interior.parcelId ) === interior;
+
+	}
+
+	/**
+	 * Lands one floor: the worker cuts it, the frame assembles rooms and the
+	 * band's own surfaces from what it posted, each step spread over as many
+	 * frames as its budget takes and noted with its thread time. Everything is
+	 * built aside and handed over whole, so a load that stops being wanted
+	 * leaves nothing behind.
+	 *
+	 * @returns { content, rooms, solid }, or null when it stopped being wanted
+	 */
+	async #build( interior, band ) {
+
+		const { parcelId } = interior;
 		const sent = performance.now();
-		const { cut, bytes, cost } = await this.worker.cut( entry );
-		this.hitches?.note( `interior ${entry.parcelId} off thread ${( bytes / 1048576 ).toFixed( 1 )} MB: `
+		const { cut, bytes, cost } = await this.worker.cut( band.glbUrl, interior.outlines );
+		this.hitches?.note( `floor ${band.id} off thread ${( bytes / 1048576 ).toFixed( 1 )} MB: `
 			+ `${Object.entries( cost ).map( ( [ step, ms ] ) => `${step} ${ms} ms` ).join( ', ' )}, `
 			+ `round trip ${( performance.now() - sent ).toFixed( 0 )} ms` );
 
-		if ( ! this.#waiting( entry ) ) return null;
+		if ( ! this.#wanted( interior, band ) ) return null;
 
 		const reflectance = await this.#reflectance( keysOf( cut ) );
 
-		if ( ! this.#waiting( entry ) ) return null;
+		if ( ! this.#wanted( interior, band ) ) return null;
 
 		let budget = new FrameBudget( FRAME_BUDGET_MS );
 		const rooms = [];
 
-		for ( const room of assembleRooms( entry.parcelId, cut, entry.floors, reflectance ) ) {
+		for ( const room of assembleRooms( parcelId, cut, interior.floors, reflectance ) ) {
 
 			// A room is shown by distance and lit by the slot pool on separate
 			// timers, so it enters the scene already dressed in the dim binding.
 			room.wear( this.roomLights.dim, this.roomLights );
 			rooms.push( room );
 
-			if ( ! await this.#rest( budget, entry ) ) return null;
+			if ( ! await this.#rest( budget, interior, band ) ) return null;
 
 		}
 
-		this.hitches?.note( `interior ${entry.parcelId} rooms ${budget.frames} frames`, budget.busy );
+		this.hitches?.note( `floor ${band.id} rooms ${budget.frames} frames`, budget.busy );
 
 		budget = new FrameBudget( FRAME_BUDGET_MS );
-		const group = new THREE.Group();
-		group.name = `interior:${entry.parcelId}`;
-		// Before the bands, because the door leaves each band gives up have to
-		// know which shaft they belong to.
-		this.elevators?.add( entry.parcelId, entry.floors, group );
+		const content = new THREE.Group();
+		const solid = [];
 
-		const levels = new Map( entry.floors.map( ( floor ) => [ floor.floor, floor ] ) );
-		const bands = new Map();
-		const bandOf = ( floor ) => {
-
-			if ( ! bands.has( floor ) ) {
-
-				const band = new FloorBand( entry.parcelId, floor, levels.get( floor ) );
-				group.add( band.group );
-				bands.set( floor, band );
-
-			}
-
-			return bands.get( floor );
-
-		};
-
-		for ( const { floor, surfaces } of cut.shared ) {
-
-			const band = bandOf( floor );
+		for ( const { surfaces } of cut.shared ) {
 
 			for ( const surface of surfaces ) {
 
@@ -325,63 +345,56 @@ export class InteriorStream {
 				// the shafts take theirs so they can slide.
 				if ( surface.key.includes( ELEVATOR_DOOR ) ) {
 
-					geometry = this.elevators?.claim( entry.parcelId, floor, geometry, material, band.group ) ?? geometry;
+					geometry = this.elevators?.claim( parcelId, band.floor, geometry, material, content ) ?? geometry;
 
 				}
 
-				if ( geometry ) band.add( new THREE.Mesh( geometry, material ) );
+				if ( ! geometry ) continue;
+
+				content.add( new THREE.Mesh( geometry, material ) );
+				solid.push( geometry.getAttribute( 'position' ).array );
 
 			}
 
-			if ( ! await this.#rest( budget, entry ) ) {
+			if ( ! await this.#rest( budget, interior, band ) ) {
 
-				this.elevators?.remove( entry.parcelId );
+				this.elevators?.release( parcelId, band.floor );
 				return null;
 
 			}
 
 		}
 
-		for ( const room of rooms ) bandOf( room.floor ).addRoom( room );
+		for ( const room of rooms ) {
 
-		const list = [ ...bands.values() ];
-		this.#hangHaze( list, rooms );
-		this.hitches?.note( `interior ${entry.parcelId} bands ${budget.frames} frames`, budget.busy );
+			room.group.visible = false;
+			content.add( room.group );
 
-		return { parcelId: entry.parcelId, center: entry.center, group, bands: list, rooms, standing: null };
+			for ( const { mesh } of room.meshes ) solid.push( mesh.geometry.getAttribute( 'position' ).array );
+
+		}
+
+		// The air inside the floor's rooms, parented to the band so it is
+		// culled and dropped with the floor it belongs to.
+		const glow = this.haze && Haze.build( rooms.flatMap( ( room ) => room.fixtures ), this.haze );
+
+		if ( glow ) content.add( glow );
+
+		this.hitches?.note( `floor ${band.id} band ${budget.frames} frames`, budget.busy );
+
+		return { content, rooms, solid };
 
 	}
 
 	/**
 	 * Lets the frame go once the budget is spent.
-	 * @returns whether the building is still wanted afterwards
+	 * @returns whether the floor is still wanted afterwards
 	 */
-	async #rest( budget, entry ) {
+	async #rest( budget, interior, band ) {
 
 		await budget.rest();
 
-		return this.#waiting( entry );
-
-	}
-
-	/**
-	 * The air inside the rooms of one floor, as geometry, parented to that
-	 * band so it is culled with the floor it belongs to.
-	 */
-	#hangHaze( bands, rooms ) {
-
-		if ( ! this.haze ) return;
-
-		for ( const band of bands ) {
-
-			const fixtures = rooms
-				.filter( ( room ) => room.floor === band.floor )
-				.flatMap( ( room ) => room.fixtures );
-			const glow = Haze.build( fixtures, this.haze );
-
-			if ( glow ) band.group.add( glow );
-
-		}
+		return this.#wanted( interior, band );
 
 	}
 
@@ -398,42 +411,62 @@ export class InteriorStream {
 
 }
 
+/** One building open around the player: its floors as bands, lowest first. */
+class Interior {
+
+	constructor( { parcelId, floors, center } ) {
+
+		this.parcelId = parcelId;
+		this.center = center;
+		this.floors = floors;
+		this.outlines = outlinesOf( floors );
+		this.group = new THREE.Group();
+		this.group.name = `interior:${parcelId}`;
+		this.bands = [ ...floors ]
+			.sort( ( a, b ) => a.floor - b.floor )
+			.map( ( floor ) => new FloorBand( parcelId, floor ) );
+
+		for ( const band of this.bands ) this.group.add( band.group );
+
+	}
+
+}
+
 /**
- * One floor of one interior: in the scene and solid while the player is
- * within a floor of it. Its collider is built the first time it goes live,
- * from the same arrays its meshes draw, so a tower's sixty other floors never
- * pay for one.
+ * One floor of one interior: fetched while the player is within a floor of it,
+ * in the scene and solid while it stays so. Its collider is built the first
+ * time it goes live, from the same arrays its meshes draw, and everything is
+ * let go together, so a tower's other floors never cost a byte.
  */
 class FloorBand {
 
-	constructor( parcelId, floor, level ) {
+	constructor( parcelId, { floor, elevation, height, glbUrl } ) {
 
 		this.id = `${parcelId}:${floor}`;
 		this.floor = floor;
-		this.elevation = level?.elevation ?? 0;
-		this.height = level?.height ?? 0;
+		this.elevation = elevation;
+		this.height = height;
+		this.glbUrl = glbUrl;
 		this.group = new THREE.Group();
-		this.group.name = `interior:${parcelId}:floor:${floor}`;
+		this.group.name = `interior:${this.id}`;
 		this.group.visible = false;
+		this.state = EMPTY;
 		this.live = false;
+		this.content = null;
+		this.rooms = [];
 		this.solid = [];
 		this.trimesh = null;
 
 	}
 
-	add( mesh ) {
+	/** Takes what a landing built: the floor's meshes, its rooms, its solid arrays. */
+	take( { content, rooms, solid } ) {
 
-		this.group.add( mesh );
-		this.solid.push( mesh.geometry.getAttribute( 'position' ).array );
-
-	}
-
-	addRoom( room ) {
-
-		room.group.visible = false;
-		this.group.add( room.group );
-
-		for ( const { mesh } of room.meshes ) this.solid.push( mesh.geometry.getAttribute( 'position' ).array );
+		this.content = content;
+		this.rooms = rooms;
+		this.solid = solid;
+		this.group.add( content );
+		this.state = LOADED;
 
 	}
 
@@ -459,10 +492,19 @@ class FloorBand {
 
 	}
 
-	dispose() {
+	/** Back to empty: nothing of the floor's geometry is referenced afterwards. */
+	clear() {
 
 		this.trimesh?.dispose();
-		this.group.traverse( ( node ) => node.geometry?.dispose() );
+		this.content?.traverse( ( node ) => node.geometry?.dispose() );
+
+		if ( this.content ) this.group.remove( this.content );
+
+		this.trimesh = null;
+		this.content = null;
+		this.rooms = [];
+		this.solid = [];
+		this.state = EMPTY;
 
 	}
 
@@ -483,15 +525,19 @@ class InteriorWorkerLink {
 
 	}
 
-	/** @returns { cut, bytes, cost } as InteriorWorker.js posts them */
-	cut( entry ) {
+	/**
+	 * @param url one floor's GLB
+	 * @param outlines the building's floors as `outlinesOf` keeps them
+	 * @returns { cut, bytes, cost } as InteriorWorker.js posts them
+	 */
+	cut( url, outlines ) {
 
 		const id = this.serial ++;
 
 		return new Promise( ( resolve, reject ) => {
 
 			this.waiting.set( id, { resolve, reject } );
-			this.#worker().postMessage( { id, url: entry.glbUrl, outlines: outlinesOf( entry.floors ) } );
+			this.#worker().postMessage( { id, url, outlines } );
 
 		} );
 
@@ -537,9 +583,9 @@ class InteriorWorkerLink {
 }
 
 /**
- * How much of a frame a landing interior may take. A loop checks in after
- * each piece of work; once the slice has run past the budget, the next piece
- * waits for the next frame. Keeps the thread time it took, over how many frames.
+ * How much of a frame the stream may take. A loop checks in after each piece
+ * of work; once the slice has run past the budget, the next piece waits for
+ * the next frame. Keeps the thread time it took, over how many frames.
  */
 class FrameBudget {
 
@@ -616,8 +662,6 @@ export function floorAt( bands, y ) {
 
 	for ( const band of bands ) {
 
-		if ( band.floor === OUTSIDE_FLOORS ) continue;
-
 		const top = band.elevation + band.height;
 
 		if ( y >= band.elevation && y < top ) return band.floor;
@@ -642,6 +686,3 @@ function ground( center, point ) {
 	return Math.hypot( center.x - point.x, center.z - point.z );
 
 }
-
-/** Held while a load is in flight so the same building is not fetched twice. */
-const PLACEHOLDER = Object.freeze( { placeholder: true } );

@@ -88,6 +88,16 @@ export class Elevators {
 	}
 
 	/**
+	 * Lets go of the leaves claimed at one floor when its band leaves memory;
+	 * the next load of that floor claims them again.
+	 */
+	release( parcelId, floor ) {
+
+		for ( const shaft of this.byBuilding.get( parcelId ) ?? [] ) shaft.stopAt( floor )?.release();
+
+	}
+
+	/**
 	 * Takes this band's published door leaves into the shafts that own them.
 	 * @returns the geometry left over, which is everything that is not a door.
 	 */
@@ -393,6 +403,13 @@ class Stop {
 		this.panel = centre.clone().addScaledVector( facing, PANEL_OUT ).setY( this.elevation + PANEL_HEIGHT );
 
 		return this.leaves;
+
+	}
+
+	release() {
+
+		this.leaves = [];
+		this.panel = null;
 
 	}
 
