@@ -84,6 +84,28 @@ describe( 'RequestAssembler', () => {
 
 	} );
 
+	it( 'signs a venue with what it is, and leaves everything else unsigned', () => {
+
+		const sign = ( type ) => {
+
+			const parcel = { ...officeParcel, type };
+
+			return new RequestAssembler( atlasWith( parcel ), connections ).assemble( 'p7' ).options.signage;
+
+		};
+
+		expect( sign( 'coffee_shop' ) ).toEqual( { mode: 'marquee', text: 'COFFEE' } );
+		expect( sign( 'restaurant' ) ).toEqual( { mode: 'marquee', text: 'DINER' } );
+		expect( sign( 'offices' ) ).toBe( undefined );
+		expect( sign( 'residential' ) ).toBe( undefined );
+
+		// a facade the word does not fit on wears none rather than failing
+		const bare = new RequestAssembler( atlasWith( { ...officeParcel, type: 'hotel' } ), connections )
+			.assemble( 'p7', { signage: false } );
+		expect( bare.options.signage ).toBe( undefined );
+
+	} );
+
 	it( 'chooses a floor count inside exterior\'s feasible range', () => {
 
 		// hotel constants 2.8/5.0, bases {8, 16} under maxHeight 22.4: recipe gives

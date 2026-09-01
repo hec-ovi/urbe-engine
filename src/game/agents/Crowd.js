@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { SIDEWALK_HEIGHT } from '../ground/GroundBuilder.js';
 import { CLIP } from './CharacterAssets.js';
 import { FRAMES } from './VatBaker.js';
+import { look } from './Appearance.js';
 
 const WALK_SPEED = 1.4;
 const SPAWN_RADIUS = 90;
@@ -12,15 +13,10 @@ const PARCEL_RADIUS = 45;
  *  holds more than a handful, and the cap is per edge, not per city. */
 const EDGE_AGENTS = 16;
 const PARCEL_AGENTS = 8;
-
-// Night-street clothing. The base character models ship undressed, so the tint
-// multiplies their skin map into a bodysuit: the hues stay off-skin on purpose,
-// and mid-toned, because darker than this is a black smear under a street lamp
-// and lighter reads as bare.
-const TINTS = [
-	0x5b6b86, 0x7a4a52, 0x4d6b5f, 0x6b5f7a, 0x8a6a4a,
-	0x556070, 0x6e4f6b, 0x4a5f6b, 0x7d6f5a, 0x5f5f6b
-];
+/** The space one person stands in, measured for the pushback only. */
+const PERSON_RADIUS = 0.34;
+/** Above or below this, the two are on different floors and never touch. */
+const PERSON_HEIGHT = 2;
 
 /**
  * The people in the world, all of them real. Two sources, both the simulation
@@ -51,7 +47,7 @@ export class Crowd {
 		this.timer = REFRESH_INTERVAL;
 		this.sampled = 0;
 
-		this.color = new THREE.Color();
+		this.push = new THREE.Vector3();
 
 	}
 
@@ -79,6 +75,53 @@ export class Crowd {
 		}
 
 		this.#write();
+
+	}
+
+	/**
+	 * How far the player has to move to stop standing inside somebody. Nobody
+	 * in the crowd is a physics body, so the player is pushed out of them
+	 * instead: the whole overlap every frame, which is what makes walking
+	 * through a person impossible, summed over everyone touching, so a knot of
+	 * people shoulders the player aside instead of snapping them to one side.
+	 *
+	 * @param point the player's feet
+	 * @param clearance the player's own radius
+	 * @returns the XZ correction, zero when nobody is touching. Reused; copy it
+	 * if it has to outlive the call.
+	 */
+	pushback( point, clearance ) {
+
+		const reach = PERSON_RADIUS + clearance;
+
+		this.push.set( 0, 0, 0 );
+
+		for ( const member of this.members.values() ) {
+
+			if ( Math.abs( member.position.y - point.y ) > PERSON_HEIGHT ) continue;
+
+			const dx = point.x - member.position.x;
+			const dz = point.z - member.position.z;
+			const distance = Math.hypot( dx, dz );
+
+			if ( distance >= reach ) continue;
+
+			// Exactly on top of each other has no direction to push along, so
+			// pick one rather than divide by zero.
+			if ( distance < 1e-4 ) {
+
+				this.push.x += reach;
+				continue;
+
+			}
+
+			const overlap = reach - distance;
+			this.push.x += ( dx / distance ) * overlap;
+			this.push.z += ( dz / distance ) * overlap;
+
+		}
+
+		return this.push;
 
 	}
 
@@ -271,7 +314,7 @@ export class Crowd {
 			npcId: null,
 			instance: null,
 			variant: seed % 2,
-			tint: TINTS[ seed % TINTS.length ],
+			look: look( seed ),
 			frame: seed % FRAMES,
 			frozen: false,
 			waiting: false,
@@ -357,11 +400,9 @@ export class Crowd {
 
 			if ( slot >= this.capacity ) continue;
 
-			this.color.set( member.tint );
-
 			for ( const mesh of this.assets.meshesOf( member.variant ) ) {
 
-				mesh.setInstance( slot, member.position, member.heading, member.frame, member.clip, this.color );
+				mesh.setInstance( slot, member.position, member.heading, member.frame, member.clip, member.look );
 
 			}
 

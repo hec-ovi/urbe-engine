@@ -10,10 +10,12 @@ const DEFAULTS = {
 	streetDensity: 1
 };
 
+const LANE_MODES = [ 'paint', 'glow', 'debug' ];
+
 /**
  * One game run, described entirely by the URL query:
  * ?mode=game[&world=city-urbe-tiny][&out=/out/city-tiny][&backend=webgpu|webgl]
- * [&hour=21][&crowd=160][&cars=18][&density=1][&lanes=debug]
+ * [&hour=21][&crowd=160][&cars=18][&density=1][&lanes=glow|debug]
  */
 export class GameConfig {
 
@@ -53,9 +55,10 @@ export class GameConfig {
 			// Debug only: repeats each real street agent N times over nearby
 			// walk edges to load-test the crowd renderer. Never on by default.
 			stress: int( 'stress', DEFAULTS.stress, 0, 40 ),
-			// Debug only: paints every lane of the road graph end to end
-			// instead of the thin centreline strips. Off in every normal run.
-			laneDebug: q.get( 'lanes' ) === 'debug'
+			// Debug only: `debug` paints every lane of the road graph end to
+			// end, `glow` restores the teal emissive centreline strips. Normal
+			// runs get painted road markings.
+			laneMode: LANE_MODES.includes( q.get( 'lanes' ) ) ? q.get( 'lanes' ) : 'paint'
 		};
 
 	}

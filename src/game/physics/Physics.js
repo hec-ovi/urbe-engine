@@ -63,6 +63,21 @@ export class Physics {
 
 	}
 
+	/**
+	 * A fixed upright cylinder standing on the ground: street furniture the
+	 * player bumps into, at a fraction of what the same shape costs as a
+	 * trimesh.
+	 * @param post { x, z, base, height, radius }
+	 */
+	addPost( { x, z, base, height, radius } ) {
+
+		const body = this.world.createRigidBody(
+			RAPIER.RigidBodyDesc.fixed().setTranslation( x, base + height / 2, z )
+		);
+		this.world.createCollider( RAPIER.ColliderDesc.cylinder( height / 2, radius ), body );
+
+	}
+
 	remove( handle ) {
 
 		if ( ! handle ) return;

@@ -7,6 +7,8 @@ const PLAZA_SPACING = 34;
 const MIN_GAP = 6;
 const POLE_HEIGHT = 6.4;
 const POLE_RADIUS = 0.085;
+/** The pole is tapered; the collider is one cylinder around its widest point. */
+const POLE_COLLIDER_RADIUS = 0.14;
 const ARM = 1.1;
 const LAMP_COLOR = 0xffcf9a;
 const LENS_KEY = 'cyberpunk/light-fixture/mid';
@@ -32,7 +34,7 @@ export class StreetLamps {
 
 	}
 
-	/** @returns { group, glows } */
+	/** @returns { group, glows, posts } */
 	build() {
 
 		const plazas = this.atlas.volumetric.ground
@@ -46,8 +48,9 @@ export class StreetLamps {
 		const structure = [];
 		const lenses = [];
 		const glows = [];
+		const posts = [];
 
-		for ( const spot of spots ) this.#lamp( structure, lenses, glows, spot );
+		for ( const spot of spots ) this.#lamp( structure, lenses, glows, posts, spot );
 
 		const group = new THREE.Group();
 		group.name = 'lamps';
@@ -70,7 +73,7 @@ export class StreetLamps {
 
 		}
 
-		return { group, glows };
+		return { group, glows, posts };
 
 	}
 
@@ -169,9 +172,10 @@ export class StreetLamps {
 
 	/**
 	 * Pole, arm reaching over the road, dark housing on the end of it and the
-	 * lens under the housing. The glow hangs just below the lens.
+	 * lens under the housing. The glow hangs just below the lens, and the pole
+	 * is the only part solid enough to walk into.
 	 */
-	#lamp( structure, lenses, glows, { x, z, ax, az } ) {
+	#lamp( structure, lenses, glows, posts, { x, z, ax, az } ) {
 
 		const base = 0.12;
 		const facing = - Math.atan2( az, ax );
@@ -206,6 +210,8 @@ export class StreetLamps {
 			intensity: 42,
 			distance: 24
 		} );
+
+		posts.push( { x, z, base, height: POLE_HEIGHT, radius: POLE_COLLIDER_RADIUS } );
 
 	}
 

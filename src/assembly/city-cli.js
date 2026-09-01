@@ -3,8 +3,13 @@
  * Full-city batch: connections once for the whole blueprint, then the building
  * pipeline (merged runtime GLB, blueprint, core-gated interior with npc.json)
  * for every parcel, a few in parallel. Failures are recorded in the QA report,
- * never fatal; the run always completes. Writes <dir>/qa-report.json and
- * prints the summary. Exit 0 when every parcel passed, 1 otherwise.
+ * never fatal; the run always completes.
+ *
+ * The out dir ends holding exactly this blueprint: folders for parcels it no
+ * longer has are removed first, and <dir>/manifest.json names the blueprint and
+ * the parcels that really finished, which is the list the game loads. Writes
+ * <dir>/qa-report.json too and prints the summary. Exit 0 when every parcel
+ * passed, 1 otherwise.
  */
 
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
@@ -12,6 +17,7 @@ import { join, resolve } from 'node:path';
 import { RequestAssembler } from './RequestAssembler.js';
 import { runConnections } from './connectionsRunner.js';
 import { BuildingPipeline } from './BuildingPipeline.js';
+import { OutDir, MANIFEST_FILE } from './OutDir.js';
 
 function parseArgs( argv ) {
 
@@ -66,11 +72,14 @@ const atlas = JSON.parse( readFileSync( resolve( args.blueprint ), 'utf8' ) );
 const connections = await runConnections( atlas, { seed: atlas.meta.seed } );
 const pipeline = new BuildingPipeline( new RequestAssembler( atlas, connections ) );
 const outDir = resolve( args.out );
+const out = new OutDir( outDir );
 
-const queue = atlas.parcels
-	.map( ( p ) => p.id )
-	.filter( ( id ) => ! args.parcels || args.parcels.includes( id ) );
+const parcelIds = atlas.parcels.map( ( p ) => p.id );
+const stale = out.prune( atlas.parcels );
+const queue = parcelIds.filter( ( id ) => ! args.parcels || args.parcels.includes( id ) );
+
 console.log( `city ${atlas.meta.seed}: ${queue.length} parcels, ${args.workers} workers` );
+if ( stale.length ) console.log( `dropped ${stale.length} folders this blueprint no longer has: ${stale.join( ', ' )}` );
 
 const results = [];
 
@@ -97,6 +106,10 @@ async function worker() {
 			console.log( `${id}  ok  ${result.floors}+${result.basements}b ${coreMode}  ${result.ms} ms  ${result.bytes} bytes` );
 
 		} catch ( error ) {
+
+			// A parcel that failed leaves nothing on disk, so the manifest and
+			// the report agree on what the world actually holds.
+			out.drop( id );
 
 			const result = {
 				parcelId: id,
@@ -133,8 +146,11 @@ writeFileSync( join( outDir, 'qa-report.json' ), JSON.stringify( {
 	parcels: results
 }, null, 2 ) + '\n' );
 
+const manifest = out.writeManifest( atlas, out.built( parcelIds ) );
+
 console.log( `\n${totals.passed}/${totals.parcels} passed, ${totals.failed} failed, ${( totals.wallMs / 1000 ).toFixed( 1 )} s, ${( totals.bytes / 1e6 ).toFixed( 1 )} MB` );
 for ( const r of failed ) console.log( `  ${r.parcelId}  ${r.error}` );
 console.log( `qa report: ${join( outDir, 'qa-report.json' )}` );
+console.log( `manifest: ${join( outDir, MANIFEST_FILE )} (${manifest.parcels.length} buildings, atlas ${manifest.atlasVersion})` );
 
 process.exit( failed.length > 0 ? 1 : 0 );

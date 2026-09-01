@@ -41,8 +41,7 @@ export class BuildingPipeline {
 
 		mkdirSync( outDir, { recursive: true } );
 
-		let request = this.#assembleValidated( parcelId, glb, null );
-		let blueprint = await this.#generateExterior( request, outDir );
+		let { request, blueprint } = await this.#shell( parcelId, outDir, { glb } );
 		let coreMode = null;
 
 		if ( interior ) {
@@ -51,8 +50,7 @@ export class BuildingPipeline {
 
 			if ( core.mode === 'walkup' && request.building.floors > core.walkupMaxFloors ) {
 
-				request = this.#assembleValidated( parcelId, glb, core.walkupMaxFloors );
-				blueprint = await this.#generateExterior( request, outDir );
+				( { request, blueprint } = await this.#shell( parcelId, outDir, { glb, floorCap: core.walkupMaxFloors } ) );
 				core = await runCoreFeasibility( blueprint );
 
 			}
@@ -73,9 +71,34 @@ export class BuildingPipeline {
 
 	}
 
-	#assembleValidated( parcelId, glb, floorCap ) {
+	/**
+	 * The shell, with the parcel's venue sign on it. A facade too small for the
+	 * word throws E_SIGNAGE_TEXT_TOO_LONG; that building wears no sign rather
+	 * than failing the parcel.
+	 */
+	async #shell( parcelId, outDir, options ) {
 
-		const request = this.assembler.assemble( parcelId, { glb, floorCap } );
+		const request = this.#assembleValidated( parcelId, options );
+
+		try {
+
+			return { request, blueprint: await this.#generateExterior( request, outDir ) };
+
+		} catch ( error ) {
+
+			if ( ! request.options.signage || ! error.message.includes( 'E_SIGNAGE_TEXT_TOO_LONG' ) ) throw error;
+
+		}
+
+		const bare = this.#assembleValidated( parcelId, { ...options, signage: false } );
+
+		return { request: bare, blueprint: await this.#generateExterior( bare, outDir ) };
+
+	}
+
+	#assembleValidated( parcelId, options ) {
+
+		const request = this.assembler.assemble( parcelId, options );
 		const errors = validateExteriorRequest( request );
 
 		if ( errors.length > 0 ) {

@@ -7,17 +7,23 @@ import { signedArea } from '../ground/Polygons.js';
 // panels themselves are lit by their own emission maps from the materials
 // database, so the signage never turns into flat coloured cards.
 const GLOW = [ 0xff2fb0, 0x24e0ff, 0xffa42b, 0x9b5cff, 0x2bff9e ];
+const DOOR_GLOW = 0xffd7a8;
 
-const BLADE_EMISSIVE = 2.2;
-const BLADE_KEY = ( tier ) => `cyberpunk/signage/${tier}`;
 const SCREEN_KEY = ( tier ) => `cyberpunk/ad-screen/${tier}`;
 const SCREEN_ASPECT = 16 / 9;
 
 /**
- * Street-level neon. The exterior layer emits no signage geometry, so the game
- * hangs it: blade signs projecting off the facade the parcel's street access
- * faces, and flat ad screens on the same wall, both textured and lit by the
- * materials database's own emissive entries. Deterministic per parcel.
+ * Street-level light on the facades. Two jobs:
+ *
+ * - it hangs flat ad screens on the facade each parcel's street access faces,
+ *   textured and lit by the materials database's own emissive entries;
+ * - it registers the glows the light budget spends its point lights on, and
+ *   every one of them sits on something the world actually built: the venue
+ *   sign exterior lettered for this parcel, the fixtures over its entrance,
+ *   and the screens hung here. A building with no sign gets no sign light,
+ *   which is the point: nothing lights an empty panel.
+ *
+ * Deterministic per parcel.
  */
 export class Neon {
 
@@ -37,7 +43,6 @@ export class Neon {
 	/** @returns { group, glows } */
 	build() {
 
-		const blades = new Map();
 		const screens = new Map();
 		const glows = [];
 
@@ -47,38 +52,35 @@ export class Neon {
 
 			if ( ! building ) continue;
 
+			const rng = new Rng( hash( parcel.id ) );
+
+			this.#signLight( glows, building.blueprint, rng );
+			this.#doorLight( glows, building.blueprint );
+
 			const facade = frontFacade( building.blueprint, parcel );
 
-			if ( ! facade ) continue;
+			if ( facade ) {
 
-			const rng = new Rng( hash( parcel.id ) );
-			const tier = parcel.tier;
-			const top = building.blueprint.bounds.height;
+				this.#screens( screens, glows, facade, rng, parcel.tier, building.blueprint.bounds.height );
 
-			this.#blades( blades, glows, facade, rng, tier, top );
-			this.#screens( screens, facade, rng, tier, top );
+			}
 
 		}
 
 		const group = new THREE.Group();
 		group.name = 'neon';
 
-		// A blade sign has to carry down a street, so its emission is pushed.
-		// An ad screen already ships at strength 8 to 10 and pushing that only
+		// An ad screen already ships at strength 8 to 10; pushing that only
 		// clips the picture to a white rectangle, so it is left as the
 		// database wrote it.
-		for ( const [ scale, panels ] of [ [ BLADE_EMISSIVE, blades ], [ 1, screens ] ] ) {
+		for ( const [ key, geometries ] of screens ) {
 
-			for ( const [ key, geometries ] of panels ) {
-
-				const mesh = new THREE.Mesh(
-					BufferGeometryUtils.mergeGeometries( geometries, false ),
-					this.factory.variant( key, { emissiveScale: scale, side: THREE.DoubleSide } )
-				);
-				mesh.name = `neon:${key}`;
-				group.add( mesh );
-
-			}
+			const mesh = new THREE.Mesh(
+				BufferGeometryUtils.mergeGeometries( geometries, false ),
+				this.factory.variant( key, { side: THREE.DoubleSide } )
+			);
+			mesh.name = `neon:${key}`;
+			group.add( mesh );
 
 		}
 
@@ -86,39 +88,22 @@ export class Neon {
 
 	}
 
-	/** Signs standing out from the wall, the ones you read down a street. */
-	#blades( out, glows, facade, rng, tier, top ) {
+	/** The parcel's own lettered sign, standing just off its face. */
+	#signLight( glows, blueprint, rng ) {
 
-		const count = 1 + Math.floor( rng.next() * 2 );
-		const key = BLADE_KEY( tier );
+		for ( const sign of blueprint.signage ?? [] ) {
 
-		for ( let i = 0; i < count; i ++ ) {
+			const [ nx, nz ] = sign.normal;
+			const reach = ( sign.depth ?? 0 ) + 0.4;
 
-			const height = rng.range( 2.4, Math.min( 5.5, Math.max( 2.6, top - 4 ) ) );
-			const depth = rng.range( 1.1, 2.1 );
-			const base = rng.range( 3.4, Math.max( 4, Math.min( top - height - 1, 12 ) ) );
-			const along = rng.range( 0.15, 0.85 );
-
-			const anchor = facade.pointAt( along );
-			const geometry = new THREE.PlaneGeometry( depth, height );
-			// UVs in world meters: the signage entry tiles 2 x 1 m.
-			panelUv( geometry, depth, height );
-			geometry.rotateY( facade.angle + Math.PI / 2 );
-			geometry.translate(
-				anchor.x + facade.normal.x * depth / 2,
-				base + height / 2,
-				anchor.z + facade.normal.z * depth / 2
-			);
-
-			push( out, key, geometry );
 			glows.push( {
 				position: new THREE.Vector3(
-					anchor.x + facade.normal.x * ( depth + 0.4 ),
-					base + height / 2,
-					anchor.z + facade.normal.z * ( depth + 0.4 )
+					sign.center[ 0 ] + nx * reach,
+					sign.center[ 1 ],
+					sign.center[ 2 ] + nz * reach
 				),
 				color: GLOW[ Math.floor( rng.next() * GLOW.length ) ],
-				intensity: rng.range( 14, 30 ),
+				intensity: 18 + sign.width * 4,
 				distance: 26
 			} );
 
@@ -126,8 +111,32 @@ export class Neon {
 
 	}
 
+	/** The fixtures exterior put over the entrance: the light on the pavement. */
+	#doorLight( glows, blueprint ) {
+
+		for ( const light of blueprint.lights ?? [] ) {
+
+			if ( light.kind !== 'entrance' ) continue;
+
+			const [ nx, nz ] = light.normal;
+
+			glows.push( {
+				position: new THREE.Vector3(
+					light.position[ 0 ] + nx * 0.4,
+					light.position[ 1 ],
+					light.position[ 2 ] + nz * 0.4
+				),
+				color: DOOR_GLOW,
+				intensity: 12,
+				distance: 12
+			} );
+
+		}
+
+	}
+
 	/** Flat screens on the wall itself. */
-	#screens( out, facade, rng, tier, top ) {
+	#screens( out, glows, facade, rng, tier, top ) {
 
 		if ( top < 7 || rng.next() > 0.75 ) return;
 
@@ -151,6 +160,16 @@ export class Neon {
 		);
 
 		push( out, key, geometry );
+		glows.push( {
+			position: new THREE.Vector3(
+				anchor.x + facade.normal.x * ( width * 0.4 ),
+				base + height / 2,
+				anchor.z + facade.normal.z * ( width * 0.4 )
+			),
+			color: GLOW[ Math.floor( rng.next() * GLOW.length ) ],
+			intensity: rng.range( 14, 26 ),
+			distance: 24
+		} );
 
 	}
 

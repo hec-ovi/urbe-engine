@@ -3,6 +3,18 @@ import { loadFloorConstants, constantsForType, feasibleFloorRange } from './floo
 
 const THEME = 'cyberpunk';
 
+// A sign says what the place is until the naming pass gives it a name. Only
+// parcel types a passer-by reads off the street are listed; every other type
+// gets no sign at all, because a blank one is worse than none.
+const VENUE_SIGN = {
+	hotel: 'HOTEL',
+	coffee_shop: 'COFFEE',
+	commerce: 'MARKET',
+	clinic: 'CLINIC',
+	police: 'POLICE',
+	restaurant: 'DINER'
+};
+
 export class AssemblyError extends Error {
 
 	constructor( code, message ) {
@@ -48,10 +60,12 @@ export class RequestAssembler {
 	 * @param options.floorCap optional above-ground floor cap (interior walkup
 	 * mode); the cap wins over the atlas envelope minimum, aperture-driven
 	 * minimums stay hard
+	 * @param options.signage false drops the venue sign, for a facade that
+	 * cannot fit the letters
 	 * @returns BuildingRequest per ../exterior/schemas/building-request.schema.json
 	 * @throws AssemblyError E_PARCEL_UNKNOWN | E_ENVELOPE_INFEASIBLE
 	 */
-	assemble( parcelId, { glb = 'merged', floorCap = null } = {} ) {
+	assemble( parcelId, { glb = 'merged', floorCap = null, signage = true } = {} ) {
 
 		const parcel = this.parcels.get( parcelId );
 
@@ -77,6 +91,9 @@ export class RequestAssembler {
 			apertures,
 			options: { glb }
 		};
+
+		const text = signage ? VENUE_SIGN[ parcel.type ] : null;
+		if ( text ) request.options.signage = { mode: 'marquee', text };
 
 		const basements = this.#chooseBasements( parcel, apertures );
 		if ( basements > 0 ) request.building.basements = basements;

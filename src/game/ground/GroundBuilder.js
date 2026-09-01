@@ -136,14 +136,21 @@ export class GroundBuilder {
 
 }
 
-/** Rain-slick asphalt: keep the albedo, drop the roughness, let the sky reflect. */
+/**
+ * Damp asphalt. Wet road is darker and a little glossier than dry road, and
+ * that is all: a mirror finish over a grainy normal map turns every chip of
+ * aggregate into a specular point and the whole street sparkles at night. So
+ * the albedo drops, the roughness stays high enough to spread a highlight, the
+ * grain is damped, and the surface stays a dielectric.
+ */
 function applyWetLook( material ) {
 
-	material.roughness = 0.18;
-	material.metalness = 0.35;
-	material.envMapIntensity = 2.4;
+	material.color.multiplyScalar( 0.72 );
+	material.roughness = 0.62;
+	material.metalness = 0;
+	material.envMapIntensity = 1;
 
-	if ( material.roughnessMap ) material.roughnessMap = null;
+	if ( material.normalScale ) material.normalScale.setScalar( 0.35 );
 
 	return material;
 

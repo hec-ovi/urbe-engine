@@ -1,7 +1,9 @@
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VatBaker } from './VatBaker.js';
-import { CrowdMesh, loadResizedTexture } from './CrowdMesh.js';
+import { BodyMesh } from './BodyMesh.js';
+import { HairMesh } from './HairMesh.js';
+import { garments } from './Garments.js';
 
 const BASE = '/models';
 const CHARACTERS = `${BASE}/universal-base-characters/Base Characters/Godot - UE`;
@@ -22,7 +24,8 @@ const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAA
 /**
  * The CC0 Quaternius character kit turned into crowd draw calls: the two base
  * bodies and their hair, posed by the Universal Animation Library's walk, idle
- * and talking loops baked into vertex animation textures.
+ * and talking loops baked into vertex animation textures, and dressed by the
+ * garment map read off their skeleton (Garments.js, BodyMesh.js).
  *
  * The packs live in the machine's model store, not the repo (URBE_MODELS_DIR,
  * served under /models by the dev server). Their own 4K PNGs never load: the
@@ -64,12 +67,15 @@ export class CharacterAssets {
 
 			const root = models[ i ].scene;
 			const parts = collect( root );
+			// Read off the skeleton before baking: the pose buffers have no
+			// bones left to ask.
+			const cloth = garments( parts.body );
 			const baked = VatBaker.bake( root, [ parts.body, parts.hair ].filter( Boolean ), clips );
 
 			variants.push( {
 				id: MODELS[ i ].id,
-				body: new CrowdMesh( baked[ 0 ], skins[ i ], capacity, storageCapable ),
-				hair: baked[ 1 ] ? new CrowdMesh( baked[ 1 ], hairMap, capacity, storageCapable ) : null
+				body: new BodyMesh( baked[ 0 ], capacity, storageCapable, { map: skins[ i ], cloth } ),
+				hair: baked[ 1 ] ? new HairMesh( baked[ 1 ], capacity, storageCapable, { map: hairMap } ) : null
 			} );
 
 		}
@@ -124,5 +130,28 @@ function collect( root ) {
 	if ( ! parts.body ) throw new Error( 'character model has no body mesh' );
 
 	return parts;
+
+}
+
+/** One of the pack's 4K maps, downscaled on the way to the GPU. */
+async function loadResizedTexture( url, size ) {
+
+	const response = await fetch( url );
+
+	if ( ! response.ok ) throw new Error( `${url}: HTTP ${response.status}` );
+
+	const blob = await response.blob();
+	const bitmap = await createImageBitmap( blob, {
+		resizeWidth: size,
+		resizeHeight: size,
+		resizeQuality: 'high'
+	} );
+
+	const map = new THREE.Texture( bitmap );
+	map.colorSpace = THREE.SRGBColorSpace;
+	map.flipY = false;
+	map.needsUpdate = true;
+
+	return map;
 
 }

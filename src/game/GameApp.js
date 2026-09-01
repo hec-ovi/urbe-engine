@@ -10,13 +10,13 @@ import { GroundBuilder, SIDEWALK_HEIGHT } from './ground/GroundBuilder.js';
 import { BuildingsLoader } from './city/BuildingsLoader.js';
 import { Neon } from './city/Neon.js';
 import { StreetLamps } from './city/StreetLamps.js';
-import { LaneGlow } from './city/LaneGlow.js';
+import { LaneMarkings } from './city/LaneMarkings.js';
 import { LitWindows } from './city/LitWindows.js';
 import { LightBudget } from './city/LightBudget.js';
 import { NightSky } from './sky/NightSky.js';
 import { Physics } from './physics/Physics.js';
 import { WorldColliders } from './physics/WorldColliders.js';
-import { PlayerBody } from './physics/PlayerBody.js';
+import { PlayerBody, BODY_RADIUS } from './physics/PlayerBody.js';
 import { Input } from './player/Input.js';
 import { PlayerController } from './player/PlayerController.js';
 import { Interactor } from './player/Interactor.js';
@@ -110,7 +110,7 @@ export class GameApp {
 		this.scene.add(
 			neon.group,
 			lamps.group,
-			new LaneGlow( connections.networks, config.laneDebug ).build(),
+			new LaneMarkings( connections.networks, config.laneMode ).build(),
 			new LitWindows( atlas, buildings ).build()
 		);
 		this.lights = new LightBudget( [ ...neon.glows, ...lamps.glows ] );
@@ -125,6 +125,7 @@ export class GameApp {
 		this.colliders = new WorldColliders( this.physics );
 		this.colliders.addGround( ground.colliderGeometry );
 		this.colliders.addShells( city.shellColliders );
+		this.colliders.addPosts( lamps.posts );
 		this.colliders.registerInteriors( city.interiors );
 
 		this.view.step( 'waking the population' );
@@ -214,6 +215,10 @@ export class GameApp {
 		this.sky.setHour( this.clock.hour );
 
 		this.physics.step( delta );
+
+		// Out of anyone the crowd walked into last frame before the camera is
+		// placed, so the correction never shows up as a jolt a frame later.
+		this.body.push( this.crowd.pushback( this.body.feet, BODY_RADIUS ) );
 		this.controller.update( delta );
 
 		const feet = this.body.feet;

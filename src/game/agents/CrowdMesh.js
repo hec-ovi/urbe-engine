@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
-import { cos, float, instancedBufferAttribute, int, mix, sin, texture, vec3, vec4, vertexIndex } from 'three/tsl';
+import { cos, float, instancedBufferAttribute, int, mix, sin, vec3, vertexIndex } from 'three/tsl';
 import { FRAMES } from './VatBaker.js';
 import { PoseBuffer } from './PoseBuffer.js';
 
@@ -8,31 +8,35 @@ import { PoseBuffer } from './PoseBuffer.js';
  * One instanced draw call for an entire crowd of animated characters. The pose
  * comes out of the baked pose buffers, indexed by the vertex id and a
  * per-instance frame cursor, so there are no skeletons, no mixers and no
- * per-character CPU work beyond writing five floats.
+ * per-character CPU work beyond writing a handful of floats.
  *
  * The instance transform is composed here rather than through instanceMatrix:
  * NodeMaterial assigns positionNode after it has applied the instanced-mesh
  * transform, so a positionNode that ignored the instance would pile the whole
  * crowd on the world origin. Each character carries its own ground position
  * and heading instead, which is also less to upload than a matrix.
+ *
+ * Pose and transform are all this class knows. What the surface looks like is
+ * the subclass's: it declares its own per-instance attributes in `colorNode`
+ * and fills them in `setLook`.
  */
 export class CrowdMesh {
 
 	/**
 	 * @param baked one entry from VatBaker.bake
-	 * @param map base colour texture, or null
 	 * @param capacity maximum simultaneous instances
-	 * @param storageCapable true on the WebGPU backend
+	 * @param storageCapable true on the WebGPU backend (see PoseBuffer)
+	 * @param paint whatever this subclass's colorNode needs
 	 */
-	constructor( baked, map, capacity, storageCapable ) {
+	constructor( baked, capacity, storageCapable, paint ) {
 
 		this.capacity = capacity;
+		this.attributes = [];
 
-		this.frames = instanced( capacity, 1 );
-		this.clips = instanced( capacity, 1 );
-		this.origins = instanced( capacity, 3 );
-		this.headings = instanced( capacity, 1 );
-		this.tints = instanced( capacity, 3 );
+		this.frames = this.attribute( 1 );
+		this.clips = this.attribute( 1 );
+		this.origins = this.attribute( 3 );
+		this.headings = this.attribute( 1 );
 
 		const positions = new PoseBuffer( baked.position, baked.vertexCount, baked.rows, storageCapable );
 		const normals = new PoseBuffer( baked.normal, baked.vertexCount, baked.rows, storageCapable );
@@ -41,7 +45,6 @@ export class CrowdMesh {
 		const aClip = instancedBufferAttribute( this.clips, 'float' );
 		const aOrigin = instancedBufferAttribute( this.origins, 'vec3' );
 		const aHeading = instancedBufferAttribute( this.headings, 'float' );
-		const aTint = instancedBufferAttribute( this.tints, 'vec3' );
 
 		const whole = aFrame.floor();
 		const blend = aFrame.sub( whole );
@@ -61,15 +64,15 @@ export class CrowdMesh {
 		const pose = mix( positions.sample( row0, column ), positions.sample( row1, column ), blend );
 		const normal = mix( normals.sample( row0, column ), normals.sample( row1, column ), blend );
 
-		const material = new MeshStandardNodeMaterial( { roughness: 0.78, metalness: 0 } );
-		material.positionNode = turn( pose ).add( aOrigin );
-		material.normalNode = turn( normal ).normalize();
-		material.colorNode = map ? texture( map ).mul( vec4( aTint, 1 ) ) : vec4( aTint, 1 );
-
 		const geometry = baked.mesh.geometry.clone();
 		geometry.deleteAttribute( 'skinIndex' );
 		geometry.deleteAttribute( 'skinWeight' );
 		geometry.boundingSphere = new THREE.Sphere( new THREE.Vector3(), 1e6 );
+
+		const material = new MeshStandardNodeMaterial( { roughness: 0.78, metalness: 0 } );
+		material.positionNode = turn( pose ).add( aOrigin );
+		material.normalNode = turn( normal ).normalize();
+		material.colorNode = this.colorNode( geometry, paint );
 
 		this.mesh = new THREE.InstancedMesh( geometry, material, capacity );
 		this.mesh.frustumCulled = false;
@@ -84,13 +87,43 @@ export class CrowdMesh {
 
 	}
 
-	setInstance( slot, position, heading, frame, clip, tint ) {
+	/** A per-instance attribute of this crowd's capacity, uploaded with the rest. */
+	attribute( itemSize ) {
+
+		const attribute = new THREE.InstancedBufferAttribute(
+			new Float32Array( this.capacity * itemSize ), itemSize
+		);
+		attribute.setUsage( THREE.DynamicDrawUsage );
+		this.attributes.push( attribute );
+
+		return attribute;
+
+	}
+
+	/**
+	 * @abstract
+	 * @param geometry this mesh's own geometry, free to take extra attributes
+	 * @param paint the descriptor handed to the constructor
+	 * @returns the material's colour node
+	 */
+	colorNode() {
+
+		throw new Error( 'a CrowdMesh subclass paints itself' );
+
+	}
+
+	/**
+	 * @abstract writes one person's appearance into this mesh's attributes
+	 */
+	setLook() {}
+
+	setInstance( slot, position, heading, frame, clip, look ) {
 
 		this.origins.setXYZ( slot, position.x, position.y, position.z );
 		this.headings.setX( slot, heading );
 		this.frames.setX( slot, frame );
 		this.clips.setX( slot, clip );
-		this.tints.setXYZ( slot, tint.r, tint.g, tint.b );
+		this.setLook( slot, look );
 
 	}
 
@@ -98,44 +131,8 @@ export class CrowdMesh {
 
 		this.mesh.count = count;
 
-		for ( const attribute of [ this.origins, this.headings, this.frames, this.clips, this.tints ] ) {
-
-			attribute.needsUpdate = true;
-
-		}
+		for ( const attribute of this.attributes ) attribute.needsUpdate = true;
 
 	}
-
-}
-
-function instanced( capacity, itemSize ) {
-
-	const attribute = new THREE.InstancedBufferAttribute( new Float32Array( capacity * itemSize ), itemSize );
-	attribute.setUsage( THREE.DynamicDrawUsage );
-
-	return attribute;
-
-}
-
-/** Shared by the crowd builders: a colour texture downscaled on the way in. */
-export async function loadResizedTexture( url, size ) {
-
-	const response = await fetch( url );
-
-	if ( ! response.ok ) throw new Error( `${url}: HTTP ${response.status}` );
-
-	const blob = await response.blob();
-	const bitmap = await createImageBitmap( blob, {
-		resizeWidth: size,
-		resizeHeight: size,
-		resizeQuality: 'high'
-	} );
-
-	const map = new THREE.Texture( bitmap );
-	map.colorSpace = THREE.SRGBColorSpace;
-	map.flipY = false;
-	map.needsUpdate = true;
-
-	return map;
 
 }

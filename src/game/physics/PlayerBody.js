@@ -1,10 +1,10 @@
 import * as THREE from 'three/webgpu';
 
 export const EYE_HEIGHT = 1.7;
+export const BODY_RADIUS = 0.32;
 
-const RADIUS = 0.32;
 const HALF_HEIGHT = 0.55;
-const CENTRE_OFFSET = RADIUS + HALF_HEIGHT;
+const CENTRE_OFFSET = BODY_RADIUS + HALF_HEIGHT;
 const GRAVITY = - 20;
 const TERMINAL = - 45;
 
@@ -26,7 +26,7 @@ export class PlayerBody {
 		this.grounded = false;
 
 		this.collider = world.createCollider(
-			rapier.ColliderDesc.capsule( HALF_HEIGHT, RADIUS )
+			rapier.ColliderDesc.capsule( HALF_HEIGHT, BODY_RADIUS )
 				.setTranslation( this.position.x, this.position.y, this.position.z )
 		);
 
@@ -67,6 +67,25 @@ export class PlayerBody {
 		this.grounded = this.controller.computedGrounded() || ( askedDown > 1e-5 && gotDown < askedDown - 1e-5 );
 
 		if ( this.grounded && this.velocityY < 0 ) this.velocityY = 0;
+
+	}
+
+	/**
+	 * Slide the capsule sideways out of something that moved into it. No
+	 * gravity and no change to the fall state, and still resolved against the
+	 * world, so a push can never shove the player through a wall.
+	 * @param offset desired XZ correction in metres
+	 */
+	push( offset ) {
+
+		if ( offset.x === 0 && offset.z === 0 ) return;
+
+		this.controller.computeColliderMovement( this.collider, { x: offset.x, y: 0, z: offset.z } );
+		const movement = this.controller.computedMovement();
+
+		this.position.x += movement.x;
+		this.position.z += movement.z;
+		this.collider.setTranslation( this.position );
 
 	}
 
