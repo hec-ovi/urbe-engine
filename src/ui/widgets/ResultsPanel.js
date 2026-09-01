@@ -34,8 +34,16 @@ export class ResultsPanel {
 			label: 'copy as JSON',
 			onClick: async () => {
 
-				await navigator.clipboard.writeText( onCopyJson() );
-				this.copyButton.flash( 'copied' );
+				try {
+
+					await navigator.clipboard.writeText( onCopyJson() );
+					this.copyButton.flash( 'copied' );
+
+				} catch {
+
+					this.copyButton.flash( 'copy failed' );
+
+				}
 
 			}
 		} );

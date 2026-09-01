@@ -87,7 +87,7 @@ export class Metrics {
 				gpuRenderMs: round( this.gpuRenderMs ),
 				gpuComputeMs: round( this.gpuComputeMs ),
 				drawCalls: this.drawCalls,
-				triangles: this.triangles,
+				triangles: this.visible.triangles ?? this.triangles,
 				visibleInstances: this.visible.total,
 				visibleByLod: this.visible.byLod
 			}

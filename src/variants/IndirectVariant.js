@@ -212,19 +212,24 @@ export class IndirectVariant extends Variant {
 	async readVisible() {
 
 		const byLod = new Array( LOD_COUNT ).fill( 0 );
+		let triangles = 0;
 
 		for ( const group of this.groups ) {
 
 			for ( let l = 0; l < LOD_COUNT; l ++ ) {
 
 				const data = await this.ctx.renderer.getArrayBufferAsync( group.lods[ l ].indirectAttribute );
-				byLod[ l ] += new Uint32Array( data )[ 1 ];
+				const [ indexCount, instanceCount ] = new Uint32Array( data );
+				byLod[ l ] += instanceCount;
+				triangles += ( instanceCount * indexCount ) / 3;
 
 			}
 
 		}
 
-		this.lastVisible = { total: byLod.reduce( ( a, b ) => a + b, 0 ), byLod };
+		// The renderer's own triangle count assumes full instance counts on
+		// indirect draws; the readback carries the real GPU-culled numbers.
+		this.lastVisible = { total: byLod.reduce( ( a, b ) => a + b, 0 ), byLod, triangles };
 
 	}
 

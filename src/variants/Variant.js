@@ -21,9 +21,11 @@ export class Variant {
 	update( camera ) {} // eslint-disable-line no-unused-vars
 
 	/**
-	 * Visible building instances this frame, or null when unknown.
+	 * Visible building instances this frame, or null when unknown. A variant
+	 * that knows better triangle numbers than renderer.info (indirect draws)
+	 * adds a triangles field.
 	 * @param {object} info renderer.info after the render
-	 * @returns {{ total: number|null, byLod: number[]|null }}
+	 * @returns {{ total: number|null, byLod: number[]|null, triangles?: number }}
 	 */
 	visibleInstances( info ) { // eslint-disable-line no-unused-vars
 
