@@ -119,22 +119,12 @@ for ( const agent of slice.agents.slice( 0, 3 ) ) {
 
 }
 
-// three lives; agents only materialize on edge scopes, so walk the graph for a handle
-let agent = slice.agents[ 0 ] ?? null;
-let agentSlice = slice;
-
-for ( const edge of networks.walk.edges ) {
-
-	if ( agent ) break;
-
-	agentSlice = simulation.crowd( args.time, { kind: 'edge', id: edge.id } );
-	agent = agentSlice.agents[ 0 ] ?? null;
-
-}
+// three lives, the first from the slice's sampled agents
+const agent = slice.agents[ 0 ];
 
 if ( ! agent ) {
 
-	console.error( 'no crowd agents found on any walk edge at this time' );
+	console.error( 'no crowd agents in this slice; pick another time or scope' );
 	process.exit( 1 );
 
 }
