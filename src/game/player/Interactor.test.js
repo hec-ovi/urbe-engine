@@ -214,7 +214,8 @@ function simulation( byEdge ) {
 		instantiated,
 		resumed,
 		npcIds: [ 'n1', 'n2' ],
-		crowd: ( timeMin, scope ) => ( { agents: byEdge.get( scope.id ) ?? [] } ),
+		// The pavement here is short, so a radius scope sees everyone on it.
+		crowd: ( timeMin, scope ) => ( { agents: scope.kind === 'radius' ? all() : byEdge.get( scope.id ) ?? [] } ),
 		instantiate: ( crowdId ) => {
 
 			const slot = all().findIndex( ( agent ) => agent.crowdId === crowdId );

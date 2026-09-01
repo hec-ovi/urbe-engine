@@ -144,7 +144,7 @@ function session( minutes ) {
 		rows.push( {
 			minute: Math.round( tick * step / 60 ),
 			spawned: crowd.count,
-			live: live( routes, sim, clock.timeMin ),
+			live: live( sim, clock.timeMin ),
 			held
 		} );
 
@@ -155,15 +155,11 @@ function session( minutes ) {
 }
 
 /** Every handle the simulation has out on the pavements around the player. */
-function live( routes, sim, timeMin ) {
+function live( sim, timeMin ) {
 
 	const out = [];
 
-	for ( const edge of routes.near( PLAYER, 0, 90 ) ) {
-
-		for ( const agent of sim.crowd( timeMin, { kind: 'edge', id: edge.id } ).agents ) out.push( agent.crowdId );
-
-	}
+	for ( const agent of sim.crowd( timeMin, { kind: 'radius', x: PLAYER.x, z: PLAYER.z, metres: 90 } ).agents ) out.push( agent.crowdId );
 
 	return out;
 
@@ -199,27 +195,50 @@ function resampled() {
 	return {
 		crowd: ( timeMin, scope ) => {
 
-			if ( scope.kind !== 'edge' ) return { agents: [] };
+			const onEdge = ( id ) => {
 
-			const epoch = Math.floor( timeMin / EPOCH );
-			const count = timeMin % 10 < 5 ? 4 : 3;
-			const agents = [];
+				const epoch = Math.floor( timeMin / EPOCH );
+				const count = timeMin % 10 < 5 ? 4 : 3;
+				const agents = [];
 
-			for ( let i = 0; i < count; i ++ ) {
+				for ( let i = 0; i < count; i ++ ) {
 
-				agents.push( {
-					crowdId: `c|${scope.id}|${i}|${epoch}`,
-					type: TYPES[ i % TYPES.length ],
-					gender: i % 2 ? 'female' : 'male',
-					activity: 'commuting',
-					place: { kind: 'edge', id: scope.id },
-					progress: ( i + 0.5 ) / count,
-					direction: i % 2 ? - 1 : 1
-				} );
+					agents.push( {
+						crowdId: `c|${id}|${i}|${epoch}`,
+						type: TYPES[ i % TYPES.length ],
+						gender: i % 2 ? 'female' : 'male',
+						activity: 'commuting',
+						place: { kind: 'edge', id },
+						progress: ( i + 0.5 ) / count,
+						direction: i % 2 ? - 1 : 1
+					} );
+
+				}
+
+				return agents;
+
+			};
+
+			if ( scope.kind === 'edge' ) return { agents: onEdge( scope.id ) };
+			if ( scope.kind !== 'radius' ) return { agents: [] };
+
+			// The pavement runs along x: a person is inside the circle when the
+			// spot their progress puts them at is within reach of its centre.
+			const inside = [];
+
+			for ( let i = 0; i < 6; i ++ ) {
+
+				for ( const agent of onEdge( `e${i}` ) ) {
+
+					const x = - 120 + i * 40 + agent.progress * 40;
+
+					if ( Math.abs( x - scope.x ) <= scope.metres ) inside.push( agent );
+
+				}
 
 			}
 
-			return { agents };
+			return { agents: inside };
 
 		}
 	};

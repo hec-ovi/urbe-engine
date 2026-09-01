@@ -392,34 +392,32 @@ export class Crowd {
 	}
 
 	/**
-	 * Who the simulation says is on the sidewalks around the player, asked edge
-	 * by edge, each with the spot on that pavement it is reported at. A single
-	 * city-scope slice is a sample of the whole city, so at any cap most of it
-	 * lands out of sight and the street in front of the player starves; the
-	 * edge scope answers for that edge alone.
+	 * Who the simulation says is on the sidewalks around the player: one radius
+	 * scope around their feet, exactly the people inside it and no sample cap
+	 * (../../../../simulation/CONTRACT.md), each with the spot on their pavement
+	 * they are reported at.
 	 */
 	#streetAgents( timeMin, player ) {
 
 		const out = [];
+		const scope = { kind: 'radius', x: player.x, z: player.z, metres: SPAWN_RADIUS };
 
-		for ( const edge of this.routes.near( player, 0, SPAWN_RADIUS ) ) {
+		for ( const agent of this.#agentsIn( timeMin, scope, this.capacity ) ) {
 
 			if ( out.length >= this.capacity ) break;
+			if ( agent.place.kind !== 'edge' ) continue;
 
-			for ( const agent of this.#agentsIn( timeMin, { kind: 'edge', id: edge.id }, EDGE_AGENTS ) ) {
+			const walk = this.routes.edges.get( agent.place.id );
 
-				if ( agent.place.kind !== 'edge' ) continue;
+			if ( ! walk ) continue;
 
-				const walk = this.routes.edges.get( agent.place.id ) ?? edge;
-				const direction = agent.direction === - 1 ? - 1 : 1;
-				const distance = THREE.MathUtils.clamp( agent.progress ?? 0.5, 0, 1 ) * walk.length;
+			const direction = agent.direction === - 1 ? - 1 : 1;
+			const distance = THREE.MathUtils.clamp( agent.progress ?? 0.5, 0, 1 ) * walk.length;
 
-				out.push( {
-					agent, edge: walk, direction, distance,
-					at: this.routes.pointAt( walk, distance, direction )
-				} );
-
-			}
+			out.push( {
+				agent, edge: walk, direction, distance,
+				at: this.routes.pointAt( walk, distance, direction )
+			} );
 
 		}
 
