@@ -11,6 +11,8 @@ const LOAD_RADIUS = 70;
 const DROP_RADIUS = 95;
 /** One building's interior at a time: a 12 MB parse must not stall a frame run. */
 const CONCURRENCY = 1;
+/** The published key whose geometry the lifts take their sliding leaves from. */
+const ELEVATOR_DOOR = '/elevator_door/';
 /** Floors above and below the one the player is on that stay in the scene. */
 const BAND_REACH = 1;
 
@@ -37,11 +39,12 @@ export class InteriorStream {
 	 * @param haze { spread, cap } for the air inside a room, or null at tiers
 	 * that do not draw it
 	 */
-	constructor( { factory, roomLights, haze } ) {
+	constructor( { factory, roomLights, haze, elevators } ) {
 
 		this.factory = factory;
 		this.roomLights = roomLights;
 		this.haze = haze;
+		this.elevators = elevators;
 		this.loader = new GLTFLoader();
 		this.group = new THREE.Group();
 		this.group.name = 'interiors';
@@ -204,6 +207,7 @@ export class InteriorStream {
 
 		}
 
+		this.elevators?.remove( parcelId );
 		this.group.remove( interior.group );
 		this.rooms = this.rooms.filter( ( room ) => room.parcelId !== parcelId );
 		this.changed = true;
@@ -234,6 +238,9 @@ export class InteriorStream {
 		const cut = buildRooms( entry.parcelId, byKey, entry.floors, reflectance );
 		const group = new THREE.Group();
 		group.name = `interior:${entry.parcelId}`;
+		// Before the bands, because the door leaves each band gives up have to
+		// know which shaft they belong to.
+		this.elevators?.add( entry.parcelId, entry.floors, group );
 
 		const levels = new Map( entry.floors.map( ( floor ) => [ floor.floor, floor ] ) );
 		const bands = new Map();
@@ -267,10 +274,22 @@ export class InteriorStream {
 
 			for ( const [ key, geometries ] of keys ) {
 
-				const merged = BufferGeometryUtils.mergeGeometries( geometries, false );
+				const material = this.roomLights.materialFor( this.roomLights.dim, key );
+				let merged = BufferGeometryUtils.mergeGeometries( geometries, false );
 				geometries.forEach( ( g ) => g.dispose() );
+
+				// The lift doors are published as geometry like everything else;
+				// the shafts take theirs so they can slide.
+				if ( key.includes( ELEVATOR_DOOR ) ) {
+
+					merged = this.elevators?.claim( entry.parcelId, floor, merged, material, band.group ) ?? merged;
+
+				}
+
+				if ( ! merged ) continue;
+
 				band.flat.push( positionsOnly( merged ) );
-				band.group.add( new THREE.Mesh( merged, this.roomLights.materialFor( this.roomLights.dim, key ) ) );
+				band.group.add( new THREE.Mesh( merged, material ) );
 
 			}
 

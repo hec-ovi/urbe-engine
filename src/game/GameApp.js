@@ -12,6 +12,7 @@ import { BuildingsLoader } from './city/BuildingsLoader.js';
 import { Links } from './links/Links.js';
 import { Transit } from './transit/Transit.js';
 import { InteriorStream } from './city/InteriorStream.js';
+import { Elevators } from './city/Elevators.js';
 import { Neon } from './city/Neon.js';
 import { StreetLamps } from './city/StreetLamps.js';
 import { LaneMarkings } from './city/LaneMarkings.js';
@@ -132,8 +133,9 @@ export class GameApp {
 		const city = await new BuildingsLoader( factory ).load( buildings );
 		this.scene.add( city.group );
 
+		this.elevators = new Elevators( factory );
 		this.stream = new InteriorStream( {
-			factory, roomLights: this.rooms,
+			factory, roomLights: this.rooms, elevators: this.elevators,
 			haze: this.tier.haze ? INDOOR_HAZE : null
 		} );
 		this.stream.register( buildings, city.centers );
@@ -221,7 +223,8 @@ export class GameApp {
 		this.look = new LookPipeline( this.renderer, this.scene, this.camera, this.tier );
 
 		this.interactor = new Interactor( {
-			crowd: this.crowd, doors: city.doors, sim: this.sim, controller: this.controller
+			crowd: this.crowd, doors: city.doors, sim: this.sim,
+			controller: this.controller, elevators: this.elevators
 		} );
 		this.interactor.onConversation = ( conversation ) => this.view.dialog.show( conversation );
 
@@ -291,6 +294,7 @@ export class GameApp {
 		this.crowd.update( delta, feet, this.clock );
 		this.traffic.update( delta, feet, this.clock.daySeconds );
 		this.transit.update( feet, this.clock.daySeconds );
+		this.elevators.update( delta, this.body );
 		this.#relight( feet, delta );
 
 		const prompt = this.interactor.update( delta );

@@ -33,12 +33,13 @@ const HANDLE = 1.1;
  */
 export class Interactor {
 
-	constructor( { crowd, doors, sim, controller } ) {
+	constructor( { crowd, doors, sim, controller, elevators } ) {
 
 		this.crowd = crowd;
 		this.doors = doors;
 		this.sim = sim;
 		this.controller = controller;
+		this.elevators = elevators;
 		this.target = null;
 		this.conversation = null;
 		this.onConversation = null;
@@ -52,11 +53,14 @@ export class Interactor {
 
 		if ( this.conversation ) return null;
 
+		const feet = this.controller.body.feet;
+
 		this.target = pick(
 			this.controller.eye,
 			this.controller.look,
-			this.doors.filter( ( door ) => door.center.distanceTo( this.controller.body.feet ) <= DOOR_RANGE ),
-			this.crowd.within( this.controller.body.feet, TALK_RANGE )
+			this.doors.filter( ( door ) => door.center.distanceTo( feet ) <= DOOR_RANGE ),
+			this.crowd.within( feet, TALK_RANGE ),
+			this.elevators?.panels( feet, DOOR_RANGE ) ?? []
 		);
 
 		return this.target ? prompt( this.target ) : null;
@@ -71,6 +75,14 @@ export class Interactor {
 		if ( this.target.kind === 'door' ) {
 
 			this.target.door.wanted = this.target.door.wanted > 0.5 ? 0 : 1;
+
+			return;
+
+		}
+
+		if ( this.target.kind === 'elevator' ) {
+
+			this.target.shaft.press( this.target );
 
 			return;
 
@@ -168,13 +180,19 @@ export class Interactor {
  * @param eye the camera position, @param look the unit crosshair ray
  * @returns { kind: 'door'|'npc', door?, person?, aim } or null
  */
-export function pick( eye, look, doors, people ) {
+export function pick( eye, look, doors, people, panels = [] ) {
 
 	const candidates = [];
 
 	for ( const door of doors ) {
 
 		candidates.push( { kind: 'door', door, aim: aimAt( eye, look, door.center, HANDLE ) } );
+
+	}
+
+	for ( const panel of panels ) {
+
+		candidates.push( { ...panel, aim: aimAt( eye, look, panel.center, 0 ) } );
 
 	}
 
@@ -212,6 +230,8 @@ function aimAt( eye, look, position, rise ) {
 
 /** What the prompt says, always naming the thing it will act on. */
 function prompt( target ) {
+
+	if ( target.kind === 'elevator' ) return target.shaft.label( target );
 
 	if ( target.kind === 'door' ) {
 
