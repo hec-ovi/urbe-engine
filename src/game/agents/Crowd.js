@@ -691,6 +691,9 @@ function fitTo( free, agent, at ) {
 
 	for ( const member of free ) {
 
+		// A body is for life: a walker never becomes somebody of the other gender.
+		if ( member.gender && agent.gender && member.gender !== agent.gender ) continue;
+
 		const typed = member.type === agent.type ? 0 : 1;
 		const gap = ( at.x - member.position.x ) ** 2 + ( at.z - member.position.z ) ** 2;
 
