@@ -1,21 +1,14 @@
 import { el } from '../components/dom.js';
+import { CityBake } from './CityBake.js';
+import { MapPainter, MAP_COLORS } from './MapPainter.js';
 
 const SIZE = 190;
 const PIXELS_PER_METRE = 1.6;
-const ROAD = '#4a6684';
-const BLOCK = '#18212c';
-const GROUND = '#0a0e14';
-const PLAYER = '#cfe6ff';
-/** A venue you can walk into, lit while it is open and dim once it shuts. */
-const VENUE_OPEN = '#ffc46b';
-const VENUE_SHUT = '#4a4136';
 
 /**
- * Top-down map of the city with the player at its centre, north up. The whole
- * city is drawn once into an offscreen canvas when the map is handed over;
- * every frame only blits that canvas at an offset and draws the marker, so the
- * minimap costs one image copy however big the city is.
- *
+ * Corner map with the player at its centre, north up. The city is baked once
+ * when the map is handed over; every frame blits it at an offset and draws
+ * the live marks, so the minimap costs one image copy however big the city.
  * Presentation only: it is handed plain [x, z] geometry and a position.
  */
 export class MinimapView {
@@ -28,111 +21,52 @@ export class MinimapView {
 			el( 'div', { className: 'hud-minimap-label', textContent: 'M' } )
 		);
 		this.context = this.canvas.getContext( '2d' );
-		this.baked = null;
-		this.origin = [ 0, 0 ];
+		this.bake = null;
+		this.venues = [];
 		this.setVisible( true );
 
 	}
 
-	/**
-	 * Where you can go in: one dot per enterable venue, drawn live rather than
-	 * baked, because a venue goes dark when it shuts.
-	 * @param venues [{ point: Vector3, open }]
-	 */
+	/** @param map { bounds: { min: [x,z], max: [x,z] }, roads: [{ path, width }], blocks: [ring] } */
+	setMap( map ) {
+
+		this.bake = new CityBake( map, PIXELS_PER_METRE );
+
+	}
+
+	/** One dot per enterable venue, lit while open. @param venues [{ point: { x, z }, open }] */
 	setVenues( venues ) {
 
 		this.venues = venues;
 
 	}
 
-	/**
-	 * @param map { bounds: { min: [x,z], max: [x,z] }, roads: [{ path, width }], blocks: [ring] }
-	 */
-	setMap( { bounds, roads, blocks } ) {
-
-		const pad = 40;
-		const width = Math.ceil( ( bounds.max[ 0 ] - bounds.min[ 0 ] + pad * 2 ) * PIXELS_PER_METRE );
-		const height = Math.ceil( ( bounds.max[ 1 ] - bounds.min[ 1 ] + pad * 2 ) * PIXELS_PER_METRE );
-
-		this.origin = [ bounds.min[ 0 ] - pad, bounds.min[ 1 ] - pad ];
-		this.baked = el( 'canvas', { width, height } );
-
-		const ctx = this.baked.getContext( '2d' );
-		ctx.fillStyle = GROUND;
-		ctx.fillRect( 0, 0, width, height );
-
-		ctx.fillStyle = BLOCK;
-
-		for ( const ring of blocks ) {
-
-			ctx.beginPath();
-			ring.forEach( ( [ x, z ], i ) => {
-
-				const p = this.#toPixels( x, z );
-				i ? ctx.lineTo( p[ 0 ], p[ 1 ] ) : ctx.moveTo( p[ 0 ], p[ 1 ] );
-
-			} );
-			ctx.closePath();
-			ctx.fill();
-
-		}
-
-		ctx.strokeStyle = ROAD;
-		ctx.lineCap = 'round';
-
-		for ( const road of roads ) {
-
-			ctx.lineWidth = Math.max( 1.5, road.width * PIXELS_PER_METRE );
-			ctx.beginPath();
-			road.path.forEach( ( [ x, z ], i ) => {
-
-				const p = this.#toPixels( x, z );
-				i ? ctx.lineTo( p[ 0 ], p[ 1 ] ) : ctx.moveTo( p[ 0 ], p[ 1 ] );
-
-			} );
-			ctx.stroke();
-
-		}
-
-	}
-
 	/** @param heading yaw in radians; the player looks along (-sin, -cos) in [x, z]. */
 	update( position, heading ) {
 
-		if ( this.element.hidden || ! this.baked ) return;
+		if ( this.element.hidden || ! this.bake ) return;
 
 		const ctx = this.context;
-		const [ px, pz ] = this.#toPixels( position.x, position.z );
-
-		ctx.fillStyle = GROUND;
-		ctx.fillRect( 0, 0, SIZE, SIZE );
-		ctx.drawImage( this.baked, SIZE / 2 - px, SIZE / 2 - pz );
-
+		const [ px, pz ] = this.bake.toPixels( position.x, position.z );
 		const c = SIZE / 2;
 
-		for ( const venue of this.venues ?? [] ) {
+		ctx.fillStyle = MAP_COLORS.ground;
+		ctx.fillRect( 0, 0, SIZE, SIZE );
+		ctx.drawImage( this.bake.canvas, c - px, c - pz );
 
-			const [ vx, vz ] = this.#toPixels( venue.point.x, venue.point.z );
+		for ( const venue of this.venues ) {
+
+			const [ vx, vz ] = this.bake.toPixels( venue.point.x, venue.point.z );
 			const x = c - px + vx;
 			const y = c - pz + vz;
 
 			if ( x < 0 || y < 0 || x > SIZE || y > SIZE ) continue;
 
-			ctx.fillStyle = venue.open ? VENUE_OPEN : VENUE_SHUT;
-			ctx.fillRect( x - 2, y - 2, 4, 4 );
+			MapPainter.venue( ctx, x, y, venue.open );
 
 		}
 
-		const dx = - Math.sin( heading );
-		const dz = - Math.cos( heading );
-
-		ctx.fillStyle = PLAYER;
-		ctx.beginPath();
-		ctx.moveTo( c + dx * 7, c + dz * 7 );
-		ctx.lineTo( c - dx * 4 - dz * 4, c - dz * 4 + dx * 4 );
-		ctx.lineTo( c - dx * 4 + dz * 4, c - dz * 4 - dx * 4 );
-		ctx.closePath();
-		ctx.fill();
+		MapPainter.player( ctx, c, c, heading );
 
 	}
 
@@ -145,15 +79,6 @@ export class MinimapView {
 	setVisible( visible ) {
 
 		this.element.hidden = ! visible;
-
-	}
-
-	#toPixels( x, z ) {
-
-		return [
-			( x - this.origin[ 0 ] ) * PIXELS_PER_METRE,
-			( z - this.origin[ 1 ] ) * PIXELS_PER_METRE
-		];
 
 	}
 

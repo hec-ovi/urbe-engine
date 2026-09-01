@@ -48,7 +48,7 @@ import { GameClock } from './time/GameClock.js';
 import { stopsFor } from './time/DayCycle.js';
 import { Locator } from './world/Locator.js';
 import { Bookmarks } from './world/Bookmarks.js';
-import { mapModel } from './world/MapModel.js';
+import { mapModel, stations } from './world/MapModel.js';
 
 const THEME = 'cyberpunk';
 /** Past this a room is behind opaque walls and haze, so it is not drawn. */
@@ -58,6 +58,25 @@ const INDOOR_HAZE = { spread: 0.55, cap: 3 };
 const OUTDOOR_HAZE = { spread: 0.28, cap: 2.4 };
 // A near plane this far out is still inside the player capsule, and it buys
 // the depth precision that keeps coplanar facade layers from flickering.
+/** The HUD panels and the key that opens each, as the tab bar labels them. */
+const PANEL_KEYS = [
+	[ 'KeyJ', 'QUESTS' ], [ 'KeyM', 'MAP' ], [ 'KeyI', 'INVENTORY' ],
+	[ 'KeyX', 'CODEX' ], [ 'KeyO', 'SETTINGS' ], [ 'Slash', 'CONTROLS' ]
+];
+const BINDINGS = [
+	{ action: 'walk', keys: [ 'W', 'A', 'S', 'D' ] },
+	{ action: 'run', keys: [ 'Shift' ] },
+	{ action: 'doors, lifts and people', keys: [ 'E' ] },
+	{ action: 'quests', keys: [ 'J' ] },
+	{ action: 'map', keys: [ 'M' ] },
+	{ action: 'inventory', keys: [ 'I' ] },
+	{ action: 'codex', keys: [ 'X' ] },
+	{ action: 'settings', keys: [ 'O' ] },
+	{ action: 'controls', keys: [ '?' ] },
+	{ action: 'leave', keys: [ 'N' ] },
+	{ action: 'pause, close a panel', keys: [ 'Esc' ] }
+];
+
 const NEAR_PLANE = 0.2;
 const FAR_PLANE = 900;
 
@@ -73,7 +92,12 @@ export class GameApp {
 		this.config = config;
 		this.view = new GameView( {
 			onResume: () => this.input?.requestLock(),
-			onCloseDialog: () => this.interactor?.close( this.clock )
+			onCloseDialog: () => this.interactor?.close( this.clock ),
+			onSend: ( text ) => this.view.dialog.addMessage( { from: 'player', name: 'you', text } ),
+			onOpen: () => this.input?.exitLock(),
+			onClose: () => this.input?.requestLock(),
+			onLeave: () => this.input?.exitLock(),
+			onSettingChange: ( change ) => this.#setting( change )
 		} );
 		this.view.mount( document.body );
 		this.stats = {
@@ -242,17 +266,32 @@ export class GameApp {
 			crowd: this.crowd, doors: city.doors, sim: this.sim,
 			controller: this.controller, elevators: this.elevators
 		} );
-		this.interactor.onConversation = ( conversation ) => this.view.dialog.show( conversation );
+		this.interactor.onConversation = ( conversation ) => {
+
+			this.view.dialog.show( conversation );
+			this.view.avatar.setVisible( Boolean( conversation ) );
+
+			if ( ! conversation ) return;
+
+			// The chat takes the mouse: the input wants focus and the panel a click.
+			this.view.avatar.setAvatar( { name: conversation.instance?.name ?? 'someone passing by', bar: 1 } );
+			this.input.exitLock();
+
+		};
 
 		this.input.onLockChange = ( locked ) => {
 
-			this.view.pause.setVisible( ! locked );
 			this.controller.frozen = ! locked;
 
 		};
 
-		this.view.minimap.setMap( mapModel( atlas ) );
+		const map = mapModel( atlas );
+		this.view.minimap.setMap( map );
 		this.view.minimap.setVenues( this.venues.marks );
+		this.view.map.setMap( { ...map, stations: stations( atlas ) } );
+		this.view.map.setVenues( this.venues.marks );
+		this.view.settings.setValues( { quality: this.tier.name, fog: config.fog, exposure: config.exposure, crowd: config.maxCrowd } );
+		this.view.controls.setBindings( BINDINGS );
 		this.view.readout.setAbout( [
 			config.blueprintUrl,
 			`${config.outBase}/ (${buildings.size} built${unbuilt.length ? `, ${unbuilt.length} unbuilt` : ''})`,
@@ -326,11 +365,20 @@ export class GameApp {
 
 		}
 
-		if ( this.input.consume( 'KeyM' ) ) this.view.minimap.toggle();
-		if ( this.input.consume( 'KeyI' ) ) this.view.inventory.toggle();
-		if ( this.input.consume( 'Escape' ) ) this.input.exitLock();
+		// A panel or the chat owns the keyboard while it is up; the game's own
+		// keys only fire on the street.
+		const free = ! this.view.panels.current && ! this.interactor.conversation;
 
+		if ( free ) {
+
+			for ( const [ code, panel ] of PANEL_KEYS ) if ( this.input.consume( code ) ) this.view.toggle( panel );
+			if ( this.input.consume( 'KeyN' ) || ( this.input.consume( 'Escape' ) && this.input.locked ) ) this.input.exitLock();
+
+		}
+
+		this.view.pause.setVisible( ! this.input.locked && free );
 		this.view.minimap.update( feet, this.controller.yaw );
+		if ( this.view.panels.current === 'MAP' ) this.view.map.setPlayer( feet, this.controller.yaw );
 		this.view.clock.update( this.clock.label, this.locator.district( feet.x, feet.z ) );
 		this.view.readout.update( feet, this.locator.district( feet.x, feet.z ), this.locator.parcel( feet.x, feet.z ) );
 
@@ -344,6 +392,22 @@ export class GameApp {
 	 * which rooms hold a light slot, what colour the air around the player is,
 	 * whether the probe needs rebaking, and which exposure the camera is on.
 	 */
+	/** A setting changed in the HUD: the ones that are uniforms apply on the spot, the tier reloads the run. */
+	#setting( { key, value } ) {
+
+		if ( key === 'fog' ) this.fog.density.value = value;
+		else if ( key === 'exposure' ) this.exposure.base = value;
+		else if ( key === 'crowd' ) this.crowd.capacity = value;
+		else if ( key === 'quality' ) {
+
+			const query = new URLSearchParams( window.location.search );
+			query.set( 'quality', value );
+			window.location.search = query.toString();
+
+		}
+
+	}
+
 	#relight( feet, delta ) {
 
 		const visible = this.roomView.update( feet, delta );

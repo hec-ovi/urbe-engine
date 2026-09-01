@@ -14,3 +14,12 @@ export function mapModel( atlas ) {
 	};
 
 }
+
+/** Every rail station on the map, named by its network until the naming pass gives it a name. */
+export function stations( atlas ) {
+
+	const of = ( list, kind ) => ( list ?? [] ).map( ( station ) => ( { point: station.position, name: `${kind} ${station.id}` } ) );
+
+	return [ ...of( atlas.transit?.trainStations, 'train' ), ...of( atlas.transit?.subwayStations, 'subway' ) ];
+
+}

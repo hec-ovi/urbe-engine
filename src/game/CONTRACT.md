@@ -16,6 +16,7 @@ Purpose: plays the assembled city as a first-person world at street level, at ni
   - `exposure` (default 0.024): the one number the whole look is graded at. Tuning only.
   - `fog` (default 0.0006): street fog density per metre; the first block stays crisp, fog separates the skyline past it.
   - `off` (comma list of `fog`, `bloom`, `probe`, `haze`, `interiors`): look stages left out of the run, for telling them apart on screen.
+- HUD (src/ui/CONTRACT.md): the tab bar's panels open on J M I X O ? and close on Esc, N and Esc pause; a panel or the chat releases the mouse and owns the keyboard; the settings panel changes fog, exposure and crowd on the spot and reloads the run for a quality tier; the map shows roads, blocks, venues in their open state, rail stations and the player.
 - Atlas blueprint per ../../../atlas/CONTRACT.md.
 - Connections document, generated in-process from that blueprint by `connectionsRunner.js`; `signalStateAt` is consumed directly for signal state.
 - `<out>/manifest.json` (../assembly/CONTRACT.md): which blueprint the directory was assembled from and which parcels finished. It is the only list of buildings the game reads, so a folder left behind by an older blueprint is never loaded on top of the city that replaced it. A missing manifest, or one from another blueprint, fails the run with what to re-run.

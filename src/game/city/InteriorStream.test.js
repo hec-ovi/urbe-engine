@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { floorAt, InteriorStream, materialKey, plain, variantOf } from './InteriorStream.js';
-import { OUTSIDE_FLOORS } from './InteriorRooms.js';
-import { INTERIOR_PREFIX } from './BuildingsLoader.js';
+import { floorAt, InteriorStream } from './InteriorStream.js';
+import { outlinesOf, partition, OUTSIDE_FLOORS } from './InteriorRooms.js';
 import * as THREE from 'three/webgpu';
 
 /** Four floors of a real building: a basement, a tall lobby, two storeys. */
@@ -47,36 +46,51 @@ describe( 'floorAt', () => {
 
 } );
 
-/**
- * Two meshes of the same database entry and different variants are two looks
- * (a patterned ceiling and a plain one), so they must not share a bucket or the
- * second one silently wears the first one's material.
- */
-describe( 'materialKey', () => {
+/** One furnished floor: a patch of carpet inside the published room. */
+const floors = [ {
+	floor: 0, elevation: 0, height: 3,
+	rooms: [ { id: 'r0', kind: 'living', polygon: [ [ 0, 0 ], [ 4, 0 ], [ 4, 4 ], [ 0, 4 ] ] } ],
+	lights: []
+} ];
+const carpet = {
+	key: 'cyberpunk/carpet/mid',
+	position: new Float32Array( [ 1, 0, 1, 3, 0, 1, 1, 0, 3 ] ),
+	normal: new Float32Array( 9 ),
+	uv: new Float32Array( 6 )
+};
 
-	it( 'carries the variant the interior box asked for', () => {
+/** What the worker posts for that floor: the cut, run in-process. */
+function posted() {
 
-		const key = materialKey( {
-			name: 'cyberpunk/ceiling/high_rich',
-			userData: { materialVariant: 'panel' }
-		} );
+	return { cut: partition( [ carpet ], outlinesOf( floors ) ), bytes: 0, cost: {} };
 
-		expect( key ).toBe( 'cyberpunk/ceiling/high_rich#panel' );
-		expect( plain( key ) ).toBe( 'cyberpunk/ceiling/high_rich' );
-		expect( variantOf( key ) ).toBe( 'panel' );
+}
 
+/** A stream with one building registered 3 m away, and the worker stubbed. */
+function stream( cut ) {
+
+	const roomLights = {
+		dim: { room: null },
+		materialFor: ( binding, key ) => new THREE.MeshBasicMaterial( { name: key } )
+	};
+	const stream = new InteriorStream( {
+		factory: { tint: async () => null }, roomLights, haze: null, elevators: null
 	} );
+	stream.worker = { cut, dispose: () => { stream.workerDisposed = true; } };
+	stream.register(
+		new Map( [ [ 'p0', { glbUrl: '/out/p0/interior/building.glb', floors } ] ] ),
+		new Map( [ [ 'p0', { x: 2, z: 2 } ] ] )
+	);
 
-	it( 'is the plain key when no variant is named', () => {
+	return stream;
 
-		const key = materialKey( { name: 'cyberpunk/concrete/high_rich', userData: {} } );
+}
 
-		expect( key ).toBe( 'cyberpunk/concrete/high_rich' );
-		expect( variantOf( key ) ).toBeUndefined();
+const settle = async ( stream ) => {
 
-	} );
+	while ( stream.loading ) await new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
 
-} );
+};
 
 /**
  * A furnished interior takes many frames to arrive, and the streamer is
@@ -87,57 +101,58 @@ describe( 'InteriorStream.update', () => {
 
 	it( 'keeps ticking while a building is still loading', () => {
 
-		const stream = new InteriorStream( { factory: null, roomLights: null, haze: null, elevators: null } );
-		stream.bytes = () => new Promise( () => {} );
-		stream.register(
-			new Map( [ [ 'p0', { glbUrl: '/out/p0/interior/building.glb', floors: [] } ] ] ),
-			new Map( [ [ 'p0', { x: 10, z: 0 } ] ] )
-		);
 		const feet = { x: 0, y: 0, z: 0 };
+		const loading = stream( () => new Promise( () => {} ) );
 
-		stream.update( feet );
+		loading.update( feet );
 
-		expect( () => stream.update( feet ) ).not.toThrow();
-		expect( stream.liveInteriors ).toBe( 1 );
+		expect( () => loading.update( feet ) ).not.toThrow();
+		expect( loading.liveInteriors ).toBe( 1 );
 
 	} );
 
 	it( 'hands over every room already wearing a material', async () => {
 
-		// One furnished floor: a patch of carpet inside the published room.
-		const floors = [ {
-			floor: 0, elevation: 0, height: 3,
-			rooms: [ { id: 'r0', kind: 'living', polygon: [ [ 0, 0 ], [ 4, 0 ], [ 4, 4 ], [ 0, 4 ] ] } ],
-			lights: []
-		} ];
-		const carpet = new THREE.BufferGeometry();
-		carpet.setAttribute( 'position', new THREE.Float32BufferAttribute( [ 1, 0, 1, 3, 0, 1, 1, 0, 3 ], 3 ) );
-		const mesh = new THREE.Mesh( carpet, new THREE.MeshBasicMaterial( { name: 'cyberpunk/carpet/mid' } ) );
-		mesh.name = `${INTERIOR_PREFIX}carpet`;
-		const scene = new THREE.Group();
-		scene.add( mesh );
+		const landed = stream( async () => posted() );
 
-		const roomLights = {
-			dim: { room: null },
-			materialFor: ( binding, key ) => new THREE.MeshBasicMaterial( { name: key } )
-		};
-		const stream = new InteriorStream( {
-			factory: { tint: async () => null }, roomLights, haze: null, elevators: null
-		} );
-		stream.bytes = async () => new ArrayBuffer( 0 );
-		stream.loader = { parseAsync: async () => ( { scene } ) };
-		stream.register(
-			new Map( [ [ 'p0', { glbUrl: '/out/p0/interior/building.glb', floors } ] ] ),
-			new Map( [ [ 'p0', { x: 2, z: 2 } ] ] )
-		);
-
-		stream.update( { x: 0, y: 0, z: 0 } );
-		while ( stream.loading ) await new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
+		landed.update( { x: 0, y: 0, z: 0 } );
+		await settle( landed );
 
 		// The room view and the light slots run on separate timers, so a room
 		// can be shown before it is lit; it must never be shown with no material.
-		expect( stream.rooms ).toHaveLength( 1 );
-		expect( stream.rooms[ 0 ].meshes.every( ( { mesh } ) => mesh.material?.name === 'cyberpunk/carpet/mid' ) ).toBe( true );
+		expect( landed.rooms ).toHaveLength( 1 );
+		expect( landed.rooms[ 0 ].meshes.every( ( { mesh } ) => mesh.material?.name === 'cyberpunk/carpet/mid' ) ).toBe( true );
+
+	} );
+
+	it( 'puts the floor the player stands on in the scene and in the physics world', async () => {
+
+		const landed = stream( async () => posted() );
+		const solid = new Map();
+		landed.onColliderBand = ( id, geometry ) => solid.set( id, geometry );
+
+		landed.update( { x: 0, y: 0, z: 0 } );
+		await settle( landed );
+		landed.update( { x: 0, y: 0, z: 0 } );
+
+		expect( landed.rooms[ 0 ].group.parent.visible ).toBe( true );
+		expect( solid.get( 'p0:0' ).getAttribute( 'position' ).count ).toBe( 3 );
+
+	} );
+
+	it( 'lets a load go when the stream is disposed before it lands', async () => {
+
+		let land = null;
+		const dropped = stream( () => new Promise( ( resolve ) => { land = resolve; } ) );
+
+		dropped.update( { x: 0, y: 0, z: 0 } );
+		dropped.dispose();
+		land( posted() );
+		await settle( dropped );
+
+		expect( dropped.rooms ).toHaveLength( 0 );
+		expect( dropped.liveInteriors ).toBe( 0 );
+		expect( dropped.workerDisposed ).toBe( true );
 
 	} );
 

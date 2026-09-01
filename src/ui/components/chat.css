@@ -196,15 +196,15 @@
 .call {
 	position: absolute;
 	pointer-events: auto;
-	top: 150px;
-	right: 14px;
-	width: 320px;
+	top: 216px;
+	left: 20px;
+	width: 300px;
 	background: var(--ui-panel);
 	border: 1px solid var(--ui-accent-dim);
 }
 
 .call-screen {
-	height: 200px;
+	height: 180px;
 	background: #050a0e;
 	border-bottom: 1px solid var(--ui-line);
 	overflow: hidden;
