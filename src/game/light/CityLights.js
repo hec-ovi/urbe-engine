@@ -58,7 +58,28 @@ export class CityLights {
 		this.dim = dim;
 		this.group.visible = dim > 0;
 
-		for ( let i = 0; i < this.lights.length; i ++ ) this.lights[ i ].power = this.fixtures[ i ].lumens * dim;
+		for ( let i = 0; i < this.lights.length; i ++ ) this.#power( i );
+
+	}
+
+	/**
+	 * One fixture switched on its own, on top of the hour: a venue's sign goes
+	 * dark when the simulation has nobody working there.
+	 */
+	setFixtureDim( index, dim ) {
+
+		const light = this.lights[ index ];
+
+		if ( ! light || light.userData.dim === dim ) return;
+
+		light.userData.dim = dim;
+		this.#power( index );
+
+	}
+
+	#power( index ) {
+
+		this.lights[ index ].power = this.fixtures[ index ].lumens * this.dim * ( this.lights[ index ].userData.dim ?? 1 );
 
 	}
 

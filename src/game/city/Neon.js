@@ -62,8 +62,8 @@ export class Neon {
 
 			const rng = new Rng( hash( parcel.id ) );
 
-			this.#signLight( glows, building.blueprint, rng );
-			this.#doorLight( glows, building.blueprint );
+			this.#signLight( glows, parcel.id, building.blueprint, rng );
+			this.#doorLight( glows, parcel.id, building.blueprint );
 
 			const facade = frontFacade( building.blueprint, parcel );
 
@@ -97,7 +97,7 @@ export class Neon {
 	}
 
 	/** The parcel's own lettered sign, standing just off its face. */
-	#signLight( glows, blueprint, rng ) {
+	#signLight( glows, parcelId, blueprint, rng ) {
 
 		for ( const sign of blueprint.signage ?? [] ) {
 
@@ -112,7 +112,10 @@ export class Neon {
 				),
 				color: new THREE.Color( GLOW[ Math.floor( rng.next() * GLOW.length ) ] ),
 				lumens: rng.range( SIGN_LUMENS[ 0 ], SIGN_LUMENS[ 1 ] ) * Math.max( 1, sign.width / 2 ),
-				range: 14
+				range: 14,
+				// Whose sign this is, so it can go dark when the place shuts.
+				parcelId,
+				kind: 'sign'
 			} );
 
 		}
@@ -120,7 +123,7 @@ export class Neon {
 	}
 
 	/** The fixtures exterior put over the entrance: the light on the pavement. */
-	#doorLight( glows, blueprint ) {
+	#doorLight( glows, parcelId, blueprint ) {
 
 		for ( const light of blueprint.lights ?? [] ) {
 
@@ -136,7 +139,9 @@ export class Neon {
 				),
 				color: kelvinColor( DOOR_KELVIN ),
 				lumens: DOOR_LUMENS,
-				range: DOOR_RANGE
+				range: DOOR_RANGE,
+				parcelId,
+				kind: 'entrance'
 			} );
 
 		}

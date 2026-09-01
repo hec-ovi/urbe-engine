@@ -19,6 +19,7 @@ import { Dressing } from './props/Dressing.js';
 import { LaneMarkings } from './city/LaneMarkings.js';
 import { LitWindows } from './city/LitWindows.js';
 import { RoomView } from './city/RoomView.js';
+import { Venues } from './city/Venues.js';
 import { CityLights } from './light/CityLights.js';
 import { NightSwitch } from './light/NightSwitch.js';
 import { LightingSystem } from './light/LightingSystem.js';
@@ -163,6 +164,10 @@ export class GameApp {
 		this.lights = new CityLights( fixtures, this.lighting.capacity );
 		this.scene.add( this.lights.group );
 		this.roomView = new RoomView( this.stream.rooms, ROOM_VISIBLE_RADIUS );
+		// A building you can walk into says so, and one with nothing behind its
+		// facade says that too, by staying dark and offering no prompt.
+		this.venues = new Venues( { atlas, buildings, doors: city.doors, fixtures, factory } );
+		this.scene.add( this.venues.build( city.doors ) );
 		this.#hangHaze( fixtures );
 
 		this.view.step( 'raising the sky' );
@@ -240,6 +245,7 @@ export class GameApp {
 		};
 
 		this.view.minimap.setMap( mapModel( atlas ) );
+		this.view.minimap.setVenues( this.venues.marks );
 		this.view.readout.setAbout( [
 			config.blueprintUrl,
 			`${config.outBase}/ (${buildings.size} built${unbuilt.length ? `, ${unbuilt.length} unbuilt` : ''})`,
@@ -299,6 +305,7 @@ export class GameApp {
 		this.traffic.update( delta, feet, this.clock.daySeconds );
 		this.transit.update( feet, this.clock.daySeconds );
 		this.elevators.update( delta, this.body );
+		this.venues.update( delta, feet, this.clock.timeMin, this.sim, this.lights );
 		this.#relight( feet, delta );
 
 		const prompt = this.interactor.update( delta );

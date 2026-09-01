@@ -6,6 +6,9 @@ const ROAD = '#4a6684';
 const BLOCK = '#18212c';
 const GROUND = '#0a0e14';
 const PLAYER = '#cfe6ff';
+/** A venue you can walk into, lit while it is open and dim once it shuts. */
+const VENUE_OPEN = '#ffc46b';
+const VENUE_SHUT = '#4a4136';
 
 /**
  * Top-down map of the city with the player at its centre, north up. The whole
@@ -28,6 +31,17 @@ export class MinimapView {
 		this.baked = null;
 		this.origin = [ 0, 0 ];
 		this.setVisible( true );
+
+	}
+
+	/**
+	 * Where you can go in: one dot per enterable venue, drawn live rather than
+	 * baked, because a venue goes dark when it shuts.
+	 * @param venues [{ point: Vector3, open }]
+	 */
+	setVenues( venues ) {
+
+		this.venues = venues;
 
 	}
 
@@ -94,9 +108,23 @@ export class MinimapView {
 		ctx.fillRect( 0, 0, SIZE, SIZE );
 		ctx.drawImage( this.baked, SIZE / 2 - px, SIZE / 2 - pz );
 
+		const c = SIZE / 2;
+
+		for ( const venue of this.venues ?? [] ) {
+
+			const [ vx, vz ] = this.#toPixels( venue.point.x, venue.point.z );
+			const x = c - px + vx;
+			const y = c - pz + vz;
+
+			if ( x < 0 || y < 0 || x > SIZE || y > SIZE ) continue;
+
+			ctx.fillStyle = venue.open ? VENUE_OPEN : VENUE_SHUT;
+			ctx.fillRect( x - 2, y - 2, 4, 4 );
+
+		}
+
 		const dx = - Math.sin( heading );
 		const dz = - Math.cos( heading );
-		const c = SIZE / 2;
 
 		ctx.fillStyle = PLAYER;
 		ctx.beginPath();
