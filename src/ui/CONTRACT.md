@@ -7,7 +7,7 @@ Layout: `views/` are full panels and the overlays that assemble them, `widgets/`
 ## GameView (views/GameView.js)
 The whole game overlay. `mount( parent )` appends it.
 - props (all optional): `onResume()`, `onCloseDialog()`, `onSend( text )`, `onOpen( name )`, `onClose()`, `onLeave()`, `onSettingChange({ key, value })`, `onHangUp()`, `onSummaryClose()`
-- methods: `open( name )`, `close()`, `toggle( name )` with name one of `QUESTS`, `MAP`, `INVENTORY`, `CODEX`, `SETTINGS`, `CONTROLS`; `step( text )`, `ready()`, `fail( message )` drive the loading surface
+- methods: `open( name )`, `close()`, `toggle( name )` with name one of `QUESTS`, `MAP`, `INVENTORY`, `CODEX`, `SETTINGS`, `CONTROLS`; `setPaused( bool )` shows the pause screen and the tab bar together (the bar is hidden while playing and shown while paused or while a panel is open); `step( text )`, `ready()`, `fail( message )` drive the loading surface
 - children the game feeds directly: `clock`, `prompt`, `readout`, `stats`, `minimap`, `pause`, `avatar`, `call`, `toast`, `dialog` (ChatPanel), `summary`, `map`, `inventory`, `quests`, `codex`, `settings`, `controls`, `tabs`, `panels`
 
 ## PanelHost (views/PanelHost.js)
@@ -46,7 +46,7 @@ One panel over the game at a time.
 ## Invariants
 - Presentation only: nothing here reads game state or touches the scene. The game overlay (GameView and everything it mounts) imports nothing from outside `src/ui`; ExperimentView alone reads the scale experiment's option lists.
 - No rounded corners anywhere: no `border-radius` in any stylesheet.
-- The tab bar always shows each entry's key letter.
+- The tab bar always shows each entry's key letter, and is only on screen while paused or while a panel is open.
 - One full panel at a time; Escape closes it.
 - Canvas maps redraw on pan, zoom or data change, never per frame on their own.
 

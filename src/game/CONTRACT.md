@@ -15,9 +15,9 @@ Purpose: plays the assembled city as a first-person world at street level, at ni
   - `lanes=debug` paints every lane of the road graph end to end, `lanes=glow` restores the teal emissive centreline strips. Debug only; a normal run gets painted road markings.
   - `quality` (`low` | `medium` | `high` | `ultra`): what the frame is allowed to spend (src/game/look/CONTRACT.md). Unset follows the backend: `high` on WebGPU, `low` on the WebGL2 fallback.
   - `exposure` (default 0.024): the one number the whole look is graded at. Tuning only.
-  - `fog` (default 0.0006): street fog density per metre; the first block stays crisp, fog separates the skyline past it.
+  - `fog` (default 0.0003): street fog density per metre, sky-coloured and untinted, so a distant building fades without changing colour; the first block stays crisp.
   - `off` (comma list of `fog`, `bloom`, `probe`, `haze`, `interiors`): look stages left out of the run, for telling them apart on screen.
-- HUD (src/ui/CONTRACT.md): the tab bar's panels open on J M I X O ? and close on Esc, N and Esc pause; a panel or the chat releases the mouse and owns the keyboard; the settings panel changes fog, exposure and crowd on the spot and reloads the run for a quality tier; the map shows roads, blocks, venues in their open state, rail stations and the player.
+- HUD (src/ui/CONTRACT.md): the panels open on J M I X O ? and close on Esc, N and Esc pause; the tab bar is on screen only while paused or while a panel is open; a panel or the chat releases the mouse and owns the keyboard; the settings panel changes fog, exposure and crowd on the spot and reloads the run for a quality tier; the map shows roads, blocks, venues in their open state, rail stations and the player.
 - Atlas blueprint per ../../../atlas/CONTRACT.md.
 - Connections document, generated in-process from that blueprint by `connectionsRunner.js`; `signalStateAt` is consumed directly for signal state.
 - `<out>/manifest.json` (../assembly/CONTRACT.md): which blueprint the directory was assembled from, which parcels finished and the floor files each one has. It is the only list of buildings and floors the game reads, so a folder left behind by an older blueprint is never loaded on top of the city that replaced it. A missing manifest, one from another blueprint or one without the floor list fails the run with what to re-run.

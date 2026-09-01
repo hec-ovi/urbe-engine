@@ -76,12 +76,14 @@ export class GameView {
 			onOpen: ( name ) => {
 
 				this.tabs.setActive( name );
+				this.tabs.element.hidden = false;
 				onOpen( name );
 
 			},
 			onClose: () => {
 
 				this.tabs.setActive( null );
+				this.tabs.element.hidden = ! this.paused;
 				onClose();
 
 			}
@@ -113,7 +115,21 @@ export class GameView {
 			this.loading
 		);
 
+		this.paused = false;
+		this.tabs.element.hidden = true;
 		this.pause.setVisible( false );
+
+	}
+
+	/**
+	 * Paused is the only time the bar is up: the mouse is captured while
+	 * playing, so the panels are reached from the pause screen or their keys.
+	 */
+	setPaused( paused ) {
+
+		this.paused = paused;
+		this.pause.setVisible( paused );
+		this.tabs.element.hidden = ! ( paused || this.panels.current );
 
 	}
 

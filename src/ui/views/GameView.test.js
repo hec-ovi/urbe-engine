@@ -63,3 +63,28 @@ describe( 'GameView', () => {
 	} );
 
 } );
+
+describe( 'GameView tab bar', () => {
+
+	it( 'is up only while paused or while a panel is open', () => {
+
+		const view = new GameView( {} );
+		view.mount( document.body );
+
+		expect( view.tabs.element.hidden ).toBe( true );
+
+		view.setPaused( true );
+		expect( view.tabs.element.hidden ).toBe( false );
+
+		view.setPaused( false );
+		expect( view.tabs.element.hidden ).toBe( true );
+
+		view.open( 'MAP' );
+		expect( view.tabs.element.hidden ).toBe( false );
+
+		view.close();
+		expect( view.tabs.element.hidden ).toBe( true );
+
+	} );
+
+} );

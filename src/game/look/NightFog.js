@@ -9,13 +9,13 @@ const HEIGHT = 80;
  * scene is in: moonlight plus the skyglow a lit city throws back down, which
  * in a dense one is the larger of the two by far.
  */
-const SKY_RADIANCE = 0.32;
+const SKY_RADIANCE = 0.12;
 /**
  * The fraction of the illuminance falling on the air that comes back to the
  * eye. Thin outdoor haze returns very little, which is why a lit street's air
  * sits well under the road it lights.
  */
-const SCATTER = 0.006;
+const SCATTER = 0;
 /** A room's air is thick over metres where the street's is thin over blocks. */
 const INDOOR_DENSITY = 0.12;
 /** Seconds to cross from one medium to the other, walking through a door. */

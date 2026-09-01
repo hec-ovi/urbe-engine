@@ -3,15 +3,13 @@ import * as THREE from 'three/webgpu';
 /**
  * Where the camera is standing, in stops relative to the base exposure. The
  * lights are in real photometric units, so relative brightness is already
- * correct everywhere and these only model the eye: stepping out of a lit room
- * into the street is a drop the player should feel.
- *
- * An interior keeps its offset at every hour: a lit room at noon is still
- * darker than the street outside it, by the same amount.
+ * correct everywhere; a room and the street outside it are graded the same,
+ * and what the room's own fixtures do to it is the whole difference the eye
+ * sees on walking in. The day cycle moves the stops with the sun.
  */
 const VOLUMES = {
 	exterior: 0,
-	interior: - 1.6
+	interior: 0
 };
 
 /** Eye adaptation, in seconds, for the whole cross-fade. */

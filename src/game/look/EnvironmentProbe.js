@@ -78,20 +78,20 @@ export class EnvironmentProbe {
 	 * @param crossed true when the player has just walked between the street
 	 * and a room.
 	 */
-	update( position, crossed = false ) {
+	update( position ) {
 
 		if ( ! this.at ) return;
 
-		if ( crossed || this.at.distanceTo( position ) > this.interval ) this.pending = true;
+		if ( this.at.distanceTo( position ) > this.interval ) this.pending = true;
 
 		if ( ! this.pending ) return;
 
-		// Walking through a door changes everything reflective at once, so that
-		// bake happens on the spot. A bake asked for by distance alone can
-		// wait, and never lands in consecutive frames.
+		// A bake is six renders of the city in one frame, so it only happens
+		// on the cooldown and never on a threshold: walking into a building
+		// keeps the street's reflections until the next distance bake.
 		const now = performance.now();
 
-		if ( ! crossed && now - this.last < COOLDOWN ) return;
+		if ( now - this.last < COOLDOWN ) return;
 
 		this.pending = false;
 		this.bake( position, now );

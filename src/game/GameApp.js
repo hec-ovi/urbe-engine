@@ -298,7 +298,7 @@ export class GameApp {
 			`/materials/${THEME}`,
 			'/models/quaternius'
 		] );
-		this.view.pause.setVisible( true );
+		this.view.setPaused( true );
 		this.view.ready();
 
 		this.renderer.domElement.addEventListener( 'click', () => this.input.requestLock() );
@@ -376,7 +376,7 @@ export class GameApp {
 
 		}
 
-		this.view.pause.setVisible( ! this.input.locked && free );
+		this.view.setPaused( ! this.input.locked && free );
 		this.view.minimap.update( feet, this.controller.yaw );
 		if ( this.view.panels.current === 'MAP' ) this.view.map.setPlayer( feet, this.controller.yaw );
 		this.view.clock.update( this.clock.label, this.locator.district( feet.x, feet.z ) );
@@ -423,7 +423,7 @@ export class GameApp {
 
 		this.rooms.update( visible, feet, delta );
 		this.fog.update( room ? roomAir( room ) : this.lights.airColor( this.camera.position ), Boolean( room ), delta );
-		this.probe?.update( feet, crossed );
+		this.probe?.update( feet );
 		this.exposure.enter( room ? 'interior' : 'exterior' );
 		this.exposure.update( delta );
 
