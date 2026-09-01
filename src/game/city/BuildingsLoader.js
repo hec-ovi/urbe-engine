@@ -12,6 +12,9 @@ import { kelvinColor } from '../light/Color.js';
 // not sanitized, so the material key still arrives whole.
 const EXTERIOR = 'merged';
 export const INTERIOR_PREFIX = 'interior';
+// The entrance leaf is its own subtree, `door:entrance/leaf:N`. Every mesh
+// under it belongs to the pivot, glass included, or the door swings in halves.
+const DOOR = 'door';
 
 const FIXTURE = '/light-fixture/';
 /** A lit diffuser is looked at directly, so it sits well above road exposure. */
@@ -123,12 +126,24 @@ export class BuildingsLoader {
 
 		gltf.scene.traverse( ( node ) => {
 
-			if ( ! node.isMesh || ! node.name?.startsWith( EXTERIOR ) ) return;
+			if ( ! node.isMesh ) return;
 
+			const name = node.name ?? '';
 			const key = node.material?.name ?? '';
+
+			if ( door && name.startsWith( DOOR ) ) {
+
+				doorParts.push( { key, geometry: bake( node ) } );
+
+				return;
+
+			}
+
+			if ( ! name.startsWith( EXTERIOR ) ) return;
+
 			const geometry = bake( node );
 
-			// The entrance leaf hides inside the door material's merged mesh.
+			// Older shells merged the leaf into the door material's own mesh.
 			const [ leaf, rest ] = door && isDoorMaterial( key )
 				? splitAt( geometry, door.box )
 				: [ null, geometry ];
