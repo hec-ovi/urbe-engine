@@ -12,6 +12,7 @@ This repo is the final layer of a larger build: a seeded, deterministic city wor
 - Characters: Quaternius universal base characters, universal animation library, modular outfits (links in docs/REQUIREMENTS.md). The animation set (walk, sit, talk) lives here. Future runtime morphs (body and face variety) are noted, not built now.
 - Talking animations on interaction, real NPC walking with character models, real dimensions, real door entries, real stairs.
 - Sky: skybox style solution, one thing that solves it all.
+- Rendering targets WebGPU (three.js WebGPURenderer path, fallback decided by research). Desktop distribution later as an Electron style bundle (Windows and the rest, browser-less, publishable as a full game): core code never couples hard to browser-only APIs; saves and file access go through an abstraction.
 - Hosts the simulation runtime layer (the simulation box ships a library, this box runs it).
 - Modes: orbit the city, or play it.
 - Optional docker mode so the whole pipeline can run in one container. Optional, never a blocker.
