@@ -1,4 +1,5 @@
 import { pickInt } from './hash.js';
+import { loadFloorConstants, constantsForType, feasibleFloorRange } from './floorFeasibility.js';
 
 export class AssemblyError extends Error {
 
@@ -13,17 +14,19 @@ export class AssemblyError extends Error {
 
 /**
  * Pure adapter: atlas blueprint + connections output -> one exterior BuildingRequest per parcel.
- * Deterministic: same inputs, identical request. No IO.
+ * Deterministic: same inputs, identical request. No IO beyond the injected constants.
  */
 export class RequestAssembler {
 
 	/**
 	 * @param atlas CityBlueprint per ../atlas/CONTRACT.md
 	 * @param connections ConnectionsOutput per ../connections/CONTRACT.md
+	 * @param floorConstants exterior's floor-constants surface; defaults to the sibling file
 	 */
-	constructor( atlas, connections ) {
+	constructor( atlas, connections, floorConstants = loadFloorConstants() ) {
 
 		this.worldSeed = atlas.meta.seed;
+		this.floorConstants = floorConstants;
 		this.parcels = new Map( atlas.parcels.map( ( p ) => [ p.id, p ] ) );
 		this.aperturesByBuilding = new Map();
 
@@ -41,7 +44,7 @@ export class RequestAssembler {
 	 * @param parcelId atlas parcel id
 	 * @param options.glb 'merged' (default, engine runtime mode) | 'named'
 	 * @returns BuildingRequest per ../exterior/schemas/building-request.schema.json
-	 * @throws AssemblyError E_PARCEL_UNKNOWN
+	 * @throws AssemblyError E_PARCEL_UNKNOWN | E_ENVELOPE_INFEASIBLE
 	 */
 	assemble( parcelId, { glb = 'merged' } = {} ) {
 
@@ -78,23 +81,38 @@ export class RequestAssembler {
 	}
 
 	/**
-	 * Seeded pick inside the envelope, raised so the nominal height covers the
-	 * topmost above-ground aperture (a floor plate must land at every base).
+	 * Seeded pick inside the intersection of the atlas envelope and exterior's
+	 * feasible floor count range for the parcel's apertures.
 	 */
 	#chooseFloors( parcel, apertures, seed ) {
 
-		const { minFloors, maxFloors, floorHeight } = parcel.envelope;
-		let floors = pickInt( `${seed}:floors`, minFloors, maxFloors );
+		const { minFloors, maxFloors, maxHeight } = parcel.envelope;
+		const constants = constantsForType( this.floorConstants, parcel.type );
+		const range = feasibleFloorRange( {
+			maxHeight,
+			apertures,
+			minFloorHeight: constants.minFloorHeight,
+			maxFloorHeight: constants.maxFloorHeight
+		} );
 
-		for ( const aperture of apertures ) {
+		if ( ! range ) {
 
-			const top = aperture.base + aperture.height;
-			if ( top <= 0 ) continue;
-			floors = Math.max( floors, Math.ceil( top / floorHeight ) );
+			throw new AssemblyError( 'E_ENVELOPE_INFEASIBLE',
+				`${parcel.id}: no feasible floor count for maxHeight ${maxHeight} with its apertures` );
 
 		}
 
-		return Math.min( floors, maxFloors );
+		const low = Math.max( minFloors, range.min );
+		const high = Math.min( maxFloors, range.max );
+
+		if ( low > high ) {
+
+			throw new AssemblyError( 'E_ENVELOPE_INFEASIBLE',
+				`${parcel.id}: envelope ${minFloors}..${maxFloors} misses feasible range ${range.min}..${range.max}` );
+
+		}
+
+		return pickInt( `${seed}:floors`, low, high );
 
 	}
 
@@ -109,7 +127,11 @@ export class RequestAssembler {
 
 		}
 
-		return Math.ceil( depth / parcel.envelope.floorHeight );
+		if ( depth === 0 ) return 0;
+
+		const { maxFloorHeight } = constantsForType( this.floorConstants, parcel.type );
+
+		return Math.ceil( depth / maxFloorHeight );
 
 	}
 

@@ -10,7 +10,7 @@ Purpose: turns the atlas blueprint plus the connections document into per-parcel
 `RequestAssembler(atlas, connections).assemble(parcelId, { glb })` returns a `BuildingRequest` per ../../../exterior/schemas/building-request.schema.json:
 - seed: `<atlas seed>:<parcelId>`
 - parcel: footprint, access point and nominal maxHeight from the atlas parcel, verbatim
-- building: atlas type and tier verbatim; floors seeded inside the envelope and raised so the nominal height covers the topmost above-ground aperture; basements added when a tunnel aperture sits below ground
+- building: atlas type and tier verbatim; floors seeded inside the intersection of the atlas envelope and exterior's feasible range, computed with the recipe and constants in ../../../exterior/schemas/floor-constants.json (`floorFeasibility.js`); basements added when a tunnel aperture sits below ground, deep enough at the type's max floor height to reach its base
 - theme: `cyberpunk`
 - apertures: the connections apertures whose buildingId equals the parcel id, verbatim
 - options.glb: `merged` (engine runtime default) or `named`
@@ -19,6 +19,7 @@ CLI: `npm run assemble -- --parcel <id> --out <dir> [--glb merged|named]` valida
 
 ## Errors
 - `E_PARCEL_UNKNOWN`: parcel id not in the atlas blueprint (thrown as `AssemblyError`; CLI exit 1)
+- `E_ENVELOPE_INFEASIBLE`: no floor count satisfies both the atlas envelope and exterior's feasibility recipe for the parcel's apertures (thrown as `AssemblyError`; CLI exit 1)
 - `E_REQUEST_INVALID`: assembled request fails exterior's schema (CLI exit 1, ajv errors printed)
 - `E_EXTERIOR_FAILED`: exterior CLI exited nonzero (CLI exit 1, its output printed)
 - usage error: CLI exit 2
