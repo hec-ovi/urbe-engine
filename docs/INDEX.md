@@ -1,6 +1,7 @@
 # Box map
 
-- root box: see CONTRACT.md. No inner boxes yet.
+- root box: see CONTRACT.md.
+- `src/assembly/`: first world-assembly slice; atlas parcel + connections apertures -> exterior BuildingRequest, CLI drives exterior to GLB + blueprint (src/assembly/CONTRACT.md). Depends on ../atlas, ../connections, ../exterior contracts.
 
 ## Scale experiment (docs/RESEARCH.md 9)
 
