@@ -106,7 +106,7 @@ export class Shelters {
 
 		} );
 
-		group.add( ...meshes );
+		if ( meshes.length ) group.add( ...meshes );
 
 		return { group, glows, collider: solid( colliders ) };
 

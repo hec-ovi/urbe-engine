@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { floorAt, InteriorStream, materialKey, plain, variantOf } from './InteriorStream.js';
 import { OUTSIDE_FLOORS } from './InteriorRooms.js';
+import { INTERIOR_PREFIX } from './BuildingsLoader.js';
+import * as THREE from 'three/webgpu';
 
 /** Four floors of a real building: a basement, a tall lobby, two storeys. */
 const bands = [
@@ -97,6 +99,44 @@ describe( 'InteriorStream.update', () => {
 
 		expect( () => stream.update( feet ) ).not.toThrow();
 		expect( stream.liveInteriors ).toBe( 1 );
+
+	} );
+
+	it( 'hands over every room already wearing a material', async () => {
+
+		// One furnished floor: a patch of carpet inside the published room.
+		const floors = [ {
+			floor: 0, elevation: 0, height: 3,
+			rooms: [ { id: 'r0', kind: 'living', polygon: [ [ 0, 0 ], [ 4, 0 ], [ 4, 4 ], [ 0, 4 ] ] } ],
+			lights: []
+		} ];
+		const carpet = new THREE.BufferGeometry();
+		carpet.setAttribute( 'position', new THREE.Float32BufferAttribute( [ 1, 0, 1, 3, 0, 1, 1, 0, 3 ], 3 ) );
+		const mesh = new THREE.Mesh( carpet, new THREE.MeshBasicMaterial( { name: 'cyberpunk/carpet/mid' } ) );
+		mesh.name = `${INTERIOR_PREFIX}carpet`;
+		const scene = new THREE.Group();
+		scene.add( mesh );
+
+		const roomLights = {
+			dim: { room: null },
+			materialFor: ( binding, key ) => new THREE.MeshBasicMaterial( { name: key } )
+		};
+		const stream = new InteriorStream( {
+			factory: { tint: async () => null }, roomLights, haze: null, elevators: null
+		} );
+		stream.loader = { loadAsync: async () => ( { scene } ) };
+		stream.register(
+			new Map( [ [ 'p0', { glbUrl: '/out/p0/interior/building.glb', floors } ] ] ),
+			new Map( [ [ 'p0', { x: 2, z: 2 } ] ] )
+		);
+
+		stream.update( { x: 0, y: 0, z: 0 } );
+		while ( stream.loading ) await new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
+
+		// The room view and the light slots run on separate timers, so a room
+		// can be shown before it is lit; it must never be shown with no material.
+		expect( stream.rooms ).toHaveLength( 1 );
+		expect( stream.rooms[ 0 ].meshes.every( ( { mesh } ) => mesh.material?.name === 'cyberpunk/carpet/mid' ) ).toBe( true );
 
 	} );
 

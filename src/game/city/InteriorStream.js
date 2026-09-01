@@ -240,6 +240,11 @@ export class InteriorStream {
 
 		const reflectance = await this.#reflectance( byKey.keys() );
 		const cut = buildRooms( entry.parcelId, byKey, entry.floors, reflectance );
+
+		// A room is shown by distance and lit by the slot pool on separate
+		// timers, so it enters the scene already dressed in the dim binding.
+		for ( const room of cut.rooms ) room.wear( this.roomLights.dim, this.roomLights );
+
 		const group = new THREE.Group();
 		group.name = `interior:${entry.parcelId}`;
 		// Before the bands, because the door leaves each band gives up have to

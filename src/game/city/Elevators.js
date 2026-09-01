@@ -113,7 +113,13 @@ export class Elevators {
 
 		}
 
-		stops.forEach( ( stop, i ) => group.add( ...stop.takeLeaves( geometry, mine[ i ], material ) ) );
+		stops.forEach( ( stop, i ) => {
+
+			const leaves = stop.takeLeaves( geometry, mine[ i ], material );
+
+			if ( leaves.length ) group.add( ...leaves );
+
+		} );
 
 		const left = takeTriangles( geometry, rest );
 		geometry.dispose();

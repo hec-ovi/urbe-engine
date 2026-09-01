@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Elevators } from './Elevators.js';
 
@@ -67,15 +67,21 @@ describe( 'Elevators', () => {
 
 	} );
 
-	it( 'leaves geometry that belongs to no shaft alone', () => {
+	it( 'leaves geometry that belongs to no shaft alone, without a word', () => {
 
 		const { elevators } = shafts();
 		const far = doorGeometry( 0 );
 		far.translate( 40, 0, 0 );
+		const band = new THREE.Group();
+		const errors = vi.spyOn( console, 'error' ).mockImplementation( () => {} );
 
-		const left = elevators.claim( 'p1', 0, far, new THREE.MeshBasicMaterial(), new THREE.Group() );
+		const left = elevators.claim( 'p1', 0, far, new THREE.MeshBasicMaterial(), band );
 
 		expect( left.getAttribute( 'position' ).count ).toBe( 12 );
+		// A stop with no leaves in this band hangs nothing and logs nothing.
+		expect( band.children ).toHaveLength( 0 );
+		expect( errors ).not.toHaveBeenCalled();
+		errors.mockRestore();
 
 	} );
 
