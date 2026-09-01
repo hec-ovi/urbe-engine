@@ -88,7 +88,7 @@ describe( 'InteriorStream.update', () => {
 	it( 'keeps ticking while a building is still loading', () => {
 
 		const stream = new InteriorStream( { factory: null, roomLights: null, haze: null, elevators: null } );
-		stream.loader = { loadAsync: () => new Promise( () => {} ) };
+		stream.bytes = () => new Promise( () => {} );
 		stream.register(
 			new Map( [ [ 'p0', { glbUrl: '/out/p0/interior/building.glb', floors: [] } ] ] ),
 			new Map( [ [ 'p0', { x: 10, z: 0 } ] ] )
@@ -124,7 +124,8 @@ describe( 'InteriorStream.update', () => {
 		const stream = new InteriorStream( {
 			factory: { tint: async () => null }, roomLights, haze: null, elevators: null
 		} );
-		stream.loader = { loadAsync: async () => ( { scene } ) };
+		stream.bytes = async () => new ArrayBuffer( 0 );
+		stream.loader = { parseAsync: async () => ( { scene } ) };
 		stream.register(
 			new Map( [ [ 'p0', { glbUrl: '/out/p0/interior/building.glb', floors } ] ] ),
 			new Map( [ [ 'p0', { x: 2, z: 2 } ] ] )

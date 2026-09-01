@@ -28,6 +28,7 @@ import { Haze } from './light/Haze.js';
 import { QualityTier } from './look/QualityTier.js';
 import { Exposure } from './look/Exposure.js';
 import { NightFog } from './look/NightFog.js';
+import { HitchLog } from './debug/HitchLog.js';
 import { EnvironmentProbe } from './look/EnvironmentProbe.js';
 import { LookPipeline } from './look/LookPipeline.js';
 import { NightSky, SKY_COLOR } from './sky/NightSky.js';
@@ -55,7 +56,6 @@ const ROOM_VISIBLE_RADIUS = 32;
 /** Air scattering is wide and weak indoors, tight and small on the street. */
 const INDOOR_HAZE = { spread: 0.55, cap: 3 };
 const OUTDOOR_HAZE = { spread: 0.28, cap: 2.4 };
-const NIGHT_FOG_DENSITY = 0.003;
 // A near plane this far out is still inside the player capsule, and it buys
 // the depth precision that keeps coplanar facade layers from flickering.
 const NEAR_PLANE = 0.2;
@@ -114,6 +114,8 @@ export class GameApp {
 		// already happened and the tier is a choice about cost, not backend.
 		const backend = RendererFactory.actualBackend( this.renderer );
 		this.tier = QualityTier.describe( config.quality, backend );
+		if ( config.off.has( 'bloom' ) ) this.tier.bloom = { strength: 0, radius: 0 };
+		if ( config.off.has( 'haze' ) ) this.tier.haze = false;
 		this.lighting = LightingSystem.install( this.renderer, this.tier );
 		this.exposure = new Exposure( this.renderer, config.exposure );
 		document.body.prepend( this.renderer.domElement );
@@ -136,11 +138,12 @@ export class GameApp {
 		this.scene.add( city.group );
 
 		this.elevators = new Elevators( factory );
+		this.hitches = new HitchLog();
 		this.stream = new InteriorStream( {
 			factory, roomLights: this.rooms, elevators: this.elevators,
-			haze: this.tier.haze ? INDOOR_HAZE : null
+			haze: this.tier.haze ? INDOOR_HAZE : null, hitches: this.hitches
 		} );
-		this.stream.register( buildings, city.centers );
+		if ( ! config.off.has( 'interiors' ) ) this.stream.register( buildings, city.centers );
 		this.scene.add( this.stream.group );
 
 		this.view.step( 'hanging the neon' );
@@ -177,8 +180,10 @@ export class GameApp {
 		// added to the world rather than by being registered here.
 		this.night = new NightSwitch( this.lights )
 			.addGroup( neon.group ).addGroup( lamps.group ).addGroup( city.group ).addGroup( this.transit.group ).addGroup( props.group );
-		this.fog = new NightFog( this.scene, { density: NIGHT_FOG_DENSITY, color: SKY_COLOR } );
-		this.probe = new EnvironmentProbe( this.renderer, this.scene, this.tier );
+		this.fog = new NightFog( this.scene, config.off.has( 'fog' )
+			? { density: 0, indoorDensity: 0, color: SKY_COLOR }
+			: { density: config.fog, color: SKY_COLOR } );
+		this.probe = config.off.has( 'probe' ) ? null : new EnvironmentProbe( this.renderer, this.scene, this.tier, this.hitches );
 
 		this.view.step( 'building the physics world' );
 		this.physics = await Physics.create();
@@ -228,7 +233,7 @@ export class GameApp {
 		this.bookmarks = new Bookmarks( { fixtures, rooms: () => this.stream.rooms, networks: connections.networks } );
 
 		this.view.step( 'baking the environment' );
-		this.probe.bake( spawn.point );
+		this.probe?.bake( spawn.point );
 		this.look = new LookPipeline( this.renderer, this.scene, this.camera, this.tier );
 
 		this.interactor = new Interactor( {
@@ -269,6 +274,7 @@ export class GameApp {
 	#frame() {
 
 		const now = performance.now();
+		this.hitches.frame( now - this.last );
 		this.tick( Math.min( 0.05, ( now - this.last ) / 1000 ) );
 		this.last = now;
 		this.#measure( performance.now() - now );
@@ -351,7 +357,7 @@ export class GameApp {
 
 		this.rooms.update( visible, feet, delta );
 		this.fog.update( room ? roomAir( room ) : this.lights.airColor( this.camera.position ), Boolean( room ), delta );
-		this.probe.update( feet, crossed );
+		this.probe?.update( feet, crossed );
 		this.exposure.enter( room ? 'interior' : 'exterior' );
 		this.exposure.update( delta );
 

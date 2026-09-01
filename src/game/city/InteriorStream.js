@@ -39,13 +39,15 @@ export class InteriorStream {
 	 * @param haze { spread, cap } for the air inside a room, or null at tiers
 	 * that do not draw it
 	 */
-	constructor( { factory, roomLights, haze, elevators } ) {
+	constructor( { factory, roomLights, haze, elevators, hitches = null } ) {
 
 		this.factory = factory;
+		this.hitches = hitches;
 		this.roomLights = roomLights;
 		this.haze = haze;
 		this.elevators = elevators;
 		this.loader = new GLTFLoader();
+		this.bytes = fetchBytes;
 		this.group = new THREE.Group();
 		this.group.name = 'interiors';
 		this.pending = new Map();
@@ -154,8 +156,13 @@ export class InteriorStream {
 			band.live = near;
 			band.group.visible = near;
 
-			if ( near ) this.onColliderBand?.( band.id, band.collider );
-			else this.onDropBand?.( band.id );
+			if ( near ) {
+
+				const t = performance.now();
+				this.onColliderBand?.( band.id, band.collider );
+				this.hitches?.note( `band ${band.id} collider`, performance.now() - t );
+
+			} else this.onDropBand?.( band.id );
 
 		}
 
@@ -221,8 +228,13 @@ export class InteriorStream {
 	/** Reads one interior GLB and cuts it into rooms and floor bands. */
 	async #build( entry ) {
 
-		const gltf = await this.loader.loadAsync( entry.glbUrl );
+		// Fetched first so the parse, which is the main-thread cost, is timed alone.
+		const bytes = await this.bytes( entry.glbUrl );
+		let t = performance.now();
+		const gltf = await this.loader.parseAsync( bytes, '' );
 		gltf.scene.updateMatrixWorld( true );
+		this.hitches?.note( `interior ${entry.parcelId} parse ${( bytes.byteLength / 1048576 ).toFixed( 1 )} MB`, performance.now() - t );
+		t = performance.now();
 
 		const byKey = new Map();
 
@@ -240,6 +252,8 @@ export class InteriorStream {
 
 		const reflectance = await this.#reflectance( byKey.keys() );
 		const cut = buildRooms( entry.parcelId, byKey, entry.floors, reflectance );
+		this.hitches?.note( `interior ${entry.parcelId} rooms`, performance.now() - t );
+		t = performance.now();
 
 		// A room is shown by distance and lit by the slot pool on separate
 		// timers, so it enters the scene already dressed in the dim binding.
@@ -326,6 +340,7 @@ export class InteriorStream {
 		}
 
 		this.#hangHaze( list, cut.rooms );
+		this.hitches?.note( `interior ${entry.parcelId} bands`, performance.now() - t );
 
 		return { parcelId: entry.parcelId, center: entry.center, group, bands: list, rooms: cut.rooms };
 
@@ -429,6 +444,12 @@ export function floorAt( bands, y ) {
 function ground( center, point ) {
 
 	return Math.hypot( center.x - point.x, center.z - point.z );
+
+}
+
+async function fetchBytes( url ) {
+
+	return ( await fetch( url ) ).arrayBuffer();
 
 }
 

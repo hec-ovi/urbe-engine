@@ -40,7 +40,9 @@ const ADAPT = 0.6;
  */
 export class NightFog {
 
-	constructor( scene, { density, color } ) {
+	constructor( scene, { density, color, indoorDensity = INDOOR_DENSITY } ) {
+
+		this.indoorDensity = indoorDensity;
 
 		this.sky = new THREE.Color( color );
 		this.sky.multiplyScalar( SKY_RADIANCE / Math.max( 1e-4, luminance( this.sky ) ) );
@@ -77,7 +79,7 @@ export class NightFog {
 			? target
 			: this.indoor + Math.sign( target - this.indoor ) * step;
 
-		this.base.value = INDOOR_DENSITY * this.indoor;
+		this.base.value = this.indoorDensity * this.indoor;
 
 		const lit = this.scatter.value * air.lux;
 		const hue = luminance( air.color );

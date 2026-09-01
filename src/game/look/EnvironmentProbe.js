@@ -22,9 +22,10 @@ const COOLDOWN = 2000;
 export class EnvironmentProbe {
 
 	/** @param tier quality descriptor (probeSize, probeInterval in metres) */
-	constructor( renderer, scene, tier ) {
+	constructor( renderer, scene, tier, hitches = null ) {
 
 		this.renderer = renderer;
+		this.hitches = hitches;
 		this.scene = scene;
 		this.size = tier.probeSize;
 		this.interval = tier.probeInterval;
@@ -39,6 +40,7 @@ export class EnvironmentProbe {
 	bake( position, now = performance.now() ) {
 
 		this.last = now;
+		const t = performance.now();
 
 		const pmrem = new THREE.PMREMGenerator( this.renderer );
 		const previous = this.target;
@@ -51,6 +53,7 @@ export class EnvironmentProbe {
 
 		pmrem.dispose();
 		previous?.dispose();
+		this.hitches?.note( 'probe bake', performance.now() - t );
 
 	}
 

@@ -1,5 +1,7 @@
 # Changelog
 
+0.9.3: every entrance leaf swings on the hinge the exterior box delivered it on, so a two or three leaf door parts in the middle instead of turning as one slab on the first jamb. Street fog is a run setting (`fog=`, default 0.0006 per metre, a fifth of what it was): the first block stays crisp and fog only separates the skyline into planes. `off=` leaves a look stage out of a run (fog, bloom, probe, haze, interiors) for telling them apart on screen. A hitch log names every frame gap over 40 ms with the work that landed in it: interior parse, room cut, band colliders, probe bake.
+
 0.9.2: a streamed room enters the scene already dressed in the dim light binding. The room view shows rooms by distance and the slot pool lights them on its own timer, so a room could be drawn with no material for a few frames after its building landed, which threw inside the renderer on machines fast enough to fit frames into that window. A lift stop with no door leaves in a floor band, and a city with no bus stops, hang nothing instead of asking three to add an empty list.
 
 0.9.1: the interior streamer ticks through a load in flight. A building whose furnished interior is still arriving holds a placeholder in the live set, and the drop pass skips it instead of measuring a distance it does not have, so the frame loop survives the first fetch after the city loads.

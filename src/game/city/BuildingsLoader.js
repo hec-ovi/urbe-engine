@@ -12,8 +12,8 @@ import { kelvinColor } from '../light/Color.js';
 // not sanitized, so the material key still arrives whole.
 const EXTERIOR = 'merged';
 export const INTERIOR_PREFIX = 'interior';
-// The entrance leaf is its own subtree, `door:entrance/leaf:N`. Every mesh
-// under it belongs to the pivot, glass included, or the door swings in halves.
+// Each entrance leaf is its own node, `door:entrance/leaf:N`, sitting on its
+// hinge (../../../exterior/CONTRACT.md): the node's origin is where it swings.
 const DOOR = 'door';
 
 const FIXTURE = '/light-fixture/';
@@ -78,7 +78,8 @@ export class BuildingsLoader {
 
 			if ( building.door ) {
 
-				group.add( building.door.pivot );
+				for ( const { pivot } of building.door.pivots ) group.add( pivot );
+
 				doors.push( building.door );
 
 			}
@@ -133,7 +134,7 @@ export class BuildingsLoader {
 
 			if ( door && name.startsWith( DOOR ) ) {
 
-				doorParts.push( { key, geometry: bake( node ) } );
+				doorParts.push( { key, geometry: bake( node ), hinge: node.getWorldPosition( new THREE.Vector3() ) } );
 
 				return;
 
@@ -148,7 +149,7 @@ export class BuildingsLoader {
 				? splitAt( geometry, door.box )
 				: [ null, geometry ];
 
-			if ( leaf ) doorParts.push( { key, geometry: leaf } );
+			if ( leaf ) doorParts.push( { key, geometry: leaf, hinge: door.hinge } );
 
 			if ( rest ) {
 
@@ -159,15 +160,14 @@ export class BuildingsLoader {
 
 		} );
 
-		if ( door && doorParts.length ) attachLeaf( door, doorParts, ( key ) => this.#material( key ) );
-		else if ( door ) door.pivot = null;
+		if ( door && doorParts.length ) attachLeaves( door, doorParts, ( key ) => this.#material( key ) );
 
 		return {
 			parcelId,
 			exterior,
 			exteriorFlat: exteriorFlat.length ? BufferGeometryUtils.mergeGeometries( exteriorFlat, false ) : null,
 			center: centerOf( blueprint ),
-			door: door?.pivot ? door : null
+			door: door?.pivots.length ? door : null
 		};
 
 	}
@@ -246,20 +246,28 @@ function splitAt( geometry, box ) {
  * Re-parents the leaf triangles under a pivot at the hinge edge, so opening
  * the door is a rotation on the pivot and the geometry never moves in place.
  */
-function attachLeaf( door, parts, material ) {
+/**
+ * Hangs every leaf on the hinge it was delivered on. A leaf whose body lies
+ * ahead of its hinge along the opening swings one way, one hung on the far
+ * jamb swings the other, so a pair or a triple parts as it opens.
+ */
+function attachLeaves( door, parts, material ) {
 
-	const pivot = new THREE.Group();
-	pivot.position.copy( door.hinge );
-	pivot.name = `door:${door.parcelId}`;
+	door.pivots = [];
 
-	for ( const { key, geometry } of parts ) {
+	for ( const { key, geometry, hinge } of parts ) {
 
-		geometry.translate( - door.hinge.x, - door.hinge.y, - door.hinge.z );
+		geometry.computeBoundingBox();
+		const side = geometry.boundingBox.getCenter( _centroid ).sub( hinge ).dot( door.along ) >= 0 ? 1 : - 1;
+		geometry.translate( - hinge.x, - hinge.y, - hinge.z );
+
+		const pivot = new THREE.Group();
+		pivot.position.copy( hinge );
+		pivot.name = `door:${door.parcelId}:${door.pivots.length}`;
 		pivot.add( new THREE.Mesh( geometry, material( key ) ) );
+		door.pivots.push( { pivot, sign: side } );
 
 	}
-
-	door.pivot = pivot;
 
 }
 

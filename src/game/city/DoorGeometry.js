@@ -7,8 +7,9 @@ const LEAF_MARGIN = 0.06;
 /**
  * The one ground-floor entrance of a building, read off its exterior blueprint
  * (floor 0, opening kind `door`). Everything the game needs to stand in front
- * of it, prompt for it and swing it: a hinge point, the world box its leaf
- * occupies, the outward facing and the walk-in target.
+ * of it, prompt for it and swing it: the opening's first jamb (the hinge of a
+ * shell that merged its leaf into the wall), the direction the opening runs,
+ * the world box its leaves occupy, the outward facing and the walk-in target.
  */
 export function doorFrame( blueprint ) {
 
@@ -26,6 +27,7 @@ export function doorFrame( blueprint ) {
 	return {
 		parcelId: blueprint.buildingId,
 		hinge: rect.start.clone(),
+		along: rect.end.clone().sub( rect.start ).normalize(),
 		normal: rect.normal,
 		width: rect.width,
 		height: rect.height,
@@ -36,7 +38,7 @@ export function doorFrame( blueprint ) {
 		box: leafBox( rect ),
 		open: 0,
 		wanted: 0,
-		pivot: null
+		pivots: []
 	};
 
 }

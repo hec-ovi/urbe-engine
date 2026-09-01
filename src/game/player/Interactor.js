@@ -167,7 +167,7 @@ export class Interactor {
 			? Math.min( wanted, door.open + step )
 			: Math.max( wanted, door.open - step );
 
-		door.pivot.rotation.y = door.open * DOOR_ANGLE;
+		for ( const { pivot, sign } of door.pivots ) pivot.rotation.y = sign * door.open * DOOR_ANGLE;
 
 	}
 
