@@ -5,6 +5,9 @@ import { openingRect } from './Openings.js';
 
 const LIT_SHARE = 0.42;
 const INSET = 0.16;
+/** Brightness at the head of the pane and at the sill: a room, not a swatch. */
+const TOP = 1;
+const SILL = 0.5;
 
 // Interior lighting seen from the street: warm domestic, cold office, and the
 // occasional screen glow. Split by building type rather than picked at random.
@@ -30,8 +33,9 @@ const TYPE_PALETTE = {
  * small emissive pane just inside a deterministic share of each building's
  * window openings, coloured by what the building is.
  *
- * It is one merged mesh per colour, so the whole skyline lights up for a
- * handful of draw calls.
+ * Colour, per-window brightness and the fall-off from head to sill are baked
+ * into vertex colours, so the whole skyline lights up in one draw call and no
+ * window reads as a flat card of one colour.
  */
 export class LitWindows {
 
@@ -44,7 +48,7 @@ export class LitWindows {
 
 	build() {
 
-		const byColor = new Map();
+		const panes = [];
 
 		for ( const parcel of this.atlas.parcels ) {
 
@@ -68,11 +72,9 @@ export class LitWindows {
 
 					if ( ! rect ) continue;
 
-					const color = palette[ Math.floor( rng.next() * palette.length ) ];
+					const color = new THREE.Color( palette[ Math.floor( rng.next() * palette.length ) ] );
 
-					if ( ! byColor.has( color ) ) byColor.set( color, [] );
-
-					byColor.get( color ).push( pane( rect ) );
+					panes.push( pane( rect, color.multiplyScalar( rng.range( 0.45, 1 ) ) ) );
 
 				}
 
@@ -83,16 +85,13 @@ export class LitWindows {
 		const group = new THREE.Group();
 		group.name = 'lit-windows';
 
-		for ( const [ color, panes ] of byColor ) {
+		if ( panes.length ) {
 
-			const material = new THREE.MeshBasicMaterial( {
-				color,
-				toneMapped: false,
-				side: THREE.DoubleSide,
-				fog: true
-			} );
-			const mesh = new THREE.Mesh( BufferGeometryUtils.mergeGeometries( panes, false ), material );
-			mesh.name = `lit:${color.toString( 16 )}`;
+			const mesh = new THREE.Mesh(
+				BufferGeometryUtils.mergeGeometries( panes, false ),
+				new THREE.MeshBasicMaterial( { vertexColors: true, side: THREE.DoubleSide, fog: true } )
+			);
+			mesh.name = 'lit-windows:panes';
 			group.add( mesh );
 
 		}
@@ -103,10 +102,11 @@ export class LitWindows {
 
 }
 
-/** A flat pane filling the opening, set back inside the wall. */
-function pane( rect ) {
+/** A flat pane filling the opening, set back inside the wall, lit head to sill. */
+function pane( rect, color ) {
 
 	const positions = [];
+	const colors = [];
 	const dx = rect.end.x - rect.start.x;
 	const dz = rect.end.z - rect.start.z;
 	const ox = - rect.normal.x * INSET;
@@ -125,8 +125,15 @@ function pane( rect ) {
 
 	positions.push( ...a, ...b, ...c, ...a, ...c, ...d );
 
+	for ( const level of [ SILL, SILL, TOP, SILL, TOP, TOP ] ) {
+
+		colors.push( color.r * level, color.g * level, color.b * level );
+
+	}
+
 	const geometry = new THREE.BufferGeometry();
 	geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( positions, 3 ) );
+	geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 3 ) );
 
 	return geometry;
 

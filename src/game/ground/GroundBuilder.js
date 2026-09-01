@@ -7,10 +7,13 @@ const CURB_BOTTOM = - 0.06;
 const BEDROCK_Y = - 0.8;
 
 // Atlas ground surfaces mapped onto material database keys. The database has
-// no road or sidewalk kind, so each surface takes the closest resolvable one
-// (../materials/CONTRACT.md names the guaranteed vocabulary).
+// no road, asphalt or sidewalk kind, so each surface takes the closest
+// resolvable one (../materials/CONTRACT.md names the guaranteed vocabulary).
+// Roadway takes the darkest, least patterned entry in the database so it does
+// not read as the same paving as the sidewalk beside it; the gap is logged in
+// docs/ISSUES.md.
 const SURFACES = {
-	roadway: { key: 'cyberpunk/rubber/rich', y: 0, wet: true },
+	roadway: { key: 'cyberpunk/rubber/high_rich', y: 0, wet: true },
 	sidewalk: { key: 'cyberpunk/concrete/high_rich', y: SIDEWALK_HEIGHT, curb: true },
 	block: { key: 'cyberpunk/concrete/high_rich', y: SIDEWALK_HEIGHT },
 	open: { key: 'cyberpunk/tile/high_rich', y: SIDEWALK_HEIGHT, curb: true }
@@ -64,8 +67,10 @@ export class GroundBuilder {
 			const merged = BufferGeometryUtils.mergeGeometries( fills, false );
 			fills.forEach( ( g ) => g.dispose() );
 
-			const material = this.factory.build( spec.key );
-			if ( spec.wet ) applyWetLook( material );
+			// The factory's material is shared by every mesh of that key, so the
+			// wet finish goes on a copy of it.
+			const base = this.factory.build( spec.key );
+			const material = spec.wet ? applyWetLook( base.clone() ) : base;
 
 			const mesh = new THREE.Mesh( merged, material );
 			mesh.name = `ground:${surface}`;
@@ -142,6 +147,8 @@ function applyWetLook( material ) {
 	material.envMapIntensity = 2.4;
 
 	if ( material.roughnessMap ) material.roughnessMap = null;
+
+	return material;
 
 }
 

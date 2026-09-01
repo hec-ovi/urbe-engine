@@ -21,6 +21,9 @@ export class PauseMenu {
 				key( 'Shift' ), ' run · ',
 				key( 'E' ), ' doors and people'
 			),
+			el( 'div', { className: 'hud-pause-note' },
+				key( 'M' ), ' map · ', key( 'I' ), ' inventory'
+			),
 			el( 'button', {
 				className: 'hud-npc-close',
 				type: 'button',

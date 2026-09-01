@@ -9,7 +9,9 @@ Purpose: plays the assembled city as a first-person world at street level, at ni
   - `backend` (`webgpu` default, `webgl`)
   - `hour` (0-23, default 21): world clock start
   - `crowd` (default 200), `cars` (default 18): instance capacity
+  - `density` (default 1): the simulation's `params.streetDensity`, the researched share of the population out in public space
   - `stress` (default 0, max 40): debug only, repeats each real street agent N times over nearby walk edges to load-test the crowd renderer. Off in every normal run.
+  - `lanes=debug`: debug only, paints every lane of the road graph end to end instead of the centreline strips. Off in every normal run.
 - Atlas blueprint per ../../../atlas/CONTRACT.md.
 - Connections document, generated in-process from that blueprint by `connectionsRunner.js`; `signalStateAt` is consumed directly for signal state.
 - Per parcel under `<out>/<id>/`: the exterior blueprint, and `interior/building.glb` plus `interior/npc.json`. A parcel with no assembled building is reported as unbuilt, never an error.
@@ -17,7 +19,7 @@ Purpose: plays the assembled city as a first-person world at street level, at ni
 - CC0 character, animation and vehicle packs under `/models`, served from `URBE_MODELS_DIR` (default `<home>/models/quaternius`).
 
 ## Out
-- A walkable city: pointer-lock mouse look, WASD at 1.4 m/s, 4 m/s on shift, eye height 1.7 m, gravity and collision through Rapier.
+- A walkable city: pointer-lock mouse look, WASD at 1.4 m/s, 4 m/s on shift, eye height 1.7 m, gravity and collision through Rapier. W walks along the look direction, A and D strafe left and right of it.
 - `GameApp.tick(delta)`: one deterministic step of clock, physics, agents, interaction and render. The animation loop calls it with real elapsed time; a harness with no display can call it directly.
 - HUD under `src/ui`: clock and district, interact prompt, position readout, about line naming every loaded path, NPC panel, pause menu, performance readout.
 
@@ -25,7 +27,9 @@ Purpose: plays the assembled city as a first-person world at street level, at ni
 - **Ground**: the blueprint's `volumetric.ground` cover. Roadway at y=0, sidewalk, block and open areas at y=0.12, every raised surface ringed by a curb skirt down to y=-0.06 so no height step can open a gap. One merged mesh per material; roadway takes a wet finish (low roughness, high environment intensity).
 - **Buildings**: every assembled merged GLB. Shells merge across the whole city by material key, so the skyline costs one draw call per key. Each building's interior stays a group at its real world position **in the same scene**: entering is walking through a door, never a load or a swap. Interiors are hidden and their colliders dropped beyond a radius, and come back before the player can see in.
 - **Doors**: the ground-floor `door` opening from each exterior blueprint. Its leaf is split out of the shell geometry into a hinged pivot and swings 100 degrees on E.
-- **Neon**: the exterior layer emits no signage, so the game hangs it: blade signs and ad screens on the facade each parcel's street access faces, textured by the materials database's emissive `signage` and `ad-screen` entries; lit window panes behind a deterministic share of every window opening, coloured by building type; emissive lane strips down the connections lane centrelines; lamp posts along every street. A fixed pool of point lights follows the nearest sign and lamp positions, so real light on the road costs the same in a village and a city.
+- **Neon**: the exterior layer emits no signage, so the game hangs it: blade signs and ad screens on the facade each parcel's street access faces, textured by the materials database's emissive `signage` and `ad-screen` entries; lit window panes behind a deterministic share of every window opening, coloured by building type, with per-window brightness and a head-to-sill fall-off baked into vertex colours so the whole skyline is one draw call; thin emissive strips down the connections lane centrelines; lamp posts every 19 m on alternating kerbs of every street, one on each junction's widest corner, none inside a plaza and a sparse ring around its edge, each a pole, an arm, a dark housing and an emissive lens. A fixed pool of point lights follows the nearest sign and lamp positions, so real light on the road costs the same in a village and a city.
+
+- **Materials**: every map loads with `flipY` off. The geometry that wears them comes from glTF, whose UVs put v = 0 at the top of the image; the game's own panels are authored the same way. The material a key resolves to is shared by every mesh of that key and is never edited in place: a hotter emission or a two-sided panel takes a tuned copy.
 - **Sky**: `SkyMesh` with the sun below the horizon, `FogExp2` in the same colour, a moon key, stars, and one PMREM bake into `scene.environment`.
 
 ## Physics
@@ -33,10 +37,10 @@ Purpose: plays the assembled city as a first-person world at street level, at ni
 - Player: capsule collider driven by `KinematicCharacterController` with autostep (0.42 m, which is what makes curbs and interior stairs walkable) and snap-to-ground.
 
 ## People and traffic
-- Population is the simulation library's, never invented here. The city crowd slice is the authoritative set of people on the street; those whose walk edge is near the player are spawned where the simulation says they are and then walk the connections walk graph at 1.4 m/s, holding at signalled crossings until the walk phase. The parcel crowd slice adds each nearby building's on-duty staff, standing in its lobby.
+- Population is the simulation library's, never invented here. The crowd slice for each walk edge around the player is the authoritative set of people on that pavement (a city-scope slice is a sample of the whole city, so it starves the street in front of the player); every agent it reports is spawned where the simulation says it is and then walks the connections walk graph at 1.4 m/s, holding at signalled crossings until the walk phase. The parcel crowd slice adds each nearby building's on-duty staff, standing in its lobby.
 - Every person keeps its `crowdId`. Talking instantiates it, interrupts its routine, shows the identity and weekly routine the simulation returns, and resumes it on close.
 - Rendering: animation clips are baked once into vertex animation buffers, so the whole crowd is 4 draw calls (two models, body and hair) and no skeletons at any population. Measured: 0.02-0.2 ms of CPU per frame from 10 to 260 people.
-- Cars drive the connections lane graph at each lane's posted speed, take a turn connection at the end and hold at a red. Two instanced draws per model.
+- Cars drive the connections lane graph at each lane's posted speed. At the end of a lane a car takes one of that lane's turn connections, chosen by its own seeded rng, holds at the stop line while that turn is red, then drives the turn's own curve through the intersection onto the next lane: the corner is driven, never jumped. Cars keep a 7 m following gap on the line they share and spawn into a gap wide enough for one. A car leaves the world past 140 m from the player, or where the lane graph ends with no turn connection. Two instanced draws per model.
 
 ## Errors
 The whole run either starts or reports why: any failure during startup is caught and shown on the loading panel with its message. There is no partial world.

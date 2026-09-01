@@ -1,11 +1,20 @@
 import * as THREE from 'three/webgpu';
 
+// Kinds the geometry layers place a few millimetres behind another surface
+// (a curtain hangs just inside its window glass). At city distances that gap
+// is below depth-buffer resolution, so the pair flickers; a positive polygon
+// offset settles which one is behind.
+const BEHIND_GLASS = /\/curtain\//;
+
 /**
  * Turns a MaterialEntry into a three.js PBR material.
  * Tiled entries: geometry UVs are world meters (exterior/interior convention),
  * so texture.repeat = 1 / worldSize makes one tile cover worldSize meters.
  * Exact entries keep their 0..1 UVs untouched. Glass uses transmission per the
  * materials contract (KHR_materials_transmission semantics).
+ * Every map loads with flipY off: the geometry that wears these materials comes
+ * from glTF, whose UVs put v = 0 at the top of the image, and a flipped V both
+ * turns exact art (screens, signs) upside down and mislights every normal map.
  * Unresolvable keys get an unmistakable magenta fallback.
  */
 export class PbrMaterialFactory {
@@ -41,6 +50,28 @@ export class PbrMaterialFactory {
 
 	}
 
+	/**
+	 * A tuned copy of a key's material, cached under the same tuning. Callers
+	 * that want a hotter emission or a two-sided panel take one of these; the
+	 * material `build` returns is shared by every mesh of that key and must
+	 * never be edited in place.
+	 * @param tweaks { emissiveScale, side }
+	 */
+	variant( key, tweaks = {} ) {
+
+		const id = `${key}|${tweaks.emissiveScale ?? 1}|${tweaks.side ?? ''}`;
+
+		if ( this.cache.has( id ) ) return this.cache.get( id );
+
+		const material = this.build( key ).clone();
+		material.emissiveIntensity = ( material.emissiveIntensity ?? 1 ) * ( tweaks.emissiveScale ?? 1 );
+		if ( tweaks.side !== undefined ) material.side = tweaks.side;
+		this.cache.set( id, material );
+
+		return material;
+
+	}
+
 	#fromEntry( key, entry ) {
 
 		const theme = key.split( '/' )[ 0 ];
@@ -58,6 +89,7 @@ export class PbrMaterialFactory {
 			if ( ! path ) return null;
 
 			const texture = this.loader.load( this.resolver.mapUrl( theme, path ) );
+			texture.flipY = false;
 			texture.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
 			texture.wrapS = texture.wrapT = tiled ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
 			texture.repeat.set( repeat[ 0 ], repeat[ 1 ] );
@@ -99,6 +131,14 @@ export class PbrMaterialFactory {
 
 		if ( physical.alphaMode === 'BLEND' ) material.transparent = true;
 		if ( physical.alphaMode === 'MASK' ) material.alphaTest = 0.5;
+
+		if ( BEHIND_GLASS.test( key ) ) {
+
+			material.polygonOffset = true;
+			material.polygonOffsetFactor = 1;
+			material.polygonOffsetUnits = 1;
+
+		}
 
 		return material;
 

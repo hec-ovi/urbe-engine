@@ -1,34 +1,50 @@
 import * as THREE from 'three/webgpu';
+import { Rng } from '../../city/Rng.js';
 import { measure, sample } from './Polyline.js';
 
 const SPAWN_RADIUS = 110;
 const DESPAWN_RADIUS = 140;
 const REFRESH_INTERVAL = 1.5;
 const STOP_MARGIN = 5;
-const HEADWAY = 9;
+/** Clear road a car keeps in front of the one ahead, bumper to bumper. */
+const MIN_GAP = 7;
+/** A lane shorter than this is a stub between two junctions: driven, never spawned on. */
+const MIN_SPAWN_LANE = 6;
+const TURN_WEIGHT = { s: 6, r: 2, l: 2, t: 1 };
+const TURN_SPEED = 0.55;
 
 /**
- * Cars on the connections lane graph: each drives its own lane at that lane's
- * posted speed, hands itself to one of the lane's turn connections at the end,
- * and holds at the stop line while its turn's signal is red. Lanes far from
- * the player carry nothing, so the cost tracks what is on screen.
+ * Cars on the connections lane graph. A car drives its lane at that lane's
+ * posted speed, picks one of the lane's turn connections with its own seeded
+ * rng, holds at the stop line while that turn is red, then drives the turn's
+ * own curve through the intersection onto the next lane: a corner is driven,
+ * never jumped. Cars keep a following gap on the line they share, and spawn
+ * into a gap wide enough for one, so two never stand in the same place.
+ *
+ * A car leaves the world when it is further than DESPAWN_RADIUS from the
+ * player, or when the lane it is on has no turn connection at all, which is
+ * the edge of the road network.
  */
 export class Traffic {
 
-	constructor( { networks, models, signals, capacity } ) {
+	/** @param seed the world's seed; any string or number, one traffic stream per world. */
+	constructor( { networks, models, signals, capacity, seed = 1 } ) {
 
 		this.models = models;
 		this.signals = signals;
 		this.capacity = capacity;
+		this.seed = typeof seed === 'number' ? seed >>> 0 : hash( String( seed ) );
 		this.cars = [];
+		this.spawned = 0;
 		this.timer = REFRESH_INTERVAL;
 		this.lanes = new Map();
+		this.turns = new Map();
 
 		for ( const lane of networks.road.lanes ) {
 
 			const line = measure( lane.path );
 
-			if ( line.length < 6 ) continue;
+			if ( ! ( line.length > 0 ) ) continue;
 
 			this.lanes.set( lane.id, { id: lane.id, speed: lane.speed, next: lane.next ?? [], ...line } );
 
@@ -58,9 +74,34 @@ export class Traffic {
 
 		}
 
-		for ( const car of this.cars ) this.#drive( car, delta, daySeconds );
+		const traffic = this.#byLine();
+
+		for ( const car of this.cars ) this.#drive( car, delta, daySeconds, traffic );
+
+		this.cars = this.cars.filter( ( car ) => ! car.gone );
 
 		this.#write();
+
+	}
+
+	/** Cars on each line, in travel order, so each one can see the one ahead. */
+	#byLine() {
+
+		const lines = new Map();
+
+		for ( const car of this.cars ) {
+
+			const id = lineId( car );
+
+			if ( ! lines.has( id ) ) lines.set( id, [] );
+
+			lines.get( id ).push( car );
+
+		}
+
+		for ( const cars of lines.values() ) cars.sort( ( a, b ) => a.distance - b.distance );
+
+		return lines;
 
 	}
 
@@ -70,23 +111,45 @@ export class Traffic {
 
 		if ( this.cars.length >= this.capacity ) return;
 
-		const occupied = new Set( this.cars.map( ( car ) => car.lane.id ) );
+		const taken = new Map();
+
+		for ( const car of this.cars ) {
+
+			if ( car.via ) continue;
+
+			if ( ! taken.has( car.lane.id ) ) taken.set( car.lane.id, [] );
+
+			taken.get( car.lane.id ).push( car.distance );
+
+		}
 
 		for ( const lane of this.lanes.values() ) {
 
 			if ( this.cars.length >= this.capacity ) return;
-			if ( occupied.has( lane.id ) ) continue;
+			if ( lane.length < MIN_SPAWN_LANE ) continue;
 
 			const distance = Math.hypot( lane.mid[ 0 ] - player.x, lane.mid[ 1 ] - player.z );
 
 			if ( distance > SPAWN_RADIUS || distance < 12 ) continue;
 
-			occupied.add( lane.id );
+			const rng = new Rng( mix( this.seed, this.spawned ++ ) );
+			const at = freeSlot( lane.length, taken.get( lane.id ) ?? [], rng );
+
+			if ( at === null ) continue;
+
+			if ( ! taken.has( lane.id ) ) taken.set( lane.id, [] );
+
+			taken.get( lane.id ).push( at );
+
 			this.cars.push( {
+				rng,
 				lane,
-				model: Math.floor( Math.random() * this.models.count ),
-				distance: Math.random() * lane.length,
+				via: null,
+				turn: null,
+				model: Math.floor( rng.next() * this.models.count ),
+				distance: at,
 				speed: lane.speed,
+				gone: false,
 				position: new THREE.Vector3(),
 				heading: 0
 			} );
@@ -95,40 +158,77 @@ export class Traffic {
 
 	}
 
-	#drive( car, delta, daySeconds ) {
+	#drive( car, delta, daySeconds, traffic ) {
 
-		const remaining = car.lane.length - car.distance;
-		const turn = car.turn ?? pickTurn( car.lane );
-		const held = turn?.signal && ! this.signals.green( turn.signal, daySeconds );
+		if ( ! car.via && ! car.turn ) car.turn = pickTurn( car.lane, car.rng );
 
-		car.turn = turn;
+		const line = car.via ?? car.lane;
+		const limit = car.via ? car.lane.speed * TURN_SPEED : car.lane.speed;
+		const remaining = line.length - car.distance;
 
 		// Ease down to the stop line, then hold there until the light frees it.
-		const target = held && remaining < STOP_MARGIN ? 0 : car.lane.speed;
+		const held = ! car.via && car.turn?.signal && ! this.signals.green( car.turn.signal, daySeconds );
+		let target = held && remaining < STOP_MARGIN ? 0 : limit;
+
+		const gap = gapAhead( car, traffic );
+
+		if ( gap < MIN_GAP ) target = 0;
+		else if ( gap < MIN_GAP * 2 ) target = Math.min( target, limit * ( gap - MIN_GAP ) / MIN_GAP );
+
 		car.speed += THREE.MathUtils.clamp( target - car.speed, - 12 * delta, 6 * delta );
 		car.distance += Math.max( 0, car.speed ) * delta;
 
-		if ( car.distance >= car.lane.length ) {
+		if ( car.distance >= line.length ) this.#advance( car, car.distance - line.length );
 
-			const next = turn ? this.lanes.get( turn.laneId ) : null;
+		const spot = sample( car.via ?? car.lane, Math.min( car.distance, ( car.via ?? car.lane ).length ), 1 );
+		car.position.set( spot.x, 0.02, spot.z );
+		car.heading = spot.heading;
 
-			if ( next ) {
+	}
 
-				car.lane = next;
-				car.distance = Math.min( HEADWAY, next.length * 0.2 );
-				car.turn = null;
+	/** End of the lane: onto the turn's curve. End of the curve: onto the next lane. */
+	#advance( car, carry ) {
 
-			} else {
+		if ( car.via ) {
 
-				car.distance = 0;
+			const next = this.lanes.get( car.turn.laneId );
+
+			if ( ! next ) {
+
+				car.gone = true;
+				return;
 
 			}
 
+			car.lane = next;
+			car.via = null;
+			car.turn = pickTurn( next, car.rng );
+			car.distance = Math.min( carry, next.length );
+
+			return;
+
 		}
 
-		const spot = sample( car.lane, Math.min( car.distance, car.lane.length ), 1 );
-		car.position.set( spot.x, 0.02, spot.z );
-		car.heading = spot.heading;
+		if ( ! car.turn ) {
+
+			car.gone = true;
+			return;
+
+		}
+
+		car.via = this.#via( car.lane, car.turn );
+		car.distance = Math.min( carry, car.via.length );
+
+	}
+
+	/** The measured curve through one intersection, kept for every car that takes it. */
+	#via( lane, turn ) {
+
+		const id = `${lane.id}>${turn.laneId}`;
+
+		if ( ! this.turns.has( id ) ) this.turns.set( id, { id, ...measure( turn.via ) } );
+
+		return this.turns.get( id );
 
 	}
 
@@ -158,12 +258,79 @@ export class Traffic {
 
 const UP = new THREE.Vector3( 0, 1, 0 );
 
-function pickTurn( lane ) {
+/** The line a car is travelling: its lane, or the curve it is crossing on. */
+function lineId( car ) {
+
+	return car.via ? car.via.id : car.lane.id;
+
+}
+
+/** Metres of clear road in front, or Infinity when nothing shares the line. */
+function gapAhead( car, traffic ) {
+
+	const queue = traffic.get( lineId( car ) );
+
+	if ( ! queue ) return Infinity;
+
+	const index = queue.indexOf( car );
+	const ahead = queue[ index + 1 ];
+
+	return ahead ? ahead.distance - car.distance : Infinity;
+
+}
+
+/**
+ * The turn this car takes out of a lane: straight three times as often as a
+ * left or a right, drawn from the car's own rng so the same car always turns
+ * the same way. A lane with no turn connections is the end of the network.
+ */
+function pickTurn( lane, rng ) {
 
 	if ( ! lane.next.length ) return null;
 
-	const straight = lane.next.find( ( option ) => option.turn === 's' );
+	return lane.next[ rng.pickWeighted( lane.next.map( ( option ) => TURN_WEIGHT[ option.turn ] ?? 1 ) ) ];
 
-	return straight ?? lane.next[ Math.floor( Math.random() * lane.next.length ) ];
+}
+
+/**
+ * A spot on the lane at least MIN_GAP clear of every car already on it, or
+ * null when the lane has no room. Widest gap first, so cars spread out.
+ */
+function freeSlot( length, occupied, rng ) {
+
+	const edges = [ - MIN_GAP, ...[ ...occupied ].sort( ( a, b ) => a - b ), length + MIN_GAP ];
+	let best = { width: 0, start: 0 };
+
+	for ( let i = 0; i < edges.length - 1; i ++ ) {
+
+		const width = edges[ i + 1 ] - edges[ i ];
+
+		if ( width > best.width ) best = { width, start: edges[ i ] };
+
+	}
+
+	if ( best.width < MIN_GAP * 2 ) return null;
+
+	const low = Math.max( 0, best.start + MIN_GAP );
+	const high = Math.min( length, best.start + best.width - MIN_GAP );
+
+	return high <= low ? null : rng.range( low, high );
+
+}
+
+/** Two integers into one seed, so every car's rng is its own. */
+function mix( seed, index ) {
+
+	return ( Math.imul( seed ^ ( index + 0x9e3779b9 ), 0x85ebca6b ) >>> 0 );
+
+}
+
+function hash( text ) {
+
+	let h = 2166136261;
+
+	for ( let i = 0; i < text.length; i ++ ) h = Math.imul( h ^ text.charCodeAt( i ), 16777619 );
+
+	return h >>> 0;
 
 }

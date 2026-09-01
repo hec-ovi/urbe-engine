@@ -1,18 +1,27 @@
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+import { pointInRing } from '../ground/Polygons.js';
 
-const SPACING = 22;
+const SPACING = 19;
+const PLAZA_SPACING = 34;
+const MIN_GAP = 6;
 const POLE_HEIGHT = 6.4;
 const POLE_RADIUS = 0.085;
 const ARM = 1.1;
 const LAMP_COLOR = 0xffcf9a;
+const LENS_KEY = 'cyberpunk/light-fixture/mid';
+const POLE_KEY = 'cyberpunk/metal/rich';
 
 /**
- * Lamp posts down both sides of every street and road, placed on the sidewalk
- * from the atlas street graph. Poles and heads each merge into one mesh; the
- * heads carry the materials database's emissive light-fixture entry, and every
- * head registers a glow so the light budget can put a real light in the ones
- * near the player.
+ * Lamp posts along the streets, from the atlas street graph. One post every
+ * 19 m, alternating sides, plus one on the widest corner of each crossing, and
+ * never two within 6 m of each other, so overlapping street edges cannot stack
+ * posts into a thicket. Open ground (plazas) carries no posts inside it, only
+ * a sparse ring around its edge.
+ *
+ * Each post is pole, arm and a luminaire: a dark housing over the road with a
+ * small emissive lens under it, and the glow registered at the lens, so the
+ * light budget's point lights sit where the lamp actually is.
  */
 export class StreetLamps {
 
@@ -26,45 +35,38 @@ export class StreetLamps {
 	/** @returns { group, glows } */
 	build() {
 
-		const poles = [];
-		const heads = [];
+		const plazas = this.atlas.volumetric.ground
+			.filter( ( cover ) => cover.surface === 'open' )
+			.map( ( cover ) => cover.polygon );
+
+		const spots = dedupe( [ ...this.#alongStreets(), ...this.#atCrossings() ]
+			.filter( ( spot ) => ! plazas.some( ( ring ) => pointInRing( spot.x, spot.z, ring ) ) )
+			.concat( this.#aroundPlazas( plazas ) ) );
+
+		const structure = [];
+		const lenses = [];
 		const glows = [];
 
-		for ( const edge of this.atlas.streets.edges ) {
-
-			const offset = edge.width / 2 + Math.max( 1.1, ( edge.sidewalk?.left ?? 2.5 ) * 0.45 );
-
-			for ( const { point, normal } of samplePath( edge.path, SPACING ) ) {
-
-				for ( const side of [ 1, - 1 ] ) {
-
-					const x = point.x + normal.x * offset * side;
-					const z = point.z + normal.z * offset * side;
-					this.#lamp( poles, heads, glows, x, z, - normal.x * side, - normal.z * side );
-
-				}
-
-			}
-
-		}
+		for ( const spot of spots ) this.#lamp( structure, lenses, glows, spot );
 
 		const group = new THREE.Group();
 		group.name = 'lamps';
 
-		if ( poles.length ) {
+		if ( structure.length ) {
 
 			group.add( new THREE.Mesh(
-				BufferGeometryUtils.mergeGeometries( poles, false ),
-				this.factory.build( 'cyberpunk/metal/rich' )
+				BufferGeometryUtils.mergeGeometries( structure, false ),
+				this.factory.build( POLE_KEY )
 			) );
 
 		}
 
-		if ( heads.length ) {
+		if ( lenses.length ) {
 
-			const material = this.factory.build( 'cyberpunk/light-fixture/mid' );
-			material.emissiveIntensity = ( material.emissiveIntensity ?? 1 ) * 2.5;
-			group.add( new THREE.Mesh( BufferGeometryUtils.mergeGeometries( heads, false ), material ) );
+			group.add( new THREE.Mesh(
+				BufferGeometryUtils.mergeGeometries( lenses, false ),
+				this.factory.variant( LENS_KEY, { emissiveScale: 0.3 } )
+			) );
 
 		}
 
@@ -72,28 +74,134 @@ export class StreetLamps {
 
 	}
 
-	#lamp( poles, heads, glows, x, z, ax, az ) {
+	/** One post every SPACING metres, alternating kerbs down each edge. */
+	#alongStreets() {
+
+		const spots = [];
+
+		for ( const edge of this.atlas.streets.edges ) {
+
+			const offset = edge.width / 2 + Math.max( 1.1, ( edge.sidewalk?.left ?? 2.5 ) * 0.45 );
+			const points = samplePath( edge.path, SPACING );
+
+			points.forEach( ( { point, normal }, i ) => {
+
+				const side = i % 2 ? - 1 : 1;
+
+				spots.push( {
+					x: point.x + normal.x * offset * side,
+					z: point.z + normal.z * offset * side,
+					ax: - normal.x * side,
+					az: - normal.z * side
+				} );
+
+			} );
+
+		}
+
+		return spots;
+
+	}
+
+	/** One post on the widest corner of every junction of three or more streets. */
+	#atCrossings() {
+
+		const spots = [];
+		const paths = new Map( this.atlas.streets.edges.map( ( edge ) => [ edge.id, edge ] ) );
+
+		for ( const node of this.atlas.streets.nodes ) {
+
+			const edges = [ ...new Set( node.edgeIds ) ].map( ( id ) => paths.get( id ) ).filter( Boolean );
+
+			if ( edges.length < 3 ) continue;
+
+			const [ nx, nz ] = node.position;
+			const angles = edges
+				.map( ( edge ) => leaving( edge, nx, nz ) )
+				.filter( Boolean )
+				.map( ( d ) => Math.atan2( d[ 1 ], d[ 0 ] ) )
+				.sort( ( a, b ) => a - b );
+
+			if ( angles.length < 2 ) continue;
+
+			// The widest angular gap between two streets is the open corner.
+			let best = { gap: - 1, mid: 0 };
+
+			for ( let i = 0; i < angles.length; i ++ ) {
+
+				const a = angles[ i ];
+				const b = angles[ ( i + 1 ) % angles.length ] + ( i + 1 === angles.length ? Math.PI * 2 : 0 );
+
+				if ( b - a > best.gap ) best = { gap: b - a, mid: ( a + b ) / 2 };
+
+			}
+
+			const reach = Math.max( ...edges.map( ( edge ) => edge.width ) ) / 2 + 2.2;
+			const dx = Math.cos( best.mid );
+			const dz = Math.sin( best.mid );
+
+			spots.push( { x: nx + dx * reach, z: nz + dz * reach, ax: - dx, az: - dz } );
+
+		}
+
+		return spots;
+
+	}
+
+	/** Plazas get a ring of posts around the edge and nothing in the middle. */
+	#aroundPlazas( plazas ) {
+
+		const spots = [];
+
+		for ( const ring of plazas ) {
+
+			for ( const { point, normal } of samplePath( [ ...ring, ring[ 0 ] ], PLAZA_SPACING ) ) {
+
+				spots.push( { x: point.x, z: point.z, ax: normal.x, az: normal.z } );
+
+			}
+
+		}
+
+		return spots;
+
+	}
+
+	/**
+	 * Pole, arm reaching over the road, dark housing on the end of it and the
+	 * lens under the housing. The glow hangs just below the lens.
+	 */
+	#lamp( structure, lenses, glows, { x, z, ax, az } ) {
 
 		const base = 0.12;
+		const facing = - Math.atan2( az, ax );
+
 		const pole = new THREE.CylinderGeometry( POLE_RADIUS, POLE_RADIUS * 1.5, POLE_HEIGHT, 6, 1 );
 		pole.translate( x, base + POLE_HEIGHT / 2, z );
-		poles.push( strip( pole ) );
+		structure.push( strip( pole ) );
 
 		const arm = new THREE.CylinderGeometry( POLE_RADIUS * 0.7, POLE_RADIUS * 0.7, ARM, 5, 1 );
 		arm.rotateZ( Math.PI / 2 );
-		arm.rotateY( - Math.atan2( az, ax ) );
+		arm.rotateY( facing );
 		arm.translate( x + ax * ARM / 2, base + POLE_HEIGHT - 0.1, z + az * ARM / 2 );
-		poles.push( strip( arm ) );
+		structure.push( strip( arm ) );
 
 		const hx = x + ax * ARM;
 		const hz = z + az * ARM;
-		const head = new THREE.BoxGeometry( 0.44, 0.16, 0.8 );
-		head.rotateY( - Math.atan2( az, ax ) );
-		head.translate( hx, base + POLE_HEIGHT - 0.22, hz );
-		heads.push( strip( head ) );
+		const headY = base + POLE_HEIGHT - 0.24;
+
+		const housing = new THREE.BoxGeometry( 0.34, 0.16, 0.66 );
+		housing.rotateY( facing );
+		housing.translate( hx, headY, hz );
+		structure.push( strip( housing ) );
+
+		const lens = new THREE.BoxGeometry( 0.26, 0.05, 0.54 );
+		lens.rotateY( facing );
+		lens.translate( hx, headY - 0.1, hz );
+		lenses.push( strip( lens ) );
 
 		glows.push( {
-			position: new THREE.Vector3( hx, base + POLE_HEIGHT - 0.4, hz ),
+			position: new THREE.Vector3( hx, headY - 0.2, hz ),
 			color: LAMP_COLOR,
 			intensity: 42,
 			distance: 24
@@ -130,6 +238,68 @@ export function samplePath( path, step ) {
 		}
 
 		carry = Math.max( 0, carry - length ) || step - ( ( length - carry ) % step );
+
+	}
+
+	return out;
+
+}
+
+/** Unit direction of an edge leaving [x, z], or null when it starts elsewhere. */
+function leaving( edge, x, z ) {
+
+	const near = ( p ) => Math.hypot( p[ 0 ] - x, p[ 1 ] - z ) < 1;
+	const path = edge.path;
+	const pair = near( path[ 0 ] )
+		? [ path[ 0 ], path[ 1 ] ]
+		: near( path[ path.length - 1 ] ) ? [ path[ path.length - 1 ], path[ path.length - 2 ] ] : null;
+
+	if ( ! pair ) return null;
+
+	const dx = pair[ 1 ][ 0 ] - pair[ 0 ][ 0 ];
+	const dz = pair[ 1 ][ 1 ] - pair[ 0 ][ 1 ];
+	const length = Math.hypot( dx, dz );
+
+	return length < 1e-6 ? null : [ dx / length, dz / length ];
+
+}
+
+/**
+ * Drops posts that land within MIN_GAP of one already placed, which is what
+ * keeps overlapping street edges from stacking a thicket on one corner. The
+ * grid is only there to keep the check local.
+ */
+function dedupe( spots ) {
+
+	const grid = new Map();
+	const out = [];
+
+	for ( const spot of spots ) {
+
+		const cx = Math.floor( spot.x / MIN_GAP );
+		const cz = Math.floor( spot.z / MIN_GAP );
+		let clear = true;
+
+		for ( let dx = - 1; dx <= 1 && clear; dx ++ ) {
+
+			for ( let dz = - 1; dz <= 1 && clear; dz ++ ) {
+
+				for ( const other of grid.get( `${cx + dx}:${cz + dz}` ) ?? [] ) {
+
+					if ( Math.hypot( other.x - spot.x, other.z - spot.z ) < MIN_GAP ) clear = false;
+
+				}
+
+			}
+
+		}
+
+		if ( ! clear ) continue;
+
+		const cell = `${cx}:${cz}`;
+		if ( ! grid.has( cell ) ) grid.set( cell, [] );
+		grid.get( cell ).push( spot );
+		out.push( spot );
 
 	}
 

@@ -8,6 +8,7 @@ import { signedArea } from '../ground/Polygons.js';
 // database, so the signage never turns into flat coloured cards.
 const GLOW = [ 0xff2fb0, 0x24e0ff, 0xffa42b, 0x9b5cff, 0x2bff9e ];
 
+const BLADE_EMISSIVE = 2.2;
 const BLADE_KEY = ( tier ) => `cyberpunk/signage/${tier}`;
 const SCREEN_KEY = ( tier ) => `cyberpunk/ad-screen/${tier}`;
 const SCREEN_ASPECT = 16 / 9;
@@ -62,14 +63,22 @@ export class Neon {
 		const group = new THREE.Group();
 		group.name = 'neon';
 
-		for ( const [ key, geometries ] of [ ...blades, ...screens ] ) {
+		// A blade sign has to carry down a street, so its emission is pushed.
+		// An ad screen already ships at strength 8 to 10 and pushing that only
+		// clips the picture to a white rectangle, so it is left as the
+		// database wrote it.
+		for ( const [ scale, panels ] of [ [ BLADE_EMISSIVE, blades ], [ 1, screens ] ] ) {
 
-			const material = this.factory.build( key );
-			material.emissiveIntensity = ( material.emissiveIntensity ?? 1 ) * 2.2;
-			material.side = THREE.DoubleSide;
-			const mesh = new THREE.Mesh( BufferGeometryUtils.mergeGeometries( geometries, false ), material );
-			mesh.name = `neon:${key}`;
-			group.add( mesh );
+			for ( const [ key, geometries ] of panels ) {
+
+				const mesh = new THREE.Mesh(
+					BufferGeometryUtils.mergeGeometries( geometries, false ),
+					this.factory.variant( key, { emissiveScale: scale, side: THREE.DoubleSide } )
+				);
+				mesh.name = `neon:${key}`;
+				group.add( mesh );
+
+			}
 
 		}
 
@@ -93,7 +102,7 @@ export class Neon {
 			const anchor = facade.pointAt( along );
 			const geometry = new THREE.PlaneGeometry( depth, height );
 			// UVs in world meters: the signage entry tiles 2 x 1 m.
-			setMetreUv( geometry, depth, height );
+			panelUv( geometry, depth, height );
 			geometry.rotateY( facade.angle + Math.PI / 2 );
 			geometry.translate(
 				anchor.x + facade.normal.x * depth / 2,
@@ -132,6 +141,8 @@ export class Neon {
 		const anchor = facade.pointAt( rng.range( 0.2, 0.8 ) );
 
 		const geometry = new THREE.PlaneGeometry( width, height );
+		// An exact entry fills the panel once, right way up.
+		panelUv( geometry, 1, 1 );
 		geometry.rotateY( facade.angle );
 		geometry.translate(
 			anchor.x + facade.normal.x * 0.14,
@@ -191,13 +202,19 @@ function frontFacade( blueprint, parcel ) {
 
 }
 
-function setMetreUv( geometry, width, height ) {
+/**
+ * Panel UVs in the convention the material factory loads for: v grows downward
+ * from the top of the image, the way glTF writes it. `width` and `height` are
+ * the metres the panel covers, which is what a tiled entry wants; an exact
+ * entry passes 1 by 1 and fills the panel once.
+ */
+function panelUv( geometry, width, height ) {
 
 	const uv = geometry.getAttribute( 'uv' );
 
 	for ( let i = 0; i < uv.count; i ++ ) {
 
-		uv.setXY( i, uv.getX( i ) * width, uv.getY( i ) * height );
+		uv.setXY( i, uv.getX( i ) * width, ( 1 - uv.getY( i ) ) * height );
 
 	}
 

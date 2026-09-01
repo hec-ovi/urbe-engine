@@ -8,6 +8,10 @@ const SPAWN_RADIUS = 90;
 const DESPAWN_RADIUS = 115;
 const REFRESH_INTERVAL = 3;
 const PARCEL_RADIUS = 45;
+/** People the simulation may report on one sidewalk edge. A 40 m edge never
+ *  holds more than a handful, and the cap is per edge, not per city. */
+const EDGE_AGENTS = 16;
+const PARCEL_AGENTS = 8;
 
 // Night-street clothing. The base character models ship undressed, so the tint
 // multiplies their skin map into a bodysuit: the hues stay off-skin on purpose,
@@ -141,35 +145,38 @@ export class Crowd {
 	}
 
 	/**
-	 * The city slice is the authoritative set of people on the street; keeping
-	 * the ones whose edge is near the player is a filter, never a top-up.
+	 * Who the simulation says is on the sidewalks around the player, asked edge
+	 * by edge. A single city-scope slice is a sample of the whole city, so at
+	 * any cap most of it lands out of sight and the street in front of the
+	 * player starves; the edge scope answers for that edge alone.
 	 */
 	#streetAgents( timeMin, player ) {
 
-		let slice;
-
-		try {
-
-			slice = this.sim.crowd( timeMin, { kind: 'city' }, { maxAgents: Math.max( 64, this.capacity ) } );
-
-		} catch {
-
-			return [];
-
-		}
-
 		const out = [];
 
-		for ( const agent of slice.agents ) {
+		for ( const edge of this.routes.near( player, 0, SPAWN_RADIUS ) ) {
 
-			if ( agent.place.kind !== 'edge' ) continue;
+			if ( out.length >= this.capacity ) break;
 
-			const edge = this.routes.edges.get( agent.place.id );
+			let slice;
 
-			if ( ! edge ) continue;
-			if ( Math.hypot( edge.mid[ 0 ] - player.x, edge.mid[ 1 ] - player.z ) > SPAWN_RADIUS ) continue;
+			try {
 
-			out.push( { agent, edge } );
+				slice = this.sim.crowd( timeMin, { kind: 'edge', id: edge.id }, { maxAgents: EDGE_AGENTS } );
+
+			} catch {
+
+				continue;
+
+			}
+
+			for ( const agent of slice.agents ) {
+
+				if ( agent.place.kind !== 'edge' ) continue;
+
+				out.push( { agent, edge: this.routes.edges.get( agent.place.id ) ?? edge } );
+
+			}
 
 		}
 
@@ -189,7 +196,7 @@ export class Crowd {
 
 			try {
 
-				slice = this.sim.crowd( timeMin, { kind: 'parcel', id: parcelId }, { maxAgents: 6 } );
+				slice = this.sim.crowd( timeMin, { kind: 'parcel', id: parcelId }, { maxAgents: PARCEL_AGENTS } );
 
 			} catch {
 

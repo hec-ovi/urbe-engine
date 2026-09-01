@@ -1,28 +1,64 @@
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
-const CORE_WIDTH = 0.16;
-const BLOOM_WIDTH = 1.4;
-const CORE_Y = 0.02;
-const BLOOM_Y = 0.015;
-const COLORS = [ 0x28e6ff, 0xff2fb0 ];
+const STRIP_WIDTH = 0.06;
+const STRIP_Y = 0.012;
+const STRIP_COLOR = 0x1c7684;
+
+const DEBUG_CORE_WIDTH = 0.16;
+const DEBUG_BLOOM_WIDTH = 1.4;
+const DEBUG_CORE_Y = 0.02;
+const DEBUG_BLOOM_Y = 0.015;
+const DEBUG_COLORS = [ 0x28e6ff, 0xff2fb0 ];
 
 /**
- * The lit lane markings that run down the middle of the road: a hard emissive
- * core with a wide additive bloom under it, which is what reads as neon
- * reflected in wet asphalt without paying for screen-space reflections.
- * Geometry follows the connections lane centrelines, so the light is on the
- * road the cars actually drive.
+ * The lane markings down the middle of the road: one thin emissive strip per
+ * lane centreline, dim enough to read as a painted line catching the neon
+ * rather than a lit band over the asphalt. Geometry follows the connections
+ * lane centrelines, so the marking is on the road the cars actually drive.
+ *
+ * `debug` swaps in the lane-graph view instead: the full lane painted in one
+ * of two colours by lane index, which is how to see the graph itself.
  */
 export class LaneGlow {
 
-	constructor( networks ) {
+	/** @param debug true draws the full-width lane bands instead of the strips */
+	constructor( networks, debug = false ) {
 
 		this.networks = networks;
+		this.debug = debug;
 
 	}
 
 	build() {
+
+		const group = new THREE.Group();
+		group.name = 'lane-glow';
+
+		if ( this.debug ) this.#bands( group );
+		else this.#strips( group );
+
+		return group;
+
+	}
+
+	#strips( group ) {
+
+		const strips = this.networks.road.lanes.map(
+			( lane ) => ribbon( lane.path, STRIP_WIDTH, STRIP_Y )
+		);
+
+		if ( ! strips.length ) return;
+
+		group.add( new THREE.Mesh(
+			BufferGeometryUtils.mergeGeometries( strips, false ),
+			new THREE.MeshBasicMaterial( { color: STRIP_COLOR } )
+		) );
+
+	}
+
+	/** Debug only: every lane painted end to end, coloured by lane index. */
+	#bands( group ) {
 
 		const cores = [ [], [] ];
 		const blooms = [ [], [] ];
@@ -30,17 +66,14 @@ export class LaneGlow {
 		for ( const lane of this.networks.road.lanes ) {
 
 			const channel = lane.index % 2;
-			cores[ channel ].push( ribbon( lane.path, CORE_WIDTH, CORE_Y ) );
-			blooms[ channel ].push( ribbon( lane.path, BLOOM_WIDTH, BLOOM_Y ) );
+			cores[ channel ].push( ribbon( lane.path, DEBUG_CORE_WIDTH, DEBUG_CORE_Y ) );
+			blooms[ channel ].push( ribbon( lane.path, DEBUG_BLOOM_WIDTH, DEBUG_BLOOM_Y ) );
 
 		}
 
-		const group = new THREE.Group();
-		group.name = 'lane-glow';
+		for ( let channel = 0; channel < DEBUG_COLORS.length; channel ++ ) {
 
-		for ( let channel = 0; channel < COLORS.length; channel ++ ) {
-
-			const color = COLORS[ channel ];
+			const color = DEBUG_COLORS[ channel ];
 
 			if ( cores[ channel ].length ) {
 
@@ -68,8 +101,6 @@ export class LaneGlow {
 			}
 
 		}
-
-		return group;
 
 	}
 

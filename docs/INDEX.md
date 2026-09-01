@@ -13,7 +13,7 @@
   - `player/`: input, first-person controller, interaction
   - `agents/`: character assets, pose baking, crowd, walk routes, traffic
   - `sim/`: the simulation library host
-  - `time/`, `world/`: game clock, district and parcel lookup
+  - `time/`, `world/`: game clock, district and parcel lookup, map model for the minimap
 
 ## Scale experiment (docs/RESEARCH.md 9)
 
@@ -23,6 +23,6 @@ Vite app measuring three interchangeable renderings of one seeded placeholder ci
 - `src/scene/`: shared stage (ArchetypeGeometries with meshopt LOD chains, SceneBuilder: lights, ground, orbit camera)
 - `src/variants/`: the three contenders behind one Variant interface (MeshVariant, BatchedVariant, IndirectVariant with TSL compute cull/LOD into indirect draws, createVariant)
 - `src/app/`: run wiring (App, RunConfig via URL query, RendererFactory, Metrics)
-- `src/ui/`: overlay only; views/ExperimentView + BuildingView + GameView, widgets/ControlsPanel + ResultsPanel + BuildingControlsPanel + MaterialReportPanel + HudClock + InteractPrompt + LocationReadout + DebugStats + NpcDialogPanel + PauseMenu, components/ primitives and styles
+- `src/ui/`: overlay only; views/ExperimentView + BuildingView + GameView + MinimapView + InventoryView, widgets/ControlsPanel + ResultsPanel + BuildingControlsPanel + MaterialReportPanel + HudClock + InteractPrompt + LocationReadout + DebugStats + NpcDialogPanel + PauseMenu, components/ primitives and styles
 
 Dependency direction: ui -> app -> variants -> scene -> city.

@@ -28,9 +28,13 @@ import { Traffic } from './agents/Traffic.js';
 import { SimBridge } from './sim/SimBridge.js';
 import { GameClock } from './time/GameClock.js';
 import { Locator } from './world/Locator.js';
+import { mapModel } from './world/MapModel.js';
 
 const THEME = 'cyberpunk';
 const INTERIOR_VISIBLE_RADIUS = 70;
+// A near plane this far out is still inside the player capsule, and it buys
+// the depth precision that keeps coplanar facade layers from flickering.
+const NEAR_PLANE = 0.2;
 const FAR_PLANE = 900;
 
 /**
@@ -84,7 +88,7 @@ export class GameApp {
 		document.body.prepend( this.renderer.domElement );
 
 		this.scene = new THREE.Scene();
-		this.camera = new THREE.PerspectiveCamera( 72, window.innerWidth / window.innerHeight, 0.1, FAR_PLANE );
+		this.camera = new THREE.PerspectiveCamera( 72, window.innerWidth / window.innerHeight, NEAR_PLANE, FAR_PLANE );
 
 		this.view.step( 'resolving materials' );
 		const resolver = new MaterialResolver();
@@ -106,7 +110,7 @@ export class GameApp {
 		this.scene.add(
 			neon.group,
 			lamps.group,
-			new LaneGlow( connections.networks ).build(),
+			new LaneGlow( connections.networks, config.laneDebug ).build(),
 			new LitWindows( atlas, buildings ).build()
 		);
 		this.lights = new LightBudget( [ ...neon.glows, ...lamps.glows ] );
@@ -124,7 +128,7 @@ export class GameApp {
 		this.colliders.registerInteriors( city.interiors );
 
 		this.view.step( 'waking the population' );
-		this.sim = SimBridge.create( atlas, connections, buildings );
+		this.sim = SimBridge.create( atlas, connections, buildings, { streetDensity: config.streetDensity } );
 		this.signals = new Signals( connections.networks );
 		const routes = new WalkRoutes( connections.networks );
 
@@ -146,7 +150,8 @@ export class GameApp {
 		this.scene.add( carModels.group );
 		this.traffic = new Traffic( {
 			networks: connections.networks, models: carModels,
-			signals: this.signals, capacity: config.maxCars
+			signals: this.signals, capacity: config.maxCars,
+			seed: atlas.meta.seed
 		} );
 
 		this.view.step( 'stepping outside' );
@@ -168,6 +173,7 @@ export class GameApp {
 
 		};
 
+		this.view.minimap.setMap( mapModel( atlas ) );
 		this.view.readout.setAbout( [
 			config.blueprintUrl,
 			`${config.outBase}/ (${buildings.size} built${unbuilt.length ? `, ${unbuilt.length} unbuilt` : ''})`,
@@ -227,8 +233,11 @@ export class GameApp {
 
 		}
 
+		if ( this.input.consume( 'KeyM' ) ) this.view.minimap.toggle();
+		if ( this.input.consume( 'KeyI' ) ) this.view.inventory.toggle();
 		if ( this.input.consume( 'Escape' ) ) this.input.exitLock();
 
+		this.view.minimap.update( feet, this.controller.yaw );
 		this.view.clock.update( this.clock.label, this.locator.district( feet.x, feet.z ) );
 		this.view.readout.update( feet, this.locator.district( feet.x, feet.z ), this.locator.parcel( feet.x, feet.z ) );
 

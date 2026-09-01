@@ -48,11 +48,13 @@ export class PlayerController {
 		const cos = Math.cos( this.yaw );
 		const step = speed * delta;
 
-		// Forward is -Z rotated by yaw; strafe is its right-hand perpendicular.
+		// Forward is -Z rotated by yaw, and the axis reports W as z = -1, so the
+		// forward term is +axis.z on both components. Strafe is the right-hand
+		// perpendicular: +X rotated by the same yaw.
 		const horizontal = new THREE.Vector3(
-			( axis.x * cos - axis.z * sin ) * step,
+			( axis.x * cos + axis.z * sin ) * step,
 			0,
-			( - axis.x * sin - axis.z * cos ) * step
+			( - axis.x * sin + axis.z * cos ) * step
 		);
 
 		const before = this.body.position.clone();

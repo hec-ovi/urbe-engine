@@ -23,6 +23,24 @@ export function signedArea( ring ) {
 
 }
 
+/** True when [x, z] falls inside an [x,z] ring, by ray crossing. */
+export function pointInRing( x, z, ring ) {
+
+	let inside = false;
+
+	for ( let i = 0, j = ring.length - 1; i < ring.length; j = i ++ ) {
+
+		const [ ax, az ] = ring[ i ];
+		const [ bx, bz ] = ring[ j ];
+
+		if ( ( az > z ) !== ( bz > z ) && x < ( bx - ax ) * ( z - az ) / ( bz - az ) + ax ) inside = ! inside;
+
+	}
+
+	return inside;
+
+}
+
 /**
  * Horizontal surface at height y, facing +Y.
  * Shape space is (x, -z) so that the +Z face becomes the +Y face after the

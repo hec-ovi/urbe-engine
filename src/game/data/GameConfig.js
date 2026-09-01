@@ -6,13 +6,14 @@ const DEFAULTS = {
 	timeScale: 1,
 	crowd: 200,
 	cars: 18,
-	stress: 0
+	stress: 0,
+	streetDensity: 1
 };
 
 /**
  * One game run, described entirely by the URL query:
  * ?mode=game[&world=city-urbe-tiny][&out=/out/city-tiny][&backend=webgpu|webgl]
- * [&hour=21][&crowd=160][&cars=18]
+ * [&hour=21][&crowd=160][&cars=18][&density=1][&lanes=debug]
  */
 export class GameConfig {
 
@@ -22,6 +23,14 @@ export class GameConfig {
 		const int = ( key, fallback, lo, hi ) => {
 
 			const value = parseInt( q.get( key ), 10 );
+
+			return Number.isFinite( value ) ? Math.min( hi, Math.max( lo, value ) ) : fallback;
+
+		};
+
+		const float = ( key, fallback, lo, hi ) => {
+
+			const value = parseFloat( q.get( key ) );
 
 			return Number.isFinite( value ) ? Math.min( hi, Math.max( lo, value ) ) : fallback;
 
@@ -38,9 +47,15 @@ export class GameConfig {
 			timeScale: DEFAULTS.timeScale,
 			maxCrowd: int( 'crowd', DEFAULTS.crowd, 0, 600 ),
 			maxCars: int( 'cars', DEFAULTS.cars, 0, 120 ),
+			// The simulation's researched share of the population out on the
+			// street, scaled (../simulation/CONTRACT.md params.streetDensity).
+			streetDensity: float( 'density', DEFAULTS.streetDensity, 0, 8 ),
 			// Debug only: repeats each real street agent N times over nearby
 			// walk edges to load-test the crowd renderer. Never on by default.
-			stress: int( 'stress', DEFAULTS.stress, 0, 40 )
+			stress: int( 'stress', DEFAULTS.stress, 0, 40 ),
+			// Debug only: paints every lane of the road graph end to end
+			// instead of the thin centreline strips. Off in every normal run.
+			laneDebug: q.get( 'lanes' ) === 'debug'
 		};
 
 	}

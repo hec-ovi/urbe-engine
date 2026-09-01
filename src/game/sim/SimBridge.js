@@ -13,8 +13,9 @@ export class SimBridge {
 	 * @param atlas CityBlueprint
 	 * @param connections ConnectionsOutput
 	 * @param buildings Map<parcelId, { npc }>
+	 * @param params statistical overrides per ../simulation/CONTRACT.md
 	 */
-	static create( atlas, connections, buildings ) {
+	static create( atlas, connections, buildings, params = {} ) {
 
 		const interiors = {};
 
@@ -28,7 +29,8 @@ export class SimBridge {
 			seed: atlas.meta.seed,
 			blueprint: atlas,
 			networks: connections.networks,
-			interiors
+			interiors,
+			params
 		} ) );
 
 	}

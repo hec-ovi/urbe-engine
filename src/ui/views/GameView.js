@@ -7,6 +7,8 @@ import { LocationReadout } from '../widgets/LocationReadout.js';
 import { DebugStats } from '../widgets/DebugStats.js';
 import { NpcDialogPanel } from '../widgets/NpcDialogPanel.js';
 import { PauseMenu } from '../widgets/PauseMenu.js';
+import { MinimapView } from './MinimapView.js';
+import { InventoryView } from './InventoryView.js';
 
 /**
  * The whole game overlay. Presentation only: it is handed values and shows
@@ -23,6 +25,8 @@ export class GameView {
 		this.stats = new DebugStats();
 		this.dialog = new NpcDialogPanel( { onClose: onCloseDialog } );
 		this.pause = new PauseMenu( { onResume } );
+		this.minimap = new MinimapView();
+		this.inventory = new InventoryView();
 
 		this.loadingStep = el( 'div', { className: 'hud-loading-step', textContent: 'starting' } );
 		this.loadingError = el( 'div', { className: 'hud-loading-error' } );
@@ -38,6 +42,8 @@ export class GameView {
 			this.prompt.element,
 			this.readout.element,
 			this.stats.element,
+			this.minimap.element,
+			this.inventory.element,
 			this.dialog.element,
 			this.pause.element,
 			this.loading

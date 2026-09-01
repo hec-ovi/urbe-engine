@@ -11,6 +11,13 @@ import { doorFrame } from './DoorGeometry.js';
 const EXTERIOR = 'merged';
 const INTERIOR = 'interior';
 
+// The materials database gives light-fixture a featureless white emissive at
+// strength 3, which under this scene's exposure clips to a flat slab wherever
+// the exterior hangs a fixture (over doors, over windows). Damping it keeps
+// the fixture reading as lit without painting a white rectangle on the facade.
+const FIXTURE = '/light-fixture/';
+const FIXTURE_EMISSIVE = 0.4;
+
 /**
  * Every assembled building in the city, loaded once and arranged for the two
  * things the renderer cares about: the shells merge across the whole city by
@@ -68,7 +75,7 @@ export class BuildingsLoader {
 
 				const merged = BufferGeometryUtils.mergeGeometries( geometries, false );
 				triangles += merged.getAttribute( 'position' ).count / 3;
-				interior.add( new THREE.Mesh( merged, this.factory.build( key ) ) );
+				interior.add( new THREE.Mesh( merged, this.#material( key ) ) );
 
 			}
 
@@ -93,7 +100,7 @@ export class BuildingsLoader {
 			const merged = BufferGeometryUtils.mergeGeometries( geometries, false );
 			geometries.forEach( ( g ) => g.dispose() );
 			triangles += merged.getAttribute( 'position' ).count / 3;
-			const mesh = new THREE.Mesh( merged, this.factory.build( key ) );
+			const mesh = new THREE.Mesh( merged, this.#material( key ) );
 			mesh.name = `shell:${key}`;
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
@@ -102,6 +109,15 @@ export class BuildingsLoader {
 		}
 
 		return { group, interiors, doors, shellColliders, triangles };
+
+	}
+
+	/** The material for a shell key, with facade light fixtures kept off the clip. */
+	#material( key ) {
+
+		return key.includes( FIXTURE )
+			? this.factory.variant( key, { emissiveScale: FIXTURE_EMISSIVE } )
+			: this.factory.build( key );
 
 	}
 
@@ -152,7 +168,7 @@ export class BuildingsLoader {
 
 		} );
 
-		if ( door && doorParts.length ) attachLeaf( door, doorParts, this.factory );
+		if ( door && doorParts.length ) attachLeaf( door, doorParts, ( key ) => this.#material( key ) );
 		else if ( door ) door.pivot = null;
 
 		return {
@@ -286,7 +302,7 @@ function splitAt( geometry, box ) {
  * Re-parents the leaf triangles under a pivot at the hinge edge, so opening
  * the door is a rotation on the pivot and the geometry never moves in place.
  */
-function attachLeaf( door, parts, factory ) {
+function attachLeaf( door, parts, material ) {
 
 	const pivot = new THREE.Group();
 	pivot.position.copy( door.hinge );
@@ -295,7 +311,7 @@ function attachLeaf( door, parts, factory ) {
 	for ( const { key, geometry } of parts ) {
 
 		geometry.translate( - door.hinge.x, - door.hinge.y, - door.hinge.z );
-		pivot.add( new THREE.Mesh( geometry, factory.build( key ) ) );
+		pivot.add( new THREE.Mesh( geometry, material( key ) ) );
 
 	}
 
