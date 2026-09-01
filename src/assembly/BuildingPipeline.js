@@ -96,7 +96,7 @@ export class BuildingPipeline {
 
 		const { status, output } = await new Promise( ( resolvePromise ) => {
 
-			const child = spawn( 'npm', [ 'run', 'generate', '--silent', '--', requestPath, outDir ], {
+			const child = spawn( 'npm', [ 'run', 'generate', '--silent', '--', requestPath, outDir, '--keys-only' ], {
 				cwd: EXTERIOR_DIR,
 				stdio: [ 'ignore', 'pipe', 'pipe' ]
 			} );
