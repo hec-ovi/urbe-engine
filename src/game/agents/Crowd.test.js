@@ -210,6 +210,7 @@ function resampled() {
 				agents.push( {
 					crowdId: `c|${scope.id}|${i}|${epoch}`,
 					type: TYPES[ i % TYPES.length ],
+					gender: i % 2 ? 'female' : 'male',
 					activity: 'commuting',
 					place: { kind: 'edge', id: scope.id },
 					progress: ( i + 0.5 ) / count,
@@ -224,6 +225,40 @@ function resampled() {
 	};
 
 }
+
+/**
+ * The body a person walks in is the one the simulation says they have, so
+ * the woman the player talks to was a woman on the way over as well.
+ */
+describe( 'Crowd bodies', () => {
+
+	it( 'gives every person the body of their gender', () => {
+
+		const routes = pavement();
+		const crowd = new Crowd( {
+			assets: { variants: [ {}, {} ], durations: [ 1, 1, 1 ], meshesOf: () => [] },
+			routes, signals: { green: () => true }, sim: resampled(),
+			places: new Map(), capacity: 200
+		} );
+		const clock = { timeMin: 780, daySeconds: 46800, seconds: 46800 };
+
+		for ( let tick = 0; tick < 50; tick ++ ) crowd.update( 0.1, PLAYER, clock );
+
+		const walking = [ ...crowd.members.values() ].filter( ( member ) => member.crowdId );
+
+		expect( walking.length ).toBeGreaterThan( 0 );
+
+		for ( const member of walking ) {
+
+			const index = Number( member.crowdId.split( '|' )[ 2 ] );
+
+			expect( member.variant ).toBe( index % 2 ? 1 : 0 );
+
+		}
+
+	} );
+
+} );
 
 /** A crowd with nobody walking: only the members the pushback reads. */
 function crowdWith( positions ) {

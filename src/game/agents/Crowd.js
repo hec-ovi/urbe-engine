@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { SIDEWALK_HEIGHT } from '../ground/GroundBuilder.js';
-import { CLIP } from './CharacterAssets.js';
+import { CLIP, bodyFor } from './CharacterAssets.js';
 import { FRAMES } from './VatBaker.js';
 import { look } from './Appearance.js';
 
@@ -566,7 +566,7 @@ export class Crowd {
 			instance: null,
 			parcelId: null,
 			spot: null,
-			variant: seed % 2,
+			variant: bodyFor( agent.gender, seed ),
 			look: look( seed ),
 			frame: seed % FRAMES,
 			frozen: false,

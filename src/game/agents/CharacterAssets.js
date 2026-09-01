@@ -9,6 +9,18 @@ const BASE = '/models';
 const CHARACTERS = `${BASE}/universal-base-characters/Base Characters/Godot - UE`;
 const ANIMATIONS = `${BASE}/universal-animation-library/Unreal-Godot/UAL1_Standard.glb`;
 
+/**
+ * The body a person gets: the model of their gender when the simulation says
+ * it, else a seeded pick, so a street without the field still mixes bodies.
+ */
+export function bodyFor( gender, seed ) {
+
+	const index = MODELS.findIndex( ( model ) => model.id === gender );
+
+	return index >= 0 ? index : seed % MODELS.length;
+
+}
+
 // Clip order is the crowd's clip index: 0 walk, 1 idle, 2 talking.
 export const CLIP = { WALK: 0, IDLE: 1, TALK: 2 };
 const CLIP_NAMES = [ 'Walk_Loop', 'Idle_Loop', 'Idle_Talking_Loop' ];
