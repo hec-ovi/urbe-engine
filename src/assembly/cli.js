@@ -169,7 +169,7 @@ if ( args.interior ) {
 	if ( ! core.fits ) {
 
 		fail( 'E_CORE_INFEASIBLE',
-			`mode ${core.mode}: band ${core.bandLength} m, core ${core.minCoreLength} m, walkup ${core.minWalkupCoreLength} m (crossDepthOk ${core.crossDepthOk})` );
+			`mode ${core.mode}: band ${core.bandLength} m, core ${core.minCoreLength} m, compact ${core.minCompactCoreLength} m, walkup ${core.minWalkupCoreLength} m (crossDepthOk ${core.crossDepthOk})` );
 
 	}
 
