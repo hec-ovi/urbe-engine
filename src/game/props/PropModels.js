@@ -11,6 +11,9 @@ const WOOD_KEY = 'cyberpunk/wood/poor';
 const CRATE_SIZE = 0.6;
 const BOX = { w: 0.5, h: 0.4, d: 0.44 };
 
+/** How tall each solid model stands, which is what a stack of them steps by. */
+export const PROP_SIZE = { crate: CRATE_SIZE, box: BOX.h + 0.05 };
+
 /**
  * The three things a city leaves against a wall, as geometry: a bin bag, a
  * wooden crate and a moulded plastic box. Each is one merged geometry wearing

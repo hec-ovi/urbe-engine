@@ -25,6 +25,21 @@ const POLE_KEY = 'cyberpunk/metal/rich';
  */
 const LENS_EMISSIVE = 90;
 
+// A wall pack over a service door: 3000 lm is a 30 W LED head, a quarter of the
+// street luminaire's flux, on the same lamp colour so an alley reads as part of
+// the same city. Equal illuminance at a quarter of the flux is half the reach,
+// which is where the 13 m comes from.
+const WALL_LUMENS = 3000;
+const WALL_RANGE = 13;
+/** Above a doorway, below the first-floor windows. */
+const WALL_HEIGHT = 4;
+/** How finely a walkable segment is asked whether any lamp reaches it. */
+const WALL_STEP = 4;
+/** A dark spot further than this from a facade gets no fixture: nothing floats. */
+const MOUNT_REACH = 10;
+/** How far the lens stands off the wall, on its bracket. */
+const BRACKET_OUT = 0.16;
+
 /**
  * Lamp posts along the streets, from the atlas street graph. One post every
  * 19 m, alternating sides, plus one on the widest corner of each crossing, and
@@ -36,13 +51,22 @@ const LENS_EMISSIVE = 90;
  * small emissive lens under it, and the fixture registered at the lens in
  * photometric units, so the light that lands on the road is the light the lamp
  * would really throw.
+ *
+ * A 6.4 m pole with a 1.1 m arm does not fit a 5 m pedestrian alley, so alleys
+ * take no post. Once the posts stand, every walkable segment the city has is
+ * measured against what they actually reach, and each stretch none of them
+ * reaches gets a wall pack bracketed to a real building face beside it. The
+ * pack merges into the same two meshes the posts do, so covering the dark ends
+ * of the city costs no draw call.
  */
 export class StreetLamps {
 
-	constructor( atlas, factory ) {
+	/** @param walk `networks.walk` per ../../../../connections/CONTRACT.md; without it, posts only. */
+	constructor( atlas, factory, walk = null ) {
 
 		this.atlas = atlas;
 		this.factory = factory;
+		this.walk = walk;
 
 	}
 
@@ -63,6 +87,8 @@ export class StreetLamps {
 		const posts = [];
 
 		for ( const spot of spots ) this.#lamp( structure, lenses, glows, posts, spot );
+
+		this.#cover( structure, lenses, glows );
 
 		const group = new THREE.Group();
 		group.name = 'lamps';
@@ -98,6 +124,11 @@ export class StreetLamps {
 		const spots = [];
 
 		for ( const edge of this.atlas.streets.edges ) {
+
+			// An alley is a few metres of pavement between two walls: a pole and
+			// its arm would stand in the middle of it. The coverage pass lights
+			// these off the walls instead.
+			if ( edge.class === 'alley' ) continue;
 
 			const offset = edge.width / 2 + Math.max( 1.1, ( edge.sidewalk?.left ?? 2.5 ) * 0.45 );
 			const points = samplePath( edge.path, SPACING );

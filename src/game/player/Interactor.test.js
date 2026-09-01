@@ -1,7 +1,43 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Crowd } from '../agents/Crowd.js';
-import { Interactor } from './Interactor.js';
+import { Interactor, pick } from './Interactor.js';
+
+/**
+ * The playtest failure this replaces: with a person and a door both in reach,
+ * E always took the person and the door became impossible to open. What decides
+ * now is where the crosshair points, not who is closer.
+ */
+describe( 'the crosshair picks the target', () => {
+
+	const eye = new THREE.Vector3( 0, 1.7, 0 );
+	const look = new THREE.Vector3( 0, 0, - 1 );
+	const door = { center: new THREE.Vector3( 0, 0, - 2 ), open: 0, name: 'BAR' };
+	const person = { position: new THREE.Vector3( 0, 0, - 2 ), type: 'shop_clerk' };
+
+	it( 'takes whichever one the centre of the screen is on', () => {
+
+		const aside = { ...person, position: new THREE.Vector3( 1.6, 0, - 2 ) };
+
+		expect( pick( eye, look, [ door ], [ aside ] ).kind ).toBe( 'door' );
+		expect( pick( eye, look, [ { ...door, center: new THREE.Vector3( 1.6, 0, - 2 ) } ], [ person ] ).kind ).toBe( 'npc' );
+
+	} );
+
+	it( 'gives an aim too close to call to the door', () => {
+
+		// Somebody standing in the doorway: there is no angle that separates them.
+		expect( pick( eye, look, [ door ], [ person ] ).kind ).toBe( 'door' );
+
+	} );
+
+	it( 'takes nothing when the crosshair is on neither', () => {
+
+		expect( pick( eye, new THREE.Vector3( 1, 0, 0 ), [ door ], [ person ] ) ).toBe( null );
+
+	} );
+
+} );
 
 /**
  * E on a person is the whole talk feature, so what it has to keep is the
@@ -125,11 +161,18 @@ function street() {
 
 	crowd.update( 1 / 60, new THREE.Vector3(), CLOCK );
 
-	const feet = [ ...crowd.members.values() ][ 0 ]?.position.clone() ?? new THREE.Vector3();
+	// Standing a pace back from the walker with the crosshair on them.
+	const feet = ( [ ...crowd.members.values() ][ 0 ]?.position.clone() ?? new THREE.Vector3() )
+		.add( new THREE.Vector3( 0, 0, 1.5 ) );
 	const panels = [];
 	const interactor = new Interactor( {
 		crowd, doors: [], sim,
-		controller: { body: { feet }, forward: new THREE.Vector3( 0, 0, - 1 ) }
+		controller: {
+			body: { feet },
+			forward: new THREE.Vector3( 0, 0, - 1 ),
+			look: new THREE.Vector3( 0, 0, - 1 ),
+			eye: feet.clone().setY( feet.y + 1.7 )
+		}
 	} );
 	interactor.onConversation = ( conversation ) => panels.push( conversation );
 

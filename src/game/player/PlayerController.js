@@ -93,4 +93,20 @@ export class PlayerController {
 
 	}
 
+	/** Where the crosshair ray starts. */
+	get eye() {
+
+		return this.camera.position;
+
+	}
+
+	/** The crosshair ray: where the centre of the screen actually points. */
+	get look() {
+
+		const flat = Math.cos( this.pitch );
+
+		return new THREE.Vector3( - Math.sin( this.yaw ) * flat, Math.sin( this.pitch ), - Math.cos( this.yaw ) * flat );
+
+	}
+
 }

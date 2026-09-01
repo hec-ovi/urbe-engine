@@ -5,17 +5,31 @@ const TALK_RANGE = 2.5;
 const DOOR_RANGE = 3.2;
 const DOOR_SPEED = 2.2;
 const DOOR_ANGLE = ( 100 * Math.PI ) / 180;
+/** Roughly 40 degrees off the crosshair: past that you are not aiming at it. */
+const MIN_AIM = 0.76;
+/**
+ * Two targets this close together in the frame are one ambiguous aim, and the
+ * door wins it: a person you meant to talk to can be looked at squarely, but a
+ * doorway with somebody standing in it cannot be aimed at any other way.
+ */
+const TIE = 0.05;
+/** A person is aimed at around the chest, not at their feet. */
+const CHEST = 1.3;
+/** And a door around the handle, not at the sill. */
+const HANDLE = 1.1;
 
 /**
- * What pressing E does, and what the prompt says before you press it. Two
- * things are reachable: the nearest person within talking distance, and the
- * entrance you are standing in front of. Talking freezes that one NPC through
- * the simulation's interrupt and hands back its full identity and routine;
- * the door just swings, because the interior is already there.
+ * What pressing E does, and what the prompt says before you press it.
  *
- * E on a person always opens the panel. The identity comes from the crowd
- * handle the simulation answers for right now, and when it has nobody on that
- * pavement the panel says so rather than the press doing nothing.
+ * The target is whatever the crosshair is actually pointing at: every door and
+ * every person in reach is scored by how far off the centre of the screen it
+ * sits, and the closest to the middle wins. Distance only decides who is in
+ * reach at all, which is what stops a person standing near a doorway from
+ * making the door unopenable. An aim too close to call goes to the door.
+ *
+ * Talking freezes that one NPC through the simulation's interrupt and hands
+ * back its full identity and routine; the door just swings, because the
+ * interior is already there.
  */
 export class Interactor {
 
@@ -38,31 +52,14 @@ export class Interactor {
 
 		if ( this.conversation ) return null;
 
-		const feet = this.controller.body.feet;
-		const forward = this.controller.forward;
+		this.target = pick(
+			this.controller.eye,
+			this.controller.look,
+			this.doors.filter( ( door ) => door.center.distanceTo( this.controller.body.feet ) <= DOOR_RANGE ),
+			this.crowd.within( this.controller.body.feet, TALK_RANGE )
+		);
 
-		const person = this.crowd.nearest( feet, TALK_RANGE );
-		const door = this.#doorInFront( feet, forward );
-
-		if ( person ) {
-
-			this.target = { kind: 'npc', person };
-
-			return `E  talk to the ${person.type.replace( /_/g, ' ' )}`;
-
-		}
-
-		if ( door ) {
-
-			this.target = { kind: 'door', door };
-
-			return door.open > 0.5 ? `E  close the door` : `E  open the door`;
-
-		}
-
-		this.target = null;
-
-		return null;
+		return this.target ? prompt( this.target ) : null;
 
 	}
 
@@ -147,34 +144,6 @@ export class Interactor {
 
 	}
 
-	#doorInFront( feet, forward ) {
-
-		let best = null;
-		let bestScore = Infinity;
-
-		for ( const door of this.doors ) {
-
-			const distance = door.center.distanceTo( feet );
-
-			if ( distance > DOOR_RANGE ) continue;
-
-			const toDoor = TMP.copy( door.center ).sub( feet ).setY( 0 ).normalize();
-
-			if ( toDoor.dot( forward ) < 0.35 ) continue;
-
-			if ( distance < bestScore ) {
-
-				bestScore = distance;
-				best = door;
-
-			}
-
-		}
-
-		return best;
-
-	}
-
 	#swing( door, delta ) {
 
 		const wanted = door.wanted ?? 0;
@@ -189,6 +158,72 @@ export class Interactor {
 		door.pivot.rotation.y = door.open * DOOR_ANGLE;
 
 	}
+
+}
+
+/**
+ * The target the crosshair is on, out of the doors and people already known to
+ * be in reach. Pure so the tie rule can be tested without a world around it.
+ *
+ * @param eye the camera position, @param look the unit crosshair ray
+ * @returns { kind: 'door'|'npc', door?, person?, aim } or null
+ */
+export function pick( eye, look, doors, people ) {
+
+	const candidates = [];
+
+	for ( const door of doors ) {
+
+		candidates.push( { kind: 'door', door, aim: aimAt( eye, look, door.center, HANDLE ) } );
+
+	}
+
+	for ( const person of people ) {
+
+		candidates.push( { kind: 'npc', person, aim: aimAt( eye, look, person.position, CHEST ) } );
+
+	}
+
+	let best = null;
+
+	for ( const candidate of candidates ) {
+
+		if ( candidate.aim < MIN_AIM ) continue;
+
+		if ( ! best || candidate.aim > best.aim ) best = candidate;
+
+	}
+
+	if ( ! best ) return null;
+
+	// An aim too close to call goes to the door.
+	const door = candidates.find( ( c ) => c.kind === 'door' && c.aim > best.aim - TIE );
+
+	return door ?? best;
+
+}
+
+/** How centred a point is in the frame: the cosine off the crosshair ray. */
+function aimAt( eye, look, position, rise ) {
+
+	return TMP.copy( position ).setY( position.y + rise ).sub( eye ).normalize().dot( look );
+
+}
+
+/** What the prompt says, always naming the thing it will act on. */
+function prompt( target ) {
+
+	if ( target.kind === 'door' ) {
+
+		const name = target.door.name;
+
+		return `E  ${target.door.open > 0.5 ? 'close' : 'open'} the door${name ? ` to ${name}` : ''}`;
+
+	}
+
+	const given = target.person.instance?.name?.given;
+
+	return `E  talk to ${given ?? `the ${target.person.type.replace( /_/g, ' ' )}`}`;
 
 }
 

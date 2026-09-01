@@ -237,6 +237,22 @@ export class Crowd {
 
 	}
 
+	/** Everyone within `radius`, for the crosshair to choose between. */
+	within( position, radius ) {
+
+		const out = [];
+		const limit = radius * radius;
+
+		for ( const member of this.members.values() ) {
+
+			if ( position.distanceToSquared( member.position ) < limit ) out.push( member );
+
+		}
+
+		return out;
+
+	}
+
 	/** Nearest member within `radius`, for the talk prompt. */
 	nearest( position, radius ) {
 
