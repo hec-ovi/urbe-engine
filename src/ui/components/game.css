@@ -1,0 +1,242 @@
+/* Several HUD panels set their own display, which would beat the browser's
+   own [hidden] rule; hiding must always win. */
+.hud [hidden] {
+	display: none !important;
+}
+
+.hud {
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	color: #e6e8ea;
+	font-size: 13px;
+	text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+.hud-clock {
+	position: absolute;
+	top: 14px;
+	left: 50%;
+	transform: translateX(-50%);
+	text-align: center;
+	font-family: ui-monospace, monospace;
+	letter-spacing: 0.14em;
+	font-size: 18px;
+	color: #cfe6ff;
+}
+
+.hud-clock-place {
+	margin-top: 2px;
+	font-size: 11px;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	color: #7e93a8;
+}
+
+.hud-crosshair {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 5px;
+	height: 5px;
+	margin: -2.5px 0 0 -2.5px;
+	background: rgba(230, 240, 255, 0.55);
+}
+
+.hud-prompt {
+	position: absolute;
+	bottom: 16%;
+	left: 50%;
+	transform: translateX(-50%);
+	background: rgba(10, 14, 20, 0.82);
+	border: 1px solid #3d5266;
+	padding: 7px 14px;
+	letter-spacing: 0.06em;
+	white-space: nowrap;
+}
+
+.hud-readout {
+	position: absolute;
+	left: 14px;
+	bottom: 14px;
+	font-family: ui-monospace, monospace;
+	font-size: 11px;
+	line-height: 1.55;
+	color: #8fa2b4;
+}
+
+.hud-readout-about {
+	margin-top: 6px;
+	color: #5f7183;
+	max-width: 46vw;
+	overflow-wrap: anywhere;
+}
+
+.hud-stats {
+	position: absolute;
+	right: 14px;
+	top: 14px;
+	font-family: ui-monospace, monospace;
+	font-size: 11px;
+	line-height: 1.55;
+	text-align: right;
+	color: #8fa2b4;
+}
+
+.hud-stats-warn {
+	color: #ffb45c;
+}
+
+.hud-npc {
+	position: absolute;
+	pointer-events: auto;
+	right: 14px;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 330px;
+	max-height: 74vh;
+	overflow-y: auto;
+	background: rgba(12, 16, 22, 0.94);
+	border: 1px solid #3d5266;
+	padding: 14px 16px;
+}
+
+.hud-npc-name {
+	font-size: 17px;
+	letter-spacing: 0.03em;
+	color: #cfe6ff;
+}
+
+.hud-npc-type {
+	margin: 2px 0 12px;
+	font-size: 11px;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: #7e93a8;
+}
+
+.hud-npc-row {
+	display: flex;
+	justify-content: space-between;
+	gap: 14px;
+	padding: 3px 0;
+	border-bottom: 1px solid #1e2833;
+}
+
+.hud-npc-key {
+	color: #7e93a8;
+}
+
+.hud-npc-value {
+	text-align: right;
+	font-family: ui-monospace, monospace;
+}
+
+.hud-npc-section {
+	margin: 12px 0 4px;
+	font-size: 11px;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: #7e93a8;
+}
+
+.hud-npc-now {
+	background: rgba(40, 230, 255, 0.08);
+	border-left: 2px solid #28e6ff;
+	padding: 5px 8px;
+	margin-bottom: 8px;
+	font-family: ui-monospace, monospace;
+	font-size: 12px;
+}
+
+.hud-npc-routine {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-family: ui-monospace, monospace;
+	font-size: 11px;
+	color: #9fb2c4;
+}
+
+.hud-npc-routine li {
+	padding: 2px 0;
+}
+
+.hud-npc-close {
+	margin-top: 14px;
+	width: 100%;
+	background: #223040;
+	color: #cfe6ff;
+	border: 1px solid #3d5266;
+	padding: 7px;
+	font: inherit;
+	cursor: pointer;
+}
+
+.hud-pause {
+	position: absolute;
+	inset: 0;
+	pointer-events: auto;
+	background: rgba(6, 9, 13, 0.82);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+}
+
+.hud-pause-title {
+	font-size: 26px;
+	letter-spacing: 0.3em;
+	text-transform: uppercase;
+	color: #cfe6ff;
+}
+
+.hud-pause-note {
+	color: #8fa2b4;
+	max-width: 460px;
+	text-align: center;
+	line-height: 1.7;
+}
+
+.hud-pause-key {
+	display: inline-block;
+	border: 1px solid #3d5266;
+	padding: 0 6px;
+	margin: 0 2px;
+	font-family: ui-monospace, monospace;
+	color: #cfe6ff;
+}
+
+.hud-loading {
+	position: absolute;
+	inset: 0;
+	pointer-events: auto;
+	background: #070a0e;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	color: #8fa2b4;
+}
+
+.hud-loading-title {
+	font-size: 22px;
+	letter-spacing: 0.34em;
+	text-transform: uppercase;
+	color: #cfe6ff;
+}
+
+.hud-loading-step {
+	font-family: ui-monospace, monospace;
+	font-size: 12px;
+}
+
+.hud-loading-error {
+	max-width: 560px;
+	color: #ff8f8f;
+	font-family: ui-monospace, monospace;
+	font-size: 12px;
+	white-space: pre-wrap;
+}

@@ -1,5 +1,7 @@
 # Changelog
 
+0.7: playable first-person city (`?mode=game`): night street from the assembled GLBs and the blueprint's ground cover, Rapier capsule controller, doors into interiors continuous with the world, simulation-driven crowd on baked vertex animation (4 draw calls at any population) and lane-graph traffic, neon and lit windows, HUD with clock, prompt, position, NPC panel, pause menu and a live performance readout. Interior requests take `textures: keys` so the runtime resolves materials itself.
+
 0.6: city batch (assemble-city): connections once, then the shared BuildingPipeline per parcel with parallel workers, QA report with verbatim failures; blueprint path is an option on every CLI; simulate takes an interiors dir.
 0.5.1: simulate takes its crowd handle from the scoped slice's sampled agents (simulation 0.2 samples up to 64 per scope; every district addressable).
 0.5: simulation wiring: npm run simulate boots createSimulation over the sample blueprint, connections networks and assembled interiors; prints stats, crowd slice, three NPC lives, latencies and a conservation check.

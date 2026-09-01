@@ -1,0 +1,48 @@
+const DEFAULTS = {
+	world: 'city-urbe-tiny',
+	out: '/out/city-tiny',
+	backend: 'webgpu',
+	startHour: 21,
+	timeScale: 1,
+	crowd: 200,
+	cars: 18,
+	stress: 0
+};
+
+/**
+ * One game run, described entirely by the URL query:
+ * ?mode=game[&world=city-urbe-tiny][&out=/out/city-tiny][&backend=webgpu|webgl]
+ * [&hour=21][&crowd=160][&cars=18]
+ */
+export class GameConfig {
+
+	static fromUrl() {
+
+		const q = new URLSearchParams( window.location.search );
+		const int = ( key, fallback, lo, hi ) => {
+
+			const value = parseInt( q.get( key ), 10 );
+
+			return Number.isFinite( value ) ? Math.min( hi, Math.max( lo, value ) ) : fallback;
+
+		};
+
+		const world = q.get( 'world' ) ?? DEFAULTS.world;
+
+		return {
+			world,
+			blueprintUrl: `/atlas/${world}.json`,
+			outBase: q.get( 'out' ) ?? DEFAULTS.out,
+			backend: q.get( 'backend' ) === 'webgl' ? 'webgl' : DEFAULTS.backend,
+			startHour: int( 'hour', DEFAULTS.startHour, 0, 23 ),
+			timeScale: DEFAULTS.timeScale,
+			maxCrowd: int( 'crowd', DEFAULTS.crowd, 0, 600 ),
+			maxCars: int( 'cars', DEFAULTS.cars, 0, 120 ),
+			// Debug only: repeats each real street agent N times over nearby
+			// walk edges to load-test the crowd renderer. Never on by default.
+			stress: int( 'stress', DEFAULTS.stress, 0, 40 )
+		};
+
+	}
+
+}

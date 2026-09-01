@@ -4,6 +4,17 @@
 - `src/assembly/`: world-assembly slice; atlas parcel + connections apertures -> exterior BuildingRequest, CLI drives exterior to GLB + blueprint and, with --interior, interior to the filled building; `npm run assemble-city` batches the whole blueprint with a QA report; `npm run simulate` boots the simulation library over the assembled world (src/assembly/CONTRACT.md). Depends on ../atlas, ../connections, ../exterior, ../interior, ../simulation contracts.
 - `src/building/`: building viewer logic; loads out/<parcel>/ GLBs, resolves material keys against ../materials' theme database (MaterialResolver), builds PBR materials with world-scale tiling and transmission (PbrMaterialFactory), TSL floor slice (FloorSlicer), orbit stage. Open with `npm run dev` then `/?mode=building&parcel=<id>`; unresolved keys render magenta and are listed. The vite config serves the materials database read-only under /materials/.
 
+- `src/game/`: the playable city (`?mode=game`); first-person controller on Rapier, night scene from the assembled GLBs, ground from the blueprint's cover polygons, neon and lit windows, simulation-driven crowd and lane-graph traffic, doors into continuous interiors (src/game/CONTRACT.md). Depends on ../atlas, ../connections, ../materials, ../simulation contracts.
+  - `data/`: run config, world loading, signal state
+  - `ground/`: cover polygons to geometry, curbs
+  - `city/`: buildings, doors, neon, lit windows, lamps, lane glow, light budget
+  - `sky/`: night sky, fog, environment bake
+  - `physics/`: Rapier world, colliders, player capsule
+  - `player/`: input, first-person controller, interaction
+  - `agents/`: character assets, pose baking, crowd, walk routes, traffic
+  - `sim/`: the simulation library host
+  - `time/`, `world/`: game clock, district and parcel lookup
+
 ## Scale experiment (docs/RESEARCH.md 9)
 
 Vite app measuring three interchangeable renderings of one seeded placeholder city. Run `npm run dev`, pick variant, count (1k-50k), backend; results panel exports JSON.
@@ -12,6 +23,6 @@ Vite app measuring three interchangeable renderings of one seeded placeholder ci
 - `src/scene/`: shared stage (ArchetypeGeometries with meshopt LOD chains, SceneBuilder: lights, ground, orbit camera)
 - `src/variants/`: the three contenders behind one Variant interface (MeshVariant, BatchedVariant, IndirectVariant with TSL compute cull/LOD into indirect draws, createVariant)
 - `src/app/`: run wiring (App, RunConfig via URL query, RendererFactory, Metrics)
-- `src/ui/`: overlay only; views/ExperimentView + BuildingView, widgets/ControlsPanel + ResultsPanel + BuildingControlsPanel + MaterialReportPanel, components/ primitives and styles
+- `src/ui/`: overlay only; views/ExperimentView + BuildingView + GameView, widgets/ControlsPanel + ResultsPanel + BuildingControlsPanel + MaterialReportPanel + HudClock + InteractPrompt + LocationReadout + DebugStats + NpcDialogPanel + PauseMenu, components/ primitives and styles
 
 Dependency direction: ui -> app -> variants -> scene -> city.

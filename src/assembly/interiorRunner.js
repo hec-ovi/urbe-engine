@@ -6,12 +6,18 @@
 
 const INTERIOR_ENTRY = new URL( '../../../interior/src/index.ts', import.meta.url ).href;
 
-/** @returns InteriorResult: { glb: Uint8Array, floors: FloorInterior[], npc: NpcSupport } */
+/**
+ * Interior since 0.6 defaults to writing texture URIs into the GLB. The engine
+ * runtime resolves material keys itself through the materials database
+ * (src/building/MaterialResolver.js), so the assembled world keeps the keys.
+ *
+ * @returns InteriorResult: { glb: Uint8Array, floors: FloorInterior[], npc: NpcSupport }
+ */
 export async function runInterior( request ) {
 
 	const { generateInterior } = await import( INTERIOR_ENTRY );
 
-	return generateInterior( request );
+	return generateInterior( request, { textures: { mode: 'keys' } } );
 
 }
 
