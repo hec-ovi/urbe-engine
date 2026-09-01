@@ -29,14 +29,14 @@ const LENS_EMISSIVE = 90;
 // street luminaire's flux, on the same lamp colour so an alley reads as part of
 // the same city. Equal illuminance at a quarter of the flux is half the reach,
 // which is where the 13 m comes from.
-const WALL_LUMENS = 3000;
+export const WALL_LUMENS = 3000;
 const WALL_RANGE = 13;
 /** Above a doorway, below the first-floor windows. */
 const WALL_HEIGHT = 4;
-/** How finely a walkable segment is asked whether any lamp reaches it. */
-const WALL_STEP = 4;
 /** A dark spot further than this from a facade gets no fixture: nothing floats. */
 const MOUNT_REACH = 10;
+/** Each pack covers metres of the leg it lights, so no leg can need more than a few. */
+const PACKS_PER_LEG = 32;
 /** How far the lens stands off the wall, on its bracket. */
 const BRACKET_OUT = 0.16;
 
@@ -77,9 +77,16 @@ export class StreetLamps {
 			.filter( ( cover ) => cover.surface === 'open' )
 			.map( ( cover ) => cover.polygon );
 
+		// An alley is a few metres of pavement between two walls, so a 6.4 m pole
+		// with an arm over it would stand in the middle of the only way through,
+		// whether it is the alley's own post or a junction post that landed in
+		// its mouth. The coverage pass lights these off the walls instead.
+		const alleys = this.atlas.streets.edges.filter( ( edge ) => edge.class === 'alley' );
+
 		const spots = dedupe( [ ...this.#alongStreets(), ...this.#atCrossings() ]
 			.filter( ( spot ) => ! plazas.some( ( ring ) => pointInRing( spot.x, spot.z, ring ) ) )
-			.concat( this.#aroundPlazas( plazas ) ) );
+			.concat( this.#aroundPlazas( plazas ) )
+			.filter( ( spot ) => ! alleys.some( ( alley ) => onPavementOf( spot, alley ) ) ) );
 
 		const structure = [];
 		const lenses = [];
@@ -124,11 +131,6 @@ export class StreetLamps {
 		const spots = [];
 
 		for ( const edge of this.atlas.streets.edges ) {
-
-			// An alley is a few metres of pavement between two walls: a pole and
-			// its arm would stand in the middle of it. The coverage pass lights
-			// these off the walls instead.
-			if ( edge.class === 'alley' ) continue;
 
 			const offset = edge.width / 2 + Math.max( 1.1, ( edge.sidewalk?.left ?? 2.5 ) * 0.45 );
 			const points = samplePath( edge.path, SPACING );
@@ -217,6 +219,155 @@ export class StreetLamps {
 	}
 
 	/**
+	 * The coverage rule: no walkable segment is left with nothing on it, not
+	 * even the dim edge of a lamp. Every segment the city publishes is measured
+	 * against what the posts actually reach, and each stretch none of them
+	 * reaches takes a wall pack on the facade beside it.
+	 */
+	#cover( structure, lenses, glows ) {
+
+		if ( ! this.walk ) return;
+
+		const reach = new Reach( LAMP_RANGE );
+
+		for ( const glow of glows ) reach.add( glow.position.x, glow.position.z, glow.range );
+
+		for ( const edge of this.walk.edges ) {
+
+			// A `link` walk edge is a bridge or a tunnel: it runs inside a
+			// structure of its own, over the street or under it, and no fixture
+			// on a facade at 4 m is lighting either of them.
+			if ( edge.kind === 'link' ) continue;
+
+			for ( let i = 0; i < edge.path.length - 1; i ++ ) {
+
+				this.#coverLeg( structure, lenses, glows, reach, edge.path[ i ], edge.path[ i + 1 ] );
+
+			}
+
+		}
+
+	}
+
+	/**
+	 * One straight leg of a walkable segment, lit end to end. The stretches no
+	 * fixture reaches are exact intervals along the leg, and the darkest end of
+	 * the first one takes a pack, until nothing is left uncovered. A stretch
+	 * with no building within reach stays dark rather than growing a fixture in
+	 * mid-air.
+	 */
+	#coverLeg( structure, lenses, glows, reach, [ ax, az ], [ bx, bz ] ) {
+
+		const length = Math.hypot( bx - ax, bz - az );
+
+		if ( length < 1e-6 ) return;
+
+		const ux = ( bx - ax ) / length;
+		const uz = ( bz - az ) / length;
+
+		for ( let i = 0; i < PACKS_PER_LEG; i ++ ) {
+
+			const gap = reach.gaps( ax, az, ux, uz, length )[ 0 ];
+
+			if ( ! gap ) return;
+
+			// Just inside the dark end, so the pack lands on the stretch it has
+			// to light and the next round starts further down the leg.
+			const at = Math.min( gap[ 0 ] + 0.5, ( gap[ 0 ] + gap[ 1 ] ) / 2 );
+			const wall = this.#facadeFacing( ax + ux * at, az + uz * at );
+
+			if ( ! wall ) return;
+
+			const fixture = this.#wallPack( structure, lenses, glows, wall );
+			reach.add( fixture.position.x, fixture.position.z, fixture.range );
+
+		}
+
+	}
+
+	/**
+	 * The building face nearest a dark spot and actually turned towards it.
+	 * Footprints are counter-clockwise, so a segment's outward normal is
+	 * (dz, -dx); a face pointing the other way is the back of a wall on the far
+	 * side of its own block, and mounting there would light the wrong street.
+	 */
+	#facadeFacing( x, z ) {
+
+		let best = null;
+
+		for ( const parcel of this.atlas.parcels ) {
+
+			const ring = parcel.footprint;
+
+			for ( let i = 0; i < ring.length; i ++ ) {
+
+				const [ ax, az ] = ring[ i ];
+				const [ bx, bz ] = ring[ ( i + 1 ) % ring.length ];
+				const dx = bx - ax;
+				const dz = bz - az;
+				const length = Math.hypot( dx, dz );
+
+				if ( length < 1e-6 ) continue;
+
+				const t = Math.max( 0, Math.min( 1, ( ( x - ax ) * dx + ( z - az ) * dz ) / ( length * length ) ) );
+				const px = ax + dx * t;
+				const pz = az + dz * t;
+				const distance = Math.hypot( x - px, z - pz );
+
+				if ( distance > MOUNT_REACH || ( best && distance >= best.distance ) ) continue;
+
+				const nx = dz / length;
+				const nz = - dx / length;
+
+				if ( ( x - px ) * nx + ( z - pz ) * nz <= 0 ) continue;
+
+				best = { distance, px, pz, nx, nz };
+
+			}
+
+		}
+
+		return best;
+
+	}
+
+	/**
+	 * A bracket on the wall and the pack in front of it, both merged into the
+	 * same two meshes the posts build, so coverage costs no draw call. The
+	 * fixture is registered at the lens in the same photometric units.
+	 */
+	#wallPack( structure, lenses, glows, { px, pz, nx, nz } ) {
+
+		const facing = - Math.atan2( nz, nx );
+
+		const bracket = new THREE.BoxGeometry( BRACKET_OUT, 0.1, 0.12 );
+		bracket.rotateY( facing );
+		bracket.translate( px + nx * BRACKET_OUT / 2, WALL_HEIGHT, pz + nz * BRACKET_OUT / 2 );
+		structure.push( strip( bracket ) );
+
+		const lens = new THREE.BoxGeometry( 0.1, 0.14, 0.34 );
+		lens.rotateY( facing );
+		lens.translate( px + nx * ( BRACKET_OUT + 0.05 ), WALL_HEIGHT - 0.02, pz + nz * ( BRACKET_OUT + 0.05 ) );
+		lenses.push( strip( lens ) );
+
+		const glow = {
+			position: new THREE.Vector3(
+				px + nx * ( BRACKET_OUT + 0.16 ),
+				WALL_HEIGHT - 0.1,
+				pz + nz * ( BRACKET_OUT + 0.16 )
+			),
+			color: kelvinColor( LAMP_KELVIN ),
+			lumens: WALL_LUMENS,
+			range: WALL_RANGE
+		};
+
+		glows.push( glow );
+
+		return glow;
+
+	}
+
+	/**
 	 * Pole, arm reaching over the road, dark housing on the end of it and the
 	 * lens under the housing. The glow hangs just below the lens, and the pole
 	 * is the only part solid enough to walk into.
@@ -294,6 +445,115 @@ export function samplePath( path, step ) {
 	}
 
 	return out;
+
+}
+
+/**
+ * What a set of fixtures leaves dark along a line. A fixture covers the part of
+ * a line inside its own range, which is an exact interval, so the stretches
+ * nothing reaches are what is left over when those intervals are merged. The
+ * grid cell is the widest range in the set, which is what keeps a query to the
+ * cells around the line however many lamps the city ends up with.
+ */
+class Reach {
+
+	constructor( cell ) {
+
+		this.cell = cell;
+		this.cells = new Map();
+
+	}
+
+	add( x, z, range ) {
+
+		const key = `${Math.floor( x / this.cell )}:${Math.floor( z / this.cell )}`;
+
+		if ( ! this.cells.has( key ) ) this.cells.set( key, [] );
+
+		this.cells.get( key ).push( { x, z, range } );
+
+	}
+
+	/** @returns the uncovered intervals of the line, as [from, to] distances along it. */
+	gaps( ax, az, ux, uz, length ) {
+
+		const spans = [];
+
+		for ( const light of this.#around( ax, az, ax + ux * length, az + uz * length ) ) {
+
+			const dx = light.x - ax;
+			const dz = light.z - az;
+			const along = dx * ux + dz * uz;
+			const half = light.range * light.range - ( dx * dx + dz * dz - along * along );
+
+			if ( half > 0 ) spans.push( [ along - Math.sqrt( half ), along + Math.sqrt( half ) ] );
+
+		}
+
+		spans.sort( ( a, b ) => a[ 0 ] - b[ 0 ] );
+
+		const gaps = [];
+		let at = 0;
+
+		for ( const [ from, to ] of spans ) {
+
+			if ( from > at ) gaps.push( [ at, Math.min( from, length ) ] );
+
+			at = Math.max( at, to );
+
+			if ( at >= length ) return gaps;
+
+		}
+
+		gaps.push( [ at, length ] );
+
+		return gaps;
+
+	}
+
+	/** Every fixture filed near the box the line spans, one cell of slack around it. */
+	#around( ax, az, bx, bz ) {
+
+		const found = [];
+		const x0 = Math.floor( Math.min( ax, bx ) / this.cell ) - 1;
+		const x1 = Math.floor( Math.max( ax, bx ) / this.cell ) + 1;
+		const z0 = Math.floor( Math.min( az, bz ) / this.cell ) - 1;
+		const z1 = Math.floor( Math.max( az, bz ) / this.cell ) + 1;
+
+		for ( let cx = x0; cx <= x1; cx ++ ) {
+
+			for ( let cz = z0; cz <= z1; cz ++ ) {
+
+				for ( const light of this.cells.get( `${cx}:${cz}` ) ?? [] ) found.push( light );
+
+			}
+
+		}
+
+		return found;
+
+	}
+
+}
+
+/** Whether a spot stands on the pavement a street edge covers, kerb to kerb. */
+function onPavementOf( spot, edge ) {
+
+	const half = edge.width / 2 + Math.max( edge.sidewalk?.left ?? 0, edge.sidewalk?.right ?? 0 );
+
+	for ( let i = 0; i < edge.path.length - 1; i ++ ) {
+
+		const [ ax, az ] = edge.path[ i ];
+		const [ bx, bz ] = edge.path[ i + 1 ];
+		const dx = bx - ax;
+		const dz = bz - az;
+		const t = Math.max( 0, Math.min( 1, ( ( spot.x - ax ) * dx + ( spot.z - az ) * dz ) / ( dx * dx + dz * dz || 1 ) ) );
+
+		if ( Math.hypot( spot.x - ( ax + dx * t ), spot.z - ( az + dz * t ) ) < half ) return true;
+
+	}
+
+	return false;
 
 }
 

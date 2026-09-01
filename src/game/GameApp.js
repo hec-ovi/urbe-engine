@@ -15,6 +15,7 @@ import { InteriorStream } from './city/InteriorStream.js';
 import { Elevators } from './city/Elevators.js';
 import { Neon } from './city/Neon.js';
 import { StreetLamps } from './city/StreetLamps.js';
+import { Dressing } from './props/Dressing.js';
 import { LaneMarkings } from './city/LaneMarkings.js';
 import { LitWindows } from './city/LitWindows.js';
 import { RoomView } from './city/RoomView.js';
@@ -143,13 +144,15 @@ export class GameApp {
 
 		this.view.step( 'hanging the neon' );
 		const neon = new Neon( atlas, buildings, factory ).build();
-		const lamps = new StreetLamps( atlas, factory ).build();
+		const lamps = new StreetLamps( atlas, factory, connections.networks.walk ).build();
 		const links = new Links( connections, factory ).build();
+		const props = new Dressing( atlas, connections.networks.walk, factory ).build();
 		this.transit = new Transit( { atlas, networks: connections.networks, factory } );
 		this.scene.add(
 			neon.group,
 			lamps.group,
 			links.group,
+			props.group,
 			this.transit.group,
 			new LaneMarkings( connections.networks, config.laneMode ).build(),
 			new LitWindows( atlas, buildings ).build()
@@ -168,7 +171,7 @@ export class GameApp {
 		// taken off the built scene, so a new kind of lit surface joins by being
 		// added to the world rather than by being registered here.
 		this.night = new NightSwitch( this.lights )
-			.addGroup( neon.group ).addGroup( lamps.group ).addGroup( city.group ).addGroup( this.transit.group );
+			.addGroup( neon.group ).addGroup( lamps.group ).addGroup( city.group ).addGroup( this.transit.group ).addGroup( props.group );
 		this.fog = new NightFog( this.scene, { density: NIGHT_FOG_DENSITY, color: SKY_COLOR } );
 		this.probe = new EnvironmentProbe( this.renderer, this.scene, this.tier );
 
@@ -179,6 +182,7 @@ export class GameApp {
 		this.colliders.addStatics( city.shellColliders.values() );
 		this.colliders.addStatic( links.colliderGeometry );
 		this.colliders.addStatics( this.transit.colliders.values() );
+		this.colliders.addStatics( props.colliders.values() );
 		this.colliders.addPosts( lamps.posts );
 		this.stream.onColliderBand = ( id, geometry ) => this.colliders.addBand( id, geometry );
 		this.stream.onDropBand = ( id ) => this.colliders.dropBand( id );

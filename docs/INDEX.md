@@ -10,6 +10,7 @@
   - `city/`: shells and doors, neon, lit windows, lamps, road paint, interiors streamed per building and cut into rooms and floor bands, and which of them are in view
   - `links/`: bridges, AC tubes, tunnels and wires from the connections links, swept from centerline plus cross-section and sliced onto the exact carved apertures (src/game/links/CONTRACT.md)
   - `transit/`: bus stop shelters and signs, buses driven by the timetables' closed-form vehicle positions, train and subway station entrances (src/game/transit/CONTRACT.md)
+  - `props/`: seeded alley and service-corner dressing, bags, crates and boxes, clear of doorways and walk lines (src/game/props/CONTRACT.md)
   - `light/`: every fixture as real light in lumens, clustered or batched by backend, per-room light slots with the computed room fill, air glow, the day switch that puts the city's own lights out at sunrise (src/game/light/CONTRACT.md)
   - `look/`: quality tiers, AgX exposure, height fog tinted by the light in the air, environment probe, the render pipeline with emissive-selected bloom (src/game/look/CONTRACT.md)
   - `sky/`: night sky, moon key, stars
