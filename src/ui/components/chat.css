@@ -1,0 +1,242 @@
+/* Talking to someone: the chat column on the right, the avatar card top-left
+   and the framed video call. */
+
+.chat {
+	position: absolute;
+	pointer-events: auto;
+	top: 0;
+	right: 0;
+	bottom: var(--ui-tabbar);
+	width: 400px;
+	display: flex;
+	flex-direction: column;
+	background: var(--ui-panel);
+	border-left: 1px solid var(--ui-accent-dim);
+	box-shadow: -1px 0 0 rgba(46, 230, 255, 0.25);
+}
+
+.chat .panel-header {
+	padding: 10px 14px;
+}
+
+.chat-profile {
+	margin: 12px 14px 0;
+	padding: 10px 12px;
+	background: rgba(255, 255, 255, 0.025);
+	border: 1px solid var(--ui-line-2);
+	font: 11px var(--ui-mono);
+	color: #9fb2c4;
+}
+
+.chat-profile-row {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 2px 0;
+}
+
+.chat-profile-key {
+	color: var(--ui-dim);
+}
+
+.chat-profile-now {
+	margin-top: 8px;
+	padding: 5px 8px;
+	background: var(--ui-accent-wash);
+	border-left: 2px solid var(--ui-accent);
+	color: var(--ui-text);
+}
+
+.chat-profile-routine {
+	margin: 8px 0 0;
+	padding: 0;
+	list-style: none;
+	color: var(--ui-mute);
+}
+
+.chat-transcript {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 12px 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.chat-line {
+	max-width: 88%;
+	padding: 8px 10px;
+	border: 1px solid var(--ui-line-2);
+	background: rgba(255, 255, 255, 0.025);
+	line-height: 1.55;
+}
+
+.chat-line.is-player {
+	align-self: flex-end;
+	border-color: var(--ui-accent-dim);
+	background: var(--ui-accent-wash);
+}
+
+.chat-line-from {
+	margin-bottom: 3px;
+	font: 9px var(--ui-mono);
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--ui-dim);
+}
+
+.chat-compose {
+	display: flex;
+	margin: 12px 14px 14px;
+	border: 1px solid var(--ui-accent-dim);
+	background: var(--ui-panel-2);
+}
+
+.chat-input {
+	flex: 1;
+	min-width: 0;
+	padding: 9px 12px;
+	background: none;
+	border: 0;
+	color: var(--ui-text);
+	font: 13px var(--ui-mono);
+}
+
+.chat-input::placeholder {
+	color: var(--ui-mute);
+}
+
+.chat-input:focus {
+	outline: none;
+}
+
+.chat-send {
+	width: 40px;
+	background: var(--ui-accent);
+	border: 0;
+	color: #04151a;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.chat-send .icon {
+	width: 16px;
+	height: 16px;
+	stroke-width: 2;
+}
+
+.avatar-card {
+	position: absolute;
+	top: 20px;
+	left: 20px;
+	width: 172px;
+	padding: 10px 10px 14px;
+	background: var(--ui-panel);
+	border: 1px solid var(--ui-line);
+	text-align: center;
+}
+
+.avatar-frame {
+	position: relative;
+	height: 148px;
+	margin: 0 auto 10px;
+	overflow: hidden;
+	background: #050a0e;
+}
+
+.avatar-frame img,
+.avatar-frame canvas {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.avatar-frame::before,
+.avatar-frame::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	border: 1px solid var(--ui-accent);
+	clip-path: polygon(0 0, 14px 0, 14px 1px, 1px 1px, 1px 14px, 0 14px, 0 100%, 14px 100%, 14px calc(100% - 1px), 1px calc(100% - 1px), 1px calc(100% - 14px), 0 calc(100% - 14px));
+}
+
+.avatar-frame::after {
+	transform: scaleX(-1);
+}
+
+.avatar-name {
+	font: 600 11px var(--ui-mono);
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--ui-accent);
+}
+
+.avatar-bar {
+	display: flex;
+	justify-content: center;
+	gap: 2px;
+	margin-top: 8px;
+}
+
+.avatar-bar-segment {
+	width: 4px;
+	height: 8px;
+	background: var(--ui-line);
+}
+
+.avatar-bar-segment.is-lit {
+	background: var(--ui-accent);
+}
+
+.call {
+	position: absolute;
+	pointer-events: auto;
+	top: 150px;
+	right: 14px;
+	width: 320px;
+	background: var(--ui-panel);
+	border: 1px solid var(--ui-accent-dim);
+}
+
+.call-screen {
+	height: 200px;
+	background: #050a0e;
+	border-bottom: 1px solid var(--ui-line);
+	overflow: hidden;
+}
+
+.call-screen video,
+.call-screen canvas {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.call-screen .empty {
+	text-align: center;
+	padding-top: 90px;
+}
+
+.call-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px 10px 8px 12px;
+}
+
+.call-name {
+	font: 600 11px var(--ui-mono);
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--ui-accent);
+}
+
+.call-hangup {
+	color: var(--ui-bad);
+}

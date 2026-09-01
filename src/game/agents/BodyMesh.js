@@ -1,4 +1,4 @@
-import { attribute, float, instancedBufferAttribute, max, mix, smoothstep, texture, vec4 } from 'three/tsl';
+import { attribute, float, instancedBufferAttribute, max, mix, smoothstep, texture, vec2, vec4 } from 'three/tsl';
 import { CrowdMesh } from './CrowdMesh.js';
 
 /** How wide a hem or a cuff fades, in limb-length units: about two centimetres. */
@@ -29,16 +29,19 @@ export class BodyMesh extends CrowdMesh {
 
 		geometry.setAttribute( 'cloth', cloth );
 
-		this.skins = this.attribute( 3 );
-		this.shirts = this.attribute( 3 );
+		// Skin with the sleeve cut, shirt with the hem cut: two vec4s and a
+		// vec3 keep the body inside WebGPU's eight vertex buffers.
+		this.skins = this.attribute( 4 );
+		this.shirts = this.attribute( 4 );
 		this.trousers = this.attribute( 3 );
-		this.cuts = this.attribute( 2 );
 
 		const aCloth = attribute( 'cloth', 'vec4' );
-		const aSkin = instancedBufferAttribute( this.skins, 'vec3' );
-		const aShirt = instancedBufferAttribute( this.shirts, 'vec3' );
+		const aSkinCut = instancedBufferAttribute( this.skins, 'vec4' );
+		const aShirtCut = instancedBufferAttribute( this.shirts, 'vec4' );
+		const aSkin = aSkinCut.xyz;
+		const aShirt = aShirtCut.xyz;
 		const aTrousers = instancedBufferAttribute( this.trousers, 'vec3' );
-		const aCut = instancedBufferAttribute( this.cuts, 'vec2' );
+		const aCut = vec2( aSkinCut.w, aShirtCut.w );
 
 		// A limb the garment does not reach carries 2, well past any cut, so
 		// these two land on 0 for every vertex that is not on that limb.
@@ -57,10 +60,9 @@ export class BodyMesh extends CrowdMesh {
 
 	setLook( slot, look ) {
 
-		this.skins.setXYZ( slot, look.skin.r, look.skin.g, look.skin.b );
-		this.shirts.setXYZ( slot, look.shirt.r, look.shirt.g, look.shirt.b );
+		this.skins.setXYZW( slot, look.skin.r, look.skin.g, look.skin.b, look.sleeve );
+		this.shirts.setXYZW( slot, look.shirt.r, look.shirt.g, look.shirt.b, look.hem );
 		this.trousers.setXYZ( slot, look.trousers.r, look.trousers.g, look.trousers.b );
-		this.cuts.setXY( slot, look.sleeve, look.hem );
 
 	}
 

@@ -1,3 +1,7 @@
+/* HUD chrome: the palette every game panel shares, and the always-on readouts.
+   Panels: panels.css and views.css. Chat, avatar, call: chat.css. Tab bar:
+   tabbar.css. Mission toast and summary: mission.css. */
+
 /* Several HUD panels set their own display, which would beat the browser's
    own [hidden] rule; hiding must always win. */
 .hud [hidden] {
@@ -5,12 +9,83 @@
 }
 
 .hud {
+	--ui-panel: rgba(7, 12, 17, 0.94);
+	--ui-panel-2: #0c151c;
+	--ui-line: #173944;
+	--ui-line-2: #1b2731;
+	--ui-accent: #2ee6ff;
+	--ui-accent-dim: #178a9c;
+	--ui-accent-wash: rgba(46, 230, 255, 0.08);
+	--ui-text: #dfe9ee;
+	--ui-dim: #7d95a3;
+	--ui-mute: #50656f;
+	--ui-warn: #ffb45c;
+	--ui-bad: #ff8f8f;
+	--ui-mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+	--ui-tabbar: 76px;
+
 	position: fixed;
 	inset: 0;
 	pointer-events: none;
-	color: #e6e8ea;
+	color: var(--ui-text);
 	font-size: 13px;
 	text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+.hud .icon {
+	width: 1.1em;
+	height: 1.1em;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.6;
+	stroke-linecap: square;
+	stroke-linejoin: miter;
+	flex: none;
+}
+
+.hud .keycap {
+	display: inline-block;
+	border: 1px solid var(--ui-line);
+	padding: 0 5px;
+	margin: 0 2px;
+	font: 10px var(--ui-mono);
+	line-height: 16px;
+	letter-spacing: 0.08em;
+	color: var(--ui-accent);
+	background: rgba(46, 230, 255, 0.05);
+}
+
+.hud .empty {
+	padding: 14px 0;
+	font: 12px var(--ui-mono);
+	letter-spacing: 0.06em;
+	color: var(--ui-mute);
+}
+
+.hud-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	background: #16232c;
+	color: var(--ui-accent);
+	border: 1px solid var(--ui-line);
+	padding: 8px 14px;
+	font: 11px var(--ui-mono);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	cursor: pointer;
+}
+
+.hud-button:hover {
+	background: #1c3038;
+	border-color: var(--ui-accent-dim);
+}
+
+.hud-button.is-primary {
+	background: var(--ui-accent-dim);
+	color: #04151a;
+	border-color: var(--ui-accent);
 }
 
 .hud-clock {
@@ -19,7 +94,7 @@
 	left: 50%;
 	transform: translateX(-50%);
 	text-align: center;
-	font-family: ui-monospace, monospace;
+	font-family: var(--ui-mono);
 	letter-spacing: 0.14em;
 	font-size: 18px;
 	color: #cfe6ff;
@@ -30,7 +105,7 @@
 	font-size: 11px;
 	letter-spacing: 0.18em;
 	text-transform: uppercase;
-	color: #7e93a8;
+	color: var(--ui-dim);
 }
 
 .hud-crosshair {
@@ -45,11 +120,11 @@
 
 .hud-prompt {
 	position: absolute;
-	bottom: 16%;
+	bottom: 18%;
 	left: 50%;
 	transform: translateX(-50%);
-	background: rgba(10, 14, 20, 0.82);
-	border: 1px solid #3d5266;
+	background: var(--ui-panel);
+	border: 1px solid var(--ui-line);
 	padding: 7px 14px;
 	letter-spacing: 0.06em;
 	white-space: nowrap;
@@ -58,8 +133,8 @@
 .hud-readout {
 	position: absolute;
 	left: 14px;
-	bottom: 14px;
-	font-family: ui-monospace, monospace;
+	bottom: calc(var(--ui-tabbar) + 10px);
+	font-family: var(--ui-mono);
 	font-size: 11px;
 	line-height: 1.55;
 	color: #8fa2b4;
@@ -67,7 +142,7 @@
 
 .hud-readout-about {
 	margin-top: 6px;
-	color: #5f7183;
+	color: var(--ui-mute);
 	max-width: 46vw;
 	overflow-wrap: anywhere;
 }
@@ -76,7 +151,7 @@
 	position: absolute;
 	right: 14px;
 	top: 14px;
-	font-family: ui-monospace, monospace;
+	font-family: var(--ui-mono);
 	font-size: 11px;
 	line-height: 1.55;
 	text-align: right;
@@ -84,100 +159,14 @@
 }
 
 .hud-stats-warn {
-	color: #ffb45c;
-}
-
-.hud-npc {
-	position: absolute;
-	pointer-events: auto;
-	right: 14px;
-	top: 50%;
-	transform: translateY(-50%);
-	width: 330px;
-	max-height: 74vh;
-	overflow-y: auto;
-	background: rgba(12, 16, 22, 0.94);
-	border: 1px solid #3d5266;
-	padding: 14px 16px;
-}
-
-.hud-npc-name {
-	font-size: 17px;
-	letter-spacing: 0.03em;
-	color: #cfe6ff;
-}
-
-.hud-npc-type {
-	margin: 2px 0 12px;
-	font-size: 11px;
-	letter-spacing: 0.16em;
-	text-transform: uppercase;
-	color: #7e93a8;
-}
-
-.hud-npc-row {
-	display: flex;
-	justify-content: space-between;
-	gap: 14px;
-	padding: 3px 0;
-	border-bottom: 1px solid #1e2833;
-}
-
-.hud-npc-key {
-	color: #7e93a8;
-}
-
-.hud-npc-value {
-	text-align: right;
-	font-family: ui-monospace, monospace;
-}
-
-.hud-npc-section {
-	margin: 12px 0 4px;
-	font-size: 11px;
-	letter-spacing: 0.16em;
-	text-transform: uppercase;
-	color: #7e93a8;
-}
-
-.hud-npc-now {
-	background: rgba(40, 230, 255, 0.08);
-	border-left: 2px solid #28e6ff;
-	padding: 5px 8px;
-	margin-bottom: 8px;
-	font-family: ui-monospace, monospace;
-	font-size: 12px;
-}
-
-.hud-npc-routine {
-	margin: 0;
-	padding: 0;
-	list-style: none;
-	font-family: ui-monospace, monospace;
-	font-size: 11px;
-	color: #9fb2c4;
-}
-
-.hud-npc-routine li {
-	padding: 2px 0;
-}
-
-.hud-npc-close {
-	margin-top: 14px;
-	width: 100%;
-	background: #223040;
-	color: #cfe6ff;
-	border: 1px solid #3d5266;
-	padding: 7px;
-	font: inherit;
-	cursor: pointer;
+	color: var(--ui-warn);
 }
 
 .hud-pause {
 	position: absolute;
 	inset: 0;
 	pointer-events: auto;
-	background: rgba(6, 9, 13, 0.82);
+	background: rgba(4, 8, 11, 0.82);
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -186,26 +175,23 @@
 }
 
 .hud-pause-title {
-	font-size: 26px;
+	font-family: var(--ui-mono);
+	font-size: 24px;
 	letter-spacing: 0.3em;
 	text-transform: uppercase;
-	color: #cfe6ff;
+	color: var(--ui-accent);
 }
 
 .hud-pause-note {
 	color: #8fa2b4;
 	max-width: 460px;
 	text-align: center;
-	line-height: 1.7;
+	line-height: 1.9;
 }
 
-.hud-pause-key {
-	display: inline-block;
-	border: 1px solid #3d5266;
-	padding: 0 6px;
-	margin: 0 2px;
-	font-family: ui-monospace, monospace;
-	color: #cfe6ff;
+.hud-pause .hud-button {
+	margin-top: 12px;
+	min-width: 200px;
 }
 
 .hud-loading {
@@ -222,21 +208,22 @@
 }
 
 .hud-loading-title {
+	font-family: var(--ui-mono);
 	font-size: 22px;
 	letter-spacing: 0.34em;
 	text-transform: uppercase;
-	color: #cfe6ff;
+	color: var(--ui-accent);
 }
 
 .hud-loading-step {
-	font-family: ui-monospace, monospace;
+	font-family: var(--ui-mono);
 	font-size: 12px;
 }
 
 .hud-loading-error {
 	max-width: 560px;
-	color: #ff8f8f;
-	font-family: ui-monospace, monospace;
+	color: var(--ui-bad);
+	font-family: var(--ui-mono);
 	font-size: 12px;
 	white-space: pre-wrap;
 }
@@ -244,8 +231,8 @@
 .hud-minimap {
 	position: absolute;
 	right: 14px;
-	bottom: 14px;
-	border: 1px solid #3d5266;
+	bottom: calc(var(--ui-tabbar) + 10px);
+	border: 1px solid var(--ui-line);
 	background: #0a0e14;
 	line-height: 0;
 }
@@ -258,60 +245,8 @@
 	position: absolute;
 	right: 5px;
 	top: 4px;
-	font-family: ui-monospace, monospace;
-	font-size: 10px;
+	font: 10px var(--ui-mono);
 	line-height: 1;
 	letter-spacing: 0.1em;
-	color: #5f7183;
-}
-
-.hud-inventory {
-	position: absolute;
-	pointer-events: auto;
-	left: 50%;
-	top: 50%;
-	transform: translate(-50%, -50%);
-	width: 460px;
-	background: rgba(12, 16, 22, 0.94);
-	border: 1px solid #3d5266;
-	padding: 16px;
-}
-
-.hud-inventory-title {
-	font-size: 11px;
-	letter-spacing: 0.18em;
-	text-transform: uppercase;
-	color: #7e93a8;
-	margin-bottom: 12px;
-}
-
-.hud-inventory-grid {
-	display: grid;
-	grid-template-columns: repeat(6, 1fr);
-	gap: 6px;
-}
-
-.hud-inventory-slot {
-	aspect-ratio: 1;
-	border: 1px solid #223040;
-	background: rgba(255, 255, 255, 0.02);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 10px;
-	color: #8fa2b4;
-	text-align: center;
-	overflow: hidden;
-}
-
-.hud-inventory-slot.is-filled {
-	border-color: #3d5266;
-	background: rgba(40, 230, 255, 0.06);
-}
-
-.hud-inventory-note {
-	margin-top: 12px;
-	font-family: ui-monospace, monospace;
-	font-size: 11px;
-	color: #5f7183;
+	color: var(--ui-mute);
 }

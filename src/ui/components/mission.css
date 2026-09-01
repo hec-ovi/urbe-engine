@@ -1,0 +1,70 @@
+/* Mission toast that slides in under the clock, and the mission summary card. */
+
+.toast-host {
+	position: absolute;
+	top: 70px;
+	left: 50%;
+	transform: translateX(-50%);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+}
+
+.toast {
+	min-width: 320px;
+	max-width: 520px;
+	padding: 10px 16px 12px;
+	background: var(--ui-panel);
+	border: 1px solid var(--ui-accent-dim);
+	border-left: 3px solid var(--ui-accent);
+	opacity: 0;
+	transform: translateY(-12px);
+	transition: opacity 0.24s ease, transform 0.24s ease;
+}
+
+.toast.is-in {
+	opacity: 1;
+	transform: none;
+}
+
+.toast.is-out {
+	opacity: 0;
+	transition: opacity 0.6s ease;
+}
+
+.toast-title {
+	font: 600 11px var(--ui-mono);
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	color: var(--ui-accent);
+}
+
+.toast-text {
+	margin-top: 3px;
+	color: #c4d1d9;
+}
+
+.summary {
+	position: absolute;
+	pointer-events: auto;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	width: 520px;
+	display: flex;
+	flex-direction: column;
+	background: var(--ui-panel);
+	border: 1px solid var(--ui-line);
+	box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+.summary-body {
+	padding: 18px 22px;
+}
+
+.summary-footer {
+	display: flex;
+	justify-content: flex-end;
+	padding: 0 22px 18px;
+}

@@ -33,18 +33,21 @@ export class CrowdMesh {
 		this.capacity = capacity;
 		this.attributes = [];
 
-		this.frames = this.attribute( 1 );
-		this.clips = this.attribute( 1 );
-		this.origins = this.attribute( 3 );
-		this.headings = this.attribute( 1 );
+		// Every attribute is one vertex buffer on WebGPU, which allows eight per
+		// pipeline, so the per-instance data is packed: where a person stands
+		// and faces in one vec4, which frame of which clip in one vec2.
+		this.motion = this.attribute( 4 );
+		this.pose = this.attribute( 2 );
 
 		const positions = new PoseBuffer( baked.position, baked.vertexCount, baked.rows, storageCapable );
 		const normals = new PoseBuffer( baked.normal, baked.vertexCount, baked.rows, storageCapable );
 
-		const aFrame = instancedBufferAttribute( this.frames, 'float' );
-		const aClip = instancedBufferAttribute( this.clips, 'float' );
-		const aOrigin = instancedBufferAttribute( this.origins, 'vec3' );
-		const aHeading = instancedBufferAttribute( this.headings, 'float' );
+		const aMotion = instancedBufferAttribute( this.motion, 'vec4' );
+		const aPose = instancedBufferAttribute( this.pose, 'vec2' );
+		const aFrame = aPose.x;
+		const aClip = aPose.y;
+		const aOrigin = aMotion.xyz;
+		const aHeading = aMotion.w;
 
 		const whole = aFrame.floor();
 		const blend = aFrame.sub( whole );
@@ -119,10 +122,8 @@ export class CrowdMesh {
 
 	setInstance( slot, position, heading, frame, clip, look ) {
 
-		this.origins.setXYZ( slot, position.x, position.y, position.z );
-		this.headings.setX( slot, heading );
-		this.frames.setX( slot, frame );
-		this.clips.setX( slot, clip );
+		this.motion.setXYZW( slot, position.x, position.y, position.z, heading );
+		this.pose.setXY( slot, frame, clip );
 		this.setLook( slot, look );
 
 	}
