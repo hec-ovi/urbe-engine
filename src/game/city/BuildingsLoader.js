@@ -11,12 +11,8 @@ import { doorFrame } from './DoorGeometry.js';
 const EXTERIOR = 'merged';
 const INTERIOR = 'interior';
 
-// The materials database gives light-fixture a featureless white emissive at
-// strength 3, which under this scene's exposure clips to a flat slab wherever
-// the exterior hangs a fixture (over doors, over windows). Damping it keeps
-// the fixture reading as lit without painting a white rectangle on the facade.
 const FIXTURE = '/light-fixture/';
-const FIXTURE_EMISSIVE = 0.4;
+const FIXTURE_EMISSIVE = 1;
 
 /**
  * Every assembled building in the city, loaded once and arranged for the two

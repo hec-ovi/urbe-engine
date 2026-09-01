@@ -9,13 +9,10 @@ const BEDROCK_Y = - 0.8;
 // Atlas ground surfaces mapped onto material database keys. The database has
 // no road, asphalt or sidewalk kind, so each surface takes the closest
 // resolvable one (../materials/CONTRACT.md names the guaranteed vocabulary).
-// Roadway takes the darkest, least patterned entry in the database so it does
-// not read as the same paving as the sidewalk beside it; the gap is logged in
-// docs/ISSUES.md.
 const SURFACES = {
-	roadway: { key: 'cyberpunk/rubber/high_rich', y: 0, wet: true },
-	sidewalk: { key: 'cyberpunk/concrete/high_rich', y: SIDEWALK_HEIGHT, curb: true },
-	block: { key: 'cyberpunk/concrete/high_rich', y: SIDEWALK_HEIGHT },
+	roadway: { key: 'cyberpunk/road/high_rich', y: 0, wet: true },
+	sidewalk: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT, curb: true },
+	block: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT },
 	open: { key: 'cyberpunk/tile/high_rich', y: SIDEWALK_HEIGHT, curb: true }
 };
 
