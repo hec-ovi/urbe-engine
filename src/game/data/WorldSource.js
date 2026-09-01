@@ -99,6 +99,10 @@ export class WorldSource {
 			blueprint,
 			npc,
 			floors: await this.#floors( base, blueprint ),
+			// The shell, under a megabyte, and the furnished interior, tens of
+			// them. They carry the identical shell, so the city loads the small
+			// one for every building and streams the big one near the player.
+			shellUrl: `${base}/${parcelId}.glb`,
 			glbUrl: `${base}/interior/building.glb`
 		};
 

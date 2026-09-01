@@ -1,23 +1,18 @@
-const INTERIOR_LOAD_RADIUS = 55;
-const INTERIOR_DROP_RADIUS = 75;
-
 /**
  * What the player can stand on and cannot walk through. The ground and every
  * building shell are fixed trimeshes built once: the shells carry their real
  * door and window openings, so a doorway is walkable without any special case.
- * Street furniture is a cylinder each, not a mesh. Interiors are heavy, so each
- * building's floors and stairs become a collider only while the player is near
- * it, and go away again further out. Hysteresis between the two radii stops a
- * boundary from thrashing. Near is measured on the ground plane, because a
- * tower's twenty-fifth floor is directly above its own footprint and the
- * player standing on it is as near the building as it gets.
+ * Street furniture is a cylinder each, not a mesh.
+ *
+ * Interiors are heavy and arrive a floor band at a time, so a band becomes a
+ * trimesh when the stream puts it in the scene and goes away when it takes it
+ * out: what the player can walk on is exactly what they can see.
  */
 export class WorldColliders {
 
 	constructor( physics ) {
 
 		this.physics = physics;
-		this.interiors = new Map();
 		this.live = new Map();
 		this.triangles = 0;
 
@@ -48,41 +43,28 @@ export class WorldColliders {
 
 	}
 
-	/** @param interiors Map<parcelId, { geometry, center }> */
-	registerInteriors( interiors ) {
+	/** One floor band of one building becomes solid. */
+	addBand( id, geometry ) {
 
-		for ( const [ parcelId, entry ] of interiors ) {
+		if ( ! geometry || this.live.has( id ) ) return;
 
-			if ( entry.geometry ) this.interiors.set( parcelId, entry );
-
-		}
+		this.live.set( id, this.physics.addTrimesh( geometry ) );
 
 	}
 
-	/** Loads and drops interior colliders around the player. Cheap to call every frame. */
-	update( position ) {
+	/** And stops being solid when the stream takes it out of the scene. */
+	dropBand( id ) {
 
-		for ( const [ parcelId, entry ] of this.interiors ) {
+		const handle = this.live.get( id );
 
-			const distance = Math.hypot( entry.center.x - position.x, entry.center.z - position.z );
-			const loaded = this.live.has( parcelId );
+		if ( ! handle ) return;
 
-			if ( ! loaded && distance < INTERIOR_LOAD_RADIUS ) {
-
-				this.live.set( parcelId, this.physics.addTrimesh( entry.geometry ) );
-
-			} else if ( loaded && distance > INTERIOR_DROP_RADIUS ) {
-
-				this.physics.remove( this.live.get( parcelId ) );
-				this.live.delete( parcelId );
-
-			}
-
-		}
+		this.physics.remove( handle );
+		this.live.delete( id );
 
 	}
 
-	get liveInteriors() {
+	get liveBands() {
 
 		return this.live.size;
 

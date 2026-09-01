@@ -14,6 +14,7 @@ const STAND = 0.05;
  */
 export class Bookmarks {
 
+	/** @param rooms () => Room[]; interiors stream, so the set is read per shot. */
 	constructor( { fixtures, rooms, networks } ) {
 
 		this.fixtures = fixtures;

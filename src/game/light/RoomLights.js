@@ -58,6 +58,8 @@ export class RoomLights {
 	/**
 	 * The material a room's mesh wears while it holds `binding`. Cloned once per
 	 * binding and key, so the whole run compiles (slots + 1) x keys shaders.
+	 * A key may name the variant the interior box asked for after a `#`: a
+	 * patterned ceiling and a plain one are one database entry and two looks.
 	 */
 	materialFor( binding, key ) {
 
@@ -65,11 +67,13 @@ export class RoomLights {
 
 		if ( ! material ) {
 
+			const [ entry, variant ] = key.split( '#' );
+
 			// A node material, not a copy of the standard one: `lightsNode` is a
 			// node-material property, and the conversion the renderer does for a
 			// standard material drops it, which leaves the room lit by the
 			// city's own lights, which is to say not at all.
-			material = new THREE.MeshPhysicalNodeMaterial().copy( this.factory.build( key ) );
+			material = new THREE.MeshPhysicalNodeMaterial().copy( this.factory.build( entry, variant ) );
 			material.name = `${key}|room${binding.index}`;
 			material.lightsNode = binding.lightsNode;
 			binding.materials.set( key, material );

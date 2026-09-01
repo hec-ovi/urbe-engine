@@ -27,6 +27,17 @@ export class RoomView {
 
 	}
 
+	/**
+	 * The rooms currently in memory. Interiors stream, so the set changes as
+	 * the player walks; a new building's rooms are sorted in on the next pass.
+	 */
+	setRooms( rooms ) {
+
+		this.rooms = rooms;
+		this.timer = RESORT_INTERVAL;
+
+	}
+
 	/** @returns the rooms in range, nearest first. */
 	update( position, delta ) {
 

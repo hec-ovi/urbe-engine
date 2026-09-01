@@ -9,6 +9,7 @@ import { Signals } from './data/Signals.js';
 import { GroundBuilder, SIDEWALK_HEIGHT } from './ground/GroundBuilder.js';
 import { pointInRing } from './ground/Polygons.js';
 import { BuildingsLoader } from './city/BuildingsLoader.js';
+import { InteriorStream } from './city/InteriorStream.js';
 import { Neon } from './city/Neon.js';
 import { StreetLamps } from './city/StreetLamps.js';
 import { LaneMarkings } from './city/LaneMarkings.js';
@@ -42,7 +43,6 @@ import { Bookmarks } from './world/Bookmarks.js';
 import { mapModel } from './world/MapModel.js';
 
 const THEME = 'cyberpunk';
-const INTERIOR_VISIBLE_RADIUS = 70;
 /** Past this a room is behind opaque walls and haze, so it is not drawn. */
 const ROOM_VISIBLE_RADIUS = 32;
 /** Air scattering is wide and weak indoors, tight and small on the street. */
@@ -125,9 +125,15 @@ export class GameApp {
 		this.scene.add( ground.group );
 
 		this.view.step( `loading ${buildings.size} buildings` );
-		const city = await new BuildingsLoader( factory, this.rooms ).load( buildings );
+		const city = await new BuildingsLoader( factory ).load( buildings );
 		this.scene.add( city.group );
-		this.interiors = city.interiors;
+
+		this.stream = new InteriorStream( {
+			factory, roomLights: this.rooms,
+			haze: this.tier.haze ? INDOOR_HAZE : null
+		} );
+		this.stream.register( buildings, city.centers );
+		this.scene.add( this.stream.group );
 
 		this.view.step( 'hanging the neon' );
 		const neon = new Neon( atlas, buildings, factory ).build();
@@ -143,8 +149,8 @@ export class GameApp {
 		const fixtures = [ ...neon.glows, ...lamps.glows ];
 		this.lights = new CityLights( fixtures, this.lighting.capacity );
 		this.scene.add( this.lights.group );
-		this.roomView = new RoomView( city.rooms, ROOM_VISIBLE_RADIUS );
-		this.#hangHaze( fixtures, city.interiors );
+		this.roomView = new RoomView( this.stream.rooms, ROOM_VISIBLE_RADIUS );
+		this.#hangHaze( fixtures );
 
 		this.view.step( 'raising the sky' );
 		this.sky = new NightSky( this.scene ).build( this.clock.hour );
@@ -157,7 +163,8 @@ export class GameApp {
 		this.colliders.addGround( ground.colliderGeometry );
 		this.colliders.addShells( city.shellColliders );
 		this.colliders.addPosts( lamps.posts );
-		this.colliders.registerInteriors( city.interiors );
+		this.stream.onColliderBand = ( id, geometry ) => this.colliders.addBand( id, geometry );
+		this.stream.onDropBand = ( id ) => this.colliders.dropBand( id );
 
 		this.view.step( 'waking the population' );
 		this.sim = SimBridge.create( atlas, connections, buildings, { streetDensity: config.streetDensity } );
@@ -192,7 +199,7 @@ export class GameApp {
 		this.input = new Input( this.renderer.domElement );
 		this.controller = new PlayerController( { body: this.body, camera: this.camera, input: this.input } );
 		this.controller.lookAt( spawn.lookAt );
-		this.bookmarks = new Bookmarks( { fixtures, rooms: city.rooms, networks: connections.networks } );
+		this.bookmarks = new Bookmarks( { fixtures, rooms: () => this.stream.rooms, networks: connections.networks } );
 
 		this.view.step( 'baking the environment' );
 		this.probe.bake( spawn.point );
@@ -258,11 +265,12 @@ export class GameApp {
 		this.controller.update( delta );
 
 		const feet = this.body.feet;
-		this.colliders.update( feet );
+
+		if ( this.stream.update( feet ) ) this.roomView.setRooms( this.stream.rooms );
+
 		this.lights.update( this.camera.position, delta );
 		this.crowd.update( delta, feet, this.clock );
 		this.traffic.update( delta, feet, this.clock.daySeconds );
-		this.#cullInteriors( feet );
 		this.#relight( feet, delta );
 
 		const prompt = this.interactor.update( delta );
@@ -336,44 +344,17 @@ export class GameApp {
 	}
 
 	/**
-	 * The air around every fixture, as geometry: one merged glow mesh for the
-	 * street, and one per building inside its interior group so it is culled
-	 * with the rooms it belongs to.
+	 * The air around every street fixture, as one merged glow mesh. The air
+	 * inside a building belongs to the floor band it fills, so the stream hangs
+	 * that one as it loads.
 	 */
-	#hangHaze( fixtures, interiors ) {
+	#hangHaze( fixtures ) {
 
 		if ( ! this.tier.haze ) return;
 
 		const street = Haze.build( fixtures, OUTDOOR_HAZE );
 
 		if ( street ) this.scene.add( street );
-
-		for ( const entry of interiors.values() ) {
-
-			const indoor = Haze.build( entry.rooms.flatMap( ( room ) => room.fixtures ), INDOOR_HAZE );
-
-			if ( indoor ) entry.group.add( indoor );
-
-		}
-
-	}
-
-	/**
-	 * Interiors sit in the world permanently so a doorway is see-through, but
-	 * an interior more than a block away is behind opaque walls and haze.
-	 * Distance is measured on the ground plane: a tower's twenty-fifth floor
-	 * stands directly over its own footprint, and the player standing in it is
-	 * as near the building as anyone gets.
-	 */
-	#cullInteriors( position ) {
-
-		for ( const entry of this.interiors.values() ) {
-
-			const distance = Math.hypot( entry.center.x - position.x, entry.center.z - position.z );
-
-			entry.group.visible = distance < INTERIOR_VISIBLE_RADIUS;
-
-		}
 
 	}
 
@@ -386,7 +367,8 @@ export class GameApp {
 		this.stats.gpuMs = ( info.render.timestamp ?? 0 ) + ( info.compute.timestamp ?? 0 );
 		this.stats.crowd = this.crowd.count;
 		this.stats.cars = this.traffic.count;
-		this.stats.interiors = this.colliders.liveInteriors;
+		this.stats.interiors = this.stream.liveInteriors;
+		this.stats.bands = this.colliders.liveBands;
 		this.stats.lights = this.lights.count;
 		this.stats.tier = this.tier.name;
 		this.view.stats.update( this.stats );

@@ -39,14 +39,18 @@ describe( 'buildRooms', () => {
 		[ 'cyberpunk/concrete/mid', [ triangle( [ [ 9, 0, 9 ], [ 11, 0, 9 ], [ 9, 0, 11 ] ] ) ] ]
 	] ), floors, ( key ) => reflectanceOf( key ) );
 
-	it( 'puts a surface in the room it stands in and everything else in the shared set', () => {
+	it( 'puts a surface in the room it stands in and everything else on its floor', () => {
 
 		const { rooms, shared } = cut();
 
 		expect( rooms ).toHaveLength( 1 );
 		expect( rooms[ 0 ].id ).toBe( 'r0' );
+		expect( rooms[ 0 ].floor ).toBe( 0 );
 		expect( [ ...rooms[ 0 ].meshes.map( ( m ) => m.key ) ] ).toEqual( [ 'cyberpunk/carpet/mid' ] );
-		expect( [ ...shared.keys() ] ).toEqual( [ 'cyberpunk/concrete/mid' ] );
+		// A core wall or a stair belongs to no room but still stands on a floor,
+		// which is what lets a tower put one floor band in the scene at a time.
+		expect( [ ...shared.keys() ] ).toEqual( [ 0 ] );
+		expect( [ ...shared.get( 0 ).keys() ] ).toEqual( [ 'cyberpunk/concrete/mid' ] );
 
 	} );
 

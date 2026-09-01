@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { pointInRing } from '../ground/Polygons.js';
+import { takeTriangles, centroidAt } from './Triangles.js';
 import { albedoOf } from '../light/RoomFill.js';
 import { kelvinColor, luminance } from '../light/Color.js';
 
@@ -10,6 +11,8 @@ const FLOOR_MARGIN = 0.3;
 const CELL = 4;
 /** A triangle this close to level and facing up counts as floor. */
 const UP_FACING = 0.7;
+/** Band for geometry over the roof or under the lowest slab: always drawn. */
+export const OUTSIDE_FLOORS = Infinity;
 
 /**
  * Cuts a building's interior into the rooms the interior box published for it,
@@ -23,10 +26,14 @@ const UP_FACING = 0.7;
  * reflectance, and the reflectance of the up-facing surfaces on their own,
  * because a floor bounces different light than a ceiling.
  *
+ * Whatever falls in no room still belongs to a floor, and is kept under that
+ * floor's index, so a tower can put the floors around the player in the scene
+ * and leave the other sixty out of it.
+ *
  * @param byKey Map<materialKey, geometry[]> in world space
  * @param floors the parcel's floor documents (../interior/CONTRACT.md)
  * @param reflectance (key) => { scalar, tint }
- * @returns { rooms: Room[], shared: Map<key, geometry[]> }
+ * @returns { rooms: Room[], shared: Map<floorIndex, Map<key, geometry[]>> }
  */
 export function buildRooms( parcelId, byKey, floors, reflectance ) {
 
@@ -97,6 +104,7 @@ function floorIndex( floors ) {
 			} ) );
 
 			return {
+				index: floor.floor,
 				low: floor.elevation - FLOOR_MARGIN,
 				high: floor.elevation + floor.height + FLOOR_MARGIN,
 				rooms,
@@ -148,23 +156,28 @@ function sort( geometry, key, surface, index, buckets, shared ) {
 	const position = geometry.getAttribute( 'position' );
 	const a = _a, b = _b, c = _c;
 	const lists = new Map();
-	const loose = [];
+	const loose = new Map();
 
 	for ( let i = 0; i < position.count; i += 3 ) {
 
-		a.fromBufferAttribute( position, i );
-		b.fromBufferAttribute( position, i + 1 );
-		c.fromBufferAttribute( position, i + 2 );
-		_centroid.copy( a ).add( b ).add( c ).multiplyScalar( 1 / 3 );
+		centroidAt( position, i, _centroid, a, b, c );
 
-		const room = locate( index, _centroid );
+		const found = locate( index, _centroid );
 
-		if ( ! room ) {
+		if ( ! found?.room ) {
 
-			loose.push( i );
+			// Still on a floor, even with no room around it: a stair flight, a
+			// core wall, the inside of the facade. It belongs to that band.
+			const band = found?.floor ?? OUTSIDE_FLOORS;
+
+			if ( ! loose.has( band ) ) loose.set( band, [] );
+
+			loose.get( band ).push( i );
 			continue;
 
 		}
+
+		const room = found.room;
 
 		if ( ! lists.has( room.id ) ) lists.set( room.id, { room, indices: [] } );
 
@@ -191,15 +204,25 @@ function sort( geometry, key, surface, index, buckets, shared ) {
 
 		if ( ! buckets.has( room.id ) ) buckets.set( room.id, { room, byKey: new Map() } );
 
-		push( buckets.get( room.id ).byKey, key, take( geometry, indices ) );
+		push( buckets.get( room.id ).byKey, key, takeTriangles( geometry, indices ) );
 
 	}
 
-	if ( loose.length ) push( shared, key, take( geometry, loose ) );
+	for ( const [ band, indices ] of loose ) {
+
+		if ( ! shared.has( band ) ) shared.set( band, new Map() );
+
+		push( shared.get( band ), key, takeTriangles( geometry, indices ) );
+
+	}
 
 }
 
-/** The room a point stands in, or null when it belongs to the building itself. */
+/**
+ * The floor a point sits on and the room it stands in, either of which may be
+ * absent: geometry over the roof belongs to no floor, and a core wall belongs
+ * to a floor but to no room.
+ */
 function locate( index, point ) {
 
 	for ( const floor of index ) {
@@ -212,48 +235,15 @@ function locate( index, point ) {
 
 			const room = floor.rooms[ i ];
 
-			if ( pointInRing( point.x, point.z, room.polygon ) ) return room;
+			if ( pointInRing( point.x, point.z, room.polygon ) ) return { floor: floor.index, room };
 
 		}
 
-		return null;
+		return { floor: floor.index, room: null };
 
 	}
 
 	return null;
-
-}
-
-/** A new geometry from the listed triangle starts of `geometry`. */
-function take( geometry, starts ) {
-
-	const out = new THREE.BufferGeometry();
-
-	for ( const name of [ 'position', 'normal', 'uv' ] ) {
-
-		const source = geometry.getAttribute( name );
-
-		if ( ! source ) continue;
-
-		const size = source.itemSize;
-		const data = new Float32Array( starts.length * 3 * size );
-		let write = 0;
-
-		for ( const start of starts ) {
-
-			for ( let v = 0; v < 3; v ++ ) {
-
-				for ( let k = 0; k < size; k ++ ) data[ write ++ ] = source.array[ ( start + v ) * size + k ];
-
-			}
-
-		}
-
-		out.setAttribute( name, new THREE.BufferAttribute( data, size ) );
-
-	}
-
-	return out;
 
 }
 
