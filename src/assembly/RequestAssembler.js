@@ -45,10 +45,13 @@ export class RequestAssembler {
 	/**
 	 * @param parcelId atlas parcel id
 	 * @param options.glb 'merged' (default, engine runtime mode) | 'named'
+	 * @param options.floorCap optional above-ground floor cap (interior walkup
+	 * mode); the cap wins over the atlas envelope minimum, aperture-driven
+	 * minimums stay hard
 	 * @returns BuildingRequest per ../exterior/schemas/building-request.schema.json
 	 * @throws AssemblyError E_PARCEL_UNKNOWN | E_ENVELOPE_INFEASIBLE
 	 */
-	assemble( parcelId, { glb = 'merged' } = {} ) {
+	assemble( parcelId, { glb = 'merged', floorCap = null } = {} ) {
 
 		const parcel = this.parcels.get( parcelId );
 
@@ -68,7 +71,7 @@ export class RequestAssembler {
 			building: {
 				type: parcel.type,
 				tier: parcel.tier,
-				floors: this.#chooseFloors( parcel, apertures, seed )
+				floors: this.#chooseFloors( parcel, apertures, seed, floorCap )
 			},
 			theme: THEME,
 			apertures,
@@ -108,9 +111,10 @@ export class RequestAssembler {
 
 	/**
 	 * Seeded pick inside the intersection of the atlas envelope and exterior's
-	 * feasible floor count range for the parcel's apertures.
+	 * feasible floor count range for the parcel's apertures. A floorCap caps
+	 * the top and overrides the envelope minimum below it.
 	 */
-	#chooseFloors( parcel, apertures, seed ) {
+	#chooseFloors( parcel, apertures, seed, floorCap ) {
 
 		const { minFloors, maxFloors, maxHeight } = parcel.envelope;
 		const constants = constantsForType( this.floorConstants, parcel.type );
@@ -128,13 +132,13 @@ export class RequestAssembler {
 
 		}
 
-		const low = Math.max( minFloors, range.min );
-		const high = Math.min( maxFloors, range.max );
+		const high = Math.min( maxFloors, range.max, floorCap ?? Infinity );
+		const low = Math.max( range.min, Math.min( minFloors, high ) );
 
 		if ( low > high ) {
 
 			throw new AssemblyError( 'E_ENVELOPE_INFEASIBLE',
-				`${parcel.id}: envelope ${minFloors}..${maxFloors} misses feasible range ${range.min}..${range.max}` );
+				`${parcel.id}: envelope ${minFloors}..${maxFloors}${floorCap ? ` capped at ${floorCap}` : ''} misses feasible range ${range.min}..${range.max}` );
 
 		}
 

@@ -93,54 +93,87 @@ if ( ! args ) {
 const atlas = JSON.parse( readFileSync( ATLAS_SAMPLE, 'utf8' ) );
 const connections = await runConnections( atlas, { seed: atlas.meta.seed } );
 const assembler = new RequestAssembler( atlas, connections );
-
-let request;
-
-try {
-
-	request = assembler.assemble( args.parcel, { glb: args.glb } );
-
-} catch ( error ) {
-
-	fail( error.code ?? 'ERROR', error.message );
-
-}
-
-const errors = validateExteriorRequest( request );
-
-if ( errors.length > 0 ) {
-
-	console.error( 'E_REQUEST_INVALID: request fails exterior schema' );
-	printSchemaErrors( errors );
-	process.exit( 1 );
-
-}
-
 const outDir = resolve( args.out );
 mkdirSync( outDir, { recursive: true } );
 
-const requestPath = join( outDir, `${request.buildingId}.request.json` );
-writeFileSync( requestPath, JSON.stringify( request, null, 2 ) + '\n' );
+function assembleValidated( floorCap ) {
 
-const result = spawnSync( 'npm', [ 'run', 'generate', '--', requestPath, outDir ], {
-	cwd: EXTERIOR_DIR,
-	stdio: [ 'ignore', 'pipe', 'pipe' ],
-	encoding: 'utf8'
-} );
+	let request;
 
-if ( result.status !== 0 ) {
+	try {
 
-	console.error( 'E_EXTERIOR_FAILED: exterior CLI exited', result.status );
-	console.error( ( result.stderr ?? '' ).trim() );
-	console.error( ( result.stdout ?? '' ).trim() );
-	process.exit( 1 );
+		request = assembler.assemble( args.parcel, { glb: args.glb, floorCap } );
+
+	} catch ( error ) {
+
+		fail( error.code ?? 'ERROR', error.message );
+
+	}
+
+	const errors = validateExteriorRequest( request );
+
+	if ( errors.length > 0 ) {
+
+		console.error( 'E_REQUEST_INVALID: request fails exterior schema' );
+		printSchemaErrors( errors );
+		process.exit( 1 );
+
+	}
+
+	return request;
 
 }
 
+/** Writes the request, runs exterior's CLI, returns the blueprint. */
+function generateExterior( request ) {
+
+	const requestPath = join( outDir, `${request.buildingId}.request.json` );
+	writeFileSync( requestPath, JSON.stringify( request, null, 2 ) + '\n' );
+
+	const result = spawnSync( 'npm', [ 'run', 'generate', '--', requestPath, outDir ], {
+		cwd: EXTERIOR_DIR,
+		stdio: [ 'ignore', 'pipe', 'pipe' ],
+		encoding: 'utf8'
+	} );
+
+	if ( result.status !== 0 ) {
+
+		console.error( 'E_EXTERIOR_FAILED: exterior CLI exited', result.status );
+		console.error( ( result.stderr ?? '' ).trim() );
+		console.error( ( result.stdout ?? '' ).trim() );
+		process.exit( 1 );
+
+	}
+
+	return JSON.parse( readFileSync( join( outDir, `${request.buildingId}.blueprint.json` ), 'utf8' ) );
+
+}
+
+let request = assembleValidated( null );
+let blueprint = generateExterior( request );
+
 if ( args.interior ) {
 
+	let core = await runCoreFeasibility( blueprint );
+
+	if ( core.mode === 'walkup' && request.building.floors > core.walkupMaxFloors ) {
+
+		// Tight footprint: stair-only core. Re-pick floors inside the walkup
+		// cap and regenerate the shell before running interior.
+		request = assembleValidated( core.walkupMaxFloors );
+		blueprint = generateExterior( request );
+		core = await runCoreFeasibility( blueprint );
+
+	}
+
+	if ( ! core.fits ) {
+
+		fail( 'E_CORE_INFEASIBLE',
+			`mode ${core.mode}: band ${core.bandLength} m, core ${core.minCoreLength} m, walkup ${core.minWalkupCoreLength} m (crossDepthOk ${core.crossDepthOk})` );
+
+	}
+
 	const shellGlb = join( outDir, `${request.buildingId}.glb` );
-	const blueprint = JSON.parse( readFileSync( join( outDir, `${request.buildingId}.blueprint.json` ), 'utf8' ) );
 	const interiorRequest = assembler.assembleInterior( args.parcel, { blueprint, shellGlb } );
 	const interiorErrors = validateInteriorRequest( interiorRequest );
 
@@ -149,15 +182,6 @@ if ( args.interior ) {
 		console.error( 'E_REQUEST_INVALID: request fails interior schema' );
 		printSchemaErrors( interiorErrors );
 		process.exit( 1 );
-
-	}
-
-	const core = await runCoreFeasibility( blueprint );
-
-	if ( ! core.fits ) {
-
-		fail( 'E_CORE_INFEASIBLE',
-			`band ${core.bandLength} m cannot hold core ${core.minCoreLength} m (crossDepthOk ${core.crossDepthOk})` );
 
 	}
 
