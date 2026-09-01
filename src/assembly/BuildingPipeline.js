@@ -70,16 +70,7 @@ export class BuildingPipeline {
 	 */
 	async #shell( parcelId, outDir, options ) {
 
-		let previous = null;
-
-		for ( const signage of [ 'name', 'venue', 'none' ] ) {
-
-			const request = this.#assembleValidated( parcelId, { ...options, signage } );
-			const text = request.options.signage?.text ?? null;
-
-			if ( text === previous ) continue;
-
-			previous = text;
+		for ( const { request, text } of signRungs( ( signage ) => this.#assembleValidated( parcelId, { ...options, signage } ) ) ) {
 
 			try {
 
@@ -196,6 +187,29 @@ export function writeInteriorFiles( interiorDir, { glb, floorGlbs, floors, npc }
 	for ( const [ index, bytes ] of floorGlbs ) {
 
 		writeFileSync( join( floorsDir, `${floorTag( index )}.glb` ), bytes );
+
+	}
+
+}
+
+/**
+ * The requests worth trying for one shell, one per distinct sign text: the
+ * name, the venue word, none. A building with no sign at all yields once, with
+ * no text, so it is still generated.
+ */
+export function* signRungs( assemble ) {
+
+	const tried = new Set();
+
+	for ( const signage of [ 'name', 'venue', 'none' ] ) {
+
+		const request = assemble( signage );
+		const text = request.options.signage?.text ?? null;
+
+		if ( tried.has( text ) ) continue;
+
+		tried.add( text );
+		yield { request, text };
 
 	}
 

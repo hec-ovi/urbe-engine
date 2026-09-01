@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { RequestAssembler } from './RequestAssembler.js';
+import { signRungs } from './BuildingPipeline.js';
 import namedCity from './named-city.fixture.json';
 
 /** Minimal atlas blueprint slice shaped per ../atlas/CONTRACT.md. */
@@ -155,6 +156,33 @@ describe( 'RequestAssembler', () => {
 		const plain = new RequestAssembler( atlasWith( officeParcel ), { apertures: [] } ).assemble( 'p7' );
 		expect( plain.building.floors ).toBeGreaterThanOrEqual( 4 );
 		expect( plain.building.floors ).toBeLessThanOrEqual( 12 );
+
+	} );
+
+} );
+
+/**
+ * A shell is generated once per distinct sign text, and a building that has
+ * no sign at all is still generated once: skipping it left the parcel with no
+ * building.
+ */
+describe( 'signRungs', () => {
+
+	it( 'yields one request for a building with no sign', () => {
+
+		const rungs = [ ...signRungs( () => ( { options: {} } ) ) ];
+
+		expect( rungs ).toHaveLength( 1 );
+		expect( rungs[ 0 ].text ).toBe( null );
+
+	} );
+
+	it( 'steps name, venue word, none without repeating a text', () => {
+
+		const texts = { name: 'THE SALT WHARF', venue: 'DINER', none: null };
+		const rungs = [ ...signRungs( ( signage ) => ( { options: { signage: texts[ signage ] ? { text: texts[ signage ] } : undefined } } ) ) ];
+
+		expect( rungs.map( ( r ) => r.text ) ).toEqual( [ 'THE SALT WHARF', 'DINER', null ] );
 
 	} );
 
