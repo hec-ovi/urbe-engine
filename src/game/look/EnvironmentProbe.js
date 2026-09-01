@@ -55,24 +55,23 @@ export class EnvironmentProbe {
 	}
 
 	/**
-	 * @param moved true when the player has crossed between the street and a
-	 * room, which changes what is around them completely and cannot wait for
-	 * the distance threshold.
+	 * @param crossed true when the player has just walked between the street
+	 * and a room.
 	 */
-	update( position, moved = false ) {
+	update( position, crossed = false ) {
 
 		if ( ! this.at ) return;
 
-		if ( moved || this.at.distanceTo( position ) > this.interval ) this.pending = true;
+		if ( crossed || this.at.distanceTo( position ) > this.interval ) this.pending = true;
 
 		if ( ! this.pending ) return;
 
-		// However often the world asks, six cube renders never belong in
-		// consecutive frames. A rebake that arrives too soon waits its turn
-		// rather than being dropped.
+		// Walking through a door changes everything reflective at once, so that
+		// bake happens on the spot. A bake asked for by distance alone can
+		// wait, and never lands in consecutive frames.
 		const now = performance.now();
 
-		if ( now - this.last < COOLDOWN ) return;
+		if ( ! crossed && now - this.last < COOLDOWN ) return;
 
 		this.pending = false;
 		this.bake( position, now );
