@@ -18,10 +18,20 @@ export class WorldColliders {
 
 	}
 
-	/** @param groundGeometry merged ground surface + curbs, world space */
-	addGround( groundGeometry ) {
+	/**
+	 * One piece of the world that never moves and is always solid: the ground,
+	 * a building shell, a bridge deck, a bus shelter. World space, merged.
+	 */
+	addStatic( geometry ) {
 
-		this.triangles += this.physics.addTrimesh( groundGeometry ).triangles;
+		if ( geometry ) this.triangles += this.physics.addTrimesh( geometry ).triangles;
+
+	}
+
+	/** @param geometries any iterable of them */
+	addStatics( geometries ) {
+
+		for ( const geometry of geometries ) this.addStatic( geometry );
 
 	}
 
@@ -29,17 +39,6 @@ export class WorldColliders {
 	addPosts( posts ) {
 
 		for ( const post of posts ) this.physics.addPost( post );
-
-	}
-
-	/** @param shells Map<parcelId, BufferGeometry|null> from BuildingsLoader */
-	addShells( shells ) {
-
-		for ( const geometry of shells.values() ) {
-
-			if ( geometry ) this.triangles += this.physics.addTrimesh( geometry ).triangles;
-
-		}
 
 	}
 
