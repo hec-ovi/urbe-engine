@@ -10,7 +10,7 @@ Purpose: plays the assembled city as a first-person world at street level, at ni
   - `hour` (0-23, default 21): world clock start
   - `crowd` (default 200), `cars` (default 18): instance capacity
   - `density` (default 1): the simulation's `params.streetDensity`, the researched share of the population out in public space
-  - `stress` (default 0, max 40): debug only, repeats each real street agent N times over nearby walk edges to load-test the crowd renderer. Off in every normal run.
+  - `stress` (default 0, max 40): debug only, keeps N extra bodies per real street agent walking nearby walk edges to load-test the crowd renderer. They carry no identity of their own and never count towards street density. Off in every normal run.
   - `lanes=debug` paints every lane of the road graph end to end, `lanes=glow` restores the teal emissive centreline strips. Debug only; a normal run gets painted road markings.
 - Atlas blueprint per ../../../atlas/CONTRACT.md.
 - Connections document, generated in-process from that blueprint by `connectionsRunner.js`; `signalStateAt` is consumed directly for signal state.
@@ -40,6 +40,7 @@ Purpose: plays the assembled city as a first-person world at street level, at ni
 
 ## People and traffic
 - Population is the simulation library's, never invented here. The crowd slice for each walk edge around the player is the authoritative set of people on that pavement (a city-scope slice is a sample of the whole city, so it starves the street in front of the player); every agent it reports is spawned where the simulation says it is and then walks the connections walk graph at 1.4 m/s, holding at signalled crossings until the walk phase. The parcel crowd slice adds each nearby building's on-duty staff, standing in its lobby.
+- A person in the world is a body of the game's own, and the simulation handle it carries is the identity it holds right now. A street handle names a sampled agent for one epoch of that pavement, so every few minutes the same people come back under new handles: each refresh fits the people already out there to the ones the simulation reports now, of their own type and standing nearest to where it puts them, and only an agent nobody can be gets a new person. Whoever is left over retires, keeps walking and leaves the world from more than 60 m back, so nobody is ever seen going out. A lobby follows the same rule as its rota moves through the day. So the number of people on the street is the number the simulation has out there for as long as the session runs, no two of them are ever the same person, and somebody the player has talked to keeps the identity they were given.
 - Talking instantiates the person's crowd handle, interrupts its routine, shows the identity and weekly routine the simulation returns, and resumes it on close. A street handle only answers for the sampling epoch it came from and people on the pavement outlive that, so a refused handle is replaced by a live one: the simulation's slice for the pavement or the lobby they are standing in, widened to the streets within 25 m for a walker who has crossed onto a stretch the simulation keeps empty, and never somebody another person in the crowd is already being. E on a person always opens the panel; where nobody is out on that street it reads as someone passing by.
 - Rendering: animation clips are baked once into vertex animation buffers, so the whole crowd is 4 draw calls (two models, body and hair) and no skeletons at any population. Measured: 287 people in 4 draw calls, 0.08 ms of CPU per frame.
 - Dress: the base characters ship undressed, so the clothes are painted on. A garment map baked at load says which part of the body each vertex belongs to, read off the bones driving it, and each person carries their own skin tone, shirt, trousers, hair colour and where their sleeves and hems end, all decided once from their crowd id. Nothing is added to the mesh, so the draw call count does not move.
@@ -53,6 +54,7 @@ The whole run either starts or reports why: any failure during startup is caught
 - Interiors are continuous with the street: same scene, real world position, no loading screen and no camera jump.
 - The player cannot pass through a building shell and cannot fall through the ground.
 - The crowd's draw call count does not grow with the number of people.
+- The people out on the street are the people the simulation says are out there, however long the session runs, and no two of them are the same person.
 
 ## Depends on
 - ../../../atlas/CONTRACT.md, ../../../connections/CONTRACT.md, ../../../materials/CONTRACT.md, ../../../simulation/CONTRACT.md

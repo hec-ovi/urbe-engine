@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Crowd } from './Crowd.js';
+import { WalkRoutes } from './WalkRoutes.js';
 
 /**
  * People are not physics bodies, so the crowd's own pushback is the only thing
@@ -49,6 +50,180 @@ describe( 'Crowd pushback', () => {
 	} );
 
 } );
+
+/**
+ * A street handle names a sampled agent for one epoch of that pavement, so the
+ * same people come back under new handles minute after minute while the ones
+ * already spawned keep walking. What the crowd has to hold over a long session
+ * is the simulation's own street density, and one body per person.
+ */
+describe( 'Crowd over a long session', () => {
+
+	it( 'stays at the number of people the simulation has out there', () => {
+
+		const rows = session( 20 );
+
+		expect( rows ).toHaveLength( 21 );
+
+		for ( const { minute, spawned, live } of rows ) {
+
+			expect( { minute, spawned } ).toEqual( {
+				minute, spawned: Math.min( spawned, Math.round( live.length * 1.25 ) + 1 )
+			} );
+			expect( spawned ).toBeGreaterThanOrEqual( live.length );
+
+		}
+
+		// the sampled street empties and fills again through the session, so
+		// the crowd is being held at the number, not just never spawning
+		expect( new Set( rows.map( ( row ) => row.live.length ) ).size ).toBeGreaterThan( 1 );
+
+	} );
+
+	it( 'never has two people being the same one, epoch after epoch', () => {
+
+		const rows = session( 20 );
+
+		for ( const { minute, held, live } of rows ) {
+
+			expect( { minute, held: held.length } ).toEqual( { minute, held: new Set( held ).size } );
+
+			// and every one of them is somebody the simulation has out right
+			// now, not a handle left over from an epoch that has passed
+			expect( held.filter( ( id ) => ! live.includes( id ) ) ).toEqual( [] );
+
+		}
+
+	} );
+
+} );
+
+const EPOCH = 2;
+const TYPES = [ 'shop_clerk', 'nurse', 'courier' ];
+const PLAYER = new THREE.Vector3( 0, 0.12, 0 );
+
+/**
+ * The player standing on a straight run of pavement while the simulation
+ * resamples it, one reading a minute.
+ *
+ * @returns rows of { minute, spawned, live, held }: how many people the crowd
+ * has out, how many the simulation reports, and the identities they carry.
+ */
+function session( minutes ) {
+
+	const routes = pavement();
+	const sim = resampled();
+	const crowd = new Crowd( {
+		assets: { variants: [ {}, {} ], durations: [ 1, 1, 1 ], meshesOf: () => [] },
+		routes, signals: { green: () => true }, sim,
+		places: new Map(), capacity: 200
+	} );
+
+	const clock = { timeMin: 780, daySeconds: 46800, seconds: 46800 };
+	const rows = [];
+	const step = 1 / 10;
+	let due = 0;
+
+	for ( let tick = 0; tick <= minutes * 60 / step; tick ++ ) {
+
+		clock.seconds += step;
+		clock.timeMin = Math.floor( clock.seconds / 60 );
+		clock.daySeconds = clock.seconds % 86400;
+		crowd.update( step, PLAYER, clock );
+
+		// read right after a refresh, when the handles are the ones the crowd
+		// has just been told about
+		if ( crowd.timer !== 0 || tick * step < due ) continue;
+
+		due += 60;
+
+		const held = [];
+
+		for ( const member of crowd.members.values() ) if ( member.crowdId ) held.push( member.crowdId );
+
+		rows.push( {
+			minute: Math.round( tick * step / 60 ),
+			spawned: crowd.count,
+			live: live( routes, sim, clock.timeMin ),
+			held
+		} );
+
+	}
+
+	return rows;
+
+}
+
+/** Every handle the simulation has out on the pavements around the player. */
+function live( routes, sim, timeMin ) {
+
+	const out = [];
+
+	for ( const edge of routes.near( PLAYER, 0, 90 ) ) {
+
+		for ( const agent of sim.crowd( timeMin, { kind: 'edge', id: edge.id } ).agents ) out.push( agent.crowdId );
+
+	}
+
+	return out;
+
+}
+
+/** 240 m of straight pavement in 40 m edges, the player standing at its middle. */
+function pavement() {
+
+	const nodes = [];
+	const edges = [];
+
+	for ( let i = 0; i <= 6; i ++ ) nodes.push( { id: `n${i}`, x: - 120 + i * 40, z: 0, kind: 'sidewalk' } );
+
+	for ( let i = 0; i < 6; i ++ ) {
+
+		edges.push( {
+			id: `e${i}`, from: `n${i}`, to: `n${i + 1}`, kind: 'sidewalk',
+			path: [ [ nodes[ i ].x, 0 ], [ nodes[ i + 1 ].x, 0 ] ]
+		} );
+
+	}
+
+	return new WalkRoutes( { walk: { nodes, edges } } );
+
+}
+
+/**
+ * A simulation whose street handles carry the epoch they were sampled in, and
+ * whose street empties and fills through the session the way a real one does.
+ */
+function resampled() {
+
+	return {
+		crowd: ( timeMin, scope ) => {
+
+			if ( scope.kind !== 'edge' ) return { agents: [] };
+
+			const epoch = Math.floor( timeMin / EPOCH );
+			const count = timeMin % 10 < 5 ? 4 : 3;
+			const agents = [];
+
+			for ( let i = 0; i < count; i ++ ) {
+
+				agents.push( {
+					crowdId: `c|${scope.id}|${i}|${epoch}`,
+					type: TYPES[ i % TYPES.length ],
+					activity: 'commuting',
+					place: { kind: 'edge', id: scope.id },
+					progress: ( i + 0.5 ) / count,
+					direction: i % 2 ? - 1 : 1
+				} );
+
+			}
+
+			return { agents };
+
+		}
+	};
+
+}
 
 /** A crowd with nobody walking: only the members the pushback reads. */
 function crowdWith( positions ) {

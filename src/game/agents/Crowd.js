@@ -7,6 +7,9 @@ import { look } from './Appearance.js';
 const WALK_SPEED = 1.4;
 const SPAWN_RADIUS = 90;
 const DESPAWN_RADIUS = 115;
+/** How far off somebody the simulation no longer reports may leave the world:
+ *  far enough back that nobody is ever seen going out. */
+const RETIRE_RADIUS = 60;
 const REFRESH_INTERVAL = 3;
 const PARCEL_RADIUS = 45;
 /** People the simulation may report on one sidewalk edge. A 40 m edge never
@@ -24,15 +27,23 @@ const STREET_REACH = 25;
  * The people in the world, all of them real. Two sources, both the simulation
  * library's own (../simulation/CONTRACT.md):
  *
- * - the city crowd slice, which is exactly who is out on the street right now;
- *   each agent names the walk edge it is on, how far along and which way, so
- *   it is placed where the simulation says it is and then walks from there.
+ * - the crowd slice for each walk edge around the player, which is exactly who
+ *   is out on that pavement right now; each agent names the walk edge it is
+ *   on, how far along and which way, so it is placed where the simulation says
+ *   it is and then walks from there.
  * - the parcel crowd slice for buildings near the player, which is the set of
  *   workers on duty inside them; those stand in their building's lobby.
  *
- * Every spawned person keeps its crowdId, which is the handle that turns it
- * into a full NPC the moment the player talks to it. Movement follows the
- * connections walk graph and holds at signalled crossings until the walk phase.
+ * A person in the world is a body of its own, kept under a handle of the
+ * engine's own making, and the simulation handle it carries is the identity it
+ * has been given for now: a street handle names a sampled agent for one epoch
+ * of that pavement, and the same people come back under new handles every
+ * epoch. So each refresh fits who is already out there to who the simulation
+ * reports now instead of spawning them again, and whoever is left over retires.
+ * That is what keeps the street at the density the simulation calibrated and
+ * keeps every person on it somebody, rather than a crowd of passers-by nobody
+ * can name. Movement follows the connections walk graph and holds at signalled
+ * crossings until the walk phase.
  */
 export class Crowd {
 
@@ -47,7 +58,11 @@ export class Crowd {
 		this.stress = stress;
 		this.members = new Map();
 		this.timer = REFRESH_INTERVAL;
+		/** People the simulation reported on the pavements around the player at
+		 *  the last refresh: the number the crowd is kept at. */
 		this.sampled = 0;
+		/** People ever put in the world, which is what names each body. */
+		this.spawns = 0;
 
 		this.push = new THREE.Vector3();
 
@@ -247,48 +262,125 @@ export class Crowd {
 
 	#reconcile( player, timeMin ) {
 
+		this.#drop( player );
+
+		const street = this.#streetAgents( timeMin, player );
+		this.sampled = street.length;
+
+		this.#fit( street, this.#walking(), ( entry ) => this.#place( entry ) );
+		this.#staff( timeMin, player );
+		this.#copies( street, player );
+
+	}
+
+	/** Everyone who has walked out of the world, and everyone retiring who has
+	 *  got far enough back to go without being seen doing it. */
+	#drop( player ) {
+
 		for ( const [ id, member ] of this.members ) {
 
 			if ( member.frozen ) continue;
 
-			const distance = member.position.distanceTo( player );
+			const reach = member.retiring ? RETIRE_RADIUS : DESPAWN_RADIUS;
 
-			if ( distance > DESPAWN_RADIUS ) this.members.delete( id );
+			if ( member.position.distanceTo( player ) > reach ) this.members.delete( id );
 
 		}
 
-		const walkers = this.#streetAgents( timeMin, player );
-		this.sampled = walkers.length;
+	}
 
-		for ( const { agent, edge } of walkers ) {
+	/**
+	 * Fits the people already out there to the people the simulation reports
+	 * now. Every reported agent is taken by the body that fits it best, of its
+	 * own type and standing nearest to where the simulation puts it, so the
+	 * pavement's next epoch renames the people already walking it instead of
+	 * spawning them a second time. An agent nobody can be gets a new person,
+	 * and every body left over retires.
+	 *
+	 * @param entries the sampled agents, each with the spot it is reported at
+	 * @param candidates the bodies that may be handed one of those identities
+	 * @param spawn makes a new person for an agent nobody could be
+	 */
+	#fit( entries, candidates, spawn ) {
 
-			this.#place( agent.crowdId, agent, edge );
+		const free = new Set( candidates );
 
-			for ( let copy = 1; copy <= this.stress; copy ++ ) {
+		for ( const entry of entries ) {
 
-				const spread = this.routes.near( player, 0, SPAWN_RADIUS );
+			const member = fitTo( free, entry.agent, entry.at );
 
-				if ( ! spread.length ) break;
+			if ( ! member ) {
 
-				this.#place(
-					`${agent.crowdId}#${copy}`,
-					agent,
-					spread[ ( hash( agent.crowdId ) + copy * 7 ) % spread.length ]
-				);
+				spawn( entry );
+				continue;
 
 			}
 
+			free.delete( member );
+			this.#adopt( member, entry.agent );
+
 		}
 
-		this.#workers( timeMin, player );
+		for ( const member of free ) this.#retire( member );
+
+	}
+
+	/** The bodies out on the street that an identity can be handed to. */
+	#walking() {
+
+		const out = [];
+
+		for ( const member of this.members.values() ) {
+
+			if ( ! member.stationary && ! member.copy ) out.push( member );
+
+		}
+
+		return out;
+
+	}
+
+	/**
+	 * Who this body is for now. Somebody the player has already met keeps the
+	 * identity they were given: an instantiated NPC is the simulation's for
+	 * good, and re-reading a handle for them would let a second body be them
+	 * too. They still take the agent, which is what stops that second body.
+	 */
+	#adopt( member, agent ) {
+
+		member.retiring = false;
+
+		if ( member.npcId ) return;
+
+		member.crowdId = agent.crowdId;
+		member.type = agent.type;
+		member.activity = agent.activity;
+
+	}
+
+	/**
+	 * Nobody the simulation reports any more. They walk on and leave the world
+	 * from behind rather than popping out of it, and they give up their
+	 * identity on the way, so nobody in the crowd is ever a second copy of
+	 * somebody else. Whoever is mid-conversation is never one of them.
+	 */
+	#retire( member ) {
+
+		if ( member.frozen ) return;
+
+		member.retiring = true;
+		member.crowdId = null;
+		member.npcId = null;
+		member.instance = null;
 
 	}
 
 	/**
 	 * Who the simulation says is on the sidewalks around the player, asked edge
-	 * by edge. A single city-scope slice is a sample of the whole city, so at
-	 * any cap most of it lands out of sight and the street in front of the
-	 * player starves; the edge scope answers for that edge alone.
+	 * by edge, each with the spot on that pavement it is reported at. A single
+	 * city-scope slice is a sample of the whole city, so at any cap most of it
+	 * lands out of sight and the street in front of the player starves; the
+	 * edge scope answers for that edge alone.
 	 */
 	#streetAgents( timeMin, player ) {
 
@@ -298,23 +390,18 @@ export class Crowd {
 
 			if ( out.length >= this.capacity ) break;
 
-			let slice;
-
-			try {
-
-				slice = this.sim.crowd( timeMin, { kind: 'edge', id: edge.id }, { maxAgents: EDGE_AGENTS } );
-
-			} catch {
-
-				continue;
-
-			}
-
-			for ( const agent of slice.agents ) {
+			for ( const agent of this.#agentsIn( timeMin, { kind: 'edge', id: edge.id }, EDGE_AGENTS ) ) {
 
 				if ( agent.place.kind !== 'edge' ) continue;
 
-				out.push( { agent, edge: this.routes.edges.get( agent.place.id ) ?? edge } );
+				const walk = this.routes.edges.get( agent.place.id ) ?? edge;
+				const direction = agent.direction === - 1 ? - 1 : 1;
+				const distance = THREE.MathUtils.clamp( agent.progress ?? 0.5, 0, 1 ) * walk.length;
+
+				out.push( {
+					agent, edge: walk, direction, distance,
+					at: this.routes.pointAt( walk, distance, direction )
+				} );
 
 			}
 
@@ -324,74 +411,92 @@ export class Crowd {
 
 	}
 
-	/** On-duty staff in the buildings around the player, standing in the lobby. */
-	#workers( timeMin, player ) {
+	/**
+	 * On-duty staff in the buildings around the player, standing in the lobby.
+	 * A lobby is fitted the same way a pavement is: the rota moves through the
+	 * day, so the people standing in it are the shift the simulation reports
+	 * now, and the shift that went home retires.
+	 */
+	#staff( timeMin, player ) {
 
 		for ( const [ parcelId, place ] of this.places ) {
 
-			if ( this.members.size >= this.capacity ) return;
 			if ( place.inside.distanceTo( player ) > PARCEL_RADIUS ) continue;
 
-			let slice;
+			const entries = this.#agentsIn( timeMin, { kind: 'parcel', id: parcelId }, PARCEL_AGENTS )
+				.map( ( agent ) => ( { agent, at: place.inside } ) );
+			const candidates = [];
 
-			try {
+			for ( const member of this.members.values() ) {
 
-				slice = this.sim.crowd( timeMin, { kind: 'parcel', id: parcelId }, { maxAgents: PARCEL_AGENTS } );
-
-			} catch {
-
-				continue;
+				if ( member.parcelId === parcelId ) candidates.push( member );
 
 			}
 
-			let index = 0;
+			const spots = new Set( candidates.map( ( member ) => member.spot ) );
 
-			for ( const agent of slice.agents ) {
+			this.#fit( entries, candidates, ( { agent } ) => {
 
-				if ( this.members.has( agent.crowdId ) ) {
+				let spot = 0;
 
-					index ++;
-					continue;
+				while ( spots.has( spot ) ) spot ++;
 
-				}
+				spots.add( spot );
+				this.#stand( agent, parcelId, place, spot );
 
-				const seed = hash( agent.crowdId );
-				const angle = ( index * 2.399 ) + ( seed % 100 ) / 100;
-				const offset = 0.9 + ( index % 3 ) * 0.8;
-
-				this.members.set( agent.crowdId, {
-					...this.#base( agent.crowdId, agent, seed ),
-					stationary: true,
-					parcelId,
-					clip: CLIP.IDLE,
-					position: new THREE.Vector3(
-						place.inside.x + Math.sin( angle ) * offset,
-						place.inside.y,
-						place.inside.z + Math.cos( angle ) * offset
-					),
-					heading: place.heading + Math.PI + Math.sin( angle )
-				} );
-
-				index ++;
-
-			}
+			} );
 
 		}
 
 	}
 
-	#place( id, agent, edge ) {
+	/** Debug load test only: bodies with no identity of their own, kept at the
+	 *  configured multiple of the real street, walking nearby pavements. */
+	#copies( street, player ) {
 
-		if ( this.members.has( id ) || this.members.size >= this.capacity ) return;
+		if ( ! this.stress || ! street.length ) return;
 
-		const seed = hash( id );
+		const spread = this.routes.near( player, 0, SPAWN_RADIUS );
+		const standing = [];
 
-		this.members.set( id, {
-			...this.#base( id, agent, seed ),
+		for ( const member of this.members.values() ) {
+
+			if ( member.copy && ! member.retiring ) standing.push( member );
+
+		}
+
+		const target = spread.length ? street.length * this.stress : 0;
+
+		for ( let index = standing.length; index < target; index ++ ) {
+
+			const { agent, direction, distance } = street[ index % street.length ];
+			const seed = hash( `${agent.crowdId}#${index}` );
+			const copy = this.#place(
+				{ agent, edge: spread[ seed % spread.length ], direction, distance }, seed
+			);
+
+			if ( ! copy ) return;
+
+			copy.copy = true;
+			copy.crowdId = null;
+
+		}
+
+		for ( let index = target; index < standing.length; index ++ ) this.#retire( standing[ index ] );
+
+	}
+
+	/** @returns the new person, or null where the crowd is already full. */
+	#place( { agent, edge, direction, distance }, seed = hash( agent.crowdId ) ) {
+
+		if ( this.members.size >= this.capacity ) return null;
+
+		return this.#add( {
+			...this.#base( agent, seed ),
 			stationary: false,
 			edge,
-			direction: agent.direction === - 1 ? - 1 : 1,
-			distance: THREE.MathUtils.clamp( agent.progress ?? 0.5, 0, 1 ) * edge.length,
+			direction,
+			distance: Math.min( distance, edge.length ),
 			clip: CLIP.WALK,
 			position: new THREE.Vector3(),
 			heading: 0,
@@ -400,21 +505,57 @@ export class Crowd {
 
 	}
 
-	#base( id, agent, seed ) {
+	/** One worker on their own spot in a lobby, facing the room. */
+	#stand( agent, parcelId, place, spot ) {
+
+		if ( this.members.size >= this.capacity ) return null;
+
+		const seed = hash( agent.crowdId );
+		const angle = ( spot * 2.399 ) + ( seed % 100 ) / 100;
+		const offset = 0.9 + ( spot % 3 ) * 0.8;
+
+		return this.#add( {
+			...this.#base( agent, seed ),
+			stationary: true,
+			parcelId,
+			spot,
+			clip: CLIP.IDLE,
+			position: new THREE.Vector3(
+				place.inside.x + Math.sin( angle ) * offset,
+				place.inside.y,
+				place.inside.z + Math.cos( angle ) * offset
+			),
+			heading: place.heading + Math.PI + Math.sin( angle )
+		} );
+
+	}
+
+	#add( member ) {
+
+		member.id = `p${ this.spawns ++ }`;
+		this.members.set( member.id, member );
+
+		return member;
+
+	}
+
+	#base( agent, seed ) {
 
 		return {
-			id,
-			// Stress copies share the real agent's handle, so talking to one
-			// still resolves to the NPC the simulation actually knows.
+			id: null,
 			crowdId: agent.crowdId,
 			type: agent.type,
 			activity: agent.activity,
 			npcId: null,
 			instance: null,
+			parcelId: null,
+			spot: null,
 			variant: seed % 2,
 			look: look( seed ),
 			frame: seed % FRAMES,
 			frozen: false,
+			retiring: false,
+			copy: false,
 			waiting: false,
 			pendingSignal: null
 		};
@@ -515,6 +656,35 @@ export class Crowd {
 		}
 
 	}
+
+}
+
+/**
+ * The free body that best fits an agent: one of that agent's own type where
+ * any is free, and of those the one standing nearest the spot the simulation
+ * reports the agent at. Null where every body is taken, which is the crowd
+ * being short of people and the caller spawning one.
+ */
+function fitTo( free, agent, at ) {
+
+	let best = null;
+	let bestType = 2;
+	let bestGap = Infinity;
+
+	for ( const member of free ) {
+
+		const typed = member.type === agent.type ? 0 : 1;
+		const gap = ( at.x - member.position.x ) ** 2 + ( at.z - member.position.z ) ** 2;
+
+		if ( typed > bestType || ( typed === bestType && gap >= bestGap ) ) continue;
+
+		best = member;
+		bestType = typed;
+		bestGap = gap;
+
+	}
+
+	return best;
 
 }
 
