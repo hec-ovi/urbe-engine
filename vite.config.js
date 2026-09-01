@@ -10,8 +10,9 @@ import { fileURLToPath } from 'node:url';
 const THEMES_DIR = fileURLToPath( new URL( '../materials/themes', import.meta.url ) );
 
 // Sibling atlas city blueprints (../atlas/CONTRACT.md), served read-only under
-// /atlas/<sample>.json so the game can load a world by name.
-const ATLAS_DIR = fileURLToPath( new URL( '../atlas/samples', import.meta.url ) );
+// /atlas/<sample>.json so the game can load a world by name. Override with
+// URBE_ATLAS_DIR to play a directory of blueprints from somewhere else.
+const ATLAS_DIR = normalize( process.env.URBE_ATLAS_DIR ?? fileURLToPath( new URL( '../atlas/samples', import.meta.url ) ) );
 
 // CC0 character, animation and vehicle packs. Not in the repo: they live in
 // the machine's model store. Override with URBE_MODELS_DIR.

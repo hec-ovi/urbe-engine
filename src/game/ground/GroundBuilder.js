@@ -10,7 +10,7 @@ const BEDROCK_Y = - 0.8;
 // no road, asphalt or sidewalk kind, so each surface takes the closest
 // resolvable one (../materials/CONTRACT.md names the guaranteed vocabulary).
 const SURFACES = {
-	roadway: { key: 'cyberpunk/road/high_rich', y: 0, wet: true },
+	roadway: { key: 'cyberpunk/road/high_rich', y: 0, variantId: 'puddle' },
 	sidewalk: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT, curb: true },
 	block: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT },
 	open: { key: 'cyberpunk/tile/high_rich', y: SIDEWALK_HEIGHT, curb: true }
@@ -22,6 +22,12 @@ const CURB_KEY = 'cyberpunk/concrete/rich';
  * The city floor, straight off the atlas blueprint's volumetric ground cover:
  * roadway at zero, every other surface raised by a real curb, one merged mesh
  * per material so the whole ground costs a handful of draw calls.
+ *
+ * The roadway takes the road entry's `puddle` variant, where the materials box
+ * pools standing water over the asphalt: inside a puddle the surface goes dark
+ * and flat at roughness 0.04, so the environment probe lands on it and the neon
+ * above runs down the road as a long smear. Outside one the asphalt is dry and
+ * matte, which is the contrast that makes the wet part read as wet.
  */
 export class GroundBuilder {
 
@@ -64,12 +70,7 @@ export class GroundBuilder {
 			const merged = BufferGeometryUtils.mergeGeometries( fills, false );
 			fills.forEach( ( g ) => g.dispose() );
 
-			// The factory's material is shared by every mesh of that key, so the
-			// wet finish goes on a copy of it.
-			const base = this.factory.build( spec.key );
-			const material = spec.wet ? applyWetLook( base.clone() ) : base;
-
-			const mesh = new THREE.Mesh( merged, material );
+			const mesh = new THREE.Mesh( merged, this.factory.build( spec.key, spec.variantId ) );
 			mesh.name = `ground:${surface}`;
 			mesh.receiveShadow = true;
 			group.add( mesh );
@@ -133,26 +134,6 @@ export class GroundBuilder {
 		return mesh;
 
 	}
-
-}
-
-/**
- * Damp asphalt. Wet road is darker and a little glossier than dry road, and
- * that is all: a mirror finish over a grainy normal map turns every chip of
- * aggregate into a specular point and the whole street sparkles at night. So
- * the albedo drops, the roughness stays high enough to spread a highlight, the
- * grain is damped, and the surface stays a dielectric.
- */
-function applyWetLook( material ) {
-
-	material.color.multiplyScalar( 0.72 );
-	material.roughness = 0.62;
-	material.metalness = 0;
-	material.envMapIntensity = 1;
-
-	if ( material.normalScale ) material.normalScale.setScalar( 0.35 );
-
-	return material;
 
 }
 

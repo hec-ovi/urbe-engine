@@ -7,13 +7,15 @@
 - `src/game/`: the playable city (`?mode=game`); first-person controller on Rapier, night scene from the assembled GLBs, ground from the blueprint's cover polygons, neon and lit windows, simulation-driven crowd and lane-graph traffic, doors into continuous interiors (src/game/CONTRACT.md). Depends on ../atlas, ../connections, ../materials, ../simulation contracts.
   - `data/`: run config, world loading, signal state
   - `ground/`: cover polygons to geometry, curbs
-  - `city/`: buildings, doors, neon, lit windows, lamps, lane glow, light budget
-  - `sky/`: night sky, fog, environment bake
+  - `city/`: buildings, doors, neon, lit windows, lamps, road paint, interiors cut into rooms and which of them are in view
+  - `light/`: every fixture as real light in lumens, clustered or batched by backend, per-room light slots with the computed room fill, air glow (src/game/light/CONTRACT.md)
+  - `look/`: quality tiers, AgX exposure, height fog tinted by the light in the air, environment probe, the render pipeline with emissive-selected bloom (src/game/look/CONTRACT.md)
+  - `sky/`: night sky, moon key, stars
   - `physics/`: Rapier world, colliders, player capsule
   - `player/`: input, first-person controller, interaction
   - `agents/`: character assets, pose baking, crowd, walk routes, traffic
   - `sim/`: the simulation library host
-  - `time/`, `world/`: game clock, district and parcel lookup, map model for the minimap
+  - `time/`, `world/`: game clock, district and parcel lookup, map model for the minimap, named camera poses for the lighting tuning protocol
 
 ## Scale experiment (docs/RESEARCH.md 9)
 

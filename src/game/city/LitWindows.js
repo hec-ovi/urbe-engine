@@ -1,10 +1,13 @@
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+import { attribute, vec3 } from 'three/tsl';
 import { Rng } from '../../city/Rng.js';
 import { openingRect } from './Openings.js';
 
 const LIT_SHARE = 0.42;
 const INSET = 0.16;
+/** A window seen from the street sits well above the exposure the road is at. */
+const PANE_LEVEL = 14;
 /** Brightness at the head of the pane and at the sill: a room, not a swatch. */
 const TOP = 1;
 const SILL = 0.5;
@@ -89,7 +92,7 @@ export class LitWindows {
 
 			const mesh = new THREE.Mesh(
 				BufferGeometryUtils.mergeGeometries( panes, false ),
-				new THREE.MeshBasicMaterial( { vertexColors: true, side: THREE.DoubleSide, fog: true } )
+				paneMaterial()
 			);
 			mesh.name = 'lit-windows:panes';
 			group.add( mesh );
@@ -99,6 +102,24 @@ export class LitWindows {
 		return group;
 
 	}
+
+}
+
+/**
+ * A pane is a source, not a lit surface, so it carries no BRDF at all: its
+ * colour is what it emits. It also writes that colour into the frame's emissive
+ * channel, which is what selects it for bloom, so a skyline of sub-pixel window
+ * lights sparkles the way the references do while the walls around them stay
+ * matte.
+ */
+function paneMaterial() {
+
+	const material = new THREE.MeshBasicNodeMaterial( { side: THREE.DoubleSide, fog: true } );
+
+	material.colorNode = vec3( 0 );
+	material.emissiveNode = attribute( 'color', 'vec3' ).mul( PANE_LEVEL );
+
+	return material;
 
 }
 

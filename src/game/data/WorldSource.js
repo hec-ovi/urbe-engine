@@ -94,7 +94,37 @@ export class WorldSource {
 			this.#json( `${base}/interior/npc.json` )
 		] );
 
-		return { parcelId, blueprint, npc, glbUrl: `${base}/interior/building.glb` };
+		return {
+			parcelId,
+			blueprint,
+			npc,
+			floors: await this.#floors( base, blueprint ),
+			glbUrl: `${base}/interior/building.glb`
+		};
+
+	}
+
+	/**
+	 * The interior floor documents, which carry the room polygons and the light
+	 * fixtures the game lights each room from. The exterior blueprint names
+	 * which floors exist; a floor the interior pass did not write is skipped
+	 * rather than failing the run, because its geometry is still in the GLB and
+	 * still worth showing.
+	 */
+	async #floors( base, blueprint ) {
+
+		const names = ( blueprint.floors ?? [] ).map( ( floor ) => {
+
+			const index = floor.index;
+
+			return `${index < 0 ? '-' : ''}${String( Math.abs( index ) ).padStart( 3, '0' )}`;
+
+		} );
+
+		const docs = await Promise.all( names.map( ( name ) =>
+			this.#json( `${base}/interior/floors/${name}.json` ).catch( () => null ) ) );
+
+		return docs.filter( Boolean );
 
 	}
 

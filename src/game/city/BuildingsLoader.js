@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { doorFrame } from './DoorGeometry.js';
+import { buildRooms, reflectanceOf } from './InteriorRooms.js';
 
 // The GLB names its nodes `merged:<key>` and `interior:<key>`, but GLTFLoader
 // runs node names through PropertyBinding.sanitizeNodeName, which strips the
@@ -12,7 +13,8 @@ const EXTERIOR = 'merged';
 const INTERIOR = 'interior';
 
 const FIXTURE = '/light-fixture/';
-const FIXTURE_EMISSIVE = 1;
+/** A lit diffuser is looked at directly, so it sits well above road exposure. */
+const FIXTURE_EMISSIVE = 60;
 
 /**
  * Every assembled building in the city, loaded once and arranged for the two
@@ -20,6 +22,11 @@ const FIXTURE_EMISSIVE = 1;
  * material key, so the skyline costs one draw call per key; each building's
  * interior stays its own group at its real world position, so walking through
  * a door is continuous and the interior can be shown or hidden by distance.
+ *
+ * Inside that group the interior is cut into the rooms the interior box
+ * published (InteriorRooms), so each room can be lit by its own fixtures and
+ * shown on its own. Geometry belonging to no room (cores, stairs, the inside
+ * of the facade) stays one mesh per material key.
  *
  * The entrance door leaf is lifted out of the shell into its own pivoted mesh
  * so it can swing. Exterior meshes arrive without normals, so they get them.
@@ -34,8 +41,8 @@ export class BuildingsLoader {
 	}
 
 	/**
-	 * @param buildings Map<parcelId, { blueprint, glbUrl }> from WorldSource
-	 * @returns { group, shells, interiors, doors, triangles }
+	 * @param buildings Map<parcelId, { blueprint, floors, glbUrl }> from WorldSource
+	 * @returns { group, interiors, rooms, doors, shellColliders, triangles }
 	 */
 	async load( buildings ) {
 
@@ -43,11 +50,14 @@ export class BuildingsLoader {
 			[ ...buildings.values() ].map( ( entry ) => this.#loadOne( entry ) )
 		);
 
+		const reflectance = await this.#reflectance( loaded );
+
 		const group = new THREE.Group();
 		group.name = 'city';
 
 		const shellByKey = new Map();
 		const interiors = new Map();
+		const rooms = [];
 		const doors = [];
 		const shellColliders = new Map();
 		let triangles = 0;
@@ -67,18 +77,31 @@ export class BuildingsLoader {
 			const interior = new THREE.Group();
 			interior.name = `interior:${building.parcelId}`;
 
-			for ( const [ key, geometries ] of building.interior ) {
+			const cut = buildRooms( building.parcelId, building.interior, building.floors, reflectance );
+
+			for ( const [ key, geometries ] of cut.shared ) {
 
 				const merged = BufferGeometryUtils.mergeGeometries( geometries, false );
+				geometries.forEach( ( g ) => g.dispose() );
 				triangles += merged.getAttribute( 'position' ).count / 3;
 				interior.add( new THREE.Mesh( merged, this.#material( key ) ) );
+
+			}
+
+			for ( const room of cut.rooms ) {
+
+				triangles += room.triangles;
+				room.group.visible = false;
+				interior.add( room.group );
+				rooms.push( room );
 
 			}
 
 			interiors.set( building.parcelId, {
 				group: interior,
 				geometry: building.interiorFlat,
-				center: building.center
+				center: building.center,
+				rooms: cut.rooms
 			} );
 			group.add( interior );
 
@@ -104,7 +127,30 @@ export class BuildingsLoader {
 
 		}
 
-		return { group, interiors, doors, shellColliders, triangles };
+		return { group, interiors, rooms, doors, shellColliders, triangles };
+
+	}
+
+	/**
+	 * Reflectance per interior material key: the level from what the surface
+	 * is, the hue measured off its own base colour map. The room fill light
+	 * needs both, and one pass over the union of keys pays for the whole city.
+	 */
+	async #reflectance( loaded ) {
+
+		const keys = new Set();
+
+		for ( const building of loaded ) {
+
+			for ( const key of building.interior.keys() ) keys.add( key );
+
+		}
+
+		const tints = new Map( await Promise.all(
+			[ ...keys ].map( async ( key ) => [ key, await this.factory.tint( key ) ] )
+		) );
+
+		return ( key ) => reflectanceOf( key, tints.get( key ) );
 
 	}
 
@@ -117,7 +163,7 @@ export class BuildingsLoader {
 
 	}
 
-	async #loadOne( { parcelId, blueprint, glbUrl } ) {
+	async #loadOne( { parcelId, blueprint, floors, glbUrl } ) {
 
 		const gltf = await this.loader.loadAsync( glbUrl );
 		gltf.scene.updateMatrixWorld( true );
@@ -169,6 +215,7 @@ export class BuildingsLoader {
 
 		return {
 			parcelId,
+			floors,
 			exterior,
 			interior,
 			exteriorFlat: exteriorFlat.length ? BufferGeometryUtils.mergeGeometries( exteriorFlat, false ) : null,

@@ -3,11 +3,11 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 
 const PAINT_WIDTH = 0.12;
 const PAINT_Y = 0.012;
-// Traffic paint, not a light: a warm off-white with just enough emission to
-// stay readable on the stretch between two lamps, where real paint would be
-// answering headlights this renderer has no way to bounce back.
+// Traffic paint is paint: a warm off-white that returns whatever the lamps
+// give it and goes dark between them, which is what road markings do at night.
+// Anything emissive here would put a glowing line down a street whose whole
+// look depends on light coming from sources the world actually built.
 const PAINT_COLOR = 0xd8d5c8;
-const PAINT_EMISSIVE = 0x6a6a60;
 const DASH = 3;
 const DASH_GAP = 6;
 /** Half the gap between the two halves of a centre line. */
@@ -80,7 +80,6 @@ export class LaneMarkings {
 			BufferGeometryUtils.mergeGeometries( painted, false ),
 			new THREE.MeshStandardMaterial( {
 				color: PAINT_COLOR,
-				emissive: PAINT_EMISSIVE,
 				roughness: 0.82,
 				metalness: 0
 			} )

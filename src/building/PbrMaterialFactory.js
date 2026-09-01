@@ -7,6 +7,37 @@ import * as THREE from 'three/webgpu';
 const BEHIND_GLASS = /\/curtain\//;
 
 /**
+ * Mean colour of one map, by letting the browser do the averaging: a draw into
+ * a 1x1 canvas is the whole mip chain collapsed. sRGB in, linear out. A map
+ * that will not decode reads neutral rather than failing the run.
+ */
+async function decodeTint( url ) {
+
+	const neutral = new THREE.Color( 1, 1, 1 );
+
+	try {
+
+		const bitmap = await createImageBitmap( await ( await fetch( url ) ).blob(), {
+			resizeWidth: 1, resizeHeight: 1, resizeQuality: 'high'
+		} );
+		const canvas = document.createElement( 'canvas' );
+		canvas.width = canvas.height = 1;
+		const context = canvas.getContext( '2d', { willReadFrequently: true } );
+		context.drawImage( bitmap, 0, 0 );
+		const [ r, g, b ] = context.getImageData( 0, 0, 1, 1 ).data;
+		bitmap.close();
+
+		return r + g + b === 0 ? neutral : new THREE.Color().setRGB( r / 255, g / 255, b / 255, THREE.SRGBColorSpace );
+
+	} catch {
+
+		return neutral;
+
+	}
+
+}
+
+/**
  * Turns a MaterialEntry into a three.js PBR material.
  * Tiled entries: geometry UVs are world meters (exterior/interior convention),
  * so texture.repeat = 1 / worldSize makes one tile cover worldSize meters.
@@ -24,6 +55,7 @@ export class PbrMaterialFactory {
 		this.resolver = resolver;
 		this.loader = new THREE.TextureLoader();
 		this.cache = new Map();
+		this.tints = new Map();
 
 	}
 
@@ -37,14 +69,20 @@ export class PbrMaterialFactory {
 
 	}
 
-	/** @returns a PBR material for the key, or the magenta fallback. Cached per key. */
-	build( key ) {
+	/**
+	 * @param variantId one of the entry's own variants (`puddle` road, `bag`
+	 * plastic); the first variant when it is not named.
+	 * @returns a PBR material for the key, or the magenta fallback. Cached.
+	 */
+	build( key, variantId ) {
 
-		if ( this.cache.has( key ) ) return this.cache.get( key );
+		const id = variantId ? `${key}#${variantId}` : key;
+
+		if ( this.cache.has( id ) ) return this.cache.get( id );
 
 		const entry = this.resolver.resolve( key );
-		const material = entry ? this.#fromEntry( key, entry ) : PbrMaterialFactory.fallback( key );
-		this.cache.set( key, material );
+		const material = entry ? this.#fromEntry( key, entry, variantId ) : PbrMaterialFactory.fallback( key );
+		this.cache.set( id, material );
 
 		return material;
 
@@ -55,15 +93,15 @@ export class PbrMaterialFactory {
 	 * that want a hotter emission or a two-sided panel take one of these; the
 	 * material `build` returns is shared by every mesh of that key and must
 	 * never be edited in place.
-	 * @param tweaks { emissiveScale, side }
+	 * @param tweaks { variantId, emissiveScale, side }
 	 */
 	variant( key, tweaks = {} ) {
 
-		const id = `${key}|${tweaks.emissiveScale ?? 1}|${tweaks.side ?? ''}`;
+		const id = `${key}|${tweaks.variantId ?? ''}|${tweaks.emissiveScale ?? 1}|${tweaks.side ?? ''}`;
 
 		if ( this.cache.has( id ) ) return this.cache.get( id );
 
-		const material = this.build( key ).clone();
+		const material = this.build( key, tweaks.variantId ).clone();
 		material.emissiveIntensity = ( material.emissiveIntensity ?? 1 ) * ( tweaks.emissiveScale ?? 1 );
 		if ( tweaks.side !== undefined ) material.side = tweaks.side;
 		this.cache.set( id, material );
@@ -72,11 +110,31 @@ export class PbrMaterialFactory {
 
 	}
 
-	#fromEntry( key, entry ) {
+	/**
+	 * The mean colour of a key's base colour map, normalised so it carries hue
+	 * only. The room fill light needs a surface's reflectance per channel: the
+	 * level comes from what the surface is, the hue comes from the map itself,
+	 * and that is why a room of warm walls goes warmer with every bounce.
+	 * Keys with no base colour map read as neutral.
+	 */
+	async tint( key ) {
+
+		if ( this.tints.has( key ) ) return this.tints.get( key );
+
+		const url = this.build( key ).userData.basecolorUrl;
+		const pending = url ? decodeTint( url ) : Promise.resolve( new THREE.Color( 1, 1, 1 ) );
+
+		this.tints.set( key, pending );
+
+		return pending;
+
+	}
+
+	#fromEntry( key, entry, variantId ) {
 
 		const theme = key.split( '/' )[ 0 ];
 		const physical = entry.physical ?? {};
-		const variant = entry.variants[ 0 ];
+		const variant = entry.variants.find( ( v ) => v.id === variantId ) ?? entry.variants[ 0 ];
 		const tiled = entry.alignment === 'tile';
 		const repeat = tiled
 			? [ 1 / entry.tiling.worldSize[ 0 ], 1 / entry.tiling.worldSize[ 1 ] ]
@@ -110,6 +168,8 @@ export class PbrMaterialFactory {
 			roughness: physical.roughnessFactor ?? 1,
 			metalness: physical.metallicFactor ?? 1
 		} );
+
+		if ( variant.maps.basecolor ) material.userData.basecolorUrl = this.resolver.mapUrl( theme, variant.maps.basecolor );
 
 		const emission = map( 'emission', true );
 

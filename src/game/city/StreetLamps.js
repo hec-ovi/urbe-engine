@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { pointInRing } from '../ground/Polygons.js';
+import { kelvinColor } from '../light/Kelvin.js';
 
 const SPACING = 19;
 const PLAZA_SPACING = 34;
@@ -10,9 +11,19 @@ const POLE_RADIUS = 0.085;
 /** The pole is tapered; the collider is one cylinder around its widest point. */
 const POLE_COLLIDER_RADIUS = 0.14;
 const ARM = 1.1;
-const LAMP_COLOR = 0xffcf9a;
+// A street luminaire, in the units three wants: luminous flux and the colour
+// temperature of the lamp inside it. 12000 lm at 3000 K is a mid-power sodium
+// head, which is what a street of this width carries.
+const LAMP_LUMENS = 12000;
+const LAMP_KELVIN = 3000;
+const LAMP_RANGE = 26;
 const LENS_KEY = 'cyberpunk/light-fixture/mid';
 const POLE_KEY = 'cyberpunk/metal/rich';
+/**
+ * A lens is looked at directly, so it has to sit above the exposure the road
+ * is judged at or it reads as painted plastic rather than as the source.
+ */
+const LENS_EMISSIVE = 90;
 
 /**
  * Lamp posts along the streets, from the atlas street graph. One post every
@@ -22,8 +33,9 @@ const POLE_KEY = 'cyberpunk/metal/rich';
  * a sparse ring around its edge.
  *
  * Each post is pole, arm and a luminaire: a dark housing over the road with a
- * small emissive lens under it, and the glow registered at the lens, so the
- * light budget's point lights sit where the lamp actually is.
+ * small emissive lens under it, and the fixture registered at the lens in
+ * photometric units, so the light that lands on the road is the light the lamp
+ * would really throw.
  */
 export class StreetLamps {
 
@@ -68,7 +80,7 @@ export class StreetLamps {
 
 			group.add( new THREE.Mesh(
 				BufferGeometryUtils.mergeGeometries( lenses, false ),
-				this.factory.variant( LENS_KEY, { emissiveScale: 0.3 } )
+				this.factory.variant( LENS_KEY, { emissiveScale: LENS_EMISSIVE } )
 			) );
 
 		}
@@ -206,9 +218,9 @@ export class StreetLamps {
 
 		glows.push( {
 			position: new THREE.Vector3( hx, headY - 0.2, hz ),
-			color: LAMP_COLOR,
-			intensity: 42,
-			distance: 24
+			color: kelvinColor( LAMP_KELVIN ),
+			lumens: LAMP_LUMENS,
+			range: LAMP_RANGE
 		} );
 
 		posts.push( { x, z, base, height: POLE_HEIGHT, radius: POLE_COLLIDER_RADIUS } );

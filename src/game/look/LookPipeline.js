@@ -1,0 +1,49 @@
+import * as THREE from 'three/webgpu';
+import { pass, mrt, output, emissive, vec4, screenCoordinate, float } from 'three/tsl';
+import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import { bayer16 } from 'three/addons/tsl/math/Bayer.js';
+
+/** One code value of dither, which is all it takes to break an 8-bit ramp. */
+const DITHER = 1 / 255;
+
+/**
+ * How a frame is put together.
+ *
+ * Bloom is fed by the emissive attachment rather than by a brightness
+ * threshold, and that one choice is most of the look: a neon tube, a lamp lens
+ * and a lit window glow, while the wall they light does not. A threshold cannot
+ * tell those apart and always ends up blooming the floor.
+ *
+ * The chain runs on linear HDR values and the tone response is applied once,
+ * last, which is what makes bloom read as light rather than as smear. The
+ * output transform is placed by hand so a dither can sit after it: the falloffs
+ * in this world are huge and soft, and eight bits band across them visibly.
+ */
+export class LookPipeline {
+
+	constructor( renderer, scene, camera, tier ) {
+
+		const scenePass = pass( scene, camera );
+		const mrtNode = mrt( { output, emissive: vec4( emissive, output.a ) } );
+		mrtNode.setBlendMode( 'emissive', new THREE.BlendMode( THREE.NormalBlending ) );
+		scenePass.setMRT( mrtNode );
+
+		const bloomPass = bloom( scenePass.getTextureNode( 'emissive' ), tier.bloom.strength, tier.bloom.radius );
+		const dither = bayer16( screenCoordinate ).sub( 0.5 ).mul( float( DITHER ) );
+
+		this.pipeline = new THREE.RenderPipeline( renderer );
+		this.pipeline.outputColorTransform = false;
+		this.pipeline.outputNode = scenePass.getTextureNode().add( bloomPass ).renderOutput().add( dither );
+
+		this.scenePass = scenePass;
+		this.bloom = bloomPass;
+
+	}
+
+	render() {
+
+		this.pipeline.render();
+
+	}
+
+}

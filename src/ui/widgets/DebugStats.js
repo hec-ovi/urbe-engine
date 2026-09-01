@@ -14,7 +14,7 @@ export class DebugStats {
 		this.rows = {};
 		this.element = el( 'div', { className: 'hud-stats' } );
 
-		for ( const key of [ 'fps', 'gpu', 'draws', 'tris', 'crowd', 'cars', 'colliders' ] ) {
+		for ( const key of [ 'fps', 'gpu', 'draws', 'tris', 'lights', 'crowd', 'cars', 'colliders' ] ) {
 
 			this.rows[ key ] = el( 'div', {} );
 			this.element.append( this.rows[ key ] );
@@ -30,6 +30,7 @@ export class DebugStats {
 		this.#set( 'gpu', stats.gpuMs > 0 ? `gpu ${stats.gpuMs.toFixed( 2 )} ms` : 'gpu -', false );
 		this.#set( 'draws', `${stats.drawCalls} draws`, stats.drawCalls > 320 );
 		this.#set( 'tris', `${( stats.triangles / 1000 ).toFixed( 0 )}k tris`, false );
+		this.#set( 'lights', `${stats.lights} lights  ${stats.tier}`, false );
 		this.#set( 'crowd', `${stats.crowd} people`, false );
 		this.#set( 'cars', `${stats.cars} cars`, false );
 		this.#set( 'colliders', `${stats.interiors} interiors live`, false );

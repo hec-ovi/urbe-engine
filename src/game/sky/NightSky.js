@@ -1,22 +1,32 @@
 import * as THREE from 'three/webgpu';
+import { color, vec3 } from 'three/tsl';
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
 
 const SKY_SCALE = 45000;
-const FOG_COLOR = 0x0b141d;
-const FOG_DENSITY = 0.0135;
+/** The colour the air takes where no fixture reaches it: moonlit, cold. */
+export const SKY_COLOR = 0x0b141d;
 const STAR_COUNT = 2200;
+const STAR_COLOR = 0xdfe8ff;
+/** Stars are point sources: they sit above the frame's exposure or they vanish. */
+const STAR_LEVEL = 6;
+/** Full moon at ground level, in lux. The one honest number for a night key. */
+const MOON_LUX = 0.25;
+const MOON_COLOR = 0x8fb4ff;
 
 /**
- * Night over the city: the TSL sky with the sun dropped below the horizon,
- * exponential fog in the same colour so the skyline dissolves into haze, a
- * cold moon key, a star field, and the sky baked once into scene.environment
- * so wet asphalt and glass have something to reflect.
+ * Night over the city: the TSL sky with the sun dropped below the horizon, a
+ * cold moon key at the illuminance a full moon really gives, and a star field.
+ *
+ * There is no ambient light here and there will not be one. A flat fill is the
+ * most recognisable artificial-lighting tell there is, and the references never
+ * bottom out on a grey: what lifts their shadows is lit air and an environment
+ * probe, both of which are distance- and view-dependent. Those live in the look
+ * box; this only says what is in the sky.
  */
 export class NightSky {
 
-	constructor( renderer, scene ) {
+	constructor( scene ) {
 
-		this.renderer = renderer;
 		this.scene = scene;
 
 	}
@@ -35,17 +45,13 @@ export class NightSky {
 		sky.cloudScale.value = 0.00035;
 		sky.cloudSpeed.value = 0.00004;
 		sky.showSunDisc.value = 0;
+		// The sky is the far field itself, not something seen through the air.
+		sky.material.fog = false;
 		this.sky = sky;
 		this.scene.add( sky );
 
-		this.scene.fog = new THREE.FogExp2( FOG_COLOR, FOG_DENSITY );
-		this.scene.background = new THREE.Color( FOG_COLOR );
-
-		this.moon = new THREE.DirectionalLight( 0x8fb4ff, 0.35 );
+		this.moon = new THREE.DirectionalLight( MOON_COLOR, MOON_LUX );
 		this.scene.add( this.moon );
-
-		this.ambient = new THREE.HemisphereLight( 0x2b3d55, 0x0a0c10, 0.55 );
-		this.scene.add( this.ambient );
 
 		this.stars = buildStars();
 		this.scene.add( this.stars );
@@ -72,20 +78,6 @@ export class NightSky {
 
 	}
 
-	/**
-	 * One PMREM bake of the sky into scene.environment. Never per frame: it is
-	 * a full cubemap render plus mip convolution.
-	 */
-	bakeEnvironment() {
-
-		const pmrem = new THREE.PMREMGenerator( this.renderer );
-		const target = pmrem.fromScene( new THREE.Scene().add( this.sky.clone() ), 0, 1, 2000 );
-		this.scene.environment = target.texture;
-		this.scene.environmentIntensity = 1.1;
-		pmrem.dispose();
-
-	}
-
 }
 
 function buildStars() {
@@ -104,16 +96,18 @@ function buildStars() {
 	const geometry = new THREE.BufferGeometry();
 	geometry.setAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
 
-	const points = new THREE.Points( geometry, new THREE.PointsMaterial( {
-		color: 0xdfe8ff,
+	const material = new THREE.PointsNodeMaterial( {
 		size: 2,
 		sizeAttenuation: false,
 		transparent: true,
 		opacity: 0.8,
 		depthWrite: false,
-		fog: false,
-		toneMapped: false
-	} ) );
+		fog: false
+	} );
+	material.colorNode = vec3( 0 );
+	material.emissiveNode = color( STAR_COLOR ).mul( STAR_LEVEL );
+
+	const points = new THREE.Points( geometry, material );
 	points.frustumCulled = false;
 	points.name = 'stars';
 

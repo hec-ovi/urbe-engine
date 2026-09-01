@@ -7,13 +7,23 @@ import { GameConfig } from './data/GameConfig.js';
 import { WorldSource } from './data/WorldSource.js';
 import { Signals } from './data/Signals.js';
 import { GroundBuilder, SIDEWALK_HEIGHT } from './ground/GroundBuilder.js';
+import { pointInRing } from './ground/Polygons.js';
 import { BuildingsLoader } from './city/BuildingsLoader.js';
 import { Neon } from './city/Neon.js';
 import { StreetLamps } from './city/StreetLamps.js';
 import { LaneMarkings } from './city/LaneMarkings.js';
 import { LitWindows } from './city/LitWindows.js';
-import { LightBudget } from './city/LightBudget.js';
-import { NightSky } from './sky/NightSky.js';
+import { RoomView } from './city/RoomView.js';
+import { CityLights } from './light/CityLights.js';
+import { LightingSystem } from './light/LightingSystem.js';
+import { RoomLights } from './light/RoomLights.js';
+import { Haze } from './light/Haze.js';
+import { QualityTier } from './look/QualityTier.js';
+import { Exposure } from './look/Exposure.js';
+import { NightFog } from './look/NightFog.js';
+import { EnvironmentProbe } from './look/EnvironmentProbe.js';
+import { LookPipeline } from './look/LookPipeline.js';
+import { NightSky, SKY_COLOR } from './sky/NightSky.js';
 import { Physics } from './physics/Physics.js';
 import { WorldColliders } from './physics/WorldColliders.js';
 import { PlayerBody, BODY_RADIUS } from './physics/PlayerBody.js';
@@ -28,10 +38,19 @@ import { Traffic } from './agents/Traffic.js';
 import { SimBridge } from './sim/SimBridge.js';
 import { GameClock } from './time/GameClock.js';
 import { Locator } from './world/Locator.js';
+import { Bookmarks } from './world/Bookmarks.js';
 import { mapModel } from './world/MapModel.js';
 
 const THEME = 'cyberpunk';
 const INTERIOR_VISIBLE_RADIUS = 70;
+/** Past this a room is behind opaque walls and haze, so it is not drawn. */
+const ROOM_VISIBLE_RADIUS = 32;
+/** Only the rooms already nearest the player can be the one being stood in. */
+const INSIDE_CANDIDATES = 4;
+/** Air scattering is wide and weak indoors, tight and small on the street. */
+const INDOOR_HAZE = { spread: 0.55, cap: 3 };
+const OUTDOOR_HAZE = { spread: 0.28, cap: 2.4 };
+const NIGHT_FOG_DENSITY = 0.003;
 // A near plane this far out is still inside the player capsule, and it buys
 // the depth precision that keeps coplanar facade layers from flickering.
 const NEAR_PLANE = 0.2;
@@ -52,7 +71,10 @@ export class GameApp {
 			onCloseDialog: () => this.interactor?.close( this.clock )
 		} );
 		this.view.mount( document.body );
-		this.stats = { frameMs: 16.7, gpuMs: 0, drawCalls: 0, triangles: 0, crowd: 0, cars: 0, interiors: 0 };
+		this.stats = {
+			frameMs: 16.7, gpuMs: 0, drawCalls: 0, triangles: 0,
+			crowd: 0, cars: 0, interiors: 0, lights: 0, tier: '-'
+		};
 
 	}
 
@@ -83,8 +105,12 @@ export class GameApp {
 
 		this.view.step( 'starting the renderer' );
 		this.renderer = await RendererFactory.create( config.backend );
-		this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-		this.renderer.toneMappingExposure = 1.5;
+		// After init, because that is when the WebGPU-to-WebGL2 fallback has
+		// already happened and the tier is a choice about cost, not backend.
+		const backend = RendererFactory.actualBackend( this.renderer );
+		this.tier = QualityTier.describe( config.quality, backend );
+		this.lighting = LightingSystem.install( this.renderer, this.tier );
+		this.exposure = new Exposure( this.renderer, config.exposure );
 		document.body.prepend( this.renderer.domElement );
 
 		this.scene = new THREE.Scene();
@@ -94,6 +120,7 @@ export class GameApp {
 		const resolver = new MaterialResolver();
 		await resolver.loadTheme( THEME );
 		const factory = new PbrMaterialFactory( resolver );
+		this.rooms = new RoomLights( factory, this.tier );
 
 		this.view.step( 'laying the ground' );
 		const ground = new GroundBuilder( atlas, factory ).build();
@@ -113,12 +140,18 @@ export class GameApp {
 			new LaneMarkings( connections.networks, config.laneMode ).build(),
 			new LitWindows( atlas, buildings ).build()
 		);
-		this.lights = new LightBudget( [ ...neon.glows, ...lamps.glows ] );
+
+		this.view.step( 'lighting the street' );
+		const fixtures = [ ...neon.glows, ...lamps.glows ];
+		this.lights = new CityLights( fixtures, this.lighting.capacity );
 		this.scene.add( this.lights.group );
+		this.roomView = new RoomView( city.rooms, ROOM_VISIBLE_RADIUS );
+		this.#hangHaze( fixtures, city.interiors );
 
 		this.view.step( 'raising the sky' );
-		this.sky = new NightSky( this.renderer, this.scene ).build( this.clock.hour );
-		this.sky.bakeEnvironment();
+		this.sky = new NightSky( this.scene ).build( this.clock.hour );
+		this.fog = new NightFog( this.scene, { density: NIGHT_FOG_DENSITY, color: SKY_COLOR } );
+		this.probe = new EnvironmentProbe( this.renderer, this.scene, this.sky.sky, this.tier );
 
 		this.view.step( 'building the physics world' );
 		this.physics = await Physics.create();
@@ -161,6 +194,11 @@ export class GameApp {
 		this.input = new Input( this.renderer.domElement );
 		this.controller = new PlayerController( { body: this.body, camera: this.camera, input: this.input } );
 		this.controller.lookAt( spawn.lookAt );
+		this.bookmarks = new Bookmarks( { fixtures, rooms: city.rooms, networks: connections.networks } );
+
+		this.view.step( 'baking the environment' );
+		this.probe.bake( spawn.point );
+		this.look = new LookPipeline( this.renderer, this.scene, this.camera, this.tier );
 
 		this.interactor = new Interactor( {
 			crowd: this.crowd, doors: city.doors, sim: this.sim, controller: this.controller
@@ -227,6 +265,7 @@ export class GameApp {
 		this.crowd.update( delta, feet, this.clock );
 		this.traffic.update( delta, feet, this.clock.daySeconds );
 		this.#cullInteriors( feet );
+		this.#relight( feet, delta );
 
 		const prompt = this.interactor.update( delta );
 		this.view.prompt.update( this.input.locked ? prompt : null );
@@ -246,8 +285,67 @@ export class GameApp {
 		this.view.clock.update( this.clock.label, this.locator.district( feet.x, feet.z ) );
 		this.view.readout.update( feet, this.locator.district( feet.x, feet.z ), this.locator.parcel( feet.x, feet.z ) );
 
-		this.renderer.render( this.scene, this.camera );
+		this.look.render();
 		this.input.endFrame();
+
+	}
+
+	/**
+	 * One pass over everything that decides where light comes from this frame:
+	 * which rooms hold a light slot, what colour the air around the player is,
+	 * whether the probe needs rebaking, and which exposure the camera is on.
+	 */
+	#relight( feet, delta ) {
+
+		const visible = this.roomView.update( feet, delta );
+
+		this.rooms.update( visible, feet, delta );
+		this.fog.update( this.lights.airColor( this.camera.position ) );
+		this.probe.update( feet );
+		this.exposure.enter( this.#inside( visible, feet ) ? 'interior' : 'exterior' );
+		this.exposure.update( delta );
+
+	}
+
+	/**
+	 * Inside means standing in a published room, tested against its own
+	 * outline: from the pavement a shop's floor can be a couple of metres away
+	 * and the eye is still on the street.
+	 */
+	#inside( visible, feet ) {
+
+		for ( const room of visible.slice( 0, INSIDE_CANDIDATES ) ) {
+
+			if ( feet.y < room.elevation - 0.5 || feet.y > room.elevation + room.height ) continue;
+
+			if ( pointInRing( feet.x, feet.z, room.polygon ) ) return true;
+
+		}
+
+		return false;
+
+	}
+
+	/**
+	 * The air around every fixture, as geometry: one merged glow mesh for the
+	 * street, and one per building inside its interior group so it is culled
+	 * with the rooms it belongs to.
+	 */
+	#hangHaze( fixtures, interiors ) {
+
+		if ( ! this.tier.haze ) return;
+
+		const street = Haze.build( fixtures, OUTDOOR_HAZE );
+
+		if ( street ) this.scene.add( street );
+
+		for ( const entry of interiors.values() ) {
+
+			const indoor = Haze.build( entry.rooms.flatMap( ( room ) => room.fixtures ), INDOOR_HAZE );
+
+			if ( indoor ) entry.group.add( indoor );
+
+		}
 
 	}
 
@@ -271,13 +369,37 @@ export class GameApp {
 		this.stats.frameMs = this.stats.frameMs * 0.9 + frameMs * 0.1;
 		this.stats.drawCalls = info.render.drawCalls;
 		this.stats.triangles = info.render.triangles || this.baseTriangles;
-		this.stats.gpuMs = info.render.timestamp ?? 0;
+		this.stats.gpuMs = ( info.render.timestamp ?? 0 ) + ( info.compute.timestamp ?? 0 );
 		this.stats.crowd = this.crowd.count;
 		this.stats.cars = this.traffic.count;
 		this.stats.interiors = this.colliders.liveInteriors;
+		this.stats.lights = this.lights.count;
+		this.stats.tier = this.tier.name;
 		this.view.stats.update( this.stats );
 
 		this.renderer.resolveTimestampsAsync?.( 'render' ).catch( () => {} );
+		this.renderer.resolveTimestampsAsync?.( 'compute' ).catch( () => {} );
+
+	}
+
+	/**
+	 * Puts the camera on one of the tuning poses and holds it there. The
+	 * acceptance bands are only meaningful re-shot from the same place, so this
+	 * is what the measuring harness drives.
+	 */
+	bookmark( name ) {
+
+		const pose = this.bookmarks.pose( name );
+
+		if ( ! pose ) return false;
+
+		this.body.teleport( pose.point );
+		this.controller.yaw = pose.yaw;
+		this.controller.pitch = pose.pitch;
+		this.controller.update( 0 );
+		this.probe.bake( pose.point );
+
+		return true;
 
 	}
 

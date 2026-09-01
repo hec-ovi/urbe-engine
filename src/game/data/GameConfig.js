@@ -7,15 +7,21 @@ const DEFAULTS = {
 	crowd: 200,
 	cars: 18,
 	stress: 0,
-	streetDensity: 1
+	streetDensity: 1,
+	// The exposure the whole look is tuned at: what maps the city's real
+	// photometric levels onto the 1-2% of white the reference frames sit at.
+	// Measured, not guessed (docs/RESEARCH-LIGHTING.md 9).
+	exposure: 0.024
 };
 
 const LANE_MODES = [ 'paint', 'glow', 'debug' ];
+const QUALITY = [ 'low', 'medium', 'high', 'ultra' ];
 
 /**
  * One game run, described entirely by the URL query:
  * ?mode=game[&world=city-urbe-tiny][&out=/out/city-tiny][&backend=webgpu|webgl]
  * [&hour=21][&crowd=160][&cars=18][&density=1][&lanes=glow|debug]
+ * [&quality=low|medium|high|ultra][&exposure=0.11]
  */
 export class GameConfig {
 
@@ -58,7 +64,11 @@ export class GameConfig {
 			// Debug only: `debug` paints every lane of the road graph end to
 			// end, `glow` restores the teal emissive centreline strips. Normal
 			// runs get painted road markings.
-			laneMode: LANE_MODES.includes( q.get( 'lanes' ) ) ? q.get( 'lanes' ) : 'paint'
+			laneMode: LANE_MODES.includes( q.get( 'lanes' ) ) ? q.get( 'lanes' ) : 'paint',
+			// What the frame is allowed to spend. Unset follows the backend.
+			quality: QUALITY.includes( q.get( 'quality' ) ) ? q.get( 'quality' ) : null,
+			// Tuning only: moves the whole look one variable at a time.
+			exposure: float( 'exposure', DEFAULTS.exposure, 0.005, 4 )
 		};
 
 	}

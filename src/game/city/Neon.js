@@ -2,12 +2,21 @@ import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { Rng } from '../../city/Rng.js';
 import { signedArea } from '../ground/Polygons.js';
+import { kelvinColor } from '../light/Kelvin.js';
 
 // Colours only ever drive the point lights that spill onto the street; the
 // panels themselves are lit by their own emission maps from the materials
 // database, so the signage never turns into flat coloured cards.
 const GLOW = [ 0xff2fb0, 0x24e0ff, 0xffa42b, 0x9b5cff, 0x2bff9e ];
-const DOOR_GLOW = 0xffd7a8;
+// Flux in lumens, as the materials the fixture is made of would really emit: a
+// neon sign is a small source (100-400 lm), a shop entrance carries about one
+// bare bulb, an ad screen is a large dim panel.
+const SIGN_LUMENS = [ 140, 420 ];
+const DOOR_KELVIN = 2700;
+const DOOR_LUMENS = 800;
+const DOOR_RANGE = 12;
+const SCREEN_LUMENS = [ 300, 900 ];
+const SCREEN_EMISSIVE = 3;
 
 const SCREEN_KEY = ( tier ) => `cyberpunk/ad-screen/${tier}`;
 const SCREEN_ASPECT = 16 / 9;
@@ -17,11 +26,10 @@ const SCREEN_ASPECT = 16 / 9;
  *
  * - it hangs flat ad screens on the facade each parcel's street access faces,
  *   textured and lit by the materials database's own emissive entries;
- * - it registers the glows the light budget spends its point lights on, and
- *   every one of them sits on something the world actually built: the venue
- *   sign exterior lettered for this parcel, the fixtures over its entrance,
- *   and the screens hung here. A building with no sign gets no sign light,
- *   which is the point: nothing lights an empty panel.
+ * - it registers a fixture, in lumens, for every emitter it or the exterior
+ *   pass actually built: the venue sign lettered for this parcel, the fixtures
+ *   over its entrance, and the screens hung here. A building with no sign gets
+ *   no sign light, which is the point: nothing lights an empty panel.
  *
  * Deterministic per parcel.
  */
@@ -70,14 +78,14 @@ export class Neon {
 		const group = new THREE.Group();
 		group.name = 'neon';
 
-		// An ad screen already ships at strength 8 to 10; pushing that only
-		// clips the picture to a white rectangle, so it is left as the
-		// database wrote it.
+		// A screen is a large dim panel next to a lamp lens, so it carries a
+		// fraction of the lens's level: enough to read as lit, never enough to
+		// clip its picture to a white rectangle.
 		for ( const [ key, geometries ] of screens ) {
 
 			const mesh = new THREE.Mesh(
 				BufferGeometryUtils.mergeGeometries( geometries, false ),
-				this.factory.variant( key, { side: THREE.DoubleSide } )
+				this.factory.variant( key, { side: THREE.DoubleSide, emissiveScale: SCREEN_EMISSIVE } )
 			);
 			mesh.name = `neon:${key}`;
 			group.add( mesh );
@@ -102,9 +110,9 @@ export class Neon {
 					sign.center[ 1 ],
 					sign.center[ 2 ] + nz * reach
 				),
-				color: GLOW[ Math.floor( rng.next() * GLOW.length ) ],
-				intensity: 18 + sign.width * 4,
-				distance: 26
+				color: new THREE.Color( GLOW[ Math.floor( rng.next() * GLOW.length ) ] ),
+				lumens: rng.range( SIGN_LUMENS[ 0 ], SIGN_LUMENS[ 1 ] ) * Math.max( 1, sign.width / 2 ),
+				range: 14
 			} );
 
 		}
@@ -126,9 +134,9 @@ export class Neon {
 					light.position[ 1 ],
 					light.position[ 2 ] + nz * 0.4
 				),
-				color: DOOR_GLOW,
-				intensity: 12,
-				distance: 12
+				color: kelvinColor( DOOR_KELVIN ),
+				lumens: DOOR_LUMENS,
+				range: DOOR_RANGE
 			} );
 
 		}
@@ -166,9 +174,9 @@ export class Neon {
 				base + height / 2,
 				anchor.z + facade.normal.z * ( width * 0.4 )
 			),
-			color: GLOW[ Math.floor( rng.next() * GLOW.length ) ],
-			intensity: rng.range( 14, 26 ),
-			distance: 24
+			color: new THREE.Color( GLOW[ Math.floor( rng.next() * GLOW.length ) ] ),
+			lumens: rng.range( SCREEN_LUMENS[ 0 ], SCREEN_LUMENS[ 1 ] ) * ( width * height ) / 6,
+			range: 18
 		} );
 
 	}
