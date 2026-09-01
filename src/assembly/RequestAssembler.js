@@ -128,7 +128,7 @@ export class RequestAssembler {
 		if ( ! range ) {
 
 			throw new AssemblyError( 'E_ENVELOPE_INFEASIBLE',
-				`${parcel.id}: no feasible floor count for maxHeight ${maxHeight} with its apertures` );
+				`${parcel.id}: no ${parcel.type} floor count fits maxHeight ${maxHeight} m with its ${apertures.length} apertures` );
 
 		}
 

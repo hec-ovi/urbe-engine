@@ -1,5 +1,6 @@
 # Changelog
 
+0.6: city batch (assemble-city): connections once, then the shared BuildingPipeline per parcel with parallel workers, QA report with verbatim failures; blueprint path is an option on every CLI; simulate takes an interiors dir.
 0.5.1: simulate takes its crowd handle from the scoped slice's sampled agents (simulation 0.2 samples up to 64 per scope; every district addressable).
 0.5: simulation wiring: npm run simulate boots createSimulation over the sample blueprint, connections networks and assembled interiors; prints stats, crowd slice, three NPC lives, latencies and a conservation check.
 0.4.2: core gate follows interior 0.5 modes (standard, compact, walkup, none); the full bridged sample assembles end to end.

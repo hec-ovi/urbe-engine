@@ -3,7 +3,7 @@
 Purpose: turns the atlas blueprint plus the connections document into per-parcel exterior BuildingRequests, drives exterior to produce each building's GLB and blueprint, and optionally drives interior to fill the shell.
 
 ## In
-- atlas blueprint: `CityBlueprint` per ../../../atlas/CONTRACT.md; the CLI loads the committed sample `../../../atlas/samples/city-urbe.json`.
+- atlas blueprint: `CityBlueprint` per ../../../atlas/CONTRACT.md; every CLI takes `--blueprint <path>` and defaults to the committed sample `../../../atlas/samples/city-urbe.json` (assemble-city requires it explicitly).
 - connections document: `ConnectionsOutput` per ../../../connections/CONTRACT.md, produced in-process by `connectionsRunner.js` calling the library entry `generate(atlas, { seed })` with the atlas seed.
 
 ## Out
@@ -17,9 +17,13 @@ Purpose: turns the atlas blueprint plus the connections document into per-parcel
 
 `assembleInterior(parcelId, { blueprint, shellGlb })` returns an `InteriorRequest` per ../../../interior/schemas/request.schema.json: same derived seed, building id/type/tier verbatim, the exterior blueprint and shell path, materialTheme `cyberpunk`; assignments omitted so interior derives floor kinds from the blueprint slots. `interiorRunner.js` calls interior's library entries `generateInterior(request)` and `coreFeasibility(blueprint)` as black boxes; the latter gates generation (footprint-shape driven, per ../../../interior/schemas/core-feasibility.json; modes standard, compact, walkup, none). Standard and compact flow straight through. When the gate reports walkup mode and the chosen floors exceed its cap, the CLI re-picks floors with `assemble(parcelId, { floorCap })` (the cap wins over the atlas envelope minimum, aperture-driven minimums stay hard) and regenerates the shell before running interior. Mode none fails as E_CORE_INFEASIBLE.
 
-CLI: `npm run assemble -- --parcel <id> --out <dir> [--glb merged|named] [--interior]` validates each request against its schema (ajv, draft 2020-12), writes `<id>.request.json` to `<dir>`, then runs exterior's CLI (`npm run generate` in ../../../exterior) so `<dir>` ends with request, GLB and blueprint. With `--interior` (named shell required, so `--glb merged` alongside it is a usage error; glb defaults to `named` then) it also writes `<dir>/interior/`: `building.glb`, `floors/NNN.json` (zero-padded floor index, basements negative), `npc.json`. Prints each output file with its size.
+The per-parcel chain lives in `BuildingPipeline.js` (assemble + validate, exterior CLI, core gate with walkup re-pick, interior files) and is shared by both CLIs; interior accepts merged shells since its 0.5, so `merged` is the default everywhere.
 
-Simulation: `simulationRunner.js` calls simulation's `createSimulation(input)` as a black box. `npm run simulate -- --time <minutes> [--district <id>]` boots it over the atlas sample, connections' networks and the npc.json of every assembled building under `out/` (synthetic fallback elsewhere, default npcTypes and name pool), prints population stats, the scoped crowd slice, three instantiated lives (a sampled crowd agent's handle, coffee vendor at midday, a reservation), latency measurements and a conservation check; usage error exit 2, no live crowd agent exit 1.
+CLI: `npm run assemble -- --parcel <id> --out <dir> [--blueprint <path>] [--glb merged|named] [--interior]` validates each request against its schema (ajv, draft 2020-12), writes `<id>.request.json` to `<dir>`, then runs exterior's CLI (`npm run generate` in ../../../exterior) so `<dir>` ends with request, GLB and blueprint. With `--interior` it also writes `<dir>/interior/`: `building.glb`, `floors/NNN.json` (zero-padded floor index, basements negative), `npc.json`. Prints each output file with its size.
+
+City batch: `npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--parcel <id,id,...>]` runs connections once, then the pipeline (merged runtime GLB + blueprint + interior) for every parcel, N in parallel (default 4). Failures are recorded, never fatal; `<dir>/qa-report.json` carries per-parcel pass/fail with verbatim errors, timing and disk totals. Exit 0 only when every parcel passed.
+
+Simulation: `simulationRunner.js` calls simulation's `createSimulation(input)` as a black box. `npm run simulate -- --time <minutes> [--district <id>] [--blueprint <path>] [--interiors <dir>]` boots it over the blueprint, connections' networks and the npc.json of every assembled building under the interiors dir (default `out/`) (synthetic fallback elsewhere, default npcTypes and name pool), prints population stats, the scoped crowd slice, three instantiated lives (a sampled crowd agent's handle, coffee vendor at midday, a reservation), latency measurements and a conservation check; usage error exit 2, no live crowd agent exit 1.
 
 ## Errors
 - `E_PARCEL_UNKNOWN`: parcel id not in the atlas blueprint (thrown as `AssemblyError`; CLI exit 1)

@@ -1,7 +1,7 @@
 # Box map
 
 - root box: see CONTRACT.md.
-- `src/assembly/`: world-assembly slice; atlas parcel + connections apertures -> exterior BuildingRequest, CLI drives exterior to GLB + blueprint and, with --interior, interior to the filled building; `npm run simulate` boots the simulation library over the assembled world (src/assembly/CONTRACT.md). Depends on ../atlas, ../connections, ../exterior, ../interior, ../simulation contracts.
+- `src/assembly/`: world-assembly slice; atlas parcel + connections apertures -> exterior BuildingRequest, CLI drives exterior to GLB + blueprint and, with --interior, interior to the filled building; `npm run assemble-city` batches the whole blueprint with a QA report; `npm run simulate` boots the simulation library over the assembled world (src/assembly/CONTRACT.md). Depends on ../atlas, ../connections, ../exterior, ../interior, ../simulation contracts.
 - `src/building/`: building viewer logic; loads out/<parcel>/ GLBs, resolves material keys against ../materials' theme database (MaterialResolver), builds PBR materials with world-scale tiling and transmission (PbrMaterialFactory), TSL floor slice (FloorSlicer), orbit stage. Open with `npm run dev` then `/?mode=building&parcel=<id>`; unresolved keys render magenta and are listed. The vite config serves the materials database read-only under /materials/.
 
 ## Scale experiment (docs/RESEARCH.md 9)

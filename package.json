@@ -1,13 +1,14 @@
 {
   "name": "urbe-engine",
   "private": true,
-  "version": "0.5.1",
+  "version": "0.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "assemble": "tsx src/assembly/cli.js",
+    "assemble-city": "tsx src/assembly/city-cli.js",
     "simulate": "tsx src/assembly/simulate-cli.js",
     "test": "vitest run"
   },

@@ -1,30 +1,33 @@
 /**
- * npm run simulate -- --time <minutes> [--district <id>]
- * Boots the world simulation over the real inputs: atlas sample blueprint,
- * connections networks, and the npc.json of every assembled building in out/
- * (simulation synthesizes roles for every other parcel). Prints population
+ * npm run simulate -- --time <minutes> [--district <id>] [--blueprint <path>] [--interiors <dir>]
+ * Boots the world simulation over the real inputs: the atlas blueprint (the
+ * committed urbe sample by default), connections networks, and the npc.json of
+ * every assembled building under the interiors dir (out/ by default;
+ * simulation synthesizes roles for every other parcel). Prints population
  * stats, a crowd slice for the scope, three instantiated NPC lives, latency
  * measurements and a conservation check.
  */
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { runConnections } from './connectionsRunner.js';
 import { runCreateSimulation } from './simulationRunner.js';
 
-const ATLAS_SAMPLE = new URL( '../../../atlas/samples/city-urbe.json', import.meta.url );
+const ATLAS_SAMPLE = fileURLToPath( new URL( '../../../atlas/samples/city-urbe.json', import.meta.url ) );
 const OUT_DIR = fileURLToPath( new URL( '../../out/', import.meta.url ) );
 const MIDDAY = 780; // Monday 13:00, minutes since epoch
 
 function parseArgs( argv ) {
 
-	const args = {};
+	const args = { blueprint: ATLAS_SAMPLE, interiors: OUT_DIR };
 
 	for ( let i = 0; i < argv.length; i += 2 ) {
 
 		if ( argv[ i ] === '--time' ) args.time = parseInt( argv[ i + 1 ], 10 );
 		else if ( argv[ i ] === '--district' ) args.district = argv[ i + 1 ];
+		else if ( argv[ i ] === '--blueprint' ) args.blueprint = argv[ i + 1 ];
+		else if ( argv[ i ] === '--interiors' ) args.interiors = argv[ i + 1 ];
 		else return null;
 
 	}
@@ -33,16 +36,16 @@ function parseArgs( argv ) {
 
 }
 
-/** parcelId -> NpcSupport from every assembled building under out/. */
-function loadInteriors() {
+/** parcelId -> NpcSupport from every assembled building under the dir. */
+function loadInteriors( dir ) {
 
 	const interiors = {};
 
-	if ( ! existsSync( OUT_DIR ) ) return interiors;
+	if ( ! existsSync( dir ) ) return interiors;
 
-	for ( const name of readdirSync( OUT_DIR ).sort() ) {
+	for ( const name of readdirSync( dir ).sort() ) {
 
-		const npcPath = join( OUT_DIR, name, 'interior', 'npc.json' );
+		const npcPath = join( dir, name, 'interior', 'npc.json' );
 
 		if ( existsSync( npcPath ) ) interiors[ name ] = JSON.parse( readFileSync( npcPath, 'utf8' ) );
 
@@ -67,14 +70,14 @@ const args = parseArgs( process.argv.slice( 2 ) );
 
 if ( ! args ) {
 
-	console.error( 'usage: npm run simulate -- --time <minutes> [--district <id>]' );
+	console.error( 'usage: npm run simulate -- --time <minutes> [--district <id>] [--blueprint <path>] [--interiors <dir>]' );
 	process.exit( 2 );
 
 }
 
-const blueprint = JSON.parse( readFileSync( ATLAS_SAMPLE, 'utf8' ) );
+const blueprint = JSON.parse( readFileSync( resolve( args.blueprint ), 'utf8' ) );
 const networks = ( await runConnections( blueprint, { seed: blueprint.meta.seed } ) ).networks;
-const interiors = loadInteriors();
+const interiors = loadInteriors( resolve( args.interiors ) );
 console.log( `inputs: atlas ${blueprint.meta.version} seed ${blueprint.meta.seed}, networks, interiors for ${Object.keys( interiors ).length} parcels` );
 
 const sim = timed( 'createSimulation', () =>
@@ -143,9 +146,18 @@ const fromCrowd = timed( 'instantiate(crowd handle)', () =>
 life( 'crowd handle', fromCrowd );
 
 const coffeeShop = blueprint.parcels.find( ( p ) => p.type === 'coffee_shop' );
-const vendor = timed( 'getNPCVendor(coffee midday)', () =>
-	simulation.getNPCVendor( { parcelId: coffeeShop.id, timeMin: MIDDAY } ) );
-life( `coffee vendor at ${coffeeShop.id}, 13:00`, vendor );
+
+try {
+
+	const vendor = timed( 'getNPCVendor(coffee midday)', () =>
+		simulation.getNPCVendor( { parcelId: coffeeShop.id, timeMin: MIDDAY } ) );
+	life( `coffee vendor at ${coffeeShop.id}, 13:00`, vendor );
+
+} catch ( error ) {
+
+	console.log( `\nvendor query failed at ${coffeeShop.id}: ${error.code}: ${error.message}` );
+
+}
 
 const commonType = Object.entries( stats.typeCounts ).sort( ( a, b ) => b[ 1 ] - a[ 1 ] )[ 0 ][ 0 ];
 const reserved = timed( 'reserveNPC', () =>
