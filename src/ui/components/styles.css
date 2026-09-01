@@ -106,6 +106,20 @@ canvas {
 	font-size: 12px;
 }
 
+.report-list {
+	margin: 8px 0 0;
+	padding: 0;
+	list-style: none;
+	max-height: 40vh;
+	overflow-y: auto;
+	font-family: ui-monospace, monospace;
+	font-size: 12px;
+}
+
+.report-bad {
+	color: #ff00ff;
+}
+
 .error-box {
 	position: absolute;
 	top: 50%;
