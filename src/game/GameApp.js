@@ -128,7 +128,7 @@ export class GameApp {
 
 		this.view.step( 'reading the world' );
 		const source = new WorldSource( config );
-		const { atlas, connections, buildings, unbuilt } = await source.load();
+		const { atlas, connections, buildings, unbuilt, npcTypes } = await source.load();
 		this.locator = new Locator( atlas );
 		this.clock = new GameClock( { startHour: config.startHour, scale: config.timeScale } );
 
@@ -223,7 +223,7 @@ export class GameApp {
 		this.stream.onDropBand = ( id ) => this.colliders.dropBand( id );
 
 		this.view.step( 'waking the population' );
-		this.sim = SimBridge.create( atlas, connections, buildings, { streetDensity: config.streetDensity } );
+		this.sim = SimBridge.create( atlas, connections, buildings, { streetDensity: config.streetDensity }, npcTypes );
 		this.signals = new Signals( connections.networks );
 		const routes = new WalkRoutes( connections.networks );
 

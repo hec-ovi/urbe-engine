@@ -14,8 +14,9 @@ export class SimBridge {
 	 * @param connections ConnectionsOutput
 	 * @param buildings Map<parcelId, { npc }>
 	 * @param params statistical overrides per ../simulation/CONTRACT.md
+	 * @param npcTypes the naming box's typed set for this world, or null for the built-in one
 	 */
-	static create( atlas, connections, buildings, params = {} ) {
+	static create( atlas, connections, buildings, params = {}, npcTypes = null ) {
 
 		const interiors = {};
 
@@ -30,7 +31,8 @@ export class SimBridge {
 			blueprint: atlas,
 			networks: connections.networks,
 			interiors,
-			params
+			params,
+			...( npcTypes ? { npcTypes } : {} )
 		} ) );
 
 	}

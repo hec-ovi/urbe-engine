@@ -6,6 +6,7 @@ Purpose: plays the assembled city as a first-person world at street level, at ni
 - `?mode=game` on the vite app, with the run described entirely by the URL query:
   - `world` (default `city-urbe-tiny`): atlas sample name, loaded from `/atlas/<world>.json`
   - `out` (default `/out/city-tiny`): the `assemble-city` output directory to read buildings from
+    An `npc-types.json` in that directory (the naming box's typed set for this world) drives the population's types and names; absent, the simulation's built-in set does.
   - `backend` (`webgpu` default, `webgl`)
   - `hour` (0-23, default 21): world clock start
   - `crowd` (default 200), `cars` (default 18): instance capacity

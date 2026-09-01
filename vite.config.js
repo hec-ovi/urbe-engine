@@ -70,7 +70,10 @@ export default defineConfig( {
 	server: {
 		// The connections library is consumed as TypeScript source from the
 		// sibling repo (../connections/CONTRACT.md is the coupling surface).
-		fs: { allow: [ '..' ] }
+		fs: { allow: [ '..' ] },
+		// Assembled worlds under out/ are served, never watched: a city is
+		// thousands of files and the watcher would run out of inotify handles.
+		watch: { ignored: [ '**/out/**' ] }
 	},
 	build: {
 		target: 'esnext',
