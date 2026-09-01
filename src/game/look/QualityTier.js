@@ -14,7 +14,7 @@ const TIERS = [ 'low', 'medium', 'high', 'ultra' ];
  */
 const PRESETS = {
 	low: {
-		bloom: { strength: 0.5, radius: 0.0 },
+		bloom: { strength: 0.3, radius: 0.0 },
 		haze: true,
 		roomSlots: 2,
 		roomSpots: 4,
@@ -25,7 +25,7 @@ const PRESETS = {
 		probeInterval: 120
 	},
 	medium: {
-		bloom: { strength: 0.6, radius: 0.1 },
+		bloom: { strength: 0.35, radius: 0.03 },
 		haze: true,
 		roomSlots: 3,
 		roomSpots: 4,
@@ -36,7 +36,7 @@ const PRESETS = {
 		probeInterval: 90
 	},
 	high: {
-		bloom: { strength: 0.6, radius: 0.1 },
+		bloom: { strength: 0.35, radius: 0.04 },
 		haze: true,
 		roomSlots: 4,
 		roomSpots: 4,
@@ -47,7 +47,7 @@ const PRESETS = {
 		probeInterval: 60
 	},
 	ultra: {
-		bloom: { strength: 0.6, radius: 0.15 },
+		bloom: { strength: 0.4, radius: 0.06 },
 		haze: true,
 		roomSlots: 6,
 		roomSpots: 4,

@@ -184,6 +184,7 @@ export class GameApp {
 			? { density: 0, indoorDensity: 0, color: SKY_COLOR }
 			: { density: config.fog, color: SKY_COLOR } );
 		this.probe = config.off.has( 'probe' ) ? null : new EnvironmentProbe( this.renderer, this.scene, this.tier, this.hitches );
+		this.probe?.exclude( this.stream.group, props.group, this.transit.group );
 
 		this.view.step( 'building the physics world' );
 		this.physics = await Physics.create();
@@ -208,6 +209,7 @@ export class GameApp {
 			RendererFactory.actualBackend( this.renderer ) === 'webgpu'
 		);
 		this.scene.add( assets.group );
+		this.probe?.exclude( assets.group );
 		this.crowd = new Crowd( {
 			assets, routes, sim: this.sim, signals: this.signals,
 			places: placesOf( city.doors ),
@@ -304,7 +306,14 @@ export class GameApp {
 
 		const feet = this.body.feet;
 
-		if ( this.stream.update( feet ) ) this.roomView.setRooms( this.stream.rooms );
+		if ( this.stream.update( feet ) ) {
+
+			this.roomView.setRooms( this.stream.rooms );
+			// New materials compile their pipelines now, off the frame, rather
+			// than on the first frame that draws them.
+			this.renderer.compileAsync( this.scene, this.camera );
+
+		}
 
 		this.lights.update( this.camera.position, delta );
 		this.crowd.update( delta, feet, this.clock );

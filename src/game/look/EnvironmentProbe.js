@@ -33,10 +33,22 @@ export class EnvironmentProbe {
 		this.target = null;
 		this.last = - Infinity;
 		this.pending = false;
+		this.excluded = [];
 
 	}
 
 	/** One bake. Never per frame: six cube faces plus a mip convolution. */
+	/**
+	 * Groups left out of the six probe renders: what a rough wall reflects is
+	 * the lit city around it, not the crowd, the cars or the furniture, and
+	 * those are most of the draw calls a bake would otherwise submit.
+	 */
+	exclude( ...groups ) {
+
+		this.excluded.push( ...groups );
+
+	}
+
 	bake( position, now = performance.now() ) {
 
 		this.last = now;
@@ -44,8 +56,13 @@ export class EnvironmentProbe {
 
 		const pmrem = new THREE.PMREMGenerator( this.renderer );
 		const previous = this.target;
+		const shown = this.excluded.filter( ( group ) => group.visible );
+
+		for ( const group of shown ) group.visible = false;
 
 		this.target = pmrem.fromScene( this.scene, 0, NEAR, FAR, { size: this.size, position } );
+
+		for ( const group of shown ) group.visible = true;
 
 
 		this.scene.environment = this.target.texture;
