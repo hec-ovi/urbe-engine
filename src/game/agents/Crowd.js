@@ -205,9 +205,10 @@ export class Crowd {
 	}
 
 	/**
-	 * Which of these agents this person is: their own type where the sample has
-	 * one, nobody else in the crowd is already holding, standing closest to how
-	 * far along the pavement they are.
+	 * Which of these agents this person is: their own gender always (a body is
+	 * for life), their own type where the sample has one, nobody else in the
+	 * crowd is already holding, standing closest to how far along the pavement
+	 * they are.
 	 */
 	#pick( agents, member, progress ) {
 
@@ -215,7 +216,9 @@ export class Crowd {
 
 		for ( const other of this.members.values() ) if ( other !== member ) taken.add( other.crowdId );
 
-		const pool = narrow( agents.filter( ( agent ) => ! taken.has( agent.crowdId ) ), member.type );
+		const free = agents.filter( ( agent ) =>
+			! taken.has( agent.crowdId ) && ( ! member.gender || ! agent.gender || agent.gender === member.gender ) );
+		const pool = narrow( free, member.type );
 
 		let best = null;
 		let bestGap = Infinity;
@@ -559,6 +562,7 @@ export class Crowd {
 			id: null,
 			crowdId: agent.crowdId,
 			type: agent.type,
+			gender: agent.gender ?? null,
 			activity: agent.activity,
 			npcId: null,
 			instance: null,
