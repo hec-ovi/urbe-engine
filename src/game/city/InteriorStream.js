@@ -118,6 +118,10 @@ export class InteriorStream {
 
 		for ( const [ parcelId, interior ] of this.live ) {
 
+			// A load in flight has no geometry to band and no centre to measure;
+			// it is dropped or kept once it lands.
+			if ( interior === PLACEHOLDER ) continue;
+
 			if ( ground( interior.center, feet ) > DROP_RADIUS ) this.#drop( parcelId );
 			else this.#band( interior, feet );
 

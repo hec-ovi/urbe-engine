@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { floorAt, materialKey, plain, variantOf } from './InteriorStream.js';
+import { floorAt, InteriorStream, materialKey, plain, variantOf } from './InteriorStream.js';
 import { OUTSIDE_FLOORS } from './InteriorRooms.js';
 
 /** Four floors of a real building: a basement, a tall lobby, two storeys. */
@@ -71,6 +71,32 @@ describe( 'materialKey', () => {
 
 		expect( key ).toBe( 'cyberpunk/concrete/high_rich' );
 		expect( variantOf( key ) ).toBeUndefined();
+
+	} );
+
+} );
+
+/**
+ * A furnished interior takes many frames to arrive, and the streamer is
+ * updated on every one of them; a building whose load is in flight must never
+ * break the frame that asked for it.
+ */
+describe( 'InteriorStream.update', () => {
+
+	it( 'keeps ticking while a building is still loading', () => {
+
+		const stream = new InteriorStream( { factory: null, roomLights: null, haze: null, elevators: null } );
+		stream.loader = { loadAsync: () => new Promise( () => {} ) };
+		stream.register(
+			new Map( [ [ 'p0', { glbUrl: '/out/p0/interior/building.glb', floors: [] } ] ] ),
+			new Map( [ [ 'p0', { x: 10, z: 0 } ] ] )
+		);
+		const feet = { x: 0, y: 0, z: 0 };
+
+		stream.update( feet );
+
+		expect( () => stream.update( feet ) ).not.toThrow();
+		expect( stream.liveInteriors ).toBe( 1 );
 
 	} );
 
