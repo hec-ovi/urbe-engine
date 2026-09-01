@@ -17,6 +17,8 @@ const PARCEL_AGENTS = 8;
 const PERSON_RADIUS = 0.34;
 /** Above or below this, the two are on different floors and never touch. */
 const PERSON_HEIGHT = 2;
+/** How far around a walker talk looks for the street they belong to. */
+const STREET_REACH = 25;
 
 /**
  * The people in the world, all of them real. Two sources, both the simulation
@@ -122,6 +124,101 @@ export class Crowd {
 		}
 
 		return this.push;
+
+	}
+
+	/**
+	 * Another live handle for this person, for when the one they spawned with
+	 * has stopped answering: a street handle names a sampled agent for one
+	 * epoch of that pavement, and people walk on long after it. The answer is
+	 * whoever the simulation reports out on the street they are standing in
+	 * now, of their own type where it has one, and never somebody another
+	 * person in the crowd is already being.
+	 *
+	 * @returns a crowdId, or null where the simulation has nobody out there
+	 */
+	handleFor( member, timeMin ) {
+
+		if ( member.stationary ) {
+
+			return this.#pick(
+				this.#agentsIn( timeMin, { kind: 'parcel', id: member.parcelId }, PARCEL_AGENTS ), member, 0
+			);
+
+		}
+
+		const here = this.#pick(
+			this.#agentsIn( timeMin, { kind: 'edge', id: member.edge.id }, EDGE_AGENTS ),
+			member,
+			member.distance / member.edge.length
+		);
+
+		if ( here ) return here;
+
+		// A walker crosses the whole graph and ends up on stretches the
+		// simulation keeps empty. Who is out on this street is still the
+		// answer, so the question widens to the pavements a few doors down.
+		const around = [];
+
+		for ( const edge of this.routes.near( member.position, 0, STREET_REACH ) ) {
+
+			if ( edge.id !== member.edge.id ) {
+
+				around.push( ...this.#agentsIn( timeMin, { kind: 'edge', id: edge.id }, EDGE_AGENTS ) );
+
+			}
+
+		}
+
+		return this.#pick( around, member, 0.5 );
+
+	}
+
+	/** One scope's sampled agents, empty where the simulation has no such scope. */
+	#agentsIn( timeMin, scope, maxAgents ) {
+
+		try {
+
+			return this.sim.crowd( timeMin, scope, { maxAgents } ).agents;
+
+		} catch {
+
+			return [];
+
+		}
+
+	}
+
+	/**
+	 * Which of these agents this person is: their own type where the sample has
+	 * one, nobody else in the crowd is already holding, standing closest to how
+	 * far along the pavement they are.
+	 */
+	#pick( agents, member, progress ) {
+
+		const taken = new Set();
+
+		for ( const other of this.members.values() ) if ( other !== member ) taken.add( other.crowdId );
+
+		const pool = narrow( agents.filter( ( agent ) => ! taken.has( agent.crowdId ) ), member.type );
+
+		let best = null;
+		let bestGap = Infinity;
+
+		for ( const agent of pool ) {
+
+			const gap = Math.abs( ( agent.progress ?? 0.5 ) - progress );
+
+			if ( gap < bestGap ) {
+
+				bestGap = gap;
+				best = agent;
+
+			}
+
+		}
+
+		return best ? best.crowdId : null;
 
 	}
 
@@ -265,6 +362,7 @@ export class Crowd {
 				this.members.set( agent.crowdId, {
 					...this.#base( agent.crowdId, agent, seed ),
 					stationary: true,
+					parcelId,
 					clip: CLIP.IDLE,
 					position: new THREE.Vector3(
 						place.inside.x + Math.sin( angle ) * offset,
@@ -417,6 +515,15 @@ export class Crowd {
 		}
 
 	}
+
+}
+
+/** The agents of this person's type, or all of them when none is that type. */
+function narrow( agents, type ) {
+
+	const same = agents.filter( ( agent ) => agent.type === type );
+
+	return same.length ? same : agents;
 
 }
 

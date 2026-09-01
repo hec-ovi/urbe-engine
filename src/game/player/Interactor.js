@@ -12,6 +12,10 @@ const DOOR_ANGLE = ( 100 * Math.PI ) / 180;
  * entrance you are standing in front of. Talking freezes that one NPC through
  * the simulation's interrupt and hands back its full identity and routine;
  * the door just swings, because the interior is already there.
+ *
+ * E on a person always opens the panel. The identity comes from the crowd
+ * handle the simulation answers for right now, and when it has nobody on that
+ * pavement the panel says so rather than the press doing nothing.
  */
 export class Interactor {
 
@@ -84,7 +88,9 @@ export class Interactor {
 		if ( ! this.conversation ) return;
 
 		const { person, npcId } = this.conversation;
-		this.sim.resume( npcId, clock.timeMin );
+
+		if ( npcId ) this.sim.resume( npcId, clock.timeMin );
+
 		person.frozen = false;
 		person.clip = CLIP.WALK;
 		this.conversation = null;
@@ -98,16 +104,31 @@ export class Interactor {
 
 		if ( ! person.npcId ) {
 
-			const instance = this.sim.instantiate( person.crowdId, timeMin );
+			// A street handle only answers for the epoch it was sampled in and
+			// people walk the pavement long after that, so a refusal means
+			// asking the crowd who the simulation has out there now.
+			let handle = person.crowdId;
+			let instance = this.sim.instantiate( handle, timeMin );
 
-			if ( ! instance ) return;
+			if ( ! instance ) {
 
-			person.npcId = instance.npcId;
-			person.instance = instance;
+				handle = this.crowd.handleFor( person, timeMin );
+				instance = handle ? this.sim.instantiate( handle, timeMin ) : null;
+
+			}
+
+			if ( instance ) {
+
+				person.crowdId = handle;
+				person.npcId = instance.npcId;
+				person.instance = instance;
+
+			}
 
 		}
 
-		this.sim.interrupt( person.npcId, timeMin );
+		if ( person.npcId ) this.sim.interrupt( person.npcId, timeMin );
+
 		person.frozen = true;
 		person.clip = CLIP.TALK;
 		person.heading = Math.atan2(
@@ -119,7 +140,7 @@ export class Interactor {
 			person,
 			npcId: person.npcId,
 			instance: person.instance,
-			behavior: this.sim.behaviorAt( person.npcId, timeMin )
+			behavior: person.npcId ? this.sim.behaviorAt( person.npcId, timeMin ) : null
 		};
 
 		this.onConversation?.( this.conversation );
