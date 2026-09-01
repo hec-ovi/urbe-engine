@@ -8,14 +8,16 @@
   - `data/`: run config, world loading, signal state
   - `ground/`: cover polygons to geometry, curbs
   - `city/`: shells and doors, neon, lit windows, lamps, road paint, interiors streamed per building and cut into rooms and floor bands, and which of them are in view
-  - `light/`: every fixture as real light in lumens, clustered or batched by backend, per-room light slots with the computed room fill, air glow (src/game/light/CONTRACT.md)
+  - `links/`: bridges, AC tubes, tunnels and wires from the connections links, swept from centerline plus cross-section and sliced onto the exact carved apertures (src/game/links/CONTRACT.md)
+  - `transit/`: bus stop shelters and signs, buses driven by the timetables' closed-form vehicle positions, train and subway station entrances (src/game/transit/CONTRACT.md)
+  - `light/`: every fixture as real light in lumens, clustered or batched by backend, per-room light slots with the computed room fill, air glow, the day switch that puts the city's own lights out at sunrise (src/game/light/CONTRACT.md)
   - `look/`: quality tiers, AgX exposure, height fog tinted by the light in the air, environment probe, the render pipeline with emissive-selected bloom (src/game/look/CONTRACT.md)
   - `sky/`: night sky, moon key, stars
   - `physics/`: Rapier world, colliders, player capsule
   - `player/`: input, first-person controller, interaction
   - `agents/`: character assets, pose baking, crowd, walk routes, traffic
   - `sim/`: the simulation library host
-  - `time/`, `world/`: game clock, district and parcel lookup, map model for the minimap, named camera poses for the lighting tuning protocol
+  - `time/`, `world/`: game clock, the sun arc and the four sky states it drives, district and parcel lookup, map model for the minimap, named camera poses for the lighting tuning protocol
 
 ## Scale experiment (docs/RESEARCH.md 9)
 

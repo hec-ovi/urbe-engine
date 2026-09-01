@@ -9,6 +9,8 @@ import { Signals } from './data/Signals.js';
 import { GroundBuilder, SIDEWALK_HEIGHT } from './ground/GroundBuilder.js';
 import { pointInRing } from './ground/Polygons.js';
 import { BuildingsLoader } from './city/BuildingsLoader.js';
+import { Links } from './links/Links.js';
+import { Transit } from './transit/Transit.js';
 import { InteriorStream } from './city/InteriorStream.js';
 import { Neon } from './city/Neon.js';
 import { StreetLamps } from './city/StreetLamps.js';
@@ -140,15 +142,19 @@ export class GameApp {
 		this.view.step( 'hanging the neon' );
 		const neon = new Neon( atlas, buildings, factory ).build();
 		const lamps = new StreetLamps( atlas, factory ).build();
+		const links = new Links( connections, factory ).build();
+		this.transit = new Transit( { atlas, networks: connections.networks, factory } );
 		this.scene.add(
 			neon.group,
 			lamps.group,
+			links.group,
+			this.transit.group,
 			new LaneMarkings( connections.networks, config.laneMode ).build(),
 			new LitWindows( atlas, buildings ).build()
 		);
 
 		this.view.step( 'lighting the street' );
-		const fixtures = [ ...neon.glows, ...lamps.glows ];
+		const fixtures = [ ...neon.glows, ...lamps.glows, ...this.transit.glows ];
 		this.lights = new CityLights( fixtures, this.lighting.capacity );
 		this.scene.add( this.lights.group );
 		this.roomView = new RoomView( this.stream.rooms, ROOM_VISIBLE_RADIUS );
@@ -160,15 +166,17 @@ export class GameApp {
 		// taken off the built scene, so a new kind of lit surface joins by being
 		// added to the world rather than by being registered here.
 		this.night = new NightSwitch( this.lights )
-			.addGroup( neon.group ).addGroup( lamps.group ).addGroup( city.group );
+			.addGroup( neon.group ).addGroup( lamps.group ).addGroup( city.group ).addGroup( this.transit.group );
 		this.fog = new NightFog( this.scene, { density: NIGHT_FOG_DENSITY, color: SKY_COLOR } );
 		this.probe = new EnvironmentProbe( this.renderer, this.scene, this.tier );
 
 		this.view.step( 'building the physics world' );
 		this.physics = await Physics.create();
 		this.colliders = new WorldColliders( this.physics );
-		this.colliders.addGround( ground.colliderGeometry );
-		this.colliders.addShells( city.shellColliders );
+		this.colliders.addStatic( ground.colliderGeometry );
+		this.colliders.addStatics( city.shellColliders.values() );
+		this.colliders.addStatic( links.colliderGeometry );
+		this.colliders.addStatics( this.transit.colliders.values() );
 		this.colliders.addPosts( lamps.posts );
 		this.stream.onColliderBand = ( id, geometry ) => this.colliders.addBand( id, geometry );
 		this.stream.onDropBand = ( id ) => this.colliders.dropBand( id );
@@ -239,7 +247,7 @@ export class GameApp {
 
 		if ( import.meta.env.DEV ) window.__game = this;
 
-		this.baseTriangles = city.triangles;
+		this.baseTriangles = city.triangles + links.triangles;
 		this.last = performance.now();
 		this.renderer.setAnimationLoop( () => this.#frame() );
 
@@ -282,6 +290,7 @@ export class GameApp {
 		this.lights.update( this.camera.position, delta );
 		this.crowd.update( delta, feet, this.clock );
 		this.traffic.update( delta, feet, this.clock.daySeconds );
+		this.transit.update( feet, this.clock.daySeconds );
 		this.#relight( feet, delta );
 
 		const prompt = this.interactor.update( delta );
