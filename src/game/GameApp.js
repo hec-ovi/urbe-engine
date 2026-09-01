@@ -306,14 +306,7 @@ export class GameApp {
 
 		const feet = this.body.feet;
 
-		if ( this.stream.update( feet ) ) {
-
-			this.roomView.setRooms( this.stream.rooms );
-			// New materials compile their pipelines now, off the frame, rather
-			// than on the first frame that draws them.
-			this.renderer.compileAsync( this.scene, this.camera );
-
-		}
+		if ( this.stream.update( feet ) ) this.roomView.setRooms( this.stream.rooms );
 
 		this.lights.update( this.camera.position, delta );
 		this.crowd.update( delta, feet, this.clock );
