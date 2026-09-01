@@ -102,6 +102,10 @@ describe( 'RoomLights', () => {
 		expect( lights.materialFor( lights.slots[ 0 ], key ) ).toBe( first );
 		expect( lights.materialFor( lights.slots[ 1 ], key ) ).not.toBe( first );
 		expect( first.lightsNode ).toBe( lights.slots[ 0 ].lightsNode );
+		// A standard material loses `lightsNode` in the conversion the renderer
+		// does for it, and the room comes out lit by the city instead of by
+		// itself, which at night means not at all.
+		expect( first.isNodeMaterial ).toBe( true );
 
 	} );
 

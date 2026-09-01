@@ -9,10 +9,10 @@ Purpose: decides how a frame is exposed, coloured and composed, so a city lit in
 - `{ color, lux }` for the air around the player, from `light/CityLights.airColor`.
 
 ## Out
-- `QualityTier.describe(name, backend) -> descriptor`: `bloom{strength,radius}`, `haze`, `roomSlots`, `roomSpots`, `roomStrips`, `clusteredLights`, `batchedLights`, `fogBlur`, `probeSize`, `probeInterval`. `defaultFor(backend)` is the tier a backend runs unless the run names one.
+- `QualityTier.describe(name, backend) -> descriptor`: `bloom{strength,radius}`, `haze`, `roomSlots`, `roomSpots`, `roomStrips`, `clusteredLights`, `batchedLights`, `probeSize`, `probeInterval`. `defaultFor(backend)` is the tier a backend runs unless the run names one.
 - `Exposure(renderer, base)`: sets AgX tone response and the base exposure; `enter('exterior'|'interior')` and `update(delta)` cross-fade between authored exposures over 0.6 s.
-- `NightFog(scene, { density, color })`: installs the height fog node; `update(air)` retints it from the light actually filling the air.
-- `EnvironmentProbe(renderer, scene, sky, tier)`: `bake(position)` and `update(position)`, the cubemap wet ground and glass reflect.
+- `NightFog(scene, { density, color })`: installs the fog node, height fog outdoors and a thin uniform medium indoors; `update(air, indoor, delta)` retints it from the light actually filling the air and crosses between the two media.
+- `EnvironmentProbe(renderer, scene, tier)`: `bake(position)` and `update(position, crossed)`, the cubemap wet ground and glass reflect. Rebakes on distance, on crossing a threshold, and never twice within two seconds.
 - `LookPipeline(renderer, scene, camera, tier)`: `render()` draws one frame through the chain.
 
 ## The chain

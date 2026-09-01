@@ -22,12 +22,6 @@ export class Bookmarks {
 
 	}
 
-	names() {
-
-		return [ 'street', 'room', 'canyon' ];
-
-	}
-
 	/** @returns { point, yaw, pitch } or null when the world has no such place. */
 	pose( name ) {
 

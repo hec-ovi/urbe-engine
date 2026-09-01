@@ -8,7 +8,9 @@ const INTERIOR_DROP_RADIUS = 75;
  * Street furniture is a cylinder each, not a mesh. Interiors are heavy, so each
  * building's floors and stairs become a collider only while the player is near
  * it, and go away again further out. Hysteresis between the two radii stops a
- * boundary from thrashing.
+ * boundary from thrashing. Near is measured on the ground plane, because a
+ * tower's twenty-fifth floor is directly above its own footprint and the
+ * player standing on it is as near the building as it gets.
  */
 export class WorldColliders {
 
@@ -62,7 +64,7 @@ export class WorldColliders {
 
 		for ( const [ parcelId, entry ] of this.interiors ) {
 
-			const distance = entry.center.distanceTo( position );
+			const distance = Math.hypot( entry.center.x - position.x, entry.center.z - position.z );
 			const loaded = this.live.has( parcelId );
 
 			if ( ! loaded && distance < INTERIOR_LOAD_RADIUS ) {

@@ -3,6 +3,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { doorFrame } from './DoorGeometry.js';
 import { buildRooms, reflectanceOf } from './InteriorRooms.js';
+import { kelvinColor } from '../light/Kelvin.js';
 
 // The GLB names its nodes `merged:<key>` and `interior:<key>`, but GLTFLoader
 // runs node names through PropertyBinding.sanitizeNodeName, which strips the
@@ -15,6 +16,7 @@ const INTERIOR = 'interior';
 const FIXTURE = '/light-fixture/';
 /** A lit diffuser is looked at directly, so it sits well above road exposure. */
 const FIXTURE_EMISSIVE = 60;
+const FIXTURE_KELVIN = 2700;
 
 /**
  * Every assembled building in the city, loaded once and arranged for the two
@@ -33,9 +35,15 @@ const FIXTURE_EMISSIVE = 60;
  */
 export class BuildingsLoader {
 
-	constructor( factory ) {
+	/**
+	 * @param factory PbrMaterialFactory
+	 * @param rooms RoomLights, which owns every interior material: what belongs
+	 * to no room takes the dim set, so a stairwell is lit air rather than a hole.
+	 */
+	constructor( factory, rooms ) {
 
 		this.factory = factory;
+		this.rooms = rooms;
 		this.loader = new GLTFLoader();
 
 	}
@@ -84,7 +92,7 @@ export class BuildingsLoader {
 				const merged = BufferGeometryUtils.mergeGeometries( geometries, false );
 				geometries.forEach( ( g ) => g.dispose() );
 				triangles += merged.getAttribute( 'position' ).count / 3;
-				interior.add( new THREE.Mesh( merged, this.#material( key ) ) );
+				interior.add( new THREE.Mesh( merged, this.rooms.materialFor( this.rooms.dim, key ) ) );
 
 			}
 
@@ -154,11 +162,14 @@ export class BuildingsLoader {
 
 	}
 
-	/** The material for a shell key, with facade light fixtures kept off the clip. */
+	/** The material for a shell key; a lit diffuser reads as its own lamp. */
 	#material( key ) {
 
 		return key.includes( FIXTURE )
-			? this.factory.variant( key, { emissiveScale: FIXTURE_EMISSIVE } )
+			? this.factory.variant( key, {
+				emissiveScale: FIXTURE_EMISSIVE,
+				emissive: kelvinColor( FIXTURE_KELVIN )
+			} )
 			: this.factory.build( key );
 
 	}

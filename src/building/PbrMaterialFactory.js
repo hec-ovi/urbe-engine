@@ -93,16 +93,18 @@ export class PbrMaterialFactory {
 	 * that want a hotter emission or a two-sided panel take one of these; the
 	 * material `build` returns is shared by every mesh of that key and must
 	 * never be edited in place.
-	 * @param tweaks { variantId, emissiveScale, side }
+	 * @param tweaks { variantId, emissiveScale, emissive, side }
 	 */
 	variant( key, tweaks = {} ) {
 
-		const id = `${key}|${tweaks.variantId ?? ''}|${tweaks.emissiveScale ?? 1}|${tweaks.side ?? ''}`;
+		const id = `${key}|${tweaks.variantId ?? ''}|${tweaks.emissiveScale ?? 1}|${tweaks.emissive?.getHexString() ?? ''}|${tweaks.side ?? ''}`;
 
 		if ( this.cache.has( id ) ) return this.cache.get( id );
 
 		const material = this.build( key, tweaks.variantId ).clone();
 		material.emissiveIntensity = ( material.emissiveIntensity ?? 1 ) * ( tweaks.emissiveScale ?? 1 );
+		// A lit diffuser reads as the colour of the lamp behind it, not white.
+		if ( tweaks.emissive ) material.emissive = tweaks.emissive.clone();
 		if ( tweaks.side !== undefined ) material.side = tweaks.side;
 		this.cache.set( id, material );
 

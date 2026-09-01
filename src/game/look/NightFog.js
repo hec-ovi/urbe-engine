@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
-import { fog, uniform, exponentialHeightFogFactor } from 'three/tsl';
+import { fog, uniform, exponentialHeightFogFactor, densityFogFactor } from 'three/tsl';
 
-/** Where the haze thins out. Above it a tower stands clear of the street's air. */
+/** Where the street's haze thins out. Above it a tower stands clear of it. */
 const HEIGHT = 80;
 /**
  * Radiance of the night sky over a city, in the same cd/m2 the rest of the
@@ -15,6 +15,10 @@ const SKY_RADIANCE = 0.32;
  * sits well under the road it lights.
  */
 const SCATTER = 0.006;
+/** A room's air is thick over metres where the street's is thin over blocks. */
+const INDOOR_DENSITY = 0.12;
+/** Seconds to cross from one medium to the other, walking through a door. */
+const ADAPT = 0.6;
 
 /**
  * The air the city stands in, and the reason its shadows are not black.
@@ -27,10 +31,11 @@ const SCATTER = 0.006;
  * street is a real surface brightness in the same units as everything else, so
  * it lifts the darks by the right amount at any exposure.
  *
- * Height fog rather than plain distance fog, because haze pools in the street
- * and thins over the roofs, which is what separates a skyline into planes.
- * Colour, density and height are uniforms, so tuning them never rebuilds a
- * shader.
+ * Two media in series. Height fog pools in the street and thins over the roofs,
+ * which is what separates a skyline into planes; a thin uniform medium comes in
+ * indoors, where a room is hazy over a few metres and a tower's twenty-fifth
+ * floor is above the street's haze entirely. Colour and both densities are
+ * uniforms, so tuning them never rebuilds a shader.
  */
 export class NightFog {
 
@@ -42,27 +47,46 @@ export class NightFog {
 		this.color = uniform( this.sky.clone() );
 		this.density = uniform( density );
 		this.height = uniform( HEIGHT );
+		this.base = uniform( 0 );
 		this.scatter = uniform( SCATTER );
+		this.indoor = 0;
+
+		const outside = exponentialHeightFogFactor( this.density, this.height );
+		const inside = densityFogFactor( this.base );
 
 		// The environment probe bakes at street range, where the sky dome is
 		// past the far plane, so the background is what stands in for the sky
 		// glow in every reflection. It carries the same radiance as the air.
-		scene.fogNode = fog( this.color, exponentialHeightFogFactor( this.density, this.height ) );
+		scene.fogNode = fog( this.color, outside.oneMinus().mul( inside.oneMinus() ).oneMinus() );
 		scene.background = this.sky.clone();
 		this.scene = scene;
 
 	}
 
-	/** @param air { color, lux } from CityLights.airColor */
-	update( air ) {
+	/**
+	 * @param air { color, lux } the light filling the air where the player is
+	 * @param indoor whether that air is a room's rather than the street's
+	 */
+	update( air, indoor, delta = 0 ) {
+
+		const step = delta > 0 ? delta / ADAPT : 1;
+		const target = indoor ? 1 : 0;
+
+		this.indoor = Math.abs( target - this.indoor ) <= step
+			? target
+			: this.indoor + Math.sign( target - this.indoor ) * step;
+
+		this.base.value = INDOOR_DENSITY * this.indoor;
 
 		const lit = this.scatter.value * air.lux;
 		const hue = luminance( air.color );
+		// Indoors the sky is behind a slab, so the air is the room's own light.
+		const floor = 1 - this.indoor;
 
 		this.color.value.setRGB(
-			this.sky.r + ( hue > 0 ? air.color.r / hue * lit : 0 ),
-			this.sky.g + ( hue > 0 ? air.color.g / hue * lit : 0 ),
-			this.sky.b + ( hue > 0 ? air.color.b / hue * lit : 0 ),
+			this.sky.r * floor + ( hue > 0 ? air.color.r / hue * lit : 0 ),
+			this.sky.g * floor + ( hue > 0 ? air.color.g / hue * lit : 0 ),
+			this.sky.b * floor + ( hue > 0 ? air.color.b / hue * lit : 0 ),
 			THREE.LinearSRGBColorSpace
 		);
 

@@ -80,7 +80,10 @@ export class StreetLamps {
 
 			group.add( new THREE.Mesh(
 				BufferGeometryUtils.mergeGeometries( lenses, false ),
-				this.factory.variant( LENS_KEY, { emissiveScale: LENS_EMISSIVE } )
+				this.factory.variant( LENS_KEY, {
+					emissiveScale: LENS_EMISSIVE,
+					emissive: kelvinColor( LAMP_KELVIN )
+				} )
 			) );
 
 		}

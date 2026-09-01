@@ -45,8 +45,6 @@ const THEME = 'cyberpunk';
 const INTERIOR_VISIBLE_RADIUS = 70;
 /** Past this a room is behind opaque walls and haze, so it is not drawn. */
 const ROOM_VISIBLE_RADIUS = 32;
-/** Only the rooms already nearest the player can be the one being stood in. */
-const INSIDE_CANDIDATES = 4;
 /** Air scattering is wide and weak indoors, tight and small on the street. */
 const INDOOR_HAZE = { spread: 0.55, cap: 3 };
 const OUTDOOR_HAZE = { spread: 0.28, cap: 2.4 };
@@ -127,7 +125,7 @@ export class GameApp {
 		this.scene.add( ground.group );
 
 		this.view.step( `loading ${buildings.size} buildings` );
-		const city = await new BuildingsLoader( factory ).load( buildings );
+		const city = await new BuildingsLoader( factory, this.rooms ).load( buildings );
 		this.scene.add( city.group );
 		this.interiors = city.interiors;
 
@@ -151,7 +149,7 @@ export class GameApp {
 		this.view.step( 'raising the sky' );
 		this.sky = new NightSky( this.scene ).build( this.clock.hour );
 		this.fog = new NightFog( this.scene, { density: NIGHT_FOG_DENSITY, color: SKY_COLOR } );
-		this.probe = new EnvironmentProbe( this.renderer, this.scene, this.sky.sky, this.tier );
+		this.probe = new EnvironmentProbe( this.renderer, this.scene, this.tier );
 
 		this.view.step( 'building the physics world' );
 		this.physics = await Physics.create();
@@ -298,31 +296,42 @@ export class GameApp {
 	#relight( feet, delta ) {
 
 		const visible = this.roomView.update( feet, delta );
+		const room = this.#inside( visible, feet );
+
+		this.standing = room;
+
+		// Crossing the threshold is what changes everything around the camera;
+		// walking from one room to the next does not, and rebaking on that
+		// would put six cube renders in every other frame.
+		const crossed = Boolean( room ) !== this.indoors;
+		this.indoors = Boolean( room );
 
 		this.rooms.update( visible, feet, delta );
-		this.fog.update( this.lights.airColor( this.camera.position ) );
-		this.probe.update( feet );
-		this.exposure.enter( this.#inside( visible, feet ) ? 'interior' : 'exterior' );
+		this.fog.update( room ? roomAir( room ) : this.lights.airColor( this.camera.position ), Boolean( room ), delta );
+		this.probe.update( feet, crossed );
+		this.exposure.enter( room ? 'interior' : 'exterior' );
 		this.exposure.update( delta );
 
 	}
 
 	/**
-	 * Inside means standing in a published room, tested against its own
+	 * The published room the player is standing in, tested against its own
 	 * outline: from the pavement a shop's floor can be a couple of metres away
-	 * and the eye is still on the street.
+	 * and the eye is still on the street. The room held last frame is tried
+	 * first, because it is nearly always still the answer, and because a test
+	 * that flickers would rebake the environment probe every other frame.
 	 */
 	#inside( visible, feet ) {
 
-		for ( const room of visible.slice( 0, INSIDE_CANDIDATES ) ) {
+		if ( holds( this.standing, feet ) && this.standing.group.visible ) return this.standing;
 
-			if ( feet.y < room.elevation - 0.5 || feet.y > room.elevation + room.height ) continue;
+		for ( const room of visible ) {
 
-			if ( pointInRing( feet.x, feet.z, room.polygon ) ) return true;
+			if ( holds( room, feet ) ) return room;
 
 		}
 
-		return false;
+		return null;
 
 	}
 
@@ -351,13 +360,18 @@ export class GameApp {
 
 	/**
 	 * Interiors sit in the world permanently so a doorway is see-through, but
-	 * an interior more than a block away is behind opaque walls and fog.
+	 * an interior more than a block away is behind opaque walls and haze.
+	 * Distance is measured on the ground plane: a tower's twenty-fifth floor
+	 * stands directly over its own footprint, and the player standing in it is
+	 * as near the building as anyone gets.
 	 */
 	#cullInteriors( position ) {
 
 		for ( const entry of this.interiors.values() ) {
 
-			entry.group.visible = entry.center.distanceTo( position ) < INTERIOR_VISIBLE_RADIUS;
+			const distance = Math.hypot( entry.center.x - position.x, entry.center.z - position.z );
+
+			entry.group.visible = distance < INTERIOR_VISIBLE_RADIUS;
 
 		}
 
@@ -397,7 +411,9 @@ export class GameApp {
 		this.controller.yaw = pose.yaw;
 		this.controller.pitch = pose.pitch;
 		this.controller.update( 0 );
-		this.probe.bake( pose.point );
+		// The probe rebakes itself on the next step, once the rooms around the
+		// camera have taken their light slots and are worth reflecting.
+		this.indoors = undefined;
 
 		return true;
 
@@ -416,6 +432,27 @@ export class GameApp {
 		return GameConfig.fromUrl();
 
 	}
+
+}
+
+/** Whether a point stands on this room's floor, inside its outline. */
+function holds( room, feet ) {
+
+	return Boolean( room )
+		&& feet.y >= room.elevation - 0.5
+		&& feet.y <= room.elevation + room.height
+		&& pointInRing( feet.x, feet.z, room.polygon );
+
+}
+
+/**
+ * The light filling a room's air: its own fixtures' flux spread over its own
+ * surfaces, which is the mean illuminance in it, and their colour. Same shape
+ * as the street's, so the fog reads one or the other without knowing which.
+ */
+function roomAir( room ) {
+
+	return { color: room.color, lux: room.flux / Math.max( 1, room.area ) };
 
 }
 

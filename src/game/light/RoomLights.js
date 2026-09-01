@@ -65,7 +65,11 @@ export class RoomLights {
 
 		if ( ! material ) {
 
-			material = this.factory.build( key ).clone();
+			// A node material, not a copy of the standard one: `lightsNode` is a
+			// node-material property, and the conversion the renderer does for a
+			// standard material drops it, which leaves the room lit by the
+			// city's own lights, which is to say not at all.
+			material = new THREE.MeshPhysicalNodeMaterial().copy( this.factory.build( key ) );
 			material.name = `${key}|room${binding.index}`;
 			material.lightsNode = binding.lightsNode;
 			binding.materials.set( key, material );
@@ -131,8 +135,12 @@ export class RoomLights {
 
 		}
 
-		const spots = room.fixtures.filter( ( f ) => f.kind === 'spot' );
-		const strips = room.fixtures.filter( ( f ) => f.kind !== 'spot' );
+		// Where the tier carries no line sources, a strip still has to light the
+		// room it was published for, so it competes for a spot instead: the
+		// stretched highlight is lost, the room's own light is not.
+		const line = binding.strips.length > 0;
+		const spots = line ? room.fixtures.filter( ( f ) => f.kind === 'spot' ) : room.fixtures;
+		const strips = line ? room.fixtures.filter( ( f ) => f.kind !== 'spot' ) : [];
 
 		place( binding.spots, spots, aimSpot );
 		place( binding.strips, strips, aimStrip );

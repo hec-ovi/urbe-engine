@@ -22,7 +22,7 @@ import { RectAreaLightTexturesLib } from 'three/addons/lights/RectAreaLightTextu
  */
 export class LightingSystem {
 
-	/** @returns { backend, capacity } */
+	/** @returns { capacity } how many fixtures may be lit at once */
 	static install( renderer, tier ) {
 
 		const webgpu = renderer.backend.isWebGPUBackend === true;
@@ -38,10 +38,7 @@ export class LightingSystem {
 
 		if ( tier.roomStrips > 0 ) THREE.RectAreaLightNode.setLTC( RectAreaLightTexturesLib.init() );
 
-		return {
-			backend: webgpu ? 'webgpu' : 'webgl',
-			capacity: webgpu ? tier.clusteredLights : tier.batchedLights
-		};
+		return { capacity: webgpu ? tier.clusteredLights : tier.batchedLights };
 
 	}
 

@@ -8,7 +8,7 @@ import * as THREE from 'three/webgpu';
  */
 const VOLUMES = {
 	exterior: 0,
-	interior: - 0.6
+	interior: - 1.6
 };
 
 /** Eye adaptation, in seconds, for the whole cross-fade. */
@@ -53,15 +53,12 @@ export class Exposure {
 
 	update( delta ) {
 
-		if ( this.stops !== this.target ) {
+		const step = delta / ADAPT;
+		const gap = this.target - this.stops;
 
-			const step = delta / ADAPT;
-			const gap = this.target - this.stops;
+		if ( gap !== 0 ) this.stops = Math.abs( gap ) <= step ? this.target : this.stops + Math.sign( gap ) * step;
 
-			this.stops = Math.abs( gap ) <= step ? this.target : this.stops + Math.sign( gap ) * step;
-			this.renderer.toneMappingExposure = this.base * Math.pow( 2, this.stops );
-
-		}
+		this.renderer.toneMappingExposure = this.base * Math.pow( 2, this.stops );
 
 	}
 

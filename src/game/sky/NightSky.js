@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { color, vec3 } from 'three/tsl';
+import { color, uniform, vec3 } from 'three/tsl';
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
 
 const SKY_SCALE = 45000;
@@ -9,6 +9,8 @@ const STAR_COUNT = 2200;
 const STAR_COLOR = 0xdfe8ff;
 /** Stars are point sources: they sit above the frame's exposure or they vanish. */
 const STAR_LEVEL = 6;
+/** Radiance of the lit air over the city, in the cd/m2 everything else is in. */
+const SKYGLOW = 0.32;
 /** Full moon at ground level, in lux. The one honest number for a night key. */
 const MOON_LUX = 0.25;
 const MOON_COLOR = 0x8fb4ff;
@@ -47,6 +49,12 @@ export class NightSky {
 		sky.showSunDisc.value = 0;
 		// The sky is the far field itself, not something seen through the air.
 		sky.material.fog = false;
+		// With the sun this far under the horizon the analytic sky returns
+		// almost nothing, and a night sky is never black: a city throws enough
+		// light back off the air to be the brightest thing above the roofline.
+		// Without this every window in the city is a hole cut out of the frame.
+		this.glow = uniform( skyglow() );
+		sky.material.colorNode = sky.material.colorNode.add( this.glow );
 		this.sky = sky;
 		this.scene.add( sky );
 
@@ -77,6 +85,16 @@ export class NightSky {
 		this.hour = hour;
 
 	}
+
+}
+
+/** The sky colour at the radiance the air over the city actually has. */
+function skyglow() {
+
+	const glow = new THREE.Color( SKY_COLOR );
+	const luminance = glow.r * 0.2126 + glow.g * 0.7152 + glow.b * 0.0722;
+
+	return glow.multiplyScalar( SKYGLOW / Math.max( 1e-4, luminance ) );
 
 }
 

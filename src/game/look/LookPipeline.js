@@ -35,7 +35,6 @@ export class LookPipeline {
 		this.pipeline.outputColorTransform = false;
 		this.pipeline.outputNode = scenePass.getTextureNode().add( bloomPass ).renderOutput().add( dither );
 
-		this.scenePass = scenePass;
 		this.bloom = bloomPass;
 
 	}
