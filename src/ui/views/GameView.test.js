@@ -23,6 +23,8 @@ describe( 'GameView', () => {
 	it( 'a tab opens its panel and lights up; the same tab again closes it', async () => {
 
 		const user = userEvent.setup();
+		// The bar is reached from the pause screen.
+		view.setPaused( true );
 		const tab = screen.getByRole( 'button', { name: /^MAP/ } );
 
 		await user.click( tab );
