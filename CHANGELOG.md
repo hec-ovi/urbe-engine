@@ -1,5 +1,6 @@
 # Changelog
 
+0.5: simulation wiring: npm run simulate boots createSimulation over the sample blueprint, connections networks and assembled interiors; prints stats, crowd slice, three NPC lives, latencies and a conservation check.
 0.4.2: core gate follows interior 0.5 modes (standard, compact, walkup, none); the full bridged sample assembles end to end.
 0.4.1: core gate follows interior 0.4 modes (standard, walkup, none); walkup parcels re-pick floors inside the cap and regenerate the shell before interior runs.
 0.4: building viewer (?mode=building&parcel=<id>): assembled GLBs textured through the materials database, world-scale tiling, glass transmission, TSL floor slice, magenta fallback plus report for unresolved keys.

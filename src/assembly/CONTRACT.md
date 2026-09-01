@@ -19,6 +19,8 @@ Purpose: turns the atlas blueprint plus the connections document into per-parcel
 
 CLI: `npm run assemble -- --parcel <id> --out <dir> [--glb merged|named] [--interior]` validates each request against its schema (ajv, draft 2020-12), writes `<id>.request.json` to `<dir>`, then runs exterior's CLI (`npm run generate` in ../../../exterior) so `<dir>` ends with request, GLB and blueprint. With `--interior` (named shell required, so `--glb merged` alongside it is a usage error; glb defaults to `named` then) it also writes `<dir>/interior/`: `building.glb`, `floors/NNN.json` (zero-padded floor index, basements negative), `npc.json`. Prints each output file with its size.
 
+Simulation: `simulationRunner.js` calls simulation's `createSimulation(input)` as a black box. `npm run simulate -- --time <minutes> [--district <id>]` boots it over the atlas sample, connections' networks and the npc.json of every assembled building under `out/` (synthetic fallback elsewhere, default npcTypes and name pool), prints population stats, the scoped crowd slice, three instantiated lives (crowd handle from a walk edge, coffee vendor at midday, a reservation), latency measurements and a conservation check; usage error exit 2, no live crowd agent exit 1.
+
 ## Errors
 - `E_PARCEL_UNKNOWN`: parcel id not in the atlas blueprint (thrown as `AssemblyError`; CLI exit 1)
 - `E_ENVELOPE_INFEASIBLE`: no floor count satisfies both the atlas envelope and exterior's feasibility recipe for the parcel's apertures (thrown as `AssemblyError`; CLI exit 1)
@@ -38,3 +40,4 @@ CLI: `npm run assemble -- --parcel <id> --out <dir> [--glb merged|named] [--inte
 - ../../../connections/CONTRACT.md
 - ../../../exterior/CONTRACT.md
 - ../../../interior/CONTRACT.md
+- ../../../simulation/CONTRACT.md
