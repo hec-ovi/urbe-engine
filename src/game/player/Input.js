@@ -5,6 +5,8 @@ const MOVE_KEYS = {
 	KeyD: 'right', ArrowRight: 'right'
 };
 
+const GAME_KEYS = new Set( [ ...Object.keys( MOVE_KEYS ), 'Space', 'KeyC', 'ShiftLeft', 'ShiftRight' ] );
+
 /**
  * Keyboard and pointer state, and nothing more. Mouse deltas accumulate
  * between frames and are drained by whoever reads them, so a slow frame never
@@ -26,13 +28,14 @@ export class Input {
 			keydown: ( event ) => {
 
 				if ( event.repeat ) return;
+				if ( this.locked && GAME_KEYS.has( event.code ) ) event.preventDefault?.();
 
 				this.keys.add( event.code );
 				this.pressed.add( event.code );
 
 			},
 			keyup: ( event ) => this.keys.delete( event.code ),
-			blur: () => this.keys.clear(),
+			blur: () => this.clear(),
 			mousemove: ( event ) => {
 
 				if ( ! this.locked ) return;
@@ -44,7 +47,7 @@ export class Input {
 			pointerlockchange: () => {
 
 				this.locked = document.pointerLockElement === this.element;
-				if ( ! this.locked ) this.keys.clear();
+				if ( ! this.locked ) this.clear();
 				this.onLockChange?.( this.locked );
 
 			}
@@ -101,6 +104,12 @@ export class Input {
 
 	}
 
+	get crouching() {
+
+		return this.keys.has( 'KeyC' );
+
+	}
+
 	/** True once per physical press. */
 	consume( code ) {
 
@@ -122,6 +131,15 @@ export class Input {
 	endFrame() {
 
 		this.pressed.clear();
+
+	}
+
+	clear() {
+
+		this.keys.clear();
+		this.pressed.clear();
+		this.dx = 0;
+		this.dy = 0;
 
 	}
 

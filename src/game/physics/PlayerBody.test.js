@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Physics } from './Physics.js';
-import { PlayerBody, BODY_RADIUS } from './PlayerBody.js';
+import { BODY_RADIUS, CROUCH_EYE_HEIGHT, EYE_HEIGHT, PlayerBody } from './PlayerBody.js';
 
 /**
  * Two promises the street depends on: a lamp post is solid, and the push that
@@ -24,6 +24,58 @@ describe( 'PlayerBody against street furniture', () => {
 
 		// 120 steps of walking is 2.8 m, well past the post at z = 2
 		expect( body.position.z ).toBeLessThan( 2 - 0.14 - BODY_RADIUS + 0.05 );
+
+	} );
+
+	it( 'jumps once from the floor, rises, and lands on the same floor', async () => {
+
+		const { physics, body } = await world();
+		step( physics, body, 2 );
+		expect( body.grounded ).toBe( true );
+		expect( body.jump() ).toBe( true );
+		expect( body.jump() ).toBe( false );
+
+		let top = body.feet.y;
+
+		for ( let frame = 0; frame < 120; frame ++ ) {
+
+			step( physics, body );
+			top = Math.max( top, body.feet.y );
+
+		}
+
+		expect( top ).toBeGreaterThan( 0.9 );
+		expect( body.feet.y ).toBeCloseTo( 0, 1 );
+		expect( body.grounded ).toBe( true );
+
+	} );
+
+	it( 'crouches without moving its feet and restores the standing eye', async () => {
+
+		const { body } = await world();
+		const floor = body.feet.y;
+
+		expect( body.setCrouched( true ) ).toBe( true );
+		expect( body.feet.y ).toBeCloseTo( floor );
+		expect( body.eye.y - body.feet.y ).toBeCloseTo( CROUCH_EYE_HEIGHT );
+		expect( body.setCrouched( false ) ).toBe( true );
+		expect( body.feet.y ).toBeCloseTo( floor );
+		expect( body.eye.y - body.feet.y ).toBeCloseTo( EYE_HEIGHT );
+
+	} );
+
+	it( 'stays crouched until there is head clearance', async () => {
+
+		const { physics, body } = await world();
+		body.setCrouched( true );
+		const ceiling = new THREE.BoxGeometry( 4, 0.2, 4 ).translate( 0, 1.36, 0 );
+		physics.addTrimesh( ceiling );
+		physics.step( 1 / 60 );
+
+		expect( body.canStand() ).toBe( false );
+		expect( body.setCrouched( false ) ).toBe( false );
+		expect( body.crouched ).toBe( true );
+		expect( body.eye.y - body.feet.y ).toBeCloseTo( CROUCH_EYE_HEIGHT );
 
 	} );
 
@@ -63,5 +115,16 @@ async function world() {
 	physics.addTrimesh( floor );
 
 	return { physics, body: new PlayerBody( physics, new THREE.Vector3( 0, 0.02, 0 ) ) };
+
+}
+
+function step( physics, body, count = 1 ) {
+
+	for ( let i = 0; i < count; i ++ ) {
+
+		physics.step( 1 / 60 );
+		body.move( new THREE.Vector3(), 1 / 60 );
+
+	}
 
 }

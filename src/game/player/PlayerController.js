@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 
 export const WALK_SPEED = 1.4;
 export const RUN_SPEED = 4;
+export const CROUCH_SPEED = 0.9;
 
 const SENSITIVITY = 0.0022;
 const PITCH_LIMIT = Math.PI / 2 - 0.02;
@@ -39,9 +40,10 @@ export class PlayerController {
 	update( delta ) {
 
 		this.#look();
+		this.#stance();
 
 		const axis = this.frozen ? { x: 0, z: 0 } : this.input.axis();
-		const speed = this.input.running ? RUN_SPEED : WALK_SPEED;
+		const speed = this.body.crouched ? CROUCH_SPEED : ( this.input.running ? RUN_SPEED : WALK_SPEED );
 		const moving = axis.x !== 0 || axis.z !== 0;
 
 		const sin = Math.sin( this.yaw );
@@ -72,6 +74,23 @@ export class PlayerController {
 			eye.z
 		);
 		this.camera.quaternion.setFromEuler( new THREE.Euler( this.pitch, this.yaw, 0, 'YXZ' ) );
+
+	}
+
+	#stance() {
+
+		if ( this.frozen ) return;
+
+		this.body.setCrouched( this.input.crouching );
+
+		if ( this.input.consume( 'Space' ) ) {
+
+			// Space from a released crouch stands first. A held C or a low ceiling
+			// keeps the short capsule and cannot start an impossible jump.
+			if ( this.body.crouched && ! this.input.crouching ) this.body.setCrouched( false );
+			this.body.jump();
+
+		}
 
 	}
 

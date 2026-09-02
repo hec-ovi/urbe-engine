@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Input } from './Input.js';
-import { PlayerController } from './PlayerController.js';
+import { CROUCH_SPEED, PlayerController, RUN_SPEED } from './PlayerController.js';
 
 /**
  * The controller promises WASD on the ground plane, camera relative. Inverted
@@ -46,6 +46,38 @@ describe( 'PlayerController', () => {
 
 	} );
 
+	it( 'sprints while shift is held and crouches to the shorter speed', () => {
+
+		const sprint = harness();
+		sprint.press( 'KeyW' );
+		sprint.press( 'ShiftLeft' );
+		sprint.controller.update( 0.5 );
+
+		expect( sprint.body.position.z ).toBeCloseTo( - RUN_SPEED * 0.5 );
+
+		const crouch = harness();
+		crouch.press( 'KeyW' );
+		crouch.press( 'ShiftLeft' );
+		crouch.press( 'KeyC' );
+		crouch.controller.update( 0.5 );
+
+		expect( crouch.body.crouched ).toBe( true );
+		expect( crouch.body.position.z ).toBeCloseTo( - CROUCH_SPEED * 0.5 );
+
+	} );
+
+	it( 'starts one jump from one physical space press', () => {
+
+		const { controller, body, press } = harness();
+
+		press( 'Space' );
+		controller.update( 1 / 60 );
+		controller.update( 1 / 60 );
+
+		expect( body.jumps ).toBe( 1 );
+
+	} );
+
 } );
 
 function harness() {
@@ -69,7 +101,12 @@ function harness() {
 		input
 	} );
 
-	return { controller, body, press: ( code ) => listeners.get( 'keydown' )( { code } ) };
+	return {
+		controller,
+		body,
+		press: ( code ) => listeners.get( 'keydown' )( { code, repeat: false } ),
+		release: ( code ) => listeners.get( 'keyup' )( { code } )
+	};
 
 }
 
@@ -80,6 +117,8 @@ class StubBody {
 
 		this.position = new THREE.Vector3();
 		this.grounded = true;
+		this.crouched = false;
+		this.jumps = 0;
 
 	}
 
@@ -98,6 +137,22 @@ class StubBody {
 	move( offset ) {
 
 		this.position.add( offset );
+
+	}
+
+	setCrouched( wanted ) {
+
+		this.crouched = wanted;
+		return true;
+
+	}
+
+	jump() {
+
+		if ( ! this.grounded || this.crouched ) return false;
+		this.jumps ++;
+		this.grounded = false;
+		return true;
 
 	}
 

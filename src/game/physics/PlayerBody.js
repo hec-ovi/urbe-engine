@@ -2,11 +2,14 @@ import * as THREE from 'three/webgpu';
 
 export const EYE_HEIGHT = 1.7;
 export const BODY_RADIUS = 0.32;
+export const CROUCH_EYE_HEIGHT = 1.05;
+export const JUMP_SPEED = 6.5;
 
-const HALF_HEIGHT = 0.55;
-const CENTRE_OFFSET = BODY_RADIUS + HALF_HEIGHT;
+const STAND_HALF_HEIGHT = 0.55;
+const CROUCH_HALF_HEIGHT = 0.255;
 const GRAVITY = - 20;
 const TERMINAL = - 45;
+const UP = { x: 0, y: 0, z: 0, w: 1 };
 
 /**
  * The player as Rapier sees them: one capsule collider driven by the kinematic
@@ -21,12 +24,14 @@ export class PlayerBody {
 		const { rapier, world } = physics;
 
 		this.physics = physics;
-		this.position = new THREE.Vector3( spawn.x, spawn.y + CENTRE_OFFSET, spawn.z );
+		this.halfHeight = STAND_HALF_HEIGHT;
+		this.position = new THREE.Vector3( spawn.x, spawn.y + this.centreOffset, spawn.z );
 		this.velocityY = 0;
 		this.grounded = false;
+		this.crouched = false;
 
 		this.collider = world.createCollider(
-			rapier.ColliderDesc.capsule( HALF_HEIGHT, BODY_RADIUS )
+			rapier.ColliderDesc.capsule( this.halfHeight, BODY_RADIUS )
 				.setTranslation( this.position.x, this.position.y, this.position.z )
 		);
 
@@ -39,6 +44,58 @@ export class PlayerBody {
 		this.controller.setMaxSlopeClimbAngle( ( 55 * Math.PI ) / 180 );
 		this.controller.setMinSlopeSlideAngle( ( 40 * Math.PI ) / 180 );
 		this.controller.setApplyImpulsesToDynamicBodies( false );
+
+	}
+
+	/** Starts one jump only from supported, standing feet. */
+	jump() {
+
+		if ( ! this.grounded || this.crouched ) return false;
+
+		this.velocityY = JUMP_SPEED;
+		this.grounded = false;
+
+		return true;
+
+	}
+
+	/**
+	 * Changes the real capsule and eye height without moving the feet. Standing
+	 * is refused while the full-height capsule would overlap a ceiling.
+	 */
+	setCrouched( wanted ) {
+
+		if ( wanted === this.crouched ) return true;
+		if ( ! wanted && ! this.canStand() ) return false;
+
+		const floor = this.feet.y;
+		this.halfHeight = wanted ? CROUCH_HALF_HEIGHT : STAND_HALF_HEIGHT;
+		this.crouched = wanted;
+		this.position.y = floor + this.centreOffset;
+		this.collider.setHalfHeight( this.halfHeight );
+		this.collider.setTranslation( this.position );
+
+		return true;
+
+	}
+
+	/** Whether the standing capsule fits above the current foot point. */
+	canStand() {
+
+		if ( ! this.crouched ) return true;
+
+		const feet = this.feet;
+		const centre = { x: feet.x, y: feet.y + BODY_RADIUS + STAND_HALF_HEIGHT, z: feet.z };
+		const shape = new this.physics.rapier.Capsule( STAND_HALF_HEIGHT, BODY_RADIUS );
+		let blocked = false;
+
+		this.physics.world.intersectionsWithShape(
+			centre, UP, shape,
+			() => { blocked = true; return false; },
+			undefined, undefined, this.collider
+		);
+
+		return ! blocked;
 
 	}
 
@@ -94,7 +151,7 @@ export class PlayerBody {
 	/** Feet on the floor: what the camera and interaction distances measure from. */
 	get feet() {
 
-		return new THREE.Vector3( this.position.x, this.position.y - CENTRE_OFFSET, this.position.z );
+		return new THREE.Vector3( this.position.x, this.position.y - this.centreOffset, this.position.z );
 
 	}
 
@@ -102,15 +159,21 @@ export class PlayerBody {
 
 		return new THREE.Vector3(
 			this.position.x,
-			this.position.y - CENTRE_OFFSET + EYE_HEIGHT,
+			this.feet.y + ( this.crouched ? CROUCH_EYE_HEIGHT : EYE_HEIGHT ),
 			this.position.z
 		);
 
 	}
 
+	get centreOffset() {
+
+		return BODY_RADIUS + this.halfHeight;
+
+	}
+
 	teleport( point ) {
 
-		this.position.set( point.x, point.y + CENTRE_OFFSET, point.z );
+		this.position.set( point.x, point.y + this.centreOffset, point.z );
 		this.velocityY = 0;
 		this.collider.setTranslation( this.position );
 

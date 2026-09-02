@@ -72,7 +72,9 @@ const PANEL_KEYS = [
 ];
 const BINDINGS = [
 	{ action: 'walk', keys: [ 'W', 'A', 'S', 'D' ] },
-	{ action: 'run', keys: [ 'Shift' ] },
+	{ action: 'jump', keys: [ 'Space' ] },
+	{ action: 'crouch', keys: [ 'C' ] },
+	{ action: 'sprint', keys: [ 'Shift' ] },
 	{ action: 'doors, lifts and people', keys: [ 'E' ] },
 	{ action: 'quests', keys: [ 'J' ] },
 	{ action: 'map', keys: [ 'M' ] },
