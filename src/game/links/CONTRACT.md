@@ -17,12 +17,12 @@ The section comes from the link, never from here; these are what each kind is bu
 
 | kind | built as | solid |
 | --- | --- | --- |
-| bridge | concrete shell, ends open | walk through |
+| bridge | open concrete deck between two 1.1 m railings, nothing over the top | walk on |
 | ac-tube | sheet metal shell, ends open | walk through and over |
 | tunnel | concrete shell at basement level, ends open | walk through |
 | wire | closed cable tube along the published catenary | nothing |
 
-A kind this box does not know is skipped. Bridges are drawn as a closed shell; the open deck with railings connections describes is not built yet.
+A kind this box does not know is skipped.
 
 ## Invariants
 - A link's geometry is its own `path` and `crossSection` and nothing else. Ends are never inset or extended: `path[0]` and the last point already sit on the two face planes.
@@ -30,9 +30,10 @@ A kind this box does not know is skipped. Bridges are drawn as a closed shell; t
 - The section frame is the one the apertures were cut with: `right` horizontal and square to the axis, `up` square to both. A sloped link tilts its section with the axis.
 - Every link ends on a wall it faces, so the axis is never parallel to the face plane it terminates on (measured minimum over the city: 0.65 of a right angle away from parallel).
 - A rect link is one shell with no wall thickness: the aperture's cut is that surface, and the floor you walk on is the section's own bottom, level with the floor plate the exterior box aligns to the aperture's `base`. Shells are drawn from both sides.
-- Solid follows the flags, not the kind: `inside || over` puts the whole shell in the collider, neither puts nothing there. The shell is one surface, so walking through a bridge and standing on a tube are the same triangles.
+- A bridge is that shell opened: the deck is the section's own bottom, a railing stands on each edge of it, and nothing spans the top, so the aperture stays a doorway onto a crossing in the open air. It meets the two base corners of its cut exactly; a closed link meets all four.
+- Solid follows the flags, not the kind: `inside || over` puts the whole surface in the collider, neither puts nothing there. A tube is one surface, so walking through it and standing on it are the same triangles; a bridge's railings are in the collider too, which is what stops a walk off the deck.
 - UVs are world metres both ways, `station` along the link and section perimeter across it, because the materials tile over world-metre UVs.
-- The whole city merges by material key, never by link: three keys, three draw calls, whatever the city's size.
+- The whole city merges by material key, never by link: three keys, three draw calls, whatever the city's size. A closed rect sweeps four strips a segment, an open deck three, a wire five.
 - No link carries a published emitter, so this box publishes no light. Bridges and tunnels are lit by whatever reaches through their open ends.
 
 ## Errors

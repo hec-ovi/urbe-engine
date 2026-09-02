@@ -1,5 +1,6 @@
 # Changelog
 
+0.16.14: a bridge is an open deck. The walking surface is the section's own bottom, exactly on the aperture base the exterior box aligned its floor plate to, a 1.1 m railing stands on each edge and is solid, and nothing spans the top; tubes and tunnels stay closed boxes.
 0.16.13: a lamp lens, an entrance diffuser and a lift's cab light take their emissive level outright instead of multiplying the database's own authored strength, so the fixture family's new maps (which carry their falloff themselves) read at the level the night grade was tuned at.
 0.16.12: stations are places. Every shaft the atlas publishes is a well on its own footprint with a switchback stair fitted to its depth (four flights of eighteen at 0.168 m for a 12 m shaft), the passage at its foot joins it to the platform room, and the room is floor, ceiling and walls lit by its own fixtures; a platform already at street level gets a canopy. Two draw calls for the whole city.
 0.16.11: the city floor opens over every station shaft and the bedrock drops below the deepest volume the city digs, so what is built underground can be reached.

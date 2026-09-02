@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { PbrMaterialFactory } from '../../building/PbrMaterialFactory.js';
 import { runConnections } from '../../assembly/connectionsRunner.js';
-import { Links } from './Links.js';
+import { Links, RAILING } from './Links.js';
 
 const ATLAS_SAMPLE = new URL( '../../../../atlas/samples/city-urbe-small.json', import.meta.url );
 /** Mirrors the wire tube's side count, so the triangle accounting is exact. */
@@ -28,6 +28,11 @@ describe( 'Links', () => {
 	 * aperture's cut polygon; a sweep cut square to its own axis instead of to
 	 * the wall misses that hole by centimetres on every diagonal link, which is
 	 * a gap you can see daylight through or a tube poking out of a wall.
+	 *
+	 * A closed link meets all four corners of its cut. A bridge is an open deck,
+	 * so it meets the two at the base, which is the walking surface landing on
+	 * the floor plate the exterior box aligned to that aperture; above them the
+	 * opening is open, which is the point.
 	 */
 	it( 'lands every end face on the aperture the facade was cut with', () => {
 
@@ -44,6 +49,7 @@ describe( 'Links', () => {
 
 		const cuts = new Map( doc.apertures.map( ( aperture ) => [ aperture.id, aperture.cut.polygon ] ) );
 		let worst = 0;
+		let decks = 0;
 
 		for ( const link of doc.links ) {
 
@@ -51,16 +57,18 @@ describe( 'Links', () => {
 
 			for ( const end of [ link.a, link.b ] ) {
 
-				for ( const vertex of cuts.get( end.apertureId ) ) {
+				const polygon = cuts.get( end.apertureId );
+				const wanted = link.kind === 'bridge' ? base( polygon ) : polygon;
 
-					worst = Math.max( worst, nearest( points, vertex ) );
+				if ( link.kind === 'bridge' ) decks ++;
 
-				}
+				for ( const vertex of wanted ) worst = Math.max( worst, nearest( points, vertex ) );
 
 			}
 
 		}
 
+		expect( decks ).toBeGreaterThan( 0 );
 		expect( worst ).toBeLessThan( 1e-3 );
 
 	} );
@@ -103,8 +111,18 @@ describe( 'Links', () => {
 		expect( built.drawCalls ).toBe( PROMISED_DRAW_CALLS );
 		expect( built.group.children.length ).toBe( PROMISED_DRAW_CALLS );
 
+		// A closed section sweeps one strip per side, an open deck one fewer:
+		// railing, deck, railing, and nothing over the top.
+		const sides = ( link ) => {
+
+			if ( link.crossSection.shape !== 'rect' ) return WIRE_SIDES;
+
+			return link.kind === 'bridge' ? 3 : 4;
+
+		};
+
 		const expected = doc.links.reduce(
-			( sum, link ) => sum + ( link.crossSection.shape === 'rect' ? 4 : WIRE_SIDES ) * ( link.path.length - 1 ) * 2,
+			( sum, link ) => sum + sides( link ) * ( link.path.length - 1 ) * 2,
 			0
 		);
 
@@ -133,7 +151,8 @@ describe( 'Links', () => {
 
 		}
 
-		expect( across[ 1 ] - across[ 0 ] ).toBeCloseTo( 2 * ( bridge.crossSection.width + bridge.crossSection.height ), 3 );
+		// Railing, deck, railing across the section.
+		expect( across[ 1 ] - across[ 0 ] ).toBeCloseTo( bridge.crossSection.width + 2 * RAILING, 3 );
 		// The mitre slides the end corners along the axis, so the span reaches
 		// a little past the centerline length, never as far as one section.
 		expect( Math.abs( along[ 1 ] - along[ 0 ] - bridge.length ) ).toBeLessThan( bridge.crossSection.width );
@@ -141,6 +160,15 @@ describe( 'Links', () => {
 	} );
 
 } );
+
+/** The two lowest corners of a cut polygon: the edge a deck lands on. */
+function base( polygon ) {
+
+	const low = Math.min( ...polygon.map( ( vertex ) => vertex[ 1 ] ) );
+
+	return polygon.filter( ( vertex ) => vertex[ 1 ] - low < 1e-6 );
+
+}
 
 /** A link whose two ends sit at the same height, so its roof is one plane. */
 function level( link ) {

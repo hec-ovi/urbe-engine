@@ -26,6 +26,29 @@ export function rectShell( frames, width, height ) {
 }
 
 /**
+ * A bridge as an open deck: the walking surface is the section's own bottom,
+ * exactly where the exterior box aligns the aperture's `base`, and a railing
+ * stands on each edge of it. Nothing spans the opening above, which is what an
+ * open deck means: the aperture stays a 3.2 m doorway and the crossing itself
+ * is a deck you walk out onto in the open air.
+ *
+ * The section is a polyline rather than a loop (railing, deck, railing), so the
+ * sweep leaves the top open instead of closing a roof over it.
+ */
+export function openDeck( frames, width, height, railing ) {
+
+	const floor = - height / 2;
+	const top = floor + railing;
+	const section = [ [ - 1, top ], [ - 1, floor ], [ 1, floor ], [ 1, top ] ];
+	const rings = frames.map( ( frame ) => section.map(
+		( [ across, up ] ) => corner( frame, across * width / 2, up )
+	) );
+
+	return sweep( rings, [ railing, width, railing ], false );
+
+}
+
+/**
  * A round link as a closed tube of `sides` flats. A wire is 10 cm across and
  * read from metres away, so the flats never show and the tube costs a fraction
  * of a smooth one.
@@ -58,7 +81,7 @@ export function roundTube( frames, radius, sides ) {
  * perimeter across it, because every material a link wears tiles over
  * world-metre UVs and a 0..1 unwrap would stretch one tile over the whole span.
  */
-function sweep( rings, spans ) {
+function sweep( rings, spans, closed = true ) {
 
 	const positions = [];
 	const uvs = [];
@@ -66,7 +89,7 @@ function sweep( rings, spans ) {
 
 	for ( let edge = 0; edge < spans.length; edge ++ ) {
 
-		const next = ( edge + 1 ) % spans.length;
+		const next = closed ? ( edge + 1 ) % spans.length : edge + 1;
 
 		for ( let i = 0; i < rings.length - 1; i ++ ) {
 

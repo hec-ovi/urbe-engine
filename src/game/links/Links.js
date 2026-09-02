@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { cutPlanes } from './Apertures.js';
 import { framesAlong } from './PathFrames.js';
-import { rectShell, roundTube } from './Sweep.js';
+import { openDeck, rectShell, roundTube } from './Sweep.js';
 
 // One material per kind of thing, never per link: an air duct is sheet metal,
 // a skybridge and a service tunnel are the same cast concrete, a wire is
@@ -15,11 +15,14 @@ const KEYS = {
 };
 /** A 10 cm cable read from metres away; more sides would be invisible. */
 const WIRE_SIDES = 5;
+/** A parapet a person cannot go over, which is what stops a walk off a deck. */
+export const RAILING = 1.1;
 
 /**
  * Every inter-building link the connections box published, as geometry and as
- * something to stand on: bridges and tunnels you walk through, AC tubes you
- * walk through and over, and the wires strung across the streets.
+ * something to stand on: bridges as open decks between two railings, tunnels
+ * and AC tubes as closed boxes you walk through (and over, on a tube), and the
+ * wires strung across the streets.
  *
  * Each link is swept from its own centerline and cross section, and its two
  * ends are sliced by the planes of the apertures it terminates on, so the end
@@ -109,9 +112,13 @@ export class Links {
 			last: this.planes.get( link.b.apertureId )
 		} );
 
-		return shape === 'rect'
-			? rectShell( frames, width, height )
-			: roundTube( frames, width / 2, WIRE_SIDES );
+		if ( shape !== 'rect' ) return roundTube( frames, width / 2, WIRE_SIDES );
+
+		// A bridge is an open crossing in the air, a tube is a duct: the first
+		// is a deck between two railings, the second a closed box.
+		return link.kind === 'bridge'
+			? openDeck( frames, width, height, RAILING )
+			: rectShell( frames, width, height );
 
 	}
 
