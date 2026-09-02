@@ -6,6 +6,9 @@ const HITCH_MS = 40;
  * it here with its cost; when the gap between two frames runs past the
  * threshold, the notes taken during that gap are printed with it. A hitch with
  * no note is work the world did not do itself: a pipeline compile, a GC pause.
+ *
+ * `count` and `worst` are the run's own answer to "did it stall", which the HUD
+ * carries so a screenshot says it without a console open.
  */
 export class HitchLog {
 
@@ -14,6 +17,8 @@ export class HitchLog {
 		this.threshold = threshold;
 		this.notes = [];
 		this.count = 0;
+		/** The longest gap of the run, which is what "did it stall" means. */
+		this.worst = 0;
 
 	}
 
@@ -30,6 +35,7 @@ export class HitchLog {
 		if ( gapMs > this.threshold ) {
 
 			this.count ++;
+			this.worst = Math.max( this.worst, gapMs );
 			console.info( `hitch ${gapMs.toFixed( 0 )} ms: ${this.notes.join( ', ' ) || 'no world event in this gap'}` );
 
 		}
