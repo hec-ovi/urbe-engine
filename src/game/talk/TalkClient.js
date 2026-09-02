@@ -18,13 +18,16 @@ export class TalkClient {
 
 	}
 
-	/** @param conversation Interactor's { instance, behavior } */
-	async say( conversation, line, timeMin ) {
+	/**
+	 * @param conversation Interactor's { instance, behavior }
+	 * @param quests the questlines as they stand, QuestSession.snapshot()
+	 */
+	async say( conversation, line, timeMin, quests = [] ) {
 
 		const response = await fetch( this.endpoint, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify( { out: this.out, npc: conversation.instance, behavior: conversation.behavior, line, timeMin } )
+			body: JSON.stringify( { out: this.out, npc: conversation.instance, behavior: conversation.behavior, line, timeMin, quests } )
 		} );
 		const data = await response.json();
 		if ( ! response.ok ) throw new Error( data.error ?? `talk ${response.status}` );

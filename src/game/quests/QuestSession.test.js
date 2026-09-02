@@ -44,6 +44,7 @@ describe( 'QuestSession', () => {
 		} ] );
 
 		expect( session.advance( { kind: 'arrivedAt', parcelId: 'p9' }, 600 ) ).toEqual( [] );
+		expect( session.snapshot() ).toEqual( [ { id: 'q1', cast: { barista: 'n1' }, state: { activeStepIds: [ 's_talk' ], completedStepIds: [], flags: [] } } ] );
 
 		const moved = session.advance( { kind: 'talkedTo', npcId: 'n1' }, 601 );
 		expect( moved ).toHaveLength( 1 );

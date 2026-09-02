@@ -15,9 +15,25 @@ async function worldDir() {
 		districts: [ { id: 'd1', name: 'Old Port' } ],
 		parcels: [ { id: 'p1', districtId: 'd1', type: 'bar', name: 'The Rusty Anchor' } ]
 	} ) );
+	await mkdir( join( root, 'out', 'w', 'quests' ), { recursive: true } );
+	await writeFile( join( root, 'out', 'w', 'quests', 'questlines.json' ), JSON.stringify( [ questline ] ) );
 	return root + sep;
 
 }
+
+const questline = {
+	id: 'q1', title: 'Static', premise: 'A word at the bar.',
+	roles: [ { roleId: 'barista', npcType: 'barista', persona: 'Tired, watchful.' } ],
+	items: [], facts: [], acts: [ { actId: 'a1', title: 'The Word', summary: 'Listen.' } ],
+	steps: [ {
+		stepId: 's_talk', actId: 'a1',
+		narrative: { description: 'The barista wants the player to carry a message.', playerHint: 'Talk to her.', stake: 'Without it the debt lands on her.' },
+		wantedByRoleId: 'barista', target: { kind: 'talk', roleId: 'barista' },
+		gives: [], needs: [], conditions: [], effects: [], next: [], branching: 'parallel', endingId: 'e_done'
+	} ],
+	endings: [ { endingId: 'e_done', title: 'Carried', epilogue: 'The message went.' } ],
+	flags: [], entryStepIds: [ 's_talk' ]
+};
 
 const npc = {
 	npcId: 'n1', type: DEFAULT_TYPE_SET.types[ 0 ].type,
@@ -42,6 +58,11 @@ describe( 'TalkService', () => {
 
 		await service.reply( { out: '/out/w', npc, behavior, line: 'Thanks.', timeMin: 601 } );
 		expect( seen[ 1 ].system ).toContain( 'Ask at the bar.' );
+
+		const quests = [ { id: 'q1', cast: { barista: 'n1' }, state: { activeStepIds: [ 's_talk' ], completedStepIds: [], flags: [] } } ];
+		await service.reply( { out: '/out/w', npc, behavior, line: 'What do you need?', timeMin: 602, quests } );
+		expect( seen[ 2 ].system ).toContain( 'Without it the debt lands on her.' );
+		expect( seen[ 2 ].system ).toContain( 'Tired, watchful.' );
 
 	} );
 

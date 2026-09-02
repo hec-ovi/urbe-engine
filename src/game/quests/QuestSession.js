@@ -87,6 +87,13 @@ export class QuestSession {
 
 	}
 
+	/** Every questline as it stands, for whoever else needs to know its part: [{ id, cast, state }]. */
+	snapshot() {
+
+		return this.entries.map( ( { definition, runtime } ) => ( { id: definition.id, cast: runtime.cast, state: runtime.serialize() } ) );
+
+	}
+
 	/** The quests panel's list: every questline with its done and open steps, open ones naming who to find. */
 	view() {
 

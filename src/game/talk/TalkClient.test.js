@@ -15,11 +15,11 @@ describe( 'TalkClient', () => {
 		const fetch = vi.fn( async () => ( { ok: true, json: async () => ( { reply: 'Not now.' } ) } ) );
 		vi.stubGlobal( 'fetch', fetch );
 
-		const reply = await new TalkClient( '/out/w' ).say( conversation, 'Hello', 42 );
+		const reply = await new TalkClient( '/out/w' ).say( conversation, 'Hello', 42, [ { id: 'q1', cast: {}, state: {} } ] );
 
 		expect( reply ).toBe( 'Not now.' );
 		expect( JSON.parse( fetch.mock.calls[ 0 ][ 1 ].body ) ).toEqual( {
-			out: '/out/w', npc: conversation.instance, behavior: conversation.behavior, line: 'Hello', timeMin: 42
+			out: '/out/w', npc: conversation.instance, behavior: conversation.behavior, line: 'Hello', timeMin: 42, quests: [ { id: 'q1', cast: {}, state: {} } ]
 		} );
 		expect( TalkClient.nameOf( conversation.instance ) ).toBe( 'Mara Voss' );
 

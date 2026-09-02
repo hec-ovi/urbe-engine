@@ -428,7 +428,7 @@ export class GameApp {
 		if ( ! conversation?.instance ) return;
 
 		const name = TalkClient.nameOf( conversation.instance );
-		this.talk.say( conversation, text, this.clock.timeMin )
+		this.talk.say( conversation, text, this.clock.timeMin, this.quests.snapshot() )
 			.then( ( reply ) => {
 
 				if ( this.interactor.conversation === conversation ) this.view.dialog.addMessage( { from: 'npc', name, text: reply } );
