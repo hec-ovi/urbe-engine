@@ -32,6 +32,7 @@ import { QualityTier } from './look/QualityTier.js';
 import { Exposure } from './look/Exposure.js';
 import { NightFog } from './look/NightFog.js';
 import { HitchLog } from './debug/HitchLog.js';
+import { RenderWork } from './debug/RenderWork.js';
 import { EnvironmentProbe } from './look/EnvironmentProbe.js';
 import { LookPipeline } from './look/LookPipeline.js';
 import { NightSky, SKY_COLOR } from './sky/NightSky.js';
@@ -174,6 +175,7 @@ export class GameApp {
 
 		this.elevators = new Elevators( factory );
 		this.hitches = new HitchLog();
+		this.work = new RenderWork( this.renderer.info );
 		this.stream = new InteriorStream( {
 			factory, roomLights: this.rooms, elevators: this.elevators,
 			haze: this.tier.haze ? INDOOR_HAZE : null, hitches: this.hitches
@@ -329,6 +331,11 @@ export class GameApp {
 	#frame() {
 
 		const now = performance.now();
+		// What the renderer built for itself last frame, before the gap that
+		// carried it is printed: a link and an upload are blocking work the
+		// world never asked for and could not otherwise name.
+		const built = this.work.since();
+		if ( built ) this.hitches.note( built );
 		this.hitches.frame( now - this.last );
 		this.tick( Math.min( 0.05, ( now - this.last ) / 1000 ) );
 		this.last = now;

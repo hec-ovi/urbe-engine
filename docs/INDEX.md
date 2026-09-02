@@ -18,6 +18,7 @@
   - `player/`: input, first-person controller, interaction
   - `agents/`: character assets, pose baking, crowd, walk routes, traffic
   - `sim/`: the simulation library host
+  - `debug/`: the hitch log, and the renderer work (shader links, texture uploads) that explains a gap the world did not cause
   - `time/`, `world/`: game clock, the sun arc and the four sky states it drives, district and parcel lookup, map model for the minimap, named camera poses for the lighting tuning protocol
 
 ## Scale experiment (docs/RESEARCH.md 9)
