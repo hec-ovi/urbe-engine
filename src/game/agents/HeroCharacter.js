@@ -1,7 +1,11 @@
 import * as THREE from 'three/webgpu';
+import { MeshStandardNodeMaterial } from 'three/webgpu';
+import { uniform, vec2 } from 'three/tsl';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { ANIMATION_URL, CHARACTER_ROOT, assertRigCompatibility, avatarFor } from './CharacterCatalog.js';
+import { dressedColorNode } from './BodyMesh.js';
+import { garments } from './Garments.js';
 
 const TALK = 'Idle_Talking_Loop';
 const SIT_TALK = 'Sitting_Talking_Loop';
@@ -45,6 +49,7 @@ export class HeroCharacter {
 		if ( request !== this.request ) return false;
 
 		const root = clone( source.scene );
+		dress( root, person.look );
 		root.name = `focused-${descriptor.id}`;
 		root.position.copy( person.position );
 		root.rotation.y = person.heading;
@@ -111,6 +116,7 @@ export class HeroCharacter {
 		person.hero = false;
 		mixer.stopAllAction();
 		this.group.remove( root );
+		for ( const material of root.userData.transientMaterials ?? [] ) material.dispose();
 		this.active = null;
 
 	}
@@ -206,6 +212,32 @@ function skinnedMesh( root ) {
 	if ( ! best ) throw new Error( 'character asset has no skinned mesh' );
 
 	return best;
+
+}
+
+/** Paints the focused bare base with the same outfit the baked slot wore. */
+function dress( root, look ) {
+
+	if ( ! look ) return;
+	const body = skinnedMesh( root );
+	const source = Array.isArray( body.material ) ? body.material[ 0 ] : body.material;
+	if ( ! source?.map ) return;
+
+	body.geometry.setAttribute( 'cloth', garments( body ) );
+	const material = new MeshStandardNodeMaterial( {
+		roughness: source.roughness ?? 0.78,
+		metalness: source.metalness ?? 0,
+		normalMap: source.normalMap ?? null,
+		roughnessMap: source.roughnessMap ?? null
+	} );
+	material.colorNode = dressedColorNode( body.geometry, source.map, {
+		skin: uniform( look.skin ),
+		shirt: uniform( look.shirt ),
+		trousers: uniform( look.trousers ),
+		cut: vec2( uniform( look.sleeve ), uniform( look.hem ) )
+	} );
+	body.material = material;
+	root.userData.transientMaterials = [ material ];
 
 }
 

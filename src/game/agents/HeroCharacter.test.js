@@ -20,7 +20,7 @@ describe( 'focused character', () => {
 		} );
 		const person = {
 			gender: 'female', appearanceSeed: 7, clip: 2, hero: false,
-			position: new THREE.Vector3( 4, 0, 8 ), heading: 1.2
+			position: new THREE.Vector3( 4, 0, 8 ), heading: 1.2, look: outfit()
 		};
 
 		expect( await hero.show( person ) ).toBe( true );
@@ -33,10 +33,15 @@ describe( 'focused character', () => {
 		hero.active.root.traverse( ( node ) => { if ( node.isMesh ) meshes.push( node ); } );
 		expect( meshes.filter( ( mesh ) => mesh.isSkinnedMesh ) ).toHaveLength( 1 );
 		expect( meshes.find( ( mesh ) => mesh.name === 'hair' ).parent.name ).toBe( 'Head' );
+		const body = meshes.find( ( mesh ) => mesh.isSkinnedMesh );
+		expect( body.material ).toBeInstanceOf( THREE.MeshStandardNodeMaterial );
+		expect( body.geometry.hasAttribute( 'cloth' ) ).toBe( true );
+		const dispose = vi.spyOn( body.material, 'dispose' );
 
 		hero.hide();
 		expect( person.hero ).toBe( false );
 		expect( hero.group.children ).toHaveLength( 0 );
+		expect( dispose ).toHaveBeenCalledOnce();
 
 	} );
 
@@ -95,13 +100,25 @@ function rig( name = 'body' ) {
 	geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [ 0, 0, 0 ], 3 ) );
 	geometry.setAttribute( 'skinIndex', new THREE.Uint16BufferAttribute( [ 0, 0, 0, 0 ], 4 ) );
 	geometry.setAttribute( 'skinWeight', new THREE.Float32BufferAttribute( [ 1, 0, 0, 0 ], 4 ) );
-	const mesh = new THREE.SkinnedMesh( geometry, new THREE.MeshBasicMaterial() );
+	const mesh = new THREE.SkinnedMesh( geometry, new THREE.MeshStandardMaterial( { map: new THREE.Texture() } ) );
 	mesh.name = name;
 	mesh.add( bone );
 	mesh.bind( new THREE.Skeleton( [ bone, head ] ) );
 	root.add( mesh );
 
 	return root;
+
+}
+
+function outfit() {
+
+	return {
+		skin: new THREE.Color( 0xffffff ),
+		shirt: new THREE.Color( 0x446688 ),
+		trousers: new THREE.Color( 0x222833 ),
+		sleeve: 0.55,
+		hem: 0.88
+	};
 
 }
 

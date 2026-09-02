@@ -35,26 +35,15 @@ export class BodyMesh extends CrowdMesh {
 		this.shirts = this.attribute( 4 );
 		this.trousers = this.attribute( 3 );
 
-		const aCloth = attribute( 'cloth', 'vec4' );
 		const aSkinCut = instancedBufferAttribute( this.skins, 'vec4' );
 		const aShirtCut = instancedBufferAttribute( this.shirts, 'vec4' );
-		const aSkin = aSkinCut.xyz;
-		const aShirt = aShirtCut.xyz;
-		const aTrousers = instancedBufferAttribute( this.trousers, 'vec3' );
-		const aCut = vec2( aSkinCut.w, aShirtCut.w );
 
-		// A limb the garment does not reach carries 2, well past any cut, so
-		// these two land on 0 for every vertex that is not on that limb.
-		const sleeve = float( 1 ).sub( smoothstep( aCut.x.sub( EDGE ), aCut.x.add( EDGE ), aCloth.y ) );
-		const leg = float( 1 ).sub( smoothstep( aCut.y.sub( EDGE ), aCut.y.add( EDGE ), aCloth.z ) );
-
-		const torso = smoothstep( TORSO_IN, TORSO_OUT, aCloth.x );
-		const skin = texture( map ).rgb.mul( aSkin );
-		// Trousers first, then the shirt over the waistband, then the shoes.
-		const dressed = mix( skin, aTrousers, leg );
-		const top = mix( dressed, aShirt, max( torso, sleeve ) );
-
-		return vec4( mix( top, aTrousers.mul( SHOE_SHADE ), aCloth.w ), 1 );
+		return dressedColorNode( geometry, map, {
+			skin: aSkinCut.xyz,
+			shirt: aShirtCut.xyz,
+			trousers: instancedBufferAttribute( this.trousers, 'vec3' ),
+			cut: vec2( aSkinCut.w, aShirtCut.w )
+		} );
 
 	}
 
@@ -65,5 +54,22 @@ export class BodyMesh extends CrowdMesh {
 		this.trousers.setXYZ( slot, look.trousers.r, look.trousers.g, look.trousers.b );
 
 	}
+
+}
+
+/** The same garment surface for a baked crowd body or one focused rig. */
+export function dressedColorNode( geometry, map, { skin, shirt, trousers, cut } ) {
+
+	const aCloth = attribute( 'cloth', 'vec4' );
+	// A limb the garment does not reach carries 2, well past any cut, so
+	// these two land on 0 for every vertex that is not on that limb.
+	const sleeve = float( 1 ).sub( smoothstep( cut.x.sub( EDGE ), cut.x.add( EDGE ), aCloth.y ) );
+	const leg = float( 1 ).sub( smoothstep( cut.y.sub( EDGE ), cut.y.add( EDGE ), aCloth.z ) );
+	const torso = smoothstep( TORSO_IN, TORSO_OUT, aCloth.x );
+	const bare = texture( map ).rgb.mul( skin );
+	const dressed = mix( bare, trousers, leg );
+	const top = mix( dressed, shirt, max( torso, sleeve ) );
+
+	return vec4( mix( top, trousers.mul( SHOE_SHADE ), aCloth.w ), 1 );
 
 }
