@@ -20,6 +20,7 @@ import { Neon } from './city/Neon.js';
 import { StreetLamps } from './city/StreetLamps.js';
 import { Dressing } from './props/Dressing.js';
 import { LaneMarkings } from './city/LaneMarkings.js';
+import { Crossings } from './city/Crossings.js';
 import { LitWindows } from './city/LitWindows.js';
 import { RoomView } from './city/RoomView.js';
 import { Venues } from './city/Venues.js';
@@ -199,6 +200,7 @@ export class GameApp {
 			props.group,
 			this.transit.group,
 			new LaneMarkings( connections.networks, config.laneMode ).build(),
+			new Crossings( atlas ).build(),
 			new LitWindows( atlas, buildings ).build()
 		);
 
