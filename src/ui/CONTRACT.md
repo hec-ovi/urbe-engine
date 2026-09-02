@@ -18,7 +18,7 @@ One panel over the game at a time.
 - Escape closes while a panel is open; opening one closes the one before
 
 ## Views (one full panel each; every one takes `onClose()`)
-- **MapView**: `setMap({ bounds: { min: [x,z], max: [x,z] }, roads: [{ path: [[x,z]], width }], blocks: [[[x,z]]], stations?: [{ point: [x,z], name }], markers?: [{ point: [x,z], label }] })`, `setVenues([{ point: { x, z }, open }])`, `setPlayer( position, heading )` (heading in radians, the player looks along (-sin, -cos)), `centre()`, `shown()`. Drag pans, wheel zooms, north up, legend, player marker; the canvas redraws only on pan, zoom or a data change; follows the player until the first drag.
+- **Map3DView** (the MAP panel): `setWorld({ bounds: { min: [x,z], max: [x,z] }, buildings: [{ ring: [[x,z]], height }], ground: [{ surface, polygon: [[x,z]] }] })` raises every building as a prism and lays the ground cover as plates; `setVenues([{ point: { x, z }, open }])`, `setPlayer( position, heading )`, `centre()`; drag turns, wheel zooms, the frame renders only on a change; `shown()` creates the WebGL renderer sized to the stage.
 - **MinimapView** (HUD corner, always on): `setMap( map )` same shape without stations or markers, `setVenues( venues )`, `update( position, heading )` each frame, `toggle()`, `setVisible( bool )`
 - **InventoryView**: `setItems([{ id, name, kind, description, place }])` in slot order over 30 slots, `select( index )` (-1 clears); clicking a slot selects it and shows its detail
 - **QuestsView**: `setQuests([{ id, title, text, state: 'active' | 'done' | 'failed', steps: [{ text, done }] }])`, `select( id )`; empty reads "no quest yet"
@@ -48,7 +48,7 @@ One panel over the game at a time.
 - No rounded corners anywhere: no `border-radius` in any stylesheet.
 - The tab bar always shows each entry's key letter, and is only on screen while paused or while a panel is open.
 - One full panel at a time; Escape closes it.
-- Canvas maps redraw on pan, zoom or data change, never per frame on their own.
+- Maps redraw on pan, zoom, turn or data change, never per frame on their own.
 
 ## Tests and preview
 `*.test.js` beside each view and widget, Testing Library plus user-event on jsdom (`// @vitest-environment jsdom`), one per declared input, output and event. `test-helpers/canvas.js` gives jsdom a recording 2d context.

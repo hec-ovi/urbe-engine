@@ -15,11 +15,13 @@ export function mapModel( atlas ) {
 
 }
 
-/** Every rail station on the map, named by its network until the naming pass gives it a name. */
-export function stations( atlas ) {
+/** The city as blocks for the 3D map: every parcel prism and the ground cover, straight off the volumetrics. */
+export function blockWorld( atlas ) {
 
-	const of = ( list, kind ) => ( list ?? [] ).map( ( station ) => ( { point: station.position, name: `${kind} ${station.id}` } ) );
-
-	return [ ...of( atlas.transit?.trainStations, 'train' ), ...of( atlas.transit?.subwayStations, 'subway' ) ];
+	return {
+		bounds: atlas.meta.bounds,
+		buildings: atlas.volumetric.buildings.map( ( building ) => ( { ring: building.footprint, height: building.height } ) ),
+		ground: atlas.volumetric.ground
+	};
 
 }

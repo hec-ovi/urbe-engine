@@ -48,7 +48,7 @@ import { GameClock } from './time/GameClock.js';
 import { stopsFor } from './time/DayCycle.js';
 import { Locator } from './world/Locator.js';
 import { Bookmarks } from './world/Bookmarks.js';
-import { mapModel, stations } from './world/MapModel.js';
+import { mapModel, blockWorld } from './world/MapModel.js';
 
 const THEME = 'cyberpunk';
 /** Past this a room is behind opaque walls and haze, so it is not drawn. */
@@ -288,7 +288,7 @@ export class GameApp {
 		const map = mapModel( atlas );
 		this.view.minimap.setMap( map );
 		this.view.minimap.setVenues( this.venues.marks );
-		this.view.map.setMap( { ...map, stations: stations( atlas ) } );
+		this.view.map.setWorld( blockWorld( atlas ) );
 		this.view.map.setVenues( this.venues.marks );
 		this.view.settings.setValues( { quality: this.tier.name, fog: config.fog, exposure: config.exposure, crowd: config.maxCrowd } );
 		this.view.controls.setBindings( BINDINGS );

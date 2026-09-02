@@ -19,7 +19,7 @@ import { PauseMenu } from '../widgets/PauseMenu.js';
 import { TabBar } from '../widgets/TabBar.js';
 import { PanelHost } from './PanelHost.js';
 import { MinimapView } from './MinimapView.js';
-import { MapView } from './MapView.js';
+import { Map3DView } from './Map3DView.js';
 import { InventoryView } from './InventoryView.js';
 import { QuestsView } from './QuestsView.js';
 import { CodexView } from './CodexView.js';
@@ -56,7 +56,7 @@ export class GameView {
 		this.summary = new MissionSummary( { onClose: onSummaryClose } );
 		this.pause = new PauseMenu( { onResume } );
 
-		this.map = new MapView( { onClose: close } );
+		this.map = new Map3DView( { onClose: close } );
 		this.inventory = new InventoryView( { onClose: close } );
 		this.quests = new QuestsView( { onClose: close } );
 		this.codex = new CodexView( { onClose: close } );

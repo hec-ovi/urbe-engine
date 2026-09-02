@@ -28,6 +28,6 @@ Vite app measuring three interchangeable renderings of one seeded placeholder ci
 - `src/scene/`: shared stage (ArchetypeGeometries with meshopt LOD chains, SceneBuilder: lights, ground, orbit camera)
 - `src/variants/`: the three contenders behind one Variant interface (MeshVariant, BatchedVariant, IndirectVariant with TSL compute cull/LOD into indirect draws, createVariant)
 - `src/app/`: run wiring (App, RunConfig via URL query, RendererFactory, Metrics)
-- `src/ui/`: overlay only (src/ui/CONTRACT.md); views/GameView with PanelHost over MapView, InventoryView, QuestsView, CodexView, SettingsView, ControlsView plus MinimapView, BuildingView, ExperimentView; widgets/TabBar, ChatPanel, AvatarCard, VideoCallPanel, MissionToast, MissionSummary, HudClock, InteractPrompt, LocationReadout, DebugStats, PauseMenu and the viewer panels; components/ primitives and stylesheets; preview.html shows the whole overlay with sample data
+- `src/ui/`: overlay only (src/ui/CONTRACT.md); views/GameView with PanelHost over Map3DView, InventoryView, QuestsView, CodexView, SettingsView, ControlsView plus MinimapView, BuildingView, ExperimentView; widgets/TabBar, ChatPanel, AvatarCard, VideoCallPanel, MissionToast, MissionSummary, HudClock, InteractPrompt, LocationReadout, DebugStats, PauseMenu and the viewer panels; components/ primitives and stylesheets; preview.html shows the whole overlay with sample data
 
 Dependency direction: ui -> app -> variants -> scene -> city.
