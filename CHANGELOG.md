@@ -1,5 +1,8 @@
 # Changelog
 
+0.16.4: a freeze names the renderer work that caused it: the shaders linked and the maps uploaded in that frame join the world's own notes in the hitch line.
+0.16.3: the HUD readout's first row names the backend, the quality tier and the render size, so a screenshot says which path drew the frame.
+0.16.2: the transit tests build the bus stops and stations they assert on, so a regenerated atlas sample cannot decide what this box's contract test proves.
 0.16.1: WebGL2 runs without GPU timing queries and the low tier without bloom (no emissive target, no blur chain), so the fallback backend renders at speed.
 0.16.0: the city preview (`?mode=city`): every parcel stacked from its assembled floors over the atlas ground, orbit and zoom, hover names a parcel, a click opens it in the building viewer.
 0.15.10: every building wears its own pattern variant of each material, picked by parcel id (src/game/city/Variety.js); the viewer shows the same one.
