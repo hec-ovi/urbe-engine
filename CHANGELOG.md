@@ -1,5 +1,6 @@
 # Changelog
 
+0.15.4: an environment rebake renders one cube face per frame and convolves on the seventh; the reflections in use stay the previous bake's until the new one is whole.
 0.15.3: the lift cab waits at the ground floor instead of the basement.
 0.15.2: the game imports the quests runtime entry (no node APIs), so the world loads in the browser with questlines wired.
 0.15.1: a talk line carries the questlines as they stand, so the dialog layers know the person's part in the story.
