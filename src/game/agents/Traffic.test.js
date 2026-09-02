@@ -73,6 +73,43 @@ describe( 'Traffic', () => {
 
 	} );
 
+	it( 'holds short of a player standing in its lane and pushes them out of its body', () => {
+
+		const traffic = new Traffic( {
+			networks: corner( 20 ),
+			models: stubModels(),
+			signals: { green: () => true },
+			capacity: 1,
+			seed: 'corner'
+		} );
+		const far = new THREE.Vector3( 10, 0, 40 );
+
+		traffic.update( 0.05, far, 0 );
+		const car = traffic.cars[ 0 ];
+
+		// somewhere with open road ahead on a straight lane
+		for ( let step = 0; step < 400 && ( car.via || car.lane.length - car.distance < 8 ); step ++ ) traffic.update( 0.05, far, 0 );
+
+		const forward = new THREE.Vector3( Math.sin( car.heading ), 0, Math.cos( car.heading ) );
+		const player = car.position.clone().addScaledVector( forward, 4.6 / 2 + 9 );
+		player.y = 0.12;
+		let closest = Infinity;
+
+		for ( let step = 0; step < 100; step ++ ) {
+
+			traffic.update( 0.05, player, 0 );
+			closest = Math.min( closest, player.clone().sub( car.position ).dot( forward ) - 4.6 / 2 );
+
+		}
+
+		expect( car.speed ).toBeLessThan( 0.05 );
+		expect( closest ).toBeGreaterThan( 0.5 );
+
+		expect( traffic.pushback( car.position.clone().addScaledVector( forward, 1 ).setY( 0.12 ), 0.32 ).length() ).toBeGreaterThan( 1 );
+		expect( traffic.pushback( car.position.clone().addScaledVector( forward, 12 ).setY( 0.12 ), 0.32 ).length() ).toBe( 0 );
+
+	} );
+
 	it( 'never puts two cars in the same place', () => {
 
 		const traffic = new Traffic( {

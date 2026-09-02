@@ -53,6 +53,7 @@ import { Locator } from './world/Locator.js';
 import { Bookmarks } from './world/Bookmarks.js';
 import { mapModel, blockWorld } from './world/MapModel.js';
 
+const _push = new THREE.Vector3();
 const THEME = 'cyberpunk';
 /** Past this a room is behind opaque walls and haze, so it is not drawn. */
 const ROOM_VISIBLE_RADIUS = 32;
@@ -351,7 +352,7 @@ export class GameApp {
 
 		// Out of anyone the crowd walked into last frame before the camera is
 		// placed, so the correction never shows up as a jolt a frame later.
-		this.body.push( this.crowd.pushback( this.body.feet, BODY_RADIUS ) );
+		this.body.push( _push.copy( this.crowd.pushback( this.body.feet, BODY_RADIUS ) ).add( this.traffic.pushback( this.body.feet, BODY_RADIUS ) ) );
 		this.controller.update( delta );
 
 		const feet = this.body.feet;

@@ -12,6 +12,12 @@ const MIN_GAP = 7;
 const MIN_SPAWN_LANE = 6;
 const TURN_WEIGHT = { s: 6, r: 2, l: 2, t: 1 };
 const TURN_SPEED = 0.55;
+/** The CC0 pack's cars: 4 to 4.8 m long, 1.8 to 2 m wide, as one box for who they touch. */
+const CAR_LENGTH = 4.6;
+const CAR_WIDTH = 1.9;
+/** A car eases down when the player stands in its lane this far ahead of its nose, and holds this short of them. */
+const YIELD_AHEAD = 10;
+const YIELD_STOP = 1.5;
 
 /**
  * Cars on the connections lane graph. A car drives its lane at that lane's
@@ -29,6 +35,8 @@ export class Traffic {
 
 	/** @param seed the world's seed; any string or number, one traffic stream per world. */
 	constructor( { networks, models, signals, capacity, seed = 1 } ) {
+
+		this.push = new THREE.Vector3();
 
 		this.models = models;
 		this.signals = signals;
@@ -76,7 +84,7 @@ export class Traffic {
 
 		const traffic = this.#byLine();
 
-		for ( const car of this.cars ) this.#drive( car, delta, daySeconds, traffic );
+		for ( const car of this.cars ) this.#drive( car, delta, daySeconds, traffic, player );
 
 		this.cars = this.cars.filter( ( car ) => ! car.gone );
 
@@ -158,7 +166,7 @@ export class Traffic {
 
 	}
 
-	#drive( car, delta, daySeconds, traffic ) {
+	#drive( car, delta, daySeconds, traffic, player ) {
 
 		if ( ! car.via && ! car.turn ) car.turn = pickTurn( car.lane, car.rng );
 
@@ -175,6 +183,11 @@ export class Traffic {
 		if ( gap < MIN_GAP ) target = 0;
 		else if ( gap < MIN_GAP * 2 ) target = Math.min( target, limit * ( gap - MIN_GAP ) / MIN_GAP );
 
+		// Somebody standing in the lane ahead: ease down to them and hold short.
+		const ahead = this.#ahead( car, player );
+
+		if ( ahead !== null ) target = ahead < YIELD_STOP ? 0 : Math.min( target, limit * ( ahead - YIELD_STOP ) / YIELD_AHEAD );
+
 		car.speed += THREE.MathUtils.clamp( target - car.speed, - 12 * delta, 6 * delta );
 		car.distance += Math.max( 0, car.speed ) * delta;
 
@@ -183,6 +196,70 @@ export class Traffic {
 		const spot = sample( car.via ?? car.lane, Math.min( car.distance, ( car.via ?? car.lane ).length ), 1 );
 		car.position.set( spot.x, 0.02, spot.z );
 		car.heading = spot.heading;
+
+	}
+
+	/**
+	 * How far ahead of this car's nose the player stands inside its lane
+	 * corridor, or null when they are not in its way.
+	 */
+	#ahead( car, player ) {
+
+		if ( Math.abs( player.y - car.position.y ) > 2 ) return null;
+
+		const local = toCar( car, player );
+		const ahead = local.along - CAR_LENGTH / 2;
+
+		if ( ahead < 0 || ahead > YIELD_AHEAD + YIELD_STOP ) return null;
+		if ( Math.abs( local.lateral ) > CAR_WIDTH / 2 + PLAYER_CLEARANCE ) return null;
+
+		return ahead;
+
+	}
+
+	/**
+	 * How far the player has to move to stop standing inside a car: the same
+	 * rule as the crowd's, over the car's box instead of a person's circle,
+	 * out through whichever side is nearer. The result is reused; copy it if
+	 * it has to outlive the call.
+	 *
+	 * @param point the player's feet
+	 * @param clearance the player's own radius
+	 */
+	pushback( point, clearance ) {
+
+		this.push.set( 0, 0, 0 );
+
+		for ( const car of this.cars ) {
+
+			if ( Math.abs( point.y - car.position.y ) > 2 ) continue;
+
+			const local = toCar( car, point );
+			const alongRoom = CAR_LENGTH / 2 + clearance - Math.abs( local.along );
+			const lateralRoom = CAR_WIDTH / 2 + clearance - Math.abs( local.lateral );
+
+			if ( alongRoom <= 0 || lateralRoom <= 0 ) continue;
+
+			const sin = Math.sin( car.heading );
+			const cos = Math.cos( car.heading );
+
+			if ( lateralRoom < alongRoom ) {
+
+				const side = local.lateral < 0 ? - 1 : 1;
+				this.push.x += cos * side * lateralRoom;
+				this.push.z -= sin * side * lateralRoom;
+
+			} else {
+
+				const end = local.along < 0 ? - 1 : 1;
+				this.push.x += sin * end * alongRoom;
+				this.push.z += cos * end * alongRoom;
+
+			}
+
+		}
+
+		return this.push;
 
 	}
 
@@ -257,6 +334,20 @@ export class Traffic {
 }
 
 const UP = new THREE.Vector3( 0, 1, 0 );
+/** Room a person needs beside a car's side to count as out of its lane. */
+const PLAYER_CLEARANCE = 0.6;
+
+/** A world point in a car's frame: along its heading (forward positive) and across it (left positive). */
+function toCar( car, point ) {
+
+	const dx = point.x - car.position.x;
+	const dz = point.z - car.position.z;
+	const sin = Math.sin( car.heading );
+	const cos = Math.cos( car.heading );
+
+	return { along: dx * sin + dz * cos, lateral: dx * cos - dz * sin };
+
+}
 
 /** The line a car is travelling: its lane, or the curve it is crossing on. */
 function lineId( car ) {

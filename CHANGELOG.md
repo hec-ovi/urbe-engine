@@ -1,5 +1,6 @@
 # Changelog
 
+0.15.6: cars brake for a player standing in their lane (easing from 10 m ahead, holding 1.5 m short) and their bodies push the player out like the crowd does.
 0.15.5: the character controller's autostep asks for 0.2 m of tread, under the interior's 0.28 m, so no stair tread fails the step test.
 0.15.4: an environment rebake renders one cube face per frame and convolves on the seventh; the reflections in use stay the previous bake's until the new one is whole.
 0.15.3: the lift cab waits at the ground floor instead of the basement.

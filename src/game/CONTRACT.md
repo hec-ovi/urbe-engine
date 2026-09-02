@@ -53,6 +53,7 @@ Purpose: plays the assembled city as a first-person world at street level, at ni
 
 ## Physics
 - Rapier 0.20, fixed 1/60 step. Ground and every building shell are fixed trimeshes built once; the shells carry their real door and window openings, so a doorway is walkable with no special case. Each lamp post is one thin fixed cylinder, not a mesh. An interior floor band becomes a trimesh when the stream puts it in the scene and stops being one when it takes it out, so what can be walked on is exactly what can be seen.
+- A car is a box the player is pushed out of the same way, through whichever side is nearer; a car whose lane the player stands in eases down from 10 m ahead of its nose and holds 1.5 m short of them.
 - Nobody in the crowd is a physics body, so the player is pushed out of them instead: every frame, the whole overlap with everyone within arm's reach, summed and resolved through the same character controller, so a person cannot be walked through and a push cannot shove the player through a wall.
 - Player: capsule collider driven by `KinematicCharacterController` with autostep (0.42 m, which is what makes curbs and interior stairs walkable) and snap-to-ground.
 
