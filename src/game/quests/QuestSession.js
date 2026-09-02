@@ -1,4 +1,4 @@
-import { CastResolver, QuestlineRuntime } from '../../../../quests/dist/index.js';
+import { CastResolver, QuestlineRuntime } from '../../../../quests/dist/runtime.js';
 
 /**
  * The questlines of a world, running against the game's own simulation
