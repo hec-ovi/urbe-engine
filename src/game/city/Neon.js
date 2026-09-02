@@ -19,6 +19,17 @@ const SCREEN_LUMENS = [ 300, 900 ];
 const SCREEN_EMISSIVE = 3;
 
 const SCREEN_KEY = ( tier ) => `cyberpunk/ad-screen/${tier}`;
+/** The parcel types whose screens advertise the business itself (../../../../materials/CONTRACT.md, rebrand). */
+const ADVERTISERS = new Set( [ 'hotel', 'commerce', 'mall', 'restaurant', 'coffee_shop', 'corpo', 'clinic' ] );
+
+/** The materials box's variant id for a business name: `brand:<slug>`. */
+export function brandVariant( name ) {
+
+	const slug = name.toLowerCase().replace( /[^a-z0-9]+/g, '-' ).replace( /^-|-$/g, '' );
+
+	return slug ? `brand:${slug}` : null;
+
+}
 const SCREEN_ASPECT = 16 / 9;
 
 /**
@@ -69,7 +80,8 @@ export class Neon {
 
 			if ( facade ) {
 
-				this.#screens( screens, glows, facade, rng, parcel.tier, building.blueprint.bounds.height );
+				const brand = parcel.name && ADVERTISERS.has( parcel.type ) ? brandVariant( parcel.name ) : null;
+				this.#screens( screens, glows, facade, rng, parcel.tier, building.blueprint.bounds.height, brand );
 
 			}
 
@@ -81,11 +93,13 @@ export class Neon {
 		// A screen is a large dim panel next to a lamp lens, so it carries a
 		// fraction of the lens's level: enough to read as lit, never enough to
 		// clip its picture to a white rectangle.
-		for ( const [ key, geometries ] of screens ) {
+		for ( const [ id, geometries ] of screens ) {
+
+			const [ key, variantId ] = id.split( '#' );
 
 			const mesh = new THREE.Mesh(
 				BufferGeometryUtils.mergeGeometries( geometries, false ),
-				this.factory.variant( key, { side: THREE.DoubleSide, emissiveScale: SCREEN_EMISSIVE } )
+				this.factory.variant( key, { variantId, side: THREE.DoubleSide, emissiveScale: SCREEN_EMISSIVE } )
 			);
 			mesh.name = `neon:${key}`;
 			group.add( mesh );
@@ -149,11 +163,14 @@ export class Neon {
 	}
 
 	/** Flat screens on the wall itself. */
-	#screens( out, glows, facade, rng, tier, top ) {
+	#screens( out, glows, facade, rng, tier, top, brand = null ) {
 
 		if ( top < 7 || rng.next() > 0.75 ) return;
 
-		const key = SCREEN_KEY( tier );
+		// A named business advertises itself: its screens take its branded
+		// variant, and a name the database has not spelled yet falls back to
+		// the tier's brandless art.
+		const key = brand ? `${SCREEN_KEY( tier )}#${brand}` : SCREEN_KEY( tier );
 		const width = rng.range( 2.8, Math.min( 6, facade.length * 0.5 ) );
 
 		if ( ! ( width > 1 ) ) return;
