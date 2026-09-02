@@ -622,7 +622,7 @@ export class Crowd {
 				Math.min( member.distance, member.edge.length ),
 				member.direction
 			);
-			member.position.set( spot.x, member.edge.kind === 'crossing' ? 0.02 : SIDEWALK_HEIGHT, spot.z );
+			member.position.set( spot.x, walkY( member.edge, spot ), spot.z );
 			member.heading = spot.heading;
 
 		}
@@ -693,6 +693,36 @@ export class Crowd {
 		}
 
 	}
+
+}
+
+/**
+ * Connections publishes network grade. The raised city pavement adds its
+ * 12 cm surface to sidewalk and access edges; station floors and links already
+ * carry their absolute level. A stair blends that surface lift away by the
+ * bottom landing so both ends meet the rendered station exactly.
+ */
+function walkY( edge, spot ) {
+
+	const clearance = 0.02;
+
+	if ( edge.kind === 'sidewalk' || edge.kind === 'access' ) return spot.y + SIDEWALK_HEIGHT;
+
+	if ( edge.kind !== 'stairs' ) return spot.y + clearance;
+
+	let low = Infinity;
+	let high = - Infinity;
+
+	for ( const point of edge.path ) {
+
+		low = Math.min( low, point[ 1 ] );
+		high = Math.max( high, point[ 1 ] );
+
+	}
+
+	const t = high > low ? THREE.MathUtils.clamp( ( spot.y - low ) / ( high - low ), 0, 1 ) : 0;
+
+	return spot.y + THREE.MathUtils.lerp( clearance, SIDEWALK_HEIGHT, t );
 
 }
 

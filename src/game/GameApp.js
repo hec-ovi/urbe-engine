@@ -700,7 +700,7 @@ function placesOf( doors, buildings ) {
  * than at a wall: the walk node nearest the built centre, aimed at the corner
  * furthest from it.
  */
-function pickSpawn( networks, atlas ) {
+export function pickSpawn( networks, atlas ) {
 
 	const centre = atlas.parcels.reduce(
 		( acc, p ) => [ acc[ 0 ] + p.access.point[ 0 ] / atlas.parcels.length, acc[ 1 ] + p.access.point[ 1 ] / atlas.parcels.length ],
@@ -743,8 +743,8 @@ function pickSpawn( networks, atlas ) {
 	}
 
 	return {
-		point: new THREE.Vector3( best.x, SIDEWALK_HEIGHT + 0.05, best.z ),
-		lookAt: new THREE.Vector3( target.x, SIDEWALK_HEIGHT, target.z )
+		point: new THREE.Vector3( best.x, best.y + SIDEWALK_HEIGHT + 0.05, best.z ),
+		lookAt: new THREE.Vector3( target.x, target.y + SIDEWALK_HEIGHT, target.z )
 	};
 
 }

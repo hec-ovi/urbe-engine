@@ -52,6 +52,40 @@ describe( 'Crowd pushback', () => {
 
 } );
 
+describe( 'Crowd route elevation', () => {
+
+	it( 'places a walker on the authored subway stair height', () => {
+
+		const routes = new WalkRoutes( { walk: {
+			nodes: [
+				{ id: 'top', x: 0, y: 0, z: 0, kind: 'station-access' },
+				{ id: 'bottom', x: 10, y: - 10, z: 0, kind: 'station-handoff' }
+			],
+			edges: [ {
+				id: 'stairs', from: 'top', to: 'bottom', kind: 'stairs', width: 1.2, level: 0,
+				path: [ [ 0, 0 ], [ 10, 0 ] ], path3: [ [ 0, 0, 0 ], [ 10, - 10, 0 ] ]
+			} ]
+		} } );
+		const agent = {
+			crowdId: 'station-walker', type: 'commuter', activity: 'commuting',
+			place: { kind: 'edge', id: 'stairs' }, progress: 0.5, direction: 1
+		};
+		const crowd = new Crowd( {
+			assets: { variants: [ {} ], durations: [ 1, 1, 1 ], meshesOf: () => [] },
+			routes, signals: { green: () => true }, sim: { crowd: () => ( { agents: [ agent ] } ) },
+			places: new Map(), capacity: 2
+		} );
+
+		crowd.update( 0, new THREE.Vector3( 5, - 5, 0 ), { timeMin: 0, daySeconds: 0 } );
+
+		const walker = [ ...crowd.members.values() ][ 0 ];
+		expect( walker.position.x ).toBeCloseTo( 5 );
+		expect( walker.position.y ).toBeCloseTo( - 4.93 );
+
+	} );
+
+} );
+
 /**
  * A street handle names a sampled agent for one epoch of that pavement, so the
  * same people come back under new handles minute after minute while the ones
@@ -172,13 +206,14 @@ function pavement() {
 	const nodes = [];
 	const edges = [];
 
-	for ( let i = 0; i <= 6; i ++ ) nodes.push( { id: `n${i}`, x: - 120 + i * 40, z: 0, kind: 'sidewalk' } );
+	for ( let i = 0; i <= 6; i ++ ) nodes.push( { id: `n${i}`, x: - 120 + i * 40, y: 0, z: 0, kind: 'sidewalk' } );
 
 	for ( let i = 0; i < 6; i ++ ) {
 
 		edges.push( {
 			id: `e${i}`, from: `n${i}`, to: `n${i + 1}`, kind: 'sidewalk',
-			path: [ [ nodes[ i ].x, 0 ], [ nodes[ i + 1 ].x, 0 ] ]
+			path: [ [ nodes[ i ].x, 0 ], [ nodes[ i + 1 ].x, 0 ] ],
+			path3: [ [ nodes[ i ].x, 0, 0 ], [ nodes[ i + 1 ].x, 0, 0 ] ]
 		} );
 
 	}

@@ -46,7 +46,7 @@ export class Bookmarks {
 		if ( ! node ) return null;
 
 		return {
-			point: new THREE.Vector3( node.x, 0.17, node.z ),
+			point: new THREE.Vector3( node.x, node.y + 0.17, node.z ),
 			yaw: Math.atan2( node.x - spot.x, node.z - spot.z ) + Math.PI,
 			pitch: - 0.08
 		};
@@ -87,7 +87,7 @@ export class Bookmarks {
 		if ( ! node ) return null;
 
 		return {
-			point: new THREE.Vector3( node.x, 0.17, node.z ),
+			point: new THREE.Vector3( node.x, node.y + 0.17, node.z ),
 			yaw: Math.atan2( node.x - spot.x, node.z - spot.z ) + Math.PI,
 			pitch: 0.22
 		};

@@ -50,7 +50,7 @@ export class Traffic {
 
 		for ( const lane of networks.road.lanes ) {
 
-			const line = measure( lane.path );
+			const line = measure( lane.path3, `road lane ${lane.id}.path3` );
 
 			if ( ! ( line.length > 0 ) ) continue;
 
@@ -60,6 +60,7 @@ export class Traffic {
 
 		this.matrix = new THREE.Matrix4();
 		this.quaternion = new THREE.Quaternion();
+		this.rotation = new THREE.Euler( 0, 0, 0, 'YXZ' );
 		this.position = new THREE.Vector3();
 		this.scale = new THREE.Vector3( 1, 1, 1 );
 
@@ -136,7 +137,7 @@ export class Traffic {
 			if ( this.cars.length >= this.capacity ) return;
 			if ( lane.length < MIN_SPAWN_LANE ) continue;
 
-			const distance = Math.hypot( lane.mid[ 0 ] - player.x, lane.mid[ 1 ] - player.z );
+			const distance = Math.hypot( lane.mid[ 0 ] - player.x, lane.mid[ 2 ] - player.z );
 
 			if ( distance > SPAWN_RADIUS || distance < 12 ) continue;
 
@@ -159,7 +160,8 @@ export class Traffic {
 				speed: lane.speed,
 				gone: false,
 				position: new THREE.Vector3(),
-				heading: 0
+				heading: 0,
+				pitch: 0
 			} );
 
 		}
@@ -194,8 +196,9 @@ export class Traffic {
 		if ( car.distance >= line.length ) this.#advance( car, car.distance - line.length );
 
 		const spot = sample( car.via ?? car.lane, Math.min( car.distance, ( car.via ?? car.lane ).length ), 1 );
-		car.position.set( spot.x, 0.02, spot.z );
+		car.position.set( spot.x, spot.y + 0.02, spot.z );
 		car.heading = spot.heading;
+		car.pitch = spot.pitch;
 
 	}
 
@@ -303,7 +306,11 @@ export class Traffic {
 
 		const id = `${lane.id}>${turn.laneId}`;
 
-		if ( ! this.turns.has( id ) ) this.turns.set( id, { id, ...measure( turn.via ) } );
+		if ( ! this.turns.has( id ) ) {
+
+			this.turns.set( id, { id, ...measure( turn.via3, `turn ${id}.via3` ) } );
+
+		}
 
 		return this.turns.get( id );
 
@@ -320,7 +327,8 @@ export class Traffic {
 			if ( slot >= this.capacity ) continue;
 
 			this.position.copy( car.position );
-			this.quaternion.setFromAxisAngle( UP, car.heading );
+			this.rotation.set( - car.pitch, car.heading, 0, 'YXZ' );
+			this.quaternion.setFromEuler( this.rotation );
 			this.matrix.compose( this.position, this.quaternion, this.scale );
 			this.models.setInstance( car.model, slot, this.matrix );
 			counts[ car.model ] = slot + 1;
@@ -333,7 +341,6 @@ export class Traffic {
 
 }
 
-const UP = new THREE.Vector3( 0, 1, 0 );
 /** Room a person needs beside a car's side to count as out of its lane. */
 const PLAYER_CLEARANCE = 0.6;
 

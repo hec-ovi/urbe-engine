@@ -194,7 +194,7 @@ function routes() {
 	return {
 		edges: new Map( [ [ EDGE.id, EDGE ], [ NEIGHBOUR.id, NEIGHBOUR ] ] ),
 		near: () => [ EDGE, NEIGHBOUR ],
-		pointAt: ( edge, distance ) => ( { x: distance, z: 0, heading: 0 } ),
+		pointAt: ( edge, distance ) => ( { x: distance, y: 0, z: 0, heading: 0 } ),
 		exitNode: () => 'n1',
 		nextFrom: () => ( { edge: EDGE, direction: 1 } )
 	};

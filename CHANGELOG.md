@@ -1,5 +1,7 @@
 # Changelog
 
+0.16.17: people and cars follow Connections 0.9 movement in three dimensions. Walkers keep the height of sidewalks, crossings, station stairs, passages, platforms and building links; cars keep lane and turn elevation and pitch on ramps. A missing authoritative `path3` or `via3` refuses the run instead of falling back to its flat projection.
+
 0.16.16: an Atlas building selection opens its exact parcel and output in the exterior viewer. A missing exterior is generated on demand from a known Atlas sample through the validated assembly boundary, and an absent world or parcel is reported on screen.
 
 0.16.15: the readout answers "did it stall": the run's hitch count and its worst gap in milliseconds, or `no hitch`, so a screenshot says it without a console open.

@@ -144,6 +144,49 @@ describe( 'Traffic', () => {
 
 	} );
 
+	it( 'follows lane and turn elevation without flattening either path', () => {
+
+		const networks = corner( 20 );
+		networks.road.lanes[ 0 ].path3 = [ [ 0, 0, 0 ], [ 20, 8, 0 ] ];
+		networks.road.lanes[ 0 ].next[ 0 ].via3 = [
+			[ 20, 8, 0 ], [ 23, 8, 0 ], [ 25, 8, 2 ], [ 25, 8, 5 ]
+		];
+		networks.road.lanes[ 1 ].path3 = [ [ 25, 8, 5 ], [ 25, 8, 60 ] ];
+		const traffic = new Traffic( {
+			networks,
+			models: stubModels(),
+			signals: { green: () => true },
+			capacity: 1,
+			seed: 'ramp'
+		} );
+		const player = new THREE.Vector3( 10, 0, 40 );
+
+		traffic.update( 0.05, player, 0 );
+		const car = traffic.cars[ 0 ];
+		expect( car.position.y ).toBeGreaterThan( 0.02 );
+		expect( car.pitch ).toBeCloseTo( Math.atan2( 8, 20 ) );
+
+		for ( let step = 0; step < 400 && ! car.via; step ++ ) traffic.update( 0.05, player, 0 );
+
+		expect( car.via ).toBeTruthy();
+		expect( car.position.y ).toBeCloseTo( 8.02 );
+
+	} );
+
+	it( 'refuses a lane with no authoritative 3D path', () => {
+
+		const networks = corner( 20 );
+		delete networks.road.lanes[ 0 ].path3;
+
+		expect( () => new Traffic( {
+			networks,
+			models: stubModels(),
+			signals: { green: () => true },
+			capacity: 1
+		} ) ).toThrow( /E_MOVEMENT_PATH3: road lane A\.path3/ );
+
+	} );
+
 } );
 
 /** Two lanes meeting at a corner, joined by one turn connection with a curve. */
@@ -155,16 +198,19 @@ function corner( length, signal ) {
 				{
 					id: 'A', edgeId: 'e0', index: 0, speed: 10, width: 3,
 					path: [ [ 0, 0 ], [ length, 0 ] ],
+					path3: [ [ 0, 0, 0 ], [ length, 0, 0 ] ],
 					next: [ {
 						laneId: 'B',
 						turn: 'l',
 						via: [ [ length, 0 ], [ length + 3, 0 ], [ length + 5, 2 ], [ length + 5, 5 ] ],
+						via3: [ [ length, 0, 0 ], [ length + 3, 0, 0 ], [ length + 5, 0, 2 ], [ length + 5, 0, 5 ] ],
 						...( signal ? { signal } : {} )
 					} ]
 				},
 				{
 					id: 'B', edgeId: 'e1', index: 0, speed: 10, width: 3,
 					path: [ [ length + 5, 5 ], [ length + 5, 60 ] ],
+					path3: [ [ length + 5, 0, 5 ], [ length + 5, 0, 60 ] ],
 					next: []
 				}
 			]

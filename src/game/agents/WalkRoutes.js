@@ -24,8 +24,6 @@ export class WalkRoutes {
 
 		for ( const edge of networks.walk.edges ) {
 
-			if ( edge.kind === 'link' ) continue;
-
 			const measured = measureEdge( edge );
 
 			if ( measured.length < 0.5 ) continue;
@@ -47,7 +45,7 @@ export class WalkRoutes {
 
 		for ( const edge of this.walkable ) {
 
-			const distance = Math.hypot( edge.mid[ 0 ] - position.x, edge.mid[ 1 ] - position.z );
+			const distance = Math.hypot( edge.mid[ 0 ] - position.x, edge.mid[ 2 ] - position.z );
 
 			if ( distance >= inner && distance <= outer ) found.push( edge );
 
@@ -97,7 +95,7 @@ function measureEdge( edge ) {
 		to: edge.to,
 		kind: edge.kind,
 		signal: edge.signal ?? null,
-		...measure( edge.path )
+		...measure( edge.path3, `walk edge ${edge.id}.path3` )
 	};
 
 }
