@@ -24,16 +24,24 @@ export class LookPipeline {
 	constructor( renderer, scene, camera, tier ) {
 
 		const scenePass = pass( scene, camera );
-		const mrtNode = mrt( { output, emissive: vec4( emissive, output.a ) } );
-		mrtNode.setBlendMode( 'emissive', new THREE.BlendMode( THREE.NormalBlending ) );
-		scenePass.setMRT( mrtNode );
-
-		const bloomPass = bloom( scenePass.getTextureNode( 'emissive' ), tier.bloom.strength, tier.bloom.radius );
 		const dither = bayer16( screenCoordinate ).sub( 0.5 ).mul( float( DITHER ) );
+		// A tier with no bloom skips the emissive target and the blur chain outright, not a zero-strength pass.
+		const blooming = tier.bloom.strength > 0;
+		let bloomPass = null;
+
+		if ( blooming ) {
+
+			const mrtNode = mrt( { output, emissive: vec4( emissive, output.a ) } );
+			mrtNode.setBlendMode( 'emissive', new THREE.BlendMode( THREE.NormalBlending ) );
+			scenePass.setMRT( mrtNode );
+			bloomPass = bloom( scenePass.getTextureNode( 'emissive' ), tier.bloom.strength, tier.bloom.radius );
+
+		}
 
 		this.pipeline = new THREE.RenderPipeline( renderer );
 		this.pipeline.outputColorTransform = false;
-		this.pipeline.outputNode = scenePass.getTextureNode().add( bloomPass ).renderOutput().add( dither );
+		const lit = blooming ? scenePass.getTextureNode().add( bloomPass ) : scenePass.getTextureNode();
+		this.pipeline.outputNode = lit.renderOutput().add( dither );
 
 		this.bloom = bloomPass;
 

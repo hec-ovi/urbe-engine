@@ -16,7 +16,7 @@ const TIERS = [ 'low', 'medium', 'high', 'ultra' ];
  */
 const PRESETS = {
 	low: {
-		bloom: { strength: 0.3, radius: 0.0 },
+		bloom: { strength: 0, radius: 0.0 },
 		haze: false,
 		roomSlots: 2,
 		roomSpots: 4,

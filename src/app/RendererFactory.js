@@ -24,6 +24,8 @@ export class RendererFactory {
 		renderer.setPixelRatio( window.devicePixelRatio );
 		renderer.setSize( window.innerWidth, window.innerHeight );
 		await renderer.init();
+		// GPU timing queries are free on WebGPU and a stall per pass on WebGL2, where the pool also overflows.
+		renderer.trackTimestamp = RendererFactory.actualBackend( renderer ) === 'webgpu';
 		return renderer;
 
 	}

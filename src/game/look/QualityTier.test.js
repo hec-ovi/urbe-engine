@@ -23,8 +23,8 @@ describe( 'QualityTier', () => {
 		const low = QualityTier.describe( 'low', 'webgl' );
 		const ultra = QualityTier.describe( 'ultra', 'webgpu' );
 
-		// low is not a broken high: bloom and a room fill are on; haze quads are off on every tier.
-		expect( low.bloom.strength ).toBeGreaterThan( 0 );
+		// low is the fallback backend's tier: no bloom chain, but a room fill is on; haze quads are off on every tier.
+		expect( low.bloom.strength ).toBe( 0 );
 		expect( low.haze ).toBe( false );
 		expect( low.roomSlots ).toBeGreaterThan( 0 );
 

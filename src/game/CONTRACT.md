@@ -16,7 +16,7 @@ Purpose: plays the assembled city as a first-person world at street level, at ni
   - `quality` (`low` | `medium` | `high` | `ultra`): what the frame is allowed to spend (src/game/look/CONTRACT.md). Unset follows the backend: `high` on WebGPU, `low` on the WebGL2 fallback.
   - `exposure` (default 0.024): the one number the whole look is graded at. Tuning only.
   - `fog` (default 0.0003): street fog density per metre, sky-coloured and untinted, so a distant building fades without changing colour; the first block stays crisp.
-  - `off` (comma list of `fog`, `bloom`, `probe`, `haze`, `interiors`): look stages left out of the run, for telling them apart on screen.
+  - `off` (comma list of `fog`, `bloom`, `probe`, `haze`, `interiors`): look stages left out of the run, for telling them apart on screen. A tier whose bloom strength is 0 (the `low` tier, and any run with `off=bloom`) runs no emissive target and no blur chain at all. GPU timing queries run only on WebGPU.
 - HUD (src/ui/CONTRACT.md): the panels open on J M I X O ? and close on Esc, N and Esc pause; the tab bar is on screen only while paused or while a panel is open; a panel or the chat releases the mouse and owns the keyboard; the settings panel changes fog, exposure and crowd on the spot and reloads the run for a quality tier; the map is the city as blocks (every parcel prism and the ground cover from the atlas volumetrics) orbiting the player, with venues in their open state.
 - Atlas blueprint per ../../../atlas/CONTRACT.md.
 - Connections document, generated in-process from that blueprint by `connectionsRunner.js`; `signalStateAt` is consumed directly for signal state.
