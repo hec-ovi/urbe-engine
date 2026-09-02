@@ -15,7 +15,7 @@ const SURFACES = {
 	open: { key: 'cyberpunk/tile/high_rich', y: SIDEWALK_HEIGHT, curb: true }
 };
 
-const CURB_KEY = 'cyberpunk/curb/high_rich';
+const CURB_KEY = 'cyberpunk/curb/poor';
 /** A kerb stone's top, from the edge inward, and how far above the pavement it sits so it never fights it. */
 const CURB_WIDTH = 0.15;
 const CURB_LIP = 0.004;

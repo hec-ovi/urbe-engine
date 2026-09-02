@@ -46,6 +46,8 @@ function mount( name, prefix, dir ) {
 
 					const data = await readFile( filePath );
 					res.setHeader( 'Content-Type', type );
+					// A material map keeps its file name across releases; never let the browser keep a stale one.
+					res.setHeader( 'Cache-Control', 'no-store' );
 					res.end( data );
 
 				} catch {
