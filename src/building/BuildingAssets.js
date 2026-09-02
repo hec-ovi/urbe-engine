@@ -15,6 +15,27 @@ export class BuildingAssets {
 
 	}
 
+	/** Ensure the selected Atlas parcel has a generated exterior in this world. */
+	async ensure() {
+
+		const response = await fetch( '/api/building', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify( { parcel: this.parcel, out: this.base.slice( 0, - ( this.parcel.length + 1 ) ) } )
+		} );
+		const result = await response.json().catch( () => null );
+
+		if ( ! response.ok ) {
+
+			const code = result?.code ?? 'E_BUILD_FAILED';
+			throw new Error( `${code}: ${result?.message ?? `HTTP ${response.status}`}` );
+
+		}
+
+		return result;
+
+	}
+
 	async loadBlueprint() {
 
 		const response = await fetch( `${this.base}/${this.parcel}.blueprint.json` );

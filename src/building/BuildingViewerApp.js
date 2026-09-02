@@ -26,7 +26,7 @@ export class BuildingViewerApp {
 		return {
 			parcel: params.get( 'parcel' ) ?? 'p1640',
 			out: params.get( 'out' ) ?? '/out',
-			source: [ 'shell', 'interior' ].includes( params.get( 'source' ) ) ? params.get( 'source' ) : null,
+			source: [ 'shell', 'interior' ].includes( params.get( 'source' ) ) ? params.get( 'source' ) : 'shell',
 			backend: params.get( 'backend' ) === 'webgl' ? 'webgl' : 'webgpu'
 		};
 
@@ -72,13 +72,16 @@ export class BuildingViewerApp {
 
 		const { parcel, out, backend } = this.config;
 		const assets = new BuildingAssets( parcel, out );
+		this.view.setStatus( `preparing ${parcel} exterior…` );
+		await assets.ensure();
 
 		const [ blueprint, hasInterior ] = await Promise.all( [
 			assets.loadBlueprint(),
 			assets.hasInterior()
 		] );
 
-		const source = this.config.source ?? ( hasInterior ? 'interior' : 'shell' );
+		const source = this.config.source;
+		if ( source === 'interior' && ! hasInterior ) throw new Error( `E_INTERIOR_NOT_FOUND: ${parcel} has no assembled interior in ${out}` );
 		this.view.setSource( source, hasInterior );
 
 		this.renderer = await RendererFactory.create( backend );

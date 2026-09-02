@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urbe/engine/building-build-error",
+  "title": "BuildingBuildError",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["code", "message"],
+  "properties": {
+    "code": {
+      "enum": [
+        "E_INVALID_REQUEST",
+        "E_WORLD_NOT_FOUND",
+        "E_WORLD_INVALID",
+        "E_PARCEL_NOT_FOUND",
+        "E_BUILD_FAILED",
+        "E_BUILD_INCOMPLETE"
+      ]
+    },
+    "message": { "type": "string" }
+  }
+}

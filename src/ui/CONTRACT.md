@@ -25,7 +25,8 @@ One panel over the game at a time.
 - **CodexView**: `setEntries([{ id, title, category, text }])` grouped by category, `select( id )`; empty reads "nothing recorded yet"
 - **SettingsView**: props `onChange({ key, value })`; `setValues({ quality, fog, exposure, crowd })`. Fields: `quality` select (`low`, `medium`, `high`, `ultra`), `fog` range 0..0.003, `exposure` number, `crowd` number. Numeric values arrive as numbers.
 - **ControlsView**: `setBindings([{ action, keys: [string] }])`; empty reads "no bindings yet"
-- **BuildingView**, **ExperimentView**: the building viewer and scale experiment overlays (props in each file)
+- **BuildingView**: the building viewer overlay; `setStatus(text)` reports preparation and the selected source, `showError(message)` puts a fatal failure on screen, and its controls report source and floor-slice changes.
+- **ExperimentView**: the scale experiment overlay (props in the file).
 
 ## Widgets
 - **TabBar**: props `onSelect( name )`, `onLeave()`; `setActive( name | null )`. Seven entries in order with their key letters: QUESTS J, MAP M, INVENTORY I, CODEX X, SETTINGS O, CONTROLS ?, LEAVE N. Keys are labels: the game binds them and calls `open`.

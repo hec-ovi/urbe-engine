@@ -4,6 +4,7 @@ import { extname, join, normalize, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { talkRoute } from './src/server/talkRoute.js';
+import { buildingRoute } from './src/server/buildingRoute.js';
 
 // Sibling materials database (../materials/CONTRACT.md), served read-only
 // under /materials/<theme>/... for the building viewer and the game. Path is
@@ -70,6 +71,7 @@ export default defineConfig( {
 		mount( 'serve-materials-themes', '/materials', THEMES_DIR ),
 		mount( 'serve-atlas-samples', '/atlas', ATLAS_DIR ),
 		mount( 'serve-models', '/models', MODELS_DIR ),
+		buildingRoute( ROOT, ATLAS_DIR ),
 		talkRoute( ROOT )
 	],
 	server: {

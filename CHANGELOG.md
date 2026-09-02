@@ -1,5 +1,7 @@
 # Changelog
 
+0.16.16: an Atlas building selection opens its exact parcel and output in the exterior viewer. A missing exterior is generated on demand from a known Atlas sample through the validated assembly boundary, and an absent world or parcel is reported on screen.
+
 0.16.15: the readout answers "did it stall": the run's hitch count and its worst gap in milliseconds, or `no hitch`, so a screenshot says it without a console open.
 0.16.14: a bridge is an open deck. The walking surface is the section's own bottom, exactly on the aperture base the exterior box aligned its floor plate to, a 1.1 m railing stands on each edge and is solid, and nothing spans the top; tubes and tunnels stay closed boxes.
 0.16.13: a lamp lens, an entrance diffuser and a lift's cab light take their emissive level outright instead of multiplying the database's own authored strength, so the fixture family's new maps (which carry their falloff themselves) read at the level the night grade was tuned at.

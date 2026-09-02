@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urbe/engine/building-build-result",
+  "title": "BuildingBuildResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["parcel", "out", "built"],
+  "properties": {
+    "parcel": { "type": "string" },
+    "out": { "type": "string" },
+    "built": { "type": "boolean" }
+  }
+}
