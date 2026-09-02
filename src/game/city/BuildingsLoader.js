@@ -18,8 +18,12 @@ export const INTERIOR_PREFIX = 'interior';
 const DOOR = 'door';
 
 const FIXTURE = '/light-fixture/';
-/** A lit diffuser is looked at directly, so it sits well above road exposure. */
-const FIXTURE_EMISSIVE = 60;
+/**
+ * A lit diffuser is looked at directly, so it sits well above road exposure.
+ * This is the level the night grade was tuned at, stated outright rather than
+ * multiplied onto whatever strength the database authored the map with.
+ */
+const FIXTURE_EMISSIVE = 180;
 const FIXTURE_KELVIN = 2700;
 
 /**
@@ -113,7 +117,7 @@ export class BuildingsLoader {
 		return key.includes( FIXTURE )
 			? this.factory.variant( key, {
 				variantId,
-				emissiveScale: FIXTURE_EMISSIVE,
+				emissiveLevel: FIXTURE_EMISSIVE,
 				emissive: kelvinColor( FIXTURE_KELVIN )
 			} )
 			: this.factory.build( key, variantId );

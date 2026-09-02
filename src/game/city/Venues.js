@@ -15,7 +15,7 @@ const ASK_INTERVAL = 4;
 const FRAME_KEY = 'cyberpunk/light-fixture/mid';
 const FRAME_KELVIN = 3200;
 /** A door frame strip is read directly, so it sits above street exposure. */
-const FRAME_EMISSIVE = 30;
+const FRAME_EMISSIVE = 90;
 const FRAME_WIDTH = 0.07;
 const FRAME_INSET = 0.06;
 
@@ -105,7 +105,7 @@ export class Venues {
 			group.add( new THREE.Mesh(
 				BufferGeometryUtils.mergeGeometries( strips, false ),
 				this.factory.variant( FRAME_KEY, {
-					emissiveScale: FRAME_EMISSIVE,
+					emissiveLevel: FRAME_EMISSIVE,
 					emissive: kelvinColor( FRAME_KELVIN )
 				} )
 			) );

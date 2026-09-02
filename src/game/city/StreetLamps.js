@@ -23,7 +23,7 @@ const POLE_KEY = 'cyberpunk/metal/rich';
  * A lens is looked at directly, so it has to sit above the exposure the road
  * is judged at or it reads as painted plastic rather than as the source.
  */
-const LENS_EMISSIVE = 90;
+const LENS_EMISSIVE = 270;
 
 // A wall pack over a service door: 3000 lm is a 30 W LED head, a quarter of the
 // street luminaire's flux, on the same lamp colour so an alley reads as part of
@@ -120,7 +120,7 @@ export class StreetLamps {
 			group.add( new THREE.Mesh(
 				BufferGeometryUtils.mergeGeometries( lenses, false ),
 				this.factory.variant( LENS_KEY, {
-					emissiveScale: LENS_EMISSIVE,
+					emissiveLevel: LENS_EMISSIVE,
 					emissive: kelvinColor( LAMP_KELVIN )
 				} )
 			) );

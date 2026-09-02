@@ -93,16 +93,23 @@ export class PbrMaterialFactory {
 	 * that want a hotter emission or a two-sided panel take one of these; the
 	 * material `build` returns is shared by every mesh of that key and must
 	 * never be edited in place.
-	 * @param tweaks { variantId, emissiveScale, emissive, side }
+	 * `emissiveScale` rides the database's own authored strength; `emissiveLevel`
+	 * replaces it. A surface the look is graded against by eye (a lamp lens, a
+	 * lit diffuser) takes the level, so a materials release that re-authors a
+	 * strength moves what the map looks like and never how bright the game runs
+	 * it. A sign takes the scale, because the database's tiering is the point.
+	 * @param tweaks { variantId, emissiveScale, emissiveLevel, emissive, side }
 	 */
 	variant( key, tweaks = {} ) {
 
-		const id = `${key}|${tweaks.variantId ?? ''}|${tweaks.emissiveScale ?? 1}|${tweaks.emissive?.getHexString() ?? ''}|${tweaks.side ?? ''}`;
+		const id = `${key}|${tweaks.variantId ?? ''}|${tweaks.emissiveScale ?? 1}|${tweaks.emissiveLevel ?? ''}|${tweaks.emissive?.getHexString() ?? ''}|${tweaks.side ?? ''}`;
 
 		if ( this.cache.has( id ) ) return this.cache.get( id );
 
 		const material = this.build( key, tweaks.variantId ).clone();
-		material.emissiveIntensity = ( material.emissiveIntensity ?? 1 ) * ( tweaks.emissiveScale ?? 1 );
+		material.emissiveIntensity = tweaks.emissiveLevel !== undefined
+			? tweaks.emissiveLevel
+			: ( material.emissiveIntensity ?? 1 ) * ( tweaks.emissiveScale ?? 1 );
 		// A lit diffuser reads as the colour of the lamp behind it, not white.
 		if ( tweaks.emissive ) material.emissive = tweaks.emissive.clone();
 		if ( tweaks.side !== undefined ) material.side = tweaks.side;

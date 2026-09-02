@@ -23,7 +23,7 @@ const CAB_KEY = 'cyberpunk/metal/rich';
 const CAB_LIGHT_KEY = 'cyberpunk/light-fixture/mid';
 const CAB_KELVIN = 3800;
 /** Looked at directly inside a small box, so it sits above street exposure. */
-const CAB_EMISSIVE = 40;
+const CAB_EMISSIVE = 120;
 
 /**
  * The lifts, made rideable.
@@ -218,7 +218,7 @@ class Shaft {
 		);
 		const lamp = new THREE.Mesh(
 			slab( w * 0.5, 0.04, d * 0.5, 0, CAB_HEIGHT - 0.08, 0 ),
-			this.factory.variant( CAB_LIGHT_KEY, { emissiveScale: CAB_EMISSIVE, emissive: kelvinColor( CAB_KELVIN ) } )
+			this.factory.variant( CAB_LIGHT_KEY, { emissiveLevel: CAB_EMISSIVE, emissive: kelvinColor( CAB_KELVIN ) } )
 		);
 
 		this.cab = group;
