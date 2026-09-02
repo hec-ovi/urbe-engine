@@ -5,7 +5,10 @@
  */
 export function stubCanvas() {
 
-	HTMLCanvasElement.prototype.getContext = function () {
+	HTMLCanvasElement.prototype.getContext = function ( type ) {
+
+		// Only the 2d context is stood in for; WebGL stays absent, as in jsdom.
+		if ( type !== '2d' ) return null;
 
 		const target = { calls: [], canvas: this };
 
