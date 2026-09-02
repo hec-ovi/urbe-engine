@@ -19,7 +19,7 @@ Other commands:
 - `npm run simulate` boots the population over an assembled world and prints stats, a crowd slice, three NPC lives, latencies and a conservation check.
 - `npm run build` produces the static client.
 
-The client has three modes on one vite app: `?mode=game` plays the city, `?mode=building&parcel=<id>[&out=/out/small]` inspects one assembled building (from a world build when `out` names it) textured through the material database, and no mode runs the city render scale comparison.
+The client has three modes on one vite app: `?mode=game` plays the city, `?mode=building&parcel=<id>[&out=/out/small]` inspects one assembled building (from a world build when `out` names it) textured through the material database, walked with W A S D, Q and E for down and up, drag to look, and no mode runs the city render scale comparison.
 
 ## Assembly
 

@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { FlyCamera } from './FlyCamera.js';
 
 /**
  * Stage for one building: neutral sky, sun and fill lights, ground plane,
@@ -38,10 +38,8 @@ export class BuildingStage {
 		);
 		camera.position.set( center.x + radius * 1.4, boundingBox.max.y * 1.1, center.z + radius * 1.4 );
 
-		const controls = new OrbitControls( camera, domElement );
-		controls.target.copy( center );
-		controls.maxDistance = radius * 12;
-		controls.update();
+		const controls = new FlyCamera( camera, domElement );
+		controls.lookAt( center );
 
 		return { scene, camera, controls };
 

@@ -12,6 +12,7 @@ const DEFAULT_THEME = 'cyberpunk';
 /**
  * One building viewer run, described by the URL query:
  * ?mode=building&parcel=p1640[&out=/out/small][&source=shell|interior][&backend=webgpu|webgl].
+ * W A S D walk, Q and E go down and up, drag to look, Shift is fast; nothing zooms.
  * Loads the assembled building from /out/<parcel>/, resolves every material
  * key through the materials database and orbits the result.
  */
