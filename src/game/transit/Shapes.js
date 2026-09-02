@@ -43,10 +43,102 @@ export function tube( radius, height, segments = 10 ) {
 
 }
 
-/** Merges, or returns null for nothing, which is what an empty city yields. */
+/**
+ * A vertical surface standing on a ring, from `top` down to `bottom`, broken
+ * wherever `open( x, z )` says the wall is a way through. Each edge is walked in
+ * short steps and the closed steps are joined back into runs, so a 140 m
+ * platform wall with one doorway in it is two quads rather than five hundred.
+ *
+ * One surface, no thickness: the material is drawn from both sides, because a
+ * station wall is seen from the room on one side and from the shaft on the
+ * other. UVs are world metres, like everything else in this box.
+ */
+export function wall( ring, top, bottom, open = () => false, step = 0.4 ) {
+
+	const positions = [];
+	const uvs = [];
+	const normals = [];
+	let run = 0;
+
+	for ( let i = 0; i < ring.length; i ++ ) {
+
+		const a = ring[ i ];
+		const b = ring[ ( i + 1 ) % ring.length ];
+		const dx = b[ 0 ] - a[ 0 ];
+		const dz = b[ 1 ] - a[ 1 ];
+		const length = Math.hypot( dx, dz );
+
+		if ( length < 1e-6 ) continue;
+
+		const ux = dx / length;
+		const uz = dz / length;
+		const nx = uz;
+		const nz = - ux;
+		const steps = Math.max( 1, Math.round( length / step ) );
+		let from = null;
+
+		for ( let k = 0; k <= steps; k ++ ) {
+
+			const at = ( k / steps ) * length;
+			const mid = ( ( k + 0.5 ) / steps ) * length;
+			const closed = k < steps && ! open( a[ 0 ] + ux * mid, a[ 1 ] + uz * mid );
+
+			if ( closed && from === null ) from = at;
+
+			if ( ! closed && from !== null ) {
+
+				quad( positions, uvs, normals, a, [ ux, uz ], [ nx, nz ], from, at, top, bottom, run );
+				run += at - from;
+				from = null;
+
+			}
+
+		}
+
+	}
+
+	if ( ! positions.length ) return null;
+
+	const geometry = new THREE.BufferGeometry();
+	geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( positions, 3 ) );
+	geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
+	geometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( uvs, 2 ) );
+
+	return geometry;
+
+}
+
+function quad( positions, uvs, normals, a, [ ux, uz ], [ nx, nz ], from, to, top, bottom, run ) {
+
+	const p = [ a[ 0 ] + ux * from, a[ 1 ] + uz * from ];
+	const q = [ a[ 0 ] + ux * to, a[ 1 ] + uz * to ];
+	const corners = [
+		[ p, top, run ], [ q, top, run + to - from ], [ p, bottom, run ],
+		[ p, bottom, run ], [ q, top, run + to - from ], [ q, bottom, run + to - from ]
+	];
+
+	for ( const [ point, y, u ] of corners ) {
+
+		positions.push( point[ 0 ], y, point[ 1 ] );
+		uvs.push( u, y );
+		normals.push( nx, 0, nz );
+
+	}
+
+}
+
+/**
+ * Merges, or returns null for nothing, which is what an empty city yields.
+ * Indexing is normalised first: a station mixes swept walls with triangulated
+ * slabs, and merging only accepts one layout.
+ */
 export function merge( geometries ) {
 
-	return geometries.length ? BufferGeometryUtils.mergeGeometries( geometries, false ) : null;
+	if ( ! geometries.length ) return null;
+
+	const flat = geometries.map( ( geometry ) => ( geometry.index ? geometry.toNonIndexed() : geometry ) );
+
+	return BufferGeometryUtils.mergeGeometries( flat, false );
 
 }
 

@@ -1,5 +1,6 @@
 # Changelog
 
+0.16.12: stations are places. Every shaft the atlas publishes is a well on its own footprint with a switchback stair fitted to its depth (four flights of eighteen at 0.168 m for a 12 m shaft), the passage at its foot joins it to the platform room, and the room is floor, ceiling and walls lit by its own fixtures; a platform already at street level gets a canopy. Two draw calls for the whole city.
 0.16.11: the city floor opens over every station shaft and the bedrock drops below the deepest volume the city digs, so what is built underground can be reached.
 0.16.10: the game contract carries the kerb strip, the painted crossings, the warm-up and what the readout says.
 0.16.9: the links contract states what each kind is built as and leaves the section to the link, which is where it comes from; the open bridge deck with railings connections describes is named as not built.
