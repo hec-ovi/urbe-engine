@@ -1,5 +1,6 @@
 # Changelog
 
+0.15.3: the lift cab waits at the ground floor instead of the basement.
 0.15.2: the game imports the quests runtime entry (no node APIs), so the world loads in the browser with questlines wired.
 0.15.1: a talk line carries the questlines as they stand, so the dialog layers know the person's part in the story.
 0.15.0: questlines play: `out/<world>/quests/questlines.json` (carried from a quests creation run by `npm run carry-quests`) is cast against the game's simulation at load and run on the quests flow runtime; talking and entering buildings advance steps, completions toast, endings open the summary, the QUESTS panel lists progress; SimBridge exposes the story slice of the simulation port.

@@ -195,7 +195,8 @@ class Shaft {
 	build() {
 
 		this.stops.sort( ( a, b ) => a.elevation - b.elevation );
-		this.at = this.stops[ 0 ]?.elevation ?? 0;
+		// The cab waits where people come in: the ground floor when the shaft serves it, else its lowest stop.
+		this.at = ( this.stops.find( ( stop ) => stop.floor === 0 ) ?? this.stops[ 0 ] )?.elevation ?? 0;
 		this.target = this.at;
 
 		const group = new THREE.Group();

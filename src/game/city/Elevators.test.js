@@ -53,6 +53,16 @@ function shafts() {
  */
 describe( 'Elevators', () => {
 
+	it( 'parks the cab at the ground floor, not in the basement', () => {
+
+		const elevators = new Elevators( factory );
+		const group = new THREE.Group();
+		elevators.add( 'p2', [ { floor: - 1, elevation: - 4, height: 4, core: { elevators: [ LIFT() ] } }, ...floors ], group );
+
+		expect( group.getObjectByName( 'elevator:p2:elev-0' ).position.y ).toBe( 0 );
+
+	} );
+
 	it( 'takes the published door leaves out of the floor band they arrived in', () => {
 
 		const { elevators, group } = shafts();
