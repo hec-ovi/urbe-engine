@@ -6,9 +6,8 @@ export const SIDEWALK_HEIGHT = 0.12;
 const CURB_BOTTOM = - 0.06;
 const BEDROCK_Y = - 0.8;
 
-// Atlas ground surfaces mapped onto material database keys. The database has
-// no road, asphalt or sidewalk kind, so each surface takes the closest
-// resolvable one (../materials/CONTRACT.md names the guaranteed vocabulary).
+// Atlas ground surfaces mapped onto material database keys: road, sidewalk
+// and curb are real kinds since materials 0.9 (../materials/CONTRACT.md).
 const SURFACES = {
 	roadway: { key: 'cyberpunk/road/high_rich', y: 0, variantId: 'puddle' },
 	sidewalk: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT, curb: true },
@@ -16,7 +15,7 @@ const SURFACES = {
 	open: { key: 'cyberpunk/tile/high_rich', y: SIDEWALK_HEIGHT, curb: true }
 };
 
-const CURB_KEY = 'cyberpunk/concrete/rich';
+const CURB_KEY = 'cyberpunk/curb/high_rich';
 
 /**
  * The city floor, straight off the atlas blueprint's volumetric ground cover:
