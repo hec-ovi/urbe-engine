@@ -59,9 +59,9 @@ describe( 'Elevators', () => {
 		const band = new THREE.Group();
 		const left = elevators.claim( 'p1', 0, doorGeometry( 0 ), new THREE.MeshBasicMaterial(), band );
 
-		// Both leaves went to the shaft, and nothing was left behind as a
-		// second static door standing in front of the sliding one.
-		expect( band.children ).toHaveLength( 2 );
+		// Both leaves and the call plate went to the shaft, and nothing was left
+		// behind as a second static door standing in front of the sliding one.
+		expect( band.children ).toHaveLength( 3 );
 		expect( left ).toBe( null );
 		expect( group.children ).toHaveLength( 1 );
 

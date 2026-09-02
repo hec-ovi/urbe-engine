@@ -12,6 +12,11 @@ const DOOR_TIME = 1.4;
 /** Where the call panel floats: a pace out from the door, at hand height. */
 const PANEL_OUT = 0.7;
 const PANEL_HEIGHT = 1.1;
+/** The call plate: past the jamb, a hand wide, standing a little proud of the wall. */
+const PLATE_OFF = 0.25;
+const PLATE_WIDTH = 0.12;
+const PLATE_HEIGHT = 0.18;
+const PLATE_PROUD = 0.015;
 const CAB_CLEAR = 0.12;
 const CAB_HEIGHT = 2.4;
 const CAB_KEY = 'cyberpunk/metal/rich';
@@ -399,6 +404,18 @@ class Stop {
 			this.leaves.push( pivot );
 
 		}
+
+		// The call plate beside the door: the geometry the prompt points at, a hand
+		// wide on the wall at chest height, past the jamb on the side the run goes.
+		const plate = new THREE.Group();
+		const beside = acrossX ? new THREE.Vector3( width / 2 + PLATE_OFF, 0, 0 ) : new THREE.Vector3( 0, 0, width / 2 + PLATE_OFF );
+		plate.position.copy( centre ).add( beside ).addScaledVector( facing, PLATE_PROUD ).setY( this.elevation + PANEL_HEIGHT );
+		plate.userData.slide = new THREE.Vector3();
+		plate.add( new THREE.Mesh(
+			acrossX ? new THREE.BoxGeometry( PLATE_WIDTH, PLATE_HEIGHT, PLATE_PROUD * 2 ) : new THREE.BoxGeometry( PLATE_PROUD * 2, PLATE_HEIGHT, PLATE_WIDTH ),
+			material
+		) );
+		this.leaves.push( plate );
 
 		this.panel = centre.clone().addScaledVector( facing, PANEL_OUT ).setY( this.elevation + PANEL_HEIGHT );
 
