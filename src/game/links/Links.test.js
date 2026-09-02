@@ -138,28 +138,49 @@ describe( 'Links', () => {
 	it( 'unwraps in world metres', () => {
 
 		const bridge = doc.links.find( ( link ) => link.kind === 'bridge' && level( link ) );
-		const uv = new Links( { links: [ bridge ], apertures: doc.apertures }, factory )
-			.build().group.children[ 0 ].geometry.getAttribute( 'uv' );
+		const geometry = new Links( { links: [ bridge ], apertures: doc.apertures }, factory )
+			.build().group.children[ 0 ].geometry;
+		const uv = geometry.getAttribute( 'uv' );
+		const position = geometry.getAttribute( 'position' );
 
 		let along = [ Infinity, - Infinity ];
 		let across = [ Infinity, - Infinity ];
+		const axis = unit( bridge.path[ 0 ], bridge.path[ 1 ] );
 
 		for ( let i = 0; i < uv.count; i ++ ) {
 
 			along = [ Math.min( along[ 0 ], uv.getX( i ) ), Math.max( along[ 1 ], uv.getX( i ) ) ];
 			across = [ Math.min( across[ 0 ], uv.getY( i ) ), Math.max( across[ 1 ], uv.getY( i ) ) ];
+			const point = [ position.getX( i ), position.getY( i ), position.getZ( i ) ];
+			expect( uv.getX( i ) ).toBeCloseTo( projection( point, bridge.path[ 0 ], axis ), 3 );
 
 		}
 
 		// Railing, deck, railing across the section.
 		expect( across[ 1 ] - across[ 0 ] ).toBeCloseTo( bridge.crossSection.width + 2 * RAILING, 3 );
-		// The mitre slides the end corners along the axis, so the span reaches
-		// a little past the centerline length, never as far as one section.
-		expect( Math.abs( along[ 1 ] - along[ 0 ] - bridge.length ) ).toBeLessThan( bridge.crossSection.width );
+		// The two wall mitres may extend by more than one section between them.
+		// U is the exact metre projection along the straight link axis, including
+		// those cuts, rather than an arbitrary bound around centerline length.
+		expect( along[ 1 ] - along[ 0 ] ).toBeGreaterThan( bridge.length );
 
 	} );
 
 } );
+
+function unit( a, b ) {
+
+	const vector = b.map( ( value, i ) => value - a[ i ] );
+	const length = Math.hypot( ...vector );
+
+	return vector.map( ( value ) => value / length );
+
+}
+
+function projection( point, origin, axis ) {
+
+	return point.reduce( ( sum, value, i ) => sum + ( value - origin[ i ] ) * axis[ i ], 0 );
+
+}
 
 /** The two lowest corners of a cut polygon: the edge a deck lands on. */
 function base( polygon ) {
