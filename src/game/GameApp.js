@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { RendererFactory } from '../app/RendererFactory.js';
 import { MaterialResolver } from '../building/MaterialResolver.js';
 import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
+import { TalkClient } from './talk/TalkClient.js';
 import { GameView } from '../ui/views/GameView.js';
 import { GameConfig } from './data/GameConfig.js';
 import { WorldSource } from './data/WorldSource.js';
@@ -94,10 +95,11 @@ export class GameApp {
 	constructor( config ) {
 
 		this.config = config;
+		this.talk = new TalkClient( config.outBase );
 		this.view = new GameView( {
 			onResume: () => this.input?.requestLock(),
 			onCloseDialog: () => this.interactor?.close( this.clock ),
-			onSend: ( text ) => this.view.dialog.addMessage( { from: 'player', name: 'you', text } ),
+			onSend: ( text ) => this.#say( text ),
 			onOpen: () => this.input?.exitLock(),
 			onClose: () => this.input?.requestLock(),
 			onLeave: () => this.input?.exitLock(),
@@ -413,6 +415,29 @@ export class GameApp {
 	}
 
 	/** A setting changed in the HUD: the ones that are uniforms apply on the spot, the tier reloads the run. */
+	/** The player's line goes to the person in front of them; their answer lands in the same panel. */
+	#say( text ) {
+
+		this.view.dialog.addMessage( { from: 'player', name: 'you', text } );
+		const conversation = this.interactor?.conversation;
+		if ( ! conversation?.instance ) return;
+
+		const name = TalkClient.nameOf( conversation.instance );
+		this.talk.say( conversation, text, this.clock.timeMin )
+			.then( ( reply ) => {
+
+				if ( this.interactor.conversation === conversation ) this.view.dialog.addMessage( { from: 'npc', name, text: reply } );
+
+			} )
+			.catch( ( error ) => {
+
+				console.warn( 'talk:', error.message );
+				this.view.dialog.addMessage( { from: 'npc', name, text: '...' } );
+
+			} );
+
+	}
+
 	#setting( { key, value } ) {
 
 		if ( key === 'fog' ) this.fog.density.value = value;

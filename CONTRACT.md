@@ -12,6 +12,7 @@ Status: play mode is live (src/game/CONTRACT.md); orbit mode, saves and world qu
 - the running game: `?mode=game` plays the assembled city first person at street level (src/game/CONTRACT.md)
 - world query functions over the assembled state (by type, zone, tier, schedule)
 - game saves
+- dev server routes: sibling mounts (/atlas, /materials, /models) and POST /api/talk (src/server/talkRoute.js): the NPC's reply to one player line through ../quests dialog over the OpenAI-compatible server at LLM_BASE_URL (default http://localhost:8080/v1), LLM_MODEL or the first model listed
 
 ## Errors
 Closed set, to be defined.

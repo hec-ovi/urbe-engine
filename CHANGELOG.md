@@ -1,5 +1,6 @@
 # Changelog
 
+0.14.0: NPCs talk back: the chat line goes to the dev server's /api/talk with the person and their current behavior, the quests dialog layers answer through the local model server (LLM_BASE_URL, LLM_MODEL); what each NPC has been told is remembered for the session.
 0.13.3: the crowd draws on WebGPU: the body geometry drops its own normal attribute (position and normal come from the pose buffers), so the pipeline binds eight vertex buffers, the limit.
 
 0.13.2: a kerb stands only where a pavement edge meets the road, square-ended beside a building; a strip fixture's light lies along its housing (the interior's angle, +X toward +Z, mapped onto the rotation); the environment probe bakes only while the player stands still and at half size, so walking never stalls on a bake; the haze quads are off on every tier.
