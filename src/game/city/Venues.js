@@ -176,61 +176,35 @@ function nameOf( building ) {
 }
 
 /**
- * Two jambs and a head, standing just proud of the facade around the opening.
- * The door already knows its own hinge, its normal and the box its leaf sweeps,
- * so the frame is measured off the opening rather than off the blueprint again.
+ * Two jambs and a head, standing just proud of the facade around the opening,
+ * built in the door's own frame (along the opening, out of it) so a facade at
+ * any angle gets its strips on the frame and not on the world axes.
  */
 function frameStrip( door ) {
 
-	const box = door.box;
-	const size = box.getSize( _size );
-	const centre = box.getCenter( _centre );
-	const wide = Math.max( size.x, size.z );
-	const along = size.x >= size.z ? _x : _z;
+	const yaw = Math.atan2( - door.along.z, door.along.x );
+	const y0 = door.center.y;
 	const out = [];
 
-	const bar = ( length, height, x, y, z ) => {
+	const bar = ( length, height, offset, y ) => {
 
-		const geometry = new THREE.BoxGeometry(
-			along === _x ? length : FRAME_WIDTH,
-			height,
-			along === _x ? FRAME_WIDTH : length
-		);
+		const geometry = new THREE.BoxGeometry( length, height, FRAME_WIDTH );
 		geometry.deleteAttribute( 'uv1' );
-		geometry.translate( x, y, z );
+		geometry.rotateY( yaw );
+		geometry.translate(
+			door.center.x + door.along.x * offset + door.normal.x * FRAME_INSET,
+			y,
+			door.center.z + door.along.z * offset + door.normal.z * FRAME_INSET
+		);
 		out.push( geometry.toNonIndexed() );
 
 	};
 
-	const nudge = FRAME_INSET;
-	const top = box.max.y;
-	const half = wide / 2;
+	for ( const side of [ - 1, 1 ] ) bar( FRAME_WIDTH, door.height, side * door.width / 2, y0 + door.height / 2 );
 
-	for ( const side of [ - 1, 1 ] ) {
-
-		bar(
-			FRAME_WIDTH,
-			top - box.min.y,
-			centre.x + along.x * side * half + door.normal.x * nudge,
-			( top + box.min.y ) / 2,
-			centre.z + along.z * side * half + door.normal.z * nudge
-		);
-
-	}
-
-	bar(
-		wide + FRAME_WIDTH,
-		FRAME_WIDTH,
-		centre.x + door.normal.x * nudge,
-		top,
-		centre.z + door.normal.z * nudge
-	);
+	bar( door.width + FRAME_WIDTH, FRAME_WIDTH, 0, y0 + door.height );
 
 	return out;
 
 }
 
-const _size = new THREE.Vector3();
-const _centre = new THREE.Vector3();
-const _x = new THREE.Vector3( 1, 0, 0 );
-const _z = new THREE.Vector3( 0, 0, 1 );

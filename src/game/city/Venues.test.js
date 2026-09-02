@@ -16,6 +16,10 @@ function door( parcelId ) {
 	return {
 		parcelId,
 		normal: new THREE.Vector3( 0, 0, 1 ),
+		along: new THREE.Vector3( 1, 0, 0 ),
+		center: new THREE.Vector3( 0, 0, 0 ),
+		width: 1.2,
+		height: 2.2,
 		outside: new THREE.Vector3( 0, 0, 2 ),
 		box: new THREE.Box3( new THREE.Vector3( - 0.6, 0, - 0.1 ), new THREE.Vector3( 0.6, 2.2, 0.1 ) )
 	};
