@@ -1,7 +1,7 @@
 {
   "name": "urbe-engine",
   "private": true,
-  "version": "0.14.1",
+  "version": "0.15.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,7 @@
     "assemble": "tsx src/assembly/cli.js",
     "assemble-city": "tsx src/assembly/city-cli.js",
     "simulate": "tsx src/assembly/simulate-cli.js",
+    "carry-quests": "tsx src/assembly/quests-cli.js",
     "test": "vitest run"
   },
   "dependencies": {

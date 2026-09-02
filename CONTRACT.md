@@ -7,6 +7,7 @@ Status: play mode is live (src/game/CONTRACT.md); orbit mode, saves and world qu
 ## In (must cover)
 - every sibling export: world blueprint, connection layers, building GLBs and blueprints, material sets, population model, named world, questlines
 - a game save (world state plus player state) for load, import, export
+- questlines: `out/<world>/quests/questlines.json`, the definitions of one ../quests creation run (main first), carried beside the city by `npm run carry-quests -- --from <run dir> --out <world out dir>`; absent means a city with no story
 
 ## Out (must cover)
 - the running game: `?mode=game` plays the assembled city first person at street level (src/game/CONTRACT.md)

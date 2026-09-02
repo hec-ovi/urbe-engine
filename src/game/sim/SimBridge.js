@@ -112,4 +112,12 @@ export class SimBridge {
 
 	}
 
+
+	/** The story-side slice of the port (../../../../quests/CONTRACT.md SimulationPort): who exists, who is on duty, what the story did to them. */
+	getNPC( npcId ) { return this.simulation.getNPC( npcId ); }
+	findNPCs( query ) { return this.simulation.findNPCs( query ); }
+	getNPCVendor( query ) { return this.simulation.getNPCVendor( query ); }
+	reserveNPC( spec ) { return this.simulation.reserveNPC( spec ); }
+	applyFlag( npcId, op ) { this.simulation.applyFlag( npcId, op ); }
+
 }

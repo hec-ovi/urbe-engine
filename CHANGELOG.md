@@ -1,5 +1,6 @@
 # Changelog
 
+0.15.0: questlines play: `out/<world>/quests/questlines.json` (carried from a quests creation run by `npm run carry-quests`) is cast against the game's simulation at load and run on the quests flow runtime; talking and entering buildings advance steps, completions toast, endings open the summary, the QUESTS panel lists progress; SimBridge exposes the story slice of the simulation port.
 0.14.1: people in a building take the interior's anchors: staff stand at the ground-floor work spots, guests sit on the seats (sitting and seated-talking clips baked into the crowd), the overflow stands in the lobby; a seated person stays seated through a conversation.
 0.14.0: NPCs talk back: the chat line goes to the dev server's /api/talk with the person and their current behavior, the quests dialog layers answer through the local model server (LLM_BASE_URL, LLM_MODEL); what each NPC has been told is remembered for the session.
 0.13.3: the crowd draws on WebGPU: the body geometry drops its own normal attribute (position and normal come from the pose buffers), so the pipeline binds eight vertex buffers, the limit.

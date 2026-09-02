@@ -4,6 +4,7 @@ import { runConnections } from '../../assembly/connectionsRunner.js';
 const MANIFEST_FILE = 'manifest.json';
 const NPC_TYPES_FILE = 'npc-types.json';
 const BLUEPRINT_FILE = 'blueprint.json';
+const QUESTLINES_FILE = 'quests/questlines.json';
 
 /**
  * Everything the game reads off disk, and nothing else: the atlas blueprint,
@@ -38,7 +39,7 @@ export class WorldSource {
 
 	}
 
-	/** @returns { atlas, connections, buildings, unbuilt, npcTypes } */
+	/** @returns { atlas, connections, buildings, unbuilt, npcTypes, questlines } */
 	async load() {
 
 		// The world folder carries the blueprint it was assembled from (named or
@@ -61,6 +62,7 @@ export class WorldSource {
 			buildings,
 			// The naming box's typed set for this world, when the out dir carries one.
 			npcTypes: await this.#json( `${this.outBase}/${NPC_TYPES_FILE}` ).catch( () => null ),
+			questlines: await this.#json( `${this.outBase}/${QUESTLINES_FILE}` ).catch( () => [] ),
 			unbuilt: [ ...known ].filter( ( id ) => ! buildings.has( id ) )
 		};
 

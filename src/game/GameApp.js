@@ -3,6 +3,7 @@ import { RendererFactory } from '../app/RendererFactory.js';
 import { MaterialResolver } from '../building/MaterialResolver.js';
 import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
+import { QuestSession } from './quests/QuestSession.js';
 import { groundAnchors } from './agents/Anchors.js';
 import { GameView } from '../ui/views/GameView.js';
 import { GameConfig } from './data/GameConfig.js';
@@ -135,7 +136,7 @@ export class GameApp {
 
 		this.view.step( 'reading the world' );
 		const source = new WorldSource( config );
-		const { atlas, connections, buildings, unbuilt, npcTypes } = await source.load();
+		const { atlas, connections, buildings, unbuilt, npcTypes, questlines } = await source.load();
 		this.locator = new Locator( atlas );
 		this.clock = new GameClock( { startHour: config.startHour, scale: config.timeScale } );
 
@@ -231,6 +232,8 @@ export class GameApp {
 
 		this.view.step( 'waking the population' );
 		this.sim = SimBridge.create( atlas, connections, buildings, { streetDensity: config.streetDensity }, npcTypes );
+		this.quests = QuestSession.create( questlines, this.sim, this.clock.timeMin );
+		this.view.quests.setQuests( this.quests.view() );
 		this.signals = new Signals( connections.networks );
 		const routes = new WalkRoutes( connections.networks );
 
@@ -279,6 +282,7 @@ export class GameApp {
 			this.view.avatar.setVisible( Boolean( conversation ) );
 
 			if ( ! conversation ) return;
+			if ( conversation.npcId ) this.#questEvent( { kind: 'talkedTo', npcId: conversation.npcId } );
 
 			// The chat takes the mouse: the input wants focus and the panel a click.
 			this.view.avatar.setAvatar( { name: conversation.instance?.name ?? 'someone passing by', bar: 1 } );
@@ -439,6 +443,33 @@ export class GameApp {
 
 	}
 
+	/** Stepping into a building's rooms is arriving there for the story; the street in between is not a place. */
+	#arrive( parcelId ) {
+
+		if ( parcelId === this.parcelStanding ) return;
+
+		this.parcelStanding = parcelId;
+		if ( parcelId ) this.#questEvent( { kind: 'arrivedAt', parcelId } );
+
+	}
+
+	/** A player event goes to every questline; what it completed shows as a toast, an ending as the summary. */
+	#questEvent( event ) {
+
+		const moved = this.quests.advance( event, this.clock.timeMin );
+		if ( moved.length === 0 ) return;
+
+		for ( const { definition, completed, ending } of moved ) {
+
+			for ( const step of completed ) this.view.toast.show( { title: definition.title, text: step.narrative.description } );
+			if ( ending ) this.view.summary.show( { title: ending.title, text: ending.epilogue, outcome: 'done' } );
+
+		}
+
+		this.view.quests.setQuests( this.quests.view() );
+
+	}
+
 	#setting( { key, value } ) {
 
 		if ( key === 'fog' ) this.fog.density.value = value;
@@ -460,6 +491,7 @@ export class GameApp {
 		const room = this.#inside( visible, feet );
 
 		this.standing = room;
+		this.#arrive( room?.parcelId ?? null );
 
 		// Crossing the threshold is what changes everything around the camera;
 		// walking from one room to the next does not, and rebaking on that
