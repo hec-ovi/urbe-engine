@@ -6,19 +6,24 @@ export const SIDEWALK_HEIGHT = 0.12;
 const CURB_BOTTOM = - 0.06;
 const BEDROCK_Y = - 0.8;
 
-// Atlas ground surfaces mapped onto material database keys: road, sidewalk
-// and curb are real kinds since materials 0.9 (../materials/CONTRACT.md).
-const SURFACES = {
-	roadway: { key: 'cyberpunk/road/high_rich', y: 0, variantId: 'puddle' },
-	sidewalk: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT, curb: true },
-	block: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT },
-	open: { key: 'cyberpunk/tile/high_rich', y: SIDEWALK_HEIGHT, curb: true }
-};
-
 const CURB_KEY = 'cyberpunk/curb/poor';
 /** A kerb stone's top, from the edge inward, and how far above the pavement it sits so it never fights it. */
 const CURB_WIDTH = 0.15;
 const CURB_LIP = 0.004;
+
+// Atlas ground surfaces mapped onto material database keys: road, sidewalk
+// and curb are real kinds since materials 0.9 (../materials/CONTRACT.md).
+// `kerb` says where the kerb stone comes from: `face` for the strip the
+// blueprint publishes, which only wants its road-facing side; `grow` for a
+// pavement in a world published without one, which has to cut its own from the
+// edges that meet the road.
+const SURFACES = {
+	roadway: { key: 'cyberpunk/road/high_rich', y: 0, variantId: 'puddle' },
+	sidewalk: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT, kerb: 'grow' },
+	block: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT },
+	open: { key: 'cyberpunk/tile/high_rich', y: SIDEWALK_HEIGHT, kerb: 'grow' },
+	curb: { key: CURB_KEY, y: SIDEWALK_HEIGHT + CURB_LIP, kerb: 'face' }
+};
 
 /**
  * The city floor, straight off the atlas blueprint's volumetric ground cover:
@@ -66,6 +71,9 @@ export class GroundBuilder {
 		const curbs = [];
 		// A kerb stands only where a pavement edge meets the road, never along a building or another pavement.
 		const road = new Roadway( this.atlas.volumetric.ground );
+		// The blueprint's own kerb strip wins wherever it is published: it runs
+		// unbroken through every junction return, which a pavement edge cannot.
+		const strip = bySurface.has( 'curb' );
 
 		for ( const [ surface, rings ] of bySurface ) {
 
@@ -80,15 +88,15 @@ export class GroundBuilder {
 			group.add( mesh );
 			solid.push( merged );
 
-			if ( spec.curb ) {
+			if ( spec.kerb === 'grow' && strip ) continue;
 
-				for ( const ring of rings ) {
+			for ( const ring of spec.kerb ? rings : [] ) {
 
-					const ccw = signedArea( ring ) > 0;
-					const onRoad = ( a, b ) => road.bordersEdge( a, b, ccw );
-					curbs.push( skirt( ring, spec.y, CURB_BOTTOM, onRoad ), ledge( ring, spec.y + CURB_LIP, CURB_WIDTH, onRoad ) );
+				const ccw = signedArea( ring ) > 0;
+				const onRoad = ( a, b ) => road.bordersEdge( a, b, ccw );
 
-				}
+				curbs.push( skirt( ring, spec.y, CURB_BOTTOM, onRoad ) );
+				if ( spec.kerb === 'grow' ) curbs.push( ledge( ring, spec.y + CURB_LIP, CURB_WIDTH, onRoad ) );
 
 			}
 
@@ -99,7 +107,7 @@ export class GroundBuilder {
 			const merged = BufferGeometryUtils.mergeGeometries( curbs, false );
 			curbs.forEach( ( g ) => g.dispose() );
 			const mesh = new THREE.Mesh( merged, this.factory.build( CURB_KEY ) );
-			mesh.name = 'ground:curb';
+			mesh.name = 'ground:kerb';
 			group.add( mesh );
 			solid.push( merged );
 
