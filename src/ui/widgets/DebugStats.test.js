@@ -12,7 +12,8 @@ describe( 'DebugStats', () => {
 	const sample = {
 		frameMs: 11, gpuMs: 0, drawCalls: 100, triangles: 1000,
 		crowd: 0, cars: 0, interiors: 0, lights: 0,
-		backend: 'webgl', tier: 'low', width: 1920, height: 1080
+		backend: 'webgl', tier: 'low', width: 1920, height: 1080,
+		materials: 22, unresolved: 0
 	};
 
 	it( 'names the backend, the tier and the render size', () => {
@@ -24,6 +25,20 @@ describe( 'DebugStats', () => {
 		expect( stats.element.textContent ).toContain( 'webgl' );
 		expect( stats.element.textContent ).toContain( 'low' );
 		expect( stats.element.textContent ).toContain( '1920x1080' );
+
+	} );
+
+	it( 'reports how many material keys resolved, and warns when one did not', () => {
+
+		const clean = new DebugStats();
+		const missing = new DebugStats();
+
+		clean.update( sample );
+		missing.update( { ...sample, materials: 21, unresolved: 1 } );
+
+		expect( clean.element.textContent ).toContain( '22 materials  0 unresolved' );
+		expect( clean.rows.materials.className ).toBe( '' );
+		expect( missing.rows.materials.className ).toBe( 'hud-stats-warn' );
 
 	} );
 

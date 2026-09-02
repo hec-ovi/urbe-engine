@@ -57,6 +57,16 @@ export class MaterialResolver {
 
 	}
 
+	/**
+	 * How the run is resolving, without building the lists: the HUD reads this
+	 * every frame while interiors stream new keys in.
+	 */
+	get counts() {
+
+		return { resolved: this.resolved.size, unresolved: this.unresolved.size };
+
+	}
+
 	report() {
 
 		return {

@@ -114,7 +114,8 @@ export class GameApp {
 		this.stats = {
 			frameMs: 16.7, gpuMs: 0, drawCalls: 0, triangles: 0,
 			crowd: 0, cars: 0, interiors: 0, lights: 0,
-			backend: '-', tier: '-', width: 0, height: 0
+			backend: '-', tier: '-', width: 0, height: 0,
+			materials: 0, unresolved: 0
 		};
 
 	}
@@ -163,6 +164,7 @@ export class GameApp {
 		this.view.step( 'resolving materials' );
 		const resolver = new MaterialResolver();
 		await resolver.loadTheme( THEME );
+		this.resolver = resolver;
 		const factory = new PbrMaterialFactory( resolver );
 		this.rooms = new RoomLights( factory, this.tier );
 
@@ -577,10 +579,32 @@ export class GameApp {
 		this.stats.tier = this.tier.name;
 		this.stats.width = this.renderer.domElement.width;
 		this.stats.height = this.renderer.domElement.height;
+		this.#materials();
 		this.view.stats.update( this.stats );
 
 		this.renderer.resolveTimestampsAsync?.( 'render' ).catch( () => {} );
 		this.renderer.resolveTimestampsAsync?.( 'compute' ).catch( () => {} );
+
+	}
+
+	/**
+	 * The resolution count, and the keys behind it the first time one fails.
+	 * A key the database cannot answer renders magenta and is named here; it
+	 * never takes the load down, because a world can name a brand whose assets
+	 * are not on this machine (../materials/CONTRACT.md).
+	 */
+	#materials() {
+
+		const { resolved, unresolved } = this.resolver.counts;
+
+		this.stats.materials = resolved;
+
+		if ( unresolved > this.stats.unresolved ) {
+
+			this.stats.unresolved = unresolved;
+			console.warn( `unresolved material keys: ${this.resolver.report().unresolved.join( ', ' )}` );
+
+		}
 
 	}
 
