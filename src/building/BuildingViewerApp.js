@@ -96,7 +96,8 @@ export class BuildingViewerApp {
 
 			const replace = ( material ) => {
 
-				const built = factory.build( material.name );
+				// The interior names a variant in the material's extras (`materialVariant`): a strip is not a lamp.
+				const built = factory.build( material.name, material.userData?.materialVariant );
 				this.slicer.attach( built );
 
 				return built;

@@ -1,5 +1,6 @@
 # Changelog
 
+0.15.8: the building viewer builds each material with the variant the interior named in its extras, so strip fixtures show the strip diffuser instead of a tiled lamp.
 0.15.7: the building viewer reads a world build through `out` (`?mode=building&parcel=p4&out=/out/small`) and names a missing building instead of failing on the page the dev server answers with.
 0.15.6: cars brake for a player standing in their lane (easing from 10 m ahead, holding 1.5 m short) and their bodies push the player out like the crowd does.
 0.15.5: the character controller's autostep asks for 0.2 m of tread, under the interior's 0.28 m, so no stair tread fails the step test.
