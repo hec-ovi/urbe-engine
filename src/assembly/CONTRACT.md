@@ -24,7 +24,7 @@ CLI: `npm run assemble -- --parcel <id> --out <dir> [--blueprint <path>] [--glb 
 
 City batch: `npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--parcel <id,id,...>]` runs connections once, then the pipeline (merged runtime GLB + blueprint + interior) for every parcel, N in parallel (default 4). Failures are recorded, never fatal; `<dir>/qa-report.json` carries per-parcel pass/fail with verbatim errors, the sign text each building wears (null when none), timing and disk totals. Exit 0 only when every parcel passed.
 
-The out dir ends holding exactly the blueprint it was built from (`OutDir.js`). Folders for parcels the blueprint no longer has are removed before the run, and only folders assembly itself wrote (one carrying its own request or blueprint) are ever touched. `<dir>/blueprint.json` is the blueprint the batch was built from (named or not), so the folder is the whole world the game loads; `<dir>/manifest.json` is written last:
+The out dir ends holding exactly the blueprint it was built from (`OutDir.js`). Folders for parcels the blueprint no longer has are removed before the run, and only folders assembly itself wrote (one carrying its own request or blueprint) are ever touched. `<dir>/blueprint.json` is the blueprint the batch was built from (named or not) and `<dir>/npc-types.json` is the naming box's typed set found beside that blueprint, so the folder is the whole world the game loads; `<dir>/manifest.json` is written last:
 
 ```
 {

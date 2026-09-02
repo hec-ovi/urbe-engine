@@ -1,9 +1,11 @@
-import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { copyFileSync, existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 export const MANIFEST_FILE = 'manifest.json';
 /** The blueprint the world was assembled from, so the folder is the whole world. */
 export const BLUEPRINT_FILE = 'blueprint.json';
+/** The naming box's typed set, carried in from beside the blueprint when it has one. */
+export const NPC_TYPES_FILE = 'npc-types.json';
 
 /** Zero-padded floor file tag; basements keep their minus sign (-001). */
 export function floorTag( index ) {
@@ -114,6 +116,22 @@ export class OutDir {
 	 * from. The game refuses an out dir whose blueprint is not the one it is
 	 * playing.
 	 */
+	/**
+	 * A named world comes with its typed NPC set beside it; the out dir takes a
+	 * copy so the folder plays as one world. @returns whether one was found.
+	 */
+	carryTypes( blueprintPath ) {
+
+		const source = join( dirname( blueprintPath ), NPC_TYPES_FILE );
+
+		if ( ! existsSync( source ) ) return false;
+
+		copyFileSync( source, join( this.dir, NPC_TYPES_FILE ) );
+
+		return true;
+
+	}
+
 	writeManifest( atlas, parcelIds ) {
 
 		const parcels = [ ...parcelIds ].sort( ( a, b ) => a.localeCompare( b, undefined, { numeric: true } ) );

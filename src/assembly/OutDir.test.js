@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { OutDir, MANIFEST_FILE, BLUEPRINT_FILE } from './OutDir.js';
+import { OutDir, MANIFEST_FILE, BLUEPRINT_FILE, NPC_TYPES_FILE } from './OutDir.js';
 import { writeInteriorFiles } from './BuildingPipeline.js';
 import namedCity from './named-city.fixture.json';
 
@@ -98,6 +98,25 @@ describe( 'OutDir', () => {
 		new OutDir( dir ).writeManifest( namedCity, [ 'p0' ] );
 
 		expect( JSON.parse( readFileSync( join( dir, BLUEPRINT_FILE ), 'utf8' ) ) ).toEqual( namedCity );
+
+	} );
+
+	it( 'carries the typed NPC set that sits beside the blueprint', () => {
+
+		dir = worldWith( [ 'p0' ] );
+		const source = mkdtempSync( join( tmpdir(), 'named-' ) );
+		writeFileSync( join( source, 'city.json' ), '{}' );
+		writeFileSync( join( source, NPC_TYPES_FILE ), '{"types":[]}' );
+
+		const out = new OutDir( dir );
+
+		expect( out.carryTypes( join( source, 'city.json' ) ) ).toBe( true );
+		expect( existsSync( join( dir, NPC_TYPES_FILE ) ) ).toBe( true );
+		rmSync( source, { recursive: true, force: true } );
+		// A blueprint with nothing beside it carries nothing.
+		const bare = mkdtempSync( join( tmpdir(), 'bare-' ) );
+		expect( new OutDir( dir ).carryTypes( join( bare, 'city.json' ) ) ).toBe( false );
+		rmSync( bare, { recursive: true, force: true } );
 
 	} );
 

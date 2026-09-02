@@ -148,6 +148,7 @@ writeFileSync( join( outDir, 'qa-report.json' ), JSON.stringify( {
 }, null, 2 ) + '\n' );
 
 const manifest = out.writeManifest( atlas, out.built( parcelIds ) );
+if ( out.carryTypes( resolve( args.blueprint ) ) ) console.log( 'typed NPC set carried in beside the blueprint' );
 
 console.log( `\n${totals.passed}/${totals.parcels} passed, ${totals.failed} failed, ${( totals.wallMs / 1000 ).toFixed( 1 )} s, ${( totals.bytes / 1e6 ).toFixed( 1 )} MB` );
 for ( const r of failed ) console.log( `  ${r.parcelId}  ${r.error}` );
