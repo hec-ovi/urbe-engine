@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { RendererFactory } from '../app/RendererFactory.js';
+import { variantFor } from '../game/city/Variety.js';
 import { BuildingAssets } from './BuildingAssets.js';
 import { BuildingStage } from './BuildingStage.js';
 import { MaterialResolver } from './MaterialResolver.js';
@@ -98,7 +99,8 @@ export class BuildingViewerApp {
 			const replace = ( material ) => {
 
 				// The interior names a variant in the material's extras (`materialVariant`): a strip is not a lamp.
-				const built = factory.build( material.name, material.userData?.materialVariant );
+				// the interior names its variant; otherwise the building wears the variant the city gives it
+				const built = factory.build( material.name, material.userData?.materialVariant ?? variantFor( factory.resolver.resolve( material.name ), parcel ) );
 				this.slicer.attach( built );
 
 				return built;

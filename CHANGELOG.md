@@ -1,5 +1,6 @@
 # Changelog
 
+0.15.10: every building wears its own pattern variant of each material, picked by parcel id (src/game/city/Variety.js); the viewer shows the same one.
 0.15.9: the building viewer walks: W A S D along the view, Q and E down and up, drag to look, Shift fast; the wheel no longer zooms.
 0.15.8: the building viewer builds each material with the variant the interior named in its extras, so strip fixtures show the strip diffuser instead of a tiled lamp.
 0.15.7: the building viewer reads a world build through `out` (`?mode=building&parcel=p4&out=/out/small`) and names a missing building instead of failing on the page the dev server answers with.

@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { doorFrame } from './DoorGeometry.js';
 import { takeTriangles, centroidAt } from './Triangles.js';
 import { kelvinColor } from '../light/Color.js';
+import { bucketFor, splitBucket, variantFor } from './Variety.js';
 
 // The GLB names its nodes `merged:<key>` and `interior:<key>`, but GLTFLoader
 // runs node names through PropertyBinding.sanitizeNodeName, which strips the
@@ -67,9 +68,10 @@ export class BuildingsLoader {
 
 			for ( const [ key, geometries ] of building.exterior ) {
 
-				if ( ! shellByKey.has( key ) ) shellByKey.set( key, [] );
-
-				shellByKey.get( key ).push( ...geometries );
+				// a building wears one variant of each material; buildings of the same variant merge together
+				const bucket = bucketFor( key, variantFor( this.factory.resolver.resolve( key ), building.parcelId ) );
+				if ( ! shellByKey.has( bucket ) ) shellByKey.set( bucket, [] );
+				shellByKey.get( bucket ).push( ...geometries );
 
 			}
 
@@ -103,15 +105,18 @@ export class BuildingsLoader {
 
 	}
 
-	/** The material for a shell key; a lit diffuser reads as its own lamp. */
-	#material( key ) {
+	/** The material for a merge bucket (key and the variant it wears); a lit diffuser reads as its own lamp. */
+	#material( bucket ) {
+
+		const { key, variantId } = splitBucket( bucket );
 
 		return key.includes( FIXTURE )
 			? this.factory.variant( key, {
+				variantId,
 				emissiveScale: FIXTURE_EMISSIVE,
 				emissive: kelvinColor( FIXTURE_KELVIN )
 			} )
-			: this.factory.build( key );
+			: this.factory.build( key, variantId );
 
 	}
 
