@@ -70,6 +70,10 @@ export class CrowdMesh {
 		const geometry = baked.mesh.geometry.clone();
 		geometry.deleteAttribute( 'skinIndex' );
 		geometry.deleteAttribute( 'skinWeight' );
+		// Position and normal come from the pose buffers, so the geometry's own
+		// normal is never read; dropping it keeps the body within the eight
+		// vertex buffers a WebGPU pipeline binds.
+		geometry.deleteAttribute( 'normal' );
 		geometry.boundingSphere = new THREE.Sphere( new THREE.Vector3(), 1e6 );
 
 		const material = new MeshStandardNodeMaterial( { roughness: 0.78, metalness: 0 } );

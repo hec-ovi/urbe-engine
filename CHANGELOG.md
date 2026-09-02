@@ -1,5 +1,7 @@
 # Changelog
 
+0.13.3: the crowd draws on WebGPU: the body geometry drops its own normal attribute (position and normal come from the pose buffers), so the pipeline binds eight vertex buffers, the limit.
+
 0.13.2: a kerb stands only where a pavement edge meets the road, square-ended beside a building; a strip fixture's light lies along its housing (the interior's angle, +X toward +Z, mapped onto the rotation); the environment probe bakes only while the player stands still and at half size, so walking never stalls on a bake; the haze quads are off on every tier.
 
 0.13.1: a sidewalk edge is a kerb stone (mitred top ledge and face in the curb kind); the lit entrance strips stand on the door frame at any facade angle; material maps are served uncached so a release shows on reload; assembly carries the typed NPC set beside a named blueprint into the world folder.

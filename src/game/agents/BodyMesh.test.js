@@ -11,6 +11,7 @@ function baked( vertexCount = 3, rows = 32 ) {
 
 	const geometry = new THREE.BufferGeometry();
 	geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array( vertexCount * 3 ), 3 ) );
+	geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( new Float32Array( vertexCount * 3 ), 3 ) );
 	geometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( new Float32Array( vertexCount * 2 ), 2 ) );
 
 	return {
