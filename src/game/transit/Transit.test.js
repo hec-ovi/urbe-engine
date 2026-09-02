@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import * as THREE from 'three/webgpu';
 import { transitVehiclesAt } from '../../../../connections/src/index.ts';
 import { Transit } from './Transit.js';
@@ -14,8 +12,7 @@ import { Transit } from './Transit.js';
  */
 describe( 'Transit', () => {
 
-	const small = blueprint( 'city-urbe-small' );
-	const full = blueprint( 'city-urbe' );
+	const small = city();
 
 	it( 'puts a bus where the transit library says it is', () => {
 
@@ -62,9 +59,10 @@ describe( 'Transit', () => {
 
 	it( 'builds nothing for a city with no bus stops', () => {
 
-		const transit = new Transit( { atlas: small, networks: null, factory: stubFactory() } );
+		const bare = city( { busStops: [] } );
+		const transit = new Transit( { atlas: bare, networks: null, factory: stubFactory() } );
 
-		expect( small.transit.busStops ).toEqual( [] );
+		expect( bare.transit.busStops ).toEqual( [] );
 		expect( transit.group.getObjectByName( 'bus-shelters' ).children ).toEqual( [] );
 		expect( transit.group.getObjectByName( 'buses' ).children ).toEqual( [] );
 		expect( transit.colliders.get( 'transit:shelters' ) ).toBe( null );
@@ -73,11 +71,12 @@ describe( 'Transit', () => {
 
 	it( 'draws a whole city of bus stops as one instance set per material', () => {
 
-		const transit = new Transit( { atlas: full, networks: null, factory: stubFactory() } );
+		const many = city( { busStops: busStops( 24 ) } );
+		const transit = new Transit( { atlas: many, networks: null, factory: stubFactory() } );
 		const meshes = transit.group.getObjectByName( 'bus-shelters' ).children;
-		const stops = full.transit.busStops.length;
+		const stops = many.transit.busStops.length;
 
-		expect( stops ).toBeGreaterThan( 20 );
+		expect( stops ).toBe( 24 );
 		expect( meshes.length ).toBe( 3 );
 
 		for ( const mesh of meshes ) {
@@ -111,13 +110,43 @@ describe( 'Transit', () => {
 
 } );
 
-/** An atlas sample, read from the sibling blueprint repo the game plays. */
-function blueprint( name ) {
+/**
+ * A blueprint in the shape atlas publishes, holding only what transit reads:
+ * one street to hang stops on, and whatever transit data the case is about.
+ * Built here rather than read from a sample so a regenerated sibling city
+ * cannot decide what this box's contract test proves.
+ */
+function city( transit = {} ) {
 
-	return JSON.parse( readFileSync(
-		fileURLToPath( new URL( `../../../../atlas/samples/${name}.json`, import.meta.url ) ),
-		'utf8'
-	) );
+	return {
+		streets: { edges: [ { id: 'e0', path: [ [ 0, 0 ], [ 200, 0 ] ] } ] },
+		transit: {
+			busStops: [],
+			trainStations: [ station( 'ts0', 40 ) ],
+			subwayStations: [ station( 'ss0', 120 ) ],
+			...transit
+		}
+	};
+
+}
+
+function station( id, x ) {
+
+	return {
+		id, position: [ x, 60 ], districtId: 'd0', level: 0, shafts: [],
+		platform: [ [ x - 20, 50 ], [ x + 20, 50 ], [ x + 20, 70 ], [ x - 20, 70 ] ],
+		entrances: [ [ x - 4, 58 ], [ x + 4, 62 ] ]
+	};
+
+}
+
+/** `count` stops spread along the one street, each far enough off it to face the kerb. */
+function busStops( count ) {
+
+	return Array.from( { length: count }, ( _, i ) => ( {
+		id: `bs${i}`, edgeId: 'e0', districtId: 'd0',
+		position: [ 4 + i * 8, 3 ]
+	} ) );
 
 }
 
