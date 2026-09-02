@@ -77,6 +77,10 @@ const BINDINGS = [
 	{ action: 'pause, close a panel', keys: [ 'Esc' ] }
 ];
 
+/** Standing still: this close to one spot for this long. */
+const STILL_RADIUS = 0.1;
+const STILL_SECONDS = 1;
+
 const NEAR_PLANE = 0.2;
 const FAR_PLANE = 900;
 
@@ -392,6 +396,22 @@ export class GameApp {
 	 * which rooms hold a light slot, what colour the air around the player is,
 	 * whether the probe needs rebaking, and which exposure the camera is on.
 	 */
+	/** Whether the feet have stayed within a hand's width for the last second. */
+	#still( feet, delta ) {
+
+		if ( ! this.rest ) this.rest = { at: feet.clone(), seconds: 0 };
+
+		if ( this.rest.at.distanceTo( feet ) > STILL_RADIUS ) {
+
+			this.rest.at.copy( feet );
+			this.rest.seconds = 0;
+
+		} else this.rest.seconds += delta;
+
+		return this.rest.seconds >= STILL_SECONDS;
+
+	}
+
 	/** A setting changed in the HUD: the ones that are uniforms apply on the spot, the tier reloads the run. */
 	#setting( { key, value } ) {
 
@@ -423,7 +443,7 @@ export class GameApp {
 
 		this.rooms.update( visible, feet, delta );
 		this.fog.update( room ? roomAir( room ) : this.lights.airColor( this.camera.position ), Boolean( room ), delta );
-		this.probe?.update( feet );
+		this.probe?.update( feet, this.#still( feet, delta ) );
 		this.exposure.enter( room ? 'interior' : 'exterior' );
 		this.exposure.update( delta );
 

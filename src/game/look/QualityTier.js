@@ -34,7 +34,7 @@ const PRESETS = {
 		roomStrips: 1,
 		clusteredLights: 1024,
 		batchedLights: 48,
-		probeSize: 128,
+		probeSize: 64,
 		probeInterval: 90
 	},
 	high: {
@@ -45,7 +45,7 @@ const PRESETS = {
 		roomStrips: 2,
 		clusteredLights: 1024,
 		batchedLights: 48,
-		probeSize: 128,
+		probeSize: 64,
 		probeInterval: 60
 	},
 	ultra: {
@@ -56,7 +56,7 @@ const PRESETS = {
 		roomStrips: 2,
 		clusteredLights: 1024,
 		batchedLights: 48,
-		probeSize: 256,
+		probeSize: 128,
 		probeInterval: 40
 	}
 };

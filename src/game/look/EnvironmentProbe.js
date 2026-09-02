@@ -78,17 +78,18 @@ export class EnvironmentProbe {
 	 * @param crossed true when the player has just walked between the street
 	 * and a room.
 	 */
-	update( position ) {
+	/** @param still whether the player has stood still for the last stretch: a bake never lands mid-stride */
+	update( position, still ) {
 
-		if ( ! this.at ) return;
+		if ( ! this.at || ! still ) return;
 
 		if ( this.at.distanceTo( position ) > this.interval ) this.pending = true;
 
 		if ( ! this.pending ) return;
 
 		// A bake is six renders of the city in one frame, so it only happens
-		// on the cooldown and never on a threshold: walking into a building
-		// keeps the street's reflections until the next distance bake.
+		// on the cooldown, only while the player stands still, and never on a
+		// threshold: walking keeps the reflections it has until the next stop.
 		const now = performance.now();
 
 		if ( now - this.last < COOLDOWN ) return;
