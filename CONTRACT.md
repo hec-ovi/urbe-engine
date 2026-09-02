@@ -13,6 +13,7 @@ Status: play mode is live (src/game/CONTRACT.md); orbit mode, saves and world qu
 - the running game: `?mode=game` plays the assembled city first person at street level (src/game/CONTRACT.md)
 - world query functions over the assembled state (by type, zone, tier, schedule)
 - game saves
+- the city preview: `?mode=city[&out=/out/small]`: every parcel as its published floors stacked (unbuilt ones as the atlas envelope) over the atlas ground cover; hover names the parcel, a click opens `?mode=building&parcel=<id>&out=<out>`
 - the building viewer: `?mode=building&parcel=<id>[&out=/out/small]` with a fly camera (W A S D walk, Q and E down and up, drag to look, Shift fast, no zoom)
 - dev server routes: sibling mounts (/atlas, /materials, /models) and POST /api/talk (src/server/talkRoute.js): the NPC's reply to one player line through ../quests dialog over the OpenAI-compatible server at LLM_BASE_URL (default http://localhost:8080/v1), LLM_MODEL or the first model listed
 
