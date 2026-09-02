@@ -42,13 +42,19 @@ export function pointInRing( x, z, ring ) {
 }
 
 /**
- * Horizontal surface at height y, facing +Y.
+ * Horizontal surface at height y, facing +Y, with a hole where each ring in
+ * `holes` falls: that is how the city floor opens over a station shaft, and how
+ * a station's ceiling opens where its shaft comes through.
  * Shape space is (x, -z) so that the +Z face becomes the +Y face after the
  * rotation; earcut handles either input winding, so no ring is ever inverted.
  */
-export function fill( ring, y ) {
+export function fill( ring, y, holes = [] ) {
 
-	const shape = new THREE.Shape( ring.map( ( [ x, z ] ) => new THREE.Vector2( x, - z ) ) );
+	const flat = ( points ) => points.map( ( [ x, z ] ) => new THREE.Vector2( x, - z ) );
+	const shape = new THREE.Shape( flat( ring ) );
+
+	for ( const hole of holes ) shape.holes.push( new THREE.Path( flat( hole ) ) );
+
 	const geometry = new THREE.ShapeGeometry( shape );
 	geometry.rotateX( - Math.PI / 2 );
 	geometry.translate( 0, y, 0 );

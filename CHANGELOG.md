@@ -1,5 +1,6 @@
 # Changelog
 
+0.16.11: the city floor opens over every station shaft and the bedrock drops below the deepest volume the city digs, so what is built underground can be reached.
 0.16.10: the game contract carries the kerb strip, the painted crossings, the warm-up and what the readout says.
 0.16.9: the links contract states what each kind is built as and leaves the section to the link, which is where it comes from; the open bridge deck with railings connections describes is named as not built.
 0.16.8: the ground lays the blueprint's own `curb` surface, unbroken through the junction returns, with a face down to the roadway; a world published without one still gets a kerb cut from its pavement edges.

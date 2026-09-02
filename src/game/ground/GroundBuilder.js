@@ -1,10 +1,13 @@
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { fill, skirt, ringBounds, ledge, Roadway, signedArea } from './Polygons.js';
+import { holesWithin, shaftMouths, stationDepth } from './Stations.js';
 
 export const SIDEWALK_HEIGHT = 0.12;
 const CURB_BOTTOM = - 0.06;
 const BEDROCK_Y = - 0.8;
+/** How far the bedrock keeps clear of the deepest thing the city digs. */
+const BEDROCK_CLEARANCE = 2;
 
 const CURB_KEY = 'cyberpunk/curb/poor';
 /** A kerb stone's top, from the edge inward, and how far above the pavement it sits so it never fights it. */
@@ -69,6 +72,9 @@ export class GroundBuilder {
 
 		const solid = [];
 		const curbs = [];
+		// The floor is open over every station shaft: without the hole the stair
+		// down is buried under the cover it starts from.
+		const mouths = shaftMouths( this.atlas );
 		// A kerb stands only where a pavement edge meets the road, never along a building or another pavement.
 		const road = new Roadway( this.atlas.volumetric.ground );
 		// The blueprint's own kerb strip wins wherever it is published: it runs
@@ -78,7 +84,7 @@ export class GroundBuilder {
 		for ( const [ surface, rings ] of bySurface ) {
 
 			const spec = SURFACES[ surface ];
-			const fills = rings.map( ( ring ) => fill( ring, spec.y ) );
+			const fills = rings.map( ( ring ) => fill( ring, spec.y, holesWithin( ring, mouths ) ) );
 			const merged = BufferGeometryUtils.mergeGeometries( fills, false );
 			fills.forEach( ( g ) => g.dispose() );
 
@@ -114,7 +120,10 @@ export class GroundBuilder {
 		}
 
 		const bounds = ringBounds( this.atlas.volumetric.ground.map( ( g ) => g.polygon ) );
-		group.add( this.#bedrock( bounds ) );
+		// Deep enough to be under the deepest thing the city digs, so a station
+		// is a room rather than a hollow inside the rock.
+		const dug = stationDepth( this.atlas );
+		group.add( this.#bedrock( bounds, dug < 0 ? dug - BEDROCK_CLEARANCE : BEDROCK_Y ) );
 
 		return {
 			group,
@@ -129,7 +138,7 @@ export class GroundBuilder {
 	 * makes a hole in the ground impossible to see through and gives the
 	 * physics world a floor of last resort.
 	 */
-	#bedrock( bounds ) {
+	#bedrock( bounds, y ) {
 
 		const pad = 120;
 		const width = bounds.max[ 0 ] - bounds.min[ 0 ] + pad * 2;
@@ -138,7 +147,7 @@ export class GroundBuilder {
 		geometry.rotateX( - Math.PI / 2 );
 		geometry.translate(
 			( bounds.min[ 0 ] + bounds.max[ 0 ] ) / 2,
-			BEDROCK_Y,
+			y,
 			( bounds.min[ 1 ] + bounds.max[ 1 ] ) / 2
 		);
 
