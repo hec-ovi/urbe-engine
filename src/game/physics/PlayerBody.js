@@ -32,7 +32,9 @@ export class PlayerBody {
 
 		this.controller = world.createCharacterController( 0.02 );
 		this.controller.setUp( { x: 0, y: 1, z: 0 } );
-		this.controller.enableAutostep( 0.42, 0.28, true );
+		// Steps up to 0.42 m; a tread is 0.28 m (interior STAIR.tread), and the
+		// width the step test asks for stays under it so every tread counts.
+		this.controller.enableAutostep( 0.42, 0.2, true );
 		this.controller.enableSnapToGround( 0.6 );
 		this.controller.setMaxSlopeClimbAngle( ( 55 * Math.PI ) / 180 );
 		this.controller.setMinSlopeSlideAngle( ( 40 * Math.PI ) / 180 );
