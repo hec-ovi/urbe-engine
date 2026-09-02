@@ -1,5 +1,7 @@
 # Changelog
 
+0.13.1: a sidewalk edge is a kerb stone (mitred top ledge and face in the curb kind); the lit entrance strips stand on the door frame at any facade angle; material maps are served uncached so a release shows on reload; assembly carries the typed NPC set beside a named blueprint into the world folder.
+
 0.13: the map is the city as blocks. The MAP panel raises every parcel prism and lays every ground polygon of the atlas volumetrics in a small three scene that orbits the player: drag turns, wheel zooms, venues stand as lit marks in their open state, and the frame renders only on a change. The minimap keeps its flat bake.
 
 0.12: a world folder is the whole world, and the walk into a building is continuous. Assembly copies the blueprint it was built from into the out dir and the game reads it there first, so a named world (signs lettered with the naming box's parcel names, its typed NPC set in `npc-types.json`) plays as one folder; a building with no sign is still generated. The environment probe never rebakes on a doorway, only on distance and its cooldown, and a room is graded like the street it opens off, so stepping inside changes nothing but what the room's own fixtures do. Fog is sky-coloured and untinted at a third of the density, so a distant building fades without changing colour. The tab bar is on screen only while paused or while a panel is open.
