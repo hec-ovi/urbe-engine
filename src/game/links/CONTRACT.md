@@ -13,12 +13,16 @@ Purpose: builds every inter-building link the connections box published as merge
 - `triangles`, `drawCalls`: what the box costs.
 
 ## Kinds
-| kind | section | built as | solid |
-| --- | --- | --- | --- |
-| bridge | rect 4 x 3.2 | concrete shell, ends open | walk through |
-| ac-tube | rect 1.6 x 1.6 | sheet metal shell, ends open | walk through and over |
-| tunnel | rect 3 x 2.8 | concrete shell at basement level, ends open | walk through |
-| wire | circle 0.1 | closed cable tube along the published catenary | nothing |
+The section comes from the link, never from here; these are what each kind is built as.
+
+| kind | built as | solid |
+| --- | --- | --- |
+| bridge | concrete shell, ends open | walk through |
+| ac-tube | sheet metal shell, ends open | walk through and over |
+| tunnel | concrete shell at basement level, ends open | walk through |
+| wire | closed cable tube along the published catenary | nothing |
+
+A kind this box does not know is skipped. Bridges are drawn as a closed shell; the open deck with railings connections describes is not built yet.
 
 ## Invariants
 - A link's geometry is its own `path` and `crossSection` and nothing else. Ends are never inset or extended: `path[0]` and the last point already sit on the two face planes.

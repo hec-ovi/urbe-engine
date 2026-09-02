@@ -1,5 +1,6 @@
 # Changelog
 
+0.16.9: the links contract states what each kind is built as and leaves the section to the link, which is where it comes from; the open bridge deck with railings connections describes is named as not built.
 0.16.8: the ground lays the blueprint's own `curb` surface, unbroken through the junction returns, with a face down to the roadway; a world published without one still gets a kerb cut from its pavement edges.
 0.16.7: junctions are marked. Every segment of the blueprint's `streets.crossings` is painted continental (0.45 m bars along the walk, repeated across a 3.6 m corridor, held 0.3 m clear of both kerbs), merged into one draw for the whole city, in the same road paint the lane markings wear.
 0.16.6: the game's readout carries the material resolution the viewer already showed: how many keys resolved and how many did not, warned while any is outstanding, with the failing keys named in the console. A key the database cannot serve (a world naming a brand whose assets are not on this machine) renders magenta and never takes the load down.
