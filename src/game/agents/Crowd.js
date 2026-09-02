@@ -586,6 +586,7 @@ export class Crowd {
 			spot: null,
 			variant: bodyFor( agent.gender, seed ),
 			look: look( seed ),
+			appearanceSeed: seed,
 			frame: seed % FRAMES,
 			frozen: false,
 			retiring: false,
@@ -668,6 +669,8 @@ export class Crowd {
 		const counts = this.assets.variants.map( () => 0 );
 
 		for ( const member of this.members.values() ) {
+
+			if ( member.hero ) continue;
 
 			const slot = counts[ member.variant ];
 

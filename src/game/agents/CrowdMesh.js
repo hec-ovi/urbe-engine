@@ -68,12 +68,14 @@ export class CrowdMesh {
 		const normal = mix( normals.sample( row0, column ), normals.sample( row1, column ), blend );
 
 		const geometry = baked.mesh.geometry.clone();
-		geometry.deleteAttribute( 'skinIndex' );
-		geometry.deleteAttribute( 'skinWeight' );
-		// Position and normal come from the pose buffers, so the geometry's own
-		// normal is never read; dropping it keeps the body within the eight
-		// vertex buffers a WebGPU pipeline binds.
-		geometry.deleteAttribute( 'normal' );
+		// Source exports carry unused secondary UV and colour channels. Position
+		// gives the draw its vertex count and uv samples the body map; every other
+		// source attribute is replaced by the pose buffers or the garment map.
+		for ( const name of Object.keys( geometry.attributes ) ) {
+
+			if ( name !== 'position' && name !== 'uv' ) geometry.deleteAttribute( name );
+
+		}
 		geometry.boundingSphere = new THREE.Sphere( new THREE.Vector3(), 1e6 );
 
 		const material = new MeshStandardNodeMaterial( { roughness: 0.78, metalness: 0 } );
@@ -81,16 +83,16 @@ export class CrowdMesh {
 		material.normalNode = turn( normal ).normalize();
 		material.colorNode = this.colorNode( geometry, paint );
 
-		this.mesh = new THREE.InstancedMesh( geometry, material, capacity );
+		// An InstancedMesh binds its identity instanceMatrix even though this
+		// shader replaces it, taking a ninth vertex buffer on devices whose limit
+		// is eight. InstancedBufferGeometry issues the same instanced draw without
+		// that unused binding.
+		const instanced = new THREE.InstancedBufferGeometry().copy( geometry );
+		instanced.instanceCount = 0;
+		this.mesh = new THREE.Mesh( instanced, material );
 		this.mesh.frustumCulled = false;
 		this.mesh.castShadow = true;
 		this.mesh.count = 0;
-
-		// Positions live in the instanced attributes above, so the instance
-		// matrix stays identity and is never uploaded again.
-		const identity = new THREE.Matrix4();
-
-		for ( let i = 0; i < capacity; i ++ ) this.mesh.setMatrixAt( i, identity );
 
 	}
 
@@ -135,6 +137,7 @@ export class CrowdMesh {
 	commit( count ) {
 
 		this.mesh.count = count;
+		this.mesh.geometry.instanceCount = count;
 
 		for ( const attribute of this.attributes ) attribute.needsUpdate = true;
 

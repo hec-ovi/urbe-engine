@@ -42,8 +42,23 @@ describe( 'crowd meshes', () => {
 			const bound = Object.keys( mesh.mesh.geometry.attributes ).length + mesh.attributes.length;
 
 			expect( bound ).toBeLessThanOrEqual( VERTEX_BUFFERS );
+			expect( mesh.mesh.isInstancedMesh ).not.toBe( true );
+			expect( mesh.mesh.geometry.isInstancedBufferGeometry ).toBe( true );
 
 		}
+
+	} );
+
+	it( 'drops source-export channels the crowd shader never reads', () => {
+
+		const source = baked();
+		source.mesh.geometry.setAttribute( 'uv1', new THREE.Float32BufferAttribute( new Float32Array( 6 ), 2 ) );
+		source.mesh.geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( new Float32Array( 9 ), 3 ) );
+		const cloth = new THREE.BufferAttribute( new Float32Array( 3 * 4 ), 4 );
+		const body = new BodyMesh( source, 4, false, { map: new THREE.Texture(), cloth } );
+
+		expect( Object.keys( body.mesh.geometry.attributes ).sort() ).toEqual( [ 'cloth', 'position', 'uv' ] );
+		expect( Object.keys( body.mesh.geometry.attributes ).length + body.attributes.length ).toBe( VERTEX_BUFFERS );
 
 	} );
 

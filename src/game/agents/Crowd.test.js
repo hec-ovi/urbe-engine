@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Crowd } from './Crowd.js';
 import { CLIP } from './CharacterAssets.js';
@@ -278,7 +278,35 @@ describe( 'Crowd bodies', () => {
 
 	} );
 
+	it( 'removes only the focused hero from the baked crowd draw', () => {
+
+		const commits = [];
+		const mesh = { setInstance: vi.fn(), commit: ( count ) => commits.push( count ) };
+		const crowd = new Crowd( {
+			assets: { variants: [ {} ], durations: [ 1 ], meshesOf: () => [ mesh ] },
+			routes: null, signals: null, sim: null, places: new Map(), capacity: 4
+		} );
+		crowd.timer = 0;
+		crowd.members.set( 'baked', stationaryMember( false ) );
+		crowd.members.set( 'hero', stationaryMember( true ) );
+
+		crowd.update( 0.1, PLAYER, { timeMin: 780, daySeconds: 46800 } );
+
+		expect( mesh.setInstance ).toHaveBeenCalledOnce();
+		expect( commits.at( - 1 ) ).toBe( 1 );
+
+	} );
+
 } );
+
+function stationaryMember( hero ) {
+
+	return {
+		variant: 0, hero, stationary: true, frozen: true, frame: 0, clip: 0,
+		position: new THREE.Vector3(), heading: 0, look: {}
+	};
+
+}
 
 /** A crowd with nobody walking: only the members the pushback reads. */
 function crowdWith( positions ) {

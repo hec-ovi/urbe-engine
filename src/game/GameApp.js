@@ -45,6 +45,7 @@ import { Input } from './player/Input.js';
 import { PlayerController } from './player/PlayerController.js';
 import { Interactor } from './player/Interactor.js';
 import { CharacterAssets } from './agents/CharacterAssets.js';
+import { HeroCharacter } from './agents/HeroCharacter.js';
 import { Crowd } from './agents/Crowd.js';
 import { WalkRoutes } from './agents/WalkRoutes.js';
 import { CarModels } from './agents/CarModels.js';
@@ -288,6 +289,8 @@ export class GameApp {
 		this.warmup = new Warmup( this.renderer, this.scene, this.camera, this.look.mrt );
 		this.stream.warmup = this.warmup;
 		await this.warmup.warm( this.scene );
+		this.hero = await HeroCharacter.create( { animation: assets.animation, warmup: this.warmup } );
+		this.scene.add( this.hero.group );
 
 		this.view.step( 'baking the environment' );
 		this.probe?.bake( spawn.point );
@@ -301,8 +304,14 @@ export class GameApp {
 			this.view.dialog.show( conversation );
 			this.view.avatar.setVisible( Boolean( conversation ) );
 
-			if ( ! conversation ) return;
+			if ( ! conversation ) {
+
+				this.hero.hide();
+				return;
+
+			}
 			if ( conversation.npcId ) this.#questEvent( { kind: 'talkedTo', npcId: conversation.npcId } );
+			this.hero.show( conversation.person ).catch( ( error ) => console.warn( 'focused character:', error.message ) );
 
 			// The chat takes the mouse: the input wants focus and the panel a click.
 			this.view.avatar.setAvatar( { name: conversation.instance?.name ?? 'someone passing by', bar: 1 } );
@@ -385,6 +394,7 @@ export class GameApp {
 
 		this.lights.update( this.camera.position, delta );
 		this.crowd.update( delta, feet, this.clock );
+		this.hero.update( delta );
 		this.traffic.update( delta, feet, this.clock.daySeconds );
 		this.transit.update( feet, this.clock.daySeconds );
 		this.elevators.update( delta, this.body );
