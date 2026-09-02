@@ -37,7 +37,7 @@ One panel over the game at a time.
 - **HudClock**: `update( time, place )`, `setState( 'dawn' | 'day' | 'dusk' | 'night' )`
 - **InteractPrompt**: `update( text | null )`
 - **LocationReadout**: `update( position, district, parcel )`, `setAbout( paths )`
-- **DebugStats**: `update( stats )`
+- **DebugStats**: `update( stats )` with `{ backend, tier, width, height, frameMs, gpuMs, drawCalls, triangles, lights, crowd, cars, interiors }`; the first row names the backend, the tier and the render size, warned on the fallback backend
 - **PauseMenu**: props `onResume()`; `setVisible( bool )`
 
 ## Components

@@ -111,7 +111,8 @@ export class GameApp {
 		this.view.mount( document.body );
 		this.stats = {
 			frameMs: 16.7, gpuMs: 0, drawCalls: 0, triangles: 0,
-			crowd: 0, cars: 0, interiors: 0, lights: 0, tier: '-'
+			crowd: 0, cars: 0, interiors: 0, lights: 0,
+			backend: '-', tier: '-', width: 0, height: 0
 		};
 
 	}
@@ -147,6 +148,7 @@ export class GameApp {
 		// already happened and the tier is a choice about cost, not backend.
 		const backend = RendererFactory.actualBackend( this.renderer );
 		this.tier = QualityTier.describe( config.quality, backend );
+		this.stats.backend = backend;
 		if ( config.off.has( 'bloom' ) ) this.tier.bloom = { strength: 0, radius: 0 };
 		if ( config.off.has( 'haze' ) ) this.tier.haze = false;
 		this.lighting = LightingSystem.install( this.renderer, this.tier );
@@ -557,6 +559,8 @@ export class GameApp {
 		this.stats.bands = this.colliders.liveBands;
 		this.stats.lights = this.lights.count;
 		this.stats.tier = this.tier.name;
+		this.stats.width = this.renderer.domElement.width;
+		this.stats.height = this.renderer.domElement.height;
 		this.view.stats.update( this.stats );
 
 		this.renderer.resolveTimestampsAsync?.( 'render' ).catch( () => {} );
