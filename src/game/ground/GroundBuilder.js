@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
-import { fill, skirt, ringBounds } from './Polygons.js';
+import { fill, skirt, ringBounds, ledge } from './Polygons.js';
 
 export const SIDEWALK_HEIGHT = 0.12;
 const CURB_BOTTOM = - 0.06;
@@ -16,6 +16,9 @@ const SURFACES = {
 };
 
 const CURB_KEY = 'cyberpunk/curb/high_rich';
+/** A kerb stone's top, from the edge inward, and how far above the pavement it sits so it never fights it. */
+const CURB_WIDTH = 0.15;
+const CURB_LIP = 0.004;
 
 /**
  * The city floor, straight off the atlas blueprint's volumetric ground cover:
@@ -77,7 +80,7 @@ export class GroundBuilder {
 
 			if ( spec.curb ) {
 
-				for ( const ring of rings ) curbs.push( skirt( ring, spec.y, CURB_BOTTOM ) );
+				for ( const ring of rings ) curbs.push( skirt( ring, spec.y, CURB_BOTTOM ), ledge( ring, spec.y + CURB_LIP, CURB_WIDTH ) );
 
 			}
 
