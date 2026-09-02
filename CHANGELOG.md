@@ -1,5 +1,7 @@
 # Changelog
 
+0.13.2: a kerb stands only where a pavement edge meets the road, square-ended beside a building; a strip fixture's light lies along its housing (the interior's angle, +X toward +Z, mapped onto the rotation); the environment probe bakes only while the player stands still and at half size, so walking never stalls on a bake; the haze quads are off on every tier.
+
 0.13.1: a sidewalk edge is a kerb stone (mitred top ledge and face in the curb kind); the lit entrance strips stand on the door frame at any facade angle; material maps are served uncached so a release shows on reload; assembly carries the typed NPC set beside a named blueprint into the world folder.
 
 0.13: the map is the city as blocks. The MAP panel raises every parcel prism and lays every ground polygon of the atlas volumetrics in a small three scene that orbits the player: drag turns, wheel zooms, venues stand as lit marks in their open state, and the frame renders only on a change. The minimap keeps its flat bake.
