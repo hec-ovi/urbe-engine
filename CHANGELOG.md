@@ -1,5 +1,6 @@
 # Changelog
 
+0.16.5: nothing links a shader on a frame the player sees. The loading screen compiles the built city through `compileAsync`, where the WebGL2 backend links in the background instead of blocking, and every streamed interior floor is warmed while it is still detached.
 0.16.4: a freeze names the renderer work that caused it: the shaders linked and the maps uploaded in that frame join the world's own notes in the hitch line.
 0.16.3: the HUD readout's first row names the backend, the quality tier and the render size, so a screenshot says which path drew the frame.
 0.16.2: the transit tests build the bus stops and stations they assert on, so a regenerated atlas sample cannot decide what this box's contract test proves.

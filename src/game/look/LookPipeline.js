@@ -29,12 +29,17 @@ export class LookPipeline {
 		const blooming = tier.bloom.strength > 0;
 		let bloomPass = null;
 
+		// What the scene pass writes, kept so a warm-up can compile against the
+		// same outputs the frame will ask for (src/game/look/Warmup.js).
+		this.mrt = null;
+
 		if ( blooming ) {
 
 			const mrtNode = mrt( { output, emissive: vec4( emissive, output.a ) } );
 			mrtNode.setBlendMode( 'emissive', new THREE.BlendMode( THREE.NormalBlending ) );
 			scenePass.setMRT( mrtNode );
 			bloomPass = bloom( scenePass.getTextureNode( 'emissive' ), tier.bloom.strength, tier.bloom.radius );
+			this.mrt = mrtNode;
 
 		}
 

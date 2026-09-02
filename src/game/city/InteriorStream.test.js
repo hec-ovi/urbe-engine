@@ -69,13 +69,13 @@ const factory = {
 };
 
 /** A stream with the building registered 3 m away and the worker stubbed. */
-function stream( { cut, elevators = null } ) {
+function stream( { cut, elevators = null, warmup = null } ) {
 
 	const roomLights = {
 		dim: { room: null },
 		materialFor: ( binding, key ) => new THREE.MeshBasicMaterial( { name: key } )
 	};
-	const stream = new InteriorStream( { factory, roomLights, haze: null, elevators } );
+	const stream = new InteriorStream( { factory, roomLights, haze: null, elevators, warmup } );
 	stream.worker = { cut, dispose: () => { stream.workerDisposed = true; } };
 	stream.solid = new Map();
 	stream.dropped = [];
@@ -169,6 +169,29 @@ describe( 'InteriorStream.update', () => {
 		expect( landed.solid.get( 'p0:0' ).getAttribute( 'position' ).count ).toBe( 3 + 12 );
 		expect( bandGroup( landed, 0 ).visible ).toBe( true );
 		expect( bandGroup( landed, 3 ).children ).toHaveLength( 0 );
+
+	} );
+
+	it( 'warms a floor while it is still nowhere, before anything can draw it', async () => {
+
+		const warmed = [];
+		const warmup = { warm: async ( content ) => {
+
+			warmed.push( { meshes: content.children.length, attached: content.parent !== null } );
+
+			return 1;
+
+		} };
+		const landed = stream( { cut: workerFor( [] ), warmup } );
+
+		await settle( landed, feetOn( 0 ) );
+
+		// One per floor in the window, each still detached: a floor that reached
+		// the scene before it was warmed would link its shaders in the frame it
+		// first appears, which is the freeze this exists to stop.
+		expect( warmed ).toHaveLength( 3 );
+		expect( warmed.every( ( floor ) => floor.meshes > 0 ) ).toBe( true );
+		expect( warmed.every( ( floor ) => floor.attached === false ) ).toBe( true );
 
 	} );
 

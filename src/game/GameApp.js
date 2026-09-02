@@ -35,6 +35,7 @@ import { HitchLog } from './debug/HitchLog.js';
 import { RenderWork } from './debug/RenderWork.js';
 import { EnvironmentProbe } from './look/EnvironmentProbe.js';
 import { LookPipeline } from './look/LookPipeline.js';
+import { Warmup } from './look/Warmup.js';
 import { NightSky, SKY_COLOR } from './sky/NightSky.js';
 import { Physics } from './physics/Physics.js';
 import { WorldColliders } from './physics/WorldColliders.js';
@@ -273,9 +274,17 @@ export class GameApp {
 		this.controller.lookAt( spawn.lookAt );
 		this.bookmarks = new Bookmarks( { fixtures, rooms: () => this.stream.rooms, networks: connections.networks } );
 
+		// Before the bake, not after: six cube renders of a city whose shaders
+		// are already linked cost what they draw, and nothing the loading
+		// screen compiles can stall a frame once the player is walking.
+		this.view.step( 'warming the renderer' );
+		this.look = new LookPipeline( this.renderer, this.scene, this.camera, this.tier );
+		this.warmup = new Warmup( this.renderer, this.scene, this.camera, this.look.mrt );
+		this.stream.warmup = this.warmup;
+		await this.warmup.warm( this.scene );
+
 		this.view.step( 'baking the environment' );
 		this.probe?.bake( spawn.point );
-		this.look = new LookPipeline( this.renderer, this.scene, this.camera, this.tier );
 
 		this.interactor = new Interactor( {
 			crowd: this.crowd, doors: city.doors, sim: this.sim,

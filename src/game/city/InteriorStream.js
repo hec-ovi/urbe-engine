@@ -48,11 +48,16 @@ export class InteriorStream {
 	 * @param roomLights RoomLights, which owns every interior material
 	 * @param haze { spread, cap } for the air inside a room, or null at tiers
 	 * that do not draw it
+	 * @param warmup a `Warmup` (src/game/look/Warmup.js), which builds a landed
+	 * floor's pipelines and maps before it is ever drawn; the run sets it once
+	 * the render pipeline exists. Without one a floor stalls the frame it first
+	 * appears on.
 	 */
-	constructor( { factory, roomLights, haze, elevators, hitches = null } ) {
+	constructor( { factory, roomLights, haze, elevators, hitches = null, warmup = null } ) {
 
 		this.factory = factory;
 		this.hitches = hitches;
+		this.warmup = warmup;
 		this.roomLights = roomLights;
 		this.haze = haze;
 		this.elevators = elevators;
@@ -381,6 +386,18 @@ export class InteriorStream {
 		if ( glow ) content.add( glow );
 
 		this.hitches?.note( `floor ${band.id} band ${budget.frames} frames`, budget.busy );
+
+		// The floor is whole and still nowhere: the frame that puts it in the
+		// scene must not be the frame that links its shaders.
+		if ( this.warmup ) {
+
+			const warmed = await this.warmup.warm( content );
+
+			this.hitches?.note( `floor ${band.id} warm`, warmed );
+
+			if ( ! this.#wanted( interior, band ) ) return null;
+
+		}
 
 		return { content, rooms, solid };
 
