@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Crowd } from './Crowd.js';
+import { CLIP } from './CharacterAssets.js';
 import { WalkRoutes } from './WalkRoutes.js';
 
 /**
@@ -296,3 +297,35 @@ function crowdWith( positions ) {
 	return crowd;
 
 }
+
+describe( 'Crowd inside a building', () => {
+
+	it( 'stands staff at the work spots, sits guests on the seats, keeps the overflow in the lobby', () => {
+
+		const seat = { id: 'f0-a1', position: new THREE.Vector3( 12, 0, 11 ), heading: 1 };
+		const work = { id: 'f0-a2', position: new THREE.Vector3( 9, 0, 13 ), heading: 2 };
+		const inside = new THREE.Vector3( 10, 0, 10 );
+		const guest = ( id ) => ( { crowdId: id, type: 'patron', gender: 'female', activity: 'leisure', place: { kind: 'parcel', id: 'p1' } } );
+		const sim = { crowd: ( timeMin, scope ) => ( { agents: scope.kind !== 'parcel' ? [] : [
+			{ ...guest( 'w1' ), activity: 'working' }, guest( 'g1' ), guest( 'g2' )
+		] } ) };
+		const crowd = new Crowd( {
+			assets: { variants: [ {}, {} ], durations: [ 1, 1, 1, 1, 1 ], meshesOf: () => [] },
+			routes: pavement(), signals: { green: () => true }, sim,
+			places: new Map( [ [ 'p1', { inside, heading: 0, anchors: { seat: [ seat ], work: [ work ] } } ] ] ),
+			capacity: 200
+		} );
+
+		crowd.update( 0.1, PLAYER, { timeMin: 780, daySeconds: 46800, seconds: 46800 } );
+
+		const byId = new Map( [ ...crowd.members.values() ].map( ( m ) => [ m.crowdId, m ] ) );
+		expect( byId.get( 'w1' ) ).toMatchObject( { clip: CLIP.IDLE, spot: 'work:0', heading: 2 } );
+		expect( byId.get( 'w1' ).position.equals( work.position ) ).toBe( true );
+		expect( byId.get( 'g1' ) ).toMatchObject( { clip: CLIP.SIT, spot: 'seat:0', heading: 1 } );
+		expect( byId.get( 'g1' ).position.equals( seat.position ) ).toBe( true );
+		expect( byId.get( 'g2' ) ).toMatchObject( { clip: CLIP.IDLE, spot: 'lobby:0' } );
+		expect( byId.get( 'g2' ).position.distanceTo( inside ) ).toBeLessThan( 3 );
+
+	} );
+
+} );

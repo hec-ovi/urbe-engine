@@ -101,7 +101,7 @@ export class Interactor {
 		if ( npcId ) this.sim.resume( npcId, clock.timeMin );
 
 		person.frozen = false;
-		person.clip = CLIP.WALK;
+		person.clip = person.restClip ?? CLIP.WALK;
 		this.conversation = null;
 		this.onConversation?.( null );
 
@@ -139,7 +139,8 @@ export class Interactor {
 		if ( person.npcId ) this.sim.interrupt( person.npcId, timeMin );
 
 		person.frozen = true;
-		person.clip = CLIP.TALK;
+		person.restClip = person.clip;
+		person.clip = person.clip === CLIP.SIT ? CLIP.SIT_TALK : CLIP.TALK;
 		person.heading = Math.atan2(
 			this.controller.body.feet.x - person.position.x,
 			this.controller.body.feet.z - person.position.z

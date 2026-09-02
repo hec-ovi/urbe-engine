@@ -22,8 +22,8 @@ export function bodyFor( gender, seed ) {
 }
 
 // Clip order is the crowd's clip index: 0 walk, 1 idle, 2 talking.
-export const CLIP = { WALK: 0, IDLE: 1, TALK: 2 };
-const CLIP_NAMES = [ 'Walk_Loop', 'Idle_Loop', 'Idle_Talking_Loop' ];
+export const CLIP = { WALK: 0, IDLE: 1, TALK: 2, SIT: 3, SIT_TALK: 4 };
+const CLIP_NAMES = [ 'Walk_Loop', 'Idle_Loop', 'Idle_Talking_Loop', 'Sitting_Idle_Loop', 'Sitting_Talking_Loop' ];
 
 const MODELS = [
 	{ id: 'male', file: 'Superhero_Male_FullBody.gltf', skin: 'T_Superhero_Male_Dark.png' },

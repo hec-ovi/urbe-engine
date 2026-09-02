@@ -3,6 +3,7 @@ import { RendererFactory } from '../app/RendererFactory.js';
 import { MaterialResolver } from '../building/MaterialResolver.js';
 import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
+import { groundAnchors } from './agents/Anchors.js';
 import { GameView } from '../ui/views/GameView.js';
 import { GameConfig } from './data/GameConfig.js';
 import { WorldSource } from './data/WorldSource.js';
@@ -242,7 +243,7 @@ export class GameApp {
 		this.probe?.exclude( assets.group );
 		this.crowd = new Crowd( {
 			assets, routes, sim: this.sim, signals: this.signals,
-			places: placesOf( city.doors ),
+			places: placesOf( city.doors, buildings ),
 			capacity: config.maxCrowd,
 			stress: config.stress
 		} );
@@ -591,11 +592,12 @@ function roomAir( room ) {
 }
 
 /** Where a building's on-duty staff stand: just inside its entrance. */
-function placesOf( doors ) {
+function placesOf( doors, buildings ) {
 
 	return new Map( doors.map( ( door ) => [ door.parcelId, {
 		inside: door.inside.clone(),
-		heading: Math.atan2( door.normal.x, door.normal.z )
+		heading: Math.atan2( door.normal.x, door.normal.z ),
+		anchors: groundAnchors( buildings.get( door.parcelId )?.npc, door.inside.y )
 	} ] ) );
 
 }

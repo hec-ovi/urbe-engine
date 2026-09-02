@@ -429,10 +429,12 @@ export class Crowd {
 	}
 
 	/**
-	 * On-duty staff in the buildings around the player, standing in the lobby.
-	 * A lobby is fitted the same way a pavement is: the rota moves through the
-	 * day, so the people standing in it are the shift the simulation reports
-	 * now, and the shift that went home retires.
+	 * The people the simulation has inside the buildings around the player:
+	 * whoever is on duty stands at one of the interior's work spots, a guest
+	 * sits on one of its seats, and when the anchors run out a person stands
+	 * in the lobby. A building is fitted the same way a pavement is: the rota
+	 * moves through the day, so the people in it are the ones the simulation
+	 * reports now, and the shift that went home retires.
 	 */
 	#staff( timeMin, player ) {
 
@@ -450,18 +452,9 @@ export class Crowd {
 
 			}
 
-			const spots = new Set( candidates.map( ( member ) => member.spot ) );
+			const taken = new Set( candidates.map( ( member ) => member.spot ) );
 
-			this.#fit( entries, candidates, ( { agent } ) => {
-
-				let spot = 0;
-
-				while ( spots.has( spot ) ) spot ++;
-
-				spots.add( spot );
-				this.#stand( agent, parcelId, place, spot );
-
-			} );
+			this.#fit( entries, candidates, ( { agent } ) => this.#post( agent, parcelId, place, taken ) );
 
 		}
 
@@ -522,12 +515,35 @@ export class Crowd {
 
 	}
 
-	/** One worker on their own spot in a lobby, facing the room. */
-	#stand( agent, parcelId, place, spot ) {
+	/** One person on the first free anchor of their kind, or on a lobby spot when the anchors are full. */
+	#post( agent, parcelId, place, taken ) {
 
 		if ( this.members.size >= this.capacity ) return null;
 
 		const seed = hash( agent.crowdId );
+		const kind = agent.activity === 'working' ? 'work' : 'seat';
+		const anchors = place.anchors?.[ kind ] ?? [];
+		const index = firstFree( taken, kind );
+
+		if ( index < anchors.length ) {
+
+			const anchor = anchors[ index ];
+			taken.add( `${kind}:${index}` );
+
+			return this.#add( {
+				...this.#base( agent, seed ),
+				stationary: true,
+				parcelId,
+				spot: `${kind}:${index}`,
+				clip: kind === 'seat' ? CLIP.SIT : CLIP.IDLE,
+				position: anchor.position.clone(),
+				heading: anchor.heading
+			} );
+
+		}
+
+		const spot = firstFree( taken, 'lobby' );
+		taken.add( `lobby:${spot}` );
 		const angle = ( spot * 2.399 ) + ( seed % 100 ) / 100;
 		const offset = 0.9 + ( spot % 3 ) * 0.8;
 
@@ -535,7 +551,7 @@ export class Crowd {
 			...this.#base( agent, seed ),
 			stationary: true,
 			parcelId,
-			spot,
+			spot: `lobby:${spot}`,
 			clip: CLIP.IDLE,
 			position: new THREE.Vector3(
 				place.inside.x + Math.sin( angle ) * offset,
@@ -742,5 +758,14 @@ function mulberry( seed ) {
 		return ( ( t ^ ( t >>> 14 ) ) >>> 0 ) / 4294967296;
 
 	};
+
+}
+
+/** The lowest index of a kind nobody in the building holds. */
+function firstFree( taken, kind ) {
+
+	let index = 0;
+	while ( taken.has( `${kind}:${index}` ) ) index ++;
+	return index;
 
 }
