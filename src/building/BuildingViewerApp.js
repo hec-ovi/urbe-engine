@@ -11,7 +11,7 @@ const DEFAULT_THEME = 'cyberpunk';
 
 /**
  * One building viewer run, described by the URL query:
- * ?mode=building&parcel=p1640[&source=shell|interior][&backend=webgpu|webgl].
+ * ?mode=building&parcel=p1640[&out=/out/small][&source=shell|interior][&backend=webgpu|webgl].
  * Loads the assembled building from /out/<parcel>/, resolves every material
  * key through the materials database and orbits the result.
  */
@@ -23,6 +23,7 @@ export class BuildingViewerApp {
 
 		return {
 			parcel: params.get( 'parcel' ) ?? 'p1640',
+			out: params.get( 'out' ) ?? '/out',
 			source: [ 'shell', 'interior' ].includes( params.get( 'source' ) ) ? params.get( 'source' ) : null,
 			backend: params.get( 'backend' ) === 'webgl' ? 'webgl' : 'webgpu'
 		};
@@ -67,8 +68,8 @@ export class BuildingViewerApp {
 
 	async #run() {
 
-		const { parcel, backend } = this.config;
-		const assets = new BuildingAssets( parcel );
+		const { parcel, out, backend } = this.config;
+		const assets = new BuildingAssets( parcel, out );
 
 		const [ blueprint, hasInterior ] = await Promise.all( [
 			assets.loadBlueprint(),
