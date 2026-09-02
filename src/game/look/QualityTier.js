@@ -8,6 +8,8 @@ const TIERS = [ 'low', 'medium', 'high', 'ultra' ];
  * `low` is not a broken `high`: it keeps physical light units, the computed
  * room fill, the fog floor and selective bloom, which is most of what the
  * reference frames are made of, and gives up the per-fragment luxuries.
+ * The haze geometry (lit air drawn as quads around fixtures) is off on every
+ * tier: it reads as a smear indoors, and the fog floor already lifts the darks.
  *
  * Every effect downstream reads this descriptor, never the backend, so the
  * WebGL2 fallback is one default choice rather than a second pipeline.
@@ -15,7 +17,7 @@ const TIERS = [ 'low', 'medium', 'high', 'ultra' ];
 const PRESETS = {
 	low: {
 		bloom: { strength: 0.3, radius: 0.0 },
-		haze: true,
+		haze: false,
 		roomSlots: 2,
 		roomSpots: 4,
 		roomStrips: 0,
@@ -26,7 +28,7 @@ const PRESETS = {
 	},
 	medium: {
 		bloom: { strength: 0.35, radius: 0.03 },
-		haze: true,
+		haze: false,
 		roomSlots: 3,
 		roomSpots: 4,
 		roomStrips: 1,
@@ -37,7 +39,7 @@ const PRESETS = {
 	},
 	high: {
 		bloom: { strength: 0.35, radius: 0.04 },
-		haze: true,
+		haze: false,
 		roomSlots: 4,
 		roomSpots: 4,
 		roomStrips: 2,
@@ -48,7 +50,7 @@ const PRESETS = {
 	},
 	ultra: {
 		bloom: { strength: 0.4, radius: 0.06 },
-		haze: true,
+		haze: false,
 		roomSlots: 6,
 		roomSpots: 4,
 		roomStrips: 2,
