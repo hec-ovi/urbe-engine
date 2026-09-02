@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { RoomLights } from './RoomLights.js';
+import { RoomLights, stripEuler } from './RoomLights.js';
 
 const tier = { roomSlots: 2, roomSpots: 2, roomStrips: 1 };
 
@@ -106,6 +106,30 @@ describe( 'RoomLights', () => {
 		// does for it, and the room comes out lit by the city instead of by
 		// itself, which at night means not at all.
 		expect( first.isNodeMaterial ).toBe( true );
+
+	} );
+
+} );
+
+/**
+ * The strip's light has to lie along the housing the interior box drew, or
+ * the glow lands beside the fixture: the two boxes measure the angle the same
+ * way, and this pins the mapping onto three's rotation.
+ */
+describe( 'stripEuler', () => {
+
+	it( 'lays the light along the published angle, +X toward +Z', () => {
+
+		const along = new THREE.Vector3( 1, 0, 0 ).applyEuler( stripEuler( { angleDeg: 37, facing: 'down' } ) );
+		const rad = THREE.MathUtils.degToRad( 37 );
+
+		expect( along.x ).toBeCloseTo( Math.cos( rad ) );
+		expect( along.z ).toBeCloseTo( Math.sin( rad ) );
+		expect( along.y ).toBeCloseTo( 0 );
+
+		// And the face points at the floor.
+		const facing = new THREE.Vector3( 0, 0, 1 ).applyEuler( stripEuler( { angleDeg: 37, facing: 'down' } ) );
+		expect( facing.y ).toBeCloseTo( - 1 );
 
 	} );
 

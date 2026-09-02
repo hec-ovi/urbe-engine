@@ -281,13 +281,25 @@ function aimStrip( light, fixture ) {
 
 	light.width = Math.max( 0.1, fixture.length );
 	light.height = STRIP_WIDTH;
-	light.rotation.set(
+	light.rotation.copy( stripEuler( fixture ) );
+	light.power = fixture.lumens;
+
+}
+
+/**
+ * The published strip angle runs from +X toward +Z on the ground plane
+ * (../../../../interior/CONTRACT.md); a rotation about +Y turns +X toward -Z,
+ * so the yaw is the negated angle. The light lies in its own XY plane and
+ * emits along its +Z; the pitch turns that face down at the floor, or up for a cove.
+ */
+export function stripEuler( fixture ) {
+
+	return new THREE.Euler(
 		fixture.facing === 'up' ? - Math.PI / 2 : Math.PI / 2,
-		THREE.MathUtils.degToRad( fixture.angleDeg ),
+		- THREE.MathUtils.degToRad( fixture.angleDeg ),
 		0,
 		'YXZ'
 	);
-	light.power = fixture.lumens;
 
 }
 
