@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
-import { pointInRing, ringBounds } from '../ground/Polygons.js';
+import { pointInRing, Roadway } from '../ground/Polygons.js';
 import { kelvinColor } from '../light/Color.js';
 
 const SPACING = 19;
@@ -91,7 +91,7 @@ export class StreetLamps {
 			.filter( ( spot ) => ! plazas.some( ( ring ) => pointInRing( spot.x, spot.z, ring ) ) )
 			.concat( this.#aroundPlazas( plazas ) )
 			.filter( ( spot ) => ! alleys.some( ( alley ) => onPavementOf( spot, alley ) ) )
-			.map( ( spot ) => roadway.offAsphalt( spot ) )
+			.map( ( spot ) => offAsphalt( roadway, spot ) )
 			.filter( Boolean ) );
 
 		const structure = [];
@@ -424,42 +424,22 @@ export class StreetLamps {
 const KERB_SEARCH = 4;
 const KERB_STEP = 0.5;
 
-/** The atlas roadway polygons, with a bounds test in front of the ring test. */
-class Roadway {
+/**
+ * The spot itself when it stands clear of the asphalt, else the first point
+ * behind it (away from the road its arm faces) that does, else null.
+ */
+function offAsphalt( roadway, spot ) {
 
-	constructor( ground ) {
+	for ( let back = 0; back <= KERB_SEARCH; back += KERB_STEP ) {
 
-		this.rings = ground
-			.filter( ( cover ) => cover.surface === 'roadway' )
-			.map( ( cover ) => ( { ring: cover.polygon, ...ringBounds( [ cover.polygon ] ) } ) );
+		const x = spot.x - spot.ax * back;
+		const z = spot.z - spot.az * back;
 
-	}
-
-	covers( x, z ) {
-
-		return this.rings.some( ( { ring, min, max } ) =>
-			x >= min[ 0 ] && x <= max[ 0 ] && z >= min[ 1 ] && z <= max[ 1 ] && pointInRing( x, z, ring ) );
+		if ( ! roadway.covers( x, z ) ) return back ? { ...spot, x, z } : spot;
 
 	}
 
-	/**
-	 * The spot itself when it stands clear of the asphalt, else the first
-	 * point behind it (away from the road its arm faces) that does, else null.
-	 */
-	offAsphalt( spot ) {
-
-		for ( let back = 0; back <= KERB_SEARCH; back += KERB_STEP ) {
-
-			const x = spot.x - spot.ax * back;
-			const z = spot.z - spot.az * back;
-
-			if ( ! this.covers( x, z ) ) return back ? { ...spot, x, z } : spot;
-
-		}
-
-		return null;
-
-	}
+	return null;
 
 }
 

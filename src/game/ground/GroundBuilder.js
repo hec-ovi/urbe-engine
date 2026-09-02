@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
-import { fill, skirt, ringBounds, ledge } from './Polygons.js';
+import { fill, skirt, ringBounds, ledge, Roadway, signedArea } from './Polygons.js';
 
 export const SIDEWALK_HEIGHT = 0.12;
 const CURB_BOTTOM = - 0.06;
@@ -64,6 +64,8 @@ export class GroundBuilder {
 
 		const solid = [];
 		const curbs = [];
+		// A kerb stands only where a pavement edge meets the road, never along a building or another pavement.
+		const road = new Roadway( this.atlas.volumetric.ground );
 
 		for ( const [ surface, rings ] of bySurface ) {
 
@@ -80,7 +82,13 @@ export class GroundBuilder {
 
 			if ( spec.curb ) {
 
-				for ( const ring of rings ) curbs.push( skirt( ring, spec.y, CURB_BOTTOM ), ledge( ring, spec.y + CURB_LIP, CURB_WIDTH ) );
+				for ( const ring of rings ) {
+
+					const ccw = signedArea( ring ) > 0;
+					const onRoad = ( a, b ) => road.bordersEdge( a, b, ccw );
+					curbs.push( skirt( ring, spec.y, CURB_BOTTOM, onRoad ), ledge( ring, spec.y + CURB_LIP, CURB_WIDTH, onRoad ) );
+
+				}
 
 			}
 

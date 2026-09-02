@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ledge, skirt } from './Polygons.js';
+import { ledge, skirt, Roadway } from './Polygons.js';
 
 const square = [ [ 0, 0 ], [ 10, 0 ], [ 10, 10 ], [ 0, 10 ] ];
 
@@ -39,6 +39,36 @@ describe( 'kerb geometry', () => {
 		const face = skirt( square, 0.15, - 0.05 );
 
 		expect( face.getAttribute( 'position' ).count ).toBe( 24 );
+
+	} );
+
+} );
+
+/**
+ * A kerb stands where the pavement meets the road and nowhere else: not along
+ * a building, not between two pavements.
+ */
+describe( 'kerb placement', () => {
+
+	// The road runs along the square's south edge (z < 0), nothing else around it.
+	const road = new Roadway( [ { surface: 'roadway', polygon: [ [ - 5, - 8 ], [ 15, - 8 ], [ 15, 0 ], [ - 5, 0 ] ] } ] );
+	const onRoad = ( a, b ) => road.bordersEdge( a, b, true );
+
+	it( 'keeps the stone on the edge that borders the road only', () => {
+
+		expect( ledge( square, 0.15, 0.15, onRoad ).getAttribute( 'position' ).count ).toBe( 6 );
+		expect( skirt( square, 0.15, - 0.05, onRoad ).getAttribute( 'position' ).count ).toBe( 6 );
+
+	} );
+
+	it( 'ends the stone square where its neighbours are not kerbs', () => {
+
+		const position = ledge( square, 0.15, 0.15, onRoad ).getAttribute( 'position' );
+		const xs = new Set();
+		for ( let i = 0; i < position.count; i ++ ) xs.add( position.getX( i ).toFixed( 2 ) );
+
+		expect( xs.has( '0.00' ) && xs.has( '10.00' ) ).toBe( true );
+		expect( xs.has( '0.15' ) || xs.has( '9.85' ) ).toBe( false );
 
 	} );
 

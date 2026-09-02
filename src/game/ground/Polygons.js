@@ -62,7 +62,7 @@ export function fill( ring, y ) {
  * This is the curb: it seals the height step between two surfaces so no gap
  * can ever open at a sidewalk edge.
  */
-export function skirt( ring, top, bottom ) {
+export function skirt( ring, top, bottom, keep = () => true ) {
 
 	const ccw = signedArea( ring ) > 0;
 	const positions = [];
@@ -78,7 +78,7 @@ export function skirt( ring, top, bottom ) {
 		const dz = b[ 1 ] - a[ 1 ];
 		const length = Math.hypot( dx, dz );
 
-		if ( length < 1e-6 ) continue;
+		if ( length < 1e-6 || ! keep( a, b ) ) continue;
 
 		// Outward normal of a CCW ring edge is (dz, -dx); flip for CW input.
 		const sign = ccw ? 1 : - 1;
@@ -126,7 +126,7 @@ const MITRE_LIMIT = 2.5;
  * facing up, its corners mitred so two edges meet in one stone. Together with
  * the skirt below it, this is what a sidewalk edge is made of.
  */
-export function ledge( ring, y, width ) {
+export function ledge( ring, y, width, keep = () => true ) {
 
 	const ccw = signedArea( ring ) > 0;
 	const points = ccw ? ring : [ ...ring ].reverse();
@@ -164,15 +164,21 @@ export function ledge( ring, y, width ) {
 	const normals = [];
 	let run = 0;
 
+	const kept = points.map( ( p, i ) => keep( p, points[ ( i + 1 ) % n ] ) );
+
 	for ( let i = 0; i < n; i ++ ) {
 
 		const p = points[ i ];
 		const q = points[ ( i + 1 ) % n ];
-		const pi = inward[ i ];
-		const qi = inward[ ( i + 1 ) % n ];
 		const length = Math.hypot( q[ 0 ] - p[ 0 ], q[ 1 ] - p[ 1 ] );
 
-		if ( length < 1e-6 ) continue;
+		if ( length < 1e-6 || ! kept[ i ] ) continue;
+
+		// A corner shared with a kept neighbour is mitred; beside a skipped
+		// edge the stone ends square on this edge's own normal.
+		const own = normal( p, q );
+		const pi = kept[ ( i + n - 1 ) % n ] ? inward[ i ] : [ p[ 0 ] - own[ 0 ] * width, p[ 1 ] - own[ 1 ] * width ];
+		const qi = kept[ ( i + 1 ) % n ] ? inward[ ( i + 1 ) % n ] : [ q[ 0 ] - own[ 0 ] * width, q[ 1 ] - own[ 1 ] * width ];
 
 		const u0 = run;
 		const u1 = run + length;
@@ -211,6 +217,40 @@ function normal( a, b ) {
 	const length = Math.hypot( dx, dz ) || 1;
 
 	return [ dz / length, - dx / length ];
+
+}
+
+/** The atlas roadway polygons, with a bounds test in front of the ring test. */
+export class Roadway {
+
+	constructor( ground ) {
+
+		this.rings = ground
+			.filter( ( cover ) => cover.surface === 'roadway' )
+			.map( ( cover ) => ( { ring: cover.polygon, ...ringBounds( [ cover.polygon ] ) } ) );
+
+	}
+
+	covers( x, z ) {
+
+		return this.rings.some( ( { ring, min, max } ) =>
+			x >= min[ 0 ] && x <= max[ 0 ] && z >= min[ 1 ] && z <= max[ 1 ] && pointInRing( x, z, ring ) );
+
+	}
+
+	/** Whether the ring edge a -> b (of a ring wound `ccw` or not) has road just outside it. */
+	bordersEdge( a, b, ccw, probe = 0.1 ) {
+
+		const dx = b[ 0 ] - a[ 0 ];
+		const dz = b[ 1 ] - a[ 1 ];
+		const length = Math.hypot( dx, dz ) || 1;
+		const sign = ccw ? 1 : - 1;
+		const mx = ( a[ 0 ] + b[ 0 ] ) / 2 + ( dz / length ) * sign * probe;
+		const mz = ( a[ 1 ] + b[ 1 ] ) / 2 - ( dx / length ) * sign * probe;
+
+		return this.covers( mx, mz );
+
+	}
 
 }
 
