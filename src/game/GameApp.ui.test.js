@@ -42,6 +42,23 @@ describe( 'playable game navigation', () => {
 
 	} );
 
+	it( 'renders the structured NPC name in the conversation avatar', () => {
+
+		const app = new GameApp( {} );
+		app.input = { exitLock: vi.fn() };
+
+		app.presentConversation( {
+			instance: {
+				name: { given: 'Ada', family: 'Vance' }, type: 'clerk',
+				home: { parcelId: 'p1', unit: 2 }, routine: []
+			}
+		} );
+
+		expect( document.querySelector( '.avatar-name' ).textContent ).toBe( 'Ada Vance' );
+		expect( app.input.exitLock ).toHaveBeenCalledOnce();
+
+	} );
+
 	it( 'keeps typed chat usable after a text model failure', async () => {
 
 		const app = dialogueApp();

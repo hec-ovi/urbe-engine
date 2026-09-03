@@ -441,22 +441,7 @@ export class GameApp {
 			continuity: this.npcContinuity,
 			animations: this.animations
 		} );
-		this.interactor.onConversation = ( conversation ) => {
-
-			this.view.dialog.show( conversation );
-			this.view.avatar.setVisible( Boolean( conversation ) );
-
-			if ( ! conversation ) return;
-			if ( conversation.npcId ) this.#questEvent( { kind: 'talkedTo', npcId: conversation.npcId } );
-
-			// The chat takes the mouse: the input wants focus and the panel a click.
-			this.view.avatar.setAvatar( {
-				name: conversation.instance ? TalkClient.nameOf( conversation.instance ) : 'someone passing by',
-				bar: 1
-			} );
-			this.input.exitLock();
-
-		};
+		this.interactor.onConversation = ( conversation ) => this.presentConversation( conversation );
 
 		this.input.onLockChange = ( locked ) => {
 
@@ -490,6 +475,24 @@ export class GameApp {
 		this.baseTriangles = city.triangles + links.triangles + ( this.hydrology.summary?.triangles ?? 0 );
 		this.last = performance.now();
 		this.renderer.setAnimationLoop( () => this.#frame() );
+
+	}
+
+	/** Shows or closes the typed conversation owned by the current interaction. */
+	presentConversation( conversation ) {
+
+		this.view.dialog.show( conversation );
+		this.view.avatar.setVisible( Boolean( conversation ) );
+
+		if ( ! conversation ) return;
+		if ( conversation.npcId ) this.#questEvent( { kind: 'talkedTo', npcId: conversation.npcId } );
+
+		// The chat takes the mouse: the input wants focus and the panel a click.
+		this.view.avatar.setAvatar( {
+			name: conversation.instance ? TalkClient.nameOf( conversation.instance ) : 'someone passing by',
+			bar: 1
+		} );
+		this.input.exitLock();
 
 	}
 
