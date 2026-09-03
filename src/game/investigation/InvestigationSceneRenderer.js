@@ -141,9 +141,11 @@ export class InvestigationSceneRenderer {
 			mixer.setTime( Math.max( 0, clip.duration - 1 / 120 ) );
 			root.updateMatrixWorld( true );
 			fitBody( root, entity.dimensions );
-			root.userData.finalPose = entity.poseId;
-			root.userData.mixer = mixer;
-			return root;
+			const container = new THREE.Group();
+			container.add( root );
+			container.userData.finalPose = entity.poseId;
+			container.userData.mixer = mixer;
+			return container;
 
 		} catch ( error ) {
 

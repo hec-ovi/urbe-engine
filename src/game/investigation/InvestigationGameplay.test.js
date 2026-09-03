@@ -81,6 +81,24 @@ describe( 'InvestigationGameplay live integration', () => {
 
 describe( 'InvestigationSceneRenderer production failures', () => {
 
+	it( 'keeps the fitted final-pose body offset beneath the authored world transform', async () => {
+
+		const scene = new SceneAssembler().assemble( interior );
+		const animation = { scene: rig(), animations: [ new THREE.AnimationClip( 'Death02', 1, [] ) ] };
+		const renderer = await InvestigationSceneRenderer.create( {
+			assemblies: [ scene ],
+			materialFactory: { build: ( key ) => new THREE.MeshStandardMaterial( { name: key } ) },
+			animation,
+			loadGltf: async () => ( { scene: rig() } )
+		} );
+		const body = renderer.visuals.get( 'courier-body' ).object;
+		const authored = scene.entities.find( ( entity ) => entity.entityId === 'courier-body' ).transform.position;
+		expect( body.position.toArray() ).toEqual( [ authored.x, authored.y, authored.z ] );
+		expect( body.children[ 0 ].position.y ).toBeGreaterThan( 0 );
+		expect( body.userData.finalPose ).toBe( 'Death02' );
+
+	} );
+
 	it( 'fails closed for unavailable PBR materials', async () => {
 
 		const scene = new SceneAssembler().assemble( street );
@@ -172,5 +190,26 @@ function questDefinition() {
 function simulation() {
 
 	return { getNPC: () => null, findNPCs: () => [], getNPCVendor: () => null, reserveNPC: () => null, applyFlag: () => {} };
+
+}
+
+function rig() {
+
+	const root = new THREE.Group();
+	const bone = new THREE.Bone();
+	bone.name = 'Root';
+	const geometry = new THREE.BoxGeometry( 0.7, 1.8, 0.4 );
+	const count = geometry.getAttribute( 'position' ).count;
+	geometry.setAttribute( 'skinIndex', new THREE.Uint16BufferAttribute( new Uint16Array( count * 4 ), 4 ) );
+	const weights = new Float32Array( count * 4 );
+	for ( let index = 0; index < count; index ++ ) weights[ index * 4 ] = 1;
+	geometry.setAttribute( 'skinWeight', new THREE.Float32BufferAttribute( weights, 4 ) );
+	const material = new THREE.MeshStandardMaterial();
+	material.map = new THREE.Texture();
+	const mesh = new THREE.SkinnedMesh( geometry, material );
+	mesh.add( bone );
+	mesh.bind( new THREE.Skeleton( [ bone ] ) );
+	root.add( mesh );
+	return root;
 
 }
