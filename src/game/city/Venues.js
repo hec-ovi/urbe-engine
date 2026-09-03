@@ -23,10 +23,10 @@ const FRAME_INSET = 0.06;
  * Which buildings are real, said in light.
  *
  * The playtest complaint this answers is "I just do not know which ones are
- * real". A building the world actually built has a way in, and now it says so:
+ * real". A building with an interior has a way in, and now it says so:
  * a thin lit strip runs up both sides of its door frame and over the head, and
  * the entrance fixture the exterior box put there is lit. A parcel with no
- * interior behind it has no door, so it gets neither, and never offers a
+ * interior behind it keeps its door shut, so it gets neither, and never offers a
  * prompt. Nothing floats: every marker is a fixture on a real surface.
  *
  * A venue's sign follows the simulation rather than the clock: it is lit while
@@ -207,4 +207,3 @@ function frameStrip( door ) {
 	return out;
 
 }
-

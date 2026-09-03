@@ -83,6 +83,7 @@ export class InteriorStream {
 
 		for ( const [ parcelId, building ] of buildings ) {
 
+			if ( building.hasInterior === false ) continue;
 			this.pending.set( parcelId, { parcelId, floors: building.floors, center: centers.get( parcelId ) } );
 
 		}

@@ -22,20 +22,21 @@ The per-parcel chain lives in `BuildingPipeline.js` (assemble + validate, exteri
 
 CLI: `npm run assemble -- --parcel <id> --out <dir> [--blueprint <path>] [--glb merged|named] [--interior]` validates each request against its schema (ajv, draft 2020-12), writes `<id>.request.json` to `<dir>`, then runs exterior's CLI (`npm run generate` in ../../../exterior) so `<dir>` ends with request, GLB and blueprint. With `--interior` it also writes `<dir>/interior/`: `building.glb` (the whole furnished building, for the building viewer), `npc.json`, and per floor `floors/<tag>.json` plus `floors/<tag>.glb` (tag: zero-padded floor index, basements negative, `-001`), the floor's own geometry as interior's `floorGlbs` option returns it, which is what the game streams. Prints each output file with its size.
 
-City batch: `npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--parcel <id,id,...>]` runs connections once, then the pipeline (merged runtime GLB + blueprint + interior) for every parcel, N in parallel (default 4). Failures are recorded, never fatal; `<dir>/qa-report.json` carries per-parcel pass/fail with verbatim errors, the sign text each building wears (null when none), timing and disk totals. Exit 0 only when every parcel passed.
+City batch: `npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--interiors N] [--parcel <id,id,...>]` runs connections once, then builds the merged runtime shell and blueprint for every parcel, N in parallel (default 4). It furnishes five buildings by default. Parcels explicitly referenced anywhere in carried `<out>/quests/questlines.json` rank first; remaining slots come from commerce, mall, restaurant, coffee shop, hotel, clinic, hospital and police parcels. Both groups use a stable hash of the atlas seed and parcel id, never input order. A candidate whose interior fails keeps its complete shell closed and the next candidate is tried. `<dir>/qa-report.json` separates shell failures from interior failures. Exit 0 only when every shell and the requested interior count finish.
 
-The out dir ends holding exactly the blueprint it was built from (`OutDir.js`). Folders for parcels the blueprint no longer has are removed before the run, and only folders assembly itself wrote (one carrying its own request or blueprint) are ever touched. `<dir>/blueprint.json` is the blueprint the batch was built from (named or not) and `<dir>/npc-types.json` is the naming box's typed set found beside that blueprint, so the folder is the whole world the game loads; `<dir>/manifest.json` is written last:
+The out dir ends holding exactly the blueprint it was built from (`OutDir.js`). Folders for parcels the blueprint no longer has are removed before the run, and only folders assembly itself wrote (one carrying its own request or blueprint) are ever touched. `<dir>/blueprint.json` is the blueprint the batch was built from (named or not) and `<dir>/npc-types.json` is the naming box's typed set found beside that blueprint, so the folder is the whole world the game loads; `<dir>/manifest.json` conforms to [schema/world-manifest.schema.json](schema/world-manifest.schema.json) and is written last:
 
 ```
 {
-  "seed": "urbe-tiny", "atlasVersion": "0.2.4",
+  "contractVersion": "1.0.0", "seed": "urbe-tiny", "atlasVersion": "0.2.4",
   "named": true, "namingTheme": "rain-soaked port city",
   "parcels": [ "p0", "p1", ... ],
-  "floors": { "p0": [ "-001", "000", "001" ], "p1": [ ... ], ... }
+  "interiors": [ "p1", ... ],
+  "floors": { "p1": [ "-001", "000", "001" ], ... }
 }
 ```
 
-`named` says whether the blueprint's parcels carry names, and `namingTheme` is `meta.naming.theme` when the blueprint records one, else null. `parcels` is every id whose build is complete on disk (shell blueprint, `interior/building.glb`, `interior/npc.json`, and a GLB beside every floor document), so a parcel that failed halfway is not in it; `floors` lists each one's floor tags, lowest first. This is the only list of buildings and floors the game loads: a directory listing would pick up a folder from an older blueprint and stand its building inside the one that replaced it, and the seed and version let the game refuse an out dir assembled from a different blueprint outright.
+`named` says whether the blueprint's parcels carry names, and `namingTheme` is `meta.naming.theme` when the blueprint records one, else null. `parcels` is every id with a complete exterior blueprint and GLB. `interiors` is the subset with `interior/building.glb`, `interior/npc.json`, and a GLB beside every floor document; `floors` has exactly those ids and lists their tags lowest first. A shell that is deliberately closed remains in `parcels` and is not a failure. This is the only list of buildings and floors the game loads: a directory listing would pick up stale output, and the seed and version let the game refuse an out dir assembled from a different blueprint outright.
 
 Simulation: `simulationRunner.js` calls simulation's `createSimulation(input)` as a black box. `npm run simulate -- --time <minutes> [--district <id>] [--blueprint <path>] [--interiors <dir>]` boots it over the blueprint, connections' networks and the npc.json of every assembled building under the interiors dir (default `out/`) (synthetic fallback elsewhere, default npcTypes and name pool), prints population stats, the scoped crowd slice, three instantiated lives (a sampled crowd agent's handle, coffee vendor at midday, a reservation), latency measurements and a conservation check; usage error exit 2, no live crowd agent exit 1.
 
@@ -51,7 +52,7 @@ Simulation: `simulationRunner.js` calls simulation's `createSimulation(input)` a
 ## Invariants
 - Deterministic: same atlas and connections inputs, byte-identical request JSON.
 - Apertures are passed through untouched; assembly never edits connections geometry.
-- After a city batch the out dir holds a folder for no parcel outside the blueprint, and `manifest.json` names only the parcels whose build is complete, with their floor files.
+- After a city batch the out dir holds a folder for no parcel outside the blueprint. `manifest.json` lists all complete shells, lists complete interiors as a subset, and has floor files for exactly that subset.
 - The per-floor GLBs together hold exactly the interior meshes of `building.glb` (../../../interior/CONTRACT.md), so streaming floors draws the same building the viewer shows.
 - The CLI needs a TS-capable loader for the connections and interior entries; the npm script runs it under tsx.
 

@@ -1,7 +1,9 @@
 import { copyFileSync, existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { validateWorldManifest } from './validators.js';
 
 export const MANIFEST_FILE = 'manifest.json';
+export const MANIFEST_VERSION = '1.0.0';
 /** The blueprint the world was assembled from, so the folder is the whole world. */
 export const BLUEPRINT_FILE = 'blueprint.json';
 /** The naming box's typed set, carried in from beside the blueprint when it has one. */
@@ -19,8 +21,8 @@ export function floorTag( index ) {
  * ids move), and a parcel folder left behind by the old one is a whole building
  * standing in a place the city no longer has, which the game loads on top of
  * whatever stands there now. So the out dir is kept to exactly what the current
- * blueprint has, and the manifest says which blueprint that was and which
- * parcels really finished, which is the only list the game reads.
+ * blueprint has, and the manifest says which blueprint that was, which shells
+ * stand and which have interiors. This is the only list the game reads.
  */
 export class OutDir {
 
@@ -69,22 +71,39 @@ export class OutDir {
 
 	}
 
+	/** Removes only furnished output. The exterior remains a valid closed shell. */
+	dropInterior( parcelId ) {
+
+		rmSync( join( this.dir, parcelId, 'interior' ), { recursive: true, force: true } );
+
+	}
+
 	/**
-	 * The parcels whose build is complete on disk: shell blueprint, interior
-	 * NPC support, the whole-building GLB and every floor with its own GLB.
+	 * The parcels whose exterior is complete on disk. These are the buildings
+	 * that stand in the city whether or not they are enterable.
 	 */
-	built( parcelIds ) {
+	shells( parcelIds ) {
 
 		return parcelIds.filter( ( id ) => {
 
 			const path = join( this.dir, id );
 
 			return existsSync( join( path, `${id}.blueprint.json` ) )
-				&& existsSync( join( path, 'interior', 'building.glb' ) )
-				&& existsSync( join( path, 'interior', 'npc.json' ) )
-				&& this.floorsOf( id ) !== null;
+				&& existsSync( join( path, `${id}.glb` ) );
 
 		} );
+
+	}
+
+	/** The shell parcels whose furnished interior is complete and streamable. */
+	interiors( parcelIds ) {
+
+		const shells = new Set( this.shells( parcelIds ) );
+
+		return parcelIds.filter( ( id ) => shells.has( id )
+			&& existsSync( join( this.dir, id, 'interior', 'building.glb' ) )
+			&& existsSync( join( this.dir, id, 'interior', 'npc.json' ) )
+			&& this.floorsOf( id ) !== null );
 
 	}
 
@@ -110,13 +129,6 @@ export class OutDir {
 	}
 
 	/**
-	 * Writes the manifest: the blueprint this world came from, whether its
-	 * parcels carry names (and the naming theme when the blueprint records
-	 * one), the parcels standing in it and the floor files each one streams
-	 * from. The game refuses an out dir whose blueprint is not the one it is
-	 * playing.
-	 */
-	/**
 	 * A named world comes with its typed NPC set beside it; the out dir takes a
 	 * copy so the folder plays as one world. @returns whether one was found.
 	 */
@@ -132,17 +144,36 @@ export class OutDir {
 
 	}
 
-	writeManifest( atlas, parcelIds ) {
+	/**
+	 * Writes the manifest: the blueprint this world came from, every shell,
+	 * the complete interior subset and only that subset's streamable floors.
+	 * The game refuses an out dir whose blueprint is not the one it is playing.
+	 */
+	writeManifest( atlas, parcelIds, interiorIds ) {
 
 		const parcels = [ ...parcelIds ].sort( ( a, b ) => a.localeCompare( b, undefined, { numeric: true } ) );
+		const interiors = [ ...interiorIds ].sort( ( a, b ) => a.localeCompare( b, undefined, { numeric: true } ) );
+		const shells = new Set( parcels );
+
+		if ( interiors.some( ( id ) => ! shells.has( id ) || ! this.interiors( [ id ] ).includes( id ) ) ) {
+
+			throw new Error( 'manifest interior must be a complete interior inside a listed shell parcel' );
+
+		}
+
 		const manifest = {
+			contractVersion: MANIFEST_VERSION,
 			seed: atlas.meta.seed,
 			atlasVersion: atlas.meta.version,
 			named: atlas.parcels.some( ( parcel ) => Boolean( parcel.name ) ),
 			namingTheme: atlas.meta.naming?.theme ?? null,
 			parcels,
-			floors: Object.fromEntries( parcels.map( ( id ) => [ id, this.floorsOf( id ) ] ) )
+			interiors,
+			floors: Object.fromEntries( interiors.map( ( id ) => [ id, this.floorsOf( id ) ] ) )
 		};
+		const errors = validateWorldManifest( manifest );
+
+		if ( errors.length ) throw new Error( `invalid world manifest: ${errors.map( ( error ) => `${error.instancePath || '/'} ${error.message}` ).join( '; ' )}` );
 
 		writeFileSync( join( this.dir, MANIFEST_FILE ), JSON.stringify( manifest, null, 2 ) + '\n' );
 		writeFileSync( join( this.dir, BLUEPRINT_FILE ), JSON.stringify( atlas ) + '\n' );

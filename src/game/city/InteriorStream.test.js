@@ -135,6 +135,25 @@ describe( 'floorAt', () => {
 
 } );
 
+describe( 'interior registration', () => {
+
+	it( 'never opens a closed shell-only parcel', () => {
+
+		const model = stream( { cut: workerFor( [] ) } );
+		model.register(
+			new Map( [ [ 'closed', { hasInterior: false, floors: [] } ] ] ),
+			new Map( [ [ 'closed', { x: 2, z: 2 } ] ] )
+		);
+		model.update( { x: 2, y: 0, z: 2 } );
+
+		expect( model.pending.has( 'closed' ) ).toBe( false );
+		expect( model.live.has( 'closed' ) ).toBe( false );
+		model.dispose();
+
+	} );
+
+} );
+
 /**
  * A tower costs the floors around the player and nothing else: what is
  * fetched, what is solid and what stays in memory all follow the floor the

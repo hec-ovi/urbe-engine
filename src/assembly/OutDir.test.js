@@ -69,11 +69,11 @@ describe( 'OutDir', () => {
 		out.drop( 'p1' );
 
 		expect( existsSync( join( dir, 'p1' ) ) ).toBe( false );
-		expect( out.built( [ 'p0', 'p1' ] ) ).toEqual( [ 'p0' ] );
+		expect( out.shells( [ 'p0', 'p1' ] ) ).toEqual( [ 'p0' ] );
 
 	} );
 
-	it( 'lists only the parcels whose build finished, with their floor files, and writes them with the blueprint', () => {
+	it( 'lists every shell and only complete interiors with their floor files', () => {
 
 		dir = worldWith( [ 'p0', 'p1', 'p2' ] );
 		// p1 got as far as its shell and then failed: no interior on disk
@@ -82,11 +82,15 @@ describe( 'OutDir', () => {
 		rmSync( join( dir, 'p2', 'interior', 'floors', '000.glb' ) );
 
 		const out = new OutDir( dir );
-		const atlas = { meta: { seed: 'urbe-tiny', version: '0.2.4' }, parcels: [ parcel( 'p0' ) ] };
-		const manifest = out.writeManifest( atlas, out.built( [ 'p0', 'p1', 'p2', 'p3' ] ) );
+		const atlas = { meta: { seed: 'urbe-tiny', version: '0.2.4' }, parcels: [ parcel( 'p0' ), parcel( 'p1' ), parcel( 'p2' ) ] };
+		const shells = out.shells( [ 'p0', 'p1', 'p2', 'p3' ] );
+		const interiors = out.interiors( shells );
+		const manifest = out.writeManifest( atlas, shells, interiors );
 
 		expect( manifest ).toEqual( {
-			seed: 'urbe-tiny', atlasVersion: '0.2.4', named: false, namingTheme: null, parcels: [ 'p0' ], floors: { p0: [ '-001', '000' ] }
+			contractVersion: '1.0.0', seed: 'urbe-tiny', atlasVersion: '0.2.4',
+			named: false, namingTheme: null,
+			parcels: [ 'p0', 'p1', 'p2' ], interiors: [ 'p0' ], floors: { p0: [ '-001', '000' ] }
 		} );
 		expect( existsSync( join( dir, MANIFEST_FILE ) ) ).toBe( true );
 
@@ -95,7 +99,7 @@ describe( 'OutDir', () => {
 	it( 'copies the blueprint it was built from beside the manifest', () => {
 
 		dir = worldWith( [ 'p0' ] );
-		new OutDir( dir ).writeManifest( namedCity, [ 'p0' ] );
+		new OutDir( dir ).writeManifest( namedCity, [ 'p0' ], [ 'p0' ] );
 
 		expect( JSON.parse( readFileSync( join( dir, BLUEPRINT_FILE ), 'utf8' ) ) ).toEqual( namedCity );
 
@@ -125,11 +129,25 @@ describe( 'OutDir', () => {
 		dir = worldWith( [ 'p1', 'p2' ] );
 		const out = new OutDir( dir );
 
-		const manifest = out.writeManifest( namedCity, out.built( [ 'p1', 'p2' ] ) );
+		const shells = out.shells( [ 'p1', 'p2' ] );
+		const manifest = out.writeManifest( namedCity, shells, out.interiors( shells ) );
 
 		expect( manifest.named ).toBe( true );
 		expect( manifest.namingTheme ).toBe( 'rain-soaked port city' );
 		expect( JSON.parse( readFileSync( join( dir, MANIFEST_FILE ), 'utf8' ) ).named ).toBe( true );
+
+	} );
+
+	it( 'can remove an interior while keeping the closed exterior shell', () => {
+
+		dir = worldWith( [ 'p0' ] );
+		const out = new OutDir( dir );
+
+		out.dropInterior( 'p0' );
+
+		expect( out.shells( [ 'p0' ] ) ).toEqual( [ 'p0' ] );
+		expect( out.interiors( [ 'p0' ] ) ).toEqual( [] );
+		expect( existsSync( join( dir, 'p0', 'interior' ) ) ).toBe( false );
 
 	} );
 
@@ -180,6 +198,7 @@ function worldWith( ids ) {
 		writeFileSync( join( dir, id, `${id}.request.json` ),
 			JSON.stringify( { buildingId: id, parcel: { footprint: parcel( id ).footprint } } ) + '\n' );
 		writeFileSync( join( dir, id, `${id}.blueprint.json` ), '{}\n' );
+		writeFileSync( join( dir, id, `${id}.glb` ), 'glb' );
 		writeInteriorFiles( join( dir, id, 'interior' ), interior() );
 
 	}

@@ -1,5 +1,7 @@
 # Changelog
 
+0.16.20: a city batch builds every exterior shell and furnishes five deterministic quest or venue parcels by default. The manifest lists shell parcels separately from its interior subset and floor files. The game loads every shell, streams and simulates only that subset, and leaves every other entrance visibly shut with no interaction or interior fetch.
+
 0.16.19: the building viewer generates the requested exterior or interior and checks the response type before handing a GLB to the loader. Missing Vite assets now show as unavailable instead of JSON errors, failed assets keep technical details separate, and an unavailable interior can return to its exterior. A viewport click captures the fly camera; Escape releases it and another click captures it again without taking pointer lock from the overlay controls.
 
 0.16.18: Atlas highway structures render and collide as one continuous road surface plus one concrete structure mesh. The road splits at every elevation knot, follows the exact ramp and deck profile, keeps the published width and structural depth, and extrudes each support from its published footprint and height. Lane paint follows the same 3D lane paths.

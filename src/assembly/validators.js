@@ -6,6 +6,7 @@ const Ajv2020 = AjvModule.default ?? AjvModule;
 const EXTERIOR_REQUEST = new URL( '../../../exterior/schemas/building-request.schema.json', import.meta.url );
 const INTERIOR_REQUEST = new URL( '../../../interior/schemas/request.schema.json', import.meta.url );
 const INTERIOR_BLUEPRINT = new URL( '../../../interior/schemas/blueprint.schema.json', import.meta.url );
+const WORLD_MANIFEST = new URL( './schema/world-manifest.schema.json', import.meta.url );
 
 let ajv = null;
 
@@ -23,10 +24,20 @@ function instance() {
 		ajv.addSchema( loadSchema( INTERIOR_BLUEPRINT ) );
 		ajv.addSchema( loadSchema( INTERIOR_REQUEST ) );
 		ajv.addSchema( loadSchema( EXTERIOR_REQUEST ) );
+		ajv.addSchema( loadSchema( WORLD_MANIFEST ) );
 
 	}
 
 	return ajv;
+
+}
+
+/** @returns [] when valid, else ajv error objects. */
+export function validateWorldManifest( manifest ) {
+
+	const validate = instance().getSchema( 'urbe/engine/world-manifest' );
+
+	return validate( manifest ) ? [] : validate.errors;
 
 }
 

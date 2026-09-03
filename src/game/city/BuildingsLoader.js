@@ -42,10 +42,10 @@ const FIXTURE_KELVIN = 2700;
 export class BuildingsLoader {
 
 	/** @param factory PbrMaterialFactory */
-	constructor( factory ) {
+	constructor( factory, loader = new GLTFLoader() ) {
 
 		this.factory = factory;
-		this.loader = new GLTFLoader();
+		this.loader = loader;
 
 	}
 
@@ -124,13 +124,13 @@ export class BuildingsLoader {
 
 	}
 
-	async #loadOne( { parcelId, blueprint, shellUrl } ) {
+	async #loadOne( { parcelId, blueprint, shellUrl, hasInterior = true } ) {
 
 		const gltf = await this.loader.loadAsync( shellUrl );
 		gltf.scene.updateMatrixWorld( true );
 
 		const exterior = new Map();
-		const door = doorFrame( blueprint );
+		const door = hasInterior ? doorFrame( blueprint ) : null;
 		const doorParts = [];
 		const exteriorFlat = [];
 
@@ -140,6 +140,14 @@ export class BuildingsLoader {
 
 			const name = node.name ?? '';
 			const key = node.material?.name ?? '';
+			if ( ! hasInterior && name.startsWith( DOOR ) ) {
+
+				const geometry = bake( node );
+				push( exterior, key, geometry );
+				exteriorFlat.push( positionsOnly( geometry ) );
+				return;
+
+			}
 
 			if ( door && name.startsWith( DOOR ) ) {
 

@@ -1,4 +1,5 @@
 import { runConnections } from '../../assembly/connectionsRunner.js';
+import { worldManifestErrors } from './WorldManifest.js';
 
 /** The out dir's own index, written by assemble-city (../assembly/CONTRACT.md). */
 const MANIFEST_FILE = 'manifest.json';
@@ -9,8 +10,8 @@ const QUESTLINES_FILE = 'quests/questlines.json';
 /**
  * Everything the game reads off disk, and nothing else: the atlas blueprint,
  * the connections document generated from it, and per parcel the exterior
- * blueprint, the interior NPC support and the floor documents written by
- * `npm run assemble-city`, each floor carrying the URL of its own GLB.
+ * blueprint, every shell, and the selected interior NPC support and floor
+ * documents written by `npm run assemble-city`, each floor carrying its GLB URL.
  *
  * Which buildings exist, and which floors each has, is the out dir's
  * manifest, never the directory listing: a blueprint that merges two lots
@@ -32,10 +33,20 @@ export class WorldSource {
 	async #json( url ) {
 
 		const response = await fetch( url );
+		const type = ( response.headers?.get( 'content-type' ) ?? '' ).split( ';', 1 )[ 0 ].toLowerCase();
 
 		if ( ! response.ok ) throw new Error( `${url}: HTTP ${response.status}` );
+		if ( type && type !== 'application/json' ) throw new Error( `${url}: expected JSON, received ${type}` );
 
-		return response.json();
+		try {
+
+			return await response.json();
+
+		} catch ( error ) {
+
+			throw new Error( `${url}: invalid JSON (${error.message})` );
+
+		}
 
 	}
 
@@ -49,10 +60,11 @@ export class WorldSource {
 		const connections = await runConnections( atlas, { seed: atlas.meta.seed } );
 
 		const known = new Set( atlas.parcels.map( ( parcel ) => parcel.id ) );
-		const listed = manifest.parcels.filter( ( id ) => known.has( id ) );
+		const listed = manifest.parcels;
+		const interiors = new Set( manifest.interiors );
 
 		const buildings = new Map(
-			( await Promise.all( listed.map( ( id ) => this.#loadBuilding( id, manifest.floors[ id ] ) ) ) )
+			( await Promise.all( listed.map( ( id ) => this.#loadBuilding( id, manifest.floors[ id ], interiors.has( id ) ) ) ) )
 				.map( ( building ) => [ building.parcelId, building ] )
 		);
 
@@ -92,27 +104,28 @@ export class WorldSource {
 
 		}
 
-		if ( ! manifest.floors ) throw new Error( `${this.outBase} lists no floor files: re-run assemble-city` );
+		const errors = worldManifestErrors( manifest, new Set( atlas.parcels.map( ( parcel ) => parcel.id ) ) );
+		if ( errors.length ) throw new Error( `${this.outBase} has an invalid ${MANIFEST_FILE}: ${errors.join( '; ' )}; re-run assemble-city` );
 
 		return manifest;
 
 	}
 
 	/** @param tags the parcel's floor file tags, as the manifest lists them */
-	async #loadBuilding( parcelId, tags ) {
+	async #loadBuilding( parcelId, tags, hasInterior ) {
 
 		const base = `${this.outBase}/${parcelId}`;
-		const [ blueprint, npc, floors ] = await Promise.all( [
-			this.#json( `${base}/${parcelId}.blueprint.json` ),
-			this.#json( `${base}/interior/npc.json` ),
-			this.#floors( base, tags )
-		] );
+		const blueprint = await this.#json( `${base}/${parcelId}.blueprint.json` );
+		const [ npc, floors ] = hasInterior
+			? await Promise.all( [ this.#json( `${base}/interior/npc.json` ), this.#floors( base, tags ) ] )
+			: [ null, [] ];
 
 		return {
 			parcelId,
 			blueprint,
 			npc,
 			floors,
+			hasInterior,
 			// The shell, under a megabyte: the city loads it for every building.
 			shellUrl: `${base}/${parcelId}.glb`
 		};
