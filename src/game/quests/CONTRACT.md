@@ -26,6 +26,7 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - `perform(request)` maps `take`, `inspect`, `listen`, `steal`, `work`, and `deliver` to the quests runtime's closed player event vocabulary. `read` returns the selected document text without advancing the quest.
 - `objective({ timeMin })` selects the first open questline and first definition-ordered active step for route presentation.
 - `QuestGameplay.candidates(frame)` projects those validated targets into the shared centered interaction route. `QuestGameplay.perform(request)` resolves the current selected target and sends its measured place, visibility, obstruction and reach facts through `QuestActions.perform`.
+- An accepted `QuestGameplay.perform(request)` sends its stable target key, exact action, and retained cast participants to the gameplay animation coordinator. Rejected actions never start presentation state.
 - `QuestGameplay.control(request)` accepts only an explicit event for an npcId already in the session cast. Conversation and quest-step kinds never imply following, and this API does not add an escort quest mechanic.
 
 ## Errors
@@ -40,6 +41,7 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - `quests/flow`, through its contract and questline schema.
 - `game/quests/QuestSession`, inside this layer only.
 - The game's crowd, physics query and PBR material factory for live target bodies and measured focus facts.
+- The quest animation coordination contract for accepted action presentation.
 
 ## Invariants
 
@@ -47,6 +49,7 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - Pickup and theft require the selected object or person to be visible, unobstructed, inside the fixed reach, and at the quest target's current place.
 - Listening requires an unobstructed conversation target inside eight metres and at the target parcel.
 - A failed interaction does not mutate quest progress or inventory.
+- A failed interaction does not start or replace an animation action.
 - A successful pickup cannot be repeated because its completed step no longer produces an active target.
 - Highlight and icon data identify the same item, cast NPCs, and step consumed by the action.
 - A live pickup prop has the stable `targetKey`, a database-backed body material, and separate outline and icon cues. It leaves the scene only when the accepted result includes its `collected` world change.

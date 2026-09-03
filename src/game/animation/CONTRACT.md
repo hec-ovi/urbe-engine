@@ -41,6 +41,8 @@ Coordinates quest, dialogue, follow, crouch, and routine animations as one deter
 - Playable quest actions contract for accepted action and dialogue lifecycle events.
 - The installed Quaternius Universal Animation Library Pro catalog. This layer consumes clip names and never modifies vendor assets.
 
+The live game adapter synchronizes NPC continuity routines, turns accepted quest actions into commands, and sends every ordered transition to Crowd plus the one focused HeroCharacter armature. Coordinator state is presentation derived from persisted quest and NPC continuity state, so it is not duplicated in the game save.
+
 ## Invariants
 
 - Actor identity and action identity are never inferred from display names or proximity.
