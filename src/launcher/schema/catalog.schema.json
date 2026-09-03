@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urbe/engine/launcher/catalog",
+  "title": "Launcher city and game catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [ "games", "cities" ],
+  "properties": {
+    "games": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/game" }
+    },
+    "cities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/city" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "namedItem": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [ "name" ],
+          "properties": { "name": { "type": "string", "minLength": 1 } }
+        }
+      ]
+    },
+    "building": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "id" ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "type": "string" },
+        "type": { "type": "string" },
+        "eligible": { "type": "boolean" }
+      }
+    },
+    "quest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "title", "objective" ],
+      "properties": {
+        "title": { "type": "string" },
+        "objective": { "type": "string" }
+      }
+    },
+    "game": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "id", "name" ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1 },
+        "cityName": { "type": "string" },
+        "theme": { "type": "string" },
+        "playable": { "type": "boolean" },
+        "mainSteps": { "type": "integer", "minimum": 0 },
+        "sideJobs": { "type": "integer", "minimum": 0 },
+        "interiors": { "type": "integer", "minimum": 0 },
+        "inventoryCount": { "type": "integer", "minimum": 0 },
+        "locationCount": { "type": "integer", "minimum": 0 },
+        "location": { "type": "string" },
+        "position": {
+          "type": "array",
+          "prefixItems": [ { "type": "number" }, { "type": "number" }, { "type": "number" } ],
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "activeQuest": { "$ref": "#/$defs/quest" },
+        "inventory": { "type": "array", "items": { "$ref": "#/$defs/namedItem" } },
+        "locations": { "type": "array", "items": { "$ref": "#/$defs/namedItem" } }
+      }
+    },
+    "city": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "id", "name" ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1 },
+        "seed": { "type": "string" },
+        "size": { "enum": [ "small", "medium", "large" ] },
+        "status": { "enum": [ "ready", "building", "failed" ] },
+        "buildings": { "type": "integer", "minimum": 0 },
+        "buildingCount": { "type": "integer", "minimum": 0 },
+        "interiorCount": { "type": "integer", "minimum": 0 },
+        "districts": { "type": "integer", "minimum": 0 },
+        "summary": { "type": "string" },
+        "availableBuildings": { "type": "array", "items": { "$ref": "#/$defs/building" } }
+      }
+    }
+  }
+}

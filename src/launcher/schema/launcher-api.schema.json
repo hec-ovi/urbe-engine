@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urbe/engine/launcher/api",
+  "title": "Launcher API requests and responses",
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "playUrl": { "type": "string", "minLength": 1 },
+    "downloadFilename": { "type": "string", "pattern": "^[a-z0-9._-]+\\.(urbegame|urbecity)\\.json$" },
+    "catalog": { "$ref": "urbe/engine/launcher/catalog" },
+    "jsonDocument": { "type": "object" },
+    "city": { "$ref": "urbe/engine/launcher/catalog#/$defs/city" },
+    "game": { "$ref": "urbe/engine/launcher/catalog#/$defs/game" },
+    "continueResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "playUrl" ],
+      "properties": { "playUrl": { "$ref": "#/$defs/playUrl" } }
+    },
+    "exportResult": { "$ref": "#/$defs/jsonDocument" },
+    "importInput": { "$ref": "#/$defs/jsonDocument" },
+    "generateCityInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "name", "seed", "size" ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "seed": { "type": "string", "minLength": 1 },
+        "size": { "enum": [ "small", "medium", "large" ] }
+      }
+    },
+    "generateCityResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "city" ],
+      "properties": {
+        "city": { "$ref": "#/$defs/city" },
+        "catalog": { "$ref": "#/$defs/catalog" }
+      }
+    },
+    "generateInstancesInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "cityId", "mode", "count", "buildingIds" ],
+      "properties": {
+        "cityId": { "$ref": "#/$defs/id" },
+        "mode": { "enum": [ "automatic", "manual" ] },
+        "count": { "type": "integer", "minimum": 1, "maximum": 24 },
+        "buildingIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+      }
+    },
+    "instances": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "ids" ],
+      "properties": {
+        "ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "count": { "type": "integer", "minimum": 1, "maximum": 24 }
+      }
+    },
+    "generateInstancesResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "instances" ],
+      "properties": { "instances": { "$ref": "#/$defs/instances" } }
+    },
+    "generateQuestsInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "cityId", "interiorIds", "mainBrief", "sideJobs" ],
+      "properties": {
+        "cityId": { "$ref": "#/$defs/id" },
+        "interiorIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "mainBrief": { "type": "string" },
+        "sideJobs": { "type": "integer", "minimum": 0, "maximum": 24 }
+      }
+    },
+    "quests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "id", "mainSteps", "sideJobs" ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "mainSteps": { "type": "integer", "minimum": 0 },
+        "sideJobs": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "generateQuestsResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "quests" ],
+      "properties": { "quests": { "$ref": "#/$defs/quests" } }
+    },
+    "createGameInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "cityId", "interiorIds", "questId" ],
+      "properties": {
+        "cityId": { "$ref": "#/$defs/id" },
+        "interiorIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "questId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "createGameResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "game" ],
+      "properties": {
+        "game": { "$ref": "#/$defs/game" },
+        "catalog": { "$ref": "#/$defs/catalog" }
+      }
+    }
+  }
+}
