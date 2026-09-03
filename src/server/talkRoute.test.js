@@ -33,7 +33,8 @@ describe( 'NPC dialogue HTTP boundary', () => {
 		for ( const body of [
 			'{',
 			JSON.stringify( { ...talkRequest(), unknown: true } ),
-			JSON.stringify( { ...talkRequest(), timeMin: 'now' } )
+			JSON.stringify( { ...talkRequest(), timeMin: 'now' } ),
+			JSON.stringify( { ...talkRequest(), out: '/out/../src' } )
 		] ) {
 
 			const response = await fetch( `${origin}/api/talk`, {
@@ -55,6 +56,21 @@ describe( 'NPC dialogue HTTP boundary', () => {
 		} );
 		expect( response.status ).toBe( 502 );
 		expect( await response.json() ).toEqual( { error: 'text model unavailable' } );
+
+	} );
+
+	it( 'maps malformed downstream JSON to a bad gateway response', async () => {
+
+		const origin = await serve( { reply: vi.fn( async () => {
+
+			throw new SyntaxError( 'model or world response is malformed' );
+
+		} ) } );
+		const response = await fetch( `${origin}/api/talk`, {
+			method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( talkRequest() )
+		} );
+		expect( response.status ).toBe( 502 );
+		expect( await response.json() ).toEqual( { error: 'model or world response is malformed' } );
 
 	} );
 

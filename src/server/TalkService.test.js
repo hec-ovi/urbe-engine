@@ -71,6 +71,7 @@ describe( 'TalkService', () => {
 		const service = new TalkService( { async complete() { return ''; } }, await worldDir() );
 		await expect( service.reply( { out: '/out/w', npc: { ...npc, flags: { dead: true } }, behavior, line: 'Hey', timeMin: 0 } ) ).rejects.toThrow( /is dead/ );
 		await expect( service.reply( { out: '/../etc', npc, behavior, line: 'Hey', timeMin: 0 } ) ).rejects.toThrow( /outside/ );
+		await expect( service.reply( { out: '/out/../src', npc, behavior, line: 'Hey', timeMin: 0 } ) ).rejects.toThrow( /outside/ );
 
 	} );
 

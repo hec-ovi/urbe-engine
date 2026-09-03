@@ -32,7 +32,7 @@ Expose checked development HTTP routes for world builds, the launcher, NPC dialo
 - A route invokes its service only after its request passes the public boundary.
 - Talk uses the visible NPC, current behavior and current quest snapshot supplied by `GameApp`. An empty `LLM_MODEL` selects the first model advertised by `LLM_BASE_URL`.
 - Routes return JSON with no undeclared fields. Speech responses are not cached.
-- Filesystem services keep every resolved path inside the configured workspace or output root.
+- Filesystem services keep every resolved path inside the configured output root. Talk world paths contain no `.` or `..` segment.
 
 ## Dependencies
 

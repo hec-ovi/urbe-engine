@@ -23,7 +23,7 @@ export function talkRoute( outRoot, providedService = null ) {
 				if ( req.method !== 'POST' ) return next();
 				try {
 
-					const request = boundary.input( JSON.parse( await body( req ) ) );
+					const request = boundary.input( parseRequestJson( await body( req ) ) );
 					service ??= new TalkService(
 						new OpenAIPort( process.env.LLM_BASE_URL ?? DEFAULT_BASE_URL, process.env.LLM_MODEL || null ), outRoot
 					);
@@ -32,7 +32,7 @@ export function talkRoute( outRoot, providedService = null ) {
 
 				} catch ( error ) {
 
-					const invalid = error instanceof SyntaxError || error?.code === 'E_TALK_INPUT';
+					const invalid = error?.code === 'E_TALK_REQUEST_JSON' || error?.code === 'E_TALK_INPUT';
 					send( res, invalid ? 400 : 502, boundary.error( { error: messageOf( error ) } ) );
 
 				}
@@ -41,6 +41,19 @@ export function talkRoute( outRoot, providedService = null ) {
 
 		}
 	};
+
+}
+
+function parseRequestJson( text ) {
+
+	try { return JSON.parse( text ); }
+	catch ( cause ) {
+
+		const error = new Error( `talk request is not valid JSON: ${messageOf( cause )}` );
+		error.code = 'E_TALK_REQUEST_JSON';
+		throw error;
+
+	}
 
 }
 

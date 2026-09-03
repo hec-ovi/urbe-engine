@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { join, normalize, resolve, sep } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { Converse, DialogContextService, QuestlineRuntime } from '../../../quests/dist/index.js';
 import { DEFAULT_TYPE_SET } from '../../../simulation/dist/index.js';
 import { SnapshotPort } from './SnapshotPort.js';
@@ -53,8 +53,9 @@ export class TalkService {
 
 	async #world( out ) {
 
-		const dir = normalize( join( this.outRoot, out ) );
-		if ( ! dir.startsWith( this.outRoot + sep ) ) throw new Error( `out path outside the served worlds: ${out}` );
+		const servedWorlds = join( this.outRoot, 'out' );
+		const dir = resolve( this.outRoot, `.${out}` );
+		if ( ! dir.startsWith( servedWorlds + sep ) ) throw new Error( `out path outside the served worlds: ${out}` );
 
 		let world = this.#worlds.get( dir );
 		if ( world ) return world;

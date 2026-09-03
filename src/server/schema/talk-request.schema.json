@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["out", "npc", "behavior", "line", "timeMin"],
   "properties": {
-    "out": { "type": "string", "pattern": "^/out(?:/[A-Za-z0-9._-]+)+$" },
+    "out": { "type": "string", "pattern": "^/out(?:/(?!\\.{1,2}(?:/|$))[A-Za-z0-9._-]+)+$" },
     "npc": { "$ref": "#/$defs/npc" },
     "behavior": { "$ref": "#/$defs/behavior" },
     "line": { "type": "string", "minLength": 1 },
