@@ -32,7 +32,7 @@ describe( 'WorldSource selective interiors', () => {
 		vi.stubGlobal( 'fetch', vi.fn( async ( url ) => {
 
 			requested.push( url );
-			if ( url === '/out/city/npc-types.json' || url === '/out/city/quests/questlines.json' || url === '/out/city/quests/investigations.json' ) return response( 404, null );
+			if ( optional( url ) ) return response( 404, null );
 			if ( ! documents.has( url ) ) throw new Error( `unexpected ${url}` );
 			return response( 200, documents.get( url ) );
 
@@ -71,7 +71,7 @@ describe( 'WorldSource selective interiors', () => {
 		] );
 		vi.stubGlobal( 'fetch', vi.fn( async ( url ) => {
 
-			if ( url.endsWith( '/npc-types.json' ) || url.endsWith( '/quests/questlines.json' ) || url.endsWith( '/quests/investigations.json' ) ) return response( 404, null );
+			if ( optional( url ) ) return response( 404, null );
 			if ( ! documents.has( url ) ) throw new Error( `unexpected ${url}` );
 			return response( 200, documents.get( url ) );
 
@@ -94,7 +94,7 @@ describe( 'WorldSource selective interiors', () => {
 		] );
 		vi.stubGlobal( 'fetch', vi.fn( async ( url ) => {
 
-			if ( url.endsWith( '/npc-types.json' ) || url.endsWith( '/quests/questlines.json' ) ) return response( 404, null );
+			if ( optional( url, false ) ) return response( 404, null );
 			if ( ! documents.has( url ) ) throw new Error( `unexpected ${url}` );
 			return response( 200, documents.get( url ) );
 
@@ -105,7 +105,7 @@ describe( 'WorldSource selective interiors', () => {
 		documents.set( '/out/city/quests/investigations.json', Symbol( 'invalid json' ) );
 		vi.mocked( fetch ).mockImplementation( async ( url ) => {
 
-			if ( url.endsWith( '/npc-types.json' ) || url.endsWith( '/quests/questlines.json' ) ) return response( 404, null );
+			if ( optional( url, false ) ) return response( 404, null );
 			if ( url.endsWith( '/quests/investigations.json' ) ) return { ...response( 200, null ), json: async () => { throw new Error( 'bad' ); } };
 			return response( 200, documents.get( url ) );
 
@@ -115,7 +115,68 @@ describe( 'WorldSource selective interiors', () => {
 
 	} );
 
+	it( 'loads and cross-validates every catalog named by a game quest bundle', async () => {
+
+		const questlines = [ {
+			id: 'q-main', items: [ { itemId: 'ledger' } ],
+			steps: [ { stepId: 'take-ledger', target: { kind: 'pickup', itemId: 'ledger' } } ]
+		} ];
+		const catalogs = {
+			questlines,
+			objectives: [ { questId: 'q-main', stepId: 'take-ledger', action: questlines[ 0 ].steps[ 0 ].target } ],
+			investigations: [],
+			missionAssetRequests: [ { assetId: 'quest.ledger' } ],
+			missionItemBindings: [ { questId: 'q-main', itemId: 'ledger', assetId: 'quest.ledger' } ]
+		};
+		const bundle = {
+			contractVersion: '1.0',
+			files: {
+				questlines: 'questlines.json', objectives: 'objectives.json', investigations: 'investigations.json',
+				missionAssetRequests: 'mission-assets.json', missionItemBindings: 'mission-item-bindings.json'
+			},
+			counts: Object.fromEntries( Object.entries( catalogs ).map( ( [ name, values ] ) => [ name, values.length ] ) )
+		};
+		const documents = new Map( [
+			[ '/out/games/quest/blueprint.json', atlas ],
+			[ '/out/games/quest/manifest.json', { ...manifest, parcels: [], interiors: [], floors: {} } ],
+			[ '/out/games/quest/game.json', { id: 'quest', questBundle: { uri: 'quests/quest-bundle.json' } } ],
+			[ '/out/games/quest/quests/quest-bundle.json', bundle ],
+			...Object.entries( bundle.files ).map( ( [ name, file ] ) => [ `/out/games/quest/quests/${file}`, catalogs[ name ] ] )
+		] );
+		vi.stubGlobal( 'fetch', vi.fn( async ( url ) => {
+
+			if ( url.endsWith( '/npc-types.json' ) ) return response( 404, null );
+			if ( ! documents.has( url ) ) throw new Error( `unexpected ${url}` );
+			return response( 200, documents.get( url ) );
+
+		} ) );
+
+		const source = new WorldSource( {
+			blueprintUrl: '/atlas/city.json', outBase: '/out/games/quest', gameId: 'quest'
+		} );
+		const world = await source.load();
+		expect( world.questBundle.manifest ).toBe( bundle );
+		expect( world.objectives ).toEqual( catalogs.objectives );
+		expect( world.missionAssetRequests ).toEqual( catalogs.missionAssetRequests );
+		expect( world.missionItemBindings ).toEqual( catalogs.missionItemBindings );
+
+		documents.set( '/out/games/quest/quests/quest-bundle.json', {
+			...bundle, counts: { ...bundle.counts, objectives: 2 }
+		} );
+		await expect( source.load() ).rejects.toThrow( 'objectives.json has 1 records, expected 2' );
+
+	} );
+
 } );
+
+function optional( url, includeInvestigations = true ) {
+
+	return url.endsWith( '/npc-types.json' )
+		|| url.endsWith( '/quests/quest-bundle.json' )
+		|| url.endsWith( '/quests/questlines.json' )
+		|| includeInvestigations && url.endsWith( '/quests/investigations.json' );
+
+}
 
 function response( status, body ) {
 

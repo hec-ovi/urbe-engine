@@ -11,12 +11,13 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - Live interaction frame: [schema/gameplay-frame.schema.json](schema/gameplay-frame.schema.json). The host supplies validated clock, place and camera facts.
 - Live selected binding: [schema/gameplay-perform.schema.json](schema/gameplay-perform.schema.json). The shared interactor returns only the selected target key, symbolic binding and current clock.
 - NPC control request: [schema/npc-control-request.schema.json](schema/npc-control-request.schema.json). An explicit start-follow, release-follow, start-crouch, or release-crouch event names one actual cast npcId, current clock and player position.
+- Mission item requests and `{ questId, itemId, assetId }` bindings arrive only through the validated [quest bundle](../../quest-bundle/CONTRACT.md). The loaded Materials theme is projected to the mission-assets material catalog without changing its keys, aliases, or variant ids.
 
 ## Outputs
 
 - Interaction targets: [schema/interaction-targets.schema.json](schema/interaction-targets.schema.json). Every target has a stable quest and step identity, map place, actual cast NPC ids, availability, and presentation instructions. Binding names stay symbolic so the UI renders the player's current key or controller binding.
 - Interaction result: [schema/interaction-result.schema.json](schema/interaction-result.schema.json). Success and failure both return current quest inventory. A completed pickup, theft, or delivery includes the matching world state change.
-- Active objective: [schema/active-objective.schema.json](schema/active-objective.schema.json). Includes talk and goto steps as well as direct actions, and carries the runtime's exact current place or null.
+- Active objective: [schema/active-objective.schema.json](schema/active-objective.schema.json). Includes talk and goto steps as well as direct actions, and carries the runtime's exact current place plus its route-ready guidance result. Parcel, station and stop places carry a destination. Areas, edges, moving routes and unavailable targets carry a closed reason.
 - Live interaction candidates: [schema/gameplay-candidates.schema.json](schema/gameplay-candidates.schema.json). Carries only validated prompt data and stable target identity to the shared interactor. Measured focus facts remain private until the matching target is selected.
 - NPC control result: [schema/npc-control-result.schema.json](schema/npc-control-result.schema.json). Success reports following, posing, or schedule-return mode; failure uses the closed `not_cast`, `unavailable`, `unreachable` or `conflict` set.
 
@@ -24,8 +25,9 @@ Purpose: converts active quest steps into deterministic player interaction targe
 
 - `targets({ timeMin })` projects active `pickup`, `observe`, `listen`, `steal`, `work`, and `deliver` steps.
 - `perform(request)` maps `take`, `inspect`, `listen`, `steal`, `work`, and `deliver` to the quests runtime's closed player event vocabulary. `read` returns the selected document text without advancing the quest.
-- `objective({ timeMin })` selects the first open questline and first definition-ordered active step for route presentation.
+- `objective({ timeMin })` selects the first open questline and first definition-ordered active step. The live game passes its exact guidance destination to the objective route box.
 - `QuestGameplay.candidates(frame)` projects those validated targets into the shared centered interaction route. `QuestGameplay.perform(request)` resolves the current selected target and sends its measured place, visibility, obstruction and reach facts through `QuestActions.perform`.
+- A pickup is projected only when its exact quest and item binding creates a portable mission-assets assembly with a `take` anchor. Every assembly primitive uses its authored PBR key and variant and has matching Rapier collision.
 - An accepted `QuestGameplay.perform(request)` sends its stable target key, exact action, and retained cast participants to the gameplay animation coordinator. Rejected actions never start presentation state.
 - `QuestGameplay.control(request)` accepts only an explicit event for an npcId already in the session cast. Conversation, player crouch input, and quest-step kinds never imply follow or crouch. An accepted pose event is sent to animation coordination with the exact returned actor state.
 
@@ -41,6 +43,7 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - `quests/flow`, through its contract and questline schema.
 - `game/quests/QuestSession`, inside this layer only.
 - The game's crowd, physics query and PBR material factory for live target bodies and measured focus facts.
+- [Mission assets](../../mission-assets/CONTRACT.md) for exact item geometry, collision, interaction anchors and material assignments.
 - The quest animation coordination contract for accepted action presentation.
 
 ## Invariants
@@ -52,12 +55,12 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - A failed interaction does not start or replace an animation action.
 - A successful pickup cannot be repeated because its completed step no longer produces an active target.
 - Highlight and icon data identify the same item, cast NPCs, and step consumed by the action.
-- A live pickup prop has the stable `targetKey`, a database-backed body material, and separate outline and icon cues. It leaves the scene only when the accepted result includes its `collected` world change.
+- A live pickup prop has the stable `targetKey`, the bound assembly's exact geometry and materials, separate outline and icon cues, and one fixed collider per primitive. Ray focus excludes only its own colliders. The visual and collision leave only when the accepted result includes its `collected` world change.
 - Cast-person mechanics resolve the exact `actorIds`. A nearby omitted cast NPC may receive one deterministic rendered quest body, within the crowd capacity, at their simulation place.
 - Follow control resolves only the requested cast npcId and never substitutes a nearby statistical handle.
 - Crouch control resolves only the requested cast npcId, holds it until its matching release, and resumes its persisted simulation routine.
 - Parcel area mechanics are offered only at their deterministic entry or interior anchor. District observation remains an area action throughout the named district.
-- Quest item data currently publishes a parcel but no room, prop, or transform. The live layer uses the parcel's ground-floor interior entry anchor, or its published access point when no interior door exists. Observe data publishes only a district, so the layer does not invent individual evidence clues.
+- Quest item data currently publishes a parcel but no room or transform. The live layer places the exact bound assembly at the parcel's ground-floor interior entry anchor, or its published access point when no interior door exists. An absent binding, fixed assembly, missing `take` anchor or unresolved material produces no pickup. Observe data publishes only a district, so the layer does not invent individual evidence clues.
 
 ## How to modify this blackbox safely
 

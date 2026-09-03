@@ -76,4 +76,23 @@ export class MaterialResolver {
 
 	}
 
+	/** Exact material key and variant surface consumed by mission-assets v1.0. */
+	missionCatalog( theme ) {
+
+		const db = this.themes.get( theme );
+		if ( ! db ) throw new Error( `theme index ${theme} is not loaded` );
+
+		return {
+			contractVersion: '1.0',
+			entries: Object.entries( db.entries )
+				.map( ( [ key, entry ] ) => ( {
+					key,
+					...( entry.aliases?.length ? { aliases: [ ...entry.aliases ] } : {} ),
+					variants: entry.variants.map( ( variant ) => variant.id )
+				} ) )
+				.sort( ( left, right ) => left.key.localeCompare( right.key ) )
+		};
+
+	}
+
 }

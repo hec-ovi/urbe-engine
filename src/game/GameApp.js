@@ -5,6 +5,7 @@ import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { QuestSession } from './quests/QuestSession.js';
 import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
+import { MissionItemAssets } from './quests/MissionItemAssets.js';
 import { InvestigationGameplay } from './investigation/index.js';
 import { ObjectiveRouter } from './routes/ObjectiveRouter.js';
 import { ObjectiveGuide } from './routes/ObjectiveGuide.js';
@@ -159,7 +160,10 @@ export class GameApp {
 
 		this.view.step( 'reading the world' );
 		const source = new WorldSource( config );
-		const { atlas, connections, buildings, unbuilt, npcTypes, questlines, investigations, game } = await source.load();
+		const {
+			atlas, connections, buildings, unbuilt, npcTypes, questlines, investigations,
+			missionAssetRequests, missionItemBindings, game
+		} = await source.load();
 		const transitRoutes = connections.networks.transit.routes;
 		this.transitJourney = new TransitJourney( {
 			atlas, routes: transitRoutes, ...( game?.transitJourney ? { state: game.transitJourney } : {} )
@@ -195,6 +199,11 @@ export class GameApp {
 		await resolver.loadTheme( THEME );
 		this.resolver = resolver;
 		const factory = new PbrMaterialFactory( resolver, this.tier );
+		this.missionItems = new MissionItemAssets( {
+			requests: missionAssetRequests,
+			bindings: missionItemBindings,
+			materialCatalog: resolver.missionCatalog( THEME )
+		} );
 		this.rooms = new RoomLights( factory, this.tier );
 
 		this.view.step( 'laying the ground' );
@@ -365,6 +374,7 @@ export class GameApp {
 			physics: this.physics,
 			playerCollider: this.body.collider,
 			materialFactory: factory,
+			missionItems: this.missionItems,
 			continuity: this.npcContinuity,
 			animations: this.animations
 		} );
@@ -812,9 +822,7 @@ export class GameApp {
 		if ( ! this.objectiveGuide || ! this.questGameplay || ! this.body ) return;
 		const feet = this.body.feet;
 		const objective = this.questGameplay.objective( this.clock.timeMin );
-		const destination = objective?.place?.kind === 'parcel'
-			? { kind: 'parcel', id: objective.place.id }
-			: null;
+		const destination = objective?.guidance?.destination ?? null;
 
 		try {
 

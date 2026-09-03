@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:quest-bundle:manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "files", "counts"],
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "files": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["questlines", "objectives", "investigations", "missionAssetRequests", "missionItemBindings"],
+      "properties": {
+        "questlines": { "$ref": "#/$defs/file" },
+        "objectives": { "const": "objectives.json" },
+        "investigations": { "const": "investigations.json" },
+        "missionAssetRequests": { "const": "mission-assets.json" },
+        "missionItemBindings": { "const": "mission-item-bindings.json" }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["questlines", "objectives", "investigations", "missionAssetRequests", "missionItemBindings"],
+      "properties": {
+        "questlines": { "$ref": "#/$defs/count" },
+        "objectives": { "$ref": "#/$defs/count" },
+        "investigations": { "$ref": "#/$defs/count" },
+        "missionAssetRequests": { "$ref": "#/$defs/count" },
+        "missionItemBindings": { "$ref": "#/$defs/count" }
+      }
+    }
+  },
+  "$defs": {
+    "file": { "type": "string", "minLength": 1, "pattern": "^[^/\\\\]+\\.json$" },
+    "count": { "type": "integer", "minimum": 0 }
+  }
+}

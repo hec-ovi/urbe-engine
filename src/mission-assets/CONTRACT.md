@@ -58,6 +58,7 @@ Closed error envelope: [schema/error.schema.json](schema/error.schema.json).
 ## Dependencies
 
 - Materials contract: material keys and variant ids only. The caller supplies the schema-validated catalog projection, so this layer never imports Materials internals or map files.
+- Web `TextEncoder`. Canonical SHA-256 is synchronous and produces the same payload reference in Node and the browser.
 
 ## Invariants
 

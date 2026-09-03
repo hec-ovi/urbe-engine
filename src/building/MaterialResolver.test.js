@@ -3,8 +3,10 @@ import { MaterialResolver } from './MaterialResolver.js';
 
 const INDEX = {
 	entries: {
-		'cyberpunk/wall/mid': { alignment: 'tile', variants: [] },
-		'cyberpunk/ad-screen/mid': { alignment: 'exact', variants: [], aliases: [ 'cyberpunk/screen/mid' ] }
+		'cyberpunk/wall/mid': { alignment: 'tile', variants: [ { id: 'plain' }, { id: 'panel' } ] },
+		'cyberpunk/ad-screen/mid': {
+			alignment: 'exact', variants: [ { id: 'brand:sample' } ], aliases: [ 'cyberpunk/screen/mid' ]
+		}
 	}
 };
 
@@ -51,6 +53,19 @@ describe( 'MaterialResolver', () => {
 		resolver.resolve( 'cyberpunk/brand/none' );
 
 		expect( resolver.counts ).toEqual( { resolved: 1, unresolved: 1 } );
+
+	} );
+
+	it( 'publishes the loaded key, alias and variant surface for mission asset creation', () => {
+
+		expect( resolver.missionCatalog( 'cyberpunk' ) ).toEqual( {
+			contractVersion: '1.0',
+			entries: [
+				{ key: 'cyberpunk/ad-screen/mid', aliases: [ 'cyberpunk/screen/mid' ], variants: [ 'brand:sample' ] },
+				{ key: 'cyberpunk/wall/mid', variants: [ 'plain', 'panel' ] }
+			]
+		} );
+		expect( () => resolver.missionCatalog( 'absent' ) ).toThrow( 'theme index absent is not loaded' );
 
 	} );
 

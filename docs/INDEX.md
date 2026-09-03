@@ -7,6 +7,7 @@
 - `src/library/`: filesystem catalog for generated city directories and playable game directories, with schema-validated descriptors, atomic revisioned saves and path containment (src/library/CONTRACT.md).
 - `src/launcher/`: browser orchestration between the isolated front-door UI and the catalog and generation API; validates every callback result before navigation, download or creation state changes (src/launcher/CONTRACT.md).
 - `src/mission-assets/`: deterministic renderer-neutral mission objects and reusable furniture with exact dimensions, PBR material references, collision, interaction anchors, clearances and canonical payload hashes (src/mission-assets/CONTRACT.md).
+- `src/quest-bundle/`: atomic consumer and selector for quests v0.6 definitions, objectives, investigations, mission asset requests and item bindings (src/quest-bundle/CONTRACT.md).
 
 - `src/game/`: the playable city (`?mode=game`); first-person controller on Rapier, night scene from the assembled GLBs, ground from the blueprint's cover polygons, neon and lit windows, simulation-driven crowd and lane-graph traffic, doors into continuous interiors (src/game/CONTRACT.md). Depends on ../atlas, ../connections, ../materials, ../simulation contracts.
   - `data/`: run config, world loading, signal state

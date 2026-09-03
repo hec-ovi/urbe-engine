@@ -110,7 +110,37 @@ describe( 'QuestActions target contract', () => {
 		const { actions } = setup();
 		expect( actions.objective( { timeMin: 600 } ) ).toEqual( {
 			targetKey: 'quest:q_courier:take_doc', questId: 'q_courier', stepId: 'take_doc', kind: 'pickup',
-			title: 'Paper trail', text: 'Take the stamped manifest.', place: { kind: 'parcel', id: 'p_pickup' }
+			title: 'Paper trail', text: 'Take the stamped manifest.', place: { kind: 'parcel', id: 'p_pickup' },
+			guidance: {
+				questId: 'q_courier', stepId: 'take_doc', place: { kind: 'parcel', id: 'p_pickup' },
+				destination: { kind: 'parcel', id: 'p_pickup' }
+			}
+		} );
+
+	} );
+
+	it.each( [ [ 'station', 'central' ], [ 'stop', 'night-bus' ] ] )(
+		'publishes the quests runtime %s destination without reducing it to a parcel', ( kind, id ) => {
+
+			const place = kind === 'station' ? { stationId: id } : { stopId: id };
+			const session = QuestSession.create( [ oneStepQuest( `q_${kind}`, { kind: 'goto', place } ) ], simulation(), 600 );
+			const objective = new QuestActions( session ).objective( { timeMin: 600 } );
+			expect( objective.place ).toEqual( { kind, id } );
+			expect( objective.guidance ).toEqual( {
+				questId: `q_${kind}`, stepId: 'step', place: { kind, id }, destination: { kind, id }
+			} );
+
+		}
+	);
+
+	it( 'preserves a closed guidance reason when the active objective is an area', () => {
+
+		const session = QuestSession.create( [ oneStepQuest(
+			'q_area', { kind: 'observe', districtId: 'd_glass' },
+			{ gives: information( 'area-notes', 'Area notes' ) }
+		) ], simulation(), 600 );
+		expect( new QuestActions( session ).objective( { timeMin: 600 } ).guidance ).toEqual( {
+			questId: 'q_area', stepId: 'step', place: { kind: 'district', id: 'd_glass' }, reason: 'district-area'
 		} );
 
 	} );

@@ -1,4 +1,7 @@
 import { runConnections } from '../../assembly/connectionsRunner.js';
+import {
+	QUEST_BUNDLE_CATALOGS, questBundle, questBundleManifest
+} from '../../quest-bundle/index.js';
 import { worldManifestErrors } from './WorldManifest.js';
 
 /** The out dir's own index, written by assemble-city (../assembly/CONTRACT.md). */
@@ -6,6 +9,7 @@ const MANIFEST_FILE = 'manifest.json';
 const NPC_TYPES_FILE = 'npc-types.json';
 const BLUEPRINT_FILE = 'blueprint.json';
 const QUESTLINES_FILE = 'quests/questlines.json';
+const QUEST_BUNDLE_FILE = 'quests/quest-bundle.json';
 const INVESTIGATIONS_FILE = 'quests/investigations.json';
 
 /**
@@ -71,7 +75,7 @@ export class WorldSource {
 
 	}
 
-	/** @returns { atlas, connections, buildings, unbuilt, npcTypes, questlines, investigations, game } */
+	/** @returns generated world, complete validated quest catalogs and optional catalog game */
 	async load() {
 
 		// Refuse a missing catalog descriptor before starting connections or
@@ -91,6 +95,7 @@ export class WorldSource {
 			( await Promise.all( listed.map( ( id ) => this.#loadBuilding( id, manifest.floors[ id ], interiors.has( id ) ) ) ) )
 				.map( ( building ) => [ building.parcelId, building ] )
 		);
+		const quests = await this.#quests( game );
 
 		return {
 			atlas,
@@ -101,9 +106,44 @@ export class WorldSource {
 			game,
 			// The naming box's typed set for this world, when the out dir carries one.
 			npcTypes: await this.#json( `${this.outBase}/${NPC_TYPES_FILE}` ).catch( () => null ),
-			questlines: await this.#json( `${this.outBase}/${QUESTLINES_FILE}` ).catch( () => [] ),
-			investigations: await this.#optionalJson( `${this.outBase}/${INVESTIGATIONS_FILE}`, [] ),
+			...quests,
 			unbuilt: [ ...known ].filter( ( id ) => ! buildings.has( id ) )
+		};
+
+	}
+
+	/** Loads a v1.0 bundle atomically, with a legacy questline fallback for older worlds. */
+	async #quests( game ) {
+
+		const reference = game?.questBundle?.uri ?? null;
+		const manifestUri = reference?.endsWith( '/quest-bundle.json' ) || reference === 'quest-bundle.json'
+			? reference
+			: reference ? null : QUEST_BUNDLE_FILE;
+		const manifest = manifestUri
+			? ( reference ? await this.#json( `${this.outBase}/${manifestUri}` ) : await this.#optionalJson( `${this.outBase}/${manifestUri}`, null ) )
+			: null;
+
+		if ( manifest ) {
+
+			const checked = questBundleManifest( manifest );
+			const slash = manifestUri.lastIndexOf( '/' );
+			const directory = slash < 0 ? '' : manifestUri.slice( 0, slash + 1 );
+			const catalogs = Object.fromEntries( await Promise.all( QUEST_BUNDLE_CATALOGS.map( async ( name ) => [
+				name, await this.#json( `${this.outBase}/${directory}${checked.files[ name ]}` )
+			] ) ) );
+			const complete = questBundle( checked, catalogs );
+			return { questBundle: complete, ...catalogs };
+
+		}
+
+		const questlinesUri = reference ?? QUESTLINES_FILE;
+		return {
+			questBundle: null,
+			questlines: await this.#optionalJson( `${this.outBase}/${questlinesUri}`, [] ),
+			objectives: [],
+			investigations: await this.#optionalJson( `${this.outBase}/${INVESTIGATIONS_FILE}`, [] ),
+			missionAssetRequests: [],
+			missionItemBindings: []
 		};
 
 	}

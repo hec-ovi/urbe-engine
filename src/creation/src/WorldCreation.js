@@ -3,6 +3,9 @@ import { createHash } from 'node:crypto';
 import { cp, lstat, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createLibrary, LibraryError } from '../../library/index.js';
+import {
+	QUEST_BUNDLE_CATALOGS, questBundle, questBundleManifest, selectQuestBundle
+} from '../../quest-bundle/index.js';
 import { Boundary } from './Boundary.js';
 import { CreationError } from './CreationError.js';
 
@@ -98,8 +101,8 @@ export class WorldCreation {
 
 			await cp( join( this.outDir, 'cities', city.id ), world, { recursive: true } );
 			await rm( join( world, 'city.json' ), { force: true } );
-			const definitions = await this.#materialize( city, world );
-			const required = questParcelIds( definitions );
+			const handoff = await this.#materialize( city, world );
+			const required = questParcelIds( handoff.questlines );
 			let selected;
 			if ( input.mode === 'manual' ) selected = input.buildingIds;
 			else {
@@ -172,15 +175,19 @@ export class WorldCreation {
 			throw new CreationError( 'E_STAGE_MISMATCH', 'quest input does not match the current interior stage' );
 
 		}
-		const all = await json( join( draftDir, 'quests', 'all.questlines.json' ), 'materialized quest set' );
-		const definitions = all.slice( 0, 1 + input.sideJobs );
+		const questsDir = join( draftDir, 'quests' );
+		const all = await readQuestBundle( questsDir, 'materialized quest bundle' );
+		const definitions = all.questlines.slice( 0, 1 + input.sideJobs );
 		const missing = questParcelIds( definitions ).filter( ( id ) => ! input.interiorIds.includes( id ) );
 		if ( missing.length ) {
 
 			throw new CreationError( 'E_QUEST_LOCATIONS', `quests need interiors not selected in stage 2: ${missing.join( ', ' )}` );
 
 		}
-		await writeJson( join( draftDir, 'quests', 'questlines.json' ), definitions );
+		const selected = bundleOperation( () => selectQuestBundle(
+			all, definitions.map( ( definition ) => definition.id )
+		), 'materialized quest bundle selection' );
+		await writeQuestBundle( questsDir, selected );
 		const questId = `${input.cityId}-quests-${input.sideJobs}`;
 		await writeJson( join( draftDir, 'draft.json' ), { ...draft, questId } );
 		const result = { id: questId, mainSteps: definitions[ 0 ].steps.length, sideJobs: definitions.length - 1 };
@@ -207,6 +214,7 @@ export class WorldCreation {
 
 			await cp( join( this.outDir, 'drafts', city.id ), world, { recursive: true } );
 			await rm( join( world, 'quests', 'all.questlines.json' ), { force: true } );
+			await rm( join( world, 'quests', 'questlines.meta.json' ), { force: true } );
 			await rm( join( world, 'draft.json' ), { force: true } );
 			const atlas = await json( join( world, 'blueprint.json' ), 'game blueprint' );
 			const manifest = await json( join( world, 'manifest.json' ), 'game manifest' );
@@ -215,7 +223,7 @@ export class WorldCreation {
 				throw new CreationError( 'E_OUTPUT_INVALID', 'game manifest does not match the interior stage' );
 
 			}
-			const definitions = await json( join( world, 'quests', 'questlines.json' ), 'game quest set' );
+			const definitions = ( await readQuestBundle( join( world, 'quests' ), 'game quest bundle' ) ).questlines;
 			await mkdir( join( this.outDir, 'games' ), { recursive: true } );
 			await rename( world, target );
 			const game = await gameDescriptor( target, city, atlas, manifest, definitions, this.clock() );
@@ -250,7 +258,7 @@ export class WorldCreation {
 			'run', 'materialize', '--', join( this.questsRoot, RECORDING ), city.size,
 			join( world, 'blueprint.json' ), types, output
 		], { cwd: this.questsRoot } );
-		return json( output, 'materialized quest set' );
+		return readQuestBundle( questsDir, 'materialized quest bundle' );
 
 	}
 
@@ -364,7 +372,7 @@ async function gameDescriptor( root, city, atlas, manifest, definitions, now ) {
 	return {
 		contractVersion: '1.0.0', id: city.id, name: `${city.name} Game`, cityId: city.id, size: city.size,
 		theme: 'cyberpunk', selectedInteriors: manifest.interiors,
-		questBundle: await resource( root, 'quests/questlines.json', 'application/json' ),
+		questBundle: await resource( root, 'quests/quest-bundle.json', 'application/json' ),
 		quests: progress.slice( 0, 1 ), sideJobs: progress.slice( 1 ),
 		player: { position: current.position, heading: current.heading, inventory: [] },
 		currentLocation: current.location,
@@ -452,6 +460,40 @@ async function json( path, label ) {
 function writeJson( path, value ) {
 
 	return writeFile( path, JSON.stringify( value, null, 2 ) + '\n' );
+
+}
+
+async function readQuestBundle( directory, label ) {
+
+	const manifest = await json( join( directory, 'quest-bundle.json' ), `${label} manifest` );
+	const checked = bundleOperation( () => questBundleManifest( manifest ), `${label} manifest` );
+	const catalogs = Object.fromEntries( await Promise.all( QUEST_BUNDLE_CATALOGS.map( async ( name ) => [
+		name, await json( join( directory, checked.files[ name ] ), `${label} ${name}` )
+	] ) ) );
+	return bundleOperation( () => questBundle( checked, catalogs ), label );
+
+}
+
+async function writeQuestBundle( directory, bundle ) {
+
+	await Promise.all( QUEST_BUNDLE_CATALOGS.map( ( name ) =>
+		writeJson( join( directory, bundle.manifest.files[ name ] ), bundle[ name ] )
+	) );
+	await writeJson( join( directory, 'quest-bundle.json' ), bundle.manifest );
+
+}
+
+function bundleOperation( operation, label ) {
+
+	try {
+
+		return operation();
+
+	} catch ( error ) {
+
+		throw new CreationError( 'E_OUTPUT_INVALID', `${label} is invalid: ${error.message}` );
+
+	}
 
 }
 

@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { QuestGameplay, questGameplayWorld } from './QuestGameplay.js';
 import { QuestActionError } from './QuestActionError.js';
+import { MissionItemAssets } from './MissionItemAssets.js';
+import { Physics } from '../physics/Physics.js';
 
 const FEET = new THREE.Vector3( 0, 0, 0 );
 const EYE = new THREE.Vector3( 0, 1.7, 0 );
@@ -31,6 +33,48 @@ describe( 'live quest target projection', () => {
 		actions.perform.mockReturnValueOnce( result( 'take', [ { targetKey: target.targetKey, state: 'collected' } ] ) );
 		gameplay.perform( perform( candidate ) );
 		expect( gameplay.group.children ).toHaveLength( 0 );
+
+	} );
+
+	it( 'renders and collides the exact bound assembly without letting it occlude its own interaction', async () => {
+
+		const physics = await Physics.create();
+		const factory = { build: vi.fn( ( key, variantId ) => new THREE.MeshStandardMaterial( { name: `${key}#${variantId}` } ) ) };
+		const target = questTarget( 'pickup', [ action( 'take', 'Take' ) ] );
+		const actions = fakeActions( target );
+		const missionItems = missionItemAssets();
+		const assembly = missionItems.get( 'q', 'item.case' );
+		const gameplay = setup( actions, { physics, playerCollider: null, materialFactory: factory, missionItems } );
+		const candidate = gameplay.candidates( frame( pointLook( 0, MISSION_REQUEST.dimensions.height * 0.65, - 2 ) ) )[ 0 ];
+		const mark = gameplay.staticMarks.get( target.targetKey );
+		const shell = mark.getObjectByName( `${MISSION_REQUEST.assetId}:lower-cover` );
+
+		expect( mark.userData.assetId ).toBe( MISSION_REQUEST.assetId );
+		expect( shell.geometry.parameters ).toMatchObject( {
+			width: assembly.geometry.primitives[ 0 ].size.width,
+			height: assembly.geometry.primitives[ 0 ].size.height,
+			depth: assembly.geometry.primitives[ 0 ].size.depth
+		} );
+		expect( factory.build ).toHaveBeenCalledWith( 'cyberpunk/fabric/mid', 'flat' );
+		expect( candidate.interaction.targetKey ).toBe( target.targetKey );
+
+		physics.world.step();
+		const ray = new physics.rapier.Ray( { x: 0, y: 0.001, z: 0 }, { x: 0, y: 0, z: -1 } );
+		expect( physics.world.castRay( ray, 3, true ) ).not.toBe( null );
+
+		actions.perform.mockReturnValueOnce( result( 'take', [ { targetKey: target.targetKey, state: 'collected' } ] ) );
+		gameplay.perform( perform( candidate ) );
+		expect( physics.world.castRay( ray, 3, true ) ).toBe( null );
+
+	} );
+
+	it( 'does not advertise a pickup that has no exact mission item binding', () => {
+
+		const target = questTarget( 'pickup', [ action( 'take', 'Take' ) ] );
+		const gameplay = setup( fakeActions( target ), { missionItems: { get: () => null } } );
+
+		expect( gameplay.candidates( frame( pointLook( 0, 0.2, - 2 ) ) ) ).toEqual( [] );
+		expect( gameplay.staticMarks.has( target.targetKey ) ).toBe( false );
 
 	} );
 
@@ -224,7 +268,8 @@ describe( 'explicit quest NPC control', () => {
 } );
 
 function setup( actions, {
-	crowd = { questMember: () => null }, blocked = false, session = null, continuity = null, animations = null
+	crowd = { questMember: () => null }, blocked = false, session = null, continuity = null, animations = null,
+	physics = null, playerCollider = {}, materialFactory = null, missionItems = missionItemAssets()
 } = {} ) {
 
 	class Ray {
@@ -237,9 +282,10 @@ function setup( actions, {
 		actions, session, continuity, animations,
 		world: { parcels: [ { id: 'p9', anchor: [ 0, 0, - 2 ] } ] },
 		crowd,
-		physics: { rapier: { Ray }, world: { castRay: () => blocked ? { toi: 0.5 } : null } },
-		playerCollider: {},
-		materialFactory: { build: () => new THREE.MeshStandardMaterial( { color: 0x223344 } ) }
+		physics: physics ?? { rapier: { Ray }, world: { castRay: () => blocked ? { toi: 0.5 } : null } },
+		playerCollider,
+		materialFactory: materialFactory ?? { build: () => new THREE.MeshStandardMaterial( { color: 0x223344 } ) },
+		missionItems
 	} );
 
 }
@@ -264,9 +310,31 @@ function questTarget( kind, actions, place = PARCEL ) {
 
 	return {
 		targetKey: `quest:q:${kind}`, questId: 'q', stepId: kind, kind, place, actorIds: [],
+		...( kind === 'pickup' ? { item: { id: 'item.case', name: 'Case file', description: 'Evidence', kind: 'document', quantity: 1 } } : {} ),
 		presentation: { name: `target ${kind}`, description: `${kind} target`, icon: kind, highlight: 'area-marker', actions },
 		availability: { available: true }
 	};
+
+}
+
+const MISSION_CATALOG = {
+	contractVersion: '1.0', entries: [ { key: 'cyberpunk/fabric/mid', variants: [ 'flat' ] } ]
+};
+const MISSION_REQUEST = {
+	contractVersion: '1.0', assetId: 'asset.case-file', purpose: 'Case file', family: 'document',
+	dimensions: { width: 0.24, height: 0.018, depth: 0.32 },
+	materials: [ { slot: 'surface', key: 'cyberpunk/fabric/mid', variantId: 'flat' } ],
+	requiredInteractions: [ 'inspect', 'read', 'take' ],
+	clearance: { approachDepth: 1, sideMargin: 0.3, overhead: 0.2 }, seed: 8
+};
+
+function missionItemAssets() {
+
+	return new MissionItemAssets( {
+		requests: [ MISSION_REQUEST ],
+		bindings: [ { questId: 'q', itemId: 'item.case', assetId: MISSION_REQUEST.assetId } ],
+		materialCatalog: MISSION_CATALOG
+	} );
 
 }
 

@@ -77,7 +77,8 @@ export class QuestActions {
 				kind: step.target.kind,
 				title: definition.title,
 				text: step.narrative.playerHint,
-				place: runtime.stepPlace( step.stepId, query.timeMin ) ?? null
+				place: runtime.stepPlace( step.stepId, query.timeMin ) ?? null,
+				guidance: runtime.stepGuidance( step.stepId, query.timeMin )
 			} );
 
 		}

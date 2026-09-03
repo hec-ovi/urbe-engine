@@ -48,6 +48,7 @@ describe( 'playable world creation contract', () => {
 		} );
 		expect( game ).toMatchObject( {
 			id: 'canal-ward', cityId: 'canal-ward', selectedInteriors: instances.ids,
+			questBundle: { uri: 'quests/quest-bundle.json', mediaType: 'application/json' },
 			quests: [ { id: 'main-line', state: 'active', totalSteps: 10 } ],
 			sideJobs: [
 				{ id: 'side-one', state: 'available', totalSteps: 5 },
@@ -57,7 +58,15 @@ describe( 'playable world creation contract', () => {
 			save: { revision: 1, playTimeSeconds: 0, createdAt: NOW.toISOString() }
 		} );
 		expect( await readJson( join( fixture.config.outDir, 'games/canal-ward/game.json' ) ) ).toEqual( game );
+		const bundleDir = join( fixture.config.outDir, 'games/canal-ward/quests' );
+		expect( await readJson( join( bundleDir, 'quest-bundle.json' ) ) ).toMatchObject( {
+			files: { questlines: 'questlines.json' },
+			counts: { questlines: 4, objectives: 25, investigations: 0, missionAssetRequests: 4, missionItemBindings: 4 }
+		} );
+		expect( await readJson( join( bundleDir, 'mission-item-bindings.json' ) ) ).toHaveLength( 4 );
 		await expect( readFile( join( fixture.config.outDir, 'games/canal-ward/draft.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+		await expect( readFile( join( bundleDir, 'all.questlines.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+		await expect( readFile( join( bundleDir, 'questlines.meta.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
 		expect( fixture.calls.map( ( call ) => call.kind ) ).toEqual( [ 'atlas', 'shells', 'materialize', 'interiors' ] );
 		expect( fixture.calls[ 0 ].args ).toEqual( expect.arrayContaining( [ '--size', '400', '--max-floors', '6', '--no-highways', '--no-trains', '--no-subways' ] ) );
 
@@ -135,7 +144,30 @@ function processPort( calls ) {
 		if ( args.includes( 'materialize' ) ) {
 
 			calls.push( { kind: 'materialize', command, args } );
-			await writeJson( args.at( -1 ), definitions() );
+			const output = args.at( -1 );
+			const questlines = definitions();
+			const objectives = questlines.flatMap( ( definition ) => definition.steps.map( ( step ) => ( {
+				questId: definition.id, stepId: step.stepId, action: step.target
+			} ) ) );
+			const missionAssetRequests = questlines.map( ( definition, index ) => missionRequest( definition.id, index ) );
+			const missionItemBindings = questlines.map( ( definition ) => ( {
+				questId: definition.id, itemId: `${definition.id}-item`, assetId: `asset.${definition.id}`
+			} ) );
+			const catalogs = { questlines, objectives, investigations: [], missionAssetRequests, missionItemBindings };
+			await writeJson( output, questlines );
+			await writeJson( join( dirname( output ), 'objectives.json' ), objectives );
+			await writeJson( join( dirname( output ), 'investigations.json' ), [] );
+			await writeJson( join( dirname( output ), 'mission-assets.json' ), missionAssetRequests );
+			await writeJson( join( dirname( output ), 'mission-item-bindings.json' ), missionItemBindings );
+			await writeJson( join( dirname( output ), 'quest-bundle.json' ), {
+				contractVersion: '1.0',
+				files: {
+					questlines: 'all.questlines.json', objectives: 'objectives.json', investigations: 'investigations.json',
+					missionAssetRequests: 'mission-assets.json', missionItemBindings: 'mission-item-bindings.json'
+				},
+				counts: Object.fromEntries( Object.entries( catalogs ).map( ( [ name, values ] ) => [ name, values.length ] ) )
+			} );
+			await writeJson( join( dirname( output ), 'questlines.meta.json' ), { generated: true } );
 			return '';
 
 		}
@@ -193,12 +225,24 @@ function definitions() {
 function quest( id, title, count, locations ) {
 
 	return {
-		id, title, premise: `${ title } premise`,
+		id, title, premise: `${ title } premise`, items: [ { itemId: `${id}-item` } ],
 		steps: Array.from( { length: count }, ( _, index ) => ( {
-			id: `${ id}-step-${ index + 1 }`,
+			stepId: `${ id}-step-${ index + 1 }`,
 			narrative: { playerHint: `${ title } objective ${ index + 1 }` },
 			target: { parcelId: locations[ index % locations.length ] }
 		} ) )
+	};
+
+}
+
+function missionRequest( questId, seed ) {
+
+	return {
+		contractVersion: '1.0', assetId: `asset.${questId}`, purpose: `Physical item for ${questId}`, family: 'document',
+		dimensions: { width: 0.2, height: 0.01, depth: 0.3 },
+		materials: [ { slot: 'surface', key: 'cyberpunk/fabric/mid', variantId: 'paper' } ],
+		requiredInteractions: [ 'inspect', 'read', 'take' ],
+		clearance: { approachDepth: 0.8, sideMargin: 0.2, overhead: 0.1 }, seed
 	};
 
 }

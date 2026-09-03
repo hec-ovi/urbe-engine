@@ -9,7 +9,7 @@
       "additionalProperties": false,
       "required": ["kind", "id"],
       "properties": {
-        "kind": { "enum": ["parcel", "district", "edge", "stop", "route"] },
+        "kind": { "enum": ["parcel", "district", "station", "edge", "stop", "route"] },
         "id": { "$ref": "#/$defs/id" }
       }
     },

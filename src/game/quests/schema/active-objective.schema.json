@@ -6,7 +6,7 @@
     {
       "type": "object",
       "additionalProperties": false,
-      "required": ["targetKey", "questId", "stepId", "kind", "title", "text", "place"],
+      "required": ["targetKey", "questId", "stepId", "kind", "title", "text", "place", "guidance"],
       "properties": {
         "targetKey": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
         "questId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
@@ -18,6 +18,40 @@
           "oneOf": [
             { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/place" },
             { "type": "null" }
+          ]
+        },
+        "guidance": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["questId", "stepId", "place", "destination"],
+              "properties": {
+                "questId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+                "stepId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+                "place": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/place" },
+                "destination": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "id"],
+                  "properties": {
+                    "kind": { "enum": ["parcel", "station", "stop"] },
+                    "id": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["questId", "stepId", "reason"],
+              "properties": {
+                "questId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+                "stepId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+                "place": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/place" },
+                "reason": { "enum": ["target-unavailable", "district-area", "street-edge", "moving-route"] }
+              }
+            }
           ]
         }
       }

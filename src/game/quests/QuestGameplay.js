@@ -14,7 +14,10 @@ const CHEST = 1.3;
  */
 export class QuestGameplay {
 
-	constructor( { session, actions, world, crowd, physics, playerCollider, materialFactory, continuity = null, animations = null } ) {
+	constructor( {
+		session, actions, world, crowd, physics, playerCollider, materialFactory, missionItems,
+		continuity = null, animations = null
+	} ) {
 
 		this.boundary = new QuestActionBoundary();
 		this.boundary.input( 'gameplay-world', world );
@@ -26,10 +29,12 @@ export class QuestGameplay {
 		this.physics = physics;
 		this.playerCollider = playerCollider;
 		this.materialFactory = materialFactory;
+		this.missionItems = missionItems;
 		this.group = new THREE.Group();
 		this.group.name = 'quest-targets';
 		this.anchors = new Map( world.parcels.map( ( parcel ) => [ parcel.id, new THREE.Vector3( ...parcel.anchor ) ] ) );
 		this.staticMarks = new Map();
+		this.targetColliders = new Map();
 		this.actorMarks = new Map();
 		this.changedTargets = new Set();
 		this.liveInteractions = new Map();
@@ -254,20 +259,26 @@ export class QuestGameplay {
 		const distance = feet.distanceTo( distancePoint );
 		const aim = aimAt( eye, look, point );
 		if ( distance > reach || aim < MIN_AIM || ! atPlace( playerPlaces, target.place ) ) return null;
-		if ( ! this.#clear( eye, point ) ) return null;
+		if ( ! this.#clear( eye, point, target.targetKey ) ) return null;
 
 		return interaction( target, playerPlaces, aim, { visible: true, unobstructed: true, distanceMeters: distance }, members );
 
 	}
 
-	#clear( from, to ) {
+	#clear( from, to, targetKey = null ) {
 
 		if ( ! this.physics?.world?.castRay || ! this.physics.rapier?.Ray ) return true;
 		const delta = to.clone().sub( from );
 		const distance = delta.length();
 		if ( distance <= 0.25 ) return true;
 		const ray = new this.physics.rapier.Ray( from, delta.multiplyScalar( 1 / distance ) );
-		return ! this.physics.world.castRay( ray, distance - 0.25, true, undefined, undefined, this.playerCollider );
+		const targetHandles = new Set(
+			( this.targetColliders.get( targetKey ) ?? [] ).map( ( handle ) => handle.collider.handle )
+		);
+		return ! this.physics.world.castRay(
+			ray, distance - 0.25, true, undefined, undefined, this.playerCollider, undefined,
+			( collider ) => ! targetHandles.has( collider.handle )
+		);
 
 	}
 
@@ -282,9 +293,14 @@ export class QuestGameplay {
 			if ( this.staticMarks.has( target.targetKey ) || this.changedTargets.has( target.targetKey ) ) continue;
 			const anchor = this.anchors.get( target.place.id );
 			if ( ! anchor ) continue;
-			const mark = target.kind === 'pickup' ? pickupMark( target, anchor, this.materialFactory ) : areaMark( target, anchor );
+			const assembly = target.kind === 'pickup' ? this.missionItems?.get( target.questId, target.item?.id ) : null;
+			if ( target.kind === 'pickup' && ( ! assembly?.portable || ! anchorFor( assembly, 'take' ) ) ) continue;
+			const mark = target.kind === 'pickup'
+				? pickupMark( target, anchor, assembly, this.materialFactory )
+				: areaMark( target, anchor );
 			this.staticMarks.set( target.targetKey, mark );
 			this.group.add( mark );
+			if ( assembly ) this.#collide( target.targetKey, assembly, anchor );
 
 		}
 
@@ -350,6 +366,40 @@ export class QuestGameplay {
 
 		}
 		collection.delete( key );
+		for ( const handle of this.targetColliders.get( key ) ?? [] ) this.physics?.remove?.( handle );
+		this.targetColliders.delete( key );
+
+	}
+
+	#collide( targetKey, assembly, anchor ) {
+
+		if ( ! this.physics?.addTrimesh ) return;
+		const handles = [];
+		try {
+
+			for ( const primitive of assembly.geometry.primitives ) {
+
+				const geometry = primitiveGeometry( primitive );
+				geometry.translate( anchor.x, anchor.y, anchor.z );
+				try {
+
+					handles.push( this.physics.addTrimesh( geometry ) );
+
+				} finally {
+
+					geometry.dispose();
+
+				}
+
+			}
+			this.targetColliders.set( targetKey, handles );
+
+		} catch ( error ) {
+
+			for ( const handle of handles ) this.physics.remove?.( handle );
+			throw error;
+
+		}
 
 	}
 
@@ -429,31 +479,74 @@ export function questGameplayWorld( atlas, doors, boundary = new QuestActionBoun
 
 }
 
-function pickupMark( target, anchor, materialFactory ) {
+function pickupMark( target, anchor, assembly, materialFactory ) {
 
 	const group = new THREE.Group();
-	const bodyGeometry = new THREE.BoxGeometry( 0.48, 0.22, 0.34 );
-	const body = new THREE.Mesh( bodyGeometry, materialFactory.build( 'cyberpunk/metal/mid' ) );
-	body.position.y = 0.2;
-	const outline = new THREE.LineSegments(
-		new THREE.EdgesGeometry( bodyGeometry ),
-		new THREE.LineBasicMaterial( { color: 0x69f4ff } )
-	);
-	outline.position.copy( body.position );
+	const materials = new Map( assembly.materials.map( ( assignment ) => {
+
+		const material = materialFactory.build( assignment.key, assignment.variantId );
+		if ( ! material || material.name?.startsWith( 'unresolved:' ) ) {
+
+			throw new Error( `mission item material ${assignment.key}#${assignment.variantId} is unavailable` );
+
+		}
+		return [ assignment.slot, material ];
+
+	} ) );
+	for ( const primitive of assembly.geometry.primitives ) {
+
+		const geometry = primitiveGeometry( primitive );
+		const mesh = new THREE.Mesh( geometry, materials.get( primitive.materialSlot ) );
+		mesh.name = `${assembly.assetId}:${primitive.primitiveId}`;
+		mesh.castShadow = true;
+		mesh.receiveShadow = true;
+		const outline = new THREE.LineSegments(
+			new THREE.EdgesGeometry( geometry ),
+			new THREE.LineBasicMaterial( { color: 0x69f4ff } )
+		);
+		outline.position.copy( mesh.position );
+		group.add( mesh, outline );
+
+	}
 	const icon = new THREE.Mesh(
 		new THREE.OctahedronGeometry( 0.16 ),
 		new THREE.MeshBasicMaterial( { color: 0xff5fa8 } )
 	);
-	icon.position.y = 0.85;
-	group.add( body, outline, icon );
+	icon.position.y = assembly.dimensions.height + 0.45;
+	group.add( icon );
 	group.position.copy( anchor );
 	group.name = `quest-target:${target.targetKey}`;
+	const focusAnchor = anchorFor( assembly, 'take' );
 	group.userData = {
 		targetKey: target.targetKey,
 		kind: target.kind,
-		focusPoint: anchor.clone().add( new THREE.Vector3( 0, 0.2, 0 ) )
+		assetId: assembly.assetId,
+		focusPoint: anchor.clone().add( vector( focusAnchor.position ) )
 	};
 	return group;
+
+}
+
+function primitiveGeometry( primitive ) {
+
+	const geometry = new THREE.BoxGeometry( primitive.size.width, primitive.size.height, primitive.size.depth );
+	geometry.rotateX( primitive.rotationRadians.x );
+	geometry.rotateY( primitive.rotationRadians.y );
+	geometry.rotateZ( primitive.rotationRadians.z );
+	geometry.translate( primitive.position.x, primitive.position.y, primitive.position.z );
+	return geometry;
+
+}
+
+function anchorFor( assembly, interactionId ) {
+
+	return assembly.interactionAnchors.find( ( anchor ) => anchor.interaction === interactionId ) ?? null;
+
+}
+
+function vector( value ) {
+
+	return new THREE.Vector3( value.x, value.y, value.z );
 
 }
 
