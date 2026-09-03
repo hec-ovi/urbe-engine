@@ -77,6 +77,27 @@ describe( 'GroundBuilder', () => {
 
 	} );
 
+	it( 'includes Atlas highway decks and supports in the visible and solid ground', () => {
+
+		const highwayStructures = [ {
+			edgeIds: [ 'e0' ], path: [ [ 0, 5 ], [ 20, 5 ] ], width: 6, level: 8,
+			deckThickness: 1, ramps: { start: 0, end: 0 },
+			elevationProfile: [ { distance: 0, level: 8 }, { distance: 20, level: 8 } ],
+			supports: [ {
+				position: [ 10, 5 ], footprint: [ [ 9, 4 ], [ 11, 4 ], [ 11, 6 ], [ 9, 6 ] ],
+				bottom: 0, top: 7
+			} ]
+		} ];
+		const built = new GroundBuilder( {
+			volumetric: { ground: [ ROAD ] }, streets: { highwayStructures }
+		}, factory ).build();
+
+		expect( built.group.getObjectByName( 'highway:roadway' ) ).toBeDefined();
+		expect( built.group.getObjectByName( 'highway:structure' ) ).toBeDefined();
+		expect( span( built.colliderGeometry )[ 1 ] ).toBe( 8 );
+
+	} );
+
 } );
 
 const bedrockY = ( group ) => round( group.getObjectByName( 'ground:bedrock' ).geometry.getAttribute( 'position' ).getY( 0 ) );

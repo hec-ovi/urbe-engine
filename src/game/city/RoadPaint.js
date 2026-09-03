@@ -18,7 +18,8 @@ export function paintMaterial() {
 }
 
 /**
- * A flat marking following a 2D polyline, facing +Y.
+ * A marking following a 2D [x,z] or 3D [x,y,z] polyline. On a 3D lane, `y`
+ * is clearance above the authored surface rather than an absolute height.
  * @param options.offset metres to the left of the line, in travel direction
  * @param options.width paint width
  * @param options.dash painted run in metres; 0 draws a solid line
@@ -34,16 +35,18 @@ export function stripe( path, { offset = 0, width, y = PAINT_Y, dash = 0, gap = 
 
 	for ( let i = 0; i < path.length - 1; i ++ ) {
 
-		const [ ax, az ] = path[ i ];
-		const [ bx, bz ] = path[ i + 1 ];
+		const [ ax, ay, az ] = point3( path[ i ] );
+		const [ bx, by, bz ] = point3( path[ i + 1 ] );
 		const dx = bx - ax;
+		const dy = by - ay;
 		const dz = bz - az;
-		const length = Math.hypot( dx, dz );
+		const planar = Math.hypot( dx, dz );
+		const length = Math.hypot( dx, dy, dz );
 
-		if ( length < 1e-6 ) continue;
+		if ( length < 1e-6 || planar < 1e-6 ) continue;
 
-		const ux = dx / length;
-		const uz = dz / length;
+		const ux = dx / planar;
+		const uz = dz / planar;
 		// Connections' own left: lane index 0 is the rightmost of its direction
 		// and its left neighbour sits this way.
 		const lx = - uz;
@@ -51,18 +54,22 @@ export function stripe( path, { offset = 0, width, y = PAINT_Y, dash = 0, gap = 
 
 		for ( const [ from, to ] of painted( travelled, length, dash, period ) ) {
 
-			const sx = ax + ux * from + lx * offset;
-			const sz = az + uz * from + lz * offset;
-			const ex = ax + ux * to + lx * offset;
-			const ez = az + uz * to + lz * offset;
+			const start = from / length;
+			const end = to / length;
+			const sx = ax + dx * start + lx * offset;
+			const sy = ay + dy * start + y;
+			const sz = az + dz * start + lz * offset;
+			const ex = ax + dx * end + lx * offset;
+			const ey = ay + dy * end + y;
+			const ez = az + dz * end + lz * offset;
 			const nx = lx * half;
 			const nz = lz * half;
 
 			// Wound so the face looks up: the left-hand offset above puts the
 			// other order's normal into the ground, where nothing can see it.
 			positions.push(
-				sx + nx, y, sz + nz, ex - nx, y, ez - nz, sx - nx, y, sz - nz,
-				sx + nx, y, sz + nz, ex + nx, y, ez + nz, ex - nx, y, ez - nz
+				sx + nx, sy, sz + nz, ex - nx, ey, ez - nz, sx - nx, sy, sz - nz,
+				sx + nx, sy, sz + nz, ex + nx, ey, ez + nz, ex - nx, ey, ez - nz
 			);
 
 		}
@@ -78,6 +85,12 @@ export function stripe( path, { offset = 0, width, y = PAINT_Y, dash = 0, gap = 
 	geometry.computeVertexNormals();
 
 	return geometry;
+
+}
+
+function point3( point ) {
+
+	return point.length === 3 ? point : [ point[ 0 ], 0, point[ 1 ] ];
 
 }
 

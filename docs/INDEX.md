@@ -7,7 +7,7 @@
 
 - `src/game/`: the playable city (`?mode=game`); first-person controller on Rapier, night scene from the assembled GLBs, ground from the blueprint's cover polygons, neon and lit windows, simulation-driven crowd and lane-graph traffic, doors into continuous interiors (src/game/CONTRACT.md). Depends on ../atlas, ../connections, ../materials, ../simulation contracts.
   - `data/`: run config, world loading, signal state
-  - `ground/`: cover polygons to geometry, the blueprint's kerb strip where it publishes one and a kerb cut from the pavement edges where it does not
+  - `ground/`: cover polygons to geometry, highway ramps, decks and supports from Atlas dimensions and elevation knots, the published kerb strip and a kerb cut from pavement edges where no strip exists
   - `city/`: shells and doors, neon, lit windows, lamps, road paint and the painted crossings at every marked junction, interiors streamed a floor at a time from each floor's own GLB and cut into rooms, and which of them are in view
   - `links/`: bridges, AC tubes, tunnels and wires from the connections links, swept from centerline plus cross-section and sliced onto the exact carved apertures (src/game/links/CONTRACT.md)
   - `transit/`: bus stop shelters and signs, buses driven by the timetables' closed-form vehicle positions, station entrances and the shaft, passage and platform room behind each one (src/game/transit/CONTRACT.md)

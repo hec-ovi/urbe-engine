@@ -13,8 +13,8 @@ describe( 'LaneMarkings', () => {
 	// neighbour on lane a's left. Left of +x is +z in the connections frame.
 	const networks = {
 		road: { lanes: [
-			{ id: 'a', index: 0, width: 3, path: [ [ 0, 0 ], [ 30, 0 ] ], left: { laneId: 'b', change: true } },
-			{ id: 'b', index: 1, width: 3, path: [ [ 0, 3 ], [ 30, 3 ] ] }
+			{ id: 'a', index: 0, width: 3, path: [ [ 0, 0 ], [ 30, 0 ] ], path3: [ [ 0, 0, 0 ], [ 30, 0, 0 ] ], left: { laneId: 'b', change: true } },
+			{ id: 'b', index: 1, width: 3, path: [ [ 0, 3 ], [ 30, 3 ] ], path3: [ [ 0, 0, 3 ], [ 30, 0, 3 ] ] }
 		] } }
 	;
 
@@ -42,6 +42,34 @@ describe( 'LaneMarkings', () => {
 
 		// the lane line is dashed: 30 m of 3 m dash on a 9 m period is 4 dashes
 		expect( lines.get( 1.56 ) ).toBe( 12 );
+
+	} );
+
+	it( 'follows the authoritative lane elevation in every view', () => {
+
+		const ramp = { road: { lanes: [ {
+			id: 'ramp', index: 0, width: 3,
+			path: [ [ 0, 0 ], [ 30, 0 ] ], path3: [ [ 0, 0, 0 ], [ 30, 8, 0 ] ]
+		} ] } };
+
+		for ( const mode of [ 'paint', 'glow', 'debug' ] ) {
+
+			const position = new LaneMarkings( ramp, mode ).build().children[ 0 ].geometry.getAttribute( 'position' );
+			let high = - Infinity;
+
+			for ( let i = 0; i < position.count; i ++ ) high = Math.max( high, position.getY( i ) );
+
+			expect( high ).toBeCloseTo( 8 + ( mode === 'paint' ? 0.012 : mode === 'glow' ? 0.012 : 0.02 ) );
+
+		}
+
+	} );
+
+	it( 'refuses to paint a projected lane with no path3', () => {
+
+		const flat = { road: { lanes: [ { id: 'flat', index: 0, width: 3, path: [ [ 0, 0 ], [ 30, 0 ] ] } ] } };
+
+		expect( () => new LaneMarkings( flat ).build() ).toThrow( /E_MOVEMENT_PATH3: road lane flat\.path3/ );
 
 	} );
 

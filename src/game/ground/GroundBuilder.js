@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { fill, skirt, ringBounds, ledge, Roadway, signedArea } from './Polygons.js';
 import { holesWithin, shaftMouths, stationDepth } from './Stations.js';
+import { Highways } from './Highways.js';
 
 export const SIDEWALK_HEIGHT = 0.12;
 const CURB_BOTTOM = - 0.06;
@@ -118,6 +119,10 @@ export class GroundBuilder {
 			solid.push( merged );
 
 		}
+
+		const highways = new Highways( this.atlas, this.factory ).build();
+		group.add( highways.group );
+		if ( highways.colliderGeometry ) solid.push( highways.colliderGeometry );
 
 		const bounds = ringBounds( this.atlas.volumetric.ground.map( ( g ) => g.polygon ) );
 		// Deep enough to be under the deepest thing the city digs, so a station

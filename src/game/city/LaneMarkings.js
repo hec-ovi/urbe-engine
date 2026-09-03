@@ -60,10 +60,11 @@ export class LaneMarkings {
 		for ( const lane of this.networks.road.lanes ) {
 
 			const half = lane.width / 2;
+			const path = path3( lane );
 
 			stripes.push( lane.left
-				? stripe( lane.path, { offset: half, width: PAINT_WIDTH, y: PAINT_Y, dash: DASH, gap: DASH_GAP } )
-				: stripe( lane.path, { offset: half - CENTRE_INSET, width: PAINT_WIDTH, y: PAINT_Y } ) );
+				? stripe( path, { offset: half, width: PAINT_WIDTH, y: PAINT_Y, dash: DASH, gap: DASH_GAP } )
+				: stripe( path, { offset: half - CENTRE_INSET, width: PAINT_WIDTH, y: PAINT_Y } ) );
 
 		}
 
@@ -79,7 +80,7 @@ export class LaneMarkings {
 	#glow( group ) {
 
 		const strips = this.networks.road.lanes
-			.map( ( lane ) => stripe( lane.path, { width: GLOW_WIDTH, y: GLOW_Y } ) )
+			.map( ( lane ) => stripe( path3( lane ), { width: GLOW_WIDTH, y: GLOW_Y } ) )
 			.filter( ( geometry ) => geometry !== null );
 
 		if ( ! strips.length ) return;
@@ -100,8 +101,9 @@ export class LaneMarkings {
 		for ( const lane of this.networks.road.lanes ) {
 
 			const channel = lane.index % 2;
-			const core = stripe( lane.path, { width: DEBUG_CORE_WIDTH, y: DEBUG_CORE_Y } );
-			const bloom = stripe( lane.path, { width: DEBUG_BLOOM_WIDTH, y: DEBUG_BLOOM_Y } );
+			const path = path3( lane );
+			const core = stripe( path, { width: DEBUG_CORE_WIDTH, y: DEBUG_CORE_Y } );
+			const bloom = stripe( path, { width: DEBUG_BLOOM_WIDTH, y: DEBUG_BLOOM_Y } );
 
 			if ( core ) cores[ channel ].push( core );
 			if ( bloom ) blooms[ channel ].push( bloom );
@@ -140,5 +142,20 @@ export class LaneMarkings {
 		}
 
 	}
+
+}
+
+function path3( lane ) {
+
+	if ( ! Array.isArray( lane.path3 ) || lane.path3.length < 2 || lane.path3.some( ( point ) =>
+		! Array.isArray( point ) || point.length !== 3 || point.some( ( value ) => ! Number.isFinite( value ) ) ) ) {
+
+		const error = new Error( `E_MOVEMENT_PATH3: road lane ${lane.id}.path3 must be an authoritative 3D path` );
+		error.code = 'E_MOVEMENT_PATH3';
+		throw error;
+
+	}
+
+	return lane.path3;
 
 }
