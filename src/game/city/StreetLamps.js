@@ -10,12 +10,20 @@ const POLE_HEIGHT = 6.4;
 const POLE_RADIUS = 0.085;
 /** The pole is tapered; the collider is one cylinder around its widest point. */
 const POLE_COLLIDER_RADIUS = 0.14;
-const ARM = 1.1;
+const BEND_RADIUS = 0.36;
+const ARM_REACH = 0.72;
+const HEAD_LENGTH = 1.65;
+const HEAD_WIDTH = 0.22;
+const HEAD_HEIGHT = 0.13;
+const LENS_SEGMENTS = 5;
+const LENS_LENGTH = 0.28;
+const LENS_WIDTH = 0.16;
+const LENS_GAP = 0.035;
 // A street luminaire, in the units three wants: luminous flux and the colour
-// temperature of the lamp inside it. 12000 lm at 3000 K is a mid-power sodium
-// head, which is what a street of this width carries.
+// temperature of the lamp inside it. 12000 lm at 3800 K is a neutral mid-power
+// LED head, which keeps concrete and road boundaries readable at night.
 const LAMP_LUMENS = 12000;
-const LAMP_KELVIN = 3000;
+const LAMP_KELVIN = 3800;
 const LAMP_RANGE = 26;
 const LENS_KEY = 'cyberpunk/light-fixture/mid';
 const POLE_KEY = 'cyberpunk/metal/rich';
@@ -120,6 +128,7 @@ export class StreetLamps {
 			group.add( new THREE.Mesh(
 				BufferGeometryUtils.mergeGeometries( lenses, false ),
 				this.factory.variant( LENS_KEY, {
+					variantId: 'panel',
 					emissiveLevel: LENS_EMISSIVE,
 					emissive: kelvinColor( LAMP_KELVIN )
 				} )
@@ -380,43 +389,118 @@ export class StreetLamps {
 	 */
 	#lamp( structure, lenses, glows, posts, { x, z, ax, az } ) {
 
-		const base = 0.12;
-		const facing = - Math.atan2( az, ax );
-
-		const pole = new THREE.CylinderGeometry( POLE_RADIUS, POLE_RADIUS * 1.5, POLE_HEIGHT, 6, 1 );
-		pole.translate( x, base + POLE_HEIGHT / 2, z );
-		structure.push( strip( pole ) );
-
-		const arm = new THREE.CylinderGeometry( POLE_RADIUS * 0.7, POLE_RADIUS * 0.7, ARM, 5, 1 );
-		arm.rotateZ( Math.PI / 2 );
-		arm.rotateY( facing );
-		arm.translate( x + ax * ARM / 2, base + POLE_HEIGHT - 0.1, z + az * ARM / 2 );
-		structure.push( strip( arm ) );
-
-		const hx = x + ax * ARM;
-		const hz = z + az * ARM;
-		const headY = base + POLE_HEIGHT - 0.24;
-
-		const housing = new THREE.BoxGeometry( 0.34, 0.16, 0.66 );
-		housing.rotateY( facing );
-		housing.translate( hx, headY, hz );
-		structure.push( strip( housing ) );
-
-		const lens = new THREE.BoxGeometry( 0.26, 0.05, 0.54 );
-		lens.rotateY( facing );
-		lens.translate( hx, headY - 0.1, hz );
-		lenses.push( strip( lens ) );
-
-		glows.push( {
-			position: new THREE.Vector3( hx, headY - 0.2, hz ),
-			color: kelvinColor( LAMP_KELVIN ),
-			lumens: LAMP_LUMENS,
-			range: LAMP_RANGE
-		} );
-
-		posts.push( { x, z, base, height: POLE_HEIGHT, radius: POLE_COLLIDER_RADIUS } );
+		const assembly = streetLampAssembly( { x, z, ax, az } );
+		structure.push( ...assembly.structure );
+		lenses.push( ...assembly.lenses );
+		glows.push( assembly.glow );
+		posts.push( assembly.post );
 
 	}
+
+}
+
+/**
+ * One complete overhead fixture in the local frame of the route it serves.
+ * The support bends from world up into `aim`; the housing and every diffuser
+ * segment use that same axis. Only the fitted underside faces emit.
+ */
+export function streetLampAssembly( { x, z, ax, az } ) {
+
+	const base = 0.12;
+	const aimLength = Math.hypot( ax, az ) || 1;
+	ax /= aimLength;
+	az /= aimLength;
+	const facing = - Math.atan2( az, ax );
+	const headY = base + POLE_HEIGHT - HEAD_HEIGHT / 2;
+	const straightHeight = POLE_HEIGHT - BEND_RADIUS - HEAD_HEIGHT / 2;
+	const structure = [];
+	const lenses = [];
+
+	const pole = new THREE.CylinderGeometry( POLE_RADIUS, POLE_RADIUS * 1.5, straightHeight, 8, 1 );
+	pole.translate( x, base + straightHeight / 2, z );
+	structure.push( strip( pole ) );
+
+	const bend = new THREE.TubeGeometry( new THREE.QuadraticBezierCurve3(
+		new THREE.Vector3( 0, base + straightHeight, 0 ),
+		new THREE.Vector3( 0, headY, 0 ),
+		new THREE.Vector3( BEND_RADIUS, headY, 0 )
+	), 8, POLE_RADIUS * 0.72, 6, false );
+	bend.rotateY( facing );
+	bend.translate( x, 0, z );
+	structure.push( strip( bend ) );
+
+	const armLength = ARM_REACH - BEND_RADIUS;
+	const arm = new THREE.CylinderGeometry( POLE_RADIUS * 0.72, POLE_RADIUS * 0.72, armLength, 6, 1 );
+	arm.rotateZ( Math.PI / 2 );
+	arm.rotateY( facing );
+	arm.translate(
+		x + ax * ( BEND_RADIUS + armLength / 2 ),
+		headY,
+		z + az * ( BEND_RADIUS + armLength / 2 )
+	);
+	structure.push( strip( arm ) );
+
+	// The socket enters the housing by half a segment. This is a fitted join,
+	// rather than the old compact head balanced across the arm at 90 degrees.
+	const headAlong = ARM_REACH + HEAD_LENGTH / 2 - LENS_LENGTH / 2;
+	const hx = x + ax * headAlong;
+	const hz = z + az * headAlong;
+	const housing = new THREE.BoxGeometry( HEAD_LENGTH, HEAD_HEIGHT, HEAD_WIDTH );
+	housing.rotateY( facing );
+	housing.translate( hx, headY, hz );
+	structure.push( strip( housing ) );
+
+	const lensRun = LENS_SEGMENTS * LENS_LENGTH + ( LENS_SEGMENTS - 1 ) * LENS_GAP;
+
+	for ( let i = 0; i < LENS_SEGMENTS; i ++ ) {
+
+		const offset = - lensRun / 2 + LENS_LENGTH / 2 + i * ( LENS_LENGTH + LENS_GAP );
+		const lens = new THREE.PlaneGeometry( LENS_LENGTH, LENS_WIDTH );
+		fixtureUv( lens );
+		// PlaneGeometry faces +Z. Rotate its face to -Y, then turn its long
+		// dimension from local +X into the route-facing aim.
+		lens.rotateX( Math.PI / 2 );
+		lens.rotateY( facing );
+		lens.translate( hx + ax * offset, headY - HEAD_HEIGHT / 2 - 0.001, hz + az * offset );
+		lenses.push( lens.toNonIndexed() );
+
+	}
+
+	const glow = {
+		position: new THREE.Vector3( hx, headY - HEAD_HEIGHT / 2 - 0.12, hz ),
+		color: kelvinColor( LAMP_KELVIN ),
+		lumens: LAMP_LUMENS,
+		range: LAMP_RANGE
+	};
+	const post = {
+		x, z, base, height: straightHeight, radius: POLE_COLLIDER_RADIUS,
+		head: {
+			center: new THREE.Vector3( hx, headY, hz ),
+			aim: new THREE.Vector3( ax, 0, az ),
+			length: HEAD_LENGTH,
+			width: HEAD_WIDTH,
+			underside: headY - HEAD_HEIGHT / 2
+		}
+	};
+
+	return { structure, lenses, glow, post };
+
+}
+
+/** One 0.16 x 0.28 material tile fitted to one 0.16 x 0.28 diffuser face. */
+function fixtureUv( geometry ) {
+
+	const uv = geometry.getAttribute( 'uv' );
+
+	for ( let i = 0; i < uv.count; i ++ ) {
+
+		const u = uv.getX( i );
+		const v = uv.getY( i );
+		uv.setXY( i, v * LENS_WIDTH, u * LENS_LENGTH );
+
+	}
+
+	return geometry;
 
 }
 

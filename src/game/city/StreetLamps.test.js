@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
+import * as THREE from 'three/webgpu';
 import { runConnections } from '../../assembly/connectionsRunner.js';
 import { pointInRing } from '../ground/Polygons.js';
-import { StreetLamps, WALL_LUMENS } from './StreetLamps.js';
+import { StreetLamps, WALL_LUMENS, streetLampAssembly } from './StreetLamps.js';
 
 const SAMPLE = new URL( '../../../../atlas/samples/city-urbe-small.json', import.meta.url );
 const MIN_GAP = 6;
@@ -124,7 +125,60 @@ describe( 'StreetLamps', () => {
 
 	} );
 
+	it( 'turns the complete long-head assembly with the served route', () => {
+
+		for ( const [ ax, az ] of [ [ 1, 0 ], [ 0, 1 ], [ - 1, 0 ], [ 0, - 1 ] ] ) {
+
+			const fixture = streetLampAssembly( { x: 4, z: 7, ax, az } );
+			const { head } = fixture.post;
+			const fromPost = head.center.clone().sub( new THREE.Vector3( 4, head.center.y, 7 ) );
+
+			expect( head.length ).toBeGreaterThan( 1.5 );
+			expect( fromPost.dot( head.aim ) ).toBeGreaterThan( 1.2 );
+			expect( Math.abs( fromPost.x * head.aim.z - fromPost.z * head.aim.x ) ).toBeLessThan( 1e-6 );
+			expect( fixture.glow.position.x ).toBeCloseTo( head.center.x, 6 );
+			expect( fixture.glow.position.z ).toBeCloseTo( head.center.z, 6 );
+
+			for ( const lens of fixture.lenses ) {
+
+				const normal = lens.getAttribute( 'normal' );
+				const position = lens.getAttribute( 'position' );
+				const uv = lens.getAttribute( 'uv' );
+
+				for ( let i = 0; i < normal.count; i ++ ) {
+
+					expect( normal.getY( i ) ).toBeCloseTo( - 1, 6 );
+					expect( position.getY( i ) ).toBeCloseTo( head.underside - 0.001, 6 );
+
+				}
+
+				expect( attributeSpan( uv, 'x' ) ).toBeCloseTo( 0.16, 6 );
+				expect( attributeSpan( uv, 'y' ) ).toBeCloseTo( 0.28, 6 );
+
+			}
+
+		}
+
+	} );
+
 } );
+
+function attributeSpan( attribute, component ) {
+
+	const get = component === 'x' ? ( i ) => attribute.getX( i ) : ( i ) => attribute.getY( i );
+	let min = Infinity;
+	let max = - Infinity;
+
+	for ( let i = 0; i < attribute.count; i ++ ) {
+
+		min = Math.min( min, get( i ) );
+		max = Math.max( max, get( i ) );
+
+	}
+
+	return max - min;
+
+}
 
 /**
  * Whether any fixture reaches a point, over a grid wider than the widest range
