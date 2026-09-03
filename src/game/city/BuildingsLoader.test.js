@@ -90,6 +90,50 @@ describe( 'building entrance availability', () => {
 
 	} );
 
+	it( 'preserves continuous strip geometry at representative authored door sizes', async () => {
+
+		const fixtureKey = 'cyberpunk/light-fixture/high_rich';
+		const dimensions = [ [ 3, 3.5 ], [ 4, 4.5 ], [ 5, 4 ] ];
+		const scenes = new Map( dimensions.map( ( [ width, height ], index ) => {
+
+			const scene = new THREE.Group();
+			stripFrame( scene, fixtureKey, index * 10, width, height );
+			return [ `/p${index}.glb`, scene ];
+
+		} ) );
+		const loader = { loadAsync: async ( url ) => ( { scene: scenes.get( url ) } ) };
+		const variant = vi.fn( ( key, options ) => Object.assign(
+			new THREE.MeshBasicMaterial(), { userData: { key, variantId: options.variantId } }
+		) );
+		const fixtureFactory = {
+			resolver: { resolve: () => ( { variants: [ { id: 'strip', class: 'exact' } ] } ) },
+			build: factory.build,
+			variant
+		};
+		const buildings = new Map( dimensions.map( ( _, index ) => [ `p${index}`, {
+			parcelId: `p${index}`, blueprint: boxBlueprint( `p${index}` ), shellUrl: `/p${index}.glb`, hasInterior: false
+		} ] ) );
+		const city = await new BuildingsLoader( fixtureFactory, loader ).load( buildings );
+		const strip = city.group.getObjectByName( `shell:${fixtureKey}#strip` );
+		const positions = strip.geometry.getAttribute( 'position' );
+
+		expect( positions.count ).toBe( dimensions.length * 18 );
+		for ( const [ index, [ width, height ] ] of dimensions.entries() ) {
+
+			const start = index * 18;
+			const points = Array.from( { length: 18 }, ( _, point ) => [
+				positions.getX( start + point ), positions.getY( start + point )
+			] );
+			expect( Math.min( ...points.map( ( point ) => point[ 0 ] ) ) ).toBeCloseTo( index * 10 );
+			expect( Math.max( ...points.map( ( point ) => point[ 0 ] ) ) ).toBeCloseTo( index * 10 + width );
+			expect( Math.min( ...points.map( ( point ) => point[ 1 ] ) ) ).toBeCloseTo( 0 );
+			expect( Math.max( ...points.map( ( point ) => point[ 1 ] ) ) ).toBeCloseTo( height );
+
+		}
+		expect( variant ).toHaveBeenCalledWith( fixtureKey, expect.objectContaining( { variantId: 'strip' } ) );
+
+	} );
+
 } );
 
 describe( 'shell loading budget', () => {
@@ -163,10 +207,35 @@ function mesh( name, key, x ) {
 
 }
 
-function boxBlueprint() {
+function stripFrame( scene, key, x, width, height ) {
+
+	for ( const [ index, bounds ] of [
+		[ x, 0, x + 0.12, height ],
+		[ x + width - 0.12, 0, x + width, height ],
+		[ x, height - 0.12, x + width, height ]
+	].entries() ) {
+
+		const [ left, bottom, right, top ] = bounds;
+		const geometry = new THREE.BufferGeometry();
+		geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [
+			left, bottom, 0, right, bottom, 0, left, top, 0,
+			right, bottom, 0, right, top, 0, left, top, 0
+		], 3 ) );
+		const material = new THREE.MeshBasicMaterial();
+		material.name = key;
+		material.userData.materialVariant = 'strip';
+		const surface = new THREE.Mesh( geometry, material );
+		surface.name = `mergedstrip${index}`;
+		scene.add( surface );
+
+	}
+
+}
+
+function boxBlueprint( buildingId = 'p0' ) {
 
 	return {
-		buildingId: 'p0',
+		buildingId,
 		bounds: { footprint: [ [ 0, 0 ], [ 4, 0 ], [ 4, 4 ], [ 0, 4 ] ] },
 		floors: [ { index: 0, elevation: 0, outline: [ [ 0, 0 ], [ 4, 0 ], [ 4, 4 ], [ 0, 4 ] ], openings: [] } ]
 	};
