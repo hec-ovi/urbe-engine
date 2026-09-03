@@ -110,9 +110,10 @@ const FAR_PLANE = 900;
  */
 export class GameApp {
 
-	constructor( config ) {
+	constructor( config, { navigate = ( path ) => window.location.assign( path ) } = {} ) {
 
 		this.config = config;
+		this.navigate = navigate;
 		this.talk = new TalkClient( config.outBase );
 		this.view = new GameView( {
 			onResume: () => this.input?.requestLock(),
@@ -743,12 +744,17 @@ export class GameApp {
 	async #leave() {
 
 		this.input?.exitLock();
-		if ( ! this.persistence || ! this.body || ! this.controller || ! this.quests ) return;
+		if ( ! this.persistence || ! this.body || ! this.controller || ! this.quests ) {
+
+			this.navigate( '/' );
+			return;
+
+		}
 
 		try {
 
 			await this.#saveCurrent();
-			window.location.assign( '/' );
+			this.navigate( '/' );
 
 		} catch ( error ) {
 
