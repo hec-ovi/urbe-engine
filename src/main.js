@@ -35,7 +35,7 @@ async function start() {
 
 }
 
-start().catch( ( error ) => {
+await start().catch( ( error ) => {
 
 	console.error( error );
 	document.body.textContent = `Could not start Urbe: ${error.message ?? error}`;
