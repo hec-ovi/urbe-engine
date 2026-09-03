@@ -75,6 +75,12 @@
 	color: var(--ui-text);
 }
 
+.panel-close:focus-visible {
+	color: var(--ui-accent);
+	outline: 2px solid var(--ui-accent);
+	outline-offset: 3px;
+}
+
 .view-body {
 	flex: 1;
 	min-height: 0;
@@ -140,6 +146,12 @@
 
 .list-row:hover {
 	background: rgba(255, 255, 255, 0.03);
+}
+
+.list-row:focus-visible {
+	background: var(--ui-accent-wash);
+	outline: 1px solid var(--ui-accent);
+	outline-offset: -1px;
 }
 
 .list-row.is-active {
@@ -250,4 +262,50 @@
 .hud .field-readout {
 	font: 12px var(--ui-mono);
 	color: var(--ui-accent);
+}
+
+@media ( max-width: 700px ) {
+
+	.panel-host {
+		align-items: stretch;
+	}
+
+	.view {
+		width: 100vw;
+		height: 100%;
+		border-right: 0;
+		border-left: 0;
+		background: #070c11;
+	}
+
+	.view-body {
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	.view-side {
+		flex: 0 0 38%;
+		border-right: 0;
+		border-bottom: 1px solid var(--ui-line-2);
+	}
+
+	.view-main {
+		padding: 16px;
+	}
+
+	.hud .field {
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 8px 12px;
+	}
+
+	.hud .field-input {
+		grid-column: 1 / -1;
+		grid-row: 2;
+		max-width: none;
+	}
+
+	.controls-table td:first-child {
+		width: 50%;
+	}
+
 }

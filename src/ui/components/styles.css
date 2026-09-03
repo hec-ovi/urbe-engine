@@ -85,6 +85,12 @@ canvas {
 	background: #343b44;
 }
 
+.button:focus-visible,
+.field-input:focus-visible {
+	outline: 2px solid #8deeff;
+	outline-offset: 2px;
+}
+
 .results-row {
 	display: flex;
 	justify-content: space-between;

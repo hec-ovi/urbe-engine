@@ -6,11 +6,11 @@
 	pointer-events: auto;
 	top: 0;
 	right: 0;
-	bottom: var(--ui-tabbar);
-	width: 400px;
+	bottom: 0;
+	width: min(400px, 100vw);
 	display: flex;
 	flex-direction: column;
-	background: var(--ui-panel);
+	background: #070c11;
 	border-left: 1px solid var(--ui-accent-dim);
 	box-shadow: -1px 0 0 rgba(46, 230, 255, 0.25);
 }
@@ -111,6 +111,11 @@
 	outline: none;
 }
 
+.chat-compose:focus-within {
+	border-color: var(--ui-accent);
+	box-shadow: 0 0 0 1px var(--ui-accent);
+}
+
 .chat-send {
 	width: 40px;
 	background: var(--ui-accent);
@@ -126,6 +131,11 @@
 	width: 16px;
 	height: 16px;
 	stroke-width: 2;
+}
+
+.chat-send:focus-visible {
+	outline: 2px solid #fff;
+	outline-offset: -4px;
 }
 
 .avatar-card {
@@ -239,4 +249,28 @@
 
 .call-hangup {
 	color: var(--ui-bad);
+}
+
+@media ( max-width: 700px ) {
+
+	.avatar-card {
+		top: 12px;
+		left: 12px;
+		width: 120px;
+	}
+
+	.avatar-frame {
+		height: 96px;
+	}
+
+	.call {
+		top: 166px;
+		left: 12px;
+		width: min(300px, calc(100vw - 24px));
+	}
+
+	.chat {
+		width: 100vw;
+	}
+
 }

@@ -12,7 +12,7 @@
 }
 
 .toast {
-	min-width: 320px;
+	width: min(520px, calc(100vw - 24px));
 	max-width: 520px;
 	padding: 10px 16px 12px;
 	background: var(--ui-panel);
@@ -51,7 +51,9 @@
 	left: 50%;
 	top: 50%;
 	transform: translate(-50%, -50%);
-	width: 520px;
+	width: min(520px, calc(100vw - 24px));
+	max-height: calc(100vh - 24px);
+	overflow-y: auto;
 	display: flex;
 	flex-direction: column;
 	background: var(--ui-panel);

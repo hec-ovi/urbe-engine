@@ -45,8 +45,15 @@
 }
 
 .tab:hover,
-.tab:hover .icon {
+.tab:hover .icon,
+.tab:focus-visible,
+.tab:focus-visible .icon {
 	color: var(--ui-text);
+}
+
+.tab:focus-visible {
+	outline: 2px solid var(--ui-accent);
+	outline-offset: -2px;
 }
 
 .tab.is-active,
@@ -62,4 +69,24 @@
 
 .tab.is-leave {
 	margin-left: auto;
+}
+
+@media ( max-width: 700px ) {
+
+	.tabbar {
+		padding: 0 4px;
+	}
+
+	.tab {
+		flex: 1 1 0;
+		min-width: 0;
+		width: auto;
+		font-size: 9px;
+		letter-spacing: 0;
+	}
+
+	.tab.is-leave {
+		margin-left: 0;
+	}
+
 }

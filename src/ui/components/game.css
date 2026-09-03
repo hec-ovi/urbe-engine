@@ -18,7 +18,7 @@
 	--ui-accent-wash: rgba(46, 230, 255, 0.08);
 	--ui-text: #dfe9ee;
 	--ui-dim: #7d95a3;
-	--ui-mute: #50656f;
+	--ui-mute: #708590;
 	--ui-warn: #ffb45c;
 	--ui-bad: #ff8f8f;
 	--ui-mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
@@ -80,6 +80,11 @@
 .hud-button:hover {
 	background: #1c3038;
 	border-color: var(--ui-accent-dim);
+}
+
+.hud-button:focus-visible {
+	outline: 2px solid var(--ui-accent);
+	outline-offset: 2px;
 }
 
 .hud-button.is-primary {
@@ -305,4 +310,47 @@
 	line-height: 1;
 	letter-spacing: 0.1em;
 	color: var(--ui-mute);
+}
+
+@media ( max-width: 700px ) {
+
+	.hud-clock {
+		top: 10px;
+		font-size: 15px;
+	}
+
+	.hud-stats {
+		top: 58px;
+		right: 8px;
+		max-width: 46vw;
+		font-size: 9px;
+	}
+
+	.hud-prompt {
+		width: max-content;
+		max-width: calc(100vw - 24px);
+		white-space: normal;
+		text-align: center;
+	}
+
+	.hud-readout {
+		left: 8px;
+		max-width: calc(100vw - 168px);
+		font-size: 10px;
+	}
+
+	.hud-minimap,
+	.hud-minimap-canvas {
+		width: 144px;
+		height: 144px;
+	}
+
+	.hud-minimap {
+		right: 8px;
+	}
+
+	.hud-pause {
+		padding: 18px;
+	}
+
 }

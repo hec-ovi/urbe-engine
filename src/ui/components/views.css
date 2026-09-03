@@ -112,6 +112,12 @@
 	box-shadow: inset 0 0 0 1px var(--ui-accent);
 }
 
+.inv-slot:focus-visible {
+	border-color: var(--ui-accent);
+	outline: 1px solid var(--ui-accent);
+	outline-offset: 2px;
+}
+
 .inv-note {
 	margin-top: 12px;
 	font: 11px var(--ui-mono);
@@ -183,4 +189,32 @@
 	font-size: 11px;
 	line-height: 20px;
 	padding: 0 8px;
+}
+
+@media ( max-width: 700px ) {
+
+	.inv-grid {
+		grid-template-columns: repeat(5, minmax(44px, 1fr));
+	}
+
+	.inv-detail {
+		flex: 0 0 auto;
+		max-height: 38%;
+		padding: 16px;
+		overflow-y: auto;
+		border-top: 1px solid var(--ui-line-2);
+		border-left: 0;
+	}
+
+	.map-legend {
+		grid-template-columns: 1fr;
+	}
+
+	.map-tools {
+		align-items: flex-end;
+		flex-direction: column;
+		gap: 6px;
+		text-align: right;
+	}
+
 }

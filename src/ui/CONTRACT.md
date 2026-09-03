@@ -80,6 +80,7 @@ One panel over the game at a time.
 - The tab bar always shows each entry's key letter, and is only on screen while paused or while a panel is open.
 - One full panel at a time; Escape closes it.
 - Maps redraw on pan, zoom, turn or data change, never per frame on their own.
+- At narrow viewport widths, the front door compacts its navigation, the tab bar keeps all seven actions visible, and dialogs and panels remain inside the viewport.
 - A city is a generated world artifact. A game is the final city plus its selected interiors, quests and playthrough. The UI never presents these as the same directory.
 - Creation order is enforced in the UI: city, interiors, story and side jobs, playable game.
 
