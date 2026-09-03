@@ -11,6 +11,7 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - Live interaction frame: [schema/gameplay-frame.schema.json](schema/gameplay-frame.schema.json). The host supplies validated clock, place and camera facts.
 - Live selected binding: [schema/gameplay-perform.schema.json](schema/gameplay-perform.schema.json). The shared interactor returns only the selected target key, symbolic binding and current clock.
 - NPC control request: [schema/npc-control-request.schema.json](schema/npc-control-request.schema.json). An explicit start-follow, release-follow, start-crouch, or release-crouch event names one actual cast npcId, current clock and player position.
+- Measured mechanic completion: [schema/mechanic-request.schema.json](schema/mechanic-request.schema.json). A live subsystem selects one active quest and step and supplies the exact quests event for a kill, release, escort arrival, access, hack, sabotage or completed journey. GameApp supplies the current simulation clock.
 - Mission item requests and `{ questId, itemId, assetId }` bindings arrive only through the validated [quest bundle](../../quest-bundle/CONTRACT.md). The loaded Materials theme is projected to the mission-assets material catalog without changing its keys, aliases, or variant ids.
 
 ## Outputs
@@ -20,6 +21,7 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - Active objective: [schema/active-objective.schema.json](schema/active-objective.schema.json). Includes talk and goto steps as well as direct actions, and carries the runtime's exact current place plus its route-ready guidance result. Parcel, station and stop places carry a destination. Areas, edges, moving routes and unavailable targets carry a closed reason.
 - Live interaction candidates: [schema/gameplay-candidates.schema.json](schema/gameplay-candidates.schema.json). Carries only validated prompt data and stable target identity to the shared interactor. Measured focus facts remain private until the matching target is selected.
 - NPC control result: [schema/npc-control-result.schema.json](schema/npc-control-result.schema.json). Success reports following, posing, or schedule-return mode; failure uses the closed `not_cast`, `unavailable`, `unreachable` or `conflict` set.
+- Measured mechanic result: [schema/mechanic-result.schema.json](schema/mechanic-result.schema.json). Returns the selected step, accepted event kind, current inventory and complete quest presentation. Failures use `unknown_target`, `wrong_event` or `runtime_rejected` without mutating state.
 
 ## Events
 
@@ -30,6 +32,7 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - A pickup is projected only when its exact quest and item binding creates a portable mission-assets assembly with a `take` anchor. Every assembly primitive uses its authored PBR key and variant and has matching Rapier collision.
 - An accepted `QuestGameplay.perform(request)` sends its stable target key, exact action, and retained cast participants to the gameplay animation coordinator. Rejected actions never start presentation state.
 - `QuestGameplay.control(request)` accepts only an explicit event for an npcId already in the session cast. Conversation, player crouch input, and quest-step kinds never imply follow or crouch. An accepted pose event is sent to animation coordination with the exact returned actor state.
+- `QuestMechanics.complete(request)` maps `killed`, `released`, `escorted`, `accessed`, `hacked`, `sabotaged` and `transported` only to their matching active target kinds. The quests runtime checks every authored NPC, route, access point, credential, target, journey, passenger, cargo, mode and place identity. `GameApp.questMechanic(request)` is the production host entrypoint and updates the same HUD, inventory, persistence and objective route as centered actions.
 
 ## Errors
 
@@ -37,6 +40,7 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - `E_QUEST_ACTION_OUTPUT`: an output does not match its schema.
 - Result codes are `unknown_target`, `wrong_action`, `unavailable`, `wrong_place`, `not_visible`, `occluded`, `out_of_reach`, and `runtime_rejected`.
 - NPC control result codes are `not_cast`, `unavailable`, `unreachable`, and `conflict`.
+- Mechanic result codes are `unknown_target`, `wrong_event`, and `runtime_rejected`.
 
 ## Dependencies
 
@@ -49,6 +53,7 @@ Purpose: converts active quest steps into deterministic player interaction targe
 ## Invariants
 
 - An interaction advances only the questline named by the selected target. Equal item ids in another questline do not receive the event.
+- A measured mechanic event advances only its selected active quest and step. A different event kind or any mismatched authored identity changes nothing.
 - Pickup and theft require the selected object or person to be visible, unobstructed, inside the fixed reach, and at the quest target's current place.
 - Listening requires an unobstructed conversation target inside eight metres and at the target parcel.
 - A failed interaction does not mutate quest progress or inventory.

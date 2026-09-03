@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:quest-actions:mechanic-result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "questId", "stepId", "eventKind", "progressed", "message", "completed", "inventory"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "questId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+    "stepId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+    "eventKind": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/mechanicEventKind" },
+    "progressed": { "type": "boolean" },
+    "message": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" },
+    "code": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/mechanicFailureCode" },
+    "completed": { "type": "array", "items": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/completion" } },
+    "inventory": { "type": "array", "items": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/inventoryItem" } }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "ok": { "const": false } }, "required": ["ok"] },
+      "then": {
+        "properties": { "code": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/mechanicFailureCode" } },
+        "required": ["code"]
+      }
+    }
+  ]
+}

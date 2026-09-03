@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:quest-actions:mechanic-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["questId", "stepId", "timeMin", "event"],
+  "properties": {
+    "questId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+    "stepId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+    "timeMin": { "type": "number", "minimum": 0 },
+    "event": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "npcId"],
+          "properties": { "kind": { "const": "killed" }, "npcId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" } }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "npcId", "releaseTargetId", "place"],
+          "properties": {
+            "kind": { "const": "released" }, "npcId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+            "releaseTargetId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }, "place": { "$ref": "#/$defs/runtimePlace" }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "npcId", "routeId", "mode", "from", "to"],
+          "properties": {
+            "kind": { "const": "escorted" }, "npcId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+            "routeId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }, "mode": { "enum": ["follow-player", "lead-player"] },
+            "from": { "$ref": "#/$defs/runtimePlace" }, "to": { "$ref": "#/$defs/runtimePlace" }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "accessPointId", "credentialItemId", "place"],
+          "properties": {
+            "kind": { "const": "accessed" }, "accessPointId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+            "credentialItemId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }, "place": { "$ref": "#/$defs/runtimePlace" }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "targetId", "place"],
+          "properties": { "kind": { "const": "hacked" }, "targetId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }, "place": { "$ref": "#/$defs/runtimePlace" } }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "targetId", "place"],
+          "properties": { "kind": { "const": "sabotaged" }, "targetId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }, "place": { "$ref": "#/$defs/runtimePlace" } }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "journeyId", "mode", "from", "to", "passengerNpcIds", "cargoItemIds"],
+          "properties": {
+            "kind": { "const": "transported" }, "journeyId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+            "mode": { "enum": ["ride-hail", "public-transit", "vehicle", "animal", "aircraft"] },
+            "from": { "$ref": "#/$defs/runtimePlace" }, "to": { "$ref": "#/$defs/runtimePlace" },
+            "passengerNpcIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" } },
+            "cargoItemIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" } }
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "runtimePlace": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["parcelId"], "properties": { "parcelId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" } } },
+        { "type": "object", "additionalProperties": false, "required": ["districtId"], "properties": { "districtId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" } } },
+        { "type": "object", "additionalProperties": false, "required": ["stationId"], "properties": { "stationId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" } } },
+        { "type": "object", "additionalProperties": false, "required": ["stopId"], "properties": { "stopId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" } } }
+      ]
+    }
+  }
+}

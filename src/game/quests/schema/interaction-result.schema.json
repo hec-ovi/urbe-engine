@@ -14,56 +14,7 @@
     "readText": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" },
     "completed": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["questId", "stepIds", "presentation"],
-        "properties": {
-          "questId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
-          "stepIds": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true,
-            "items": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }
-          },
-          "endingId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
-          "presentation": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["title", "steps"],
-            "properties": {
-              "title": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" },
-              "steps": {
-                "type": "array",
-                "minItems": 1,
-                "items": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" }
-              },
-              "ending": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["title", "text", "outcome", "steps"],
-                "properties": {
-                  "title": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" },
-                  "text": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" },
-                  "outcome": { "enum": ["done", "failed"] },
-                  "steps": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": ["text", "done"],
-                      "properties": {
-                        "text": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" },
-                        "done": { "type": "boolean" }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+      "items": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/completion" }
     },
     "inventory": {
       "type": "array",

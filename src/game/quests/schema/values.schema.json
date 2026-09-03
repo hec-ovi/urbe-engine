@@ -49,6 +49,12 @@
         "runtime_rejected"
       ]
     },
+    "mechanicEventKind": {
+      "enum": ["killed", "released", "escorted", "accessed", "hacked", "sabotaged", "transported"]
+    },
+    "mechanicFailureCode": {
+      "enum": ["unknown_target", "wrong_event", "runtime_rejected"]
+    },
     "inventoryItem": {
       "type": "object",
       "additionalProperties": false,
@@ -69,6 +75,56 @@
               "minItems": 1,
               "uniqueItems": true,
               "items": { "$ref": "#/$defs/id" }
+            }
+          }
+        }
+      }
+    },
+    "completion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["questId", "stepIds", "presentation"],
+      "properties": {
+        "questId": { "$ref": "#/$defs/id" },
+        "stepIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "endingId": { "$ref": "#/$defs/id" },
+        "presentation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["title", "steps"],
+          "properties": {
+            "title": { "$ref": "#/$defs/text" },
+            "steps": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/text" }
+            },
+            "ending": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["title", "text", "outcome", "steps"],
+              "properties": {
+                "title": { "$ref": "#/$defs/text" },
+                "text": { "$ref": "#/$defs/text" },
+                "outcome": { "enum": ["done", "failed"] },
+                "steps": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["text", "done"],
+                    "properties": {
+                      "text": { "$ref": "#/$defs/text" },
+                      "done": { "type": "boolean" }
+                    }
+                  }
+                }
+              }
             }
           }
         }

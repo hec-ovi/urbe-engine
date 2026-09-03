@@ -6,6 +6,7 @@ import { TalkClient } from './talk/TalkClient.js';
 import { QuestSession } from './quests/QuestSession.js';
 import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
 import { MissionItemAssets } from './quests/MissionItemAssets.js';
+import { QuestMechanics } from './quests/QuestMechanics.js';
 import { InvestigationGameplay } from './investigation/index.js';
 import { ObjectiveRouter } from './routes/ObjectiveRouter.js';
 import { ObjectiveGuide } from './routes/ObjectiveGuide.js';
@@ -299,6 +300,7 @@ export class GameApp {
 			this.clock.timeMin,
 			game ? [ ...game.quests, ...game.sideJobs ] : []
 		);
+		this.questMechanics = new QuestMechanics( this.quests );
 		this.savedInventory = game?.player.inventory ?? [];
 		this.questItemIds = questlines.flatMap( ( questline ) => questline.items.map( ( item ) => item.itemId ) );
 		this.#refreshInventory();
@@ -924,6 +926,15 @@ export class GameApp {
 			this.view.toast.show( { title: 'Save failed', text: error.message } );
 
 		} );
+		return result;
+
+	}
+
+	/** Completion proof from a live combat, rescue, escort, access, device, sabotage, or journey host. */
+	questMechanic( request ) {
+
+		const result = this.questMechanics.complete( { ...request, timeMin: this.clock.timeMin } );
+		this.#questActionResult( result );
 		return result;
 
 	}

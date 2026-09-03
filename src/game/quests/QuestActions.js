@@ -1,4 +1,5 @@
 import { QuestActionBoundary } from './QuestActionBoundary.js';
+import { questCompletion } from './QuestCompletion.js';
 
 const INTERACTION_KINDS = new Set( [ 'pickup', 'observe', 'listen', 'steal', 'work', 'deliver' ] );
 const PHYSICAL_REACH = { pickup: 2.5, steal: 2, listen: 8 };
@@ -144,7 +145,7 @@ export class QuestActions {
 			action: request.action,
 			progressed: true,
 			message: step.narrative.description,
-			completed: moved.map( ( change ) => completion( change, this.session.view() ) ),
+			completed: moved.map( ( change ) => questCompletion( change, this.session.view() ) ),
 			inventory: this.session.inventoryView(),
 			worldChanges
 		} );
@@ -172,27 +173,6 @@ export class QuestActions {
 		return this.boundary.output( 'interaction-result', result );
 
 	}
-
-}
-
-function completion( change, views ) {
-
-	const view = views.find( ( candidate ) => candidate.id === change.definition.id );
-	return {
-		questId: change.definition.id,
-		stepIds: change.completed.map( ( completed ) => completed.stepId ),
-		...( change.ending ? { endingId: change.ending.endingId } : {} ),
-		presentation: {
-			title: change.definition.title,
-			steps: change.completed.map( ( step ) => step.narrative.description ),
-			...( change.ending ? { ending: {
-				title: change.ending.title,
-				text: change.ending.epilogue,
-				outcome: 'done',
-				steps: view?.steps ?? []
-			} } : {} )
-		}
-	};
 
 }
 
