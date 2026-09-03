@@ -25,6 +25,12 @@ describe( 'launcher schemas', () => {
 		const validInstances = ajv.compile( { $ref: 'urbe/engine/launcher/api#/$defs/generateInstancesInput' } );
 		expect( validInstances( { cityId: 'c1', mode: 'manual', count: 1, buildingIds: [ 'p11' ] } ) ).toBe( true );
 		expect( validInstances( { cityId: 'c1', mode: 'manual', count: 0, buildingIds: [] } ) ).toBe( false );
+		expect( validInstances( { cityId: 'c1', mode: 'automatic', count: 8, buildingIds: [] } ) ).toBe( false );
+		expect( validInstances( { cityId: 'c1', mode: 'automatic', count: 9, buildingIds: [] } ) ).toBe( true );
+
+		const validQuests = ajv.compile( { $ref: 'urbe/engine/launcher/api#/$defs/generateQuestsInput' } );
+		expect( validQuests( { cityId: 'c1', interiorIds: [ 'p11' ], mainBrief: '', sideJobs: 3 } ) ).toBe( true );
+		expect( validQuests( { cityId: 'c1', interiorIds: [ 'p11' ], mainBrief: '', sideJobs: 4 } ) ).toBe( false );
 
 	} );
 

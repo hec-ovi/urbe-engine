@@ -14,12 +14,13 @@ const city = {
 };
 
 const game = {
-	id: 'rain-game', name: 'Salt Wharf', cityName: 'Rain Sector', playable: true, mainSteps: 8, sideJobs: 4,
+	id: 'rain-game', name: 'Salt Wharf', cityName: 'Rain Sector', playable: true, mainSteps: 8, sideJobs: 3,
 	interiors: 2, location: 'Quay Office', position: [ 12, 0.12, - 20 ],
 	activeQuest: { title: 'Missing Freight', objective: 'Read the ledger' }, inventory: [], locations: []
 };
 
 const emptyCatalog = { games: [], cities: [] };
+const interiorIds = [ 'p11', 'p17', 'p22', 'p35', 'p41', 'p52', 'p64', 'p71', 'p79' ];
 
 function api( overrides = {} ) {
 
@@ -30,8 +31,8 @@ function api( overrides = {} ) {
 		importGame: vi.fn().mockResolvedValue( { games: [ game ], cities: [ city ] } ),
 		exportCity: vi.fn().mockResolvedValue( { kind: 'city' } ),
 		generateCity: vi.fn().mockResolvedValue( { city } ),
-		generateInstances: vi.fn().mockResolvedValue( { instances: { ids: [ 'p11', 'p64' ], count: 2 } } ),
-		generateQuests: vi.fn().mockResolvedValue( { quests: { id: 'rain-quests', mainSteps: 8, sideJobs: 4 } } ),
+		generateInstances: vi.fn().mockResolvedValue( { instances: { ids: interiorIds, count: 9 } } ),
+		generateQuests: vi.fn().mockResolvedValue( { quests: { id: 'rain-quests', mainSteps: 8, sideJobs: 3 } } ),
 		createGame: vi.fn().mockResolvedValue( { game, catalog: { games: [ game ], cities: [ city ] } } ),
 		...overrides
 	};
@@ -107,19 +108,19 @@ describe( 'LauncherApp', () => {
 		await user.click( screen.getByRole( 'button', { name: 'Generate selected interiors' } ) );
 		await screen.findByRole( 'heading', { name: 'Story and side jobs' } );
 		expect( made.api.generateInstances ).toHaveBeenCalledWith( {
-			cityId: 'rain-city', mode: 'automatic', count: 5, buildingIds: []
+			cityId: 'rain-city', mode: 'automatic', count: 9, buildingIds: []
 		} );
 
 		await user.click( screen.getByRole( 'button', { name: 'Generate story and jobs' } ) );
 		await screen.findByRole( 'heading', { name: 'Playable game' } );
 		expect( made.api.generateQuests ).toHaveBeenCalledWith( {
-			cityId: 'rain-city', interiorIds: [ 'p11', 'p64' ], mainBrief: '', sideJobs: 4
+			cityId: 'rain-city', interiorIds, mainBrief: '', sideJobs: 3
 		} );
 
 		await user.click( screen.getByRole( 'button', { name: 'Create playable game' } ) );
 		await screen.findByRole( 'heading', { name: 'Your games' } );
 		expect( made.api.createGame ).toHaveBeenCalledWith( {
-			cityId: 'rain-city', interiorIds: [ 'p11', 'p64' ], questId: 'rain-quests'
+			cityId: 'rain-city', interiorIds, questId: 'rain-quests'
 		} );
 		expect( screen.getByRole( 'heading', { name: 'Salt Wharf' } ) ).toBeTruthy();
 
@@ -137,7 +138,7 @@ describe( 'LauncherApp', () => {
 		await made.app.start();
 		made.app.view.mainMenu.createNew();
 		made.app.view.setCreationState( {
-			city, instances: { ids: [ 'p11' ], count: 1 }, quests: { id: 'rain-quests', mainSteps: 8, sideJobs: 4 }
+			city, instances: { ids: [ 'p11' ], count: 1 }, quests: { id: 'rain-quests', mainSteps: 8, sideJobs: 3 }
 		} );
 		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Create playable game' } ) );
 		await screen.findByRole( 'heading', { name: 'Your games' } );

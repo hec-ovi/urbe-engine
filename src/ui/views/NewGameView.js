@@ -61,7 +61,7 @@ export class NewGameView {
 		this.instanceMode = el( 'select', { className: 'creation-input', ariaLabel: 'Interior selection mode' },
 			option( 'automatic', 'Choose automatically' ), option( 'manual', 'Choose buildings' )
 		);
-		this.instanceCount = el( 'input', { className: 'creation-input', type: 'number', min: 1, max: 24, step: 1, value: 5, ariaLabel: 'Interior count' } );
+		this.instanceCount = el( 'input', { className: 'creation-input', type: 'number', min: 9, max: 24, step: 1, value: 9, ariaLabel: 'Interior count' } );
 		this.buildingList = el( 'fieldset', { className: 'creation-buildings' },
 			el( 'legend', { textContent: 'Buildings available for interiors' } )
 		);
@@ -70,7 +70,7 @@ export class NewGameView {
 		this.instancePane = this.pane( '2', 'Playable interiors', 'Only selected quest and work locations receive interiors. The rest remain sealed city buildings.',
 			el( 'div', { className: 'creation-form-grid' },
 				labelled( 'Selection', this.instanceMode ),
-				labelled( 'Interior count', this.instanceCount, 'Five is the default. Increase it only for locations the game will use.' )
+				labelled( 'Interior count', this.instanceCount, 'Nine is the minimum and default: seven main-story locations plus two unique side-job locations.' )
 			),
 			this.buildingList,
 			this.instanceAction,
@@ -78,7 +78,7 @@ export class NewGameView {
 		);
 
 		this.mainBrief = el( 'textarea', { className: 'creation-input creation-textarea', placeholder: 'Optional direction for the main story', spellcheck: true, ariaLabel: 'Main story direction' } );
-		this.sideJobs = el( 'input', { className: 'creation-input', type: 'number', min: 0, max: 24, step: 1, value: 4, ariaLabel: 'Side jobs' } );
+		this.sideJobs = el( 'input', { className: 'creation-input', type: 'number', min: 0, max: 3, step: 1, value: 3, ariaLabel: 'Side jobs' } );
 		this.questAction = submit( 'Generate story and jobs', () => this.generateQuests() );
 		this.questStatus = el( 'p', { className: 'creation-stage-status' } );
 		this.questPane = this.pane( '3', 'Story and side jobs', 'The story pass defines the narrative. The gameplay pass then maps it onto real people, places, items and supported actions.',
@@ -143,9 +143,9 @@ export class NewGameView {
 		this.seed.value = 'urbe';
 		this.size.value = 'small';
 		this.instanceMode.value = 'automatic';
-		this.instanceCount.value = '5';
+		this.instanceCount.value = '9';
 		this.mainBrief.value = '';
-		this.sideJobs.value = '4';
+		this.sideJobs.value = '3';
 		this.setBuildings( [] );
 		this.sync();
 
@@ -249,9 +249,10 @@ export class NewGameView {
 
 		if ( ! this.state.city ) return this.showError( 'Generate or select a city first.' );
 		const count = Number( this.instanceCount.value );
-		if ( ! Number.isInteger( count ) || count < 1 || count > 24 ) return this.showError( 'Interior count must be between 1 and 24.' );
 		const ids = [ ...this.buildingList.querySelectorAll( 'input:checked' ) ].map( ( input ) => input.value );
+		if ( this.instanceMode.value === 'automatic' && ( ! Number.isInteger( count ) || count < 9 || count > 24 ) ) return this.showError( 'Automatic interior count must be between 9 and 24.' );
 		if ( this.instanceMode.value === 'manual' && ids.length === 0 ) return this.showError( 'Select at least one building for a manual interior build.' );
+		if ( this.instanceMode.value === 'manual' && ids.length > 24 ) return this.showError( 'Select no more than 24 buildings for interiors.' );
 		this.clearError();
 		this.handlers.onGenerateInstances?.( {
 			cityId: this.state.city.id,
@@ -266,7 +267,7 @@ export class NewGameView {
 
 		if ( ! this.state.instances ) return this.showError( 'Generate the playable interiors first.' );
 		const sideJobs = Number( this.sideJobs.value );
-		if ( ! Number.isInteger( sideJobs ) || sideJobs < 0 || sideJobs > 24 ) return this.showError( 'Side jobs must be between 0 and 24.' );
+		if ( ! Number.isInteger( sideJobs ) || sideJobs < 0 || sideJobs > 3 ) return this.showError( 'Side jobs must be between 0 and 3.' );
 		this.clearError();
 		this.handlers.onGenerateQuests?.( {
 			cityId: this.state.city.id,

@@ -29,8 +29,8 @@ The two local directories rendered by the front door.
 ## NewGameView (views/NewGameView.js)
 The four-stage creation surface. A later stage remains locked until the caller supplies the preceding artifact through `setCreationState`.
 - Stage 1, City: reports `onGenerateCity({ name, seed, size })`, where size is `small`, `medium` or `large`. Name and seed are required.
-- Stage 2, Interiors: reports `onGenerateInstances({ cityId, mode, count, buildingIds })`. Mode is `automatic` or `manual`; count is 1 through 24. Manual mode requires at least one eligible selected building.
-- Stage 3, Story and jobs: reports `onGenerateQuests({ cityId, interiorIds, mainBrief, sideJobs })`. Side jobs is 0 through 24. The main brief may be blank so the story can derive from the city.
+- Stage 2, Interiors: reports `onGenerateInstances({ cityId, mode, count, buildingIds })`. Automatic mode defaults to 9 and accepts 9 through 24, reserving seven main-story locations and two unique side-job locations. Manual mode preserves explicit selection and requires 1 through 24 eligible buildings.
+- Stage 3, Story and jobs: reports `onGenerateQuests({ cityId, interiorIds, mainBrief, sideJobs })`. Side jobs is 0 through 3 and defaults to 3. The main brief may be blank so the story can derive from the city.
 - Stage 4, Playable game: reports `onCreateGame({ cityId, interiorIds, questId })` only after city, interiors and quests exist.
 - methods: `reset()`, `beginWithCity(city)`, `setCreationState(update)`, `open(step)`
 - `setCreationState` accepts any supplied part of `{ city, instances, quests, game, busy, error }`. The caller owns the artifacts and uses `busy` with one of `city`, `instances`, `quests`, `game` to lock duplicate actions.

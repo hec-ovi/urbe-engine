@@ -66,6 +66,8 @@ describe( 'NewGameView', () => {
 		expect( screen.getByText( '146 buildings ready.' ) ).toBeTruthy();
 		expect( screen.getByRole( 'button', { name: 'Step 2: Interiors' } ).disabled ).toBe( false );
 		expect( screen.getByRole( 'button', { name: 'Step 3: Story and jobs' } ).disabled ).toBe( true );
+		expect( screen.getByLabelText( 'Interior count' ).value ).toBe( '9' );
+		expect( screen.getByLabelText( 'Interior count' ).min ).toBe( '9' );
 
 	} );
 
@@ -89,7 +91,7 @@ describe( 'NewGameView', () => {
 
 	} );
 
-	it( 'validates automatic interior count before reporting generation', async () => {
+	it( 'rejects an automatic interior count below the nine-location minimum', async () => {
 
 		const onGenerateInstances = vi.fn();
 		const view = mount( { onGenerateInstances } );
@@ -97,9 +99,9 @@ describe( 'NewGameView', () => {
 		const user = userEvent.setup();
 		const amount = screen.getByLabelText( 'Interior count' );
 		await user.clear( amount );
-		await user.type( amount, '25' );
+		await user.type( amount, '8' );
 		await user.click( screen.getByRole( 'button', { name: 'Generate selected interiors' } ) );
-		expect( screen.getByRole( 'alert' ).textContent ).toBe( 'Interior count must be between 1 and 24.' );
+		expect( screen.getByRole( 'alert' ).textContent ).toBe( 'Automatic interior count must be between 9 and 24.' );
 		expect( onGenerateInstances ).not.toHaveBeenCalled();
 
 	} );
@@ -112,10 +114,10 @@ describe( 'NewGameView', () => {
 		const user = userEvent.setup();
 		const amount = screen.getByLabelText( 'Interior count' );
 		await user.clear( amount );
-		await user.type( amount, '7' );
+		await user.type( amount, '12' );
 		await user.click( screen.getByRole( 'button', { name: 'Generate selected interiors' } ) );
 		expect( onGenerateInstances ).toHaveBeenCalledWith( {
-			cityId: 'city-rain', mode: 'automatic', count: 7, buildingIds: []
+			cityId: 'city-rain', mode: 'automatic', count: 12, buildingIds: []
 		} );
 
 	} );
@@ -128,11 +130,18 @@ describe( 'NewGameView', () => {
 		const user = userEvent.setup();
 		await user.type( screen.getByLabelText( 'Main story direction' ), 'A missing freight investigation' );
 		const sideJobs = screen.getByLabelText( 'Side jobs' );
+		expect( sideJobs.value ).toBe( '3' );
+		expect( sideJobs.max ).toBe( '3' );
 		await user.clear( sideJobs );
-		await user.type( sideJobs, '6' );
+		await user.type( sideJobs, '4' );
+		await user.click( screen.getByRole( 'button', { name: 'Generate story and jobs' } ) );
+		expect( screen.getByRole( 'alert' ).textContent ).toBe( 'Side jobs must be between 0 and 3.' );
+		expect( onGenerateQuests ).not.toHaveBeenCalled();
+		await user.clear( sideJobs );
+		await user.type( sideJobs, '3' );
 		await user.click( screen.getByRole( 'button', { name: 'Generate story and jobs' } ) );
 		expect( onGenerateQuests ).toHaveBeenCalledWith( {
-			cityId: 'city-rain', interiorIds: [ 'p11', 'p64' ], mainBrief: 'A missing freight investigation', sideJobs: 6
+			cityId: 'city-rain', interiorIds: [ 'p11', 'p64' ], mainBrief: 'A missing freight investigation', sideJobs: 3
 		} );
 
 	} );
@@ -144,7 +153,7 @@ describe( 'NewGameView', () => {
 		view.setCreationState( {
 			city,
 			instances: { ids: [ 'p11', 'p64' ], count: 2 },
-			quests: { id: 'quests-rain', mainSteps: 9, sideJobs: 4 }
+			quests: { id: 'quests-rain', mainSteps: 9, sideJobs: 3 }
 		} );
 		expect( screen.getByRole( 'heading', { name: 'Playable game' } ) ).toBeTruthy();
 		expect( screen.getByText( '9 steps' ) ).toBeTruthy();

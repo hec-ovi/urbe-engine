@@ -21,6 +21,7 @@ Purpose: connect the isolated game front door to a catalog and generation API wi
 - Game and city exports validate a JSON object before sending it to `download(filename, payload)`. Filenames end in `.urbegame.json` or `.urbecity.json`.
 - Local game loading reads and parses the selected file, passes the JSON object to `api.importGame`, validates the returned catalog, then opens the games directory.
 - Every generation action sets its stage busy, validates the API result, feeds the returned artifact to `GameView.setCreationState`, and clears busy. A new city invalidates downstream artifacts in the UI; a new interior set invalidates quests and the game.
+- Automatic interior generation requires 9 through 24 locations. Nine reserves seven distinct main-story locations and two unique side-job locations. Manual mode accepts 1 through 24 explicitly selected buildings. Quest generation accepts at most three side jobs.
 - Creating a game refreshes the catalog when the result does not include one, then opens the games directory.
 
 ## Errors
