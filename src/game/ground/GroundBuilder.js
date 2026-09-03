@@ -84,7 +84,14 @@ export class GroundBuilder {
 		for ( const [ surface, rings ] of bySurface ) {
 
 			const spec = SURFACES[ surface ];
-			const fills = rings.map( ( ring ) => fill( ring, spec.y, holesWithin( ring, mouths ) ) );
+			const fills = rings.map( ( ring ) => {
+
+				if ( surface !== 'curb' ) return fill( ring, spec.y, holesWithin( ring, mouths ) );
+
+				const ccw = signedArea( ring ) > 0;
+				return ledge( ring, spec.y, CURB_WIDTH, ( a, b ) => road.bordersEdge( a, b, ccw ) );
+
+			} );
 			const merged = BufferGeometryUtils.mergeGeometries( fills, false );
 			fills.forEach( ( g ) => g.dispose() );
 

@@ -34,6 +34,28 @@ describe( 'GroundBuilder', () => {
 
 	} );
 
+	it( 'maps the published kerb top along its edge and across its width', () => {
+
+		const vertical = ( surface, x0, x1 ) => ( {
+			surface,
+			polygon: [ [ x0, 0 ], [ x1, 0 ], [ x1, 20 ], [ x0, 20 ] ]
+		} );
+		const { group } = ground( [
+			vertical( 'roadway', 0, 10 ),
+			vertical( 'curb', 10, 10.15 ),
+			vertical( 'sidewalk', 10.15, 16 )
+		] );
+		const uv = group.getObjectByName( 'ground:curb' ).geometry.getAttribute( 'uv' );
+		const u = Array.from( { length: uv.count }, ( _, i ) => uv.getX( i ) );
+		const v = Array.from( { length: uv.count }, ( _, i ) => uv.getY( i ) );
+
+		// The material's 2 x .15 m tile runs along the stone, then across it.
+		// World-axis fill UVs invert these spans when the kerb turns north.
+		expect( round( Math.max( ...u ) - Math.min( ...u ) ) ).toBe( 20 );
+		expect( round( Math.max( ...v ) - Math.min( ...v ) ) ).toBe( 0.15 );
+
+	} );
+
 	it( 'stands the strip on a face down to the roadway, and nothing else', () => {
 
 		const { group } = ground( [ ROAD, STRIP, rect( 'sidewalk', 10.15, 16 ) ] );
