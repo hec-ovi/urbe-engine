@@ -18,6 +18,10 @@ import { pointInRing } from './ground/Polygons.js';
 import { BuildingsLoader } from './city/BuildingsLoader.js';
 import { Links } from './links/Links.js';
 import { Transit } from './transit/Transit.js';
+import { TransitJourney } from './transit/TransitJourney.js';
+import {
+	TransitGameplay, transitErrorMessage, transitServiceLabel, transitStatusLabel
+} from './transit/TransitGameplay.js';
 import { InteriorStream } from './city/InteriorStream.js';
 import { Elevators } from './city/Elevators.js';
 import { Neon } from './city/Neon.js';
@@ -80,7 +84,7 @@ const BINDINGS = [
 	{ action: 'jump', keys: [ 'Space' ] },
 	{ action: 'crouch', keys: [ 'C' ] },
 	{ action: 'sprint', keys: [ 'Shift' ] },
-	{ action: 'interact, take, inspect, listen, steal, work, deliver', keys: [ 'E' ] },
+	{ action: 'interact, board, leave transit, take, inspect, listen, steal, work, deliver', keys: [ 'E' ] },
 	{ action: 'read quest document', keys: [ 'R' ] },
 	{ action: 'quests', keys: [ 'J' ] },
 	{ action: 'map', keys: [ 'M' ] },
@@ -117,7 +121,9 @@ export class GameApp {
 			onOpen: () => this.input?.exitLock(),
 			onClose: () => this.input?.requestLock(),
 			onLeave: () => this.#leave(),
-			onSettingChange: ( change ) => this.#setting( change )
+			onSettingChange: ( change ) => this.#setting( change ),
+			onTransitSelect: ( service ) => this.#selectTransit( service ),
+			onTransitCancel: () => this.#cancelTransitSelection()
 		} );
 		this.view.mount( document.body );
 		this.stats = {
@@ -151,9 +157,15 @@ export class GameApp {
 		this.view.step( 'reading the world' );
 		const source = new WorldSource( config );
 		const { atlas, connections, buildings, unbuilt, npcTypes, questlines, game } = await source.load();
+		const transitRoutes = connections.networks.transit.routes;
+		this.transitJourney = new TransitJourney( {
+			atlas, routes: transitRoutes, ...( game?.transitJourney ? { state: game.transitJourney } : {} )
+		} );
 		this.persistence = game ? new GamePersistence( { game, gameId: config.gameId } ) : null;
-		this.locator = new Locator( atlas );
-		this.clock = new GameClock( { startHour: config.startHour, scale: config.timeScale } );
+		this.locator = new Locator( atlas, transitRoutes );
+		this.clock = new GameClock( {
+			startHour: transitStartHour( this.transitJourney, config.startHour ), scale: config.timeScale
+		} );
 
 		this.view.step( 'starting the renderer' );
 		this.renderer = await RendererFactory.create( config.backend );
@@ -297,6 +309,15 @@ export class GameApp {
 		this.controller = new PlayerController( { body: this.body, camera: this.camera, input: this.input } );
 		if ( spawn.heading === undefined ) this.controller.lookAt( spawn.lookAt );
 		else this.controller.yaw = spawn.heading;
+		this.transitGameplay = new TransitGameplay( {
+			atlas,
+			routes: transitRoutes,
+			...( game?.transitJourney ? { state: game.transitJourney } : {} ),
+			journey: this.transitJourney,
+			locator: this.locator,
+			controller: this.controller
+		} );
+		if ( this.transitGameplay.restoreRejected ) console.warn( 'transit journey: saved trip is no longer valid' );
 		this.currentLocation = game?.currentLocation ?? this.locator.location( spawn.point.x, spawn.point.z );
 		this.discoveredLocations = new Map(
 			( game?.discoveredLocations ?? [ this.currentLocation ] ).map( ( location ) => [ location.id, location ] )
@@ -421,6 +442,9 @@ export class GameApp {
 		this.night.set( day.lampsOn );
 		this.exposure.setDaylight( stopsFor( day.state ) );
 		this.view.clock.setState( day.state );
+		let transitFrame = this.transitGameplay.aboard
+			? this.transitGameplay.update( { daySeconds: this.clock.daySeconds } )
+			: null;
 
 		this.hitches.time( 'physics/player', () => {
 
@@ -451,22 +475,31 @@ export class GameApp {
 		this.hitches.time( 'relight', () => this.#relight( feet, delta ) );
 
 		const playerPlaces = this.locator.refs( feet.x, feet.z, this.standing?.parcelId ?? null );
-		const prompt = this.interactor.update( delta, {
+		const worldPrompt = this.interactor.update( delta, {
 			timeMin: this.clock.timeMin,
 			playerPlaces,
 			feet: { x: feet.x, y: feet.y, z: feet.z },
 			eye: { x: this.controller.eye.x, y: this.controller.eye.y, z: this.controller.eye.z },
 			look: { x: this.controller.look.x, y: this.controller.look.y, z: this.controller.look.z }
 		} );
+		if ( ! transitFrame ) transitFrame = this.transitGameplay.update( {
+			daySeconds: this.clock.daySeconds,
+			interactionBlocked: Boolean( worldPrompt || this.interactor.conversation )
+		} );
+		const prompt = playableTransitPrompt( worldPrompt, transitFrame );
+		this.view.transit.ride( transitStatusLabel( transitFrame.status ) );
+		if ( transitFrame.result?.autoDisembarked ) this.#persistTransitState();
 		this.view.prompt.update( this.input.locked ? prompt : null );
 
 		if ( this.input.consume( 'KeyE' ) && this.input.locked ) {
 
-			if ( this.interactor.conversation ) this.interactor.close( this.clock );
-			else this.#questActionResult( this.interactor.activate( this.clock ) );
+			const owner = playableInteractionOwner( this.interactor, transitFrame );
+			if ( owner === 'conversation' ) this.interactor.close( this.clock );
+			else if ( owner === 'world' ) this.#questActionResult( this.interactor.activate( this.clock ) );
+			else this.#transitAction( this.transitGameplay.activate() );
 
 		}
-		if ( this.input.consume( 'KeyR' ) && this.input.locked && ! this.interactor.conversation ) {
+		if ( this.input.consume( 'KeyR' ) && this.input.locked && ! this.interactor.conversation && ! transitFrame.aboard ) {
 
 			this.#questActionResult( this.interactor.activate( this.clock, 'secondary-interact' ) );
 
@@ -474,7 +507,7 @@ export class GameApp {
 
 		// A panel or the chat owns the keyboard while it is up; the game's own
 		// keys only fire on the street.
-		const free = ! this.view.panels.current && ! this.interactor.conversation;
+		const free = ! this.view.panels.current && ! this.interactor.conversation && ! this.view.transit.open;
 
 		if ( free ) {
 
@@ -610,6 +643,59 @@ export class GameApp {
 
 	}
 
+	#transitAction( action ) {
+
+		if ( ! action ) return;
+		if ( action.action === 'choose' ) {
+
+			this.view.transit.choose( action.services.map( ( service ) => ( {
+				id: `${service.tripId}:${service.stopIndex}`,
+				label: transitServiceLabel( service ),
+				value: service
+			} ) ) );
+			this.input.exitLock();
+			return;
+
+		}
+
+		if ( ! action.result.ok ) {
+
+			this.view.toast.show( { title: 'Transit', text: transitErrorMessage( action.result.error ) } );
+			return;
+
+		}
+
+		this.view.transit.close();
+		this.#persistTransitState();
+
+	}
+
+	#persistTransitState() {
+
+		if ( ! this.persistence ) return;
+		this.#saveCurrent().catch( ( error ) => {
+
+			console.error( error );
+			this.view.toast.show( { title: 'Save failed', text: error.message } );
+
+		} );
+
+	}
+
+	#selectTransit( service ) {
+
+		this.#transitAction( this.transitGameplay?.board( service ) );
+		this.input?.requestLock();
+
+	}
+
+	#cancelTransitSelection() {
+
+		this.transitGameplay?.cancelSelection();
+		this.input?.requestLock();
+
+	}
+
 	#refreshQuestState() {
 
 		this.view.quests.setQuests( this.quests.view() );
@@ -688,6 +774,7 @@ export class GameApp {
 			sideJobs: progress.sideJobs,
 			currentLocation: this.currentLocation,
 			discoveredLocations: uniqueLocations( [ ...this.discoveredLocations.values() ] ),
+			transitJourney: this.transitGameplay.state,
 			elapsedSeconds: Math.max( 0, ( performance.now() - this.playStartedAt ) / 1000 )
 		} );
 
@@ -970,5 +1057,30 @@ export function savedSpawn( game ) {
 
 	const { position, heading } = game.player;
 	return { point: new THREE.Vector3( position.x, position.y, position.z ), heading };
+
+}
+
+/** Restores the world clock used by a valid active timetable journey. */
+export function transitStartHour( journey, fallback ) {
+
+	const state = journey?.state;
+	if ( ! journey?.valid || state?.status !== 'aboard' || state.clock.lastDaySeconds === null ) return fallback;
+	return ( state.clock.dayOffset + state.clock.lastDaySeconds ) / 3600;
+
+}
+
+/** Existing aimed world interactions win E while waiting; an active ride owns E. */
+export function playableTransitPrompt( worldPrompt, transitFrame ) {
+
+	if ( transitFrame?.aboard ) return transitFrame.prompt ?? null;
+	return worldPrompt ?? transitFrame?.prompt ?? null;
+
+}
+
+export function playableInteractionOwner( interactor, transitFrame ) {
+
+	if ( interactor?.conversation ) return 'conversation';
+	if ( ! transitFrame?.aboard && interactor?.target ) return 'world';
+	return 'transit';
 
 }

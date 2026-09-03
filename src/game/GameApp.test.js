@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { pickSpawn, prepareInteriorStreaming, savedSpawn } from './GameApp.js';
+import {
+	pickSpawn, playableInteractionOwner, playableTransitPrompt, prepareInteriorStreaming, savedSpawn, transitStartHour
+} from './GameApp.js';
 
 describe( 'game spawn', () => {
 
@@ -43,6 +45,43 @@ describe( 'streamed floor preparation', () => {
 		expect( warmup.scene ).toBe( scene );
 		expect( warmup.camera ).toBe( camera );
 		expect( warmup.mrt ).toBe( mrt );
+
+	} );
+
+} );
+
+describe( 'playable transit integration', () => {
+
+	it( 'restores the exact active timetable clock including a day rollover', () => {
+
+		const journey = {
+			valid: true,
+			state: { status: 'aboard', clock: { dayOffset: 86400, lastDaySeconds: 125 } }
+		};
+
+		expect( transitStartHour( journey, 21 ) ).toBe( 86525 / 3600 );
+		expect( transitStartHour( { ...journey, valid: false }, 21 ) ).toBe( 21 );
+		expect( transitStartHour( {
+			valid: true, state: { status: 'waiting', clock: { dayOffset: 0, lastDaySeconds: 125 } }
+		}, 21 ) ).toBe( 21 );
+
+	} );
+
+	it( 'gives aimed world targets priority while waiting and the ride priority while aboard', () => {
+
+		expect( playableTransitPrompt( 'E  open door', {
+			aboard: false, prompt: 'E  board Bus B1'
+		} ) ).toBe( 'E  open door' );
+		expect( playableTransitPrompt( null, {
+			aboard: false, prompt: 'E  board Bus B1'
+		} ) ).toBe( 'E  board Bus B1' );
+		expect( playableTransitPrompt( 'E  talk', {
+			aboard: true, prompt: 'E  leave bus B1 at stop-b'
+		} ) ).toBe( 'E  leave bus B1 at stop-b' );
+		expect( playableInteractionOwner( { conversation: {}, target: {} }, { aboard: true } ) ).toBe( 'conversation' );
+		expect( playableInteractionOwner( { conversation: null, target: {} }, { aboard: false } ) ).toBe( 'world' );
+		expect( playableInteractionOwner( { conversation: null, target: {} }, { aboard: true } ) ).toBe( 'transit' );
+		expect( playableInteractionOwner( { conversation: null, target: null }, { aboard: false } ) ).toBe( 'transit' );
 
 	} );
 
