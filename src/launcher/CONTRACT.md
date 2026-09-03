@@ -13,7 +13,7 @@ Purpose: connect the isolated game front door to a catalog and generation API wi
 - `api.generateInstances(input)` takes [generateInstancesInput](schema/launcher-api.schema.json#/$defs/generateInstancesInput) and returns [generateInstancesResult](schema/launcher-api.schema.json#/$defs/generateInstancesResult).
 - `api.generateQuests(input)` takes [generateQuestsInput](schema/launcher-api.schema.json#/$defs/generateQuestsInput) and returns [generateQuestsResult](schema/launcher-api.schema.json#/$defs/generateQuestsResult).
 - `api.createGame(input)` takes [createGameInput](schema/launcher-api.schema.json#/$defs/createGameInput) and returns [createGameResult](schema/launcher-api.schema.json#/$defs/createGameResult).
-- The launcher HTTP route accepts `saveCurrent` with [../game/persistence/schema/save-current-payload.schema.json](../game/persistence/schema/save-current-payload.schema.json), including optional active transit state, and returns the updated [../library/schema/game-descriptor.schema.json](../library/schema/game-descriptor.schema.json).
+- The launcher HTTP route accepts `saveCurrent` with [../game/persistence/schema/save-current-payload.schema.json](../game/persistence/schema/save-current-payload.schema.json), including optional timetable and quest transit state, and returns the updated [../library/schema/game-descriptor.schema.json](../library/schema/game-descriptor.schema.json).
 
 ## Outputs
 
