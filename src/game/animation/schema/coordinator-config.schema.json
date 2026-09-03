@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:animation:coordinator-config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "catalog", "actors"],
+  "properties": {
+    "version": { "const": "1" },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assetId", "edition", "sourceSha256", "availableClips"],
+      "properties": {
+        "assetId": { "const": "quaternius-universal-animation-library-pro" },
+        "edition": { "const": "Pro" },
+        "sourceSha256": { "$ref": "urn:urbe:engine:animation:values#/$defs/sha256" },
+        "availableClips": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "actors": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["actorId", "routine"],
+        "properties": {
+          "actorId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" },
+          "routine": { "$ref": "urn:urbe:engine:animation:values#/$defs/routine" }
+        }
+      }
+    }
+  }
+}

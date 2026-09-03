@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:animation:command",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "commandId", "kind", "actorId", "routine"],
+      "properties": {
+        "version": { "const": "1" },
+        "commandId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" },
+        "kind": { "const": "sync-routine" },
+        "actorId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" },
+        "routine": { "$ref": "urn:urbe:engine:animation:values#/$defs/routine" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "commandId", "kind", "actionId", "actorId", "variant"],
+      "properties": {
+        "version": { "const": "1" },
+        "commandId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" },
+        "kind": { "const": "quest-action" },
+        "actionId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" },
+        "actorId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" },
+        "variant": {
+          "enum": [
+            "idle",
+            "sit",
+            "pickup-ground",
+            "pickup-table",
+            "read",
+            "observe",
+            "steal-ground",
+            "steal-table",
+            "work-counter",
+            "work-repair",
+            "work-interact",
+            "deliver",
+            "follow-walk",
+            "follow-sprint",
+            "crouch-idle",
+            "crouch-forward"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "commandId", "kind", "actionId", "speakerId", "listenerIds"],
+      "properties": {
+        "version": { "const": "1" },
+        "commandId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" },
+        "kind": { "const": "dialogue-turn" },
+        "actionId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" },
+        "speakerId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" },
+        "listenerIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "commandId", "kind", "actionId", "reason"],
+      "properties": {
+        "version": { "const": "1" },
+        "commandId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" },
+        "kind": { "const": "interrupt" },
+        "actionId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" },
+        "reason": {
+          "enum": [
+            "player-left",
+            "physics",
+            "combat",
+            "quest-cancelled",
+            "target-unavailable",
+            "scene-transition",
+            "dialogue-replaced"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "commandId", "kind", "actionId"],
+      "properties": {
+        "version": { "const": "1" },
+        "commandId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" },
+        "kind": { "const": "complete" },
+        "actionId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "commandId", "kind", "actionId"],
+      "properties": {
+        "version": { "const": "1" },
+        "commandId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" },
+        "kind": { "const": "resume-routine" },
+        "actionId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" }
+      }
+    }
+  ]
+}

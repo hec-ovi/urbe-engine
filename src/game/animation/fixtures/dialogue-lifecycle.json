@@ -1,0 +1,23 @@
+[
+  {
+    "version": "1",
+    "commandId": "cmd-dialogue-start",
+    "kind": "dialogue-turn",
+    "actionId": "quest-main:step-3:turn-1",
+    "speakerId": "npc-mara",
+    "listenerIds": ["npc-ivo"]
+  },
+  {
+    "version": "1",
+    "commandId": "cmd-dialogue-interrupt",
+    "kind": "interrupt",
+    "actionId": "quest-main:step-3:turn-1",
+    "reason": "player-left"
+  },
+  {
+    "version": "1",
+    "commandId": "cmd-dialogue-resume-routine",
+    "kind": "resume-routine",
+    "actionId": "quest-main:step-3:turn-1"
+  }
+]

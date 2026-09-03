@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:animation:command-result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "commandId", "transitions", "events", "state"],
+  "properties": {
+    "version": { "const": "1" },
+    "commandId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" },
+    "transitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["actorId", "fromMode", "toMode", "segments", "terminalClip"],
+        "properties": {
+          "actorId": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" },
+          "fromMode": { "$ref": "urn:urbe:engine:animation:values#/$defs/mode" },
+          "toMode": { "$ref": "urn:urbe:engine:animation:values#/$defs/mode" },
+          "segments": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "urn:urbe:engine:animation:values#/$defs/segment" }
+          },
+          "terminalClip": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "actionId", "actorIds", "reason"],
+        "properties": {
+          "type": {
+            "enum": [
+              "routine-synchronized",
+              "quest-action-started",
+              "dialogue-turn-started",
+              "action-completed",
+              "action-interrupted",
+              "routine-resumed"
+            ]
+          },
+          "actionId": {
+            "oneOf": [
+              { "type": "null" },
+              { "$ref": "urn:urbe:engine:animation:values#/$defs/id" }
+            ]
+          },
+          "actorIds": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "$ref": "urn:urbe:engine:animation:values#/$defs/id" }
+          },
+          "reason": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "enum": [
+                  "player-left",
+                  "physics",
+                  "combat",
+                  "quest-cancelled",
+                  "target-unavailable",
+                  "scene-transition",
+                  "dialogue-replaced"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "state": { "$ref": "urn:urbe:engine:animation:snapshot" }
+  }
+}

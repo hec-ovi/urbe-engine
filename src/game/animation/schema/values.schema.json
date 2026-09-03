@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:animation:values",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "posture": {
+      "enum": ["standing", "seated", "kneeling", "crouched"]
+    },
+    "routinePosture": {
+      "enum": ["standing", "seated"]
+    },
+    "mode": {
+      "enum": ["routine", "quest", "completed", "interrupted"]
+    },
+    "action": {
+      "enum": [
+        "talk",
+        "listen",
+        "sit",
+        "idle",
+        "pickup",
+        "read",
+        "observe",
+        "steal",
+        "work",
+        "deliver",
+        "follow-walk",
+        "follow-sprint",
+        "crouch"
+      ]
+    },
+    "completion": {
+      "enum": ["clip-end", "explicit"]
+    },
+    "segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clipName", "loop", "role", "blendMs"],
+      "properties": {
+        "clipName": { "type": "string", "minLength": 1 },
+        "loop": { "type": "boolean" },
+        "role": { "enum": ["entry", "action", "exit", "neutral", "routine"] },
+        "blendMs": { "type": "integer", "minimum": 0, "maximum": 1000 }
+      }
+    },
+    "routine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["routineId", "activity", "posture", "clipName", "loop"],
+      "properties": {
+        "routineId": { "$ref": "#/$defs/id" },
+        "activity": { "enum": ["idle", "walk", "sprint", "sit", "work", "travel", "leisure"] },
+        "posture": { "$ref": "#/$defs/routinePosture" },
+        "clipName": { "type": "string", "minLength": 1 },
+        "loop": { "const": true }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actorId",
+        "mode",
+        "actionId",
+        "action",
+        "posture",
+        "completion",
+        "currentClip",
+        "exitSegments",
+        "resumePending",
+        "routine"
+      ],
+      "properties": {
+        "actorId": { "$ref": "#/$defs/id" },
+        "mode": { "$ref": "#/$defs/mode" },
+        "actionId": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/id" }
+          ]
+        },
+        "action": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/action" }
+          ]
+        },
+        "posture": { "$ref": "#/$defs/posture" },
+        "completion": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/completion" }
+          ]
+        },
+        "currentClip": { "type": "string", "minLength": 1 },
+        "exitSegments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/segment" }
+        },
+        "resumePending": { "type": "boolean" },
+        "routine": { "$ref": "#/$defs/routine" }
+      }
+    },
+    "actionState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actionId", "participants", "status"],
+      "properties": {
+        "actionId": { "$ref": "#/$defs/id" },
+        "participants": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "status": { "enum": ["active", "completed", "interrupted"] }
+      }
+    }
+  }
+}
