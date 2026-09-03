@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:server:launcher-request",
+  "title": "Launcher route request",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["method"],
+      "properties": { "method": { "const": "catalog" } },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["method", "input"],
+      "properties": {
+        "method": { "enum": ["continueGame", "exportGame", "exportCity"] },
+        "input": { "$ref": "../../launcher/schema/launcher-api.schema.json#/$defs/id" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["method", "input"],
+      "properties": {
+        "method": { "const": "importGame" },
+        "input": { "$ref": "../../library/schema/game-descriptor.schema.json" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["method", "input"],
+      "properties": {
+        "method": { "const": "generateCity" },
+        "input": { "$ref": "../../launcher/schema/launcher-api.schema.json#/$defs/generateCityInput" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["method", "input"],
+      "properties": {
+        "method": { "const": "generateInstances" },
+        "input": { "$ref": "../../launcher/schema/launcher-api.schema.json#/$defs/generateInstancesInput" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["method", "input"],
+      "properties": {
+        "method": { "const": "generateQuests" },
+        "input": { "$ref": "../../launcher/schema/launcher-api.schema.json#/$defs/generateQuestsInput" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["method", "input"],
+      "properties": {
+        "method": { "const": "createGame" },
+        "input": { "$ref": "../../launcher/schema/launcher-api.schema.json#/$defs/createGameInput" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["method", "input"],
+      "properties": {
+        "method": { "const": "saveCurrent" },
+        "input": { "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

@@ -45,3 +45,4 @@ Keep changes inside `src/launcher`. Update both schemas before changing API shap
 ## Depends on
 
 - `../ui/CONTRACT.md`
+- The browser transport posts to the engine route described by [../server/schema/launcher-request.schema.json](../server/schema/launcher-request.schema.json).
