@@ -22,8 +22,8 @@ const LENS_GAP = 0.035;
 // A street luminaire, in the units three wants: luminous flux and the colour
 // temperature of the lamp inside it. 12000 lm at 3800 K is a neutral mid-power
 // LED head, which keeps concrete and road boundaries readable at night.
-const LAMP_LUMENS = 12000;
-const LAMP_KELVIN = 3800;
+const LAMP_LUMENS = 24000;
+const LAMP_KELVIN = 5000;
 const LAMP_RANGE = 26;
 const LENS_KEY = 'cyberpunk/light-fixture/mid';
 const POLE_KEY = 'cyberpunk/metal/rich';
@@ -33,10 +33,9 @@ const POLE_KEY = 'cyberpunk/metal/rich';
  */
 const LENS_EMISSIVE = 270;
 
-// A wall pack over a service door: 3000 lm is a 30 W LED head, a quarter of the
+// A wall pack over a service door: 3000 lm is a 30 W LED head, one eighth of the
 // street luminaire's flux, on the same lamp colour so an alley reads as part of
-// the same city. Equal illuminance at a quarter of the flux is half the reach,
-// which is where the 13 m comes from.
+// the same city.
 export const WALL_LUMENS = 3000;
 const WALL_RANGE = 13;
 /** Above a doorway, below the first-floor windows. */

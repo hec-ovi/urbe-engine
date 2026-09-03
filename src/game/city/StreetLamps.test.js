@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { runConnections } from '../../assembly/connectionsRunner.js';
 import { pointInRing } from '../ground/Polygons.js';
+import { kelvinColor } from '../light/Color.js';
 import { StreetLamps, WALL_LUMENS, streetLampAssembly } from './StreetLamps.js';
 
 const SAMPLE = new URL( '../../../../atlas/samples/city-urbe-small.json', import.meta.url );
@@ -133,6 +134,8 @@ describe( 'StreetLamps', () => {
 			const { head } = fixture.post;
 			const fromPost = head.center.clone().sub( new THREE.Vector3( 4, head.center.y, 7 ) );
 
+			expect( fixture.glow.lumens ).toBe( 24000 );
+			expect( fixture.glow.color ).toEqual( kelvinColor( 5000 ) );
 			expect( head.length ).toBeGreaterThan( 1.5 );
 			expect( fromPost.dot( head.aim ) ).toBeGreaterThan( 1.2 );
 			expect( Math.abs( fromPost.x * head.aim.z - fromPost.z * head.aim.x ) ).toBeLessThan( 1e-6 );
