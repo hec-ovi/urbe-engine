@@ -62,6 +62,9 @@ export class WorldSource {
 		if ( response.status === 404 ) return fallback;
 		const type = ( response.headers?.get( 'content-type' ) ?? '' ).split( ';', 1 )[ 0 ].toLowerCase();
 		if ( ! response.ok ) throw new Error( `${url}: HTTP ${response.status}` );
+		// Vite sends its HTML application shell with 200 for a missing file.
+		// Optional world documents treat that exact development response as absent.
+		if ( type === 'text/html' ) return fallback;
 		if ( type && type !== 'application/json' ) throw new Error( `${url}: expected JSON, received ${type}` );
 		try {
 

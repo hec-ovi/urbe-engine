@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.3: direct city play accepts absent optional quest catalogs from the development server while malformed and non-JSON catalog files remain startup errors.
+
 0.17.2: public transit keeps one cast passenger across parcel, station and stop endpoints and persists approach, aboard and arrival progress. NPC dialogue uses the checked text route, and reply gestures settle after a 1.8-second presentation hold.
 
 0.17.1: exact active cast NPCs materialize once for assassination and public transit without extra interactions; fatal impacts resolve rendered bodies to authored NPC ids; rescue acquires follow control before quest progress. Talk routes validate closed envelopes and dependency failures, empty model configuration selects the advertised model, and world creation invokes Atlas through its public command.

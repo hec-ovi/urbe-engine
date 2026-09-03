@@ -115,6 +115,39 @@ describe( 'WorldSource selective interiors', () => {
 
 	} );
 
+	it( 'treats the development HTML shell as an absent optional quest catalog', async () => {
+
+		const documents = new Map( [
+			[ '/out/city/blueprint.json', atlas ],
+			[ '/out/city/manifest.json', { ...manifest, parcels: [], interiors: [], floors: {} } ]
+		] );
+		vi.stubGlobal( 'fetch', vi.fn( async ( url ) => {
+
+			if ( optional( url ) ) return response( 200, '<!doctype html>', 'text/html' );
+			if ( ! documents.has( url ) ) throw new Error( `unexpected ${url}` );
+			return response( 200, documents.get( url ) );
+
+		} ) );
+
+		const world = await new WorldSource( { blueprintUrl: '/atlas/city.json', outBase: '/out/city' } ).load();
+		expect( world ).toMatchObject( {
+			questBundle: null, questlines: [], investigations: [], npcTypes: null
+		} );
+
+		vi.mocked( fetch ).mockImplementation( async ( url ) => {
+
+			if ( url.endsWith( '/quests/quest-bundle.json' ) ) return response( 200, '<!doctype html>', 'text/html' );
+			if ( url.endsWith( '/quests/questlines.json' ) ) return response( 200, 'not json', 'text/plain' );
+			if ( url.endsWith( '/npc-types.json' ) ) return response( 404, null );
+			if ( ! documents.has( url ) ) throw new Error( `unexpected ${url}` );
+			return response( 200, documents.get( url ) );
+
+		} );
+		await expect( new WorldSource( { blueprintUrl: '/atlas/city.json', outBase: '/out/city' } ).load() )
+			.rejects.toThrow( 'questlines.json: expected JSON, received text/plain' );
+
+	} );
+
 	it( 'loads and cross-validates every catalog named by a game quest bundle', async () => {
 
 		const questlines = [ {
@@ -184,12 +217,12 @@ function optional( url, includeInvestigations = true ) {
 
 }
 
-function response( status, body ) {
+function response( status, body, type = 'application/json' ) {
 
 	return {
 		ok: status >= 200 && status < 300,
 		status,
-		headers: { get: () => 'application/json' },
+		headers: { get: () => type },
 		json: async () => body
 	};
 
