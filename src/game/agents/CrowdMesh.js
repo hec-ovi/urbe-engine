@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
-import { cos, float, instancedBufferAttribute, int, mix, sin, vec3, vertexIndex } from 'three/tsl';
+import { cos, float, instancedBufferAttribute, int, mix, sin, transformNormalToView, vec3, vertexIndex } from 'three/tsl';
 import { FRAMES } from './VatBaker.js';
 import { PoseBuffer } from './PoseBuffer.js';
 
@@ -80,7 +80,9 @@ export class CrowdMesh {
 
 		const material = new MeshStandardNodeMaterial( { roughness: 0.78, metalness: 0 } );
 		material.positionNode = turn( pose ).add( aOrigin );
-		material.normalNode = turn( normal ).normalize();
+		// normalNode is consumed in view space. The baked vector first follows
+		// the same per-person heading as the position, then enters that space.
+		material.normalNode = transformNormalToView( turn( normal ) ).normalize();
 		material.colorNode = this.colorNode( geometry, paint );
 
 		// An InstancedMesh binds its identity instanceMatrix even though this
