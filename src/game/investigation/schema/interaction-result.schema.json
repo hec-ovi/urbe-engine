@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:investigation:interaction-result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "targetKey", "action", "message", "state", "events", "worldChanges"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "targetKey": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
+    "action": { "enum": ["inspect", "take"] },
+    "message": { "$ref": "urn:urbe:engine:investigation:values#/$defs/text" },
+    "code": { "enum": ["unknown-target", "wrong-scene", "wrong-action", "prerequisite", "not-visible", "occluded", "out-of-reach", "inspect-first", "already-resolved"] },
+    "state": { "$ref": "urn:urbe:engine:investigation:values#/$defs/sceneState" },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["transitionId", "kind", "key", "value"],
+        "properties": {
+          "transitionId": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
+          "kind": { "enum": ["quest-signal", "world-flag", "dialogue-unlock", "objective-unlock", "ending-candidate"] },
+          "key": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
+          "value": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" }
+            ]
+          }
+        }
+      }
+    },
+    "worldChanges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entityId", "state"],
+        "properties": {
+          "entityId": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
+          "state": { "const": "collected" }
+        }
+      }
+    }
+  }
+}

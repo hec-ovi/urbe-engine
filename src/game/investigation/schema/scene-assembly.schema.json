@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:investigation:scene-assembly",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "sceneId", "questId", "seed", "incident", "location", "entities", "decals", "evidence", "targets", "initialState"],
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "sceneId": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
+    "questId": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
+    "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "incident": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["family", "summary"],
+      "properties": {
+        "family": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
+        "summary": { "$ref": "urn:urbe:engine:investigation:values#/$defs/text" }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "placeId"],
+      "properties": {
+        "kind": { "enum": ["interior", "street"] },
+        "placeId": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" }
+      }
+    },
+    "entities": {
+      "type": "array",
+      "items": { "$ref": "urn:urbe:engine:investigation:values#/$defs/entityPlacement" }
+    },
+    "decals": {
+      "type": "array",
+      "items": { "$ref": "urn:urbe:engine:investigation:values#/$defs/decalPlacement" }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "urn:urbe:engine:investigation:values#/$defs/evidence" }
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "urn:urbe:engine:investigation:values#/$defs/interactionTarget" }
+    },
+    "initialState": { "$ref": "urn:urbe:engine:investigation:values#/$defs/sceneState" }
+  }
+}

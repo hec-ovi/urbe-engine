@@ -1,0 +1,164 @@
+{
+  "contractVersion": "1.0",
+  "sceneId": "scene-apartment-47",
+  "questId": "quest-missing-courier",
+  "seed": 774311,
+  "incident": {
+    "family": "homicide",
+    "summary": "A courier was killed beside a damaged service chair; the blood direction and dropped access card are authored evidence."
+  },
+  "location": {
+    "kind": "interior",
+    "placeId": "parcel-p47-floor-0-room-2",
+    "origin": { "x": 10, "y": 2.4, "z": 20 },
+    "yawRadians": 0,
+    "width": 8,
+    "depth": 7,
+    "entries": [
+      { "entryId": "door-main", "position": { "x": 0, "z": -3.5 }, "clearanceRadius": 1.1 }
+    ],
+    "blockedZones": [
+      { "blockerId": "counter", "center": { "x": -2.8, "z": 1.2 }, "width": 1.4, "depth": 2.2 }
+    ],
+    "receivingSurfaces": [
+      {
+        "surfaceId": "floor-main",
+        "kind": "floor",
+        "origin": { "x": 10, "y": 2.4, "z": 20 },
+        "uAxis": { "x": 1, "y": 0, "z": 0 },
+        "vAxis": { "x": 0, "y": 0, "z": 1 },
+        "normal": { "x": 0, "y": 1, "z": 0 },
+        "width": 8,
+        "height": 7,
+        "blockedRegions": [
+          { "center": { "x": 0, "z": -3.2 }, "width": 1.4, "depth": 0.6 }
+        ]
+      }
+    ]
+  },
+  "bodies": [
+    {
+      "entityId": "courier-body",
+      "asset": {
+        "assetId": "regular-female-courier-static",
+        "uri": "asset://characters/regular-female",
+        "mediaType": "model/gltf+json",
+        "byteSize": 1048576,
+        "checksum": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "groundContact": { "x": 0, "y": 0, "z": 0 }
+      },
+      "dimensions": { "width": 0.72, "height": 0.4, "depth": 1.82 },
+      "poseId": "body-side-static",
+      "placement": { "zone": "center", "preferredYawRadians": 1.5707963267948966 },
+      "materials": [
+        { "slot": "clothing", "key": "cyberpunk/fabric/mid" }
+      ],
+      "evidenceId": "body-position"
+    }
+  ],
+  "props": [
+    {
+      "entityId": "dropped-access-card",
+      "asset": {
+        "assetId": "access-card-a",
+        "uri": "asset://mission-props/access-card-a",
+        "mediaType": "model/gltf-binary",
+        "byteSize": 32768,
+        "checksum": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "groundContact": { "x": 0, "y": -0.01, "z": 0 }
+      },
+      "dimensions": { "width": 0.09, "height": 0.02, "depth": 0.055 },
+      "placement": { "zone": "incident", "nearEntityId": "courier-body", "maxDistanceMeters": 1.25 },
+      "materials": [
+        { "slot": "casing", "key": "cyberpunk/metal/mid", "variantId": "paint" }
+      ],
+      "portable": true,
+      "evidenceId": "access-card"
+    },
+    {
+      "entityId": "damaged-service-chair",
+      "asset": {
+        "assetId": "service-chair-damaged",
+        "uri": "asset://furniture/service-chair-damaged",
+        "mediaType": "model/gltf-binary",
+        "byteSize": 262144,
+        "checksum": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "groundContact": { "x": 0, "y": -0.42, "z": 0 }
+      },
+      "dimensions": { "width": 0.7, "height": 0.85, "depth": 0.72 },
+      "placement": { "zone": "incident", "nearEntityId": "courier-body", "maxDistanceMeters": 2 },
+      "materials": [
+        { "slot": "frame", "key": "cyberpunk/metal/poor", "variantId": "paint" },
+        { "slot": "seat", "key": "cyberpunk/fabric/poor", "variantId": "flat" }
+      ],
+      "portable": false
+    }
+  ],
+  "decals": [
+    {
+      "entityId": "directional-blood-stain",
+      "surfaceId": "floor-main",
+      "width": 1.45,
+      "height": 0.72,
+      "offsetMeters": 0.006,
+      "material": { "slot": "surface", "key": "cyberpunk/incident-blood/mid", "variantId": "directional-pool" },
+      "nearEntityId": "courier-body",
+      "evidenceId": "blood-direction"
+    }
+  ],
+  "evidence": [
+    {
+      "evidenceId": "body-position",
+      "factId": "courier-moved-after-impact",
+      "label": "Courier's position",
+      "description": "The authored pose shows that the courier came to rest beside the service chair.",
+      "portable": false,
+      "requiresInspection": false,
+      "prerequisiteEvidenceIds": [],
+      "consequences": [
+        {
+          "transitionId": "unlock-blood-reading",
+          "when": "discovered",
+          "event": { "kind": "objective-unlock", "key": "inspect-blood-direction", "value": true }
+        }
+      ]
+    },
+    {
+      "evidenceId": "blood-direction",
+      "factId": "impact-near-service-chair",
+      "label": "Directional blood stain",
+      "description": "The authored stain direction runs from the damaged chair toward the body.",
+      "portable": false,
+      "requiresInspection": false,
+      "prerequisiteEvidenceIds": ["body-position"],
+      "consequences": [
+        {
+          "transitionId": "unlock-card-reading",
+          "when": "discovered",
+          "event": { "kind": "dialogue-unlock", "key": "ask-about-access-card", "value": true }
+        }
+      ]
+    },
+    {
+      "evidenceId": "access-card",
+      "factId": "courier-entered-restricted-level",
+      "label": "Dropped access card",
+      "description": "The card belongs to the restricted freight level named by the story.",
+      "portable": true,
+      "requiresInspection": true,
+      "prerequisiteEvidenceIds": ["blood-direction"],
+      "consequences": [
+        {
+          "transitionId": "record-card-owner",
+          "when": "discovered",
+          "event": { "kind": "quest-signal", "key": "access-card-owner-known", "value": true }
+        },
+        {
+          "transitionId": "branch-restricted-level",
+          "when": "collected",
+          "event": { "kind": "ending-candidate", "key": "follow-restricted-level-lead", "value": true }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,329 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:investigation:values",
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "text": { "type": "string", "minLength": 1 },
+    "finite": { "type": "number" },
+    "positive": { "type": "number", "exclusiveMinimum": 0 },
+    "vector2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "z"],
+      "properties": {
+        "x": { "$ref": "#/$defs/finite" },
+        "z": { "$ref": "#/$defs/finite" }
+      }
+    },
+    "vector3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "$ref": "#/$defs/finite" },
+        "y": { "$ref": "#/$defs/finite" },
+        "z": { "$ref": "#/$defs/finite" }
+      }
+    },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "depth"],
+      "properties": {
+        "width": { "$ref": "#/$defs/positive" },
+        "height": { "$ref": "#/$defs/positive" },
+        "depth": { "$ref": "#/$defs/positive" }
+      }
+    },
+    "rect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["center", "width", "depth"],
+      "properties": {
+        "center": { "$ref": "#/$defs/vector2" },
+        "width": { "$ref": "#/$defs/positive" },
+        "depth": { "$ref": "#/$defs/positive" }
+      }
+    },
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blockerId", "center", "width", "depth"],
+      "properties": {
+        "blockerId": { "$ref": "#/$defs/id" },
+        "center": { "$ref": "#/$defs/vector2" },
+        "width": { "$ref": "#/$defs/positive" },
+        "depth": { "$ref": "#/$defs/positive" }
+      }
+    },
+    "footprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["center", "width", "depth", "yawRadians"],
+      "properties": {
+        "center": { "$ref": "#/$defs/vector2" },
+        "width": { "$ref": "#/$defs/positive" },
+        "depth": { "$ref": "#/$defs/positive" },
+        "yawRadians": { "$ref": "#/$defs/finite" }
+      }
+    },
+    "assetRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assetId", "uri", "mediaType", "byteSize", "checksum", "groundContact"],
+      "properties": {
+        "assetId": { "$ref": "#/$defs/id" },
+        "uri": { "type": "string", "minLength": 1 },
+        "mediaType": { "enum": ["model/gltf-binary", "model/gltf+json"] },
+        "byteSize": { "type": "integer", "minimum": 1 },
+        "checksum": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "groundContact": { "$ref": "#/$defs/vector3" }
+      }
+    },
+    "material": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "key"],
+      "properties": {
+        "slot": { "$ref": "#/$defs/id" },
+        "key": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9_-]*$" },
+        "variantId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "placementHint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zone"],
+      "properties": {
+        "zone": { "enum": ["center", "perimeter", "incident", "entry-side"] },
+        "nearEntityId": { "$ref": "#/$defs/id" },
+        "maxDistanceMeters": { "$ref": "#/$defs/positive" },
+        "preferredYawRadians": { "$ref": "#/$defs/finite" }
+      }
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entityId", "asset", "dimensions", "poseId", "placement", "materials"],
+      "properties": {
+        "entityId": { "$ref": "#/$defs/id" },
+        "asset": { "$ref": "#/$defs/assetRef" },
+        "dimensions": { "$ref": "#/$defs/dimensions" },
+        "poseId": { "$ref": "#/$defs/id" },
+        "placement": { "$ref": "#/$defs/placementHint" },
+        "materials": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/material" }
+        },
+        "evidenceId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "prop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entityId", "asset", "dimensions", "placement", "materials", "portable"],
+      "properties": {
+        "entityId": { "$ref": "#/$defs/id" },
+        "asset": { "$ref": "#/$defs/assetRef" },
+        "dimensions": { "$ref": "#/$defs/dimensions" },
+        "placement": { "$ref": "#/$defs/placementHint" },
+        "materials": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/material" }
+        },
+        "portable": { "type": "boolean" },
+        "evidenceId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "decal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entityId", "surfaceId", "width", "height", "offsetMeters", "material"],
+      "properties": {
+        "entityId": { "$ref": "#/$defs/id" },
+        "surfaceId": { "$ref": "#/$defs/id" },
+        "width": { "$ref": "#/$defs/positive" },
+        "height": { "$ref": "#/$defs/positive" },
+        "offsetMeters": { "type": "number", "minimum": 0.002, "maximum": 0.02 },
+        "material": { "$ref": "#/$defs/material" },
+        "nearEntityId": { "$ref": "#/$defs/id" },
+        "localCenter": { "$ref": "#/$defs/vector2" },
+        "evidenceId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["surfaceId", "kind", "origin", "uAxis", "vAxis", "normal", "width", "height", "blockedRegions"],
+      "properties": {
+        "surfaceId": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["floor", "wall"] },
+        "origin": { "$ref": "#/$defs/vector3" },
+        "uAxis": { "$ref": "#/$defs/vector3" },
+        "vAxis": { "$ref": "#/$defs/vector3" },
+        "normal": { "$ref": "#/$defs/vector3" },
+        "width": { "$ref": "#/$defs/positive" },
+        "height": { "$ref": "#/$defs/positive" },
+        "blockedRegions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rect" }
+        }
+      }
+    },
+    "consequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transitionId", "when", "event"],
+      "properties": {
+        "transitionId": { "$ref": "#/$defs/id" },
+        "when": { "enum": ["discovered", "collected"] },
+        "event": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "key", "value"],
+          "properties": {
+            "kind": { "enum": ["quest-signal", "world-flag", "dialogue-unlock", "objective-unlock", "ending-candidate"] },
+            "key": { "$ref": "#/$defs/id" },
+            "value": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "number" },
+                { "type": "boolean" }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidenceId", "factId", "label", "description", "portable", "requiresInspection", "prerequisiteEvidenceIds", "consequences"],
+      "properties": {
+        "evidenceId": { "$ref": "#/$defs/id" },
+        "factId": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/text" },
+        "description": { "$ref": "#/$defs/text" },
+        "portable": { "type": "boolean" },
+        "requiresInspection": { "type": "boolean" },
+        "prerequisiteEvidenceIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "consequences": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/consequence" }
+        }
+      }
+    },
+    "entityPlacement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entityId", "role", "asset", "dimensions", "transform", "footprint", "materials", "blocksMovement"],
+      "properties": {
+        "entityId": { "$ref": "#/$defs/id" },
+        "role": { "enum": ["body", "prop"] },
+        "asset": { "$ref": "#/$defs/assetRef" },
+        "dimensions": { "$ref": "#/$defs/dimensions" },
+        "poseId": { "$ref": "#/$defs/id" },
+        "transform": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["position", "yawRadians"],
+          "properties": {
+            "position": { "$ref": "#/$defs/vector3" },
+            "yawRadians": { "$ref": "#/$defs/finite" }
+          }
+        },
+        "footprint": { "$ref": "#/$defs/footprint" },
+        "materials": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/material" }
+        },
+        "blocksMovement": { "type": "boolean" },
+        "portable": { "type": "boolean" },
+        "evidenceId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "decalPlacement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entityId", "surfaceId", "transform", "width", "height", "offsetMeters", "material"],
+      "properties": {
+        "entityId": { "$ref": "#/$defs/id" },
+        "surfaceId": { "$ref": "#/$defs/id" },
+        "transform": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["position", "uAxis", "vAxis", "normal"],
+          "properties": {
+            "position": { "$ref": "#/$defs/vector3" },
+            "uAxis": { "$ref": "#/$defs/vector3" },
+            "vAxis": { "$ref": "#/$defs/vector3" },
+            "normal": { "$ref": "#/$defs/vector3" }
+          }
+        },
+        "width": { "$ref": "#/$defs/positive" },
+        "height": { "$ref": "#/$defs/positive" },
+        "offsetMeters": { "type": "number", "minimum": 0.002, "maximum": 0.02 },
+        "material": { "$ref": "#/$defs/material" },
+        "evidenceId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "interactionTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetKey", "evidenceId", "entityId", "label", "description", "portable", "approachPoint", "maxDistanceMeters", "actions", "available"],
+      "properties": {
+        "targetKey": { "$ref": "#/$defs/id" },
+        "evidenceId": { "$ref": "#/$defs/id" },
+        "entityId": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/text" },
+        "description": { "$ref": "#/$defs/text" },
+        "portable": { "type": "boolean" },
+        "approachPoint": { "$ref": "#/$defs/vector3" },
+        "maxDistanceMeters": { "$ref": "#/$defs/positive" },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["inspect", "take"] }
+        },
+        "available": { "type": "boolean" },
+        "unavailableReason": { "enum": ["prerequisite", "already-collected"] }
+      }
+    },
+    "evidenceState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidenceId", "status"],
+      "properties": {
+        "evidenceId": { "$ref": "#/$defs/id" },
+        "status": { "enum": ["undiscovered", "discovered", "collected"] }
+      }
+    },
+    "sceneState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "sceneId", "revision", "evidence", "emittedTransitionIds"],
+      "properties": {
+        "contractVersion": { "const": "1.0" },
+        "sceneId": { "$ref": "#/$defs/id" },
+        "revision": { "type": "integer", "minimum": 0 },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidenceState" }
+        },
+        "emittedTransitionIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        }
+      }
+    }
+  }
+}

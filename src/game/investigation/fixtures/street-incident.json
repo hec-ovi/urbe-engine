@@ -1,0 +1,99 @@
+{
+  "contractVersion": "1.0",
+  "sceneId": "scene-service-road-9",
+  "questId": "quest-route-collision",
+  "seed": 901145,
+  "incident": {
+    "family": "traffic-collision",
+    "summary": "An authored maintenance-drone collision left a broken control module and one recorded tyre mark."
+  },
+  "location": {
+    "kind": "street",
+    "placeId": "edge-service-9",
+    "origin": { "x": -31, "y": 0.12, "z": 44 },
+    "yawRadians": 0.35,
+    "width": 12,
+    "depth": 8,
+    "entries": [
+      { "entryId": "west-walk", "position": { "x": -6, "z": -2.8 }, "clearanceRadius": 1.2 },
+      { "entryId": "east-walk", "position": { "x": 6, "z": 2.8 }, "clearanceRadius": 1.2 }
+    ],
+    "blockedZones": [
+      { "blockerId": "barrier-a", "center": { "x": -3.8, "z": 2.6 }, "width": 1.8, "depth": 0.5 }
+    ],
+    "receivingSurfaces": [
+      {
+        "surfaceId": "road-surface",
+        "kind": "floor",
+        "origin": { "x": -31, "y": 0.12, "z": 44 },
+        "uAxis": { "x": 0.9393727128, "y": 0, "z": -0.3428978075 },
+        "vAxis": { "x": 0.3428978075, "y": 0, "z": 0.9393727128 },
+        "normal": { "x": 0, "y": 1, "z": 0 },
+        "width": 12,
+        "height": 8,
+        "blockedRegions": []
+      }
+    ]
+  },
+  "bodies": [],
+  "props": [
+    {
+      "entityId": "broken-control-module",
+      "asset": {
+        "assetId": "control-module-broken",
+        "uri": "asset://mission-props/control-module-broken",
+        "mediaType": "model/gltf-binary",
+        "byteSize": 131072,
+        "checksum": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "groundContact": { "x": 0, "y": -0.11, "z": 0 }
+      },
+      "dimensions": { "width": 0.55, "height": 0.22, "depth": 0.42 },
+      "placement": { "zone": "center" },
+      "materials": [
+        { "slot": "case", "key": "cyberpunk/metal/poor", "variantId": "service" }
+      ],
+      "portable": false,
+      "evidenceId": "control-module-impact"
+    }
+  ],
+  "decals": [
+    {
+      "entityId": "tyre-mark",
+      "surfaceId": "road-surface",
+      "width": 2.4,
+      "height": 0.32,
+      "offsetMeters": 0.005,
+      "material": { "slot": "surface", "key": "cyberpunk/incident-tyre/poor", "variantId": "directional-transfer" },
+      "nearEntityId": "broken-control-module",
+      "evidenceId": "tyre-direction"
+    }
+  ],
+  "evidence": [
+    {
+      "evidenceId": "control-module-impact",
+      "factId": "module-hit-from-west",
+      "label": "Broken control module",
+      "description": "The authored fracture is concentrated on the module's west side.",
+      "portable": false,
+      "requiresInspection": false,
+      "prerequisiteEvidenceIds": [],
+      "consequences": []
+    },
+    {
+      "evidenceId": "tyre-direction",
+      "factId": "service-vehicle-left-east",
+      "label": "Tyre transfer mark",
+      "description": "The authored mark points east from the damaged module.",
+      "portable": false,
+      "requiresInspection": false,
+      "prerequisiteEvidenceIds": ["control-module-impact"],
+      "consequences": [
+        {
+          "transitionId": "route-east-service-vehicle",
+          "when": "discovered",
+          "event": { "kind": "objective-unlock", "key": "search-east-service-route", "value": true }
+        }
+      ]
+    }
+  ]
+}
