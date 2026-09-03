@@ -54,13 +54,39 @@ for ( const x of [ - 200, - 110, 0, 110 ] ) {
 
 }
 
+const roadPlate = ( { path: [ [ x1, z1 ], [ x2, z2 ] ], width } ) => {
+
+	const half = width / 2;
+	return x1 === x2
+		? [ [ x1 - half, Math.min( z1, z2 ) ], [ x1 + half, Math.min( z1, z2 ) ], [ x1 + half, Math.max( z1, z2 ) ], [ x1 - half, Math.max( z1, z2 ) ] ]
+		: [ [ Math.min( x1, x2 ), z1 - half ], [ Math.max( x1, x2 ), z1 - half ], [ Math.max( x1, x2 ), z1 + half ], [ Math.min( x1, x2 ), z1 + half ] ];
+
+};
+
+const world = {
+	bounds: city.bounds,
+	buildings: city.blocks.map( ( ring, index ) => {
+
+		const centre = ring.reduce( ( sum, [ x, z ] ) => [ sum[ 0 ] + x / ring.length, sum[ 1 ] + z / ring.length ], [ 0, 0 ] );
+		return {
+			ring: ring.map( ( [ x, z ] ) => [ centre[ 0 ] + ( x - centre[ 0 ] ) * 0.72, centre[ 1 ] + ( z - centre[ 1 ] ) * 0.72 ] ),
+			height: 18 + ( index % 5 ) * 11
+		};
+
+	} ),
+	ground: [
+		...city.blocks.map( ( polygon ) => ( { surface: 'block', polygon } ) ),
+		...city.roads.map( ( road ) => ( { surface: 'roadway', polygon: roadPlate( road ) } ) )
+	]
+};
+
 const venues = [
 	{ point: { x: - 60, z: - 40 }, open: true },
 	{ point: { x: 40, z: 30 }, open: false },
 	{ point: { x: 150, z: 120 }, open: true }
 ];
 
-view.map.setMap( city );
+view.map.setWorld( world );
 view.map.setVenues( venues );
 view.map.setPlayer( { x: 12, z: - 20 }, 0.6 );
 view.minimap.setMap( city );

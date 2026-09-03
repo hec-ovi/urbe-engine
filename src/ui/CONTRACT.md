@@ -83,7 +83,7 @@ One panel over the game at a time.
 
 ## Tests and preview
 `*.test.js` beside each view and widget, Testing Library plus user-event on jsdom (`// @vitest-environment jsdom`), one per declared input, output and event. `test-helpers/canvas.js` gives jsdom a recording 2d context.
-`preview.html` shows the whole overlay with sample data and no game behind it: `npm run dev`, then `/src/ui/preview.html`.
+`preview.html` shows the whole overlay with sample data and no game behind it, starting on the game directory: `npm run dev`, then `/src/ui/preview.html`.
 
 ## Depends on
 Nothing outside this folder. The game (`src/game/CONTRACT.md`) is the caller.
