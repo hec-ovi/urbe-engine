@@ -120,7 +120,7 @@ describe( 'GroundBuilder', () => {
 
 		const road = group.getObjectByName( 'ground:roadway' );
 		expect( road.material.userData ).toEqual( {
-			key: 'cyberpunk/road/high_rich', variantId: 'patched'
+			key: 'cyberpunk/road/high_rich', variantId: 'street'
 		} );
 
 		for ( const name of [ 'sidewalk', 'block', 'open' ] ) {

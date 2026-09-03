@@ -27,6 +27,14 @@ const FIXTURE_EMISSIVE = 180;
 const FIXTURE_KELVIN = 2700;
 const LOAD_CONCURRENCY = 8;
 const MAIN_THREAD_SLICE_MS = 8;
+// Only surfaces that can stop or support a person enter Rapier. Window frames,
+// signs, lamps and trim still render, but cooking their small relief geometry
+// duplicates millions of triangles without changing the walkable shell.
+const COLLIDER_KINDS = new Set( [
+	'concrete', 'wall', 'column', 'window-glass', 'door', 'door-glass',
+	'floor-slab', 'roof', 'parapet', 'balcony-slab', 'balcony-rail',
+	'roof-artifact', 'ac-unit', 'metal'
+] );
 
 /**
  * Every building's shell, loaded once for the whole city: the skyline is
@@ -184,7 +192,7 @@ export class BuildingsLoader {
 			if ( rest ) {
 
 				push( exterior, key, rest );
-				exteriorFlat.push( positionsOnly( rest ) );
+				if ( isColliderMaterial( key ) ) exteriorFlat.push( positionsOnly( rest ) );
 
 			}
 			if ( performance.now() - sliceStarted >= MAIN_THREAD_SLICE_MS ) {
@@ -229,6 +237,13 @@ export async function mapConcurrent( values, concurrency, operation ) {
 	await Promise.all( Array.from( { length: Math.min( concurrency, values.length ) }, worker ) );
 
 	return results;
+
+}
+
+/** Material keys whose rendered surface is also a structural player barrier. */
+export function isColliderMaterial( key ) {
+
+	return COLLIDER_KINDS.has( String( key ).split( '/' )[ 1 ] );
 
 }
 

@@ -105,6 +105,13 @@ describe( 'Transit', () => {
 		expect( transit.glows.filter( ( glow ) => glow.range > 10 ).length ).toBe( entrances );
 		expect( transit.colliders.get( 'transit:entrances' ).getAttribute( 'position' ).count )
 			.toBeGreaterThan( 0 );
+		for ( const collider of transit.colliders.values() ) {
+
+			if ( ! collider ) continue;
+			expect( collider.index ).toBe( null );
+			expect( collider.getAttribute( 'position' ).count % 3 ).toBe( 0 );
+
+		}
 
 	} );
 

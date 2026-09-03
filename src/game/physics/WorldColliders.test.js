@@ -23,4 +23,15 @@ describe( 'city collider installation', () => {
 
 	} );
 
+	it( 'keeps map labels on collider failures', async () => {
+
+		const bad = { getAttribute: () => ( { count: 9 } ), dispose: vi.fn() };
+		const colliders = new WorldColliders( { addTrimesh: () => { throw new Error( 'wasm rejected mesh' ); } } );
+
+		await expect( colliders.addStaticsAsync( new Map( [ [ 'building p15', bad ] ] ), { release: true } ) )
+			.rejects.toThrow( 'building p15 collider failed (3 triangles): wasm rejected mesh' );
+		expect( bad.dispose ).toHaveBeenCalledOnce();
+
+	} );
+
 } );

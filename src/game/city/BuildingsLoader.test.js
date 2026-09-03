@@ -30,6 +30,30 @@ describe( 'building entrance availability', () => {
 
 	} );
 
+	it( 'keeps decorative facade relief out of the structural collider', async () => {
+
+		const loader = { loadAsync: async () => {
+
+			const scene = new THREE.Group();
+			scene.add(
+				mesh( 'mergedwall', 'cyberpunk/concrete/mid', 0 ),
+				mesh( 'mergedframes', 'cyberpunk/window-frame/mid', 2 ),
+				mesh( 'mergedlight', 'cyberpunk/light-fixture/mid', 4 )
+			);
+
+			return { scene };
+
+		} };
+		const buildings = new Map( [ [ 'p0', {
+			parcelId: 'p0', blueprint: boxBlueprint(), shellUrl: '/p0.glb', hasInterior: false
+		} ] ] );
+		const city = await new BuildingsLoader( factory, loader ).load( buildings );
+
+		expect( city.group.children ).toHaveLength( 3 );
+		expect( city.shellColliders.get( 'p0' ).getAttribute( 'position' ).count ).toBe( 3 );
+
+	} );
+
 } );
 
 describe( 'shell loading budget', () => {
@@ -84,5 +108,28 @@ async function load( hasInterior ) {
 	const buildings = new Map( [ [ 'p0', { parcelId: 'p0', blueprint, shellUrl: '/p0.glb', hasInterior } ] ] );
 
 	return new BuildingsLoader( factory, loader ).load( buildings );
+
+}
+
+function mesh( name, key, x ) {
+
+	const geometry = new THREE.BufferGeometry();
+	geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [ x, 0, 0, x + 1, 0, 0, x, 1, 0 ], 3 ) );
+	const material = new THREE.MeshBasicMaterial();
+	material.name = key;
+	const result = new THREE.Mesh( geometry, material );
+	result.name = name;
+
+	return result;
+
+}
+
+function boxBlueprint() {
+
+	return {
+		buildingId: 'p0',
+		bounds: { footprint: [ [ 0, 0 ], [ 4, 0 ], [ 4, 4 ], [ 0, 4 ] ] },
+		floors: [ { index: 0, elevation: 0, outline: [ [ 0, 0 ], [ 4, 0 ], [ 4, 4 ], [ 0, 4 ] ], openings: [] } ]
+	};
 
 }

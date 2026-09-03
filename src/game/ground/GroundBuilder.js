@@ -22,7 +22,7 @@ const CURB_LIP = 0.004;
 // pavement in a world published without one, which has to cut its own from the
 // edges that meet the road.
 const SURFACES = {
-	roadway: { key: 'cyberpunk/road/high_rich', y: 0, variantId: 'patched' },
+	roadway: { key: 'cyberpunk/road/high_rich', y: 0, variantId: 'street' },
 	sidewalk: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT, variantId: 'plate', kerb: 'grow' },
 	block: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT, variantId: 'plate' },
 	open: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT, variantId: 'plate', kerb: 'grow' },
@@ -34,7 +34,7 @@ const SURFACES = {
  * roadway at zero, every other surface raised by a real curb, one merged mesh
  * per material so the whole ground costs a handful of draw calls.
  *
- * Roadway uses the isotropic patched asphalt because these cover polygons have
+ * Roadway uses the isotropic street asphalt because these cover polygons have
  * a shared world grid rather than one lane axis. Sidewalk, block and open cover
  * use one neutral 2 m plate per tile. Their UV coordinates remain world metres,
  * so every cover shares one grid origin and texture size never follows mesh size.

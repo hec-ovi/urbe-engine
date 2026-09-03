@@ -235,12 +235,12 @@ export class GameApp {
 		this.view.step( 'building the physics world' );
 		this.physics = await Physics.create();
 		this.colliders = new WorldColliders( this.physics );
-		this.colliders.addStatic( ground.colliderGeometry );
-		await this.colliders.addStaticsAsync( city.shellColliders.values(), { release: true } );
+		this.colliders.addStatic( ground.colliderGeometry, 'ground' );
+		await this.colliders.addStaticsAsync( city.shellColliders, { release: true } );
 		city.shellColliders.clear();
-		this.colliders.addStatic( links.colliderGeometry );
-		this.colliders.addStatics( this.transit.colliders.values() );
-		this.colliders.addStatics( props.colliders.values() );
+		this.colliders.addStatic( links.colliderGeometry, 'building links' );
+		this.colliders.addStatics( this.transit.colliders );
+		this.colliders.addStatics( props.colliders );
 		this.colliders.addPosts( lamps.posts );
 		this.stream.onColliderBand = ( id, geometry ) => this.colliders.addBand( id, geometry );
 		this.stream.onDropBand = ( id ) => this.colliders.dropBand( id );

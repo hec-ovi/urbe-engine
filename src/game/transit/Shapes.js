@@ -150,8 +150,10 @@ export function solid( geometries ) {
 
 	return merge( geometries.map( ( geometry ) => {
 
+		const flat = geometry.index ? geometry.toNonIndexed() : geometry;
 		const copy = new THREE.BufferGeometry();
-		copy.setAttribute( 'position', geometry.getAttribute( 'position' ).clone() );
+		copy.setAttribute( 'position', flat.getAttribute( 'position' ).clone() );
+		if ( flat !== geometry ) flat.dispose();
 
 		return copy;
 

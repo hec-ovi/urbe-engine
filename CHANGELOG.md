@@ -1,5 +1,7 @@
 # Changelog
 
+0.16.25: station collision geometry now expands indexed slabs before producing the position-only Rapier mesh, so every collider remains a complete triangle list. Building physics includes structural walls, slabs, glass, roofs, rails, columns and solid service objects while leaving window-frame relief, signs, lamps and trim in the renderer. The urbe city's shell collision set drops from 2,842,692 rendered triangles to 487,970 structural triangles. Collider startup failures name the exact world part. Grade road uses the current `street` material variant.
+
 0.16.24: highway decks use the materials database's lane-aligned highway asphalt instead of the isotropic puddle variant. Their UVs now put U across the published width and V along the full elevated path, so each 3.5 m repeat keeps its wheel tracks under one lane. Grade road, pavement, curb, deck frame and supports remain on their database-backed patched asphalt, plate, curb stone and concrete entries.
 
 0.16.23: the local character store now verifies the purchased Source and Pro files against their original workspace hashes, all six 65-joint bodies, all 32 compatible hairstyle and facial-hair rigs, and all 120 animation clips. A focused NPC selects the complete gender- and age-compatible hairstyle catalog while the mass crowd keeps its bounded two-body vertex-animation path.

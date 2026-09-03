@@ -22,16 +22,34 @@ export class WorldColliders {
 	 * One piece of the world that never moves and is always solid: the ground,
 	 * a building shell, a bridge deck, a bus shelter. World space, merged.
 	 */
-	addStatic( geometry ) {
+	addStatic( geometry, label = 'static world geometry' ) {
 
-		if ( geometry ) this.triangles += this.physics.addTrimesh( geometry ).triangles;
+		if ( ! geometry ) return;
+
+		try {
+
+			this.triangles += this.physics.addTrimesh( geometry ).triangles;
+
+		} catch ( error ) {
+
+			const position = geometry.getAttribute?.( 'position' );
+			const triangles = position ? position.count / 3 : 0;
+			throw new Error( `${label} collider failed (${triangles} triangles): ${error?.message ?? error}`, { cause: error } );
+
+		}
 
 	}
 
 	/** @param geometries any iterable of them */
 	addStatics( geometries ) {
 
-		for ( const geometry of geometries ) this.addStatic( geometry );
+		let index = 0;
+		for ( const item of geometries ) {
+
+			const [ label, geometry ] = labelled( item, index ++ );
+			this.addStatic( geometry, label );
+
+		}
 
 	}
 
@@ -43,10 +61,20 @@ export class WorldColliders {
 
 		let since = performance.now();
 
-		for ( const geometry of geometries ) {
+		let index = 0;
+		for ( const item of geometries ) {
 
-			this.addStatic( geometry );
-			if ( release ) geometry?.dispose();
+			const [ label, geometry ] = labelled( item, index );
+			try {
+
+				this.addStatic( geometry, label );
+
+			} finally {
+
+				if ( release ) geometry?.dispose();
+
+			}
+			index ++;
 
 			if ( performance.now() - since >= sliceMs ) {
 
@@ -98,5 +126,13 @@ export class WorldColliders {
 function taskYield() {
 
 	return new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
+
+}
+
+function labelled( item, index ) {
+
+	return Array.isArray( item ) && item.length === 2 && typeof item[ 0 ] === 'string'
+		? [ item[ 0 ], item[ 1 ] ]
+		: [ `static world geometry ${index}`, item ];
 
 }
