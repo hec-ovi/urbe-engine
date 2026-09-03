@@ -3,6 +3,7 @@ import { Shelters } from './Shelters.js';
 import { StationEntrances } from './StationEntrances.js';
 import { StationVolumes } from './StationVolumes.js';
 import { Buses } from './Buses.js';
+import { RailVehicles } from './RailVehicles.js';
 
 /** Peak on a full city is a dozen buses in service; this is headroom over it. */
 const BUS_CAPACITY = 24;
@@ -37,10 +38,23 @@ export class Transit {
 			factory,
 			capacity
 		} );
+		this.trains = new RailVehicles( {
+			routes: networks?.transit?.routes ?? [], kind: 'train', factory, capacity
+		} );
+		this.subways = new RailVehicles( {
+			routes: networks?.transit?.routes ?? [], kind: 'subway', factory, capacity
+		} );
 
 		this.group = new THREE.Group();
 		this.group.name = 'transit';
-		this.group.add( shelters.group, entrances.group, volumes.group, this.buses.group );
+		this.group.add(
+			shelters.group,
+			entrances.group,
+			volumes.group,
+			this.buses.group,
+			this.trains.group,
+			this.subways.group
+		);
 
 		this.glows = [ ...shelters.glows, ...entrances.glows, ...volumes.glows ];
 		this.colliders = new Map( [
@@ -51,10 +65,10 @@ export class Transit {
 
 	}
 
-	/** Buses on screen right now. */
+	/** Transit vehicles on screen right now. */
 	get count() {
 
-		return this.buses.count;
+		return this.buses.count + this.trains.count + this.subways.count;
 
 	}
 
@@ -65,6 +79,8 @@ export class Transit {
 	update( player, daySeconds ) {
 
 		this.buses.update( player, daySeconds );
+		this.trains.update( player, daySeconds );
+		this.subways.update( player, daySeconds );
 
 	}
 

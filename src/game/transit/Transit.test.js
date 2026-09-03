@@ -39,6 +39,44 @@ describe( 'Transit', () => {
 
 	} );
 
+	it( 'places one bounded material-backed vehicle for every transit mode', () => {
+
+		const routes = [
+			busRoute(),
+			railRoute( 'train', 'Rt0', 't0', 40, 0 ),
+			railRoute( 'subway', 'Rs0', 's0', 120, -12 )
+		];
+		const built = [];
+		const transit = new Transit( {
+			atlas: small,
+			networks: { transit: { routes } },
+			factory: stubFactory( built ),
+			capacity: 1
+		} );
+		const time = 30060;
+		transit.update( new THREE.Vector3( 60, 0, 50 ), time );
+
+		const expected = new Map( transitVehiclesAt( routes, time ).map( ( vehicle ) => [ vehicle.kind, vehicle ] ) );
+		for ( const kind of [ 'bus', 'train', 'subway' ] ) {
+
+			const group = transit.group.getObjectByName( kind === 'bus' ? 'buses' : `${kind}s` );
+			const body = transit.group.getObjectByName( `${kind}:body` );
+			const placed = new THREE.Vector3().setFromMatrixPosition( readInstance( body, 0 ) );
+
+			expect( group.children ).toHaveLength( 3 );
+			expect( group.children.every( ( mesh ) => mesh.isInstancedMesh && mesh.count === 1 ) ).toBe( true );
+			expect( placed.toArray() ).toEqual( expected.get( kind ).position );
+
+		}
+		expect( transit.count ).toBe( 3 );
+		expect( built.slice( -9 ) ).toEqual( [
+			'cyberpunk/metal/mid', 'cyberpunk/glass/mid', 'cyberpunk/rubber/mid',
+			'cyberpunk/metal/mid', 'cyberpunk/glass/mid', 'cyberpunk/rubber/mid',
+			'cyberpunk/metal/mid', 'cyberpunk/glass/mid', 'cyberpunk/rubber/mid'
+		] );
+
+	} );
+
 	it( 'runs no bus outside every service period', () => {
 
 		const route = busRoute();
@@ -176,6 +214,22 @@ function busRoute() {
 
 }
 
+function railRoute( kind, id, lineId, x, y ) {
+
+	const stationId = kind === 'train' ? 'ts0' : 'ss0';
+	return {
+		id, kind, lineId,
+		stops: [
+			{ stopId: stationId, x, y, z: 0, shapeDist: 0 },
+			{ stopId: `${stationId}-far`, x, y, z: 100, shapeDist: 100 }
+		],
+		shape: [ [ x, y, 0 ], [ x, y, 100 ] ],
+		template: [ { arrive: 0, depart: 10 }, { arrive: 110, depart: 110 } ],
+		service: [ { start: 30000, end: 36000, headway: 1200, phase: 0 } ]
+	};
+
+}
+
 function readInstance( mesh, index ) {
 
 	const matrix = new THREE.Matrix4();
@@ -186,10 +240,18 @@ function readInstance( mesh, index ) {
 }
 
 /** The materials database is a browser fetch away; the geometry is the promise. */
-function stubFactory() {
+function stubFactory( built = [] ) {
 
 	const material = new THREE.MeshStandardMaterial();
 
-	return { build: () => material, variant: () => material };
+	return {
+		build: ( key ) => {
+
+			built.push( key );
+			return material;
+
+		},
+		variant: () => material
+	};
 
 }
