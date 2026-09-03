@@ -450,7 +450,10 @@ export class GameApp {
 			if ( conversation.npcId ) this.#questEvent( { kind: 'talkedTo', npcId: conversation.npcId } );
 
 			// The chat takes the mouse: the input wants focus and the panel a click.
-			this.view.avatar.setAvatar( { name: conversation.instance?.name ?? 'someone passing by', bar: 1 } );
+			this.view.avatar.setAvatar( {
+				name: conversation.instance ? TalkClient.nameOf( conversation.instance ) : 'someone passing by',
+				bar: 1
+			} );
 			this.input.exitLock();
 
 		};
