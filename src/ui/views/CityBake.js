@@ -9,7 +9,7 @@ const PAD = 40;
  */
 export class CityBake {
 
-	constructor( { bounds, roads, blocks }, pixelsPerMetre ) {
+	constructor( { bounds, roads, blocks, transit }, pixelsPerMetre ) {
 
 		this.pixelsPerMetre = pixelsPerMetre;
 		this.origin = [ bounds.min[ 0 ] - PAD, bounds.min[ 1 ] - PAD ];
@@ -18,9 +18,10 @@ export class CityBake {
 			height: Math.ceil( ( bounds.max[ 1 ] - bounds.min[ 1 ] + PAD * 2 ) * pixelsPerMetre )
 		} );
 
+		this.context = this.canvas.getContext( '2d' );
 		MapPainter.city(
-			this.canvas.getContext( '2d' ),
-			{ roads, blocks },
+			this.context,
+			{ roads, blocks, transit },
 			( x, z ) => this.toPixels( x, z ),
 			pixelsPerMetre,
 			this.canvas.width,

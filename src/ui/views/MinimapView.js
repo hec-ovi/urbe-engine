@@ -28,7 +28,7 @@ export class MinimapView {
 
 	}
 
-	/** @param map { bounds: { min: [x,z], max: [x,z] }, roads: [{ path, width }], blocks: [ring] } */
+	/** @param map city bounds, roads, blocks and generated 2D transit routes and places. */
 	setMap( map ) {
 
 		this.bake = new CityBake( map, PIXELS_PER_METRE );

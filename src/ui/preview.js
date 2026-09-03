@@ -40,8 +40,13 @@ const city = {
 		{ path: [ [ 110, - 160 ], [ 110, 180 ] ], width: 8 }
 	],
 	blocks: [],
-	stations: [ { point: [ - 55, 45 ], name: 'Quay' }, { point: [ 165, - 45 ], name: 'Mill' } ],
-	markers: [ { point: [ 60, - 130 ], label: 'meet Ada' } ]
+	transit: {
+		routes: [ { id: 'bus-1', kind: 'bus', path: [ [ - 180, -90 ], [ 0, 0 ], [ 190, 90 ] ] } ],
+		places: [
+			{ id: 'bus:a', refId: 'a', kind: 'bus', point: [ - 180, -90 ] },
+			{ id: 'bus:b', refId: 'b', kind: 'bus', point: [ 190, 90 ] }
+		]
+	}
 };
 
 for ( const x of [ - 200, - 110, 0, 110 ] ) {
@@ -77,7 +82,11 @@ const world = {
 	ground: [
 		...city.blocks.map( ( polygon ) => ( { surface: 'block', polygon } ) ),
 		...city.roads.map( ( road ) => ( { surface: 'roadway', polygon: roadPlate( road ) } ) )
-	]
+	],
+	transit: {
+		routes: city.transit.routes.map( ( route ) => ( { ...route, path: route.path.map( ( [ x, z ] ) => [ x, 0, z ] ) } ) ),
+		places: city.transit.places.map( ( place ) => ( { ...place, point: [ place.point[ 0 ], 0, place.point[ 1 ] ] } ) )
+	}
 };
 
 const venues = [

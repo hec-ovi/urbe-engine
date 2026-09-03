@@ -13,7 +13,7 @@
   - `ground/`: cover polygons to geometry, highway ramps, decks and supports from Atlas dimensions and elevation knots, the published kerb strip and a kerb cut from pavement edges where no strip exists
   - `city/`: shells and doors, neon, lit windows, lamps, road paint and the painted crossings at every marked junction, interiors streamed a floor at a time from each floor's own GLB and cut into rooms, and which of them are in view
   - `links/`: bridges, AC tubes, tunnels and wires from the connections links, swept from centerline plus cross-section and sliced onto the exact carved apertures (src/game/links/CONTRACT.md)
-  - `transit/`: bus stop shelters and signs, buses driven by the timetables' closed-form vehicle positions, station entrances and the shaft, passage and platform room behind each one (src/game/transit/CONTRACT.md)
+  - `transit/`: bus stop shelters and signs, buses driven by the timetables' closed-form vehicle positions, station entrances and the shaft, passage and platform room behind each one; both maps project the enabled Connections routes and their served stops or entrances (src/game/transit/CONTRACT.md)
   - `props/`: seeded alley and service-corner dressing, bags, crates and boxes, clear of doorways and walk lines (src/game/props/CONTRACT.md)
   - `light/`: every fixture as real light in lumens, clustered or batched by backend, per-room light slots with the computed room fill, air glow, the day switch that puts the city's own lights out at sunrise (src/game/light/CONTRACT.md)
   - `look/`: quality tiers with explicit texture budgets, AgX exposure, height fog tinted by the light in the air, environment probe, the render pipeline with emissive-selected bloom, and serial warm-up that builds pipelines and maps before a frame can stall on them (src/game/look/CONTRACT.md)
@@ -27,7 +27,7 @@
   - `routes/`: deterministic shortest objective routes to published parcel, station and stop entries over Connections' authoritative 3D walk graph (src/game/routes/CONTRACT.md)
   - `sim/`: the simulation library host and exact NPC continuity pass-through (src/game/sim/CONTRACT.md)
   - `debug/`: the hitch log, and the renderer work (shader links, texture uploads) that explains a gap the world did not cause
-  - `time/`, `world/`: game clock, the sun arc and the four sky states it drives, district and parcel lookup, map model for the minimap, named camera poses for the lighting tuning protocol
+  - `time/`, `world/`: game clock, the sun arc and the four sky states it drives, district and parcel lookup, 2D and 3D map models from Atlas and Connections, named camera poses for the lighting tuning protocol
 
 ## Scale experiment (docs/RESEARCH.md 9)
 

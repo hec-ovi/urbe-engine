@@ -7,7 +7,11 @@ import { MinimapView } from './MinimapView.js';
 const MAP = {
 	bounds: { min: [ 0, 0 ], max: [ 100, 100 ] },
 	roads: [ { path: [ [ 0, 50 ], [ 100, 50 ] ], width: 8 } ],
-	blocks: [ [ [ 10, 10 ], [ 40, 10 ], [ 40, 40 ], [ 10, 40 ] ] ]
+	blocks: [ [ [ 10, 10 ], [ 40, 10 ], [ 40, 40 ], [ 10, 40 ] ] ],
+	transit: {
+		routes: [ { id: 'train-1', kind: 'train', path: [ [ 0, 20 ], [ 100, 20 ] ] } ],
+		places: [ { id: 'train:t0:0', refId: 't0', kind: 'train', point: [ 25, 20 ] } ]
+	}
 };
 
 /** The corner map blits the baked city once per update and marks venues live. */
@@ -32,6 +36,15 @@ describe( 'MinimapView', () => {
 		expect( count( view.context, 'drawImage' ) ).toBe( 1 );
 		expect( view.context.calls ).toContainEqual( [ 'set', 'fillStyle', MAP_COLORS.venueOpen ] );
 		expect( view.context.calls ).toContainEqual( [ 'set', 'fillStyle', MAP_COLORS.venueShut ] );
+
+	} );
+
+	it( 'bakes generated transit routes and station entries into the city layer', () => {
+
+		view.setMap( MAP );
+
+		expect( view.bake.context.calls ).toContainEqual( [ 'set', 'strokeStyle', MAP_COLORS.train ] );
+		expect( view.bake.context.calls ).toContainEqual( [ 'strokeRect', 100.5, 92.5, 7, 7 ] );
 
 	} );
 

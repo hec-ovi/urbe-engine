@@ -10,11 +10,12 @@ const PITCH = { min: 0.25, max: 1.45, start: 0.95 };
 const COLORS = {
 	sky: 0x0a0e14, roadway: 0x2f4358, sidewalk: 0x1b2430, block: 0x141a22, open: 0x1a2a24,
 	building: 0x27313f, edge: 0x5a6d84, player: 0xcfe6ff, venueOpen: 0xffc46b, venueShut: 0x4a4136,
-	route: 0x69f4ff, objective: 0xff5fa8
+	bus: 0xffb84d, train: 0x78f06f, subway: 0xa788ff, route: 0x69f4ff, objective: 0xff5fa8
 };
 const LEGEND = [
 	[ 'you', COLORS.player ], [ 'venue open', COLORS.venueOpen ], [ 'venue shut', COLORS.venueShut ],
-	[ 'objective route', COLORS.route ], [ 'building', COLORS.building ], [ 'road', COLORS.roadway ], [ 'pavement', COLORS.sidewalk ]
+	[ 'objective route', COLORS.route ], [ 'bus', COLORS.bus ], [ 'train', COLORS.train ], [ 'subway', COLORS.subway ],
+	[ 'building', COLORS.building ], [ 'road', COLORS.roadway ], [ 'pavement', COLORS.sidewalk ]
 ];
 
 /** A ring of [x, z] as a three Shape lying in the ground plane once rotated onto XZ. */
@@ -68,6 +69,8 @@ export class Map3DView {
 		this.blocks = null;
 		this.edges = null;
 		this.plates = [];
+		this.transitRoutes = new THREE.Group();
+		this.transitPlaces = new THREE.Group();
 		this.venueMarks = new THREE.Group();
 		this.routeLine = null;
 		this.objectiveMark = new THREE.Mesh(
@@ -76,7 +79,7 @@ export class Map3DView {
 		);
 		this.objectiveMark.visible = false;
 		this.marker = this.#marker();
-		this.scene.add( this.venueMarks, this.marker, this.objectiveMark );
+		this.scene.add( this.transitRoutes, this.transitPlaces, this.venueMarks, this.marker, this.objectiveMark );
 		this.scene.add( new THREE.HemisphereLight( 0x9fb4cc, 0x1a2230, 1.4 ) );
 
 		this.canvas = el( 'canvas', { className: 'map-canvas' } );
@@ -99,9 +102,9 @@ export class Map3DView {
 
 	/**
 	 * @param world { bounds: { min: [x,z], max: [x,z] }, buildings: [{ ring: [[x,z]], height }],
-	 *   ground: [{ surface, polygon: [[x,z]] }] }
+	 *   ground: [{ surface, polygon: [[x,z]] }], transit: { routes, places } }
 	 */
-	setWorld( { bounds, buildings, ground } ) {
+	setWorld( { bounds, buildings, ground, transit } ) {
 
 		for ( const old of [ this.blocks, this.edges, ...this.plates ] ) {
 
@@ -118,11 +121,45 @@ export class Map3DView {
 		this.plates = [ [ 'roadway', 0.05 ], [ 'sidewalk', 0.2 ], [ 'block', 0.1 ], [ 'open', 0.1 ] ].map( ( [ surface, y ] ) =>
 			new THREE.Mesh( plateGeometry( ground, surface, y ), new THREE.MeshLambertMaterial( { color: COLORS[ surface ] } ) ) );
 		this.scene.add( this.blocks, this.edges, ...this.plates );
+		this.#setTransit( transit );
 
 		this.bounds = bounds;
 		this.target.set( ( bounds.min[ 0 ] + bounds.max[ 0 ] ) / 2, 0, ( bounds.min[ 1 ] + bounds.max[ 1 ] ) / 2 );
 		this.orbit.distance = Math.min( DISTANCE.max, Math.max( bounds.max[ 0 ] - bounds.min[ 0 ], bounds.max[ 1 ] - bounds.min[ 1 ] ) * 0.9 );
 		this.redraw();
+
+	}
+
+	#setTransit( { routes, places } ) {
+
+		clearGroup( this.transitRoutes );
+		clearGroup( this.transitPlaces );
+
+		for ( const route of routes ) {
+
+			const line = new THREE.Line(
+				new THREE.BufferGeometry().setFromPoints( route.path.map( ( point ) => new THREE.Vector3( ...point ) ) ),
+				new THREE.LineBasicMaterial( { color: COLORS[ route.kind ], depthTest: false, depthWrite: false } )
+			);
+			line.name = `transit-route:${route.id}`;
+			line.renderOrder = 5;
+			this.transitRoutes.add( line );
+
+		}
+
+		for ( const place of places ) {
+
+			const mark = new THREE.Mesh(
+				new THREE.BoxGeometry( 4, 1.5, 4 ),
+				new THREE.MeshBasicMaterial( { color: COLORS[ place.kind ], depthTest: false, depthWrite: false } )
+			);
+			mark.name = `transit-place:${place.id}`;
+			mark.position.set( place.point[ 0 ], place.point[ 1 ] + 0.75, place.point[ 2 ] );
+			mark.userData.point = [ ...place.point ];
+			mark.renderOrder = 6;
+			this.transitPlaces.add( mark );
+
+		}
 
 	}
 
@@ -289,6 +326,19 @@ export class Map3DView {
 			if ( ! this.element.hidden ) this.shown();
 
 		} );
+
+	}
+
+}
+
+function clearGroup( group ) {
+
+	for ( const child of [ ...group.children ] ) {
+
+		child.geometry?.dispose();
+		if ( Array.isArray( child.material ) ) child.material.forEach( ( material ) => material.dispose() );
+		else child.material?.dispose();
+		group.remove( child );
 
 	}
 

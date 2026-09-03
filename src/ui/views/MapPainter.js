@@ -6,7 +6,9 @@ export const MAP_COLORS = {
 	player: '#cfe6ff',
 	venueOpen: '#ffc46b',
 	venueShut: '#4a4136',
-	station: '#2ee6ff',
+	bus: '#ffb84d',
+	train: '#78f06f',
+	subway: '#a788ff',
 	marker: '#ff5fa8',
 	route: '#69f4ff'
 };
@@ -19,7 +21,7 @@ export const MAP_COLORS = {
 export class MapPainter {
 
 	/** Ground, blocks and roads of the whole city, baked once. */
-	static city( ctx, { roads, blocks }, toPixels, pixelsPerMetre, width, height ) {
+	static city( ctx, { roads, blocks, transit }, toPixels, pixelsPerMetre, width, height ) {
 
 		ctx.fillStyle = MAP_COLORS.ground;
 		ctx.fillRect( 0, 0, width, height );
@@ -42,6 +44,33 @@ export class MapPainter {
 			ctx.lineWidth = Math.max( 1.5, road.width * pixelsPerMetre );
 			MapPainter.#trace( ctx, road.path, toPixels );
 			ctx.stroke();
+
+		}
+
+		MapPainter.transit( ctx, transit, toPixels );
+
+	}
+
+	/** Generated service lines and their stops or street entrances. */
+	static transit( ctx, transit, toPixels ) {
+
+		for ( const route of transit.routes ) {
+
+			if ( route.path.length < 2 ) continue;
+
+			ctx.strokeStyle = MAP_COLORS[ route.kind ];
+			ctx.lineWidth = 2;
+			ctx.lineCap = 'butt';
+			ctx.lineJoin = 'miter';
+			MapPainter.#trace( ctx, route.path, toPixels );
+			ctx.stroke();
+
+		}
+
+		for ( const place of transit.places ) {
+
+			const [ x, y ] = toPixels( place.point[ 0 ], place.point[ 1 ] );
+			MapPainter.station( ctx, x, y, place.kind );
 
 		}
 
@@ -69,9 +98,9 @@ export class MapPainter {
 	}
 
 	/** A framed square: transit stops and station entrances. */
-	static station( ctx, x, y ) {
+	static station( ctx, x, y, kind ) {
 
-		ctx.strokeStyle = MAP_COLORS.station;
+		ctx.strokeStyle = MAP_COLORS[ kind ];
 		ctx.lineWidth = 1.5;
 		ctx.strokeRect( x - 3.5, y - 3.5, 7, 7 );
 

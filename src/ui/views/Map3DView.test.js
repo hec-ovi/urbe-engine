@@ -11,7 +11,17 @@ const world = {
 	ground: [
 		{ surface: 'roadway', polygon: [ [ 0, 40 ], [ 100, 40 ], [ 100, 48 ], [ 0, 48 ] ] },
 		{ surface: 'sidewalk', polygon: [ [ 0, 48 ], [ 100, 48 ], [ 100, 51 ], [ 0, 51 ] ] }
-	]
+	],
+	transit: {
+		routes: [
+			{ id: 'bus-1', kind: 'bus', path: [ [ 2, 0.5, 10 ], [ 80, 4, 10 ] ] },
+			{ id: 'subway-1', kind: 'subway', path: [ [ 20, -12, 30 ], [ 60, -12, 30 ] ] }
+		],
+		places: [
+			{ id: 'bus:b0', refId: 'b0', kind: 'bus', point: [ 2, 0.5, 10 ] },
+			{ id: 'subway:s0:0', refId: 's0', kind: 'subway', point: [ 20, 0, 30 ] }
+		]
+	}
 };
 
 /**
@@ -48,6 +58,23 @@ describe( 'Map3DView', () => {
 		// No WebGL under jsdom: showing the panel degrades to a scene with no frame.
 		expect( () => view.shown() ).not.toThrow();
 		expect( view.renderer ).toBe( null );
+
+	} );
+
+	it( 'draws every generated transit route and entry at its published height', () => {
+
+		const view = new Map3DView( { onClose: () => {} } );
+		view.setWorld( world );
+
+		expect( view.transitRoutes.children.map( ( route ) => route.name ) ).toEqual( [
+			'transit-route:bus-1', 'transit-route:subway-1'
+		] );
+		expect( view.transitRoutes.children[ 0 ].geometry.getAttribute( 'position' ).array ).toEqual(
+			new Float32Array( [ 2, 0.5, 10, 80, 4, 10 ] )
+		);
+		expect( view.transitPlaces.children.map( ( place ) => place.userData.point ) ).toEqual( [
+			[ 2, 0.5, 10 ], [ 20, 0, 30 ]
+		] );
 
 	} );
 

@@ -425,10 +425,10 @@ export class GameApp {
 
 		};
 
-		const map = mapModel( atlas );
+		const map = mapModel( atlas, connections.networks );
 		this.view.minimap.setMap( map );
 		this.view.minimap.setVenues( this.venues.marks );
-		this.view.map.setWorld( blockWorld( atlas ) );
+		this.view.map.setWorld( blockWorld( atlas, connections.networks ) );
 		this.view.map.setVenues( this.venues.marks );
 		this.#updateObjectiveRoute( 0, true );
 		this.view.settings.setValues( { quality: this.tier.name, fog: config.fog, exposure: config.exposure, crowd: config.maxCrowd } );
