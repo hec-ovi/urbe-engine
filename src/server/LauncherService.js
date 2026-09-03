@@ -180,7 +180,9 @@ export function presentCatalog( catalog ) {
 
 	const cities = new Map( catalog.cities.map( ( city ) => [ city.id, city ] ) );
 	return {
-		games: catalog.games.map( ( game ) => presentGame( game, cities.get( game.cityId ) ) ),
+		games: [ ...catalog.games ]
+			.sort( ( left, right ) => Date.parse( right.save.updatedAt ) - Date.parse( left.save.updatedAt ) || ( left.id < right.id ? - 1 : left.id > right.id ? 1 : 0 ) )
+			.map( ( game ) => presentGame( game, cities.get( game.cityId ) ) ),
 		cities: catalog.cities.map( presentCity )
 	};
 

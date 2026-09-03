@@ -18,6 +18,7 @@ Purpose: connect the isolated game front door to a catalog and generation API wi
 ## Outputs
 
 - `start()` mounts one `GameView`, clears its loading surface, opens its main menu, then loads and validates [schema/catalog.schema.json](schema/catalog.schema.json).
+- The server presents games by saved `updatedAt`, newest first, so Continue targets the latest confirmed playthrough. Equal timestamps use id order.
 - Continue validates the returned play URL before sending it to `navigate(url)`.
 - Game and city exports validate a JSON object before sending it to `download(filename, payload)`. Filenames end in `.urbegame.json` or `.urbecity.json`.
 - Local game loading reads and parses the selected file, passes the JSON object to `api.importGame`, validates the returned catalog, then opens the games directory.

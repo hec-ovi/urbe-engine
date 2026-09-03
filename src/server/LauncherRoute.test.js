@@ -75,7 +75,7 @@ describe( 'launcher HTTP boundary', () => {
 
 		const imported = { ...exported, id: 'imported-night', name: 'Imported Night', save: { ...exported.save, revision: 5 } };
 		const after = await api.importGame( imported );
-		expect( after.games.map( ( game ) => game.id ) ).toEqual( [ 'imported-night', 'night-shift' ] );
+		expect( after.games.map( ( game ) => game.id ) ).toEqual( [ 'night-shift', 'imported-night' ] );
 		expect( JSON.parse( readFileSync( join( outDir, 'games', 'imported-night', 'game.json' ), 'utf8' ) ).save.revision ).toBe( 5 );
 
 	} );
