@@ -104,4 +104,38 @@ describe( 'FlyCamera', () => {
 
 	} );
 
+	it( 'reports capture failure and clears capture when the window loses focus', async () => {
+
+		const states = [];
+		const { element, fly } = rig();
+		fly.onLockChange = ( locked, failed ) => states.push( { locked, failed } );
+		const exit = vi.fn( () => {
+
+			document.pointerLockElement = null;
+			document.dispatchEvent( new Event( 'pointerlockchange' ) );
+
+		} );
+		document.exitPointerLock = exit;
+
+		element.dispatchEvent( new Event( 'click' ) );
+		window.dispatchEvent( new KeyboardEvent( 'keydown', { code: 'KeyW' } ) );
+		window.dispatchEvent( new Event( 'blur' ) );
+
+		expect( exit ).toHaveBeenCalledOnce();
+		expect( fly.keys.size ).toBe( 0 );
+		expect( states ).toEqual( [
+			{ locked: true, failed: false },
+			{ locked: false, failed: false }
+		] );
+
+		element.requestPointerLock = vi.fn( () => Promise.reject( new Error( 'denied' ) ) );
+		element.dispatchEvent( new Event( 'click' ) );
+		await Promise.resolve();
+
+		expect( states.at( -1 ) ).toEqual( { locked: false, failed: true } );
+		fly.dispose();
+		delete document.exitPointerLock;
+
+	} );
+
 } );
