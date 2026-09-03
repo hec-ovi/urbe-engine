@@ -15,6 +15,7 @@ import { AvatarCard } from '../widgets/AvatarCard.js';
 import { VideoCallPanel } from '../widgets/VideoCallPanel.js';
 import { MissionToast } from '../widgets/MissionToast.js';
 import { MissionSummary } from '../widgets/MissionSummary.js';
+import { TransitHud } from '../widgets/TransitHud.js';
 import { PauseMenu } from '../widgets/PauseMenu.js';
 import { TabBar } from '../widgets/TabBar.js';
 import { PanelHost } from './PanelHost.js';
@@ -34,13 +35,14 @@ const noop = () => {};
  * time over the game, and the chat, avatar, call and mission widgets.
  * Presentation only: it is handed values and reports intents through props.
  * props (all optional): { onResume, onCloseDialog, onSend, onOpen, onClose,
- *   onLeave, onSettingChange, onHangUp, onSummaryClose }
+	 *   onLeave, onSettingChange, onHangUp, onSummaryClose, onTransitSelect, onTransitCancel }
  */
 export class GameView {
 
 	constructor( {
 		onResume = noop, onCloseDialog = noop, onSend = noop, onOpen = noop, onClose = noop,
 		onLeave = noop, onSettingChange = noop, onHangUp = noop, onSummaryClose = noop,
+		onTransitSelect = noop, onTransitCancel = noop,
 		menu = {}
 	} = {} ) {
 
@@ -56,6 +58,7 @@ export class GameView {
 		this.toast = new MissionToast();
 		this.dialog = new ChatPanel( { onSend, onClose: onCloseDialog } );
 		this.summary = new MissionSummary( { onClose: onSummaryClose } );
+		this.transit = new TransitHud( { onSelect: onTransitSelect, onCancel: onTransitCancel } );
 		this.pause = new PauseMenu( { onResume } );
 
 		this.map = new Map3DView( { onClose: close } );
@@ -120,6 +123,7 @@ export class GameView {
 			this.toast.element,
 			this.dialog.element,
 			this.summary.element,
+			this.transit.element,
 			this.pause.element,
 			this.panels.element,
 			this.tabs.element,

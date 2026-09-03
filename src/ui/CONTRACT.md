@@ -6,10 +6,10 @@ Layout: `views/` are full panels and the overlays that assemble them, `widgets/`
 
 ## GameView (views/GameView.js)
 The whole game overlay. `mount( parent )` appends it.
-- props (all optional): `onResume()`, `onCloseDialog()`, `onSend( text )`, `onOpen( name )`, `onClose()`, `onLeave()`, `onSettingChange({ key, value })`, `onHangUp()`, `onSummaryClose()`, `menu` (the `MainMenuView` callbacks below)
+- props (all optional): `onResume()`, `onCloseDialog()`, `onSend( text )`, `onOpen( name )`, `onClose()`, `onLeave()`, `onSettingChange({ key, value })`, `onHangUp()`, `onSummaryClose()`, `onTransitSelect(value)`, `onTransitCancel()`, `menu` (the `MainMenuView` callbacks below)
 - methods: `open( name )`, `close()`, `toggle( name )` with name one of `QUESTS`, `MAP`, `INVENTORY`, `CODEX`, `SETTINGS`, `CONTROLS`; `setPaused( bool )` shows the pause screen and the tab bar together (the bar is hidden while playing and shown while paused or while a panel is open); `step( text )`, `ready()`, `fail( message )` drive the loading surface
 - front-door methods: `showMainMenu()`, `hideMainMenu()`, `setLibrary(data)`, `setCreationState(data)`
-- children the game feeds directly: `clock`, `prompt`, `readout`, `stats`, `minimap`, `pause`, `avatar`, `call`, `toast`, `dialog` (ChatPanel), `summary`, `map`, `inventory`, `quests`, `codex`, `settings`, `controls`, `tabs`, `panels`, `mainMenu`
+- children the game feeds directly: `clock`, `prompt`, `readout`, `stats`, `minimap`, `pause`, `avatar`, `call`, `toast`, `dialog` (ChatPanel), `summary`, `transit`, `map`, `inventory`, `quests`, `codex`, `settings`, `controls`, `tabs`, `panels`, `mainMenu`
 
 ## MainMenuView (views/MainMenuView.js)
 The full-screen front door. It owns display and selection state only. Storage, generation and game launch remain caller responsibilities.
@@ -67,6 +67,7 @@ One panel over the game at a time.
 - **LocationReadout**: `update( position, district, parcel )`, `setAbout( paths )`
 - **DebugStats**: `update( stats )` with `{ backend, tier, width, height, frameMs, gpuMs, drawCalls, triangles, lights, crowd, cars, interiors, materials, unresolved, hitches, worstMs }`; the first row names the backend, the tier and the render size, warned on the fallback backend; then how many material keys resolved, warned while any has not, and last whether the run has stalled and by how long, warned once it has
 - **PauseMenu**: props `onResume()`; `setVisible( bool )`
+- **TransitHud**: props `onSelect(value)`, `onCancel()`; `choose([{ id, label, value }])` opens an accessible service dialog with one button per candidate, `close()` removes it, `open` reports its state, and `ride(text | null)` shows or clears the current line and next stop.
 
 ## Components
 `dom.el`, `Icon.icon( name )`, `KeyCap.keyCap( text )`, `PanelHeader` (title, key hint, Esc button), `EmptyState.emptyState( text )`, `SettingField`, `Button`, `SelectField`, `MenuButton.menuButton`. Stylesheets: `game.css` (palette and HUD chrome), `tabbar.css`, `panels.css`, `views.css`, `chat.css`, `mission.css`, `launcher.css` (front door and creation stages), `styles.css` (viewer and experiment overlays).

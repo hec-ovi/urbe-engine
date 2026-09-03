@@ -130,6 +130,62 @@
 	white-space: nowrap;
 }
 
+.hud-transit-status {
+	position: absolute;
+	top: 52px;
+	left: 50%;
+	transform: translateX(-50%);
+	background: var(--ui-panel);
+	border: 1px solid var(--ui-line);
+	padding: 6px 12px;
+	font: 11px var(--ui-mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.hud-transit-chooser {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: min(440px, calc(100vw - 32px));
+	transform: translate(-50%, -50%);
+	pointer-events: auto;
+	background: var(--ui-panel);
+	border: 1px solid var(--ui-line);
+	padding: 18px;
+}
+
+.hud-transit-title {
+	margin: 0 0 12px;
+	font: 14px var(--ui-mono);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+
+.hud-transit-options {
+	display: grid;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+
+.hud-transit-option {
+	width: 100%;
+	background: #101d25;
+	color: var(--ui-text);
+	border: 1px solid var(--ui-line);
+	padding: 10px 12px;
+	font: 12px var(--ui-mono);
+	text-align: left;
+	cursor: pointer;
+}
+
+.hud-transit-option:hover,
+.hud-transit-option:focus-visible {
+	background: var(--ui-accent-wash);
+	border-color: var(--ui-accent);
+	outline: none;
+}
+
 .hud-readout {
 	position: absolute;
 	left: 14px;
