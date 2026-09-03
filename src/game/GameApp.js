@@ -3,7 +3,6 @@ import { RendererFactory } from '../app/RendererFactory.js';
 import { MaterialResolver } from '../building/MaterialResolver.js';
 import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
-import { DialogueSpeech } from './voice/index.js';
 import { QuestSession } from './quests/QuestSession.js';
 import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
 import { MissionItemAssets } from './quests/MissionItemAssets.js';
@@ -116,24 +115,16 @@ const FAR_PLANE = 900;
 export class GameApp {
 
 	constructor( config, {
-		navigate = ( path ) => window.location.assign( path ),
-		speechConnect = () => DialogueSpeech.connect()
+		navigate = ( path ) => window.location.assign( path )
 	} = {} ) {
 
 		this.config = config;
 		this.navigate = navigate;
-		this.speechConnect = speechConnect;
 		this.talk = new TalkClient( config.outBase );
 		this.view = new GameView( {
 			onResume: () => this.input?.requestLock(),
-			onCloseDialog: () => {
-
-				this.#cancelDialogueSpeech( 'player-left' );
-				this.interactor?.close( this.clock );
-
-			},
+			onCloseDialog: () => this.interactor?.close( this.clock ),
 			onSend: ( text ) => this.#say( text ),
-			onRecord: ( recording ) => this.#record( recording ),
 			onOpen: () => this.input?.exitLock(),
 			onClose: () => this.input?.requestLock(),
 			onLeave: () => this.#leave(),
@@ -169,9 +160,6 @@ export class GameApp {
 	async #run() {
 
 		const config = this.config;
-		this.view.step( 'checking local speech' );
-		this.speech = await this.speechConnect();
-
 		this.view.step( 'reading the world' );
 		const source = new WorldSource( config );
 		const {
@@ -455,7 +443,6 @@ export class GameApp {
 		} );
 		this.interactor.onConversation = ( conversation ) => {
 
-			if ( ! conversation ) this.#cancelDialogueSpeech( 'player-left' );
 			this.view.dialog.show( conversation );
 			this.view.avatar.setVisible( Boolean( conversation ) );
 
@@ -680,16 +667,9 @@ export class GameApp {
 		this.view.dialog.addMessage( { from: 'player', name: 'you', text } );
 		const conversation = this.interactor?.conversation;
 		if ( ! conversation?.instance ) return;
-		this.#cancelDialogueSpeech( 'new-line' );
 		const turn = ( this.dialogueTurn ?? 0 ) + 1;
 		this.dialogueTurn = turn;
-		this.speech?.cancelTranscription();
-		this.view.dialog.setRecording( false );
-		const unlock = this.speech
-			? this.speech.unlock().then( () => null, ( error ) => error )
-			: Promise.resolve( null );
 		this.animations.playerDialogueTurn( conversation );
-		this.animations.completeDialogueTurn( conversation );
 
 		const name = TalkClient.nameOf( conversation.instance );
 		let reply;
@@ -699,6 +679,7 @@ export class GameApp {
 			console.warn( 'talk:', error.message );
 			if ( this.interactor.conversation === conversation && turn === this.dialogueTurn ) {
 
+				this.animations.completeDialogueTurn( conversation );
 				this.view.dialog.addMessage( { from: 'npc', name, text: '...' } );
 
 			}
@@ -706,97 +687,9 @@ export class GameApp {
 
 		}
 		if ( this.interactor.conversation !== conversation || turn !== this.dialogueTurn ) return;
+		this.animations.completeDialogueTurn( conversation );
 		this.view.dialog.addMessage( { from: 'npc', name, text: reply } );
-		const audioError = await unlock;
-		if ( audioError ) {
-
-			this.#speechError( audioError );
-			return;
-
-		}
-		if ( this.interactor.conversation !== conversation || turn !== this.dialogueTurn ) return;
-		if ( ! this.speech ) return;
-		try {
-
-			await this.speech.speak( conversation, reply, {
-				onPlaybackStart: () => {
-
-					if ( this.interactor.conversation === conversation && turn === this.dialogueTurn ) {
-
-						this.animations.npcDialogueTurn( conversation );
-
-					}
-
-				},
-				onPlaybackEnd: () => {
-
-					if ( this.interactor.conversation === conversation && turn === this.dialogueTurn ) {
-
-						this.animations.completeDialogueTurn( conversation );
-
-					}
-
-				}
-			} );
-
-		} catch ( error ) {
-
-			if ( this.interactor.conversation === conversation && turn === this.dialogueTurn ) {
-
-				this.animations.completeDialogueTurn( conversation );
-				this.#speechError( error );
-
-			}
-
-		}
-
-	}
-
-	async #record( recording ) {
-
-		if ( ! this.speech ) return;
-		if ( recording ) {
-
-			try {
-
-				const [ , started ] = await Promise.all( [ this.speech.unlock(), this.speech.startTranscription() ] );
-				this.view.dialog.setRecording( started === true );
-
-			} catch ( error ) {
-
-				this.speech.cancelTranscription();
-				this.view.dialog.setRecording( false );
-				this.#speechError( error );
-
-			}
-			return;
-
-		}
-
-		this.view.dialog.setRecording( false );
-		try {
-
-			const result = await this.speech.stopTranscription();
-			if ( result?.text && this.interactor?.conversation ) await this.#say( result.text );
-
-		} catch ( error ) { this.#speechError( error ); }
-
-	}
-
-	#cancelDialogueSpeech( reason ) {
-
-		const conversation = this.interactor?.conversation;
-		if ( conversation ) this.animations?.completeDialogueTurn( conversation );
-		this.speech?.cancel( reason );
-		this.speech?.cancelTranscription();
-		this.view.dialog.setRecording( false );
-
-	}
-
-	#speechError( error ) {
-
-		console.warn( 'speech:', error.message );
-		this.view.toast.show( { title: 'Speech unavailable', text: error.message } );
+		this.animations.npcDialogueTurn( conversation );
 
 	}
 
