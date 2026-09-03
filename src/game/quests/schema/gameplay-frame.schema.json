@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:quest-actions:gameplay-frame",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["timeMin", "playerPlaces", "feet", "eye", "look"],
+  "properties": {
+    "timeMin": { "type": "number", "minimum": 0 },
+    "playerPlaces": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/place" }
+    },
+    "feet": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/vector3" },
+    "eye": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/vector3" },
+    "look": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/vector3" }
+  }
+}

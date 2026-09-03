@@ -76,7 +76,11 @@ export class Interactor {
 
 		if ( this.target.kind === 'quest' ) {
 
-			return this.quests.perform( this.target.interaction, bindingAction, clock.timeMin );
+			return this.quests.perform( {
+				targetKey: this.target.interaction.targetKey,
+				bindingAction,
+				timeMin: clock.timeMin
+			} );
 
 		}
 		if ( bindingAction !== 'interact' ) return;

@@ -215,11 +215,14 @@ describe( 'shared quest interaction route', () => {
 
 		const calls = [];
 		const quests = {
-			candidates: vi.fn( () => [ { kind: 'quest', aim: 1, interaction: { prompt: 'E  take drive   R  read drive' } } ] ),
-			perform: vi.fn( ( interaction, binding, timeMin ) => {
+			candidates: vi.fn( () => [ {
+				kind: 'quest', aim: 1,
+				interaction: { targetKey: 'quest:q:pickup', prompt: 'E  take drive   R  read drive' }
+			} ] ),
+			perform: vi.fn( ( request ) => {
 
-				calls.push( { interaction, binding, timeMin } );
-				return { ok: true, action: binding };
+				calls.push( request );
+				return { ok: true, action: request.bindingAction };
 
 			} )
 		};
@@ -235,7 +238,10 @@ describe( 'shared quest interaction route', () => {
 		expect( quests.candidates ).toHaveBeenCalledWith( state );
 		expect( interactor.activate( CLOCK ) ).toMatchObject( { action: 'interact' } );
 		expect( interactor.activate( CLOCK, 'secondary-interact' ) ).toMatchObject( { action: 'secondary-interact' } );
-		expect( calls.map( ( call ) => call.binding ) ).toEqual( [ 'interact', 'secondary-interact' ] );
+		expect( calls ).toEqual( [
+			{ targetKey: 'quest:q:pickup', bindingAction: 'interact', timeMin: CLOCK.timeMin },
+			{ targetKey: 'quest:q:pickup', bindingAction: 'secondary-interact', timeMin: CLOCK.timeMin }
+		] );
 
 	} );
 

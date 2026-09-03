@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:quest-actions:gameplay-world",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["parcels"],
+  "properties": {
+    "parcels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "anchor"],
+        "properties": {
+          "id": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+          "anchor": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "prefixItems": [ { "type": "number" }, { "type": "number" }, { "type": "number" } ],
+            "items": false
+          }
+        }
+      }
+    }
+  }
+}

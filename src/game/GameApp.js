@@ -4,7 +4,7 @@ import { MaterialResolver } from '../building/MaterialResolver.js';
 import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { QuestSession } from './quests/QuestSession.js';
-import { QuestGameplay } from './quests/QuestGameplay.js';
+import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
 import { ObjectiveRouter } from './routes/ObjectiveRouter.js';
 import { ObjectiveGuide } from './routes/ObjectiveGuide.js';
 import { GamePersistence, mergeInventory, mergeProgress, uniqueLocations } from './persistence/index.js';
@@ -305,8 +305,7 @@ export class GameApp {
 		this.bookmarks = new Bookmarks( { fixtures, rooms: () => this.stream.rooms, networks: connections.networks } );
 		this.questGameplay = new QuestGameplay( {
 			session: this.quests,
-			atlas,
-			doors: city.doors,
+			world: questGameplayWorld( atlas, city.doors ),
 			crowd: this.crowd,
 			physics: this.physics,
 			playerCollider: this.body.collider,
@@ -455,9 +454,9 @@ export class GameApp {
 		const prompt = this.interactor.update( delta, {
 			timeMin: this.clock.timeMin,
 			playerPlaces,
-			feet,
-			eye: this.controller.eye,
-			look: this.controller.look
+			feet: { x: feet.x, y: feet.y, z: feet.z },
+			eye: { x: this.controller.eye.x, y: this.controller.eye.y, z: this.controller.eye.z },
+			look: { x: this.controller.look.x, y: this.controller.look.y, z: this.controller.look.z }
 		} );
 		this.view.prompt.update( this.input.locked ? prompt : null );
 

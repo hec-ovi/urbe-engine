@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:quest-actions:gameplay-candidates",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["kind", "aim", "interaction"],
+    "properties": {
+      "kind": { "const": "quest" },
+      "aim": { "type": "number", "minimum": -1, "maximum": 1 },
+      "interaction": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["targetKey", "prompt"],
+        "properties": {
+          "targetKey": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+          "prompt": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" }
+        }
+      }
+    }
+  }
+}

@@ -3,11 +3,18 @@ import interactionRequest from './schema/interaction-request.schema.json';
 import interactionResult from './schema/interaction-result.schema.json';
 import interactionTargets from './schema/interaction-targets.schema.json';
 import activeObjective from './schema/active-objective.schema.json';
+import gameplayWorld from './schema/gameplay-world.schema.json';
+import gameplayFrame from './schema/gameplay-frame.schema.json';
+import gameplayCandidates from './schema/gameplay-candidates.schema.json';
+import gameplayPerform from './schema/gameplay-perform.schema.json';
 import targetQuery from './schema/target-query.schema.json';
 import values from './schema/values.schema.json';
 import { QuestActionError } from './QuestActionError.js';
 
-const SCHEMAS = [ values, targetQuery, interactionRequest, interactionTargets, activeObjective, interactionResult ];
+const SCHEMAS = [
+	values, targetQuery, interactionRequest, interactionTargets, activeObjective, interactionResult,
+	gameplayWorld, gameplayFrame, gameplayCandidates, gameplayPerform
+];
 
 export class QuestActionBoundary {
 

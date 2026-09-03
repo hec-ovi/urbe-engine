@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { QuestActions } from './QuestActions.js';
+import { QuestActionBoundary } from './QuestActionBoundary.js';
 
 const PHYSICAL_REACH = { pickup: 2.5, steal: 2, listen: 8 };
 const AREA_REACH = 3.2;
@@ -13,8 +14,10 @@ const CHEST = 1.3;
  */
 export class QuestGameplay {
 
-	constructor( { session, actions, atlas, doors, crowd, physics, playerCollider, materialFactory } ) {
+	constructor( { session, actions, world, crowd, physics, playerCollider, materialFactory } ) {
 
+		this.boundary = new QuestActionBoundary();
+		this.boundary.input( 'gameplay-world', world );
 		this.actions = actions ?? new QuestActions( session );
 		this.crowd = crowd;
 		this.physics = physics;
@@ -22,10 +25,11 @@ export class QuestGameplay {
 		this.materialFactory = materialFactory;
 		this.group = new THREE.Group();
 		this.group.name = 'quest-targets';
-		this.anchors = parcelAnchors( atlas, doors );
+		this.anchors = new Map( world.parcels.map( ( parcel ) => [ parcel.id, new THREE.Vector3( ...parcel.anchor ) ] ) );
 		this.staticMarks = new Map();
 		this.actorMarks = new Map();
 		this.changedTargets = new Set();
+		this.liveInteractions = new Map();
 
 	}
 
@@ -36,35 +40,49 @@ export class QuestGameplay {
 	}
 
 	/** Candidates consumed by the shared door, lift, NPC and quest Interactor. */
-	candidates( { timeMin, playerPlaces, feet, eye, look } ) {
+	candidates( frame ) {
 
+		this.boundary.input( 'gameplay-frame', frame );
+		const { timeMin, playerPlaces } = frame;
+		const feet = vector3( frame.feet );
+		const eye = vector3( frame.eye );
+		const look = vector3( frame.look );
 		const targets = this.actions.targets( { timeMin } );
 		this.#sync( targets );
 		const candidates = [];
+		this.liveInteractions.clear();
 
 		for ( const target of [ ...targets ].sort( ( left, right ) => left.targetKey.localeCompare( right.targetKey ) ) ) {
 
 			if ( ! target.availability.available || this.changedTargets.has( target.targetKey ) ) continue;
 			const interaction = this.#interaction( target, { timeMin, playerPlaces, feet, eye, look } );
-			if ( interaction ) candidates.push( { kind: 'quest', aim: interaction.aim, interaction } );
+			if ( ! interaction ) continue;
+			this.liveInteractions.set( target.targetKey, interaction );
+			candidates.push( {
+				kind: 'quest', aim: Math.max( - 1, Math.min( 1, interaction.aim ) ),
+				interaction: { targetKey: target.targetKey, prompt: interaction.prompt }
+			} );
 
 		}
 
 		this.#dropInactiveActorMarks( new Set( targets.map( ( target ) => target.targetKey ) ) );
-		return candidates;
+		return this.boundary.output( 'gameplay-candidates', candidates );
 
 	}
 
 	/** Runs the action advertised under the selected symbolic binding. */
-	perform( interaction, bindingAction, timeMin ) {
+	perform( request ) {
 
-		const offered = interaction.target.presentation.actions.find( ( action ) => action.bindingAction === bindingAction );
+		this.boundary.input( 'gameplay-perform', request );
+		const interaction = this.liveInteractions.get( request.targetKey );
+		if ( ! interaction ) return null;
+		const offered = interaction.target.presentation.actions.find( ( action ) => action.bindingAction === request.bindingAction );
 		if ( ! offered ) return null;
 
 		const result = this.actions.perform( {
 			targetKey: interaction.target.targetKey,
 			action: offered.action,
-			timeMin,
+			timeMin: request.timeMin,
 			playerPlaces: interaction.playerPlaces,
 			...( interaction.focus ? { focus: interaction.focus } : {} )
 		} );
@@ -274,17 +292,25 @@ function aimAt( eye, look, point ) {
 
 }
 
-function parcelAnchors( atlas, doors ) {
+function vector3( value ) {
+
+	return new THREE.Vector3( value.x, value.y, value.z );
+
+}
+
+/** Validated static parcel placement data crossing from the assembled city. */
+export function questGameplayWorld( atlas, doors, boundary = new QuestActionBoundary() ) {
 
 	const byDoor = new Map( doors.map( ( door ) => [ door.parcelId, door ] ) );
-	return new Map( atlas.parcels.map( ( parcel ) => {
+	const world = { parcels: atlas.parcels.map( ( parcel ) => {
 
 		const door = byDoor.get( parcel.id );
-		if ( door ) return [ parcel.id, door.inside.clone() ];
+		if ( door ) return { id: parcel.id, anchor: door.inside.toArray() };
 		const [ x, z ] = parcel.access.point;
-		return [ parcel.id, new THREE.Vector3( x, 0.12, z ) ];
+		return { id: parcel.id, anchor: [ x, 0.12, z ] };
 
-	} ) );
+	} ) };
+	return boundary.output( 'gameplay-world', world );
 
 }
 

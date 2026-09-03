@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { QuestGameplay } from './QuestGameplay.js';
+import { QuestGameplay, questGameplayWorld } from './QuestGameplay.js';
+import { QuestActionError } from './QuestActionError.js';
 
 const FEET = new THREE.Vector3( 0, 0, 0 );
 const EYE = new THREE.Vector3( 0, 1.7, 0 );
@@ -20,7 +21,7 @@ describe( 'live quest target projection', () => {
 		expect( candidate.interaction.prompt ).toBe( 'E  take target pickup   R  read target pickup' );
 
 		actions.perform.mockReturnValueOnce( result( 'read' ) );
-		gameplay.perform( candidate.interaction, 'secondary-interact', 600 );
+		gameplay.perform( perform( candidate, 'secondary-interact' ) );
 		expect( actions.perform ).toHaveBeenLastCalledWith( expect.objectContaining( {
 			targetKey: target.targetKey, action: 'read', playerPlaces: [ PARCEL ],
 			focus: expect.objectContaining( { visible: true, unobstructed: true } )
@@ -28,7 +29,7 @@ describe( 'live quest target projection', () => {
 		expect( gameplay.group.children ).toHaveLength( 1 );
 
 		actions.perform.mockReturnValueOnce( result( 'take', [ { targetKey: target.targetKey, state: 'collected' } ] ) );
-		gameplay.perform( candidate.interaction, 'interact', 600 );
+		gameplay.perform( perform( candidate ) );
 		expect( gameplay.group.children ).toHaveLength( 0 );
 
 	} );
@@ -46,7 +47,7 @@ describe( 'live quest target projection', () => {
 		const candidate = gameplay.candidates( state )[ 0 ];
 
 		expect( candidate.kind ).toBe( 'quest' );
-		gameplay.perform( candidate.interaction, 'interact', 600 );
+		gameplay.perform( perform( candidate ) );
 		expect( actions.perform ).toHaveBeenCalledWith( expect.objectContaining( { action: actionId, playerPlaces: [ place ] } ) );
 
 	} );
@@ -66,12 +67,27 @@ describe( 'live quest target projection', () => {
 		const candidate = gameplay.candidates( frame( look ) )[ 0 ];
 
 		expect( crowd.questMember.mock.calls.map( ( call ) => call[ 0 ] ) ).toEqual( actorIds );
-		expect( candidate.interaction.focus ).toMatchObject( { visible: true, unobstructed: true } );
-		gameplay.perform( candidate.interaction, 'interact', 600 );
+		gameplay.perform( perform( candidate ) );
 		expect( actions.perform ).toHaveBeenCalledWith( expect.objectContaining( { action: kind, focus: expect.any( Object ) } ) );
 
 		const blocked = setup( fakeActions( target ), { crowd, blocked: true } );
 		expect( blocked.candidates( frame( look ) ) ).toEqual( [] );
+
+	} );
+
+	it( 'validates the city projection, frame and selected binding at the live boundary', () => {
+
+		const world = questGameplayWorld(
+			{ parcels: [ { id: 'p9', access: { point: [ 4, 5 ] } } ] },
+			[ { parcelId: 'p9', inside: new THREE.Vector3( 1, 2, 3 ) } ]
+		);
+		expect( world ).toEqual( { parcels: [ { id: 'p9', anchor: [ 1, 2, 3 ] } ] } );
+
+		const gameplay = setup( fakeActions( questTarget( 'pickup', [ action( 'take', 'Take' ) ] ) ) );
+		expect( () => gameplay.candidates( { ...frame( pointLook( 0, 0.2, - 2 ) ), playerPlaces: [ { kind: 'parcel' } ] } ) )
+			.toThrowError( QuestActionError );
+		expect( () => gameplay.perform( { targetKey: 'quest:q:pickup', bindingAction: 'key-e', timeMin: 600 } ) )
+			.toThrowError( QuestActionError );
 
 	} );
 
@@ -87,16 +103,18 @@ function setup( actions, { crowd = { questMember: () => null }, blocked = false 
 
 	return new QuestGameplay( {
 		actions,
-		atlas: {
-			parcels: [ { id: 'p9', access: { point: [ 0, - 2 ] } } ],
-			districts: [ { id: 'd0', boundary: [ [ - 5, - 5 ], [ 5, - 5 ], [ 5, 5 ], [ - 5, 5 ] ] } ]
-		},
-		doors: [ { parcelId: 'p9', inside: new THREE.Vector3( 0, 0, - 2 ) } ],
+		world: { parcels: [ { id: 'p9', anchor: [ 0, 0, - 2 ] } ] },
 		crowd,
 		physics: { rapier: { Ray }, world: { castRay: () => blocked ? { toi: 0.5 } : null } },
 		playerCollider: {},
 		materialFactory: { build: () => new THREE.MeshStandardMaterial( { color: 0x223344 } ) }
 	} );
+
+}
+
+function perform( candidate, bindingAction = 'interact' ) {
+
+	return { targetKey: candidate.interaction.targetKey, bindingAction, timeMin: 600 };
 
 }
 
@@ -128,7 +146,13 @@ function action( actionId, label, bindingAction = 'interact' ) {
 
 function frame( look, playerPlaces = [ PARCEL ] ) {
 
-	return { timeMin: 600, playerPlaces, feet: FEET, eye: EYE, look };
+	return { timeMin: 600, playerPlaces, feet: jsonVector( FEET ), eye: jsonVector( EYE ), look: jsonVector( look ) };
+
+}
+
+function jsonVector( vector ) {
+
+	return { x: vector.x, y: vector.y, z: vector.z };
 
 }
 

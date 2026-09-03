@@ -7,19 +7,23 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - Target query: [schema/target-query.schema.json](schema/target-query.schema.json). `timeMin` uses the simulation clock.
 - Interaction request: [schema/interaction-request.schema.json](schema/interaction-request.schema.json). The host supplies the selected target, symbolic input action, current places, and physical focus facts when the mechanic targets an item or person.
 - Objective query: [schema/target-query.schema.json](schema/target-query.schema.json). The same clock query selects the first open quest and definition-ordered step for map guidance.
+- Live world projection: [schema/gameplay-world.schema.json](schema/gameplay-world.schema.json). The assembled city publishes one deterministic entry or access anchor per parcel.
+- Live interaction frame: [schema/gameplay-frame.schema.json](schema/gameplay-frame.schema.json). The host supplies validated clock, place and camera facts.
+- Live selected binding: [schema/gameplay-perform.schema.json](schema/gameplay-perform.schema.json). The shared interactor returns only the selected target key, symbolic binding and current clock.
 
 ## Outputs
 
 - Interaction targets: [schema/interaction-targets.schema.json](schema/interaction-targets.schema.json). Every target has a stable quest and step identity, map place, actual cast NPC ids, availability, and presentation instructions. Binding names stay symbolic so the UI renders the player's current key or controller binding.
 - Interaction result: [schema/interaction-result.schema.json](schema/interaction-result.schema.json). Success and failure both return current quest inventory. A completed pickup, theft, or delivery includes the matching world state change.
 - Active objective: [schema/active-objective.schema.json](schema/active-objective.schema.json). Includes talk and goto steps as well as direct actions, and carries the runtime's exact current place or null.
+- Live interaction candidates: [schema/gameplay-candidates.schema.json](schema/gameplay-candidates.schema.json). Carries only validated prompt data and stable target identity to the shared interactor. Measured focus facts remain private until the matching target is selected.
 
 ## Events
 
 - `targets({ timeMin })` projects active `pickup`, `observe`, `listen`, `steal`, `work`, and `deliver` steps.
 - `perform(request)` maps `take`, `inspect`, `listen`, `steal`, `work`, and `deliver` to the quests runtime's closed player event vocabulary. `read` returns the selected document text without advancing the quest.
 - `objective({ timeMin })` selects the first open questline and first definition-ordered active step for route presentation.
-- `QuestGameplay.candidates(frame)` projects those validated targets into the shared centered interaction route. `QuestGameplay.perform` sends its measured place, visibility, obstruction and reach facts back through `QuestActions.perform`.
+- `QuestGameplay.candidates(frame)` projects those validated targets into the shared centered interaction route. `QuestGameplay.perform(request)` resolves the current selected target and sends its measured place, visibility, obstruction and reach facts through `QuestActions.perform`.
 
 ## Errors
 

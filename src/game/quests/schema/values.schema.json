@@ -13,6 +13,17 @@
         "id": { "$ref": "#/$defs/id" }
       }
     },
+    "vector3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "bindingAction": { "enum": ["interact", "secondary-interact"] },
     "action": { "enum": ["take", "read", "inspect", "listen", "steal", "work", "deliver"] },
     "interactionKind": { "enum": ["pickup", "observe", "listen", "steal", "work", "deliver"] },
     "objectiveKind": { "enum": ["talk", "goto", "pickup", "observe", "listen", "steal", "assassinate", "work", "deliver"] },
