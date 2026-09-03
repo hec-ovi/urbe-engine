@@ -80,10 +80,12 @@ export class BuildingsLoader {
 
 		for ( const building of loaded ) {
 
-			for ( const [ key, geometries ] of building.exterior ) {
+			for ( const [ surface, geometries ] of building.exterior ) {
 
-				// a building wears one variant of each material; buildings of the same variant merge together
-				const bucket = bucketFor( key, variantFor(
+				const { key, variantId: authoredVariant } = splitBucket( surface );
+				// An authored surface keeps its exact look. Otherwise the building
+				// wears one seeded pattern variant of the material.
+				const bucket = bucketFor( key, authoredVariant ?? variantFor(
 					this.factory.resolver.resolve( key ), building.parcelId, this.factory.patternVariants
 				) );
 				if ( ! shellByKey.has( bucket ) ) shellByKey.set( bucket, [] );
@@ -161,10 +163,11 @@ export class BuildingsLoader {
 
 			const name = node.name ?? '';
 			const key = node.material?.name ?? '';
+			const surface = bucketFor( key, node.material?.userData?.materialVariant );
 			if ( ! hasInterior && name.startsWith( DOOR ) ) {
 
 				const geometry = bake( node );
-				push( exterior, key, geometry );
+				push( exterior, surface, geometry );
 				exteriorFlat.push( positionsOnly( geometry ) );
 				continue;
 
@@ -172,7 +175,7 @@ export class BuildingsLoader {
 
 			if ( door && name.startsWith( DOOR ) ) {
 
-				doorParts.push( { key, geometry: bake( node ), hinge: node.getWorldPosition( new THREE.Vector3() ) } );
+				doorParts.push( { key: surface, geometry: bake( node ), hinge: node.getWorldPosition( new THREE.Vector3() ) } );
 
 				continue;
 
@@ -187,11 +190,11 @@ export class BuildingsLoader {
 				? splitAt( geometry, door.box )
 				: [ null, geometry ];
 
-			if ( leaf ) doorParts.push( { key, geometry: leaf, hinge: door.hinge } );
+			if ( leaf ) doorParts.push( { key: surface, geometry: leaf, hinge: door.hinge } );
 
 			if ( rest ) {
 
-				push( exterior, key, rest );
+				push( exterior, surface, rest );
 				if ( isColliderMaterial( key ) ) exteriorFlat.push( positionsOnly( rest ) );
 
 			}

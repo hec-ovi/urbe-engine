@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { BuildingsLoader, mapConcurrent } from './BuildingsLoader.js';
 
@@ -52,6 +52,41 @@ describe( 'building entrance availability', () => {
 
 		expect( city.group.children ).toHaveLength( 3 );
 		expect( city.shellColliders.get( 'p0' ).getAttribute( 'position' ).count ).toBe( 3 );
+
+	} );
+
+	it( 'keeps an authored strip separate from ordinary fixtures with the same material key', async () => {
+
+		const fixtureKey = 'cyberpunk/light-fixture/high_rich';
+		const loader = { loadAsync: async () => {
+
+			const scene = new THREE.Group();
+			const lamp = mesh( 'mergedlamp', fixtureKey, 0 );
+			const strip = mesh( 'mergedstrip', fixtureKey, 2 );
+			strip.material.userData.materialVariant = 'strip';
+			scene.add( lamp, strip );
+
+			return { scene };
+
+		} };
+		const variant = vi.fn( ( key, options ) => Object.assign(
+			new THREE.MeshBasicMaterial(), { userData: { key, variantId: options.variantId } }
+		) );
+		const fixtureFactory = {
+			resolver: { resolve: () => ( { variants: [
+				{ id: 'lamp', class: 'pattern' }, { id: 'strip', class: 'exact' }
+			] } ) },
+			build: factory.build,
+			variant
+		};
+		const buildings = new Map( [ [ 'p0', {
+			parcelId: 'p0', blueprint: boxBlueprint(), shellUrl: '/p0.glb', hasInterior: false
+		} ] ] );
+		const city = await new BuildingsLoader( fixtureFactory, loader ).load( buildings );
+
+		expect( city.group.getObjectByName( `shell:${fixtureKey}#lamp` ).material.userData.variantId ).toBe( 'lamp' );
+		expect( city.group.getObjectByName( `shell:${fixtureKey}#strip` ).material.userData.variantId ).toBe( 'strip' );
+		expect( variant ).toHaveBeenCalledWith( fixtureKey, expect.objectContaining( { variantId: 'strip' } ) );
 
 	} );
 
