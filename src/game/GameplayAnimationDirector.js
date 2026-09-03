@@ -44,8 +44,28 @@ export class GameplayAnimationDirector {
 		const byNpcId = new Map( actors.map( ( actor ) => [ actor.npcId, actor ] ) );
 		for ( const actor of [ ...actors ].sort( ( left, right ) => left.npcId.localeCompare( right.npcId ) ) ) {
 
+			const actorId = this.#actorId( actor.npcId );
+			let held = this.actorActions.get( actorId );
+			if ( actor.mode === 'posing' ) {
+
+				this.#ensureCrouchActor( actorId );
+				if ( held?.kind !== 'crouch' ) {
+
+					if ( held ) this.#settle( held.actionId, 'interrupt', 'dialogue-replaced', false );
+					this.#startQuest( actorId, 'crouch-idle', 'crouch', actor.npcId );
+
+				}
+				continue;
+
+			}
 			this.#syncActor( actor );
-			const held = this.actorActions.get( this.#actorId( actor.npcId ) );
+			held = this.actorActions.get( actorId );
+			if ( held?.kind === 'crouch' ) {
+
+				this.#settle( held.actionId, 'complete', null, true, actor.npcId );
+				held = null;
+
+			}
 			if ( actor.mode === 'following' ) {
 
 				const variant = followVariant( actor.animation );
@@ -84,6 +104,27 @@ export class GameplayAnimationDirector {
 			this.focus = null;
 
 		}
+
+	}
+
+	/** Applies one accepted, cast-only NPC pose control event. */
+	npcControl( request, actor ) {
+
+		if ( ! actor?.npcId ) return null;
+		const actorId = this.#actorId( actor.npcId );
+		if ( request.kind === 'start-crouch' ) {
+
+			this.#ensureCrouchActor( actorId );
+			this.#replaceParticipants( [ actorId ] );
+			return this.#startQuest( actorId, 'crouch-idle', 'crouch', actor.npcId );
+
+		}
+		if ( request.kind !== 'release-crouch' ) return null;
+		this.#syncActor( actor );
+		const held = this.actorActions.get( actorId );
+		return held?.kind === 'crouch'
+			? this.#settle( held.actionId, 'complete', null, true, actor.npcId )
+			: null;
 
 	}
 
@@ -249,6 +290,15 @@ export class GameplayAnimationDirector {
 
 	}
 
+	#ensureCrouchActor( actorId ) {
+
+		if ( this.routines.has( actorId ) ) return;
+		this.#sync( actorId, {
+			routineId: 'npc:pre-crouch', activity: 'idle', posture: 'standing', clipName: 'Idle_Loop', loop: true
+		} );
+
+	}
+
 	#sync( actorId, routine ) {
 
 		const key = JSON.stringify( routine );
@@ -344,7 +394,7 @@ function followVariant( animation ) {
 
 	if ( animation === 'run' ) return 'follow-sprint';
 	if ( animation === 'walk' ) return 'follow-walk';
-	return animation === 'crouch' ? 'crouch-forward' : 'idle';
+	return 'idle';
 
 }
 

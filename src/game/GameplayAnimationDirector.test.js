@@ -66,6 +66,34 @@ describe( 'live gameplay animation composition', () => {
 
 	} );
 
+	it( 'enters crouch only from explicit NPC control and plays the exit before routine resume', () => {
+
+		const rig = setup();
+		const crouched = actor( { animation: 'crouch', mode: 'posing' } );
+		rig.director.npcControl( { kind: 'start-crouch', npcId: crouched.npcId }, crouched );
+		expect( current( rig.director, crouched.npcId ) ).toMatchObject( {
+			action: 'crouch', posture: 'crouched', currentClip: 'Crouch_Idle_Loop'
+		} );
+		expect( lastSegments( rig.hero ) ).toEqual( [ 'Crouch_Enter', 'Crouch_Idle_Loop' ] );
+
+		const resumed = actor( { animation: 'walk', mode: 'resuming' } );
+		rig.director.npcControl( { kind: 'release-crouch', npcId: resumed.npcId }, resumed );
+		expect( current( rig.director, resumed.npcId ) ).toMatchObject( {
+			mode: 'routine', action: null, currentClip: 'Walk_Loop'
+		} );
+		expect( lastSegments( rig.hero ) ).toEqual( [ 'Crouch_Exit', 'Walk_Loop' ] );
+
+	} );
+
+	it( 'reconstructs a restored explicit crouch from continuity mode', () => {
+
+		const rig = setup();
+		rig.director.update( [ actor( { animation: 'crouch', mode: 'posing' } ) ], 0 );
+		expect( current( rig.director, 'npc-1' ).action ).toBe( 'crouch' );
+		expect( lastSegments( rig.hero ) ).toEqual( [ 'Crouch_Enter', 'Crouch_Idle_Loop' ] );
+
+	} );
+
 	it.each( [
 		[ 'take', 'pickup-ground', 'pickup' ], [ 'read', 'read', 'read' ],
 		[ 'inspect', 'observe', 'observe' ], [ 'steal', 'steal-ground', 'steal' ],
