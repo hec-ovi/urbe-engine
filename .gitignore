@@ -10,3 +10,4 @@ out/
 !src/library/fixtures/out/**
 CLAUDE.md
 session
+.research/
