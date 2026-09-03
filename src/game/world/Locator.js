@@ -5,7 +5,7 @@
  */
 export class Locator {
 
-	constructor( atlas ) {
+	constructor( atlas, transitRoutes = [] ) {
 
 		this.districts = atlas.districts.map( ( d ) => ( {
 			id: d.id,
@@ -18,6 +18,38 @@ export class Locator {
 			label: `${p.id} ${p.type}`.replace( /_/g, ' ' ),
 			ring: p.lot ?? p.footprint
 		} ) );
+
+		const busLevels = new Map();
+		for ( const route of transitRoutes.filter( ( candidate ) => candidate.kind === 'bus' ) ) {
+
+			for ( const stop of route.stops ) if ( ! busLevels.has( stop.stopId ) ) busLevels.set( stop.stopId, stop.y );
+
+		}
+		this.transitPlaces = [
+			...( atlas.transit?.busStops ?? [] ).map( ( stop ) => ( {
+				kind: 'bus-stop', id: stop.id,
+				position: [ stop.position[ 0 ], busLevels.get( stop.id ) ?? 0, stop.position[ 1 ] ], ring: null
+			} ) ),
+			...( atlas.transit?.trainStations ?? [] ).map( ( station ) => stationPlace( 'train-station', station ) ),
+			...( atlas.transit?.subwayStations ?? [] ).map( ( station ) => stationPlace( 'subway-station', station ) )
+		];
+
+	}
+
+	/** The exact published stop or platform under the player's feet. */
+	transitPlace( x, y, z ) {
+
+		const candidates = this.transitPlaces.filter( ( place ) => {
+
+			if ( Math.abs( place.position[ 1 ] - y ) > 1 ) return false;
+			if ( place.ring ) return inside( place.ring, x, z );
+			return Math.hypot( place.position[ 0 ] - x, place.position[ 2 ] - z ) <= 3;
+
+		} );
+		candidates.sort( ( left, right ) => horizontalDistance( left.position, x, z )
+			- horizontalDistance( right.position, x, z ) || transitKey( left ).localeCompare( transitKey( right ) ) );
+		const place = candidates[ 0 ];
+		return place ? { kind: place.kind, id: place.id } : null;
 
 	}
 
@@ -59,6 +91,29 @@ export class Locator {
 		return district ? { id: district.id, name: district.label } : { id: 'outskirts', name: 'outskirts' };
 
 	}
+
+}
+
+function stationPlace( kind, station ) {
+
+	return {
+		kind,
+		id: station.id,
+		position: [ station.position[ 0 ], station.level, station.position[ 1 ] ],
+		ring: station.platform
+	};
+
+}
+
+function horizontalDistance( position, x, z ) {
+
+	return Math.hypot( position[ 0 ] - x, position[ 2 ] - z );
+
+}
+
+function transitKey( place ) {
+
+	return `${place.kind}:${place.id}`;
 
 }
 

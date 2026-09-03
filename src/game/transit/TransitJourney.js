@@ -45,6 +45,12 @@ export class TransitJourney {
 
 	}
 
+	get valid() {
+
+		return this.dataValid;
+
+	}
+
 	/** Lists only services dwelling at this published place and within reach now. */
 	listBoardable( request ) {
 
