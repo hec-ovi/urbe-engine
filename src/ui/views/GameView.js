@@ -35,13 +35,13 @@ const noop = () => {};
  * The whole game overlay: the always-on HUD, the tab bar, one panel at a
  * time over the game, and the chat, avatar, call and mission widgets.
  * Presentation only: it is handed values and reports intents through props.
- * props (all optional): { onResume, onCloseDialog, onSend, onOpen, onClose,
+ * props (all optional): { onResume, onCloseDialog, onSend, onRecord, onOpen, onClose,
 	 *   onLeave, onSettingChange, onHangUp, onSummaryClose, onTransitSelect, onTransitCancel }
  */
 export class GameView {
 
 	constructor( {
-		onResume = noop, onCloseDialog = noop, onSend = noop, onOpen = noop, onClose = noop,
+		onResume = noop, onCloseDialog = noop, onSend = noop, onRecord = noop, onOpen = noop, onClose = noop,
 		onLeave = noop, onSettingChange = noop, onHangUp = noop, onSummaryClose = noop,
 		onTransitSelect = noop, onTransitCancel = noop,
 		menu = {}
@@ -58,7 +58,7 @@ export class GameView {
 		this.avatar = new AvatarCard();
 		this.call = new VideoCallPanel( { onHangUp } );
 		this.toast = new MissionToast();
-		this.dialog = new ChatPanel( { onSend, onClose: onCloseDialog } );
+		this.dialog = new ChatPanel( { onSend, onRecord, onClose: onCloseDialog } );
 		this.summary = new MissionSummary( { onClose: onSummaryClose } );
 		this.transit = new TransitHud( { onSelect: onTransitSelect, onCancel: onTransitCancel } );
 		this.pause = new PauseMenu( { onResume } );

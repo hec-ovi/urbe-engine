@@ -14,6 +14,8 @@ Turn structured NPC speech into verified local audio, play its absolute PCM time
 - Adapter synthesis: [schema/adapter-request.schema.json](schema/adapter-request.schema.json) and an `AbortSignal`.
 - Adapter chunks: [schema/adapter-chunk.schema.json](schema/adapter-chunk.schema.json).
 - `LocalSpeechRuntime.transcribe(media, options)`: `audio/wav`, normalized `audio/webm`, `audio/ogg`, or `audio/mp4`. Its checked service request is [schema/transcription-request.schema.json](schema/transcription-request.schema.json). `auto` omits the faster-whisper language parameter.
+- `DialogueSpeech.speak(conversation, text, lifecycle)`: one stable NPC, one line, and playback start/end callbacks used by `GameApp` animation composition.
+- `DialogueSpeech.startTranscription()` and `stopTranscription()`: microphone gestures used by the live chat composer. A cancelled permission request returns `false` and stops its late stream.
 - `PcmAudioPlayer.play(chunks)`: ordered [schema/audio-chunk.schema.json](schema/audio-chunk.schema.json) values with absolute `startFrame` positions.
 - `AudioWorkletPacketTransport.push(event)` and `read(request)`: [schema/lifecycle-event.schema.json](schema/lifecycle-event.schema.json) and [schema/playback-read.schema.json](schema/playback-read.schema.json).
 
@@ -74,6 +76,7 @@ Terminal results use `E_VOICE_ADAPTER`, `E_VOICE_CHUNK`, `E_VOICE_ORDER`, or `E_
 - Unsupported controls do not disappear. Exact pauses produce whole zero-valued PCM frames.
 - Audio bytes are verified before publication, transcription, and playback.
 - Playback places each chunk at its absolute `startFrame`, rejects overlaps and format changes, and resolves cancellation even while Web Audio unlock is pending.
+- GameApp unlocks Web Audio from the send or microphone gesture. NPC speaking starts only when PCM playback starts and settles when playback ends or is cancelled. A transcript enters the same dialogue send path as typed text.
 - Active cancellation terminates inference. Queued cancellation never terminates another request.
 - `speech-health` loads both models. `speech-smoke` performs real Chatterbox synthesis and faster-whisper transcription.
 

@@ -30,6 +30,36 @@ describe( 'microphone transcription lifecycle', () => {
 
 	} );
 
+	it( 'stops a late permission stream and lets a new start create its own session', async () => {
+
+		const firstPermission = deferred();
+		const secondPermission = deferred();
+		const firstStream = stream();
+		const secondStream = stream();
+		const mediaDevices = {
+			getUserMedia: vi.fn()
+				.mockReturnValueOnce( firstPermission.promise )
+				.mockReturnValueOnce( secondPermission.promise )
+		};
+		const microphone = new MicrophoneTranscriber( { transcribe: vi.fn() }, {
+			mediaDevices, Recorder: ControlledRecorder
+		} );
+
+		const cancelled = microphone.start();
+		microphone.cancel();
+		const restarted = microphone.start();
+		expect( mediaDevices.getUserMedia ).toHaveBeenCalledTimes( 2 );
+
+		firstPermission.resolve( firstStream );
+		await expect( cancelled ).resolves.toBe( false );
+		expect( firstStream.track.stop ).toHaveBeenCalledOnce();
+
+		secondPermission.resolve( secondStream );
+		await expect( restarted ).resolves.toBe( true );
+		expect( microphone.recording ).toBe( true );
+
+	} );
+
 } );
 
 class ControlledRecorder extends EventTarget {
@@ -64,6 +94,15 @@ class ControlledRecorder extends EventTarget {
 
 function stream() {
 
-	return { getTracks: () => [ { stop: vi.fn() } ] };
+	const track = { stop: vi.fn() };
+	return { track, getTracks: () => [ track ] };
+
+}
+
+function deferred() {
+
+	let resolve;
+	const promise = new Promise( ( done ) => { resolve = done; } );
+	return { promise, resolve };
 
 }

@@ -2,6 +2,8 @@
 
 The browser sends structured NPC lines to a project-local Chatterbox Nano service and microphone recordings to faster-whisper. The voice client checks profile identity, model and runtime pins, PCM hashes, ordering, cancellation, and cache identity before playback.
 
+GameApp connects this boundary during startup. The chat microphone returns its transcript through the same send path as typed text. NPC speaking and listening animation follows actual audio playback start, completion, and cancellation.
+
 ## Install and verify
 
 The runtime uses its own Python 3.12 environment. It never installs packages globally or downloads models.

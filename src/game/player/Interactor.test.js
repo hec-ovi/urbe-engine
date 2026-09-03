@@ -196,7 +196,7 @@ describe( 'E on an NPC', () => {
 		expect( continuity.beginConversation ).toHaveBeenCalledWith( expect.objectContaining( {
 			npcId: 'n1', timeMin: CLOCK.timeMin, position: visible, place: { kind: 'edge', id: 'e1' }
 		} ) );
-		expect( person ).toMatchObject( { npcId: 'n1', frozen: true, talking: true, clip: CLIP.TALK } );
+		expect( person ).toMatchObject( { npcId: 'n1', frozen: true, talking: false, clip: CLIP.IDLE } );
 		expect( sim.interrupted ).toEqual( [] );
 
 		interactor.close( { ...CLOCK, timeMin: CLOCK.timeMin + 1 } );

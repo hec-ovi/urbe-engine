@@ -19,15 +19,29 @@ const CONVERSATION = {
 /** Name and Esc up top, messages in the middle, what you type goes out. */
 describe( 'ChatPanel', () => {
 
-	let panel, onSend, onClose;
+	let panel, onSend, onRecord, onClose;
 
 	beforeEach( () => {
 
 		onSend = vi.fn();
+		onRecord = vi.fn();
 		onClose = vi.fn();
-		panel = new ChatPanel( { onSend, onClose } );
+		panel = new ChatPanel( { onSend, onRecord, onClose } );
 		document.body.replaceChildren( panel.element );
 		panel.setVisible( true );
+
+	} );
+
+	it( 'reports microphone start and stop gestures from the same composer', async () => {
+
+		const user = userEvent.setup();
+		await user.click( screen.getByRole( 'button', { name: 'start voice input' } ) );
+		expect( onRecord ).toHaveBeenLastCalledWith( true );
+
+		panel.setRecording( true );
+		await user.click( screen.getByRole( 'button', { name: 'stop voice input' } ) );
+		expect( onRecord ).toHaveBeenLastCalledWith( false );
+		expect( screen.getByRole( 'button', { name: 'stop voice input' } ).getAttribute( 'aria-pressed' ) ).toBe( 'true' );
 
 	} );
 

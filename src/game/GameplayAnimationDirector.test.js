@@ -13,10 +13,9 @@ describe( 'live gameplay animation composition', () => {
 		rig.director.beginConversation( conversation, { ...scheduled, mode: 'conversation' } );
 
 		expect( current( rig.director, scheduled.npcId ) ).toMatchObject( {
-			action: 'talk', currentClip: 'Sitting_Talking_Loop', posture: 'seated'
+			action: null, currentClip: 'Sitting_Idle_Loop', posture: 'seated'
 		} );
-		expect( current( rig.director, 'player' ) ).toMatchObject( { action: 'listen', currentClip: 'Idle_Loop' } );
-		expect( lastSegments( rig.hero ) ).toEqual( [ 'Sitting_Talking_Loop' ] );
+		expect( rig.director.snapshot().actions ).toEqual( [] );
 
 		rig.director.playerDialogueTurn( conversation );
 		expect( current( rig.director, scheduled.npcId ) ).toMatchObject( {
@@ -27,6 +26,10 @@ describe( 'live gameplay animation composition', () => {
 
 		rig.director.npcDialogueTurn( conversation );
 		expect( current( rig.director, scheduled.npcId ).currentClip ).toBe( 'Sitting_Talking_Loop' );
+		rig.director.completeDialogueTurn( conversation );
+		expect( current( rig.director, scheduled.npcId ).currentClip ).toBe( 'Sitting_Idle_Loop' );
+		expect( rig.director.snapshot().actions ).toEqual( [] );
+		rig.director.npcDialogueTurn( conversation );
 		const resumed = { ...scheduled, animation: 'walk', mode: 'resuming' };
 		rig.director.endConversation( conversation, resumed );
 		expect( current( rig.director, scheduled.npcId ) ).toMatchObject( {
@@ -44,6 +47,7 @@ describe( 'live gameplay animation composition', () => {
 		rig.director.update( [ scheduled ], 0 );
 		const conversation = { npcId: scheduled.npcId };
 		rig.director.beginConversation( conversation, { ...scheduled, mode: 'conversation' } );
+		rig.director.npcDialogueTurn( conversation );
 
 		const interrupted = rig.director.physicsInterrupt( { npcId: scheduled.npcId } );
 		expect( interrupted.events ).toContainEqual( expect.objectContaining( {

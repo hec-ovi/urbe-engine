@@ -19,13 +19,14 @@ export class MicrophoneTranscriber {
 
 	async start() {
 
-		if ( this.recording ) return;
-		if ( this.starting ) return this.starting;
+		if ( this.recording ) return true;
+		if ( this.starting?.generation === this.sequence ) return this.starting.promise;
 		if ( ! this.mediaDevices?.getUserMedia || ! this.Recorder ) throw new Error( 'Microphone recording is unavailable' );
 		const generation = ++ this.sequence;
-		this.starting = this.#start( generation );
-		try { await this.starting; }
-		finally { this.starting = null; }
+		const starting = { generation, promise: this.#start( generation ) };
+		this.starting = starting;
+		try { return await starting.promise; }
+		finally { if ( this.starting === starting ) this.starting = null; }
 
 	}
 
@@ -35,7 +36,7 @@ export class MicrophoneTranscriber {
 		if ( generation !== this.sequence ) {
 
 			stopStream( stream );
-			return;
+			return false;
 
 		}
 		const mediaType = preferredType( this.Recorder );
@@ -48,6 +49,7 @@ export class MicrophoneTranscriber {
 
 		} );
 		recorder.start();
+		return true;
 
 	}
 

@@ -202,9 +202,9 @@ export class Interactor {
 		} else if ( person.npcId ) this.sim.interrupt( person.npcId, timeMin );
 
 		person.frozen = true;
-		person.talking = true;
+		person.talking = false;
 		person.restClip = person.restClip ?? person.clip;
-		person.clip = person.restClip === CLIP.SIT ? CLIP.SIT_TALK : CLIP.TALK;
+		person.clip = person.restClip;
 		person.heading = Math.atan2(
 			this.controller.body.feet.x - person.position.x,
 			this.controller.body.feet.z - person.position.z

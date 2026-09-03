@@ -152,15 +152,14 @@ export class GameplayAnimationDirector {
 
 	}
 
-	/** Starts the first NPC turn when a live conversation opens. */
+	/** Registers an open conversation without claiming either participant is speaking. */
 	beginConversation( conversation, actor ) {
 
 		if ( ! conversation?.npcId || ! actor ) return null;
 		const actorId = this.#syncActor( actor );
 		this.#replaceParticipants( [ PLAYER_ID, actorId ] );
-		const action = this.#dialogue( actorId, [ PLAYER_ID ], conversation.npcId );
-		this.conversations.set( conversation, { actorId, npcId: conversation.npcId, actionId: action.actionId } );
-		return action;
+		this.conversations.set( conversation, { actorId, npcId: conversation.npcId, actionId: null } );
+		return { actorId, npcId: conversation.npcId };
 
 	}
 
@@ -179,13 +178,26 @@ export class GameplayAnimationDirector {
 
 	}
 
+	/** Completes the audible turn while leaving the conversation open. */
+	completeDialogueTurn( conversation ) {
+
+		const state = this.conversations.get( conversation );
+		if ( ! state?.actionId ) return null;
+		const result = this.#settle( state.actionId, 'complete', null, true, state.npcId );
+		state.actionId = null;
+		return result;
+
+	}
+
 	/** Interrupts the open turn and restores the continuity actor's current routine. */
 	endConversation( conversation, actor, reason = 'player-left' ) {
 
 		const state = this.conversations.get( conversation );
 		if ( ! state ) return null;
 		if ( actor ) this.#syncActor( actor );
-		const result = this.#settle( state.actionId, 'interrupt', reason, true, state.npcId );
+		const result = state.actionId
+			? this.#settle( state.actionId, 'interrupt', reason, true, state.npcId )
+			: null;
 		this.conversations.delete( conversation );
 		if ( actor?.mode === 'following' ) {
 
@@ -229,7 +241,7 @@ export class GameplayAnimationDirector {
 
 		const state = this.conversations.get( conversation );
 		if ( ! state ) return null;
-		this.#settle( state.actionId, 'complete', null, false );
+		if ( state.actionId ) this.#settle( state.actionId, 'complete', null, false );
 		const listeners = speakerId === PLAYER_ID ? [ state.actorId ] : [ PLAYER_ID ];
 		const started = this.#dialogue( speakerId, listeners, state.npcId );
 		state.actionId = started.actionId;

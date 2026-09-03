@@ -116,24 +116,41 @@
 	box-shadow: 0 0 0 1px var(--ui-accent);
 }
 
-.chat-send {
+.chat-send,
+.chat-record {
 	width: 40px;
-	background: var(--ui-accent);
 	border: 0;
-	color: #04151a;
 	cursor: pointer;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 }
 
-.chat-send .icon {
+.chat-send {
+	background: var(--ui-accent);
+	color: #04151a;
+}
+
+.chat-record {
+	background: transparent;
+	border-right: 1px solid var(--ui-accent-dim);
+	color: var(--ui-accent);
+}
+
+.chat-record.is-recording {
+	background: var(--ui-bad);
+	color: #fff;
+}
+
+.chat-send .icon,
+.chat-record .icon {
 	width: 16px;
 	height: 16px;
 	stroke-width: 2;
 }
 
-.chat-send:focus-visible {
+.chat-send:focus-visible,
+.chat-record:focus-visible {
 	outline: 2px solid #fff;
 	outline-offset: -4px;
 }
