@@ -1,5 +1,7 @@
 # Changelog
 
+0.16.24: highway decks use the materials database's lane-aligned highway asphalt instead of the isotropic puddle variant. Their UVs now put U across the published width and V along the full elevated path, so each 3.5 m repeat keeps its wheel tracks under one lane. Grade road, pavement, curb, deck frame and supports remain on their database-backed patched asphalt, plate, curb stone and concrete entries.
+
 0.16.23: the local character store now verifies the purchased Source and Pro files against their original workspace hashes, all six 65-joint bodies, all 32 compatible hairstyle and facial-hair rigs, and all 120 animation clips. A focused NPC selects the complete gender- and age-compatible hairstyle catalog while the mass crowd keeps its bounded two-body vertex-animation path.
 
 0.16.22: walking keeps the exterior light set in fixed object slots and copies the nearest fixtures' photometry into them. The stable light ids stop camera translation from invalidating every material pipeline on WebGL. Opaque metallic-roughness surfaces use the standard shader; only glass with published transmission carries the larger physical feature graph. Startup compiles the first visible view instead of feeding the whole city to either backend at once. Large shell loads, geometry baking and collider cooking use bounded batches and yield between main-thread slices; the low tier skips the moving environment probe. The hitch log times each frame subsystem separately.

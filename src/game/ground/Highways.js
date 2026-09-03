@@ -52,7 +52,7 @@ export class Highways {
 
 		if ( road ) {
 
-			const mesh = new THREE.Mesh( road, this.factory.build( ROAD_KEY, 'puddle' ) );
+			const mesh = new THREE.Mesh( road, this.factory.build( ROAD_KEY, 'highway' ) );
 			mesh.name = 'highway:roadway';
 			mesh.receiveShadow = true;
 			group.add( mesh );
@@ -130,8 +130,8 @@ function topOf( sections, width ) {
 		const b = sections[ i + 1 ];
 		push( positions, a.left, b.left, a.right, a.right, b.left, b.right );
 		uvs.push(
-			a.distance, 0, b.distance, 0, a.distance, width,
-			a.distance, width, b.distance, 0, b.distance, width
+			0, a.distance, 0, b.distance, width, a.distance,
+			width, a.distance, 0, b.distance, width, b.distance
 		);
 
 	}

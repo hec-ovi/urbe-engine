@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Highways } from './Highways.js';
 
-const factory = { build: () => new THREE.MeshStandardMaterial() };
+const factory = { build: ( key, variantId ) => {
+
+	const material = new THREE.MeshStandardMaterial();
+	material.userData = { key, variantId };
+	return material;
+
+} };
 
 describe( 'highway structures', () => {
 
@@ -32,6 +38,20 @@ describe( 'highway structures', () => {
 		// become its own cross-section or one triangle would flatten the break.
 		expect( values( road, 'x' ) ).toContain( 60 );
 		expect( levelsAt( road, 30 ) ).toEqual( [] );
+
+	} );
+
+	it( 'uses the lane-aligned highway material with U across and V along the deck', () => {
+
+		const mesh = new Highways( atlas(), factory ).build().group.getObjectByName( 'highway:roadway' );
+
+		expect( mesh.material.userData ).toEqual( {
+			key: 'cyberpunk/road/high_rich', variantId: 'highway'
+		} );
+		expect( uvAt( mesh.geometry, 0, 5 ) ).toEqual( [ [ 0, 0 ] ] );
+		expect( uvAt( mesh.geometry, 0, - 5 ) ).toEqual( [ [ 10, 0 ] ] );
+		expect( uvAt( mesh.geometry, 100, 5 ) ).toEqual( [ [ 0, 100 ] ] );
+		expect( uvAt( mesh.geometry, 100, - 5 ) ).toEqual( [ [ 10, 100 ] ] );
 
 	} );
 
@@ -104,6 +124,24 @@ function range( geometry, axis ) {
 	const all = values( geometry, axis );
 
 	return [ Math.min( ...all ), Math.max( ...all ) ];
+
+}
+
+function uvAt( geometry, x, z ) {
+
+	const position = geometry.getAttribute( 'position' );
+	const uv = geometry.getAttribute( 'uv' );
+	const found = new Map();
+
+	for ( let i = 0; i < position.count; i ++ ) {
+
+		if ( ! close( position.getX( i ), x ) || ! close( position.getZ( i ), z ) ) continue;
+		const pair = [ round( uv.getX( i ) ), round( uv.getY( i ) ) ];
+		found.set( pair.join( ',' ), pair );
+
+	}
+
+	return [ ...found.values() ];
 
 }
 
