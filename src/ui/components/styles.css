@@ -106,6 +106,15 @@ canvas {
 	font-size: 12px;
 }
 
+.status[data-state="ready"] {
+	color: #86d7aa;
+}
+
+.status[data-state="unavailable"],
+.status[data-state="failed"] {
+	color: #ffb09e;
+}
+
 .report-list {
 	margin: 8px 0 0;
 	padding: 0;
@@ -130,4 +139,29 @@ canvas {
 	border: 1px solid #7a4040;
 	padding: 16px 20px;
 	max-width: 420px;
+}
+
+.error-box h3,
+.error-box p {
+	margin: 0 0 10px;
+}
+
+.error-box details {
+	margin-top: 12px;
+	color: #c0c5cc;
+}
+
+.error-box pre {
+	white-space: pre-wrap;
+	word-break: break-word;
+	font-size: 11px;
+}
+
+.viewer-error-actions {
+	display: flex;
+	gap: 8px;
+}
+
+.viewer-error-actions .button {
+	margin-top: 0;
 }

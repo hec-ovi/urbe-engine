@@ -13,12 +13,13 @@ const MOVES = {
 
 /**
  * Walk-anywhere camera for looking at one building: W A S D move along the
- * view, Q and E go down and up, dragging looks around, Shift moves faster.
- * Nothing zooms: the wheel is left alone so a close look is always a walk.
+ * view, Q and E go down and up, and captured mouse movement looks around.
+ * A viewport click enters pointer lock and Escape leaves it. Nothing zooms:
+ * the wheel is left alone so a close look is always a walk.
  */
 export class FlyCamera {
 
-	constructor( camera, domElement ) {
+	constructor( camera, domElement, onLockChange = null ) {
 
 		this.camera = camera;
 		this.element = domElement;
@@ -26,20 +27,48 @@ export class FlyCamera {
 		this.yaw = 0;
 		this.pitch = 0;
 		this.fast = false;
-		this.dragging = false;
+		this.locked = document.pointerLockElement === domElement;
+		this.onLockChange = onLockChange;
 		this.last = performance.now();
 		this.handlers = {
-			keydown: ( event ) => { if ( event.code in MOVES ) this.keys.add( event.code ); if ( event.key === 'Shift' ) this.fast = true; },
+			keydown: ( event ) => {
+
+				if ( ! this.locked ) return;
+				if ( event.code in MOVES ) this.keys.add( event.code );
+				if ( event.key === 'Shift' ) this.fast = true;
+
+			},
 			keyup: ( event ) => { this.keys.delete( event.code ); if ( event.key === 'Shift' ) this.fast = false; },
-			pointerdown: ( event ) => { this.dragging = true; this.element.setPointerCapture?.( event.pointerId ); },
-			pointerup: () => { this.dragging = false; },
-			pointermove: ( event ) => { if ( this.dragging ) this.turn( event.movementX, event.movementY ); }
+			blur: () => {
+
+				this.clear();
+				if ( document.pointerLockElement === this.element ) document.exitPointerLock?.();
+
+			},
+			click: () => this.requestLock(),
+			mousemove: ( event ) => { if ( this.locked ) this.turn( event.movementX, event.movementY ); },
+			pointerlockchange: () => {
+
+				this.locked = document.pointerLockElement === this.element;
+				if ( ! this.locked ) this.clear();
+				this.onLockChange?.( this.locked, false );
+
+			},
+			pointerlockerror: () => {
+
+				this.locked = false;
+				this.clear();
+				this.onLockChange?.( false, true );
+
+			}
 		};
 		window.addEventListener( 'keydown', this.handlers.keydown );
 		window.addEventListener( 'keyup', this.handlers.keyup );
-		domElement.addEventListener( 'pointerdown', this.handlers.pointerdown );
-		domElement.addEventListener( 'pointerup', this.handlers.pointerup );
-		domElement.addEventListener( 'pointermove', this.handlers.pointermove );
+		window.addEventListener( 'blur', this.handlers.blur );
+		domElement.addEventListener( 'click', this.handlers.click );
+		document.addEventListener( 'mousemove', this.handlers.mousemove );
+		document.addEventListener( 'pointerlockchange', this.handlers.pointerlockchange );
+		document.addEventListener( 'pointerlockerror', this.handlers.pointerlockerror );
 
 	}
 
@@ -58,6 +87,24 @@ export class FlyCamera {
 		this.yaw -= dx * LOOK;
 		this.pitch = THREE.MathUtils.clamp( this.pitch - dy * LOOK, - PITCH_LIMIT, PITCH_LIMIT );
 		this.#orient();
+
+	}
+
+	requestLock() {
+
+		if ( this.locked ) return;
+
+		try {
+
+			if ( ! this.element.requestPointerLock ) return this.handlers.pointerlockerror();
+			const pending = this.element.requestPointerLock();
+			pending?.catch?.( () => this.handlers.pointerlockerror() );
+
+		} catch {
+
+			this.handlers.pointerlockerror();
+
+		}
 
 	}
 
@@ -86,13 +133,22 @@ export class FlyCamera {
 
 	}
 
+	clear() {
+
+		this.keys.clear();
+		this.fast = false;
+
+	}
+
 	dispose() {
 
 		window.removeEventListener( 'keydown', this.handlers.keydown );
 		window.removeEventListener( 'keyup', this.handlers.keyup );
-		this.element.removeEventListener( 'pointerdown', this.handlers.pointerdown );
-		this.element.removeEventListener( 'pointerup', this.handlers.pointerup );
-		this.element.removeEventListener( 'pointermove', this.handlers.pointermove );
+		window.removeEventListener( 'blur', this.handlers.blur );
+		this.element.removeEventListener( 'click', this.handlers.click );
+		document.removeEventListener( 'mousemove', this.handlers.mousemove );
+		document.removeEventListener( 'pointerlockchange', this.handlers.pointerlockchange );
+		document.removeEventListener( 'pointerlockerror', this.handlers.pointerlockerror );
 
 	}
 

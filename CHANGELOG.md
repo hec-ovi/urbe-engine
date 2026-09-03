@@ -1,5 +1,7 @@
 # Changelog
 
+0.16.19: the building viewer generates the requested exterior or interior and checks the response type before handing a GLB to the loader. Missing Vite assets now show as unavailable instead of JSON errors, failed assets keep technical details separate, and an unavailable interior can return to its exterior. A viewport click captures the fly camera; Escape releases it and another click captures it again without taking pointer lock from the overlay controls.
+
 0.16.18: Atlas highway structures render and collide as one continuous road surface plus one concrete structure mesh. The road splits at every elevation knot, follows the exact ramp and deck profile, keeps the published width and structural depth, and extrudes each support from its published footprint and height. Lane paint follows the same 3D lane paths.
 
 0.16.17: people and cars follow Connections 0.9 movement in three dimensions. Walkers keep the height of sidewalks, crossings, station stairs, passages, platforms and building links; cars keep lane and turn elevation and pitch on ramps. A missing authoritative `path3` or `via3` refuses the run instead of falling back to its flat projection.

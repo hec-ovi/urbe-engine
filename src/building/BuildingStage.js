@@ -7,7 +7,7 @@ import { FlyCamera } from './FlyCamera.js';
  */
 export class BuildingStage {
 
-	static build( boundingBox, domElement ) {
+	static build( boundingBox, domElement, onLockChange = null ) {
 
 		const size = boundingBox.getSize( new THREE.Vector3() );
 		const center = boundingBox.getCenter( new THREE.Vector3() );
@@ -38,7 +38,7 @@ export class BuildingStage {
 		);
 		camera.position.set( center.x + radius * 1.4, boundingBox.max.y * 1.1, center.z + radius * 1.4 );
 
-		const controls = new FlyCamera( camera, domElement );
+		const controls = new FlyCamera( camera, domElement, onLockChange );
 		controls.lookAt( center );
 
 		return { scene, camera, controls };

@@ -1,6 +1,6 @@
 import { BuildingBuildService } from './BuildingBuildService.js';
 
-/** POST /api/building ensures that one selected Atlas parcel has an exterior preview. */
+/** POST /api/building ensures that one selected Atlas parcel has the requested preview source. */
 export function buildingRoute( engineRoot, atlasDir, service = null ) {
 
 	return {

@@ -8,6 +8,7 @@
   "properties": {
     "parcel": { "type": "string" },
     "out": { "type": "string" },
+    "source": { "enum": ["shell", "interior"] },
     "built": { "type": "boolean" }
   }
 }

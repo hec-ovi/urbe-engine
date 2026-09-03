@@ -27,12 +27,29 @@ describe( 'POST /api/building', () => {
 
 		const first = await post( origin, { parcel: 'p136', out: '/out/urbe' } );
 		expect( first.status ).toBe( 200 );
-		expect( first.body ).toEqual( { parcel: 'p136', out: '/out/urbe', built: true } );
-		expect( builds ).toEqual( [ { parcel: 'p136', world: 'city-urbe.json', out: 'p136' } ] );
+		expect( first.body ).toEqual( { parcel: 'p136', out: '/out/urbe', source: 'shell', built: true } );
+		expect( builds ).toEqual( [ { parcel: 'p136', source: 'shell', world: 'city-urbe.json', out: 'p136' } ] );
 
 		const second = await post( origin, { parcel: 'p136', out: '/out/urbe' } );
-		expect( second.body ).toEqual( { parcel: 'p136', out: '/out/urbe', built: false } );
+		expect( second.body ).toEqual( { parcel: 'p136', out: '/out/urbe', source: 'shell', built: false } );
 		expect( builds ).toHaveLength( 1 );
+
+	} );
+
+	it( 'builds an interior on demand even when the exterior already exists', async () => {
+
+		const { service, builds } = fixture();
+		const origin = await serve( service );
+		await post( origin, { parcel: 'p136', out: '/out/urbe' } );
+
+		const interior = await post( origin, { parcel: 'p136', out: '/out/urbe', source: 'interior' } );
+
+		expect( interior.status ).toBe( 200 );
+		expect( interior.body ).toEqual( { parcel: 'p136', out: '/out/urbe', source: 'interior', built: true } );
+		expect( builds.map( ( build ) => build.source ) ).toEqual( [ 'shell', 'interior' ] );
+
+		const existing = await post( origin, { parcel: 'p136', out: '/out/urbe', source: 'interior' } );
+		expect( existing.body.built ).toBe( false );
 
 	} );
 
@@ -71,10 +88,16 @@ describe( 'POST /api/building', () => {
 			atlasDir,
 			build: async ( request ) => {
 
-				builds.push( { parcel: request.parcel, world: request.blueprintPath.split( '/' ).at( - 1 ), out: request.outDir.split( '/' ).at( - 1 ) } );
+				builds.push( { parcel: request.parcel, source: request.source, world: request.blueprintPath.split( '/' ).at( - 1 ), out: request.outDir.split( '/' ).at( - 1 ) } );
 				mkdirSync( request.outDir, { recursive: true } );
 				writeFileSync( join( request.outDir, `${request.parcel}.blueprint.json` ), '{}' );
 				writeFileSync( join( request.outDir, `${request.parcel}.glb` ), 'glb' );
+				if ( request.source === 'interior' ) {
+
+					mkdirSync( join( request.outDir, 'interior' ) );
+					writeFileSync( join( request.outDir, 'interior', 'building.glb' ), 'glb' );
+
+				}
 
 			}
 		} );

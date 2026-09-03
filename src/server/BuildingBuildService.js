@@ -21,9 +21,10 @@ export class BuildingBuildError extends Error {
 
 /**
  * Development-only boundary for a building selected in an Atlas preview.
- * It accepts only one known output folder and one parcel from that world's
- * carried blueprint or a named Atlas sample, then delegates to assembly's real
- * CLI. Assembly validates Connections and Exterior at their schema boundaries.
+ * It accepts only one known output folder, one source and one parcel from that
+ * world's carried blueprint or a named Atlas sample, then delegates to
+ * assembly's real CLI. Assembly validates Connections, Exterior and Interior
+ * at their schema boundaries.
  */
 export class BuildingBuildService {
 
@@ -48,7 +49,7 @@ export class BuildingBuildService {
 
 		}
 
-		const { parcel, out } = input;
+		const { parcel, out, source = 'shell' } = input;
 		const outDir = resolve( this.engineRoot, `.${out}` );
 
 		if ( outDir !== this.outRoot && ! outDir.startsWith( this.outRoot + sep ) ) {
@@ -58,7 +59,7 @@ export class BuildingBuildService {
 		}
 
 		const parcelDir = join( outDir, parcel );
-		if ( complete( parcelDir, parcel ) ) return { parcel, out, built: false };
+		if ( complete( parcelDir, parcel, source ) ) return { parcel, out, source, built: false };
 
 		const blueprintPath = this.#blueprint( outDir, basename( outDir ) );
 		const atlas = readJson( blueprintPath, 'E_WORLD_INVALID', 422 );
@@ -69,10 +70,10 @@ export class BuildingBuildService {
 
 		}
 
-		const key = `${out}:${parcel}`;
+		const key = `${out}:${parcel}:${source}`;
 		if ( ! this.#active.has( key ) ) {
 
-			this.#active.set( key, this.#build( { parcel, out, outDir: parcelDir, blueprintPath } ) );
+			this.#active.set( key, this.#build( { parcel, out, source, outDir: parcelDir, blueprintPath } ) );
 
 		}
 
@@ -86,13 +87,13 @@ export class BuildingBuildService {
 
 		}
 
-		if ( ! complete( parcelDir, parcel ) ) {
+		if ( ! complete( parcelDir, parcel, source ) ) {
 
-			throw new BuildingBuildError( 'E_BUILD_INCOMPLETE', `assembly did not publish the exterior for ${parcel}`, 500 );
+			throw new BuildingBuildError( 'E_BUILD_INCOMPLETE', `assembly did not publish the ${source} for ${parcel}`, 500 );
 
 		}
 
-		return { parcel, out, built: true };
+		return { parcel, out, source, built: true };
 
 	}
 
@@ -133,9 +134,11 @@ export class BuildingBuildService {
 
 }
 
-function complete( dir, parcel ) {
+function complete( dir, parcel, source ) {
 
-	return existsSync( join( dir, `${parcel}.blueprint.json` ) ) && existsSync( join( dir, `${parcel}.glb` ) );
+	const exterior = existsSync( join( dir, `${parcel}.blueprint.json` ) ) && existsSync( join( dir, `${parcel}.glb` ) );
+
+	return exterior && ( source === 'shell' || existsSync( join( dir, 'interior', 'building.glb' ) ) );
 
 }
 
@@ -153,17 +156,19 @@ function readJson( path, code, status ) {
 
 }
 
-function runAssembly( { engineRoot, parcel, outDir, blueprintPath } ) {
+function runAssembly( { engineRoot, parcel, source, outDir, blueprintPath } ) {
 
 	return new Promise( ( resolvePromise, reject ) => {
 
-		const child = spawn( 'npm', [
+		const args = [
 			'run', 'assemble', '--silent', '--',
 			'--parcel', parcel,
 			'--out', outDir,
 			'--blueprint', blueprintPath,
 			'--glb', 'merged'
-		], { cwd: engineRoot, stdio: [ 'ignore', 'pipe', 'pipe' ] } );
+		];
+		if ( source === 'interior' ) args.push( '--interior' );
+		const child = spawn( 'npm', args, { cwd: engineRoot, stdio: [ 'ignore', 'pipe', 'pipe' ] } );
 		let output = '';
 
 		child.stdout.on( 'data', ( chunk ) => output += chunk );

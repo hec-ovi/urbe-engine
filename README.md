@@ -19,7 +19,7 @@ Other commands:
 - `npm run simulate` boots the population over an assembled world and prints stats, a crowd slice, three NPC lives, latencies and a conservation check.
 - `npm run build` produces the static client.
 
-The client has four modes on one vite app: `?mode=city&out=/out/small` shows the assembled city as stacked floor prisms (hover names a parcel, click opens it in the building viewer), `?mode=game` plays the city, `?mode=building&parcel=<id>[&out=/out/small]` inspects one building's exterior textured through the material database, walked with W A S D, Q and E for down and up, drag to look, and no mode runs the city render scale comparison. In development, opening a parcel that belongs to a known Atlas sample generates its missing exterior through the normal assembly boundary. Add `source=interior` to inspect an interior already built for that parcel.
+The client has four modes on one vite app: `?mode=city&out=/out/small` shows the assembled city as stacked floor prisms (hover names a parcel, click opens it in the building viewer), `?mode=game` plays the city, `?mode=building&parcel=<id>[&out=/out/small]` inspects one building's exterior textured through the material database, walked with W A S D, Q and E for down and up, click to capture the mouse, Escape to release it, and no mode runs the city render scale comparison. In development, opening a parcel that belongs to a known Atlas sample generates its missing exterior through the normal assembly boundary. Add `source=interior` to generate and inspect that parcel's interior.
 
 ## Assembly
 

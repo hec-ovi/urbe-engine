@@ -10,10 +10,13 @@ import { MaterialReportPanel } from '../widgets/MaterialReportPanel.js';
  */
 export class BuildingView {
 
-	constructor( { parcel, onSourceChange, onSliceChange } ) {
+	constructor( { parcel, onSourceChange, onSliceChange, onRetry, onExterior } ) {
 
 		this.controls = new BuildingControlsPanel( { parcel, onSourceChange, onSliceChange } );
 		this.report = new MaterialReportPanel();
+		this.onRetry = onRetry;
+		this.onExterior = onExterior;
+		this.issue = null;
 
 		this.element = el( 'div', { className: 'overlay' },
 			this.controls.element,
@@ -46,16 +49,52 @@ export class BuildingView {
 
 	}
 
-	setStatus( text ) {
+	setStatus( text, state = 'loading' ) {
 
-		this.controls.setStatus( text );
+		this.controls.setStatus( text, state );
+
+	}
+
+	setCameraCaptured( captured, failed = false ) {
+
+		this.controls.setCameraCaptured( captured, failed );
 
 	}
 
-	showError( message ) {
+	showIssue( { state = 'failed', title, message, details, exterior = false } ) {
 
-		this.element.append( el( 'div', { className: 'error-box', textContent: message } ) );
+		this.issue?.remove();
+		const actions = el( 'div', { className: 'viewer-error-actions' } );
+		actions.append( button( state === 'unavailable' ? 'retry generation' : 'retry', this.onRetry ) );
+		if ( exterior ) actions.append( button( 'return to exterior', this.onExterior ) );
+		this.issue = el( 'section', { className: 'error-box', role: 'alert' },
+			el( 'h3', { textContent: title } ),
+			el( 'p', { textContent: message } ),
+			actions,
+			details ? el( 'details', {},
+				el( 'summary', { textContent: 'technical details' } ),
+				el( 'pre', { textContent: details } )
+			) : ''
+		);
+		this.issue.dataset.state = state;
+		this.element.append( this.issue );
 
 	}
+
+	clearIssue() {
+
+		this.issue?.remove();
+		this.issue = null;
+
+	}
+
+}
+
+function button( label, action ) {
+
+	const element = el( 'button', { className: 'button', type: 'button', textContent: label } );
+	element.addEventListener( 'click', () => action?.() );
+
+	return element;
 
 }

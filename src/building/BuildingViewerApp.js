@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { RendererFactory } from '../app/RendererFactory.js';
 import { variantFor } from '../game/city/Variety.js';
-import { BuildingAssets } from './BuildingAssets.js';
+import { BuildingAssetError, BuildingAssets } from './BuildingAssets.js';
 import { BuildingStage } from './BuildingStage.js';
 import { MaterialResolver } from './MaterialResolver.js';
 import { PbrMaterialFactory } from './PbrMaterialFactory.js';
@@ -38,7 +38,9 @@ export class BuildingViewerApp {
 		this.view = new BuildingView( {
 			parcel: config.parcel,
 			onSourceChange: ( source ) => this.navigate( { source } ),
-			onSliceChange: ( value ) => this.slicer?.apply( value )
+			onSliceChange: ( value ) => this.slicer?.apply( value ),
+			onRetry: () => window.location.reload(),
+			onExterior: () => this.navigate( { source: 'shell' } )
 		} );
 		this.view.mount( document.body );
 
@@ -62,7 +64,17 @@ export class BuildingViewerApp {
 		} catch ( error ) {
 
 			console.error( error );
-			this.view.showError( String( error.message ?? error ) );
+			const source = this.config.source;
+			const state = error.state === 'unavailable' ? 'unavailable' : 'failed';
+			this.view.setSource( source, false );
+			this.view.setStatus( `${this.config.parcel} · ${source} · ${state}`, state );
+			this.view.showIssue( {
+				state,
+				title: `${source === 'interior' ? 'interior' : 'exterior'} ${state}`,
+				message: error.message ?? 'The preview could not be loaded.',
+				details: error.details ?? String( error.stack ?? error ),
+				exterior: source === 'interior'
+			} );
 
 		}
 
@@ -70,19 +82,22 @@ export class BuildingViewerApp {
 
 	async #run() {
 
-		const { parcel, out, backend } = this.config;
+		const { parcel, out, backend, source } = this.config;
 		const assets = new BuildingAssets( parcel, out );
-		this.view.setStatus( `preparing ${parcel} exterior…` );
-		await assets.ensure();
+		this.view.clearIssue();
+		this.view.setStatus( `${parcel} · ${source} · loading`, 'loading' );
+		await assets.ensure( source );
 
-		const [ blueprint, hasInterior ] = await Promise.all( [
+		const [ blueprint, selected, interior ] = await Promise.all( [
 			assets.loadBlueprint(),
-			assets.hasInterior()
+			assets.inspectScene( source ),
+			source === 'interior' ? Promise.resolve( null ) : assets.inspectScene( 'interior' )
 		] );
 
-		const source = this.config.source;
-		if ( source === 'interior' && ! hasInterior ) throw new Error( `E_INTERIOR_NOT_FOUND: ${parcel} has no assembled interior in ${out}` );
-		this.view.setSource( source, hasInterior );
+		if ( ! selected.available ) throw new BuildingAssetError(
+			selected.state, selected.code, selected.message, selected.details
+		);
+		this.view.setSource( source, source === 'interior' || interior.available );
 
 		this.renderer = await RendererFactory.create( backend );
 		document.body.prepend( this.renderer.domElement );
@@ -94,7 +109,7 @@ export class BuildingViewerApp {
 		this.slicer = new FloorSlicer( blueprint.floors );
 		this.view.setFloorOptions( this.slicer.options() );
 
-		const building = await assets.loadScene( source );
+		const building = await assets.loadScene( source, selected );
 		building.traverse( ( node ) => {
 
 			if ( ! node.isMesh ) return;
@@ -117,14 +132,18 @@ export class BuildingViewerApp {
 		} );
 
 		const bounds = new THREE.Box3().setFromObject( building );
-		const stage = BuildingStage.build( bounds, this.renderer.domElement );
+		const stage = BuildingStage.build(
+			bounds,
+			this.renderer.domElement,
+			( captured, failed ) => this.view.setCameraCaptured( captured, failed )
+		);
 		stage.scene.add( building );
 		Object.assign( this, stage ); // scene, camera, controls
 
 		if ( import.meta.env.DEV ) window.__viewer = this; // headless verification handle
 
 		this.view.setReport( resolver.report() );
-		this.view.setStatus( `${parcel} · ${source} · ${RendererFactory.actualBackend( this.renderer )}` );
+		this.view.setStatus( `${parcel} · ${source} · ready · ${RendererFactory.actualBackend( this.renderer )}`, 'ready' );
 
 		window.addEventListener( 'resize', () => this.resize() );
 		this.renderer.setAnimationLoop( () => {
