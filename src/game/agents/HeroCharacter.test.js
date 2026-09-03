@@ -14,7 +14,7 @@ describe( 'focused character', () => {
 			loadModel: ( descriptor ) => {
 
 				loaded.push( descriptor );
-				return { scene: rig( 'body' ), hair: { scene: rig( 'hair' ) } };
+				return { scene: rig( 'body' ), hairs: [ { scene: rig( 'hair' ) }, { scene: rig( 'facial-hair' ) } ] };
 
 			}
 		} );
@@ -33,6 +33,7 @@ describe( 'focused character', () => {
 		hero.active.root.traverse( ( node ) => { if ( node.isMesh ) meshes.push( node ); } );
 		expect( meshes.filter( ( mesh ) => mesh.isSkinnedMesh ) ).toHaveLength( 1 );
 		expect( meshes.find( ( mesh ) => mesh.name === 'hair' ).parent.name ).toBe( 'Head' );
+		expect( meshes.find( ( mesh ) => mesh.name === 'facial-hair' ).parent.name ).toBe( 'Head' );
 		const body = meshes.find( ( mesh ) => mesh.isSkinnedMesh );
 		expect( body.material ).toBeInstanceOf( THREE.MeshStandardNodeMaterial );
 		expect( body.geometry.hasAttribute( 'cloth' ) ).toBe( true );

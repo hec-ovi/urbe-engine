@@ -83,7 +83,7 @@ export class HeroCharacter {
 		this.#dropActive();
 		person.hero = true;
 		root.visible = true;
-		this.active = { person, root, mixer, descriptor, key: `${descriptor.id}:${descriptor.hair}` };
+		this.active = { person, root, mixer, descriptor, key: modelKey( descriptor ) };
 		this.#keepOnly( this.active.key );
 
 		return true;
@@ -123,17 +123,17 @@ export class HeroCharacter {
 
 	async #model( descriptor ) {
 
-		const key = `${descriptor.id}:${descriptor.hair}`;
+		const key = modelKey( descriptor );
 
 		if ( ! this.models.has( key ) ) {
 
 			this.models.set( key, Promise.resolve( this.loadModel( descriptor ) ).then( ( model ) => {
 
 				assertRigCompatibility( model.scene, this.animation.scene );
-				if ( model.hair ) {
+				for ( const hair of modelHairs( model ) ) {
 
-					assertRigCompatibility( model.hair.scene, this.animation.scene );
-					attachHair( model.scene, model.hair.scene );
+					assertRigCompatibility( hair.scene, this.animation.scene );
+					attachHair( model.scene, hair.scene );
 
 				}
 				return model;
@@ -164,12 +164,24 @@ export class HeroCharacter {
 async function defaultLoad( descriptor ) {
 
 	const loader = new GLTFLoader();
-	const [ model, hair ] = await Promise.all( [
+	const [ model, ...hairs ] = await Promise.all( [
 		loader.loadAsync( `${CHARACTER_ROOT}/${descriptor.file}` ),
-		loader.loadAsync( `${CHARACTER_ROOT}/${descriptor.hair}` )
+		...descriptor.hairs.map( ( file ) => loader.loadAsync( `${CHARACTER_ROOT}/${file}` ) )
 	] );
 
-	return { ...model, hair };
+	return { ...model, hairs };
+
+}
+
+function modelKey( descriptor ) {
+
+	return `${descriptor.id}:${descriptor.hairs.join( '+' )}`;
+
+}
+
+function modelHairs( model ) {
+
+	return model.hairs ?? ( model.hair ? [ model.hair ] : [] );
 
 }
 
@@ -247,7 +259,7 @@ function disposeModel( model ) {
 	const materials = new Set();
 	const textures = new Set();
 
-	for ( const root of [ model.scene, model.hair?.scene ] ) root?.traverse( ( node ) => {
+	for ( const root of [ model.scene, ...modelHairs( model ).map( ( hair ) => hair.scene ) ] ) root?.traverse( ( node ) => {
 
 		if ( node.geometry ) geometries.add( node.geometry );
 		for ( const material of Array.isArray( node.material ) ? node.material : [ node.material ] ) {

@@ -13,6 +13,37 @@ export const CHARACTER_MODELS = [
 	model( 'superhero-female', 'female', 'Superhero_Female', 'T_Superhero_Female_Dark_BaseColor.png', 'Female/Hair_Buns.gltf' )
 ];
 
+const HAIR_ROOT = 'Hairstyles/Rigged to Head Bone';
+const MALE_HEAD = [
+	'Hair_Balding', 'Hair_Buzzed', 'Hair_Dreads', 'Hair_Mohawk',
+	'Hair_Ponytail', 'Hair_SimpleParted', 'Hair_SlickBack'
+];
+const MALE_FACE = [ 'Hair_Beard', 'Hair_Moustache', 'Hair_MuttonChops' ];
+const FEMALE_HEAD = [
+	'Hair_Bob', 'Hair_Buns', 'Hair_BuzzedFemale',
+	'Hair_Long', 'Hair_LongDreads', 'Hair_Ponytail_2'
+];
+
+/** Every original Source hairstyle, separated where pieces may be combined. */
+export const HAIRSTYLES = {
+	male: {
+		adult: paths( 'Male', MALE_HEAD ),
+		teen: paths( 'Male', MALE_HEAD, true ),
+		facial: paths( 'Male', MALE_FACE ),
+		teenFacial: paths( 'Male', MALE_FACE, true )
+	},
+	female: {
+		adult: paths( 'Female', FEMALE_HEAD ),
+		teen: paths( 'Female', FEMALE_HEAD, true ),
+		facial: [],
+		teenFacial: []
+	}
+};
+
+export const HAIRSTYLE_FILES = [ ...new Set(
+	Object.values( HAIRSTYLES ).flatMap( ( set ) => Object.values( set ).flat() )
+) ];
+
 /** The two geometry-stable bodies used by the mass crowd. */
 export const CROWD_MODELS = CHARACTER_MODELS.slice( 0, 2 );
 
@@ -45,8 +76,15 @@ export function avatarFor( gender, seed ) {
 
 	const matching = CHARACTER_MODELS.filter( ( entry ) => ! gender || entry.gender === gender );
 	const pool = matching.length ? matching : CHARACTER_MODELS;
+	const value = Number.isInteger( seed ) ? seed >>> 0 : 0;
+	const shape = pool[ value % pool.length ];
+	const teen = shape.id.startsWith( 'teen-' );
+	const styles = HAIRSTYLES[ shape.gender ];
+	const head = styles[ teen ? 'teen' : 'adult' ][ Math.floor( value / pool.length ) % styles.adult.length ];
+	const facial = styles[ teen ? 'teenFacial' : 'facial' ];
+	const faceIndex = Math.floor( value / ( pool.length * styles.adult.length ) ) % ( facial.length + 1 );
 
-	return pool[ seed % pool.length ];
+	return { ...shape, hairs: [ head, ...( faceIndex ? [ facial[ faceIndex - 1 ] ] : [] ) ] };
 
 }
 
@@ -71,6 +109,12 @@ function model( id, gender, stem, skin, hair ) {
 		id, gender, file: `${stem}_FullBody.gltf`, skin,
 		hair: `Hairstyles/Rigged to Head Bone/${hair}`
 	};
+
+}
+
+function paths( gender, names, teen = false ) {
+
+	return names.map( ( name ) => `${HAIR_ROOT}/${gender}/${name}${teen ? '_Teen' : ''}.gltf` );
 
 }
 

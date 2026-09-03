@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import {
-	CHARACTER_MODELS, CROWD_MODELS, PLAYER_CLIP_NAMES,
+	CHARACTER_MODELS, CROWD_MODELS, HAIRSTYLES, HAIRSTYLE_FILES, PLAYER_CLIP_NAMES,
 	assertRigCompatibility, avatarFor, bodyFor
 } from './CharacterCatalog.js';
 
@@ -18,7 +18,11 @@ describe( 'character catalog', () => {
 			'Crouch_Fwd_Loop', 'Jump_Start', 'Jump_Loop', 'Jump_Land'
 		] ) );
 		expect( CHARACTER_MODELS.every( ( entry ) => entry.hair.endsWith( '.gltf' ) ) ).toBe( true );
-		expect( new Set( CHARACTER_MODELS.map( ( entry ) => entry.hair ) ).size ).toBe( 6 );
+		expect( HAIRSTYLES.male.adult ).toHaveLength( 7 );
+		expect( HAIRSTYLES.male.facial ).toHaveLength( 3 );
+		expect( HAIRSTYLES.female.adult ).toHaveLength( 6 );
+		expect( HAIRSTYLE_FILES ).toHaveLength( 32 );
+		expect( new Set( HAIRSTYLE_FILES ) ).toHaveLength( 32 );
 
 	} );
 
@@ -27,8 +31,13 @@ describe( 'character catalog', () => {
 		expect( CROWD_MODELS ).toHaveLength( 2 );
 		expect( bodyFor( 'male', 9 ) ).toBe( 0 );
 		expect( bodyFor( 'female', 8 ) ).toBe( 1 );
-		expect( avatarFor( 'female', 4 ) ).toBe( avatarFor( 'female', 4 ) );
+		expect( avatarFor( 'female', 4 ) ).toEqual( avatarFor( 'female', 4 ) );
 		expect( avatarFor( 'female', 4 ).gender ).toBe( 'female' );
+		expect( avatarFor( 'female', 4 ).hairs[ 0 ] ).toMatch( /_Teen\.gltf$/ );
+
+		const maleLooks = new Set( Array.from( { length: 84 }, ( _, seed ) => avatarFor( 'male', seed ).hairs.join( '+' ) ) );
+		expect( maleLooks.size ).toBeGreaterThan( HAIRSTYLES.male.adult.length );
+		expect( [ ...maleLooks ].some( ( hair ) => hair.includes( 'Hair_Beard' ) ) ).toBe( true );
 
 	} );
 

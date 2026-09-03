@@ -1,7 +1,7 @@
 {
   "name": "urbe-engine",
   "private": true,
-  "version": "0.16.22",
+  "version": "0.16.23",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,6 +11,8 @@
     "assemble-city": "tsx src/assembly/city-cli.js",
     "simulate": "tsx src/assembly/simulate-cli.js",
     "carry-quests": "tsx src/assembly/quests-cli.js",
+    "install-character-assets": "node scripts/install-character-assets.mjs",
+    "audit-character-assets": "node scripts/install-character-assets.mjs --check",
     "test": "vitest run"
   },
   "dependencies": {
