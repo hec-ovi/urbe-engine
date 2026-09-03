@@ -2,7 +2,8 @@
 import { screen } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BuildingViewerApp } from './BuildingViewerApp.js';
+import * as THREE from 'three/webgpu';
+import { BuildingViewerApp, materialForViewerSurface } from './BuildingViewerApp.js';
 
 describe( 'building navigation', () => {
 
@@ -32,6 +33,27 @@ describe( 'building navigation', () => {
 		expect( BuildingViewerApp.configFromUrl() ).toEqual( {
 			parcel: 'p2', out: '/out/small', source: 'interior', backend: 'webgl'
 		} );
+
+	} );
+
+	it( 'keeps an authored two-sided material two-sided in the rendered preview', () => {
+
+		const factory = {
+			resolver: { resolve: () => ( { variants: [ { id: 'blind', class: 'exact' } ] } ) },
+			build: vi.fn(),
+			variant: vi.fn( () => new THREE.MeshStandardMaterial( { side: THREE.DoubleSide } ) )
+		};
+		const source = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide } );
+		source.name = 'cyberpunk/curtain/high_rich';
+		source.userData.materialVariant = 'blind';
+
+		const result = materialForViewerSurface( factory, source, 'p1' );
+
+		expect( result.side ).toBe( THREE.DoubleSide );
+		expect( factory.variant ).toHaveBeenCalledWith( source.name, {
+			variantId: 'blind', side: THREE.DoubleSide
+		} );
+		expect( factory.build ).not.toHaveBeenCalled();
 
 	} );
 

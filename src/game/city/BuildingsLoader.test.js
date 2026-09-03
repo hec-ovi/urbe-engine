@@ -90,6 +90,43 @@ describe( 'building entrance availability', () => {
 
 	} );
 
+	it( 'keeps authored two-sided surfaces visible from both sides after city merging', async () => {
+
+		const curtainKey = 'cyberpunk/curtain/high_rich';
+		const loader = { loadAsync: async () => {
+
+			const scene = new THREE.Group();
+			const outsideOnly = mesh( 'mergedcurtainfront', curtainKey, 0 );
+			const bothSides = mesh( 'mergedcurtaindouble', curtainKey, 2 );
+			outsideOnly.material.userData.materialVariant = 'fabric#flat';
+			bothSides.material.userData.materialVariant = 'fabric#flat';
+			bothSides.material.side = THREE.DoubleSide;
+			scene.add( outsideOnly, bothSides );
+
+			return { scene };
+
+		} };
+		const variant = vi.fn( ( key, options ) => Object.assign(
+			new THREE.MeshBasicMaterial( { side: options.side } ), { userData: { key, variantId: options.variantId } }
+		) );
+		const curtainFactory = {
+			resolver: { resolve: () => ( { variants: [ { id: 'fabric#flat', class: 'exact' } ] } ) },
+			build: factory.build,
+			variant
+		};
+		const buildings = new Map( [ [ 'p0', {
+			parcelId: 'p0', blueprint: boxBlueprint(), shellUrl: '/p0.glb', hasInterior: false
+		} ] ] );
+		const city = await new BuildingsLoader( curtainFactory, loader ).load( buildings );
+
+		expect( city.group.getObjectByName( `shell:${curtainKey}#fabric#flat` ).material.side ).toBe( THREE.FrontSide );
+		expect( city.group.getObjectByName( `shell:${curtainKey}#fabric#flat|side=double` ).material.side ).toBe( THREE.DoubleSide );
+		expect( variant ).toHaveBeenCalledWith( curtainKey, {
+			variantId: 'fabric#flat', side: THREE.DoubleSide
+		} );
+
+	} );
+
 	it( 'preserves continuous strip geometry at representative authored door sizes', async () => {
 
 		const fixtureKey = 'cyberpunk/light-fixture/high_rich';

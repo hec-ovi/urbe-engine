@@ -116,9 +116,7 @@ export class BuildingViewerApp {
 
 			const replace = ( material ) => {
 
-				// The interior names a variant in the material's extras (`materialVariant`): a strip is not a lamp.
-				// the interior names its variant; otherwise the building wears the variant the city gives it
-				const built = factory.build( material.name, material.userData?.materialVariant ?? variantFor( factory.resolver.resolve( material.name ), parcel ) );
+				const built = materialForViewerSurface( factory, material, parcel );
 				this.slicer.attach( built );
 
 				return built;
@@ -162,5 +160,19 @@ export class BuildingViewerApp {
 		this.renderer.setSize( window.innerWidth, window.innerHeight );
 
 	}
+
+}
+
+/** Resolve one GLB material without dropping its authored two-sided surface. */
+export function materialForViewerSurface( factory, source, parcel ) {
+
+	// The interior names its exact variant; otherwise the building wears the
+	// deterministic pattern the city gives it.
+	const variantId = source.userData?.materialVariant
+		?? variantFor( factory.resolver.resolve( source.name ), parcel );
+
+	return source.side === THREE.DoubleSide
+		? factory.variant( source.name, { variantId, side: THREE.DoubleSide } )
+		: factory.build( source.name, variantId );
 
 }

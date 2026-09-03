@@ -82,12 +82,12 @@ export class BuildingsLoader {
 
 			for ( const [ surface, geometries ] of building.exterior ) {
 
-				const { key, variantId: authoredVariant } = splitBucket( surface );
+				const { key, variantId: authoredVariant, doubleSided } = splitBucket( surface );
 				// An authored surface keeps its exact look. Otherwise the building
 				// wears one seeded pattern variant of the material.
 				const bucket = bucketFor( key, authoredVariant ?? variantFor(
 					this.factory.resolver.resolve( key ), building.parcelId, this.factory.patternVariants
-				) );
+				), doubleSided );
 				if ( ! shellByKey.has( bucket ) ) shellByKey.set( bucket, [] );
 				shellByKey.get( bucket ).push( ...geometries );
 
@@ -133,15 +133,19 @@ export class BuildingsLoader {
 	/** The material for a merge bucket (key and the variant it wears); a lit diffuser reads as its own lamp. */
 	#material( bucket ) {
 
-		const { key, variantId } = splitBucket( bucket );
+		const { key, variantId, doubleSided } = splitBucket( bucket );
+		const side = doubleSided ? THREE.DoubleSide : undefined;
 
 		return key.includes( FIXTURE )
 			? this.factory.variant( key, {
 				variantId,
 				emissiveLevel: FIXTURE_EMISSIVE,
-				emissive: kelvinColor( FIXTURE_KELVIN )
+				emissive: kelvinColor( FIXTURE_KELVIN ),
+				...( side !== undefined ? { side } : {} )
 			} )
-			: this.factory.build( key, variantId );
+			: side === undefined
+				? this.factory.build( key, variantId )
+				: this.factory.variant( key, { variantId, side } );
 
 	}
 
@@ -163,7 +167,11 @@ export class BuildingsLoader {
 
 			const name = node.name ?? '';
 			const key = node.material?.name ?? '';
-			const surface = bucketFor( key, node.material?.userData?.materialVariant );
+			const surface = bucketFor(
+				key,
+				node.material?.userData?.materialVariant,
+				node.material?.side === THREE.DoubleSide
+			);
 			if ( ! hasInterior && name.startsWith( DOOR ) ) {
 
 				const geometry = bake( node );

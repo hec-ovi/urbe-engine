@@ -16,18 +16,25 @@ export function variantFor( entry, parcelId, limit = Infinity ) {
 
 }
 
-/** The bucket a building's geometry merges into: the key with the variant it wears. */
-export function bucketFor( key, variantId ) {
+const DOUBLE_SIDED = '|side=double';
 
-	return variantId ? `${key}#${variantId}` : key;
+/** The bucket a building's geometry merges into: key, variant and authored face behavior. */
+export function bucketFor( key, variantId, doubleSided = false ) {
+
+	return `${variantId ? `${key}#${variantId}` : key}${doubleSided ? DOUBLE_SIDED : ''}`;
 
 }
 
 /** A merge bucket back into what the factory takes. */
 export function splitBucket( bucket ) {
 
-	const [ key, variantId ] = bucket.split( '#' );
-	return { key, variantId };
+	const doubleSided = bucket.endsWith( DOUBLE_SIDED );
+	const material = doubleSided ? bucket.slice( 0, - DOUBLE_SIDED.length ) : bucket;
+	const split = material.indexOf( '#' );
+	const key = split < 0 ? material : material.slice( 0, split );
+	const variantId = split < 0 ? undefined : material.slice( split + 1 );
+
+	return { key, variantId, ...( doubleSided ? { doubleSided } : {} ) };
 
 }
 

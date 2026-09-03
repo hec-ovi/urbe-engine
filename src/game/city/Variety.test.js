@@ -22,6 +22,9 @@ describe( 'variantFor', () => {
 		expect( lowPicks ).toEqual( new Set( [ 'panel-ochre', 'panel-slate' ] ) );
 		expect( splitBucket( bucketFor( 'cyberpunk/wall/rich', 'panel-slate' ) ) ).toEqual( { key: 'cyberpunk/wall/rich', variantId: 'panel-slate' } );
 		expect( splitBucket( bucketFor( 'cyberpunk/roof/rich', null ) ) ).toEqual( { key: 'cyberpunk/roof/rich', variantId: undefined } );
+		expect( splitBucket( bucketFor( 'cyberpunk/curtain/rich', 'fabric#flat', true ) ) ).toEqual( {
+			key: 'cyberpunk/curtain/rich', variantId: 'fabric#flat', doubleSided: true
+		} );
 
 	} );
 
