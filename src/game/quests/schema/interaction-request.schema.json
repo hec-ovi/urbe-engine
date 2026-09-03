@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:quest-actions:interaction-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["targetKey", "action", "timeMin", "playerPlaces"],
+  "properties": {
+    "targetKey": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+    "action": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/action" },
+    "timeMin": { "type": "number", "minimum": 0 },
+    "playerPlaces": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/place" }
+    },
+    "focus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["visible", "unobstructed", "distanceMeters"],
+      "properties": {
+        "visible": { "type": "boolean" },
+        "unobstructed": { "type": "boolean" },
+        "distanceMeters": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

@@ -177,31 +177,49 @@ export class QuestSession {
 
 		const moved = [];
 
-		for ( const { definition, runtime } of this.entries ) {
+		for ( const entry of this.entries ) {
 
-			let result;
-
-			try {
-
-				result = runtime.advance( event, timeMin );
-
-			} catch {
-
-				// no active step of this questline takes the event, or it is gated off right now
-				continue;
-
-			}
-
-			const steps = new Map( definition.steps.map( ( step ) => [ step.stepId, step ] ) );
-			moved.push( {
-				definition,
-				completed: result.completedStepIds.map( ( id ) => steps.get( id ) ),
-				ending: definition.endings.find( ( e ) => e.endingId === result.endingId ) ?? null
-			} );
+			const change = this.#advanceEntry( entry, event, timeMin );
+			if ( change ) moved.push( change );
 
 		}
 
 		return moved;
+
+	}
+
+	/** Applies an interaction to one selected questline, never another quest with the same item id. */
+	advanceFor( questId, event, timeMin ) {
+
+		const entry = this.entries.find( ( candidate ) => candidate.definition.id === questId );
+		if ( ! entry ) return [];
+
+		const change = this.#advanceEntry( entry, event, timeMin );
+		return change ? [ change ] : [];
+
+	}
+
+	#advanceEntry( { definition, runtime }, event, timeMin ) {
+
+		let result;
+
+		try {
+
+			result = runtime.advance( event, timeMin );
+
+		} catch {
+
+			// No active step takes the event, or it is gated off right now.
+			return null;
+
+		}
+
+		const steps = new Map( definition.steps.map( ( step ) => [ step.stepId, step ] ) );
+		return {
+			definition,
+			completed: result.completedStepIds.map( ( id ) => steps.get( id ) ),
+			ending: definition.endings.find( ( ending ) => ending.endingId === result.endingId ) ?? null
+		};
 
 	}
 

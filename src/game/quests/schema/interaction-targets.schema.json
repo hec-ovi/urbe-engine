@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:quest-actions:interaction-targets",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "targetKey",
+      "questId",
+      "stepId",
+      "kind",
+      "place",
+      "actorIds",
+      "presentation",
+      "availability"
+    ],
+    "properties": {
+      "targetKey": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+      "questId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+      "stepId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+      "kind": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/interactionKind" },
+      "place": {
+        "oneOf": [
+          { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/place" },
+          { "type": "null" }
+        ]
+      },
+      "actorIds": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }
+      },
+      "item": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "description", "kind", "quantity"],
+        "properties": {
+          "id": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+          "name": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" },
+          "description": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" },
+          "kind": { "enum": ["device", "weapon", "document", "key", "substance", "valuable", "information"] },
+          "quantity": { "const": 1 }
+        }
+      },
+      "presentation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "description", "icon", "highlight", "actions"],
+        "properties": {
+          "name": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" },
+          "description": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" },
+          "icon": { "enum": ["pickup", "inspect", "listen", "steal", "work", "deliver"] },
+          "highlight": { "enum": ["outline", "person-outline", "area-marker"] },
+          "actions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["action", "label", "bindingAction", "progressesQuest"],
+              "properties": {
+                "action": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/action" },
+                "label": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" },
+                "bindingAction": { "enum": ["interact", "secondary-interact"] },
+                "progressesQuest": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      },
+      "availability": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["available"],
+        "properties": {
+          "available": { "type": "boolean" },
+          "reason": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/unavailableReason" }
+        }
+      }
+    }
+  }
+}

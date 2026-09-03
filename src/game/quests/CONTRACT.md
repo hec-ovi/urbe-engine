@@ -1,0 +1,42 @@
+# CONTRACT: playable quest actions
+
+Purpose: converts active quest steps into deterministic player interaction targets and applies validated interactions to one selected questline.
+
+## Inputs
+
+- Target query: [schema/target-query.schema.json](schema/target-query.schema.json). `timeMin` uses the simulation clock.
+- Interaction request: [schema/interaction-request.schema.json](schema/interaction-request.schema.json). The host supplies the selected target, symbolic input action, current places, and physical focus facts when the mechanic targets an item or person.
+
+## Outputs
+
+- Interaction targets: [schema/interaction-targets.schema.json](schema/interaction-targets.schema.json). Every target has a stable quest and step identity, map place, actual cast NPC ids, availability, and presentation instructions. Binding names stay symbolic so the UI renders the player's current key or controller binding.
+- Interaction result: [schema/interaction-result.schema.json](schema/interaction-result.schema.json). Success and failure both return current quest inventory. A completed pickup, theft, or delivery includes the matching world state change.
+
+## Events
+
+- `targets({ timeMin })` projects active `pickup`, `observe`, `listen`, `steal`, `work`, and `deliver` steps.
+- `perform(request)` maps `take`, `inspect`, `listen`, `steal`, `work`, and `deliver` to the quests runtime's closed player event vocabulary. `read` returns the selected document text without advancing the quest.
+
+## Errors
+
+- `E_QUEST_ACTION_INPUT`: an input does not match its schema.
+- `E_QUEST_ACTION_OUTPUT`: an output does not match its schema.
+- Result codes are `unknown_target`, `wrong_action`, `unavailable`, `wrong_place`, `not_visible`, `occluded`, `out_of_reach`, and `runtime_rejected`.
+
+## Dependencies
+
+- `quests/flow`, through its contract and questline schema.
+- `game/quests/QuestSession`, inside this layer only.
+
+## Invariants
+
+- An interaction advances only the questline named by the selected target. Equal item ids in another questline do not receive the event.
+- Pickup and theft require the selected object or person to be visible, unobstructed, inside the fixed reach, and at the quest target's current place.
+- Listening requires an unobstructed conversation target inside eight metres and at the target parcel.
+- A failed interaction does not mutate quest progress or inventory.
+- A successful pickup cannot be repeated because its completed step no longer produces an active target.
+- Highlight and icon data identify the same item, cast NPCs, and step consumed by the action.
+
+## How to modify this blackbox safely
+
+Keep action mapping closed and deterministic. Add a runtime event before advertising its mechanic here. Update every affected schema and run the quest action tests plus the full engine suite.
