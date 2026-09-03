@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:objective-routes:route-request",
+  "$defs": {
+    "destination": {
+      "type": "object",
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "enum": ["parcel", "station", "stop"] },
+        "id": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "required": ["from", "destination"],
+  "properties": {
+    "from": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [{ "type": "number" }, { "type": "number" }, { "type": "number" }],
+      "items": false
+    },
+    "destination": { "$ref": "#/$defs/destination" }
+  },
+  "additionalProperties": false
+}

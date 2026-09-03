@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:objective-routes:walk-network",
+  "type": "object",
+  "required": ["nodes", "edges"],
+  "properties": {
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "x", "y", "z", "kind"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "x": { "type": "number" },
+          "y": { "type": "number" },
+          "z": { "type": "number" },
+          "kind": { "enum": ["sidewalk", "corner", "crossing-end", "stop", "station", "station-entrance", "station-access", "station-handoff", "entry", "link-portal"] },
+          "ref": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": true
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "from", "to", "kind", "path3"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "from": { "type": "string", "minLength": 1 },
+          "to": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["sidewalk", "crossing", "access", "stairs", "passage", "platform", "link"] },
+          "path3": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "prefixItems": [{ "type": "number" }, { "type": "number" }, { "type": "number" }],
+              "items": false
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}
