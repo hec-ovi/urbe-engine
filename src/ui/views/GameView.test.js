@@ -64,6 +64,22 @@ describe( 'GameView', () => {
 
 	} );
 
+	it( 'opens the full game directory from Leave and exposes its data ports', async () => {
+
+		const onLeave = vi.fn();
+		const view = new GameView( { onLeave, menu: { onContinue: vi.fn() } } );
+		view.mount( document.body );
+		view.setLibrary( { games: [ { id: 'g1', name: 'Night run', playable: true } ] } );
+		view.setPaused( true );
+		await userEvent.setup().click( view.tabs.element.querySelector( '.is-leave' ) );
+		expect( view.mainMenu.element.hidden ).toBe( false );
+		expect( screen.getByRole( 'heading', { name: 'Night run' } ) ).toBeTruthy();
+		expect( onLeave ).toHaveBeenCalledOnce();
+		view.hideMainMenu();
+		expect( view.mainMenu.element.hidden ).toBe( true );
+
+	} );
+
 } );
 
 describe( 'GameView tab bar', () => {

@@ -13,7 +13,17 @@ const view = new GameView( {
 	onLeave: () => console.log( 'leave' ),
 	onHangUp: () => view.call.setVisible( false ),
 	onSummaryClose: () => view.summary.setVisible( false ),
-	onCloseDialog: () => view.dialog.setVisible( false )
+	onCloseDialog: () => view.dialog.setVisible( false ),
+	menu: {
+		onContinue: ( id ) => console.log( 'continue', id ),
+		onSave: ( id ) => console.log( 'save', id ),
+		onLoad: ( file ) => console.log( 'load', file.name ),
+		onExportCity: ( id ) => console.log( 'export city', id ),
+		onGenerateCity: ( input ) => console.log( 'generate city', input ),
+		onGenerateInstances: ( input ) => console.log( 'generate interiors', input ),
+		onGenerateQuests: ( input ) => console.log( 'generate quests', input ),
+		onCreateGame: ( input ) => console.log( 'create game', input )
+	}
 } );
 
 view.mount( document.body );
@@ -117,4 +127,18 @@ view.dialog.setVisible( true );
 view.call.setName( 'Nadir' );
 view.call.setVisible( true );
 view.toast.show( { title: 'New mission', text: 'Salt Wharf: find out who signs for the night containers.' } );
+view.setLibrary( {
+	games: [ {
+		id: 'salt-wharf', name: 'Salt Wharf', cityName: 'Rain Sector', theme: 'future noir', playable: true,
+		mainSteps: 8, sideJobs: 4, interiors: 5, location: 'Quay Office', position: [ 12.4, 0.12, - 20.8 ],
+		activeQuest: { title: 'Salt Wharf', objective: 'Check the freight ledger' },
+		inventory: [ { name: 'Brass key' }, { name: 'Folded note' } ],
+		locations: [ { name: 'Quay Office' }, { name: 'Bar Nadir' }, { name: 'Pier 4' } ]
+	} ],
+	cities: [ {
+		id: 'rain-sector', name: 'Rain Sector', size: 'medium', seed: 'rain-44', buildings: 146, interiorCount: 5, districts: 7,
+		availableBuildings: [ { id: 'p11', label: 'Quay Office', type: 'office' }, { id: 'p64', label: 'Bar Nadir', type: 'business' } ]
+	} ]
+} );
+view.showMainMenu();
 window.view = view;

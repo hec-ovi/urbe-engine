@@ -25,6 +25,7 @@ import { QuestsView } from './QuestsView.js';
 import { CodexView } from './CodexView.js';
 import { SettingsView } from './SettingsView.js';
 import { ControlsView } from './ControlsView.js';
+import { MainMenuView } from './MainMenuView.js';
 
 const noop = () => {};
 
@@ -39,7 +40,8 @@ export class GameView {
 
 	constructor( {
 		onResume = noop, onCloseDialog = noop, onSend = noop, onOpen = noop, onClose = noop,
-		onLeave = noop, onSettingChange = noop, onHangUp = noop, onSummaryClose = noop
+		onLeave = noop, onSettingChange = noop, onHangUp = noop, onSummaryClose = noop,
+		menu = {}
 	} = {} ) {
 
 		const close = () => this.close();
@@ -63,7 +65,16 @@ export class GameView {
 		this.settings = new SettingsView( { onChange: onSettingChange, onClose: close } );
 		this.controls = new ControlsView( { onClose: close } );
 
-		this.tabs = new TabBar( { onSelect: ( name ) => this.toggle( name ), onLeave } );
+		this.mainMenu = new MainMenuView( menu );
+		this.tabs = new TabBar( {
+			onSelect: ( name ) => this.toggle( name ),
+			onLeave: () => {
+
+				this.showMainMenu();
+				onLeave();
+
+			}
+		} );
 		this.panels = new PanelHost( {
 			views: {
 				QUESTS: this.quests,
@@ -112,7 +123,8 @@ export class GameView {
 			this.pause.element,
 			this.panels.element,
 			this.tabs.element,
-			this.loading
+			this.loading,
+			this.mainMenu.element
 		);
 
 		this.paused = false;
@@ -167,6 +179,31 @@ export class GameView {
 	ready() {
 
 		this.loading.hidden = true;
+
+	}
+
+	showMainMenu() {
+
+		this.close();
+		this.mainMenu.show();
+
+	}
+
+	hideMainMenu() {
+
+		this.mainMenu.hide();
+
+	}
+
+	setLibrary( library ) {
+
+		this.mainMenu.setLibrary( library );
+
+	}
+
+	setCreationState( state ) {
+
+		this.mainMenu.setCreationState( state );
 
 	}
 

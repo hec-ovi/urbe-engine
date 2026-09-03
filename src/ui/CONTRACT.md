@@ -6,9 +6,34 @@ Layout: `views/` are full panels and the overlays that assemble them, `widgets/`
 
 ## GameView (views/GameView.js)
 The whole game overlay. `mount( parent )` appends it.
-- props (all optional): `onResume()`, `onCloseDialog()`, `onSend( text )`, `onOpen( name )`, `onClose()`, `onLeave()`, `onSettingChange({ key, value })`, `onHangUp()`, `onSummaryClose()`
+- props (all optional): `onResume()`, `onCloseDialog()`, `onSend( text )`, `onOpen( name )`, `onClose()`, `onLeave()`, `onSettingChange({ key, value })`, `onHangUp()`, `onSummaryClose()`, `menu` (the `MainMenuView` callbacks below)
 - methods: `open( name )`, `close()`, `toggle( name )` with name one of `QUESTS`, `MAP`, `INVENTORY`, `CODEX`, `SETTINGS`, `CONTROLS`; `setPaused( bool )` shows the pause screen and the tab bar together (the bar is hidden while playing and shown while paused or while a panel is open); `step( text )`, `ready()`, `fail( message )` drive the loading surface
-- children the game feeds directly: `clock`, `prompt`, `readout`, `stats`, `minimap`, `pause`, `avatar`, `call`, `toast`, `dialog` (ChatPanel), `summary`, `map`, `inventory`, `quests`, `codex`, `settings`, `controls`, `tabs`, `panels`
+- front-door methods: `showMainMenu()`, `hideMainMenu()`, `setLibrary(data)`, `setCreationState(data)`
+- children the game feeds directly: `clock`, `prompt`, `readout`, `stats`, `minimap`, `pause`, `avatar`, `call`, `toast`, `dialog` (ChatPanel), `summary`, `map`, `inventory`, `quests`, `codex`, `settings`, `controls`, `tabs`, `panels`, `mainMenu`
+
+## MainMenuView (views/MainMenuView.js)
+The full-screen front door. It owns display and selection state only. Storage, generation and game launch remain caller responsibilities.
+- callbacks (all optional): `onContinue(gameId)`, `onSave(gameId)`, `onLoad(file)`, `onExportCity(cityId)`, `onGenerateCity(input)`, `onGenerateInstances(input)`, `onGenerateQuests(input)`, `onCreateGame(input)`
+- methods: `show()`, `hide()`, `openLibrary('games' | 'cities')`, `createNew()`, `createFromCity(city)`, `setLibrary(data)`, `setCreationState(data)`
+- `setLibrary({ games, cities })`: both arrays are optional. A game may provide `{ id, name, cityName, theme, playable, mainSteps, sideJobs, interiors, location, position: [x,y,z], activeQuest: { title, objective }, inventory, locations }`. A city may provide `{ id, name, seed, size, status, buildings, interiorCount, districts, summary, availableBuildings }`.
+- absent callbacks disable their corresponding control. The menu says when loading is not connected, and each creation stage says when its generator is not connected.
+- `onLoad(file)` receives the browser `File` selected by the player. The input accepts JSON game files and clears after every selection.
+
+## GameLibraryView (views/GameLibraryView.js)
+The two local directories rendered by the front door.
+- methods: `setLibrary({ games, cities })`, `showDirectory('games' | 'cities')`
+- `mostRecentGame` returns the first playable game, or null
+- game cards show current location and exact position, active quest and objective, recent locations, inventory and content counts
+- city cards show generation identity and counts, then report setup or export intent through the callbacks supplied by `MainMenuView`
+
+## NewGameView (views/NewGameView.js)
+The four-stage creation surface. A later stage remains locked until the caller supplies the preceding artifact through `setCreationState`.
+- Stage 1, City: reports `onGenerateCity({ name, seed, size })`, where size is `small`, `medium` or `large`. Name and seed are required.
+- Stage 2, Interiors: reports `onGenerateInstances({ cityId, mode, count, buildingIds })`. Mode is `automatic` or `manual`; count is 1 through 24. Manual mode requires at least one eligible selected building.
+- Stage 3, Story and jobs: reports `onGenerateQuests({ cityId, interiorIds, mainBrief, sideJobs })`. Side jobs is 0 through 24. The main brief may be blank so the story can derive from the city.
+- Stage 4, Playable game: reports `onCreateGame({ cityId, interiorIds, questId })` only after city, interiors and quests exist.
+- methods: `reset()`, `beginWithCity(city)`, `setCreationState(update)`, `open(step)`
+- `setCreationState` accepts any supplied part of `{ city, instances, quests, game, busy, error }`. The caller owns the artifacts and uses `busy` with one of `city`, `instances`, `quests`, `game` to lock duplicate actions.
 
 ## PanelHost (views/PanelHost.js)
 One panel over the game at a time.
@@ -29,6 +54,8 @@ One panel over the game at a time.
 - **ExperimentView**: the scale experiment overlay (props in the file).
 
 ## Widgets
+- **LibraryCard**: renders one game or city archive row. Game actions report continue/save by game id; city actions report setup/export by city id. Missing handlers create disabled buttons.
+- **CreationSteps**: `set(current, unlocked)` marks one of four creation stages current, completed or locked and reports enabled stage selection.
 - **TabBar**: props `onSelect( name )`, `onLeave()`; `setActive( name | null )`. Seven entries in order with their key letters: QUESTS J, MAP M, INVENTORY I, CODEX X, SETTINGS O, CONTROLS ?, LEAVE N. Keys are labels: the game binds them and calls `open`.
 - **ChatPanel**: props `onSend( text )`, `onClose()`; `setNpc({ name, role })`, `setProfile({ facts: [[key, value]], now, routine: [line] } | null)`, `addMessage({ from: 'npc' | 'player', name, text })`, `setTranscript( messages )`, `show( conversation | null )` (a simulation `{ instance, behavior }` becomes name, profile and an empty transcript; null hides), `setVisible( bool )`. Header with the name and Esc, the transcript, the input "say something" with a send button; Enter sends, Escape in the input closes, blank text is never sent.
 - **AvatarCard** (top left): `setAvatar({ name, portraitUrl | canvas, bar })` with bar in 0..1 over 12 segments, `setVisible( bool )`; hidden until the first call
@@ -42,7 +69,7 @@ One panel over the game at a time.
 - **PauseMenu**: props `onResume()`; `setVisible( bool )`
 
 ## Components
-`dom.el`, `Icon.icon( name )`, `KeyCap.keyCap( text )`, `PanelHeader` (title, key hint, Esc button), `EmptyState.emptyState( text )`, `SettingField`, `Button`, `SelectField`. Stylesheets: `game.css` (palette and HUD chrome), `tabbar.css`, `panels.css`, `views.css`, `chat.css`, `mission.css`, `styles.css` (viewer and experiment overlays).
+`dom.el`, `Icon.icon( name )`, `KeyCap.keyCap( text )`, `PanelHeader` (title, key hint, Esc button), `EmptyState.emptyState( text )`, `SettingField`, `Button`, `SelectField`, `MenuButton.menuButton`. Stylesheets: `game.css` (palette and HUD chrome), `tabbar.css`, `panels.css`, `views.css`, `chat.css`, `mission.css`, `launcher.css` (front door and creation stages), `styles.css` (viewer and experiment overlays).
 
 ## Invariants
 - Presentation only: nothing here reads game state or touches the scene. The game overlay (GameView and everything it mounts) imports nothing from outside `src/ui`; ExperimentView alone reads the scale experiment's option lists.
@@ -50,6 +77,8 @@ One panel over the game at a time.
 - The tab bar always shows each entry's key letter, and is only on screen while paused or while a panel is open.
 - One full panel at a time; Escape closes it.
 - Maps redraw on pan, zoom, turn or data change, never per frame on their own.
+- A city is a generated world artifact. A game is the final city plus its selected interiors, quests and playthrough. The UI never presents these as the same directory.
+- Creation order is enforced in the UI: city, interiors, story and side jobs, playable game.
 
 ## Tests and preview
 `*.test.js` beside each view and widget, Testing Library plus user-event on jsdom (`// @vitest-environment jsdom`), one per declared input, output and event. `test-helpers/canvas.js` gives jsdom a recording 2d context.
