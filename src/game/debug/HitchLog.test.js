@@ -68,4 +68,19 @@ describe( 'HitchLog', () => {
 
 	} );
 
+	it( 'times dominant synchronous frame work without logging normal work', () => {
+
+		const log = new HitchLog();
+		const clock = vi.spyOn( performance, 'now' )
+			.mockReturnValueOnce( 10 ).mockReturnValueOnce( 22 )
+			.mockReturnValueOnce( 30 ).mockReturnValueOnce( 32 );
+
+		expect( log.time( 'render', () => 'done' ) ).toBe( 'done' );
+		log.time( 'agents', () => {} );
+
+		expect( log.notes ).toEqual( [ 'render 12 ms' ] );
+		clock.mockRestore();
+
+	} );
+
 } );

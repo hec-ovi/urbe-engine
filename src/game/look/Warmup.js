@@ -1,23 +1,9 @@
 /**
- * Every pipeline and map built before the frame that would first draw it.
+ * Builds WebGPU pipelines and maps before a frame first draws them.
  *
- * The WebGL2 backend links a program the moment an object first renders, and a
- * link of a city material (a physical surface under batched lights, often with
- * transmission) is tens of milliseconds to seconds of blocked main thread. Its
- * maps upload on the same frame, the whole mip chain, also blocking. That is
- * what a walk across the city feels: a median frame of ten milliseconds and a
- * freeze every time the street shows something it has not shown before.
- *
- * `compileAsync` is the same work on the other path: three passes a promise
- * list to the backend, which then links through KHR_parallel_shader_compile and
- * polls for completion instead of waiting, so nothing blocks. Textures upload
- * during the same pass. Whatever is warmed here never stalls a frame later.
- *
- * What is warmed is hidden or off camera by definition, so the pass turns
- * visibility and frustum culling off for the objects it compiles and puts both
- * back exactly as they were. The compile runs under the render pipeline's own
- * multiple render target, because that decides how many outputs the fragment
- * shader writes and so which program the frame will actually ask for.
+ * Hidden or off-camera objects are staged for compilation and restored exactly.
+ * The compile uses the render pipeline's multiple render target because that
+ * decides which fragment program the visible frame requests.
  */
 export class Warmup {
 
@@ -43,16 +29,8 @@ export class Warmup {
 		if ( ! object || ! this.renderer?.compileAsync ) return 0;
 
 		const started = performance.now();
-		const shown = [];
+		const shown = stage( object );
 		const previous = this.renderer.getMRT?.() ?? null;
-
-		object.traverse( ( node ) => {
-
-			shown.push( [ node, node.visible, node.frustumCulled ] );
-			node.visible = true;
-			node.frustumCulled = false;
-
-		} );
 
 		try {
 
@@ -67,12 +45,7 @@ export class Warmup {
 		} finally {
 
 			this.renderer.setMRT?.( previous );
-			for ( const [ node, visible, culled ] of shown ) {
-
-				node.visible = visible;
-				node.frustumCulled = culled;
-
-			}
+			restore( shown );
 
 		}
 
@@ -81,9 +54,8 @@ export class Warmup {
 	}
 
 	/**
-	 * Warms one renderable at a time. Large WebGL worlds can make a driver
-	 * compile hundreds of programs concurrently when the whole scene is passed
-	 * at once; serial work keeps the same cache result without that peak.
+	 * Warms one renderable at a time so the backend never receives an unbounded
+	 * set of programs in one compile request.
 	 */
 	async warmAll( object ) {
 
@@ -100,6 +72,41 @@ export class Warmup {
 		}
 
 		return performance.now() - started;
+
+	}
+
+}
+
+function stage( object ) {
+
+	const shown = [];
+
+	object.traverse( ( node ) => {
+
+		const count = node.isInstancedMesh ? node.count : undefined;
+		const instanceCount = node.geometry?.isInstancedBufferGeometry ? node.geometry.instanceCount : undefined;
+		shown.push( [ node, node.visible, node.frustumCulled, count, instanceCount ] );
+		// Keep the active light budget intact. Making every city light visible
+		// would exceed the fixed DynamicLighting arrays used by WebGL.
+		if ( ! node.isLight ) node.visible = true;
+		node.frustumCulled = false;
+		if ( count === 0 ) node.count = 1;
+		if ( instanceCount === 0 ) node.geometry.instanceCount = 1;
+
+	} );
+
+	return shown;
+
+}
+
+function restore( shown ) {
+
+	for ( const [ node, visible, culled, count, instanceCount ] of shown ) {
+
+		node.visible = visible;
+		node.frustumCulled = culled;
+		if ( count !== undefined ) node.count = count;
+		if ( instanceCount !== undefined ) node.geometry.instanceCount = instanceCount;
 
 	}
 

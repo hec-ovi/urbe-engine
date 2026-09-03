@@ -92,6 +92,52 @@ describe( 'Warmup', () => {
 
 	} );
 
+	it( 'stages empty instance batches for compilation and restores their counts', async () => {
+
+		const root = new THREE.Group();
+		const instanced = new THREE.InstancedMesh(
+			new THREE.BoxGeometry(),
+			new THREE.MeshBasicMaterial(),
+			4
+		);
+		instanced.count = 0;
+		const geometry = new THREE.InstancedBufferGeometry().copy( new THREE.BoxGeometry() );
+		geometry.instanceCount = 0;
+		const custom = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial() );
+		root.add( instanced, custom );
+
+		const renderer = fakeRenderer( async () => {
+
+			expect( instanced.count ).toBe( 1 );
+			expect( geometry.instanceCount ).toBe( 1 );
+
+		} );
+
+		await new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera() ).warm( root );
+
+		expect( instanced.count ).toBe( 0 );
+		expect( geometry.instanceCount ).toBe( 0 );
+
+	} );
+
+	it( 'keeps inactive lights out of the staged compile', async () => {
+
+		const root = new THREE.Group();
+		const light = new THREE.PointLight();
+		light.visible = false;
+		root.add( light );
+		const renderer = fakeRenderer( async () => {
+
+			expect( light.visible ).toBe( false );
+
+		} );
+
+		await new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera() ).warm( root );
+
+		expect( light.visible ).toBe( false );
+
+	} );
+
 	it( 'survives a compile that throws and leaves the tree as it found it', async () => {
 
 		const { root, hidden } = tree();

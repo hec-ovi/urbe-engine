@@ -14,9 +14,9 @@ const AIR_RADIUS = 45;
  * clustered lighting bins on the GPU, so the count costs a compute dispatch
  * rather than a BRDF evaluation per fragment. Where the backend batches
  * instead of clustering the capacity is small and the nearest fixtures take
- * the slots; toggling a light's visibility never recompiles anything, because
- * neither lighting system folds a batched or clustered light's id into its
- * shader cache key.
+ * fixed slots. The slot objects never change identity; walking only copies a
+ * new fixture's values into them, so the renderer keeps every material's
+ * lighting cache key and pipeline.
  */
 export class CityLights {
 
@@ -30,19 +30,22 @@ export class CityLights {
 		this.capacity = capacity;
 		this.group = new THREE.Group();
 		this.group.name = 'city-lights';
-		this.lights = [];
+		this.lights = Array.from(
+			{ length: Math.min( capacity, fixtures.length ) },
+			() => new THREE.PointLight()
+		);
+		this.selection = this.lights.map( ( _, index ) => index );
+		this.fixtureDim = fixtures.map( () => 1 );
+		this.ranked = fixtures.map( ( _, index ) => ( { index, distance: 0 } ) );
 		this.timer = RESHUFFLE_INTERVAL;
 		this.dim = 1;
 
-		for ( const fixture of fixtures ) {
+		for ( let slot = 0; slot < this.lights.length; slot ++ ) {
 
-			const light = new THREE.PointLight( fixture.color, 1, fixture.range, 2 );
-			light.position.copy( fixture.position );
-			light.power = fixture.lumens;
+			const light = this.lights[ slot ];
 			light.castShadow = false;
-			light.visible = this.lights.length < capacity;
-			this.lights.push( light );
 			this.group.add( light );
+			this.#assign( slot, slot );
 
 		}
 
@@ -56,9 +59,8 @@ export class CityLights {
 	setDim( dim ) {
 
 		this.dim = dim;
-		this.group.visible = dim > 0;
 
-		for ( let i = 0; i < this.lights.length; i ++ ) this.#power( i );
+		for ( let slot = 0; slot < this.lights.length; slot ++ ) this.#power( slot );
 
 	}
 
@@ -68,30 +70,45 @@ export class CityLights {
 	 */
 	setFixtureDim( index, dim ) {
 
-		const light = this.lights[ index ];
+		if ( ! this.fixtures[ index ] || this.fixtureDim[ index ] === dim ) return;
 
-		if ( ! light || light.userData.dim === dim ) return;
+		this.fixtureDim[ index ] = dim;
+		const slot = this.selection.indexOf( index );
 
-		light.userData.dim = dim;
-		this.#power( index );
+		if ( slot >= 0 ) this.#power( slot );
 
 	}
 
-	#power( index ) {
+	#assign( slot, index ) {
 
-		this.lights[ index ].power = this.fixtures[ index ].lumens * this.dim * ( this.lights[ index ].userData.dim ?? 1 );
+		const light = this.lights[ slot ];
+		const fixture = this.fixtures[ index ];
+
+		this.selection[ slot ] = index;
+		light.position.copy( fixture.position );
+		light.color.copy( fixture.color );
+		light.distance = fixture.range;
+		light.decay = 2;
+		this.#power( slot );
+
+	}
+
+	#power( slot ) {
+
+		const index = this.selection[ slot ];
+		this.lights[ slot ].power = this.fixtures[ index ].lumens * this.dim * this.fixtureDim[ index ];
 
 	}
 
 	get count() {
 
-		return Math.min( this.capacity, this.lights.length );
+		return this.lights.length;
 
 	}
 
 	update( position, delta ) {
 
-		if ( this.lights.length <= this.capacity ) return;
+		if ( this.fixtures.length <= this.lights.length ) return;
 
 		this.timer += delta;
 
@@ -99,13 +116,19 @@ export class CityLights {
 
 		this.timer = 0;
 
-		const ranked = this.lights
-			.map( ( light, i ) => ( { i, d: light.position.distanceToSquared( position ) } ) )
-			.sort( ( a, b ) => a.d - b.d );
+		for ( const entry of this.ranked ) {
 
-		for ( let rank = 0; rank < ranked.length; rank ++ ) {
+			entry.distance = this.fixtures[ entry.index ].position.distanceToSquared( position );
 
-			this.lights[ ranked[ rank ].i ].visible = rank < this.capacity;
+		}
+
+		this.ranked.sort( ( a, b ) => a.distance - b.distance || a.index - b.index );
+
+		for ( let slot = 0; slot < this.lights.length; slot ++ ) {
+
+			const index = this.ranked[ slot ].index;
+
+			if ( this.selection[ slot ] !== index ) this.#assign( slot, index );
 
 		}
 

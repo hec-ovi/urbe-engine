@@ -29,6 +29,19 @@ export class HitchLog {
 
 	}
 
+	/** Runs synchronous frame work and records it only when its own cost is material. */
+	time( what, work, threshold = 4 ) {
+
+		const started = performance.now();
+		const result = work();
+		const elapsed = performance.now() - started;
+
+		if ( elapsed >= threshold ) this.note( what, elapsed );
+
+		return result;
+
+	}
+
 	/** Called once per frame with the gap since the previous one. */
 	frame( gapMs ) {
 

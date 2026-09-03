@@ -173,7 +173,14 @@ export class PbrMaterialFactory {
 
 		};
 
-		const material = new THREE.MeshPhysicalMaterial( {
+		// Standard covers every authored channel except transmission and produces
+		// a much smaller shader. A large WebGL city otherwise compiles the full
+		// physical feature graph for every opaque wall, road and roof even though
+		// none of those branches can contribute.
+		const Material = ( physical.transmission ?? 0 ) > 0
+			? THREE.MeshPhysicalMaterial
+			: THREE.MeshStandardMaterial;
+		const material = new Material( {
 			name: key,
 			map: map( 'basecolor', true ),
 			normalMap: map( 'normal' ),

@@ -14,7 +14,7 @@ Purpose: decides how a frame is exposed, coloured and composed, so a city lit in
 - `NightFog(scene, { density, color })`: installs the fog node, height fog outdoors and a thin uniform medium indoors; `update(air, indoor, delta)` retints it from the light actually filling the air and crosses between the two media.
 - `EnvironmentProbe(renderer, scene, tier)`: `bake(position)` and `update(position, crossed)`, the cubemap wet ground and glass reflect. Rebakes on distance, on crossing a threshold, and never twice within two seconds.
 - `LookPipeline(renderer, scene, camera, tier)`: `render()` draws one frame through the chain; `mrt` is the scene pass's multiple render target, or `null` at a tier with no bloom.
-- `Warmup(renderer, scene, camera, mrt)`: `warm(object)` builds the object's pipelines and uploads its maps off the frame that would first draw it. `warmAll(object)` does the same one renderable at a time and yields after every eight, keeping large WebGL worlds out of a concurrent driver compile spike. Hidden and frustum-culled objects are compiled and left exactly as they were.
+- `Warmup(renderer, scene, camera, mrt)`: `warm(object)` builds the object's pipelines and uploads its maps off the frame that would first draw it. `warmAll(object)` does the same one renderable at a time and yields after every eight. Hidden and frustum-culled objects, including empty instance batches, are staged and left exactly as they were; inactive light objects stay inactive so the fixed budget is never exceeded.
 
 ## The chain
 Scene pass with a two-attachment MRT (`output`, `emissive`) -> bloom fed by the emissive attachment -> output colour transform (AgX at the run's exposure) -> ordered dither. Everything before the transform is linear HDR, so the tone response is applied once, last.
@@ -24,8 +24,8 @@ Scene pass with a two-attachment MRT (`output`, `emissive`) -> bloom fed by the 
 - There is no auto-exposure. Exposure is authored per volume so walking out of a lit room into the street is a drop the player feels.
 - Fog colour is read back from the fixtures around the player, never authored: the air is the colour of the light in it.
 - Every effect reads the quality descriptor, never the backend. The backend picks a default tier once, after `init()`, and nothing downstream asks again.
-- `low` keeps physical units, computed room fill, fog and the environment probe. It disables bloom, limits material variety and uses scalar roughness and metalness to stay inside WebGL texture memory.
-- Nothing links a shader or uploads a map on a frame the player sees. The WebGL2 backend links through `compileAsync`; the loading screen warms the built city serially and every streamed floor is warmed while it is still detached.
+- `low` keeps physical units, computed room fill and fog. It disables bloom and the environment probe, limits material variety and uses scalar roughness and metalness to stay inside WebGL texture memory. Medium through ultra keep the probe.
+- The game compiles its first visible view instead of warming the complete city or streamed floors. A whole-city program set can occupy either backend for minutes; fixed light identities keep later camera translation on existing pipeline keys.
 
 ## Acceptance bands (docs/RESEARCH-LIGHTING.md 9)
 | statistic | interior | exterior |

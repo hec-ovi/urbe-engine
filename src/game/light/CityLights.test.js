@@ -12,8 +12,8 @@ const fixture = ( x, lumens, color ) => ( {
 /**
  * Two promises. Every fixture is lit at the flux the world published for it, in
  * the units three wants, so one exposure works city-wide. And where the backend
- * can only carry a handful, the handful is the nearest ones, chosen without
- * ever removing a light from the scene.
+ * can only carry a handful, the handful is the nearest ones, copied into fixed
+ * light slots so walking never invalidates the renderer's light cache key.
  */
 describe( 'CityLights', () => {
 
@@ -40,10 +40,44 @@ describe( 'CityLights', () => {
 			2
 		);
 
+		const slots = [ ...lights.lights ];
 		lights.update( new THREE.Vector3( 100, 0, 0 ), 1 );
 
-		expect( lights.lights.map( ( l ) => l.visible ) ).toEqual( [ false, true, true ] );
+		expect( lights.lights ).toEqual( slots );
+		expect( lights.lights.map( ( light ) => light.position.x ) ).toEqual( [ 100, 50 ] );
 		expect( lights.count ).toBe( 2 );
+
+		lights.update( new THREE.Vector3( 0, 0, 0 ), 1 );
+		expect( lights.lights ).toEqual( slots );
+		expect( lights.lights.map( ( light ) => light.position.x ) ).toEqual( [ 0, 50 ] );
+
+	} );
+
+	it( 'keeps a fixture dimmed when it later enters a light slot', () => {
+
+		const lights = new CityLights(
+			[ fixture( 0, 1000 ), fixture( 50, 2000 ), fixture( 100, 3000 ) ],
+			1
+		);
+
+		lights.setFixtureDim( 2, 0 );
+		lights.update( new THREE.Vector3( 100, 0, 0 ), 1 );
+
+		expect( lights.lights[ 0 ].position.x ).toBe( 100 );
+		expect( lights.lights[ 0 ].power ).toBe( 0 );
+
+	} );
+
+	it( 'turns daylight slots down without removing their stable light identities', () => {
+
+		const lights = new CityLights( [ fixture( 0, 12000, 0xffffff ) ], 1 );
+		const slot = lights.lights[ 0 ];
+
+		lights.setDim( 0 );
+
+		expect( lights.group.visible ).toBe( true );
+		expect( lights.lights[ 0 ] ).toBe( slot );
+		expect( slot.power ).toBe( 0 );
 
 	} );
 

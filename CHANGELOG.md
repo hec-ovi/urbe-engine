@@ -1,5 +1,7 @@
 # Changelog
 
+0.16.22: walking keeps the exterior light set in fixed object slots and copies the nearest fixtures' photometry into them. The stable light ids stop camera translation from invalidating every material pipeline on WebGL. Opaque metallic-roughness surfaces use the standard shader; only glass with published transmission carries the larger physical feature graph. Startup compiles the first visible view instead of feeding the whole city to either backend at once. Large shell loads, geometry baking and collider cooking use bounded batches and yield between main-thread slices; the low tier skips the moving environment probe. The hitch log times each frame subsystem separately.
+
 0.16.21: large cities no longer ask a WebGL driver to compile the whole world concurrently. Warm-up serializes renderables and yields to the driver between batches. The WebGL default low tier limits each material family to two pattern variants and uploads base colour, normal and emission maps; physical roughness and metalness remain as scalar values. Higher tiers add channels, variants and anisotropy explicitly.
 
 0.16.20: a city batch builds every exterior shell and furnishes five deterministic quest or venue parcels by default. The manifest lists shell parcels separately from its interior subset and floor files. The game loads every shell, streams and simulates only that subset, and leaves every other entrance visibly shut with no interaction or interior fetch.

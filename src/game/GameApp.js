@@ -36,7 +36,6 @@ import { HitchLog } from './debug/HitchLog.js';
 import { RenderWork } from './debug/RenderWork.js';
 import { EnvironmentProbe } from './look/EnvironmentProbe.js';
 import { LookPipeline } from './look/LookPipeline.js';
-import { Warmup } from './look/Warmup.js';
 import { NightSky, SKY_COLOR } from './sky/NightSky.js';
 import { Physics } from './physics/Physics.js';
 import { WorldColliders } from './physics/WorldColliders.js';
@@ -228,14 +227,17 @@ export class GameApp {
 		this.fog = new NightFog( this.scene, config.off.has( 'fog' )
 			? { density: 0, indoorDensity: 0, color: SKY_COLOR }
 			: { density: config.fog, color: SKY_COLOR } );
-		this.probe = config.off.has( 'probe' ) ? null : new EnvironmentProbe( this.renderer, this.scene, this.tier, this.hitches );
+		this.probe = config.off.has( 'probe' ) || this.tier.probeSize === 0
+			? null
+			: new EnvironmentProbe( this.renderer, this.scene, this.tier, this.hitches );
 		this.probe?.exclude( this.stream.group, props.group, this.transit.group );
 
 		this.view.step( 'building the physics world' );
 		this.physics = await Physics.create();
 		this.colliders = new WorldColliders( this.physics );
 		this.colliders.addStatic( ground.colliderGeometry );
-		this.colliders.addStatics( city.shellColliders.values() );
+		await this.colliders.addStaticsAsync( city.shellColliders.values(), { release: true } );
+		city.shellColliders.clear();
 		this.colliders.addStatic( links.colliderGeometry );
 		this.colliders.addStatics( this.transit.colliders.values() );
 		this.colliders.addStatics( props.colliders.values() );
@@ -281,19 +283,22 @@ export class GameApp {
 		this.controller.lookAt( spawn.lookAt );
 		this.bookmarks = new Bookmarks( { fixtures, rooms: () => this.stream.rooms, networks: connections.networks } );
 
-		// Before the bake, not after: six cube renders of a city whose shaders
-		// are already linked cost what they draw, and nothing the loading
-		// screen compiles can stall a frame once the player is walking.
+		// Construct the scene pass before a WebGPU probe bake so its final
+		// material programs can be warmed against that render context.
 		this.view.step( 'warming the renderer' );
 		this.look = new LookPipeline( this.renderer, this.scene, this.camera, this.tier );
-		this.warmup = new Warmup( this.renderer, this.scene, this.camera, this.look.mrt );
-		this.stream.warmup = this.warmup;
-		await this.warmup.warmAll( this.scene );
-		this.hero = await HeroCharacter.create( { animation: assets.animation, warmup: this.warmup } );
-		this.scene.add( this.hero.group );
+		// A large city's eager program set can leave either backend compiling for
+		// minutes. The first visible view builds only what it draws; stable light
+		// slots keep later camera translation on those program keys.
+		this.stream.warmup = null;
 
 		this.view.step( 'baking the environment' );
 		this.probe?.bake( spawn.point );
+		this.hero = await HeroCharacter.create( {
+			animation: assets.animation,
+			warmup: null
+		} );
+		this.scene.add( this.hero.group );
 
 		this.interactor = new Interactor( {
 			crowd: this.crowd, doors: city.doors, sim: this.sim,
@@ -381,25 +386,33 @@ export class GameApp {
 		this.exposure.setDaylight( stopsFor( day.state ) );
 		this.view.clock.setState( day.state );
 
-		this.physics.step( delta );
+		this.hitches.time( 'physics/player', () => {
 
-		// Out of anyone the crowd walked into last frame before the camera is
-		// placed, so the correction never shows up as a jolt a frame later.
-		this.body.push( _push.copy( this.crowd.pushback( this.body.feet, BODY_RADIUS ) ).add( this.traffic.pushback( this.body.feet, BODY_RADIUS ) ) );
-		this.controller.update( delta );
+			this.physics.step( delta );
+
+			// Out of anyone the crowd walked into last frame before the camera is
+			// placed, so the correction never shows up as a jolt a frame later.
+			this.body.push( _push.copy( this.crowd.pushback( this.body.feet, BODY_RADIUS ) ).add( this.traffic.pushback( this.body.feet, BODY_RADIUS ) ) );
+			this.controller.update( delta );
+
+		} );
 
 		const feet = this.body.feet;
 
-		if ( this.stream.update( feet ) ) this.roomView.setRooms( this.stream.rooms );
+		this.hitches.time( 'interior stream', () => {
+
+			if ( this.stream.update( feet ) ) this.roomView.setRooms( this.stream.rooms );
+
+		} );
 
 		this.lights.update( this.camera.position, delta );
-		this.crowd.update( delta, feet, this.clock );
+		this.hitches.time( 'crowd', () => this.crowd.update( delta, feet, this.clock ) );
 		this.hero.update( delta );
-		this.traffic.update( delta, feet, this.clock.daySeconds );
+		this.hitches.time( 'traffic', () => this.traffic.update( delta, feet, this.clock.daySeconds ) );
 		this.transit.update( feet, this.clock.daySeconds );
 		this.elevators.update( delta, this.body );
 		this.venues.update( delta, feet, this.clock.timeMin, this.sim, this.lights );
-		this.#relight( feet, delta );
+		this.hitches.time( 'relight', () => this.#relight( feet, delta ) );
 
 		const prompt = this.interactor.update( delta );
 		this.view.prompt.update( this.input.locked ? prompt : null );
@@ -425,10 +438,14 @@ export class GameApp {
 		this.view.setPaused( ! this.input.locked && free );
 		this.view.minimap.update( feet, this.controller.yaw );
 		if ( this.view.panels.current === 'MAP' ) this.view.map.setPlayer( feet, this.controller.yaw );
-		this.view.clock.update( this.clock.label, this.locator.district( feet.x, feet.z ) );
-		this.view.readout.update( feet, this.locator.district( feet.x, feet.z ), this.locator.parcel( feet.x, feet.z ) );
+		this.hitches.time( 'location HUD', () => {
 
-		this.look.render();
+			this.view.clock.update( this.clock.label, this.locator.district( feet.x, feet.z ) );
+			this.view.readout.update( feet, this.locator.district( feet.x, feet.z ), this.locator.parcel( feet.x, feet.z ) );
+
+		} );
+
+		this.hitches.time( 'render', () => this.look.render() );
 		this.input.endFrame();
 
 	}

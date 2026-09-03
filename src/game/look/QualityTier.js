@@ -23,7 +23,7 @@ const PRESETS = {
 		roomStrips: 0,
 		clusteredLights: 512,
 		batchedLights: 32,
-		probeSize: 64,
+		probeSize: 0,
 		probeInterval: 120,
 		materialMaps: [ 'basecolor', 'normal', 'emission' ],
 		materialVariants: 2,

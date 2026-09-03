@@ -30,6 +30,7 @@ describe( 'QualityTier', () => {
 		expect( low.materialMaps ).toEqual( [ 'basecolor', 'normal', 'emission' ] );
 		expect( low.materialVariants ).toBeLessThan( ultra.materialVariants );
 		expect( low.textureAnisotropy ).toBeLessThan( ultra.textureAnisotropy );
+		expect( low.probeSize ).toBe( 0 );
 
 		expect( ultra.roomSlots ).toBeGreaterThan( low.roomSlots );
 		expect( ultra.probeSize ).toBeGreaterThan( low.probeSize );

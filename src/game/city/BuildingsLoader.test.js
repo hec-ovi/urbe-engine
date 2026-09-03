@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { BuildingsLoader } from './BuildingsLoader.js';
+import { BuildingsLoader, mapConcurrent } from './BuildingsLoader.js';
 
 const factory = {
 	resolver: { resolve: () => null },
@@ -27,6 +27,30 @@ describe( 'building entrance availability', () => {
 		expect( city.doors ).toHaveLength( 1 );
 		expect( city.doors[ 0 ].parcelId ).toBe( 'p0' );
 		expect( city.group.getObjectByName( 'door:p0:0' ) ).toBeTruthy();
+
+	} );
+
+} );
+
+describe( 'shell loading budget', () => {
+
+	it( 'limits concurrent GLB parse work and preserves input order', async () => {
+
+		let active = 0;
+		let peak = 0;
+		const values = Array.from( { length: 40 }, ( _, index ) => index );
+		const result = await mapConcurrent( values, 8, async ( value ) => {
+
+			active ++;
+			peak = Math.max( peak, active );
+			await new Promise( ( resolve ) => setTimeout( resolve, value % 3 ) );
+			active --;
+			return value * 2;
+
+		} );
+
+		expect( peak ).toBe( 8 );
+		expect( result ).toEqual( values.map( ( value ) => value * 2 ) );
 
 	} );
 

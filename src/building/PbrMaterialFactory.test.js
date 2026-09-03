@@ -66,4 +66,24 @@ describe( 'PbrMaterialFactory', () => {
 
 	} );
 
+	it( 'uses the smaller standard shader for opaque PBR and physical only for transmission', () => {
+
+		const resolver = {
+			resolve: ( key ) => ( {
+				...entry( 1 ),
+				physical: {
+					...entry( 1 ).physical,
+					transmission: key.includes( 'glass' ) ? 0.8 : 0
+				}
+			} ),
+			mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
+		};
+		const factory = new PbrMaterialFactory( resolver, { materialMaps: [] } );
+
+		expect( factory.build( 'known/wall/mid' ).type ).toBe( 'MeshStandardMaterial' );
+		expect( factory.build( 'known/glass/mid' ).type ).toBe( 'MeshPhysicalMaterial' );
+		expect( factory.build( 'known/glass/mid' ).transmission ).toBeCloseTo( 0.8 );
+
+	} );
+
 } );

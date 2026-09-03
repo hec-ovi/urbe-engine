@@ -392,7 +392,7 @@ export class InteriorStream {
 		// scene must not be the frame that links its shaders.
 		if ( this.warmup ) {
 
-			const warmed = await this.warmup.warm( content );
+			const warmed = await this.warmup.warmAll( content );
 
 			this.hitches?.note( `floor ${band.id} warm`, warmed );
 

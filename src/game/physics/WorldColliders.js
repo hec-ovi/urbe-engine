@@ -35,6 +35,30 @@ export class WorldColliders {
 
 	}
 
+	/**
+	 * Adds a large set without holding the main thread across the whole city.
+	 * Each geometry is still one exact trimesh; the yield only separates cooks.
+	 */
+	async addStaticsAsync( geometries, { sliceMs = 8, release = false } = {} ) {
+
+		let since = performance.now();
+
+		for ( const geometry of geometries ) {
+
+			this.addStatic( geometry );
+			if ( release ) geometry?.dispose();
+
+			if ( performance.now() - since >= sliceMs ) {
+
+				await taskYield();
+				since = performance.now();
+
+			}
+
+		}
+
+	}
+
 	/** @param posts [{ x, z, base, height, radius }] lamp poles and the like */
 	addPosts( posts ) {
 
@@ -68,5 +92,11 @@ export class WorldColliders {
 		return this.live.size;
 
 	}
+
+}
+
+function taskYield() {
+
+	return new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
 
 }

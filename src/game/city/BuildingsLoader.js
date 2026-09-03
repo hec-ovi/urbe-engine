@@ -25,6 +25,8 @@ const FIXTURE = '/light-fixture/';
  */
 const FIXTURE_EMISSIVE = 180;
 const FIXTURE_KELVIN = 2700;
+const LOAD_CONCURRENCY = 8;
+const MAIN_THREAD_SLICE_MS = 8;
 
 /**
  * Every building's shell, loaded once for the whole city: the skyline is
@@ -55,8 +57,8 @@ export class BuildingsLoader {
 	 */
 	async load( buildings ) {
 
-		const loaded = await Promise.all(
-			[ ...buildings.values() ].map( ( entry ) => this.#loadOne( entry ) )
+		const loaded = await mapConcurrent(
+			[ ...buildings.values() ], LOAD_CONCURRENCY, ( entry ) => this.#loadOne( entry )
 		);
 
 		const group = new THREE.Group();
@@ -94,6 +96,7 @@ export class BuildingsLoader {
 
 		}
 
+		let sliceStarted = performance.now();
 		for ( const [ key, geometries ] of shellByKey ) {
 
 			const merged = BufferGeometryUtils.mergeGeometries( geometries, false );
@@ -104,6 +107,12 @@ export class BuildingsLoader {
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
 			group.add( mesh );
+			if ( performance.now() - sliceStarted >= MAIN_THREAD_SLICE_MS ) {
+
+				await taskYield();
+				sliceStarted = performance.now();
+
+			}
 
 		}
 
@@ -136,9 +145,11 @@ export class BuildingsLoader {
 		const doorParts = [];
 		const exteriorFlat = [];
 
-		gltf.scene.traverse( ( node ) => {
+		const meshes = [];
+		gltf.scene.traverse( ( node ) => { if ( node.isMesh ) meshes.push( node ); } );
+		let sliceStarted = performance.now();
 
-			if ( ! node.isMesh ) return;
+		for ( const node of meshes ) {
 
 			const name = node.name ?? '';
 			const key = node.material?.name ?? '';
@@ -147,7 +158,7 @@ export class BuildingsLoader {
 				const geometry = bake( node );
 				push( exterior, key, geometry );
 				exteriorFlat.push( positionsOnly( geometry ) );
-				return;
+				continue;
 
 			}
 
@@ -155,11 +166,11 @@ export class BuildingsLoader {
 
 				doorParts.push( { key, geometry: bake( node ), hinge: node.getWorldPosition( new THREE.Vector3() ) } );
 
-				return;
+				continue;
 
 			}
 
-			if ( ! name.startsWith( EXTERIOR ) ) return;
+			if ( ! name.startsWith( EXTERIOR ) ) continue;
 
 			const geometry = bake( node );
 
@@ -176,8 +187,14 @@ export class BuildingsLoader {
 				exteriorFlat.push( positionsOnly( rest ) );
 
 			}
+			if ( performance.now() - sliceStarted >= MAIN_THREAD_SLICE_MS ) {
 
-		} );
+				await taskYield();
+				sliceStarted = performance.now();
+
+			}
+
+		}
 
 		if ( door && doorParts.length ) attachLeaves( door, doorParts, ( key ) => this.#material( key ) );
 
@@ -190,6 +207,34 @@ export class BuildingsLoader {
 		};
 
 	}
+
+}
+
+/** Ordered concurrent map with a fixed resource ceiling. */
+export async function mapConcurrent( values, concurrency, operation ) {
+
+	const results = new Array( values.length );
+	let next = 0;
+
+	async function worker() {
+
+		for ( let index = next ++; index < values.length; index = next ++ ) {
+
+			results[ index ] = await operation( values[ index ], index );
+
+		}
+
+	}
+
+	await Promise.all( Array.from( { length: Math.min( concurrency, values.length ) }, worker ) );
+
+	return results;
+
+}
+
+function taskYield() {
+
+	return new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
 
 }
 

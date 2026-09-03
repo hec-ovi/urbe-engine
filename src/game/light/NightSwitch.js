@@ -7,7 +7,7 @@ import { uniform } from 'three/tsl';
  */
 export const nightLevel = uniform( 1 );
 
-/** Below this a lamp is off rather than very dim, and stops being drawn. */
+/** Below this a lamp is off rather than very dim. */
 const OFF = 0.02;
 
 /**

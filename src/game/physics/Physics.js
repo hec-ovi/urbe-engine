@@ -54,7 +54,7 @@ export class Physics {
 			: new Float32Array( position.array );
 		const indices = geometry.index
 			? new Uint32Array( geometry.index.array )
-			: new Uint32Array( Array.from( { length: position.count }, ( _, i ) => i ) );
+			: sequentialTriangleIndices( position.count );
 
 		const body = this.world.createRigidBody( RAPIER.RigidBodyDesc.fixed() );
 		const collider = this.world.createCollider( RAPIER.ColliderDesc.trimesh( vertices, indices ), body );
@@ -85,5 +85,16 @@ export class Physics {
 		this.world.removeRigidBody( handle.body );
 
 	}
+
+}
+
+/** Dense triangle indices without an intermediate boxed JavaScript array. */
+export function sequentialTriangleIndices( count ) {
+
+	const indices = new Uint32Array( count );
+
+	for ( let index = 0; index < count; index ++ ) indices[ index ] = index;
+
+	return indices;
 
 }

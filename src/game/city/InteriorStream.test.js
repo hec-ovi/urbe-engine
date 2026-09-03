@@ -194,7 +194,7 @@ describe( 'InteriorStream.update', () => {
 	it( 'warms a floor while it is still nowhere, before anything can draw it', async () => {
 
 		const warmed = [];
-		const warmup = { warm: async ( content ) => {
+		const warmup = { warmAll: async ( content ) => {
 
 			warmed.push( { meshes: content.children.length, attached: content.parent !== null } );
 
