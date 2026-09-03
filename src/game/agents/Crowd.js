@@ -114,7 +114,9 @@ export class Crowd {
 		member.position.copy( position );
 		member.heading = actor.heading;
 		member.restClip = clipForNpcAnimation( actor.animation );
-		member.clip = member.talking
+		member.clip = member.animationOverride !== undefined
+			? crowdClipForName( member.animationOverride )
+			: member.talking
 			? member.restClip === CLIP.SIT ? CLIP.SIT_TALK : CLIP.TALK
 			: member.restClip;
 		member.controlMode = actor.mode;
@@ -131,6 +133,27 @@ export class Crowd {
 	syncActors( actors, player ) {
 
 		return actors.map( ( actor ) => this.syncActor( actor, player ) ).filter( Boolean );
+
+	}
+
+	/** The rendered body for one persistent identity, if it is currently loaded. */
+	memberForNpc( npcId ) {
+
+		return [ ...this.members.values() ].find( ( member ) => member.npcId === npcId ) ?? null;
+
+	}
+
+	/**
+	 * Projects an exact coordinator clip onto the baked crowd's closest authored
+	 * VAT state. The exact clip still drives HeroCharacter while it is focused.
+	 */
+	setAnimationClip( npcId, clipName ) {
+
+		const member = this.memberForNpc( npcId );
+		if ( ! member ) return null;
+		member.animationOverride = clipName;
+		member.clip = crowdClipForName( clipName );
+		return member;
 
 	}
 
@@ -919,6 +942,19 @@ function memberAt( member, place ) {
 function angleTo( from, to ) {
 
 	return Math.atan2( to.x - from.x, to.z - from.z );
+
+}
+
+/** The nearest baked VAT state for an exact Pro animation clip. */
+export function crowdClipForName( clipName ) {
+
+	if ( /^Walk_(?:Loop|Formal_Loop)$/.test( clipName ) ) return CLIP.WALK;
+	if ( /^Sprint_/.test( clipName ) ) return CLIP.RUN;
+	if ( /^Crouch_/.test( clipName ) ) return CLIP.CROUCH;
+	if ( clipName === 'Idle_Talking_Loop' ) return CLIP.TALK;
+	if ( clipName === 'Sitting_Talking_Loop' ) return CLIP.SIT_TALK;
+	if ( /^Sitting_/.test( clipName ) ) return CLIP.SIT;
+	return CLIP.IDLE;
 
 }
 

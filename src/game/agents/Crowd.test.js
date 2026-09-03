@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { Crowd } from './Crowd.js';
+import { Crowd, crowdClipForName } from './Crowd.js';
 import { CLIP } from './CharacterAssets.js';
 import { WalkRoutes } from './WalkRoutes.js';
 
@@ -143,6 +143,45 @@ describe( 'persistent NPC projection', () => {
 			.toBe( instance.npcId );
 		expect( continuity.appear ).toHaveBeenCalledWith( { npcId: instance.npcId, timeMin: 600 } );
 		expect( crowd.questMember( instance.npcId, 601, player, { kind: 'edge', id: 'e1' } ) ).toBeNull();
+
+	} );
+
+	it( 'keeps an exact coordinator override across continuity refreshes', () => {
+
+		const instance = {
+			npcId: 'seated-listener', name: { given: 'Sora', family: 'Lin' },
+			type: 'patron', gender: 'female', appearanceSeed: 901
+		};
+		const crowd = new Crowd( {
+			assets: testAssets(), routes: pavement(), signals: { green: () => true },
+			sim: { getNPC: () => instance, crowd: () => ( { agents: [] } ) },
+			places: new Map(), capacity: 4
+		} );
+		const actor = { ...persistentActor( instance ), animation: 'sit', mode: 'conversation' };
+		const member = crowd.syncActor( actor, new THREE.Vector3() );
+
+		expect( crowd.setAnimationClip( instance.npcId, 'Sitting_Nodding_Loop' ) ).toBe( member );
+		expect( member.clip ).toBe( CLIP.SIT );
+		expect( crowd.syncActor( { ...actor, heading: 1 }, new THREE.Vector3() ) ).toBe( member );
+		expect( crowd.memberForNpc( instance.npcId ) ).toMatchObject( {
+			animationOverride: 'Sitting_Nodding_Loop', clip: CLIP.SIT, heading: 1
+		} );
+
+	} );
+
+} );
+
+describe( 'exact animation projection', () => {
+
+	it.each( [
+		[ 'Walk_Loop', CLIP.WALK ], [ 'Walk_Formal_Loop', CLIP.WALK ],
+		[ 'Sprint_Enter', CLIP.RUN ], [ 'Sprint_Loop', CLIP.RUN ],
+		[ 'Crouch_Idle_Loop', CLIP.CROUCH ], [ 'Idle_Talking_Loop', CLIP.TALK ],
+		[ 'Sitting_Talking_Loop', CLIP.SIT_TALK ], [ 'Sitting_Nodding_Loop', CLIP.SIT ],
+		[ 'PickUp_Ground', CLIP.IDLE ]
+	] )( 'maps %s to its closest VAT state', ( clipName, expected ) => {
+
+		expect( crowdClipForName( clipName ) ).toBe( expected );
 
 	} );
 
