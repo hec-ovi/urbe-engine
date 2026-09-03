@@ -125,16 +125,21 @@ describe( 'WorldSource selective interiors', () => {
 			questlines,
 			objectives: [ { questId: 'q-main', stepId: 'take-ledger', action: questlines[ 0 ].steps[ 0 ].target } ],
 			investigations: [],
+			mechanicTargetBindings: [],
 			missionAssetRequests: [ { assetId: 'quest.ledger' } ],
-			missionItemBindings: [ { questId: 'q-main', itemId: 'ledger', assetId: 'quest.ledger' } ]
+			missionItemBindings: [ { questId: 'q-main', itemId: 'ledger', assetId: 'quest.ledger' } ],
+			hostCapabilities: { transportationModes: [] }
 		};
 		const bundle = {
-			contractVersion: '1.0',
+			contractVersion: '1.1',
 			files: {
 				questlines: 'questlines.json', objectives: 'objectives.json', investigations: 'investigations.json',
-				missionAssetRequests: 'mission-assets.json', missionItemBindings: 'mission-item-bindings.json'
+				mechanicTargetBindings: 'mechanic-target-bindings.json', missionAssetRequests: 'mission-assets.json',
+				missionItemBindings: 'mission-item-bindings.json', hostCapabilities: 'host-capabilities.json'
 			},
-			counts: Object.fromEntries( Object.entries( catalogs ).map( ( [ name, values ] ) => [ name, values.length ] ) )
+			counts: Object.fromEntries( Object.entries( catalogs )
+				.filter( ( [ name ] ) => name !== 'hostCapabilities' )
+				.map( ( [ name, values ] ) => [ name, values.length ] ) )
 		};
 		const documents = new Map( [
 			[ '/out/games/quest/blueprint.json', atlas ],
@@ -159,6 +164,7 @@ describe( 'WorldSource selective interiors', () => {
 		expect( world.objectives ).toEqual( catalogs.objectives );
 		expect( world.missionAssetRequests ).toEqual( catalogs.missionAssetRequests );
 		expect( world.missionItemBindings ).toEqual( catalogs.missionItemBindings );
+		expect( world.hostCapabilities ).toEqual( catalogs.hostCapabilities );
 
 		documents.set( '/out/games/quest/quests/quest-bundle.json', {
 			...bundle, counts: { ...bundle.counts, objectives: 2 }

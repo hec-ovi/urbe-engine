@@ -1,24 +1,24 @@
 # CONTRACT: quest bundle consumer
 
-Purpose: validates and selects the complete quests v0.6 engine handoff without breaking cross-file references.
+Purpose: validates and selects the complete quests v0.7 engine handoff without breaking cross-file references.
 
 ## Inputs
 
-- Manifest: [schema/manifest.schema.json](schema/manifest.schema.json), the consumed quests `quest-bundle.json` v1.0 shape.
-- Catalogs: the five arrays named by the manifest: questlines, objective projections, investigation requests, mission asset requests and mission item bindings.
+- Manifest: [schema/manifest.schema.json](schema/manifest.schema.json), the consumed quests `quest-bundle.json` v1.1 shape.
+- Files: six counted arrays for questlines, objectives, investigations, fixed mechanic bindings, mission asset requests and item bindings, plus the object-valued host capabilities file.
 - Selection: an ordered unique list of quest ids and the output questline filename.
 
 ## Outputs
 
-- `questBundle(manifest, catalogs)`: the validated manifest and its five unchanged arrays.
-- `selectQuestBundle(bundle, questIds, questlinesFile)`: the chosen definitions, objective projections and investigations, plus only their item bindings and referenced mission asset requests. Counts and filenames are rebuilt together.
+- `questBundle(manifest, catalogs)`: the validated manifest and its seven unchanged files.
+- `selectQuestBundle(bundle, questIds, questlinesFile)`: the chosen definitions and quest-owned records, plus only mission assets referenced by selected item or mechanic bindings. Host capabilities remain unchanged. Counts and filenames are rebuilt together.
 
 ## Errors
 
 - `E_QUEST_BUNDLE_INPUT`: the manifest or selection does not match its contract.
 - `E_QUEST_BUNDLE_FILES`: a named catalog is not an array.
 - `E_QUEST_BUNDLE_COUNT`: manifest and catalog counts disagree.
-- `E_QUEST_BUNDLE_CONTENT`: objective order or a quest, item, asset or investigation reference disagrees across catalogs.
+- `E_QUEST_BUNDLE_CONTENT`: objective order, fixed target identity, interaction, host mode, or another cross-file reference disagrees.
 
 ## Dependencies
 
@@ -28,7 +28,8 @@ Purpose: validates and selects the complete quests v0.6 engine handoff without b
 ## Invariants
 
 - Objective rows are the byte-equivalent quest and step ordered projection of each authored target.
-- A selected bundle contains no record owned by an omitted quest and no mission asset request without a selected item binding.
+- A selected bundle contains no record owned by an omitted quest and no mission asset without a selected item or fixed mechanic binding.
+- Every rescue, access, hacking and sabotage step binds its exact authored target to a fixed asset interaction. Engine admits only measured `public-transit` transportation.
 - Filenames stay in one directory and counts describe the exact returned arrays.
 - Unknown or mismatched cross-file references fail before gameplay starts.
 

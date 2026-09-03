@@ -61,7 +61,10 @@ describe( 'playable world creation contract', () => {
 		const bundleDir = join( fixture.config.outDir, 'games/canal-ward/quests' );
 		expect( await readJson( join( bundleDir, 'quest-bundle.json' ) ) ).toMatchObject( {
 			files: { questlines: 'questlines.json' },
-			counts: { questlines: 4, objectives: 25, investigations: 0, missionAssetRequests: 4, missionItemBindings: 4 }
+				counts: {
+					questlines: 4, objectives: 25, investigations: 0, mechanicTargetBindings: 0,
+					missionAssetRequests: 4, missionItemBindings: 4
+				}
 		} );
 		expect( await readJson( join( bundleDir, 'mission-item-bindings.json' ) ) ).toHaveLength( 4 );
 		await expect( readFile( join( fixture.config.outDir, 'games/canal-ward/draft.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
@@ -153,19 +156,27 @@ function processPort( calls ) {
 			const missionItemBindings = questlines.map( ( definition ) => ( {
 				questId: definition.id, itemId: `${definition.id}-item`, assetId: `asset.${definition.id}`
 			} ) );
-			const catalogs = { questlines, objectives, investigations: [], missionAssetRequests, missionItemBindings };
+			const catalogs = {
+				questlines, objectives, investigations: [], mechanicTargetBindings: [], missionAssetRequests,
+				missionItemBindings, hostCapabilities: { transportationModes: [] }
+			};
 			await writeJson( output, questlines );
 			await writeJson( join( dirname( output ), 'objectives.json' ), objectives );
 			await writeJson( join( dirname( output ), 'investigations.json' ), [] );
+			await writeJson( join( dirname( output ), 'mechanic-target-bindings.json' ), [] );
 			await writeJson( join( dirname( output ), 'mission-assets.json' ), missionAssetRequests );
 			await writeJson( join( dirname( output ), 'mission-item-bindings.json' ), missionItemBindings );
+			await writeJson( join( dirname( output ), 'host-capabilities.json' ), catalogs.hostCapabilities );
 			await writeJson( join( dirname( output ), 'quest-bundle.json' ), {
-				contractVersion: '1.0',
+				contractVersion: '1.1',
 				files: {
 					questlines: 'all.questlines.json', objectives: 'objectives.json', investigations: 'investigations.json',
-					missionAssetRequests: 'mission-assets.json', missionItemBindings: 'mission-item-bindings.json'
+					mechanicTargetBindings: 'mechanic-target-bindings.json', missionAssetRequests: 'mission-assets.json',
+					missionItemBindings: 'mission-item-bindings.json', hostCapabilities: 'host-capabilities.json'
 				},
-				counts: Object.fromEntries( Object.entries( catalogs ).map( ( [ name, values ] ) => [ name, values.length ] ) )
+				counts: Object.fromEntries( Object.entries( catalogs )
+					.filter( ( [ name ] ) => name !== 'hostCapabilities' )
+					.map( ( [ name, values ] ) => [ name, values.length ] ) )
 			} );
 			await writeJson( join( dirname( output ), 'questlines.meta.json' ), { generated: true } );
 			return '';

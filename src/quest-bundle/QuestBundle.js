@@ -3,8 +3,9 @@ import manifestSchema from './schema/manifest.schema.json' with { type: 'json' }
 import { QuestBundleError } from './QuestBundleError.js';
 
 export const QUEST_BUNDLE_CATALOGS = Object.freeze( [
-	'questlines', 'objectives', 'investigations', 'missionAssetRequests', 'missionItemBindings'
+	'questlines', 'objectives', 'investigations', 'mechanicTargetBindings', 'missionAssetRequests', 'missionItemBindings'
 ] );
+export const QUEST_BUNDLE_FILES = Object.freeze( [ ...QUEST_BUNDLE_CATALOGS, 'hostCapabilities' ] );
 
 const validateManifest = new Ajv2020( { allErrors: true, strict: true } ).compile( manifestSchema );
 
@@ -33,6 +34,7 @@ export function questBundle( manifest, catalogs ) {
 		}
 
 	}
+	assertHostCapabilities( catalogs.hostCapabilities );
 	assertContent( catalogs );
 	return { manifest, ...catalogs };
 
@@ -44,7 +46,7 @@ export function questBundleManifest( manifest ) {
 	if ( ! validateManifest( manifest ) ) {
 
 		throw new QuestBundleError(
-			'E_QUEST_BUNDLE_INPUT', 'quest-bundle.json does not match the v1.0 contract',
+			'E_QUEST_BUNDLE_INPUT', 'quest-bundle.json does not match the v1.1 contract',
 			( validateManifest.errors ?? [] ).map( ( error ) => ( {
 				path: error.instancePath || '/', keyword: error.keyword, message: error.message ?? 'invalid value'
 			} ) )
@@ -75,10 +77,14 @@ export function selectQuestBundle( bundle, questIds, questlinesFile = 'questline
 	}
 	const objectives = checked.objectives.filter( ( objective ) => selected.has( objective.questId ) );
 	const investigations = checked.investigations.filter( ( request ) => selected.has( request.questId ) );
+	const mechanicTargetBindings = checked.mechanicTargetBindings.filter( ( binding ) => selected.has( binding.questId ) );
 	const missionItemBindings = checked.missionItemBindings.filter( ( binding ) => selected.has( binding.questId ) );
-	const assetIds = new Set( missionItemBindings.map( ( binding ) => binding.assetId ) );
+	const assetIds = new Set( [ ...missionItemBindings, ...mechanicTargetBindings ].map( ( binding ) => binding.assetId ) );
 	const missionAssetRequests = checked.missionAssetRequests.filter( ( request ) => assetIds.has( request.assetId ) );
-	const catalogs = { questlines, objectives, investigations, missionAssetRequests, missionItemBindings };
+	const catalogs = {
+		questlines, objectives, investigations, mechanicTargetBindings, missionAssetRequests,
+		missionItemBindings, hostCapabilities: checked.hostCapabilities
+	};
 	const manifest = manifestFor( catalogs, questlinesFile );
 	return questBundle( manifest, catalogs );
 
@@ -87,13 +93,15 @@ export function selectQuestBundle( bundle, questIds, questlinesFile = 'questline
 export function manifestFor( catalogs, questlinesFile = 'questlines.json' ) {
 
 	return {
-		contractVersion: '1.0',
+		contractVersion: '1.1',
 		files: {
 			questlines: questlinesFile,
 			objectives: 'objectives.json',
 			investigations: 'investigations.json',
+			mechanicTargetBindings: 'mechanic-target-bindings.json',
 			missionAssetRequests: 'mission-assets.json',
-			missionItemBindings: 'mission-item-bindings.json'
+			missionItemBindings: 'mission-item-bindings.json',
+			hostCapabilities: 'host-capabilities.json'
 		},
 		counts: Object.fromEntries( QUEST_BUNDLE_CATALOGS.map( ( name ) => [ name, catalogs[ name ]?.length ?? - 1 ] ) )
 	};
@@ -122,6 +130,7 @@ function assertContent( catalogs ) {
 
 	}
 	const assets = uniqueIds( catalogs.missionAssetRequests, 'assetId', 'mission asset requests' );
+	const assetById = new Map( catalogs.missionAssetRequests.map( ( request ) => [ request.assetId, request ] ) );
 	const bindingKeys = new Set();
 	for ( const binding of catalogs.missionItemBindings ) {
 
@@ -136,6 +145,88 @@ function assertContent( catalogs ) {
 		const key = `${binding.questId}\u0000${binding.itemId}`;
 		if ( bindingKeys.has( key ) ) fail( `mission item binding repeats ${binding.questId}/${binding.itemId}` );
 		bindingKeys.add( key );
+
+	}
+	assertMechanicBindings( catalogs, questIds, assets, assetById );
+	for ( const definition of catalogs.questlines ) {
+
+		for ( const step of definition.steps ) {
+
+			if ( step.target?.kind === 'transportation'
+				&& ! catalogs.hostCapabilities.transportationModes.includes( step.target.mode ) ) {
+
+				fail( `transportation ${definition.id}/${step.stepId} uses unsupported mode ${step.target.mode}` );
+
+			}
+
+		}
+
+	}
+
+}
+
+function assertHostCapabilities( value ) {
+
+	if ( ! value || typeof value !== 'object' || Array.isArray( value )
+		|| Object.keys( value ).length !== 1 || ! Array.isArray( value.transportationModes ) ) {
+
+		throw new QuestBundleError( 'E_QUEST_BUNDLE_FILES', 'host-capabilities.json must contain one host capability object' );
+
+	}
+	const modes = value.transportationModes;
+	if ( new Set( modes ).size !== modes.length || modes.some( ( mode ) => mode !== 'public-transit' ) ) {
+
+		fail( 'host transportation modes must be the measured Engine capability public-transit' );
+
+	}
+
+}
+
+function assertMechanicBindings( catalogs, questIds, assets, assetById ) {
+
+	const expected = new Map();
+	for ( const definition of catalogs.questlines ) for ( const step of definition.steps ) {
+
+		if ( [ 'rescue', 'access', 'hacking', 'sabotage' ].includes( step.target?.kind ) ) {
+
+			expected.set( `${definition.id}\u0000${step.stepId}`, { definition, step } );
+
+		}
+
+	}
+	const found = new Set();
+	for ( const binding of catalogs.mechanicTargetBindings ) {
+
+		if ( ! questIds.has( binding?.questId ) ) fail( `mechanic target binding names unknown quest ${binding?.questId}` );
+		const key = `${binding.questId}\u0000${binding.stepId}`;
+		if ( found.has( key ) ) fail( `mechanic target binding repeats ${binding.questId}/${binding.stepId}` );
+		found.add( key );
+		const match = expected.get( key );
+		if ( ! match ) fail( `mechanic target binding names unknown fixed step ${binding.questId}/${binding.stepId}` );
+		const target = match.step.target;
+		const rules = {
+			rescue: [ 'releaseTargetId', new Set( [ 'open', 'use' ] ) ],
+			access: [ 'accessPointId', new Set( [ 'access' ] ) ],
+			hacking: [ 'targetId', new Set( [ 'hack' ] ) ],
+			sabotage: [ 'targetId', new Set( [ 'sabotage' ] ) ]
+		};
+		const [ idField, interactions ] = rules[ target.kind ];
+		if ( binding[ idField ] !== target[ idField ] || ! interactions.has( binding.interactionId ) ) {
+
+			fail( `mechanic target binding disagrees with ${binding.questId}/${binding.stepId}` );
+
+		}
+		if ( ! assets.has( binding.assetId ) ) fail( `mechanic target binding names unknown asset ${binding.assetId}` );
+		if ( ! assetById.get( binding.assetId )?.requiredInteractions?.includes( binding.interactionId ) ) {
+
+			fail( `mechanic target binding interaction ${binding.interactionId} is absent from asset ${binding.assetId}` );
+
+		}
+
+	}
+	for ( const [ key, match ] of expected ) if ( ! found.has( key ) ) {
+
+		fail( `fixed step ${match.definition.id}/${match.step.stepId} has no mechanic target binding` );
 
 	}
 

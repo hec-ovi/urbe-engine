@@ -4,7 +4,7 @@ import { cp, lstat, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from
 import { join, resolve } from 'node:path';
 import { createLibrary, LibraryError } from '../../library/index.js';
 import {
-	QUEST_BUNDLE_CATALOGS, questBundle, questBundleManifest, selectQuestBundle
+	QUEST_BUNDLE_FILES, questBundle, questBundleManifest, selectQuestBundle
 } from '../../quest-bundle/index.js';
 import { Boundary } from './Boundary.js';
 import { CreationError } from './CreationError.js';
@@ -467,7 +467,7 @@ async function readQuestBundle( directory, label ) {
 
 	const manifest = await json( join( directory, 'quest-bundle.json' ), `${label} manifest` );
 	const checked = bundleOperation( () => questBundleManifest( manifest ), `${label} manifest` );
-	const catalogs = Object.fromEntries( await Promise.all( QUEST_BUNDLE_CATALOGS.map( async ( name ) => [
+	const catalogs = Object.fromEntries( await Promise.all( QUEST_BUNDLE_FILES.map( async ( name ) => [
 		name, await json( join( directory, checked.files[ name ] ), `${label} ${name}` )
 	] ) ) );
 	return bundleOperation( () => questBundle( checked, catalogs ), label );
@@ -476,7 +476,7 @@ async function readQuestBundle( directory, label ) {
 
 async function writeQuestBundle( directory, bundle ) {
 
-	await Promise.all( QUEST_BUNDLE_CATALOGS.map( ( name ) =>
+	await Promise.all( QUEST_BUNDLE_FILES.map( ( name ) =>
 		writeJson( join( directory, bundle.manifest.files[ name ] ), bundle[ name ] )
 	) );
 	await writeJson( join( directory, 'quest-bundle.json' ), bundle.manifest );

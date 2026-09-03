@@ -1,6 +1,6 @@
 import { runConnections } from '../../assembly/connectionsRunner.js';
 import {
-	QUEST_BUNDLE_CATALOGS, questBundle, questBundleManifest
+	QUEST_BUNDLE_FILES, questBundle, questBundleManifest
 } from '../../quest-bundle/index.js';
 import { worldManifestErrors } from './WorldManifest.js';
 
@@ -112,7 +112,7 @@ export class WorldSource {
 
 	}
 
-	/** Loads a v1.0 bundle atomically, with a legacy questline fallback for older worlds. */
+	/** Loads a v1.1 bundle atomically, with a legacy questline fallback for older worlds. */
 	async #quests( game ) {
 
 		const reference = game?.questBundle?.uri ?? null;
@@ -128,7 +128,7 @@ export class WorldSource {
 			const checked = questBundleManifest( manifest );
 			const slash = manifestUri.lastIndexOf( '/' );
 			const directory = slash < 0 ? '' : manifestUri.slice( 0, slash + 1 );
-			const catalogs = Object.fromEntries( await Promise.all( QUEST_BUNDLE_CATALOGS.map( async ( name ) => [
+			const catalogs = Object.fromEntries( await Promise.all( QUEST_BUNDLE_FILES.map( async ( name ) => [
 				name, await this.#json( `${this.outBase}/${directory}${checked.files[ name ]}` )
 			] ) ) );
 			const complete = questBundle( checked, catalogs );
@@ -142,8 +142,10 @@ export class WorldSource {
 			questlines: await this.#optionalJson( `${this.outBase}/${questlinesUri}`, [] ),
 			objectives: [],
 			investigations: await this.#optionalJson( `${this.outBase}/${INVESTIGATIONS_FILE}`, [] ),
+			mechanicTargetBindings: [],
 			missionAssetRequests: [],
-			missionItemBindings: []
+			missionItemBindings: [],
+			hostCapabilities: { transportationModes: [] }
 		};
 
 	}
