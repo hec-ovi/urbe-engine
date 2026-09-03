@@ -14,6 +14,8 @@ describe( 'launcher route schema', () => {
 			'../library/schema/npc-state.schema.json',
 			'../game/agents/schema/values.schema.json',
 			'../game/agents/schema/continuity-save.schema.json',
+			'../game/quests/schema/values.schema.json',
+			'../game/quests/schema/transit-state.schema.json',
 			'../../../simulation/src/schemas/simulation-save.schema.json',
 			'../game/persistence/schema/values.schema.json',
 			'../game/persistence/schema/save-current-payload.schema.json',

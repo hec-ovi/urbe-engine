@@ -6,6 +6,8 @@ import npcState from '../library/schema/npc-state.schema.json' with { type: 'jso
 import npcValues from '../game/agents/schema/values.schema.json' with { type: 'json' };
 import continuitySave from '../game/agents/schema/continuity-save.schema.json' with { type: 'json' };
 import simulationSave from '../../../simulation/src/schemas/simulation-save.schema.json' with { type: 'json' };
+import questValues from '../game/quests/schema/values.schema.json' with { type: 'json' };
+import questTransit from '../game/quests/schema/transit-state.schema.json' with { type: 'json' };
 
 const Ajv2020 = AjvModule.default ?? AjvModule;
 
@@ -17,7 +19,9 @@ export class LauncherService {
 		this.library = library ?? createLibrary( { outDir } );
 		this.creation = creation;
 		const ajv = new Ajv2020( { allErrors: true, strict: true } );
-		for ( const schema of [ npcValues, continuitySave, simulationSave, npcState, persistenceValues ] ) ajv.addSchema( schema );
+		for ( const schema of [
+			npcValues, continuitySave, simulationSave, npcState, questValues, questTransit, persistenceValues
+		] ) ajv.addSchema( schema );
 		this.validateSaveCurrent = ajv.compile( saveCurrentPayload );
 
 	}
@@ -122,6 +126,9 @@ export class LauncherService {
 			...( Object.hasOwn( input, 'transitJourney' )
 				? { transitJourney: input.transitJourney }
 				: Object.hasOwn( current, 'transitJourney' ) ? { transitJourney: current.transitJourney } : {} ),
+			...( Object.hasOwn( input, 'questTransit' )
+				? { questTransit: input.questTransit }
+				: Object.hasOwn( current, 'questTransit' ) ? { questTransit: current.questTransit } : {} ),
 			...( Object.hasOwn( input, 'npcState' )
 				? { npcState: input.npcState }
 				: Object.hasOwn( current, 'npcState' ) ? { npcState: current.npcState } : {} ),

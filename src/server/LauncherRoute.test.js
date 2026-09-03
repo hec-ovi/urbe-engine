@@ -59,6 +59,10 @@ describe( 'launcher HTTP boundary', () => {
 		const transitJourney = {
 			status: 'waiting', clock: { dayOffset: 86400, lastDaySeconds: 120 }
 		};
+		const questTransit = {
+			questId: 'main', stepId: 'escape', stage: 'arrival',
+			tripId: 'trip-live', routeId: 'route-live', passengerNpcId: 'npc.witness'
+		};
 		const npcState = {
 			timeMin: 1562,
 			simulation: { version: '1', seed: 'small-urbe', events: [] },
@@ -80,6 +84,7 @@ describe( 'launcher HTTP boundary', () => {
 			currentLocation: exported.currentLocation,
 			discoveredLocations: exported.discoveredLocations,
 			transitJourney,
+			questTransit,
 			npcState,
 			investigations
 		} );
@@ -87,11 +92,14 @@ describe( 'launcher HTTP boundary', () => {
 			id: 'night-shift', player: { position: { x: 16, y: 0.12, z: -2 } },
 			save: { revision: exported.save.revision + 1, playTimeSeconds: exported.save.playTimeSeconds + 12 },
 			transitJourney,
+			questTransit,
 			npcState,
 			investigations
 		} );
 		expect( JSON.parse( readFileSync( join( outDir, 'games', 'night-shift', 'game.json' ), 'utf8' ) )
 			.transitJourney ).toEqual( transitJourney );
+		expect( JSON.parse( readFileSync( join( outDir, 'games', 'night-shift', 'game.json' ), 'utf8' ) )
+			.questTransit ).toEqual( questTransit );
 		expect( JSON.parse( readFileSync( join( outDir, 'games', 'night-shift', 'game.json' ), 'utf8' ) )
 			.npcState ).toEqual( npcState );
 		expect( JSON.parse( readFileSync( join( outDir, 'games', 'night-shift', 'game.json' ), 'utf8' ) )
