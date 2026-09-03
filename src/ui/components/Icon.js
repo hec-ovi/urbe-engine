@@ -10,7 +10,6 @@ const PATHS = {
 	controls: 'M2 6h20v12H2zM6 10h1M10 10h1M14 10h1M18 10h1M7 14h10',
 	leave: 'M10 4H5v16h5M14 8l4 4-4 4M18 12H9',
 	send: 'M3 11l18-8-8 18-2-8z',
-	microphone: 'M9 5a3 3 0 016 0v6a3 3 0 01-6 0zM5 10v1a7 7 0 0014 0v-1M12 18v3M8 21h8',
 	close: 'M6 6l12 12M18 6L6 18',
 	hangup: 'M3 14c5-5 13-5 18 0l-2 3-4-1v-2a9 9 0 00-6 0v2l-4 1z',
 	north: 'M12 3l5 16-5-3-5 3z'

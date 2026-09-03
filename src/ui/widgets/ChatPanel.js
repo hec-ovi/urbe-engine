@@ -6,11 +6,11 @@ import { npcProfile } from './NpcProfile.js';
 /**
  * Talking to one person: their name and Esc up top, the transcript, and the
  * line to type into. Presentation only: the game feeds every message.
- * props: { onSend( text ), onRecord( recording ), onClose() }
+ * props: { onSend( text ), onClose() }
  */
 export class ChatPanel {
 
-	constructor( { onSend, onRecord = () => {}, onClose } ) {
+	constructor( { onSend, onClose } ) {
 
 		this.onSend = onSend;
 		this.header = new PanelHeader( { title: '', onClose } );
@@ -29,16 +29,12 @@ export class ChatPanel {
 		this.send = el( 'button', { className: 'chat-send', type: 'button' }, icon( 'send' ) );
 		this.send.setAttribute( 'aria-label', 'send' );
 		this.send.addEventListener( 'click', () => this.#send() );
-		this.recording = false;
-		this.record = el( 'button', { className: 'chat-record', type: 'button' }, icon( 'microphone' ) );
-		this.record.addEventListener( 'click', () => onRecord( ! this.recording ) );
-		this.setRecording( false );
 
 		this.element = el( 'div', { className: 'chat' },
 			this.header.element,
 			this.profile,
 			this.transcript,
-			el( 'div', { className: 'chat-compose' }, this.record, this.input, this.send )
+			el( 'div', { className: 'chat-compose' }, this.input, this.send )
 		);
 
 		this.profile.hidden = true;
@@ -113,15 +109,6 @@ export class ChatPanel {
 	setVisible( visible ) {
 
 		this.element.hidden = ! visible;
-
-	}
-
-	setRecording( recording ) {
-
-		this.recording = recording;
-		this.record.setAttribute( 'aria-pressed', String( recording ) );
-		this.record.setAttribute( 'aria-label', recording ? 'stop voice input' : 'start voice input' );
-		this.record.classList.toggle( 'is-recording', recording );
 
 	}
 
