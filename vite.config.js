@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 import { talkRoute } from './src/server/talkRoute.js';
 import { buildingRoute } from './src/server/buildingRoute.js';
 import { launcherRoute } from './src/server/launcherRoute.js';
-import { speechRoute } from './src/server/speechRoute.js';
 import { createWorldCreation } from './src/creation/index.js';
 
 // Sibling materials database (../materials/CONTRACT.md), served read-only
@@ -82,8 +81,7 @@ export default defineConfig( {
 		mount( 'serve-models', '/models', MODELS_DIR ),
 		buildingRoute( ROOT, ATLAS_DIR ),
 		launcherRoute( ROOT, creation ),
-		talkRoute( ROOT ),
-		speechRoute()
+		talkRoute( ROOT )
 	],
 	server: {
 		// The connections library is consumed as TypeScript source from the
