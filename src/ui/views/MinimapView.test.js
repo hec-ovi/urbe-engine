@@ -46,4 +46,21 @@ describe( 'MinimapView', () => {
 
 	} );
 
+	it( 'draws and clears the active objective route', () => {
+
+		view.setMap( MAP );
+		view.setRoute( { path: [ [ 45, 50 ], [ 50, 50 ], [ 60, 55 ] ], label: 'reach p9' } );
+		view.update( { x: 45, z: 50 }, 0 );
+
+		expect( view.context.calls ).toContainEqual( [ 'set', 'strokeStyle', MAP_COLORS.route ] );
+		expect( count( view.context, 'stroke' ) ).toBeGreaterThan( 0 );
+		expect( view.context.calls ).toContainEqual( [ 'set', 'fillStyle', MAP_COLORS.marker ] );
+
+		view.context.calls.length = 0;
+		view.setRoute( null );
+		view.update( { x: 45, z: 50 }, 0 );
+		expect( view.context.calls ).not.toContainEqual( [ 'set', 'strokeStyle', MAP_COLORS.route ] );
+
+	} );
+
 } );

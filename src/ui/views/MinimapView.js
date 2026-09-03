@@ -23,6 +23,7 @@ export class MinimapView {
 		this.context = this.canvas.getContext( '2d' );
 		this.bake = null;
 		this.venues = [];
+		this.route = null;
 		this.setVisible( true );
 
 	}
@@ -41,6 +42,13 @@ export class MinimapView {
 
 	}
 
+	/** @param route { path: [[x,z]], label: string } or null */
+	setRoute( route ) {
+
+		this.route = route;
+
+	}
+
 	/** @param heading yaw in radians; the player looks along (-sin, -cos) in [x, z]. */
 	update( position, heading ) {
 
@@ -53,6 +61,26 @@ export class MinimapView {
 		ctx.fillStyle = MAP_COLORS.ground;
 		ctx.fillRect( 0, 0, SIZE, SIZE );
 		ctx.drawImage( this.bake.canvas, c - px, c - pz );
+
+		if ( this.route ) {
+
+			const toScreen = ( x, z ) => {
+
+				const [ rx, rz ] = this.bake.toPixels( x, z );
+				return [ c - px + rx, c - pz + rz ];
+
+			};
+
+			MapPainter.route( ctx, this.route.path, toScreen );
+			const destination = this.route.path.at( - 1 );
+			if ( destination ) {
+
+				const [ x, y ] = toScreen( destination[ 0 ], destination[ 1 ] );
+				MapPainter.marker( ctx, x, y, '' );
+
+			}
+
+		}
 
 		for ( const venue of this.venues ) {
 

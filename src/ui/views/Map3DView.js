@@ -9,11 +9,12 @@ const DISTANCE = { min: 40, max: 1600, start: 260 };
 const PITCH = { min: 0.25, max: 1.45, start: 0.95 };
 const COLORS = {
 	sky: 0x0a0e14, roadway: 0x2f4358, sidewalk: 0x1b2430, block: 0x141a22, open: 0x1a2a24,
-	building: 0x27313f, edge: 0x5a6d84, player: 0xcfe6ff, venueOpen: 0xffc46b, venueShut: 0x4a4136
+	building: 0x27313f, edge: 0x5a6d84, player: 0xcfe6ff, venueOpen: 0xffc46b, venueShut: 0x4a4136,
+	route: 0x69f4ff, objective: 0xff5fa8
 };
 const LEGEND = [
 	[ 'you', COLORS.player ], [ 'venue open', COLORS.venueOpen ], [ 'venue shut', COLORS.venueShut ],
-	[ 'building', COLORS.building ], [ 'road', COLORS.roadway ], [ 'pavement', COLORS.sidewalk ]
+	[ 'objective route', COLORS.route ], [ 'building', COLORS.building ], [ 'road', COLORS.roadway ], [ 'pavement', COLORS.sidewalk ]
 ];
 
 /** A ring of [x, z] as a three Shape lying in the ground plane once rotated onto XZ. */
@@ -68,8 +69,14 @@ export class Map3DView {
 		this.edges = null;
 		this.plates = [];
 		this.venueMarks = new THREE.Group();
+		this.routeLine = null;
+		this.objectiveMark = new THREE.Mesh(
+			new THREE.OctahedronGeometry( 3 ),
+			new THREE.MeshBasicMaterial( { color: COLORS.objective } )
+		);
+		this.objectiveMark.visible = false;
 		this.marker = this.#marker();
-		this.scene.add( this.venueMarks, this.marker );
+		this.scene.add( this.venueMarks, this.marker, this.objectiveMark );
 		this.scene.add( new THREE.HemisphereLight( 0x9fb4cc, 0x1a2230, 1.4 ) );
 
 		this.canvas = el( 'canvas', { className: 'map-canvas' } );
@@ -129,6 +136,37 @@ export class Map3DView {
 			const mark = new THREE.Mesh( new THREE.BoxGeometry( 3, 3, 3 ), new THREE.MeshBasicMaterial( { color: venue.open ? COLORS.venueOpen : COLORS.venueShut } ) );
 			mark.position.set( venue.point.x, 2, venue.point.z );
 			this.venueMarks.add( mark );
+
+		}
+
+		this.redraw();
+
+	}
+
+	/** @param route { path: [[x,z]], label: string } or null */
+	setRoute( route ) {
+
+		if ( this.routeLine ) {
+
+			this.scene.remove( this.routeLine );
+			this.routeLine.geometry.dispose();
+			this.routeLine.material.dispose();
+			this.routeLine = null;
+
+		}
+
+		this.objectiveMark.visible = false;
+		if ( route?.path.length ) {
+
+			const points = route.path.map( ( [ x, z ] ) => new THREE.Vector3( x, 0.5, z ) );
+			this.routeLine = new THREE.Line(
+				new THREE.BufferGeometry().setFromPoints( points ),
+				new THREE.LineBasicMaterial( { color: COLORS.route } )
+			);
+			this.routeLine.name = 'objective-route';
+			this.scene.add( this.routeLine );
+			this.objectiveMark.position.copy( points.at( - 1 ) ).setY( 4 );
+			this.objectiveMark.visible = true;
 
 		}
 

@@ -7,7 +7,8 @@ export const MAP_COLORS = {
 	venueOpen: '#ffc46b',
 	venueShut: '#4a4136',
 	station: '#2ee6ff',
-	marker: '#ff5fa8'
+	marker: '#ff5fa8',
+	route: '#69f4ff'
 };
 
 /**
@@ -50,6 +51,20 @@ export class MapPainter {
 
 		ctx.fillStyle = open ? MAP_COLORS.venueOpen : MAP_COLORS.venueShut;
 		ctx.fillRect( x - 2, y - 2, 4, 4 );
+
+	}
+
+	/** The active objective path, kept legible over the baked street layer. */
+	static route( ctx, points, toPixels ) {
+
+		if ( points.length < 2 ) return;
+
+		ctx.strokeStyle = MAP_COLORS.route;
+		ctx.lineWidth = 3;
+		ctx.lineCap = 'round';
+		ctx.lineJoin = 'round';
+		MapPainter.#trace( ctx, points, toPixels );
+		ctx.stroke();
 
 	}
 

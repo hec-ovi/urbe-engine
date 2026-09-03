@@ -43,8 +43,8 @@ One panel over the game at a time.
 - Escape closes while a panel is open; opening one closes the one before
 
 ## Views (one full panel each; every one takes `onClose()`)
-- **Map3DView** (the MAP panel): `setWorld({ bounds: { min: [x,z], max: [x,z] }, buildings: [{ ring: [[x,z]], height }], ground: [{ surface, polygon: [[x,z]] }] })` raises every building as a prism and lays the ground cover as plates; `setVenues([{ point: { x, z }, open }])`, `setPlayer( position, heading )`, `centre()`; drag turns, wheel zooms, the frame renders only on a change; `shown()` creates the WebGL renderer sized to the stage.
-- **MinimapView** (HUD corner, always on): `setMap( map )` same shape without stations or markers, `setVenues( venues )`, `update( position, heading )` each frame, `toggle()`, `setVisible( bool )`
+- **Map3DView** (the MAP panel): `setWorld({ bounds: { min: [x,z], max: [x,z] }, buildings: [{ ring: [[x,z]], height }], ground: [{ surface, polygon: [[x,z]] }] })` raises every building as a prism and lays the ground cover as plates; `setVenues([{ point: { x, z }, open }])`, `setRoute({ path: [[x,z]], label } | null)`, `setPlayer( position, heading )`, `centre()`; drag turns, wheel zooms, the frame renders only on a change; `shown()` creates the WebGL renderer sized to the stage.
+- **MinimapView** (HUD corner, always on): `setMap( map )` same shape without stations or markers, `setVenues( venues )`, `setRoute({ path: [[x,z]], label } | null)`, `update( position, heading )` each frame, `toggle()`, `setVisible( bool )`
 - **InventoryView**: `setItems([{ id, name, kind, description, place }])` in slot order over 30 slots, `select( index )` (-1 clears); clicking a slot selects it and shows its detail
 - **QuestsView**: `setQuests([{ id, title, text, state: 'active' | 'done' | 'failed', steps: [{ text, done }] }])`, `select( id )`; empty reads "no quest yet"
 - **CodexView**: `setEntries([{ id, title, category, text }])` grouped by category, `select( id )`; empty reads "nothing recorded yet"

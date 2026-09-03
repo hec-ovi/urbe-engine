@@ -51,4 +51,22 @@ describe( 'Map3DView', () => {
 
 	} );
 
+	it( 'shows and clears one objective route without starting a render loop', () => {
+
+		const view = new Map3DView( { onClose: () => {} } );
+		view.setWorld( world );
+		view.setRoute( { path: [ [ 2, 3 ], [ 8, 12 ], [ 15, 20 ] ], label: 'reach p9' } );
+
+		expect( view.routeLine.name ).toBe( 'objective-route' );
+		expect( view.routeLine.geometry.getAttribute( 'position' ).count ).toBe( 3 );
+		expect( view.objectiveMark.position.toArray() ).toEqual( [ 15, 4, 20 ] );
+		expect( view.objectiveMark.visible ).toBe( true );
+		expect( view.renderer ).toBe( null );
+
+		view.setRoute( null );
+		expect( view.routeLine ).toBe( null );
+		expect( view.objectiveMark.visible ).toBe( false );
+
+	} );
+
 } );
