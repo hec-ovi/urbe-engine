@@ -186,6 +186,27 @@ describe( 'cast quest NPC bodies', () => {
 
 	} );
 
+	it( 'keeps one deterministic quest body on the exact published walk edge', () => {
+
+		const sim = {
+			crowd: () => ( { agents: [] } ),
+			getNPC: () => ( { npcId: 'cast-edge', type: 'quest_security', gender: 'male' } ),
+			instantiate: () => null
+		};
+		const crowd = new Crowd( {
+			assets: { variants: [ {} ], durations: [ 1 ], meshesOf: () => [] },
+			routes: routes(), signals: { green: () => true }, sim, places: new Map(), capacity: 2
+		} );
+		const player = new THREE.Vector3( 20, 0, 0 );
+		const first = crowd.questMember( 'cast-edge', CLOCK.timeMin, player, { kind: 'edge', id: 'e1' } );
+		const second = crowd.questMember( 'cast-edge', CLOCK.timeMin, player, { kind: 'edge', id: 'e1' } );
+
+		expect( second ).toBe( first );
+		expect( first.edge.id ).toBe( 'e1' );
+		expect( crowd.members.size ).toBe( 1 );
+
+	} );
+
 } );
 
 describe( 'shared quest interaction route', () => {

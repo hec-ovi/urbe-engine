@@ -287,7 +287,15 @@ export class Crowd {
 	 */
 	questMember( npcId, timeMin, player, place, fallbackAnchor = null ) {
 
-		for ( const member of this.members.values() ) if ( member.npcId === npcId ) return member;
+		for ( const member of this.members.values() ) {
+
+			if ( member.npcId !== npcId ) continue;
+			if ( memberAt( member, place ) ) return member;
+			if ( member.frozen ) return null;
+			this.members.delete( member.id );
+			break;
+
+		}
 
 		const npc = this.sim.getNPC( npcId );
 		const candidates = [ ...this.members.values() ]
@@ -631,6 +639,7 @@ export class Crowd {
 		const seed = hash( `quest:${npc.npcId}` );
 		let position;
 		let parcelId = null;
+		let edge = null;
 
 		if ( place?.kind === 'parcel' ) {
 
@@ -643,7 +652,7 @@ export class Crowd {
 
 		} else if ( place?.kind === 'edge' ) {
 
-			const edge = this.routes.edges.get( place.id );
+			edge = this.routes.edges.get( place.id );
 			if ( ! edge ) return null;
 			const at = this.routes.pointAt( edge, edge.length * ( 0.25 + ( seed % 500 ) / 1000 ), 1 );
 			position = new THREE.Vector3( at.x, walkY( edge, at ), at.z );
@@ -660,6 +669,7 @@ export class Crowd {
 			stationary: true,
 			quest: true,
 			parcelId,
+			edge,
 			spot: `quest:${npc.npcId}`,
 			clip: CLIP.IDLE,
 			position,
@@ -804,7 +814,7 @@ function memberAt( member, place ) {
 
 	if ( ! place ) return false;
 	if ( place.kind === 'parcel' ) return member.parcelId === place.id;
-	if ( place.kind === 'edge' ) return ! member.stationary && member.edge?.id === place.id;
+	if ( place.kind === 'edge' ) return member.edge?.id === place.id;
 	return false;
 
 }
