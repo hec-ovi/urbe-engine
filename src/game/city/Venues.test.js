@@ -20,6 +20,7 @@ function door( parcelId ) {
 		center: new THREE.Vector3( 0, 0, 0 ),
 		width: 1.2,
 		height: 2.2,
+		surfaceDepth: 0.08,
 		outside: new THREE.Vector3( 0, 0, 2 ),
 		box: new THREE.Box3( new THREE.Vector3( - 0.6, 0, - 0.1 ), new THREE.Vector3( 0.6, 2.2, 0.1 ) )
 	};
@@ -127,6 +128,11 @@ describe( 'Venues', () => {
 
 			}
 
+			const housingDepths = housings.flatMap( ( geometry ) => projectedDepths( geometry, entry ) );
+			const lensDepths = lenses.flatMap( ( geometry ) => projectedDepths( geometry, entry ) );
+			expect( Math.min( ...housingDepths ) ).toBeGreaterThan( entry.surfaceDepth );
+			expect( Math.min( ...lensDepths ) ).toBeGreaterThan( Math.max( ...housingDepths ) );
+
 		}
 
 	} );
@@ -154,3 +160,21 @@ describe( 'Venues', () => {
 	} );
 
 } );
+
+function projectedDepths( geometry, entry ) {
+
+	const positions = geometry.getAttribute( 'position' );
+	const depths = [];
+
+	for ( let i = 0; i < positions.count; i ++ ) {
+
+		depths.push(
+			( positions.getX( i ) - entry.center.x ) * entry.normal.x
+			+ ( positions.getZ( i ) - entry.center.z ) * entry.normal.z
+		);
+
+	}
+
+	return depths;
+
+}

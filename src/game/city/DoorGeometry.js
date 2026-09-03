@@ -3,6 +3,7 @@ import { openingRect } from './Openings.js';
 
 const LEAF_DEPTH = 0.25;
 const LEAF_MARGIN = 0.06;
+const DEFAULT_FRAME_DEPTH = 0.08;
 
 /**
  * The one ground-floor entrance of a building, read off its exterior blueprint
@@ -31,6 +32,9 @@ export function doorFrame( blueprint ) {
 		normal: rect.normal,
 		width: rect.width,
 		height: rect.height,
+		// The shell's fitted casing projects this far outside its wall plane.
+		// Anything added around the opening starts beyond it.
+		surfaceDepth: opening.door?.frameDepth ?? DEFAULT_FRAME_DEPTH,
 		// Where the prompt fires and where the player ends up walking in.
 		center: new THREE.Vector3( mid.x, rect.y0, mid.z ),
 		outside: mid.clone().addScaledVector( rect.normal, 1.4 ),

@@ -26,6 +26,7 @@ describe( 'building entrance availability', () => {
 
 		expect( city.doors ).toHaveLength( 1 );
 		expect( city.doors[ 0 ].parcelId ).toBe( 'p0' );
+		expect( city.doors[ 0 ].surfaceDepth ).toBe( 0.09 );
 		expect( city.group.getObjectByName( 'door:p0:0' ) ).toBeTruthy();
 
 	} );
@@ -102,7 +103,10 @@ async function load( hasInterior ) {
 		floors: [ {
 			index: 0, elevation: 0,
 			outline: [ [ 0, 0 ], [ 4, 0 ], [ 4, 4 ], [ 0, 4 ] ],
-			openings: [ { kind: 'door', edge: 0, offset: 1, width: 1, sill: 0, height: 2 } ]
+			openings: [ {
+				kind: 'door', edge: 0, offset: 1, width: 1, sill: 0, height: 2,
+				door: { frameDepth: 0.09 }
+			} ]
 		} ]
 	};
 	const buildings = new Map( [ [ 'p0', { parcelId: 'p0', blueprint, shellUrl: '/p0.glb', hasInterior } ] ] );

@@ -20,7 +20,8 @@ const FRAME_EMISSIVE = 90;
 const FRAME_HOUSING_WIDTH = 0.11;
 const FRAME_LIGHT_WIDTH = 0.045;
 const FRAME_DEPTH = 0.05;
-const FRAME_INSET = 0.055;
+const FRAME_CLEARANCE = 0.003;
+const DEFAULT_SURFACE_DEPTH = 0.08;
 /** Dark fitted end cap at each end of a continuous light bar. */
 const FRAME_END_CAP = 0.055;
 
@@ -212,6 +213,7 @@ export function frameStrip( door ) {
 	const y0 = door.center.y;
 	const housings = [];
 	const lenses = [];
+	const rear = ( door.surfaceDepth ?? DEFAULT_SURFACE_DEPTH ) + FRAME_CLEARANCE;
 
 	const bar = ( length, height, lensWidth, lensHeight, offset, y ) => {
 
@@ -219,9 +221,9 @@ export function frameStrip( door ) {
 		housing.deleteAttribute( 'uv1' );
 		housing.rotateY( yaw );
 		housing.translate(
-			door.center.x + door.along.x * offset + door.normal.x * FRAME_INSET,
+			door.center.x + door.along.x * offset + door.normal.x * ( rear + FRAME_DEPTH / 2 ),
 			y,
-			door.center.z + door.along.z * offset + door.normal.z * FRAME_INSET
+			door.center.z + door.along.z * offset + door.normal.z * ( rear + FRAME_DEPTH / 2 )
 		);
 		housings.push( housing.toNonIndexed() );
 
@@ -232,9 +234,9 @@ export function frameStrip( door ) {
 		lens.deleteAttribute( 'uv1' );
 		lens.rotateY( yaw );
 		lens.translate(
-			door.center.x + door.along.x * offset + door.normal.x * ( FRAME_INSET + FRAME_DEPTH / 2 + 0.001 ),
+			door.center.x + door.along.x * offset + door.normal.x * ( rear + FRAME_DEPTH + 0.001 ),
 			y,
-			door.center.z + door.along.z * offset + door.normal.z * ( FRAME_INSET + FRAME_DEPTH / 2 + 0.001 )
+			door.center.z + door.along.z * offset + door.normal.z * ( rear + FRAME_DEPTH + 0.001 )
 		);
 		lenses.push( lens.toNonIndexed() );
 
