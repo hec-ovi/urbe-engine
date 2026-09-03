@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:transit:service-query",
+  "type": "object",
+  "required": ["position", "place", "daySeconds"],
+  "properties": {
+    "position": { "$ref": "urn:urbe:engine:transit:values#/$defs/vector3" },
+    "place": { "$ref": "urn:urbe:engine:transit:values#/$defs/place" },
+    "daySeconds": { "type": "number", "minimum": 0, "exclusiveMaximum": 86400 }
+  },
+  "additionalProperties": false
+}

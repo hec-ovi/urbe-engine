@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:transit:board-request",
+  "type": "object",
+  "required": ["position", "place", "daySeconds", "tripId", "routeId", "stopIndex", "serviceDeparture"],
+  "properties": {
+    "position": { "$ref": "urn:urbe:engine:transit:values#/$defs/vector3" },
+    "place": { "$ref": "urn:urbe:engine:transit:values#/$defs/place" },
+    "daySeconds": { "type": "number", "minimum": 0, "exclusiveMaximum": 86400 },
+    "tripId": { "type": "string", "minLength": 1 },
+    "routeId": { "type": "string", "minLength": 1 },
+    "stopIndex": { "type": "integer", "minimum": 0 },
+    "serviceDeparture": { "type": "number" }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:transit:journey-update-request",
+  "type": "object",
+  "required": ["daySeconds"],
+  "properties": {
+    "daySeconds": { "type": "number", "minimum": 0, "exclusiveMaximum": 86400 }
+  },
+  "additionalProperties": false
+}

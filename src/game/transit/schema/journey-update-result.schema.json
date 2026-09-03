@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:transit:journey-update-result",
+  "oneOf": [
+    { "$ref": "urn:urbe:engine:transit:values#/$defs/errorResult" },
+    {
+      "type": "object",
+      "required": ["ok", "tripId", "routeId", "lineId", "kind", "position", "heading", "nextStops", "canDisembark", "state"],
+      "properties": {
+        "ok": { "const": true },
+        "tripId": { "type": "string", "minLength": 1 },
+        "routeId": { "type": "string", "minLength": 1 },
+        "lineId": { "type": "string", "minLength": 1 },
+        "kind": { "$ref": "urn:urbe:engine:transit:values#/$defs/kind" },
+        "position": { "$ref": "urn:urbe:engine:transit:values#/$defs/vector3" },
+        "heading": { "$ref": "urn:urbe:engine:transit:values#/$defs/vector2" },
+        "nextStops": { "type": "array", "items": { "$ref": "urn:urbe:engine:transit:values#/$defs/nextStop" } },
+        "canDisembark": { "type": "boolean" },
+        "state": { "$ref": "urn:urbe:engine:transit:values#/$defs/state" }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

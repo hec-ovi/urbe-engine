@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:transit:transit-data",
+  "$defs": {
+    "station": {
+      "type": "object",
+      "required": ["id", "position", "level"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "position": { "$ref": "urn:urbe:engine:transit:values#/$defs/vector2" },
+        "level": { "type": "number" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "type": "object",
+  "required": ["atlas", "routes"],
+  "properties": {
+    "atlas": {
+      "type": "object",
+      "required": ["transit"],
+      "properties": {
+        "transit": {
+          "type": "object",
+          "required": ["busStops", "trainStations", "subwayStations"],
+          "properties": {
+            "busStops": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "position"],
+                "properties": {
+                  "id": { "type": "string", "minLength": 1 },
+                  "position": { "$ref": "urn:urbe:engine:transit:values#/$defs/vector2" }
+                },
+                "additionalProperties": true
+              }
+            },
+            "trainStations": { "type": "array", "items": { "$ref": "#/$defs/station" } },
+            "subwayStations": { "type": "array", "items": { "$ref": "#/$defs/station" } }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "lineId", "stops", "shape", "template", "service"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "kind": { "$ref": "urn:urbe:engine:transit:values#/$defs/kind" },
+          "lineId": { "type": "string", "minLength": 1 },
+          "stops": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "required": ["stopId", "x", "y", "z", "shapeDist"],
+              "properties": {
+                "stopId": { "type": "string", "minLength": 1 },
+                "x": { "type": "number" },
+                "y": { "type": "number" },
+                "z": { "type": "number" },
+                "shapeDist": { "type": "number", "minimum": 0 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "shape": {
+            "type": "array",
+            "minItems": 2,
+            "items": { "$ref": "urn:urbe:engine:transit:values#/$defs/vector3" }
+          },
+          "template": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "required": ["arrive", "depart"],
+              "properties": {
+                "arrive": { "type": "number", "minimum": 0 },
+                "depart": { "type": "number", "minimum": 0 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "service": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["start", "end", "headway", "phase"],
+              "properties": {
+                "start": { "type": "number", "minimum": 0 },
+                "end": { "type": "number", "exclusiveMinimum": 0 },
+                "headway": { "type": "number", "exclusiveMinimum": 0 },
+                "phase": { "type": "number", "minimum": 0 }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

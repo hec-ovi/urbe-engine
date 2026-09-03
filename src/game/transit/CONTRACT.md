@@ -1,50 +1,81 @@
-# CONTRACT: transit (game inner box)
+# CONTRACT: transit
 
-Purpose: puts the city's public transport on the street and under it, from the blueprint and timetable: shelters and signs, the bus, train and subway vehicles in service, and the shaft, passage and platform room behind every station entrance.
+Purpose: renders published public transport and provides schema-checked boarding over Atlas places and Connections timetables.
 
-## In
-- **Atlas blueprint** (`../../../../atlas/CONTRACT.md`): `transit.busStops` (`{ id, edgeId, position: [x, z] }`), `transit.trainStations` and `transit.subwayStations` (`{ id, position, entrances: [[x, z], ...], platform: ring, box: { bottom, top }, shafts: [{ footprint: ring, top, bottom, passage: ring }] }`), and `streets.edges` for the centreline a stop's shelter faces.
-- **Networks** (`../../../../connections/CONTRACT.md`): `networks.transit.routes` for bus, train and subway shapes, stops, templates and service periods.
-- **Materials**: `PbrMaterialFactory` (`../../../building/PbrMaterialFactory.js`), for `build( key, variantId )` and `variant( key, tweaks )`.
-- **Clock**: seconds since midnight, per frame, as `time/GameClock.js` reports them.
-- **Player**: the player's feet in world metres, per frame.
+## Inputs
 
-## Out
-`new Transit( { atlas, networks, factory, capacity } )` builds everything and exposes:
-- `group`: one `Group` to add to the scene. Holds `bus-shelters`, `station-entrances`, `buses`, `trains` and `subways`.
-- `glows`: `[{ position: Vector3, lumens, color: Color, range }]`, the shape `light/CONTRACT.md` takes as an exterior fixture. One per bus stop sign box (180 lm at 5000 K), one per station entrance name band (900 lm at 4000 K).
-- `colliders`: `Map<string, BufferGeometry|null>` of position-only trimeshes, the shape `physics/WorldColliders.js` `addShells` consumes. `transit:shelters` is the frames, roofs and sign masts; `transit:entrances` is the portals and, where a station publishes no shaft, that entrance's own stair; `transit:stations` is every platform floor, ceiling, wall, shaft, stair and passage.
-- `update( player, daySeconds )`: places every transit vehicle running at that time. No delta: each position is a function of the clock alone.
-- `count`: bus, train and subway vehicles on screen.
+- Renderer blueprint and network: Atlas `transit` and `streets.edges`, plus Connections `networks.transit.routes`, per their public contracts. `new Transit({ atlas, networks, factory, capacity })` consumes them without changing them.
+- Materials: `PbrMaterialFactory` for every shelter, station and vehicle surface.
+- Render update: player feet in world meters and clock seconds since midnight.
+- Journey data: [schema/transit-data.schema.json](schema/transit-data.schema.json). This is the consumed Atlas place and Connections route subset. Runtime relation checks also require unique ids, referenced places, matching template and stop counts, ordered stop distances and times, valid route distance bounds, and non-overlapping service periods.
+- Restored journey state: [schema/journey-state.schema.json](schema/journey-state.schema.json). Omit it for a new waiting state.
+- Boardable service query: [schema/service-query.schema.json](schema/service-query.schema.json). Current player feet, published place identity and clock time.
+- Board request: [schema/board-request.schema.json](schema/board-request.schema.json). The selected trip, route, stop occurrence, scheduled route departure, player feet, published place and clock time.
+- Journey update request: [schema/journey-update-request.schema.json](schema/journey-update-request.schema.json). Current clock time.
+- Disembark request: [schema/disembark-request.schema.json](schema/disembark-request.schema.json). Current clock time.
 
-## Cost
-- Bus stops: one instanced mesh per material, three for the whole city (frame, glass, sign box), 176 triangles of geometry each way.
-- Vehicles: three instanced meshes per mode (body, glazing and running gear), each mode capacity bounded and dropped past 320 m from the player.
-- Station entrances: merged, one mesh for every entrance's concrete plus one lit band per mode, three for the whole city.
-- Station volumes: two merged meshes for the whole city, structure and floor. On the small blueprint (two surface platforms, two subway rooms, four shafts, two passages) that is 4,472 triangles, 4,464 of collider and 42 published fixtures.
-- Up to nine vehicle draw calls cover all three modes. Empty modes allocate no meshes or draw calls.
+## Outputs
 
-## Invariants
-- Nothing is invented. Every shelter stands on a blueprint bus stop, every entrance on a blueprint entrance point, and every vehicle is where `transitVehiclesAt` says it is; this box never integrates a vehicle forward or spawns one of its own.
-- An empty collection builds nothing: no stops means no shelter mesh, no bus mesh and a null collider, and the group is empty.
-- A shelter faces the roadway. The way there is the shortest way from the stop back to its street edge's centreline, which is the direction someone waiting has to watch.
-- A stair descends towards its own station, treads rise 0.175 m on a 0.3 m going, and the flight is 1.8 m clear: inside the controller's 0.42 m autostep and more than twice the 0.7 m capsule.
-- A shaft's stair is not authored, it is fitted: as many treads as one flight of the published footprint holds, as many flights as the published depth needs at no more than 0.19 m a tread, and the rise spread evenly over all of them. A 12 m shaft in an 8 m footprint comes out four flights of eighteen at 0.168 m. No tread is ever outside the controller's step.
-- A shaft standing inside its own platform ends at the room's ceiling and drops through a hole in it. One standing outside is joined to the room by the passage the atlas publishes, and the walls of shaft, passage and room all open where they meet.
-- A platform at or above grade is already the city floor, so it gets a canopy on posts rather than a room.
-- Nothing underground is unlit: the platform carries a fixture every 14 m and every stair landing and passage carries its own, all published as real lumens like everything else.
-- A station wall is one surface with no thickness, drawn from both sides, because it is seen from the room on one side and the shaft on the other.
-- Geometry UVs are world metres, so one material key reads at one scale on a 12 m bus flank and on a 0.09 m post.
-- Transit vehicles get no collider. Player boarding and separation are handled outside render geometry.
-- Service periods run past midnight while the clock's day seconds wrap at 24:00, so the routes are asked again a day later during that overrun; a timetable that ends by midnight is asked once.
+- `Transit.group`: one Three.js group containing `bus-shelters`, `station-entrances`, station volumes, `buses`, `trains` and `subways`.
+- `Transit.glows`: exterior fixtures shaped for `light/CONTRACT.md`. Each bus sign emits 180 lm at 5000 K and each station name band emits 900 lm at 4000 K.
+- `Transit.colliders`: position-only trimeshes named `transit:shelters`, `transit:entrances` and `transit:stations` for `physics/WorldColliders.js`.
+- `Transit.count`: number of visible bus, train and subway vehicles after `update`.
+- Boardable service list: [schema/service-list.schema.json](schema/service-list.schema.json). Each exact service identifies its route, public line, mode, stop occurrence, next stop, final destination stop, arrival, departure, published position and stable trip id.
+- Board result: [schema/board-result.schema.json](schema/board-result.schema.json). A successful result returns the selected service and serializable aboard state.
+- Journey update result: [schema/journey-update-result.schema.json](schema/journey-update-result.schema.json). Route shape position, heading, remaining published stops and whether the vehicle is dwelling.
+- Disembark result: [schema/disembark-result.schema.json](schema/disembark-result.schema.json). Published stop or platform position and the new waiting state.
+- Serializable state: [schema/journey-state.schema.json](schema/journey-state.schema.json). It stores waiting or aboard status, clock rollover, and active trip identity.
+
+## Events
+
+- `Transit.update(player, daySeconds)` places every visible vehicle directly from `transitVehiclesAt`. It takes no delta and integrates no position.
+- `TransitJourney.listBoardable(request)` lists services currently dwelling at the requested published place and within 3 m of the player. Being outside reach is a valid empty list.
+- `TransitJourney.board(request)` enters one exact scheduled trip while it dwells at the selected stop occurrence and the player is within 3 m.
+- `TransitJourney.update(request)` recomputes an aboard player location from route shape and service elapsed time, and lists current or future stops.
+- `TransitJourney.disembark(request)` leaves only during a published stop dwell and returns the Atlas stop or platform center. A final stop with zero dwell is available only at its exact arrival time.
 
 ## Errors
-None thrown. A stop naming a street edge the blueprint no longer carries is dropped, and so is an entrance standing exactly on its own station.
 
-## Depends on
-- `../../../building/PbrMaterialFactory.js` for every material; no colour is chosen here
-- `../ground/GroundBuilder.js` for `SIDEWALK_HEIGHT`, the level a shelter and a stair mouth stand on, and for the floor being cut open over every shaft that breaks the surface
-- `../ground/Polygons.js` for `fill` (with holes) and `pointInRing`
-- `../light/Color.js` for `kelvinColor`, and `../light/CONTRACT.md` for what a published fixture is
-- `../../../../connections/CONTRACT.md` for `networks.transit.routes` and `transitVehiclesAt( routes, t )`
-- `../../../../atlas/CONTRACT.md` for the transit collections and the street graph
+Every journey method returns either `ok: true` or `ok: false` with one code from this closed vocabulary:
+
+- `E_TRANSIT_INVALID_DATA`: input, restored state, route data or Atlas relationships fail validation.
+- `E_TRANSIT_ABSENT_ROUTE`: a requested or restored route does not exist.
+- `E_TRANSIT_WRONG_PLACE`: the place is unpublished, has the wrong mode, or is not the selected route stop occurrence.
+- `E_TRANSIT_OUT_OF_SERVICE`: the departure is not scheduled or the active trip is outside its route duration.
+- `E_TRANSIT_MISSED_VEHICLE`: the selected vehicle already left the requested stop.
+- `E_TRANSIT_MOVING_VEHICLE`: boarding or disembarking was attempted between dwells.
+- `E_TRANSIT_OUT_OF_REACH`: boarding was attempted more than 3 m from the published place.
+- `E_TRANSIT_ALREADY_ABOARD`: listing or boarding was requested during a journey.
+- `E_TRANSIT_NOT_ABOARD`: update or disembark was requested while waiting.
+
+Renderer construction throws no transit error. Empty optional collections build nothing, as before.
+
+## Cost
+
+- Bus stops use three city-wide instanced meshes. Station entrances use one merged concrete mesh plus one lit band per mode. Station volumes use two merged meshes.
+- Each active vehicle mode uses three instanced meshes for body, glazing and running gear. Capacity is bounded per mode, nearest vehicles win, and vehicles farther than 320 m use no instance.
+- Empty vehicle modes allocate no mesh or draw call. The maximum vehicle cost is nine draw calls across bus, train and subway.
+
+## Dependencies
+
+- Atlas public contract for stop, station, platform and street geometry.
+- Connections public contract and `transitVehiclesAt` for route geometry and timetable placement.
+- `building/PbrMaterialFactory.js` for rendered materials.
+- `ground/GroundBuilder.js` and `ground/Polygons.js` for station and shelter geometry.
+- `light/Color.js` and `light/CONTRACT.md` for fixtures.
+
+## Invariants
+
+- Rendered vehicles and aboard players use the authoritative 3D `route.shape` and template offsets. Neither renderer nor journey state integrates position or invents track geometry.
+- The trip id is `trip:<route id length>:<route id>:<absolute scheduled departure>`. Connections exposes no trip id, so route id plus scheduled departure supplies the deterministic identity without punctuation ambiguity.
+- Stop ids can occur more than once on an out-and-back route. `stopIndex` identifies the exact scheduled occurrence.
+- Service periods can end after 86400. Serialized clock rollover resolves a wrapped day time against the same absolute trip without moving the vehicle incrementally.
+- Disembark positions come from Atlas bus stop coordinates at the Connections stop height, or the Atlas station center at its published platform level.
+- A malformed route, dangling place reference, invalid restored trip or non-schema request fails closed before journey state changes.
+- Identical route data, serialized state and request produce identical output.
+- Geometry UVs use world meters and every visible surface uses a material from `PbrMaterialFactory`.
+- Transit vehicles have no physics collider.
+
+## How to modify this blackbox safely
+
+Keep timetable math aligned with Connections' `transitVehiclesAt`, including its dwell boundary behavior. Update every affected schema and focused journey or renderer test, then run the complete engine tests and build.

@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:transit:values",
+  "$defs": {
+    "vector2": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [{ "type": "number" }, { "type": "number" }],
+      "items": false
+    },
+    "vector3": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [{ "type": "number" }, { "type": "number" }, { "type": "number" }],
+      "items": false
+    },
+    "kind": { "enum": ["bus", "train", "subway"] },
+    "place": {
+      "type": "object",
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "enum": ["bus-stop", "train-station", "subway-station"] },
+        "id": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "clock": {
+      "type": "object",
+      "required": ["dayOffset", "lastDaySeconds"],
+      "properties": {
+        "dayOffset": { "type": "integer", "minimum": 0 },
+        "lastDaySeconds": { "type": ["number", "null"], "minimum": 0, "exclusiveMaximum": 86400 }
+      },
+      "additionalProperties": false
+    },
+    "state": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["status", "clock"],
+          "properties": {
+            "status": { "const": "waiting" },
+            "clock": { "$ref": "#/$defs/clock" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["status", "clock", "tripId", "routeId", "serviceDeparture", "boardedStopIndex"],
+          "properties": {
+            "status": { "const": "aboard" },
+            "clock": { "$ref": "#/$defs/clock" },
+            "tripId": { "type": "string", "minLength": 1 },
+            "routeId": { "type": "string", "minLength": 1 },
+            "serviceDeparture": { "type": "number" },
+            "boardedStopIndex": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "error": {
+      "enum": [
+        "E_TRANSIT_INVALID_DATA",
+        "E_TRANSIT_ABSENT_ROUTE",
+        "E_TRANSIT_WRONG_PLACE",
+        "E_TRANSIT_OUT_OF_SERVICE",
+        "E_TRANSIT_MISSED_VEHICLE",
+        "E_TRANSIT_MOVING_VEHICLE",
+        "E_TRANSIT_OUT_OF_REACH",
+        "E_TRANSIT_ALREADY_ABOARD",
+        "E_TRANSIT_NOT_ABOARD"
+      ]
+    },
+    "errorResult": {
+      "type": "object",
+      "required": ["ok", "error"],
+      "properties": {
+        "ok": { "const": false },
+        "error": { "$ref": "#/$defs/error" }
+      },
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "required": ["tripId", "routeId", "lineId", "kind", "stopId", "stopIndex", "serviceDeparture", "arrivalTime", "departureTime", "nextStopId", "destinationStopId", "position"],
+      "properties": {
+        "tripId": { "type": "string", "minLength": 1 },
+        "routeId": { "type": "string", "minLength": 1 },
+        "lineId": { "type": "string", "minLength": 1 },
+        "kind": { "$ref": "#/$defs/kind" },
+        "stopId": { "type": "string", "minLength": 1 },
+        "stopIndex": { "type": "integer", "minimum": 0 },
+        "serviceDeparture": { "type": "number" },
+        "arrivalTime": { "type": "number" },
+        "departureTime": { "type": "number" },
+        "nextStopId": { "type": ["string", "null"], "minLength": 1 },
+        "destinationStopId": { "type": "string", "minLength": 1 },
+        "position": { "$ref": "#/$defs/vector3" }
+      },
+      "additionalProperties": false
+    },
+    "nextStop": {
+      "type": "object",
+      "required": ["stopId", "stopIndex", "arrivalTime", "departureTime", "position"],
+      "properties": {
+        "stopId": { "type": "string", "minLength": 1 },
+        "stopIndex": { "type": "integer", "minimum": 0 },
+        "arrivalTime": { "type": "number" },
+        "departureTime": { "type": "number" },
+        "position": { "$ref": "#/$defs/vector3" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

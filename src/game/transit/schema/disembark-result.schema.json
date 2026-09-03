@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:transit:disembark-result",
+  "oneOf": [
+    { "$ref": "urn:urbe:engine:transit:values#/$defs/errorResult" },
+    {
+      "type": "object",
+      "required": ["ok", "tripId", "routeId", "place", "position", "state"],
+      "properties": {
+        "ok": { "const": true },
+        "tripId": { "type": "string", "minLength": 1 },
+        "routeId": { "type": "string", "minLength": 1 },
+        "place": { "$ref": "urn:urbe:engine:transit:values#/$defs/place" },
+        "position": { "$ref": "urn:urbe:engine:transit:values#/$defs/vector3" },
+        "state": { "$ref": "urn:urbe:engine:transit:values#/$defs/state" }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

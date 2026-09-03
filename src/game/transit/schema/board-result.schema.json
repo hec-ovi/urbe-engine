@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:transit:board-result",
+  "oneOf": [
+    { "$ref": "urn:urbe:engine:transit:values#/$defs/errorResult" },
+    {
+      "type": "object",
+      "required": ["ok", "service", "state"],
+      "properties": {
+        "ok": { "const": true },
+        "service": { "$ref": "urn:urbe:engine:transit:values#/$defs/service" },
+        "state": { "$ref": "urn:urbe:engine:transit:values#/$defs/state" }
+      },
+      "additionalProperties": false
+    }
+  ]
+}
