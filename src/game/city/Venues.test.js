@@ -94,8 +94,10 @@ describe( 'Venues', () => {
 		expect( group.getObjectByName( 'entrance-frame:housing' ).material.userData.key )
 			.toBe( 'cyberpunk/window-frame/mid' );
 		const lens = group.getObjectByName( 'entrance-frame:lens' );
-		expect( lens.material.userData.key ).toBe( 'cyberpunk/light-fixture/mid' );
-		expect( lens.material.userData.tweaks.variantId ).toBe( 'strip' );
+		expect( lens.material.name ).toBe( 'entrance-frame:light' );
+		expect( lens.material.map ).toBeNull();
+		expect( lens.material.emissiveMap ).toBeNull();
+		expect( lens.material.emissiveIntensity ).toBe( 90 );
 		expect( lens.geometry.getAttribute( 'position' ).count ).toBeGreaterThan( 0 );
 
 	} );

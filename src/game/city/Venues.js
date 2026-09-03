@@ -12,7 +12,6 @@ const ASK_RADIUS = 140;
 /** And how often. A rota changes on the hour, never between two frames. */
 const ASK_INTERVAL = 4;
 
-const FRAME_LIGHT_KEY = 'cyberpunk/light-fixture/mid';
 const FRAME_HOUSING_KEY = 'cyberpunk/window-frame/mid';
 const FRAME_KELVIN = 3200;
 /** A door frame strip is read directly, so it sits above street exposure. */
@@ -128,11 +127,7 @@ export class Venues {
 
 			const mesh = new THREE.Mesh(
 				BufferGeometryUtils.mergeGeometries( lenses, false ),
-				this.factory.variant( FRAME_LIGHT_KEY, {
-					variantId: 'strip',
-					emissiveLevel: FRAME_EMISSIVE,
-					emissive: kelvinColor( FRAME_KELVIN )
-				} )
+				frameLightMaterial()
 			);
 			mesh.name = 'entrance-frame:lens';
 			group.add( mesh );
@@ -173,6 +168,22 @@ export class Venues {
 		}
 
 	}
+
+}
+
+/** A continuous emitter has no repeated fixture map, mask, or bezel. */
+function frameLightMaterial() {
+
+	const color = kelvinColor( FRAME_KELVIN );
+
+	return new THREE.MeshStandardMaterial( {
+		name: 'entrance-frame:light',
+		color,
+		emissive: color,
+		emissiveIntensity: FRAME_EMISSIVE,
+		roughness: 0.45,
+		metalness: 0
+	} );
 
 }
 
