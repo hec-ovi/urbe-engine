@@ -6,14 +6,17 @@ Purpose: calculates a repeatable route from the player's current feet to an obje
 
 - Walk network: [schema/walk-network.schema.json](schema/walk-network.schema.json). Nodes and edges come from `connections.networks.walk`; every edge carries its complete `path3` walking surface.
 - Route request: [schema/route-request.schema.json](schema/route-request.schema.json). The current three-dimensional player position and one parcel, station, or stop identity.
+- Guide update: [schema/guide-update.schema.json](schema/guide-update.schema.json). Current feet, elapsed frame time, optional force flag, and a routable destination or null.
 
 ## Outputs
 
 - Route result: [schema/route-result.schema.json](schema/route-result.schema.json). Ordered nodes, edges, exact 3D path and total walking distance through the destination's published entry node.
+- Guide result: [schema/guide-result.schema.json](schema/guide-result.schema.json). The current route or null and whether the presentation needs to redraw it.
 
 ## Events
 
 - `route(request)` calculates a new shortest path. Calling it again from changed feet is rerouting; no stale route state is retained.
+- `ObjectiveGuide.update(request)` routes a changed objective immediately and otherwise reroutes only after 0.75 seconds when the feet moved at least three metres.
 
 ## Errors
 
@@ -33,6 +36,7 @@ Purpose: calculates a repeatable route from the player's current feet to an obje
 - Parcel routes finish on the parcel's `entry` node, station routes on the station node, and bus routes on the stop node with the matching `ref`.
 - Equal-cost choices resolve by edge and node id, so identical inputs produce identical output.
 - The current feet lead to the nearest graph node and count toward the displayed distance.
+- The guide never calls the router every frame. It retains one validated result between bounded reroutes.
 
 ## How to modify this blackbox safely
 

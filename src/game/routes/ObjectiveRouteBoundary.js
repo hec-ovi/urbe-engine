@@ -2,9 +2,11 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import walkNetwork from './schema/walk-network.schema.json';
 import routeRequest from './schema/route-request.schema.json';
 import routeResult from './schema/route-result.schema.json';
+import guideUpdate from './schema/guide-update.schema.json';
+import guideResult from './schema/guide-result.schema.json';
 import { ObjectiveRouteError } from './ObjectiveRouteError.js';
 
-const SCHEMAS = [ walkNetwork, routeRequest, routeResult ];
+const SCHEMAS = [ walkNetwork, routeRequest, routeResult, guideUpdate, guideResult ];
 
 export class ObjectiveRouteBoundary {
 

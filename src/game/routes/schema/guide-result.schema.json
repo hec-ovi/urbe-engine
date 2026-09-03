@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:objective-routes:guide-result",
+  "type": "object",
+  "required": ["changed", "route"],
+  "properties": {
+    "changed": { "type": "boolean" },
+    "route": {
+      "oneOf": [
+        { "$ref": "urn:urbe:engine:objective-routes:route-result" },
+        { "type": "null" }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

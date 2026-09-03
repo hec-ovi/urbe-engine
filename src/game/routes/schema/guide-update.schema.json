@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:objective-routes:guide-update",
+  "type": "object",
+  "required": ["deltaSeconds", "from", "destination"],
+  "properties": {
+    "deltaSeconds": { "type": "number", "minimum": 0 },
+    "from": { "$ref": "urn:urbe:engine:objective-routes:route-request#/properties/from" },
+    "destination": {
+      "oneOf": [
+        { "$ref": "urn:urbe:engine:objective-routes:route-request#/$defs/destination" },
+        { "type": "null" }
+      ]
+    },
+    "force": { "type": "boolean" }
+  },
+  "additionalProperties": false
+}
