@@ -27,6 +27,8 @@ export class PlayerController {
 		this.bob = 0;
 		this.speed = 0;
 		this.frozen = false;
+		this.movementLocked = false;
+		this.carrierYaw = null;
 
 	}
 
@@ -42,7 +44,7 @@ export class PlayerController {
 		this.#look();
 		this.#stance();
 
-		const axis = this.frozen ? { x: 0, z: 0 } : this.input.axis();
+		const axis = this.frozen || this.movementLocked ? { x: 0, z: 0 } : this.input.axis();
 		const speed = this.body.crouched ? CROUCH_SPEED : ( this.input.running ? RUN_SPEED : WALK_SPEED );
 		const moving = axis.x !== 0 || axis.z !== 0;
 
@@ -59,11 +61,20 @@ export class PlayerController {
 			( - axis.x * sin + axis.z * cos ) * step
 		);
 
-		const before = this.body.position.clone();
-		this.body.move( horizontal, delta );
-		this.speed = before.distanceTo( this.body.position ) / Math.max( delta, 1e-4 );
+		if ( this.movementLocked ) {
 
-		this.bob = moving && this.body.grounded
+			this.speed = 0;
+			this.bob = 0;
+
+		} else {
+
+			const before = this.body.position.clone();
+			this.body.move( horizontal, delta );
+			this.speed = before.distanceTo( this.body.position ) / Math.max( delta, 1e-4 );
+
+		}
+
+		this.bob = ! this.movementLocked && moving && this.body.grounded
 			? this.bob + delta * BOB_RATE * ( speed / WALK_SPEED )
 			: 0;
 
@@ -79,7 +90,7 @@ export class PlayerController {
 
 	#stance() {
 
-		if ( this.frozen ) return;
+		if ( this.frozen || this.movementLocked ) return;
 
 		this.body.setCrouched( this.input.crouching );
 
@@ -91,6 +102,37 @@ export class PlayerController {
 			this.body.jump();
 
 		}
+
+	}
+
+	/** Starts an authoritative ride and initially faces along its route heading. */
+	beginRide( position, heading ) {
+
+		const point = new THREE.Vector3().fromArray( position );
+		this.body.beginCarry( point );
+		this.movementLocked = true;
+		this.carrierYaw = yawOf( heading );
+		this.yaw = this.carrierYaw;
+
+	}
+
+	/** Carries the body exactly and turns the current mouse look with bends in the route. */
+	carry( position, heading ) {
+
+		const nextYaw = yawOf( heading );
+		if ( this.carrierYaw === null ) this.carrierYaw = nextYaw;
+		else this.yaw += angleDelta( nextYaw, this.carrierYaw );
+		this.carrierYaw = nextYaw;
+		this.body.carryTo( new THREE.Vector3().fromArray( position ) );
+
+	}
+
+	/** Places the physical capsule at the published stop and gives movement back. */
+	endRide( position ) {
+
+		this.body.endCarry( new THREE.Vector3().fromArray( position ) );
+		this.movementLocked = false;
+		this.carrierYaw = null;
 
 	}
 
@@ -127,5 +169,17 @@ export class PlayerController {
 		return new THREE.Vector3( - Math.sin( this.yaw ) * flat, Math.sin( this.pitch ), - Math.cos( this.yaw ) * flat );
 
 	}
+
+}
+
+function yawOf( heading ) {
+
+	return Math.atan2( - heading[ 0 ], - heading[ 1 ] );
+
+}
+
+function angleDelta( next, previous ) {
+
+	return Math.atan2( Math.sin( next - previous ), Math.cos( next - previous ) );
 
 }

@@ -105,6 +105,22 @@ describe( 'PlayerBody against street furniture', () => {
 
 	} );
 
+	it( 'leaves collision while carried and restores it at the published destination', async () => {
+
+		const { body } = await world();
+		body.beginCarry( new THREE.Vector3( 10, -12, 4 ) );
+		expect( body.collider.isEnabled() ).toBe( false );
+		expect( body.feet.toArray() ).toEqual( [ 10, -12, 4 ] );
+		body.move( new THREE.Vector3( 10, 0, 0 ), 1 );
+		expect( body.feet.toArray() ).toEqual( [ 10, -12, 4 ] );
+
+		body.carryTo( new THREE.Vector3( 20, -12, 4 ) );
+		body.endCarry( new THREE.Vector3( 30, 0, 8 ) );
+		expect( body.collider.isEnabled() ).toBe( true );
+		expect( body.feet.toArray() ).toEqual( [ 30, 0, 8 ] );
+
+	} );
+
 } );
 
 /** A flat floor at y = 0 and a player standing on it at the origin. */

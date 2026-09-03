@@ -78,6 +78,31 @@ describe( 'PlayerController', () => {
 
 	} );
 
+	it( 'keeps mouse look but ignores walking, jumping and crouching while carried', () => {
+
+		const { controller, body, press, mouse } = harness();
+		controller.beginRide( [ 10, -12, 4 ], [ 1, 0 ] );
+		const rideYaw = controller.yaw;
+		press( 'KeyW' );
+		press( 'KeyC' );
+		press( 'Space' );
+		mouse( 20, -10 );
+		controller.update( 0.5 );
+
+		expect( body.feet.toArray() ).toEqual( [ 10, -12, 4 ] );
+		expect( body.moves ).toBe( 0 );
+		expect( body.jumps ).toBe( 0 );
+		expect( body.crouched ).toBe( false );
+		expect( controller.yaw ).not.toBe( rideYaw );
+
+		controller.carry( [ 12, -12, 6 ], [ 0, 1 ] );
+		expect( body.feet.toArray() ).toEqual( [ 12, -12, 6 ] );
+		controller.endRide( [ 20, 0, 8 ] );
+		expect( body.feet.toArray() ).toEqual( [ 20, 0, 8 ] );
+		expect( controller.movementLocked ).toBe( false );
+
+	} );
+
 } );
 
 function harness() {
@@ -105,7 +130,8 @@ function harness() {
 		controller,
 		body,
 		press: ( code ) => listeners.get( 'keydown' )( { code, repeat: false } ),
-		release: ( code ) => listeners.get( 'keyup' )( { code } )
+		release: ( code ) => listeners.get( 'keyup' )( { code } ),
+		mouse: ( movementX, movementY ) => listeners.get( 'mousemove' )( { movementX, movementY } )
 	};
 
 }
@@ -119,6 +145,8 @@ class StubBody {
 		this.grounded = true;
 		this.crouched = false;
 		this.jumps = 0;
+		this.moves = 0;
+		this.carried = false;
 
 	}
 
@@ -136,6 +164,7 @@ class StubBody {
 
 	move( offset ) {
 
+		this.moves ++;
 		this.position.add( offset );
 
 	}
@@ -153,6 +182,26 @@ class StubBody {
 		this.jumps ++;
 		this.grounded = false;
 		return true;
+
+	}
+
+	beginCarry( point ) {
+
+		this.carried = true;
+		this.position.copy( point );
+
+	}
+
+	carryTo( point ) {
+
+		this.position.copy( point );
+
+	}
+
+	endCarry( point ) {
+
+		this.carried = false;
+		this.position.copy( point );
 
 	}
 

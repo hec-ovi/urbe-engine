@@ -29,6 +29,7 @@ export class PlayerBody {
 		this.velocityY = 0;
 		this.grounded = false;
 		this.crouched = false;
+		this.carried = false;
 
 		this.collider = world.createCollider(
 			rapier.ColliderDesc.capsule( this.halfHeight, BODY_RADIUS )
@@ -102,6 +103,7 @@ export class PlayerBody {
 	/** @param horizontal desired XZ movement this step, in metres. */
 	move( horizontal, delta ) {
 
+		if ( this.carried ) return;
 		this.velocityY = Math.max( TERMINAL, this.velocityY + GRAVITY * delta );
 
 		const desired = {
@@ -137,7 +139,7 @@ export class PlayerBody {
 	 */
 	push( offset ) {
 
-		if ( offset.x === 0 && offset.z === 0 ) return;
+		if ( this.carried || ( offset.x === 0 && offset.z === 0 ) ) return;
 
 		this.controller.computeColliderMovement( this.collider, { x: offset.x, y: 0, z: offset.z } );
 		const movement = this.controller.computedMovement();
@@ -175,6 +177,42 @@ export class PlayerBody {
 
 		this.position.set( point.x, point.y + this.centreOffset, point.z );
 		this.velocityY = 0;
+		this.collider.setTranslation( this.position );
+
+	}
+
+	/** Removes the capsule from collision and carries its feet at an authoritative world point. */
+	beginCarry( point ) {
+
+		this.carried = true;
+		this.collider.setEnabled( false );
+		this.#place( point );
+
+	}
+
+	carryTo( point ) {
+
+		if ( ! this.carried ) return false;
+		this.#place( point );
+		return true;
+
+	}
+
+	/** Restores collision at an authoritative safe destination. */
+	endCarry( point ) {
+
+		this.#place( point );
+		this.carried = false;
+		this.collider.setEnabled( true );
+		return true;
+
+	}
+
+	#place( point ) {
+
+		this.position.set( point.x, point.y + this.centreOffset, point.z );
+		this.velocityY = 0;
+		this.grounded = false;
 		this.collider.setTranslation( this.position );
 
 	}
