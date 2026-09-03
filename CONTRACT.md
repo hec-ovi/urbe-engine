@@ -2,7 +2,7 @@
 
 Purpose: assembles the generated city boxes into a cataloged world and serves its launcher, previews, creation flow and playable first-person game.
 
-Status: v0.17.3.
+Status: v0.17.4.
 
 ## Inputs
 
@@ -19,7 +19,7 @@ Status: v0.17.3.
 - `/` is the launcher for separate generated-city and saved-game catalogs. Creation runs city shells, selected interiors, the selected quest bundle and the final game as four validated stages.
 - `?mode=game` plays the assembled city through [src/game/CONTRACT.md](src/game/CONTRACT.md), including revisioned saves, library discovery, world queries, objective guidance, authored investigations and all 16 quest action kinds.
 - The seven measured quest hosts are assassination by fatal Rapier vehicle impact, fixed-asset rescue, escort follow or lead arrival, fixed access, fixed hacking, fixed sabotage and a verified public-transit journey. Each keeps its authored quest, step, actor, target, place and asset identities.
-- `?mode=city&out=/out/<world>` shows each manifest parcel and opens its building viewer. `?mode=building&parcel=<id>&out=/out/<world>[&source=interior]` shows the exterior or furnished interior and can request a missing build.
+- `?mode=city&out=/out/<world>` shows each manifest parcel and opens its building viewer. `?mode=building&parcel=<id>&out=/out/<world>[&source=interior]` shows the exterior or furnished interior and can request a missing build. Its source state is loading, ready, unavailable or failed with retry and exterior recovery actions; a viewport click captures the camera, Escape releases it, and source and floor controls remain usable while released.
 - `POST /api/building` returns [building-build-result.schema.json](src/server/schema/building-build-result.schema.json).
 - `POST /api/talk` returns [talk-response.schema.json](src/server/schema/talk-response.schema.json).
 

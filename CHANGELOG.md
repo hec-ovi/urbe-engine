@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.4: two-metre pavement plates and edge-local curb stone keep neutral street regions readable under 24000 lm, 5000 K route lights. Exterior entrance surfaces retain their authored strip material at every door size, animated crowds retain the Source mesh normals, NPC identity cards accept structured names without an empty portrait, and building previews expose recoverable source and pointer-capture states.
+
 0.17.3: direct city play accepts absent optional quest catalogs from the development server while malformed and non-JSON catalog files remain startup errors.
 
 0.17.2: public transit keeps one cast passenger across parcel, station and stop endpoints and persists approach, aboard and arrival progress. NPC dialogue uses the checked text route, and reply gestures settle after a 1.8-second presentation hold.

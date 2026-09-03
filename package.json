@@ -1,7 +1,7 @@
 {
   "name": "urbe-engine",
   "private": true,
-	"version": "0.17.3",
+  "version": "0.17.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,10 +10,10 @@
     "assemble": "tsx src/assembly/cli.js",
     "assemble-city": "tsx src/assembly/city-cli.js",
     "simulate": "tsx src/assembly/simulate-cli.js",
-		"carry-quests": "tsx src/assembly/quests-cli.js",
-		"install-character-assets": "node scripts/install-character-assets.mjs",
-		"audit-character-assets": "node scripts/install-character-assets.mjs --check",
-		"test": "vitest run"
+    "carry-quests": "tsx src/assembly/quests-cli.js",
+    "install-character-assets": "node scripts/install-character-assets.mjs",
+    "audit-character-assets": "node scripts/install-character-assets.mjs --check",
+    "test": "vitest run"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",
