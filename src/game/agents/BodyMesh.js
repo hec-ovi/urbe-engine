@@ -1,4 +1,4 @@
-import { attribute, float, instancedBufferAttribute, max, mix, smoothstep, texture, vec2, vec4 } from 'three/tsl';
+import { attribute, float, instancedBufferAttribute, max, mix, smoothstep, step, texture, vec2, vec4 } from 'three/tsl';
 import { CrowdMesh } from './CrowdMesh.js';
 
 /** How wide a hem or a cuff fades, in limb-length units: about two centimetres. */
@@ -24,8 +24,8 @@ const SHOE_SHADE = 0.42;
  */
 export class BodyMesh extends CrowdMesh {
 
-	/** @param paint { map: skin base colour, cloth: the garment attribute } */
-	colorNode( geometry, { map, cloth } ) {
+	/** @param paint { map: skin base colour, eyeMap: eye colour, cloth: garment/eye marker } */
+	colorNode( geometry, { map, eyeMap, cloth } ) {
 
 		geometry.setAttribute( 'cloth', cloth );
 
@@ -43,7 +43,7 @@ export class BodyMesh extends CrowdMesh {
 			shirt: aShirtCut.xyz,
 			trousers: instancedBufferAttribute( this.trousers, 'vec3' ),
 			cut: vec2( aSkinCut.w, aShirtCut.w )
-		} );
+		}, eyeMap );
 
 	}
 
@@ -58,7 +58,7 @@ export class BodyMesh extends CrowdMesh {
 }
 
 /** The same garment surface for a baked crowd body or one focused rig. */
-export function dressedColorNode( geometry, map, { skin, shirt, trousers, cut } ) {
+export function dressedColorNode( geometry, map, { skin, shirt, trousers, cut }, eyeMap = null ) {
 
 	const aCloth = attribute( 'cloth', 'vec4' );
 	// A limb the garment does not reach carries 2, well past any cut, so
@@ -70,6 +70,9 @@ export function dressedColorNode( geometry, map, { skin, shirt, trousers, cut } 
 	const dressed = mix( bare, trousers, leg );
 	const top = mix( dressed, shirt, max( torso, sleeve ) );
 
-	return vec4( mix( top, trousers.mul( SHOE_SHADE ), aCloth.w ), 1 );
+	const body = mix( top, trousers.mul( SHOE_SHADE ), aCloth.w );
+	const surface = eyeMap ? mix( texture( eyeMap ).rgb, body, step( 0, aCloth.x ) ) : body;
+
+	return vec4( surface, 1 );
 
 }

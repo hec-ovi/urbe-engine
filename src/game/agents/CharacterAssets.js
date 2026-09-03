@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VatBaker } from './VatBaker.js';
 import { BodyMesh } from './BodyMesh.js';
@@ -17,14 +18,13 @@ const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAA
 
 /**
  * The Source Quaternius character kit turned into four crowd draw calls: the
- * regular male and female bodies and hairstyles, posed by the Pro animation
- * library's walk, idle and talking loops baked into vertex animation textures,
- * and dressed by the garment map read off their skeleton (Garments.js,
- * BodyMesh.js).
+ * regular male and female body/eye and hair/eyebrow surfaces, posed by the Pro
+ * animation library's loops baked into vertex animation textures and dressed
+ * by the garment map read off their skeleton (Garments.js, BodyMesh.js).
  *
  * The packs live in the machine's model store, not the repo (URBE_MODELS_DIR,
  * served under /models by the dev server). Their own 4K PNGs never load: the
- * glTF texture requests are stubbed out and the two body maps the crowd needs
+ * glTF texture requests are stubbed out. Body, eye and gender-correct hair maps
  * are fetched once and downscaled on the way to the GPU.
  */
 export class CharacterAssets {
@@ -42,13 +42,16 @@ export class CharacterAssets {
 		const loaded = await Promise.all( [
 			new GLTFLoader().loadAsync( ANIMATION_URL ),
 			Promise.all( CROWD_MODELS.map( ( m ) => loadResizedTexture( `${CHARACTER_ROOT}/${m.skin}`, 1024 ) ) ),
-			loadResizedTexture( `${CHARACTER_ROOT}/T_Hair_1_BaseColor.png`, 512 ),
+			Promise.all( CROWD_MODELS.map( ( m ) => loadResizedTexture(
+				`${CHARACTER_ROOT}/T_Hair_${m.gender === 'female' ? 2 : 1}_BaseColor.png`, 512
+			) ) ),
+			loadResizedTexture( `${CHARACTER_ROOT}/T_Eye_Brown.png`, 256 ),
 			...CROWD_MODELS.map( ( m ) => loader.loadAsync( `${CHARACTER_ROOT}/${m.file}` ) ),
 			...CROWD_MODELS.map( ( m ) => loader.loadAsync( `${CHARACTER_ROOT}/${m.hair}` ) )
 		] );
-		const [ animationGltf, skins, hairMap ] = loaded;
-		const models = loaded.slice( 3, 3 + CROWD_MODELS.length );
-		const hairs = loaded.slice( 3 + CROWD_MODELS.length );
+		const [ animationGltf, skins, hairMaps, eyeMap ] = loaded;
+		const models = loaded.slice( 4, 4 + CROWD_MODELS.length );
+		const hairs = loaded.slice( 4 + CROWD_MODELS.length );
 
 		const clips = CROWD_CLIP_NAMES.map( ( name ) => {
 
@@ -68,18 +71,21 @@ export class CharacterAssets {
 			const hairRoot = hairs[ i ].scene;
 			assertRigCompatibility( root, animationGltf.scene );
 			assertRigCompatibility( hairRoot, animationGltf.scene );
-			const body = collectBody( root );
-			const hair = collectBody( hairRoot );
+			const { body, eyes, eyebrows } = characterParts( root );
+			const hair = largestSkinnedMesh( hairRoot );
 			// Read off the skeleton before baking: the pose buffers have no
 			// bones left to ask.
-			const cloth = garments( body );
-			const [ baked ] = VatBaker.bake( root, [ body ], clips );
+			const bodyCloth = garments( body );
+			const [ bakedBody, bakedEyes, bakedEyebrows ] = VatBaker.bake( root, [ body, eyes, eyebrows ], clips );
 			const [ bakedHair ] = VatBaker.bake( hairRoot, [ hair ], clips );
+			const baked = mergeBaked( [ bakedBody, bakedEyes ] );
+			const bakedHeadHair = mergeBaked( [ bakedHair, bakedEyebrows ] );
+			const cloth = crowdCloth( bodyCloth, bakedEyes.vertexCount );
 
 			variants.push( {
 				id: CROWD_MODELS[ i ].id,
-				body: new BodyMesh( baked, capacity, storageCapable, { map: skins[ i ], cloth } ),
-				hair: new HairMesh( bakedHair, capacity, storageCapable, { map: hairMap } )
+				body: new BodyMesh( baked, capacity, storageCapable, { map: skins[ i ], eyeMap, cloth } ),
+				hair: new HairMesh( bakedHeadHair, capacity, storageCapable, { map: hairMaps[ i ] } )
 			} );
 
 		}
@@ -116,23 +122,151 @@ export class CharacterAssets {
 
 }
 
-/** The full-body mesh is the largest skinned part; eyes and brows are separate. */
-function collectBody( root ) {
+/** The base-character export is three skinned surfaces. None may disappear. */
+export function characterParts( root ) {
 
-	let body = null;
-	let vertices = - 1;
+	let eyes = null;
+	let eyebrows = null;
+	const bodies = [];
 
 	root.traverse( ( node ) => {
 
 		if ( ! node.isSkinnedMesh ) return;
-		const count = node.geometry.getAttribute( 'position' )?.count ?? 0;
-		if ( count > vertices ) { body = node; vertices = count; }
+		const name = node.name.toLowerCase();
+		if ( name === 'eyes' ) eyes = node;
+		else if ( name === 'eyebrows' ) eyebrows = node;
+		else bodies.push( node );
 
 	} );
 
-	if ( ! body ) throw new Error( 'character model has no body mesh' );
+	const body = largest( bodies );
 
-	return body;
+	if ( ! body || ! eyes || ! eyebrows ) {
+
+		throw new Error( 'character model must contain body, eyes and eyebrows meshes' );
+
+	}
+
+	return { body, eyes, eyebrows };
+
+}
+
+/** The hairstyle export has one skinned surface. */
+function largestSkinnedMesh( root ) {
+
+	const meshes = [];
+
+	root.traverse( ( node ) => {
+
+		if ( node.isSkinnedMesh ) meshes.push( node );
+
+	} );
+
+	const mesh = largest( meshes );
+
+	if ( ! mesh ) throw new Error( 'character model has no skinned mesh' );
+
+	return mesh;
+
+}
+
+function largest( meshes ) {
+
+	return meshes.reduce( ( best, mesh ) => {
+
+		const count = mesh.geometry.getAttribute( 'position' )?.count ?? 0;
+		const bestCount = best?.geometry.getAttribute( 'position' )?.count ?? - 1;
+		return count > bestCount ? mesh : best;
+
+	}, null );
+
+}
+
+/**
+ * Concatenate separately textured baked surfaces into one instanced draw.
+ * Vertex rows keep the same part order as the merged geometry.
+ */
+export function mergeBaked( parts ) {
+
+	if ( ! parts.length ) throw new Error( 'cannot merge an empty baked character' );
+
+	const rows = parts[ 0 ].rows;
+	const vertexCount = parts.reduce( ( sum, part ) => sum + part.vertexCount, 0 );
+	const geometries = parts.map( ( part ) => {
+
+		if ( part.rows !== rows ) throw new Error( 'baked character parts have different row counts' );
+		if ( part.mesh.geometry.getAttribute( 'position' )?.count !== part.vertexCount ) {
+
+			throw new Error( 'baked character geometry does not match its vertex count' );
+
+		}
+
+		const geometry = part.mesh.geometry.clone();
+
+		for ( const name of Object.keys( geometry.attributes ) ) {
+
+			if ( name !== 'position' && name !== 'uv' ) geometry.deleteAttribute( name );
+
+		}
+
+		if ( ! geometry.hasAttribute( 'uv' ) ) throw new Error( 'baked character geometry has no primary UVs' );
+
+		return geometry;
+
+	} );
+	const geometry = BufferGeometryUtils.mergeGeometries( geometries, false );
+	geometries.forEach( ( part ) => part.dispose() );
+
+	if ( ! geometry ) throw new Error( 'baked character geometries cannot be merged' );
+
+	return {
+		mesh: new THREE.Mesh( geometry ),
+		vertexCount,
+		rows,
+		position: mergeRows( parts, 'position', rows, vertexCount ),
+		normal: mergeRows( parts, 'normal', rows, vertexCount )
+	};
+
+}
+
+function mergeRows( parts, channel, rows, vertexCount ) {
+
+	const joined = new Float32Array( rows * vertexCount * 4 );
+
+	for ( let row = 0; row < rows; row ++ ) {
+
+		let vertexOffset = 0;
+
+		for ( const part of parts ) {
+
+			const sourceStart = row * part.vertexCount * 4;
+			const targetStart = ( row * vertexCount + vertexOffset ) * 4;
+			joined.set( part[ channel ].subarray( sourceStart, sourceStart + part.vertexCount * 4 ), targetStart );
+			vertexOffset += part.vertexCount;
+
+		}
+
+	}
+
+	return joined;
+
+}
+
+/** Body garment markers followed by eye markers for the merged body draw. */
+export function crowdCloth( bodyCloth, eyeVertices ) {
+
+	if ( bodyCloth.itemSize !== 4 ) throw new Error( 'crowd garment map must be vec4' );
+
+	const values = new Float32Array( ( bodyCloth.count + eyeVertices ) * 4 );
+	values.set( bodyCloth.array );
+
+	for ( let i = bodyCloth.count; i < bodyCloth.count + eyeVertices; i ++ ) {
+
+		values.set( [ - 1, 2, 2, 0 ], i * 4 );
+
+	}
+
+	return new THREE.BufferAttribute( values, 4 );
 
 }
 

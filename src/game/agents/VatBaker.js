@@ -32,6 +32,7 @@ export class VatBaker {
 			return {
 				mesh,
 				count,
+				normalGroups: normalWeldGroups( mesh.geometry ),
 				position: new Float32Array( count * rows * 4 ),
 				normal: new Float32Array( count * rows * 4 )
 			};
@@ -142,6 +143,8 @@ function writeNormals( target, stride ) {
 
 	}
 
+	weldFrameNormals( normal, stride, target.normalGroups );
+
 	for ( let i = 0; i < count; i ++ ) {
 
 		const offset = stride + i * 4;
@@ -149,6 +152,66 @@ function writeNormals( target, stride ) {
 		normal[ offset ] /= length;
 		normal[ offset + 1 ] /= length;
 		normal[ offset + 2 ] /= length;
+
+	}
+
+}
+
+/**
+ * UV seams duplicate vertices. Join only copies that had the same rest-pose
+ * position and normal, preserving intentional hard edges.
+ */
+export function normalWeldGroups( geometry ) {
+
+	const position = geometry.getAttribute( 'position' );
+	const normal = geometry.getAttribute( 'normal' );
+
+	if ( ! position || ! normal || position.count !== normal.count ) return [];
+
+	const bySurfacePoint = new Map();
+
+	for ( let i = 0; i < position.count; i ++ ) {
+
+		const key = [
+			position.getX( i ), position.getY( i ), position.getZ( i ),
+			normal.getX( i ), normal.getY( i ), normal.getZ( i )
+		].join( ',' );
+
+		if ( ! bySurfacePoint.has( key ) ) bySurfacePoint.set( key, [] );
+		bySurfacePoint.get( key ).push( i );
+
+	}
+
+	return [ ...bySurfacePoint.values() ].filter( ( group ) => group.length > 1 );
+
+}
+
+/** Area-weighted normal contributions are shared across each smooth seam. */
+export function weldFrameNormals( normal, stride, groups ) {
+
+	for ( const group of groups ) {
+
+		let x = 0;
+		let y = 0;
+		let z = 0;
+
+		for ( const vertex of group ) {
+
+			const offset = stride + vertex * 4;
+			x += normal[ offset ];
+			y += normal[ offset + 1 ];
+			z += normal[ offset + 2 ];
+
+		}
+
+		for ( const vertex of group ) {
+
+			const offset = stride + vertex * 4;
+			normal[ offset ] = x;
+			normal[ offset + 1 ] = y;
+			normal[ offset + 2 ] = z;
+
+		}
 
 	}
 
