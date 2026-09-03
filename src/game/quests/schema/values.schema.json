@@ -15,6 +15,7 @@
     },
     "action": { "enum": ["take", "read", "inspect", "listen", "steal", "work", "deliver"] },
     "interactionKind": { "enum": ["pickup", "observe", "listen", "steal", "work", "deliver"] },
+    "objectiveKind": { "enum": ["talk", "goto", "pickup", "observe", "listen", "steal", "assassinate", "work", "deliver"] },
     "unavailableReason": {
       "enum": [
         "role_dead",

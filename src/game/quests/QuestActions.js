@@ -59,6 +59,33 @@ export class QuestActions {
 
 	}
 
+	/** The first open story objective, including talk and goto steps used for map guidance. */
+	objective( query ) {
+
+		this.boundary.input( 'target-query', query );
+
+		for ( const { definition, runtime } of this.session.entries ) {
+
+			const active = new Set( runtime.activeSteps().map( ( step ) => step.stepId ) );
+			const step = definition.steps.find( ( candidate ) => active.has( candidate.stepId ) );
+			if ( ! step ) continue;
+
+			return this.boundary.output( 'active-objective', {
+				targetKey: targetKey( definition.id, step.stepId ),
+				questId: definition.id,
+				stepId: step.stepId,
+				kind: step.target.kind,
+				title: definition.title,
+				text: step.narrative.playerHint,
+				place: runtime.stepPlace( step.stepId, query.timeMin ) ?? null
+			} );
+
+		}
+
+		return this.boundary.output( 'active-objective', null );
+
+	}
+
 	/**
 	 * Applies one selected target. All rejected paths return state rather than
 	 * mutating it, so the host can keep the object visible and explain why.
@@ -116,11 +143,7 @@ export class QuestActions {
 			action: request.action,
 			progressed: true,
 			message: step.narrative.description,
-			completed: moved.map( ( change ) => ( {
-				questId: change.definition.id,
-				stepIds: change.completed.map( ( completed ) => completed.stepId ),
-				...( change.ending ? { endingId: change.ending.endingId } : {} )
-			} ) ),
+			completed: moved.map( ( change ) => completion( change, this.session.view() ) ),
 			inventory: this.session.inventoryView(),
 			worldChanges
 		} );
@@ -148,6 +171,27 @@ export class QuestActions {
 		return this.boundary.output( 'interaction-result', result );
 
 	}
+
+}
+
+function completion( change, views ) {
+
+	const view = views.find( ( candidate ) => candidate.id === change.definition.id );
+	return {
+		questId: change.definition.id,
+		stepIds: change.completed.map( ( completed ) => completed.stepId ),
+		...( change.ending ? { endingId: change.ending.endingId } : {} ),
+		presentation: {
+			title: change.definition.title,
+			steps: change.completed.map( ( step ) => step.narrative.description ),
+			...( change.ending ? { ending: {
+				title: change.ending.title,
+				text: change.ending.epilogue,
+				outcome: 'done',
+				steps: view?.steps ?? []
+			} } : {} )
+		}
+	};
 
 }
 

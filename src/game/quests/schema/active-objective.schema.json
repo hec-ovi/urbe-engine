@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:quest-actions:active-objective",
+  "oneOf": [
+    { "type": "null" },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetKey", "questId", "stepId", "kind", "title", "text", "place"],
+      "properties": {
+        "targetKey": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+        "questId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+        "stepId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+        "kind": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/objectiveKind" },
+        "title": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" },
+        "text": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" },
+        "place": {
+          "oneOf": [
+            { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/place" },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  ]
+}

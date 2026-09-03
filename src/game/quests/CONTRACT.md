@@ -6,16 +6,19 @@ Purpose: converts active quest steps into deterministic player interaction targe
 
 - Target query: [schema/target-query.schema.json](schema/target-query.schema.json). `timeMin` uses the simulation clock.
 - Interaction request: [schema/interaction-request.schema.json](schema/interaction-request.schema.json). The host supplies the selected target, symbolic input action, current places, and physical focus facts when the mechanic targets an item or person.
+- Objective query: [schema/target-query.schema.json](schema/target-query.schema.json). The same clock query selects the first open quest and definition-ordered step for map guidance.
 
 ## Outputs
 
 - Interaction targets: [schema/interaction-targets.schema.json](schema/interaction-targets.schema.json). Every target has a stable quest and step identity, map place, actual cast NPC ids, availability, and presentation instructions. Binding names stay symbolic so the UI renders the player's current key or controller binding.
 - Interaction result: [schema/interaction-result.schema.json](schema/interaction-result.schema.json). Success and failure both return current quest inventory. A completed pickup, theft, or delivery includes the matching world state change.
+- Active objective: [schema/active-objective.schema.json](schema/active-objective.schema.json). Includes talk and goto steps as well as direct actions, and carries the runtime's exact current place or null.
 
 ## Events
 
 - `targets({ timeMin })` projects active `pickup`, `observe`, `listen`, `steal`, `work`, and `deliver` steps.
 - `perform(request)` maps `take`, `inspect`, `listen`, `steal`, `work`, and `deliver` to the quests runtime's closed player event vocabulary. `read` returns the selected document text without advancing the quest.
+- `objective({ timeMin })` selects the first open questline and first definition-ordered active step for route presentation.
 
 ## Errors
 

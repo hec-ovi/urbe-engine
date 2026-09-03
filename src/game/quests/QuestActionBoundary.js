@@ -2,11 +2,12 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import interactionRequest from './schema/interaction-request.schema.json';
 import interactionResult from './schema/interaction-result.schema.json';
 import interactionTargets from './schema/interaction-targets.schema.json';
+import activeObjective from './schema/active-objective.schema.json';
 import targetQuery from './schema/target-query.schema.json';
 import values from './schema/values.schema.json';
 import { QuestActionError } from './QuestActionError.js';
 
-const SCHEMAS = [ values, targetQuery, interactionRequest, interactionTargets, interactionResult ];
+const SCHEMAS = [ values, targetQuery, interactionRequest, interactionTargets, activeObjective, interactionResult ];
 
 export class QuestActionBoundary {
 

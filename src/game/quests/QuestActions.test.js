@@ -105,6 +105,16 @@ describe( 'QuestActions target contract', () => {
 
 	} );
 
+	it( 'selects the first open objective deterministically for map guidance', () => {
+
+		const { actions } = setup();
+		expect( actions.objective( { timeMin: 600 } ) ).toEqual( {
+			targetKey: 'quest:q_courier:take_doc', questId: 'q_courier', stepId: 'take_doc', kind: 'pickup',
+			title: 'Paper trail', text: 'Take the stamped manifest.', place: { kind: 'parcel', id: 'p_pickup' }
+		} );
+
+	} );
+
 	it( 'validates every public input before reading quest state', () => {
 
 		const actions = setup().actions;
@@ -153,7 +163,10 @@ describe( 'QuestActions interaction state', () => {
 		const taken = actions.perform( { ...request, action: 'take' } );
 		expect( taken ).toMatchObject( {
 			ok: true, progressed: true,
-			completed: [ { questId: 'q_courier', stepIds: [ 'take_doc' ] } ],
+			completed: [ {
+				questId: 'q_courier', stepIds: [ 'take_doc' ],
+				presentation: { title: 'Paper trail', steps: [ 'Take the stamped manifest. completed.' ] }
+			} ],
 			inventory: [ { id: 'shared_document', name: 'Stamped manifest', quantity: 1 } ],
 			worldChanges: [ { targetKey: request.targetKey, state: 'collected' } ]
 		} );
@@ -192,7 +205,10 @@ describe( 'QuestActions interaction state', () => {
 		} );
 		const delivered = actions.perform( areaRequest( 'q_courier', 'deliver_doc', 'deliver', { kind: 'parcel', id: 'p_drop' } ) );
 		expect( delivered ).toMatchObject( {
-			ok: true, completed: [ { questId: 'q_courier', stepIds: [ 'deliver_doc' ], endingId: 'done' } ],
+			ok: true, completed: [ {
+				questId: 'q_courier', stepIds: [ 'deliver_doc' ], endingId: 'done',
+				presentation: { ending: { title: 'Delivered', text: 'The manifest changed hands.', outcome: 'done' } }
+			} ],
 			worldChanges: [ { targetKey: 'quest:q_courier:deliver_doc', state: 'delivered' } ]
 		} );
 		expect( delivered.inventory.find( ( item ) => item.id === 'shared_document' ) ).toBeUndefined();
