@@ -217,6 +217,10 @@ function savedGame() {
 		},
 		currentLocation: { id: 'p2', name: 'Market Two' },
 		discoveredLocations: [ { id: 'p2', name: 'Market Two' } ],
+		questTransit: {
+			questId: 'main', stepId: 'escape', stage: 'approach',
+			tripId: null, routeId: null, passengerNpcId: 'npc-1'
+		},
 		npcState: {
 			timeMin: 1260,
 			simulation: { version: '1', seed: 'fresh-save', events: [] },

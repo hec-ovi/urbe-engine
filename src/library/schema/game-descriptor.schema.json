@@ -128,6 +128,9 @@
     "transitJourney": {
       "$ref": "#/$defs/transitJourney"
     },
+    "questTransit": {
+      "$ref": "urn:urbe:engine:quest-actions:transit-state"
+    },
     "npcState": {
       "$ref": "urn:urbe:engine:library:npc-state"
     },

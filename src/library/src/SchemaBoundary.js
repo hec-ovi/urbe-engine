@@ -44,6 +44,8 @@ export class SchemaBoundary {
 const EXTERNAL_SCHEMAS = [
 	new URL( '../../game/agents/schema/values.schema.json', import.meta.url ),
 	new URL( '../../game/agents/schema/continuity-save.schema.json', import.meta.url ),
+	new URL( '../../game/quests/schema/values.schema.json', import.meta.url ),
+	new URL( '../../game/quests/schema/transit-state.schema.json', import.meta.url ),
 	new URL( '../../../../simulation/src/schemas/simulation-save.schema.json', import.meta.url )
 ];
 
