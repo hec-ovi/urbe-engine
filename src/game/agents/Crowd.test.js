@@ -204,6 +204,38 @@ describe( 'persistent NPC projection', () => {
 
 	} );
 
+	it( 'projects a persistent NPC turn into the rendered body without changing its appearance', () => {
+
+		const instance = {
+			npcId: 'turning-worker', name: { given: 'Hank', family: 'Nakamura' },
+			type: 'barista', gender: 'male', appearanceSeed: 312229336
+		};
+		const mesh = { setInstance: vi.fn(), commit: vi.fn() };
+		const crowd = new Crowd( {
+			assets: { variants: Array.from( { length: 8 }, () => ( {} ) ), durations: Array( 8 ).fill( 1 ), meshesOf: () => [ mesh ] },
+			routes: pavement(), signals: { green: () => true },
+			sim: { getNPC: () => instance, crowd: () => ( { agents: [] } ) },
+			places: new Map(), capacity: 4
+		} );
+		const player = new THREE.Vector3();
+		const facingNorth = persistentActor( instance );
+
+		crowd.syncActor( facingNorth, player );
+		crowd.update( 0, player, { timeMin: 600, daySeconds: 36000 } );
+		const before = mesh.setInstance.mock.calls.at( -1 );
+		const facingEast = { ...facingNorth, heading: Math.PI / 2 };
+		crowd.syncActor( facingEast, player );
+		crowd.update( 0, player, { timeMin: 600, daySeconds: 36000 } );
+		const after = mesh.setInstance.mock.calls.at( -1 );
+
+		expect( before[ 2 ] ).toBe( 0 );
+		expect( after[ 2 ] ).toBe( Math.PI / 2 );
+		expect( after[ 1 ].toArray() ).toEqual( before[ 1 ].toArray() );
+		expect( after[ 4 ] ).toBe( before[ 4 ] );
+		expect( after[ 5 ] ).toEqual( before[ 5 ] );
+
+	} );
+
 	it( 'keeps one impacted identity frozen and out of interaction until physics rejects it', () => {
 
 		const instance = {

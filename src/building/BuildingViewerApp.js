@@ -66,13 +66,17 @@ export class BuildingViewerApp {
 			console.error( error );
 			const source = this.config.source;
 			const state = error.state === 'unavailable' ? 'unavailable' : 'failed';
+			const rawDetails = error.details ?? String( error.stack ?? error );
+			const details = error.code && ! String( rawDetails ).startsWith( `${error.code}:` )
+				? `${error.code}: ${rawDetails}`
+				: rawDetails;
 			this.view.setSource( source, false );
 			this.view.setStatus( `${this.config.parcel} · ${source} · ${state}`, state );
 			this.view.showIssue( {
 				state,
 				title: `${source === 'interior' ? 'interior' : 'exterior'} ${state}`,
 				message: error.message ?? 'The preview could not be loaded.',
-				details: error.details ?? String( error.stack ?? error ),
+				details,
 				exterior: source === 'interior'
 			} );
 

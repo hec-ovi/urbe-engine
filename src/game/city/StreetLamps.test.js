@@ -4,6 +4,7 @@ import * as THREE from 'three/webgpu';
 import { runConnections } from '../../assembly/connectionsRunner.js';
 import { pointInRing } from '../ground/Polygons.js';
 import { kelvinColor } from '../light/Color.js';
+import { BODY_RADIUS } from '../physics/PlayerBody.js';
 import { StreetLamps, WALL_LUMENS, streetLampAssembly } from './StreetLamps.js';
 
 const SAMPLE = new URL( '../../../../atlas/samples/city-urbe-small.json', import.meta.url );
@@ -117,6 +118,136 @@ describe( 'StreetLamps', () => {
 			for ( let j = i + 1; j < posts.length; j ++ ) {
 
 				if ( Math.hypot( post.x - posts[ j ].x, post.z - posts[ j ].z ) < MIN_GAP ) wrong.push( `${i} on top of ${j}` );
+
+			}
+
+		}
+
+		expect( wrong.slice( 0, 5 ) ).toEqual( [] );
+
+	} );
+
+	it( 'keeps each complete fixture outside building volumes and tree anchors', () => {
+
+		const trees = atlas.streets.planting.filter( ( item ) => item.kind === 'tree' );
+		const wrong = [];
+
+		expect( atlas.volumetric.buildings.length ).toBeGreaterThan( 0 );
+		expect( trees.length ).toBeGreaterThan( 0 );
+
+		for ( const [ index, post ] of lamps.posts.entries() ) {
+
+			const segment = headSegment( post.head );
+			const radius = post.head.width / 2;
+
+			for ( const building of atlas.volumetric.buildings ) {
+
+				if ( pointInRing( post.x, post.z, building.footprint ) || toRing( post.x, post.z, building.footprint ) < post.radius ) {
+
+					wrong.push( `${index} pole in building ${building.parcelId}` );
+
+				}
+				if ( building.height >= post.head.underside && segmentToRing( segment, building.footprint ) < radius ) {
+
+					wrong.push( `${index} head in building ${building.parcelId}` );
+
+				}
+
+			}
+
+			for ( const tree of trees ) {
+
+				if ( Math.hypot( post.x - tree.position[ 0 ], post.z - tree.position[ 1 ] ) < post.radius ) wrong.push( `${index} pole on tree` );
+				if ( toSegment( tree.position[ 0 ], tree.position[ 1 ], ...segment ) < radius ) wrong.push( `${index} head on tree` );
+
+			}
+
+		}
+
+		expect( wrong.slice( 0, 5 ) ).toEqual( [] );
+
+	} );
+
+	it( 'keeps each complete fixture outside highway decks and supports', () => {
+
+		const wrong = [];
+
+		expect( atlas.streets.highwayStructures.length ).toBeGreaterThan( 0 );
+
+		for ( const [ index, post ] of lamps.posts.entries() ) {
+
+			const segment = headSegment( post.head );
+			const radius = post.head.width / 2;
+			const top = post.head.underside + post.head.height;
+
+			for ( const [ highwayIndex, highway ] of atlas.streets.highwayStructures.entries() ) {
+
+				for ( const support of highway.supports ) {
+
+					if ( pointInRing( post.x, post.z, support.footprint ) || toRing( post.x, post.z, support.footprint ) < post.radius ) {
+
+						wrong.push( `${index} pole in highway ${highwayIndex} support` );
+
+					}
+					if ( support.top >= post.head.underside && segmentToRing( segment, support.footprint ) < radius ) {
+
+						wrong.push( `${index} head in highway ${highwayIndex} support` );
+
+					}
+
+				}
+
+				let along = 0;
+				for ( let pathIndex = 0; pathIndex < highway.path.length - 1; pathIndex ++ ) {
+
+					const a = highway.path[ pathIndex ];
+					const b = highway.path[ pathIndex + 1 ];
+					const nearest = betweenSegments( segment[ 0 ], segment[ 1 ], a, b );
+					const length = Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ] );
+					const level = profileLevel( highway.elevationProfile, along + nearest.right * length );
+
+					if ( nearest.distance < highway.width / 2 + radius
+						&& top > level - highway.deckThickness && post.head.underside < level ) {
+
+						wrong.push( `${index} head in highway ${highwayIndex} deck` );
+
+					}
+					along += length;
+
+				}
+
+			}
+
+		}
+
+		expect( wrong.slice( 0, 5 ) ).toEqual( [] );
+
+	} );
+
+	it( 'keeps every overhead head outside pedestrian movement envelopes', () => {
+
+		const wrong = [];
+		const movementHeight = 3;
+
+		for ( const [ index, post ] of lamps.posts.entries() ) {
+
+			const segment = headSegment( post.head );
+			const radius = post.head.width / 2 + BODY_RADIUS;
+			const top = post.head.underside + post.head.height;
+
+			for ( const edge of walk.edges ) {
+
+				for ( let pathIndex = 0; pathIndex < edge.path3.length - 1; pathIndex ++ ) {
+
+					const a = edge.path3[ pathIndex ];
+					const b = edge.path3[ pathIndex + 1 ];
+					const nearest = betweenSegments( segment[ 0 ], segment[ 1 ], [ a[ 0 ], a[ 2 ] ], [ b[ 0 ], b[ 2 ] ] );
+					if ( nearest.distance >= radius ) continue;
+					const level = THREE.MathUtils.lerp( a[ 1 ], b[ 1 ], nearest.right );
+
+					if ( top > level && post.head.underside < level + movementHeight ) wrong.push( `${index} head in ${edge.id}` );
+
+				}
 
 			}
 
@@ -283,5 +414,75 @@ function toSegment( x, z, [ ax, az ], [ bx, bz ] ) {
 	const t = Math.max( 0, Math.min( 1, ( ( x - ax ) * dx + ( z - az ) * dz ) / ( dx * dx + dz * dz || 1 ) ) );
 
 	return Math.hypot( x - ( ax + dx * t ), z - ( az + dz * t ) );
+
+}
+
+function headSegment( head ) {
+
+	const half = head.length / 2;
+
+	return [
+		[ head.center.x - head.aim.x * half, head.center.z - head.aim.z * half ],
+		[ head.center.x + head.aim.x * half, head.center.z + head.aim.z * half ]
+	];
+
+}
+
+function segmentToRing( segment, ring ) {
+
+	if ( pointInRing( ...segment[ 0 ], ring ) || pointInRing( ...segment[ 1 ], ring ) ) return 0;
+	let best = Infinity;
+
+	for ( let index = 0; index < ring.length; index ++ ) {
+
+		best = Math.min( best, betweenSegments(
+			segment[ 0 ], segment[ 1 ], ring[ index ], ring[ ( index + 1 ) % ring.length ]
+		).distance );
+
+	}
+
+	return best;
+
+}
+
+function betweenSegments( a, b, c, d ) {
+
+	const ux = b[ 0 ] - a[ 0 ];
+	const uz = b[ 1 ] - a[ 1 ];
+	const vx = d[ 0 ] - c[ 0 ];
+	const vz = d[ 1 ] - c[ 1 ];
+	const wx = a[ 0 ] - c[ 0 ];
+	const wz = a[ 1 ] - c[ 1 ];
+	const uu = ux * ux + uz * uz;
+	const uv = ux * vx + uz * vz;
+	const vv = vx * vx + vz * vz;
+	const uw = ux * wx + uz * wz;
+	const vw = vx * wx + vz * wz;
+	const denominator = uu * vv - uv * uv;
+	let left = denominator > 1e-12 ? THREE.MathUtils.clamp( ( uv * vw - vv * uw ) / denominator, 0, 1 ) : 0;
+	let right = vv > 1e-12 ? THREE.MathUtils.clamp( ( uv * left + vw ) / vv, 0, 1 ) : 0;
+	left = uu > 1e-12 ? THREE.MathUtils.clamp( ( uv * right - uw ) / uu, 0, 1 ) : 0;
+	if ( vv > 1e-12 ) right = THREE.MathUtils.clamp( ( uv * left + vw ) / vv, 0, 1 );
+
+	return {
+		distance: Math.hypot( a[ 0 ] + ux * left - c[ 0 ] - vx * right, a[ 1 ] + uz * left - c[ 1 ] - vz * right ),
+		left, right
+	};
+
+}
+
+function profileLevel( profile, distance ) {
+
+	for ( let index = 0; index < profile.length - 1; index ++ ) {
+
+		const a = profile[ index ];
+		const b = profile[ index + 1 ];
+		if ( distance > b.distance ) continue;
+
+		return THREE.MathUtils.lerp( a.level, b.level, ( distance - a.distance ) / ( b.distance - a.distance || 1 ) );
+
+	}
+
+	return profile.at( -1 ).level;
 
 }

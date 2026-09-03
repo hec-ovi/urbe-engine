@@ -2,7 +2,7 @@
 
 Purpose: assembles the generated city boxes into a cataloged world and serves its launcher, previews, creation flow and playable first-person game.
 
-Status: v0.17.5.
+Status: v0.17.6.
 
 ## Inputs
 
@@ -25,7 +25,7 @@ Status: v0.17.5.
 
 ## Errors
 
-- Building preview failures use [building-build-error.schema.json](src/server/schema/building-build-error.schema.json): `E_INVALID_REQUEST`, `E_WORLD_NOT_FOUND`, `E_WORLD_INVALID`, `E_PARCEL_NOT_FOUND`, `E_BUILD_FAILED`, `E_BUILD_INCOMPLETE`.
+- Building preview build failures use [building-build-error.schema.json](src/server/schema/building-build-error.schema.json): `E_INVALID_REQUEST`, `E_WORLD_NOT_FOUND`, `E_WORLD_INVALID`, `E_PARCEL_NOT_FOUND`, `E_BUILD_FAILED`, `E_BUILD_INCOMPLETE`. Viewer asset failures are `E_BUILD_RESPONSE`, `E_BLUEPRINT_UNAVAILABLE`, `E_BLUEPRINT_INVALID`, `E_SOURCE_UNAVAILABLE`, `E_SOURCE_RESPONSE`, and `E_SOURCE_LOAD`.
 - Development route, launcher, library, creation, gameplay, quest and hydrology failures use the closed sets in their linked contracts. Startup failures are visible and publish no partial world.
 
 ## Invariants

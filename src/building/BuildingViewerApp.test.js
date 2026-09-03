@@ -67,6 +67,8 @@ describe( 'building navigation', () => {
 			json: async () => ( { code: 'E_WORLD_NOT_FOUND', message: 'missing has no Atlas sample' } )
 		} ) );
 		const app = new BuildingViewerApp( { parcel: 'p9', out: '/out/missing', source: 'shell', backend: 'webgl' } );
+		const retry = vi.fn();
+		app.view.onRetry = retry;
 
 		await app.start();
 
@@ -75,6 +77,28 @@ describe( 'building navigation', () => {
 		expect( screen.getByText( 'missing has no Atlas sample' ) ).toBeTruthy();
 		expect( screen.getByText( /E_WORLD_NOT_FOUND:/ ) ).toBeTruthy();
 		expect( screen.getByText( /p9 · shell · failed/ ).dataset.state ).toBe( 'failed' );
+		await userEvent.click( screen.getByRole( 'button', { name: 'retry' } ) );
+		expect( retry ).toHaveBeenCalledOnce();
+
+	} );
+
+	it( 'names an unreadable successful build response and keeps retry available', async () => {
+
+		vi.spyOn( console, 'error' ).mockImplementation( () => {} );
+		vi.stubGlobal( 'fetch', vi.fn().mockResolvedValue( response( 200, '<!doctype html>', 'text/html' ) ) );
+		const app = new BuildingViewerApp( { parcel: 'p113', out: '/out/urbe', source: 'interior', backend: 'webgl' } );
+		const retry = vi.fn();
+		app.view.onRetry = retry;
+
+		await app.start();
+
+		expect( screen.getByRole( 'alert' ).dataset.state ).toBe( 'failed' );
+		expect( screen.getByRole( 'heading', { name: 'interior failed' } ) ).toBeTruthy();
+		expect( screen.getByText( 'The preview builder returned an unreadable response.' ) ).toBeTruthy();
+		expect( screen.getByText( /E_BUILD_RESPONSE: POST \/api\/building returned 200 text\/html/ ) ).toBeTruthy();
+		expect( screen.getByText( 'p113 · interior · failed' ).dataset.state ).toBe( 'failed' );
+		await userEvent.click( screen.getByRole( 'button', { name: 'retry' } ) );
+		expect( retry ).toHaveBeenCalledOnce();
 
 	} );
 
@@ -99,6 +123,8 @@ describe( 'building navigation', () => {
 		} ) );
 		const app = new BuildingViewerApp( BuildingViewerApp.configFromUrl() );
 		const navigate = vi.spyOn( app, 'navigate' ).mockImplementation( () => {} );
+		const retry = vi.fn();
+		app.view.onRetry = retry;
 
 		await app.start();
 
@@ -108,6 +134,8 @@ describe( 'building navigation', () => {
 		expect( screen.getByLabelText( 'source' ).value ).toBe( 'interior' );
 		expect( screen.getByText( 'p113 · interior · unavailable' ).dataset.state ).toBe( 'unavailable' );
 
+		await userEvent.click( screen.getByRole( 'button', { name: 'retry generation' } ) );
+		expect( retry ).toHaveBeenCalledOnce();
 		await userEvent.click( screen.getByRole( 'button', { name: 'return to exterior' } ) );
 		expect( navigate ).toHaveBeenCalledWith( { source: 'shell' } );
 

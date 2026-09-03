@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { pointInRing, Roadway } from '../ground/Polygons.js';
 import { kelvinColor } from '../light/Color.js';
+import { StreetLampClearance } from './StreetLampClearance.js';
 
 const SPACING = 19;
 const PLAZA_SPACING = 34;
@@ -74,6 +75,7 @@ export class StreetLamps {
 		this.atlas = atlas;
 		this.factory = factory;
 		this.walk = walk;
+		this.clearance = new StreetLampClearance( atlas, walk );
 
 	}
 
@@ -389,6 +391,7 @@ export class StreetLamps {
 	#lamp( structure, lenses, glows, posts, { x, z, ax, az } ) {
 
 		const assembly = streetLampAssembly( { x, z, ax, az } );
+		if ( ! this.clearance.allows( assembly.post.head ) ) return;
 		structure.push( ...assembly.structure );
 		lenses.push( ...assembly.lenses );
 		glows.push( assembly.glow );
@@ -478,6 +481,7 @@ export function streetLampAssembly( { x, z, ax, az } ) {
 			aim: new THREE.Vector3( ax, 0, az ),
 			length: HEAD_LENGTH,
 			width: HEAD_WIDTH,
+			height: HEAD_HEIGHT,
 			underside: headY - HEAD_HEIGHT / 2
 		}
 	};
