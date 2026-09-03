@@ -146,6 +146,41 @@ describe( 'persistent NPC projection', () => {
 
 	} );
 
+	it( 'adopts the existing anonymous parcel body before continuity projects the same cast NPC', () => {
+
+		const instance = {
+			npcId: 'cast-worker', name: { given: 'Ivo', family: 'Reis' },
+			type: 'barista', gender: 'male', appearanceSeed: 44
+		};
+		const inside = new THREE.Vector3( 2, 0, 3 );
+		const actor = {
+			...persistentActor( instance ), place: { kind: 'parcel', id: 'cafe' },
+			position: inside.toArray(), animation: 'idle', mode: 'schedule'
+		};
+		const continuity = { appear: vi.fn( () => actor ) };
+		const handle = {
+			crowdId: 'staff-handle', type: 'barista', gender: 'male', appearanceSeed: 44,
+			activity: 'working', place: { kind: 'parcel', id: 'cafe' }
+		};
+		const sim = {
+			crowd: ( timeMin, scope ) => ( { agents: scope.kind === 'parcel' ? [ handle ] : [] } ),
+			instantiate: vi.fn( () => instance ), getNPC: () => instance
+		};
+		const crowd = new Crowd( {
+			assets: testAssets(), routes: pavement(), signals: { green: () => true }, sim, continuity,
+			places: new Map( [ [ 'cafe', { inside, heading: 0, anchors: {} } ] ] ), capacity: 4
+		} );
+		crowd.update( 0, inside, { timeMin: 600, daySeconds: 36000 } );
+		const anonymous = [ ...crowd.members.values() ][ 0 ];
+		expect( anonymous ).toMatchObject( { crowdId: 'staff-handle', npcId: null } );
+
+		const named = crowd.questMember( instance.npcId, 600, inside, { kind: 'parcel', id: 'cafe' } );
+		expect( named ).toBe( anonymous );
+		expect( named ).toMatchObject( { crowdId: 'staff-handle', npcId: 'cast-worker', continuity: true } );
+		expect( crowd.members.size ).toBe( 1 );
+
+	} );
+
 	it( 'keeps an exact coordinator override across continuity refreshes', () => {
 
 		const instance = {
@@ -186,7 +221,8 @@ describe( 'persistent NPC projection', () => {
 		expect( member ).toMatchObject( { fallen: true, frozen: true } );
 		expect( crowd.within( member.position, 2 ) ).toEqual( [] );
 		expect( crowd.pushback( member.position, 0.32 ).length() ).toBe( 0 );
-		crowd.syncActor( { ...persistentActor( instance ), position: [ 9, 0, 0 ] }, new THREE.Vector3() );
+		expect( crowd.syncActor( { ...persistentActor( instance ), position: [ 9, 0, 0 ] }, new THREE.Vector3() ) )
+			.toBeNull();
 		expect( member.position.toArray() ).toEqual( [ 0, 0, 0 ] );
 
 		expect( crowd.cancelRagdoll( member.id ) ).toBe( member );

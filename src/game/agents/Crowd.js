@@ -77,7 +77,7 @@ export class Crowd {
 
 		if ( ! actor ) return null;
 		let member = [ ...this.members.values() ].find( ( candidate ) => candidate.npcId === actor.npcId ) ?? null;
-		if ( member?.fallen ) return member;
+		if ( member?.fallen ) return null;
 		if ( ! actor.visible ) {
 
 			if ( member?.continuity ) this.members.delete( member.id );
@@ -121,6 +121,7 @@ export class Crowd {
 			? member.restClip === CLIP.SIT ? CLIP.SIT_TALK : CLIP.TALK
 			: member.restClip;
 		member.controlMode = actor.mode;
+		member.place = { ...actor.place };
 		member.parcelId = actor.place.kind === 'parcel' ? actor.place.id : null;
 		member.edge = actor.place.kind === 'edge' ? this.routes.edges.get( actor.place.id ) ?? null : null;
 		member.stationary = ! member.edge;
@@ -424,6 +425,7 @@ export class Crowd {
 			try {
 
 				const actor = this.continuity.appear( { npcId, timeMin } );
+				this.#adoptQuestHandle( this.sim.getNPC( npcId ), timeMin, place );
 				const member = this.syncActor( actor, player );
 				return member && memberAt( member, place ) ? member : null;
 
@@ -444,8 +446,17 @@ export class Crowd {
 		}
 
 		const npc = this.sim.getNPC( npcId );
+		const adopted = this.#adoptQuestHandle( npc, timeMin, place );
+		if ( adopted ) return adopted;
+
+		return this.#postQuestNpc( npc, timeMin, place, player, fallbackAnchor );
+
+	}
+
+	#adoptQuestHandle( npc, timeMin, place ) {
+
 		const candidates = [ ...this.members.values() ]
-			.filter( ( member ) => ! member.copy && ! member.retiring && ! member.npcId && member.crowdId )
+			.filter( ( member ) => ! member.copy && ! member.retiring && ! member.fallen && ! member.npcId && member.crowdId )
 			.filter( ( member ) => member.type === npc.type && memberAt( member, place ) )
 			.sort( ( left, right ) => left.id.localeCompare( right.id ) );
 
@@ -454,11 +465,11 @@ export class Crowd {
 			const instance = this.sim.instantiate( member.crowdId, timeMin );
 			if ( ! instance ) continue;
 			identify( member, instance );
-			if ( instance.npcId === npcId ) return member;
+			if ( instance.npcId === npc.npcId ) return member;
 
 		}
 
-		return this.#postQuestNpc( npc, timeMin, place, player, fallbackAnchor );
+		return null;
 
 	}
 
@@ -968,6 +979,12 @@ function identify( member, instance ) {
 function memberAt( member, place ) {
 
 	if ( ! place ) return false;
+	if ( member.place?.id === place.id ) {
+
+		if ( member.place.kind === place.kind ) return true;
+		if ( member.place.kind === 'stop' && place.kind === 'station' ) return true;
+
+	}
 	if ( place.kind === 'parcel' ) return member.parcelId === place.id;
 	if ( place.kind === 'edge' ) return member.edge?.id === place.id;
 	return false;

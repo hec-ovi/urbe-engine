@@ -7,7 +7,7 @@ Status: the public continuity and follow API is wired into the live GameApp, Cro
 ## Inputs
 
 - Movement network: [schema/movement-network.schema.json](schema/movement-network.schema.json). `WalkRoutes` indexes `connections.networks.walk`; every movement edge must carry authoritative `path3`. Scheduled transit materialization also consumes the matching Connections route's ordered stops, timetable, service window and 3D shape.
-- Place anchors: [schema/places.schema.json](schema/places.schema.json). Optional loaded parcel and stop positions plus interior anchor ids, positions and headings.
+- Place anchors: [schema/places.schema.json](schema/places.schema.json). Optional loaded parcel and public transport stop positions plus interior anchor ids, positions and headings. Rail station ids use the simulation's `stop` place kind at the published platform level.
 - Appearance request: [schema/appearance-request.schema.json](schema/appearance-request.schema.json). One already-instanced npcId and current simulation time.
 - Unload request: [schema/unload-request.schema.json](schema/unload-request.schema.json). The materialized npcId whose body leaves the visible set.
 - Follow start: [schema/follow-start.schema.json](schema/follow-start.schema.json). One already-instanced, live `npcId`, simulation time and player position.
@@ -42,6 +42,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - `beginConversation(request)` preserves the body at the visible position and pauses its routine. `endConversation(request)` walks a dialogue-interrupted NPC back into the current schedule. A follower stays interrupted and returns to follow control when dialogue closes.
 - `updateVisible(request)` reprojects visible schedule-controlled actors each frame and marks distant ones invisible without discarding identity or schedule state.
 - `serialize()` and `restore(save)` preserve materialized body traits, world position, schedule progress and active interruption, explicit pose, or return state.
+- `Crowd.questMember` adopts an anonymous simulation handle when it resolves to the requested cast npcId, including with continuity enabled. `Crowd.syncActor` returns null while a body is fallen, so control and passenger projection fail closed.
 
 ## Errors
 
@@ -62,12 +63,13 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 ## Invariants
 
 - Named, focused and quest NPCs are keyed only by their actual npcId. A later statistical crowd handle cannot rename one or take its body.
+- One npcId owns one rendered body. Resolving a cast worker already present at a parcel post converts that body to continuity control without adding another body.
 - A measured physics impact freezes the exact rendered identity and removes it from interaction and pushback. A rejected impact restores its prior control state. Accepted dynamic body assembly belongs to the game physics contract.
 - Appearance comes from the instance's persistent `appearanceSeed`, including after unload, save restore and reappearance.
 - Scheduled and follow movement samples only Connections `path3`; flat compatibility paths never position a body.
 - Scheduled passenger transit uses the routine's exact route, board stop, alight stop and progress. Ordered duplicate stops select the shortest forward portion of the route shape, so return legs keep their direction and heading.
 - Follow speed is bounded and its stopping distance is deterministic. Explicit stop does not teleport the visible actor to its schedule.
-- Lead speed is bounded by the same Connections path. Passenger carry requires the exact active follower and route id.
+- Lead speed is bounded by the same Connections path. Passenger carry requires the exact active follower, route id and a successful non-fallen body projection.
 - Idle, walk, sprint and seated states select the corresponding audited clip. Crouch is selected only for an explicit crouch action.
 - Explicit crouch is cast and npcId controlled. Player C input, proximity, movement speed, dialogue, and quest step kind cannot start it.
 - An interior waiter, barista or vendor keeps the simulation type chosen for that post. The engine does not reinterpret an interior role as an unrelated type.
