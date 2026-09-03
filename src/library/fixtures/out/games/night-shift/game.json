@@ -1,0 +1,59 @@
+{
+  "contractVersion": "1.0.0",
+  "id": "night-shift",
+  "name": "Night Shift",
+  "cityId": "small",
+  "size": "small",
+  "theme": "cyberpunk",
+  "selectedInteriors": ["p2"],
+  "questBundle": {
+    "uri": "quests/questlines.json",
+    "mediaType": "application/json",
+    "byteSize": 3,
+    "checksum": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  },
+  "quests": [
+    {
+      "id": "find-signal",
+      "title": "Find the Signal",
+      "objective": "Reach the relay roof",
+      "state": "active",
+      "totalSteps": 3,
+      "completedSteps": ["reach-roof"],
+      "runtime": null
+    }
+  ],
+  "sideJobs": [
+    {
+      "id": "courier-run",
+      "title": "Courier Run",
+      "objective": "Deliver the sealed case",
+      "state": "available",
+      "totalSteps": 2,
+      "completedSteps": [],
+      "runtime": null
+    }
+  ],
+  "player": {
+    "position": { "x": 12, "y": 0.12, "z": -4 },
+    "heading": 1.5,
+    "inventory": [
+      {
+        "id": "access-card",
+        "name": "Access Card",
+        "quantity": 1,
+        "state": { "level": 2 }
+      }
+    ]
+  },
+  "currentLocation": { "id": "p2", "name": "Market Two" },
+  "discoveredLocations": [
+    { "id": "p2", "name": "Market Two" }
+  ],
+  "save": {
+    "revision": 1,
+    "createdAt": "2026-09-02T20:00:00Z",
+    "updatedAt": "2026-09-02T20:30:00Z",
+    "playTimeSeconds": 1800
+  }
+}

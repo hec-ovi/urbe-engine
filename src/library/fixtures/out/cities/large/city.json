@@ -1,0 +1,26 @@
+{
+  "contractVersion": "1.0.0",
+  "id": "large",
+  "name": "Large Urbe",
+  "size": "large",
+  "seed": "fixture-large",
+  "generatedAt": "2026-09-01T13:00:00Z",
+  "districtCount": 4,
+  "buildings": [
+    { "id": "p10", "label": "Market Ten", "type": "commerce", "eligible": true }
+  ],
+  "world": {
+    "manifest": {
+      "uri": "manifest.json",
+      "mediaType": "application/json",
+      "byteSize": 3,
+      "checksum": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "blueprint": {
+      "uri": "blueprint.json",
+      "mediaType": "application/json",
+      "byteSize": 3,
+      "checksum": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  }
+}

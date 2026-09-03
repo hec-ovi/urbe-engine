@@ -1,0 +1,27 @@
+{
+  "contractVersion": "1.0.0",
+  "id": "small",
+  "name": "Small Urbe",
+  "size": "small",
+  "seed": "fixture-small",
+  "generatedAt": "2026-09-01T12:00:00Z",
+  "districtCount": 2,
+  "buildings": [
+    { "id": "p2", "label": "Market Two", "type": "commerce", "eligible": true },
+    { "id": "p7", "label": "Tower Seven", "type": "offices", "eligible": true }
+  ],
+  "world": {
+    "manifest": {
+      "uri": "manifest.json",
+      "mediaType": "application/json",
+      "byteSize": 3,
+      "checksum": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "blueprint": {
+      "uri": "blueprint.json",
+      "mediaType": "application/json",
+      "byteSize": 3,
+      "checksum": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  }
+}
