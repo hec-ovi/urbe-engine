@@ -19,10 +19,11 @@
   - `sky/`: night sky, moon key, stars
   - `physics/`: Rapier world, colliders, player capsule
   - `player/`: input, first-person controller, interaction
-  - `agents/`: character assets, pose baking, crowd, and traffic on Connections' authoritative 3D walk, lane and turn paths
+  - `agents/`: character assets, pose baking, crowd, traffic, persistent NPC materialization and quest-follow control on Connections' authoritative 3D paths (src/game/agents/CONTRACT.md)
+  - `investigation/`: deterministic measured body, prop and fitted-decal scenes with exact authored evidence, reachable interaction points and save-safe discovery state (src/game/investigation/CONTRACT.md)
   - `quests/`: cast quest sessions, validated player actions, live target props and cast-person focus (src/game/quests/CONTRACT.md)
   - `routes/`: deterministic shortest objective routes to published parcel, station and stop entries over Connections' authoritative 3D walk graph (src/game/routes/CONTRACT.md)
-  - `sim/`: the simulation library host
+  - `sim/`: the simulation library host and exact NPC continuity pass-through (src/game/sim/CONTRACT.md)
   - `debug/`: the hitch log, and the renderer work (shader links, texture uploads) that explains a gap the world did not cause
   - `time/`, `world/`: game clock, the sun arc and the four sky states it drives, district and parcel lookup, map model for the minimap, named camera poses for the lighting tuning protocol
 
