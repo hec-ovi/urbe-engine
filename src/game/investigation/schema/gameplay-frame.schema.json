@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:investigation:gameplay-frame",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["timeMin", "playerPlaces", "feet", "eye", "look"],
+  "properties": {
+    "timeMin": { "type": "number", "minimum": 0 },
+    "playerPlaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id"],
+        "properties": {
+          "kind": { "enum": ["parcel", "district", "edge"] },
+          "id": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" }
+        }
+      }
+    },
+    "feet": { "$ref": "urn:urbe:engine:investigation:values#/$defs/vector3" },
+    "eye": { "$ref": "urn:urbe:engine:investigation:values#/$defs/vector3" },
+    "look": { "$ref": "urn:urbe:engine:investigation:values#/$defs/vector3" }
+  }
+}

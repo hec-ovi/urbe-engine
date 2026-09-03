@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.0",
+  "contractVersion": "1.1",
   "sceneId": "scene-service-road-9",
   "questId": "quest-route-collision",
   "seed": 901145,
@@ -7,9 +7,13 @@
     "family": "traffic-collision",
     "summary": "An authored maintenance-drone collision left a broken control module and one recorded tyre mark."
   },
+  "questBindings": [
+    { "stepId": "inspect-control-impact", "evidenceId": "control-module-impact", "place": { "districtId": "district-service-9" }, "completionAction": "inspect" },
+    { "stepId": "inspect-tyre-direction", "evidenceId": "tyre-direction", "place": { "districtId": "district-service-9" }, "completionAction": "inspect" }
+  ],
   "location": {
     "kind": "street",
-    "placeId": "edge-service-9",
+    "placeId": "district-service-9",
     "origin": { "x": -31, "y": 0.12, "z": 44 },
     "yawRadians": 0.35,
     "width": 12,
@@ -39,18 +43,62 @@
   "props": [
     {
       "entityId": "broken-control-module",
-      "asset": {
-        "assetId": "control-module-broken",
-        "uri": "asset://mission-props/control-module-broken",
-        "mediaType": "model/gltf-binary",
-        "byteSize": 131072,
-        "checksum": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
-        "groundContact": { "x": 0, "y": -0.11, "z": 0 }
+      "missionAsset": {
+        "contractVersion": "1.0",
+        "assetId": "investigation-control-module",
+        "purpose": "authored investigation evidence",
+        "family": "control-terminal",
+        "seed": 901145,
+        "variantId": "sloped",
+        "dimensions": { "width": 0.55, "height": 0.42, "depth": 0.32 },
+        "coordinateFrame": { "units": "meters", "upAxis": "+Y", "frontAxis": "+Z" },
+        "scale": { "x": 1, "y": 1, "z": 1 },
+        "pivot": { "x": 0, "y": 0, "z": 0 },
+        "groundContactOrigin": { "x": 0, "y": 0, "z": 0 },
+        "geometry": {
+          "bounds": { "min": { "x": -0.275, "y": 0, "z": -0.16 }, "max": { "x": 0.275, "y": 0.42, "z": 0.16 } },
+          "primitives": [
+            { "primitiveId": "terminal-pedestal", "kind": "box", "position": { "x": 0, "y": 0.147, "z": -0.032 }, "rotationRadians": { "x": 0, "y": 0, "z": 0 }, "size": { "width": 0.297, "height": 0.294, "depth": 0.1792 }, "materialSlot": "surface" },
+            { "primitiveId": "terminal-console", "kind": "box", "position": { "x": 0, "y": 0.357, "z": 0 }, "rotationRadians": { "x": 0, "y": 0, "z": 0 }, "size": { "width": 0.55, "height": 0.126, "depth": 0.32 }, "materialSlot": "surface" },
+            { "primitiveId": "terminal-display", "kind": "box", "position": { "x": 0, "y": 0.36204, "z": 0.1544 }, "rotationRadians": { "x": 0, "y": 0, "z": 0 }, "size": { "width": 0.396, "height": 0.06804, "depth": 0.0112 }, "materialSlot": "display" },
+            { "primitiveId": "terminal-controls", "kind": "box", "position": { "x": 0, "y": 0.3108, "z": 0.064 }, "rotationRadians": { "x": 0, "y": 0, "z": 0 }, "size": { "width": 0.308, "height": 0.0189, "depth": 0.0704 }, "materialSlot": "surface" }
+          ]
+        },
+        "materials": [
+          { "slot": "surface", "key": "cyberpunk/metal/mid", "variantId": "paint" },
+          { "slot": "display", "key": "cyberpunk/ad-screen/mid", "variantId": "noir-cyan" }
+        ],
+        "collision": {
+          "kind": "compound-aabb",
+          "bounds": { "min": { "x": -0.275, "y": 0, "z": -0.16 }, "max": { "x": 0.275, "y": 0.42, "z": 0.16 } },
+          "parts": [
+            { "partId": "collision-terminal-pedestal", "bounds": { "min": { "x": -0.1485, "y": 0, "z": -0.1216 }, "max": { "x": 0.1485, "y": 0.294, "z": 0.0576 } } },
+            { "partId": "collision-terminal-console", "bounds": { "min": { "x": -0.275, "y": 0.294, "z": -0.16 }, "max": { "x": 0.275, "y": 0.42, "z": 0.16 } } },
+            { "partId": "collision-terminal-display", "bounds": { "min": { "x": -0.198, "y": 0.32802, "z": 0.1488 }, "max": { "x": 0.198, "y": 0.39606, "z": 0.16 } } },
+            { "partId": "collision-terminal-controls", "bounds": { "min": { "x": -0.154, "y": 0.30135, "z": 0.0288 }, "max": { "x": 0.154, "y": 0.32025, "z": 0.0992 } } }
+          ]
+        },
+        "interactionAnchors": [
+          { "anchorId": "interaction-inspect", "interaction": "inspect", "position": { "x": 0, "y": 0.273, "z": 0.16 }, "forward": { "x": 0, "y": 0, "z": 1 }, "reachMeters": 0.625 },
+          { "anchorId": "interaction-access", "interaction": "access", "position": { "x": 0, "y": 0.273, "z": 0.16 }, "forward": { "x": 0, "y": 0, "z": 1 }, "reachMeters": 0.625 }
+        ],
+        "clearances": [
+          { "clearanceId": "clearance-approach", "purpose": "approach", "center": { "x": 0, "y": 1, "z": 0.76 }, "dimensions": { "width": 1.15, "height": 2, "depth": 1.2 }, "rotationRadians": { "x": 0, "y": 0, "z": 0 } },
+          { "clearanceId": "clearance-access", "purpose": "access", "center": { "x": 0, "y": 1, "z": 0.76 }, "dimensions": { "width": 1.15, "height": 2, "depth": 1.2 }, "rotationRadians": { "x": 0, "y": 0, "z": 0 } }
+        ],
+        "portable": false,
+        "payloadRef": {
+          "uri": "urn:urbe:mission-asset:investigation-control-module:0aeabe9b56b1252cfb49f2cccb758293d7d39d71764be3c8272439a9858d9007",
+          "mediaType": "application/vnd.urbe.mission-asset+json",
+          "byteSize": 2828,
+          "checksum": "sha256:0aeabe9b56b1252cfb49f2cccb758293d7d39d71764be3c8272439a9858d9007"
+        }
       },
-      "dimensions": { "width": 0.55, "height": 0.22, "depth": 0.42 },
+      "dimensions": { "width": 0.55, "height": 0.42, "depth": 0.32 },
       "placement": { "zone": "center" },
       "materials": [
-        { "slot": "case", "key": "cyberpunk/metal/poor", "variantId": "service" }
+        { "slot": "surface", "key": "cyberpunk/metal/mid", "variantId": "paint" },
+        { "slot": "display", "key": "cyberpunk/ad-screen/mid", "variantId": "noir-cyan" }
       ],
       "portable": false,
       "evidenceId": "control-module-impact"

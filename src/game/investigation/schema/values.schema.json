@@ -80,6 +80,44 @@
         "groundContact": { "$ref": "#/$defs/vector3" }
       }
     },
+    "animationRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uri", "mediaType", "byteSize", "checksum"],
+      "properties": {
+        "uri": { "type": "string", "minLength": 1 },
+        "mediaType": { "enum": ["model/gltf-binary", "model/gltf+json"] },
+        "byteSize": { "type": "integer", "minimum": 1 },
+        "checksum": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      }
+    },
+    "questPlace": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["parcelId"],
+          "properties": { "parcelId": { "$ref": "#/$defs/id" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["districtId"],
+          "properties": { "districtId": { "$ref": "#/$defs/id" } }
+        }
+      ]
+    },
+    "questBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stepId", "evidenceId", "place", "completionAction"],
+      "properties": {
+        "stepId": { "$ref": "#/$defs/id" },
+        "evidenceId": { "$ref": "#/$defs/id" },
+        "place": { "$ref": "#/$defs/questPlace" },
+        "completionAction": { "enum": ["inspect", "take"] }
+      }
+    },
     "material": {
       "type": "object",
       "additionalProperties": false,
@@ -110,6 +148,8 @@
         "asset": { "$ref": "#/$defs/assetRef" },
         "dimensions": { "$ref": "#/$defs/dimensions" },
         "poseId": { "$ref": "#/$defs/id" },
+        "animationAsset": { "$ref": "#/$defs/animationRef" },
+        "sourceMaterialPolicy": { "const": "original-source-textures" },
         "placement": { "$ref": "#/$defs/placementHint" },
         "materials": {
           "type": "array",
@@ -122,10 +162,11 @@
     "prop": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["entityId", "asset", "dimensions", "placement", "materials", "portable"],
+      "required": ["entityId", "dimensions", "placement", "materials", "portable"],
       "properties": {
         "entityId": { "$ref": "#/$defs/id" },
         "asset": { "$ref": "#/$defs/assetRef" },
+        "missionAsset": { "$ref": "urn:urbe:mission-assets:asset-assembly" },
         "dimensions": { "$ref": "#/$defs/dimensions" },
         "placement": { "$ref": "#/$defs/placementHint" },
         "materials": {
@@ -135,7 +176,19 @@
         },
         "portable": { "type": "boolean" },
         "evidenceId": { "$ref": "#/$defs/id" }
-      }
+      },
+      "oneOf": [
+        {
+          "properties": { "asset": {}, "missionAsset": {} },
+          "required": ["asset"],
+          "not": { "properties": { "missionAsset": {} }, "required": ["missionAsset"] }
+        },
+        {
+          "properties": { "asset": {}, "missionAsset": {} },
+          "required": ["missionAsset"],
+          "not": { "properties": { "asset": {} }, "required": ["asset"] }
+        }
+      ]
     },
     "decal": {
       "type": "object",
@@ -222,13 +275,16 @@
     "entityPlacement": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["entityId", "role", "asset", "dimensions", "transform", "footprint", "materials", "blocksMovement"],
+      "required": ["entityId", "role", "dimensions", "transform", "footprint", "materials", "blocksMovement"],
       "properties": {
         "entityId": { "$ref": "#/$defs/id" },
         "role": { "enum": ["body", "prop"] },
         "asset": { "$ref": "#/$defs/assetRef" },
+        "missionAsset": { "$ref": "urn:urbe:mission-assets:asset-assembly" },
         "dimensions": { "$ref": "#/$defs/dimensions" },
         "poseId": { "$ref": "#/$defs/id" },
+        "animationAsset": { "$ref": "#/$defs/animationRef" },
+        "sourceMaterialPolicy": { "const": "original-source-textures" },
         "transform": {
           "type": "object",
           "additionalProperties": false,
@@ -247,7 +303,19 @@
         "blocksMovement": { "type": "boolean" },
         "portable": { "type": "boolean" },
         "evidenceId": { "$ref": "#/$defs/id" }
-      }
+      },
+      "oneOf": [
+        {
+          "properties": { "asset": {}, "missionAsset": {} },
+          "required": ["asset"],
+          "not": { "properties": { "missionAsset": {} }, "required": ["missionAsset"] }
+        },
+        {
+          "properties": { "asset": {}, "missionAsset": {} },
+          "required": ["missionAsset"],
+          "not": { "properties": { "asset": {} }, "required": ["asset"] }
+        }
+      ]
     },
     "decalPlacement": {
       "type": "object",

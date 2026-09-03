@@ -1,5 +1,6 @@
 import { InvestigationBoundary } from './InvestigationBoundary.js';
 import { InvestigationError } from './InvestigationError.js';
+import { assertProductionBody } from './ProductionMedia.js';
 
 const ENTITY_GAP = 0.12;
 const PLAYER_RADIUS = 0.35;
@@ -56,11 +57,12 @@ export class SceneAssembler {
 		} );
 
 		return this.boundary.output( 'scene-assembly', {
-			contractVersion: '1.0',
+			contractVersion: request.contractVersion,
 			sceneId: request.sceneId,
 			questId: request.questId,
 			seed: request.seed,
 			incident: structuredClone( request.incident ),
+			...( request.questBindings ? { questBindings: structuredClone( request.questBindings ) } : {} ),
 			location: { kind: request.location.kind, placeId: request.location.placeId },
 			entities,
 			decals,
@@ -80,6 +82,7 @@ function validateScene( request ) {
 	for ( const id of decalIds ) if ( entityIds.has( id ) ) geometryError( `duplicate visual entity id ${id}` );
 
 	const evidenceIds = unique( request.evidence.map( ( item ) => item.evidenceId ), 'evidence' );
+	if ( request.contractVersion === '1.1' ) validateQuestBindings( request, evidenceIds );
 	const surfaceIds = unique( request.location.receivingSurfaces.map( ( item ) => item.surfaceId ), 'surface' );
 	unique( request.location.entries.map( ( item ) => item.entryId ), 'entry' );
 	unique( request.location.blockedZones.map( ( item ) => item.blockerId ), 'blocker' );
@@ -93,9 +96,28 @@ function validateScene( request ) {
 	for ( const entity of [ ...request.bodies, ...request.props ] ) {
 
 		unique( entity.materials.map( ( material ) => material.slot ), `material slot on ${entity.entityId}` );
+		if ( entity.missionAsset ) validateMissionAssetProp( entity );
 		const near = entity.placement.nearEntityId;
 		if ( near && ! entityIds.has( near ) ) geometryError( `${entity.entityId} references unknown near entity ${near}` );
 		if ( near === entity.entityId ) geometryError( `${entity.entityId} cannot be near itself` );
+
+	}
+	if ( request.contractVersion === '1.1' ) {
+
+		for ( const body of request.bodies ) {
+
+			try {
+
+				assertProductionBody( body );
+
+			} catch ( error ) {
+
+				geometryError( error.message );
+
+			}
+
+		}
+		for ( const prop of request.props ) if ( ! prop.missionAsset ) geometryError( `${prop.entityId} is not a mission asset assembly` );
 
 	}
 
@@ -150,6 +172,45 @@ function validateScene( request ) {
 	}
 	unique( transitionIds, 'transition' );
 	assertAcyclicEvidence( request.evidence );
+
+}
+
+function validateQuestBindings( request, evidenceIds ) {
+
+	const steps = unique( request.questBindings.map( ( binding ) => binding.stepId ), 'quest binding step' );
+	const boundEvidence = unique( request.questBindings.map( ( binding ) => binding.evidenceId ), 'quest binding evidence' );
+	if ( steps.size !== request.questBindings.length || boundEvidence.size !== request.questBindings.length ) {
+
+		geometryError( 'quest bindings must be one-to-one by step and evidence' );
+
+	}
+	for ( const evidenceId of evidenceIds ) if ( ! boundEvidence.has( evidenceId ) ) geometryError( `evidence ${evidenceId} has no quest binding` );
+	for ( const binding of request.questBindings ) {
+
+		if ( ! evidenceIds.has( binding.evidenceId ) ) geometryError( `quest binding references unknown evidence ${binding.evidenceId}` );
+		const placeId = binding.place.parcelId ?? binding.place.districtId;
+		if ( placeId !== request.location.placeId ) geometryError( `quest binding ${binding.stepId} does not match scene place ${request.location.placeId}` );
+		const evidence = request.evidence.find( ( item ) => item.evidenceId === binding.evidenceId );
+		if ( binding.completionAction === 'take' && ! evidence.portable ) geometryError( `quest binding ${binding.stepId} takes non-portable evidence` );
+
+	}
+
+}
+
+function validateMissionAssetProp( entity ) {
+
+	const asset = entity.missionAsset;
+	if ( JSON.stringify( entity.dimensions ) !== JSON.stringify( asset.dimensions ) ) {
+
+		geometryError( `${entity.entityId} dimensions differ from mission asset ${asset.assetId}` );
+
+	}
+	if ( entity.portable !== asset.portable ) geometryError( `${entity.entityId} portability differs from mission asset ${asset.assetId}` );
+	if ( JSON.stringify( entity.materials ) !== JSON.stringify( asset.materials ) ) {
+
+		geometryError( `${entity.entityId} materials differ from mission asset ${asset.assetId}` );
+
+	}
 
 }
 
@@ -327,18 +388,22 @@ function publicEntity( location, entity ) {
 
 	const contact = localToWorld( location, entity.localFootprint.center );
 	const yaw = normalizeRadians( location.yawRadians + entity.localYaw );
-	const ground = rotate2( { x: entity.asset.groundContact.x, z: entity.asset.groundContact.z }, yaw );
+	const groundContact = entity.asset?.groundContact ?? entity.missionAsset.groundContactOrigin;
+	const ground = rotate2( { x: groundContact.x, z: groundContact.z }, yaw );
 	const origin = {
 		x: round( contact.x - ground.x ),
-		y: round( location.origin.y - entity.asset.groundContact.y ),
+		y: round( location.origin.y - groundContact.y ),
 		z: round( contact.z - ground.z )
 	};
 	return {
 		entityId: entity.entityId,
 		role: entity.role,
-		asset: structuredClone( entity.asset ),
+		...( entity.asset ? { asset: structuredClone( entity.asset ) } : {} ),
+		...( entity.missionAsset ? { missionAsset: structuredClone( entity.missionAsset ) } : {} ),
 		dimensions: structuredClone( entity.dimensions ),
 		...( entity.poseId ? { poseId: entity.poseId } : {} ),
+		...( entity.animationAsset ? { animationAsset: structuredClone( entity.animationAsset ) } : {} ),
+		...( entity.sourceMaterialPolicy ? { sourceMaterialPolicy: entity.sourceMaterialPolicy } : {} ),
 		transform: { position: origin, yawRadians: yaw },
 		footprint: {
 			center: { x: contact.x, z: contact.z },

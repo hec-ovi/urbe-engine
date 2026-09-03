@@ -1,15 +1,20 @@
 {
-  "contractVersion": "1.0",
+  "contractVersion": "1.1",
   "sceneId": "scene-apartment-47",
   "questId": "quest-missing-courier",
   "seed": 774311,
   "incident": {
     "family": "homicide",
-    "summary": "A courier was killed beside a damaged service chair; the blood direction and dropped access card are authored evidence."
+    "summary": "A courier was killed beside a dropped access drive; the body position and blood direction are authored evidence."
   },
+  "questBindings": [
+    { "stepId": "inspect-body-position", "evidenceId": "body-position", "place": { "parcelId": "p47" }, "completionAction": "inspect" },
+    { "stepId": "inspect-blood-direction", "evidenceId": "blood-direction", "place": { "parcelId": "p47" }, "completionAction": "inspect" },
+    { "stepId": "take-access-drive", "evidenceId": "access-card", "place": { "parcelId": "p47" }, "completionAction": "take" }
+  ],
   "location": {
     "kind": "interior",
-    "placeId": "parcel-p47-floor-0-room-2",
+    "placeId": "p47",
     "origin": { "x": 10, "y": 2.4, "z": 20 },
     "yawRadians": 0,
     "width": 8,
@@ -40,15 +45,22 @@
     {
       "entityId": "courier-body",
       "asset": {
-        "assetId": "regular-female-courier-static",
-        "uri": "asset://characters/regular-female",
+        "assetId": "source-regular-female-full-body",
+        "uri": "/models/universal-base-characters-source/Regular_Female_FullBody.gltf",
         "mediaType": "model/gltf+json",
-        "byteSize": 1048576,
-        "checksum": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "byteSize": 30959,
+        "checksum": "sha256:d952b4e9d782533a837071ec23f25599232f033d3b01d257f280dbf6c917220a",
         "groundContact": { "x": 0, "y": 0, "z": 0 }
       },
       "dimensions": { "width": 0.72, "height": 0.4, "depth": 1.82 },
-      "poseId": "body-side-static",
+      "poseId": "Death02",
+      "animationAsset": {
+        "uri": "/models/universal-animation-library-pro/UAL1.glb",
+        "mediaType": "model/gltf-binary",
+        "byteSize": 21378992,
+        "checksum": "sha256:d1cb4537efa4c06a953ca951e5935062f88c2580ac68e45045592d587bddb43d"
+      },
+      "sourceMaterialPolicy": "original-source-textures",
       "placement": { "zone": "center", "preferredYawRadians": 1.5707963267948966 },
       "materials": [
         { "slot": "clothing", "key": "cyberpunk/fabric/mid" }
@@ -59,39 +71,62 @@
   "props": [
     {
       "entityId": "dropped-access-card",
-      "asset": {
-        "assetId": "access-card-a",
-        "uri": "asset://mission-props/access-card-a",
-        "mediaType": "model/gltf-binary",
-        "byteSize": 32768,
-        "checksum": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-        "groundContact": { "x": 0, "y": -0.01, "z": 0 }
+      "missionAsset": {
+        "contractVersion": "1.0",
+        "assetId": "investigation-access-drive",
+        "purpose": "authored investigation evidence",
+        "family": "data-drive",
+        "seed": 774311,
+        "variantId": "block",
+        "dimensions": { "width": 0.09, "height": 0.02, "depth": 0.055 },
+        "coordinateFrame": { "units": "meters", "upAxis": "+Y", "frontAxis": "+Z" },
+        "scale": { "x": 1, "y": 1, "z": 1 },
+        "pivot": { "x": 0, "y": 0, "z": 0 },
+        "groundContactOrigin": { "x": 0, "y": 0, "z": 0 },
+        "geometry": {
+          "bounds": { "min": { "x": -0.045, "y": 0, "z": -0.0275 }, "max": { "x": 0.045, "y": 0.02, "z": 0.0275 } },
+          "primitives": [
+            { "primitiveId": "drive-shell", "kind": "box", "position": { "x": -0.0126, "y": 0.01, "z": 0 }, "rotationRadians": { "x": 0, "y": 0, "z": 0 }, "size": { "width": 0.0648, "height": 0.02, "depth": 0.055 }, "materialSlot": "surface" },
+            { "primitiveId": "drive-connector", "kind": "box", "position": { "x": 0.0324, "y": 0.01, "z": 0 }, "rotationRadians": { "x": 0, "y": 0, "z": 0 }, "size": { "width": 0.0252, "height": 0.0116, "depth": 0.0385 }, "materialSlot": "accent" },
+            { "primitiveId": "drive-ridge", "kind": "box", "position": { "x": -0.0108, "y": 0.0192, "z": 0 }, "rotationRadians": { "x": 0, "y": 0, "z": 0 }, "size": { "width": 0.0378, "height": 0.0016, "depth": 0.055 }, "materialSlot": "surface" }
+          ]
+        },
+        "materials": [
+          { "slot": "surface", "key": "cyberpunk/metal/mid", "variantId": "paint" },
+          { "slot": "accent", "key": "cyberpunk/plastic/poor", "variantId": "bag" }
+        ],
+        "collision": {
+          "kind": "compound-aabb",
+          "bounds": { "min": { "x": -0.045, "y": 0, "z": -0.0275 }, "max": { "x": 0.045, "y": 0.02, "z": 0.0275 } },
+          "parts": [
+            { "partId": "collision-drive-shell", "bounds": { "min": { "x": -0.045, "y": 0, "z": -0.0275 }, "max": { "x": 0.0198, "y": 0.02, "z": 0.0275 } } },
+            { "partId": "collision-drive-connector", "bounds": { "min": { "x": 0.0198, "y": 0.0042, "z": -0.01925 }, "max": { "x": 0.045, "y": 0.0158, "z": 0.01925 } } },
+            { "partId": "collision-drive-ridge", "bounds": { "min": { "x": -0.0297, "y": 0.0184, "z": -0.0275 }, "max": { "x": 0.0081, "y": 0.02, "z": 0.0275 } } }
+          ]
+        },
+        "interactionAnchors": [
+          { "anchorId": "interaction-inspect", "interaction": "inspect", "position": { "x": 0, "y": 0.013000000000000001, "z": 0.0275 }, "forward": { "x": 0, "y": 0, "z": 1 }, "reachMeters": 0.5 },
+          { "anchorId": "interaction-take", "interaction": "take", "position": { "x": 0, "y": 0.013000000000000001, "z": 0.0275 }, "forward": { "x": 0, "y": 0, "z": 1 }, "reachMeters": 0.5 }
+        ],
+        "clearances": [
+          { "clearanceId": "clearance-approach", "purpose": "approach", "center": { "x": 0, "y": 1, "z": 0.6275 }, "dimensions": { "width": 0.8, "height": 2, "depth": 1.2 }, "rotationRadians": { "x": 0, "y": 0, "z": 0 } }
+        ],
+        "portable": true,
+        "payloadRef": {
+          "uri": "urn:urbe:mission-asset:investigation-access-drive:7b827f6aedc251b903ba8f7b1759be1ec9bf430dcbf889dbf33e370d492ab175",
+          "mediaType": "application/vnd.urbe.mission-asset+json",
+          "byteSize": 2320,
+          "checksum": "sha256:7b827f6aedc251b903ba8f7b1759be1ec9bf430dcbf889dbf33e370d492ab175"
+        }
       },
       "dimensions": { "width": 0.09, "height": 0.02, "depth": 0.055 },
       "placement": { "zone": "incident", "nearEntityId": "courier-body", "maxDistanceMeters": 1.25 },
       "materials": [
-        { "slot": "casing", "key": "cyberpunk/metal/mid", "variantId": "paint" }
+        { "slot": "surface", "key": "cyberpunk/metal/mid", "variantId": "paint" },
+        { "slot": "accent", "key": "cyberpunk/plastic/poor", "variantId": "bag" }
       ],
       "portable": true,
       "evidenceId": "access-card"
-    },
-    {
-      "entityId": "damaged-service-chair",
-      "asset": {
-        "assetId": "service-chair-damaged",
-        "uri": "asset://furniture/service-chair-damaged",
-        "mediaType": "model/gltf-binary",
-        "byteSize": 262144,
-        "checksum": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
-        "groundContact": { "x": 0, "y": -0.42, "z": 0 }
-      },
-      "dimensions": { "width": 0.7, "height": 0.85, "depth": 0.72 },
-      "placement": { "zone": "incident", "nearEntityId": "courier-body", "maxDistanceMeters": 2 },
-      "materials": [
-        { "slot": "frame", "key": "cyberpunk/metal/poor", "variantId": "paint" },
-        { "slot": "seat", "key": "cyberpunk/fabric/poor", "variantId": "flat" }
-      ],
-      "portable": false
     }
   ],
   "decals": [
@@ -111,7 +146,7 @@
       "evidenceId": "body-position",
       "factId": "courier-moved-after-impact",
       "label": "Courier's position",
-      "description": "The authored pose shows that the courier came to rest beside the service chair.",
+      "description": "The authored final pose shows where the courier came to rest.",
       "portable": false,
       "requiresInspection": false,
       "prerequisiteEvidenceIds": [],
@@ -127,7 +162,7 @@
       "evidenceId": "blood-direction",
       "factId": "impact-near-service-chair",
       "label": "Directional blood stain",
-      "description": "The authored stain direction runs from the damaged chair toward the body.",
+      "description": "The authored stain direction runs toward the body.",
       "portable": false,
       "requiresInspection": false,
       "prerequisiteEvidenceIds": ["body-position"],

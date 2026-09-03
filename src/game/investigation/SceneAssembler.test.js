@@ -36,7 +36,8 @@ describe( 'SceneAssembler', () => {
 			};
 			expect( rectsOverlap( { ...entity.footprint, center: local }, blocked, 0.12 ) ).toBe( false );
 			expect( circleHitsRect( entry.position, entry.clearanceRadius, { ...entity.footprint, center: local } ) ).toBe( false );
-			const expectedY = interior.location.origin.y - entity.asset.groundContact.y;
+			const contact = entity.asset?.groundContact ?? entity.missionAsset.groundContactOrigin;
+			const expectedY = interior.location.origin.y - contact.y;
 			expect( entity.transform.position.y ).toBeCloseTo( expectedY, 6 );
 
 		}
@@ -72,7 +73,7 @@ describe( 'SceneAssembler', () => {
 
 		const result = new SceneAssembler().assemble( street );
 
-		expect( result.location ).toEqual( { kind: 'street', placeId: 'edge-service-9' } );
+		expect( result.location ).toEqual( { kind: 'street', placeId: 'district-service-9' } );
 		for ( const target of result.targets ) {
 
 			const local = worldToLocal( target.approachPoint, street.location );
@@ -124,7 +125,7 @@ describe( 'SceneAssembler', () => {
 		} ) );
 
 		const duplicate = structuredClone( interior );
-		duplicate.props[ 1 ].evidenceId = 'body-position';
+		duplicate.props[ 0 ].evidenceId = 'body-position';
 		expect( () => new SceneAssembler().assemble( duplicate ) ).toThrow( /more than one visual/ );
 
 	} );

@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["contractVersion", "sceneId", "questId", "seed", "incident", "location", "entities", "decals", "evidence", "targets", "initialState"],
   "properties": {
-    "contractVersion": { "const": "1.0" },
+    "contractVersion": { "enum": ["1.0", "1.1"] },
     "sceneId": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
     "questId": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
     "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
@@ -17,6 +17,11 @@
         "family": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
         "summary": { "$ref": "urn:urbe:engine:investigation:values#/$defs/text" }
       }
+    },
+    "questBindings": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "urn:urbe:engine:investigation:values#/$defs/questBinding" }
     },
     "location": {
       "type": "object",
@@ -46,5 +51,17 @@
       "items": { "$ref": "urn:urbe:engine:investigation:values#/$defs/interactionTarget" }
     },
     "initialState": { "$ref": "urn:urbe:engine:investigation:values#/$defs/sceneState" }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "contractVersion": { "const": "1.1" } },
+        "required": ["contractVersion"]
+      },
+      "then": {
+        "properties": { "questBindings": {} },
+        "required": ["questBindings"]
+      }
+    }
+  ]
 }

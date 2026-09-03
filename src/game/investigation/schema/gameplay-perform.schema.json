@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:investigation:gameplay-perform",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["targetKey", "bindingAction", "timeMin"],
+  "properties": {
+    "targetKey": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
+    "bindingAction": { "enum": ["interact", "secondary-interact"] },
+    "timeMin": { "type": "number", "minimum": 0 }
+  }
+}

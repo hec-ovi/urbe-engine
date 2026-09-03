@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:investigation:scene-requests",
+  "type": "array",
+  "items": { "$ref": "urn:urbe:engine:investigation:scene-request" }
+}

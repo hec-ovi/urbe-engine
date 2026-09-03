@@ -17,4 +17,6 @@ const result = runtime.perform( {
 } );
 ```
 
-`fixtures/interior-incident.json` covers a body, a fitted floor decal and portable evidence. `fixtures/street-incident.json` covers a rotated street frame. The model URIs are contract examples; production requests must carry real creator-owned URI, checksum and size metadata. Dedicated blood and tyre-transfer materials are required at the fixture keys `cyberpunk/incident-blood/mid` and `cyberpunk/incident-tyre/poor`.
+Live play loads version 1.1 requests through `InvestigationGameplay.create`, which checks every quest binding, renders the scene, applies E/R interactions, and serializes scene state for catalog saves.
+
+`fixtures/interior-incident.json` uses the installed Source female body, the audited Pro `Death02` final pose, a generated data-drive assembly, and a fitted blood decal. `fixtures/street-incident.json` uses a generated control-terminal assembly and fitted tyre-transfer decal in a rotated street frame. Both fixtures carry production media references and exact quest bindings.

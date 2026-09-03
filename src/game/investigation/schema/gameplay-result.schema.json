@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:investigation:gameplay-result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "targetKey", "action", "progressed", "message", "sceneId", "evidenceId", "completed", "sceneEvents", "worldChanges"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "targetKey": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
+    "action": { "enum": ["inspect", "take"] },
+    "progressed": { "type": "boolean" },
+    "message": { "$ref": "urn:urbe:engine:investigation:values#/$defs/text" },
+    "code": { "enum": ["unknown-target", "wrong-scene", "wrong-action", "prerequisite", "not-visible", "occluded", "out-of-reach", "inspect-first", "already-resolved"] },
+    "sceneId": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
+    "evidenceId": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
+    "completed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["questId", "stepIds", "presentation"],
+        "properties": {
+          "questId": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
+          "stepIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" } },
+          "endingId": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
+          "presentation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["title", "steps"],
+            "properties": {
+              "title": { "$ref": "urn:urbe:engine:investigation:values#/$defs/text" },
+              "steps": { "type": "array", "minItems": 1, "items": { "$ref": "urn:urbe:engine:investigation:values#/$defs/text" } },
+              "ending": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["title", "text", "outcome"],
+                "properties": {
+                  "title": { "$ref": "urn:urbe:engine:investigation:values#/$defs/text" },
+                  "text": { "$ref": "urn:urbe:engine:investigation:values#/$defs/text" },
+                  "outcome": { "const": "done" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "sceneEvents": { "$ref": "urn:urbe:engine:investigation:interaction-result#/properties/events" },
+    "worldChanges": { "$ref": "urn:urbe:engine:investigation:interaction-result#/properties/worldChanges" }
+  }
+}
