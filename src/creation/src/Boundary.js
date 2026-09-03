@@ -16,6 +16,8 @@ export class Boundary {
 		for ( const url of [
 			new URL( '../../game/agents/schema/values.schema.json', import.meta.url ),
 			new URL( '../../game/agents/schema/continuity-save.schema.json', import.meta.url ),
+			new URL( '../../game/quests/schema/values.schema.json', import.meta.url ),
+			new URL( '../../game/quests/schema/transit-state.schema.json', import.meta.url ),
 			new URL( '../../../../simulation/src/schemas/simulation-save.schema.json', import.meta.url ),
 			new URL( '../../library/schema/npc-state.schema.json', import.meta.url )
 		] ) ajv.addSchema( JSON.parse( readFileSync( url, 'utf8' ) ) );
