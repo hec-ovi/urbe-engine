@@ -1,0 +1,38 @@
+{
+  "contractVersion": "1.0",
+  "entries": [
+    {
+      "key": "cyberpunk/metal/mid",
+      "variants": ["paint", "zinc"]
+    },
+    {
+      "key": "cyberpunk/wood/mid",
+      "variants": ["1", "2"]
+    },
+    {
+      "key": "cyberpunk/fabric/mid",
+      "variants": ["1", "2", "flat"]
+    },
+    {
+      "key": "cyberpunk/rubber/mid",
+      "variants": ["1", "2"]
+    },
+    {
+      "key": "cyberpunk/glass/mid",
+      "variants": ["1", "2"]
+    },
+    {
+      "key": "cyberpunk/ad-screen/mid",
+      "variants": ["noir-cyan"]
+    },
+    {
+      "key": "cyberpunk/plastic/poor",
+      "aliases": [
+        "cyberpunk/plastic/mid",
+        "cyberpunk/plastic/rich",
+        "cyberpunk/plastic/high_rich"
+      ],
+      "variants": ["bag"]
+    }
+  ]
+}

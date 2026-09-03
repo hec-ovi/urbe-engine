@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:mission-assets:registry-query",
+  "title": "Mission asset registry query",
+  "type": "object",
+  "required": ["contractVersion"],
+  "additionalProperties": false,
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "family": { "$ref": "urn:urbe:mission-assets:values#/$defs/family" },
+    "interaction": { "$ref": "urn:urbe:mission-assets:values#/$defs/interaction" }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:mission-assets:registry-result",
+  "title": "Mission asset registry result",
+  "type": "object",
+  "required": ["contractVersion", "assets"],
+  "additionalProperties": false,
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "assets": {
+      "type": "array",
+      "items": { "$ref": "urn:urbe:mission-assets:asset-assembly" }
+    }
+  }
+}

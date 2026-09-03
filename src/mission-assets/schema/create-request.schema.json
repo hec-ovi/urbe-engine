@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:mission-assets:create-request",
+  "title": "Mission asset create request",
+  "type": "object",
+  "required": [
+    "contractVersion",
+    "assetId",
+    "purpose",
+    "family",
+    "dimensions",
+    "materials",
+    "requiredInteractions",
+    "clearance",
+    "seed"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "assetId": { "$ref": "urn:urbe:mission-assets:values#/$defs/assetId" },
+    "purpose": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "family": { "$ref": "urn:urbe:mission-assets:values#/$defs/family" },
+    "dimensions": { "$ref": "urn:urbe:mission-assets:values#/$defs/dimensions" },
+    "materials": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 6,
+      "items": { "$ref": "urn:urbe:mission-assets:values#/$defs/materialAssignment" }
+    },
+    "requiredInteractions": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "urn:urbe:mission-assets:values#/$defs/interaction" }
+    },
+    "clearance": {
+      "type": "object",
+      "required": ["approachDepth", "sideMargin", "overhead"],
+      "additionalProperties": false,
+      "properties": {
+        "approachDepth": { "type": "number", "minimum": 0.5, "maximum": 4 },
+        "sideMargin": { "type": "number", "minimum": 0.1, "maximum": 2 },
+        "overhead": { "type": "number", "minimum": 0.05, "maximum": 3 }
+      }
+    },
+    "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+  }
+}

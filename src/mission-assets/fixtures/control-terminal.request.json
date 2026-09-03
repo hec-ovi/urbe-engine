@@ -1,0 +1,30 @@
+{
+  "contractVersion": "1.0",
+  "assetId": "terminal.archive-west",
+  "purpose": "Authored archive access and evidence retrieval terminal",
+  "family": "control-terminal",
+  "dimensions": {
+    "width": 0.9,
+    "height": 1.35,
+    "depth": 0.55
+  },
+  "materials": [
+    {
+      "slot": "surface",
+      "key": "cyberpunk/metal/mid",
+      "variantId": "paint"
+    },
+    {
+      "slot": "display",
+      "key": "cyberpunk/ad-screen/mid",
+      "variantId": "noir-cyan"
+    }
+  ],
+  "requiredInteractions": ["inspect", "access", "hack"],
+  "clearance": {
+    "approachDepth": 1.1,
+    "sideMargin": 0.3,
+    "overhead": 0.2
+  },
+  "seed": 42017
+}

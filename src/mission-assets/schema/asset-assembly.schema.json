@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:mission-assets:asset-assembly",
+  "title": "Mission asset assembly",
+  "type": "object",
+  "required": [
+    "contractVersion",
+    "assetId",
+    "purpose",
+    "family",
+    "seed",
+    "variantId",
+    "dimensions",
+    "coordinateFrame",
+    "scale",
+    "pivot",
+    "groundContactOrigin",
+    "geometry",
+    "materials",
+    "collision",
+    "interactionAnchors",
+    "clearances",
+    "portable",
+    "payloadRef"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "assetId": { "$ref": "urn:urbe:mission-assets:values#/$defs/assetId" },
+    "purpose": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "family": { "$ref": "urn:urbe:mission-assets:values#/$defs/family" },
+    "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "variantId": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "dimensions": { "$ref": "urn:urbe:mission-assets:values#/$defs/dimensions" },
+    "coordinateFrame": {
+      "type": "object",
+      "required": ["units", "upAxis", "frontAxis"],
+      "additionalProperties": false,
+      "properties": {
+        "units": { "const": "meters" },
+        "upAxis": { "const": "+Y" },
+        "frontAxis": { "const": "+Z" }
+      }
+    },
+    "scale": { "$ref": "urn:urbe:mission-assets:values#/$defs/vector3" },
+    "pivot": { "$ref": "urn:urbe:mission-assets:values#/$defs/vector3" },
+    "groundContactOrigin": { "$ref": "urn:urbe:mission-assets:values#/$defs/vector3" },
+    "geometry": {
+      "type": "object",
+      "required": ["bounds", "primitives"],
+      "additionalProperties": false,
+      "properties": {
+        "bounds": { "$ref": "urn:urbe:mission-assets:values#/$defs/bounds" },
+        "primitives": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["primitiveId", "kind", "position", "rotationRadians", "size", "materialSlot"],
+            "additionalProperties": false,
+            "properties": {
+              "primitiveId": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+              "kind": { "const": "box" },
+              "position": { "$ref": "urn:urbe:mission-assets:values#/$defs/vector3" },
+              "rotationRadians": { "$ref": "urn:urbe:mission-assets:values#/$defs/vector3" },
+              "size": { "$ref": "urn:urbe:mission-assets:values#/$defs/dimensions" },
+              "materialSlot": {
+                "enum": ["surface", "accent", "display", "upholstery", "grip", "seal"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "materials": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 6,
+      "items": { "$ref": "urn:urbe:mission-assets:values#/$defs/materialAssignment" }
+    },
+    "collision": {
+      "type": "object",
+      "required": ["kind", "bounds", "parts"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "compound-aabb" },
+        "bounds": { "$ref": "urn:urbe:mission-assets:values#/$defs/bounds" },
+        "parts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["partId", "bounds"],
+            "additionalProperties": false,
+            "properties": {
+              "partId": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+              "bounds": { "$ref": "urn:urbe:mission-assets:values#/$defs/bounds" }
+            }
+          }
+        }
+      }
+    },
+    "interactionAnchors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["anchorId", "interaction", "position", "forward", "reachMeters"],
+        "additionalProperties": false,
+        "properties": {
+          "anchorId": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "interaction": { "$ref": "urn:urbe:mission-assets:values#/$defs/interaction" },
+          "position": { "$ref": "urn:urbe:mission-assets:values#/$defs/vector3" },
+          "forward": { "$ref": "urn:urbe:mission-assets:values#/$defs/vector3" },
+          "reachMeters": { "type": "number", "exclusiveMinimum": 0, "maximum": 3 }
+        }
+      }
+    },
+    "clearances": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["clearanceId", "purpose", "center", "dimensions", "rotationRadians"],
+        "additionalProperties": false,
+        "properties": {
+          "clearanceId": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "purpose": { "enum": ["approach", "operate", "access", "seat", "storage"] },
+          "center": { "$ref": "urn:urbe:mission-assets:values#/$defs/vector3" },
+          "dimensions": { "$ref": "urn:urbe:mission-assets:values#/$defs/dimensions" },
+          "rotationRadians": { "$ref": "urn:urbe:mission-assets:values#/$defs/vector3" }
+        }
+      }
+    },
+    "portable": { "type": "boolean" },
+    "payloadRef": { "$ref": "urn:urbe:mission-assets:values#/$defs/mediaReference" }
+  }
+}

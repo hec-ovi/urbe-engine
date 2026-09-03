@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:mission-assets:asset-lookup",
+  "title": "Mission asset registry lookup",
+  "type": "object",
+  "required": ["contractVersion", "assetId"],
+  "additionalProperties": false,
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "assetId": { "$ref": "urn:urbe:mission-assets:values#/$defs/assetId" }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:mission-assets:error",
+  "title": "Mission asset error",
+  "type": "object",
+  "required": ["name", "code", "message"],
+  "additionalProperties": false,
+  "properties": {
+    "name": { "const": "MissionAssetError" },
+    "code": {
+      "enum": [
+        "E_SCHEMA",
+        "E_DIMENSIONS",
+        "E_MATERIAL",
+        "E_INTERACTION",
+        "E_CLEARANCE",
+        "E_HASH",
+        "E_NOT_FOUND",
+        "E_CONFLICT"
+      ]
+    },
+    "message": { "type": "string", "minLength": 1 },
+    "details": { "type": "object" }
+  }
+}

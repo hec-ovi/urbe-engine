@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:mission-assets:material-catalog",
+  "title": "Mission asset material catalog",
+  "type": "object",
+  "required": ["contractVersion", "entries"],
+  "additionalProperties": false,
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["key", "variants"],
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z0-9_-]+/[a-z0-9_-]+/[a-z0-9_-]+$"
+          },
+          "aliases": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9_-]+/[a-z0-9_-]+/[a-z0-9_-]+$"
+            }
+          },
+          "variants": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9_-]+(:[a-z0-9_-]+)?$"
+            }
+          }
+        }
+      }
+    }
+  }
+}
