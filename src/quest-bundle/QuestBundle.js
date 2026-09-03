@@ -9,7 +9,7 @@ export const QUEST_BUNDLE_FILES = Object.freeze( [ ...QUEST_BUNDLE_CATALOGS, 'ho
 
 const validateManifest = new Ajv2020( { allErrors: true, strict: true } ).compile( manifestSchema );
 
-/** Validates the complete quests v0.6 engine handoff as one atomic unit. */
+/** Validates the complete Quests v0.8.0 engine handoff as one atomic unit. */
 export function questBundle( manifest, catalogs ) {
 
 	questBundleManifest( manifest );

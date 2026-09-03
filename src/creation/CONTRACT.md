@@ -42,7 +42,7 @@ Closed set in [schema/creation-error.schema.json](schema/creation-error.schema.j
 - Automatic interiors include every location needed by the ten-step main quest before adding side-job and then extra buildings. Seven interiors support the main line, eight support two side jobs, and nine support all three.
 - The current recorded story supplies at most three side jobs. A non-empty custom brief fails explicitly because this deterministic path does not call a model.
 - A stage writes into a temporary sibling and publishes only after its command and output checks pass.
-- Quest selection rewrites definitions, objectives, investigations, mission item bindings, referenced mission asset requests and manifest counts together. A final game references `quests/quest-bundle.json`; full authoring metadata and unselected definitions do not ship with it.
+- Quest selection rewrites definitions, objectives, investigations, fixed mechanic bindings, mission item bindings, referenced mission asset requests and manifest counts together. It preserves the validated host capability object. A final game references `quests/quest-bundle.json`; full authoring metadata and unselected definitions do not ship with it.
 
 ## How to modify this blackbox safely
 

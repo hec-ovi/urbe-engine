@@ -2,7 +2,7 @@
 
 Purpose: creates and registers deterministic renderer-neutral mission objects and reusable furniture without deciding where they are placed.
 
-Status: v1.0.
+Status: v1.0. Engine owns this nested box because its quest and investigation runtimes host the creator. The renderer-neutral boundary keeps asset creation separate from placement.
 
 ## Inputs
 
