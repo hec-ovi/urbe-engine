@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { TransitGameplay, transitServiceLabel } from './TransitGameplay.js';
+import { TransitGameplay, transitServiceLabel, transitStatusLabel } from './TransitGameplay.js';
+import { TransitJourneyBoundary } from './TransitJourneyBoundary.js';
 import { Locator } from '../world/Locator.js';
 
 describe( 'TransitGameplay', () => {
@@ -41,10 +42,19 @@ describe( 'TransitGameplay', () => {
 		];
 		const { gameplay } = harness( atlas, routes, [ 0, 0, 0 ] );
 
-		expect( gameplay.update( { daySeconds: 1005, interactionBlocked: true } ).prompt ).toBeNull();
+		const boundary = new TransitJourneyBoundary();
+		const blocked = gameplay.update( { daySeconds: 1005, interactionBlocked: true } );
+		expect( blocked.prompt ).toBeNull();
+		expect( boundary.valid( 'gameplay-update-request', {
+			daySeconds: 1005, interactionBlocked: true
+		} ) ).toBe( true );
+		expect( boundary.valid( 'gameplay-view', blocked ) ).toBe( true );
 		const waiting = gameplay.update( { daySeconds: 1005 } );
 		expect( waiting.services ).toHaveLength( 2 );
-		expect( gameplay.activate() ).toMatchObject( { action: 'choose', services: waiting.services } );
+		const choice = gameplay.activate();
+		expect( choice ).toMatchObject( { action: 'choose', services: waiting.services } );
+		expect( boundary.valid( 'gameplay-action', choice ) ).toBe( true );
+		expect( boundary.valid( 'gameplay-service-selection', waiting.services[ 1 ] ) ).toBe( true );
 		expect( gameplay.board( waiting.services[ 1 ] ).result.ok ).toBe( true );
 
 	} );
@@ -71,6 +81,50 @@ describe( 'TransitGameplay', () => {
 		expect( transitServiceLabel( {
 			kind: 'subway', lineId: 'S4', destinationStopId: 'central', departureTime: 3661
 		} ) ).toBe( 'Subway S4 to central, departs 01:01:01' );
+		expect( transitStatusLabel( {
+			kind: 'subway', lineId: 'S4', nextStopId: 'central', nextArrivalTime: 3661
+		} ) ).toBe( 'SUBWAY S4 · next central 01:01:01' );
+		expect( transitStatusLabel( {
+			kind: 'train', lineId: 'T1', nextStopId: null, nextArrivalTime: null
+		} ) ).toBe( 'TRAIN T1 · final stop' );
+		expect( transitStatusLabel( null ) ).toBeNull();
+
+	} );
+
+	it( 'rejects an aboard restore without a saved clock observation', () => {
+
+		const atlas = city();
+		const route = transitRoute( { kind: 'bus', ids: [ 'b0', 'b1', 'b2' ], y: 0, z: 0 } );
+		const stale = {
+			status: 'aboard', clock: { dayOffset: 0, lastDaySeconds: null },
+			tripId: 'trip:9:route-bus:1000', routeId: 'route-bus', serviceDeparture: 1000, boardedStopIndex: 0
+		};
+		const { gameplay } = harness( atlas, [ route ], [ 0, 0, 0 ], stale );
+
+		expect( gameplay.restoreRejected ).toBe( true );
+		expect( gameplay.state.status ).toBe( 'waiting' );
+
+	} );
+
+	for ( const mode of [
+		{ kind: 'bus', ids: [ 'b0', 'b1', 'b2' ], y: 0, z: 0 },
+		{ kind: 'train', ids: [ 't0', 't1', 't2' ], y: 0, z: 20 },
+		{ kind: 'subway', ids: [ 's0', 's1', 's2' ], y: -12, z: 40 }
+	] ) it( `returns control at the ${mode.kind} terminus when service ends`, () => {
+
+		const atlas = city();
+		const route = transitRoute( mode );
+		const { gameplay, controller } = harness( atlas, [ route ], [ 0, mode.y, mode.z ] );
+		gameplay.update( { daySeconds: 1005 } );
+		gameplay.activate();
+
+		const ended = gameplay.update( { daySeconds: 1221 } );
+		expect( ended ).toMatchObject( {
+			aboard: false,
+			result: { ok: true, autoDisembarked: true, state: { status: 'waiting' } }
+		} );
+		expect( controller.body.feet.toArray() ).toEqual( [ 200, mode.y, mode.z ] );
+		expect( controller.movementLocked ).toBe( false );
 
 	} );
 

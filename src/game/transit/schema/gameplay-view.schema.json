@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:transit:gameplay-view",
+  "type": "object",
+  "required": ["aboard", "prompt", "status", "services", "result"],
+  "properties": {
+    "aboard": { "type": "boolean" },
+    "prompt": { "type": ["string", "null"] },
+    "status": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["kind", "lineId", "nextStopId", "nextArrivalTime"],
+          "properties": {
+            "kind": { "$ref": "urn:urbe:engine:transit:values#/$defs/kind" },
+            "lineId": { "type": "string", "minLength": 1 },
+            "nextStopId": { "type": ["string", "null"], "minLength": 1 },
+            "nextArrivalTime": { "type": ["number", "null"] }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "services": {
+      "type": "array",
+      "items": { "$ref": "urn:urbe:engine:transit:values#/$defs/service" }
+    },
+    "result": {
+      "anyOf": [
+        { "type": "null" },
+        { "$ref": "urn:urbe:engine:transit:service-list" },
+        { "$ref": "urn:urbe:engine:transit:journey-update-result" }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

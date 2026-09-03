@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:transit:gameplay-action",
+  "oneOf": [
+    { "type": "null" },
+    {
+      "type": "object",
+      "required": ["action", "services"],
+      "properties": {
+        "action": { "const": "choose" },
+        "services": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "urn:urbe:engine:transit:values#/$defs/service" }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["action", "result"],
+      "properties": {
+        "action": { "const": "board" },
+        "result": { "$ref": "urn:urbe:engine:transit:board-result" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["action", "result"],
+      "properties": {
+        "action": { "const": "disembark" },
+        "result": { "$ref": "urn:urbe:engine:transit:disembark-result" }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

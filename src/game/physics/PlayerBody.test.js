@@ -113,6 +113,8 @@ describe( 'PlayerBody against street furniture', () => {
 		expect( body.feet.toArray() ).toEqual( [ 10, -12, 4 ] );
 		body.move( new THREE.Vector3( 10, 0, 0 ), 1 );
 		expect( body.feet.toArray() ).toEqual( [ 10, -12, 4 ] );
+		expect( body.teleport( new THREE.Vector3( 99, 99, 99 ) ) ).toBe( false );
+		expect( body.feet.toArray() ).toEqual( [ 10, -12, 4 ] );
 
 		body.carryTo( new THREE.Vector3( 20, -12, 4 ) );
 		body.endCarry( new THREE.Vector3( 30, 0, 8 ) );

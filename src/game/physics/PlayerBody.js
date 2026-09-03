@@ -175,9 +175,12 @@ export class PlayerBody {
 
 	teleport( point ) {
 
+		if ( this.carried ) return false;
+
 		this.position.set( point.x, point.y + this.centreOffset, point.z );
 		this.velocityY = 0;
 		this.collider.setTranslation( this.position );
+		return true;
 
 	}
 

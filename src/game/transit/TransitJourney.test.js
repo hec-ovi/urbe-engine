@@ -128,6 +128,26 @@ describe( 'TransitJourney', () => {
 
 	} );
 
+	it( 'ends an expired service at its exact published terminus and persists waiting state', () => {
+
+		const route = transitRoute( { kind: 'subway', first: 's0', second: 's1', third: 's2', y: -12, z: 40 } );
+		const origin = { kind: 'subway-station', id: 's0' };
+		const journey = new TransitJourney( { atlas: city(), routes: [ route ] } );
+		journey.board( boardRequest( serviceChoice( route ), origin, [ 0, -12, 40 ], 1005 ) );
+
+		const ended = journey.update( { daySeconds: 1221 } );
+		expect( ended ).toEqual( expect.objectContaining( {
+			ok: true,
+			autoDisembarked: true,
+			position: [ 200, -12, 40 ],
+			nextStops: [],
+			canDisembark: false,
+			state: { status: 'waiting', clock: { dayOffset: 0, lastDaySeconds: 1221 } }
+		} ) );
+		expect( journey.state ).toEqual( ended.state );
+
+	} );
+
 	it( 'fails closed when route data or restored state is invalid', () => {
 
 		const route = transitRoute( { kind: 'bus', first: 'b0', second: 'b1', third: 'b2', y: 0, z: 0 } );

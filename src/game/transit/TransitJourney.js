@@ -138,6 +138,7 @@ export class TransitJourney {
 		const currentTime = this.#timeForTrip( request.daySeconds, this._state.serviceDeparture, routeDuration( route ) );
 		const elapsed = currentTime - this._state.serviceDeparture;
 		const vehicle = vehicleAt( route, elapsed );
+		if ( ! vehicle && elapsed > routeDuration( route ) ) return this.#finishAtTerminus( route, currentTime, request.daySeconds );
 		if ( ! vehicle ) return this.#out( 'journey-update-result', fail( ERROR.outOfService ) );
 		this._state.clock = { dayOffset: currentTime - request.daySeconds, lastDaySeconds: request.daySeconds };
 
@@ -160,6 +161,7 @@ export class TransitJourney {
 			heading: vehicle.heading,
 			nextStops,
 			canDisembark: dwell !== -1,
+			autoDisembarked: false,
 			state: this.state
 		} );
 
@@ -251,6 +253,7 @@ export class TransitJourney {
 
 		const route = this.routeById.get( this._state.routeId );
 		return Boolean( route
+			&& this._state.clock.lastDaySeconds !== null
 			&& route.stops[ this._state.boardedStopIndex ]
 			&& tripIdentity( route.id, this._state.serviceDeparture ) === this._state.tripId
 			&& scheduledDeparture( route, this._state.serviceDeparture ) );
@@ -313,6 +316,31 @@ export class TransitJourney {
 
 		const stop = route.stops[ stopIndex ];
 		return placePosition( this.places.get( `${placeKind( route.kind )}:${stop.stopId}` ), stop );
+
+	}
+
+	#finishAtTerminus( route, currentTime, daySeconds ) {
+
+		const tripId = this._state.tripId;
+		const finalIndex = route.stops.length - 1;
+		const shapePoint = pointOnShape( route.shape, route.stops[ finalIndex ].shapeDist );
+		this._state = {
+			status: 'waiting',
+			clock: { dayOffset: currentTime - daySeconds, lastDaySeconds: daySeconds }
+		};
+		return this.#out( 'journey-update-result', {
+			ok: true,
+			tripId,
+			routeId: route.id,
+			lineId: route.lineId,
+			kind: route.kind,
+			position: this.#publishedPosition( route, finalIndex ),
+			heading: shapePoint.heading,
+			nextStops: [],
+			canDisembark: false,
+			autoDisembarked: true,
+			state: this.state
+		} );
 
 	}
 

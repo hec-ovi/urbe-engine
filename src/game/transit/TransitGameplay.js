@@ -3,12 +3,12 @@ import { TransitJourney } from './TransitJourney.js';
 /** Game-facing transit interaction, kept separate from rendering and DOM. */
 export class TransitGameplay {
 
-	constructor( { atlas, routes, state, locator, controller } ) {
+	constructor( { atlas, routes, state, journey, locator, controller } ) {
 
 		this.locator = locator;
 		this.controller = controller;
 		this.restoreRejected = false;
-		this.journey = new TransitJourney( { atlas, routes, ...( state ? { state } : {} ) } );
+		this.journey = journey ?? new TransitJourney( { atlas, routes, ...( state ? { state } : {} ) } );
 		if ( state && ! this.journey.valid ) {
 
 			const fresh = new TransitJourney( { atlas, routes } );
@@ -118,6 +118,12 @@ export class TransitGameplay {
 
 		const result = this.journey.update( { daySeconds } );
 		if ( ! result.ok ) return { aboard: true, prompt: null, status: null, services: [], result };
+		if ( result.autoDisembarked ) {
+
+			this.controller.endRide( result.position );
+			return { aboard: false, prompt: null, status: null, services: [], result };
+
+		}
 		if ( this.controller.movementLocked ) this.controller.carry( result.position, result.heading );
 		else this.controller.beginRide( result.position, result.heading );
 
@@ -151,6 +157,16 @@ export class TransitGameplay {
 export function transitServiceLabel( service ) {
 
 	return `${title( service.kind )} ${service.lineId} to ${service.destinationStopId}, departs ${clock( service.departureTime )}`;
+
+}
+
+export function transitStatusLabel( status ) {
+
+	if ( ! status ) return null;
+	const next = status.nextStopId
+		? `next ${status.nextStopId}${status.nextArrivalTime === null ? '' : ` ${clock( status.nextArrivalTime )}`}`
+		: 'final stop';
+	return `${status.kind.toUpperCase()} ${status.lineId} · ${next}`;
 
 }
 

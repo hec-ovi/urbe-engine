@@ -10,6 +10,10 @@ import journeyUpdateRequest from './schema/journey-update-request.schema.json';
 import journeyUpdateResult from './schema/journey-update-result.schema.json';
 import disembarkRequest from './schema/disembark-request.schema.json';
 import disembarkResult from './schema/disembark-result.schema.json';
+import gameplayUpdateRequest from './schema/gameplay-update-request.schema.json';
+import gameplayServiceSelection from './schema/gameplay-service-selection.schema.json';
+import gameplayView from './schema/gameplay-view.schema.json';
+import gameplayAction from './schema/gameplay-action.schema.json';
 
 const SCHEMAS = [
 	values,
@@ -22,7 +26,11 @@ const SCHEMAS = [
 	journeyUpdateRequest,
 	journeyUpdateResult,
 	disembarkRequest,
-	disembarkResult
+	disembarkResult,
+	gameplayUpdateRequest,
+	gameplayServiceSelection,
+	gameplayView,
+	gameplayAction
 ];
 
 /** Runtime boundary for every value entering or leaving TransitJourney. */
