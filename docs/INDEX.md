@@ -20,6 +20,7 @@
   - `look/`: quality tiers with explicit texture budgets, AgX exposure, height fog tinted by the light in the air, environment probe, the render pipeline with emissive-selected bloom, and serial warm-up that builds pipelines and maps before a frame can stall on them (src/game/look/CONTRACT.md)
   - `sky/`: night sky, moon key, stars
   - `physics/`: fixed-step Rapier world, generated trimesh collision, player capsule, measured vehicle contacts and one full Source-rig ragdoll (src/game/physics/CONTRACT.md)
+  - `hydro/`: exact Atlas lagoon, river and sea-coast surfaces mounted with Materials-owned PBR bindings and deterministic normal motion (src/game/hydro/CONTRACT.md)
   - `player/`: input, first-person controller, interaction
   - `agents/`: character assets, pose baking, crowd, traffic, persistent NPC materialization and quest-follow control on Connections' authoritative 3D paths (src/game/agents/CONTRACT.md)
   - `voice/`: deterministic content-addressed NPC voice profiles, structured speech controls, prioritized cancellable synthesis, checked audio chunks and AudioWorklet packet transport (src/game/voice/CONTRACT.md)

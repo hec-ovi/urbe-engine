@@ -37,6 +37,16 @@ export class MaterialResolver {
 
 	}
 
+	/** Loads one Materials-owned binding document without accepting a fallback. */
+	async loadBindings( name ) {
+
+		if ( ! /^[a-z0-9-]+$/.test( name ) ) throw new Error( `invalid material binding name ${name}` );
+		const response = await fetch( `${this.baseUrl}/bindings/${name}.json` );
+		if ( ! response.ok ) throw new Error( `material bindings ${name}: HTTP ${response.status}` );
+		return response.json();
+
+	}
+
 	/** @returns MaterialEntry or null when the key resolves to nothing. */
 	resolve( key ) {
 

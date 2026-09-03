@@ -22,9 +22,23 @@ describe( 'MaterialResolver', () => {
 
 	beforeEach( async () => {
 
-		vi.stubGlobal( 'fetch', async () => ( { ok: true, json: async () => INDEX } ) );
+		vi.stubGlobal( 'fetch', async ( url ) => ( {
+			ok: true,
+			json: async () => url.endsWith( '/bindings/atlas-hydrology.json' )
+				? { 'water.river': { key: 'cyberpunk/water-surface/high_rich', variantId: 'river' } }
+				: INDEX
+		} ) );
 		resolver = new MaterialResolver();
 		await resolver.loadTheme( 'cyberpunk' );
+
+	} );
+
+	it( 'loads an exact Materials-owned binding document', async () => {
+
+		await expect( resolver.loadBindings( 'atlas-hydrology' ) ).resolves.toEqual( {
+			'water.river': { key: 'cyberpunk/water-surface/high_rich', variantId: 'river' }
+		} );
+		await expect( resolver.loadBindings( '../other' ) ).rejects.toThrow( 'invalid material binding name' );
 
 	} );
 

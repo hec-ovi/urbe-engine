@@ -16,6 +16,7 @@ import { GameConfig } from './data/GameConfig.js';
 import { WorldSource } from './data/WorldSource.js';
 import { Signals } from './data/Signals.js';
 import { GroundBuilder, SIDEWALK_HEIGHT } from './ground/GroundBuilder.js';
+import { HydrologyHost } from './hydro/index.js';
 import { pointInRing } from './ground/Polygons.js';
 import { BuildingsLoader } from './city/BuildingsLoader.js';
 import { Links } from './links/Links.js';
@@ -209,6 +210,7 @@ export class GameApp {
 		this.view.step( 'laying the ground' );
 		const ground = new GroundBuilder( atlas, factory ).build();
 		this.scene.add( ground.group );
+		this.hydrology = await HydrologyHost.install( { blueprint: atlas, factory, scene: this.scene } );
 
 		this.view.step( `loading ${buildings.size} buildings` );
 		const city = await new BuildingsLoader( factory ).load( buildings );
@@ -266,6 +268,7 @@ export class GameApp {
 			? null
 			: new EnvironmentProbe( this.renderer, this.scene, this.tier, this.hitches );
 		this.probe?.exclude( this.stream.group, props.group, this.transit.group );
+		if ( this.hydrology.group ) this.probe?.exclude( this.hydrology.group );
 
 		this.view.step( 'building the physics world' );
 		this.physics = await Physics.create();
@@ -457,7 +460,7 @@ export class GameApp {
 
 		if ( import.meta.env.DEV ) window.__game = this;
 
-		this.baseTriangles = city.triangles + links.triangles;
+		this.baseTriangles = city.triangles + links.triangles + ( this.hydrology.summary?.triangles ?? 0 );
 		this.last = performance.now();
 		this.renderer.setAnimationLoop( () => this.#frame() );
 
@@ -486,6 +489,7 @@ export class GameApp {
 	tick( delta ) {
 
 		this.clock.advance( delta );
+		this.hydrology.update( Math.max( 0, ( performance.now() - this.playStartedAt ) / 1000 ) );
 
 		const day = this.sky.setHour( this.clock.hour );
 		this.night.set( day.lampsOn );

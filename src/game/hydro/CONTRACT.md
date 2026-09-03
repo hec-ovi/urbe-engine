@@ -2,13 +2,14 @@
 
 ## Purpose
 
-Turns an optional Atlas hydrology plan into exact render geometry and a physics handoff without owning terrain, player movement, or crossing construction.
+Turns an optional Atlas hydrology plan into exact render geometry and installs its runtime in the playable scene without owning terrain, player movement, or crossing construction.
 
 ## Inputs
 
 - Atlas hydrology plan: [schema/hydrology-plan.schema.json](schema/hydrology-plan.schema.json). `HydrologyAdapter.build(blueprint, materials)` reads only `blueprint.hydrology`. An absent field is the no-water case.
 - Material bindings: [schema/material-bindings.schema.json](schema/material-bindings.schema.json). `materials` supplies `{ factory, bindings }`; each Atlas material key in use must map to a tiled materials-database key and optional variant. The factory's resolver must resolve that exact key before any material is built. The resolved entry must satisfy the adapter's required subset of the materials contract: [schema/water-material.schema.json](schema/water-material.schema.json).
 - Runtime update: [schema/update.schema.json](schema/update.schema.json). `runtime.update({ elapsedSeconds })` takes absolute elapsed run time so normal-map motion is independent of frame rate.
+- Live installation: `HydrologyHost.install({ blueprint, factory, scene })` loads Materials' `bindings/atlas-hydrology.json` only for a water world, validates and builds the adapter, and mounts its group. `update(elapsedSeconds)` and `dispose()` own the mounted runtime lifecycle.
 
 ## Outputs
 
@@ -19,7 +20,7 @@ Turns an optional Atlas hydrology plan into exact render geometry and a physics 
 
 - `update` scrolls only each owned normal-map clone. It does not move collision data or surface vertices.
 - `dispose` releases every owned geometry, material, and cloned normal map. It is idempotent. Updating after disposal fails closed.
-- The later host adds `group` to the scene, sends `handoff.groundExclusions` to player/ground collision policy, and dispatches `handoff.crossings` to bridge/tunnel construction owners.
+- `HydrologyHost` adds `group` to the live game scene. Atlas ground cover already excludes every water polygon, so its published `groundExclusions` verify that no water collider is added. Connections consumes the unchanged bridge and tunnel records before the engine builds those crossings.
 
 ## Errors
 
@@ -34,7 +35,7 @@ Turns an optional Atlas hydrology plan into exact render geometry and a physics 
 - Atlas hydrology output contract and schema.
 - Materials `MaterialResolver` and `PbrMaterialFactory` boundary.
 - Three.js WebGPU-compatible core materials and geometry; the same objects run on WebGL2 fallback.
-- Game ground and lighting contracts consume the handoff later. This layer does not import their internals.
+- GameApp is the production host. It mounts water, excludes it from environment-probe capture, updates its normal motion from elapsed play time, and includes its triangles in the base scene count.
 
 ## Invariants
 
@@ -43,6 +44,7 @@ Turns an optional Atlas hydrology plan into exact render geometry and a physics 
 - Motion is deterministic from Atlas `seedId` and hydrology type. It is one scrolling normal-map transform per material, with no render pass, reflection camera, backend branch, or frame-rate accumulation.
 - Water meshes never enter the collider output. Every water surface is instead an explicit ground exclusion, while Atlas crossings remain explicit bridge/tunnel handoffs.
 - A missing material never becomes the material factory's fallback.
+- A no-water blueprint never requests the Materials binding document and mounts no scene object.
 
 ## How to modify this blackbox safely
 
