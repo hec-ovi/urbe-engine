@@ -14,7 +14,7 @@
       "required": ["method", "input"],
       "properties": {
         "method": { "enum": ["continueGame", "exportGame", "exportCity"] },
-        "input": { "$ref": "../../launcher/schema/launcher-api.schema.json#/$defs/id" }
+        "input": { "$ref": "#/$defs/id" }
       },
       "additionalProperties": false
     },
@@ -23,7 +23,7 @@
       "required": ["method", "input"],
       "properties": {
         "method": { "const": "importGame" },
-        "input": { "$ref": "../../library/schema/game-descriptor.schema.json" }
+        "input": { "$ref": "urn:urbe:engine:library:game-descriptor" }
       },
       "additionalProperties": false
     },
@@ -32,7 +32,7 @@
       "required": ["method", "input"],
       "properties": {
         "method": { "const": "generateCity" },
-        "input": { "$ref": "../../launcher/schema/launcher-api.schema.json#/$defs/generateCityInput" }
+        "input": { "$ref": "urn:urbe:engine:creation:generate-city" }
       },
       "additionalProperties": false
     },
@@ -41,7 +41,7 @@
       "required": ["method", "input"],
       "properties": {
         "method": { "const": "generateInstances" },
-        "input": { "$ref": "../../launcher/schema/launcher-api.schema.json#/$defs/generateInstancesInput" }
+        "input": { "$ref": "urn:urbe:engine:creation:generate-instances" }
       },
       "additionalProperties": false
     },
@@ -50,7 +50,7 @@
       "required": ["method", "input"],
       "properties": {
         "method": { "const": "generateQuests" },
-        "input": { "$ref": "../../launcher/schema/launcher-api.schema.json#/$defs/generateQuestsInput" }
+        "input": { "$ref": "urn:urbe:engine:creation:generate-quests" }
       },
       "additionalProperties": false
     },
@@ -59,7 +59,7 @@
       "required": ["method", "input"],
       "properties": {
         "method": { "const": "createGame" },
-        "input": { "$ref": "../../launcher/schema/launcher-api.schema.json#/$defs/createGameInput" }
+        "input": { "$ref": "urn:urbe:engine:creation:create-game" }
       },
       "additionalProperties": false
     },
@@ -68,9 +68,17 @@
       "required": ["method", "input"],
       "properties": {
         "method": { "const": "saveCurrent" },
-        "input": { "type": "object" }
+        "input": { "$ref": "urn:urbe:engine:game-persistence:save-current-payload" }
       },
       "additionalProperties": false
     }
-  ]
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$"
+    }
+  }
 }

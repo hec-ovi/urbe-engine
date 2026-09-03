@@ -1,4 +1,9 @@
 import { createLibrary, LibraryError } from '../library/index.js';
+import AjvModule from 'ajv/dist/2020.js';
+import persistenceValues from '../game/persistence/schema/values.schema.json' with { type: 'json' };
+import saveCurrentPayload from '../game/persistence/schema/save-current-payload.schema.json' with { type: 'json' };
+
+const Ajv2020 = AjvModule.default ?? AjvModule;
 
 /** Node-side adapter between the browser launcher contract and the artifact library. */
 export class LauncherService {
@@ -7,6 +12,9 @@ export class LauncherService {
 
 		this.library = library ?? createLibrary( { outDir } );
 		this.creation = creation;
+		const ajv = new Ajv2020( { allErrors: true, strict: true } );
+		ajv.addSchema( persistenceValues );
+		this.validateSaveCurrent = ajv.compile( saveCurrentPayload );
 
 	}
 
@@ -87,6 +95,13 @@ export class LauncherService {
 
 	async saveCurrent( input ) {
 
+		if ( ! this.validateSaveCurrent( input ) ) {
+
+			const detail = this.validateSaveCurrent.errors
+				.map( ( error ) => `${error.instancePath || '/'} ${error.message}` ).join( '; ' );
+			throw new LauncherServiceError( 'E_INVALID_REQUEST', `saveCurrent request is invalid: ${detail}` );
+
+		}
 		const current = await this.library.loadGame( { id: input.gameId } );
 		if ( input.expectedRevision !== current.save.revision ) {
 
@@ -107,8 +122,10 @@ export class LauncherService {
 				playTimeSeconds: input.playTimeSeconds
 			}
 		};
+		assertProgressIdentity( current.quests, game.quests, 'quests' );
+		assertProgressIdentity( current.sideJobs, game.sideJobs, 'side jobs' );
 
-		return this.library.saveGame( { game, expectedRevision: current.save.revision } );
+		return ( await this.library.saveGame( { game, expectedRevision: current.save.revision } ) ).game;
 
 	}
 
@@ -120,6 +137,27 @@ export class LauncherService {
 
 		}
 		return this.creation[ method ]( input );
+
+	}
+
+}
+
+function assertProgressIdentity( current, next, label ) {
+
+	const saved = new Map( current.map( ( progress ) => [ progress.id, progress ] ) );
+	if ( next.length !== current.length || next.some( ( progress ) => ! saved.has( progress.id ) ) ) {
+
+		throw new LauncherServiceError( 'E_INVALID_REQUEST', `saveCurrent cannot add, remove or reclassify ${label}` );
+
+	}
+	for ( const progress of next ) {
+
+		const before = saved.get( progress.id );
+		if ( progress.title !== before.title || progress.totalSteps !== before.totalSteps ) {
+
+			throw new LauncherServiceError( 'E_INVALID_REQUEST', `saveCurrent cannot change ${progress.id} identity` );
+
+		}
 
 	}
 

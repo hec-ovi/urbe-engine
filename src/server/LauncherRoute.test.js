@@ -56,6 +56,23 @@ describe( 'launcher HTTP boundary', () => {
 		} );
 
 		const exported = await api.exportGame( 'night-shift' );
+		const saved = await api.saveCurrent( {
+			gameId: exported.id,
+			expectedRevision: exported.save.revision,
+			updatedAt: '2026-09-03T12:00:00Z',
+			playTimeSeconds: exported.save.playTimeSeconds + 12,
+			player: { ...exported.player, position: { x: 16, y: 0.12, z: -2 } },
+			quests: exported.quests,
+			sideJobs: exported.sideJobs,
+			currentLocation: exported.currentLocation,
+			discoveredLocations: exported.discoveredLocations
+		} );
+		expect( saved ).toMatchObject( {
+			id: 'night-shift', player: { position: { x: 16, y: 0.12, z: -2 } },
+			save: { revision: exported.save.revision + 1, playTimeSeconds: exported.save.playTimeSeconds + 12 }
+		} );
+		await expect( api.saveCurrent( { gameId: 'night-shift' } ) ).rejects.toThrow( 'saveCurrent request is invalid' );
+
 		const imported = { ...exported, id: 'imported-night', name: 'Imported Night', save: { ...exported.save, revision: 5 } };
 		const after = await api.importGame( imported );
 		expect( after.games.map( ( game ) => game.id ) ).toEqual( [ 'imported-night', 'night-shift' ] );
