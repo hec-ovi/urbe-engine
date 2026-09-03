@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:creation:generate-quests",
+  "type": "object",
+  "required": ["cityId", "interiorIds", "mainBrief", "sideJobs"],
+  "properties": {
+    "cityId": { "$ref": "#/$defs/id" },
+    "interiorIds": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
+    "mainBrief": { "type": "string" },
+    "sideJobs": { "type": "integer", "minimum": 0, "maximum": 24 }
+  },
+  "additionalProperties": false,
+  "$defs": { "id": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$" } }
+}

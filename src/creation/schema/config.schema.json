@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:creation:config",
+  "type": "object",
+  "required": ["engineRoot", "atlasRoot", "questsRoot", "outDir"],
+  "properties": {
+    "engineRoot": { "type": "string", "minLength": 1 },
+    "atlasRoot": { "type": "string", "minLength": 1 },
+    "questsRoot": { "type": "string", "minLength": 1 },
+    "outDir": { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": false
+}

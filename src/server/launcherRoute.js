@@ -1,4 +1,5 @@
 import { LibraryError } from '../library/index.js';
+import { CreationError } from '../creation/index.js';
 import { LauncherService, LauncherServiceError } from './LauncherService.js';
 
 const METHODS = new Set( [
@@ -35,7 +36,7 @@ export function launcherRoute( engineRoot, creation = null, service = null ) {
 				} catch ( error ) {
 
 					const malformed = error instanceof SyntaxError;
-					const known = error instanceof LibraryError || error instanceof LauncherServiceError;
+					const known = error instanceof LibraryError || error instanceof LauncherServiceError || error instanceof CreationError;
 					send( res, malformed ? 400 : known ? error.status ?? 400 : 500, {
 						code: malformed ? 'E_INVALID_REQUEST' : error.code ?? 'E_LAUNCHER',
 						message: malformed ? 'request body is not valid JSON' : error.message

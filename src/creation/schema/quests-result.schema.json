@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:creation:quests-result",
+  "type": "object",
+  "required": ["id", "mainSteps", "sideJobs"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "mainSteps": { "type": "integer", "minimum": 1 },
+    "sideJobs": { "type": "integer", "minimum": 0, "maximum": 3 }
+  },
+  "additionalProperties": false
+}

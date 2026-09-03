@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:creation:error",
+  "type": "object",
+  "required": ["code", "message"],
+  "properties": {
+    "code": { "enum": ["E_INVALID_REQUEST", "E_EXISTS", "E_CITY_NOT_FOUND", "E_DRAFT_NOT_FOUND", "E_STAGE_MISMATCH", "E_STORY_BRIEF_UNAVAILABLE", "E_SIDE_JOB_LIMIT", "E_QUEST_LOCATIONS", "E_COMMAND_FAILED", "E_OUTPUT_INVALID", "E_STORAGE"] },
+    "message": { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": false
+}
