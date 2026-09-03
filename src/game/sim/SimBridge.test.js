@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TYPE_SET, FIXTURE_BLUEPRINT, FIXTURE_INTERIORS } from '../../../../simulation/dist/index.js';
+import { DEFAULT_TYPE_SET, FIXTURE_BLUEPRINT, FIXTURE_INTERIORS, FIXTURE_THEMED_TYPES } from '../../../../simulation/dist/index.js';
 import { SimBridge } from './SimBridge.js';
 
 const buildings = new Map( Object.entries( FIXTURE_INTERIORS ).map( ( [ id, npc ] ) => [ id, { npc } ] ) );
@@ -35,4 +35,31 @@ describe( 'SimBridge', () => {
 
 	} );
 
+	it( 'keeps an interior waiter in the vendor vocabulary', () => {
+
+		const sim = SimBridge.create( FIXTURE_BLUEPRINT, { networks: undefined }, buildings, {}, FIXTURE_THEMED_TYPES );
+		const waiter = sim.getNPCVendor( { parcelId: 'p_rest', role: 'waiter', timeMin: 12 * 60 } );
+		const type = FIXTURE_THEMED_TYPES.types.find( ( candidate ) => candidate.type === waiter.type );
+
+		expect( waiter.job.role ).toBe( 'waiter' );
+		expect( type.category ).toBe( 'vendor' );
+		expect( waiter.type ).not.toBe( 'harbour_crane_operator' );
+
+	} );
+
+	it( 'preserves closed simulation errors for continuity control', () => {
+
+		const sim = SimBridge.create( FIXTURE_BLUEPRINT, { networks: undefined }, buildings );
+		expect( errorCode( () => sim.interrupt( 'missing', 0 ) ) ).toBe( 'E_UNKNOWN_ID' );
+		expect( errorCode( () => sim.continuityAt( 'missing', 0 ) ) ).toBe( 'E_UNKNOWN_ID' );
+
+	} );
+
 } );
+
+function errorCode( run ) {
+
+	try { run(); return null; }
+	catch ( error ) { return error.code; }
+
+}

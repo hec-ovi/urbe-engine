@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-agents:movement-network",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["walk"],
+  "properties": {
+    "walk": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["nodes", "edges"],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["id", "x", "y", "z", "kind"],
+            "properties": {
+              "id": { "type": "string" },
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "z": { "type": "number" },
+              "kind": { "enum": ["sidewalk", "corner", "crossing-end", "stop", "station", "station-entrance", "station-access", "station-handoff", "entry", "link-portal"] },
+              "ref": { "type": "string" }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["id", "from", "to", "kind", "path3"],
+            "properties": {
+              "id": { "type": "string" },
+              "from": { "type": "string" },
+              "to": { "type": "string" },
+              "kind": { "enum": ["sidewalk", "crossing", "access", "stairs", "passage", "platform", "link"] },
+              "path3": { "type": "array", "minItems": 2, "items": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

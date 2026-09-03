@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-agents:appearance-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["npcId", "timeMin"],
+  "properties": {
+    "npcId": { "type": "string", "minLength": 1 },
+    "timeMin": { "type": "number", "minimum": 0 }
+  }
+}

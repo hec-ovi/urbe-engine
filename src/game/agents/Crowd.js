@@ -291,9 +291,7 @@ export class Crowd {
 
 			if ( member.npcId !== npcId ) continue;
 			if ( memberAt( member, place ) ) return member;
-			if ( member.frozen ) return null;
-			this.members.delete( member.id );
-			break;
+			return null;
 
 		}
 
@@ -312,7 +310,7 @@ export class Crowd {
 
 		}
 
-		return this.#postQuestNpc( npc, place, player, fallbackAnchor );
+		return this.#postQuestNpc( npc, timeMin, place, player, fallbackAnchor );
 
 	}
 
@@ -426,8 +424,7 @@ export class Crowd {
 
 		member.retiring = true;
 		member.crowdId = null;
-		member.npcId = null;
-		member.instance = null;
+		if ( ! member.npcId ) member.instance = null;
 
 	}
 
@@ -534,7 +531,7 @@ export class Crowd {
 	}
 
 	/** @returns the new person, or null where the crowd is already full. */
-	#place( { agent, edge, direction, distance }, seed = hash( agent.crowdId ) ) {
+	#place( { agent, edge, direction, distance }, seed = agent.appearanceSeed ?? hash( agent.crowdId ) ) {
 
 		if ( this.members.size >= this.capacity ) return null;
 
@@ -557,7 +554,7 @@ export class Crowd {
 
 		if ( this.members.size >= this.capacity ) return null;
 
-		const seed = hash( agent.crowdId );
+		const seed = agent.appearanceSeed ?? hash( agent.crowdId );
 		const kind = agent.activity === 'working' ? 'work' : 'seat';
 		const anchors = place.anchors?.[ kind ] ?? [];
 		const index = firstFree( taken, kind );
@@ -634,9 +631,9 @@ export class Crowd {
 
 	}
 
-	#postQuestNpc( npc, place, player, fallbackAnchor ) {
+	#postQuestNpc( npc, timeMin, place, player, fallbackAnchor ) {
 
-		const seed = hash( `quest:${npc.npcId}` );
+		const seed = npc.appearanceSeed ?? hash( `quest:${npc.npcId}` );
 		let position;
 		let parcelId = null;
 		let edge = null;
@@ -652,9 +649,12 @@ export class Crowd {
 
 		} else if ( place?.kind === 'edge' ) {
 
-			edge = this.routes.edges.get( place.id );
+			const continuity = this.sim.continuityAt?.( npc.npcId, timeMin );
+			const current = continuity?.movement?.current;
+			if ( current && current.edgeId !== place.id ) return null;
+			edge = this.routes.edges.get( current?.edgeId ?? place.id );
 			if ( ! edge ) return null;
-			const at = this.routes.pointAt( edge, edge.length * ( 0.25 + ( seed % 500 ) / 1000 ), 1 );
+			const at = this.routes.pointAt( edge, edge.length * ( current?.progress ?? 0.5 ), 1 );
 			position = new THREE.Vector3( at.x, walkY( edge, at ), at.z );
 			if ( position.distanceTo( player ) > SPAWN_RADIUS ) return null;
 
@@ -687,7 +687,7 @@ export class Crowd {
 		while ( this.members.size >= this.capacity ) {
 
 			const victim = [ ...this.members.values() ]
-				.filter( ( member ) => ! member.quest && ! member.frozen && ! member.hero )
+				.filter( ( member ) => ! member.quest && ! member.frozen && ! member.hero && ! member.npcId )
 				.sort( ( left, right ) =>
 					Number( Boolean( left.npcId ) ) - Number( Boolean( right.npcId ) ) ||
 					right.position.distanceToSquared( player ) - left.position.distanceToSquared( player ) ||
@@ -807,6 +807,13 @@ function identify( member, instance ) {
 	member.instance = instance;
 	member.type = instance.type;
 	member.gender = instance.gender ?? member.gender;
+	member.appearanceSeed = instance.appearanceSeed ?? member.appearanceSeed;
+	if ( instance.appearanceSeed !== undefined ) {
+
+		member.variant = bodyFor( member.gender, instance.appearanceSeed );
+		member.look = look( instance.appearanceSeed );
+
+	}
 
 }
 
@@ -871,6 +878,9 @@ function fitTo( free, agent, at ) {
 
 		// A body is for life: a walker never becomes somebody of the other gender.
 		if ( member.gender && agent.gender && member.gender !== agent.gender ) continue;
+		// A named person may hold only the crowd trip that established that
+		// identity. Later statistical handles cannot rename or relocate them.
+		if ( member.npcId && member.crowdId !== agent.crowdId ) continue;
 
 		const typed = member.type === agent.type ? 0 : 1;
 		const gap = ( at.x - member.position.x ) ** 2 + ( at.z - member.position.z ) ** 2;

@@ -48,7 +48,8 @@ export const HAIRSTYLE_FILES = [ ...new Set(
 export const CROWD_MODELS = CHARACTER_MODELS.slice( 0, 2 );
 
 export const CROWD_CLIP_NAMES = [
-	'Walk_Loop', 'Idle_Loop', 'Idle_Talking_Loop', 'Sitting_Idle_Loop', 'Sitting_Talking_Loop'
+	'Walk_Loop', 'Idle_Loop', 'Idle_Talking_Loop', 'Sitting_Idle_Loop', 'Sitting_Talking_Loop',
+	'Sprint_Loop', 'Crouch_Idle_Loop'
 ];
 
 export const PLAYER_CLIP_NAMES = {

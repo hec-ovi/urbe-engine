@@ -84,31 +84,21 @@ export class SimBridge {
 
 	}
 
+	continuityAt( npcId, timeMin ) {
+
+		return this.simulation.continuityAt( npcId, timeMin );
+
+	}
+
 	interrupt( npcId, timeMin ) {
 
-		try {
-
-			this.simulation.interrupt( npcId, timeMin );
-
-		} catch {
-
-			// A dead or unknown NPC simply cannot be interrupted.
-
-		}
+		this.simulation.interrupt( npcId, timeMin );
 
 	}
 
 	resume( npcId, timeMin ) {
 
-		try {
-
-			this.simulation.resume( npcId, timeMin );
-
-		} catch {
-
-			// Same: resuming what was never interrupted is not an error here.
-
-		}
+		this.simulation.resume( npcId, timeMin );
 
 	}
 

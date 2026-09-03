@@ -12,8 +12,20 @@ import {
 
 export { bodyFor } from './CharacterCatalog.js';
 
-// Clip order is the crowd's clip index: 0 walk, 1 idle, 2 talking.
-export const CLIP = { WALK: 0, IDLE: 1, TALK: 2, SIT: 3, SIT_TALK: 4 };
+// Clip order matches CharacterCatalog.CROWD_CLIP_NAMES.
+export const CLIP = { WALK: 0, IDLE: 1, TALK: 2, SIT: 3, SIT_TALK: 4, RUN: 5, CROUCH: 6 };
+
+export function clipForNpcAnimation( animation ) {
+
+	return {
+		walk: CLIP.WALK,
+		run: CLIP.RUN,
+		idle: CLIP.IDLE,
+		sit: CLIP.SIT,
+		crouch: CLIP.CROUCH
+	}[ animation ] ?? CLIP.IDLE;
+
+}
 const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 /**

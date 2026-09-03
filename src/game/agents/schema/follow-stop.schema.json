@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-agents:follow-stop",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["timeMin"],
+  "properties": { "timeMin": { "type": "number", "minimum": 0 } }
+}

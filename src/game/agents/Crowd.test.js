@@ -332,6 +332,45 @@ describe( 'Crowd bodies', () => {
 
 	} );
 
+	it( 'never hands a named body to a later statistical handle', () => {
+
+		const routes = pavement();
+		let agents = [ {
+			crowdId: 'first-trip', type: 'courier', gender: 'female', appearanceSeed: 123,
+			activity: 'commuting', place: { kind: 'edge', id: 'e2' }, progress: 0.5, direction: 1
+		} ];
+		const npc = {
+			npcId: 'a17', type: 'courier', gender: 'female', appearanceSeed: 123,
+			name: { given: 'Mara', family: 'Vale' }, flags: { dead: false }
+		};
+		const sim = {
+			crowd: () => ( { agents } ),
+			getNPC: () => npc,
+			instantiate: () => npc,
+			continuityAt: () => ( { movement: { current: { edgeId: 'e2', progress: 0.5 } } } )
+		};
+		const crowd = new Crowd( {
+			assets: { variants: [ {}, {} ], durations: [ 1 ], meshesOf: () => [] },
+			routes, signals: { green: () => true }, sim, places: new Map(), capacity: 4
+		} );
+		const clock = { timeMin: 780, daySeconds: 46800 };
+		crowd.update( 0, PLAYER, clock );
+		const named = crowd.questMember( npc.npcId, clock.timeMin, PLAYER, { kind: 'edge', id: 'e2' } );
+		expect( named ).toMatchObject( { npcId: 'a17', crowdId: 'first-trip', appearanceSeed: 123 } );
+
+		agents = [];
+		crowd.update( 3, PLAYER, clock );
+		expect( named ).toMatchObject( { npcId: 'a17', crowdId: null, retiring: true } );
+		agents = [ {
+			crowdId: 'later-trip', type: 'courier', gender: 'female', appearanceSeed: 456,
+			activity: 'commuting', place: { kind: 'edge', id: 'e2' }, progress: 0.5, direction: 1
+		} ];
+		crowd.update( 3, PLAYER, clock );
+		expect( named.npcId ).toBe( 'a17' );
+		expect( [ ...crowd.members.values() ].find( ( member ) => member.crowdId === 'later-trip' ) ).not.toBe( named );
+
+	} );
+
 } );
 
 function stationaryMember( hero ) {

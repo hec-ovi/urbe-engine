@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-agents:continuity-save",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "actors", "follow"],
+  "properties": {
+    "version": { "const": "1" },
+    "actors": { "type": "array", "items": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/actor" } },
+    "follow": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["npcId", "mode", "route", "lastTimeMin"],
+          "properties": {
+            "npcId": { "type": "string", "minLength": 1 },
+            "mode": { "enum": ["following", "resuming"] },
+            "route": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/route" },
+            "lastTimeMin": { "type": "number", "minimum": 0 }
+          }
+        }
+      ]
+    }
+  }
+}

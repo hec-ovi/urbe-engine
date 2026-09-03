@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-agents:values",
+  "$defs": {
+    "vec3": {
+      "type": "array",
+      "prefixItems": [{ "type": "number" }, { "type": "number" }, { "type": "number" }],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "place": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": { "kind": { "enum": ["edge", "stop", "parcel", "route"] }, "id": { "type": "string", "minLength": 1 } }
+    },
+    "name": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["given", "family"],
+      "properties": { "given": { "type": "string" }, "family": { "type": "string" } }
+    },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entryIndex", "startMin", "endMin", "progress", "nextDestination"],
+      "properties": {
+        "entryIndex": { "type": "integer", "minimum": 0 },
+        "startMin": { "type": "number", "minimum": 0 },
+        "endMin": { "type": "number", "minimum": 0 },
+        "progress": { "type": "number", "minimum": 0, "maximum": 1 },
+        "nextDestination": { "$ref": "#/$defs/place" }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["npcId", "name", "gender", "type", "appearanceSeed", "place", "position", "heading", "animation", "mode", "schedule", "visible"],
+      "properties": {
+        "npcId": { "type": "string", "minLength": 1 },
+        "name": { "$ref": "#/$defs/name" },
+        "gender": { "enum": ["male", "female"] },
+        "type": { "type": "string", "minLength": 1 },
+        "appearanceSeed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "place": { "$ref": "#/$defs/place" },
+        "position": { "$ref": "#/$defs/vec3" },
+        "heading": { "type": "number" },
+        "animation": { "enum": ["walk", "run", "idle", "sit", "crouch"] },
+        "mode": { "enum": ["schedule", "following", "resuming", "released"] },
+        "schedule": { "$ref": "#/$defs/schedule" },
+        "visible": { "type": "boolean" }
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path3", "distanceMeters", "cursor", "destination"],
+      "properties": {
+        "path3": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/vec3" } },
+        "distanceMeters": { "type": "number", "minimum": 0 },
+        "cursor": { "type": "number", "minimum": 0 },
+        "destination": { "$ref": "#/$defs/vec3" }
+      }
+    }
+  }
+}

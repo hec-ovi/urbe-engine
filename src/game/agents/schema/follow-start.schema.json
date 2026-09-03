@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-agents:follow-start",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["npcId", "timeMin", "playerPosition"],
+  "properties": {
+    "npcId": { "type": "string", "minLength": 1 },
+    "timeMin": { "type": "number", "minimum": 0 },
+    "playerPosition": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-agents:places",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["kind", "id", "position"],
+    "properties": {
+      "kind": { "enum": ["parcel", "stop"] },
+      "id": { "type": "string", "minLength": 1 },
+      "position": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" },
+      "heading": { "type": "number" },
+      "anchors": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "position"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "position": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" },
+            "heading": { "type": "number" }
+          }
+        }
+      }
+    }
+  }
+}
