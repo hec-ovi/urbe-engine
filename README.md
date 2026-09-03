@@ -44,11 +44,11 @@ The quest compiler runs as a worker and has no browser port.
 
 ## Assembly
 
-`assemble-city` runs the link layer once over the blueprint, then generates every exterior shell in parallel. Its direct CLI default furnishes five buildings referenced by carried questlines; `--interiors N` changes that count. The staged game creator uses nine so the ten-step main quest and three side jobs have every required location. The other buildings stay closed shells. A QA report separates shell failures from interior candidates that stayed closed. Interiors are requested in `keys` texture mode, so the runtime resolves materials itself. Each furnished interior is written per floor (`interior/floors/<tag>.glb` beside each floor JSON), which is what the game streams.
+`assemble-city` runs the movement/link layer once over the blueprint, then generates every exterior shell in parallel. After the shells exist, it sends their published mast attachments plus building, roof-access and equipment prisms through Connections' rooftop cable fitter. Its direct CLI default furnishes five buildings referenced by carried questlines; `--interiors N` changes that count. The staged game creator uses nine so the ten-step main quest and three side jobs have every required location. The other buildings stay closed shells. A QA report separates shell failures from interior candidates that stayed closed. Interiors are requested in `keys` texture mode, so the runtime resolves materials itself. Each furnished interior is written per floor (`interior/floors/<tag>.glb` beside each floor JSON), which is what the game streams.
 
 Venue parcels (hotel, coffee shop, market, clinic, police, diner) ask exterior for a lettered marquee saying what the place is, until the naming pass gives it a name. Everything else gets no sign, because a blank one is worse than none.
 
-The output directory matches the blueprint it was built from: assembly removes parcel folders absent from that blueprint, and `manifest.json` names every complete shell in `parcels`, the enterable subset in `interiors`, and floor files only for that subset. The game loads only this manifest.
+The output directory matches the blueprint it was built from: assembly removes parcel folders absent from that blueprint, and `manifest.json` names every complete shell in `parcels`, the enterable subset in `interiors`, floor files only for that subset, and the validated rooftop span document. The game loads only this manifest.
 
 ## The game
 

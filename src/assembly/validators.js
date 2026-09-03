@@ -7,6 +7,8 @@ const EXTERIOR_REQUEST = new URL( '../../../exterior/schemas/building-request.sc
 const INTERIOR_REQUEST = new URL( '../../../interior/schemas/request.schema.json', import.meta.url );
 const INTERIOR_BLUEPRINT = new URL( '../../../interior/schemas/blueprint.schema.json', import.meta.url );
 const WORLD_MANIFEST = new URL( './schema/world-manifest.schema.json', import.meta.url );
+const ROOFTOP_SPAN = new URL( '../../../connections/schemas/rooftop-span.schema.json', import.meta.url );
+const ROOFTOP_SPAN_OUTPUT = new URL( '../../../connections/schemas/rooftop-span-output.schema.json', import.meta.url );
 
 let ajv = null;
 
@@ -21,9 +23,13 @@ function instance() {
 	if ( ! ajv ) {
 
 		ajv = new Ajv2020( { allErrors: true } );
+		const rooftopSpanOutput = loadSchema( ROOFTOP_SPAN_OUTPUT );
+		rooftopSpanOutput.properties.spans.items.$ref = './rooftop-span';
 		ajv.addSchema( loadSchema( INTERIOR_BLUEPRINT ) );
 		ajv.addSchema( loadSchema( INTERIOR_REQUEST ) );
 		ajv.addSchema( loadSchema( EXTERIOR_REQUEST ) );
+		ajv.addSchema( loadSchema( ROOFTOP_SPAN ) );
+		ajv.addSchema( rooftopSpanOutput );
 		ajv.addSchema( loadSchema( WORLD_MANIFEST ) );
 
 	}

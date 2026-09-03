@@ -149,7 +149,7 @@ export class OutDir {
 	 * the complete interior subset and only that subset's streamable floors.
 	 * The game refuses an out dir whose blueprint is not the one it is playing.
 	 */
-	writeManifest( atlas, parcelIds, interiorIds ) {
+	writeManifest( atlas, parcelIds, interiorIds, rooftopSpans = null ) {
 
 		const parcels = [ ...parcelIds ].sort( ( a, b ) => a.localeCompare( b, undefined, { numeric: true } ) );
 		const interiors = [ ...interiorIds ].sort( ( a, b ) => a.localeCompare( b, undefined, { numeric: true } ) );
@@ -171,6 +171,7 @@ export class OutDir {
 			interiors,
 			floors: Object.fromEntries( interiors.map( ( id ) => [ id, this.floorsOf( id ) ] ) )
 		};
+		if ( rooftopSpans ) manifest.rooftopSpans = rooftopSpans;
 		const errors = validateWorldManifest( manifest );
 
 		if ( errors.length ) throw new Error( `invalid world manifest: ${errors.map( ( error ) => `${error.instancePath || '/'} ${error.message}` ).join( '; ' )}` );

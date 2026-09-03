@@ -14,3 +14,12 @@ export async function runConnections( atlas, params ) {
 	return generate( atlas, params );
 
 }
+
+/** @returns RooftopSpanOutput per ../connections/schemas/rooftop-span-output.schema.json */
+export async function runRooftopSpans( request ) {
+
+	const { generateRooftopSpans } = await import( CONNECTIONS_ENTRY );
+
+	return generateRooftopSpans( request );
+
+}

@@ -103,6 +103,7 @@ export class WorldSource {
 		return {
 			atlas,
 			connections,
+			rooftopSpans: manifest.rooftopSpans ?? emptyRooftopSpans( atlas.meta.seed ),
 			buildings,
 			// Catalog games carry the player and quest runtime beside their world.
 			// Direct city previews have no descriptor and retain session-only play.
@@ -199,7 +200,7 @@ export class WorldSource {
 			npc,
 			floors,
 			hasInterior,
-			// The shell, under a megabyte: the city loads it for every building.
+			// The runtime shell the city loads for every building.
 			shellUrl: `${base}/${parcelId}.glb`
 		};
 
@@ -219,5 +220,14 @@ export class WorldSource {
 		} ) ) );
 
 	}
+
+}
+
+function emptyRooftopSpans( seed ) {
+
+	return {
+		meta: { seed: `${seed}:rooftop-spans`, schemaVersion: '1.0.0', generatorVersion: 'legacy' },
+		spans: []
+	};
 
 }

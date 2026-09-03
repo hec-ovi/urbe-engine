@@ -30,7 +30,8 @@
         "uniqueItems": true,
         "items": { "type": "string", "pattern": "^-?[0-9]{3}$" }
       }
-    }
+    },
+    "rooftopSpans": { "$ref": "../connections/rooftop-span-output" }
   },
   "$defs": {
     "parcelId": { "type": "string", "minLength": 1 }

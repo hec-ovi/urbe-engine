@@ -1,6 +1,7 @@
-const KEYS = new Set( [
-	'contractVersion', 'seed', 'atlasVersion', 'named', 'namingTheme', 'parcels', 'interiors', 'floors'
-] );
+import { rooftopSpanErrors } from './RooftopSpanDocument.js';
+
+const REQUIRED_KEYS = [ 'contractVersion', 'seed', 'atlasVersion', 'named', 'namingTheme', 'parcels', 'interiors', 'floors' ];
+const KEYS = new Set( [ ...REQUIRED_KEYS, 'rooftopSpans' ] );
 const FLOOR_TAG = /^-?[0-9]{3}$/;
 
 /** Runtime validation of assembly's world-manifest schema plus atlas relations. */
@@ -9,7 +10,7 @@ export function worldManifestErrors( manifest, knownParcels ) {
 	const errors = [];
 	if ( ! plainObject( manifest ) ) return [ 'manifest must be an object' ];
 
-	for ( const key of KEYS ) if ( ! Object.hasOwn( manifest, key ) ) errors.push( `missing ${key}` );
+	for ( const key of REQUIRED_KEYS ) if ( ! Object.hasOwn( manifest, key ) ) errors.push( `missing ${key}` );
 	for ( const key of Object.keys( manifest ) ) if ( ! KEYS.has( key ) ) errors.push( `unknown property ${key}` );
 	if ( manifest.contractVersion !== '1.0.0' ) errors.push( 'contractVersion must be 1.0.0' );
 	if ( typeof manifest.seed !== 'string' || ! manifest.seed ) errors.push( 'seed must be a non-empty string' );
@@ -43,6 +44,8 @@ export function worldManifestErrors( manifest, knownParcels ) {
 		}
 
 	}
+
+	if ( Object.hasOwn( manifest, 'rooftopSpans' ) ) rooftopSpanErrors( manifest.rooftopSpans, parcels, errors );
 
 	return errors;
 

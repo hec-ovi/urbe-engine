@@ -15,10 +15,11 @@
 import { existsSync, readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { RequestAssembler } from './RequestAssembler.js';
-import { runConnections } from './connectionsRunner.js';
+import { runConnections, runRooftopSpans } from './connectionsRunner.js';
 import { BuildingPipeline } from './BuildingPipeline.js';
 import { OutDir, MANIFEST_FILE } from './OutDir.js';
 import { interiorPlan, parseCityArgs } from './CityPlan.js';
+import { rooftopSpanRequest } from './RooftopSpanPlan.js';
 
 function dirBytes( dir ) {
 
@@ -203,7 +204,12 @@ writeFileSync( join( outDir, 'qa-report.json' ), JSON.stringify( {
 	interiorFailures
 }, null, 2 ) + '\n' );
 
-const manifest = out.writeManifest( atlas, shells, readyInteriors );
+const rooftopBuildings = shells.map( ( buildingId ) => ( {
+	buildingId,
+	blueprint: JSON.parse( readFileSync( join( outDir, buildingId, `${buildingId}.blueprint.json` ), 'utf8' ) )
+} ) );
+const rooftopSpans = await runRooftopSpans( rooftopSpanRequest( atlas, rooftopBuildings ) );
+const manifest = out.writeManifest( atlas, shells, readyInteriors, rooftopSpans );
 if ( out.carryTypes( resolve( args.blueprint ) ) ) console.log( 'typed NPC set carried in beside the blueprint' );
 
 console.log( `\n${totals.passed}/${totals.parcels} shells passed, ${totals.failed} failed; ${totals.interiorsReady}/${totals.interiorsRequested} interiors ready; ${( totals.wallMs / 1000 ).toFixed( 1 )} s, ${( totals.bytes / 1e6 ).toFixed( 1 )} MB` );
@@ -211,6 +217,6 @@ for ( const r of failed ) console.log( `  ${r.parcelId}  ${r.error}` );
 for ( const r of interiorFailures ) console.log( `  ${r.parcelId} interior kept closed  ${r.error}` );
 console.log( `qa report: ${join( outDir, 'qa-report.json' )}` );
 const naming = manifest.named ? `, named${manifest.namingTheme ? `: ${manifest.namingTheme}` : ''}` : '';
-console.log( `manifest: ${join( outDir, MANIFEST_FILE )} (${manifest.parcels.length} shells, ${manifest.interiors.length} interiors, atlas ${manifest.atlasVersion}${naming})` );
+console.log( `manifest: ${join( outDir, MANIFEST_FILE )} (${manifest.parcels.length} shells, ${manifest.interiors.length} interiors, ${manifest.rooftopSpans.spans.length} rooftop spans, atlas ${manifest.atlasVersion}${naming})` );
 
 process.exit( failed.length > 0 || readyInteriors.length < interiorTarget ? 1 : 0 );

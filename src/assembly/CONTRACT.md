@@ -5,6 +5,7 @@ Purpose: turns the atlas blueprint plus the connections document into per-parcel
 ## In
 - atlas blueprint: `CityBlueprint` per ../../../atlas/CONTRACT.md; every CLI takes `--blueprint <path>` and defaults to the committed sample `../../../atlas/samples/city-urbe.json` (assemble-city requires it explicitly). A named world per ../../../naming/CONTRACT.md (the same blueprint with `name` on its nameables and `meta.naming`) is taken through the same flag: parcel names become sign text, district names are not read.
 - connections document: `ConnectionsOutput` per ../../../connections/CONTRACT.md, produced in-process by `connectionsRunner.js` calling the library entry `generate(atlas, { seed })` with the atlas seed.
+- rooftop fitting runs after every shell. `RooftopSpanPlan` takes each finished Exterior blueprint's nested mast `externalAttachments`, plus closed building, roof-access and non-mast equipment prisms, and calls Connections `generateRooftopSpans(request)`. The complete scene comes from generated blueprints; assembly adds no endpoint or obstacle geometry.
 
 ## Out
 `RequestAssembler(atlas, connections).assemble(parcelId, { glb })` returns a `BuildingRequest` per ../../../exterior/schemas/building-request.schema.json:
@@ -32,11 +33,12 @@ The out dir contains exactly the blueprint it was built from (`OutDir.js`). Parc
   "named": true, "namingTheme": "rain-soaked port city",
   "parcels": [ "p0", "p1", ... ],
   "interiors": [ "p1", ... ],
-  "floors": { "p1": [ "-001", "000", "001" ], ... }
+  "floors": { "p1": [ "-001", "000", "001" ], ... },
+  "rooftopSpans": { "meta": { "seed": "urbe-tiny:rooftop-spans", "schemaVersion": "1.0.0", "generatorVersion": "0.10.0" }, "spans": [] }
 }
 ```
 
-`named` says whether the blueprint's parcels carry names, and `namingTheme` is `meta.naming.theme` when the blueprint records one, else null. `parcels` is every id with a complete exterior blueprint and GLB. `interiors` is the subset with `interior/building.glb`, `interior/npc.json`, and a GLB beside every floor document; `floors` has exactly those ids and lists their tags lowest first. A shell that is deliberately closed remains in `parcels` and is not a failure. This is the only list of buildings and floors the game loads: a directory listing would pick up stale output, and the seed and version let the game refuse an out dir assembled from a different blueprint outright.
+`named` says whether the blueprint's parcels carry names, and `namingTheme` is `meta.naming.theme` when the blueprint records one, else null. `parcels` is every id with a complete exterior blueprint and GLB. `interiors` is the subset with `interior/building.glb`, `interior/npc.json`, and a GLB beside every floor document; `floors` has exactly those ids and lists their tags lowest first. `rooftopSpans` is Connections' validated schema 1.0.0 output and may be empty. Older manifest 1.0.0 documents without that additive field load as an empty span set. A shell that is deliberately closed remains in `parcels` and is not a failure. This is the only list of buildings, floors and rooftop spans the game loads: a directory listing would pick up stale output, and the seed and version let the game refuse an out dir assembled from a different blueprint outright.
 
 Simulation: `simulationRunner.js` calls simulation's `createSimulation(input)` as a black box. `npm run simulate -- --time <minutes> [--district <id>] [--blueprint <path>] [--interiors <dir>]` boots it over the blueprint, connections' networks and the npc.json of every assembled building under the interiors dir (default `out/`) (synthetic fallback elsewhere, default npcTypes and name pool), prints population stats, the scoped crowd slice, three instantiated lives (a sampled crowd agent's handle, coffee vendor at midday, a reservation), latency measurements and a conservation check; usage error exit 2, no live crowd agent exit 1.
 
@@ -52,7 +54,7 @@ Simulation: `simulationRunner.js` calls simulation's `createSimulation(input)` a
 ## Invariants
 - Deterministic: same atlas and connections inputs, byte-identical request JSON.
 - Apertures are passed through untouched; assembly never edits connections geometry.
-- After a city batch the out dir holds a folder for no parcel outside the blueprint. `manifest.json` lists all complete shells, lists complete interiors as a subset, and has floor files for exactly that subset.
+- After a city batch the out dir holds a folder for no parcel outside the blueprint. `manifest.json` lists all complete shells, lists complete interiors as a subset, has floor files for exactly that subset, and carries exactly the rooftop span document generated from those shell blueprints.
 - The per-floor GLBs together hold exactly the interior meshes of `building.glb` (../../../interior/CONTRACT.md), so streaming floors draws the same building the viewer shows.
 - The CLI needs a TS-capable loader for the connections and interior entries; the npm script runs it under tsx.
 

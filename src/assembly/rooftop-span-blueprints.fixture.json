@@ -1,0 +1,198 @@
+{
+  "p135": {
+    "floors": [{ "elevation": -4 }],
+    "roof": {
+      "outline": [[658.84, 623.882], [652.9, 652.384], [629.881, 648.299], [635.786, 615.024]],
+      "elevation": 130,
+      "bulkhead": {
+        "center": [644.1, 634.7],
+        "axis": [0.1747305537961519, -0.9846162874795897],
+        "width": 6.9,
+        "depth": 6.9,
+        "housingHeight": 2.7,
+        "doorNormal": [0.9846162874795897, 0.1747305537961519],
+        "doorWidth": 1,
+        "doorHeight": 2.1
+      },
+      "artifacts": [
+        {
+          "id": "roof-artifact:penthouse-screen:0",
+          "kind": "penthouse-screen",
+          "center": [651.95, 633.05],
+          "size": [11.45, 5.8, 2.9],
+          "rotationDeg": 90
+        },
+        {
+          "id": "roof-artifact:antenna:2",
+          "kind": "antenna",
+          "center": [635.7, 623.25],
+          "size": [1.45, 1.2, 6.85],
+          "rotationDeg": 90,
+          "mastAssembly": {
+            "externalAttachments": [{
+              "id": "roof-artifact:antenna:2:external:0",
+              "position": [635.7, 136.85, 623.25],
+              "orientation": "omnidirectional",
+              "clearanceRadius": 0.08
+            }]
+          }
+        }
+      ]
+    }
+  },
+  "p136": {
+    "floors": [{ "elevation": 0 }],
+    "roof": {
+      "outline": [[633.883, 614.293], [627.911, 647.95], [586.477, 640.598], [592.803, 604.754], [593.833, 598.904]],
+      "elevation": 74.95,
+      "bulkhead": {
+        "center": [609.8, 625.25],
+        "axis": [0.933461493836447, 0.35867762618349736],
+        "width": 6.9,
+        "depth": 6.9,
+        "housingHeight": 2.45,
+        "doorNormal": [-0.35867762618349736, 0.933461493836447],
+        "doorWidth": 1,
+        "doorHeight": 2.1
+      },
+      "artifacts": [
+        {
+          "id": "roof-artifact:penthouse-screen:0",
+          "kind": "penthouse-screen",
+          "center": [597.55, 611.1],
+          "size": [9.35, 5.4, 3.95],
+          "rotationDeg": 90
+        },
+        {
+          "id": "roof-artifact:cooling-tower:1",
+          "kind": "cooling-tower",
+          "center": [608.3, 608.95],
+          "size": [5.5, 3.2, 3.05],
+          "rotationDeg": 0
+        },
+        {
+          "id": "roof-artifact:antenna:2",
+          "kind": "antenna",
+          "center": [621.35, 631.25],
+          "size": [1.35, 1.4, 7],
+          "rotationDeg": 0,
+          "mastAssembly": {
+            "externalAttachments": [{
+              "id": "roof-artifact:antenna:2:external:0",
+              "position": [621.35, 81.95, 631.25],
+              "orientation": "omnidirectional",
+              "clearanceRadius": 0.08
+            }]
+          }
+        }
+      ]
+    }
+  },
+  "p71": {
+    "floors": [{ "elevation": 0 }],
+    "roof": {
+      "outline": [[357.835, 755.201], [346.408, 820.738], [305.617, 814.039], [327.3, 749.96]],
+      "elevation": 21.3,
+      "bulkhead": {
+        "center": [333.9, 786.55],
+        "axis": [0.3205261855467384, -0.9472396551975946],
+        "width": 6.1,
+        "depth": 6.1,
+        "housingHeight": 2.75,
+        "doorNormal": [0.9472396551975946, 0.3205261855467384],
+        "doorWidth": 1,
+        "doorHeight": 2.1
+      },
+      "artifacts": [
+        {
+          "id": "roof-artifact:water-tank:0",
+          "kind": "water-tank",
+          "center": [318.4, 804.9],
+          "size": [3.25, 4.45, 4.95],
+          "rotationDeg": 90
+        },
+        {
+          "id": "roof-artifact:hvac:1",
+          "kind": "hvac",
+          "center": [344.25, 766.6],
+          "size": [1.2, 0.9, 0.7],
+          "rotationDeg": 0
+        },
+        {
+          "id": "roof-artifact:antenna:2",
+          "kind": "antenna",
+          "center": [329.1, 794.45],
+          "size": [0.8, 1.05, 4.45],
+          "rotationDeg": 0,
+          "mastAssembly": {
+            "externalAttachments": [{
+              "id": "roof-artifact:antenna:2:external:0",
+              "position": [329.1, 25.75, 794.45],
+              "orientation": "omnidirectional",
+              "clearanceRadius": 0.08
+            }]
+          }
+        }
+      ]
+    }
+  },
+  "p76": {
+    "floors": [{ "elevation": 0 }],
+    "roof": {
+      "outline": [[417.035, 763.132], [411.655, 793.983], [368.916, 786.531], [374.277, 755.792]],
+      "elevation": 22.5,
+      "bulkhead": {
+        "center": [393, 774.85],
+        "axis": [-0.9851372249027539, -0.17176917101418668],
+        "width": 7.2,
+        "depth": 7.2,
+        "housingHeight": 2.85,
+        "doorNormal": [0.17176917101418668, -0.9851372249027539],
+        "doorWidth": 1,
+        "doorHeight": 2.1
+      },
+      "artifacts": [
+        {
+          "id": "roof-artifact:water-tank:0",
+          "kind": "water-tank",
+          "center": [403.2, 769.85],
+          "size": [3.55, 4.3, 4.75],
+          "rotationDeg": 0
+        },
+        {
+          "id": "roof-artifact:antenna:2",
+          "kind": "antenna",
+          "center": [384.35, 768.4],
+          "size": [1, 0.85, 4.65],
+          "rotationDeg": 90,
+          "mastAssembly": {
+            "externalAttachments": [{
+              "id": "roof-artifact:antenna:2:external:0",
+              "position": [384.35, 27.15, 768.4],
+              "orientation": "omnidirectional",
+              "clearanceRadius": 0.08
+            }]
+          }
+        }
+      ]
+    }
+  },
+  "p111": {
+    "floors": [{ "elevation": 0 }],
+    "roof": {
+      "outline": [[539.096, 149.388], [524.156, 204.87], [482.761, 195.649], [497.396, 153.494], [521.312, 142.957]],
+      "elevation": 36.8,
+      "bulkhead": {
+        "center": [512.25, 174.15],
+        "axis": [-0.26001466650565974, 0.9656046671396895],
+        "width": 6.9,
+        "depth": 6.9,
+        "housingHeight": 2.55,
+        "doorNormal": [-0.9656046671396895, -0.26001466650565974],
+        "doorWidth": 1,
+        "doorHeight": 2.1
+      },
+      "artifacts": []
+    }
+  }
+}
