@@ -1,5 +1,0 @@
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:urbe:engine:npc-voice:audio-chunk",
-  "$ref": "urn:urbe:engine:npc-voice:values#/$defs/audioChunk"
-}
