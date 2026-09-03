@@ -11,6 +11,7 @@ import npcControlRequest from './schema/npc-control-request.schema.json';
 import npcControlResult from './schema/npc-control-result.schema.json';
 import mechanicRequest from './schema/mechanic-request.schema.json';
 import mechanicResult from './schema/mechanic-result.schema.json';
+import mechanicTargets from './schema/mechanic-targets.schema.json';
 import targetQuery from './schema/target-query.schema.json';
 import values from './schema/values.schema.json';
 import { QuestActionError } from './QuestActionError.js';
@@ -18,7 +19,7 @@ import { QuestActionError } from './QuestActionError.js';
 const SCHEMAS = [
 	values, targetQuery, interactionRequest, interactionTargets, activeObjective, interactionResult,
 	gameplayWorld, gameplayFrame, gameplayCandidates, gameplayPerform, npcControlRequest, npcControlResult,
-	mechanicRequest, mechanicResult
+	mechanicRequest, mechanicResult, mechanicTargets
 ];
 
 export class QuestActionBoundary {

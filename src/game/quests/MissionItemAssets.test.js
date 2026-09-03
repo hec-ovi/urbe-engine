@@ -43,4 +43,24 @@ describe( 'mission item asset binding', () => {
 
 	} );
 
+	it( 'resolves an exact fixed mechanic assembly and authored interaction anchor', () => {
+
+		const assets = new MissionItemAssets( {
+			requests: [ request ], bindings: [],
+			mechanicBindings: [ {
+				questId: 'quest.case', stepId: 'open-case', targetId: 'case',
+				assetId: request.assetId, interactionId: 'inspect'
+			} ],
+			materialCatalog: catalog
+		} );
+
+		expect( assets.mechanic( 'quest.case', 'open-case' ) ).toMatchObject( {
+			binding: { assetId: request.assetId, interactionId: 'inspect' },
+			assembly: { assetId: request.assetId },
+			anchor: { interaction: 'inspect' }
+		} );
+		expect( assets.mechanic( 'quest.case', 'other' ) ).toBeNull();
+
+	} );
+
 } );

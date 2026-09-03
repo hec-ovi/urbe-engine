@@ -2,6 +2,9 @@ import { QuestActionBoundary } from './QuestActionBoundary.js';
 import { questCompletion } from './QuestCompletion.js';
 
 const INTERACTION_KINDS = new Set( [ 'pickup', 'observe', 'listen', 'steal', 'work', 'deliver' ] );
+const MECHANIC_KINDS = new Set( [
+	'assassinate', 'rescue', 'escort', 'access', 'hacking', 'sabotage', 'transportation'
+] );
 const PHYSICAL_REACH = { pickup: 2.5, steal: 2, listen: 8 };
 
 /**
@@ -14,6 +17,36 @@ export class QuestActions {
 
 		this.session = session;
 		this.boundary = boundary;
+
+	}
+
+	/** Active measured mechanics with exact authored facts and resolved cast ids. */
+	mechanics( query ) {
+
+		this.boundary.input( 'target-query', query );
+		const targets = [];
+		for ( const { definition, runtime } of this.session.entries ) for ( const step of runtime.activeSteps() ) {
+
+			if ( ! MECHANIC_KINDS.has( step.target.kind ) ) continue;
+			const place = runtime.stepPlace( step.stepId, query.timeMin ) ?? null;
+			const runtimeAvailability = runtime.stepAvailability( step.stepId, query.timeMin );
+			targets.push( {
+				targetKey: targetKey( definition.id, step.stepId ),
+				questId: definition.id,
+				stepId: step.stepId,
+				kind: step.target.kind,
+				place,
+				actorIds: actorRoleIds( step.target ).map( ( roleId ) => runtime.cast[ roleId ] ).filter( Boolean ),
+				target: structuredClone( step.target ),
+				availability: place ? runtimeAvailability : { available: false, reason: 'target_missing' },
+				presentation: {
+					name: step.narrative.playerHint,
+					description: step.narrative.description
+				}
+			} );
+
+		}
+		return this.boundary.output( 'mechanic-targets', targets );
 
 	}
 
@@ -186,6 +219,8 @@ function actorRoleIds( target ) {
 
 	if ( target.kind === 'listen' ) return target.roleIds;
 	if ( target.kind === 'steal' ) return [ target.fromRoleId ];
+	if ( [ 'assassinate', 'rescue', 'escort' ].includes( target.kind ) ) return [ target.roleId ];
+	if ( target.kind === 'transportation' ) return target.passengerRoleIds;
 	return [];
 
 }

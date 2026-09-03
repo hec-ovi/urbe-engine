@@ -1,6 +1,8 @@
 import Ajv2020 from 'ajv/dist/2020.js';
 import values from './schema/values.schema.json';
 import followStart from './schema/follow-start.schema.json';
+import leadStart from './schema/lead-start.schema.json';
+import followerCarry from './schema/follower-carry.schema.json';
 import followUpdate from './schema/follow-update.schema.json';
 import followStop from './schema/follow-stop.schema.json';
 import crouchStart from './schema/crouch-start.schema.json';
@@ -19,7 +21,7 @@ import actorStates from './schema/actor-states.schema.json';
 import { NpcContinuityError } from './NpcContinuityError.js';
 
 const SCHEMAS = [
-	values, appearanceRequest, unloadRequest, followStart, followUpdate, followStop,
+	values, appearanceRequest, unloadRequest, followStart, leadStart, followerCarry, followUpdate, followStop,
 	crouchStart, crouchStop,
 	conversationStart, conversationStop,
 	visibleUpdate, actorState, actorStateOrNull, actorStates, continuitySave, places, movementNetwork

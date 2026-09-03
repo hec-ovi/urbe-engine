@@ -29,7 +29,7 @@ Purpose: validates and selects the complete quests v0.7 engine handoff without b
 
 - Objective rows are the byte-equivalent quest and step ordered projection of each authored target.
 - A selected bundle contains no record owned by an omitted quest and no mission asset without a selected item or fixed mechanic binding.
-- Every rescue, access, hacking and sabotage step binds its exact authored target to a fixed asset interaction. Engine admits only measured `public-transit` transportation.
+- Every rescue, access, hacking and sabotage step binds its exact authored target to a fixed asset interaction. Engine admits measured `public-transit` transportation with at most one controlled passenger.
 - Filenames stay in one directory and counts describe the exact returned arrays.
 - Unknown or mismatched cross-file references fail before gameplay starts.
 

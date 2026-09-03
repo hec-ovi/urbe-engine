@@ -127,6 +127,54 @@ export class NpcContinuity {
 
 	}
 
+	/** Interrupts one NPC and routes it ahead to an exact authored place. */
+	startLead( request ) {
+
+		this.boundary.input( 'lead-start', request );
+		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is in conversation` );
+		if ( this.follow ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.follow.npcId} is already under movement control` );
+		if ( this.pose ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.pose.npcId} has an explicit pose` );
+		const actor = this.#scheduledActor( request.npcId, request.timeMin );
+		if ( actor.place.kind === 'route' ) throw new NpcContinuityError( 'E_NPC_PLACE', `NPC ${request.npcId} cannot lead while aboard transit` );
+		const destination = this.#locatePlace( request.destination, null ).position;
+		const route = this.routes.route( actor.position, destination );
+		if ( ! route ) throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${request.npcId} cannot reach the escort destination` );
+		this.#interrupt( request.npcId, request.timeMin );
+		actor.visible = true;
+		actor.mode = 'leading';
+		actor.animation = route.distanceMeters > ARRIVAL_DISTANCE ? 'walk' : 'idle';
+		this.actors.set( actor.npcId, actor );
+		this.follow = {
+			npcId: actor.npcId, mode: 'leading', source: 'follow',
+			route: savedRoute( route, destination, 0 ), lastTimeMin: request.timeMin
+		};
+		return this.#actorOut( actor );
+
+	}
+
+	/** Attaches the exact active follower to a measured transit vehicle position. */
+	carryFollower( request ) {
+
+		this.boundary.input( 'follower-carry', request );
+		if ( this.follow?.npcId !== request.npcId || this.follow.mode !== 'following' ) {
+
+			throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${request.npcId} is not following` );
+
+		}
+		const actor = this.actors.get( request.npcId );
+		if ( ! actor ) throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', `NPC ${request.npcId} has no materialized actor` );
+		actor.position = [ ...request.position ];
+		actor.place = { kind: 'route', id: request.routeId };
+		actor.mode = 'following';
+		actor.animation = 'idle';
+		actor.visible = true;
+		this.follow.route = {
+			path3: [ [ ...request.position ] ], distanceMeters: 0, cursor: 0, destination: [ ...request.position ]
+		};
+		return this.#actorOut( actor );
+
+	}
+
 	/** Freezes one actual identity in crouch until its matching release. */
 	startCrouch( request ) {
 
@@ -200,6 +248,7 @@ export class NpcContinuity {
 		}
 
 		if ( this.follow.mode === 'following' ) this.#advanceFollowing( actor, request );
+		else if ( this.follow.mode === 'leading' ) this.#advanceLeading( actor, request );
 		else this.#advanceResume( actor, request );
 		if ( this.follow ) this.follow.lastTimeMin = request.timeMin;
 		return this.#actorOut( actor );
@@ -210,7 +259,7 @@ export class NpcContinuity {
 
 		this.boundary.input( 'follow-stop', request );
 		if ( ! this.follow ) throw new NpcContinuityError( 'E_NPC_CONFLICT', 'no NPC is following' );
-		if ( this.follow.mode !== 'following' ) throw new NpcContinuityError( 'E_NPC_CONFLICT', 'NPC is already returning to its schedule' );
+		if ( ! [ 'following', 'leading' ].includes( this.follow.mode ) ) throw new NpcContinuityError( 'E_NPC_CONFLICT', 'NPC is already returning to its schedule' );
 		if ( this.conversation?.npcId === this.follow.npcId ) throw new NpcContinuityError( 'E_NPC_CONFLICT', 'close the conversation before release' );
 		const actor = this.actors.get( this.follow.npcId );
 		if ( ! actor ) return this.#releaseInvalid( 'E_NPC_UNAVAILABLE', 'followed NPC state is unavailable', request.timeMin );
@@ -241,7 +290,7 @@ export class NpcContinuity {
 		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is already in conversation` );
 		if ( this.pose ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.pose.npcId} has an explicit pose` );
 		if ( this.follow?.mode === 'resuming' && this.follow.npcId === request.npcId ) this.follow = null;
-		const following = this.follow?.mode === 'following' && this.follow.npcId === request.npcId;
+		const following = [ 'following', 'leading' ].includes( this.follow?.mode ) && this.follow.npcId === request.npcId;
 		const actor = following ? this.actors.get( request.npcId ) : this.#scheduledActor( request.npcId, request.timeMin );
 		if ( ! actor ) throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', `NPC ${request.npcId} has no materialized actor` );
 		if ( ! following ) this.#interrupt( request.npcId, request.timeMin );
@@ -271,7 +320,7 @@ export class NpcContinuity {
 		if ( ! actor ) throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', `NPC ${conversation.npcId} has no materialized actor` );
 		if ( ! conversation.ownsInterruption ) {
 
-			actor.mode = 'following';
+			actor.mode = this.follow.mode;
 			actor.animation = 'idle';
 			return this.#actorOut( actor );
 
@@ -355,7 +404,7 @@ export class NpcContinuity {
 
 		}
 		const interrupted = new Set();
-		if ( save.follow?.mode === 'following' ) interrupted.add( save.follow.npcId );
+		if ( [ 'following', 'leading' ].includes( save.follow?.mode ) ) interrupted.add( save.follow.npcId );
 		if ( save.conversation?.ownsInterruption ) interrupted.add( save.conversation.npcId );
 		if ( save.pose ) interrupted.add( save.pose.npcId );
 		for ( const npcId of interrupted ) if ( ! this.simulation.behaviorAt( npcId, 0 )?.interrupted ) {
@@ -385,6 +434,22 @@ export class NpcContinuity {
 		actor.mode = 'following';
 		this.#putOnWalkGraph( actor );
 		this.follow.route = savedRoute( route, request.playerPosition, travel );
+
+	}
+
+	#advanceLeading( actor, request ) {
+
+		const destination = this.follow.route.destination;
+		const route = this.routes.route( actor.position, destination );
+		if ( ! route ) return this.#releaseInvalid( 'E_NPC_PATH', `NPC ${actor.npcId} cannot reach the escort destination`, request.timeMin );
+		const travel = Math.min( route.distanceMeters, WALK_SPEED * request.deltaSeconds );
+		const moved = pointAtDistance( route.path3, travel );
+		actor.position = moved.position;
+		actor.heading = moved.heading ?? actor.heading;
+		actor.animation = route.distanceMeters - travel <= ARRIVAL_DISTANCE ? 'idle' : 'walk';
+		actor.mode = 'leading';
+		this.#putOnWalkGraph( actor );
+		this.follow.route = savedRoute( route, destination, travel );
 
 	}
 

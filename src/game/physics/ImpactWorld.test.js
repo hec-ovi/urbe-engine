@@ -21,6 +21,8 @@ describe( 'live vehicle and pedestrian impact physics', () => {
 		expect( hit ).toEqual( {
 			personId: 'person:one',
 			vehicleId: 'car:one',
+			impactSpeed: 8,
+			fatal: false,
 			point: { x: 0, y: 1.05, z: 0 },
 			impulse: { x: 0, y: 6, z: 60 }
 		} );
@@ -29,6 +31,19 @@ describe( 'live vehicle and pedestrian impact physics', () => {
 		impacts.release( person.id );
 		physics.step( 1 / 60 );
 		expect( impacts.drain() ).toHaveLength( 1 );
+
+	} );
+
+	it( 'classifies only a measured high-speed contact as fatal', async () => {
+
+		const physics = await Physics.create();
+		const impacts = new ImpactWorld( physics );
+		impacts.sync( {
+			people: [ { id: 'person:mark', position: new THREE.Vector3() } ],
+			vehicles: [ { id: 'car:fast', position: new THREE.Vector3(), heading: 0, pitch: 0, speed: 12 } ]
+		} );
+		physics.step( 1 / 60 );
+		expect( impacts.drain()[ 0 ] ).toMatchObject( { personId: 'person:mark', impactSpeed: 12, fatal: true } );
 
 	} );
 

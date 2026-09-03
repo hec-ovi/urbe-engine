@@ -12,7 +12,7 @@ Purpose: resolves world and player collision, measures vehicle contacts, and tur
 
 ## Outputs
 
-- Measured impacts: [schema/impact-events.schema.json](schema/impact-events.schema.json). `ImpactWorld.drain()` returns stable person and vehicle ids plus the Rapier contact point and impulse. One person is reported once until released.
+- Measured impacts: [schema/impact-events.schema.json](schema/impact-events.schema.json). `ImpactWorld.drain()` returns stable person and vehicle ids, capped contact speed, fatal classification, Rapier contact point and impulse. One person is reported once until released.
 - Ragdoll summary: [schema/ragdoll-summary.schema.json](schema/ragdoll-summary.schema.json). The accepted Source rig becomes 15 dynamic bodies and 14 spherical joints with 70 kg total mass.
 - Player body position and grounded state are live Three.js values consumed by the game controller.
 
@@ -32,12 +32,12 @@ Purpose: resolves world and player collision, measures vehicle contacts, and tur
 ## Invariants
 
 - Physics advances at 1/60 second. Ground, structures and streamed floors use the same generated geometry that is rendered.
-- Vehicle impact starts only from a Rapier sensor intersection at 2 m/s or faster. Distance guesses never trigger a fall.
+- Vehicle impact starts only from a Rapier sensor intersection at 2 m/s or faster. A measured contact at 10 m/s or faster is fatal; slower contacts are falls only.
 - A fall starts from the person's current baked animation frame, removes that exact instanced slot and drives the same full Source skeleton. A proxy mesh or alternate skeleton is rejected.
 - Ragdoll parts collide with generated world geometry and not with one another. The 15 body masses total 70 kg.
 - One full fallen body may be resident at a time. A concurrent hit remains in crowd control and is rearmed for a later measured contact.
 - Fallen people are excluded from talk targeting and crowd pushback while the dynamic colliders own their contact.
-- A physical fall does not invent injury, death or simulation state. Persistent consequences require an explicit simulation contract.
+- GameApp sends a fatal contact to an active assassination step only after the full Source ragdoll accepts it. The quest runtime applies the simulation `die` flag.
 
 ## Verification
 

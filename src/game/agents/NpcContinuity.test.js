@@ -181,6 +181,40 @@ describe( 'NPC continuity integration', () => {
 
 	} );
 
+	it( 'leads to an authored place and attaches an exact follower to a measured transit route', () => {
+
+		const leading = setup();
+		const npc = leading.bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const destinationId = FIXTURE_BLUEPRINT.parcels.find( ( parcel ) => parcel.id !== 'p_cafe' ).id;
+		let actor = leading.controller.startLead( {
+			npcId: npc.npcId, timeMin: MON_9, destination: { kind: 'parcel', id: destinationId }
+		} );
+		expect( actor.mode ).toBe( 'leading' );
+		for ( let step = 0; step < 600 && actor.animation !== 'idle'; step ++ ) {
+
+			actor = leading.controller.updateFollow( {
+				timeMin: MON_9, deltaSeconds: 1, playerPosition: [ 0, 0, 0 ]
+			} );
+
+		}
+		expect( actor ).toMatchObject( { mode: 'leading', animation: 'idle' } );
+		expect( leading.controller.stopFollow( { timeMin: MON_9 + 1 } ).mode ).toBe( 'resuming' );
+
+		const riding = setup();
+		const rider = riding.bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		riding.controller.startFollow( { npcId: rider.npcId, timeMin: MON_9, playerPosition: [ 560, 1, 250 ] } );
+		expect( riding.controller.carryFollower( {
+			npcId: rider.npcId, position: [ 700, 4, 250 ], routeId: 'route-live'
+		} ) ).toMatchObject( {
+			npcId: rider.npcId, position: [ 700, 4, 250 ], place: { kind: 'route', id: 'route-live' },
+			mode: 'following', animation: 'idle'
+		} );
+		expect( code( () => riding.controller.carryFollower( {
+			npcId: 'other', position: [ 700, 4, 250 ], routeId: 'route-live'
+		} ) ) ).toBe( 'E_NPC_CONFLICT' );
+
+	} );
+
 	it( 'holds explicit crouch through visibility and save restore, then walks back to the routine', () => {
 
 		const first = setup();

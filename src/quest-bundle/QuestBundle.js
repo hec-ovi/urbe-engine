@@ -158,6 +158,11 @@ function assertContent( catalogs ) {
 				fail( `transportation ${definition.id}/${step.stepId} uses unsupported mode ${step.target.mode}` );
 
 			}
+			if ( step.target?.kind === 'transportation' && step.target.passengerRoleIds.length > 1 ) {
+
+				fail( `transportation ${definition.id}/${step.stepId} exceeds Engine's one controlled passenger` );
+
+			}
 
 		}
 

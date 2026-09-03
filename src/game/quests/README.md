@@ -1,6 +1,6 @@
 # Playable quest actions
 
-`QuestSession` owns cast quest runtimes and saved progress. `QuestActions` turns their active non-dialog steps into renderer-neutral targets, then accepts one validated player action for one target. `QuestGameplay` puts those targets into the live scene and shares the existing centered door, lift and NPC interaction route.
+`QuestSession` owns cast quest runtimes and saved progress. `QuestActions` projects every active target with stable quest, step and cast identities. `QuestGameplay` puts direct and fixed asset targets into the live centered interaction route, controls escorts, consumes fatal physics results, and observes complete passenger transit journeys.
 
 ```js
 const actions = new QuestActions( quests );
@@ -17,4 +17,4 @@ const result = actions.perform( {
 
 Render `presentation.bindingAction` through the current input map. Apply `worldChanges` only after `ok` is true, and replace the inventory display with `result.inventory`. See [CONTRACT.md](CONTRACT.md) for the boundary and failure rules.
 
-Item definitions currently stop at a parcel id. The live pickup prop therefore uses that parcel's ground-floor interior entry anchor, or the published access point when no interior door exists. District observation remains a district-wide action because the schema has no individual clue transform.
+Item definitions stop at a parcel id, so a pickup uses its ground-floor entry or published access anchor. Fixed rescue, access, hacking and sabotage targets use their mission asset binding and exact interaction anchor. Transport supports public transit with one or zero controlled passengers.

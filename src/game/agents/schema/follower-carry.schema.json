@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-agents:follower-carry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["npcId", "position", "routeId"],
+  "properties": {
+    "npcId": { "type": "string", "minLength": 1 },
+    "position": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" },
+    "routeId": { "type": "string", "minLength": 1 }
+  }
+}

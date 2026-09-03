@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:quest-actions:mechanic-targets",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["targetKey", "questId", "stepId", "kind", "place", "actorIds", "target", "availability", "presentation"],
+    "properties": {
+      "targetKey": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+      "questId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+      "stepId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+      "kind": { "enum": ["assassinate", "rescue", "escort", "access", "hacking", "sabotage", "transportation"] },
+      "place": {
+        "oneOf": [
+          { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/place" },
+          { "type": "null" }
+        ]
+      },
+      "actorIds": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }
+      },
+      "target": { "type": "object", "minProperties": 2 },
+      "availability": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["available"],
+        "properties": {
+          "available": { "type": "boolean" },
+          "reason": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/unavailableReason" }
+        }
+      },
+      "presentation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "description"],
+        "properties": {
+          "name": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" },
+          "description": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" }
+        }
+      }
+    }
+  }
+}

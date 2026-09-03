@@ -5,10 +5,12 @@
   "items": {
     "type": "object",
     "additionalProperties": false,
-    "required": ["personId", "vehicleId", "point", "impulse"],
+    "required": ["personId", "vehicleId", "impactSpeed", "fatal", "point", "impulse"],
     "properties": {
       "personId": { "type": "string", "minLength": 1, "maxLength": 160 },
       "vehicleId": { "type": "string", "minLength": 1, "maxLength": 160 },
+      "impactSpeed": { "type": "number", "minimum": 2, "maximum": 18 },
+      "fatal": { "type": "boolean" },
       "point": { "$ref": "urn:urbe:engine:physics:ragdoll-impact#/$defs/vector3" },
       "impulse": { "$ref": "urn:urbe:engine:physics:ragdoll-impact#/$defs/vector3" }
     }

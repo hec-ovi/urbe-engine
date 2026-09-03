@@ -6,6 +6,7 @@ const PERSON_RADIUS = 0.32;
 const PERSON_HALF_HEIGHT = 0.55;
 const CAR_HALF = { x: 0.95, y: 0.65, z: 2.3 };
 const MIN_IMPACT_SPEED = 2;
+const FATAL_IMPACT_SPEED = 10;
 const PERSON_GROUP = 0x0001;
 const VEHICLE_GROUP = 0x0002;
 const PERSON_COLLISIONS = ( PERSON_GROUP << 16 ) | VEHICLE_GROUP;
@@ -64,6 +65,8 @@ export class ImpactWorld {
 				events.push( {
 					personId: person.id,
 					vehicleId: vehicle.id,
+					impactSpeed: speed,
+					fatal: speed >= FATAL_IMPACT_SPEED,
 					point: record( point ),
 					impulse: record( direction.multiplyScalar( speed * 7.5 ).setY( Math.min( 12, speed * 0.75 ) ) )
 				} );

@@ -1,6 +1,6 @@
 # CONTRACT: NPC agents
 
-Purpose: materializes persistent simulation NPC identities and controls their follow, conversation, explicit crouch, and deterministic schedule return states over Connections paths.
+Purpose: materializes persistent simulation NPC identities and controls follow, lead, passenger carry, conversation, explicit crouch and deterministic schedule return over Connections paths.
 
 Status: the public continuity and follow API is wired into the live GameApp, Crowd, Interactor and explicit quest control adapter.
 
@@ -11,6 +11,8 @@ Status: the public continuity and follow API is wired into the live GameApp, Cro
 - Appearance request: [schema/appearance-request.schema.json](schema/appearance-request.schema.json). One already-instanced npcId and current simulation time.
 - Unload request: [schema/unload-request.schema.json](schema/unload-request.schema.json). The materialized npcId whose body leaves the visible set.
 - Follow start: [schema/follow-start.schema.json](schema/follow-start.schema.json). One already-instanced, live `npcId`, simulation time and player position.
+- Lead start: [schema/lead-start.schema.json](schema/lead-start.schema.json). One live npcId, simulation time and exact authored destination place.
+- Follower carry: [schema/follower-carry.schema.json](schema/follower-carry.schema.json). The active follower, measured transit position and authoritative route id.
 - Follow update: [schema/follow-update.schema.json](schema/follow-update.schema.json). Current simulation time, bounded frame delta and player position.
 - Follow stop: [schema/follow-stop.schema.json](schema/follow-stop.schema.json). Current simulation time.
 - Crouch start: [schema/crouch-start.schema.json](schema/crouch-start.schema.json). One exact npcId and current simulation time. It never derives from player input or movement.
@@ -34,6 +36,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - `appear(request)` projects the NPC's actual simulation schedule. Passenger transit legs map schedule progress through the matching per-leg timetable onto the route's authoritative 3D shape. `unload(request)` removes visibility while retaining identity state. A later `appear` uses the same npcId and body traits.
 - `startFollow(request)` accepts only a live, positioned NPC, interrupts its routine, and routes it toward the player.
 - `updateFollow(request)` replans over `path3`, walks at 1.4 m/s, runs at 2.4 m/s beyond 8 m, and stops 1.8 m from the player. Movement per update never exceeds speed times elapsed time.
+- `startLead(request)` routes the exact interrupted identity to the authored destination and holds it there until release. `carryFollower(request)` places only the active follower on the measured transit route position.
 - `stopFollow(request)` resumes the simulation and enters `resuming` mode. The NPC walks from its current position to the current scheduled place or next destination before returning to `schedule` mode.
 - `startCrouch(request)` interrupts one actual NPC routine and holds that identity in `posing` mode with crouch animation. `releaseCrouch(request)` resumes the simulation and routes the same identity back to its current schedule.
 - `beginConversation(request)` preserves the body at the visible position and pauses its routine. `endConversation(request)` walks a dialogue-interrupted NPC back into the current schedule. A follower stays interrupted and returns to follow control when dialogue closes.
@@ -64,6 +67,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - Scheduled and follow movement samples only Connections `path3`; flat compatibility paths never position a body.
 - Scheduled passenger transit uses the routine's exact route, board stop, alight stop and progress. Ordered duplicate stops select the shortest forward portion of the route shape, so return legs keep their direction and heading.
 - Follow speed is bounded and its stopping distance is deterministic. Explicit stop does not teleport the visible actor to its schedule.
+- Lead speed is bounded by the same Connections path. Passenger carry requires the exact active follower and route id.
 - Idle, walk, sprint and seated states select the corresponding purchased clip. Crouch is selected only for an explicit crouch action.
 - Explicit crouch is cast and npcId controlled. Player C input, proximity, movement speed, dialogue, and quest step kind cannot start it.
 - An interior waiter, barista or vendor keeps the simulation type chosen for that post. The engine does not reinterpret an interior role as an unrelated type.

@@ -12,11 +12,12 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - Live selected binding: [schema/gameplay-perform.schema.json](schema/gameplay-perform.schema.json). The shared interactor returns only the selected target key, symbolic binding and current clock.
 - NPC control request: [schema/npc-control-request.schema.json](schema/npc-control-request.schema.json). An explicit start-follow, release-follow, start-crouch, or release-crouch event names one actual cast npcId, current clock and player position.
 - Measured mechanic completion: [schema/mechanic-request.schema.json](schema/mechanic-request.schema.json). A live subsystem selects one active quest and step and supplies the exact quests event for a kill, release, escort arrival, access, hack, sabotage or completed journey. GameApp supplies the current simulation clock.
-- Mission item requests and `{ questId, itemId, assetId }` bindings arrive only through the validated [quest bundle](../../quest-bundle/CONTRACT.md). The loaded Materials theme is projected to the mission-assets material catalog without changing its keys, aliases, or variant ids.
+- Mission asset requests, item bindings and fixed mechanic bindings arrive only through the validated [quest bundle](../../quest-bundle/CONTRACT.md). The loaded Materials theme is projected to the mission-assets material catalog without changing its keys, aliases, or variant ids.
 
 ## Outputs
 
 - Interaction targets: [schema/interaction-targets.schema.json](schema/interaction-targets.schema.json). Every target has a stable quest and step identity, map place, actual cast NPC ids, availability, and presentation instructions. Binding names stay symbolic so the UI renders the player's current key or controller binding.
+- Measured mechanic targets: [schema/mechanic-targets.schema.json](schema/mechanic-targets.schema.json). Every active assassination, rescue, escort, access, hacking, sabotage and transportation step retains its quest and step identity, exact authored target, current place, availability and resolved cast ids.
 - Interaction result: [schema/interaction-result.schema.json](schema/interaction-result.schema.json). Success and failure both return current quest inventory. A completed pickup, theft, or delivery includes the matching world state change.
 - Active objective: [schema/active-objective.schema.json](schema/active-objective.schema.json). Includes talk and goto steps as well as direct actions, and carries the runtime's exact current place plus its route-ready guidance result. Parcel, station and stop places carry a destination. Areas, edges, moving routes and unavailable targets carry a closed reason.
 - Live interaction candidates: [schema/gameplay-candidates.schema.json](schema/gameplay-candidates.schema.json). Carries only validated prompt data and stable target identity to the shared interactor. Measured focus facts remain private until the matching target is selected.
@@ -26,13 +27,16 @@ Purpose: converts active quest steps into deterministic player interaction targe
 ## Events
 
 - `targets({ timeMin })` projects active `pickup`, `observe`, `listen`, `steal`, `work`, and `deliver` steps.
+- `mechanics({ timeMin })` projects all seven measured target kinds with the exact facts later used to build their closed runtime event.
 - `perform(request)` maps `take`, `inspect`, `listen`, `steal`, `work`, and `deliver` to the quests runtime's closed player event vocabulary. `read` returns the selected document text without advancing the quest.
 - `objective({ timeMin })` selects the first open questline and first definition-ordered active step. The live game passes its exact guidance destination to the objective route box.
 - `QuestGameplay.candidates(frame)` projects those validated targets into the shared centered interaction route. `QuestGameplay.perform(request)` resolves the current selected target and sends its measured place, visibility, obstruction and reach facts through `QuestActions.perform`.
-- A pickup is projected only when its exact quest and item binding creates a portable mission-assets assembly with a `take` anchor. Every assembly primitive uses its authored PBR key and variant and has matching Rapier collision.
+- A pickup is projected only when its exact quest and item binding creates a portable mission-assets assembly with a `take` anchor. Rescue, access, hacking and sabotage use the exact fixed asset and interaction anchor from their v1.1 binding. Every assembly primitive uses its authored PBR key and variant and has matching Rapier collision.
 - An accepted `QuestGameplay.perform(request)` sends its stable target key, exact action, and retained cast participants to the gameplay animation coordinator. Rejected actions never start presentation state.
 - `QuestGameplay.control(request)` accepts only an explicit event for an npcId already in the session cast. Conversation, player crouch input, and quest-step kinds never imply follow or crouch. An accepted pose event is sent to animation coordination with the exact returned actor state.
-- `QuestMechanics.complete(request)` maps `killed`, `released`, `escorted`, `accessed`, `hacked`, `sabotaged` and `transported` only to their matching active target kinds. The quests runtime checks every authored NPC, route, access point, credential, target, journey, passenger, cargo, mode and place identity. `GameApp.questMechanic(request)` is the production host entrypoint and updates the same HUD, inventory, persistence and objective route as centered actions.
+- Fixed asset interaction flows through `QuestGameplay.perform`. Rescue keeps its exact cast NPC under follow control. Escort starts the authored follow or lead mode at its exact source and completes only when the controlled body and player reach the destination, then resumes the NPC routine.
+- `QuestGameplay.fatalImpact` consumes only a fatal Rapier vehicle contact after Source ragdoll acceptance. `QuestGameplay.transitEvent` tracks an accepted public transit board, attaches the exact passenger to every measured ride position, verifies trip, origin, destination and cargo, then releases the passenger after disembark. GameApp sends every accepted result through the shared HUD, inventory, persistence and route path.
+- `QuestMechanics.complete(request)` remains the closed runtime adapter behind those live hosts. The quests runtime checks every authored NPC, route, access point, credential, target, journey, passenger, cargo, mode and place identity.
 
 ## Errors
 
@@ -54,6 +58,8 @@ Purpose: converts active quest steps into deterministic player interaction targe
 
 - An interaction advances only the questline named by the selected target. Equal item ids in another questline do not receive the event.
 - A measured mechanic event advances only its selected active quest and step. A different event kind or any mismatched authored identity changes nothing.
+- Public transit completion requires the exact active origin, one or zero cast passengers, every cargo item, the tracked trip and route, and the exact authored destination. A wrong trip or stop changes nothing.
+- Escort completion requires the exact controlled identity. Follow mode keeps the NPC within 3.2 metres at arrival. Lead mode reaches its Connections destination before the player arrival is accepted.
 - Pickup and theft require the selected object or person to be visible, unobstructed, inside the fixed reach, and at the quest target's current place.
 - Listening requires an unobstructed conversation target inside eight metres and at the target parcel.
 - A failed interaction does not mutate quest progress or inventory.

@@ -7,7 +7,6 @@ import { DialogueSpeech } from './voice/index.js';
 import { QuestSession } from './quests/QuestSession.js';
 import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
 import { MissionItemAssets } from './quests/MissionItemAssets.js';
-import { QuestMechanics } from './quests/QuestMechanics.js';
 import { InvestigationGameplay } from './investigation/index.js';
 import { ObjectiveRouter } from './routes/ObjectiveRouter.js';
 import { ObjectiveGuide } from './routes/ObjectiveGuide.js';
@@ -177,7 +176,7 @@ export class GameApp {
 		const source = new WorldSource( config );
 		const {
 			atlas, connections, buildings, unbuilt, npcTypes, questlines, investigations,
-			missionAssetRequests, missionItemBindings, game
+			mechanicTargetBindings, missionAssetRequests, missionItemBindings, game
 		} = await source.load();
 		const transitRoutes = connections.networks.transit.routes;
 		this.transitJourney = new TransitJourney( {
@@ -217,6 +216,7 @@ export class GameApp {
 		this.missionItems = new MissionItemAssets( {
 			requests: missionAssetRequests,
 			bindings: missionItemBindings,
+			mechanicBindings: mechanicTargetBindings,
 			materialCatalog: resolver.missionCatalog( THEME )
 		} );
 		this.rooms = new RoomLights( factory, this.tier );
@@ -313,7 +313,6 @@ export class GameApp {
 			this.clock.timeMin,
 			game ? [ ...game.quests, ...game.sideJobs ] : []
 		);
-		this.questMechanics = new QuestMechanics( this.quests );
 		this.savedInventory = game?.player.inventory ?? [];
 		this.questItemIds = questlines.flatMap( ( questline ) => questline.items.map( ( item ) => item.itemId ) );
 		this.#refreshInventory();
@@ -572,12 +571,18 @@ export class GameApp {
 			eye: { x: this.controller.eye.x, y: this.controller.eye.y, z: this.controller.eye.z },
 			look: { x: this.controller.look.x, y: this.controller.look.y, z: this.controller.look.z }
 		} );
+		for ( const result of this.questGameplay.drainMechanicResults() ) this.#questActionResult( result );
 		if ( ! transitFrame ) transitFrame = this.transitGameplay.update( {
 			daySeconds: this.clock.daySeconds,
 			interactionBlocked: Boolean( worldPrompt || this.interactor.conversation )
 		} );
 		const prompt = playableTransitPrompt( worldPrompt, transitFrame );
 		this.view.transit.ride( transitStatusLabel( transitFrame.status ) );
+		if ( transitFrame.result?.ok && ( transitFrame.aboard || transitFrame.result.autoDisembarked ) ) {
+
+			this.#transitQuestEvent( { action: 'update', result: transitFrame.result } );
+
+		}
 		if ( transitFrame.result?.autoDisembarked ) this.#persistTransitState();
 		this.view.prompt.update( this.input.locked ? prompt : null );
 
@@ -586,7 +591,7 @@ export class GameApp {
 			const owner = playableInteractionOwner( this.interactor, transitFrame );
 			if ( owner === 'conversation' ) this.interactor.close( this.clock );
 			else if ( owner === 'world' ) this.#questActionResult( this.interactor.activate( this.clock ) );
-			else this.#transitAction( this.transitGameplay.activate() );
+			else this.#transitAction( this.transitGameplay.activate(), playerPlaces );
 
 		}
 		if ( this.input.consume( 'KeyR' ) && this.input.locked && ! this.interactor.conversation && ! transitFrame.aboard ) {
@@ -836,7 +841,7 @@ export class GameApp {
 
 	}
 
-	#transitAction( action ) {
+	#transitAction( action, playerPlaces = null ) {
 
 		if ( ! action ) return;
 		if ( action.action === 'choose' ) {
@@ -859,6 +864,7 @@ export class GameApp {
 		}
 
 		this.view.transit.close();
+		this.#transitQuestEvent( action, playerPlaces );
 		this.#persistTransitState();
 
 	}
@@ -887,7 +893,13 @@ export class GameApp {
 		this.hero.fall( person, this.physics, { point: impact.point, impulse: impact.impulse } )
 			.then( ( accepted ) => {
 
-				if ( accepted ) return;
+				if ( accepted ) {
+
+					const result = this.questGameplay.fatalImpact( impact, this.clock.timeMin );
+					if ( result ) this.#questActionResult( result );
+					return;
+
+				}
 				this.crowd.cancelRagdoll( impact.personId );
 				this.animations.physicsResume( person );
 				this.impactWorld.release( impact.personId );
@@ -906,8 +918,24 @@ export class GameApp {
 
 	#selectTransit( service ) {
 
-		this.#transitAction( this.transitGameplay?.board( service ) );
+		const feet = this.body.feet;
+		const places = this.locator.refs( feet.x, feet.z, this.standing?.parcelId ?? null );
+		this.#transitAction( this.transitGameplay?.board( service ), places );
 		this.input?.requestLock();
+
+	}
+
+	#transitQuestEvent( action, playerPlaces = null ) {
+
+		if ( ! this.questGameplay || ! this.body ) return;
+		const feet = this.body.feet;
+		const places = playerPlaces ?? this.locator.refs( feet.x, feet.z, this.standing?.parcelId ?? null );
+		const result = this.questGameplay.transitEvent( action, {
+			timeMin: this.clock.timeMin,
+			playerPlaces: places,
+			position: [ feet.x, feet.y, feet.z ]
+		} );
+		if ( result ) this.#questActionResult( result );
 
 	}
 
@@ -1036,15 +1064,6 @@ export class GameApp {
 			this.view.toast.show( { title: 'Save failed', text: error.message } );
 
 		} );
-		return result;
-
-	}
-
-	/** Completion proof from a live combat, rescue, escort, access, device, sabotage, or journey host. */
-	questMechanic( request ) {
-
-		const result = this.questMechanics.complete( { ...request, timeMin: this.clock.timeMin } );
-		this.#questActionResult( result );
 		return result;
 
 	}

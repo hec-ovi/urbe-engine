@@ -153,6 +153,48 @@ describe( 'QuestActions target contract', () => {
 
 	} );
 
+	it( 'projects every measured mechanic with exact authored target and resolved cast identities', () => {
+
+		const targets = [
+			{ kind: 'assassinate', roleId: 'actor' },
+			{ kind: 'rescue', roleId: 'actor', releaseTargetId: 'release', place: { parcelId: 'p_work' }, completionFlag: 'done' },
+			{ kind: 'escort', roleId: 'actor', routeId: 'safe', mode: 'follow-player', from: { parcelId: 'p_work' }, to: { parcelId: 'p_drop' }, completionFlag: 'done' },
+			{ kind: 'access', accessPointId: 'door', credentialItemId: 'code', place: { parcelId: 'p_work' }, completionFlag: 'done' },
+			{ kind: 'hacking', targetId: 'terminal', place: { parcelId: 'p_work' }, completionFlag: 'done' },
+			{ kind: 'sabotage', targetId: 'relay', place: { parcelId: 'p_work' }, completionFlag: 'done' },
+			{ kind: 'transportation', journeyId: 'ride', mode: 'public-transit', from: { parcelId: 'p_work' }, to: { parcelId: 'p_drop' }, passengerRoleIds: [ 'actor' ], cargoItemIds: [], completionFlag: 'done' }
+		];
+		const definitions = targets.map( ( targetValue, index ) => {
+
+			const value = oneStepQuest( `q_mechanic_${index}`, targetValue, {
+				roles: targetValue.roleId || targetValue.passengerRoleIds ? [ role( 'actor', 'giver' ) ] : undefined,
+				items: targetValue.kind === 'access'
+					? [ { itemId: 'code', name: 'Code', description: 'Access code.', kind: 'information' } ]
+					: []
+			} );
+			if ( targetValue.completionFlag ) {
+
+				value.flags = [ targetValue.completionFlag ];
+				value.steps[ 0 ].effects = [ { kind: 'setFlag', flag: targetValue.completionFlag } ];
+
+			}
+			if ( targetValue.kind === 'access' ) value.steps[ 0 ].needs = [ targetValue.credentialItemId ];
+			return value;
+
+		} );
+		const projected = new QuestActions( QuestSession.create( definitions, simulation(), 600 ) ).mechanics( { timeMin: 600 } );
+
+		expect( projected.map( ( target ) => target.kind ) ).toEqual( targets.map( ( target ) => target.kind ) );
+		expect( projected[ 0 ] ).toMatchObject( {
+			targetKey: 'quest:q_mechanic_0:step', actorIds: [ 'n_giver' ], target: targets[ 0 ],
+			place: { kind: 'parcel', id: 'p_work' }, availability: { available: true }
+		} );
+		expect( projected[ 6 ] ).toMatchObject( {
+			actorIds: [ 'n_giver' ], target: targets[ 6 ], place: { kind: 'parcel', id: 'p_work' }
+		} );
+
+	} );
+
 } );
 
 describe( 'QuestActions interaction state', () => {
