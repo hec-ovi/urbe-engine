@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { doorFrame } from './DoorGeometry.js';
+import { doorFrames, doorLeafOwner } from './DoorGeometry.js';
 import { takeTriangles, centroidAt } from './Triangles.js';
 import { kelvinColor } from '../light/Color.js';
 import { bucketFor, splitBucket, variantFor } from './Variety.js';
@@ -13,9 +13,11 @@ import { bucketFor, splitBucket, variantFor } from './Variety.js';
 // not sanitized, so the material key still arrives whole.
 const EXTERIOR = 'merged';
 export const INTERIOR_PREFIX = 'interior';
-// Each entrance leaf is its own node, `door:entrance/leaf:N`, sitting on its
-// hinge (../../../exterior/CONTRACT.md): the node's origin is where it swings.
+// Each moving leaf is its own node, `door:<id>/leaf:N` or
+// `balcony:<id>/leaf:N`, sitting on its hinge
+// (../../../exterior/CONTRACT.md): the node's origin is where it swings.
 const DOOR = 'door';
+const BALCONY = 'balcony';
 
 const FIXTURE = '/light-fixture/';
 /**
@@ -74,6 +76,7 @@ export class BuildingsLoader {
 
 		const shellByKey = new Map();
 		const doors = [];
+		const entrances = [];
 		const shellColliders = new Map();
 		const centers = new Map();
 		let triangles = 0;
@@ -96,11 +99,12 @@ export class BuildingsLoader {
 			shellColliders.set( building.parcelId, building.exteriorFlat );
 			centers.set( building.parcelId, building.center );
 
-			if ( building.door ) {
+			for ( const door of building.doors ) {
 
-				for ( const { pivot } of building.door.pivots ) group.add( pivot );
+				for ( const { pivot } of door.pivots ) group.add( pivot );
 
-				doors.push( building.door );
+				doors.push( door );
+				if ( door.role === 'main' ) entrances.push( door );
 
 			}
 
@@ -126,7 +130,7 @@ export class BuildingsLoader {
 
 		}
 
-		return { group, doors, shellColliders, centers, triangles };
+		return { group, doors, entrances, shellColliders, centers, triangles };
 
 	}
 
@@ -155,8 +159,8 @@ export class BuildingsLoader {
 		gltf.scene.updateMatrixWorld( true );
 
 		const exterior = new Map();
-		const door = hasInterior ? doorFrame( blueprint ) : null;
-		const doorParts = [];
+		const doors = hasInterior ? doorFrames( blueprint ) : [];
+		const doorParts = new Map( doors.map( ( door ) => [ door, [] ] ) );
 		const exteriorFlat = [];
 
 		const meshes = [];
@@ -172,18 +176,30 @@ export class BuildingsLoader {
 				node.material?.userData?.materialVariant,
 				node.material?.side === THREE.DoubleSide
 			);
-			if ( ! hasInterior && name.startsWith( DOOR ) ) {
+			if ( ! hasInterior && isDoorLeaf( name ) ) {
 
 				const geometry = bake( node );
 				push( exterior, surface, geometry );
-				exteriorFlat.push( positionsOnly( geometry ) );
+				if ( isColliderMaterial( key ) ) exteriorFlat.push( positionsOnly( geometry ) );
 				continue;
 
 			}
 
-			if ( door && name.startsWith( DOOR ) ) {
+			if ( doors.length && isDoorLeaf( name ) ) {
 
-				doorParts.push( { key: surface, geometry: bake( node ), hinge: node.getWorldPosition( new THREE.Vector3() ) } );
+				const owner = doorLeafOwner( name, doors );
+				const geometry = bake( node );
+				if ( owner ) doorParts.get( owner ).push( {
+					key: surface,
+					geometry,
+					hinge: node.getWorldPosition( new THREE.Vector3() )
+				} );
+				else {
+
+					push( exterior, surface, geometry );
+					if ( isColliderMaterial( key ) ) exteriorFlat.push( positionsOnly( geometry ) );
+
+				}
 
 				continue;
 
@@ -194,11 +210,15 @@ export class BuildingsLoader {
 			const geometry = bake( node );
 
 			// Older shells merged the leaf into the door material's own mesh.
-			const [ leaf, rest ] = door && isDoorMaterial( key )
-				? splitAt( geometry, door.box )
-				: [ null, geometry ];
+			let rest = geometry;
+			if ( doors.length && isDoorMaterial( key ) ) for ( const door of doors ) {
 
-			if ( leaf ) doorParts.push( { key: surface, geometry: leaf, hinge: door.hinge } );
+				const [ leaf, remainder ] = splitAt( rest, door.box );
+				if ( leaf ) doorParts.get( door ).push( { key: surface, geometry: leaf, hinge: door.hinge } );
+				rest = remainder;
+				if ( ! rest ) break;
+
+			}
 
 			if ( rest ) {
 
@@ -215,14 +235,19 @@ export class BuildingsLoader {
 
 		}
 
-		if ( door && doorParts.length ) attachLeaves( door, doorParts, ( key ) => this.#material( key ) );
+		for ( const door of doors ) {
+
+			const parts = doorParts.get( door );
+			if ( parts.length ) attachLeaves( door, parts, ( key ) => this.#material( key ) );
+
+		}
 
 		return {
 			parcelId,
 			exterior,
 			exteriorFlat: exteriorFlat.length ? BufferGeometryUtils.mergeGeometries( exteriorFlat, false ) : null,
 			center: centerOf( blueprint ),
-			door: door?.pivots.length ? door : null
+			doors: doors.filter( ( door ) => door.pivots.length )
 		};
 
 	}
@@ -267,6 +292,12 @@ function taskYield() {
 function isDoorMaterial( key ) {
 
 	return key.includes( '/door-glass/' ) || key.includes( '/door/' );
+
+}
+
+function isDoorLeaf( name ) {
+
+	return name.startsWith( DOOR ) || name.startsWith( BALCONY );
 
 }
 
@@ -344,18 +375,38 @@ function splitAt( geometry, box ) {
 function attachLeaves( door, parts, material ) {
 
 	door.pivots = [];
+	const leaves = new Map();
 
 	for ( const { key, geometry, hinge } of parts ) {
 
-		geometry.computeBoundingBox();
-		const side = geometry.boundingBox.getCenter( _centroid ).sub( hinge ).dot( door.along ) >= 0 ? 1 : - 1;
-		geometry.translate( - hinge.x, - hinge.y, - hinge.z );
+		const leafKey = hinge.toArray().join( '/' );
+		if ( ! leaves.has( leafKey ) ) leaves.set( leafKey, { hinge: hinge.clone(), parts: [] } );
+		leaves.get( leafKey ).parts.push( { key, geometry } );
 
+	}
+
+	for ( const { hinge, parts: leafParts } of leaves.values() ) {
+
+		const bounds = new THREE.Box3();
 		const pivot = new THREE.Group();
+		const colliderParts = [];
 		pivot.position.copy( hinge );
-		pivot.name = `door:${door.parcelId}:${door.pivots.length}`;
-		pivot.add( new THREE.Mesh( geometry, material( key ) ) );
-		door.pivots.push( { pivot, sign: side } );
+		pivot.name = `door:${door.parcelId}:${door.id}:${door.pivots.length}`;
+
+		for ( const { key, geometry } of leafParts ) {
+
+			geometry.computeBoundingBox();
+			bounds.union( geometry.boundingBox );
+			geometry.translate( - hinge.x, - hinge.y, - hinge.z );
+			colliderParts.push( positionsOnly( geometry ) );
+			pivot.add( new THREE.Mesh( geometry, material( key ) ) );
+
+		}
+
+		const sign = bounds.getCenter( _centroid ).sub( hinge ).dot( door.along ) >= 0 ? 1 : - 1;
+		const colliderGeometry = BufferGeometryUtils.mergeGeometries( colliderParts, false );
+		colliderParts.forEach( ( geometry ) => geometry.dispose() );
+		door.pivots.push( { pivot, sign, colliderGeometry } );
 
 	}
 

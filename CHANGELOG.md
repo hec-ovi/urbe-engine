@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.5: city manifests carry Connections rooftop spans and the game renders their exact fitted catenaries. Authored two-sided shell surfaces remain two-sided after material resolution. Every Exterior entrance, balcony and roof-bulkhead leaf on an interior parcel has its own stable interaction and a kinematic collider aligned to the rendered hinge.
+
 0.17.4: two-metre pavement plates and edge-local curb stone keep neutral street regions readable under 24000 lm, 5000 K route lights. Exterior entrance surfaces retain their authored strip material at every door size, animated crowds retain the Source mesh normals, NPC identity cards accept structured names without an empty portrait, and building previews expose recoverable source and pointer-capture states.
 
 0.17.3: direct city play accepts absent optional quest catalogs from the development server while malformed and non-JSON catalog files remain startup errors.

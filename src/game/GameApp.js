@@ -49,7 +49,7 @@ import { EnvironmentProbe } from './look/EnvironmentProbe.js';
 import { LookPipeline } from './look/LookPipeline.js';
 import { Warmup } from './look/Warmup.js';
 import { NightSky, SKY_COLOR } from './sky/NightSky.js';
-import { Physics, WorldColliders, PlayerBody, BODY_RADIUS, ImpactWorld } from './physics/index.js';
+import { Physics, WorldColliders, DoorColliders, PlayerBody, BODY_RADIUS, ImpactWorld } from './physics/index.js';
 import { Input } from './player/Input.js';
 import { PlayerController } from './player/PlayerController.js';
 import { Interactor } from './player/Interactor.js';
@@ -252,8 +252,8 @@ export class GameApp {
 		this.roomView = new RoomView( this.stream.rooms, ROOM_VISIBLE_RADIUS );
 		// A building you can walk into says so, and one with nothing behind its
 		// facade says that too, by staying dark and offering no prompt.
-		this.venues = new Venues( { atlas, buildings, doors: city.doors, fixtures, factory } );
-		this.scene.add( this.venues.build( city.doors ) );
+		this.venues = new Venues( { atlas, buildings, doors: city.entrances, fixtures, factory } );
+		this.scene.add( this.venues.build( city.entrances ) );
 		this.#hangHaze( fixtures );
 
 		this.view.step( 'raising the sky' );
@@ -274,6 +274,7 @@ export class GameApp {
 
 		this.view.step( 'building the physics world' );
 		this.physics = await Physics.create();
+		this.doorColliders = new DoorColliders( this.physics, city.doors );
 		this.impactWorld = new ImpactWorld( this.physics );
 		this.colliders = new WorldColliders( this.physics );
 		this.colliders.addStatic( ground.colliderGeometry, 'ground' );
@@ -307,11 +308,11 @@ export class GameApp {
 		this.view.quests.setQuests( this.quests.view() );
 		this.signals = new Signals( connections.networks );
 		const routes = new WalkRoutes( connections.networks );
-		const crowdPlaces = placesOf( city.doors, buildings );
+		const crowdPlaces = placesOf( city.entrances, buildings );
 		this.npcContinuity = new NpcContinuity( {
 			simulation: this.sim,
 			routes,
-			places: npcContinuityPlaces( atlas, city.doors, buildings, transitRoutes )
+			places: npcContinuityPlaces( atlas, city.entrances, buildings, transitRoutes )
 		} );
 		if ( game?.npcState?.continuity ) this.npcContinuity.restore( game.npcState.continuity );
 
@@ -374,7 +375,7 @@ export class GameApp {
 		this.bookmarks = new Bookmarks( { fixtures, rooms: () => this.stream.rooms, networks: connections.networks } );
 		this.questGameplay = new QuestGameplay( {
 			session: this.quests,
-			world: questGameplayWorld( atlas, city.doors ),
+			world: questGameplayWorld( atlas, city.entrances ),
 			crowd: this.crowd,
 			physics: this.physics,
 			playerCollider: this.body.collider,
@@ -439,7 +440,8 @@ export class GameApp {
 			controller: this.controller, elevators: this.elevators, quests: this.questGameplay,
 			investigations: this.investigations,
 			continuity: this.npcContinuity,
-			animations: this.animations
+			animations: this.animations,
+			doorColliders: this.doorColliders
 		} );
 		this.interactor.onConversation = ( conversation ) => this.presentConversation( conversation );
 

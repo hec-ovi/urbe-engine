@@ -33,7 +33,7 @@ const HANDLE = 1.1;
  */
 export class Interactor {
 
-	constructor( { crowd, doors, sim, controller, elevators, quests, investigations = null, continuity = null, animations = null } ) {
+	constructor( { crowd, doors, sim, controller, elevators, quests, investigations = null, continuity = null, animations = null, doorColliders = null } ) {
 
 		this.crowd = crowd;
 		this.doors = doors;
@@ -44,6 +44,7 @@ export class Interactor {
 		this.investigations = investigations;
 		this.continuity = continuity;
 		this.animations = animations;
+		this.doorColliders = doorColliders;
 		this.target = null;
 		this.conversation = null;
 		this.onConversation = null;
@@ -235,6 +236,7 @@ export class Interactor {
 			: Math.max( wanted, door.open - step );
 
 		for ( const { pivot, sign } of door.pivots ) pivot.rotation.y = sign * door.open * DOOR_ANGLE;
+		this.doorColliders?.sync( door );
 
 	}
 

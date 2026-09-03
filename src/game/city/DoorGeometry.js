@@ -6,36 +6,66 @@ const LEAF_MARGIN = 0.06;
 const DEFAULT_FRAME_DEPTH = 0.08;
 
 /**
- * The one ground-floor entrance of a building, read off its exterior blueprint
- * (floor 0, opening kind `door`). Everything the game needs to stand in front
- * of it, prompt for it and swing it: the opening's first jamb (the hinge of a
- * shell that merged its leaf into the wall), the direction the opening runs,
- * the world box its leaves occupy, the outward facing and the walk-in target.
+ * Every moving Exterior leaf gets its own interaction frame. The stable
+ * opening id is also the ownership boundary for named GLB leaf nodes, so one
+ * door can never swing a different entrance, balcony or roof leaf.
  */
-export function doorFrame( blueprint ) {
+export function doorFrames( blueprint ) {
 
-	const floor = blueprint.floors.find( ( f ) => f.index === 0 );
-	const opening = floor?.openings.find( ( o ) => o.kind === 'door' );
+	const frames = [];
 
-	if ( ! opening ) return null;
+	for ( const floor of blueprint.floors ) {
 
-	const rect = openingRect( floor, opening );
+		for ( const opening of floor.openings ) {
 
-	if ( ! rect ) return null;
+			if ( opening.kind !== 'door' && opening.kind !== 'balconyDoor' ) continue;
+
+			const rect = openingRect( floor, opening );
+			if ( ! rect ) continue;
+
+			frames.push( frame( blueprint, floor, opening, rect ) );
+
+		}
+
+	}
+
+	const roof = roofDoorRect( blueprint );
+	if ( roof ) frames.push( frame( blueprint, { index: roof.floor }, {
+		id: 'roof-bulkhead', kind: 'door', doorRole: 'roof',
+		door: { frameDepth: DEFAULT_FRAME_DEPTH }
+	}, roof ) );
+
+	return frames;
+
+}
+
+/** Returns the exact frame named by a sanitized GLTFLoader leaf node. */
+export function doorLeafOwner( name, frames ) {
+
+	return frames.find( ( candidate ) => String( name ).startsWith( candidate.nodeStem ) ) ?? null;
+
+}
+
+function frame( blueprint, floor, opening, rect ) {
 
 	const mid = rect.start.clone().add( rect.end ).multiplyScalar( 0.5 );
+	const prefix = opening.kind === 'balconyDoor' ? 'balcony' : 'door';
 
 	return {
+		id: opening.id,
 		parcelId: blueprint.buildingId,
+		floor: floor.index,
+		kind: opening.kind,
+		role: opening.doorRole ?? null,
+		nodeStem: sanitizeNodeName( `${prefix}:${opening.id}/leaf:` ),
 		hinge: rect.start.clone(),
 		along: rect.end.clone().sub( rect.start ).normalize(),
 		normal: rect.normal,
 		width: rect.width,
 		height: rect.height,
 		// The shell's fitted casing projects this far outside its wall plane.
-		// Anything added around the opening starts beyond it.
+		// Anything added around a street entrance starts beyond it.
 		surfaceDepth: opening.door?.frameDepth ?? DEFAULT_FRAME_DEPTH,
-		// Where the prompt fires and where the player ends up walking in.
 		center: new THREE.Vector3( mid.x, rect.y0, mid.z ),
 		outside: mid.clone().addScaledVector( rect.normal, 1.4 ),
 		inside: mid.clone().addScaledVector( rect.normal, - 1.8 ),
@@ -44,6 +74,40 @@ export function doorFrame( blueprint ) {
 		wanted: 0,
 		pivots: []
 	};
+
+}
+
+/** Exterior publishes the bulkhead and its roof-facing doorway together. */
+function roofDoorRect( blueprint ) {
+
+	const roof = blueprint.roof;
+	const bulkhead = roof?.bulkhead;
+	if ( ! bulkhead ) return null;
+
+	const axis = new THREE.Vector3( bulkhead.axis[ 0 ], 0, bulkhead.axis[ 1 ] ).normalize();
+	const normal = new THREE.Vector3( bulkhead.doorNormal[ 0 ], 0, bulkhead.doorNormal[ 1 ] ).normalize();
+	const mid = new THREE.Vector3( bulkhead.center[ 0 ], roof.elevation, bulkhead.center[ 1 ] )
+		.addScaledVector( normal, bulkhead.depth / 2 );
+	const start = mid.clone().addScaledVector( axis, bulkhead.doorWidth / 2 );
+	const end = mid.clone().addScaledVector( axis, - bulkhead.doorWidth / 2 );
+
+	return {
+		start,
+		end,
+		normal,
+		y0: roof.elevation,
+		y1: roof.elevation + bulkhead.doorHeight,
+		width: bulkhead.doorWidth,
+		height: bulkhead.doorHeight,
+		floor: Math.max( ...blueprint.floors.map( ( floor ) => floor.index ) ) + 1
+	};
+
+}
+
+/** Matches Three.PropertyBinding.sanitizeNodeName for Exterior's stable names. */
+function sanitizeNodeName( name ) {
+
+	return name.replace( /\s/g, '_' ).replace( /[\[\].:\/]/g, '' );
 
 }
 

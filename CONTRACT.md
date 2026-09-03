@@ -2,7 +2,7 @@
 
 Purpose: assembles the generated city boxes into a cataloged world and serves its launcher, previews, creation flow and playable first-person game.
 
-Status: v0.17.4.
+Status: v0.17.5.
 
 ## Inputs
 

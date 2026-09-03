@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { BuildingsLoader, mapConcurrent } from './BuildingsLoader.js';
+import { Interactor } from '../player/Interactor.js';
 
 const factory = {
 	resolver: { resolve: () => null },
@@ -25,9 +26,74 @@ describe( 'building entrance availability', () => {
 		const city = await load( true );
 
 		expect( city.doors ).toHaveLength( 1 );
+		expect( city.entrances ).toEqual( city.doors );
 		expect( city.doors[ 0 ].parcelId ).toBe( 'p0' );
 		expect( city.doors[ 0 ].surfaceDepth ).toBe( 0.09 );
-		expect( city.group.getObjectByName( 'door:p0:0' ) ).toBeTruthy();
+		expect( city.group.getObjectByName( 'door:p0:entrance:0' ) ).toBeTruthy();
+
+	} );
+
+	it( 'owns every entrance, balcony and roof leaf independently by its published id', async () => {
+
+		const blueprint = movingDoorBlueprint();
+		const loader = { loadAsync: async () => {
+
+			const scene = new THREE.Group();
+			const openings = [
+				[ 'doorentranceleaf0', [ 1, 0, 0 ] ],
+				[ 'doorentranceleaf0_1', [ 1, 0, 0 ], 'cyberpunk/door-glass/mid' ],
+				[ 'doorentrancesecondary0leaf0', [ 5, 0, 0 ] ],
+				[ 'balconybd111leaf0', [ 10, 3, 2 ] ],
+				[ 'doorroof-bulkheadleaf0', [ 3.5, 6, 8.85 ] ]
+			];
+			for ( const [ name, hinge, key ] of openings ) scene.add( localLeaf( name, hinge, key ) );
+			return { scene };
+
+		} };
+		const buildings = new Map( [ [ 'p0', {
+			parcelId: 'p0', blueprint, shellUrl: '/p0.glb', hasInterior: true
+		} ] ] );
+		const city = await new BuildingsLoader( factory, loader ).load( buildings );
+
+		expect( city.doors.map( ( door ) => door.id ) ).toEqual( [
+			'entrance', 'entrance:secondary:0', 'bd:1:1:1', 'roof-bulkhead'
+		] );
+		expect( city.entrances.map( ( door ) => door.id ) ).toEqual( [ 'entrance' ] );
+		expect( city.doors.map( ( door ) => door.pivots.length ) ).toEqual( [ 1, 1, 1, 1 ] );
+		expect( city.doors[ 0 ].pivots[ 0 ].pivot.children ).toHaveLength( 2 );
+
+		const interactor = new Interactor( {
+			crowd: { within: () => [] }, doors: city.doors, sim: {},
+			controller: {
+				body: { feet: new THREE.Vector3( 100, 100, 100 ) },
+				eye: new THREE.Vector3( 100, 100, 100 ), look: new THREE.Vector3( 0, 0, - 1 )
+			},
+			quests: { candidates: () => [] }
+		} );
+		city.doors[ 2 ].wanted = 1;
+		interactor.update( 0.1, null );
+
+		expect( city.doors[ 2 ].pivots[ 0 ].pivot.rotation.y ).not.toBe( 0 );
+		expect( city.doors.filter( ( _, index ) => index !== 2 )
+			.every( ( door ) => door.pivots[ 0 ].pivot.rotation.y === 0 ) ).toBe( true );
+
+	} );
+
+	it( 'keeps named balcony leaves visible and solid on a shell-only parcel', async () => {
+
+		const scene = new THREE.Group();
+		scene.add( localLeaf( 'balconybd111leaf0', [ 10, 3, 2 ] ) );
+		const buildings = new Map( [ [ 'p0', {
+			parcelId: 'p0', blueprint: movingDoorBlueprint(), shellUrl: '/p0.glb', hasInterior: false
+		} ] ] );
+		const city = await new BuildingsLoader( factory, {
+			loadAsync: async () => ( { scene } )
+		} ).load( buildings );
+
+		expect( city.doors ).toEqual( [] );
+		expect( city.entrances ).toEqual( [] );
+		expect( city.group.getObjectByName( 'shell:cyberpunk/door/mid' ) ).toBeTruthy();
+		expect( city.shellColliders.get( 'p0' ).getAttribute( 'position' ).count ).toBe( 3 );
 
 	} );
 
@@ -220,7 +286,7 @@ async function load( hasInterior ) {
 			index: 0, elevation: 0,
 			outline: [ [ 0, 0 ], [ 4, 0 ], [ 4, 4 ], [ 0, 4 ] ],
 			openings: [ {
-				kind: 'door', edge: 0, offset: 1, width: 1, sill: 0, height: 2,
+				id: 'entrance', kind: 'door', doorRole: 'main', edge: 0, offset: 1, width: 1, sill: 0, height: 2,
 				door: { frameDepth: 0.09 }
 			} ]
 		} ]
@@ -228,6 +294,52 @@ async function load( hasInterior ) {
 	const buildings = new Map( [ [ 'p0', { parcelId: 'p0', blueprint, shellUrl: '/p0.glb', hasInterior } ] ] );
 
 	return new BuildingsLoader( factory, loader ).load( buildings );
+
+}
+
+function localLeaf( name, [ x, y, z ], key = 'cyberpunk/door/mid' ) {
+
+	const geometry = new THREE.BufferGeometry();
+	geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [ 0, 0, 0, 1, 0, 0, 0, 2, 0 ], 3 ) );
+	const material = new THREE.MeshBasicMaterial();
+	material.name = key;
+	const leaf = new THREE.Mesh( geometry, material );
+	leaf.name = name;
+	leaf.position.set( x, y, z );
+	return leaf;
+
+}
+
+function movingDoorBlueprint() {
+
+	return {
+		buildingId: 'p0',
+		bounds: { footprint: [ [ 0, 0 ], [ 10, 0 ], [ 10, 10 ], [ 0, 10 ] ] },
+		floors: [
+			{
+				index: 0, elevation: 0,
+				outline: [ [ 0, 0 ], [ 10, 0 ], [ 10, 10 ], [ 0, 10 ] ],
+				openings: [
+					{ id: 'entrance', kind: 'door', doorRole: 'main', edge: 0, offset: 1, width: 1, sill: 0, height: 2 },
+					{ id: 'entrance:secondary:0', kind: 'door', doorRole: 'secondary', edge: 0, offset: 5, width: 1, sill: 0, height: 2 }
+				]
+			},
+			{
+				index: 1, elevation: 3,
+				outline: [ [ 0, 0 ], [ 10, 0 ], [ 10, 10 ], [ 0, 10 ] ],
+				openings: [
+					{ id: 'bd:1:1:1', kind: 'balconyDoor', edge: 1, offset: 2, width: 1, sill: 0, height: 2 }
+				]
+			}
+		],
+		roof: {
+			elevation: 6,
+			bulkhead: {
+				center: [ 3, 5 ], axis: [ 1, 0 ], doorNormal: [ 0, 1 ],
+				width: 8, depth: 8, doorWidth: 1, doorHeight: 2.1
+			}
+		}
+	};
 
 }
 

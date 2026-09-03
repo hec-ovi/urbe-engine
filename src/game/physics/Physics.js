@@ -63,6 +63,25 @@ export class Physics {
 
 	}
 
+	/** A rendered moving surface, expressed around its world-space hinge. */
+	addKinematicTrimesh( geometry, hinge ) {
+
+		const position = geometry.getAttribute( 'position' );
+		const vertices = position.array instanceof Float32Array
+			? position.array
+			: new Float32Array( position.array );
+		const indices = geometry.index
+			? new Uint32Array( geometry.index.array )
+			: sequentialTriangleIndices( position.count );
+		const body = this.world.createRigidBody(
+			RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation( hinge.x, hinge.y, hinge.z )
+		);
+		const collider = this.world.createCollider( RAPIER.ColliderDesc.trimesh( vertices, indices ), body );
+
+		return { body, collider, triangles: indices.length / 3 };
+
+	}
+
 	/**
 	 * A fixed upright cylinder standing on the ground: street furniture the
 	 * player bumps into, at a fraction of what the same shape costs as a
