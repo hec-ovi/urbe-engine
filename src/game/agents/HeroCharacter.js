@@ -9,6 +9,7 @@ import { garments } from './Garments.js';
 
 const TALK = 'Idle_Talking_Loop';
 const SIT_TALK = 'Sitting_Talking_Loop';
+const BLEND_MS = 160;
 
 /**
  * One full-quality skinned person while the player is talking to them. The
@@ -40,9 +41,17 @@ export class HeroCharacter {
 	}
 
 	/** Loads and swaps one crowd member without ever exposing an unready mesh. */
-	async show( person ) {
+	async show( person, segments = null, onFinished = null ) {
 
 		const request = ++ this.request;
+		const sequence = this.#resolveSegments( segments ?? defaultSegments( person ) );
+		if ( samePerson( this.active?.person, person ) ) {
+
+			this.active.person = person;
+			this.#play( sequence, onFinished );
+			return true;
+
+		}
 		const descriptor = avatarFor( person.gender, person.appearanceSeed ?? 0 );
 		const source = await this.#model( descriptor );
 
@@ -62,13 +71,7 @@ export class HeroCharacter {
 
 		} );
 
-		const clipName = person.clip === 3 || person.clip === 4 ? SIT_TALK : TALK;
-		const clip = THREE.AnimationClip.findByName( this.animation.animations, clipName );
-
-		if ( ! clip ) throw new Error( `Pro animation library is missing ${clipName}` );
-
 		const mixer = new THREE.AnimationMixer( root );
-		mixer.clipAction( withoutRootTravel( clip ) ).play();
 		this.group.add( root );
 		await this.warmup?.warm( root );
 
@@ -83,9 +86,23 @@ export class HeroCharacter {
 		this.#dropActive();
 		person.hero = true;
 		root.visible = true;
-		this.active = { person, root, mixer, descriptor, key: modelKey( descriptor ) };
+		this.active = {
+			person, root, mixer, descriptor, key: modelKey( descriptor ),
+			playback: null, sequence: 0, currentAction: null, currentClip: null
+		};
+		mixer.addEventListener( 'finished', ( event ) => this.#finished( mixer, event ) );
+		this.#play( sequence, onFinished );
 		this.#keepOnly( this.active.key );
 
+		return true;
+
+	}
+
+	/** Plays one validated ordered transition on the active full-quality actor. */
+	play( segments, onFinished = null ) {
+
+		if ( ! this.active ) return false;
+		this.#play( this.#resolveSegments( segments ), onFinished );
 		return true;
 
 	}
@@ -118,6 +135,76 @@ export class HeroCharacter {
 		this.group.remove( root );
 		for ( const material of root.userData.transientMaterials ?? [] ) material.dispose();
 		this.active = null;
+
+	}
+
+	#resolveSegments( segments ) {
+
+		if ( ! Array.isArray( segments ) || segments.length === 0 ) throw new Error( 'focused animation needs at least one segment' );
+		return segments.map( ( segment ) => {
+
+			const clip = THREE.AnimationClip.findByName( this.animation.animations, segment.clipName );
+			if ( ! clip ) throw new Error( `Pro animation library is missing ${segment.clipName}` );
+			return {
+				clipName: segment.clipName,
+				loop: Boolean( segment.loop ),
+				blendMs: segment.blendMs ?? BLEND_MS,
+				clip: withoutRootTravel( clip )
+			};
+
+		} );
+
+	}
+
+	#play( segments, onFinished ) {
+
+		const active = this.active;
+		if ( ! active ) return;
+		active.sequence ++;
+		active.playback = { segments, index: 0, onFinished, sequence: active.sequence };
+		this.#playCurrent();
+
+	}
+
+	#playCurrent() {
+
+		const active = this.active;
+		const playback = active?.playback;
+		if ( ! active || ! playback ) return;
+		const segment = playback.segments[ playback.index ];
+		if ( ! segment ) return;
+		const previous = active.currentAction;
+		const action = active.mixer.clipAction( segment.clip );
+		action.reset();
+		action.enabled = true;
+		action.clampWhenFinished = ! segment.loop;
+		action.setLoop( segment.loop ? THREE.LoopRepeat : THREE.LoopOnce, segment.loop ? Infinity : 1 );
+		action.play();
+		if ( previous && previous !== action ) {
+
+			action.crossFadeFrom( previous, Math.max( 0, segment.blendMs ) / 1000, true );
+
+		}
+		active.currentAction = action;
+		active.currentClip = segment.clipName;
+
+	}
+
+	#finished( mixer, event ) {
+
+		const active = this.active;
+		const playback = active?.playback;
+		if ( ! active || active.mixer !== mixer || ! playback || event.action !== active.currentAction ) return;
+		if ( playback.index < playback.segments.length - 1 ) {
+
+			playback.index ++;
+			this.#playCurrent();
+			return;
+
+		}
+		const finished = playback.onFinished;
+		active.playback = null;
+		if ( typeof finished === 'function' ) finished();
 
 	}
 
@@ -158,6 +245,24 @@ export class HeroCharacter {
 		}
 
 	}
+
+}
+
+function defaultSegments( person ) {
+
+	return [ {
+		clipName: person.clip === 3 || person.clip === 4 ? SIT_TALK : TALK,
+		loop: true,
+		blendMs: BLEND_MS
+	} ];
+
+}
+
+function samePerson( left, right ) {
+
+	if ( ! left || ! right ) return false;
+	if ( left === right ) return true;
+	return Boolean( left.npcId && right.npcId && left.npcId === right.npcId );
 
 }
 

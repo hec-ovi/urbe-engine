@@ -87,6 +87,67 @@ describe( 'focused character', () => {
 
 	} );
 
+	it( 'plays ordered one-shot entry into a held loop on the same focused rig', async () => {
+
+		const hero = new HeroCharacter( {
+			animation: animation(),
+			loadModel: () => ( { scene: rig( 'body' ) } )
+		} );
+		const person = {
+			npcId: 'npc-follower', gender: 'female', appearanceSeed: 7, clip: 0, hero: false,
+			position: new THREE.Vector3(), heading: 0, look: outfit()
+		};
+		await hero.show( person, [
+			{ clipName: 'Sprint_Enter', loop: false, blendMs: 0 },
+			{ clipName: 'Sprint_Loop', loop: true, blendMs: 80 }
+		] );
+
+		expect( hero.active.currentClip ).toBe( 'Sprint_Enter' );
+		hero.update( 1.1 );
+		expect( hero.active.currentClip ).toBe( 'Sprint_Loop' );
+
+	} );
+
+	it( 'changes a loaded actor without reloading its original model and reports one-shot completion', async () => {
+
+		const loadModel = vi.fn( () => ( { scene: rig( 'body' ) } ) );
+		const finished = vi.fn();
+		const hero = new HeroCharacter( { animation: animation(), loadModel } );
+		const person = {
+			npcId: 'npc-reader', gender: 'male', appearanceSeed: 2, clip: 0, hero: false,
+			position: new THREE.Vector3(), heading: 0, look: outfit()
+		};
+		await hero.show( person, [ { clipName: 'Idle_Loop', loop: true, blendMs: 0 } ] );
+		await hero.show( { ...person, position: new THREE.Vector3( 2, 0, 0 ) }, [
+			{ clipName: 'Idle_Paper', loop: false, blendMs: 120 }
+		], finished );
+
+		expect( loadModel ).toHaveBeenCalledOnce();
+		expect( hero.active.currentClip ).toBe( 'Idle_Paper' );
+		hero.update( 1.1 );
+		expect( finished ).toHaveBeenCalledOnce();
+
+	} );
+
+	it( 'rejects a missing transition clip before replacing the visible actor', async () => {
+
+		const hero = new HeroCharacter( {
+			animation: animation(),
+			loadModel: () => ( { scene: rig( 'body' ) } )
+		} );
+		const person = {
+			npcId: 'npc-safe', gender: 'female', appearanceSeed: 7, clip: 2, hero: false,
+			position: new THREE.Vector3(), heading: 0, look: outfit()
+		};
+		await hero.show( person );
+
+		await expect( hero.show( { ...person, npcId: 'npc-other' }, [
+			{ clipName: 'Does_Not_Exist', loop: true, blendMs: 0 }
+		] ) ).rejects.toThrow( /Does_Not_Exist/ );
+		expect( hero.active.person.npcId ).toBe( 'npc-safe' );
+
+	} );
+
 } );
 
 function rig( name = 'body' ) {
@@ -133,7 +194,11 @@ function animation() {
 		scene,
 		animations: [
 			new THREE.AnimationClip( 'Idle_Talking_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
-			new THREE.AnimationClip( 'Sitting_Talking_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] )
+			new THREE.AnimationClip( 'Sitting_Talking_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
+			new THREE.AnimationClip( 'Idle_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
+			new THREE.AnimationClip( 'Idle_Paper', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
+			new THREE.AnimationClip( 'Sprint_Enter', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
+			new THREE.AnimationClip( 'Sprint_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] )
 		]
 	};
 
