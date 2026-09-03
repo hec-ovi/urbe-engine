@@ -1,5 +1,6 @@
 /**
  * npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--interiors N] [--parcel <id,id,...>]
+ *   [--reuse-shells true] [--interior-parcels <id,id,...>]
  * Full-city batch: connections once for the whole blueprint, then every shell
  * in parallel and a small deterministic quest/venue interior subset. Failures
  * are recorded in the QA report; an interior failure leaves its shell closed.
@@ -17,31 +18,7 @@ import { RequestAssembler } from './RequestAssembler.js';
 import { runConnections } from './connectionsRunner.js';
 import { BuildingPipeline } from './BuildingPipeline.js';
 import { OutDir, MANIFEST_FILE } from './OutDir.js';
-import { interiorCandidates } from './InteriorSelection.js';
-
-function parseArgs( argv ) {
-
-	const args = { workers: 4, interiors: 5, parcels: null };
-
-	for ( let i = 0; i < argv.length; i += 2 ) {
-
-		const key = argv[ i ];
-		const value = argv[ i + 1 ];
-
-		if ( key === '--blueprint' ) args.blueprint = value;
-		else if ( key === '--out' ) args.out = value;
-		else if ( key === '--workers' ) args.workers = parseInt( value, 10 );
-		else if ( key === '--interiors' ) args.interiors = parseInt( value, 10 );
-		else if ( key === '--parcel' ) args.parcels = value.split( ',' );
-		else return null;
-
-	}
-
-	if ( ! args.blueprint || ! args.out || ! ( args.workers >= 1 ) || ! ( args.interiors >= 0 ) ) return null;
-
-	return args;
-
-}
+import { interiorPlan, parseCityArgs } from './CityPlan.js';
 
 function dirBytes( dir ) {
 
@@ -59,11 +36,11 @@ function dirBytes( dir ) {
 
 }
 
-const args = parseArgs( process.argv.slice( 2 ) );
+const args = parseCityArgs( process.argv.slice( 2 ) );
 
 if ( ! args ) {
 
-	console.error( 'usage: npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--interiors N] [--parcel <id,id,...>]' );
+	console.error( 'usage: npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--interiors N] [--parcel <id,id,...>] [--reuse-shells true] [--interior-parcels <id,id,...>]' );
 	process.exit( 2 );
 
 }
@@ -77,9 +54,11 @@ const out = new OutDir( outDir );
 
 const parcelIds = atlas.parcels.map( ( p ) => p.id );
 const stale = out.prune( atlas.parcels );
-const queue = parcelIds.filter( ( id ) => ! args.parcels || args.parcels.includes( id ) );
+const queue = args.reuseShells ? [] : parcelIds.filter( ( id ) => ! args.parcels || args.parcels.includes( id ) );
 
-console.log( `city ${atlas.meta.seed}: ${queue.length} parcels, ${args.workers} workers` );
+console.log( args.reuseShells
+	? `city ${atlas.meta.seed}: reusing ${parcelIds.length} shells`
+	: `city ${atlas.meta.seed}: ${queue.length} parcels, ${args.workers} workers` );
 if ( stale.length ) console.log( `dropped ${stale.length} folders this blueprint no longer has: ${stale.join( ', ' )}` );
 
 const results = [];
@@ -131,17 +110,48 @@ async function worker() {
 await Promise.all( Array.from( { length: args.workers }, worker ) );
 
 const shells = out.shells( parcelIds );
-for ( const id of shells ) out.dropInterior( id );
 
 const questlinesPath = join( outDir, 'quests', 'questlines.json' );
 const questlines = existsSync( questlinesPath ) ? JSON.parse( readFileSync( questlinesPath, 'utf8' ) ) : [];
-const candidates = interiorCandidates( atlas, questlines, shells );
+const { candidates, target: interiorTarget, unknown: unknownInteriors, unavailable: unavailableInteriors } = interiorPlan(
+	atlas, questlines, shells, args
+);
+
+if ( unknownInteriors.length || unavailableInteriors.length ) {
+
+	const problem = [
+		unknownInteriors.length ? `unknown: ${unknownInteriors.join( ', ' )}` : '',
+		unavailableInteriors.length ? `missing shell: ${unavailableInteriors.join( ', ' )}` : ''
+	].filter( Boolean ).join( '; ' );
+	console.error( `E_INTERIOR_SELECTION: ${problem}` );
+	process.exit( 1 );
+
+}
+
+for ( const id of shells ) out.dropInterior( id );
+
+if ( args.reuseShells ) {
+
+	const complete = new Set( shells );
+	for ( const parcelId of parcelIds ) {
+
+		const ok = complete.has( parcelId );
+		results.push( ok ? {
+			parcelId, ok: true, interior: 'closed', bytes: dirBytes( join( outDir, parcelId ) )
+		} : {
+			parcelId, ok: false, error: 'E_SHELL_MISSING: reusable city is missing its complete shell', ms: 0
+		} );
+
+	}
+
+}
+
 const readyInteriors = [];
 const interiorFailures = [];
 
 for ( const id of candidates ) {
 
-	if ( readyInteriors.length >= args.interiors ) break;
+	if ( readyInteriors.length >= interiorTarget ) break;
 
 	const t0 = performance.now();
 	try {
@@ -178,7 +188,7 @@ const totals = {
 	parcels: results.length,
 	passed: results.length - failed.length,
 	failed: failed.length,
-	interiorsRequested: args.interiors,
+	interiorsRequested: interiorTarget,
 	interiorsReady: readyInteriors.length,
 	interiorsFailed: interiorFailures.length,
 	wallMs: Math.round( performance.now() - started ),
@@ -203,4 +213,4 @@ console.log( `qa report: ${join( outDir, 'qa-report.json' )}` );
 const naming = manifest.named ? `, named${manifest.namingTheme ? `: ${manifest.namingTheme}` : ''}` : '';
 console.log( `manifest: ${join( outDir, MANIFEST_FILE )} (${manifest.parcels.length} shells, ${manifest.interiors.length} interiors, atlas ${manifest.atlasVersion}${naming})` );
 
-process.exit( failed.length > 0 || readyInteriors.length < args.interiors ? 1 : 0 );
+process.exit( failed.length > 0 || readyInteriors.length < interiorTarget ? 1 : 0 );
