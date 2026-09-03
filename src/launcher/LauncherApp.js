@@ -1,4 +1,4 @@
-import { GameView } from '../ui/views/GameView.js';
+import { MainMenuView } from '../ui/views/MainMenuView.js';
 import { downloadBrowser, navigateBrowser } from './adapters.js';
 import {
 	catalog as validCatalog,
@@ -61,17 +61,15 @@ export class LauncherApp {
 		this.navigate = navigate;
 		this.download = download;
 		this.started = false;
-		this.view = new GameView( {
-			menu: {
-				onContinue: ( id ) => void this.continueGame( id ),
-				onSave: ( id ) => void this.exportGame( id ),
-				onLoad: ( file ) => void this.importGame( file ),
-				onExportCity: ( id ) => void this.exportCity( id ),
-				onGenerateCity: ( input ) => void this.generateCity( input ),
-				onGenerateInstances: ( input ) => void this.generateInstances( input ),
-				onGenerateQuests: ( input ) => void this.generateQuests( input ),
-				onCreateGame: ( input ) => void this.createGame( input )
-			}
+		this.view = new MainMenuView( {
+			onContinue: ( id ) => void this.continueGame( id ),
+			onSave: ( id ) => void this.exportGame( id ),
+			onLoad: ( file ) => void this.importGame( file ),
+			onExportCity: ( id ) => void this.exportCity( id ),
+			onGenerateCity: ( input ) => void this.generateCity( input ),
+			onGenerateInstances: ( input ) => void this.generateInstances( input ),
+			onGenerateQuests: ( input ) => void this.generateQuests( input ),
+			onCreateGame: ( input ) => void this.createGame( input )
 		} );
 
 	}
@@ -81,9 +79,8 @@ export class LauncherApp {
 
 		if ( this.started ) return;
 		this.started = true;
-		this.view.mount( this.mount );
-		this.view.ready();
-		this.view.showMainMenu();
+		this.mount.append( this.view.element );
+		this.view.show();
 		await this.refreshCatalog();
 
 	}
@@ -148,7 +145,7 @@ export class LauncherApp {
 			const catalog = validCatalog( await this.api.importGame( payload ) );
 			this.view.setLibrary( catalog );
 			this.clearAnnouncement();
-			this.view.mainMenu.openLibrary( 'games' );
+			this.view.openLibrary( 'games' );
 
 		} catch ( cause ) {
 
@@ -220,7 +217,7 @@ export class LauncherApp {
 			return { game: result.game };
 
 		} );
-		if ( update ) this.view.mainMenu.openLibrary( 'games' );
+		if ( update ) this.view.openLibrary( 'games' );
 
 	}
 
@@ -244,7 +241,7 @@ export class LauncherApp {
 
 	announce( text, error = false ) {
 
-		const line = this.view.mainMenu.integration;
+		const line = this.view.integration;
 		line.textContent = text;
 		line.dataset.error = String( error );
 		line.setAttribute( 'role', error ? 'alert' : 'status' );
@@ -253,7 +250,7 @@ export class LauncherApp {
 
 	clearAnnouncement() {
 
-		const line = this.view.mainMenu.integration;
+		const line = this.view.integration;
 		line.removeAttribute( 'role' );
 		delete line.dataset.error;
 

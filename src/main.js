@@ -1,31 +1,43 @@
-import { App } from './app/App.js';
-import { RunConfig } from './app/RunConfig.js';
-import { BuildingViewerApp } from './building/BuildingViewerApp.js';
-import { CityApp } from './city/CityApp.js';
-import { GameApp } from './game/GameApp.js';
-import { LauncherApp } from './launcher/LauncherApp.js';
-import { HttpLauncherApi } from './launcher/HttpLauncherApi.js';
-
 const mode = new URLSearchParams( window.location.search ).get( 'mode' );
 
-if ( mode === 'game' ) {
+async function start() {
 
-	new GameApp( GameApp.configFromUrl() ).start();
+	if ( mode === 'game' ) {
 
-} else if ( mode === 'city' ) {
+		const { GameApp } = await import( './game/GameApp.js' );
+		await new GameApp( GameApp.configFromUrl() ).start();
 
-	new CityApp( CityApp.configFromUrl() ).start();
+	} else if ( mode === 'city' ) {
 
-} else if ( mode === 'building' ) {
+		const { CityApp } = await import( './city/CityApp.js' );
+		await new CityApp( CityApp.configFromUrl() ).start();
 
-	new BuildingViewerApp( BuildingViewerApp.configFromUrl() ).start();
+	} else if ( mode === 'building' ) {
 
-} else if ( mode === 'experiment' ) {
+		const { BuildingViewerApp } = await import( './building/BuildingViewerApp.js' );
+		await new BuildingViewerApp( BuildingViewerApp.configFromUrl() ).start();
 
-	new App( RunConfig.fromUrl() ).start();
+	} else if ( mode === 'experiment' ) {
 
-} else {
+		const [ { App }, { RunConfig } ] = await Promise.all( [
+			import( './app/App.js' ), import( './app/RunConfig.js' )
+		] );
+		await new App( RunConfig.fromUrl() ).start();
 
-	new LauncherApp( { mount: document.body, api: new HttpLauncherApi() } ).start();
+	} else {
+
+		const [ { LauncherApp }, { HttpLauncherApi } ] = await Promise.all( [
+			import( './launcher/LauncherApp.js' ), import( './launcher/HttpLauncherApi.js' )
+		] );
+		await new LauncherApp( { mount: document.body, api: new HttpLauncherApi() } ).start();
+
+	}
 
 }
+
+start().catch( ( error ) => {
+
+	console.error( error );
+	document.body.textContent = `Could not start Urbe: ${error.message ?? error}`;
+
+} );

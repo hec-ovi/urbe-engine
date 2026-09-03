@@ -17,12 +17,12 @@ Purpose: connect the isolated game front door to a catalog and generation API wi
 
 ## Outputs
 
-- `start()` mounts one `GameView`, clears its loading surface, opens its main menu, then loads and validates [schema/catalog.schema.json](schema/catalog.schema.json).
+- `start()` mounts one `MainMenuView`, opens it immediately, then loads and validates [schema/catalog.schema.json](schema/catalog.schema.json).
 - The server presents games by saved `updatedAt`, newest first, so Continue targets the latest confirmed playthrough. Equal timestamps use id order.
 - Continue validates the returned play URL before sending it to `navigate(url)`.
 - Game and city exports validate a JSON object before sending it to `download(filename, payload)`. Filenames end in `.urbegame.json` or `.urbecity.json`.
 - Local game loading reads and parses the selected file, passes the JSON object to `api.importGame`, validates the returned catalog, then opens the games directory.
-- Every generation action sets its stage busy, validates the API result, feeds the returned artifact to `GameView.setCreationState`, and clears busy. A new city invalidates downstream artifacts in the UI; a new interior set invalidates quests and the game.
+- Every generation action sets its stage busy, validates the API result, feeds the returned artifact to `MainMenuView.setCreationState`, and clears busy. A new city invalidates downstream artifacts in the UI; a new interior set invalidates quests and the game.
 - Automatic interior generation requires 9 through 24 locations. Nine reserves seven distinct main-story locations and two unique side-job locations. Manual mode accepts 1 through 24 explicitly selected buildings. Quest generation accepts at most three side jobs.
 - Creating a game refreshes the catalog when the result does not include one, then opens the games directory.
 

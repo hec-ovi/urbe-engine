@@ -2,7 +2,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
-import { stubCanvas } from '../ui/test-helpers/canvas.js';
 import { LauncherApp } from './LauncherApp.js';
 
 const city = {
@@ -53,7 +52,6 @@ describe( 'LauncherApp', () => {
 	beforeEach( () => {
 
 		document.body.replaceChildren();
-		stubCanvas();
 
 	} );
 
@@ -64,7 +62,7 @@ describe( 'LauncherApp', () => {
 		const made = make( api( { catalog: vi.fn().mockReturnValue( catalog ) } ) );
 		const starting = made.app.start();
 		expect( screen.getByRole( 'heading', { name: 'URBE' } ) ).toBeTruthy();
-		expect( made.app.view.loading.hidden ).toBe( true );
+		expect( made.app.view.element.hidden ).toBe( false );
 		release( { games: [ game ], cities: [ city ] } );
 		await starting;
 		expect( screen.getByRole( 'heading', { name: 'Salt Wharf' } ) ).toBeTruthy();
@@ -77,7 +75,7 @@ describe( 'LauncherApp', () => {
 		await made.app.start();
 		await made.app.start();
 		expect( made.api.catalog ).toHaveBeenCalledOnce();
-		expect( document.querySelectorAll( '.hud' ) ).toHaveLength( 1 );
+		expect( document.querySelectorAll( '.main-menu' ) ).toHaveLength( 1 );
 
 	} );
 
@@ -136,7 +134,7 @@ describe( 'LauncherApp', () => {
 		} );
 		const made = make( apiValue );
 		await made.app.start();
-		made.app.view.mainMenu.createNew();
+		made.app.view.createNew();
 		made.app.view.setCreationState( {
 			city, instances: { ids: [ 'p11' ], count: 1 }, quests: { id: 'rain-quests', mainSteps: 8, sideJobs: 3 }
 		} );
@@ -179,7 +177,7 @@ describe( 'LauncherApp', () => {
 		const made = make();
 		await made.app.start();
 		const file = new File( [ JSON.stringify( { contractVersion: '1.0.0', game: 'rain' } ) ], 'rain.urbegame.json', { type: 'application/json' } );
-		await userEvent.setup().upload( made.app.view.mainMenu.file, file );
+		await userEvent.setup().upload( made.app.view.file, file );
 		await waitFor( () => expect( made.api.importGame ).toHaveBeenCalledWith( { contractVersion: '1.0.0', game: 'rain' } ) );
 		expect( screen.getByRole( 'heading', { name: 'Salt Wharf' } ) ).toBeTruthy();
 
@@ -190,7 +188,7 @@ describe( 'LauncherApp', () => {
 		const made = make();
 		await made.app.start();
 		const file = new File( [ '{broken' ], 'broken.json', { type: 'application/json' } );
-		await userEvent.setup().upload( made.app.view.mainMenu.file, file );
+		await userEvent.setup().upload( made.app.view.file, file );
 		await waitFor( () => expect( screen.getByRole( 'alert' ).textContent ).toContain( 'Could not load the game file' ) );
 		expect( made.api.importGame ).not.toHaveBeenCalled();
 
