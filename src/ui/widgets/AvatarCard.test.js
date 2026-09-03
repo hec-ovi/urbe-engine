@@ -38,4 +38,14 @@ describe( 'AvatarCard', () => {
 
 	} );
 
+	it( 'omits the portrait frame when the caller only has an identity', () => {
+
+		card.setAvatar( { name: 'Ada Vance', bar: 1 } );
+
+		expect( card.frame.hidden ).toBe( true );
+		expect( screen.getByText( 'Ada Vance' ) ).toBeTruthy();
+		expect( document.querySelectorAll( '.avatar-bar-segment.is-lit' ) ).toHaveLength( 12 );
+
+	} );
+
 } );

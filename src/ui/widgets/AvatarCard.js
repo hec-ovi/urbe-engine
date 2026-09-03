@@ -29,7 +29,9 @@ export class AvatarCard {
 	setAvatar( { name, portraitUrl, canvas, bar = 1 } ) {
 
 		this.name.textContent = name;
-		this.frame.replaceChildren( canvas ?? ( portraitUrl ? el( 'img', { src: portraitUrl, alt: name } ) : '' ) );
+		const portrait = canvas ?? ( portraitUrl ? el( 'img', { src: portraitUrl, alt: name } ) : null );
+		this.frame.replaceChildren( ...( portrait ? [ portrait ] : [] ) );
+		this.frame.hidden = ! portrait;
 
 		const lit = Math.round( Math.min( 1, Math.max( 0, bar ) ) * SEGMENTS );
 		this.segments.forEach( ( segment, i ) => segment.classList.toggle( 'is-lit', i < lit ) );
