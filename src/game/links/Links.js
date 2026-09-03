@@ -11,10 +11,13 @@ const KEYS = {
 	'ac-tube': 'cyberpunk/metal/mid',
 	bridge: 'cyberpunk/concrete/mid',
 	tunnel: 'cyberpunk/concrete/mid',
-	wire: 'cyberpunk/rubber/mid'
+	wire: 'cyberpunk/rubber/mid',
+	'rooftop-span': 'cyberpunk/rubber/mid'
 };
 /** A 10 cm cable read from metres away; more sides would be invisible. */
 const WIRE_SIDES = 5;
+/** Thin rooftop spans need a round silhouette in the closer roof view. */
+export const ROOFTOP_WIRE_SIDES = 8;
 /** A parapet a person cannot go over, which is what stops a walk off a deck. */
 export const RAILING = 1.1;
 
@@ -38,9 +41,10 @@ export class Links {
 	 * @param connections the connections document (`links` and `apertures`)
 	 * @param factory PbrMaterialFactory
 	 */
-	constructor( connections, factory ) {
+	constructor( connections, factory, rooftopSpans = { spans: [] } ) {
 
 		this.links = connections.links;
+		this.rooftopSpans = rooftopSpans?.spans ?? [];
 		this.planes = cutPlanes( connections.apertures );
 		this.factory = factory;
 
@@ -52,7 +56,7 @@ export class Links {
 		const byKey = new Map();
 		const solid = [];
 
-		for ( const link of this.links ) {
+		for ( const link of [ ...this.links, ...this.#rooftopLinks() ] ) {
 
 			const key = KEYS[ link.kind ];
 
@@ -107,18 +111,33 @@ export class Links {
 	#sweep( link ) {
 
 		const { shape, width, height } = link.crossSection;
-		const frames = framesAlong( link.path, {
+		const frames = framesAlong( link.path, link.kind === 'rooftop-span' ? {} : {
 			first: this.planes.get( link.a.apertureId ),
 			last: this.planes.get( link.b.apertureId )
 		} );
 
-		if ( shape !== 'rect' ) return roundTube( frames, width / 2, WIRE_SIDES );
+		if ( shape !== 'rect' ) return roundTube(
+			frames,
+			width / 2,
+			link.kind === 'rooftop-span' ? ROOFTOP_WIRE_SIDES : WIRE_SIDES
+		);
 
 		// A bridge is an open crossing in the air, a tube is a duct: the first
 		// is a deck between two railings, the second a closed box.
 		return link.kind === 'bridge'
 			? openDeck( frames, width, height, RAILING )
 			: rectShell( frames, width, height );
+
+	}
+
+	#rooftopLinks() {
+
+		return this.rooftopSpans.map( ( span ) => ( {
+			kind: 'rooftop-span',
+			path: span.path,
+			crossSection: { shape: 'circle', width: span.thickness, height: span.thickness },
+			walkable: { inside: false, over: false }
+		} ) );
 
 	}
 

@@ -163,7 +163,7 @@ export class GameApp {
 		this.view.step( 'reading the world' );
 		const source = new WorldSource( config );
 		const {
-			atlas, connections, buildings, unbuilt, npcTypes, questlines, investigations,
+			atlas, connections, rooftopSpans, buildings, unbuilt, npcTypes, questlines, investigations,
 			mechanicTargetBindings, missionAssetRequests, missionItemBindings, game
 		} = await source.load();
 		const transitRoutes = connections.networks.transit.routes;
@@ -231,7 +231,7 @@ export class GameApp {
 		this.view.step( 'hanging the neon' );
 		const neon = new Neon( atlas, buildings, factory ).build();
 		const lamps = new StreetLamps( atlas, factory, connections.networks.walk ).build();
-		const links = new Links( connections, factory ).build();
+		const links = new Links( connections, factory, rooftopSpans ).build();
 		const props = new Dressing( atlas, connections.networks.walk, factory ).build();
 		this.transit = new Transit( { atlas, networks: connections.networks, factory } );
 		this.scene.add(

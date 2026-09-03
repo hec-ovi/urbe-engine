@@ -2,12 +2,13 @@ import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { PbrMaterialFactory } from '../../building/PbrMaterialFactory.js';
 import { runConnections } from '../../assembly/connectionsRunner.js';
-import { Links, RAILING } from './Links.js';
+import { Links, RAILING, ROOFTOP_WIRE_SIDES } from './Links.js';
 
 const ATLAS_SAMPLE = new URL( '../../../../atlas/samples/city-urbe-small.json', import.meta.url );
 /** Mirrors the wire tube's side count, so the triangle accounting is exact. */
 const WIRE_SIDES = 5;
 const PROMISED_DRAW_CALLS = 3;
+const ROOFTOP_FIXTURE = new URL( '../../../../connections/fixtures/rooftop-spans.request.json', import.meta.url );
 
 /** No theme is served under node, so every key falls back. Keys still differ. */
 const factory = new PbrMaterialFactory( { resolve: () => null, mapUrl: () => '' } );
@@ -165,7 +166,80 @@ describe( 'Links', () => {
 
 	} );
 
+	it( 'renders rooftop span thickness, catenary samples and exact mast endpoints', async () => {
+
+		const request = JSON.parse( readFileSync( ROOFTOP_FIXTURE, 'utf8' ) );
+		const rooftop = await ( await import( '../../../../connections/src/index.ts' ) ).generateRooftopSpans( request );
+
+		for ( const span of rooftop.spans ) {
+
+			const built = new Links( { links: [], apertures: [] }, factory, { ...rooftop, spans: [ span ] } ).build();
+			const geometry = built.group.children[ 0 ].geometry;
+			const position = geometry.getAttribute( 'position' );
+			const uv = geometry.getAttribute( 'uv' );
+			const stations = pathStations( span.path );
+
+			expect( built.drawCalls ).toBe( 1 );
+			expect( built.colliderGeometry ).toBe( null );
+			expect( built.triangles ).toBe( ROOFTOP_WIRE_SIDES * ( span.path.length - 1 ) * 2 );
+			for ( let i = 0; i < span.path.length; i ++ ) {
+
+				const ring = pointsAtStation( position, uv, stations[ i ] );
+				const center = average( ring );
+
+				expect( ring ).toHaveLength( ROOFTOP_WIRE_SIDES );
+				expect( center ).toEqual( expectCloseToPoint( span.path[ i ], 4 ) );
+				for ( const point of ring ) expect( distance( point, span.path[ i ] ) ).toBeCloseTo( span.thickness / 2, 4 );
+
+			}
+
+		}
+
+	} );
+
 } );
+
+function pathStations( path ) {
+
+	const stations = [ 0 ];
+	for ( let i = 1; i < path.length; i ++ ) stations.push( stations[ i - 1 ] + distance( path[ i ], path[ i - 1 ] ) );
+
+	return stations;
+
+}
+
+function pointsAtStation( position, uv, station ) {
+
+	const points = new Map();
+	for ( let i = 0; i < uv.count; i ++ ) {
+
+		if ( Math.abs( uv.getX( i ) - station ) > 1e-4 ) continue;
+		const point = [ position.getX( i ), position.getY( i ), position.getZ( i ) ];
+		points.set( point.map( ( value ) => value.toFixed( 6 ) ).join( ':' ), point );
+
+	}
+
+	return [ ...points.values() ];
+
+}
+
+function average( points ) {
+
+	return points[ 0 ].map( ( _, axis ) => points.reduce( ( sum, point ) => sum + point[ axis ], 0 ) / points.length );
+
+}
+
+function distance( a, b ) {
+
+	return Math.hypot( ...a.map( ( value, axis ) => value - b[ axis ] ) );
+
+}
+
+function expectCloseToPoint( point, digits ) {
+
+	return point.map( ( value ) => expect.closeTo( value, digits ) );
+
+}
 
 function unit( a, b ) {
 
