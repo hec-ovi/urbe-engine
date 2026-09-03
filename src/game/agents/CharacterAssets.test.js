@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { characterParts, crowdCloth, mergeBaked } from './CharacterAssets.js';
+import { animationCatalog, characterParts, crowdCloth, mergeBaked } from './CharacterAssets.js';
 
 describe( 'crowd character composition', () => {
 
@@ -43,6 +43,30 @@ describe( 'crowd character composition', () => {
 			0.5, 2, 2, 0, 0.75, 0.25, 2, 0,
 			- 1, 2, 2, 0, - 1, 2, 2, 0
 		] );
+
+	} );
+
+	it( 'builds the exact Pro clip envelope from the audited installed manifest', () => {
+
+		const animation = { animations: [ { name: 'Idle_Loop' }, { name: 'Walk_Loop' } ] };
+		const manifest = {
+			format: 'urbe-character-assets',
+			formatVersion: 2,
+			animations: {
+				edition: 'Pro', clips: 2, gameClips: [ 'Idle_Loop', 'Walk_Loop' ],
+				sha256: 'a'.repeat( 64 )
+			}
+		};
+
+		expect( animationCatalog( animation, manifest ) ).toEqual( {
+			assetId: 'quaternius-universal-animation-library-pro',
+			edition: 'Pro',
+			sourceSha256: 'a'.repeat( 64 ),
+			availableClips: [ 'Idle_Loop', 'Walk_Loop' ]
+		} );
+		expect( () => animationCatalog( animation, {
+			...manifest, animations: { ...manifest.animations, clips: 3 }
+		} ) ).toThrow( /clip count/ );
 
 	} );
 

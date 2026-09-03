@@ -6,7 +6,7 @@ import { BodyMesh } from './BodyMesh.js';
 import { HairMesh } from './HairMesh.js';
 import { garments } from './Garments.js';
 import {
-	ANIMATION_URL, CHARACTER_ROOT, CROWD_CLIP_NAMES, CROWD_MODELS,
+	ANIMATION_URL, CHARACTER_MANIFEST_URL, CHARACTER_ROOT, CROWD_CLIP_NAMES, CROWD_MODELS,
 	assertRigCompatibility
 } from './CharacterCatalog.js';
 
@@ -51,7 +51,7 @@ export class CharacterAssets {
 		manager.setURLModifier( ( url ) => ( url.endsWith( '.png' ) ? BLANK : url ) );
 		const loader = new GLTFLoader( manager );
 
-		const loaded = await Promise.all( [
+		const [ loaded, manifest ] = await Promise.all( [ Promise.all( [
 			new GLTFLoader().loadAsync( ANIMATION_URL ),
 			Promise.all( CROWD_MODELS.map( ( m ) => loadResizedTexture( `${CHARACTER_ROOT}/${m.skin}`, 1024 ) ) ),
 			Promise.all( CROWD_MODELS.map( ( m ) => loadResizedTexture(
@@ -60,7 +60,7 @@ export class CharacterAssets {
 			loadResizedTexture( `${CHARACTER_ROOT}/T_Eye_Brown.png`, 256 ),
 			...CROWD_MODELS.map( ( m ) => loader.loadAsync( `${CHARACTER_ROOT}/${m.file}` ) ),
 			...CROWD_MODELS.map( ( m ) => loader.loadAsync( `${CHARACTER_ROOT}/${m.hair}` ) )
-		] );
+		] ), loadCharacterManifest() ] );
 		const [ animationGltf, skins, hairMaps, eyeMap ] = loaded;
 		const models = loaded.slice( 4, 4 + CROWD_MODELS.length );
 		const hairs = loaded.slice( 4 + CROWD_MODELS.length );
@@ -102,15 +102,21 @@ export class CharacterAssets {
 
 		}
 
-		return new CharacterAssets( variants, clips.map( ( clip ) => clip.duration ), animationGltf );
+		return new CharacterAssets(
+			variants,
+			clips.map( ( clip ) => clip.duration ),
+			animationGltf,
+			animationCatalog( animationGltf, manifest )
+		);
 
 	}
 
-	constructor( variants, durations, animation ) {
+	constructor( variants, durations, animation, catalog ) {
 
 		this.variants = variants;
 		this.durations = durations;
 		this.animation = animation;
+		this.animationCatalog = catalog;
 		this.group = new THREE.Group();
 		this.group.name = 'crowd';
 
@@ -131,6 +137,45 @@ export class CharacterAssets {
 		return [ variant.body, variant.hair ];
 
 	}
+
+}
+
+async function loadCharacterManifest() {
+
+	const response = await fetch( CHARACTER_MANIFEST_URL );
+	if ( ! response.ok ) throw new Error( `character asset manifest returned HTTP ${response.status}` );
+	return response.json();
+
+}
+
+/** Exact runtime catalog envelope consumed by the animation coordinator. */
+export function animationCatalog( animation, manifest ) {
+
+	const availableClips = animation?.animations?.map( ( clip ) => clip.name ) ?? [];
+	if ( manifest?.format !== 'urbe-character-assets' || manifest?.formatVersion !== 2 ) {
+
+		throw new Error( 'character asset manifest format is unsupported' );
+
+	}
+	if ( manifest.animations?.edition !== 'Pro' || ! /^[a-f0-9]{64}$/.test( manifest.animations?.sha256 ?? '' ) ) {
+
+		throw new Error( 'character asset manifest does not identify the audited Pro animation source' );
+
+	}
+	if ( manifest.animations.clips !== availableClips.length ) {
+
+		throw new Error( 'loaded animation clip count does not match the character asset manifest' );
+
+	}
+	const missing = ( manifest.animations.gameClips ?? [] ).filter( ( name ) => ! availableClips.includes( name ) );
+	if ( missing.length ) throw new Error( `loaded animation library is missing manifest clips: ${missing.join( ', ' )}` );
+
+	return {
+		assetId: 'quaternius-universal-animation-library-pro',
+		edition: 'Pro',
+		sourceSha256: manifest.animations.sha256,
+		availableClips
+	};
 
 }
 

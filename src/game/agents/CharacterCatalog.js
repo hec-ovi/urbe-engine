@@ -2,6 +2,7 @@ const BASE = '/models';
 
 export const CHARACTER_ROOT = `${BASE}/universal-base-characters-source`;
 export const ANIMATION_URL = `${BASE}/universal-animation-library-pro/UAL1.glb`;
+export const CHARACTER_MANIFEST_URL = `${BASE}/character-assets.json`;
 
 /** Every full-body model in Universal Base Characters Source. */
 export const CHARACTER_MODELS = [
