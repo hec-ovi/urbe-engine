@@ -22,7 +22,7 @@ The default model root is `$HOME/models/hf`. Override either verified snapshot w
 
 Vite serves the checked browser boundary at `/api/speech`. Without `URBE_SPEECH_URL`, it starts the locked Python process directly. With that setting, it forwards to the container service and preserves request-scoped cancellation.
 
-The container build context is `src/game/voice/runtime`, exposes port `8091`, and needs the Hugging Face model tree mounted at `/models/hf`.
+The container build context is `src/game/voice/runtime`, exposes port `8091`, and needs the Hugging Face model tree mounted at `/models/hf`. Its build stage resolves the locked VCS dependency; the runtime stage contains only the frozen environment and service files.
 
 ```sh
 docker build -t urbe-speech src/game/voice/runtime

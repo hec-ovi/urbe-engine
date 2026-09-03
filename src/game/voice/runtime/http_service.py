@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any
 
 
+class RequestBodySizeError(ValueError):
+    pass
+
+
 class RuntimeChild:
     def __init__(self, process_factory=subprocess.Popen):
         self.model_lock = threading.Lock()
@@ -128,7 +132,7 @@ class SpeechHandler(BaseHTTPRequestHandler):
                     raise ValueError("cancel requestId is required")
                 self._send(200, self.server.runtime.cancel(request_id))
             except Exception as error:
-                self._send(400, {"error": str(error)})
+                self._send(413 if isinstance(error, RequestBodySizeError) else 400, {"error": str(error)})
             return
         self._handle()
 
@@ -146,12 +150,12 @@ class SpeechHandler(BaseHTTPRequestHandler):
                 request = self._read_request()
             self._send(200, self.server.runtime.request(operation, request))
         except Exception as error:
-            self._send(503, {"error": str(error)})
+            self._send(413 if isinstance(error, RequestBodySizeError) else 503, {"error": str(error)})
 
     def _read_request(self):
         size = int(self.headers.get("Content-Length", "0"))
         if size <= 0 or size > 48 * 1024 * 1024:
-            raise ValueError("speech request body size is invalid")
+            raise RequestBodySizeError("speech request body size is invalid")
         return json.loads(self.rfile.read(size))
 
     def _send(self, status, payload):

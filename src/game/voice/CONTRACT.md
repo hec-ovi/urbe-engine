@@ -21,15 +21,15 @@ Turn structured NPC speech into verified local audio, play its absolute PCM time
 
 ## Service API
 
-Vite exposes the same routes under `/api/speech`. The container listens on port `8091`.
+Vite exposes capabilities, health, synthesis and transcription under `/api/speech`. The standalone service exposes the same four routes at its root on port `8091` and adds cancellation for the HTTP transport.
 
 - `GET /capabilities`: [schema/runtime-capabilities.schema.json](schema/runtime-capabilities.schema.json).
 - `GET /health`: `{status:"ready", tts, stt}` after both models load. `tts` and `stt` are the capability records above.
 - `POST /synthesize`: [schema/adapter-request.schema.json](schema/adapter-request.schema.json), returns `{chunk}` where `chunk` is [schema/adapter-chunk.schema.json](schema/adapter-chunk.schema.json).
 - `POST /transcribe`: [schema/transcription-request.schema.json](schema/transcription-request.schema.json), returns [schema/transcription-result.schema.json](schema/transcription-result.schema.json).
-- `POST /cancel`: `{requestId}`, returns `{requestId,cancelled,previousStatus}`. Cancellation removes only that queued request or terminates its active model process.
+- Standalone `POST /cancel`: `{requestId}`, returns `{requestId,cancelled,previousStatus}`. Cancellation removes only that queued request or terminates its active model process. A browser abort reaches this route through `SpeechRuntimeHttp`; it is not a separate Vite route.
 
-POST bodies above 48 MiB fail with HTTP 413 at Vite or HTTP 400 at the direct service. Invalid envelopes, missing or changed artifacts, model load failures, and inference failures return HTTP 503 `{error}`. The browser maps transport failures to `E_VOICE_ADAPTER`.
+POST bodies above 48 MiB fail with HTTP 413. Invalid envelopes, missing or changed artifacts, model load failures, and inference failures return HTTP 503 `{error}`. The browser maps transport failures to `E_VOICE_ADAPTER`.
 
 ## Outputs
 
@@ -61,7 +61,7 @@ Terminal results use `E_VOICE_ADAPTER`, `E_VOICE_CHUNK`, `E_VOICE_ORDER`, or `E_
 
 ## Dependencies
 
-- Chatterbox repository commit `5de7a54aa4e5e2baadb0182dde554908b48b85c2`, including Nano local loading.
+- Chatterbox repository commit `5de7a54aa4e5e2baadb0182dde554908b48b85c2`. Its `ChatterboxTurboTTS.from_local(..., nano=True)` API loads the verified Nano snapshot; the published 0.1.7 package does not expose this Nano parameter.
 - `faster-whisper` 1.2.1.
 - Python 3.12, CPU PyTorch 2.6.0, and the exact dependency graph in [runtime/uv.lock](runtime/uv.lock).
 - Chatterbox Nano revision `71ccd1d` and faster-whisper small snapshot `536b066`, supplied outside the repository under the configured model directories.

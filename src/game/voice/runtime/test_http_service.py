@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import io
+import http.client
 import json
 import threading
 import time
 import unittest
 
-from http_service import RuntimeChild
+from http_service import RuntimeChild, SpeechHttpServer
 
 
 def wait_for(predicate):
@@ -106,6 +107,51 @@ class RuntimeChildTest(unittest.TestCase):
 
         self.assertTrue(process.terminated)
         self.assertEqual(active_error, ["speech model process exited without a response"])
+
+
+class SpeechHttpServerTest(unittest.TestCase):
+    def test_public_cancel_route_and_body_limit(self):
+        server = SpeechHttpServer(("127.0.0.1", 0))
+        server.runtime.close()
+        server.runtime = StubRuntime()
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+        try:
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+            connection.request(
+                "POST", "/cancel", json.dumps({"requestId": "active"}),
+                {"Content-Type": "application/json"},
+            )
+            response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            self.assertEqual(json.loads(response.read()), {
+                "requestId": "active", "cancelled": True, "previousStatus": "active"
+            })
+            connection.close()
+
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+            connection.putrequest("POST", "/synthesize")
+            connection.putheader("Content-Type", "application/json")
+            connection.putheader("Content-Length", str(48 * 1024 * 1024 + 1))
+            connection.endheaders()
+            response = connection.getresponse()
+            self.assertEqual(response.status, 413)
+            self.assertEqual(json.loads(response.read()), {
+                "error": "speech request body size is invalid"
+            })
+            connection.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(2)
+
+
+class StubRuntime:
+    def close(self):
+        pass
+
+    def cancel(self, request_id):
+        return {"requestId": request_id, "cancelled": True, "previousStatus": "active"}
 
 
 if __name__ == "__main__":
