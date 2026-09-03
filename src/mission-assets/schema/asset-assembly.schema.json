@@ -42,9 +42,9 @@
         "frontAxis": { "const": "+Z" }
       }
     },
-    "scale": { "$ref": "urn:urbe:mission-assets:values#/$defs/vector3" },
-    "pivot": { "$ref": "urn:urbe:mission-assets:values#/$defs/vector3" },
-    "groundContactOrigin": { "$ref": "urn:urbe:mission-assets:values#/$defs/vector3" },
+    "scale": { "$ref": "urn:urbe:mission-assets:values#/$defs/unitScale" },
+    "pivot": { "$ref": "urn:urbe:mission-assets:values#/$defs/zeroVector3" },
+    "groundContactOrigin": { "$ref": "urn:urbe:mission-assets:values#/$defs/zeroVector3" },
     "geometry": {
       "type": "object",
       "required": ["bounds", "primitives"],
@@ -62,7 +62,7 @@
               "primitiveId": { "type": "string", "pattern": "^[a-z0-9-]+$" },
               "kind": { "const": "box" },
               "position": { "$ref": "urn:urbe:mission-assets:values#/$defs/vector3" },
-              "rotationRadians": { "$ref": "urn:urbe:mission-assets:values#/$defs/vector3" },
+              "rotationRadians": { "$ref": "urn:urbe:mission-assets:values#/$defs/zeroVector3" },
               "size": { "$ref": "urn:urbe:mission-assets:values#/$defs/dimensions" },
               "materialSlot": {
                 "enum": ["surface", "accent", "display", "upholstery", "grip", "seal"]

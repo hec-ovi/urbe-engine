@@ -7,6 +7,7 @@ import {
   matchesSchema,
   MissionAssetCreator,
   MissionAssetRegistry,
+  payloadReference,
 } from "../src/index.js";
 
 const FAMILY_CASES = [
@@ -73,6 +74,18 @@ describe("mission asset creator contract", () => {
     expect(asset.interactionAnchors.map((anchor) => anchor.interaction)).toEqual(interactions);
     expect(asset.groundContactOrigin).toEqual({ x: 0, y: 0, z: 0 });
     expect(asset.scale).toEqual({ x: 1, y: 1, z: 1 });
+    expect(asset.portable).toBe(["document", "data-drive", "tool", "package"].includes(family));
+  });
+
+  it("selects a stable named variant from the exact seed, family, and id", () => {
+    const first = new MissionAssetCreator(materialCatalog).create(terminalRequest);
+    const changedSeed = structuredClone(terminalRequest);
+    changedSeed.seed = 42018;
+    changedSeed.assetId = "terminal.archive-east";
+    const second = new MissionAssetCreator(materialCatalog).create(changedSeed);
+
+    expect(first.variantId).toBe("upright");
+    expect(second.variantId).toBe("sloped");
   });
 
   it("rejects unresolved, wrong-variant, and family-incompatible materials", () => {
@@ -110,6 +123,13 @@ describe("mission asset creator contract", () => {
     expectCode("E_CLEARANCE", () => new MissionAssetCreator(materialCatalog).create(request));
   });
 
+  it("rejects dimensions outside a family's measured range", () => {
+    const request = structuredClone(terminalRequest);
+    request.dimensions.width = 0.1;
+    expect(matchesSchema("createRequest", request)).toBe(true);
+    expectCode("E_DIMENSIONS", () => new MissionAssetCreator(materialCatalog).create(request));
+  });
+
   it("fails closed on schema-invalid requests and catalogs", () => {
     const request = { ...structuredClone(terminalRequest), position: { x: 1, y: 0, z: 2 } };
     expectCode("E_SCHEMA", () => new MissionAssetCreator(materialCatalog).create(request));
@@ -124,6 +144,15 @@ describe("mission asset creator contract", () => {
     const asset = structuredClone(creator.create(terminalRequest));
     asset.purpose = "Tampered purpose";
     expectCode("E_HASH", () => creator.verifyAssembly(asset));
+  });
+
+  it("rejects collision parts that no longer describe the geometry even with a recomputed hash", () => {
+    const creator = new MissionAssetCreator(materialCatalog);
+    const asset = structuredClone(creator.create(terminalRequest));
+    asset.collision.parts[0].bounds.max.x -= 0.01;
+    const { payloadRef: ignored, ...payload } = asset;
+    asset.payloadRef = payloadReference(asset.assetId, payload);
+    expectCode("E_DIMENSIONS", () => creator.verifyAssembly(asset));
   });
 });
 

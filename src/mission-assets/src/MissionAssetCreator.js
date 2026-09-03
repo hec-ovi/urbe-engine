@@ -241,6 +241,16 @@ export class MissionAssetCreator {
     if (!sameValue(assembly.collision.bounds, expectedBounds)) {
       throw new MissionAssetError("E_DIMENSIONS", `Collision does not fit declared dimensions for ${assembly.assetId}`);
     }
+    const expectedCollisionParts = assembly.geometry.primitives.map((primitive) => ({
+      partId: `collision-${primitive.primitiveId}`,
+      bounds: primitiveBounds(primitive),
+    }));
+    if (!sameValue(assembly.collision.parts, expectedCollisionParts)) {
+      throw new MissionAssetError("E_DIMENSIONS", `Collision parts do not match geometry for ${assembly.assetId}`);
+    }
+    if (assembly.portable !== FAMILY_RULES[assembly.family].portable) {
+      throw new MissionAssetError("E_SCHEMA", `Portability does not match family ${assembly.family}`);
+    }
     const assignedSlots = new Set(assembly.materials.map((material) => material.slot));
     for (const primitive of assembly.geometry.primitives) {
       if (!assignedSlots.has(primitive.materialSlot)) {

@@ -57,6 +57,26 @@
         "z": { "type": "number" }
       }
     },
+    "zeroVector3": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "additionalProperties": false,
+      "properties": {
+        "x": { "const": 0 },
+        "y": { "const": 0 },
+        "z": { "const": 0 }
+      }
+    },
+    "unitScale": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "additionalProperties": false,
+      "properties": {
+        "x": { "const": 1 },
+        "y": { "const": 1 },
+        "z": { "const": 1 }
+      }
+    },
     "bounds": {
       "type": "object",
       "required": ["min", "max"],
