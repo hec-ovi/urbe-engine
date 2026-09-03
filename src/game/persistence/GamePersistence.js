@@ -48,6 +48,9 @@ export class GamePersistence {
 			...( Object.hasOwn( live, 'transitJourney' )
 				? { transitJourney: live.transitJourney }
 				: Object.hasOwn( this.game, 'transitJourney' ) ? { transitJourney: this.game.transitJourney } : {} ),
+			...( Object.hasOwn( live, 'questTransit' )
+				? { questTransit: live.questTransit }
+				: Object.hasOwn( this.game, 'questTransit' ) ? { questTransit: this.game.questTransit } : {} ),
 			...( Object.hasOwn( live, 'npcState' )
 				? { npcState: live.npcState }
 				: Object.hasOwn( this.game, 'npcState' ) ? { npcState: this.game.npcState } : {} ),

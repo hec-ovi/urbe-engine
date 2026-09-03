@@ -16,6 +16,7 @@
     },
     "elapsedSeconds": { "type": "number", "minimum": 0 },
     "transitJourney": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/transitJourney" },
+    "questTransit": { "$ref": "urn:urbe:engine:quest-actions:transit-state" },
     "npcState": { "$ref": "urn:urbe:engine:library:npc-state" },
     "investigations": {
       "type": "array",

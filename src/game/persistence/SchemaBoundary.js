@@ -4,6 +4,8 @@ import npcState from '../../library/schema/npc-state.schema.json';
 import npcValues from '../agents/schema/values.schema.json';
 import continuitySave from '../agents/schema/continuity-save.schema.json';
 import simulationSave from '../../../../simulation/src/schemas/simulation-save.schema.json';
+import questValues from '../quests/schema/values.schema.json';
+import questTransit from '../quests/schema/transit-state.schema.json';
 import gameState from './schema/game-state.schema.json';
 import liveState from './schema/live-state.schema.json';
 import savePayload from './schema/save-current-payload.schema.json';
@@ -11,7 +13,10 @@ import saveResult from './schema/save-result.schema.json';
 import values from './schema/values.schema.json';
 import { PersistenceError } from './PersistenceError.js';
 
-const SCHEMAS = [ npcValues, continuitySave, simulationSave, npcState, gameDescriptor, values, gameState, liveState, savePayload, saveResult ];
+const SCHEMAS = [
+	npcValues, continuitySave, simulationSave, npcState, questValues, questTransit,
+	gameDescriptor, values, gameState, liveState, savePayload, saveResult
+];
 
 export class SchemaBoundary {
 

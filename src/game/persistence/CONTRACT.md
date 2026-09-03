@@ -5,7 +5,7 @@ Purpose: restores one cataloged game and saves its live player and quest state t
 ## Inputs
 
 - Loaded game descriptor: [schema/game-state.schema.json](schema/game-state.schema.json). The id must equal the `game` URL parameter.
-- Live state at save time: [schema/live-state.schema.json](schema/live-state.schema.json). Position is the player's foot point in world metres, elapsed time is seconds since this run became playable, optional `transitJourney` is the exact serializable transit state, optional `npcState` is the exact simulation replay plus continuity save at the same world minute, and optional `investigations` contains complete evidence, collection, and one-shot transition state.
+- Live state at save time: [schema/live-state.schema.json](schema/live-state.schema.json). Position is the player's foot point in world metres, elapsed time is seconds since this run became playable, optional `transitJourney` is the exact timetable state, optional `questTransit` is the quest-side approach, aboard or arrival state, optional `npcState` is the exact simulation replay plus continuity save at the same world minute, and optional `investigations` contains complete evidence, collection, and one-shot transition state.
 
 ## Outputs
 
@@ -36,6 +36,7 @@ Purpose: restores one cataloged game and saves its live player and quest state t
 - A quest that cannot be restored or cast keeps its recorded save progress.
 - Discovered locations are unique by id and include the current location.
 - An optional transit journey is validated exactly, sent through `saveCurrent`, returned in the game descriptor and restored by the game. A descriptor may omit it.
+- Optional quest transit progress is validated against the quest schema, sent and returned unchanged, then cross-checked against the restored quest, cast, follower and timetable journey. A descriptor may omit it.
 - Optional NPC state is validated through the simulation and NPC agent schemas, sent and returned unchanged, and restored before the first live frame. A descriptor may omit it.
 - Optional investigation state is validated, sent and returned unchanged. The investigation blackbox validates every saved scene and evidence id against current authored scenes before rendering. A descriptor may omit it.
 
