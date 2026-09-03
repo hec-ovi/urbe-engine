@@ -24,7 +24,8 @@
     "discoveredLocations": {
       "type": "array",
       "items": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/location" }
-    }
+    },
+    "transitJourney": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/transitJourney" }
   },
   "additionalProperties": false
 }

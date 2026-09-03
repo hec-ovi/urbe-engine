@@ -115,6 +115,9 @@ export class LauncherService {
 			sideJobs: input.sideJobs,
 			currentLocation: input.currentLocation,
 			discoveredLocations: input.discoveredLocations,
+			...( Object.hasOwn( input, 'transitJourney' )
+				? { transitJourney: input.transitJourney }
+				: Object.hasOwn( current, 'transitJourney' ) ? { transitJourney: current.transitJourney } : {} ),
 			save: {
 				...current.save,
 				revision: current.save.revision + 1,

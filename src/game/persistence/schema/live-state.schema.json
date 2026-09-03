@@ -14,7 +14,8 @@
       "type": "array",
       "items": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/location" }
     },
-    "elapsedSeconds": { "type": "number", "minimum": 0 }
+    "elapsedSeconds": { "type": "number", "minimum": 0 },
+    "transitJourney": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/transitJourney" }
   },
   "additionalProperties": false
 }

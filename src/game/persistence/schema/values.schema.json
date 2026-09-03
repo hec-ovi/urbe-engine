@@ -89,6 +89,46 @@
         "name": { "type": "string", "minLength": 1 }
       },
       "additionalProperties": false
+    },
+    "transitJourney": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["status", "clock"],
+          "properties": {
+            "status": { "const": "waiting" },
+            "clock": { "$ref": "#/$defs/transitClock" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["status", "clock", "tripId", "routeId", "serviceDeparture", "boardedStopIndex"],
+          "properties": {
+            "status": { "const": "aboard" },
+            "clock": { "$ref": "#/$defs/transitClock" },
+            "tripId": { "type": "string", "minLength": 1 },
+            "routeId": { "type": "string", "minLength": 1 },
+            "serviceDeparture": { "type": "number" },
+            "boardedStopIndex": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "transitClock": {
+      "type": "object",
+      "required": ["dayOffset", "lastDaySeconds"],
+      "properties": {
+        "dayOffset": { "type": "integer", "minimum": 0 },
+        "lastDaySeconds": {
+          "anyOf": [
+            { "type": "null" },
+            { "type": "number", "minimum": 0, "exclusiveMaximum": 86400 }
+          ]
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

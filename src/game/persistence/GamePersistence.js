@@ -44,7 +44,10 @@ export class GamePersistence {
 			quests: live.quests,
 			sideJobs: live.sideJobs,
 			currentLocation: live.currentLocation,
-			discoveredLocations: uniqueLocations( [ ...live.discoveredLocations, live.currentLocation ] )
+			discoveredLocations: uniqueLocations( [ ...live.discoveredLocations, live.currentLocation ] ),
+			...( Object.hasOwn( live, 'transitJourney' )
+				? { transitJourney: live.transitJourney }
+				: Object.hasOwn( this.game, 'transitJourney' ) ? { transitJourney: this.game.transitJourney } : {} )
 		};
 		this.boundary.assert( 'save-current-payload', payload, 'E_SAVE_PAYLOAD', 'saveCurrent payload' );
 

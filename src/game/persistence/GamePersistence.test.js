@@ -12,6 +12,15 @@ const activeQuest = {
 	}
 };
 
+const activeJourney = {
+	status: 'aboard',
+	clock: { dayOffset: 0, lastDaySeconds: 46805 },
+	tripId: 'trip:8:route-b1:46800',
+	routeId: 'route-b1',
+	serviceDeparture: 46800,
+	boardedStopIndex: 0
+};
+
 const liveState = ( elapsedSeconds = 12.5 ) => ( {
 	position: { x: 20, y: 0.12, z: 5 },
 	heading: - 0.75,
@@ -20,6 +29,7 @@ const liveState = ( elapsedSeconds = 12.5 ) => ( {
 	sideJobs: gameFixture.sideJobs,
 	currentLocation: { id: 'p3', name: 'p3 cafe' },
 	discoveredLocations: [ ...gameFixture.discoveredLocations ],
+	transitJourney: activeJourney,
 	elapsedSeconds
 } );
 
@@ -41,6 +51,7 @@ describe( 'playable game persistence', () => {
 				sideJobs: input.sideJobs,
 				currentLocation: input.currentLocation,
 				discoveredLocations: input.discoveredLocations,
+				transitJourney: input.transitJourney,
 				save: {
 					...gameFixture.save,
 					revision: input.expectedRevision + 1,
@@ -63,13 +74,15 @@ describe( 'playable game persistence', () => {
 				gameId: 'night-shift', expectedRevision: 1,
 				updatedAt: '2026-09-03T12:00:00.000Z', playTimeSeconds: 1812.5,
 				player: { position: { x: 20, y: 0.12, z: 5 }, heading: - 0.75 },
-				quests: [ activeQuest ], currentLocation: { id: 'p3', name: 'p3 cafe' }
+				quests: [ activeQuest ], currentLocation: { id: 'p3', name: 'p3 cafe' },
+				transitJourney: activeJourney
 			}
 		} );
 		expect( requests[ 0 ].input.discoveredLocations ).toEqual( [
 			{ id: 'p2', name: 'Market Two' }, { id: 'p3', name: 'p3 cafe' }
 		] );
 		expect( saved.save.revision ).toBe( 2 );
+		expect( saved.transitJourney ).toEqual( activeJourney );
 
 	} );
 
@@ -84,6 +97,7 @@ describe( 'playable game persistence', () => {
 				...gameFixture,
 				player: input.player, quests: input.quests, sideJobs: input.sideJobs,
 				currentLocation: input.currentLocation, discoveredLocations: input.discoveredLocations,
+				transitJourney: input.transitJourney,
 				save: { ...gameFixture.save, revision: input.expectedRevision + 1, updatedAt: input.updatedAt, playTimeSeconds: input.playTimeSeconds }
 			} );
 
@@ -104,6 +118,8 @@ describe( 'playable game persistence', () => {
 			fetcher: vi.fn( async () => response( 200, { id: 'night-shift' } ) )
 		} );
 		await expect( persistence.save( { ...liveState(), heading: Number.NaN } ) ).rejects.toMatchObject( { code: 'E_LIVE_STATE' } );
+		await expect( persistence.save( { ...liveState(), transitJourney: { status: 'aboard' } } ) )
+			.rejects.toMatchObject( { code: 'E_LIVE_STATE' } );
 		await expect( persistence.save( liveState() ) ).rejects.toMatchObject( { code: 'E_SAVE_RESPONSE' } );
 
 	} );

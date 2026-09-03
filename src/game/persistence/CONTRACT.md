@@ -5,7 +5,7 @@ Purpose: restores one cataloged game and saves its live player and quest state t
 ## Inputs
 
 - Loaded game descriptor: [schema/game-state.schema.json](schema/game-state.schema.json). The id must equal the `game` URL parameter.
-- Live state at save time: [schema/live-state.schema.json](schema/live-state.schema.json). Position is the player's foot point in world metres and elapsed time is seconds since this run became playable.
+- Live state at save time: [schema/live-state.schema.json](schema/live-state.schema.json). Position is the player's foot point in world metres, elapsed time is seconds since this run became playable, and optional `transitJourney` is the exact serializable transit state.
 
 ## Outputs
 
@@ -35,6 +35,7 @@ Purpose: restores one cataloged game and saves its live player and quest state t
 - Existing non-quest inventory is retained. Quest-owned items are replaced by the runtime's current inventory, so consumed quest items do not return.
 - A quest that could not be restored or cast stays in the save at its previous progress instead of disappearing.
 - Discovered locations are unique by id and include the current location.
+- An optional transit journey is validated exactly, sent through `saveCurrent`, returned in the game descriptor and restored by the game. Older descriptors without it remain valid.
 
 ## How to modify this blackbox safely
 
