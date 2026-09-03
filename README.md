@@ -8,23 +8,43 @@ Only generated data is rendered. No placeholder geometry, no invented population
 
 ```
 npm install
-npm run assemble-city -- --blueprint ../atlas/samples/city-urbe-small.json --out out/city --workers 8
-npm run dev            # then open /?mode=game
+npm run dev -- --port 5306
 npm test
 ```
+
+Open [http://localhost:5306/](http://localhost:5306/). The front door keeps generated cities and playable games in separate libraries. New Game runs four stages: city shells, selected interiors, the main quest plus up to three side jobs, then the saved game. Automatic creation uses nine interiors. Manual creation furnishes only the buildings selected in stage 2.
+
+Catalog games open directly with `/?mode=game&game=<id>`. A catalog game loads its own city, interiors, quests, player position, inventory and discovered locations from `out/games/<id>`, then saves the current state before returning to the launcher. A city remains a shell-only artifact under `out/cities/<id>`.
 
 Other commands:
 
 - `npm run assemble -- --parcel <id> --out <dir> [--glb merged|named] [--interior]` builds a single parcel end to end.
+- `npm run assemble-city -- --blueprint <path> --out <dir> --workers 8` builds a city directly. Add `--reuse-shells true --interior-parcels <id,id,...>` to furnish an exact set without rebuilding its shells.
 - `npm run simulate` boots the population over an assembled world and prints stats, a crowd slice, three NPC lives, latencies and a conservation check.
 - `npm run install-character-assets` validates and installs the CC0 Source characters and Pro animation pack from the workspace resources folder; `npm run audit-character-assets` verifies the local store without changing it.
 - `npm run build` produces the static client.
 
-The client has four modes on one vite app: `?mode=city&out=/out/small` shows the assembled city as stacked floor prisms (hover names a parcel, click opens it in the building viewer), `?mode=game` plays the city, `?mode=building&parcel=<id>[&out=/out/small]` inspects one building's exterior textured through the material database, walked with W A S D, Q and E for down and up, click to capture the mouse, Escape to release it, and no mode runs the city render scale comparison. In development, opening a parcel that belongs to a known Atlas sample generates its missing exterior through the normal assembly boundary. Add `source=interior` to generate and inspect that parcel's interior.
+The client tools stay available on explicit modes: `?mode=city&out=/out/cities/small` shows a whole city, `?mode=building&parcel=<id>&out=/out/games/small` inspects a building, and `?mode=experiment` runs the render scale comparison. Add `source=interior` to the building URL to inspect its furnished version.
+
+## Local preview services
+
+From the family root, `docker compose up` starts every box. The fixed ports are:
+
+| Port | Service | Open |
+| --- | --- | --- |
+| 5301 | Atlas map and city generator | [http://localhost:5301/](http://localhost:5301/) |
+| 5302 | Connections, roads and transit networks | [http://localhost:5302/](http://localhost:5302/) |
+| 5303 | Exterior building shell preview | [http://localhost:5303/](http://localhost:5303/) |
+| 5304 | Furnished interior preview | [http://localhost:5304/](http://localhost:5304/) |
+| 5305 | Population simulation testbed | [http://localhost:5305/testbed/](http://localhost:5305/testbed/) |
+| 5306 | Engine launcher and playable games | [http://localhost:5306/](http://localhost:5306/) |
+| 5307 | PBR material database preview | [http://localhost:5307/](http://localhost:5307/) |
+
+The quest compiler runs as a worker and has no browser port.
 
 ## Assembly
 
-`assemble-city` runs the link layer once over the blueprint, then generates every exterior shell in parallel. It deterministically furnishes five buildings referenced by carried questlines, filling unused slots from venue types; `--interiors N` changes that count. The other buildings stay closed shells. A QA report separates shell failures from interior candidates that stayed closed. Interiors are requested in `keys` texture mode, so the runtime resolves materials itself. Each furnished interior is written per floor (`interior/floors/<tag>.glb` beside each floor JSON), which is what the game streams.
+`assemble-city` runs the link layer once over the blueprint, then generates every exterior shell in parallel. Its direct CLI default furnishes five buildings referenced by carried questlines; `--interiors N` changes that count. The staged game creator uses nine so the ten-step main quest and three side jobs have every required location. The other buildings stay closed shells. A QA report separates shell failures from interior candidates that stayed closed. Interiors are requested in `keys` texture mode, so the runtime resolves materials itself. Each furnished interior is written per floor (`interior/floors/<tag>.glb` beside each floor JSON), which is what the game streams.
 
 Venue parcels (hotel, coffee shop, market, clinic, police, diner) ask exterior for a lettered marquee saying what the place is, until the naming pass gives it a name. Everything else gets no sign, because a blank one is worse than none.
 
@@ -32,7 +52,7 @@ The output directory ends holding exactly the blueprint it was built from: folde
 
 ## The game
 
-`?mode=game` takes its whole run from the URL: `world` (atlas sample), `out` (assembled directory), `backend` (`webgpu` default, `webgl`), `hour` (world clock, default 21), `crowd` and `cars` (instance capacity), `density` (street population scale, default 1), `quality` (`low`, `medium`, `high`, `ultra`; unset follows the backend). Debug views are off unless asked for: `lanes=debug` paints the whole lane graph, `lanes=glow` puts the teal centreline strips back, `exposure` moves the grade one variable at a time.
+`?mode=game&game=<id>` loads a saved catalog game. Without `game`, the direct preview takes its run from `world` (atlas sample), `out` (assembled directory), `backend` (`webgpu` default, `webgl`), `hour` (world clock, default 21), `crowd` and `cars` (instance capacity), `density` (street population scale, default 1), and `quality` (`low`, `medium`, `high`, `ultra`; unset follows the backend). Debug views are off unless asked for: `lanes=debug` paints the whole lane graph, `lanes=glow` puts the teal centreline strips back, `exposure` moves the grade one variable at a time.
 
 - **Streets** are the blueprint's ground cover: grade roadway in the material database's dry street variant, sidewalks and blocks in its 2 m plate variant raised 12 cm, and curb stone around every raised road edge. Highways use the lane-aligned road variant over Atlas' exact path and width, with U across the lanes and V along the elevation profile; their deck frame and supports use the concrete entry. Road paint follows each lane's 3D path: broken white lines between lanes running the same way, a solid double line against oncoming traffic.
 - **Buildings** merge across the city by material key, so the skyline costs one draw call per key. Shells come from each parcel's own exterior GLB, under a megabyte each. Only the manifest's interior subset streams per floor: within 70 m of one, only the floors within one of yours are fetched, cut into rooms in a worker and made solid, one more above and below stays in memory for the stairs and lifts, and everything further is dropped with its vertex data.
