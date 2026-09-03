@@ -61,6 +61,30 @@ describe( 'WorldSource selective interiors', () => {
 
 	} );
 
+	it( 'loads a catalog game descriptor beside its generated world only when requested', async () => {
+
+		const game = { id: 'night-shift', player: { position: { x: 1, y: 2, z: 3 } } };
+		const documents = new Map( [
+			[ '/out/games/night-shift/blueprint.json', atlas ],
+			[ '/out/games/night-shift/manifest.json', { ...manifest, parcels: [], interiors: [], floors: {} } ],
+			[ '/out/games/night-shift/game.json', game ]
+		] );
+		vi.stubGlobal( 'fetch', vi.fn( async ( url ) => {
+
+			if ( url.endsWith( '/npc-types.json' ) || url.endsWith( '/quests/questlines.json' ) ) return response( 404, null );
+			if ( ! documents.has( url ) ) throw new Error( `unexpected ${url}` );
+			return response( 200, documents.get( url ) );
+
+		} ) );
+
+		const world = await new WorldSource( {
+			blueprintUrl: '/atlas/city.json', outBase: '/out/games/night-shift', gameId: 'night-shift'
+		} ).load();
+		expect( world.game ).toBe( game );
+		expect( fetch ).toHaveBeenCalledWith( '/out/games/night-shift/game.json' );
+
+	} );
+
 } );
 
 function response( status, body ) {

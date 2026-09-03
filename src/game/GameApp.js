@@ -4,6 +4,7 @@ import { MaterialResolver } from '../building/MaterialResolver.js';
 import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { QuestSession } from './quests/QuestSession.js';
+import { GamePersistence, mergeInventory, mergeProgress, uniqueLocations } from './persistence/index.js';
 import { groundAnchors } from './agents/Anchors.js';
 import { GameView } from '../ui/views/GameView.js';
 import { GameConfig } from './data/GameConfig.js';
@@ -110,7 +111,7 @@ export class GameApp {
 			onSend: ( text ) => this.#say( text ),
 			onOpen: () => this.input?.exitLock(),
 			onClose: () => this.input?.requestLock(),
-			onLeave: () => this.input?.exitLock(),
+			onLeave: () => this.#leave(),
 			onSettingChange: ( change ) => this.#setting( change )
 		} );
 		this.view.mount( document.body );
@@ -144,7 +145,8 @@ export class GameApp {
 
 		this.view.step( 'reading the world' );
 		const source = new WorldSource( config );
-		const { atlas, connections, buildings, unbuilt, npcTypes, questlines } = await source.load();
+		const { atlas, connections, buildings, unbuilt, npcTypes, questlines, game } = await source.load();
+		this.persistence = game ? new GamePersistence( { game, gameId: config.gameId } ) : null;
 		this.locator = new Locator( atlas );
 		this.clock = new GameClock( { startHour: config.startHour, scale: config.timeScale } );
 
@@ -247,7 +249,15 @@ export class GameApp {
 
 		this.view.step( 'waking the population' );
 		this.sim = SimBridge.create( atlas, connections, buildings, { streetDensity: config.streetDensity }, npcTypes );
-		this.quests = QuestSession.create( questlines, this.sim, this.clock.timeMin );
+		this.quests = QuestSession.create(
+			questlines,
+			this.sim,
+			this.clock.timeMin,
+			game ? [ ...game.quests, ...game.sideJobs ] : []
+		);
+		this.savedInventory = game?.player.inventory ?? [];
+		this.questItemIds = questlines.flatMap( ( questline ) => questline.items.map( ( item ) => item.itemId ) );
+		this.#refreshInventory();
 		this.view.quests.setQuests( this.quests.view() );
 		this.signals = new Signals( connections.networks );
 		const routes = new WalkRoutes( connections.networks );
@@ -276,11 +286,17 @@ export class GameApp {
 		} );
 
 		this.view.step( 'stepping outside' );
-		const spawn = pickSpawn( connections.networks, atlas );
+		const spawn = game ? savedSpawn( game ) : pickSpawn( connections.networks, atlas );
 		this.body = new PlayerBody( this.physics, spawn.point );
 		this.input = new Input( this.renderer.domElement );
 		this.controller = new PlayerController( { body: this.body, camera: this.camera, input: this.input } );
-		this.controller.lookAt( spawn.lookAt );
+		if ( spawn.heading === undefined ) this.controller.lookAt( spawn.lookAt );
+		else this.controller.yaw = spawn.heading;
+		this.currentLocation = game?.currentLocation ?? this.locator.location( spawn.point.x, spawn.point.z );
+		this.discoveredLocations = new Map(
+			( game?.discoveredLocations ?? [ this.currentLocation ] ).map( ( location ) => [ location.id, location ] )
+		);
+		this.discoveredLocations.set( this.currentLocation.id, this.currentLocation );
 		this.bookmarks = new Bookmarks( { fixtures, rooms: () => this.stream.rooms, networks: connections.networks } );
 
 		// Construct the scene pass before a WebGPU probe bake so its final
@@ -345,6 +361,7 @@ export class GameApp {
 		] );
 		this.view.setPaused( true );
 		this.view.ready();
+		this.playStartedAt = performance.now();
 
 		this.renderer.domElement.addEventListener( 'click', () => this.input.requestLock() );
 		window.addEventListener( 'resize', () => this.#resize() );
@@ -440,8 +457,11 @@ export class GameApp {
 		if ( this.view.panels.current === 'MAP' ) this.view.map.setPlayer( feet, this.controller.yaw );
 		this.hitches.time( 'location HUD', () => {
 
-			this.view.clock.update( this.clock.label, this.locator.district( feet.x, feet.z ) );
-			this.view.readout.update( feet, this.locator.district( feet.x, feet.z ), this.locator.parcel( feet.x, feet.z ) );
+			const district = this.locator.district( feet.x, feet.z );
+			this.currentLocation = this.locator.location( feet.x, feet.z );
+			this.discoveredLocations.set( this.currentLocation.id, this.currentLocation );
+			this.view.clock.update( this.clock.label, district );
+			this.view.readout.update( feet, district, this.locator.parcel( feet.x, feet.z ) );
 
 		} );
 
@@ -519,6 +539,60 @@ export class GameApp {
 		}
 
 		this.view.quests.setQuests( this.quests.view() );
+		this.#refreshInventory();
+
+	}
+
+	/** Saves a catalog game before returning to the launcher; direct previews stay session-only. */
+	async #leave() {
+
+		this.input?.exitLock();
+		if ( ! this.persistence || ! this.body || ! this.controller || ! this.quests ) return;
+
+		const feet = this.body.feet;
+		this.currentLocation = this.locator.location( feet.x, feet.z );
+		this.discoveredLocations.set( this.currentLocation.id, this.currentLocation );
+		const inventory = this.#inventory();
+		const progress = mergeProgress( this.persistence.game, this.quests.persistenceView() );
+
+		try {
+
+			await this.persistence.save( {
+				position: { x: feet.x, y: feet.y, z: feet.z },
+				heading: this.controller.yaw,
+				inventory,
+				quests: progress.quests,
+				sideJobs: progress.sideJobs,
+				currentLocation: this.currentLocation,
+				discoveredLocations: uniqueLocations( [ ...this.discoveredLocations.values() ] ),
+				elapsedSeconds: Math.max( 0, ( performance.now() - this.playStartedAt ) / 1000 )
+			} );
+			window.location.assign( '/' );
+
+		} catch ( error ) {
+
+			console.error( error );
+			this.view.fail( `could not save: ${error.message}` );
+
+		}
+
+	}
+
+	#inventory() {
+
+		return mergeInventory( this.savedInventory, this.quests.inventoryView(), this.questItemIds );
+
+	}
+
+	#refreshInventory() {
+
+		this.view.inventory.setItems( this.#inventory().map( ( item ) => ( {
+			id: item.id,
+			name: item.quantity > 1 ? `${item.name} ×${item.quantity}` : item.name,
+			kind: item.state.kind ?? '',
+			description: item.state.description ?? '',
+			place: item.state.place ?? 'quest inventory'
+		} ) ) );
 
 	}
 
@@ -763,5 +837,13 @@ export function pickSpawn( networks, atlas ) {
 		point: new THREE.Vector3( best.x, best.y + SIDEWALK_HEIGHT + 0.05, best.z ),
 		lookAt: new THREE.Vector3( target.x, target.y + SIDEWALK_HEIGHT, target.z )
 	};
+
+}
+
+/** A persisted position is a foot point, in the same coordinates PlayerBody expects. */
+export function savedSpawn( game ) {
+
+	const { position, heading } = game.player;
+	return { point: new THREE.Vector3( position.x, position.y, position.z ), heading };
 
 }

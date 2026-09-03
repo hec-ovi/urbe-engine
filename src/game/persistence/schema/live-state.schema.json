@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:game-persistence:live-state",
+  "type": "object",
+  "required": ["position", "heading", "inventory", "quests", "sideJobs", "currentLocation", "discoveredLocations", "elapsedSeconds"],
+  "properties": {
+    "position": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/position" },
+    "heading": { "type": "number" },
+    "inventory": { "type": "array", "items": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/inventoryItem" } },
+    "quests": { "type": "array", "items": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/progress" } },
+    "sideJobs": { "type": "array", "items": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/progress" } },
+    "currentLocation": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/location" },
+    "discoveredLocations": {
+      "type": "array",
+      "items": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/location" }
+    },
+    "elapsedSeconds": { "type": "number", "minimum": 0 }
+  },
+  "additionalProperties": false
+}

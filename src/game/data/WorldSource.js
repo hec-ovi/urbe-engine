@@ -23,10 +23,11 @@ const QUESTLINES_FILE = 'quests/questlines.json';
  */
 export class WorldSource {
 
-	constructor( { blueprintUrl, outBase } ) {
+	constructor( { blueprintUrl, outBase, gameId = null } ) {
 
 		this.blueprintUrl = blueprintUrl;
 		this.outBase = outBase;
+		this.gameId = gameId;
 
 	}
 
@@ -50,9 +51,12 @@ export class WorldSource {
 
 	}
 
-	/** @returns { atlas, connections, buildings, unbuilt, npcTypes, questlines } */
+	/** @returns { atlas, connections, buildings, unbuilt, npcTypes, questlines, game } */
 	async load() {
 
+		// Refuse a missing catalog descriptor before starting connections or
+		// loading hundreds of building files.
+		const game = this.gameId ? await this.#json( `${this.outBase}/game.json` ) : null;
 		// The world folder carries the blueprint it was assembled from (named or
 		// not); the atlas sample is the fallback for a folder built before that.
 		const atlas = await this.#json( `${this.outBase}/${BLUEPRINT_FILE}` ).catch( () => this.#json( this.blueprintUrl ) );
@@ -72,6 +76,9 @@ export class WorldSource {
 			atlas,
 			connections,
 			buildings,
+			// Catalog games carry the player and quest runtime beside their world.
+			// Direct city previews have no descriptor and retain session-only play.
+			game,
 			// The naming box's typed set for this world, when the out dir carries one.
 			npcTypes: await this.#json( `${this.outBase}/${NPC_TYPES_FILE}` ).catch( () => null ),
 			questlines: await this.#json( `${this.outBase}/${QUESTLINES_FILE}` ).catch( () => [] ),

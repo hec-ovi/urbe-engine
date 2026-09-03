@@ -33,6 +33,17 @@ export class Locator {
 
 	}
 
+	/** Stable save-game location, preferring the parcel over its containing district. */
+	location( x, z ) {
+
+		const parcel = this.parcels.find( ( candidate ) => inside( candidate.ring, x, z ) );
+		if ( parcel ) return { id: parcel.id, name: parcel.label };
+
+		const district = this.districts.find( ( candidate ) => inside( candidate.ring, x, z ) );
+		return district ? { id: district.id, name: district.label } : { id: 'outskirts', name: 'outskirts' };
+
+	}
+
 }
 
 function inside( ring, x, z ) {

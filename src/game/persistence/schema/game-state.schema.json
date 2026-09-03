@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:game-persistence:game-state",
+  "$ref": "urn:urbe:engine:library:game-descriptor"
+}

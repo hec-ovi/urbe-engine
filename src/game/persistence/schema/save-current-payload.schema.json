@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:game-persistence:save-current-payload",
+  "type": "object",
+  "required": ["gameId", "expectedRevision", "updatedAt", "playTimeSeconds", "player", "quests", "sideJobs", "currentLocation", "discoveredLocations"],
+  "properties": {
+    "gameId": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/id" },
+    "expectedRevision": { "type": "integer", "minimum": 1 },
+    "updatedAt": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/timestamp" },
+    "playTimeSeconds": { "type": "number", "minimum": 0 },
+    "player": {
+      "type": "object",
+      "required": ["position", "heading", "inventory"],
+      "properties": {
+        "position": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/position" },
+        "heading": { "type": "number" },
+        "inventory": { "type": "array", "items": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/inventoryItem" } }
+      },
+      "additionalProperties": false
+    },
+    "quests": { "type": "array", "items": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/progress" } },
+    "sideJobs": { "type": "array", "items": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/progress" } },
+    "currentLocation": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/location" },
+    "discoveredLocations": {
+      "type": "array",
+      "items": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/location" }
+    }
+  },
+  "additionalProperties": false
+}

@@ -24,7 +24,7 @@ const OFF_STAGES = [ 'fog', 'bloom', 'probe', 'haze', 'interiors' ];
 
 /**
  * One game run, described entirely by the URL query:
- * ?mode=game[&world=city-urbe-tiny][&out=/out/city-tiny][&backend=webgpu|webgl]
+ * ?mode=game[&game=<catalog-id>][&world=city-urbe-tiny][&out=/out/city-tiny][&backend=webgpu|webgl]
  * [&hour=21][&crowd=160][&cars=18][&density=1][&lanes=glow|debug]
  * [&quality=low|medium|high|ultra][&exposure=0.024][&fog=0.0003][&off=fog,bloom,probe,haze,interiors]
  *
@@ -37,6 +37,12 @@ export class GameConfig {
 	static fromUrl() {
 
 		const q = new URLSearchParams( window.location.search );
+		const gameId = q.get( 'game' );
+		if ( gameId && ! /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/.test( gameId ) ) {
+
+			throw new Error( `invalid game id: ${gameId}` );
+
+		}
 		const int = ( key, fallback, lo, hi ) => {
 
 			const value = parseInt( q.get( key ), 10 );
@@ -58,9 +64,12 @@ export class GameConfig {
 
 		return {
 			world,
+			gameId,
 			off,
 			blueprintUrl: `/atlas/${world}.json`,
-			outBase: q.get( 'out' ) ?? DEFAULTS.out,
+			// A catalog game owns its directory. Ignore a conflicting `out`
+			// parameter so its descriptor and generated world cannot diverge.
+			outBase: gameId ? `/out/games/${gameId}` : q.get( 'out' ) ?? DEFAULTS.out,
 			backend: q.get( 'backend' ) === 'webgl' ? 'webgl' : DEFAULTS.backend,
 			startHour: int( 'hour', DEFAULTS.startHour, 0, 23 ),
 			timeScale: DEFAULTS.timeScale,
