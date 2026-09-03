@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:quest-actions:transit-restore-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["timeMin", "origin", "position", "tripId", "routeId"],
+  "properties": {
+    "timeMin": { "type": "number", "minimum": 0 },
+    "origin": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/place" },
+    "position": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/vector3" },
+    "tripId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+    "routeId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }
+  }
+}

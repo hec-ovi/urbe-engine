@@ -12,6 +12,9 @@ import npcControlResult from './schema/npc-control-result.schema.json';
 import mechanicRequest from './schema/mechanic-request.schema.json';
 import mechanicResult from './schema/mechanic-result.schema.json';
 import mechanicTargets from './schema/mechanic-targets.schema.json';
+import transitState from './schema/transit-state.schema.json';
+import transitStateRestoreRequest from './schema/transit-state-restore-request.schema.json';
+import transitRestoreRequest from './schema/transit-restore-request.schema.json';
 import targetQuery from './schema/target-query.schema.json';
 import values from './schema/values.schema.json';
 import { QuestActionError } from './QuestActionError.js';
@@ -19,7 +22,7 @@ import { QuestActionError } from './QuestActionError.js';
 const SCHEMAS = [
 	values, targetQuery, interactionRequest, interactionTargets, activeObjective, interactionResult,
 	gameplayWorld, gameplayFrame, gameplayCandidates, gameplayPerform, npcControlRequest, npcControlResult,
-	mechanicRequest, mechanicResult, mechanicTargets
+	mechanicRequest, mechanicResult, mechanicTargets, transitState, transitStateRestoreRequest, transitRestoreRequest
 ];
 
 export class QuestActionBoundary {

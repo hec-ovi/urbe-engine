@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:quest-actions:transit-state-restore-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["timeMin", "position", "state", "journey"],
+  "properties": {
+    "timeMin": { "type": "number", "minimum": 0 },
+    "position": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/vector3" },
+    "state": { "$ref": "urn:urbe:engine:quest-actions:transit-state" },
+    "journey": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tripId", "routeId"],
+          "properties": {
+            "tripId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+            "routeId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -172,8 +172,67 @@ describe( 'live measured quest mechanic hosts', () => {
 		expect( harness.gameplay.transitEvent( {
 			action: 'disembark', result: { ok: true, tripId: 'trip-live', routeId: 'route-live' }
 		}, { timeMin: TIME, playerPlaces: [ P4 ], position: [ 0, 0, 0 ] } ) ).toBeNull();
-		expect( harness.continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: TIME } );
 		expect( harness.session.persistenceView()[ 0 ].completedSteps ).toEqual( [] );
+		expect( harness.control.follow ).toEqual( { npcId: 'npc.witness', mode: 'following' } );
+		harness.control.actor.position = [ 10, 0, 0 ];
+		harness.gameplay.candidates( frame( P7, [ 10, 0, 0 ], [ 10, 1.3, -2 ] ) );
+		expect( harness.gameplay.drainMechanicResults()[ 0 ] ).toMatchObject( {
+			ok: true, eventKind: 'transported', progressed: true
+		} );
+		expect( harness.continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: TIME } );
+
+	} );
+
+	it( 'follows from a parcel to transit and from disembarkation to the destination parcel', () => {
+
+		const harness = setup( [ transportDefinition() ] );
+		harness.gameplay.candidates( frame( P4, [ 0, 0, -2 ], [ 0, 1.3, -3 ] ) );
+		expect( harness.control.follow ).toEqual( { npcId: 'npc.witness', mode: 'following' } );
+
+		harness.control.actor.position = [ 3, 0, -2 ];
+		harness.gameplay.transitEvent( {
+			action: 'board', result: { ok: true, service: { tripId: 'trip-live', routeId: 'route-live' } }
+		}, { timeMin: TIME, playerPlaces: [ { kind: 'stop', id: 'stop-a' } ], position: [ 3, 0, -2 ] } );
+		expect( harness.continuity.carryFollower ).toHaveBeenCalled();
+
+		expect( harness.gameplay.transitEvent( {
+			action: 'disembark', result: { ok: true, tripId: 'trip-live', routeId: 'route-live' }
+		}, {
+			timeMin: TIME, playerPlaces: [ { kind: 'stop', id: 'stop-b' } ], position: [ 7, 0, -2 ]
+		} ) ).toBeNull();
+		expect( harness.control.follow ).toEqual( { npcId: 'npc.witness', mode: 'following' } );
+
+		harness.control.actor.position = [ 10, 0, -2 ];
+		harness.gameplay.candidates( frame( P7, [ 10, 0, -2 ], [ 10, 1.3, -3 ] ) );
+		expect( harness.gameplay.drainMechanicResults()[ 0 ] ).toMatchObject( {
+			ok: true, eventKind: 'transported', progressed: true
+		} );
+
+	} );
+
+	it( 'rejects a passenger that cannot project at boarding or during the measured ride', () => {
+
+		const blocked = setup( [ transportDefinition() ] );
+		blocked.control.projectable = false;
+		blocked.gameplay.transitEvent( {
+			action: 'board', result: { ok: true, service: { tripId: 'trip-live', routeId: 'route-live' } }
+		}, { timeMin: TIME, playerPlaces: [ P4 ], position: [ 0, 0, -2 ] } );
+		expect( blocked.continuity.carryFollower ).not.toHaveBeenCalled();
+		expect( blocked.control.follow ).toBeNull();
+
+		const dropped = setup( [ transportDefinition() ] );
+		dropped.gameplay.transitEvent( {
+			action: 'board', result: { ok: true, service: { tripId: 'trip-live', routeId: 'route-live' } }
+		}, { timeMin: TIME, playerPlaces: [ P4 ], position: [ 0, 0, -2 ] } );
+		dropped.control.projectable = false;
+		dropped.gameplay.transitEvent( {
+			action: 'update', result: { ok: true, tripId: 'trip-live', routeId: 'route-live', autoDisembarked: false }
+		}, { timeMin: TIME, playerPlaces: [], position: [ 4, 0, -2 ] } );
+		expect( dropped.control.follow ).toBeNull();
+		expect( dropped.gameplay.transitEvent( {
+			action: 'disembark', result: { ok: true, tripId: 'trip-live', routeId: 'route-live' }
+		}, { timeMin: TIME, playerPlaces: [ P7 ], position: [ 10, 0, -2 ] } ) ).toBeNull();
+		expect( dropped.session.persistenceView()[ 0 ].completedSteps ).toEqual( [] );
 
 	} );
 
@@ -206,6 +265,80 @@ describe( 'live measured quest mechanic hosts', () => {
 
 	} );
 
+	it( 'reconstructs a saved active ride from its exact authored stop and completes at its station', () => {
+
+		const harness = setup( [ transportDefinition( {
+			from: { stopId: 'stop-a' }, to: { stationId: 'station-b' }
+		} ) ], { behaviorPlace: { kind: 'stop', id: 'stop-a' } } );
+		harness.control.actor.place = { kind: 'route', id: 'route-live' };
+		harness.control.actor.mode = 'following';
+		harness.control.follow = { npcId: 'npc.witness', mode: 'following' };
+		expect( harness.gameplay.restoreTransit( {
+			timeMin: TIME,
+			origin: { kind: 'stop', id: 'stop-a' },
+			position: { x: 0, y: 0, z: -2 },
+			tripId: 'trip-live',
+			routeId: 'route-live'
+		} ) ).toBe( true );
+		expect( harness.control.actors.map( ( value ) => value.npcId ) ).toEqual( [ 'npc.witness' ] );
+		expect( harness.continuity.startFollow ).not.toHaveBeenCalled();
+		const transported = harness.gameplay.transitEvent( {
+			action: 'disembark', result: { ok: true, tripId: 'trip-live', routeId: 'route-live' }
+		}, {
+			timeMin: TIME, playerPlaces: [ { kind: 'station', id: 'station-b' } ], position: [ 10, 0, -2 ]
+		} );
+		expect( transported ).toMatchObject( { ok: true, eventKind: 'transported', progressed: true } );
+
+	} );
+
+	it( 'restores exact approach, aboard and arrival stages without losing the passenger', () => {
+
+		const approachSource = setup( [ transportDefinition() ] );
+		approachSource.gameplay.candidates( frame( P4, [ 0, 0, -2 ], [ 0, 1.3, -3 ] ) );
+		const approach = approachSource.gameplay.serializeTransit();
+		expect( approach ).toMatchObject( {
+			questId: 'transport-only', stepId: 'transportation', stage: 'approach',
+			tripId: null, routeId: null, passengerNpcId: 'npc.witness'
+		} );
+		const approachRestore = setup( [ transportDefinition() ] );
+		approachRestore.control.actor.mode = 'following';
+		approachRestore.control.follow = { npcId: 'npc.witness', mode: 'following' };
+		expect( approachRestore.gameplay.restoreTransitState( {
+			timeMin: TIME, position: { x: 0, y: 0, z: -2 }, state: approach, journey: null
+		} ) ).toBe( true );
+		expect( approachRestore.gameplay.serializeTransit() ).toEqual( approach );
+
+		approachSource.control.actor.position = [ 3, 0, -2 ];
+		approachSource.gameplay.transitEvent( {
+			action: 'board', result: { ok: true, service: { tripId: 'trip-live', routeId: 'route-live' } }
+		}, { timeMin: TIME, playerPlaces: [], position: [ 3, 0, -2 ] } );
+		const aboard = approachSource.gameplay.serializeTransit();
+		expect( aboard ).toMatchObject( { stage: 'aboard', tripId: 'trip-live', routeId: 'route-live' } );
+		const aboardRestore = setup( [ transportDefinition() ] );
+		aboardRestore.control.actor.place = { kind: 'route', id: 'route-live' };
+		aboardRestore.control.actor.mode = 'following';
+		aboardRestore.control.follow = { npcId: 'npc.witness', mode: 'following' };
+		expect( aboardRestore.gameplay.restoreTransitState( {
+			timeMin: TIME, position: { x: 3, y: 0, z: -2 }, state: aboard,
+			journey: { tripId: 'trip-live', routeId: 'route-live' }
+		} ) ).toBe( true );
+
+		approachSource.gameplay.transitEvent( {
+			action: 'disembark', result: { ok: true, tripId: 'trip-live', routeId: 'route-live' }
+		}, { timeMin: TIME, playerPlaces: [], position: [ 7, 0, -2 ] } );
+		const arrival = approachSource.gameplay.serializeTransit();
+		expect( arrival ).toMatchObject( { stage: 'arrival', tripId: 'trip-live', routeId: 'route-live' } );
+		const arrivalRestore = setup( [ transportDefinition() ] );
+		arrivalRestore.control.actor.position = [ 7, 0, -2 ];
+		arrivalRestore.control.actor.mode = 'following';
+		arrivalRestore.control.follow = { npcId: 'npc.witness', mode: 'following' };
+		expect( arrivalRestore.gameplay.restoreTransitState( {
+			timeMin: TIME, position: { x: 7, y: 0, z: -2 }, state: arrival, journey: null
+		} ) ).toBe( true );
+		expect( arrivalRestore.gameplay.serializeTransit() ).toEqual( arrival );
+
+	} );
+
 } );
 
 function setup( definitions, options = {} ) {
@@ -219,7 +352,10 @@ function setup( definitions, options = {} ) {
 		findNPCs: ( query ) => [ ...people.values() ].filter( ( person ) => person.type === query.type ),
 		getNPCVendor: ( query ) => [ ...people.values() ].find( ( person ) => person.type === ( query.npcType ?? query.type ) ),
 		reserveNPC: ( query ) => [ ...people.values() ].find( ( person ) => person.type === ( query.npcType ?? query.type ) ),
-		behaviorAt: ( id ) => ( { mode: 'interior', activity: 'working', place: { kind: 'parcel', id: people.get( id ).parcelId }, interrupted: false } ),
+		behaviorAt: ( id ) => ( {
+			mode: 'interior', activity: 'working',
+			place: options.behaviorPlace ?? { kind: 'parcel', id: people.get( id ).parcelId }, interrupted: false
+		} ),
 		applyFlag: ( id, operation ) => { if ( operation.kind === 'die' ) people.get( id ).flags.dead = true; },
 		interrupt() {}, resume() {}
 	};
@@ -227,7 +363,8 @@ function setup( definitions, options = {} ) {
 	const control = {
 		actor: actor(),
 		actors: [],
-		follow: null
+		follow: null,
+		projectable: true
 	};
 	if ( ! options.initiallyEmpty ) control.actors.push( control.actor );
 	const continuity = {
@@ -286,6 +423,7 @@ function setup( definitions, options = {} ) {
 		syncActor: vi.fn( ( value ) => {
 
 			if ( options.syncActorError ) throw options.syncActorError;
+			if ( ! control.projectable ) return null;
 			return { id: `body:${value.npcId}`, npcId: value.npcId, position: new THREE.Vector3().fromArray( value.position ) };
 
 		} )
@@ -320,10 +458,10 @@ function fixedDefinition() {
 
 }
 
-function transportDefinition() {
+function transportDefinition( endpoints = {} ) {
 
 	return definition( 'transport-only', [ role( 'witness', 'witness' ) ], [
-		step( 'transportation', transportationTarget(), null, 'safe' )
+		step( 'transportation', transportationTarget( [], endpoints ), null, 'safe' )
 	], [], [ 'transport-done' ], 'transportation', 'safe' );
 
 }
@@ -337,11 +475,11 @@ function rescueDefinition() {
 
 }
 
-function transportationTarget( cargoItemIds = [] ) {
+function transportationTarget( cargoItemIds = [], endpoints = {} ) {
 
 	return {
 		kind: 'transportation', journeyId: 'archive-to-market', mode: 'public-transit',
-		from: { parcelId: 'p4' }, to: { parcelId: 'p7' }, passengerRoleIds: [ 'witness' ],
+		from: endpoints.from ?? { parcelId: 'p4' }, to: endpoints.to ?? { parcelId: 'p7' }, passengerRoleIds: [ 'witness' ],
 		cargoItemIds, completionFlag: 'transport-done'
 	};
 
@@ -421,7 +559,7 @@ function frame( place, feet, focus ) {
 
 	const eye = new THREE.Vector3( feet[ 0 ], 1.7, feet[ 2 ] );
 	return {
-		timeMin: TIME, playerPlaces: [ place ], feet: record( new THREE.Vector3().fromArray( feet ) ),
+		timeMin: TIME, playerPlaces: Array.isArray( place ) ? place : [ place ], feet: record( new THREE.Vector3().fromArray( feet ) ),
 		eye: record( eye ), look: record( new THREE.Vector3().fromArray( focus ).sub( eye ).normalize() )
 	};
 

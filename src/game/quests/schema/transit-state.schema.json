@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:quest-actions:transit-state",
+  "oneOf": [
+    { "type": "null" },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["questId", "stepId", "stage", "tripId", "routeId", "passengerNpcId"],
+      "properties": {
+        "questId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+        "stepId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+        "stage": { "enum": ["approach", "aboard", "arrival"] },
+        "tripId": {
+          "anyOf": [
+            { "type": "null" },
+            { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }
+          ]
+        },
+        "routeId": {
+          "anyOf": [
+            { "type": "null" },
+            { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }
+          ]
+        },
+        "passengerNpcId": {
+          "anyOf": [
+            { "type": "null" },
+            { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "stage": { "const": "approach" } }, "required": ["stage"] },
+          "then": { "properties": { "tripId": { "type": "null" }, "routeId": { "type": "null" } } },
+          "else": {
+            "properties": {
+              "tripId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+              "routeId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -134,8 +134,9 @@ export class QuestGameplay {
 		const eye = vector3( frame.eye );
 		const look = vector3( frame.look );
 		const targets = this.actions.targets( { timeMin } );
-		const mechanics = ( this.actions.mechanics?.( { timeMin } ) ?? [] ).map( ( target ) => this.#presentMechanic( target ) );
+		const mechanics = this.#mechanicTargets( timeMin ).map( ( target ) => this.#presentMechanic( target ) );
 		this.#advanceEscort( mechanics, { timeMin, playerPlaces, feet } );
+		this.#advanceTransit( mechanics, { timeMin, playerPlaces, feet } );
 		this.#materializePassiveCast( mechanics, { timeMin, playerPlaces, feet } );
 		this.#sync( [ ...targets, ...mechanics ] );
 		const candidates = [];
@@ -211,7 +212,7 @@ export class QuestGameplay {
 	fatalImpact( impact, npcId, timeMin ) {
 
 		if ( ! impact?.fatal || ! npcId ) return null;
-		const target = this.actions.mechanics( { timeMin } ).find( ( candidate ) =>
+		const target = this.#mechanicTargets( timeMin ).find( ( candidate ) =>
 			candidate.kind === 'assassinate' && candidate.actorIds[ 0 ] === npcId && candidate.availability.available );
 		if ( ! target ) return null;
 		const result = this.mechanics.complete( {
@@ -227,7 +228,12 @@ export class QuestGameplay {
 	transitEvent( action, { timeMin, playerPlaces, position } ) {
 
 		if ( ! action?.result?.ok ) return null;
-		if ( action.action === 'board' ) return this.#beginTransitQuest( action.result, { timeMin, playerPlaces, position } );
+		if ( action.action === 'board' ) {
+
+			this.#beginTransitQuest( action.result, { timeMin, playerPlaces, position } );
+			return null;
+
+		}
 		if ( ! this.transitQuest ) return null;
 		const routeId = action.result.routeId;
 		const tripId = action.result.tripId;
@@ -241,16 +247,76 @@ export class QuestGameplay {
 
 		}
 		if ( action.action !== 'disembark' && ! action.result.autoDisembarked ) return null;
-		const tracked = this.transitQuest;
+		this.transitQuest.stage = 'arrival';
+		return this.#completeTransit( { timeMin, playerPlaces, position } );
+
+	}
+
+	/** Reconstructs an active quest ride from the validated saved journey origin. */
+	restoreTransit( request ) {
+
+		this.boundary.input( 'transit-restore-request', request );
+		if ( this.transitQuest ) return false;
+		const target = this.#transitTarget( request.timeMin, [ request.origin ], false );
+		if ( ! target || ! this.#restoredPassenger( target, request.routeId ) ) return false;
+		const position = [ request.position.x, request.position.y, request.position.z ];
+		this.transitQuest = {
+			target, stage: 'aboard', tripId: request.tripId, routeId: request.routeId,
+			passengerNpcId: target.actorIds[ 0 ] ?? null
+		};
+		if ( this.#carryPassenger( position, request.routeId ) ) return true;
 		this.transitQuest = null;
-		this.#releasePassenger( tracked.passengerNpcId, timeMin, position );
-		if ( ! atPlace( playerPlaces, runtimePlace( tracked.target.target.to ) ) ) return null;
-		const result = this.mechanics.complete( {
-			questId: tracked.target.questId, stepId: tracked.target.stepId, timeMin,
-			event: mechanicEvent( tracked.target )
-		} );
-		if ( result.ok ) this.changedTargets.add( tracked.target.targetKey );
-		return result;
+		return false;
+
+	}
+
+	/** Restores an exact approach, aboard, or arrival stage saved with the quest runtime. */
+	restoreTransitState( request ) {
+
+		this.boundary.input( 'transit-state-restore-request', request );
+		const saved = request.state;
+		if ( this.transitQuest || ! saved ) return false;
+		const target = this.#mechanicTargets( request.timeMin ).find( ( candidate ) =>
+			candidate.questId === saved.questId
+			&& candidate.stepId === saved.stepId
+			&& candidate.kind === 'transportation'
+			&& candidate.target.mode === 'public-transit'
+			&& candidate.actorIds.length <= 1
+			&& ( candidate.actorIds[ 0 ] ?? null ) === saved.passengerNpcId
+			&& candidate.target.cargoItemIds.every( ( id ) =>
+				this.session.inventoryView().some( ( item ) => item.id === id ) ) );
+		if ( ! target ) return false;
+		const aboard = saved.stage === 'aboard';
+		if ( aboard !== Boolean( request.journey ) ) return false;
+		if ( aboard && ( request.journey.tripId !== saved.tripId || request.journey.routeId !== saved.routeId ) ) return false;
+		const position = [ request.position.x, request.position.y, request.position.z ];
+		if ( aboard ) {
+
+			if ( ! this.#restoredPassenger( target, saved.routeId ) ) return false;
+
+		} else if ( ! this.#restoredGroundPassenger( target, position ) ) return false;
+		this.transitQuest = {
+			target, stage: saved.stage, tripId: saved.tripId, routeId: saved.routeId,
+			passengerNpcId: saved.passengerNpcId
+		};
+		if ( ! aboard || this.#carryPassenger( position, saved.routeId ) ) return true;
+		this.transitQuest = null;
+		return false;
+
+	}
+
+	/** Serializable quest-side transit progress stored beside the timetable journey. */
+	serializeTransit() {
+
+		const tracked = this.transitQuest;
+		return this.boundary.output( 'transit-state', tracked ? {
+			questId: tracked.target.questId,
+			stepId: tracked.target.stepId,
+			stage: tracked.stage,
+			tripId: tracked.tripId,
+			routeId: tracked.routeId,
+			passengerNpcId: tracked.passengerNpcId
+		} : null );
 
 	}
 
@@ -467,11 +533,7 @@ export class QuestGameplay {
 		for ( const target of targets ) {
 
 			if ( ! target.availability.available || this.changedTargets.has( target.targetKey ) || target.actorIds.length !== 1 ) continue;
-			const assassination = target.kind === 'assassinate';
-			const transitPassenger = target.kind === 'transportation'
-				&& target.target.mode === 'public-transit'
-				&& atPlace( playerPlaces, runtimePlace( target.target.from ) );
-			if ( ! assassination && ! transitPassenger ) continue;
+			if ( target.kind !== 'assassinate' ) continue;
 			this.#questMember( target.actorIds[ 0 ], timeMin, feet, target.place );
 
 		}
@@ -507,26 +569,140 @@ export class QuestGameplay {
 
 	#beginTransitQuest( result, state ) {
 
-		const target = this.actions.mechanics( { timeMin: state.timeMin } ).find( ( candidate ) =>
-			candidate.kind === 'transportation' && candidate.availability.available
-			&& candidate.target.mode === 'public-transit'
-			&& atPlace( state.playerPlaces, runtimePlace( candidate.target.from ) )
-			&& candidate.actorIds.length <= 1
-			&& candidate.target.cargoItemIds.every( ( id ) => this.session.inventoryView().some( ( item ) => item.id === id ) ) );
-		if ( ! target ) return null;
-		if ( target.actorIds.length === 1 && ! this.#ensurePassenger( target, state.timeMin, state.position ) ) return null;
-		this.transitQuest = {
-			target, tripId: result.service.tripId, routeId: result.service.routeId,
-			passengerNpcId: target.actorIds[ 0 ] ?? null
-		};
-		if ( ! this.#carryPassenger( state.position, result.service.routeId ) ) {
+		if ( ! this.transitQuest ) {
 
-			const tracked = this.transitQuest;
-			this.transitQuest = null;
-			this.#releasePassenger( tracked.passengerNpcId, state.timeMin, state.position );
+			const target = this.#transitTarget( state.timeMin, state.playerPlaces, true );
+			if ( ! target || ! this.#prepareTransit( target, state.timeMin, state.position ) ) return false;
 
 		}
-		return null;
+		const tracked = this.transitQuest;
+		if ( tracked.stage === 'aboard' || ! this.#activePassenger( tracked, state.position ) ) return false;
+		const previous = { stage: tracked.stage, tripId: tracked.tripId, routeId: tracked.routeId };
+		Object.assign( tracked, {
+			stage: 'aboard', tripId: result.service.tripId, routeId: result.service.routeId
+		} );
+		if ( ! this.#carryPassenger( state.position, result.service.routeId ) ) {
+
+			Object.assign( tracked, previous );
+			return false;
+
+		}
+		return true;
+
+	}
+
+	#prepareTransit( target, timeMin, position ) {
+
+		const passengerNpcId = target.actorIds[ 0 ] ?? null;
+		const controlled = this.#activePassenger( { passengerNpcId }, position );
+		if ( passengerNpcId && ! controlled && ! this.#ensurePassenger( target, timeMin, position ) ) return false;
+		this.transitQuest = {
+			target, stage: 'approach', tripId: null, routeId: null,
+			passengerNpcId
+		};
+		return true;
+
+	}
+
+	#advanceTransit( targets, { timeMin, playerPlaces, feet } ) {
+
+		if ( ! this.transitQuest ) {
+
+			const target = this.#transitTarget( timeMin, playerPlaces, true );
+			if ( target ) this.#prepareTransit( target, timeMin, feet.toArray() );
+			return;
+
+		}
+		const target = targets.find( ( candidate ) => candidate.targetKey === this.transitQuest.target.targetKey );
+		if ( ! target ) {
+
+			this.#releasePassenger( this.transitQuest.passengerNpcId, timeMin, feet.toArray() );
+			this.transitQuest = null;
+			return;
+
+		}
+		this.transitQuest.target = target;
+		if ( this.transitQuest.stage !== 'arrival' ) return;
+		const result = this.#completeTransit( { timeMin, playerPlaces, position: feet.toArray() } );
+		if ( result ) this.mechanicResults.push( result );
+
+	}
+
+	#completeTransit( state ) {
+
+		const tracked = this.transitQuest;
+		if ( ! tracked || tracked.stage !== 'arrival' ) return null;
+		if ( ! atPlace( state.playerPlaces, runtimePlace( tracked.target.target.to ) ) ) return null;
+		if ( ! this.#activePassenger( tracked, state.position ) ) return null;
+		const result = this.mechanics.complete( {
+			questId: tracked.target.questId, stepId: tracked.target.stepId, timeMin: state.timeMin,
+			event: mechanicEvent( tracked.target )
+		} );
+		if ( ! result.ok ) return result;
+		this.changedTargets.add( tracked.target.targetKey );
+		this.#releasePassenger( tracked.passengerNpcId, state.timeMin, state.position );
+		this.transitQuest = null;
+		return result;
+
+	}
+
+	#activePassenger( tracked, position ) {
+
+		const npcId = tracked.passengerNpcId;
+		if ( ! npcId ) return true;
+		if ( ! this.continuity ) return false;
+		const state = this.continuity.serialize();
+		if ( state.follow?.npcId !== npcId || state.follow.mode !== 'following' ) return false;
+		const actor = state.actors.find( ( candidate ) => candidate.npcId === npcId );
+		if ( ! actor ) return false;
+		const player = new THREE.Vector3().fromArray( position );
+		if ( player.distanceTo( new THREE.Vector3().fromArray( actor.position ) ) > ESCORT_REACH ) return false;
+		return Boolean( this.crowd.syncActor( actor, player ) );
+
+	}
+
+	#transitTarget( timeMin, playerPlaces, requireAvailable ) {
+
+		return this.#mechanicTargets( timeMin ).find( ( candidate ) =>
+			candidate.kind === 'transportation'
+			&& ( ! requireAvailable || candidate.availability.available )
+			&& candidate.target.mode === 'public-transit'
+			&& atPlace( playerPlaces, runtimePlace( candidate.target.from ) )
+			&& candidate.actorIds.length <= 1
+			&& candidate.target.cargoItemIds.every( ( id ) =>
+				this.session.inventoryView().some( ( item ) => item.id === id ) ) );
+
+	}
+
+	#mechanicTargets( timeMin ) {
+
+		return this.actions.mechanics?.( { timeMin } ) ?? [];
+
+	}
+
+	#restoredPassenger( target, routeId ) {
+
+		if ( target.actorIds.length === 0 ) return true;
+		if ( ! this.continuity ) return false;
+		const npcId = target.actorIds[ 0 ];
+		const state = this.continuity.serialize();
+		const actor = state.actors.find( ( candidate ) => candidate.npcId === npcId );
+		return state.follow?.npcId === npcId
+			&& state.follow.mode === 'following'
+			&& actor?.place?.kind === 'route'
+			&& actor.place.id === routeId;
+
+	}
+
+	#restoredGroundPassenger( target, position ) {
+
+		if ( target.actorIds.length === 0 ) return true;
+		if ( ! this.continuity ) return false;
+		const npcId = target.actorIds[ 0 ];
+		const state = this.continuity.serialize();
+		const actor = state.actors.find( ( candidate ) => candidate.npcId === npcId );
+		if ( state.follow?.npcId !== npcId || state.follow.mode !== 'following' || ! actor ) return false;
+		return Boolean( this.crowd.syncActor( actor, new THREE.Vector3().fromArray( position ) ) );
 
 	}
 
@@ -568,8 +744,9 @@ export class QuestGameplay {
 		try {
 
 			const actor = this.continuity.carryFollower( { npcId, position: [ ...position ], routeId } );
-			this.crowd.syncActor( actor, vector3( { x: position[ 0 ], y: position[ 1 ], z: position[ 2 ] } ) );
-			return true;
+			return Boolean( this.crowd.syncActor(
+				actor, vector3( { x: position[ 0 ], y: position[ 1 ], z: position[ 2 ] } )
+			) );
 
 		} catch { return false; }
 
