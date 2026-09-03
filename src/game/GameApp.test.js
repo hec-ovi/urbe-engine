@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import {
 	GameApp, currentObjectiveView, npcContinuityPlaces, pickSpawn, playableInteractionOwner, playableTransitPrompt,
-	prepareInteriorStreaming, savedSpawn, transitStartHour
+	prepareInteriorStreaming, questPlayerPlaces, restoredTransitQuest, savedSpawn, transitStartHour
 } from './GameApp.js';
+import { Locator } from './world/Locator.js';
 
 describe( 'game spawn', () => {
 
@@ -87,6 +88,45 @@ describe( 'streamed floor preparation', () => {
 
 describe( 'playable transit integration', () => {
 
+	it( 'supplies exact public transport refs to quest frames and restores the boarded origin', () => {
+
+		const atlas = {
+			districts: [], parcels: [],
+			transit: {
+				busStops: [ { id: 'stop-a', position: [ 0, 0 ] } ],
+				trainStations: [ {
+					id: 'station-b', position: [ 20, 0 ], level: 4,
+					platform: [ [ 18, -2 ], [ 22, -2 ], [ 22, 2 ], [ 18, 2 ] ]
+				} ],
+				subwayStations: []
+			}
+		};
+		const routes = [ {
+			id: 'route-a', kind: 'bus', stops: [
+				{ stopId: 'stop-a', y: 3 }, { stopId: 'stop-c', y: 3 }
+			]
+		} ];
+		const locator = new Locator( atlas, routes );
+		expect( questPlayerPlaces( locator, new THREE.Vector3( 0, 3, 0 ) ) ).toEqual( [
+			{ kind: 'stop', id: 'stop-a' }
+		] );
+		expect( questPlayerPlaces( locator, new THREE.Vector3( 20, 4, 0 ) ) ).toEqual( [
+			{ kind: 'station', id: 'station-b' }
+		] );
+
+		const state = {
+			status: 'aboard', clock: { dayOffset: 0, lastDaySeconds: 3600 },
+			tripId: 'trip-a', routeId: 'route-a', serviceDeparture: 3500, boardedStopIndex: 0
+		};
+		expect( restoredTransitQuest(
+			{ valid: true, state }, routes, 60, new THREE.Vector3( 5, 3, 0 )
+		) ).toEqual( {
+			timeMin: 60, origin: { kind: 'stop', id: 'stop-a' },
+			position: { x: 5, y: 3, z: 0 }, tripId: 'trip-a', routeId: 'route-a'
+		} );
+
+	} );
+
 	it( 'restores the exact active timetable clock including a day rollover', () => {
 
 		const journey = {
@@ -143,6 +183,25 @@ describe( 'live NPC continuity integration', () => {
 				anchors: [ { id: 'coffee', position: [ 7, 2, 8 ], heading: Math.PI / 2 } ]
 			},
 			{ kind: 'parcel', id: 'home', position: [ 20, 0.12, 30 ], heading: 0, anchors: [] }
+		] );
+
+	} );
+
+	it( 'publishes bus stops and station platforms as exact simulation stop positions', () => {
+
+		const atlas = {
+			parcels: [],
+			transit: {
+				busStops: [ { id: 'bus-a', position: [ 3, 4 ] } ],
+				trainStations: [ { id: 'rail-b', position: [ 8, 9 ], level: 2 } ],
+				subwayStations: [ { id: 'metro-c', position: [ 12, 13 ], level: -8 } ]
+			}
+		};
+		const routes = [ { stops: [ { stopId: 'bus-a', y: 1.5 } ] } ];
+		expect( npcContinuityPlaces( atlas, [], new Map(), routes ) ).toEqual( [
+			{ kind: 'stop', id: 'bus-a', position: [ 3, 1.5, 4 ] },
+			{ kind: 'stop', id: 'rail-b', position: [ 8, 2, 9 ] },
+			{ kind: 'stop', id: 'metro-c', position: [ 12, -8, 13 ] }
 		] );
 
 	} );

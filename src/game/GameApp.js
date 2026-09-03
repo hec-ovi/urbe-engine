@@ -323,7 +323,7 @@ export class GameApp {
 		this.npcContinuity = new NpcContinuity( {
 			simulation: this.sim,
 			routes,
-			places: npcContinuityPlaces( atlas, city.doors, buildings )
+			places: npcContinuityPlaces( atlas, city.doors, buildings, transitRoutes )
 		} );
 		if ( game?.npcState?.continuity ) this.npcContinuity.restore( game.npcState.continuity );
 
@@ -395,6 +395,28 @@ export class GameApp {
 			continuity: this.npcContinuity,
 			animations: this.animations
 		} );
+		const savedTransitQuest = game && Object.hasOwn( game, 'questTransit' ) ? game.questTransit : undefined;
+		const transitState = this.transitJourney.state;
+		const activeJourney = transitState.status === 'aboard'
+			? { tripId: transitState.tripId, routeId: transitState.routeId }
+			: null;
+		const transitQuest = savedTransitQuest === undefined
+			? restoredTransitQuest( this.transitJourney, transitRoutes, this.clock.timeMin, this.body.feet )
+			: null;
+		const restoreRequested = Boolean( savedTransitQuest || transitQuest );
+		const restored = savedTransitQuest
+			? this.questGameplay.restoreTransitState( {
+				timeMin: this.clock.timeMin,
+				position: { x: this.body.feet.x, y: this.body.feet.y, z: this.body.feet.z },
+				state: savedTransitQuest,
+				journey: activeJourney
+			} )
+			: transitQuest ? this.questGameplay.restoreTransit( transitQuest ) : false;
+		if ( restoreRequested && ! restored ) {
+
+			console.warn( 'transit quest: active ride does not match an available quest step' );
+
+		}
 		this.scene.add( this.questGameplay.group );
 		this.probe?.exclude( this.questGameplay.group );
 		this.investigations = await InvestigationGameplay.create( {
@@ -563,7 +585,7 @@ export class GameApp {
 		this.venues.update( delta, feet, this.clock.timeMin, this.sim, this.lights );
 		this.hitches.time( 'relight', () => this.#relight( feet, delta ) );
 
-		const playerPlaces = this.locator.refs( feet.x, feet.z, this.standing?.parcelId ?? null );
+		const playerPlaces = questPlayerPlaces( this.locator, feet, this.standing?.parcelId ?? null );
 		const worldPrompt = this.interactor.update( delta, {
 			timeMin: this.clock.timeMin,
 			playerPlaces,
@@ -919,7 +941,7 @@ export class GameApp {
 	#selectTransit( service ) {
 
 		const feet = this.body.feet;
-		const places = this.locator.refs( feet.x, feet.z, this.standing?.parcelId ?? null );
+		const places = questPlayerPlaces( this.locator, feet, this.standing?.parcelId ?? null );
 		this.#transitAction( this.transitGameplay?.board( service ), places );
 		this.input?.requestLock();
 
@@ -929,7 +951,7 @@ export class GameApp {
 
 		if ( ! this.questGameplay || ! this.body ) return;
 		const feet = this.body.feet;
-		const places = playerPlaces ?? this.locator.refs( feet.x, feet.z, this.standing?.parcelId ?? null );
+		const places = playerPlaces ?? questPlayerPlaces( this.locator, feet, this.standing?.parcelId ?? null );
 		const result = this.questGameplay.transitEvent( action, {
 			timeMin: this.clock.timeMin,
 			playerPlaces: places,
@@ -1035,6 +1057,7 @@ export class GameApp {
 			currentLocation: this.currentLocation,
 			discoveredLocations: uniqueLocations( [ ...this.discoveredLocations.values() ] ),
 			transitJourney: this.transitGameplay.state,
+			questTransit: this.questGameplay.serializeTransit(),
 			investigations: this.investigations.serialize(),
 			npcState: {
 				timeMin: this.clock.timeMin,
@@ -1287,10 +1310,10 @@ function placesOf( doors, buildings ) {
 }
 
 /** Every scheduled parcel position in the controller's validated JSON shape. */
-export function npcContinuityPlaces( atlas, doors, buildings ) {
+export function npcContinuityPlaces( atlas, doors, buildings, transitRoutes = [] ) {
 
 	const doorByParcel = new Map( doors.map( ( door ) => [ door.parcelId, door ] ) );
-	return atlas.parcels.map( ( parcel ) => {
+	const parcels = atlas.parcels.map( ( parcel ) => {
 
 		const door = doorByParcel.get( parcel.id );
 		const position = door
@@ -1308,6 +1331,24 @@ export function npcContinuityPlaces( atlas, doors, buildings ) {
 		};
 
 	} );
+	const routeLevels = new Map();
+	for ( const route of transitRoutes ) for ( const stop of route.stops ) {
+
+		if ( ! routeLevels.has( stop.stopId ) ) routeLevels.set( stop.stopId, stop.y );
+
+	}
+	const stops = new Map();
+	for ( const stop of atlas.transit?.busStops ?? [] ) stops.set( stop.id, {
+		kind: 'stop', id: stop.id,
+		position: [ stop.position[ 0 ], routeLevels.get( stop.id ) ?? 0, stop.position[ 1 ] ]
+	} );
+	for ( const station of [
+		...( atlas.transit?.trainStations ?? [] ), ...( atlas.transit?.subwayStations ?? [] )
+	] ) stops.set( station.id, {
+		kind: 'stop', id: station.id,
+		position: [ station.position[ 0 ], station.level, station.position[ 1 ] ]
+	} );
+	return [ ...parcels, ...stops.values() ];
 
 }
 
@@ -1379,6 +1420,42 @@ export function transitStartHour( journey, fallback ) {
 	const state = journey?.state;
 	if ( ! journey?.valid || state?.status !== 'aboard' || state.clock.lastDaySeconds === null ) return fallback;
 	return ( state.clock.dayOffset + state.clock.lastDaySeconds ) / 3600;
+
+}
+
+/** Exact quest place identities at the player's current world point. */
+export function questPlayerPlaces( locator, feet, roomParcelId = null ) {
+
+	const places = locator.refs( feet.x, feet.z, roomParcelId );
+	const transit = questTransitPlace( locator.transitPlace( feet.x, feet.y, feet.z ) );
+	return transit && ! places.some( ( place ) => place.kind === transit.kind && place.id === transit.id )
+		? [ ...places, transit ]
+		: places;
+
+}
+
+/** Rebuilds the exact quest ride input from a validated active journey. */
+export function restoredTransitQuest( journey, routes, timeMin, position ) {
+
+	const state = journey?.state;
+	if ( ! journey?.valid || state?.status !== 'aboard' ) return null;
+	const route = routes.find( ( candidate ) => candidate.id === state.routeId );
+	const stop = route?.stops?.[ state.boardedStopIndex ];
+	if ( ! stop ) return null;
+	return {
+		timeMin,
+		origin: { kind: route.kind === 'bus' ? 'stop' : 'station', id: stop.stopId },
+		position: { x: position.x, y: position.y, z: position.z },
+		tripId: state.tripId,
+		routeId: state.routeId
+	};
+
+}
+
+function questTransitPlace( place ) {
+
+	if ( ! place ) return null;
+	return { kind: place.kind === 'bus-stop' ? 'stop' : 'station', id: place.id };
 
 }
 
