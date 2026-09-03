@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:physics:impact-events",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["personId", "vehicleId", "point", "impulse"],
+    "properties": {
+      "personId": { "type": "string", "minLength": 1, "maxLength": 160 },
+      "vehicleId": { "type": "string", "minLength": 1, "maxLength": 160 },
+      "point": { "$ref": "urn:urbe:engine:physics:ragdoll-impact#/$defs/vector3" },
+      "impulse": { "$ref": "urn:urbe:engine:physics:ragdoll-impact#/$defs/vector3" }
+    }
+  }
+}

@@ -5,8 +5,8 @@ import { CLIP } from './CharacterAssets.js';
 import { WalkRoutes } from './WalkRoutes.js';
 
 /**
- * People are not physics bodies, so the crowd's own pushback is the only thing
- * standing between the player and walking through a pedestrian. It has to
+ * Walking people are not dynamic physics bodies, so the crowd's own pushback
+ * stands between the player and walking through a pedestrian. It has to
  * clear the whole overlap, point away from the person, and reach nobody it is
  * not actually touching.
  */
@@ -166,6 +166,32 @@ describe( 'persistent NPC projection', () => {
 		expect( crowd.memberForNpc( instance.npcId ) ).toMatchObject( {
 			animationOverride: 'Sitting_Nodding_Loop', clip: CLIP.SIT, heading: 1
 		} );
+
+	} );
+
+	it( 'keeps one impacted identity frozen and out of interaction until physics rejects it', () => {
+
+		const instance = {
+			npcId: 'impact-worker', name: { given: 'Rae', family: 'Silva' },
+			type: 'barista', gender: 'female', appearanceSeed: 32
+		};
+		const crowd = new Crowd( {
+			assets: testAssets(), routes: pavement(), signals: { green: () => true },
+			sim: { getNPC: () => instance, crowd: () => ( { agents: [] } ) },
+			places: new Map(), capacity: 4
+		} );
+		const member = crowd.syncActor( persistentActor( instance ), new THREE.Vector3() );
+
+		expect( crowd.beginRagdoll( member.id ) ).toBe( member );
+		expect( member ).toMatchObject( { fallen: true, frozen: true } );
+		expect( crowd.within( member.position, 2 ) ).toEqual( [] );
+		expect( crowd.pushback( member.position, 0.32 ).length() ).toBe( 0 );
+		crowd.syncActor( { ...persistentActor( instance ), position: [ 9, 0, 0 ] }, new THREE.Vector3() );
+		expect( member.position.toArray() ).toEqual( [ 0, 0, 0 ] );
+
+		expect( crowd.cancelRagdoll( member.id ) ).toBe( member );
+		expect( member ).toMatchObject( { fallen: false, frozen: true } );
+		expect( crowd.within( member.position, 2 ) ).toEqual( [ member ] );
 
 	} );
 

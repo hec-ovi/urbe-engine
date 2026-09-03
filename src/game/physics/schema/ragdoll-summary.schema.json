@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:physics:ragdoll-summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["bodies", "joints", "totalMassKg"],
+  "properties": {
+    "bodies": { "type": "integer", "const": 15 },
+    "joints": { "type": "integer", "const": 14 },
+    "totalMassKg": { "type": "number", "const": 70 }
+  }
+}

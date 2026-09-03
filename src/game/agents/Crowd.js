@@ -77,6 +77,7 @@ export class Crowd {
 
 		if ( ! actor ) return null;
 		let member = [ ...this.members.values() ].find( ( candidate ) => candidate.npcId === actor.npcId ) ?? null;
+		if ( member?.fallen ) return member;
 		if ( ! actor.visible ) {
 
 			if ( member?.continuity ) this.members.delete( member.id );
@@ -171,6 +172,37 @@ export class Crowd {
 
 	}
 
+	/** The exact rendered person named by an ImpactWorld contact. */
+	member( id ) {
+
+		return this.members.get( id ) ?? null;
+
+	}
+
+	/** Freezes one exact crowd identity while its Source rig is physics-driven. */
+	beginRagdoll( id ) {
+
+		const member = this.members.get( id );
+		if ( ! member || member.fallen ) return null;
+		member.frozenBeforeImpact = member.frozen;
+		member.frozen = true;
+		member.fallen = true;
+		return member;
+
+	}
+
+	/** Restores the body's prior crowd control state after a rejected impact. */
+	cancelRagdoll( id ) {
+
+		const member = this.members.get( id );
+		if ( ! member?.fallen ) return null;
+		member.fallen = false;
+		member.frozen = Boolean( member.frozenBeforeImpact );
+		delete member.frozenBeforeImpact;
+		return member;
+
+	}
+
 	update( delta, player, clock ) {
 
 		this.timer += delta;
@@ -194,8 +226,8 @@ export class Crowd {
 
 	/**
 	 * How far the player has to move to stop standing inside somebody. Nobody
-	 * in the crowd is a physics body, so the player is pushed out of them
-	 * instead: the whole overlap every frame, which is what makes walking
+	 * in the walking crowd is a dynamic physics body, so the player is pushed
+	 * out of them instead: the whole overlap every frame, which is what makes walking
 	 * through a person impossible, summed over everyone touching, so a knot of
 	 * people shoulders the player aside instead of snapping them to one side.
 	 *
@@ -212,6 +244,7 @@ export class Crowd {
 
 		for ( const member of this.members.values() ) {
 
+			if ( member.fallen ) continue;
 			if ( Math.abs( member.position.y - point.y ) > PERSON_HEIGHT ) continue;
 
 			const dx = point.x - member.position.x;
@@ -345,6 +378,7 @@ export class Crowd {
 
 		for ( const member of this.members.values() ) {
 
+			if ( member.fallen ) continue;
 			if ( position.distanceToSquared( member.position ) < limit ) out.push( member );
 
 		}
@@ -361,6 +395,7 @@ export class Crowd {
 
 		for ( const member of this.members.values() ) {
 
+			if ( member.fallen ) continue;
 			const distance = position.distanceToSquared( member.position );
 
 			if ( distance < bestDistance ) {
@@ -499,7 +534,7 @@ export class Crowd {
 
 		for ( const member of this.members.values() ) {
 
-			if ( ! member.stationary && ! member.copy && ! member.continuity ) out.push( member );
+			if ( ! member.stationary && ! member.copy && ! member.continuity && ! member.frozen ) out.push( member );
 
 		}
 

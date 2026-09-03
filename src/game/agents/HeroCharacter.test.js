@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { HeroCharacter } from './HeroCharacter.js';
+import { Physics } from '../physics/index.js';
 
 describe( 'focused character', () => {
 
@@ -148,7 +149,109 @@ describe( 'focused character', () => {
 
 	} );
 
+	it( 'replaces the baked slot with the same articulated Source body for a measured impact', async () => {
+
+		const source = humanoidRig();
+		const clip = new THREE.AnimationClip( 'Walk_Loop', 1, [] );
+		const hero = new HeroCharacter( {
+			animation: { scene: humanoidRig(), animations: [ clip ] },
+			loadModel: () => ( { scene: source } )
+		} );
+		const physics = await Physics.create();
+		physics.addTrimesh( new THREE.BoxGeometry( 20, 0.1, 20 ).translate( 0, - 0.05, 0 ) );
+		const person = {
+			npcId: 'npc-impact', gender: 'female', appearanceSeed: 7,
+			clip: 0, frame: 0, hero: false, position: new THREE.Vector3(), heading: 0
+		};
+
+		expect( await hero.fall( person, physics, {
+			point: { x: 0, y: 1.4, z: 0 }, impulse: { x: 18, y: 2, z: 0 }
+		} ) ).toBe( true );
+		expect( person.hero ).toBe( true );
+		expect( hero.fallen.ragdoll.summary ).toEqual( { bodies: 15, joints: 14, totalMassKg: 70 } );
+		expect( hero.group.children ).toEqual( [ hero.fallen.root ] );
+
+		physics.step( 1 / 60 );
+		hero.update( 1 / 60 );
+		expect( hero.clearFall() ).toMatchObject( { npcId: 'npc-impact', hero: false } );
+		expect( hero.group.children ).toEqual( [] );
+
+	} );
+
 } );
+
+function humanoidRig() {
+
+	const root = new THREE.Group();
+	const armature = namedBone( 'root', [ 0, 0, 0 ] );
+	const pelvis = namedBone( 'pelvis', [ 0, 0.95, 0 ] );
+	armature.add( pelvis );
+	root.add( armature );
+	const spine1 = namedBone( 'spine_01', [ 0, 0.14, 0 ] );
+	const spine2 = namedBone( 'spine_02', [ 0, 0.12, 0 ] );
+	const spine3 = namedBone( 'spine_03', [ 0, 0.14, 0 ] );
+	const neck = namedBone( 'neck_01', [ 0, 0.14, 0 ] );
+	const head = namedBone( 'Head', [ 0, 0.1, 0 ] );
+	pelvis.add( spine1 );
+	spine1.add( spine2 );
+	spine2.add( spine3 );
+	spine3.add( neck );
+	neck.add( head );
+	addArm( spine3, 'l', 1 );
+	addArm( spine3, 'r', - 1 );
+	addLeg( pelvis, 'l', 1 );
+	addLeg( pelvis, 'r', - 1 );
+
+	const bones = [];
+	root.traverse( ( node ) => { if ( node.isBone ) bones.push( node ); } );
+	const geometry = new THREE.BufferGeometry();
+	geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [ 0, 0, 0 ], 3 ) );
+	geometry.setAttribute( 'skinIndex', new THREE.Uint16BufferAttribute( [ 0, 0, 0, 0 ], 4 ) );
+	geometry.setAttribute( 'skinWeight', new THREE.Float32BufferAttribute( [ 1, 0, 0, 0 ], 4 ) );
+	const mesh = new THREE.SkinnedMesh( geometry, new THREE.MeshStandardMaterial() );
+	mesh.name = 'body';
+	mesh.add( armature );
+	mesh.bind( new THREE.Skeleton( bones ) );
+	root.add( mesh );
+	root.updateWorldMatrix( true, true );
+	return root;
+
+}
+
+function addArm( parent, side, direction ) {
+
+	const clavicle = namedBone( `clavicle_${side}`, [ direction * 0.08, 0.06, 0 ] );
+	const upper = namedBone( `upperarm_${side}`, [ direction * 0.12, 0, 0 ] );
+	const lower = namedBone( `lowerarm_${side}`, [ direction * 0.25, 0, 0 ] );
+	const hand = namedBone( `hand_${side}`, [ direction * 0.24, 0, 0 ] );
+	parent.add( clavicle );
+	clavicle.add( upper );
+	upper.add( lower );
+	lower.add( hand );
+
+}
+
+function addLeg( parent, side, direction ) {
+
+	const thigh = namedBone( `thigh_${side}`, [ direction * 0.1, - 0.04, 0 ] );
+	const calf = namedBone( `calf_${side}`, [ 0, - 0.43, 0 ] );
+	const foot = namedBone( `foot_${side}`, [ 0, - 0.43, 0.02 ] );
+	const ball = namedBone( `ball_${side}`, [ 0, - 0.08, 0.16 ] );
+	parent.add( thigh );
+	thigh.add( calf );
+	calf.add( foot );
+	foot.add( ball );
+
+}
+
+function namedBone( name, position ) {
+
+	const value = new THREE.Bone();
+	value.name = name;
+	value.position.fromArray( position );
+	return value;
+
+}
 
 function rig( name = 'body' ) {
 

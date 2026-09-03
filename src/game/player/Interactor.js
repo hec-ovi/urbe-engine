@@ -117,7 +117,7 @@ export class Interactor {
 
 	}
 
-	close( clock ) {
+	close( clock, reason = 'player-left' ) {
 
 		if ( ! this.conversation ) return;
 
@@ -139,7 +139,8 @@ export class Interactor {
 			person.clip = person.restClip ?? CLIP.WALK;
 
 		}
-		this.animations?.endConversation( conversation, actor );
+		if ( reason === 'player-left' ) this.animations?.endConversation( conversation, actor );
+		else this.animations?.endConversation( conversation, actor, reason );
 		this.conversation = null;
 		this.onConversation?.( null );
 

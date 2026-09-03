@@ -30,6 +30,7 @@ export class GameplayAnimationDirector {
 		this.actorActions = new Map();
 		this.conversations = new WeakMap();
 		this.timed = new Map();
+		this.physicsActors = new Set();
 		this.focus = null;
 		this.coordinator = new AnimationCoordinator( {
 			version: '1', catalog,
@@ -45,6 +46,7 @@ export class GameplayAnimationDirector {
 		for ( const actor of [ ...actors ].sort( ( left, right ) => left.npcId.localeCompare( right.npcId ) ) ) {
 
 			const actorId = this.#actorId( actor.npcId );
+			if ( this.physicsActors.has( actorId ) ) continue;
 			let held = this.actorActions.get( actorId );
 			if ( actor.mode === 'posing' ) {
 
@@ -104,6 +106,28 @@ export class GameplayAnimationDirector {
 			this.focus = null;
 
 		}
+
+	}
+
+	/** Interrupts any coordinated action before Rapier takes the actor's rig. */
+	physicsInterrupt( person ) {
+
+		const identity = person?.npcId ?? person?.crowdId ?? ( person?.id ? `crowd:${person.id}` : null );
+		if ( ! identity ) return null;
+		const actorId = this.#actorId( identity );
+		this.physicsActors.add( actorId );
+		const held = this.actorActions.get( actorId );
+		if ( this.focus?.npcId === identity ) this.focus = null;
+		return held ? this.#settle( held.actionId, 'interrupt', 'physics', false ) : null;
+
+	}
+
+	/** Allows the next continuity update to resume the latest routine. */
+	physicsResume( person ) {
+
+		const identity = person?.npcId ?? person?.crowdId ?? ( person?.id ? `crowd:${person.id}` : null );
+		if ( ! identity ) return false;
+		return this.physicsActors.delete( this.#actorId( identity ) );
 
 	}
 

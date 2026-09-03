@@ -59,6 +59,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 ## Invariants
 
 - Named, focused and quest NPCs are keyed only by their actual npcId. A later statistical crowd handle cannot rename one or take its body.
+- A measured physics impact freezes the exact rendered identity and removes it from interaction and pushback. A rejected impact restores its prior control state. Accepted dynamic body assembly belongs to the game physics contract.
 - Appearance comes from the instance's persistent `appearanceSeed`, including after unload, save restore and reappearance.
 - Scheduled and follow movement samples only Connections `path3`; flat compatibility paths never position a body.
 - Scheduled passenger transit uses the routine's exact route, board stop, alight stop and progress. Ordered duplicate stops select the shortest forward portion of the route shape, so return legs keep their direction and heading.

@@ -37,6 +37,32 @@ describe( 'live gameplay animation composition', () => {
 
 	} );
 
+	it( 'interrupts the exact NPC action for physics and holds routine projection until release', () => {
+
+		const rig = setup();
+		const scheduled = actor( { animation: 'sit', mode: 'schedule' } );
+		rig.director.update( [ scheduled ], 0 );
+		const conversation = { npcId: scheduled.npcId };
+		rig.director.beginConversation( conversation, { ...scheduled, mode: 'conversation' } );
+
+		const interrupted = rig.director.physicsInterrupt( { npcId: scheduled.npcId } );
+		expect( interrupted.events ).toContainEqual( expect.objectContaining( {
+			type: 'action-interrupted', reason: 'physics', actorIds: [ scheduled.npcId, 'player' ]
+		} ) );
+		expect( rig.director.snapshot().actions ).toEqual( [] );
+		expect( current( rig.director, scheduled.npcId ) ).toMatchObject( {
+			mode: 'routine', currentClip: 'Sitting_Idle_Loop'
+		} );
+
+		const renders = rig.crowd.setAnimationClip.mock.calls.length;
+		rig.director.update( [ { ...scheduled, animation: 'walk', mode: 'resuming' } ], 1 );
+		expect( rig.crowd.setAnimationClip.mock.calls ).toHaveLength( renders );
+		expect( rig.director.physicsResume( { npcId: scheduled.npcId } ) ).toBe( true );
+		rig.director.update( [ { ...scheduled, animation: 'walk', mode: 'resuming' } ], 0 );
+		expect( current( rig.director, scheduled.npcId ).currentClip ).toBe( 'Walk_Loop' );
+
+	} );
+
 	it( 'switches a follower through sprint, walk, stop, and deterministic routine resume', () => {
 
 		const rig = setup();

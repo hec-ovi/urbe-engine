@@ -18,7 +18,7 @@
   - `light/`: every fixture as real light in lumens, clustered or batched by backend, per-room light slots with the computed room fill, air glow, the day switch that puts the city's own lights out at sunrise (src/game/light/CONTRACT.md)
   - `look/`: quality tiers with explicit texture budgets, AgX exposure, height fog tinted by the light in the air, environment probe, the render pipeline with emissive-selected bloom, and serial warm-up that builds pipelines and maps before a frame can stall on them (src/game/look/CONTRACT.md)
   - `sky/`: night sky, moon key, stars
-  - `physics/`: Rapier world, colliders, player capsule
+  - `physics/`: fixed-step Rapier world, generated trimesh collision, player capsule, measured vehicle contacts and one full Source-rig ragdoll (src/game/physics/CONTRACT.md)
   - `player/`: input, first-person controller, interaction
   - `agents/`: character assets, pose baking, crowd, traffic, persistent NPC materialization and quest-follow control on Connections' authoritative 3D paths (src/game/agents/CONTRACT.md)
   - `voice/`: deterministic content-addressed NPC voice profiles, structured speech controls, prioritized cancellable synthesis, checked audio chunks and AudioWorklet packet transport (src/game/voice/CONTRACT.md)

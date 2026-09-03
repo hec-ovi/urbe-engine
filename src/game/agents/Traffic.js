@@ -141,7 +141,8 @@ export class Traffic {
 
 			if ( distance > SPAWN_RADIUS || distance < 12 ) continue;
 
-			const rng = new Rng( mix( this.seed, this.spawned ++ ) );
+			const spawnIndex = this.spawned ++;
+			const rng = new Rng( mix( this.seed, spawnIndex ) );
 			const at = freeSlot( lane.length, taken.get( lane.id ) ?? [], rng );
 
 			if ( at === null ) continue;
@@ -151,6 +152,7 @@ export class Traffic {
 			taken.get( lane.id ).push( at );
 
 			this.cars.push( {
+				id: `car:${spawnIndex}`,
 				rng,
 				lane,
 				via: null,

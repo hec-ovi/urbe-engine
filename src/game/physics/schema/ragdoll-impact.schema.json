@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:physics:ragdoll-impact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["point", "impulse"],
+  "properties": {
+    "point": { "$ref": "#/$defs/vector3" },
+    "impulse": { "$ref": "#/$defs/vector3" }
+  },
+  "$defs": {
+    "vector3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    }
+  }
+}

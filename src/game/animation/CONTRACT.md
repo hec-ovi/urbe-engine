@@ -43,6 +43,8 @@ Coordinates quest, dialogue, follow, crouch, and routine animations as one deter
 
 The live game adapter synchronizes NPC continuity routines, turns accepted quest actions into commands, and sends every ordered transition to Crowd plus the one focused HeroCharacter armature. Coordinator state is presentation derived from persisted quest and NPC continuity state, so it is not duplicated in the game save.
 
+A measured physics impact closes the matching grouped action with interruption reason `physics`. The fallen actor receives no later routine projection while Rapier owns its Source rig. Releasing a rejected impact allows the next continuity update to project the latest synchronized routine.
+
 ## Invariants
 
 - Actor identity and action identity are never inferred from display names or proximity.

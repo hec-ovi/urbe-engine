@@ -47,9 +47,7 @@ import { EnvironmentProbe } from './look/EnvironmentProbe.js';
 import { LookPipeline } from './look/LookPipeline.js';
 import { Warmup } from './look/Warmup.js';
 import { NightSky, SKY_COLOR } from './sky/NightSky.js';
-import { Physics } from './physics/Physics.js';
-import { WorldColliders } from './physics/WorldColliders.js';
-import { PlayerBody, BODY_RADIUS } from './physics/PlayerBody.js';
+import { Physics, WorldColliders, PlayerBody, BODY_RADIUS, ImpactWorld } from './physics/index.js';
 import { Input } from './player/Input.js';
 import { PlayerController } from './player/PlayerController.js';
 import { Interactor } from './player/Interactor.js';
@@ -262,6 +260,7 @@ export class GameApp {
 
 		this.view.step( 'building the physics world' );
 		this.physics = await Physics.create();
+		this.impactWorld = new ImpactWorld( this.physics );
 		this.colliders = new WorldColliders( this.physics );
 		this.colliders.addStatic( ground.colliderGeometry, 'ground' );
 		await this.colliders.addStaticsAsync( city.shellColliders, { release: true } );
@@ -496,6 +495,7 @@ export class GameApp {
 			this.controller.update( delta );
 
 		} );
+		for ( const impact of this.impactWorld.drain() ) this.#ragdoll( impact );
 
 		const feet = this.body.feet;
 
@@ -525,6 +525,10 @@ export class GameApp {
 		} );
 		this.hero.update( delta );
 		this.hitches.time( 'traffic', () => this.traffic.update( delta, feet, this.clock.daySeconds ) );
+		this.impactWorld.sync( {
+			people: [ ...this.crowd.members.values() ],
+			vehicles: this.traffic.cars
+		} );
 		this.transit.update( feet, this.clock.daySeconds );
 		this.elevators.update( delta, this.body );
 		this.venues.update( delta, feet, this.clock.timeMin, this.sim, this.lights );
@@ -742,6 +746,35 @@ export class GameApp {
 			this.view.toast.show( { title: 'Save failed', text: error.message } );
 
 		} );
+
+	}
+
+	/** Turns one measured vehicle contact into the matching full-body rig. */
+	#ragdoll( impact ) {
+
+		let person = this.crowd.member( impact.personId );
+		if ( ! person ) return;
+		if ( this.interactor?.conversation?.person === person ) this.interactor.close( this.clock, 'physics' );
+		person = this.crowd.beginRagdoll( impact.personId );
+		if ( ! person ) return;
+		this.animations.physicsInterrupt( person );
+		this.hero.fall( person, this.physics, { point: impact.point, impulse: impact.impulse } )
+			.then( ( accepted ) => {
+
+				if ( accepted ) return;
+				this.crowd.cancelRagdoll( impact.personId );
+				this.animations.physicsResume( person );
+				this.impactWorld.release( impact.personId );
+
+			} )
+			.catch( ( error ) => {
+
+				console.warn( 'ragdoll:', error.message );
+				this.crowd.cancelRagdoll( impact.personId );
+				this.animations.physicsResume( person );
+				this.impactWorld.release( impact.personId );
+
+			} );
 
 	}
 

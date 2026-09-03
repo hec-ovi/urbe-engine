@@ -3,9 +3,14 @@ import { MeshStandardNodeMaterial } from 'three/webgpu';
 import { uniform, vec2 } from 'three/tsl';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
-import { ANIMATION_URL, CHARACTER_ROOT, assertRigCompatibility, avatarFor } from './CharacterCatalog.js';
+import {
+	ANIMATION_URL, CHARACTER_ROOT, CROWD_CLIP_NAMES,
+	assertRigCompatibility, avatarFor
+} from './CharacterCatalog.js';
 import { dressedColorNode } from './BodyMesh.js';
 import { garments } from './Garments.js';
+import { FRAMES } from './VatBaker.js';
+import { Ragdoll } from '../physics/Ragdoll.js';
 
 const TALK = 'Idle_Talking_Loop';
 const SIT_TALK = 'Sitting_Talking_Loop';
@@ -36,6 +41,8 @@ export class HeroCharacter {
 		this.group = new THREE.Group();
 		this.group.name = 'focused-character';
 		this.active = null;
+		this.fallen = null;
+		this.fallPending = false;
 		this.request = 0;
 
 	}
@@ -57,19 +64,8 @@ export class HeroCharacter {
 
 		if ( request !== this.request ) return false;
 
-		const root = clone( source.scene );
-		dress( root, person.look );
-		root.name = `focused-${descriptor.id}`;
-		root.position.copy( person.position );
-		root.rotation.y = person.heading;
+		const root = characterRoot( source, person, `focused-${descriptor.id}` );
 		root.visible = false;
-		root.traverse( ( node ) => {
-
-			if ( ! node.isMesh ) return;
-			node.castShadow = true;
-			node.receiveShadow = true;
-
-		} );
 
 		const mixer = new THREE.AnimationMixer( root );
 		this.group.add( root );
@@ -92,9 +88,50 @@ export class HeroCharacter {
 		};
 		mixer.addEventListener( 'finished', ( event ) => this.#finished( mixer, event ) );
 		this.#play( sequence, onFinished );
-		this.#keepOnly( this.active.key );
+		this.#keepOnly( this.active.key, this.fallen?.key );
 
 		return true;
+
+	}
+
+	/**
+	 * Replaces one baked crowd slot with the same full Source body and lets the
+	 * live Rapier ragdoll drive its bones. One fallen full body is resident at a
+	 * time; a concurrent dialogue body remains independent.
+	 */
+	async fall( person, physics, impact ) {
+
+		if ( this.fallen || this.fallPending ) return false;
+		this.fallPending = true;
+		const descriptor = avatarFor( person.gender, person.appearanceSeed ?? 0 );
+		let root = null;
+		let ragdoll = null;
+
+		try {
+
+			const source = await this.#model( descriptor );
+			if ( this.fallen ) return false;
+			root = characterRoot( source, person, `fallen-${descriptor.id}` );
+			poseAtCrowdFrame( root, this.animation, person );
+			if ( samePerson( this.active?.person, person ) ) this.#dropActive();
+			ragdoll = Ragdoll.create( { physics, root, impact } );
+			this.group.add( root );
+			person.hero = true;
+			this.fallen = { person, root, ragdoll, descriptor, key: modelKey( descriptor ) };
+			this.#keepOnly( this.active?.key, this.fallen.key );
+			return true;
+
+		} catch ( error ) {
+
+			ragdoll?.dispose();
+			if ( root ) disposeCharacterRoot( root );
+			throw error;
+
+		} finally {
+
+			this.fallPending = false;
+
+		}
 
 	}
 
@@ -109,12 +146,28 @@ export class HeroCharacter {
 
 	update( delta ) {
 
+		if ( this.fallen ) this.fallen.ragdoll.update( delta );
 		if ( ! this.active ) return;
 
 		const { person, root, mixer } = this.active;
 		root.position.copy( person.position );
 		root.rotation.y = person.heading;
 		mixer.update( delta );
+
+	}
+
+	/** Removes the dynamic body and returns its crowd slot to the caller. */
+	clearFall() {
+
+		if ( ! this.fallen ) return null;
+		const fallen = this.fallen;
+		this.fallen = null;
+		fallen.ragdoll.dispose();
+		fallen.person.hero = false;
+		this.group.remove( fallen.root );
+		disposeCharacterRoot( fallen.root );
+		this.#keepOnly( this.active?.key );
+		return fallen.person;
 
 	}
 
@@ -133,7 +186,7 @@ export class HeroCharacter {
 		person.hero = false;
 		mixer.stopAllAction();
 		this.group.remove( root );
-		for ( const material of root.userData.transientMaterials ?? [] ) material.dispose();
+		disposeCharacterRoot( root );
 		this.active = null;
 
 	}
@@ -234,11 +287,13 @@ export class HeroCharacter {
 	}
 
 	/** Full Source maps are 4K, so an inactive shape cannot remain resident. */
-	#keepOnly( key ) {
+	#keepOnly( ...keys ) {
+
+		const retained = new Set( keys.filter( Boolean ) );
 
 		for ( const [ cached, model ] of this.models ) {
 
-			if ( cached === key ) continue;
+			if ( retained.has( cached ) ) continue;
 			this.models.delete( cached );
 			model.then( disposeModel );
 
@@ -263,6 +318,45 @@ function samePerson( left, right ) {
 	if ( ! left || ! right ) return false;
 	if ( left === right ) return true;
 	return Boolean( left.npcId && right.npcId && left.npcId === right.npcId );
+
+}
+
+function characterRoot( source, person, name ) {
+
+	const root = clone( source.scene );
+	dress( root, person.look );
+	root.name = name;
+	root.position.copy( person.position );
+	root.rotation.y = person.heading;
+	root.traverse( ( node ) => {
+
+		if ( ! node.isMesh ) return;
+		node.castShadow = true;
+		node.receiveShadow = true;
+
+	} );
+	return root;
+
+}
+
+/** Reconstructs the baked person's authored frame before physics owns it. */
+function poseAtCrowdFrame( root, animation, person ) {
+
+	const name = CROWD_CLIP_NAMES[ person.clip ] ?? CROWD_CLIP_NAMES[ 1 ];
+	const clip = THREE.AnimationClip.findByName( animation.animations, name );
+	if ( ! clip ) throw new Error( `Pro animation library is missing ${name}` );
+	const mixer = new THREE.AnimationMixer( root );
+	const action = mixer.clipAction( withoutRootTravel( clip ) );
+	action.play();
+	mixer.setTime( ( ( person.frame ?? 0 ) % FRAMES / FRAMES ) * clip.duration );
+	root.updateWorldMatrix( true, true );
+	mixer.stopAllAction();
+
+}
+
+function disposeCharacterRoot( root ) {
+
+	for ( const material of root.userData.transientMaterials ?? [] ) material.dispose();
 
 }
 
