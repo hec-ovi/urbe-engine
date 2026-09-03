@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { stubCanvas } from '../test-helpers/canvas.js';
 import { Map3DView, prismGeometry, plateGeometry } from './Map3DView.js';
 
 const world = {
@@ -30,6 +31,8 @@ const world = {
  * building the player cannot find, so the geometry is what the test reads.
  */
 describe( 'Map3DView', () => {
+
+	beforeEach( () => stubCanvas() );
 
 	it( 'raises every building as a prism of its own height on the ground cover', () => {
 

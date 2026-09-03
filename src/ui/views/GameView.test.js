@@ -98,6 +98,8 @@ describe( 'GameView tab bar', () => {
 
 	it( 'is up only while paused or while a panel is open', () => {
 
+		document.body.replaceChildren();
+		stubCanvas();
 		const view = new GameView( {} );
 		view.mount( document.body );
 
