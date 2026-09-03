@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import {
-	GameApp, npcContinuityPlaces, pickSpawn, playableInteractionOwner, playableTransitPrompt,
+	GameApp, currentObjectiveView, npcContinuityPlaces, pickSpawn, playableInteractionOwner, playableTransitPrompt,
 	prepareInteriorStreaming, savedSpawn, transitStartHour
 } from './GameApp.js';
 
@@ -26,6 +26,39 @@ describe( 'game spawn', () => {
 		const spawn = savedSpawn( { player: { position: { x: 14.5, y: 2.25, z: -8 }, heading: - 1.2 } } );
 		expect( spawn.point.toArray() ).toEqual( [ 14.5, 2.25, - 8 ] );
 		expect( spawn.heading ).toBe( - 1.2 );
+
+	} );
+
+} );
+
+describe( 'persistent current quest objective', () => {
+
+	it( 'publishes the current active objective restored by QuestGameplay', () => {
+
+		const objective = {
+			title: 'Night courier', text: 'Deliver the sealed drive', questId: 'q1', stepId: 's2'
+		};
+		const gameplay = { objective: vi.fn( () => objective ) };
+
+		expect( currentObjectiveView( gameplay, { view: () => [] }, 725 ) ).toEqual( {
+			title: 'Night courier', objective: 'Deliver the sealed drive', state: 'active'
+		} );
+		expect( gameplay.objective ).toHaveBeenCalledWith( 725 );
+
+	} );
+
+	it( 'holds the last completed objective, then hides when no quest exists', () => {
+
+		const gameplay = { objective: () => null };
+		const session = { view: () => [ {
+			id: 'q1', title: 'Night courier', text: 'The drive arrived.', state: 'done',
+			steps: [ { text: 'Collect the drive', done: true }, { text: 'Deliver the sealed drive', done: true } ]
+		} ] };
+
+		expect( currentObjectiveView( gameplay, session, 725 ) ).toEqual( {
+			title: 'Night courier', objective: 'Deliver the sealed drive', state: 'done'
+		} );
+		expect( currentObjectiveView( gameplay, { view: () => [] }, 725 ) ).toBeNull();
 
 	} );
 

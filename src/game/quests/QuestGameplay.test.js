@@ -52,6 +52,32 @@ describe( 'live quest target projection', () => {
 
 	} );
 
+	it( 'animates only an accepted action and retains exact listen participants', () => {
+
+		const members = [
+			{ npcId: 'cast-a', position: new THREE.Vector3( - 0.3, 0, - 2 ) },
+			{ npcId: 'cast-b', position: new THREE.Vector3( 0.3, 0, - 2 ) }
+		];
+		const target = { ...questTarget( 'listen', [ action( 'listen', 'Listen' ) ] ), actorIds: members.map( ( member ) => member.npcId ) };
+		const actions = fakeActions( target );
+		const animations = { questInteraction: vi.fn() };
+		const gameplay = setup( actions, {
+			animations,
+			crowd: { questMember: vi.fn( ( npcId ) => members.find( ( member ) => member.npcId === npcId ) ) }
+		} );
+		const candidate = gameplay.candidates( frame( pointLook( 0, 1.3, - 2 ) ) )[ 0 ];
+
+		gameplay.perform( perform( candidate ) );
+		expect( animations.questInteraction ).toHaveBeenCalledWith( {
+			targetKey: target.targetKey, action: 'listen', members
+		} );
+
+		actions.perform.mockReturnValueOnce( { ...result( 'listen' ), ok: false } );
+		gameplay.perform( perform( candidate ) );
+		expect( animations.questInteraction ).toHaveBeenCalledOnce();
+
+	} );
+
 	it.each( [
 		[ 'steal', [ 'cast-guard' ], [ new THREE.Vector3( 0, 0, - 1 ) ] ],
 		[ 'listen', [ 'cast-a', 'cast-b' ], [ new THREE.Vector3( - 0.3, 0, - 2 ), new THREE.Vector3( 0.3, 0, - 2 ) ] ]
@@ -149,7 +175,7 @@ describe( 'explicit quest NPC control', () => {
 } );
 
 function setup( actions, {
-	crowd = { questMember: () => null }, blocked = false, session = null, continuity = null
+	crowd = { questMember: () => null }, blocked = false, session = null, continuity = null, animations = null
 } = {} ) {
 
 	class Ray {
@@ -159,7 +185,7 @@ function setup( actions, {
 	}
 
 	return new QuestGameplay( {
-		actions, session, continuity,
+		actions, session, continuity, animations,
 		world: { parcels: [ { id: 'p9', anchor: [ 0, 0, - 2 ] } ] },
 		crowd,
 		physics: { rapier: { Ray }, world: { castRay: () => blocked ? { toi: 0.5 } : null } },

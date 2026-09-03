@@ -14,7 +14,7 @@ const CHEST = 1.3;
  */
 export class QuestGameplay {
 
-	constructor( { session, actions, world, crowd, physics, playerCollider, materialFactory, continuity = null } ) {
+	constructor( { session, actions, world, crowd, physics, playerCollider, materialFactory, continuity = null, animations = null } ) {
 
 		this.boundary = new QuestActionBoundary();
 		this.boundary.input( 'gameplay-world', world );
@@ -22,6 +22,7 @@ export class QuestGameplay {
 		this.session = session;
 		this.crowd = crowd;
 		this.continuity = continuity;
+		this.animations = animations;
 		this.physics = physics;
 		this.playerCollider = playerCollider;
 		this.materialFactory = materialFactory;
@@ -138,6 +139,11 @@ export class QuestGameplay {
 			playerPlaces: interaction.playerPlaces,
 			...( interaction.focus ? { focus: interaction.focus } : {} )
 		} );
+		if ( result.ok ) this.animations?.questInteraction( {
+			targetKey: interaction.target.targetKey,
+			action: offered.action,
+			members: interaction.members ?? []
+		} );
 
 		for ( const change of result.worldChanges ) this.#applyWorldChange( change );
 		return result;
@@ -172,7 +178,9 @@ export class QuestGameplay {
 			if ( target.kind === 'steal' ) {
 
 				const point = members[ 0 ].position.clone().add( new THREE.Vector3( 0, CHEST, 0 ) );
-				return this.#physical( target, point, feet, eye, look, playerPlaces, PHYSICAL_REACH.steal, members[ 0 ].position );
+				return this.#physical(
+					target, point, feet, eye, look, playerPlaces, PHYSICAL_REACH.steal, members[ 0 ].position, members
+				);
 
 			}
 
@@ -182,7 +190,10 @@ export class QuestGameplay {
 			const clear = points.every( ( each ) => this.#clear( eye, each ) );
 			const aim = aimAt( eye, look, point );
 			if ( distance > PHYSICAL_REACH.listen || aim < MIN_AIM || ! clear || ! atPlace( playerPlaces, target.place ) ) return null;
-			return interaction( target, playerPlaces, aim, { visible: true, unobstructed: true, distanceMeters: distance } );
+			return interaction(
+				target, playerPlaces, aim,
+				{ visible: true, unobstructed: true, distanceMeters: distance }, members
+			);
 
 		}
 
@@ -217,14 +228,14 @@ export class QuestGameplay {
 
 	}
 
-	#physical( target, point, feet, eye, look, playerPlaces, reach, distancePoint = point ) {
+	#physical( target, point, feet, eye, look, playerPlaces, reach, distancePoint = point, members = [] ) {
 
 		const distance = feet.distanceTo( distancePoint );
 		const aim = aimAt( eye, look, point );
 		if ( distance > reach || aim < MIN_AIM || ! atPlace( playerPlaces, target.place ) ) return null;
 		if ( ! this.#clear( eye, point ) ) return null;
 
-		return interaction( target, playerPlaces, aim, { visible: true, unobstructed: true, distanceMeters: distance } );
+		return interaction( target, playerPlaces, aim, { visible: true, unobstructed: true, distanceMeters: distance }, members );
 
 	}
 
@@ -323,9 +334,12 @@ export class QuestGameplay {
 
 }
 
-function interaction( target, playerPlaces, aim, focus ) {
+function interaction( target, playerPlaces, aim, focus, members = [] ) {
 
-	return { target, playerPlaces: playerPlaces.map( ( place ) => ( { ...place } ) ), aim, prompt: promptFor( target ), ...( focus ? { focus } : {} ) };
+	return {
+		target, playerPlaces: playerPlaces.map( ( place ) => ( { ...place } ) ), aim,
+		prompt: promptFor( target ), members: [ ...members ], ...( focus ? { focus } : {})
+	};
 
 }
 

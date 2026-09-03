@@ -54,6 +54,7 @@ import { PlayerController } from './player/PlayerController.js';
 import { Interactor } from './player/Interactor.js';
 import { CharacterAssets } from './agents/CharacterAssets.js';
 import { HeroCharacter } from './agents/HeroCharacter.js';
+import { GameplayAnimationDirector } from './GameplayAnimationDirector.js';
 import { Crowd } from './agents/Crowd.js';
 import { WalkRoutes } from './agents/WalkRoutes.js';
 import { NpcContinuity } from './agents/NpcContinuity.js';
@@ -314,6 +315,17 @@ export class GameApp {
 			stress: config.stress,
 			continuity: this.npcContinuity
 		} );
+		this.hero = await HeroCharacter.create( {
+			animation: assets.animation,
+			warmup: null
+		} );
+		this.scene.add( this.hero.group );
+		this.animations = new GameplayAnimationDirector( {
+			catalog: assets.animationCatalog,
+			animation: assets.animation,
+			crowd: this.crowd,
+			hero: this.hero
+		} );
 
 		this.view.step( 'loading traffic' );
 		const carModels = await CarModels.load( config.maxCars );
@@ -353,11 +365,13 @@ export class GameApp {
 			physics: this.physics,
 			playerCollider: this.body.collider,
 			materialFactory: factory,
-			continuity: this.npcContinuity
+			continuity: this.npcContinuity,
+			animations: this.animations
 		} );
 		this.scene.add( this.questGameplay.group );
 		this.probe?.exclude( this.questGameplay.group );
 		this.objectiveGuide = new ObjectiveGuide( new ObjectiveRouter( connections.networks.walk ) );
+		this.#refreshCurrentObjective();
 
 		// Construct the scene pass before a WebGPU probe bake so its final
 		// material programs can be warmed against that render context.
@@ -372,30 +386,19 @@ export class GameApp {
 
 		this.view.step( 'baking the environment' );
 		this.probe?.bake( spawn.point );
-		this.hero = await HeroCharacter.create( {
-			animation: assets.animation,
-			warmup: null
-		} );
-		this.scene.add( this.hero.group );
-
 		this.interactor = new Interactor( {
 			crowd: this.crowd, doors: city.doors, sim: this.sim,
 			controller: this.controller, elevators: this.elevators, quests: this.questGameplay,
-			continuity: this.npcContinuity
+			continuity: this.npcContinuity,
+			animations: this.animations
 		} );
 		this.interactor.onConversation = ( conversation ) => {
 
 			this.view.dialog.show( conversation );
 			this.view.avatar.setVisible( Boolean( conversation ) );
 
-			if ( ! conversation ) {
-
-				this.hero.hide();
-				return;
-
-			}
+			if ( ! conversation ) return;
 			if ( conversation.npcId ) this.#questEvent( { kind: 'talkedTo', npcId: conversation.npcId } );
-			this.hero.show( conversation.person ).catch( ( error ) => console.warn( 'focused character:', error.message ) );
 
 			// The chat takes the mouse: the input wants focus and the panel a click.
 			this.view.avatar.setAvatar( { name: conversation.instance?.name ?? 'someone passing by', bar: 1 } );
@@ -503,6 +506,7 @@ export class GameApp {
 				maxDistance: NPC_VISIBLE_RADIUS
 			} );
 			this.crowd.syncActors( actors, feet );
+			this.animations.update( actors, delta );
 			this.crowd.update( delta, feet, this.clock );
 
 		} );
@@ -602,17 +606,24 @@ export class GameApp {
 		this.view.dialog.addMessage( { from: 'player', name: 'you', text } );
 		const conversation = this.interactor?.conversation;
 		if ( ! conversation?.instance ) return;
+		this.animations.playerDialogueTurn( conversation );
 
 		const name = TalkClient.nameOf( conversation.instance );
 		this.talk.say( conversation, text, this.clock.timeMin, this.quests.snapshot() )
 			.then( ( reply ) => {
 
-				if ( this.interactor.conversation === conversation ) this.view.dialog.addMessage( { from: 'npc', name, text: reply } );
+				if ( this.interactor.conversation === conversation ) {
+
+					this.animations.npcDialogueTurn( conversation );
+					this.view.dialog.addMessage( { from: 'npc', name, text: reply } );
+
+				}
 
 			} )
 			.catch( ( error ) => {
 
 				console.warn( 'talk:', error.message );
+				if ( this.interactor.conversation === conversation ) this.animations.npcDialogueTurn( conversation );
 				this.view.dialog.addMessage( { from: 'npc', name, text: '...' } );
 
 			} );
@@ -738,8 +749,15 @@ export class GameApp {
 	#refreshQuestState() {
 
 		this.view.quests.setQuests( this.quests.view() );
+		this.#refreshCurrentObjective();
 		this.#refreshInventory();
 		this.#updateObjectiveRoute( 0, true );
+
+	}
+
+	#refreshCurrentObjective() {
+
+		this.view.setObjective( currentObjectiveView( this.questGameplay, this.quests, this.clock.timeMin ) );
 
 	}
 
@@ -1178,5 +1196,21 @@ export function playableInteractionOwner( interactor, transitFrame ) {
 	if ( interactor?.conversation ) return 'conversation';
 	if ( ! transitFrame?.aboard && interactor?.target ) return 'world';
 	return 'transit';
+
+}
+
+/** Current quest projection for the persistent objective widget. */
+export function currentObjectiveView( gameplay, session, timeMin ) {
+
+	const active = gameplay?.objective( timeMin );
+	if ( active ) return { title: active.title, objective: active.text, state: 'active' };
+	const completed = [ ...( session?.view() ?? [] ) ].reverse().find( ( quest ) => quest.state === 'done' );
+	if ( ! completed ) return null;
+	const lastStep = [ ...completed.steps ].reverse().find( ( step ) => step.done );
+	return {
+		title: completed.title,
+		objective: lastStep?.text ?? completed.text,
+		state: 'done'
+	};
 
 }

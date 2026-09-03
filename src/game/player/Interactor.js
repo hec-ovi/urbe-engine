@@ -33,7 +33,7 @@ const HANDLE = 1.1;
  */
 export class Interactor {
 
-	constructor( { crowd, doors, sim, controller, elevators, quests, continuity = null } ) {
+	constructor( { crowd, doors, sim, controller, elevators, quests, continuity = null, animations = null } ) {
 
 		this.crowd = crowd;
 		this.doors = doors;
@@ -42,6 +42,7 @@ export class Interactor {
 		this.elevators = elevators;
 		this.quests = quests;
 		this.continuity = continuity;
+		this.animations = animations;
 		this.target = null;
 		this.conversation = null;
 		this.onConversation = null;
@@ -110,13 +111,15 @@ export class Interactor {
 
 		if ( ! this.conversation ) return;
 
-		const { npcId, controlled } = this.conversation;
-		let { person } = this.conversation;
+		const conversation = this.conversation;
+		const { npcId, controlled } = conversation;
+		let { person } = conversation;
+		let actor = null;
 
 		person.talking = false;
 		if ( npcId && controlled ) {
 
-			const actor = this.continuity.endConversation( { timeMin: clock.timeMin } );
+			actor = this.continuity.endConversation( { timeMin: clock.timeMin } );
 			person = this.crowd.syncActor( actor, this.controller.body.feet ) ?? person;
 
 		} else {
@@ -126,6 +129,7 @@ export class Interactor {
 			person.clip = person.restClip ?? CLIP.WALK;
 
 		}
+		this.animations?.endConversation( conversation, actor );
 		this.conversation = null;
 		this.onConversation?.( null );
 
@@ -166,10 +170,11 @@ export class Interactor {
 		}
 
 		let controlled = false;
+		let controlledActor = null;
 		const place = personPlace( person );
 		if ( person.npcId && this.continuity && place ) {
 
-			const actor = this.continuity.beginConversation( {
+			controlledActor = this.continuity.beginConversation( {
 				npcId: person.npcId,
 				timeMin,
 				position: person.position.toArray(),
@@ -180,7 +185,7 @@ export class Interactor {
 				place,
 				seated: person.clip === CLIP.SIT || person.clip === CLIP.SIT_TALK
 			} );
-			person = this.crowd.syncActor( actor, this.controller.body.feet ) ?? person;
+			person = this.crowd.syncActor( controlledActor, this.controller.body.feet ) ?? person;
 			controlled = true;
 
 		} else if ( person.npcId ) this.sim.interrupt( person.npcId, timeMin );
@@ -201,6 +206,7 @@ export class Interactor {
 			instance: person.instance,
 			behavior: person.npcId ? this.sim.behaviorAt( person.npcId, timeMin ) : null
 		};
+		this.animations?.beginConversation( this.conversation, controlledActor );
 
 		this.onConversation?.( this.conversation );
 

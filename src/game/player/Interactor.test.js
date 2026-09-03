@@ -176,6 +176,28 @@ describe( 'E on an NPC', () => {
 
 	} );
 
+	it( 'hands the exact controlled actor lifecycle to gameplay animation composition', () => {
+
+		let controlled = null;
+		const continuity = {
+			beginConversation: vi.fn( ( request ) => ( controlled = continuityActor( request, 'conversation', 'idle' ) ) ),
+			endConversation: vi.fn( () => ( { ...controlled, mode: 'resuming', animation: 'walk' } ) )
+		};
+		const animations = { beginConversation: vi.fn(), endConversation: vi.fn() };
+		const { interactor } = street( continuity, animations );
+
+		interactor.update( 1 / 60 );
+		interactor.activate( CLOCK );
+		const conversation = interactor.conversation;
+		expect( animations.beginConversation ).toHaveBeenCalledWith( conversation, controlled );
+
+		interactor.close( CLOCK );
+		expect( animations.endConversation ).toHaveBeenCalledWith(
+			conversation, expect.objectContaining( { npcId: 'n1', mode: 'resuming', animation: 'walk' } )
+		);
+
+	} );
+
 } );
 
 describe( 'cast quest NPC bodies', () => {
@@ -281,7 +303,7 @@ describe( 'shared quest interaction route', () => {
 const CLOCK = { timeMin: 780, daySeconds: 46800 };
 
 /** One walker on one edge, with the player standing on top of them. */
-function street( continuity = null ) {
+function street( continuity = null, animations = null ) {
 
 	const sim = simulation( new Map( [ [ 'e1', [ { ...AGENT } ] ], [ 'e2', [] ] ] ) );
 	const crowd = new Crowd( {
@@ -297,7 +319,7 @@ function street( continuity = null ) {
 		.add( new THREE.Vector3( 0, 0, 1.5 ) );
 	const panels = [];
 	const interactor = new Interactor( {
-		crowd, doors: [], sim, continuity,
+		crowd, doors: [], sim, continuity, animations,
 		controller: {
 			body: { feet },
 			forward: new THREE.Vector3( 0, 0, - 1 ),
