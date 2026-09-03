@@ -1,16 +1,18 @@
 import { OpenAIPort } from './OpenAIPort.js';
+import { TalkBoundary } from './TalkBoundary.js';
 import { TalkService } from './TalkService.js';
 
 const DEFAULT_BASE_URL = 'http://localhost:8080/v1';
 
 /**
- * Vite plugin: POST /api/talk { out, npc, behavior, line, timeMin } answers
- * { reply } with the NPC's words, or { error } with 502 when the model server
- * is unreachable. The model server comes from LLM_BASE_URL and LLM_MODEL.
+ * Vite plugin: POST /api/talk validates the browser dialogue snapshot and
+ * answers with the NPC's words. The model server comes from LLM_BASE_URL and
+ * LLM_MODEL.
  */
-export function talkRoute( outRoot ) {
+export function talkRoute( outRoot, providedService = null ) {
 
-	let service = null;
+	let service = providedService;
+	const boundary = new TalkBoundary();
 
 	return {
 		name: 'talk-route',
@@ -19,16 +21,19 @@ export function talkRoute( outRoot ) {
 			server.middlewares.use( '/api/talk', async ( req, res, next ) => {
 
 				if ( req.method !== 'POST' ) return next();
-				service ??= new TalkService( new OpenAIPort( process.env.LLM_BASE_URL ?? DEFAULT_BASE_URL, process.env.LLM_MODEL ?? null ), outRoot );
-
 				try {
 
-					const reply = await service.reply( JSON.parse( await body( req ) ) );
-					send( res, 200, { reply } );
+					const request = boundary.input( JSON.parse( await body( req ) ) );
+					service ??= new TalkService(
+						new OpenAIPort( process.env.LLM_BASE_URL ?? DEFAULT_BASE_URL, process.env.LLM_MODEL || null ), outRoot
+					);
+					const reply = await service.reply( request );
+					send( res, 200, boundary.output( { reply } ) );
 
 				} catch ( error ) {
 
-					send( res, 502, { error: error.message } );
+					const invalid = error instanceof SyntaxError || error?.code === 'E_TALK_INPUT';
+					send( res, invalid ? 400 : 502, boundary.error( { error: messageOf( error ) } ) );
 
 				}
 
@@ -36,6 +41,12 @@ export function talkRoute( outRoot ) {
 
 		}
 	};
+
+}
+
+function messageOf( error ) {
+
+	return error instanceof Error && error.message ? error.message : String( error ) || 'talk service failed';
 
 }
 

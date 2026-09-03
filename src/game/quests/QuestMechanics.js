@@ -47,6 +47,14 @@ export class QuestMechanics {
 
 	}
 
+	/** Produces the existing closed mechanic failure without advancing quest state. */
+	reject( request, message ) {
+
+		this.boundary.input( 'mechanic-request', request );
+		return this.#failure( request, 'runtime_rejected', message );
+
+	}
+
 	#failure( request, code, message ) {
 
 		return this.#result( request, { ok: false, progressed: false, code, message, completed: [] } );

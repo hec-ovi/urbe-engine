@@ -23,7 +23,7 @@ Purpose: turns every fixture the world published into real light, in photometric
 - A light probe's `color * intensity` is irradiance in lux, which is what makes the room fill computable.
 
 ## Invariants
-- No light invents a brightness. Every level traces to a published figure, so relative brightness is correct across the whole city and one exposure works everywhere.
+- No light invents a brightness. Every level traces to a published figure, so relative brightness stays consistent across the whole city and one exposure works everywhere.
 - There is no ambient light. The floor under the shadows is lit air and an environment probe, both in the look box.
 - Room light sets come from a fixed pool of light objects whose ids never change. A lights node hashes light ids into the shader cache key, so a set built per room would compile a shader per room.
 - Exterior fixtures use a fixed pool of unshadowed point-light objects whose ids never change. Walking copies position, colour, range and power from the nearest fixtures into those slots. Daylight sets their power to zero without removing them from the scene. The renderer therefore keeps the same light cache key for every frame.

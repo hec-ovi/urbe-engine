@@ -78,7 +78,7 @@ One panel over the game at a time.
 
 ## Invariants
 - Presentation only: nothing here reads game state or touches the scene. The game overlay (GameView and everything it mounts) imports nothing from outside `src/ui`; ExperimentView alone reads the scale experiment's option lists.
-- No rounded corners anywhere: no `border-radius` in any stylesheet.
+- Every component uses square corners.
 - The tab bar always shows each entry's key letter, and is only on screen while paused or while a panel is open.
 - One full panel at a time; Escape closes it.
 - Maps redraw on pan, zoom, turn or data change, never per frame on their own.

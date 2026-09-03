@@ -71,6 +71,10 @@ describe( 'playable world creation contract', () => {
 		await expect( readFile( join( bundleDir, 'all.questlines.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
 		await expect( readFile( join( bundleDir, 'questlines.meta.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
 		expect( fixture.calls.map( ( call ) => call.kind ) ).toEqual( [ 'atlas', 'shells', 'materialize', 'interiors' ] );
+		expect( fixture.calls[ 0 ] ).toMatchObject( { kind: 'atlas', command: 'npm' } );
+		expect( fixture.calls[ 0 ].args.slice( 0, 7 ) ).toEqual( [
+			'run', 'generate', '--', '--seed', 'canal-17', '--out', expect.any( String )
+		] );
 		expect( fixture.calls[ 0 ].args ).toEqual( expect.arrayContaining( [ '--size', '400', '--max-floors', '6', '--no-highways', '--no-trains', '--no-subways' ] ) );
 
 	} );
@@ -137,7 +141,7 @@ function processPort( calls ) {
 
 	return async ( command, args ) => {
 
-		if ( args[ 0 ] === 'dist/cli.mjs' ) {
+		if ( args[ 0 ] === 'run' && args[ 1 ] === 'generate' ) {
 
 			calls.push( { kind: 'atlas', command, args } );
 			await writeJson( valueAfter( args, '--out' ), atlas() );

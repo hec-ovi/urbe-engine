@@ -4,7 +4,7 @@ The question, in the user's words: "how to make all look real?"
 
 Companion to `docs/RESEARCH.md`, which settled the stack (three 0.185.1, `WebGPURenderer` from `three/webgpu`, TSL, WebGL2 backend as automatic fallback, city scale, 60fps). This chapter settles the render pipeline that sits on top of it. Every API below was read out of the r185 source tree or an r185 example on 2026-09-01; file paths and example names are given so each claim can be re-checked.
 
-One correction to carry forward from `RESEARCH.md`: `PostProcessing` was renamed `RenderPipeline` in r183 and the old name now logs a deprecation warning (`src/renderers/common/PostProcessing.js` is a two-line subclass). `renderPipeline.renderAsync()` is deprecated since r181; use `render()` after `await renderer.init()`. And r185 does have height fog built in (`exponentialHeightFogFactor`), so that no longer has to be written by hand.
+Three r185 uses `RenderPipeline`; call `render()` after `await renderer.init()`. Height fog is built in through `exponentialHeightFogFactor`.
 
 ---
 
@@ -113,7 +113,7 @@ They are objectively dark by every measure above, and still readable. Legibility
 
 ### Where tone mapping happens in the pipeline
 
-`RenderPipeline.outputColorTransform` defaults to `true` (`src/renderers/common/RenderPipeline.js` L66), and when true the pipeline wraps the whole chain in `renderOutput(outputNode, toneMapping, outputColorSpace)` at the very end (L208-212), having set `renderer.toneMapping = NoToneMapping` for the scene passes themselves (L129-146). So by default **every effect in the chain runs on linear HDR values and tone mapping is applied once, last**. That is correct for bloom, GTAO, SSR, godrays and volumetrics, and it is why bloom composited as `scenePass.add(bloomPass)` gives a physical result rather than a smear.
+`RenderPipeline.outputColorTransform` defaults to `true` (`src/renderers/common/RenderPipeline.js` L66), and when true the pipeline wraps the whole chain in `renderOutput(outputNode, toneMapping, outputColorSpace)` at the very end (L208-212), having set `renderer.toneMapping = NoToneMapping` for the scene passes themselves (L129-146). So by default **every effect in the chain runs on linear HDR values and tone mapping is applied once, last**. That is appropriate for bloom, GTAO, SSR, godrays and volumetrics, and it is why bloom composited as `scenePass.add(bloomPass)` gives a physical result rather than a smear.
 
 Set `outputColorTransform = false` and place `renderOutput(...)` manually only for effects that need sRGB input; FXAA is the canonical case, and `webgpu_postprocessing_bloom_selective` shows the explicit form as `outputPass.add(bloomPass).renderOutput()`.
 
@@ -121,7 +121,7 @@ Set `outputColorTransform = false` and place `renderOutput(...)` manually only f
 
 ### Physical light units, and the fit to interior's fixture data
 
-There is no legacy mode left to get wrong: `useLegacyLights` was removed in r165 (PR #28482), and `src/Three.Legacy.js` is a zero-byte file in r185, so setting it today creates a dead property and changes nothing. Physical units are the only units.
+Three r185 uses physical light units exclusively.
 
 Verified in source, all three `power` accessors:
 
@@ -154,7 +154,7 @@ Working values for the exterior and for sanity-checking interior output, in the 
 | full moon | 0.25 lux at ground | `DirectionalLight.intensity ≈ 0.25` |
 | overcast night sky glow | n/a | environment probe, not a light |
 
-The value of doing this properly is not accuracy for its own sake: it is that **relative** brightness becomes correct for free everywhere in the city, so one global exposure works in every room and on every street, and the artist-tuning surface collapses from hundreds of per-light numbers to one exposure and one fog density.
+The value of doing this properly is not accuracy for its own sake: **relative** brightness stays consistent throughout the city, so one global exposure works in every room and on every street, and the artist-tuning surface collapses from hundreds of per-light numbers to one exposure and one fog density.
 
 ### Picking the exposure number
 
@@ -180,7 +180,7 @@ The standard camera model (EV100 = log2(N²/t) at ISO 100, relative exposure = 1
 
 Core has no clustering (`grep -ri cluster src/` returns nothing). `src/nodes/lighting/LightsNode.js` creates one lighting node per scene light and inlines each into the fragment shader, so **N lights means N BRDF evaluations for every fragment of every lit material, reached by the light or not.** No cap, no culling, linear cost and a linearly longer shader.
 
-Worse, the light set is part of the shader cache key. `LightsNode.customCacheKey()` hashes every `light.id` plus its `castShadow` flag; `NodeManager.getCacheKey` folds that into each render object's dynamic key; `RenderObject.needsUpdate` compares it every draw and disposes the object when it differs. And `Lighting.getNode( scene )` returns **one `LightsNode` per Scene**, held in a `WeakMap`. So **adding a single `PointLight` anywhere invalidates every lit material in the scene**, including materials on the other side of the city. A previously seen combination is a cache hit, but a novel one is a full TSL walk plus WGSL emit plus pipeline creation.
+Worse, the light set is part of the shader cache key. `LightsNode.customCacheKey()` hashes every `light.id` plus its `castShadow` flag; `NodeManager.getCacheKey` folds that into each render object's dynamic key; `RenderObject.needsUpdate` compares it every draw and disposes the object when it differs. And `Lighting.getNode( scene )` returns **one `LightsNode` per Scene**, held in a `WeakMap`. So **adding a single `PointLight` anywhere invalidates every lit material in the scene**, including materials on the other side of the city. A cached combination is a hit, but a novel one is a full TSL walk plus WGSL emit plus pipeline creation.
 
 That single fact explains why a naive "spawn a light per fixture as tiles stream in" design stutters, and it is why the three tools below matter more than their headline features.
 
@@ -260,7 +260,7 @@ Activate a room's probe when the player is inside it and cross-fade between adja
 
 ### IBL and reflections
 
-There are two `PMREMGenerator` classes; `three/webgpu` exports the one at `src/renderers/common/extras/PMREMGenerator.js` (`Three.WebGPU.js` L13). Its signature carries the useful part: `fromScene( scene, sigma = 0, near = 0.1, far = 100, { size = 256, position, renderTarget } )`, where **`options.position` bakes from an arbitrary point without moving anything**, a per-room bake position for free. It throws with a named message if called before `await renderer.init()`, and `fromSceneAsync` is deprecated since r181.
+`three/webgpu` exports `PMREMGenerator` from `src/renderers/common/extras/PMREMGenerator.js` (`Three.WebGPU.js` L13). Its signature carries the useful part: `fromScene( scene, sigma = 0, near = 0.1, far = 100, { size = 256, position, renderTarget } )`, where **`options.position` bakes from an arbitrary point without moving anything**, a per-room bake position for free. It throws with a named message if called before `await renderer.init()`.
 
 `PMREMGenerator.fromScene(...)` into `scene.environment` stays the exterior answer, rebaked on a coarse threshold (`RESEARCH.md` section 5). `Scene.environmentIntensity` and `Scene.environmentRotation` exist in r185, and the per-material override resolves cleanly: `MaterialProperties.js` L23 is literally `material.envMap ? material.envMapIntensity : scene.environmentIntensity`, so **a room carrying its own `envMap` also carries its own intensity, fully decoupled from the scene's**.
 
@@ -274,7 +274,7 @@ material.envNode = pmremTexture(
 );
 ```
 
-(`examples/webgpu_materials_envmaps_bpcem.html` L93-100.) A room is a box, so the parallax correction is exact, and a wet floor or a glass counter reflects the room's own geometry in the right place instead of a smeared infinite cubemap. It also answers the standing glass-reflection feedback item: one low-res probe per room, one for the skyline.
+(`examples/webgpu_materials_envmaps_bpcem.html` L93-100.) A room is a box, so the parallax projection is exact, and a wet floor or a glass counter reflects the room's own geometry in the right place instead of a smeared infinite cubemap. It also answers the standing glass-reflection feedback item: one low-res probe per room, one for the skyline.
 
 ### Emissive surfaces as lights
 
@@ -310,7 +310,7 @@ One profile per published fixture kind, loaded once and shared across every inst
 | Fog as the shadow floor | the coloured black floor the references have | a mix | both | always |
 | Analytic per-room fill from fixture data | the warm wall gradient, `E = (Φ/A)·ρ/(1−ρ)` | ~5 ALU (`HemisphereLight`) | both | **first**; uses the contract's data directly, no assets |
 | Environment probe (sky, skyline) | outdoor fill, glass reflections | one cubeUV fetch | both | always |
-| Box-projected per-room PMREM | in-room reflections with correct parallax | one cubeUV fetch | both | stage 2; highest quality per ms |
+| Box-projected per-room PMREM | in-room reflections with consistent parallax | one cubeUV fetch | both | stage 2; highest quality per ms |
 | SH9 `LightProbe` per room | directional bounce (neon on one wall) | 9 vec3 MADs | both | stage 2, where a hemisphere is not enough |
 | Baked lightmap + AO on uv1 | true static bounce | 2 texture fetches | both | supported (`NodeMaterial` L975-1015 and L1039, example `webgpu_materials_lightmap`) but not planned: interiors are generated per seed, so there is no offline bake step to hang it on. If it ever is, bake per **room archetype**, not per instance |
 | Irradiance volume (`LightProbeGrid`) | multi-bounce grid, per-object volumes | trilinear + SH9 | **WebGL only today** | the best long-term answer; wait for the WebGPU version or port it |
@@ -366,9 +366,9 @@ scenePass.contextNode = builtinAOContext( aoPass.getTextureNode().sample( screen
 renderPipeline.outputNode = traa( scenePass, prePassDepth, prePassVelocity, camera );
 ```
 
-The load-bearing detail is `builtinAOContext` (`src/nodes/core/ContextNode.js` L244). It overrides `getAO` inside the lighting model, so the AO term attenuates **indirect** light only and skips transparent materials. Multiplying an AO buffer over the finished frame darkens direct light too and produces the dirty smudged look that gives screen-space AO a bad name. The correct wiring is in core, and it is one line.
+The load-bearing detail is `builtinAOContext` (`src/nodes/core/ContextNode.js` L244). It overrides `getAO` inside the lighting model, so the AO term attenuates **indirect** light only and skips transparent materials. Multiplying an AO buffer over the finished frame darkens direct light too and produces the dirty smudged look that gives screen-space AO a bad name. The wiring is in core, and it is one line.
 
-There is no SSAO node in r185: `GTAONode.js` is the only screen-space AO on the node path (`webgl_postprocessing_ssao` and `_sao` are legacy `EffectComposer` examples). Its uniforms are `radius` (0.25), `thickness` (1), `distanceExponent` (1), `distanceFallOff` (1), `scale` (1) and `samples` (16), plus the plain properties `resolutionScale` (1) and `useTemporalFiltering` (false). `samples` is a total tap budget split into 3 direction slices below 30 and 5 above, so crossing 30 changes the sampling pattern, not just the count.
+`GTAONode.js` is the screen-space AO on the r185 node path. Its uniforms are `radius` (0.25), `thickness` (1), `distanceExponent` (1), `distanceFallOff` (1), `scale` (1) and `samples` (16), plus the plain properties `resolutionScale` (1) and `useTemporalFiltering` (false). `samples` is a total tap budget split into 3 direction slices below 30 and 5 above, so crossing 30 changes the sampling pattern, not just the count.
 
 GTAO is noisy and needs one of two things downstream, and the docs say so: `useTemporalFiltering = true` **requires TRAA** and inherits its ghosting; with it false, a manual `DenoiseNode` (à-trous, `lumaPhi`/`depthPhi`/`normalPhi`/`radius`) is needed instead. The r185 example takes the temporal route, which is the cheaper one for us since TRAA is already in the chain for the sub-pixel emissives.
 
@@ -429,7 +429,7 @@ const outputNode = smaa( scenePassColor.add( ssrPass.rgb ) );
 Two options in `SSRNodeOptions` decide whether this works at all for our case:
 
 - **`reflectNonMetals` defaults to `false`**, and when false the pass discards dielectrics entirely for a large performance gain. **Wet asphalt is a dielectric.** Without `reflectNonMetals: true` the street reference's whole subject silently does not render. This is the kind of quiet no-op section 7 warns about.
-- `stochastic` (default `false`) picks the algorithm: false traces one mirror ray and softens with a blur (first-generation SSR), true varies the ray per pixel with GGX importance sampling (second-generation, correct on rough surfaces, noisy, and it expects a denoiser downstream). A wet road is a rough reflector, so `stochastic: true` is the physically right answer and `false` is the affordable one. Start at `false` with `reflectNonMetals: true`, `resolutionScale: 0.5`, low `quality` and a short `maxDistance`, and only reach for stochastic plus `temporalReproject` plus `recurrentDenoise` (the `webgpu_postprocessing_ssr_denoise` chain) if the blur reads wrong.
+- `stochastic` (default `false`) picks the algorithm: false traces one mirror ray and softens with a blur, while true varies the ray per pixel with GGX importance sampling (suited to rough surfaces, noisy, and expecting a denoiser downstream). A wet road is a rough reflector, so `stochastic: true` is the physically faithful answer and `false` is the affordable one. Start at `false` with `reflectNonMetals: true`, `resolutionScale: 0.5`, low `quality` and a short `maxDistance`, and only reach for stochastic plus `temporalReproject` plus `recurrentDenoise` (the `webgpu_postprocessing_ssr_denoise` chain) if the blur reads wrong.
 - `environmentNode` / `envImportanceSampling` take an equirectangular HDR with CPU-side `image.data` and are **not compatible with a PMREM cubemap**, so SSR cannot fall back to our existing `scene.environment` for off-screen rays. Off-screen misses stay misses.
 
 SSR's screen-space limitation (nothing off-screen or behind geometry reflects) is acceptable on a ground plane looking down a street, where most of what reflects is on screen. It is also the effect most likely to blow the frame budget. `Reflector.js` planar reflection remains the alternative for a single flat puddle, at the cost of a second scene render.
@@ -464,7 +464,7 @@ So all four map types are real on the node path. Their differences matter for tu
 
 **`light.shadow.filterNode` is a supported per-light override.** `ShadowNode.js` L535 reads `shadow.filterNode || this.getShadowFilterFn( renderer.shadowMap.type )`, and a filter is just `Fn( ( { depthTexture, shadowCoord, shadow, depthLayer } ) => ... )`. That is the sanctioned extension point.
 
-**No PCSS in core.** `webgl_shadowmap_pcss` is a legacy WebGL example that patches GLSL chunks. Contact-hardening penumbra would be a hand-written `filterNode` at roughly twice PCF's cost (a blocker search plus a variable-radius filter). Not worth it here: at night almost every shadow comes from a small fixture a short distance away, where a fixed-radius PCF penumbra is already close to correct.
+**No PCSS in core.** Contact-hardening penumbra would be a hand-written `filterNode` at roughly twice PCF's cost (a blocker search plus a variable-radius filter). At night almost every shadow comes from a small fixture a short distance away, where a fixed-radius PCF penumbra already fits the scene.
 
 **Android WebGPU renders harder shadows than desktop.** `WebGPUBackend.js` L177 disables `TEXTURE_COMPARE` on any Android user agent, so `ShadowNode.setupShadow` falls back to `NearestFilter` on the depth texture (L426-436) and hardware PCF is off. The WebGL2 backend reports compatibility unconditionally. Worth knowing before this gets chased as a bug.
 
@@ -569,7 +569,7 @@ renderPipeline.outputNode = mix( scenePassColor, sceneColorBlurred, fogFactor );
 
 Fog that **blurs** with distance as well as tinting. That is the measured behaviour of the bar reference (local contrast falling with depth inside one room) and of the Blade Runner reference (far city lifted 4x and soft). It is a gaussian blur and a mix, and it does more for perceived depth than most of the expensive effects in this document.
 
-**Fog colour is not an art choice.** It is the average colour of the light filling the air: cyan on the neon street, warm amber in the bar, cold blue-grey under moonlight. Drive it from the same source that drives the environment probe, and it will be right automatically. Its density is the exposure control for the shadow floor: raising density raises the measured "darkest 20%" figure directly, which is the correct setting for the user's "not that obscure" note.
+**Fog colour comes from the environment.** It is the average colour of the light filling the air: cyan on the neon street, warm amber in the bar, cold blue-grey under moonlight. Drive it from the same source that drives the environment probe. Its density is the exposure control for the shadow floor: raising density raises the measured "darkest 20%" figure directly, matching the user's "not that obscure" note.
 
 Two hooks make that tint cheap. `NodeManager.updateFog` derives a fog node from a plain `scene.fog` using `reference(...)` uniforms, so `scene.fog.density` and `scene.fog.color` stay live-editable without a shader rebuild. And `NodeMaterial.setupFog` assigns the shaded colour to the `output` property node before evaluating `fogNode`, so a custom fog node can **read the fragment's own shaded colour** and bias the fog toward it: fog picks up the neon that is actually in frame rather than a constant. `material.fog = false` opts a material out.
 
@@ -684,7 +684,7 @@ The gap is much smaller than expected, and it is one item.
 
 **MRT works on the WebGL2 backend.** `WebGLBackend.js` binds `COLOR_ATTACHMENT0 + i` per texture (L2233-2260), calls `state.drawBuffers` (L2473) and `state.setMRTBlending` (L1089), and resolves MSAA attachment by attachment. So selective bloom's emissive channel and GTAO's normal buffer are not WebGPU-only tricks.
 
-**A file that will mislead you.** `examples/jsm/tsl/WebGLNodesHandler.js` carries a comment block listing "MRT not supported", "Transmission not supported", "Storage textures not supported", "WebGPU postprocessing stack not supported". Its own header says it is a compatibility loader for **`WebGLRenderer`**, the legacy renderer, and it is used only by the four `webgl_tsl_*` examples. Those limitations do not describe `WebGPURenderer`'s WebGL2 backend. Do not plan against that list.
+`examples/jsm/tsl/WebGLNodesHandler.js` is a compatibility loader for **`WebGLRenderer`**, used only by the four `webgl_tsl_*` examples. Its limitation list does not describe `WebGPURenderer`'s WebGL2 backend.
 
 **The real gap is `ClusteredLighting`.** `WebGLBackend.compute()` (L905-950) implements compute as transform feedback: `gl.drawArrays( gl.POINTS, 0, count )` inside `beginTransformFeedback`, capturing varyings, which gives one sequential output per invocation and **no scatter writes**. `ClusteredLightsNode`'s binning kernel does exactly a conditional scatter (`getClusterSlot( index ).assign( lightIdx.add( 1 ) ); index.addAssign( 1 );`), which transform feedback cannot express. Its example hard-gates on `WebGPU.isAvailable()` and throws, so whether it errors or produces garbage on WebGL2 is untested.
 
@@ -748,7 +748,7 @@ Everything here is a configuration change or a data mapping. Together they close
 | item | cost target | why it is first |
 |---|---|---|
 | `AgXToneMapping`, exposure dropped to the 0.05-0.2 region and tuned by section 9 | 0 | the single largest visual change in the document |
-| `light.power = fixture.intensity` (lumens) for every fixture, `decay = 2`, `distance = range` | 0 | makes relative brightness correct city-wide, collapsing the tuning surface to one exposure |
+| `light.power = fixture.intensity` (lumens) for every fixture, `decay = 2`, `distance = range` | 0 | keeps relative brightness consistent city-wide, collapsing the tuning surface to one exposure |
 | Kelvin to RGB for `colorTemperatureK` | 0 | warm against cold is what makes the references legible in the dark |
 | Analytic per-room fill, `E = (Φ/A)·ρ/(1−ρ)`, on a `HemisphereLight` | ~5 ALU per fragment | the bounce gradient up the room reference's wall, computed rather than dialled |
 | Remove every flat ambient fill; the shadow floor becomes fog plus the probe | 0 | a flat wash is the most recognisable artificial-lighting tell |
@@ -799,7 +799,7 @@ Everything here is a configuration change or a data mapping. Together they close
 | high | yes | yes | yes | yes | no |
 | ultra | yes | yes | yes | yes | yes (replacing GTAO) |
 
-The `low` tier is not a broken version of `high`. It has correct exposure, correct light units, computed room fill, correct fog colour and selective bloom, which is most of what the reference images are made of. That is the point of the ordering.
+The `low` tier retains authored exposure, physical light units, computed room fill, environment-derived fog colour and selective bloom, which form most of the reference images.
 
 **Before dropping a tier, turn the scalars down.** `volumetricPass.setResolutionScale`, `volumeMaterial.steps`, `ssrPass.quality`, `ssrPass.resolutionScale`, `aoPass.resolutionScale`, `godraysPass.raymarchSteps` and `ssgi.stepCount` are all continuous. A quarter-resolution volumetric pass at 8 steps still reads as a light cone; no volumetric pass reads as nothing.
 
@@ -852,13 +852,13 @@ Kelvin-to-sRGB conversion for `colorTemperatureK`; the per-room fill-light deriv
 ## Sources
 
 r185 source tree, read 2026-09-01 via `raw.githubusercontent.com/mrdoob/three.js/r185/`:
-`src/constants.js`, `src/scenes/Scene.js`, `src/math/Color.js`, `src/Three.Legacy.js` (zero bytes), `src/nodes/display/ToneMappingFunctions.js`, `src/nodes/core/{MRTNode,PropertyNode,ContextNode}.js`, `src/nodes/lighting/{ShadowFilterNode,ShadowNode}.js`, `src/nodes/functions/material/{getRoughness,getGeometryRoughness}.js`, `src/materials/nodes/{MeshStandardNodeMaterial,NodeMaterials}.js`, `src/renderers/common/{RenderPipeline,PostProcessing,Renderer}.js`, `src/renderers/webgl-fallback/WebGLBackend.js`, `src/renderers/webgpu/WebGPUBackend.js`, `src/lights/{PointLight,SpotLight,RectAreaLight,LightShadow}.js`, `examples/jsm/lighting/ClusteredLighting.js`, `examples/jsm/tsl/lighting/{ClusteredLightsNode,DynamicLightsNode}.js`, `examples/jsm/lights/{LightProbeGenerator,RectAreaLightTexturesLib}.js`, `examples/jsm/tsl/display/{BloomNode,GTAONode,SSRNode,SSGINode,GodraysNode,TRAANode,TAAUNode,FSR1Node,DenoiseNode,RecurrentDenoiseNode,Lut3DNode,GaussianBlurNode,MotionBlur}.js`, `examples/jsm/tsl/math/Bayer.js`, `examples/jsm/csm/CSMShadowNode.js`, `examples/jsm/tsl/shadows/TileShadowNode.js`, `examples/files.json`.
+`src/constants.js`, `src/scenes/Scene.js`, `src/math/Color.js`, `src/nodes/display/ToneMappingFunctions.js`, `src/nodes/core/{MRTNode,PropertyNode,ContextNode}.js`, `src/nodes/lighting/{ShadowFilterNode,ShadowNode}.js`, `src/nodes/functions/material/{getRoughness,getGeometryRoughness}.js`, `src/materials/nodes/{MeshStandardNodeMaterial,NodeMaterials}.js`, `src/renderers/common/{RenderPipeline,Renderer}.js`, `src/renderers/webgl-fallback/WebGLBackend.js`, `src/renderers/webgpu/WebGPUBackend.js`, `src/lights/{PointLight,SpotLight,RectAreaLight,LightShadow}.js`, `examples/jsm/lighting/ClusteredLighting.js`, `examples/jsm/tsl/lighting/{ClusteredLightsNode,DynamicLightsNode}.js`, `examples/jsm/lights/{LightProbeGenerator,RectAreaLightTexturesLib}.js`, `examples/jsm/tsl/display/{BloomNode,GTAONode,SSRNode,SSGINode,GodraysNode,TRAANode,TAAUNode,FSR1Node,DenoiseNode,RecurrentDenoiseNode,Lut3DNode,GaussianBlurNode,MotionBlur}.js`, `examples/jsm/tsl/math/Bayer.js`, `examples/jsm/csm/CSMShadowNode.js`, `examples/jsm/tsl/shadows/TileShadowNode.js`, `examples/files.json`.
 
 Also read: `src/nodes/functions/VolumetricLightingModel.js`, `src/materials/nodes/{VolumeNodeMaterial,MeshPhysicalNodeMaterial}.js`, `src/nodes/fog/Fog.js`, `src/nodes/display/{NormalMapNode,ViewportDepthNode}.js`, `src/nodes/utils/TriplanarTextures.js`, `src/nodes/gpgpu/BarrierNode.js`, `src/nodes/accessors/MaterialProperties.js`, `src/renderers/common/extras/PMREMGenerator.js`, `src/renderers/webgl-fallback/{WebGLBackend,nodes/GLSLNodeBuilder,WebGLTextureUtils}.js`, `src/lights/webgpu/{IESSpotLight,ProjectorLight}.js`, `src/nodes/lighting/{LightProbeNode,IESSpotLightNode,SpotLightNode,IrradianceNode}.js`, `src/renderers/webgpu/nodes/StandardNodeLibrary.js`, `examples/jsm/lighting/{DynamicLighting,LightProbeGrid}.js`, `examples/jsm/loaders/IESLoader.js`, `examples/jsm/tsl/display/{depthAwareBlend,radialBlur,ImportanceSampledEnvironment}.js`, `test/e2e/puppeteer.js`.
 
 r185 examples: `webgpu_postprocessing_ao`, `webgpu_postprocessing_bloom_emissive`, `webgpu_postprocessing_bloom_selective`, `webgpu_postprocessing_ssr`, `webgpu_postprocessing_ssgi`, `webgpu_postprocessing_godrays`, `webgpu_lights_clustered`, `webgpu_lights_rectarealight`, `webgpu_lights_ies_spotlight`, `webgpu_lightprobe_cubecamera`, `webgpu_materials_envmaps_bpcem`, `webgpu_materials_lightmap`, `webgpu_volume_lighting`, `webgpu_volume_lighting_rectarea`, `webgpu_volume_lighting_traa`, `webgpu_fog_height`, `webgpu_custom_fog_scattering`, `webgpu_shadow_contact`, `webgpu_shadowmap_csm`, `webgpu_tonemapping`.
 
-`useLegacyLights` removal: PR https://github.com/mrdoob/three.js/pull/28482, r165 release notes. `ClusteredLighting` is PR #33406. The r185-to-r186 migration guide records the `LightProbeGrid` to `LightProbeGridWebGL` rename. Note the r185 docs live at `threejs.org/docs/pages/<Class>.html`; the old `docs/api/en/**` paths 404 from r181.
+`ClusteredLighting` is PR #33406. The r185 docs live at `threejs.org/docs/pages/<Class>.html`.
 
 Technique references outside three.js:
 - Reoriented normal mapping: https://blog.selfshadow.com/publications/blending-in-detail/ (Barré-Brisebois and Hill, 2012)

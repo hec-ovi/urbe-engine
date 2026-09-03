@@ -36,7 +36,8 @@ export function speechRoute( runtime = defaultRuntime() ) {
 
 				} catch ( error ) {
 
-					send( res, error?.code === 'E_BODY_SIZE' ? 413 : 503, { error: error.message } );
+					const invalid = error instanceof SyntaxError || error?.code === 'E_VOICE_INPUT';
+					send( res, error?.code === 'E_BODY_SIZE' ? 413 : invalid ? 400 : 503, { error: error.message } );
 
 				}
 
@@ -59,9 +60,19 @@ function defaultRuntime() {
 async function validateTranscription( boundary, request ) {
 
 	boundary.input( 'transcription-request', request );
-	const bytes = decodeBase64( request.dataBase64 );
-	if ( bytes.byteLength !== request.byteSize ) throw new Error( 'microphone byteSize disagrees with decoded audio' );
-	if ( await sha256Hex( bytes ) !== request.sha256 ) throw new Error( 'microphone SHA-256 disagrees with decoded audio' );
+	let bytes;
+	try { bytes = decodeBase64( request.dataBase64 ); }
+	catch { throw inputError( 'microphone dataBase64 is invalid' ); }
+	if ( bytes.byteLength !== request.byteSize ) throw inputError( 'microphone byteSize disagrees with decoded audio' );
+	if ( await sha256Hex( bytes ) !== request.sha256 ) throw inputError( 'microphone SHA-256 disagrees with decoded audio' );
+
+}
+
+function inputError( message ) {
+
+	const error = new Error( message );
+	error.code = 'E_VOICE_INPUT';
+	return error;
 
 }
 
@@ -76,20 +87,32 @@ function body( req ) {
 
 	return new Promise( ( resolve, reject ) => {
 
+		const declared = Number( req.headers[ 'content-length' ] ?? 0 );
+		if ( Number.isFinite( declared ) && declared > MAX_BODY_BYTES ) {
+
+			const error = new Error( 'speech request body exceeds 48 MiB' );
+			error.code = 'E_BODY_SIZE';
+			req.resume();
+			reject( error );
+			return;
+
+		}
 		let text = '';
+		let settled = false;
 		req.setEncoding( 'utf8' );
 		req.on( 'data', ( chunk ) => {
 
+			if ( settled ) return;
 			text += chunk;
 			if ( Buffer.byteLength( text ) <= MAX_BODY_BYTES ) return;
+			settled = true;
 			const error = new Error( 'speech request body exceeds 48 MiB' );
 			error.code = 'E_BODY_SIZE';
 			reject( error );
-			req.destroy();
 
 		} );
-		req.on( 'end', () => resolve( text ) );
-		req.on( 'error', reject );
+		req.on( 'end', () => { if ( ! settled ) resolve( text ); } );
+		req.on( 'error', ( error ) => { if ( ! settled ) reject( error ); } );
 
 	} );
 

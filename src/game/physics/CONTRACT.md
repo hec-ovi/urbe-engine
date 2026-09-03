@@ -37,7 +37,7 @@ Purpose: resolves world and player collision, measures vehicle contacts, and tur
 - Ragdoll parts collide with generated world geometry and not with one another. The 15 body masses total 70 kg.
 - One full fallen body may be resident at a time. A concurrent hit remains in crowd control and is rearmed for a later measured contact.
 - Fallen people are excluded from talk targeting and crowd pushback while the dynamic colliders own their contact.
-- GameApp sends a fatal contact to an active assassination step only after the full Source ragdoll accepts it. The quest runtime applies the simulation `die` flag.
+- GameApp sends a fatal contact and its rendered body's authored npcId to an active assassination step only after the full Source ragdoll accepts it. The quest runtime applies the simulation `die` flag.
 
 ## Verification
 

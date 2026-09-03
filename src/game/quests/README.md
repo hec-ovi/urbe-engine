@@ -15,6 +15,6 @@ const result = actions.perform( {
 } );
 ```
 
-Render `presentation.bindingAction` through the current input map. Apply `worldChanges` only after `ok` is true, and replace the inventory display with `result.inventory`. See [CONTRACT.md](CONTRACT.md) for the boundary and failure rules.
+Render `presentation.bindingAction` through the current input map. Apply `worldChanges` only after `ok` is true, and synchronize the inventory display from `result.inventory`. See [CONTRACT.md](CONTRACT.md) for the boundary and failure rules.
 
 Item definitions stop at a parcel id, so a pickup uses its ground-floor entry or published access anchor. Fixed rescue, access, hacking and sabotage targets use their mission asset binding and exact interaction anchor. Transport supports public transit with one or zero controlled passengers.

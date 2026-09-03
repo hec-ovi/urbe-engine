@@ -2,7 +2,7 @@
 
 Purpose: assembles the generated city boxes into a cataloged world and serves its launcher, previews, creation flow and playable first-person game.
 
-Status: v0.17.0.
+Status: v0.17.1.
 
 ## Inputs
 
@@ -11,7 +11,7 @@ Status: v0.17.0.
 - A playable story is the Quests v0.8.0 handoff `quest-bundle.json` v1.1 plus its six counted catalogs and object-valued `host-capabilities.json`, validated by [src/quest-bundle/CONTRACT.md](src/quest-bundle/CONTRACT.md).
 - Catalog, import, export, staged creation and revisioned save calls use [launcher-request.schema.json](src/server/schema/launcher-request.schema.json) at `POST /api/launcher`. Browser values use [launcher-api.schema.json](src/launcher/schema/launcher-api.schema.json); stored values use [src/library/CONTRACT.md](src/library/CONTRACT.md).
 - A missing building preview takes [building-build-request.schema.json](src/server/schema/building-build-request.schema.json) at `POST /api/building`.
-- NPC text dialogue takes `{out,npc,behavior,line,timeMin}` at `POST /api/talk`. `LLM_BASE_URL` selects an OpenAI-compatible endpoint and `LLM_MODEL` selects its model.
+- NPC text dialogue takes [talk-request.schema.json](src/server/schema/talk-request.schema.json), including optional live quest state, at `POST /api/talk`. `LLM_BASE_URL` selects an OpenAI-compatible endpoint and `LLM_MODEL` selects its model.
 - Local speech uses the checked inputs in [src/game/voice/CONTRACT.md](src/game/voice/CONTRACT.md). Vite serves capabilities, health, synthesis and transcription below `/api/speech`; `URBE_SPEECH_URL` selects the same runtime over HTTP. The standalone container listens on port 8091 and also accepts request-scoped cancellation.
 - Browser modes are `?mode=game`, `?mode=city`, `?mode=building` and `?mode=experiment`, with their exact query settings in the relevant contracts.
 
@@ -22,12 +22,12 @@ Status: v0.17.0.
 - The seven measured quest hosts are assassination by fatal Rapier vehicle impact, fixed-asset rescue, escort follow or lead arrival, fixed access, fixed hacking, fixed sabotage and a verified public-transit journey. Each keeps its authored quest, step, actor, target, place and asset identities.
 - `?mode=city&out=/out/<world>` shows each manifest parcel and opens its building viewer. `?mode=building&parcel=<id>&out=/out/<world>[&source=interior]` shows the exterior or furnished interior and can request a missing build.
 - `POST /api/building` returns [building-build-result.schema.json](src/server/schema/building-build-result.schema.json).
-- `POST /api/talk` returns `{reply}`. Speech routes return the capability, PCM chunk, transcript, health and cancellation envelopes in [src/game/voice/CONTRACT.md](src/game/voice/CONTRACT.md).
+- `POST /api/talk` returns [talk-response.schema.json](src/server/schema/talk-response.schema.json). Speech routes return the capability, PCM chunk, transcript, health and cancellation envelopes in [src/game/voice/CONTRACT.md](src/game/voice/CONTRACT.md).
 
 ## Errors
 
 - Building preview failures use [building-build-error.schema.json](src/server/schema/building-build-error.schema.json): `E_INVALID_REQUEST`, `E_WORLD_NOT_FOUND`, `E_WORLD_INVALID`, `E_PARCEL_NOT_FOUND`, `E_BUILD_FAILED`, `E_BUILD_INCOMPLETE`.
-- Launcher, library, creation, gameplay, quest, hydrology and speech failures use the closed sets in their linked contracts. Startup fails visibly instead of publishing a partial world.
+- Development route, launcher, library, creation, gameplay, quest, hydrology and speech failures use the closed sets in their linked contracts. Startup failures are visible and publish no partial world.
 
 ## Invariants
 
@@ -36,6 +36,8 @@ Status: v0.17.0.
 - WebGPU is the default renderer. WebGL2 uses the same world and gameplay data through its documented quality fallback.
 
 ## Dependencies
+
+- [Development server](src/server/CONTRACT.md)
 
 - [Atlas](../atlas/CONTRACT.md)
 - [Connections](../connections/CONTRACT.md)

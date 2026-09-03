@@ -27,15 +27,15 @@ Purpose: converts active quest steps into deterministic player interaction targe
 ## Events
 
 - `targets({ timeMin })` projects active `pickup`, `observe`, `listen`, `steal`, `work`, and `deliver` steps.
-- `mechanics({ timeMin })` projects all seven measured target kinds with the exact facts later used to build their closed runtime event.
+- `mechanics({ timeMin })` projects all seven measured target kinds with the exact facts that build their closed runtime event.
 - `perform(request)` maps `take`, `inspect`, `listen`, `steal`, `work`, and `deliver` to the quests runtime's closed player event vocabulary. `read` returns the selected document text without advancing the quest.
 - `objective({ timeMin })` selects the first open questline and first definition-ordered active step. The live game passes its exact guidance destination to the objective route box.
 - `QuestGameplay.candidates(frame)` projects those validated targets into the shared centered interaction route. `QuestGameplay.perform(request)` resolves the current selected target and sends its measured place, visibility, obstruction and reach facts through `QuestActions.perform`.
 - A pickup is projected only when its exact quest and item binding creates a portable mission-assets assembly with a `take` anchor. Rescue, access, hacking and sabotage use the exact fixed asset and interaction anchor from their v1.1 binding. Every assembly primitive uses its authored PBR key and variant and has matching Rapier collision.
 - An accepted `QuestGameplay.perform(request)` sends its stable target key, exact action, and retained cast participants to the gameplay animation coordinator. Rejected actions never start presentation state.
 - `QuestGameplay.control(request)` accepts only an explicit event for an npcId already in the session cast. Conversation, player crouch input, and quest-step kinds never imply follow or crouch. An accepted pose event is sent to animation coordination with the exact returned actor state.
-- Fixed asset interaction flows through `QuestGameplay.perform`. Rescue keeps its exact cast NPC under follow control. Escort starts the authored follow or lead mode at its exact source and completes only when the controlled body and player reach the destination, then resumes the NPC routine.
-- `QuestGameplay.fatalImpact` consumes only a fatal Rapier vehicle contact after Source ragdoll acceptance. `QuestGameplay.transitEvent` tracks an accepted public transit board only when the exact passenger is physically present at the origin, attaches that identity to every measured ride position, verifies trip, destination and cargo, then releases the passenger after disembark. GameApp sends every accepted result through the shared HUD, inventory, persistence and route path.
+- Fixed asset interaction flows through `QuestGameplay.perform`. Rescue acquires follow control for the exact cast NPC before quest progress; unavailable or conflicting control returns `runtime_rejected`, and a later runtime rejection releases newly acquired control to its routine. Escort starts the authored follow or lead mode at its exact source and completes only when the controlled body and player reach the destination, then resumes the NPC routine.
+- Active assassination and public-transit steps materialize an absent exact cast body at its current or authored place without publishing an interaction. `QuestGameplay.fatalImpact(impact, npcId, timeMin)` consumes only a fatal Rapier vehicle contact after GameApp resolves the accepted Source body to its authored npcId. `QuestGameplay.transitEvent` requires the exact passenger at the origin before boarding, carries that identity at every measured ride position, verifies trip, destination and cargo, then releases it after disembark. GameApp sends every accepted result through the shared HUD, inventory, persistence and route path.
 - `QuestMechanics.complete(request)` remains the closed runtime adapter behind those live hosts. The quests runtime checks every authored NPC, route, access point, credential, target, journey, passenger, cargo, mode and place identity.
 
 ## Errors
@@ -63,11 +63,11 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - Pickup and theft require the selected object or person to be visible, unobstructed, inside the fixed reach, and at the quest target's current place.
 - Listening requires an unobstructed conversation target inside eight metres and at the target parcel.
 - A failed interaction does not mutate quest progress or inventory.
-- A failed interaction does not start or replace an animation action.
-- A successful pickup cannot be repeated because its completed step no longer produces an active target.
+- A failed interaction does not alter the active animation action.
+- A completed pickup step produces no active target.
 - Highlight and icon data identify the same item, cast NPCs, and step consumed by the action.
 - A live pickup prop has the stable `targetKey`, the bound assembly's exact geometry and materials, separate outline and icon cues, and one fixed collider per primitive. Ray focus excludes only its own colliders. The visual and collision leave only when the accepted result includes its `collected` world change.
-- Cast-person mechanics resolve the exact `actorIds`. A nearby omitted cast NPC may receive one deterministic rendered quest body, within the crowd capacity, at their simulation place.
+- Cast-person mechanics resolve the exact `actorIds`. An absent active assassination target or transit passenger receives one deterministic rendered quest body, within the crowd capacity, at its current or authored place. Passive materialization adds no interaction target.
 - Follow control resolves only the requested cast npcId and never substitutes a nearby statistical handle.
 - Crouch control resolves only the requested cast npcId, holds it until its matching release, and resumes its persisted simulation routine.
 - Parcel area mechanics are offered only at their deterministic entry or interior anchor. District observation remains an area action throughout the named district.

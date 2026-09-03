@@ -116,7 +116,7 @@ describe( 'RequestAssembler', () => {
 		expect( sign( namedCity, 'p1' ) ).toEqual( { mode: 'marquee', text: 'THE SALT WHARF' } );
 
 		// the accent folds onto its letter, the quotes outside the atlas read as
-		// its space, and whole words stay while they fit the 40 character limit
+		// its space, and whole words stay while they fit the 40-character line width
 		expect( sign( namedCity, 'p2' ) ).toEqual( { mode: 'marquee', text: 'GRANDMOTHER LUDMILA\'S CAFE HUMMINGBIRD' } );
 
 		// the venue word when the name is empty or not even its first word fits

@@ -54,7 +54,7 @@ A measured physics impact closes the matching grouped action with interruption r
 - Crouch is an explicit action. It is never inferred from ordinary movement.
 - One-shot actions advertise `clip-end` completion. Held actions advertise `explicit` completion.
 - Completion and interruption preserve the action group until `resume-routine` restores every participant.
-- Routine updates received during a quest action do not replace the active clip. The latest update becomes authoritative when the routine resumes.
+- Routine updates received during a quest action leave the active clip intact. The latest update becomes authoritative when the routine resumes.
 - The same config, snapshot, and command sequence produces byte-equivalent JSON values and transition ordering.
 - Inputs and outputs are schema validated and fail closed. Original GLB, glTF, FBX, texture, and Blender files remain untouched.
 

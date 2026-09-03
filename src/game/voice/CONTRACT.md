@@ -27,9 +27,9 @@ Vite exposes capabilities, health, synthesis and transcription under `/api/speec
 - `GET /health`: `{status:"ready", tts, stt}` after both models load. `tts` and `stt` are the capability records above.
 - `POST /synthesize`: [schema/adapter-request.schema.json](schema/adapter-request.schema.json), returns `{chunk}` where `chunk` is [schema/adapter-chunk.schema.json](schema/adapter-chunk.schema.json).
 - `POST /transcribe`: [schema/transcription-request.schema.json](schema/transcription-request.schema.json), returns [schema/transcription-result.schema.json](schema/transcription-result.schema.json).
-- Standalone `POST /cancel`: `{requestId}`, returns `{requestId,cancelled,previousStatus}`. Cancellation removes only that queued request or terminates its active model process. A browser abort reaches this route through `SpeechRuntimeHttp`; it is not a separate Vite route.
+- Standalone `POST /cancel`: [schema/http-cancel-request.schema.json](schema/http-cancel-request.schema.json), returns `{requestId,cancelled,previousStatus}`. Cancellation removes only that queued request or terminates its active model process. A browser abort reaches this route through `SpeechRuntimeHttp`; it is not a separate Vite route.
 
-POST bodies above 48 MiB fail with HTTP 413. Invalid envelopes, missing or changed artifacts, model load failures, and inference failures return HTTP 503 `{error}`. The browser maps transport failures to `E_VOICE_ADAPTER`.
+POST bodies above 48 MiB fail with HTTP 413. Invalid JSON and envelopes return HTTP 400 `{error}`. Missing or changed artifacts, model load failures, inference failures and unavailable services return HTTP 503 `{error}`. The browser maps transport failures to `E_VOICE_ADAPTER`.
 
 ## Outputs
 

@@ -32,12 +32,12 @@ Purpose: restores one cataloged game and saves its live player and quest state t
 ## Invariants
 
 - The save revision sent is the revision that was loaded or last returned.
-- Existing non-quest inventory is retained. Quest-owned items are replaced by the runtime's current inventory, so consumed quest items do not return.
-- A quest that could not be restored or cast stays in the save at its previous progress instead of disappearing.
+- Existing non-quest inventory is retained. Quest-owned items mirror the runtime's current inventory, so consumed quest items do not return.
+- A quest that cannot be restored or cast keeps its recorded save progress.
 - Discovered locations are unique by id and include the current location.
-- An optional transit journey is validated exactly, sent through `saveCurrent`, returned in the game descriptor and restored by the game. Older descriptors without it remain valid.
-- Optional NPC state is validated through the simulation and NPC agent schemas, sent and returned unchanged, and restored before the first live frame. Older descriptors without it remain valid.
-- Optional investigation state is validated, sent and returned unchanged. The investigation blackbox validates every saved scene and evidence id against current authored scenes before rendering. Older descriptors without it remain valid.
+- An optional transit journey is validated exactly, sent through `saveCurrent`, returned in the game descriptor and restored by the game. A descriptor may omit it.
+- Optional NPC state is validated through the simulation and NPC agent schemas, sent and returned unchanged, and restored before the first live frame. A descriptor may omit it.
+- Optional investigation state is validated, sent and returned unchanged. The investigation blackbox validates every saved scene and evidence id against current authored scenes before rendering. A descriptor may omit it.
 
 ## How to modify this blackbox safely
 

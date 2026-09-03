@@ -15,6 +15,11 @@ describe( 'live measured quest mechanic hosts', () => {
 	it( 'runs fixed interactions, a passenger transit journey and a fatal impact through QuestGameplay', () => {
 
 		const harness = setup( [ fixedDefinition(), assassinationDefinition() ] );
+		const firstFrame = harness.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 0.75, -2 ] ) );
+		expect( firstFrame.some( ( candidate ) => candidate.interaction.targetKey.includes( 'assassination' ) ) ).toBe( false );
+		expect( harness.crowd.questMember ).toHaveBeenCalledWith(
+			'npc.mark', TIME, expect.any( THREE.Vector3 ), P4, expect.any( THREE.Vector3 )
+		);
 		for ( const [ kind, eventKind ] of [
 			[ 'hacking', 'hacked' ], [ 'access', 'accessed' ], [ 'rescue', 'released' ], [ 'sabotage', 'sabotaged' ]
 		] ) {
@@ -52,9 +57,86 @@ describe( 'live measured quest mechanic hosts', () => {
 		const fatal = harness.gameplay.fatalImpact( {
 			personId: 'npc.mark', vehicleId: 'car.live', impactSpeed: 12, fatal: true,
 			point: { x: 0, y: 1, z: 0 }, impulse: { x: 0, y: 9, z: 90 }
-		}, TIME );
+		}, 'npc.mark', TIME );
 		expect( fatal ).toMatchObject( { ok: true, eventKind: 'killed', progressed: true } );
 		expect( harness.people.get( 'npc.mark' ).flags.dead ).toBe( true );
+
+	} );
+
+	it( 'materializes a previously absent assassination body without advertising an interaction', () => {
+
+		const harness = setup( [ assassinationDefinition() ], { initiallyEmpty: true } );
+		expect( harness.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 1.3, -2 ] ) ) ).toEqual( [] );
+		expect( harness.control.actors.map( ( value ) => value.npcId ) ).toEqual( [ 'npc.mark' ] );
+
+		const result = harness.gameplay.fatalImpact( {
+			personId: 'crowd-body-7', vehicleId: 'car.live', impactSpeed: 12, fatal: true,
+			point: { x: 0, y: 1, z: 0 }, impulse: { x: 0, y: 9, z: 90 }
+		}, 'npc.mark', TIME );
+		expect( result ).toMatchObject( { ok: true, eventKind: 'killed', progressed: true } );
+		expect( harness.people.get( 'npc.mark' ).flags.dead ).toBe( true );
+
+	} );
+
+	it( 'acquires rescue follow before progress and keeps the exact released NPC under control', () => {
+
+		const harness = setup( [ rescueDefinition() ] );
+		const candidate = harness.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 0.75, -2 ] ) )[ 0 ];
+		const result = harness.gameplay.perform( {
+			targetKey: candidate.interaction.targetKey, bindingAction: 'interact', timeMin: TIME
+		} );
+		expect( result ).toMatchObject( { ok: true, eventKind: 'released', progressed: true } );
+		expect( harness.control.follow ).toEqual( { npcId: 'npc.witness', mode: 'following' } );
+		expect( harness.continuity.startFollow ).toHaveBeenCalledWith( {
+			npcId: 'npc.witness', timeMin: TIME, playerPosition: [ 0, 0, 0 ]
+		} );
+
+	} );
+
+	it( 'rejects rescue when another follower owns movement control', () => {
+
+		const harness = setup( [ rescueDefinition() ] );
+		harness.control.follow = { npcId: 'npc.mark', mode: 'following' };
+		const candidate = harness.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 0.75, -2 ] ) )[ 0 ];
+		const result = harness.gameplay.perform( {
+			targetKey: candidate.interaction.targetKey, bindingAction: 'interact', timeMin: TIME
+		} );
+		expect( result ).toMatchObject( { ok: false, code: 'runtime_rejected', progressed: false } );
+		expect( harness.session.persistenceView()[ 0 ].completedSteps ).toEqual( [] );
+		expect( harness.continuity.startFollow ).not.toHaveBeenCalled();
+		expect( harness.control.follow ).toEqual( { npcId: 'npc.mark', mode: 'following' } );
+
+	} );
+
+	it( 'rejects unavailable rescue control and releases a newly acquired follower after runtime rejection', () => {
+
+		const unavailable = setup( [ rescueDefinition() ], { startFollowError: new Error( 'follow path unavailable' ) } );
+		let candidate = unavailable.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 0.75, -2 ] ) )[ 0 ];
+		expect( unavailable.gameplay.perform( {
+			targetKey: candidate.interaction.targetKey, bindingAction: 'interact', timeMin: TIME
+		} ) ).toMatchObject( { ok: false, code: 'runtime_rejected', progressed: false } );
+		expect( unavailable.session.persistenceView()[ 0 ].completedSteps ).toEqual( [] );
+
+		const unrenderable = setup( [ rescueDefinition() ], { syncActorError: new Error( 'body unavailable' ) } );
+		candidate = unrenderable.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 0.75, -2 ] ) )[ 0 ];
+		expect( unrenderable.gameplay.perform( {
+			targetKey: candidate.interaction.targetKey, bindingAction: 'interact', timeMin: TIME
+		} ) ).toMatchObject( { ok: false, code: 'runtime_rejected', progressed: false } );
+		expect( unrenderable.continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: TIME } );
+		expect( unrenderable.control.follow ).toBeNull();
+		expect( unrenderable.session.persistenceView()[ 0 ].completedSteps ).toEqual( [] );
+
+		const rejected = setup( [ rescueDefinition() ] );
+		vi.spyOn( rejected.mechanics, 'complete' ).mockImplementation( ( request ) =>
+			rejected.mechanics.reject( request, 'quest runtime unavailable' ) );
+		candidate = rejected.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 0.75, -2 ] ) )[ 0 ];
+		expect( rejected.gameplay.perform( {
+			targetKey: candidate.interaction.targetKey, bindingAction: 'interact', timeMin: TIME
+		} ) ).toMatchObject( { ok: false, code: 'runtime_rejected', progressed: false } );
+		expect( rejected.continuity.startFollow ).toHaveBeenCalledOnce();
+		expect( rejected.continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: TIME } );
+		expect( rejected.control.follow ).toBeNull();
+		expect( rejected.session.persistenceView()[ 0 ].completedSteps ).toEqual( [] );
 
 	} );
 
@@ -107,9 +189,26 @@ describe( 'live measured quest mechanic hosts', () => {
 
 	} );
 
+	it( 'materializes an initially absent transit passenger at the active origin before carrying it', () => {
+
+		const harness = setup( [ transportDefinition() ], { initiallyEmpty: true } );
+		expect( harness.gameplay.candidates( frame( P4, [ 0, 0, -2 ], [ 0, 1.3, -3 ] ) ) ).toEqual( [] );
+		expect( harness.control.actors.map( ( value ) => value.npcId ) ).toEqual( [ 'npc.witness' ] );
+		harness.gameplay.transitEvent( {
+			action: 'board', result: { ok: true, service: { tripId: 'trip-live', routeId: 'route-live' } }
+		}, { timeMin: TIME, playerPlaces: [ P4 ], position: [ 0, 0, -2 ] } );
+		expect( harness.continuity.startFollow ).toHaveBeenCalledWith( {
+			npcId: 'npc.witness', timeMin: TIME, playerPosition: [ 0, 0, -2 ]
+		} );
+		expect( harness.continuity.carryFollower ).toHaveBeenCalledWith( {
+			npcId: 'npc.witness', position: [ 0, 0, -2 ], routeId: 'route-live'
+		} );
+
+	} );
+
 } );
 
-function setup( definitions ) {
+function setup( definitions, options = {} ) {
 
 	const people = new Map( [
 		[ 'npc.witness', npc( 'npc.witness', 'witness' ) ],
@@ -127,15 +226,19 @@ function setup( definitions ) {
 	const session = QuestSession.create( definitions, sim, TIME );
 	const control = {
 		actor: actor(),
+		actors: [],
 		follow: null
 	};
+	if ( ! options.initiallyEmpty ) control.actors.push( control.actor );
 	const continuity = {
 		serialize: vi.fn( () => ( {
-			version: '1', actors: [ structuredClone( control.actor ) ], follow: control.follow, conversation: null, pose: null
+			version: '1', actors: structuredClone( control.actors ), follow: control.follow, conversation: null, pose: null
 		} ) ),
 		startFollow: vi.fn( ( request ) => {
 
-			control.actor.npcId = request.npcId;
+			if ( options.startFollowError ) throw options.startFollowError;
+			control.actor = control.actors.find( ( value ) => value.npcId === request.npcId ) ?? actor( request.npcId );
+			if ( ! control.actors.includes( control.actor ) ) control.actors.push( control.actor );
 			control.actor.mode = 'following';
 			control.follow = { npcId: request.npcId, mode: 'following' };
 			return structuredClone( control.actor );
@@ -143,7 +246,8 @@ function setup( definitions ) {
 		} ),
 		startLead: vi.fn( ( request ) => {
 
-			control.actor.npcId = request.npcId;
+			control.actor = control.actors.find( ( value ) => value.npcId === request.npcId ) ?? actor( request.npcId );
+			if ( ! control.actors.includes( control.actor ) ) control.actors.push( control.actor );
 			control.actor.mode = 'leading';
 			control.follow = { npcId: request.npcId, mode: 'leading' };
 			return structuredClone( control.actor );
@@ -151,12 +255,14 @@ function setup( definitions ) {
 		} ),
 		carryFollower: vi.fn( ( request ) => {
 
+			control.actor = control.actors.find( ( value ) => value.npcId === request.npcId );
 			control.actor.position = [ ...request.position ];
 			return structuredClone( control.actor );
 
 		} ),
 		stopFollow: vi.fn( () => {
 
+			control.actor = control.actors.find( ( value ) => value.npcId === control.follow?.npcId ) ?? control.actor;
 			control.actor.mode = 'resuming';
 			control.follow = null;
 			return structuredClone( control.actor );
@@ -164,17 +270,35 @@ function setup( definitions ) {
 		} )
 	};
 	const crowd = {
-		questMember: vi.fn( ( npcId ) => ( { npcId, position: new THREE.Vector3().fromArray( control.actor.position ) } ) ),
-		syncActor: vi.fn()
+		questMember: vi.fn( ( npcId ) => {
+
+			let present = control.actors.find( ( value ) => value.npcId === npcId );
+			if ( ! present ) {
+
+				present = actor( npcId );
+				control.actors.push( present );
+				if ( npcId === 'npc.witness' ) control.actor = present;
+
+			}
+			return { id: `body:${npcId}`, npcId, position: new THREE.Vector3().fromArray( present.position ) };
+
+		} ),
+		syncActor: vi.fn( ( value ) => {
+
+			if ( options.syncActorError ) throw options.syncActorError;
+			return { id: `body:${value.npcId}`, npcId: value.npcId, position: new THREE.Vector3().fromArray( value.position ) };
+
+		} )
 	};
+	const mechanics = new QuestMechanics( session );
 	const gameplay = new QuestGameplay( {
-		session, actions: new QuestActions( session ), mechanics: new QuestMechanics( session ),
+		session, actions: new QuestActions( session ), mechanics,
 		world: { parcels: [ { id: 'p4', anchor: [ 0, 0, -2 ] }, { id: 'p7', anchor: [ 10, 0, -2 ] } ] },
 		crowd, continuity, missionItems: missionAssets(),
 		physics: { rapier: null, world: null }, playerCollider: null,
 		materialFactory: { build: () => new THREE.MeshStandardMaterial( { color: 0x223344 } ) }
 	} );
-	return { gameplay, session, continuity, control, people };
+	return { gameplay, session, continuity, control, people, crowd, mechanics };
 
 }
 
@@ -201,6 +325,15 @@ function transportDefinition() {
 	return definition( 'transport-only', [ role( 'witness', 'witness' ) ], [
 		step( 'transportation', transportationTarget(), null, 'safe' )
 	], [], [ 'transport-done' ], 'transportation', 'safe' );
+
+}
+
+function rescueDefinition() {
+
+	return definition( 'fixed', [ role( 'witness', 'witness' ) ], [ step( 'rescue', {
+		kind: 'rescue', roleId: 'witness', releaseTargetId: 'witness-release',
+		place: { parcelId: 'p4' }, completionFlag: 'rescue-done'
+	}, null, 'safe' ) ], [], [ 'rescue-done' ], 'rescue', 'safe' );
 
 }
 
@@ -294,10 +427,10 @@ function frame( place, feet, focus ) {
 
 }
 
-function actor() {
+function actor( npcId = 'npc.witness' ) {
 
 	return {
-		npcId: 'npc.witness', position: [ 0, 0, -2 ], animation: 'idle', mode: 'schedule'
+		npcId, position: [ 0, 0, -2 ], animation: 'idle', mode: 'schedule'
 	};
 
 }

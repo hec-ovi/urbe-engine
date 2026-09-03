@@ -1,105 +1,145 @@
 # Changelog
 
-0.17.0: the game consumes the complete Quests v0.8.0 handoff v1.1 and runs all 16 action kinds through measured world hosts. Fixed mission assets drive rescue, access, hacking and sabotage; escort controls an exact follower or leader through arrival and routine resume; assassination requires an accepted Source ragdoll from a fatal Rapier vehicle contact; public transit verifies trip, origin, destination, passenger and cargo. Investigation scenes, parcel/station/stop guidance, station and bus journeys, explicit NPC crouch and Atlas hydrology are live in GameApp. Local Chatterbox Nano speech, faster-whisper microphone transcription, absolute PCM playback and request-scoped cancellation share the dialogue animation lifecycle through a locked Python process or two-stage container. Model artifacts, presets, runtime files and dependency metadata are SHA-256 verified.
+0.17.1: exact active cast NPCs materialize for assassination and public transit without extra interactions; fatal impacts resolve rendered bodies to authored NPC ids; rescue acquires follow control before quest progress and rolls it back on rejection. Talk and direct speech routes validate closed envelopes, empty model configuration selects the advertised model, and world creation invokes Atlas through its public command.
 
-0.16.26: the front door separates generated cities from playable games and guides creation through city geometry, selected interiors, story and side jobs, then the final game. Game cards show saved position, location, active quest, inventory and discovered places. City assembly can reuse a complete shell-only artifact without rebuilding it, and manual setup can request an exact unique set of interior parcel ids.
+0.17.0: GameApp consumes Quests v0.8.0 handoff v1.1, runs all 16 action kinds through live hosts, renders authored investigations and hydrology, and provides verified local speech with microphone transcription and request cancellation.
 
-0.16.25: station collision geometry now expands indexed slabs before producing the position-only Rapier mesh, so every collider remains a complete triangle list. Building physics includes structural walls, slabs, glass, roofs, rails, columns and solid service objects while leaving window-frame relief, signs, lamps and trim in the renderer. The urbe city's shell collision set drops from 2,842,692 rendered triangles to 487,970 structural triangles. Collider startup failures name the exact world part. Grade road uses the current `street` material variant.
+0.16.26: the launcher separates city and game catalogs and creates a playable game through checked city, interior, quest and save stages.
 
-0.16.24: highway decks use the materials database's lane-aligned highway asphalt instead of the isotropic puddle variant. Their UVs now put U across the published width and V along the full elevated path, so each 3.5 m repeat keeps its wheel tracks under one lane. Grade road, pavement, curb, deck frame and supports remain on their database-backed patched asphalt, plate, curb stone and concrete entries.
+0.16.25: Rapier receives complete position-only station and structural building triangle meshes, with exact startup failure locations and a measured 487,970-triangle shell collision set.
 
-0.16.23: the local character store now verifies the purchased Source and Pro files against their original workspace hashes, all six 65-joint bodies, all 32 compatible hairstyle and facial-hair rigs, and all 120 animation clips. A focused NPC selects the complete gender- and age-compatible hairstyle catalog while the mass crowd keeps its bounded two-body vertex-animation path.
+0.16.24: highway decks use lane-aligned asphalt UVs across the published width and along the elevation profile.
 
-0.16.22: walking keeps the exterior light set in fixed object slots and copies the nearest fixtures' photometry into them. The stable light ids stop camera translation from invalidating every material pipeline on WebGL. Opaque metallic-roughness surfaces use the standard shader; only glass with published transmission carries the larger physical feature graph. Startup compiles the first visible view instead of feeding the whole city to either backend at once. Large shell loads, geometry baking and collider cooking use bounded batches and yield between main-thread slices; the low tier skips the moving environment probe. The hitch log times each frame subsystem separately.
+0.16.23: the character store verifies six Source bodies, 32 compatible hair rigs and 120 Pro clips; focused NPCs use the complete compatible style catalog.
 
-0.16.21: large cities no longer ask a WebGL driver to compile the whole world concurrently. Warm-up serializes renderables and yields to the driver between batches. The WebGL default low tier limits each material family to two pattern variants and uploads base colour, normal and emission maps; physical roughness and metalness remain as scalar values. Higher tiers add channels, variants and anisotropy explicitly.
+0.16.22: WebGL light slots keep stable ids, opaque surfaces use the standard shader, startup and streamed work use bounded batches, and hitch logs time each frame subsystem.
 
-0.16.20: a city batch builds every exterior shell and furnishes five deterministic quest or venue parcels by default. The manifest lists shell parcels separately from its interior subset and floor files. The game loads every shell, streams and simulates only that subset, and leaves every other entrance visibly shut with no interaction or interior fetch.
+0.16.21: warm-up serializes WebGL renderables; the default low tier bounds pattern variants and texture channels.
 
-0.16.19: the building viewer generates the requested exterior or interior and checks the response type before handing a GLB to the loader. Missing Vite assets now show as unavailable instead of JSON errors, failed assets keep technical details separate, and an unavailable interior can return to its exterior. A viewport click captures the fly camera; Escape releases it and another click captures it again without taking pointer lock from the overlay controls.
+0.16.20: city batches build every shell, furnish five deterministic parcels by default and publish the enterable subset separately.
 
-0.16.18: Atlas highway structures render and collide as one continuous road surface plus one concrete structure mesh. The road splits at every elevation knot, follows the exact ramp and deck profile, keeps the published width and structural depth, and extrudes each support from its published footprint and height. Lane paint follows the same 3D lane paths.
+0.16.19: the building viewer checks generated asset media types, reports unavailable sources and manages fly-camera pointer lock from the viewport.
 
-0.16.17: people and cars follow Connections 0.9 movement in three dimensions. Walkers keep the height of sidewalks, crossings, station stairs, passages, platforms and building links; cars keep lane and turn elevation and pitch on ramps. A missing authoritative `path3` or `via3` refuses the run instead of falling back to its flat projection.
+0.16.18: Atlas highway paths render and collide as continuous elevated road and concrete structure meshes with lane paint on the same 3D profile.
 
-0.16.16: an Atlas building selection opens its exact parcel and output in the exterior viewer. A missing exterior is generated on demand from a known Atlas sample through the validated assembly boundary, and an absent world or parcel is reported on screen.
+0.16.17: pedestrians and vehicles follow authoritative Connections `path3` and `via3` geometry at exact elevations.
 
-0.16.15: the readout answers "did it stall": the run's hitch count and its worst gap in milliseconds, or `no hitch`, so a screenshot says it without a console open.
-0.16.14: a bridge is an open deck. The walking surface is the section's own bottom, exactly on the aperture base the exterior box aligned its floor plate to, a 1.1 m railing stands on each edge and is solid, and nothing spans the top; tubes and tunnels stay closed boxes.
-0.16.13: a lamp lens, an entrance diffuser and a lift's cab light take their emissive level outright instead of multiplying the database's own authored strength, so the fixture family's new maps (which carry their falloff themselves) read at the level the night grade was tuned at.
-0.16.12: stations are places. Every shaft the atlas publishes is a well on its own footprint with a switchback stair fitted to its depth (four flights of eighteen at 0.168 m for a 12 m shaft), the passage at its foot joins it to the platform room, and the room is floor, ceiling and walls lit by its own fixtures; a platform already at street level gets a canopy. Two draw calls for the whole city.
-0.16.11: the city floor opens over every station shaft and the bedrock drops below the deepest volume the city digs, so what is built underground can be reached.
-0.16.10: the game contract carries the kerb strip, the painted crossings, the warm-up and what the readout says.
-0.16.9: the links contract states what each kind is built as and leaves the section to the link, which is where it comes from; the open bridge deck with railings connections describes is named as not built.
-0.16.8: the ground lays the blueprint's own `curb` surface, unbroken through the junction returns, with a face down to the roadway; a world published without one still gets a kerb cut from its pavement edges.
-0.16.7: junctions are marked. Every segment of the blueprint's `streets.crossings` is painted continental (0.45 m bars along the walk, repeated across a 3.6 m corridor, held 0.3 m clear of both kerbs), merged into one draw for the whole city, in the same road paint the lane markings wear.
-0.16.6: the game's readout carries the material resolution the viewer already showed: how many keys resolved and how many did not, warned while any is outstanding, with the failing keys named in the console. A key the database cannot serve (a world naming a brand whose assets are not on this machine) renders magenta and never takes the load down.
-0.16.5: nothing links a shader on a frame the player sees. The loading screen compiles the built city through `compileAsync`, where the WebGL2 backend links in the background instead of blocking, and every streamed interior floor is warmed while it is still detached.
-0.16.4: a freeze names the renderer work that caused it: the shaders linked and the maps uploaded in that frame join the world's own notes in the hitch line.
-0.16.3: the HUD readout's first row names the backend, the quality tier and the render size, so a screenshot says which path drew the frame.
-0.16.2: the transit tests build the bus stops and stations they assert on, so a regenerated atlas sample cannot decide what this box's contract test proves.
-0.16.1: WebGL2 runs without GPU timing queries and the low tier without bloom (no emissive target, no blur chain), so the fallback backend renders at speed.
-0.16.0: the city preview (`?mode=city`): every parcel stacked from its assembled floors over the atlas ground, orbit and zoom, hover names a parcel, a click opens it in the building viewer.
-0.15.10: every building wears its own pattern variant of each material, picked by parcel id (src/game/city/Variety.js); the viewer shows the same one.
-0.15.9: the building viewer walks: W A S D along the view, Q and E down and up, drag to look, Shift fast; the wheel no longer zooms.
-0.15.8: the building viewer builds each material with the variant the interior named in its extras, so strip fixtures show the strip diffuser instead of a tiled lamp.
-0.15.7: the building viewer reads a world build through `out` (`?mode=building&parcel=p4&out=/out/small`) and names a missing building instead of failing on the page the dev server answers with.
-0.15.6: cars brake for a player standing in their lane (easing from 10 m ahead, holding 1.5 m short) and their bodies push the player out like the crowd does.
-0.15.5: the character controller's autostep asks for 0.2 m of tread, under the interior's 0.28 m, so no stair tread fails the step test.
-0.15.4: an environment rebake renders one cube face per frame and convolves on the seventh; the reflections in use stay the previous bake's until the new one is whole.
-0.15.3: the lift cab waits at the ground floor instead of the basement.
-0.15.2: the game imports the quests runtime entry (no node APIs), so the world loads in the browser with questlines wired.
-0.15.1: a talk line carries the questlines as they stand, so the dialog layers know the person's part in the story.
-0.15.0: questlines play: `out/<world>/quests/questlines.json` (carried from a quests creation run by `npm run carry-quests`) is cast against the game's simulation at load and run on the quests flow runtime; talking and entering buildings advance steps, completions toast, endings open the summary, the QUESTS panel lists progress; SimBridge exposes the story slice of the simulation port.
-0.14.1: people in a building take the interior's anchors: staff stand at the ground-floor work spots, guests sit on the seats (sitting and seated-talking clips baked into the crowd), the overflow stands in the lobby; a seated person stays seated through a conversation.
-0.14.0: NPCs talk back: the chat line goes to the dev server's /api/talk with the person and their current behavior, the quests dialog layers answer through the local model server (LLM_BASE_URL, LLM_MODEL); what each NPC has been told is remembered for the session.
-0.13.3: the crowd draws on WebGPU: the body geometry drops its own normal attribute (position and normal come from the pose buffers), so the pipeline binds eight vertex buffers, the limit.
+0.16.16: Atlas selections open exact parcels and generate missing previews through the checked assembly boundary.
 
-0.13.2: a kerb stands only where a pavement edge meets the road, square-ended beside a building; a strip fixture's light lies along its housing (the interior's angle, +X toward +Z, mapped onto the rotation); the environment probe bakes only while the player stands still and at half size, so walking never stalls on a bake; the haze quads are off on every tier.
+0.16.15: the HUD reports hitch count and worst frame gap.
 
-0.13.1: a sidewalk edge is a kerb stone (mitred top ledge and face in the curb kind); the lit entrance strips stand on the door frame at any facade angle; material maps are served uncached so a release shows on reload; assembly carries the typed NPC set beside a named blueprint into the world folder.
+0.16.14: bridges use an open walking deck with solid railings; tubes and tunnels use closed sections.
 
-0.13: the map is the city as blocks. The MAP panel raises every parcel prism and lays every ground polygon of the atlas volumetrics in a small three scene that orbits the player: drag turns, wheel zooms, venues stand as lit marks in their open state, and the frame renders only on a change. The minimap keeps its flat bake.
+0.16.13: lamp lenses, entrance diffusers and cab lights use their authored emissive levels.
 
-0.12: a world folder is the whole world, and the walk into a building is continuous. Assembly copies the blueprint it was built from into the out dir and the game reads it there first, so a named world (signs lettered with the naming box's parcel names, its typed NPC set in `npc-types.json`) plays as one folder; a building with no sign is still generated. The environment probe never rebakes on a doorway, only on distance and its cooldown, and a room is graded like the street it opens off, so stepping inside changes nothing but what the room's own fixtures do. Fog is sky-coloured and untinted at a third of the density, so a distant building fades without changing colour. The tab bar is on screen only while paused or while a panel is open.
+0.16.12: station shafts contain fitted switchback stairs, passages, lit platform rooms and grade canopies in two city-wide draws.
 
-0.11: interiors stream per floor. Assembly writes each floor's interior as its own GLB beside its JSON and the manifest lists them; the game opens a building within reach, registers its lift shafts from the floor documents, fetches only the floors within one of the player's (standing floor first, nearest building first), keeps one more above and below in memory for stairs and lifts, and drops the rest with their vertex data. On the small city's 35-floor tower the street costs 2.4 MB of the 47 MB of floor files and a mid-tower floor about 4 MB, each floor landing through the worker with the frame's rooms and bands under the 8 ms budget. Worlds assemble 71 of 71 on atlas 0.3.2, exterior 0.23 and interior 0.20.
+0.16.11: ground and bedrock geometry leave every published underground station volume reachable.
 
-0.10.1: the crowd asks the simulation for the people within reach in one radius scope around the player's feet (simulation 0.5), so the street carries exactly who is there and no sampled edge starves; every walker keeps the body of the gender the simulation reports, and a fresh handle is only ever fitted to a walker of that gender.
+0.16.10: the game contract covers kerbs, crossing paint, warm-up and performance readouts.
 
-0.10: interiors land without a freeze, and the HUD is the one the game was asked for. The interior GLB is fetched, parsed, baked to world space and cut into rooms and floor buckets in a worker that posts one transferable buffer; the frame only wraps buffers into geometry, builds rooms and bands under an 8 ms per-frame budget, and builds each floor's collider the first time it goes live, so the biggest tower (47 MB, 620k triangles, 35 floors) lands with no main-thread gap over 8 ms. The overlay is a tab bar with QUESTS J, MAP M, INVENTORY I, CODEX X, SETTINGS O, CONTROLS ? and LEAVE N, one full panel at a time over the game: a pan-and-zoom city map with venues, rail stations and the player; the inventory grid with an item detail pane; quest, codex, settings and controls panels; a chat panel with transcript and input, an avatar card, a video-call panel, a mission toast and a mission summary, all presentation only under src/ui/CONTRACT.md and covered by Testing Library tests on jsdom. A panel or the chat releases the mouse and owns the keyboard; settings apply fog, exposure and crowd count on the spot and reload the run for a quality tier.
+0.16.9: the links contract defines each built section, including open bridge decks and railings.
 
-0.9.4: the crowd draws on WebGPU. A pipeline there binds at most eight vertex buffers and three binds one per attribute; the body's per-instance data is packed into a motion vec4 (origin and heading), a pose vec2 (frame and clip), skin with the sleeve cut and shirt with the hem cut, so the body binds seven and the hair five. Probe bakes leave the crowd, props, transit and interiors out of their six renders; bloom is tighter on every tier.
+0.16.8: authored curb surfaces form continuous junction returns, with a pavement-edge construction for compatible world documents.
 
-0.9.3: every entrance leaf swings on the hinge the exterior box delivered it on, so a two or three leaf door parts in the middle instead of turning as one slab on the first jamb. Street fog is a run setting (`fog=`, default 0.0006 per metre, a fifth of what it was): the first block stays crisp and fog only separates the skyline into planes. `off=` leaves a look stage out of a run (fog, bloom, probe, haze, interiors) for telling them apart on screen. A hitch log names every frame gap over 40 ms with the work that landed in it: interior parse, room cut, band colliders, probe bake.
+0.16.7: every authored crossing receives repeated continental road markings in one city-wide draw.
 
-0.9.2: a streamed room enters the scene already dressed in the dim light binding. The room view shows rooms by distance and the slot pool lights them on its own timer, so a room could be drawn with no material for a few frames after its building landed, which threw inside the renderer on machines fast enough to fit frames into that window. A lift stop with no door leaves in a floor band, and a city with no bus stops, hang nothing instead of asking three to add an empty list.
+0.16.6: the game reports material resolution, names unresolved keys and renders them magenta without aborting world load.
 
-0.9.1: the interior streamer ticks through a load in flight. A building whose furnished interior is still arriving holds a placeholder in the live set, and the drop pass skips it instead of measuring a distance it does not have, so the frame loop survives the first fetch after the city loads.
+0.16.5: loading and detached floor warm-up compile shaders outside visible play frames.
 
-0.9: the missing world layers, in the playable city. Interiors stream: shells now come from each parcel's own exterior GLB, under a megabyte, and the furnished interior GLB, tens of megabytes, is fetched one building at a time, nearest first, only within 70 m and let go past 95 m. What arrives is cut into the published rooms and into floor bands, and only the bands within one floor of where the player stands are in the scene and in the physics world, so walking up the stairs moves the window. On the small city that took the run from 1876 MB of JS heap and 14.8 s to playable down to 574 MB and 4.3 s, and the frame's CPU submission from 20.4 ms to 8.3 ms with 26% fewer triangles. The material a mesh wears is its key plus the variant the interior box asked for, so patterned ceilings and lit ad screens resolve as themselves. Every inter-building link is built from its own centerline and cross-section and sliced onto the exact hole the facade was carved with, reproducing the published cut polygon to 1.3e-13: bridges and AC tubes walkable through, tubes walkable on top, tunnels at their basement apertures, wires along the published catenaries, 129 links on the small city in 3 draw calls and 6576 triangles. Transit puts an instanced shelter and a lit sign at every bus stop, drives buses at the positions `transitVehiclesAt` gives in closed form for 0.021 ms a frame, and builds train and subway station entrances as stairs down with signage: 3 draw calls on the small city, 9 on the full one with 23 stops and 9 bus routes. The 1:1 clock now drives a real sun arc: four sky states off the sun's elevation, one key light crossing from a 0.25 lux moon to 100000 lux of sun, the analytic sky scaled onto the same cd/m2 as everything else, and one number switching lamp lenses, venue signs, ad screens, facade fixtures, lit window panes and every real light together, with exposure following in stops taken from the illuminance ratio. A run still starts at night. Lifts are rideable: the published door leaves are cut out of their floor band and given a slide, a cab is built in each shaft, E at a landing calls it and E inside takes the next floor served, and a moving cab carries the player because a character controller is not pushed by a moving collider. Alleys and service corners carry 292 seeded trash bags, crates and boxes in 3 instanced draw calls, and the lamp rule now covers every walkable segment end to end: 31 posts that stood in a 5 m alley are gone and 13 wall packs at 3000 lm on real facades take their place, with a 0.5 m resampling of the whole walk graph finding zero dark metres. A building you can walk into reads lit, with a strip up both jambs and over the head of its entrance and its entrance fixture on, one draw call for the city's 66 doors; a venue's sign follows the population library, lit while somebody is on duty and dark once it shuts, and the minimap marks 31 enterable venues in the same two states. E acts on whatever the crosshair is pointing at rather than on whoever is nearest, with an aim too close to call going to the door, and the prompt names its target.
+0.16.4: hitch records include shader-link and texture-upload work.
 
-0.8: the city is lit in real photometric units and graded like a photograph. Every emitter the world builds is a light in lumens: 12000 lm street luminaires at 3000 K, 800 lm entrance fixtures, venue signs at 140 to 420 lm by width, ad screens by area, each with decay 2 and the range it publishes. WebGPU bins all 702 of them into a cluster grid, so the count costs one compute dispatch instead of a BRDF evaluation each; the WebGL2 backend batches the nearest 48 into uniform arrays, where a light arriving or leaving recompiles nothing. Interiors are cut into the rooms the interior box published and lit by the fixtures published for them, through a fixed pool of light slots whose ids never change, so walking through a doorway never compiles a shader. Each room's fill is computed rather than dialled, E = (F/A) p/(1-p) per channel, with the reflectance level from what the surface is and the hue measured off its own base colour map. AgX tone response at exposure 0.024, dropping 1.6 stops indoors over 0.6 s. Height fog whose colour is read back from the fixtures around the player, plus a thin indoor medium for rooms above the street's haze. An environment probe baked from the city at the player, rebaked on crossing a threshold, which is what wet ground and glass reflect. Bloom fed by the emissive channel, so tubes, lamp lenses and lit windows glow and the walls they light do not. Lamp lenses and facade fixtures emit at their own colour temperature; road paint is paint again; the roadway takes the materials box's road puddle variant. Four quality tiers (low, medium, high, ultra) decide what the frame spends, and the backend picks one default after init that nothing downstream asks about again. Measured headless on the small city at 17:00 against the reference bands (docs/RESEARCH-LIGHTING.md 9). Street level lands all five: median linear luminance 0.0198 in a band of 0.011 to 0.022, 16.6% of the frame under 0.01 against 16 to 48, 0.05% over 0.5 against under 1, darkest fifth at sRGB 22,13,9 against 8 to 27 on every channel, saturation 0.25 above half white against 0.05 to 0.73. A lit interior lands three: median 0.0096 against 0.005 to 0.021, 50.6% under 0.01 against 20 to 68, 0.01% over 0.5 against under 1.5, with its darkest fifth still bottoming out on black props and its highlights at 0.22 saturation against a band of 0.27. A street lamp's halo falls from its peak to 35% at 18 px and 6% at 60 px in a 1280 px frame, against a reference lamp at 8% past 18 px and 2% at 60 px in a 1200 px frame.
+0.16.3: the HUD names renderer backend, quality tier and render size.
 
-0.7.4: the street stays at the density the simulation calibrated. A person in the world is now a body of the game's own, and the simulation handle it carries is the identity it holds right now: a street handle names a sampled agent for one epoch of that pavement, so every few minutes the same people came back under new handles and were spawned again beside the ones already walking, which took a 20 minute stand on urbe-small at 13:00 from 29 people to 123 with the simulation reporting 27. Each refresh now fits the people already out there to the ones the simulation reports, of their own type and standing nearest to where it puts them, and only an agent nobody can be gets a new person; whoever is left over retires, keeps walking and leaves the world from more than 60 m back, so nobody is seen popping out. Lobby staff follow the same rule as the rota moves through the day. The same stand now holds 29, 28 and 27 as the simulation's own count falls, everyone on the street carries a handle from the epoch that is live, and no two people are ever the same one. `?stress=` copies are bodies with no identity, kept at their multiple of the real street.
+0.16.2: transit contract tests own deterministic stop and station fixtures.
 
-0.7.3: E on a person opens the talk panel again. A crowd handle for a street agent answers only for the sampling epoch it came from, a couple of minutes, and people keep walking the pavement long after that, so the handle each person spawned with stopped resolving, the refusal was swallowed and the press did nothing at all. A refused handle now sends talk back to the crowd for a live one: the simulation's slice for the pavement, or the lobby, that person is standing in, matched by type and by how far along the pavement they are, widened to the streets within 25 m for a walker who has crossed onto a stretch the simulation keeps empty, and never somebody another person in the crowd is already being. Where nobody is out there at all the panel opens on "someone passing by", so the key always does something.
+0.16.1: WebGL2 supports the low tier without GPU timing queries or bloom.
 
-0.7.2: playtest fixes on the street. The crowd is dressed: a garment map baked from each base body's own skeleton says which vertex is chest, forearm or shin, and every person carries their own skin tone, shirt, trousers, hair colour and sleeve and hem lengths, decided once from their crowd id. Nothing is added to the mesh, so 287 people still cost 4 draw calls at 0.08 ms of CPU per frame. Road markings are paint on the lane boundaries: broken white between lanes running the same way, a solid double line against oncoming traffic, with the teal centreline strips behind `?lanes=glow`. Venue parcels ask exterior for a lettered marquee saying what the place is (HOTEL, COFFEE, MARKET, CLINIC, POLICE, DINER) and every other building goes unsigned, so no facade wears a blank panel; every point light in the budget now sits on a real sign, entrance fixture, lamp lens or ad screen. Lamp posts are thin static cylinders and the player is pushed out of anyone they walk into, so a pole and a pedestrian are both solid. The roadway reads damp rather than glittering: darker albedo, roughness that still spreads a highlight, damped grain. `assemble-city` drops out-dir folders the blueprint no longer has and writes `manifest.json` (blueprint seed and version, the parcels whose build finished), which is the only list the game loads, so a stale folder can never stand a building inside another one.
+0.16.0: city mode renders assembled parcels over Atlas ground with orbit, zoom and parcel inspection.
 
-0.7.1: playtest pass on the street. W walks forward and A/D strafe the way they read. Lane markings are thin centreline strips on the asphalt, with the full lane-graph paint behind `?lanes=debug`. Cars drive their turn connection's curve through an intersection onto the next lane, pick it from a per-car seeded rng, and keep a 7 m following gap, so a corner is driven and two cars never stand in one place. Roadway resolves the darkest unpatterned entry in the database, distinct from the sidewalk. Street lamps run 19 m apart on alternating kerbs plus one per junction corner, never inside a plaza, each with an arm, a dark housing and an emissive lens carrying the glow. Every texture loads with flipY off, which is the glTF convention the geometry is authored in, so ad screens and signage read upright and normal maps light the right way. Curtains take a polygon offset behind their window glass and the camera near plane moves to 0.2 m, ending the window flicker. Facade light fixtures stop clipping to white; lit windows carry colour, per-window brightness and a head-to-sill fall-off in vertex colours, in one draw call. The crowd asks the simulation edge by edge around the player instead of sampling the whole city, and `?density=` passes streetDensity through. HUD gains a minimap (M) and an inventory grid (I).
+0.15.10: each parcel deterministically selects material pattern variants shared by the game and building viewer.
 
-0.7: playable first-person city (`?mode=game`): night street from the assembled GLBs and the blueprint's ground cover, Rapier capsule controller, doors into interiors continuous with the world, simulation-driven crowd on baked vertex animation (4 draw calls at any population) and lane-graph traffic, neon and lit windows, HUD with clock, prompt, position, NPC panel, pause menu and a live performance readout. Interior requests take `textures: keys` so the runtime resolves materials itself.
+0.15.9: the building viewer provides keyboard flight, drag look and fast movement.
 
-0.6: city batch (assemble-city): connections once, then the shared BuildingPipeline per parcel with parallel workers, QA report with verbatim failures; blueprint path is an option on every CLI; simulate takes an interiors dir.
-0.5.1: simulate takes its crowd handle from the scoped slice's sampled agents (simulation 0.2 samples up to 64 per scope; every district addressable).
-0.5: simulation wiring: npm run simulate boots createSimulation over the sample blueprint, connections networks and assembled interiors; prints stats, crowd slice, three NPC lives, latencies and a conservation check.
-0.4.2: core gate follows interior 0.5 modes (standard, compact, walkup, none); the full bridged sample assembles end to end.
-0.4.1: core gate follows interior 0.4 modes (standard, walkup, none); walkup parcels re-pick floors inside the cap and regenerate the shell before interior runs.
-0.4: building viewer (?mode=building&parcel=<id>): assembled GLBs textured through the materials database, world-scale tiling, glass transmission, TSL floor slice, magenta fallback plus report for unresolved keys.
-0.3.1: floor feasibility follows exterior v0.8's reqH-aware recipe (pinned floor contains its aperture); interior generation gated by interior's coreFeasibility surface (E_CORE_INFEASIBLE).
-0.3: assembly drives interior: InteriorRequest per parcel (derived seed, assignments derived from blueprint slots), --interior CLI flag writing building.glb, floors/*.json and npc.json to <out>/interior/.
-0.2.1: assembly floor choice follows exterior's feasibility recipe (schemas/floor-constants.json): seeded pick inside envelope x feasible range, guaranteed-legal counts.
-0.2: assembly box, first slice: per-parcel exterior BuildingRequest from atlas + connections, CLI through exterior to GLB and blueprint (src/assembly/CONTRACT.md).
-0.1: scale experiment app, three city render variants measured side by side (docs/RESEARCH.md 9).
-0.0: scaffold, contract pending.
+0.15.8: the building viewer resolves material variants from interior mesh metadata.
+
+0.15.7: building mode reads an explicit world output and reports missing builds through the development route.
+
+0.15.6: cars brake for the player and vehicle bodies apply measured pushback.
+
+0.15.5: character autostep accepts every published interior stair tread.
+
+0.15.4: environment probes render one cube face per frame and publish complete convolutions.
+
+0.15.3: lift cabs initialize at the ground floor.
+
+0.15.2: the browser uses the runtime-safe Quests entrypoint.
+
+0.15.1: NPC dialogue receives the live quest snapshot for the visible person.
+
+0.15.0: questlines cast against the game simulation, advance from live events and populate objective, completion and ending UI.
+
+0.14.1: interior NPCs occupy authored work, seat and lobby anchors and preserve seated dialogue.
+
+0.14.0: NPC dialogue uses an OpenAI-compatible local model and session memory.
+
+0.13.3: WebGPU crowd bodies fit the eight-buffer pipeline limit.
+
+0.13.2: kerbs border roadway edges, strip lights follow authored fixture angles and probes bake during stationary half-size updates.
+
+0.13.1: lit entrance strips follow facade angles, uncached material maps update on reload and assembly carries typed NPC sets.
+
+0.13: map mode renders Atlas block and parcel volumetrics with orbit controls and live venue marks.
+
+0.12: one world folder carries its blueprint, naming data, signs and continuous exterior-to-interior play.
+
+0.11: per-floor interior streaming bounds memory, geometry creation and collision work around the player's floor.
+
+0.10.1: radius-scoped simulation crowds preserve reported gender and complete nearby density.
+
+0.10: worker-built room and floor buffers enter the frame under an 8 ms budget; the presentation-only HUD provides maps, inventory, quests, dialogue, settings and controls.
+
+0.9.4: compact instance attributes keep WebGPU bodies at seven buffers and hair at five; probe bakes exclude dynamic layers.
+
+0.9.3: multi-leaf doors rotate from authored hinges, fog and look stages are run settings, and hitch logs name streamed work.
+
+0.9.2: streamed rooms enter with materials, floor bands accept missing doors and empty transit collections render safely.
+
+0.9.1: in-flight interiors retain a measurable live placeholder during stream reconciliation.
+
+0.9: the playable city streams interiors, builds 3D links and transit, runs a shared day cycle, supports lifts and routes centered interactions.
+
+0.8: photometric lighting, AgX exposure, height fog, environment probes and emissive bloom form four measured quality tiers.
+
+0.7.4: crowd reconciliation keeps simulation density stable across sampling epochs and retires unmatched bodies out of view.
+
+0.7.3: person interaction resolves a live simulation handle for the body under the crosshair.
+
+0.7.2: deterministic garments, road markings, venue signs, solid props and material-backed damp roads complete street presentation.
+
+0.7.1: movement controls, lane turns, street lamps, texture orientation, window rendering, edge-scoped crowds, minimap and inventory support street play.
+
+0.7: game mode provides first-person physics, continuous interiors, simulation crowds, traffic, lighting and live HUD metrics.
+
+0.6: city assembly runs Connections once, builds parcels in parallel and emits a QA report.
+
+0.5.1: simulation sampling selects a real crowd handle from its scoped slice.
+
+0.5: the simulation command reports population, crowd, NPC life, latency and conservation measures for an assembled world.
+
+0.4.2: assembly supports standard, compact, walkup and empty core modes across the bridged sample.
+
+0.4.1: assembly supports standard, walkup and empty core modes with envelope-safe floor selection.
+
+0.4: building mode renders assembled GLBs with database materials, world tiling, transmission and floor slicing.
+
+0.3.1: floor selection follows Exterior feasibility and Interior core feasibility.
+
+0.3: assembly converts parcel requests into exterior and optional interior artifacts.
+
+0.2.1: assembly chooses guaranteed-legal floor counts from Exterior constants.
+
+0.2: the assembly box maps Atlas and Connections data to per-parcel Exterior requests.
+
+0.1: the render scale experiment compares three seeded city variants with exported measurements.

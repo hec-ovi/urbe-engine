@@ -8,7 +8,7 @@ export class OpenAIPort {
 	constructor( baseUrl, model = null ) {
 
 		this.baseUrl = baseUrl.replace( /\/$/, '' );
-		this.model = model;
+		this.model = model || null;
 
 	}
 

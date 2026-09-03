@@ -14,7 +14,7 @@ Purpose: renders published public transport and provides schema-checked boarding
 - Journey update request: [schema/journey-update-request.schema.json](schema/journey-update-request.schema.json). Current clock time.
 - Disembark request: [schema/disembark-request.schema.json](schema/disembark-request.schema.json). Current clock time.
 - Gameplay frame request: [schema/gameplay-update-request.schema.json](schema/gameplay-update-request.schema.json). Current clock time and whether an existing world interaction owns E.
-- Gameplay service selection: [schema/gameplay-service-selection.schema.json](schema/gameplay-service-selection.schema.json). One exact service previously offered by the current frame.
+- Gameplay service selection: [schema/gameplay-service-selection.schema.json](schema/gameplay-service-selection.schema.json). One exact service offered by the current frame.
 
 ## Outputs
 

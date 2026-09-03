@@ -1,0 +1,262 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:server:talk-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["out", "npc", "behavior", "line", "timeMin"],
+  "properties": {
+    "out": { "type": "string", "pattern": "^/out(?:/[A-Za-z0-9._-]+)+$" },
+    "npc": { "$ref": "#/$defs/npc" },
+    "behavior": { "$ref": "#/$defs/behavior" },
+    "line": { "type": "string", "minLength": 1 },
+    "timeMin": { "type": "number" },
+    "quests": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/quest" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "name": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["given", "family"],
+      "properties": {
+        "given": { "type": "string", "minLength": 1 },
+        "family": { "type": "string", "minLength": 1 }
+      }
+    },
+    "place": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "enum": ["edge", "stop", "parcel", "route"] },
+        "id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "activity": {
+      "enum": ["sleeping", "home", "working", "commuting", "shopping", "leisure", "transit_wait"]
+    },
+    "shift": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startMin", "endMin", "days", "kind"],
+      "properties": {
+        "startMin": { "type": "number" },
+        "endMin": { "type": "number" },
+        "days": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0, "maximum": 6 },
+          "uniqueItems": true
+        },
+        "kind": { "enum": ["day", "evening", "night", "rotating"] }
+      }
+    },
+    "job": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parcelId", "role", "shift"],
+      "properties": {
+        "parcelId": { "$ref": "#/$defs/id" },
+        "role": { "$ref": "#/$defs/id" },
+        "shift": { "$ref": "#/$defs/shift" }
+      }
+    },
+    "transitJob": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["place", "role", "shift"],
+      "properties": {
+        "place": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "id"],
+          "properties": {
+            "kind": { "enum": ["stop", "route"] },
+            "id": { "$ref": "#/$defs/id" }
+          }
+        },
+        "role": { "$ref": "#/$defs/id" },
+        "shift": { "$ref": "#/$defs/shift" }
+      }
+    },
+    "familyMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["npcId", "relation", "name", "instantiated"],
+      "properties": {
+        "npcId": { "$ref": "#/$defs/id" },
+        "relation": { "enum": ["partner", "child", "parent", "sibling", "roommate"] },
+        "name": { "$ref": "#/$defs/name" },
+        "instantiated": { "type": "boolean" }
+      }
+    },
+    "pathEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edgeId", "direction", "path3", "distanceM"],
+      "properties": {
+        "edgeId": { "$ref": "#/$defs/id" },
+        "direction": { "enum": [-1, 1] },
+        "path3": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [{ "type": "number" }, { "type": "number" }, { "type": "number" }],
+            "items": false,
+            "minItems": 3,
+            "maxItems": 3
+          }
+        },
+        "distanceM": { "type": "number", "minimum": 0 }
+      }
+    },
+    "routine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["days", "startMin", "endMin", "activity", "place"],
+      "properties": {
+        "days": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0, "maximum": 6 },
+          "uniqueItems": true
+        },
+        "startMin": { "type": "number" },
+        "endMin": { "type": "number" },
+        "activity": { "$ref": "#/$defs/activity" },
+        "place": { "$ref": "#/$defs/place" },
+        "walk": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["from", "to", "edges", "totalDistanceM"],
+          "properties": {
+            "from": { "$ref": "#/$defs/place" },
+            "to": { "$ref": "#/$defs/place" },
+            "edges": { "type": "array", "items": { "$ref": "#/$defs/pathEdge" } },
+            "totalDistanceM": { "type": "number", "minimum": 0 }
+          }
+        },
+        "transitLeg": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["routeId", "boardStopId", "alightStopId"],
+          "properties": {
+            "routeId": { "$ref": "#/$defs/id" },
+            "boardStopId": { "$ref": "#/$defs/id" },
+            "alightStopId": { "$ref": "#/$defs/id" }
+          }
+        }
+      }
+    },
+    "npc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["npcId", "name", "gender", "appearanceSeed", "type", "home", "family", "routine", "flags"],
+      "properties": {
+        "npcId": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/name" },
+        "gender": { "enum": ["male", "female"] },
+        "appearanceSeed": { "type": "integer" },
+        "type": { "$ref": "#/$defs/id" },
+        "home": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["parcelId", "unit"],
+          "properties": {
+            "parcelId": { "$ref": "#/$defs/id" },
+            "unit": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "job": { "$ref": "#/$defs/job" },
+        "transitJob": { "$ref": "#/$defs/transitJob" },
+        "family": { "type": "array", "items": { "$ref": "#/$defs/familyMember" } },
+        "routine": { "type": "array", "items": { "$ref": "#/$defs/routine" } },
+        "flags": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["dead", "custom"],
+          "properties": {
+            "dead": { "type": "boolean" },
+            "custom": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
+          }
+        }
+      }
+    },
+    "interior": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["at"],
+          "properties": {
+            "at": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["anchorId", "animation", "untilMin"],
+              "properties": {
+                "anchorId": { "$ref": "#/$defs/id" },
+                "animation": {
+                  "enum": ["idle_stand", "idle_sit", "idle_lean", "work_type", "work_serve", "work_cook", "sweep", "patrol_stand", "exercise", "sleep", "use_toilet"]
+                },
+                "untilMin": { "type": "number" }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["walk"],
+          "properties": {
+            "walk": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["fromAnchorId", "toAnchorId"],
+              "properties": {
+                "fromAnchorId": { "$ref": "#/$defs/id" },
+                "toAnchorId": { "$ref": "#/$defs/id" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "behavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "activity", "place", "interrupted"],
+      "properties": {
+        "mode": { "enum": ["interior", "street", "transit", "home"] },
+        "activity": { "$ref": "#/$defs/activity" },
+        "place": { "$ref": "#/$defs/place" },
+        "interior": { "$ref": "#/$defs/interior" },
+        "interrupted": { "type": "boolean" }
+      }
+    },
+    "quest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "cast", "state"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "cast": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": { "$ref": "#/$defs/id" }
+        },
+        "state": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["activeStepIds", "completedStepIds", "flags"],
+          "properties": {
+            "activeStepIds": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
+            "completedStepIds": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
+            "flags": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
+            "endingId": { "$ref": "#/$defs/id" }
+          }
+        }
+      }
+    }
+  }
+}

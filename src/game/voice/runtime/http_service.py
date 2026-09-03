@@ -9,6 +9,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from validation import SpeechEnvelopeError, validate_request
+
 
 class RequestBodySizeError(ValueError):
     pass
@@ -126,13 +128,10 @@ class SpeechHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/cancel":
             try:
-                request = self._read_request()
-                request_id = request.get("requestId")
-                if not isinstance(request_id, str) or not request_id:
-                    raise ValueError("cancel requestId is required")
-                self._send(200, self.server.runtime.cancel(request_id))
+                request = validate_request("cancel", self._read_request())
+                self._send(200, self.server.runtime.cancel(request["requestId"]))
             except Exception as error:
-                self._send(413 if isinstance(error, RequestBodySizeError) else 400, {"error": str(error)})
+                self._send(self._error_status(error), {"error": str(error)})
             return
         self._handle()
 
@@ -147,16 +146,32 @@ class SpeechHandler(BaseHTTPRequestHandler):
         try:
             request = None
             if self.command == "POST":
-                request = self._read_request()
+                request = validate_request(operation, self._read_request())
             self._send(200, self.server.runtime.request(operation, request))
         except Exception as error:
-            self._send(413 if isinstance(error, RequestBodySizeError) else 503, {"error": str(error)})
+            self._send(self._error_status(error), {"error": str(error)})
 
     def _read_request(self):
-        size = int(self.headers.get("Content-Length", "0"))
-        if size <= 0 or size > 48 * 1024 * 1024:
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+        except ValueError as error:
+            raise SpeechEnvelopeError("speech Content-Length is invalid") from error
+        if size <= 0:
+            raise SpeechEnvelopeError("speech request body is empty")
+        if size > 48 * 1024 * 1024:
             raise RequestBodySizeError("speech request body size is invalid")
-        return json.loads(self.rfile.read(size))
+        return json.loads(
+            self.rfile.read(size),
+            parse_constant=lambda value: (_ for _ in ()).throw(SpeechEnvelopeError(f"invalid JSON number: {value}")),
+        )
+
+    @staticmethod
+    def _error_status(error):
+        if isinstance(error, RequestBodySizeError):
+            return 413
+        if isinstance(error, (SpeechEnvelopeError, json.JSONDecodeError, UnicodeDecodeError)):
+            return 400
+        return 503
 
     def _send(self, status, payload):
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")

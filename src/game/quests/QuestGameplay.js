@@ -136,6 +136,7 @@ export class QuestGameplay {
 		const targets = this.actions.targets( { timeMin } );
 		const mechanics = ( this.actions.mechanics?.( { timeMin } ) ?? [] ).map( ( target ) => this.#presentMechanic( target ) );
 		this.#advanceEscort( mechanics, { timeMin, playerPlaces, feet } );
+		this.#materializePassiveCast( mechanics, { timeMin, playerPlaces, feet } );
 		this.#sync( [ ...targets, ...mechanics ] );
 		const candidates = [];
 		this.liveInteractions.clear();
@@ -206,16 +207,16 @@ export class QuestGameplay {
 
 	}
 
-	/** Accepts only a fatal measured impact against the active assassination identity. */
-	fatalImpact( impact, timeMin ) {
+	/** Accepts only a fatal measured impact whose rendered body resolves to the active assassination identity. */
+	fatalImpact( impact, npcId, timeMin ) {
 
-		if ( ! impact?.fatal ) return null;
+		if ( ! impact?.fatal || ! npcId ) return null;
 		const target = this.actions.mechanics( { timeMin } ).find( ( candidate ) =>
-			candidate.kind === 'assassinate' && candidate.actorIds[ 0 ] === impact.personId && candidate.availability.available );
+			candidate.kind === 'assassinate' && candidate.actorIds[ 0 ] === npcId && candidate.availability.available );
 		if ( ! target ) return null;
 		const result = this.mechanics.complete( {
 			questId: target.questId, stepId: target.stepId, timeMin,
-			event: { kind: 'killed', npcId: impact.personId }
+			event: { kind: 'killed', npcId }
 		} );
 		if ( result.ok ) this.changedTargets.add( target.targetKey );
 		return result;
@@ -231,11 +232,18 @@ export class QuestGameplay {
 		const routeId = action.result.routeId;
 		const tripId = action.result.tripId;
 		if ( routeId !== this.transitQuest.routeId || tripId !== this.transitQuest.tripId ) return null;
-		this.#carryPassenger( position, routeId );
+		if ( ! this.#carryPassenger( position, routeId ) ) {
+
+			const tracked = this.transitQuest;
+			this.transitQuest = null;
+			this.#releasePassenger( tracked.passengerNpcId, timeMin, position );
+			return null;
+
+		}
 		if ( action.action !== 'disembark' && ! action.result.autoDisembarked ) return null;
 		const tracked = this.transitQuest;
 		this.transitQuest = null;
-		this.#releasePassenger( tracked.passengerNpcId, timeMin );
+		this.#releasePassenger( tracked.passengerNpcId, timeMin, position );
 		if ( ! atPlace( playerPlaces, runtimePlace( tracked.target.target.to ) ) ) return null;
 		const result = this.mechanics.complete( {
 			questId: tracked.target.questId, stepId: tracked.target.stepId, timeMin,
@@ -384,9 +392,21 @@ export class QuestGameplay {
 			} catch { return null; }
 
 		}
-		const result = this.mechanics.complete( {
-			questId: target.questId, stepId: target.stepId, timeMin, event: mechanicEvent( target )
-		} );
+		const request = mechanicRequest( target, timeMin );
+		const rescue = target.kind === 'rescue' ? this.#acquireRescueFollow( target, interaction, request ) : null;
+		if ( rescue && ! rescue.ok ) return rescue.result;
+		let result;
+		try {
+
+			result = this.mechanics.complete( request );
+
+		} catch ( error ) {
+
+			if ( rescue?.started ) this.#releaseFollower( target.actorIds[ 0 ], timeMin, interaction.playerPosition );
+			return this.mechanics.reject( request, messageOf( error ) );
+
+		}
+		if ( ! result.ok && rescue?.started ) this.#releaseFollower( target.actorIds[ 0 ], timeMin, interaction.playerPosition );
 		if ( result.ok ) {
 
 			this.changedTargets.add( target.targetKey );
@@ -394,27 +414,67 @@ export class QuestGameplay {
 			this.animations?.questInteraction( {
 				targetKey: target.targetKey, action: offered.action, members: interaction.members ?? []
 			} );
-			if ( target.kind === 'rescue' ) this.#followReleasedNpc( target, interaction, timeMin );
 
 		}
 		return result;
 
 	}
 
-	#followReleasedNpc( target, interaction, timeMin ) {
+	#acquireRescueFollow( target, interaction, request ) {
 
-		if ( ! this.continuity || target.actorIds.length !== 1 ) return;
+		if ( ! this.continuity || target.actorIds.length !== 1 ) return {
+			ok: false,
+			result: this.mechanics.reject( request, 'The rescued NPC cannot enter follow control.' )
+		};
+		const npcId = target.actorIds[ 0 ];
+		let started = false;
 		try {
 
-			const state = this.continuity.serialize().follow;
-			if ( state?.npcId === target.actorIds[ 0 ] && state.mode === 'following' ) return;
-			if ( state ) return;
-			const actor = this.continuity.startFollow( {
-				npcId: target.actorIds[ 0 ], timeMin, playerPosition: interaction.playerPosition.toArray()
-			} );
-			this.crowd.syncActor( actor, interaction.playerPosition );
+			const state = this.continuity.serialize();
+			const existing = state.follow?.npcId === npcId && state.follow.mode === 'following';
+			if ( state.follow && ! existing ) return {
+				ok: false,
+				result: this.mechanics.reject( request, `NPC ${state.follow.npcId} already has movement control.` )
+			};
+			started = ! existing;
+			const actor = existing
+				? state.actors.find( ( candidate ) => candidate.npcId === npcId )
+				: this.continuity.startFollow( {
+					npcId, timeMin: request.timeMin, playerPosition: interaction.playerPosition.toArray()
+				} );
+			if ( ! actor || ! this.crowd.syncActor( actor, interaction.playerPosition ) ) {
 
-		} catch {}
+				if ( started ) this.#releaseFollower( npcId, request.timeMin, interaction.playerPosition );
+				return {
+					ok: false,
+					result: this.mechanics.reject( request, `NPC ${npcId} is unavailable for follow control.` )
+				};
+
+			}
+			return { ok: true, started };
+
+		} catch ( error ) {
+
+			if ( started ) this.#releaseFollower( npcId, request.timeMin, interaction.playerPosition );
+			return { ok: false, result: this.mechanics.reject( request, messageOf( error ) ) };
+
+		}
+
+	}
+
+	#materializePassiveCast( targets, { timeMin, playerPlaces, feet } ) {
+
+		for ( const target of targets ) {
+
+			if ( ! target.availability.available || this.changedTargets.has( target.targetKey ) || target.actorIds.length !== 1 ) continue;
+			const assassination = target.kind === 'assassinate';
+			const transitPassenger = target.kind === 'transportation'
+				&& target.target.mode === 'public-transit'
+				&& atPlace( playerPlaces, runtimePlace( target.target.from ) );
+			if ( ! assassination && ! transitPassenger ) continue;
+			this.#questMember( target.actorIds[ 0 ], timeMin, feet, target.place );
+
+		}
 
 	}
 
@@ -454,52 +514,92 @@ export class QuestGameplay {
 			&& candidate.actorIds.length <= 1
 			&& candidate.target.cargoItemIds.every( ( id ) => this.session.inventoryView().some( ( item ) => item.id === id ) ) );
 		if ( ! target ) return null;
-		if ( target.actorIds.length === 1 && ! this.#ensurePassenger( target.actorIds[ 0 ], state.timeMin, state.position ) ) return null;
+		if ( target.actorIds.length === 1 && ! this.#ensurePassenger( target, state.timeMin, state.position ) ) return null;
 		this.transitQuest = {
 			target, tripId: result.service.tripId, routeId: result.service.routeId,
 			passengerNpcId: target.actorIds[ 0 ] ?? null
 		};
-		this.#carryPassenger( state.position, result.service.routeId );
+		if ( ! this.#carryPassenger( state.position, result.service.routeId ) ) {
+
+			const tracked = this.transitQuest;
+			this.transitQuest = null;
+			this.#releasePassenger( tracked.passengerNpcId, state.timeMin, state.position );
+
+		}
 		return null;
 
 	}
 
-	#ensurePassenger( npcId, timeMin, position ) {
+	#ensurePassenger( target, timeMin, position ) {
 
 		if ( ! this.continuity ) return false;
+		const npcId = target.actorIds[ 0 ];
+		const player = new THREE.Vector3().fromArray( position );
+		const member = this.#questMember( npcId, timeMin, player, runtimePlace( target.target.from ) );
+		if ( ! member || member.position.distanceTo( player ) > ESCORT_REACH ) return false;
 		const state = this.continuity.serialize();
-		const actor = state.actors.find( ( candidate ) => candidate.npcId === npcId );
-		if ( ! actor?.position || new THREE.Vector3().fromArray( actor.position )
-			.distanceTo( new THREE.Vector3().fromArray( position ) ) > ESCORT_REACH ) return false;
 		const follow = state.follow;
 		if ( follow?.npcId === npcId && follow.mode === 'following' ) return true;
 		if ( follow ) return false;
 		try {
 
-			this.continuity.startFollow( { npcId, timeMin, playerPosition: [ ...position ] } );
+			const actor = this.continuity.startFollow( { npcId, timeMin, playerPosition: [ ...position ] } );
+			if ( ! this.crowd.syncActor( actor, player ) ) {
+
+				this.#releaseFollower( npcId, timeMin, player );
+				return false;
+
+			}
 			return true;
 
-		} catch { return false; }
+		} catch {
+
+			this.#releaseFollower( npcId, timeMin, player );
+			return false;
+
+		}
 
 	}
 
 	#carryPassenger( position, routeId ) {
 
 		const npcId = this.transitQuest?.passengerNpcId;
-		if ( ! npcId ) return;
+		if ( ! npcId ) return true;
 		try {
 
 			const actor = this.continuity.carryFollower( { npcId, position: [ ...position ], routeId } );
 			this.crowd.syncActor( actor, vector3( { x: position[ 0 ], y: position[ 1 ], z: position[ 2 ] } ) );
+			return true;
 
-		} catch { this.transitQuest = null; }
+		} catch { return false; }
 
 	}
 
-	#releasePassenger( npcId, timeMin ) {
+	#releasePassenger( npcId, timeMin, position ) {
 
-		if ( ! npcId ) return;
-		try { this.continuity.stopFollow( { timeMin } ); } catch {}
+		this.#releaseFollower( npcId, timeMin, new THREE.Vector3().fromArray( position ) );
+
+	}
+
+	#releaseFollower( npcId, timeMin, player ) {
+
+		if ( ! npcId || ! this.continuity ) return false;
+		try {
+
+			const follow = this.continuity.serialize().follow;
+			if ( follow?.npcId !== npcId || ! [ 'following', 'leading' ].includes( follow.mode ) ) return false;
+			const actor = this.continuity.stopFollow( { timeMin } );
+			this.crowd.syncActor( actor, player );
+			return true;
+
+		} catch { return false; }
+
+	}
+
+	#questMember( npcId, timeMin, player, place ) {
+
+		const anchor = place?.kind === 'parcel' ? this.anchors.get( place.id ) : null;
+		return this.crowd.questMember( npcId, timeMin, player, place, anchor );
 
 	}
 
@@ -731,6 +831,17 @@ function controlError( error ) {
 function messageOf( error ) {
 
 	return error instanceof Error ? error.message : String( error );
+
+}
+
+function mechanicRequest( target, timeMin ) {
+
+	return {
+		questId: target.questId,
+		stepId: target.stepId,
+		timeMin,
+		event: mechanicEvent( target )
+	};
 
 }
 

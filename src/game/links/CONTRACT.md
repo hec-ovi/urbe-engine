@@ -26,7 +26,7 @@ A kind this box does not know is skipped.
 
 ## Invariants
 - A link's geometry is its own `path` and `crossSection` and nothing else. Ends are never inset or extended: `path[0]` and the last point already sit on the two face planes.
-- Each end face is sliced by the plane of its aperture's `cut.polygon`, so a diagonal link closes on the carved hole instead of a square cut near it. The end cross section coincides with the cut polygon to within a millimetre.
+- Each end face is sliced by the plane of its aperture's `cut.polygon`, so a diagonal link closes on the carved hole. The end cross section coincides with the cut polygon to within a millimetre.
 - The section frame is the one the apertures were cut with: `right` horizontal and square to the axis, `up` square to both. A sloped link tilts its section with the axis.
 - Every link ends on a wall it faces, so the axis is never parallel to the face plane it terminates on (measured minimum over the city: 0.65 of a right angle away from parallel).
 - A rect link is one shell with no wall thickness: the aperture's cut is that surface, and the floor you walk on is the section's own bottom, level with the floor plate the exterior box aligns to the aperture's `base`. Shells are drawn from both sides.

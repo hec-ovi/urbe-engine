@@ -31,6 +31,22 @@ describe( 'launcher route schema', () => {
 
 	} );
 
+	it( 'compiles the closed NPC dialogue route schemas', async () => {
+
+		const ajv = new Ajv2020( { allErrors: true, strict: true } );
+		for ( const path of [
+			'./schema/talk-request.schema.json',
+			'./schema/talk-response.schema.json',
+			'./schema/talk-error.schema.json'
+		] ) {
+
+			const value = await schema( path );
+			expect( () => ajv.compile( value ) ).not.toThrow();
+
+		}
+
+	} );
+
 } );
 
 async function schema( relative ) {

@@ -29,7 +29,7 @@ Closed set in [schema/creation-error.schema.json](schema/creation-error.schema.j
 
 ## Dependencies
 
-- Atlas built CLI through `../../../atlas/CONTRACT.md`; generation executes its existing `dist/cli.mjs` so the sibling source tree can stay read-only in the engine service.
+- Atlas CLI through `../../../atlas/CONTRACT.md`; generation invokes `npm run generate -- ...` against the prepared read-only sibling box.
 - Assembly CLI through `../assembly/CONTRACT.md`.
 - Quest materialization CLI through `../../../quests/creation/CONTRACT.md` and its complete [engine handoff](../../../quests/handoff/CONTRACT.md).
 - Quest bundle validation and selection through `../quest-bundle/CONTRACT.md`.

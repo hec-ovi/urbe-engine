@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import http.client
+import hashlib
 import json
 import threading
 import time
@@ -145,13 +146,162 @@ class SpeechHttpServerTest(unittest.TestCase):
             server.server_close()
             thread.join(2)
 
+    def test_public_synthesis_transcription_and_cancel_validate_exact_envelopes(self):
+        server = SpeechHttpServer(("127.0.0.1", 0))
+        server.runtime.close()
+        server.runtime = StubRuntime()
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+        try:
+            accepted = [
+                ("/synthesize", adapter_request()),
+                ("/transcribe", transcription_request()),
+                ("/cancel", {"requestId": "speech-one"}),
+            ]
+            for path, payload in accepted:
+                status, result = post(server, path, payload)
+                self.assertEqual(status, 200)
+                self.assertEqual(result["requestId"], payload["requestId"])
+
+            invalid_adapter = adapter_request()
+            invalid_adapter["unexpected"] = True
+            invalid_scalar = adapter_request()
+            invalid_scalar["segmentIndex"] = True
+            invalid_transcription = transcription_request()
+            invalid_transcription["byteSize"] = "4"
+            invalid = [
+                ("/synthesize", invalid_adapter),
+                ("/synthesize", invalid_scalar),
+                ("/transcribe", invalid_transcription),
+                ("/cancel", {"requestId": "speech-one", "reason": "stale"}),
+            ]
+            for path, payload in invalid:
+                status, result = post(server, path, payload)
+                self.assertEqual(status, 400)
+                self.assertEqual(set(result), {"error"})
+
+            status, result = post_raw(server, "/synthesize", b"{")
+            self.assertEqual(status, 400)
+            self.assertEqual(set(result), {"error"})
+
+            self.assertEqual([call[0] for call in server.runtime.requests], ["synthesize", "transcribe"])
+            self.assertEqual(server.runtime.cancellations, ["speech-one"])
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(2)
+
+    def test_public_runtime_failures_return_service_unavailable(self):
+        server = SpeechHttpServer(("127.0.0.1", 0))
+        server.runtime.close()
+        server.runtime = FailingRuntime()
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+        try:
+            status, result = post(server, "/synthesize", adapter_request())
+            self.assertEqual(status, 503)
+            self.assertEqual(result, {"error": "speech service unavailable"})
+
+            status, result = post(server, "/cancel", {"requestId": "speech-one"})
+            self.assertEqual(status, 503)
+            self.assertEqual(result, {"error": "speech service unavailable"})
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(2)
+
 
 class StubRuntime:
+    def __init__(self):
+        self.requests = []
+        self.cancellations = []
+
     def close(self):
         pass
 
+    def request(self, operation, request=None):
+        self.requests.append((operation, request))
+        return {"operation": operation, "requestId": request["requestId"]}
+
     def cancel(self, request_id):
+        self.cancellations.append(request_id)
         return {"requestId": request_id, "cancelled": True, "previousStatus": "active"}
+
+
+class FailingRuntime(StubRuntime):
+    def request(self, operation, request=None):
+        raise RuntimeError("speech service unavailable")
+
+    def cancel(self, request_id):
+        raise RuntimeError("speech service unavailable")
+
+
+def post(server, path, payload):
+    return post_raw(server, path, json.dumps(payload).encode("utf-8"))
+
+
+def post_raw(server, path, payload):
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+    connection.request("POST", path, payload, {"Content-Type": "application/json"})
+    response = connection.getresponse()
+    result = json.loads(response.read())
+    status = response.status
+    connection.close()
+    return status, result
+
+
+def adapter_request():
+    digest = "1" * 64
+    return {
+        "version": "1",
+        "requestId": "speech-one",
+        "cacheKey": "2" * 64,
+        "segmentIndex": 0,
+        "profileRecord": {
+            "version": "1",
+            "profileDigest": "3" * 64,
+            "profile": {
+                "version": "1",
+                "profileId": "voice-one",
+                "npcId": "npc-one",
+                "revision": 1,
+                "seed": 7,
+                "language": "en-US",
+                "delivery": {"pace": 1, "pitchSemitones": 0, "energy": 1},
+                "preset": {"presetId": "chatterbox-nano-built-in", "artifactSha256": "4" * 64},
+                "engine": {
+                    "backendId": "chatterbox-nano",
+                    "modelRevision": "nano",
+                    "modelSha256": digest,
+                    "runtimeId": "urbe-local-speech",
+                    "runtimeRevision": "1",
+                    "runtimeSha256": "5" * 64,
+                },
+                "approvedReactions": [],
+            },
+        },
+        "delivery": {"pace": 1, "pitchSemitones": 0, "energy": 1},
+        "inference": {"seed": 7, "options": {}},
+        "output": {
+            "sampleRate": 24000,
+            "channels": 1,
+            "codec": "pcm_s16le",
+            "codecVersion": "pcm-s16le-v1",
+        },
+        "spans": [{"spanIndex": 0, "span": {"kind": "text", "text": "Wait here."}}],
+    }
+
+
+def transcription_request():
+    audio = b"RIFF"
+    return {
+        "version": "1",
+        "requestId": "microphone-one",
+        "mediaType": "audio/wav",
+        "byteSize": len(audio),
+        "sha256": hashlib.sha256(audio).hexdigest(),
+        "dataBase64": "UklGRg==",
+    }
 
 
 if __name__ == "__main__":

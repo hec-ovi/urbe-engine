@@ -12,7 +12,7 @@ FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 WORKDIR /service
 COPY --from=build /opt/urbe-speech /opt/urbe-speech
-COPY Dockerfile pyproject.toml uv.lock artifacts.py http_service.py protocol.py service.py speech_models.py ./
+COPY Dockerfile pyproject.toml uv.lock artifacts.py http_service.py protocol.py service.py speech_models.py validation.py ./
 
 ENV VIRTUAL_ENV=/opt/urbe-speech
 ENV PATH="/opt/urbe-speech/bin:$PATH"

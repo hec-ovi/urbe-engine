@@ -895,7 +895,7 @@ export class GameApp {
 
 				if ( accepted ) {
 
-					const result = this.questGameplay.fatalImpact( impact, this.clock.timeMin );
+					const result = this.questGameplay.fatalImpact( impact, person.npcId, this.clock.timeMin );
 					if ( result ) this.#questActionResult( result );
 					return;
 

@@ -48,7 +48,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - `E_NPC_INPUT`: an API request or restore state does not match its schema.
 - `E_NPC_OUTPUT`: an actor or save result does not match its schema.
 - `E_NPC_UNKNOWN`: the simulation does not hold that instanced npcId.
-- `E_NPC_UNAVAILABLE`: the NPC is dead or no longer available.
+- `E_NPC_UNAVAILABLE`: the NPC is dead or unavailable.
 - `E_NPC_PLACE`: the NPC's current scheduled state has no position, including a route without a matching passenger leg or complete Connections path3 and timing facts.
 - `E_NPC_PATH`: the player or scheduled destination is unreachable.
 - `E_NPC_CONFLICT`: another NPC has active follow, conversation, or pose control, or a release does not match the controlled identity.
@@ -57,7 +57,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 
 - Simulation public NPC and continuity APIs.
 - Connections walk graph and transit route output.
-- Character asset catalog for purchased animation clips.
+- Character asset catalog for the audited animation clips.
 
 ## Invariants
 
@@ -68,11 +68,11 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - Scheduled passenger transit uses the routine's exact route, board stop, alight stop and progress. Ordered duplicate stops select the shortest forward portion of the route shape, so return legs keep their direction and heading.
 - Follow speed is bounded and its stopping distance is deterministic. Explicit stop does not teleport the visible actor to its schedule.
 - Lead speed is bounded by the same Connections path. Passenger carry requires the exact active follower and route id.
-- Idle, walk, sprint and seated states select the corresponding purchased clip. Crouch is selected only for an explicit crouch action.
+- Idle, walk, sprint and seated states select the corresponding audited clip. Crouch is selected only for an explicit crouch action.
 - Explicit crouch is cast and npcId controlled. Player C input, proximity, movement speed, dialogue, and quest step kind cannot start it.
 - An interior waiter, barista or vendor keeps the simulation type chosen for that post. The engine does not reinterpret an interior role as an unrelated type.
 
-## Remaining limitations
+## Boundary behavior
 
 - The gameplay animation coordinator owns speaking and listening gestures. This controller publishes the exact identity, posture, follow mode, and routine resume state it consumes.
 - Simulation route workers publish a route workplace but no trip assignment. They fail closed because no authoritative vehicle position or route progress exists; passenger commute legs carry the required transit assignment.

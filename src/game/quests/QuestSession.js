@@ -20,7 +20,7 @@ export class QuestSession {
 	 * @param definitions QuestlineDefinition list, main questline first
 	 * @param sim the SimulationPort the runtime reads (SimBridge)
 	 * @param timeMin when the cast is resolved: whoever is on duty around now
-	 * @param persisted optional game-descriptor quest progress or legacy snapshot() entries
+	 * @param persisted optional game-descriptor quest progress or compact snapshot() entries
 	 */
 	static create( definitions, sim, timeMin, persisted = [] ) {
 
@@ -72,7 +72,7 @@ export class QuestSession {
 
 	}
 
-	/** Accepts game-descriptor progress or the legacy snapshot() entry. */
+	/** Accepts game-descriptor progress or a compact snapshot() entry. */
 	static #persistedRuntime( definition, persisted, sim ) {
 
 		const snapshot = persisted.runtime ?? ( persisted.cast && persisted.state ? persisted : null );
@@ -107,13 +107,6 @@ export class QuestSession {
 		const stepIds = new Set( definition.steps.map( ( step ) => step.stepId ) );
 		const flagIds = new Set( definition.flags );
 		const endingIds = new Set( definition.endings.map( ( ending ) => ending.endingId ) );
-		const unique = ( values ) => new Set( values ).size === values.length;
-
-		if ( ! unique( state.activeStepIds ) || ! unique( state.completedStepIds ) || ! unique( state.flags ) ) {
-
-			throw new Error( 'runtime state contains duplicate ids' );
-
-		}
 		if ( [ ...state.activeStepIds, ...state.completedStepIds ].some( ( id ) => ! stepIds.has( id ) ) ) {
 
 			throw new Error( 'runtime state names a step no longer in the definition' );

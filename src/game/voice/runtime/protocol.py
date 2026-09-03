@@ -92,7 +92,7 @@ def runtime_sha256(root: Path) -> str:
     digest = hashlib.sha256()
     for name in (
         "artifacts.py", "Dockerfile", "http_service.py", "protocol.py", "pyproject.toml",
-        "service.py", "speech_models.py", "uv.lock",
+        "service.py", "speech_models.py", "uv.lock", "validation.py",
     ):
         digest.update(name.encode("utf-8"))
         digest.update(b"\0")

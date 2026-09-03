@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
 import { sha256Hex } from '../game/voice/src/Canonical.js';
 import { speechRoute } from './speechRoute.js';
 import { SpeechRuntimeHttp } from './SpeechRuntimeHttp.js';
@@ -38,7 +38,7 @@ describe( 'local speech HTTP boundary', () => {
 		const rejected = await fetch( `${origin}/api/speech/transcribe`, {
 			method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( request )
 		} );
-		expect( rejected.status ).toBe( 503 );
+		expect( rejected.status ).toBe( 400 );
 		expect( ( await rejected.json() ).error ).toContain( 'SHA-256' );
 		expect( runtime.request ).toHaveBeenCalledOnce();
 
@@ -72,6 +72,28 @@ describe( 'local speech HTTP boundary', () => {
 
 	} );
 
+	it( 'uses the contracted browser-route status classes', async () => {
+
+		const runtime = { request: vi.fn( async () => { throw new Error( 'speech service unavailable' ); } ), dispose: vi.fn() };
+		const origin = await serve( runtime );
+		const malformed = await fetch( `${origin}/api/speech/synthesize`, {
+			method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{'
+		} );
+		expect( malformed.status ).toBe( 400 );
+		expect( await malformed.json() ).toEqual( { error: expect.any( String ) } );
+		expect( runtime.request ).not.toHaveBeenCalled();
+
+		const oversized = await oversizedPost( `${origin}/api/speech/synthesize` );
+		expect( oversized.status ).toBe( 413 );
+		expect( oversized.body ).toEqual( { error: 'speech request body exceeds 48 MiB' } );
+		expect( runtime.request ).not.toHaveBeenCalled();
+
+		const unavailable = await fetch( `${origin}/api/speech/health` );
+		expect( unavailable.status ).toBe( 503 );
+		expect( await unavailable.json() ).toEqual( { error: 'speech service unavailable' } );
+
+	} );
+
 	async function serve( runtime ) {
 
 		let handler;
@@ -90,6 +112,27 @@ describe( 'local speech HTTP boundary', () => {
 	}
 
 } );
+
+function oversizedPost( url ) {
+
+	return new Promise( ( resolve, reject ) => {
+
+		const request = httpRequest( url, {
+			method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': 48 * 1024 * 1024 + 1 }
+		}, ( response ) => {
+
+			let text = '';
+			response.setEncoding( 'utf8' );
+			response.on( 'data', ( chunk ) => text += chunk );
+			response.on( 'end', () => resolve( { status: response.statusCode, body: JSON.parse( text ) } ) );
+
+		} );
+		request.on( 'error', reject );
+		request.end();
+
+	} );
+
+}
 
 function capabilities() {
 
