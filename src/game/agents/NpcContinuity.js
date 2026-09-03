@@ -20,7 +20,8 @@ export class NpcContinuity {
 		this.simulation = simulation;
 		this.routes = routes;
 		this.boundary = boundary;
-		this.boundary.input( 'movement-network', routes.networks );
+		const networks = this.boundary.input( 'movement-network', routes.networks );
+		this.transitRoutes = new Map( ( networks.transit?.routes ?? [] ).map( ( route ) => [ route.id, route ] ) );
 		this.places = new Map( this.boundary.input( 'places', places ).map( ( place ) => [ placeKey( place ), place ] ) );
 		this.actors = new Map();
 		this.follow = null;
@@ -101,6 +102,11 @@ export class NpcContinuity {
 		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is in conversation` );
 		if ( this.follow ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.follow.npcId} is already following` );
 		const actor = this.#scheduledActor( request.npcId, request.timeMin );
+		if ( actor.place.kind === 'route' ) {
+
+			throw new NpcContinuityError( 'E_NPC_PLACE', `NPC ${request.npcId} cannot start a walking follow while aboard transit` );
+
+		}
 		const route = this.routes.route( actor.position, request.playerPosition );
 		if ( ! route ) throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${request.npcId} cannot reach the player` );
 		this.#interrupt( request.npcId, request.timeMin );
@@ -161,21 +167,8 @@ export class NpcContinuity {
 		if ( ! actor ) return this.#releaseInvalid( 'E_NPC_UNAVAILABLE', 'followed NPC state is unavailable', request.timeMin );
 		this.#resume( this.follow.npcId, request.timeMin );
 		let scheduled;
-		try {
-
-			scheduled = this.#scheduledActor( actor.npcId, request.timeMin );
-
-		} catch ( error ) {
-
-			if ( error?.code !== 'E_NPC_PLACE' ) throw error;
-			try { scheduled = this.#destinationActor( actor, request.timeMin ); }
-			catch ( destinationError ) {
-
-				return this.#releaseInvalid( 'E_NPC_UNAVAILABLE', messageOf( destinationError ), request.timeMin );
-
-			}
-
-		}
+		try { scheduled = this.#resumeTarget( actor, request.timeMin ); }
+		catch ( error ) { return this.#releaseInvalid( 'E_NPC_UNAVAILABLE', messageOf( error ), request.timeMin ); }
 		const route = this.routes.route( actor.position, scheduled.position );
 		if ( ! route ) return this.#releaseInvalid( 'E_NPC_PATH', `NPC ${actor.npcId} cannot resume its schedule`, request.timeMin );
 		actor.mode = 'resuming';
@@ -318,16 +311,8 @@ export class NpcContinuity {
 	#advanceResume( actor, request ) {
 
 		let scheduled;
-		try {
-
-			scheduled = this.#scheduledActor( actor.npcId, request.timeMin );
-
-		} catch ( error ) {
-
-			if ( error?.code !== 'E_NPC_PLACE' ) return this.#releaseInvalid( 'E_NPC_UNAVAILABLE', messageOf( error ), request.timeMin );
-			scheduled = this.#destinationActor( actor, request.timeMin );
-
-		}
+		try { scheduled = this.#resumeTarget( actor, request.timeMin ); }
+		catch ( error ) { return this.#releaseInvalid( 'E_NPC_UNAVAILABLE', messageOf( error ), request.timeMin ); }
 		const route = this.routes.route( actor.position, scheduled.position );
 		if ( ! route ) return this.#releaseInvalid( 'E_NPC_PATH', `NPC ${actor.npcId} cannot resume its schedule`, request.timeMin );
 		const travel = Math.min( route.distanceMeters, WALK_SPEED * request.deltaSeconds );
@@ -345,17 +330,7 @@ export class NpcContinuity {
 
 	#startResume( actor, timeMin, source ) {
 
-		let scheduled;
-		try {
-
-			scheduled = this.#scheduledActor( actor.npcId, timeMin );
-
-		} catch ( error ) {
-
-			if ( error?.code !== 'E_NPC_PLACE' ) throw error;
-			scheduled = this.#destinationActor( actor, timeMin );
-
-		}
+		const scheduled = this.#resumeTarget( actor, timeMin );
 		const route = this.routes.route( actor.position, scheduled.position );
 		if ( ! route ) throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${actor.npcId} cannot resume its schedule` );
 		actor.mode = 'resuming';
@@ -381,6 +356,22 @@ export class NpcContinuity {
 
 	}
 
+	#resumeTarget( actor, timeMin ) {
+
+		try {
+
+			const scheduled = this.#scheduledActor( actor.npcId, timeMin );
+			return scheduled.place.kind === 'route' ? this.#destinationActor( actor, timeMin ) : scheduled;
+
+		} catch ( error ) {
+
+			if ( error?.code !== 'E_NPC_PLACE' ) throw error;
+			return this.#destinationActor( actor, timeMin );
+
+		}
+
+	}
+
 	#scheduledActor( npcId, timeMin ) {
 
 		let npc;
@@ -400,7 +391,7 @@ export class NpcContinuity {
 			);
 
 		}
-		const located = this.#locate( state );
+		const located = this.#locate( npc, state );
 		return {
 			npcId: npc.npcId,
 			name: clone( npc.name ),
@@ -436,7 +427,7 @@ export class NpcContinuity {
 
 	}
 
-	#locate( state ) {
+	#locate( npc, state ) {
 
 		if ( state.movement ) {
 
@@ -447,13 +438,36 @@ export class NpcContinuity {
 			return { place: { kind: 'edge', id: edge.id }, position: [ point.x, point.y, point.z ], heading: point.heading };
 
 		}
+		if ( state.behavior.place.kind === 'route' ) return this.#locateTransit( npc, state );
 		return { place: clone( state.behavior.place ), ...this.#locatePlace( state.behavior.place, state.behavior.interior ) };
+
+	}
+
+	#locateTransit( npc, state ) {
+
+		const routeId = state.behavior.place.id;
+		const entry = npc.routine?.[ state.schedule.entryIndex ];
+		const leg = entry?.transitLeg;
+		if ( ! leg || leg.routeId !== routeId ) {
+
+			throw new NpcContinuityError( 'E_NPC_PLACE', `route ${routeId} has no scheduled passenger leg for NPC ${npc.npcId}` );
+
+		}
+		const route = this.transitRoutes.get( routeId );
+		if ( ! route ) throw new NpcContinuityError( 'E_NPC_PLACE', `scheduled transit route ${routeId} is unavailable` );
+		const point = transitPoint( route, leg.boardStopId, leg.alightStopId, state.schedule.progress );
+		if ( ! point ) {
+
+			throw new NpcContinuityError( 'E_NPC_PLACE', `scheduled transit route ${routeId} has incomplete path3 or timing facts` );
+
+		}
+		return { place: clone( state.behavior.place ), position: point.position, heading: point.heading };
 
 	}
 
 	#locatePlace( place, interior ) {
 
-		if ( place.kind === 'route' ) throw new NpcContinuityError( 'E_NPC_PLACE', `route ${place.id} has no walk position` );
+		if ( place.kind === 'route' ) throw new NpcContinuityError( 'E_NPC_PLACE', `route ${place.id} has no destination walk position` );
 		const known = this.places.get( placeKey( place ) );
 		if ( interior && 'at' in interior ) {
 
@@ -580,6 +594,75 @@ function savedRoute( route, destination, cursor ) {
 		cursor,
 		destination: [ ...destination ]
 	};
+
+}
+
+/** Scheduled passenger position over one ordered portion of a Connections transit shape. */
+function transitPoint( route, boardStopId, alightStopId, progress ) {
+
+	if ( ! Array.isArray( route.shape ) || route.shape.length < 2 ||
+		! route.shape.every( validPoint ) || ! Array.isArray( route.stops ) ||
+		! Array.isArray( route.template ) || route.template.length !== route.stops.length ||
+		! Array.isArray( route.service ) || route.service.length === 0 ) return null;
+	const pairs = [];
+	for ( let board = 0; board < route.stops.length - 1; board ++ ) {
+
+		if ( route.stops[ board ].stopId !== boardStopId ) continue;
+		for ( let alight = board + 1; alight < route.stops.length; alight ++ ) {
+
+			if ( route.stops[ alight ].stopId === alightStopId ) pairs.push( { board, alight } );
+
+		}
+
+	}
+	if ( ! pairs.length ) return null;
+	pairs.sort( ( a, b ) => ( a.alight - a.board ) - ( b.alight - b.board ) || a.board - b.board );
+	const { board, alight } = pairs[ 0 ];
+	const shapeLength = pathDistance( route.shape );
+	const legs = [];
+	let totalSeconds = 0;
+	for ( let index = board + 1; index <= alight; index ++ ) {
+
+		const from = route.stops[ index - 1 ];
+		const to = route.stops[ index ];
+		const previous = route.template[ index - 1 ];
+		const arrival = route.template[ index ];
+		const seconds = arrival?.arrive - previous?.depart;
+		if ( ! Number.isFinite( from.shapeDist ) || ! Number.isFinite( to.shapeDist ) ||
+			to.shapeDist <= from.shapeDist || to.shapeDist > shapeLength + 1e-6 ||
+			! Number.isFinite( seconds ) || seconds <= 0 ) return null;
+		legs.push( { from: from.shapeDist, to: to.shapeDist, seconds } );
+		totalSeconds += seconds;
+
+	}
+	if ( ! Number.isFinite( totalSeconds ) || totalSeconds <= 0 ) return null;
+	let remaining = Math.max( 0, Math.min( 1, progress ) ) * totalSeconds;
+	for ( const leg of legs ) {
+
+		if ( remaining <= leg.seconds || leg === legs.at( - 1 ) ) {
+
+			const ratio = Math.min( 1, remaining / leg.seconds );
+			return pointAtDistance( route.shape, leg.from + ( leg.to - leg.from ) * ratio );
+
+		}
+		remaining -= leg.seconds;
+
+	}
+	return null;
+
+}
+
+function validPoint( point ) {
+
+	return Array.isArray( point ) && point.length === 3 && point.every( Number.isFinite );
+
+}
+
+function pathDistance( path ) {
+
+	let total = 0;
+	for ( let index = 1; index < path.length; index ++ ) total += distance( path[ index - 1 ], path[ index ] );
+	return total;
 
 }
 

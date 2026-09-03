@@ -6,7 +6,7 @@ Status: the public continuity and follow API is wired into the live GameApp, Cro
 
 ## Inputs
 
-- Movement network: [schema/movement-network.schema.json](schema/movement-network.schema.json). `WalkRoutes` indexes `connections.networks.walk`; every movement edge must carry authoritative `path3`.
+- Movement network: [schema/movement-network.schema.json](schema/movement-network.schema.json). `WalkRoutes` indexes `connections.networks.walk`; every movement edge must carry authoritative `path3`. Scheduled transit materialization also consumes the matching Connections route's ordered stops, timetable, service window and 3D shape.
 - Place anchors: [schema/places.schema.json](schema/places.schema.json). Optional loaded parcel and stop positions plus interior anchor ids, positions and headings.
 - Appearance request: [schema/appearance-request.schema.json](schema/appearance-request.schema.json). One already-instanced npcId and current simulation time.
 - Unload request: [schema/unload-request.schema.json](schema/unload-request.schema.json). The materialized npcId whose body leaves the visible set.
@@ -29,7 +29,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 
 ## Events
 
-- `appear(request)` projects the NPC's actual simulation schedule. `unload(request)` removes visibility while retaining identity state. A later `appear` uses the same npcId and body traits.
+- `appear(request)` projects the NPC's actual simulation schedule. Passenger transit legs map schedule progress through the matching per-leg timetable onto the route's authoritative 3D shape. `unload(request)` removes visibility while retaining identity state. A later `appear` uses the same npcId and body traits.
 - `startFollow(request)` accepts only a live, positioned NPC, interrupts its routine, and routes it toward the player.
 - `updateFollow(request)` replans over `path3`, walks at 1.4 m/s, runs at 2.4 m/s beyond 8 m, and stops 1.8 m from the player. Movement per update never exceeds speed times elapsed time.
 - `stopFollow(request)` resumes the simulation and enters `resuming` mode. The NPC walks from its current position to the current scheduled place or next destination before returning to `schedule` mode.
@@ -43,14 +43,14 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - `E_NPC_OUTPUT`: an actor or save result does not match its schema.
 - `E_NPC_UNKNOWN`: the simulation does not hold that instanced npcId.
 - `E_NPC_UNAVAILABLE`: the NPC is dead or no longer available.
-- `E_NPC_PLACE`: the NPC's current scheduled state has no walk position.
+- `E_NPC_PLACE`: the NPC's current scheduled state has no position, including a route without a matching passenger leg or complete Connections path3 and timing facts.
 - `E_NPC_PATH`: the player or scheduled destination is unreachable.
 - `E_NPC_CONFLICT`: another NPC is already following, or stop was requested without an active follower.
 
 ## Dependencies
 
 - Simulation public NPC and continuity APIs.
-- Connections walk graph output.
+- Connections walk graph and transit route output.
 - Character asset catalog for purchased animation clips.
 
 ## Invariants
@@ -58,6 +58,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - Named, focused and quest NPCs are keyed only by their actual npcId. A later statistical crowd handle cannot rename one or take its body.
 - Appearance comes from the instance's persistent `appearanceSeed`, including after unload, save restore and reappearance.
 - Scheduled and follow movement samples only Connections `path3`; flat compatibility paths never position a body.
+- Scheduled passenger transit uses the routine's exact route, board stop, alight stop and progress. Ordered duplicate stops select the shortest forward portion of the route shape, so return legs keep their direction and heading.
 - Follow speed is bounded and its stopping distance is deterministic. Explicit stop does not teleport the visible actor to its schedule.
 - Idle, walk, sprint and seated states select the corresponding purchased clip. Crouch is selected only for an explicit crouch action.
 - An interior waiter, barista or vendor keeps the simulation type chosen for that post. The engine does not reinterpret an interior role as an unrelated type.
@@ -65,6 +66,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 ## Remaining presentation work
 
 - Speaking and listening turn coordination still uses the existing talk presentation. Conversation interruption and schedule return are owned here, while dialogue turn gestures remain outside this controller.
+- Simulation route workers publish a route workplace but no trip assignment. They fail closed because no authoritative vehicle position or route progress exists; passenger commute legs carry the required transit assignment.
 
 ## How to modify this blackbox safely
 

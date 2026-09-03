@@ -48,6 +48,82 @@ describe( 'NPC continuity integration', () => {
 
 	} );
 
+	it( 'projects one named commuter over the authoritative transit path3 and restores it exactly', () => {
+
+		const networks = transitNetwork();
+		const first = setup( null, networks );
+		const npc = first.bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const monday = npc.routine.filter( ( entry ) => entry.days.includes( 0 ) );
+		const ride = monday.find( ( entry ) => entry.transitLeg );
+		const walk = monday.find( ( entry ) => entry.activity === 'commuting' && entry.walk && entry.startMin < ride.startMin );
+		const work = monday.find( ( entry ) => entry.activity === 'working' && entry.place.id === 'p_cafe' );
+		const route = networks.transit.routes.find( ( candidate ) => candidate.id === ride.transitLeg.routeId );
+
+		const home = first.controller.appear( { npcId: npc.npcId, timeMin: walk.startMin - 1 } );
+		const walking = first.controller.appear( { npcId: npc.npcId, timeMin: walk.startMin + 0.25 } );
+		const aboardAt = ride.startMin + ( ride.endMin - ride.startMin ) * 0.25;
+		const aboard = first.controller.appear( { npcId: npc.npcId, timeMin: aboardAt } );
+		const later = first.controller.appear( {
+			npcId: npc.npcId, timeMin: ride.startMin + ( ride.endMin - ride.startMin ) * 0.75
+		} );
+
+		expect( home ).toMatchObject( {
+			npcId: npc.npcId, appearanceSeed: npc.appearanceSeed,
+			place: { kind: 'parcel', id: npc.home.parcelId }
+		} );
+		expect( walking ).toMatchObject( { npcId: npc.npcId, place: { kind: 'edge' }, animation: 'walk' } );
+		expect( aboard ).toMatchObject( {
+			npcId: npc.npcId, appearanceSeed: home.appearanceSeed,
+			name: home.name, gender: home.gender,
+			place: { kind: 'route', id: route.id }, mode: 'schedule'
+		} );
+		expect( aboard.position[ 0 ] ).toBeCloseTo( 550 );
+		expect( aboard.position[ 1 ] ).toBeCloseTo( 4 );
+		expect( aboard.position[ 2 ] ).toBeCloseTo( 250 );
+		expect( aboard.heading ).toBeCloseTo( - Math.PI / 2 );
+		expect( later.position[ 0 ] ).toBeCloseTo( 450 );
+		expect( later.position[ 1 ] ).toBeCloseTo( 4 );
+		expect( later.position[ 2 ] ).toBeCloseTo( 250 );
+		expect( separation( aboard.position, later.position ) ).toBeGreaterThan( 0 );
+		expect( code( () => first.controller.startFollow( {
+			npcId: npc.npcId, timeMin: aboardAt, playerPosition: [ 500, 1, 250 ]
+		} ) ) ).toBe( 'E_NPC_PLACE' );
+
+		first.controller.unload( { npcId: npc.npcId } );
+		const continuitySave = first.controller.serialize();
+		const simulationSave = first.bridge.simulation.serialize();
+		const restoredSimulation = restoreSimulation( simulationInput( networks ), simulationSave );
+		const restored = setup( restoredSimulation, networks );
+		restored.controller.restore( continuitySave );
+		const reappeared = restored.controller.appear( { npcId: npc.npcId, timeMin: aboardAt } );
+		expect( reappeared ).toEqual( { ...aboard, visible: true } );
+
+		const working = restored.controller.appear( { npcId: npc.npcId, timeMin: work.startMin + 1 } );
+		expect( working ).toMatchObject( {
+			npcId: npc.npcId, appearanceSeed: home.appearanceSeed,
+			place: { kind: 'parcel', id: 'p_cafe' }, schedule: { entryIndex: npc.routine.indexOf( work ) }
+		} );
+
+	} );
+
+	it( 'fails closed when a scheduled transit leg lacks authoritative path3 or timing facts', () => {
+
+		for ( const missing of [ 'shape', 'timing' ] ) {
+
+			const networks = transitNetwork();
+			if ( missing === 'shape' ) delete networks.transit.routes[ 0 ].shape;
+			else networks.transit.routes[ 0 ].template[ 3 ].depart = networks.transit.routes[ 0 ].template[ 4 ].arrive;
+			const { bridge, controller } = setup( null, networks );
+			const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+			const ride = npc.routine.find( ( entry ) => entry.days.includes( 0 ) && entry.transitLeg );
+			expect( code( () => controller.appear( {
+				npcId: npc.npcId, timeMin: ( ride.startMin + ride.endMin ) / 2
+			} ) ) ).toBe( 'E_NPC_PLACE' );
+
+		}
+
+	} );
+
 	it( 'follows by bounded walk paths, stops naturally, and walks back into the current routine', () => {
 
 		const { bridge, controller } = setup();
@@ -225,9 +301,8 @@ describe( 'NPC animation state', () => {
 
 } );
 
-function setup( simulation = null ) {
+function setup( simulation = null, networks = network() ) {
 
-	const networks = network();
 	const buildings = new Map( Object.entries( FIXTURE_INTERIORS ).map( ( [ id, npc ] ) => [ id, { npc } ] ) );
 	const bridge = simulation ? new SimBridge( simulation ) : SimBridge.create( FIXTURE_BLUEPRINT, { networks }, buildings );
 	const routes = new WalkRoutes( networks );
@@ -246,14 +321,66 @@ function setup( simulation = null ) {
 
 }
 
-function simulationInput() {
+function simulationInput( networks = network() ) {
 
 	return {
 		seed: FIXTURE_BLUEPRINT.meta.seed,
 		blueprint: FIXTURE_BLUEPRINT,
-		networks: network(),
+		networks,
 		interiors: FIXTURE_INTERIORS
 	};
+
+}
+
+function transitNetwork() {
+
+	const networks = network();
+	const hub = networks.walk.nodes.find( ( node ) => node.id === 'hub' );
+	for ( const stop of [
+		...FIXTURE_BLUEPRINT.transit.busStops,
+		...FIXTURE_BLUEPRINT.transit.trainStations,
+		...FIXTURE_BLUEPRINT.transit.subwayStations
+	] ) {
+
+		const id = `stop-${stop.id}`;
+		const [ x, z ] = stop.position;
+		networks.walk.nodes.push( { id, x, y: 0, z, kind: 'stop', ref: stop.id } );
+		networks.walk.edges.push( {
+			id: `walk-stop-${stop.id}`, from: hub.id, to: id, kind: 'sidewalk', width: 2,
+			path: [ [ hub.x, hub.z ], [ x, z ] ], path3: [ [ hub.x, hub.y, hub.z ], [ x, 0, z ] ]
+		} );
+
+	}
+	const shape = [
+		[ 400, 0, 250 ], [ 500, 8, 250 ], [ 600, 0, 250 ], [ 750, 6, 250 ], [ 900, 0, 250 ],
+		[ 750, 6, 250 ], [ 600, 0, 250 ], [ 500, 8, 250 ], [ 400, 0, 250 ]
+	];
+	const distances = [ 0 ];
+	for ( let index = 1; index < shape.length; index ++ ) {
+
+		distances.push( distances.at( - 1 ) + separation( shape[ index - 1 ], shape[ index ] ) );
+
+	}
+	const indexes = [ 0, 2, 4, 6, 8 ];
+	const stopIds = [ 'b0', 'b1', 'b2', 'b1', 'b0' ];
+	const stops = indexes.map( ( shapeIndex, index ) => ( {
+		stopId: stopIds[ index ], x: shape[ shapeIndex ][ 0 ], y: shape[ shapeIndex ][ 1 ],
+		z: shape[ shapeIndex ][ 2 ], shapeDist: distances[ shapeIndex ]
+	} ) );
+	let clock = 0;
+	const template = stops.map( ( stop, index ) => {
+
+		if ( index ) clock += Math.round( ( stop.shapeDist - stops[ index - 1 ].shapeDist ) / 2 );
+		const arrive = clock;
+		if ( index < stops.length - 1 ) clock += 15;
+		return { arrive, depart: clock };
+
+	} );
+	networks.transit.routes = [ {
+		id: 'r0', kind: 'bus', lineId: 'r0', shape, stops, template,
+		service: [ { start: 5 * 3600, end: 24 * 3600, headway: 600, phase: 0 } ]
+	} ];
+	return networks;
 
 }
 

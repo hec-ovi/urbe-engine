@@ -42,6 +42,74 @@
           }
         }
       }
+    },
+    "transit": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["routes"],
+      "properties": {
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["id", "kind", "stops", "template", "service"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "kind": { "enum": ["bus", "subway", "train"] },
+              "shape": {
+                "type": "array",
+                "minItems": 2,
+                "items": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" }
+              },
+              "stops": {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "required": ["stopId", "x", "y", "z", "shapeDist"],
+                  "properties": {
+                    "stopId": { "type": "string", "minLength": 1 },
+                    "x": { "type": "number" },
+                    "y": { "type": "number" },
+                    "z": { "type": "number" },
+                    "shapeDist": { "type": "number", "minimum": 0 }
+                  }
+                }
+              },
+              "template": {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "required": ["arrive", "depart"],
+                  "properties": {
+                    "arrive": { "type": "number", "minimum": 0 },
+                    "depart": { "type": "number", "minimum": 0 }
+                  }
+                }
+              },
+              "service": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "required": ["start", "end", "headway", "phase"],
+                  "properties": {
+                    "start": { "type": "number", "minimum": 0 },
+                    "end": { "type": "number", "minimum": 0 },
+                    "headway": { "type": "number", "exclusiveMinimum": 0 },
+                    "phase": { "type": "number", "minimum": 0 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
