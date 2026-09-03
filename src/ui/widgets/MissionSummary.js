@@ -16,11 +16,16 @@ export class MissionSummary {
 		this.done = el( 'button', { className: 'hud-button is-primary', type: 'button', textContent: 'continue' } );
 		this.done.addEventListener( 'click', onClose );
 
-		this.element = el( 'div', { className: 'summary' },
+		this.element = el( 'div', { className: 'summary', role: 'dialog', ariaLabel: 'Mission summary' },
 			this.header.element,
 			el( 'div', { className: 'summary-body' }, this.outcome, this.text, this.steps ),
 			el( 'div', { className: 'summary-footer' }, this.done )
 		);
+		this.element.addEventListener( 'keydown', ( event ) => {
+
+			if ( event.key === 'Escape' ) onClose();
+
+		} );
 		this.element.hidden = true;
 
 	}
@@ -35,12 +40,15 @@ export class MissionSummary {
 			className: `quest-step${step.done ? ' is-done' : ''}`
 		}, el( 'span', { className: 'quest-step-mark' } ), el( 'span', { textContent: step.text } ) ) ) );
 		this.element.hidden = false;
+		this.element.setAttribute( 'aria-label', title || 'Mission summary' );
+		this.done.focus();
 
 	}
 
 	setVisible( visible ) {
 
 		this.element.hidden = ! visible;
+		if ( visible ) this.done.focus();
 
 	}
 

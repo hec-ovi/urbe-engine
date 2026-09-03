@@ -19,7 +19,12 @@ export class PanelHost {
 		this.timers = new Map();
 		this.element = el( 'div', { className: 'panel-host' }, ...Object.values( views ).map( ( view ) => view.element ) );
 
-		for ( const view of Object.values( views ) ) view.element.hidden = true;
+		for ( const view of Object.values( views ) ) {
+
+			view.element.hidden = true;
+			view.element.inert = true;
+
+		}
 
 		this.onKey = ( event ) => {
 
@@ -32,13 +37,15 @@ export class PanelHost {
 	open( name ) {
 
 		if ( ! this.views[ name ] || this.current === name ) return;
+		const active = document.activeElement;
+		if ( active && active !== document.body && ! this.element.contains( active ) ) this.returnFocus = active;
 
 		if ( this.current ) this.#hide( this.views[ this.current ] );
 		else window.addEventListener( 'keydown', this.onKey );
 
 		this.current = name;
 		this.element.classList.add( 'is-open' );
-		this.#show( this.views[ name ] );
+		this.#show( this.views[ name ], name );
 		this.onOpen( name );
 
 	}
@@ -52,6 +59,8 @@ export class PanelHost {
 		this.element.classList.remove( 'is-open' );
 		window.removeEventListener( 'keydown', this.onKey );
 		this.onClose();
+		if ( this.returnFocus?.isConnected && ! this.returnFocus.closest( '[hidden]' ) ) this.returnFocus.focus();
+		this.returnFocus = null;
 
 	}
 
@@ -61,19 +70,33 @@ export class PanelHost {
 
 	}
 
-	#show( view ) {
+	#show( view, name ) {
 
 		clearTimeout( this.timers.get( view ) );
 		view.element.hidden = false;
+		view.element.inert = false;
+		view.element.setAttribute( 'role', 'dialog' );
+		view.element.setAttribute( 'aria-label', name[ 0 ] + name.slice( 1 ).toLowerCase() );
+		view.element.removeAttribute( 'aria-hidden' );
 		void view.element.offsetWidth;
 		view.element.classList.add( 'is-open' );
 		view.shown?.();
+		const firstControl = view.element.querySelector( 'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])' );
+		if ( firstControl ) firstControl.focus();
+		else {
+
+			view.element.tabIndex = - 1;
+			view.element.focus();
+
+		}
 
 	}
 
 	#hide( view ) {
 
 		view.element.classList.remove( 'is-open' );
+		view.element.inert = true;
+		view.element.setAttribute( 'aria-hidden', 'true' );
 		this.timers.set( view, setTimeout( () => { view.element.hidden = true; }, CLOSE_MS ) );
 
 	}

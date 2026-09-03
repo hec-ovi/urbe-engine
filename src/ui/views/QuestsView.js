@@ -55,7 +55,9 @@ export class QuestsView {
 
 		this.list.querySelectorAll( '.list-row' ).forEach( ( row, i ) => {
 
-			row.classList.toggle( 'is-active', this.quests[ i ]?.id === id );
+			const active = this.quests[ i ]?.id === id;
+			row.classList.toggle( 'is-active', active );
+			row.setAttribute( 'aria-pressed', String( active ) );
 
 		} );
 

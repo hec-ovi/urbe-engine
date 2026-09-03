@@ -34,13 +34,16 @@ describe( 'MissionSummary', () => {
 
 	} );
 
-	it( 'continue and Esc both report the close', async () => {
+	it( 'focuses continue, and continue or Escape report the close', async () => {
 
 		summary.show( { title: 'Late shift' } );
 		const user = userEvent.setup();
+		const button = screen.getByRole( 'button', { name: 'continue' } );
+		expect( document.activeElement ).toBe( button );
+		expect( screen.getByRole( 'dialog', { name: 'Late shift' } ) ).toBeTruthy();
 
-		await user.click( screen.getByRole( 'button', { name: 'continue' } ) );
-		await user.click( screen.getByRole( 'button', { name: 'close' } ) );
+		await user.click( button );
+		await user.keyboard( '{Escape}' );
 
 		expect( onClose ).toHaveBeenCalledTimes( 2 );
 

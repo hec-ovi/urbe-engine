@@ -73,10 +73,12 @@ describe( 'GameView', () => {
 		view.setPaused( true );
 		await userEvent.setup().click( view.tabs.element.querySelector( '.is-leave' ) );
 		expect( view.mainMenu.element.hidden ).toBe( false );
+		expect( view.gameplayElements.every( ( element ) => element.inert ) ).toBe( true );
 		expect( screen.getByRole( 'heading', { name: 'Night run' } ) ).toBeTruthy();
 		expect( onLeave ).toHaveBeenCalledOnce();
 		view.hideMainMenu();
 		expect( view.mainMenu.element.hidden ).toBe( true );
+		expect( view.gameplayElements.every( ( element ) => ! element.inert ) ).toBe( true );
 
 	} );
 

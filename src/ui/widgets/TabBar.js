@@ -22,7 +22,7 @@ export class TabBar {
 
 		this.tabs = new Map();
 
-		this.element = el( 'nav', { className: 'tabbar' },
+		this.element = el( 'nav', { className: 'tabbar', ariaLabel: 'Game panels' },
 			...TABS.map( ( [ name, key ] ) => this.#tab( name, key, () => onSelect( name ) ) ),
 			this.#tab( 'LEAVE', 'N', onLeave, 'is-leave' )
 		);
@@ -32,7 +32,13 @@ export class TabBar {
 	/** Lights the tab of the open panel; null clears it. */
 	setActive( name ) {
 
-		for ( const [ tabName, tab ] of this.tabs ) tab.classList.toggle( 'is-active', tabName === name );
+		for ( const [ tabName, tab ] of this.tabs ) {
+
+			const active = tabName === name;
+			tab.classList.toggle( 'is-active', active );
+			if ( tabName !== 'LEAVE' ) tab.setAttribute( 'aria-pressed', String( active ) );
+
+		}
 
 	}
 
@@ -43,6 +49,7 @@ export class TabBar {
 			el( 'span', { className: 'tab-label', textContent: name } ),
 			el( 'span', { className: 'tab-key', textContent: key } )
 		);
+		if ( name !== 'LEAVE' ) tab.setAttribute( 'aria-pressed', 'false' );
 		tab.addEventListener( 'click', onClick );
 		this.tabs.set( name, tab );
 

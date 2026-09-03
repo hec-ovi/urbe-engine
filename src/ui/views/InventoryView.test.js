@@ -41,6 +41,7 @@ describe( 'InventoryView', () => {
 		expect( screen.getByText( 'A phone number.' ) ).toBeTruthy();
 		expect( screen.getByText( 'Bar Nadir' ) ).toBeTruthy();
 		expect( view.slots[ 1 ].classList.contains( 'is-selected' ) ).toBe( true );
+		expect( view.slots[ 1 ].getAttribute( 'aria-pressed' ) ).toBe( 'true' );
 
 	} );
 

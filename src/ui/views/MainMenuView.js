@@ -39,12 +39,15 @@ export class MainMenuView {
 		} );
 		this.integration = el( 'p', { className: 'menu-integration' } );
 		this.content = el( 'main', { className: 'main-menu-content' }, this.library.element );
-		this.element = el( 'div', { className: 'main-menu', ariaLabel: 'Urbe main menu' },
+		this.title = el( 'h1', { id: 'urbe-main-menu-title', textContent: 'URBE' } );
+		this.element = el( 'div', {
+			className: 'main-menu', role: 'dialog', ariaModal: 'true'
+		},
 			el( 'div', { className: 'main-menu-frame', ariaHidden: 'true' } ),
 			el( 'header', { className: 'main-menu-header' },
 				el( 'div', {},
 					el( 'p', { className: 'menu-eyebrow', textContent: 'World directory' } ),
-					el( 'h1', { textContent: 'URBE' } ),
+					this.title,
 					el( 'p', { className: 'main-menu-subtitle', textContent: 'Continue a game, load one, or build a playable world in isolated stages.' } )
 				),
 				el( 'div', { className: 'main-menu-status' },
@@ -63,14 +66,18 @@ export class MainMenuView {
 				el( 'span', { textContent: 'Game archive = city + interiors + quests + playthrough' } )
 			)
 		);
+		this.element.setAttribute( 'aria-labelledby', this.title.id );
 		this.element.hidden = true;
 		this.setLibrary();
+		this.openLibrary( 'games' );
 
 	}
 
 	show() {
 
 		this.element.hidden = false;
+		const entry = [ this.continue, this.games, this.cities, this.newGame, this.load ].find( ( button ) => ! button.disabled );
+		entry?.focus();
 
 	}
 
@@ -110,6 +117,10 @@ export class MainMenuView {
 		this.content.replaceChildren( this.library.element );
 		this.games.classList.toggle( 'is-current', directory === 'games' );
 		this.cities.classList.toggle( 'is-current', directory === 'cities' );
+		this.newGame.classList.remove( 'is-current' );
+		this.games.setAttribute( 'aria-current', directory === 'games' ? 'page' : 'false' );
+		this.cities.setAttribute( 'aria-current', directory === 'cities' ? 'page' : 'false' );
+		this.newGame.setAttribute( 'aria-current', 'false' );
 
 	}
 
@@ -119,6 +130,10 @@ export class MainMenuView {
 		this.content.replaceChildren( this.creator.element );
 		this.games.classList.remove( 'is-current' );
 		this.cities.classList.remove( 'is-current' );
+		this.newGame.classList.add( 'is-current' );
+		this.games.setAttribute( 'aria-current', 'false' );
+		this.cities.setAttribute( 'aria-current', 'false' );
+		this.newGame.setAttribute( 'aria-current', 'page' );
 
 	}
 
@@ -126,6 +141,12 @@ export class MainMenuView {
 
 		this.creator.beginWithCity( city );
 		this.content.replaceChildren( this.creator.element );
+		this.games.classList.remove( 'is-current' );
+		this.cities.classList.remove( 'is-current' );
+		this.newGame.classList.add( 'is-current' );
+		this.games.setAttribute( 'aria-current', 'false' );
+		this.cities.setAttribute( 'aria-current', 'false' );
+		this.newGame.setAttribute( 'aria-current', 'page' );
 
 	}
 

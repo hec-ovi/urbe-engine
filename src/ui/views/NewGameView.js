@@ -47,7 +47,7 @@ export class NewGameView {
 			option( 'small', 'Small' ), option( 'medium', 'Medium' ), option( 'large', 'Large' )
 		);
 		this.cityAction = submit( 'Generate city', () => this.generateCity() );
-		this.cityStatus = el( 'p', { className: 'creation-stage-status' } );
+		this.cityStatus = el( 'p', { className: 'creation-stage-status', role: 'status', ariaLive: 'polite' } );
 		this.cityPane = this.pane( '1', 'City geometry', 'Generate the deterministic streets, transit, districts and building shells first.',
 			el( 'div', { className: 'creation-form-grid' },
 				labelled( 'City name', this.name ),
@@ -66,7 +66,7 @@ export class NewGameView {
 			el( 'legend', { textContent: 'Buildings available for interiors' } )
 		);
 		this.instanceAction = submit( 'Generate selected interiors', () => this.generateInstances() );
-		this.instanceStatus = el( 'p', { className: 'creation-stage-status' } );
+		this.instanceStatus = el( 'p', { className: 'creation-stage-status', role: 'status', ariaLive: 'polite' } );
 		this.instancePane = this.pane( '2', 'Playable interiors', 'Only selected quest and work locations receive interiors. The rest remain sealed city buildings.',
 			el( 'div', { className: 'creation-form-grid' },
 				labelled( 'Selection', this.instanceMode ),
@@ -80,7 +80,7 @@ export class NewGameView {
 		this.mainBrief = el( 'textarea', { className: 'creation-input creation-textarea', placeholder: 'Optional direction for the main story', spellcheck: true, ariaLabel: 'Main story direction' } );
 		this.sideJobs = el( 'input', { className: 'creation-input', type: 'number', min: 0, max: 3, step: 1, value: 3, ariaLabel: 'Side jobs' } );
 		this.questAction = submit( 'Generate story and jobs', () => this.generateQuests() );
-		this.questStatus = el( 'p', { className: 'creation-stage-status' } );
+		this.questStatus = el( 'p', { className: 'creation-stage-status', role: 'status', ariaLive: 'polite' } );
 		this.questPane = this.pane( '3', 'Story and side jobs', 'The story pass defines the narrative. The gameplay pass then maps it onto real people, places, items and supported actions.',
 			el( 'div', { className: 'creation-form-grid' },
 				labelled( 'Main story direction', this.mainBrief, 'Leave blank to derive it from the generated city.' ),
@@ -92,7 +92,7 @@ export class NewGameView {
 
 		this.review = el( 'div', { className: 'creation-review' } );
 		this.gameAction = submit( 'Create playable game', () => this.createGame() );
-		this.gameStatus = el( 'p', { className: 'creation-stage-status' } );
+		this.gameStatus = el( 'p', { className: 'creation-stage-status', role: 'status', ariaLive: 'polite' } );
 		this.gamePane = this.pane( '4', 'Playable game', 'Seal the city, its selected interiors, quests and initial playthrough into one loadable game.',
 			this.review,
 			this.gameAction,
@@ -311,6 +311,7 @@ export class NewGameView {
 		[ this.cityPane, this.instancePane, this.questPane, this.gamePane ].forEach( ( pane, index ) => {
 
 			pane.hidden = this.current !== index + 1;
+			pane.setAttribute( 'aria-busy', String( this.state.busy === STAGES[ index ] ) );
 
 		} );
 		this.buildingList.hidden = this.instanceMode.value !== 'manual';

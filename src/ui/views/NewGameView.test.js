@@ -170,6 +170,7 @@ describe( 'NewGameView', () => {
 		const view = mount( { onGenerateCity: vi.fn(), onCancel } );
 		view.setCreationState( { busy: 'city', error: 'City generation failed validation.' } );
 		expect( screen.getByRole( 'button', { name: 'Generate city' } ).disabled ).toBe( true );
+		expect( view.cityPane.getAttribute( 'aria-busy' ) ).toBe( 'true' );
 		expect( screen.getByRole( 'alert' ).textContent ).toBe( 'City generation failed validation.' );
 		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Back to library' } ) );
 		expect( onCancel ).toHaveBeenCalledOnce();

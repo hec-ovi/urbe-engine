@@ -71,7 +71,9 @@ export class CodexView {
 
 		this.side.querySelectorAll( '.list-row' ).forEach( ( row ) => {
 
-			row.classList.toggle( 'is-active', row.dataset.id === String( id ) );
+			const active = row.dataset.id === String( id );
+			row.classList.toggle( 'is-active', active );
+			row.setAttribute( 'aria-pressed', String( active ) );
 
 		} );
 

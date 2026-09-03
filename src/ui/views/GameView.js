@@ -130,6 +130,7 @@ export class GameView {
 			this.loading,
 			this.mainMenu.element
 		);
+		this.gameplayElements = [ ...this.element.children ].filter( ( element ) => element !== this.mainMenu.element );
 
 		this.paused = false;
 		this.tabs.element.hidden = true;
@@ -189,6 +190,12 @@ export class GameView {
 	showMainMenu() {
 
 		this.close();
+		for ( const element of this.gameplayElements ) {
+
+			element.inert = true;
+			element.setAttribute( 'aria-hidden', 'true' );
+
+		}
 		this.mainMenu.show();
 
 	}
@@ -196,6 +203,12 @@ export class GameView {
 	hideMainMenu() {
 
 		this.mainMenu.hide();
+		for ( const element of this.gameplayElements ) {
+
+			element.inert = false;
+			element.removeAttribute( 'aria-hidden' );
+
+		}
 
 	}
 

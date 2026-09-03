@@ -35,9 +35,11 @@ describe( 'QuestsView', () => {
 		expect( screen.getByText( 'Talk to Ada' ).closest( 'li' ).classList.contains( 'is-done' ) ).toBe( true );
 		expect( screen.getByText( 'Check the quay' ).closest( 'li' ).classList.contains( 'is-done' ) ).toBe( false );
 
-		await userEvent.setup().click( screen.getByRole( 'button', { name: /Late shift/ } ) );
+		const lateShift = screen.getByRole( 'button', { name: /Late shift/ } );
+		await userEvent.setup().click( lateShift );
 		expect( screen.getByRole( 'heading', { name: 'Late shift' } ) ).toBeTruthy();
 		expect( screen.getByText( 'Cover the bar.' ) ).toBeTruthy();
+		expect( lateShift.getAttribute( 'aria-pressed' ) ).toBe( 'true' );
 
 	} );
 

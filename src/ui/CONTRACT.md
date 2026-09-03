@@ -8,13 +8,13 @@ Layout: `views/` are full panels and the overlays that assemble them, `widgets/`
 The whole game overlay. `mount( parent )` appends it.
 - props (all optional): `onResume()`, `onCloseDialog()`, `onSend( text )`, `onOpen( name )`, `onClose()`, `onLeave()`, `onSettingChange({ key, value })`, `onHangUp()`, `onSummaryClose()`, `onTransitSelect(value)`, `onTransitCancel()`, `menu` (the `MainMenuView` callbacks below)
 - methods: `open( name )`, `close()`, `toggle( name )` with name one of `QUESTS`, `MAP`, `INVENTORY`, `CODEX`, `SETTINGS`, `CONTROLS`; `setPaused( bool )` shows the pause screen and the tab bar together (the bar is hidden while playing and shown while paused or while a panel is open); `step( text )`, `ready()`, `fail( message )` drive the loading surface
-- front-door methods: `showMainMenu()`, `hideMainMenu()`, `setLibrary(data)`, `setCreationState(data)`
+- front-door methods: `showMainMenu()`, `hideMainMenu()`, `setLibrary(data)`, `setCreationState(data)`. While the menu is shown, gameplay UI is inert and hidden from assistive technology.
 - children the game feeds directly: `clock`, `prompt`, `readout`, `stats`, `minimap`, `pause`, `avatar`, `call`, `toast`, `dialog` (ChatPanel), `summary`, `transit`, `map`, `inventory`, `quests`, `codex`, `settings`, `controls`, `tabs`, `panels`, `mainMenu`
 
 ## MainMenuView (views/MainMenuView.js)
 The full-screen front door. It owns display and selection state only. Storage, generation and game launch remain caller responsibilities.
 - callbacks (all optional): `onContinue(gameId)`, `onSave(gameId)`, `onLoad(file)`, `onExportCity(cityId)`, `onGenerateCity(input)`, `onGenerateInstances(input)`, `onGenerateQuests(input)`, `onCreateGame(input)`
-- methods: `show()`, `hide()`, `openLibrary('games' | 'cities')`, `createNew()`, `createFromCity(city)`, `setLibrary(data)`, `setCreationState(data)`
+- methods: `show()`, `hide()`, `openLibrary('games' | 'cities')`, `createNew()`, `createFromCity(city)`, `setLibrary(data)`, `setCreationState(data)`. `show()` focuses the first enabled menu action; the open directory or creation surface is exposed as the current action.
 - `setLibrary({ games, cities })`: both arrays are optional. A game may provide `{ id, name, cityName, theme, playable, mainSteps, sideJobs, interiors, location, position: [x,y,z], activeQuest: { title, objective }, inventory, locations }`. A city may provide `{ id, name, seed, size, status, buildings, interiorCount, districts, summary, availableBuildings }`.
 - absent callbacks disable their corresponding control. The menu says when loading is not connected, and each creation stage says when its generator is not connected.
 - `onLoad(file)` receives the browser `File` selected by the player. The input accepts JSON game files and clears after every selection.
@@ -34,6 +34,7 @@ The four-stage creation surface. A later stage remains locked until the caller s
 - Stage 4, Playable game: reports `onCreateGame({ cityId, interiorIds, questId })` only after city, interiors and quests exist.
 - methods: `reset()`, `beginWithCity(city)`, `setCreationState(update)`, `open(step)`
 - `setCreationState` accepts any supplied part of `{ city, instances, quests, game, busy, error }`. The caller owns the artifacts and uses `busy` with one of `city`, `instances`, `quests`, `game` to lock duplicate actions.
+- stage progress is a polite live status; the active pane exposes `aria-busy` while its caller action runs.
 
 ## PanelHost (views/PanelHost.js)
 One panel over the game at a time.
@@ -41,13 +42,14 @@ One panel over the game at a time.
 - methods: `open( name )`, `close()`, `toggle( name )`; `current` is the open name or null
 - a view is `{ element, shown?() }`; `shown` runs once the view is on screen
 - Escape closes while a panel is open; opening one closes the one before
+- the open view is an accessible dialog, receives focus, and becomes inert immediately when closed; focus returns to the outside control that opened it when that control remains visible
 
 ## Views (one full panel each; every one takes `onClose()`)
 - **Map3DView** (the MAP panel): `setWorld({ bounds: { min: [x,z], max: [x,z] }, buildings: [{ ring: [[x,z]], height }], ground: [{ surface, polygon: [[x,z]] }] })` raises every building as a prism and lays the ground cover as plates; `setVenues([{ point: { x, z }, open }])`, `setRoute({ path: [[x,z]], label } | null)`, `setPlayer( position, heading )`, `centre()`; drag turns, wheel zooms, the frame renders only on a change; `shown()` creates the WebGL renderer sized to the stage.
 - **MinimapView** (HUD corner, always on): `setMap( map )` same shape without stations or markers, `setVenues( venues )`, `setRoute({ path: [[x,z]], label } | null)`, `update( position, heading )` each frame, `toggle()`, `setVisible( bool )`
-- **InventoryView**: `setItems([{ id, name, kind, description, place }])` in slot order over 30 slots, `select( index )` (-1 clears); clicking a slot selects it and shows its detail
-- **QuestsView**: `setQuests([{ id, title, text, state: 'active' | 'done' | 'failed', steps: [{ text, done }] }])`, `select( id )`; empty reads "no quest yet"
-- **CodexView**: `setEntries([{ id, title, category, text }])` grouped by category, `select( id )`; empty reads "nothing recorded yet"
+- **InventoryView**: `setItems([{ id, name, kind, description, place }])` in slot order over 30 slots, `select( index )` (-1 clears); clicking a slot selects it, exposes the pressed state, and shows its detail
+- **QuestsView**: `setQuests([{ id, title, text, state: 'active' | 'done' | 'failed', steps: [{ text, done }] }])`, `select( id )`; the selected row exposes its pressed state; empty reads "no quest yet"
+- **CodexView**: `setEntries([{ id, title, category, text }])` grouped by category, `select( id )`; the selected row exposes its pressed state; empty reads "nothing recorded yet"
 - **SettingsView**: props `onChange({ key, value })`; `setValues({ quality, fog, exposure, crowd })`. Fields: `quality` select (`low`, `medium`, `high`, `ultra`), `fog` range 0..0.003, `exposure` number, `crowd` number. Numeric values arrive as numbers.
 - **ControlsView**: `setBindings([{ action, keys: [string] }])`; empty reads "no bindings yet"
 - **BuildingView**: the building viewer overlay; `setStatus(text)` reports preparation and the selected source, `showError(message)` puts a fatal failure on screen, and its controls report source and floor-slice changes.
@@ -56,12 +58,12 @@ One panel over the game at a time.
 ## Widgets
 - **LibraryCard**: renders one game or city archive row. Game actions report continue/save by game id; city actions report setup/export by city id. Missing handlers create disabled buttons.
 - **CreationSteps**: `set(current, unlocked)` marks one of four creation stages current, completed or locked and reports enabled stage selection.
-- **TabBar**: props `onSelect( name )`, `onLeave()`; `setActive( name | null )`. Seven entries in order with their key letters: QUESTS J, MAP M, INVENTORY I, CODEX X, SETTINGS O, CONTROLS ?, LEAVE N. Keys are labels: the game binds them and calls `open`.
+- **TabBar**: props `onSelect( name )`, `onLeave()`; `setActive( name | null )`. Seven entries in order with their key letters: QUESTS J, MAP M, INVENTORY I, CODEX X, SETTINGS O, CONTROLS ?, LEAVE N. Keys are labels: the game binds them and calls `open`. Panel buttons expose their pressed state.
 - **ChatPanel**: props `onSend( text )`, `onClose()`; `setNpc({ name, role })`, `setProfile({ facts: [[key, value]], now, routine: [line] } | null)`, `addMessage({ from: 'npc' | 'player', name, text })`, `setTranscript( messages )`, `show( conversation | null )` (a simulation `{ instance, behavior }` becomes name, profile and an empty transcript; null hides), `setVisible( bool )`. Header with the name and Esc, the transcript, the input "say something" with a send button; Enter sends, Escape in the input closes, blank text is never sent.
 - **AvatarCard** (top left): `setAvatar({ name, portraitUrl | canvas, bar })` with bar in 0..1 over 12 segments, `setVisible( bool )`; hidden until the first call
 - **VideoCallPanel**: props `onHangUp()`; `setStream( videoOrCanvas )`, `setName( name )`, `setVisible( bool )`
 - **MissionToast**: `show({ title, text })` slides in under the clock, holds, fades out and removes itself (about 4.4 s)
-- **MissionSummary**: props `onClose()`; `show({ title, text, outcome: 'done' | 'failed', steps: [{ text, done }] })`, `setVisible( bool )`; continue and Esc both report the close
+- **MissionSummary**: props `onClose()`; `show({ title, text, outcome: 'done' | 'failed', steps: [{ text, done }] })`, `setVisible( bool )`; it opens as a named dialog focused on continue, and continue or Escape reports the close
 - **HudClock**: `update( time, place )`, `setState( 'dawn' | 'day' | 'dusk' | 'night' )`
 - **InteractPrompt**: `update( text | null )`
 - **LocationReadout**: `update( position, district, parcel )`, `setAbout( paths )`

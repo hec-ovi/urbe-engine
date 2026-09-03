@@ -29,11 +29,14 @@ describe( 'MainMenuView', () => {
 		expect( view.element.hidden ).toBe( true );
 		view.show();
 		expect( screen.getByRole( 'heading', { name: 'URBE' } ) ).toBeTruthy();
+		expect( screen.getByRole( 'dialog', { name: 'URBE' } ) ).toBeTruthy();
+		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'Games' } ) );
 		expect( screen.getByRole( 'heading', { name: 'Your games' } ) ).toBeTruthy();
 		expect( screen.getByText( 'Missing Freight' ) ).toBeTruthy();
 		expect( screen.getByText( /X 12.4/ ) ).toBeTruthy();
 
 		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Cities' } ) );
+		expect( screen.getByRole( 'button', { name: 'Cities' } ).getAttribute( 'aria-current' ) ).toBe( 'page' );
 		expect( screen.getByRole( 'heading', { name: 'Your cities' } ) ).toBeTruthy();
 		expect( screen.getByRole( 'heading', { name: 'Rain Sector' } ) ).toBeTruthy();
 		view.hide();
@@ -49,6 +52,7 @@ describe( 'MainMenuView', () => {
 		document.body.append( view.element );
 		view.setLibrary( { games: [ game ] } );
 		view.show();
+		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'Continue game' } ) );
 		const user = userEvent.setup();
 
 		await user.click( screen.getByRole( 'button', { name: 'Continue game' } ) );
@@ -92,6 +96,7 @@ describe( 'MainMenuView', () => {
 		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Cities' } ) );
 		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Add interiors' } ) );
 		expect( screen.getByRole( 'heading', { name: 'Playable interiors' } ) ).toBeTruthy();
+		expect( screen.getByRole( 'button', { name: 'New game' } ).getAttribute( 'aria-current' ) ).toBe( 'page' );
 		expect( screen.getByRole( 'button', { name: 'Step 1: City' } ).disabled ).toBe( false );
 		expect( screen.getByRole( 'button', { name: 'Step 3: Story and jobs' } ).disabled ).toBe( true );
 

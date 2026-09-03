@@ -33,9 +33,16 @@ describe( 'PanelHost', () => {
 
 	it( 'open shows that view, tells it, and reports the name', () => {
 
+		const trigger = document.createElement( 'button' );
+		document.body.prepend( trigger );
+		trigger.focus();
 		host.open( 'A' );
 
 		expect( views.A.element.hidden ).toBe( false );
+		expect( views.A.element.inert ).toBe( false );
+		expect( views.A.element.getAttribute( 'role' ) ).toBe( 'dialog' );
+		expect( views.A.element.getAttribute( 'aria-label' ) ).toBe( 'A' );
+		expect( document.activeElement ).toBe( views.A.element );
 		expect( views.A.element.classList.contains( 'is-open' ) ).toBe( true );
 		expect( views.A.shown ).toHaveBeenCalledOnce();
 		expect( onOpen ).toHaveBeenCalledWith( 'A' );
@@ -60,12 +67,26 @@ describe( 'PanelHost', () => {
 
 		host.open( 'A' );
 		host.close();
+		expect( views.A.element.inert ).toBe( true );
+		expect( views.A.element.getAttribute( 'aria-hidden' ) ).toBe( 'true' );
 		vi.runAllTimers();
 
 		expect( views.A.element.hidden ).toBe( true );
 		expect( host.current ).toBeNull();
 		expect( onClose ).toHaveBeenCalledOnce();
 		expect( host.element.classList.contains( 'is-open' ) ).toBe( false );
+
+	} );
+
+	it( 'returns focus to the control that opened the panel', () => {
+
+		const trigger = document.createElement( 'button' );
+		document.body.prepend( trigger );
+		trigger.focus();
+		host.open( 'B' );
+		host.close();
+
+		expect( document.activeElement ).toBe( trigger );
 
 	} );
 

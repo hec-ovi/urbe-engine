@@ -41,10 +41,13 @@ describe( 'TabBar', () => {
 	it( 'setActive lights one tab and null clears it', () => {
 
 		bar.setActive( 'MAP' );
-		expect( screen.getByRole( 'button', { name: /^MAP/ } ).classList.contains( 'is-active' ) ).toBe( true );
+		const map = screen.getByRole( 'button', { name: /^MAP/ } );
+		expect( map.classList.contains( 'is-active' ) ).toBe( true );
+		expect( map.getAttribute( 'aria-pressed' ) ).toBe( 'true' );
 
 		bar.setActive( null );
 		expect( document.querySelectorAll( '.is-active' ) ).toHaveLength( 0 );
+		expect( map.getAttribute( 'aria-pressed' ) ).toBe( 'false' );
 
 	} );
 

@@ -65,7 +65,13 @@ export class InventoryView {
 	select( index ) {
 
 		this.selected = index;
-		this.slots.forEach( ( slot, i ) => slot.classList.toggle( 'is-selected', i === index ) );
+		this.slots.forEach( ( slot, i ) => {
+
+			const selected = i === index;
+			slot.classList.toggle( 'is-selected', selected );
+			slot.setAttribute( 'aria-pressed', String( selected ) );
+
+		} );
 
 		const item = this.items[ index ];
 

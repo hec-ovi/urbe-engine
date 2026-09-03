@@ -35,8 +35,10 @@ describe( 'CodexView', () => {
 		expect( screen.getByRole( 'heading', { name: 'places' } ) ).toBeTruthy();
 		expect( screen.getByText( 'Runs the quay office.' ) ).toBeTruthy();
 
-		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Salt Wharf' } ) );
+		const saltWharf = screen.getByRole( 'button', { name: 'Salt Wharf' } );
+		await userEvent.setup().click( saltWharf );
 		expect( screen.getByText( 'The last working quay.' ) ).toBeTruthy();
+		expect( saltWharf.getAttribute( 'aria-pressed' ) ).toBe( 'true' );
 
 	} );
 
