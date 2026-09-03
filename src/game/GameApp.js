@@ -37,6 +37,7 @@ import { HitchLog } from './debug/HitchLog.js';
 import { RenderWork } from './debug/RenderWork.js';
 import { EnvironmentProbe } from './look/EnvironmentProbe.js';
 import { LookPipeline } from './look/LookPipeline.js';
+import { Warmup } from './look/Warmup.js';
 import { NightSky, SKY_COLOR } from './sky/NightSky.js';
 import { Physics } from './physics/Physics.js';
 import { WorldColliders } from './physics/WorldColliders.js';
@@ -303,10 +304,12 @@ export class GameApp {
 		// material programs can be warmed against that render context.
 		this.view.step( 'warming the renderer' );
 		this.look = new LookPipeline( this.renderer, this.scene, this.camera, this.tier );
-		// A large city's eager program set can leave either backend compiling for
-		// minutes. The first visible view builds only what it draws; stable light
-		// slots keep later camera translation on those program keys.
-		this.stream.warmup = null;
+		// Compiling the complete city here can occupy either backend for minutes.
+		// Streamed floors are different: one small, detached band can compile while
+		// it is still 70 m away, before walking makes it visible.
+		this.floorWarmup = prepareInteriorStreaming(
+			this.stream, this.renderer, this.scene, this.camera, this.look.mrt
+		);
 
 		this.view.step( 'baking the environment' );
 		this.probe?.bake( spawn.point );
@@ -751,6 +754,16 @@ export class GameApp {
 		return GameConfig.fromUrl();
 
 	}
+
+}
+
+/** Keeps streamed floor compilation off the first frame that can draw it. */
+export function prepareInteriorStreaming( stream, renderer, scene, camera, mrt ) {
+
+	const warmup = new Warmup( renderer, scene, camera, mrt );
+	stream.warmup = warmup;
+
+	return warmup;
 
 }
 

@@ -180,4 +180,31 @@ describe( 'Warmup', () => {
 
 	} );
 
+	it( 'waits for streamed maps and uploads each shared texture once', async () => {
+
+		let ready;
+		const loaded = new Promise( ( resolve ) => { ready = resolve; } );
+		const texture = new THREE.Texture();
+		texture[ Symbol.for( 'urbe.texture-ready' ) ] = loaded;
+		const root = new THREE.Group();
+		root.add(
+			new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial( { map: texture } ) ),
+			new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial( { map: texture } ) )
+		);
+		const renderer = fakeRenderer( async () => {} );
+		renderer.initTexture = vi.fn();
+		const warmup = new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera() );
+		const pending = warmup.warm( root );
+
+		await Promise.resolve();
+		expect( renderer.initTexture ).not.toHaveBeenCalled();
+		ready();
+		await pending;
+		await warmup.warm( root );
+
+		expect( renderer.initTexture ).toHaveBeenCalledTimes( 1 );
+		expect( renderer.initTexture ).toHaveBeenCalledWith( texture );
+
+	} );
+
 } );

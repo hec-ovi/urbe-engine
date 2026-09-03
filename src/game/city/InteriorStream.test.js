@@ -73,7 +73,9 @@ function stream( { cut, elevators = null, warmup = null } ) {
 
 	const roomLights = {
 		dim: { room: null },
-		materialFor: ( binding, key ) => new THREE.MeshBasicMaterial( { name: key } )
+		materialFor: ( binding, key ) => new THREE.MeshBasicMaterial( {
+			name: binding.index === undefined ? key : `${key}|room${binding.index}`
+		} )
 	};
 	const stream = new InteriorStream( { factory, roomLights, haze: null, elevators, warmup } );
 	stream.worker = { cut, dispose: () => { stream.workerDisposed = true; } };
@@ -191,26 +193,48 @@ describe( 'InteriorStream.update', () => {
 
 	} );
 
-	it( 'warms a floor while it is still nowhere, before anything can draw it', async () => {
+	it( 'warms every stable light binding while the floor is still detached', async () => {
 
 		const warmed = [];
-		const warmup = { warmAll: async ( content ) => {
+		const warmup = { warm: async ( content ) => {
 
-			warmed.push( { meshes: content.children.length, attached: content.parent !== null } );
+			const bindings = new Set();
+			content.traverse( ( node ) => {
+
+				if ( node.material ) bindings.add( node.material.name.match( /room\d+$/ )?.[ 0 ] ?? 'shared' );
+
+			} );
+			warmed.push( {
+				name: content.name,
+				meshes: content.children.length,
+				attached: content.parent !== null,
+				visible: content.visible,
+				bindings: [ ...bindings ]
+			} );
 
 			return 1;
 
 		} };
 		const landed = stream( { cut: workerFor( [] ), warmup } );
+		landed.roomLights.slots = [
+			{ index: 1, materials: new Map(), lightsNode: null },
+			{ index: 2, materials: new Map(), lightsNode: null }
+		];
 
 		await settle( landed, feetOn( 0 ) );
+		const floorWarmups = warmed.filter( ( entry ) => entry.name === '' );
+		const staticWarmups = warmed.filter( ( entry ) => entry.name === 'interior:p0' );
 
-		// One per floor in the window, each still detached: a floor that reached
-		// the scene before it was warmed would link its shaders in the frame it
-		// first appears, which is the freeze this exists to stop.
-		expect( warmed ).toHaveLength( 3 );
-		expect( warmed.every( ( floor ) => floor.meshes > 0 ) ).toBe( true );
-		expect( warmed.every( ( floor ) => floor.attached === false ) ).toBe( true );
+		// Three bindings per floor: dim plus both fixed room-light slots. A floor
+		// that reached the scene first would link one of these while walking.
+		expect( floorWarmups ).toHaveLength( 9 );
+		expect( floorWarmups.every( ( floor ) => floor.meshes > 0 ) ).toBe( true );
+		expect( floorWarmups.every( ( floor ) => floor.attached === false ) ).toBe( true );
+		expect( floorWarmups.flatMap( ( floor ) => floor.bindings ) ).toContain( 'room1' );
+		expect( floorWarmups.flatMap( ( floor ) => floor.bindings ) ).toContain( 'room2' );
+		expect( staticWarmups ).toEqual( [ expect.objectContaining( { attached: true, visible: false } ) ] );
+		expect( landed.group.getObjectByName( 'interior:p0' ).visible ).toBe( true );
+		expect( landed.rooms.every( ( room ) => room.binding === landed.roomLights.dim ) ).toBe( true );
 
 	} );
 

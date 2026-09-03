@@ -161,7 +161,15 @@ export class PbrMaterialFactory {
 
 			if ( ! path ) return null;
 
-			const texture = this.loader.load( this.resolver.mapUrl( theme, path ) );
+			let ready;
+			const loaded = new Promise( ( resolve ) => { ready = resolve; } );
+			const texture = this.loader.load(
+				this.resolver.mapUrl( theme, path ),
+				() => ready(), undefined, () => ready()
+			);
+			// A streamed floor waits on this before asking the renderer to upload
+			// the map. Failed maps still resolve and keep Three's normal fallback.
+			texture[ Symbol.for( 'urbe.texture-ready' ) ] = loaded;
 			texture.flipY = false;
 			texture.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
 			texture.wrapS = texture.wrapT = tiled ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;

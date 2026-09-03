@@ -220,6 +220,7 @@ export class InteriorStream {
 	#show( band ) {
 
 		band.live = true;
+		band.group.parent.visible = true;
 		band.group.visible = true;
 		this.changed = true;
 
@@ -388,19 +389,47 @@ export class InteriorStream {
 
 		this.hitches?.note( `floor ${band.id} band ${budget.frames} frames`, budget.busy );
 
-		// The floor is whole and still nowhere: the frame that puts it in the
-		// scene must not be the frame that links its shaders.
-		if ( this.warmup ) {
+		// The floor is whole and still nowhere. Compile its dim view and every
+		// fixed room-light slot now: walking through the doorway must not create a
+		// new lighting pipeline on the first visible frame.
+		if ( this.warmup ) await this.#warm( content, rooms, interior, band );
 
-			const warmed = await this.warmup.warmAll( content );
+		if ( ! this.#wanted( interior, band ) ) return null;
 
-			this.hitches?.note( `floor ${band.id} warm`, warmed );
+		return { content, rooms, solid };
 
-			if ( ! this.#wanted( interior, band ) ) return null;
+	}
+
+	/** Warms each stable room-light binding, then restores the detached floor to dim. */
+	async #warm( content, rooms, interior, band ) {
+
+		const bindings = [ this.roomLights.dim, ...( this.roomLights.slots ?? [] ) ];
+		let warmed = 0;
+
+		try {
+
+			if ( ! interior.prepared ) {
+
+				warmed += await this.warmup.warm( interior.group );
+				interior.prepared = true;
+
+			}
+
+			for ( const binding of bindings ) {
+
+				if ( ! this.#wanted( interior, band ) ) return;
+				for ( const room of rooms ) room.wear( binding, this.roomLights );
+				warmed += await this.warmup.warm( content );
+
+			}
+
+		} finally {
+
+			for ( const room of rooms ) room.wear( this.roomLights.dim, this.roomLights );
 
 		}
 
-		return { content, rooms, solid };
+		this.hitches?.note( `floor ${band.id} warm ${bindings.length} bindings`, warmed );
 
 	}
 
@@ -440,6 +469,8 @@ class Interior {
 		this.outlines = outlinesOf( floors );
 		this.group = new THREE.Group();
 		this.group.name = `interior:${parcelId}`;
+		this.group.visible = false;
+		this.prepared = false;
 		this.bands = [ ...floors ]
 			.sort( ( a, b ) => a.floor - b.floor )
 			.map( ( floor ) => new FloorBand( parcelId, floor ) );

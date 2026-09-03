@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three/webgpu';
 import { PbrMaterialFactory } from './PbrMaterialFactory.js';
 
 const entry = ( emissiveStrength ) => ( {
@@ -83,6 +84,22 @@ describe( 'PbrMaterialFactory', () => {
 		expect( factory.build( 'known/wall/mid' ).type ).toBe( 'MeshStandardMaterial' );
 		expect( factory.build( 'known/glass/mid' ).type ).toBe( 'MeshPhysicalMaterial' );
 		expect( factory.build( 'known/glass/mid' ).transmission ).toBeCloseTo( 0.8 );
+
+	} );
+
+	it( 'exposes when each map is decoded for streamed GPU upload', async () => {
+
+		const factory = factoryFor( 1, { materialMaps: [ 'basecolor' ] } );
+		factory.loader = { load: ( url, onLoad ) => {
+
+			const texture = new THREE.Texture();
+			queueMicrotask( () => onLoad( texture ) );
+			return texture;
+
+		} };
+		const material = factory.build( 'known/wall/mid' );
+
+		await expect( material.map[ Symbol.for( 'urbe.texture-ready' ) ] ).resolves.toBeUndefined();
 
 	} );
 

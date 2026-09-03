@@ -17,6 +17,7 @@ export class Warmup {
 		this.scene = scene;
 		this.camera = camera;
 		this.mrt = mrt;
+		this.uploaded = new WeakSet();
 
 	}
 
@@ -36,6 +37,7 @@ export class Warmup {
 
 			this.renderer.setMRT?.( this.mrt );
 			await this.renderer.compileAsync( object, this.camera, this.scene );
+			await this.#upload( object );
 
 		} catch ( error ) {
 
@@ -50,6 +52,25 @@ export class Warmup {
 		}
 
 		return performance.now() - started;
+
+	}
+
+	/** Decodes and uploads each new map once, yielding between individual uploads. */
+	async #upload( object ) {
+
+		if ( ! this.renderer?.initTexture ) return;
+
+		const textures = texturesOf( object ).filter( ( texture ) => ! this.uploaded.has( texture ) );
+
+		for ( let index = 0; index < textures.length; index ++ ) {
+
+			const texture = textures[ index ];
+			await texture[ Symbol.for( 'urbe.texture-ready' ) ];
+			this.renderer.initTexture( texture );
+			this.uploaded.add( texture );
+			if ( index + 1 < textures.length ) await frameYield();
+
+		}
 
 	}
 
@@ -115,5 +136,38 @@ function restore( shown ) {
 function taskYield() {
 
 	return new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
+
+}
+
+function frameYield() {
+
+	return new Promise( ( resolve ) => {
+
+		if ( globalThis.requestAnimationFrame ) requestAnimationFrame( resolve );
+		else setTimeout( resolve, 0 );
+
+	} );
+
+}
+
+/** Unique textures reached directly from every material in one object tree. */
+function texturesOf( object ) {
+
+	const textures = new Set();
+
+	object.traverse( ( node ) => {
+
+		const materials = Array.isArray( node.material ) ? node.material : [ node.material ];
+
+		for ( const material of materials ) {
+
+			if ( ! material ) continue;
+			for ( const value of Object.values( material ) ) if ( value?.isTexture ) textures.add( value );
+
+		}
+
+	} );
+
+	return [ ...textures ];
 
 }

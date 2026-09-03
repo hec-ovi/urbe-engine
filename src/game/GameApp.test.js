@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pickSpawn, savedSpawn } from './GameApp.js';
+import { pickSpawn, prepareInteriorStreaming, savedSpawn } from './GameApp.js';
 
 describe( 'game spawn', () => {
 
@@ -22,6 +22,27 @@ describe( 'game spawn', () => {
 		const spawn = savedSpawn( { player: { position: { x: 14.5, y: 2.25, z: -8 }, heading: - 1.2 } } );
 		expect( spawn.point.toArray() ).toEqual( [ 14.5, 2.25, - 8 ] );
 		expect( spawn.heading ).toBe( - 1.2 );
+
+	} );
+
+} );
+
+describe( 'streamed floor preparation', () => {
+
+	it( 'attaches a floor-only warmup without compiling the complete city', () => {
+
+		const stream = { warmup: null };
+		const renderer = {};
+		const scene = {};
+		const camera = {};
+		const mrt = { emissive: true };
+		const warmup = prepareInteriorStreaming( stream, renderer, scene, camera, mrt );
+
+		expect( stream.warmup ).toBe( warmup );
+		expect( warmup.renderer ).toBe( renderer );
+		expect( warmup.scene ).toBe( scene );
+		expect( warmup.camera ).toBe( camera );
+		expect( warmup.mrt ).toBe( mrt );
 
 	} );
 
