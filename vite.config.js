@@ -5,6 +5,8 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { talkRoute } from './src/server/talkRoute.js';
 import { buildingRoute } from './src/server/buildingRoute.js';
+import { launcherRoute } from './src/server/launcherRoute.js';
+import { createWorldCreation } from './src/creation/index.js';
 
 // Sibling materials database (../materials/CONTRACT.md), served read-only
 // under /materials/<theme>/... for the building viewer and the game. Path is
@@ -20,6 +22,12 @@ const ATLAS_DIR = normalize( process.env.URBE_ATLAS_DIR ?? fileURLToPath( new UR
 // CC0 character, animation and vehicle packs. Not in the repo: they live in
 // the machine's model store. Override with URBE_MODELS_DIR.
 const MODELS_DIR = normalize( process.env.URBE_MODELS_DIR ?? join( homedir(), 'models', 'quaternius' ) );
+const creation = createWorldCreation( {
+	engineRoot: ROOT,
+	atlasRoot: fileURLToPath( new URL( '../atlas', import.meta.url ) ),
+	questsRoot: fileURLToPath( new URL( '../quests', import.meta.url ) ),
+	outDir: join( ROOT, 'out' )
+} );
 
 const TYPES = {
 	'.json': 'application/json',
@@ -72,6 +80,7 @@ export default defineConfig( {
 		mount( 'serve-atlas-samples', '/atlas', ATLAS_DIR ),
 		mount( 'serve-models', '/models', MODELS_DIR ),
 		buildingRoute( ROOT, ATLAS_DIR ),
+		launcherRoute( ROOT, creation ),
 		talkRoute( ROOT )
 	],
 	server: {
