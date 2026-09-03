@@ -36,6 +36,24 @@ describe( 'ObjectiveRouter', () => {
 
 	} );
 
+	it( 'terminates through zero-length graph joins without predecessor cycles', () => {
+
+		const graph = network();
+		graph.nodes.push( node( 'zero-a', 5, 2, 0, 'corner' ), node( 'zero-b', 5, 2, 0, 'corner' ) );
+		graph.edges.push(
+			edge( 'zero-in', 'b', 'zero-a', [ [ 5, 2, 0 ], [ 5, 2, 0 ] ] ),
+			edge( 'zero-join', 'zero-a', 'zero-b', [ [ 5, 2, 0 ], [ 5, 2, 0 ] ] )
+		);
+
+		const route = new ObjectiveRouter( graph ).route( {
+			from: [ 5, 2, 0 ], destination: { kind: 'parcel', id: 'p9' }
+		} );
+
+		expect( route.nodeIds.at( - 1 ) ).toBe( 'entry-p9' );
+		expect( route.nodeIds.length ).toBeLessThanOrEqual( graph.nodes.length );
+
+	} );
+
 	it( 'fails closed for invalid, missing, and disconnected data', () => {
 
 		expect( () => new ObjectiveRouter( { nodes: [], edges: [ { id: 'bad' } ] } ) ).toThrowError( ObjectiveRouteError );

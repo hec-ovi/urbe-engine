@@ -81,15 +81,19 @@ export class ObjectiveRouter {
 		const distance = new Map( [ [ startId, 0 ] ] );
 		const previous = new Map();
 		const open = new Set( [ startId ] );
+		const settled = new Set();
 
 		while ( open.size ) {
 
 			const current = [ ...open ].sort( ( a, b ) => ( distance.get( a ) - distance.get( b ) ) || a.localeCompare( b ) )[ 0 ];
 			open.delete( current );
+			if ( settled.has( current ) ) continue;
+			settled.add( current );
 			if ( current === destinationId ) break;
 
 			for ( const leg of this.adjacency.get( current ) ) {
 
+				if ( settled.has( leg.to ) ) continue;
 				const candidate = distance.get( current ) + leg.edge.distance;
 				const known = distance.get( leg.to ) ?? Infinity;
 				const knownPrevious = previous.get( leg.to );
