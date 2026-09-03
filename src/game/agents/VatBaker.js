@@ -32,7 +32,6 @@ export class VatBaker {
 			return {
 				mesh,
 				count,
-				normalGroups: normalWeldGroups( mesh.geometry ),
 				position: new Float32Array( count * rows * 4 ),
 				normal: new Float32Array( count * rows * 4 )
 			};
@@ -40,6 +39,9 @@ export class VatBaker {
 		} );
 
 		const vertex = new THREE.Vector3();
+		const normal = new THREE.Vector3();
+		const skin = new THREE.Matrix4();
+		const boundSkin = new THREE.Matrix4();
 
 		for ( let c = 0; c < clips.length; c ++ ) {
 
@@ -67,10 +69,10 @@ export class VatBaker {
 
 						target.mesh.getVertexPosition( i, vertex );
 						vertex.toArray( target.position, stride + i * 4 );
+						skinNormal( target.mesh, i, normal, skin, boundSkin );
+						normal.toArray( target.normal, stride + i * 4 );
 
 					}
-
-					writeNormals( target, stride );
 
 				}
 
@@ -93,127 +95,34 @@ export class VatBaker {
 }
 
 /**
- * Area-weighted vertex normals over the frame's deformed positions. Baking
- * these is cheaper and steadier than skinning the rest-pose normals.
+ * Applies the renderer's linear-blend skin transform to one authored normal.
+ * Keeping the source normal preserves its intentional smoothing and hard edges.
  */
-function writeNormals( target, stride ) {
+function skinNormal( mesh, index, target, skin, boundSkin ) {
 
-	const { position, normal, count } = target;
-	const index = target.mesh.geometry.index;
-	const triangles = index ? index.count : count;
+	const geometry = mesh.geometry;
+	const source = geometry.getAttribute( 'normal' );
+	const joints = geometry.getAttribute( 'skinIndex' );
+	const weights = geometry.getAttribute( 'skinWeight' );
+	const boneMatrices = mesh.skeleton.boneMatrices;
+	const elements = skin.elements;
+	elements.fill( 0 );
 
-	for ( let i = 0; i < count; i ++ ) {
+	for ( let slot = 0; slot < 4; slot ++ ) {
 
-		normal[ stride + i * 4 ] = 0;
-		normal[ stride + i * 4 + 1 ] = 0;
-		normal[ stride + i * 4 + 2 ] = 0;
+		const weight = weights.getComponent( index, slot );
+		const offset = joints.getComponent( index, slot ) * 16;
 
-	}
+		for ( let element = 0; element < 16; element ++ ) {
 
-	const ax = [ 0, 0, 0 ];
-	const bx = [ 0, 0, 0 ];
-
-	for ( let t = 0; t < triangles; t += 3 ) {
-
-		const ia = index ? index.getX( t ) : t;
-		const ib = index ? index.getX( t + 1 ) : t + 1;
-		const ic = index ? index.getX( t + 2 ) : t + 2;
-		const oa = stride + ia * 4;
-		const ob = stride + ib * 4;
-		const oc = stride + ic * 4;
-
-		for ( let k = 0; k < 3; k ++ ) {
-
-			ax[ k ] = position[ ob + k ] - position[ oa + k ];
-			bx[ k ] = position[ oc + k ] - position[ oa + k ];
-
-		}
-
-		const nx = ax[ 1 ] * bx[ 2 ] - ax[ 2 ] * bx[ 1 ];
-		const ny = ax[ 2 ] * bx[ 0 ] - ax[ 0 ] * bx[ 2 ];
-		const nz = ax[ 0 ] * bx[ 1 ] - ax[ 1 ] * bx[ 0 ];
-
-		for ( const offset of [ oa, ob, oc ] ) {
-
-			normal[ offset ] += nx;
-			normal[ offset + 1 ] += ny;
-			normal[ offset + 2 ] += nz;
+			elements[ element ] += boneMatrices[ offset + element ] * weight;
 
 		}
 
 	}
 
-	weldFrameNormals( normal, stride, target.normalGroups );
-
-	for ( let i = 0; i < count; i ++ ) {
-
-		const offset = stride + i * 4;
-		const length = Math.hypot( normal[ offset ], normal[ offset + 1 ], normal[ offset + 2 ] ) || 1;
-		normal[ offset ] /= length;
-		normal[ offset + 1 ] /= length;
-		normal[ offset + 2 ] /= length;
-
-	}
-
-}
-
-/**
- * UV seams duplicate vertices. Join only copies that had the same rest-pose
- * position and normal, preserving intentional hard edges.
- */
-export function normalWeldGroups( geometry ) {
-
-	const position = geometry.getAttribute( 'position' );
-	const normal = geometry.getAttribute( 'normal' );
-
-	if ( ! position || ! normal || position.count !== normal.count ) return [];
-
-	const bySurfacePoint = new Map();
-
-	for ( let i = 0; i < position.count; i ++ ) {
-
-		const key = [
-			position.getX( i ), position.getY( i ), position.getZ( i ),
-			normal.getX( i ), normal.getY( i ), normal.getZ( i )
-		].join( ',' );
-
-		if ( ! bySurfacePoint.has( key ) ) bySurfacePoint.set( key, [] );
-		bySurfacePoint.get( key ).push( i );
-
-	}
-
-	return [ ...bySurfacePoint.values() ].filter( ( group ) => group.length > 1 );
-
-}
-
-/** Area-weighted normal contributions are shared across each smooth seam. */
-export function weldFrameNormals( normal, stride, groups ) {
-
-	for ( const group of groups ) {
-
-		let x = 0;
-		let y = 0;
-		let z = 0;
-
-		for ( const vertex of group ) {
-
-			const offset = stride + vertex * 4;
-			x += normal[ offset ];
-			y += normal[ offset + 1 ];
-			z += normal[ offset + 2 ];
-
-		}
-
-		for ( const vertex of group ) {
-
-			const offset = stride + vertex * 4;
-			normal[ offset ] = x;
-			normal[ offset + 1 ] = y;
-			normal[ offset + 2 ] = z;
-
-		}
-
-	}
+	boundSkin.multiplyMatrices( mesh.bindMatrixInverse, skin ).multiply( mesh.bindMatrix );
+	target.fromBufferAttribute( source, index ).transformDirection( boundSkin );
 
 }
 
