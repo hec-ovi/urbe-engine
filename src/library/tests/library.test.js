@@ -81,6 +81,11 @@ describe( 'city and game library contract', () => {
 			game: { ...updated, selectedInteriors: [ 'p7' ], save: { ...updated.save, revision: 3 } }, expectedRevision: 2
 		} ), 'E_INVALID_REQUEST' );
 
+		const importedOut = fixtureOut();
+		const imported = createLibrary( { outDir: importedOut } );
+		const laterRevision = { ...game, id: 'imported-save', save: { ...game.save, revision: 7 } };
+		expect( ( await imported.saveGame( { game: laterRevision, expectedRevision: null } ) ).game.save.revision ).toBe( 7 );
+
 	} );
 
 	it( 'publishes a city descriptor once into an existing artifact directory', async () => {
@@ -194,6 +199,7 @@ function savedGame() {
 		name: 'Fresh Save',
 		cityId: 'small',
 		size: 'small',
+		theme: 'cyberpunk',
 		selectedInteriors: [ 'p2' ],
 		questBundle: null,
 		quests: [],

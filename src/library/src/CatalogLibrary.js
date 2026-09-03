@@ -328,9 +328,9 @@ function assertRevision( game, current, expected ) {
 
 	if ( current === null ) {
 
-		if ( expected !== null || game.save.revision !== 1 ) {
+		if ( expected !== null ) {
 
-			throw new LibraryError( 'E_REVISION_CONFLICT', `new game ${game.id} must expect null and start at revision 1` );
+			throw new LibraryError( 'E_REVISION_CONFLICT', `new game ${game.id} must expect null` );
 
 		}
 		return;

@@ -10,7 +10,7 @@ Discovers, validates, loads and saves deterministic city and game descriptors un
 - `discover(request = {})`, `listCities(request = {})`, `listGames(request = {})`: [schema/query.schema.json](schema/query.schema.json).
 - `loadCity(reference)`, `loadGame(reference)`: [schema/descriptor-ref.schema.json](schema/descriptor-ref.schema.json).
 - `saveCity(descriptor)`: [schema/city-descriptor.schema.json](schema/city-descriptor.schema.json). City descriptors are create-only.
-- `saveGame(request)`: [schema/save-request.schema.json](schema/save-request.schema.json). A new save uses `expectedRevision: null` and revision 1. An update names the current revision and supplies the next one.
+- `saveGame(request)`: [schema/save-request.schema.json](schema/save-request.schema.json). A new or imported save uses `expectedRevision: null`. An update names the current revision and supplies the next one.
 
 ## Outputs
 

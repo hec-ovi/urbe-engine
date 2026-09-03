@@ -9,6 +9,7 @@
     "name",
     "cityId",
     "size",
+    "theme",
     "selectedInteriors",
     "questBundle",
     "quests",
@@ -34,6 +35,10 @@
     },
     "size": {
       "enum": ["small", "medium", "large"]
+    },
+    "theme": {
+      "type": "string",
+      "minLength": 1
     },
     "selectedInteriors": {
       "type": "array",
@@ -179,7 +184,7 @@
     },
     "progress": {
       "type": "object",
-      "required": ["id", "title", "objective", "state", "completedSteps"],
+      "required": ["id", "title", "objective", "state", "totalSteps", "completedSteps", "runtime"],
       "properties": {
         "id": {
           "$ref": "#/$defs/id"
@@ -195,12 +200,54 @@
         "state": {
           "enum": ["available", "active", "completed", "failed"]
         },
+        "totalSteps": {
+          "type": "integer",
+          "minimum": 1
+        },
         "completedSteps": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/id"
           },
           "uniqueItems": true
+        },
+        "runtime": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["cast", "state"],
+              "properties": {
+                "cast": {
+                  "type": "object",
+                  "additionalProperties": { "$ref": "#/$defs/id" }
+                },
+                "state": {
+                  "type": "object",
+                  "required": ["activeStepIds", "completedStepIds", "flags"],
+                  "properties": {
+                    "activeStepIds": {
+                      "type": "array",
+                      "items": { "$ref": "#/$defs/id" },
+                      "uniqueItems": true
+                    },
+                    "completedStepIds": {
+                      "type": "array",
+                      "items": { "$ref": "#/$defs/id" },
+                      "uniqueItems": true
+                    },
+                    "flags": {
+                      "type": "array",
+                      "items": { "$ref": "#/$defs/id" },
+                      "uniqueItems": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
         }
       },
       "additionalProperties": false
