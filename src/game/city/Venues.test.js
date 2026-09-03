@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { Venues } from './Venues.js';
+import { Venues, frameStrip } from './Venues.js';
 
 const atlas = {
 	parcels: [
@@ -32,7 +32,22 @@ const fixtures = [
 	{ parcelId: 'p2', kind: 'sign', lumens: 300 }
 ];
 
-const factory = { build: () => new THREE.MeshBasicMaterial(), variant: () => new THREE.MeshBasicMaterial() };
+const factory = {
+	build: ( key ) => {
+
+		const material = new THREE.MeshBasicMaterial();
+		material.userData = { key };
+		return material;
+
+	},
+	variant: ( key, tweaks ) => {
+
+		const material = new THREE.MeshBasicMaterial();
+		material.userData = { key, tweaks };
+		return material;
+
+	}
+};
 
 function venues( doors, buildings ) {
 
@@ -74,8 +89,45 @@ describe( 'Venues', () => {
 		const doors = [ door( 'p0' ), door( 'p2' ) ];
 		const group = venues( doors, built( [ 'p0', 'p2' ] ) ).build( doors );
 
-		expect( group.children ).toHaveLength( 1 );
-		expect( group.children[ 0 ].geometry.getAttribute( 'position' ).count ).toBeGreaterThan( 0 );
+		expect( group.children ).toHaveLength( 2 );
+		expect( group.getObjectByName( 'entrance-frame:housing' ).material.userData.key )
+			.toBe( 'cyberpunk/window-frame/mid' );
+		const lens = group.getObjectByName( 'entrance-frame:lens' );
+		expect( lens.material.userData.key ).toBe( 'cyberpunk/light-fixture/mid' );
+		expect( lens.material.userData.tweaks.variantId ).toBe( 'strip' );
+		expect( lens.geometry.getAttribute( 'position' ).count ).toBeGreaterThan( 0 );
+
+	} );
+
+	it( 'keeps every emitting face outward on rotated entrances', () => {
+
+		for ( const normal of [
+			new THREE.Vector3( 0, 0, 1 ), new THREE.Vector3( 1, 0, 0 ),
+			new THREE.Vector3( 0, 0, - 1 ), new THREE.Vector3( - 1, 0, 0 )
+		] ) {
+
+			const entry = door( 'p0' );
+			entry.normal.copy( normal );
+			entry.along.set( normal.z, 0, - normal.x );
+			const { housings, lenses } = frameStrip( entry );
+
+			expect( housings ).toHaveLength( 3 );
+			expect( lenses ).toHaveLength( 3 );
+
+			for ( const geometry of lenses ) {
+
+				const normals = geometry.getAttribute( 'normal' );
+
+				for ( let i = 0; i < normals.count; i ++ ) {
+
+					const face = new THREE.Vector3().fromBufferAttribute( normals, i );
+					expect( face.dot( normal ) ).toBeCloseTo( 1, 6 );
+
+				}
+
+			}
+
+		}
 
 	} );
 

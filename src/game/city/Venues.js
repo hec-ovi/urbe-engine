@@ -12,12 +12,17 @@ const ASK_RADIUS = 140;
 /** And how often. A rota changes on the hour, never between two frames. */
 const ASK_INTERVAL = 4;
 
-const FRAME_KEY = 'cyberpunk/light-fixture/mid';
+const FRAME_LIGHT_KEY = 'cyberpunk/light-fixture/mid';
+const FRAME_HOUSING_KEY = 'cyberpunk/window-frame/mid';
 const FRAME_KELVIN = 3200;
 /** A door frame strip is read directly, so it sits above street exposure. */
 const FRAME_EMISSIVE = 90;
-const FRAME_WIDTH = 0.07;
-const FRAME_INSET = 0.06;
+const FRAME_HOUSING_WIDTH = 0.11;
+const FRAME_LIGHT_WIDTH = 0.045;
+const FRAME_DEPTH = 0.05;
+const FRAME_INSET = 0.055;
+/** Dark fitted end cap at each end of a continuous light bar. */
+const FRAME_END_CAP = 0.055;
 
 /**
  * Which buildings are real, said in light.
@@ -96,19 +101,40 @@ export class Venues {
 
 		const group = new THREE.Group();
 		group.name = 'entrances';
-		const strips = [];
+		const housings = [];
+		const lenses = [];
 
-		for ( const door of doors ) strips.push( ...frameStrip( door ) );
+		for ( const door of doors ) {
 
-		if ( strips.length ) {
+			const frame = frameStrip( door );
+			housings.push( ...frame.housings );
+			lenses.push( ...frame.lenses );
 
-			group.add( new THREE.Mesh(
-				BufferGeometryUtils.mergeGeometries( strips, false ),
-				this.factory.variant( FRAME_KEY, {
+		}
+
+		if ( housings.length ) {
+
+			const mesh = new THREE.Mesh(
+				BufferGeometryUtils.mergeGeometries( housings, false ),
+				this.factory.build( FRAME_HOUSING_KEY )
+			);
+			mesh.name = 'entrance-frame:housing';
+			group.add( mesh );
+
+		}
+
+		if ( lenses.length ) {
+
+			const mesh = new THREE.Mesh(
+				BufferGeometryUtils.mergeGeometries( lenses, false ),
+				this.factory.variant( FRAME_LIGHT_KEY, {
+					variantId: 'strip',
 					emissiveLevel: FRAME_EMISSIVE,
 					emissive: kelvinColor( FRAME_KELVIN )
 				} )
-			) );
+			);
+			mesh.name = 'entrance-frame:lens';
+			group.add( mesh );
 
 		}
 
@@ -180,30 +206,56 @@ function nameOf( building ) {
  * built in the door's own frame (along the opening, out of it) so a facade at
  * any angle gets its strips on the frame and not on the world axes.
  */
-function frameStrip( door ) {
+export function frameStrip( door ) {
 
-	const yaw = Math.atan2( - door.along.z, door.along.x );
+	const yaw = Math.atan2( door.normal.x, door.normal.z );
 	const y0 = door.center.y;
-	const out = [];
+	const housings = [];
+	const lenses = [];
 
-	const bar = ( length, height, offset, y ) => {
+	const bar = ( length, height, lensWidth, lensHeight, offset, y ) => {
 
-		const geometry = new THREE.BoxGeometry( length, height, FRAME_WIDTH );
-		geometry.deleteAttribute( 'uv1' );
-		geometry.rotateY( yaw );
-		geometry.translate(
+		const housing = new THREE.BoxGeometry( length, height, FRAME_DEPTH );
+		housing.deleteAttribute( 'uv1' );
+		housing.rotateY( yaw );
+		housing.translate(
 			door.center.x + door.along.x * offset + door.normal.x * FRAME_INSET,
 			y,
 			door.center.z + door.along.z * offset + door.normal.z * FRAME_INSET
 		);
-		out.push( geometry.toNonIndexed() );
+		housings.push( housing.toNonIndexed() );
+
+		// The emitting surface is one fitted face, not the six faces of a box.
+		// Its uniform `strip` variant can repeat over any valid door size without
+		// repeating the dark bezel of the canonical lamp texture through the bar.
+		const lens = new THREE.PlaneGeometry( lensWidth, lensHeight );
+		lens.deleteAttribute( 'uv1' );
+		lens.rotateY( yaw );
+		lens.translate(
+			door.center.x + door.along.x * offset + door.normal.x * ( FRAME_INSET + FRAME_DEPTH / 2 + 0.001 ),
+			y,
+			door.center.z + door.along.z * offset + door.normal.z * ( FRAME_INSET + FRAME_DEPTH / 2 + 0.001 )
+		);
+		lenses.push( lens.toNonIndexed() );
 
 	};
 
-	for ( const side of [ - 1, 1 ] ) bar( FRAME_WIDTH, door.height, side * door.width / 2, y0 + door.height / 2 );
+	for ( const side of [ - 1, 1 ] ) {
 
-	bar( door.width + FRAME_WIDTH, FRAME_WIDTH, 0, y0 + door.height );
+		bar(
+			FRAME_HOUSING_WIDTH, door.height,
+			FRAME_LIGHT_WIDTH, Math.max( FRAME_LIGHT_WIDTH, door.height - FRAME_END_CAP * 2 ),
+			side * door.width / 2, y0 + door.height / 2
+		);
 
-	return out;
+	}
+
+	bar(
+		door.width + FRAME_HOUSING_WIDTH, FRAME_HOUSING_WIDTH,
+		Math.max( FRAME_LIGHT_WIDTH, door.width + FRAME_HOUSING_WIDTH - FRAME_END_CAP * 2 ), FRAME_LIGHT_WIDTH,
+		0, y0 + door.height
+	);
+
+	return { housings, lenses };
 
 }
