@@ -29,7 +29,7 @@ Closed set in [schema/creation-error.schema.json](schema/creation-error.schema.j
 
 ## Dependencies
 
-- Atlas CLI through `../../../atlas/CONTRACT.md`.
+- Atlas built CLI through `../../../atlas/CONTRACT.md`; generation executes its existing `dist/cli.mjs` so the sibling source tree can stay read-only in the engine service.
 - Assembly CLI through `../assembly/CONTRACT.md`.
 - Quest materialization CLI through `../../../quests/creation/CONTRACT.md`.
 - City and game persistence through `../library/CONTRACT.md`.

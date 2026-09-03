@@ -125,7 +125,7 @@ function processPort( calls ) {
 
 	return async ( command, args ) => {
 
-		if ( args.includes( 'generate' ) ) {
+		if ( args[ 0 ] === 'dist/cli.mjs' ) {
 
 			calls.push( { kind: 'atlas', command, args } );
 			await writeJson( valueAfter( args, '--out' ), atlas() );

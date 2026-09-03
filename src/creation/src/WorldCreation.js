@@ -40,7 +40,7 @@ export class WorldCreation {
 
 		try {
 
-			await this.run( 'npm', atlasArgs( input, blueprint ), { cwd: this.atlasRoot } );
+			await this.run( 'node', atlasArgs( input, blueprint ), { cwd: this.atlasRoot } );
 			await this.run( 'npm', [
 				'run', 'assemble-city', '--', '--blueprint', blueprint, '--out', world,
 				'--workers', '4', '--interiors', '0'
@@ -316,7 +316,7 @@ export class WorldCreation {
 
 function atlasArgs( input, blueprint ) {
 
-	const args = [ 'run', 'generate', '--', '--seed', input.seed, '--out', blueprint ];
+	const args = [ 'dist/cli.mjs', '--seed', input.seed, '--out', blueprint ];
 	if ( input.size === 'small' ) args.push( '--size', '400', '--max-floors', '6', '--no-highways', '--no-trains', '--no-subways' );
 	else args.push( '--size', input.size === 'medium' ? '800' : '1000' );
 	return args;
