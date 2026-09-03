@@ -235,8 +235,8 @@ export class QuestGameplay {
 		if ( action.action !== 'disembark' && ! action.result.autoDisembarked ) return null;
 		const tracked = this.transitQuest;
 		this.transitQuest = null;
-		if ( ! atPlace( playerPlaces, runtimePlace( tracked.target.target.to ) ) ) return null;
 		this.#releasePassenger( tracked.passengerNpcId, timeMin );
+		if ( ! atPlace( playerPlaces, runtimePlace( tracked.target.target.to ) ) ) return null;
 		const result = this.mechanics.complete( {
 			questId: tracked.target.questId, stepId: tracked.target.stepId, timeMin,
 			event: mechanicEvent( tracked.target )
@@ -467,7 +467,11 @@ export class QuestGameplay {
 	#ensurePassenger( npcId, timeMin, position ) {
 
 		if ( ! this.continuity ) return false;
-		const follow = this.continuity.serialize().follow;
+		const state = this.continuity.serialize();
+		const actor = state.actors.find( ( candidate ) => candidate.npcId === npcId );
+		if ( ! actor?.position || new THREE.Vector3().fromArray( actor.position )
+			.distanceTo( new THREE.Vector3().fromArray( position ) ) > ESCORT_REACH ) return false;
+		const follow = state.follow;
 		if ( follow?.npcId === npcId && follow.mode === 'following' ) return true;
 		if ( follow ) return false;
 		try {

@@ -90,7 +90,20 @@ describe( 'live measured quest mechanic hosts', () => {
 		expect( harness.gameplay.transitEvent( {
 			action: 'disembark', result: { ok: true, tripId: 'trip-live', routeId: 'route-live' }
 		}, { timeMin: TIME, playerPlaces: [ P4 ], position: [ 0, 0, 0 ] } ) ).toBeNull();
+		expect( harness.continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: TIME } );
 		expect( harness.session.persistenceView()[ 0 ].completedSteps ).toEqual( [] );
+
+	} );
+
+	it( 'does not board an authored passenger who is absent from the origin', () => {
+
+		const harness = setup( [ transportDefinition() ] );
+		harness.control.actor.position = [ 30, 0, -2 ];
+		harness.gameplay.transitEvent( {
+			action: 'board', result: { ok: true, service: { tripId: 'trip-live', routeId: 'route-live' } }
+		}, { timeMin: TIME, playerPlaces: [ P4 ], position: [ 0, 0, -2 ] } );
+		expect( harness.continuity.startFollow ).not.toHaveBeenCalled();
+		expect( harness.continuity.carryFollower ).not.toHaveBeenCalled();
 
 	} );
 
@@ -176,9 +189,9 @@ function fixedDefinition() {
 	const steps = kinds.map( ( [ kind, fields ], index ) => step( kind, {
 		kind, ...fields, place: { parcelId: 'p4' }, completionFlag: `${kind}-done`
 	}, index === kinds.length - 1 ? 'transportation' : kinds[ index + 1 ][ 0 ] ) );
-	steps.push( step( 'transportation', transportationTarget(), null, 'safe' ) );
+	steps.push( step( 'transportation', transportationTarget( [ 'entry-code' ] ), null, 'safe' ) );
 	return definition( 'fixed', [ role( 'witness', 'witness' ) ], steps, [
-		{ itemId: 'entry-code', name: 'Entry code', description: 'Archive credential.', kind: 'information' }
+		{ itemId: 'entry-code', name: 'Entry code', description: 'Archive credential device.', kind: 'device' }
 	], [ ...kinds.map( ( [ kind ] ) => `${kind}-done` ), 'transport-done' ], 'hacking', 'safe' );
 
 }
@@ -191,12 +204,12 @@ function transportDefinition() {
 
 }
 
-function transportationTarget() {
+function transportationTarget( cargoItemIds = [] ) {
 
 	return {
 		kind: 'transportation', journeyId: 'archive-to-market', mode: 'public-transit',
 		from: { parcelId: 'p4' }, to: { parcelId: 'p7' }, passengerRoleIds: [ 'witness' ],
-		cargoItemIds: [], completionFlag: 'transport-done'
+		cargoItemIds, completionFlag: 'transport-done'
 	};
 
 }
@@ -233,7 +246,7 @@ function step( stepId, target, next, endingId ) {
 	return {
 		stepId, actId: 'act', narrative: { description: `${stepId} done`, playerHint: stepId, stake: stepId },
 		wantedByRoleId: target.roleId ?? 'witness', target, gives: stepId === 'hacking' ? [ 'entry-code' ] : [],
-		needs: stepId === 'access' ? [ 'entry-code' ] : [], conditions: [],
+		needs: stepId === 'access' ? [ 'entry-code' ] : target.kind === 'transportation' ? [ ...target.cargoItemIds ] : [], conditions: [],
 		effects: target.completionFlag ? [ { kind: 'setFlag', flag: target.completionFlag } ] : [],
 		next: next ? [ { toStepId: next, when: [] } ] : [], branching: 'parallel', ...( endingId ? { endingId } : {} )
 	};
