@@ -42,7 +42,42 @@ describe( 'kerb geometry', () => {
 
 	} );
 
+	it( 'anchors straight-run joints in world metres regardless of ring origin or winding', () => {
+
+		const ring = [ [ 101, 200 ], [ 111, 200 ], [ 111, 210 ], [ 101, 210 ] ];
+		const keepSouth = ( a, b ) => a[ 1 ] === 200 && b[ 1 ] === 200;
+		const forward = skirt( ring, 0.15, - 0.05, keepSouth ).getAttribute( 'uv' );
+		const reversed = skirt( [ ...ring ].reverse(), 0.15, - 0.05,
+			( a, b ) => a[ 1 ] === 200 && b[ 1 ] === 200 ).getAttribute( 'uv' );
+		const top = ledge( ring, 0.15, 0.2, keepSouth ).getAttribute( 'uv' );
+		const reversedTop = ledge( [ ...ring ].reverse(), 0.15, 0.2,
+			( a, b ) => a[ 1 ] === 200 && b[ 1 ] === 200 ).getAttribute( 'uv' );
+
+		expect( extent( forward, 'x' ) ).toEqual( [ 101, 111 ] );
+		expect( extent( reversed, 'x' ) ).toEqual( [ 101, 111 ] );
+		expect( extent( top, 'x' ) ).toEqual( [ 101, 111 ] );
+		expect( extent( reversedTop, 'x' ) ).toEqual( [ 101, 111 ] );
+
+	} );
+
 } );
+
+function extent( attribute, component ) {
+
+	const get = component === 'x' ? ( i ) => attribute.getX( i ) : ( i ) => attribute.getY( i );
+	let min = Infinity;
+	let max = - Infinity;
+
+	for ( let i = 0; i < attribute.count; i ++ ) {
+
+		min = Math.min( min, get( i ) );
+		max = Math.max( max, get( i ) );
+
+	}
+
+	return [ min, max ];
+
+}
 
 /**
  * A kerb stands where the pavement meets the road and nowhere else: not along

@@ -22,10 +22,10 @@ const CURB_LIP = 0.004;
 // pavement in a world published without one, which has to cut its own from the
 // edges that meet the road.
 const SURFACES = {
-	roadway: { key: 'cyberpunk/road/high_rich', y: 0, variantId: 'puddle' },
-	sidewalk: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT, kerb: 'grow' },
-	block: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT },
-	open: { key: 'cyberpunk/tile/high_rich', y: SIDEWALK_HEIGHT, kerb: 'grow' },
+	roadway: { key: 'cyberpunk/road/high_rich', y: 0, variantId: 'patched' },
+	sidewalk: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT, variantId: 'plate', kerb: 'grow' },
+	block: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT, variantId: 'plate' },
+	open: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT, variantId: 'plate', kerb: 'grow' },
 	curb: { key: CURB_KEY, y: SIDEWALK_HEIGHT + CURB_LIP, kerb: 'face' }
 };
 
@@ -34,11 +34,10 @@ const SURFACES = {
  * roadway at zero, every other surface raised by a real curb, one merged mesh
  * per material so the whole ground costs a handful of draw calls.
  *
- * The roadway takes the road entry's `puddle` variant, where the materials box
- * pools standing water over the asphalt: inside a puddle the surface goes dark
- * and flat at roughness 0.04, so the environment probe lands on it and the neon
- * above runs down the road as a long smear. Outside one the asphalt is dry and
- * matte, which is the contrast that makes the wet part read as wet.
+ * Roadway uses the isotropic patched asphalt because these cover polygons have
+ * a shared world grid rather than one lane axis. Sidewalk, block and open cover
+ * use one neutral 2 m plate per tile. Their UV coordinates remain world metres,
+ * so every cover shares one grid origin and texture size never follows mesh size.
  */
 export class GroundBuilder {
 

@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { GroundBuilder, SIDEWALK_HEIGHT } from './GroundBuilder.js';
 
-const factory = { build: () => new THREE.MeshStandardMaterial() };
+const factory = { build: ( key, variantId ) => {
+
+	const material = new THREE.MeshStandardMaterial();
+	material.userData = { key, variantId };
+	return material;
+
+} };
 const ground = ( covers, transit ) => new GroundBuilder( { volumetric: { ground: covers }, transit }, factory ).build();
 const rect = ( surface, z0, z1 ) => ( { surface, polygon: [ [ 0, z0 ], [ 20, z0 ], [ 20, z1 ], [ 0, z1 ] ] } );
 
@@ -98,6 +104,37 @@ describe( 'GroundBuilder', () => {
 
 	} );
 
+	it( 'uses neutral large plates and dry patched asphalt on the world-metre grid', () => {
+
+		const shifted = ( surface, z0, z1 ) => ( {
+			surface,
+			polygon: [ [ 100, z0 ], [ 120, z0 ], [ 120, z1 ], [ 100, z1 ] ]
+		} );
+		const { group } = ground( [
+			shifted( 'roadway', 200, 210 ),
+			shifted( 'curb', 210, 210.15 ),
+			shifted( 'sidewalk', 210.15, 216 ),
+			shifted( 'block', 216, 220 ),
+			shifted( 'open', 220, 224 )
+		] );
+
+		const road = group.getObjectByName( 'ground:roadway' );
+		expect( road.material.userData ).toEqual( {
+			key: 'cyberpunk/road/high_rich', variantId: 'patched'
+		} );
+
+		for ( const name of [ 'sidewalk', 'block', 'open' ] ) {
+
+			const surface = group.getObjectByName( `ground:${name}` );
+			expect( surface.material.userData ).toEqual( {
+				key: 'cyberpunk/sidewalk/high_rich', variantId: 'plate'
+			} );
+			expect( worldUvErrors( surface.geometry ) ).toEqual( [] );
+
+		}
+
+	} );
+
 } );
 
 const bedrockY = ( group ) => round( group.getObjectByName( 'ground:bedrock' ).geometry.getAttribute( 'position' ).getY( 0 ) );
@@ -154,3 +191,21 @@ function span( geometry ) {
 }
 
 const round = ( value ) => Math.round( value * 1e4 ) / 1e4;
+
+/** Horizontal cover UVs are absolute world metres: [x, -z]. */
+function worldUvErrors( geometry ) {
+
+	const position = geometry.getAttribute( 'position' );
+	const uv = geometry.getAttribute( 'uv' );
+	const errors = [];
+
+	for ( let i = 0; i < position.count; i ++ ) {
+
+		if ( Math.abs( uv.getX( i ) - position.getX( i ) ) > 1e-6
+			|| Math.abs( uv.getY( i ) + position.getZ( i ) ) > 1e-6 ) errors.push( i );
+
+	}
+
+	return errors;
+
+}

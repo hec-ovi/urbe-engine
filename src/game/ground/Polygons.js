@@ -74,7 +74,6 @@ export function skirt( ring, top, bottom, keep = () => true ) {
 	const positions = [];
 	const uvs = [];
 	const normals = [];
-	let run = 0;
 
 	for ( let i = 0; i < ring.length; i ++ ) {
 
@@ -93,8 +92,7 @@ export function skirt( ring, top, bottom, keep = () => true ) {
 
 		const corners = ccw ? [ a, b ] : [ b, a ];
 		const [ p, q ] = corners;
-		const u0 = run;
-		const u1 = run + length;
+		const [ u0, u1 ] = projectedEdgeU( p, q );
 
 		// Two triangles, wound so the front face points along (nx, 0, nz).
 		const pTop = [ p[ 0 ], top, p[ 1 ], u0, top ];
@@ -110,8 +108,6 @@ export function skirt( ring, top, bottom, keep = () => true ) {
 			normals.push( nx, 0, nz );
 
 		}
-
-		run = u1;
 
 	}
 
@@ -168,7 +164,6 @@ export function ledge( ring, y, width, keep = () => true ) {
 	const positions = [];
 	const uvs = [];
 	const normals = [];
-	let run = 0;
 
 	const kept = points.map( ( p, i ) => keep( p, points[ ( i + 1 ) % n ] ) );
 
@@ -186,8 +181,7 @@ export function ledge( ring, y, width, keep = () => true ) {
 		const pi = kept[ ( i + n - 1 ) % n ] ? inward[ i ] : [ p[ 0 ] - own[ 0 ] * width, p[ 1 ] - own[ 1 ] * width ];
 		const qi = kept[ ( i + 1 ) % n ] ? inward[ ( i + 1 ) % n ] : [ q[ 0 ] - own[ 0 ] * width, q[ 1 ] - own[ 1 ] * width ];
 
-		const u0 = run;
-		const u1 = run + length;
+		const [ u0, u1 ] = projectedEdgeU( p, q );
 		// Two triangles wound to face +Y.
 		const quad = [
 			[ p[ 0 ], p[ 1 ], u0, 0 ], [ pi[ 0 ], pi[ 1 ], u0, width ], [ q[ 0 ], q[ 1 ], u1, 0 ],
@@ -202,8 +196,6 @@ export function ledge( ring, y, width, keep = () => true ) {
 
 		}
 
-		run = u1;
-
 	}
 
 	const geometry = new THREE.BufferGeometry();
@@ -212,6 +204,29 @@ export function ledge( ring, y, width, keep = () => true ) {
 	geometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( uvs, 2 ) );
 
 	return geometry;
+
+}
+
+/**
+ * Metres along the edge from a stable world origin. Canonicalising the edge
+ * direction makes the same kerb keep the same joints when a ring is reversed.
+ */
+function projectedEdgeU( p, q ) {
+
+	const dx = q[ 0 ] - p[ 0 ];
+	const dz = q[ 1 ] - p[ 1 ];
+	const length = Math.hypot( dx, dz ) || 1;
+	let ux = dx / length;
+	let uz = dz / length;
+
+	if ( ux < - 1e-9 || ( Math.abs( ux ) <= 1e-9 && uz < 0 ) ) {
+
+		ux *= - 1;
+		uz *= - 1;
+
+	}
+
+	return [ p[ 0 ] * ux + p[ 1 ] * uz, q[ 0 ] * ux + q[ 1 ] * uz ];
 
 }
 
