@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:library:game-descriptor",
+  "title": "Game descriptor",
+  "type": "object",
+  "required": [
+    "contractVersion",
+    "id",
+    "name",
+    "cityId",
+    "size",
+    "selectedInteriors",
+    "questBundle",
+    "quests",
+    "sideJobs",
+    "player",
+    "currentLocation",
+    "discoveredLocations",
+    "save"
+  ],
+  "properties": {
+    "contractVersion": {
+      "const": "1.0.0"
+    },
+    "id": {
+      "$ref": "#/$defs/id"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cityId": {
+      "$ref": "#/$defs/id"
+    },
+    "size": {
+      "enum": ["small", "medium", "large"]
+    },
+    "selectedInteriors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "uniqueItems": true
+    },
+    "questBundle": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/resource"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "quests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/progress"
+      }
+    },
+    "sideJobs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/progress"
+      }
+    },
+    "player": {
+      "type": "object",
+      "required": ["position", "heading", "inventory"],
+      "properties": {
+        "position": {
+          "type": "object",
+          "required": ["x", "y", "z"],
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "z": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
+        "heading": {
+          "type": "number"
+        },
+        "inventory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "quantity", "state"],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "state": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/jsonValue"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "currentLocation": {
+      "$ref": "#/$defs/location"
+    },
+    "discoveredLocations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/location"
+      }
+    },
+    "save": {
+      "type": "object",
+      "required": ["revision", "createdAt", "updatedAt", "playTimeSeconds"],
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "createdAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "playTimeSeconds": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?Z$"
+    },
+    "resource": {
+      "type": "object",
+      "required": ["uri", "mediaType", "byteSize", "checksum"],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "byteSize": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "checksum": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "progress": {
+      "type": "object",
+      "required": ["id", "title", "objective", "state", "completedSteps"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "objective": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "enum": ["available", "active", "completed", "failed"]
+        },
+        "completedSteps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "location": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "jsonValue": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "number" },
+        { "type": "string" },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/jsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/jsonValue"
+          }
+        }
+      ]
+    }
+  }
+}

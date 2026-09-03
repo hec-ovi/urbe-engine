@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:library:descriptor-ref",
+  "title": "Library descriptor reference",
+  "type": "object",
+  "required": ["id"],
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/id"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$"
+    }
+  }
+}

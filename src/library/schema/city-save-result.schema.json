@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:library:city-save-result",
+  "title": "City save result",
+  "type": "object",
+  "required": ["contractVersion", "created", "city"],
+  "properties": {
+    "contractVersion": {
+      "const": "1.0.0"
+    },
+    "created": {
+      "const": true
+    },
+    "city": {
+      "$ref": "urn:urbe:engine:library:city-descriptor"
+    }
+  },
+  "additionalProperties": false
+}

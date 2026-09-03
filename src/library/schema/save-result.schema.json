@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:library:save-result",
+  "title": "Game save result",
+  "type": "object",
+  "required": ["contractVersion", "created", "game"],
+  "properties": {
+    "contractVersion": {
+      "const": "1.0.0"
+    },
+    "created": {
+      "type": "boolean"
+    },
+    "game": {
+      "$ref": "urn:urbe:engine:library:game-descriptor"
+    }
+  },
+  "additionalProperties": false
+}

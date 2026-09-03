@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:library:city-catalog",
+  "title": "City catalog",
+  "type": "object",
+  "required": ["contractVersion", "items"],
+  "properties": {
+    "contractVersion": {
+      "const": "1.0.0"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:urbe:engine:library:city-descriptor"
+      }
+    }
+  },
+  "additionalProperties": false
+}

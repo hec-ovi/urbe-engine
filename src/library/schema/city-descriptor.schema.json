@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:library:city-descriptor",
+  "title": "City descriptor",
+  "type": "object",
+  "required": [
+    "contractVersion",
+    "id",
+    "name",
+    "size",
+    "seed",
+    "generatedAt",
+    "districtCount",
+    "buildings",
+    "world"
+  ],
+  "properties": {
+    "contractVersion": {
+      "const": "1.0.0"
+    },
+    "id": {
+      "$ref": "#/$defs/id"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "size": {
+      "enum": ["small", "medium", "large"]
+    },
+    "seed": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generatedAt": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "districtCount": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "buildings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "type", "eligible"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "label": { "type": "string", "minLength": 1 },
+          "type": { "type": "string", "minLength": 1 },
+          "eligible": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "world": {
+      "type": "object",
+      "required": ["manifest", "blueprint"],
+      "properties": {
+        "manifest": {
+          "$ref": "#/$defs/resource"
+        },
+        "blueprint": {
+          "$ref": "#/$defs/resource"
+        },
+        "preview": {
+          "$ref": "#/$defs/resource"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?Z$"
+    },
+    "resource": {
+      "type": "object",
+      "required": ["uri", "mediaType", "byteSize", "checksum"],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "byteSize": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "checksum": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

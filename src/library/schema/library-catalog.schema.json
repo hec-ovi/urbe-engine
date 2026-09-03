@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:library:library-catalog",
+  "title": "City and game catalog",
+  "type": "object",
+  "required": ["contractVersion", "cities", "games"],
+  "properties": {
+    "contractVersion": {
+      "const": "1.0.0"
+    },
+    "cities": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:urbe:engine:library:city-descriptor"
+      }
+    },
+    "games": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:urbe:engine:library:game-descriptor"
+      }
+    }
+  },
+  "additionalProperties": false
+}
