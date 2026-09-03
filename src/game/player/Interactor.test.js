@@ -40,6 +40,37 @@ describe( 'the crosshair picks the target', () => {
 
 } );
 
+describe( 'investigation interaction routing', () => {
+
+	it( 'offers authored evidence through the shared crosshair and forwards E and R exactly', () => {
+
+		const investigations = {
+			candidates: vi.fn( () => [ {
+				kind: 'investigation', aim: 1,
+				interaction: { targetKey: 'investigation:scene:evidence', prompt: 'E  inspect drive   R  take drive' }
+			} ] ),
+			perform: vi.fn( ( request ) => ( { ok: true, ...request } ) )
+		};
+		const controller = {
+			eye: new THREE.Vector3( 0, 1.7, 0 ), look: new THREE.Vector3( 0, 0, -1 ),
+			body: { feet: new THREE.Vector3() }
+		};
+		const interactor = new Interactor( {
+			crowd: { within: () => [] }, doors: [], sim: {}, controller,
+			elevators: { panels: () => [] }, quests: null, investigations
+		} );
+		const frame = { timeMin: 8, playerPlaces: [], feet: { x: 0, y: 0, z: 0 }, eye: { x: 0, y: 1.7, z: 0 }, look: { x: 0, y: 0, z: -1 } };
+
+		expect( interactor.update( 1 / 60, frame ) ).toBe( 'E  inspect drive   R  take drive' );
+		expect( interactor.activate( { timeMin: 8 }, 'secondary-interact' ) ).toMatchObject( { ok: true, bindingAction: 'secondary-interact' } );
+		expect( investigations.perform ).toHaveBeenCalledWith( {
+			targetKey: 'investigation:scene:evidence', bindingAction: 'secondary-interact', timeMin: 8
+		} );
+
+	} );
+
+} );
+
 /**
  * E on a person is the whole talk feature, so what it has to keep is the
  * promise the game contract makes: the prompt names who is in range, and the

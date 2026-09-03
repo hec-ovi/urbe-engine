@@ -22,7 +22,7 @@
   - `player/`: input, first-person controller, interaction
   - `agents/`: character assets, pose baking, crowd, traffic, persistent NPC materialization and quest-follow control on Connections' authoritative 3D paths (src/game/agents/CONTRACT.md)
   - `voice/`: deterministic content-addressed NPC voice profiles, structured speech controls, prioritized cancellable synthesis, checked audio chunks and AudioWorklet packet transport (src/game/voice/CONTRACT.md)
-  - `investigation/`: deterministic measured body, prop and fitted-decal scenes with exact authored evidence, reachable interaction points and save-safe discovery state (src/game/investigation/CONTRACT.md)
+  - `investigation/`: deterministic authored incident assembly and live E/R evidence flow, with exact quest bindings, Source final-pose bodies, mission props, PBR decals and catalog restoration (src/game/investigation/CONTRACT.md)
   - `quests/`: cast quest sessions, validated player actions, live target props and cast-person focus (src/game/quests/CONTRACT.md)
   - `routes/`: deterministic shortest objective routes to published parcel, station and stop entries over Connections' authoritative 3D walk graph (src/game/routes/CONTRACT.md)
   - `sim/`: the simulation library host and exact NPC continuity pass-through (src/game/sim/CONTRACT.md)

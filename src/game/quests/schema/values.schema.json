@@ -26,7 +26,7 @@
     "bindingAction": { "enum": ["interact", "secondary-interact"] },
     "action": { "enum": ["take", "read", "inspect", "listen", "steal", "work", "deliver"] },
     "interactionKind": { "enum": ["pickup", "observe", "listen", "steal", "work", "deliver"] },
-    "objectiveKind": { "enum": ["talk", "goto", "pickup", "observe", "listen", "steal", "assassinate", "work", "deliver"] },
+    "objectiveKind": { "enum": ["talk", "goto", "pickup", "observe", "listen", "steal", "assassinate", "work", "deliver", "investigation", "rescue", "escort", "access", "hacking", "sabotage", "transportation"] },
     "unavailableReason": {
       "enum": [
         "role_dead",

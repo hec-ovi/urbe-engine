@@ -5,6 +5,7 @@ import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { QuestSession } from './quests/QuestSession.js';
 import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
+import { InvestigationGameplay } from './investigation/index.js';
 import { ObjectiveRouter } from './routes/ObjectiveRouter.js';
 import { ObjectiveGuide } from './routes/ObjectiveGuide.js';
 import { GamePersistence, mergeInventory, mergeProgress, uniqueLocations } from './persistence/index.js';
@@ -160,7 +161,7 @@ export class GameApp {
 
 		this.view.step( 'reading the world' );
 		const source = new WorldSource( config );
-		const { atlas, connections, buildings, unbuilt, npcTypes, questlines, game } = await source.load();
+		const { atlas, connections, buildings, unbuilt, npcTypes, questlines, investigations, game } = await source.load();
 		const transitRoutes = connections.networks.transit.routes;
 		this.transitJourney = new TransitJourney( {
 			atlas, routes: transitRoutes, ...( game?.transitJourney ? { state: game.transitJourney } : {} )
@@ -370,6 +371,17 @@ export class GameApp {
 		} );
 		this.scene.add( this.questGameplay.group );
 		this.probe?.exclude( this.questGameplay.group );
+		this.investigations = await InvestigationGameplay.create( {
+			requests: investigations,
+			session: this.quests,
+			materialFactory: factory,
+			physics: this.physics,
+			playerCollider: this.body.collider,
+			animation: assets.animation,
+			saved: game?.investigations ?? []
+		} );
+		this.scene.add( this.investigations.group );
+		this.probe?.exclude( this.investigations.group );
 		this.objectiveGuide = new ObjectiveGuide( new ObjectiveRouter( connections.networks.walk ) );
 		this.#refreshCurrentObjective();
 
@@ -389,6 +401,7 @@ export class GameApp {
 		this.interactor = new Interactor( {
 			crowd: this.crowd, doors: city.doors, sim: this.sim,
 			controller: this.controller, elevators: this.elevators, quests: this.questGameplay,
+			investigations: this.investigations,
 			continuity: this.npcContinuity,
 			animations: this.animations
 		} );
@@ -837,6 +850,7 @@ export class GameApp {
 			currentLocation: this.currentLocation,
 			discoveredLocations: uniqueLocations( [ ...this.discoveredLocations.values() ] ),
 			transitJourney: this.transitGameplay.state,
+			investigations: this.investigations.serialize(),
 			npcState: {
 				timeMin: this.clock.timeMin,
 				simulation: this.sim.serialize(),

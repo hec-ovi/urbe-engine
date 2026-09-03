@@ -33,7 +33,7 @@ const HANDLE = 1.1;
  */
 export class Interactor {
 
-	constructor( { crowd, doors, sim, controller, elevators, quests, continuity = null, animations = null } ) {
+	constructor( { crowd, doors, sim, controller, elevators, quests, investigations = null, continuity = null, animations = null } ) {
 
 		this.crowd = crowd;
 		this.doors = doors;
@@ -41,6 +41,7 @@ export class Interactor {
 		this.controller = controller;
 		this.elevators = elevators;
 		this.quests = quests;
+		this.investigations = investigations;
 		this.continuity = continuity;
 		this.animations = animations;
 		this.target = null;
@@ -64,7 +65,7 @@ export class Interactor {
 			this.doors.filter( ( door ) => door.center.distanceTo( feet ) <= DOOR_RANGE ),
 			this.crowd.within( feet, TALK_RANGE ),
 			this.elevators?.panels( feet, DOOR_RANGE ) ?? [],
-			this.quests?.candidates( questState ) ?? []
+			[ ...( this.quests?.candidates( questState ) ?? [] ), ...( this.investigations?.candidates( questState ) ?? [] ) ]
 		);
 
 		return this.target ? prompt( this.target ) : null;
@@ -79,6 +80,15 @@ export class Interactor {
 		if ( this.target.kind === 'quest' ) {
 
 			return this.quests.perform( {
+				targetKey: this.target.interaction.targetKey,
+				bindingAction,
+				timeMin: clock.timeMin
+			} );
+
+		}
+		if ( this.target.kind === 'investigation' ) {
+
+			return this.investigations.perform( {
 				targetKey: this.target.interaction.targetKey,
 				bindingAction,
 				timeMin: clock.timeMin
@@ -297,7 +307,7 @@ function aimAt( eye, look, position, rise ) {
 /** What the prompt says, always naming the thing it will act on. */
 function prompt( target ) {
 
-	if ( target.kind === 'quest' ) return target.interaction.prompt;
+	if ( target.kind === 'quest' || target.kind === 'investigation' ) return target.interaction.prompt;
 	if ( target.kind === 'elevator' ) return target.shaft.label( target );
 
 	if ( target.kind === 'door' ) {

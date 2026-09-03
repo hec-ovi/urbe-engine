@@ -6,6 +6,7 @@ const MANIFEST_FILE = 'manifest.json';
 const NPC_TYPES_FILE = 'npc-types.json';
 const BLUEPRINT_FILE = 'blueprint.json';
 const QUESTLINES_FILE = 'quests/questlines.json';
+const INVESTIGATIONS_FILE = 'quests/investigations.json';
 
 /**
  * Everything the game reads off disk, and nothing else: the atlas blueprint,
@@ -51,7 +52,26 @@ export class WorldSource {
 
 	}
 
-	/** @returns { atlas, connections, buildings, unbuilt, npcTypes, questlines, game } */
+	async #optionalJson( url, fallback ) {
+
+		const response = await fetch( url );
+		if ( response.status === 404 ) return fallback;
+		const type = ( response.headers?.get( 'content-type' ) ?? '' ).split( ';', 1 )[ 0 ].toLowerCase();
+		if ( ! response.ok ) throw new Error( `${url}: HTTP ${response.status}` );
+		if ( type && type !== 'application/json' ) throw new Error( `${url}: expected JSON, received ${type}` );
+		try {
+
+			return await response.json();
+
+		} catch ( error ) {
+
+			throw new Error( `${url}: invalid JSON (${error.message})` );
+
+		}
+
+	}
+
+	/** @returns { atlas, connections, buildings, unbuilt, npcTypes, questlines, investigations, game } */
 	async load() {
 
 		// Refuse a missing catalog descriptor before starting connections or
@@ -82,6 +102,7 @@ export class WorldSource {
 			// The naming box's typed set for this world, when the out dir carries one.
 			npcTypes: await this.#json( `${this.outBase}/${NPC_TYPES_FILE}` ).catch( () => null ),
 			questlines: await this.#json( `${this.outBase}/${QUESTLINES_FILE}` ).catch( () => [] ),
+			investigations: await this.#optionalJson( `${this.outBase}/${INVESTIGATIONS_FILE}`, [] ),
 			unbuilt: [ ...known ].filter( ( id ) => ! buildings.has( id ) )
 		};
 

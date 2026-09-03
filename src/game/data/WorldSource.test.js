@@ -32,7 +32,7 @@ describe( 'WorldSource selective interiors', () => {
 		vi.stubGlobal( 'fetch', vi.fn( async ( url ) => {
 
 			requested.push( url );
-			if ( url === '/out/city/npc-types.json' || url === '/out/city/quests/questlines.json' ) return response( 404, null );
+			if ( url === '/out/city/npc-types.json' || url === '/out/city/quests/questlines.json' || url === '/out/city/quests/investigations.json' ) return response( 404, null );
 			if ( ! documents.has( url ) ) throw new Error( `unexpected ${url}` );
 			return response( 200, documents.get( url ) );
 
@@ -71,7 +71,7 @@ describe( 'WorldSource selective interiors', () => {
 		] );
 		vi.stubGlobal( 'fetch', vi.fn( async ( url ) => {
 
-			if ( url.endsWith( '/npc-types.json' ) || url.endsWith( '/quests/questlines.json' ) ) return response( 404, null );
+			if ( url.endsWith( '/npc-types.json' ) || url.endsWith( '/quests/questlines.json' ) || url.endsWith( '/quests/investigations.json' ) ) return response( 404, null );
 			if ( ! documents.has( url ) ) throw new Error( `unexpected ${url}` );
 			return response( 200, documents.get( url ) );
 
@@ -82,6 +82,36 @@ describe( 'WorldSource selective interiors', () => {
 		} ).load();
 		expect( world.game ).toBe( game );
 		expect( fetch ).toHaveBeenCalledWith( '/out/games/night-shift/game.json' );
+
+	} );
+
+	it( 'loads authored investigations but does not hide malformed scene content', async () => {
+
+		const documents = new Map( [
+			[ '/out/city/blueprint.json', atlas ],
+			[ '/out/city/manifest.json', { ...manifest, parcels: [], interiors: [], floors: {} } ],
+			[ '/out/city/quests/investigations.json', [ { sceneId: 'scene-one' } ] ]
+		] );
+		vi.stubGlobal( 'fetch', vi.fn( async ( url ) => {
+
+			if ( url.endsWith( '/npc-types.json' ) || url.endsWith( '/quests/questlines.json' ) ) return response( 404, null );
+			if ( ! documents.has( url ) ) throw new Error( `unexpected ${url}` );
+			return response( 200, documents.get( url ) );
+
+		} ) );
+		const world = await new WorldSource( { blueprintUrl: '/atlas/city.json', outBase: '/out/city' } ).load();
+		expect( world.investigations ).toEqual( [ { sceneId: 'scene-one' } ] );
+
+		documents.set( '/out/city/quests/investigations.json', Symbol( 'invalid json' ) );
+		vi.mocked( fetch ).mockImplementation( async ( url ) => {
+
+			if ( url.endsWith( '/npc-types.json' ) || url.endsWith( '/quests/questlines.json' ) ) return response( 404, null );
+			if ( url.endsWith( '/quests/investigations.json' ) ) return { ...response( 200, null ), json: async () => { throw new Error( 'bad' ); } };
+			return response( 200, documents.get( url ) );
+
+		} );
+		await expect( new WorldSource( { blueprintUrl: '/atlas/city.json', outBase: '/out/city' } ).load() )
+			.rejects.toThrow( 'investigations.json: invalid JSON' );
 
 	} );
 
