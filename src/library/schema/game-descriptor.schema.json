@@ -240,6 +240,9 @@
                       "type": "array",
                       "items": { "$ref": "#/$defs/id" },
                       "uniqueItems": true
+                    },
+                    "endingId": {
+                      "$ref": "#/$defs/id"
                     }
                   },
                   "additionalProperties": false
