@@ -1,0 +1,293 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-voice:values",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "language": {
+      "type": "string",
+      "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"
+    },
+    "delivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pace", "pitchSemitones", "energy"],
+      "properties": {
+        "pace": { "type": "number", "exclusiveMinimum": 0 },
+        "pitchSemitones": { "type": "number" },
+        "energy": { "type": "number", "minimum": 0 }
+      }
+    },
+    "deliveryOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pace": { "type": "number", "exclusiveMinimum": 0 },
+        "pitchSemitones": { "type": "number" },
+        "energy": { "type": "number", "minimum": 0 }
+      }
+    },
+    "enginePin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "backendId", "modelRevision", "modelSha256",
+        "runtimeId", "runtimeRevision", "runtimeSha256"
+      ],
+      "properties": {
+        "backendId": { "$ref": "#/$defs/id" },
+        "modelRevision": { "type": "string", "minLength": 1 },
+        "modelSha256": { "$ref": "#/$defs/sha256" },
+        "runtimeId": { "$ref": "#/$defs/id" },
+        "runtimeRevision": { "type": "string", "minLength": 1 },
+        "runtimeSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "mediaReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uri", "mediaType", "byteSize", "sha256"],
+      "properties": {
+        "uri": { "type": "string", "minLength": 1 },
+        "mediaType": { "type": "string", "pattern": "^audio/" },
+        "byteSize": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "audioAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sampleRate", "channels", "codec", "frameCount", "byteSize", "sha256"
+      ],
+      "properties": {
+        "sampleRate": { "type": "integer", "minimum": 8000 },
+        "channels": { "type": "integer", "minimum": 1, "maximum": 2 },
+        "codec": { "enum": ["pcm_s16le", "wav", "opus"] },
+        "frameCount": { "type": "integer", "minimum": 0 },
+        "byteSize": { "type": "integer", "minimum": 0 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "dataBase64": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "contentMediaType": "application/octet-stream"
+        },
+        "uri": { "type": "string", "minLength": 1 }
+      },
+      "oneOf": [
+        {
+          "required": ["dataBase64"],
+          "properties": { "dataBase64": {}, "uri": false }
+        },
+        {
+          "required": ["uri"],
+          "properties": { "uri": {}, "dataBase64": false }
+        }
+      ]
+    },
+    "textSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "text"],
+      "properties": {
+        "kind": { "const": "text" },
+        "text": { "type": "string", "minLength": 1 }
+      }
+    },
+    "vocalEventSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "control"],
+      "properties": {
+        "kind": { "const": "control" },
+        "control": { "enum": ["laugh", "chuckle", "cough", "breath", "sigh"] }
+      }
+    },
+    "whisperSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "control", "enabled"],
+      "properties": {
+        "kind": { "const": "control" },
+        "control": { "const": "whisper" },
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "pauseSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "control", "durationMs"],
+      "properties": {
+        "kind": { "const": "control" },
+        "control": { "const": "pause_ms" },
+        "durationMs": { "type": "integer", "minimum": 1, "maximum": 60000 }
+      }
+    },
+    "emotionSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "control", "emotion", "intensity"],
+      "properties": {
+        "kind": { "const": "control" },
+        "control": { "const": "emotion" },
+        "emotion": {
+          "enum": ["neutral", "joy", "sadness", "anger", "fear", "surprise", "disgust", "tenderness"]
+        },
+        "intensity": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "contentSpan": {
+      "oneOf": [
+        { "$ref": "#/$defs/textSpan" },
+        { "$ref": "#/$defs/vocalEventSpan" },
+        { "$ref": "#/$defs/whisperSpan" },
+        { "$ref": "#/$defs/pauseSpan" },
+        { "$ref": "#/$defs/emotionSpan" }
+      ]
+    },
+    "adapterSpan": {
+      "oneOf": [
+        { "$ref": "#/$defs/textSpan" },
+        { "$ref": "#/$defs/vocalEventSpan" },
+        { "$ref": "#/$defs/whisperSpan" },
+        { "$ref": "#/$defs/emotionSpan" }
+      ]
+    },
+    "inference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seed", "options"],
+      "properties": {
+        "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "options": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9_.-]*$" },
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "boolean" }, { "type": "number" }, { "type": "string" }
+            ]
+          }
+        }
+      }
+    },
+    "chunkSource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "spanIndex"],
+          "properties": {
+            "kind": { "const": "adapter" },
+            "spanIndex": { "type": "integer", "minimum": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "spanIndex", "control"],
+          "properties": {
+            "kind": { "const": "silence" },
+            "spanIndex": { "type": "integer", "minimum": 0 },
+            "control": { "const": "pause_ms" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "spanIndex", "control"],
+          "properties": {
+            "kind": { "const": "reaction" },
+            "spanIndex": { "type": "integer", "minimum": 0 },
+            "control": { "enum": ["laugh", "chuckle", "cough", "breath", "sigh"] }
+          }
+        }
+      ]
+    },
+    "audioChunk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence", "startFrame", "sampleRate", "channels", "codec", "frameCount",
+        "byteSize", "sha256", "source"
+      ],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 0 },
+        "startFrame": { "type": "integer", "minimum": 0 },
+        "sampleRate": { "type": "integer", "minimum": 8000 },
+        "channels": { "type": "integer", "minimum": 1, "maximum": 2 },
+        "codec": { "enum": ["pcm_s16le", "wav", "opus"] },
+        "frameCount": { "type": "integer", "minimum": 0 },
+        "byteSize": { "type": "integer", "minimum": 0 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "dataBase64": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "contentMediaType": "application/octet-stream"
+        },
+        "uri": { "type": "string", "minLength": 1 },
+        "source": { "$ref": "#/$defs/chunkSource" }
+      },
+      "oneOf": [
+        {
+          "required": ["dataBase64"],
+          "properties": { "dataBase64": {}, "uri": false }
+        },
+        {
+          "required": ["uri"],
+          "properties": { "uri": {}, "dataBase64": false }
+        }
+      ]
+    },
+    "realizedControl": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["spanIndex", "control", "resolution"],
+          "properties": {
+            "spanIndex": { "type": "integer", "minimum": 0 },
+            "control": { "enum": ["laugh", "chuckle", "cough", "breath", "sigh", "whisper", "emotion"] },
+            "resolution": { "const": "native" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["spanIndex", "control", "resolution"],
+          "properties": {
+            "spanIndex": { "type": "integer", "minimum": 0 },
+            "control": { "const": "pause_ms" },
+            "resolution": { "const": "silence" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["spanIndex", "control", "resolution", "reactionSha256"],
+          "properties": {
+            "spanIndex": { "type": "integer", "minimum": 0 },
+            "control": { "enum": ["laugh", "chuckle", "cough", "breath", "sigh"] },
+            "resolution": { "const": "reaction" },
+            "reactionSha256": { "$ref": "#/$defs/sha256" }
+          }
+        }
+      ]
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "enum": ["E_VOICE_ADAPTER", "E_VOICE_CHUNK", "E_VOICE_ORDER", "E_VOICE_SILENCE"]
+        },
+        "message": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

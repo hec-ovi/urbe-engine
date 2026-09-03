@@ -1,0 +1,32 @@
+{
+  "version": "1",
+  "adapterId": "fake-voice",
+  "streaming": true,
+  "cancellable": true,
+  "maxConcurrent": 2,
+  "languages": ["en-US", "es-AR", "ja-JP"],
+  "engine": {
+    "backendId": "fake-voice",
+    "modelRevision": "fixture-model-r1",
+    "modelSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "runtimeId": "fixture-runtime",
+    "runtimeRevision": "fixture-runtime-r1",
+    "runtimeSha256": "2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "output": {
+    "sampleRate": 24000,
+    "channels": 1,
+    "codec": "pcm_s16le",
+    "codecVersion": "pcm-s16le-v1"
+  },
+  "controls": {
+    "laugh": "native",
+    "chuckle": "native",
+    "cough": "native",
+    "breath": "native",
+    "sigh": "native",
+    "whisper": "native",
+    "pause_ms": "exact-silence",
+    "emotion": "native"
+  }
+}

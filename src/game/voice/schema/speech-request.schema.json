@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-voice:speech-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version", "requestId", "npcId", "profileDigest", "priority", "content",
+    "delivery", "inference", "outputCodecVersion"
+  ],
+  "properties": {
+    "version": { "const": "1" },
+    "requestId": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/id" },
+    "npcId": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/id" },
+    "profileDigest": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/sha256" },
+    "priority": { "enum": ["conversation", "nearby", "background"] },
+    "content": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/contentSpan" }
+    },
+    "delivery": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/deliveryOverride" },
+    "inference": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/inference" },
+    "outputCodecVersion": { "type": "string", "minLength": 1 }
+  }
+}

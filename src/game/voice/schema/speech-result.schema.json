@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-voice:speech-result",
+  "$defs": {
+    "base": {
+      "type": "object",
+      "required": [
+        "version", "requestId", "profileDigest", "cacheKey", "status",
+        "realizedControls", "chunks"
+      ],
+      "properties": {
+        "version": { "const": "1" },
+        "requestId": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/id" },
+        "profileDigest": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/sha256" },
+        "cacheKey": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/sha256" },
+        "status": { "enum": ["completed", "cancelled", "failed"] },
+        "realizedControls": {
+          "type": "array",
+          "items": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/realizedControl" }
+        },
+        "chunks": {
+          "type": "array",
+          "items": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/audioChunk" }
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "version", "requestId", "profileDigest", "cacheKey", "status",
+            "cache", "realizedControls", "chunks"
+          ],
+          "properties": {
+            "version": {}, "requestId": {}, "profileDigest": {}, "cacheKey": {},
+            "status": { "const": "completed" },
+            "cache": { "enum": ["hit", "miss"] },
+            "realizedControls": {}, "chunks": {}
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "version", "requestId", "profileDigest", "cacheKey", "status",
+            "reason", "realizedControls", "chunks"
+          ],
+          "properties": {
+            "version": {}, "requestId": {}, "profileDigest": {}, "cacheKey": {},
+            "status": { "const": "cancelled" },
+            "reason": { "enum": ["stale", "speaker-changed", "scene-transition", "user-stop"] },
+            "realizedControls": {}, "chunks": {}
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "version", "requestId", "profileDigest", "cacheKey", "status",
+            "error", "realizedControls", "chunks"
+          ],
+          "properties": {
+            "version": {}, "requestId": {}, "profileDigest": {}, "cacheKey": {},
+            "status": { "const": "failed" },
+            "error": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/failure" },
+            "realizedControls": {}, "chunks": {}
+          }
+        }
+      ]
+    }
+  ]
+}

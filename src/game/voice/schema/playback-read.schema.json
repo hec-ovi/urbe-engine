@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-voice:playback-read",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "requestId", "afterSequence"],
+  "properties": {
+    "version": { "const": "1" },
+    "requestId": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/id" },
+    "afterSequence": { "type": "integer", "minimum": -1 }
+  }
+}

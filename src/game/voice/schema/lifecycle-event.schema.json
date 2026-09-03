@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-voice:lifecycle-event",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "requestId", "eventSequence", "type", "priority", "profileDigest", "cacheKey"],
+      "properties": {
+        "version": { "const": "1" },
+        "requestId": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/id" },
+        "eventSequence": { "type": "integer", "minimum": 0 },
+        "type": { "const": "accepted" },
+        "priority": { "enum": ["conversation", "nearby", "background"] },
+        "profileDigest": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/sha256" },
+        "cacheKey": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/sha256" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "requestId", "eventSequence", "type", "cacheKey"],
+      "properties": {
+        "version": { "const": "1" },
+        "requestId": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/id" },
+        "eventSequence": { "type": "integer", "minimum": 0 },
+        "type": { "enum": ["started", "cache-hit", "completed"] },
+        "cacheKey": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/sha256" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "requestId", "eventSequence", "type", "chunk"],
+      "properties": {
+        "version": { "const": "1" },
+        "requestId": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/id" },
+        "eventSequence": { "type": "integer", "minimum": 0 },
+        "type": { "const": "chunk" },
+        "chunk": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/audioChunk" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "requestId", "eventSequence", "type", "reason"],
+      "properties": {
+        "version": { "const": "1" },
+        "requestId": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/id" },
+        "eventSequence": { "type": "integer", "minimum": 0 },
+        "type": { "const": "cancelled" },
+        "reason": { "enum": ["stale", "speaker-changed", "scene-transition", "user-stop"] }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "requestId", "eventSequence", "type", "error"],
+      "properties": {
+        "version": { "const": "1" },
+        "requestId": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/id" },
+        "eventSequence": { "type": "integer", "minimum": 0 },
+        "type": { "const": "failed" },
+        "error": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/failure" }
+      }
+    }
+  ]
+}

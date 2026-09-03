@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-voice:cancel-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "requestId", "reason"],
+  "properties": {
+    "version": { "const": "1" },
+    "requestId": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/id" },
+    "reason": { "enum": ["stale", "speaker-changed", "scene-transition", "user-stop"] }
+  }
+}
