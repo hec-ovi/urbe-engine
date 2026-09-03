@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:hydro:runtime-summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["objects", "triangles", "waterSurfaces", "shorelineBands", "groundExclusions", "crossings"],
+  "properties": {
+    "objects": { "type": "integer", "minimum": 1 },
+    "triangles": { "type": "integer", "minimum": 1 },
+    "waterSurfaces": { "type": "integer", "minimum": 1 },
+    "shorelineBands": { "type": "integer", "minimum": 3 },
+    "groundExclusions": { "type": "integer", "minimum": 1 },
+    "crossings": { "type": "integer", "minimum": 0 }
+  }
+}

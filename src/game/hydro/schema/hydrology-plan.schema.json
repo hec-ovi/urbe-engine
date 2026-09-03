@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:hydro:hydrology-plan",
+  "oneOf": [
+    { "type": "null" },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seedId", "type", "bodies", "structures"],
+      "properties": {
+        "seedId": { "type": "string", "pattern": "^hydro-[0-9a-f]{8}$" },
+        "type": { "$ref": "urn:urbe:engine:hydro:values#/$defs/hydrologyType" },
+        "bodies": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "type", "surfaces", "shorelines", "elevation", "depth", "materialKey"],
+            "properties": {
+              "id": { "$ref": "urn:urbe:engine:hydro:values#/$defs/id" },
+              "type": { "$ref": "urn:urbe:engine:hydro:values#/$defs/hydrologyType" },
+              "surfaces": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "$ref": "urn:urbe:engine:hydro:values#/$defs/polygon" }
+              },
+              "shorelines": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["id", "path", "closed", "band"],
+                  "properties": {
+                    "id": { "$ref": "urn:urbe:engine:hydro:values#/$defs/id" },
+                    "path": { "$ref": "urn:urbe:engine:hydro:values#/$defs/polygon" },
+                    "closed": { "const": true },
+                    "band": {
+                      "type": "array",
+                      "minItems": 3,
+                      "items": { "$ref": "urn:urbe:engine:hydro:values#/$defs/polygon" }
+                    }
+                  }
+                }
+              },
+              "elevation": { "type": "number" },
+              "depth": { "type": "number", "exclusiveMinimum": 0 },
+              "materialKey": { "$ref": "urn:urbe:engine:hydro:values#/$defs/materialKey" }
+            }
+          }
+        },
+        "structures": {
+          "type": "array",
+          "items": { "$ref": "urn:urbe:engine:hydro:values#/$defs/crossing" }
+        }
+      }
+    }
+  ]
+}

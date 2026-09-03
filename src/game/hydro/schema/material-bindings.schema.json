@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:hydro:material-bindings",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "water.lagoon": { "$ref": "#/$defs/sourceBinding" },
+    "water.river": { "$ref": "#/$defs/sourceBinding" },
+    "water.sea-coast": { "$ref": "#/$defs/sourceBinding" }
+  },
+  "$defs": {
+    "sourceBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z0-9_-]+/[a-z0-9_-]+/[a-z0-9_-]+$" },
+        "variantId": { "type": "string", "pattern": "^[a-z0-9_-]+(:[a-z0-9_-]+)?$" }
+      }
+    }
+  }
+}

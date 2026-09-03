@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:hydro:handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "seedId", "type", "waterSurfaces", "shorelineBands", "groundExclusions", "crossings"],
+  "properties": {
+    "version": { "const": "1" },
+    "seedId": { "type": "string", "pattern": "^hydro-[0-9a-f]{8}$" },
+    "type": { "$ref": "urn:urbe:engine:hydro:values#/$defs/hydrologyType" },
+    "waterSurfaces": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "urn:urbe:engine:hydro:values#/$defs/surfaceRecord" }
+    },
+    "shorelineBands": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "allOf": [
+          { "$ref": "urn:urbe:engine:hydro:values#/$defs/surfaceRecord" },
+          {
+            "type": "object",
+            "required": ["shorelineId"],
+            "properties": { "shorelineId": { "$ref": "urn:urbe:engine:hydro:values#/$defs/id" } }
+          }
+        ]
+      }
+    },
+    "groundExclusions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "waterBodyId", "polygon", "elevation"],
+        "properties": {
+          "id": { "$ref": "urn:urbe:engine:hydro:values#/$defs/id" },
+          "waterBodyId": { "$ref": "urn:urbe:engine:hydro:values#/$defs/id" },
+          "polygon": { "$ref": "urn:urbe:engine:hydro:values#/$defs/polygon" },
+          "elevation": { "type": "number" }
+        }
+      }
+    },
+    "crossings": {
+      "type": "array",
+      "items": { "$ref": "urn:urbe:engine:hydro:values#/$defs/crossing" }
+    }
+  }
+}

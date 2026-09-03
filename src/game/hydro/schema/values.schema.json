@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:hydro:values",
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "point2": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [{ "type": "number" }, { "type": "number" }],
+      "items": false
+    },
+    "point3": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [{ "type": "number" }, { "type": "number" }, { "type": "number" }],
+      "items": false
+    },
+    "polygon": {
+      "type": "array",
+      "minItems": 3,
+      "items": { "$ref": "#/$defs/point2" }
+    },
+    "path": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "$ref": "#/$defs/point2" }
+    },
+    "hydrologyType": { "enum": ["lagoon", "river", "sea-coast"] },
+    "materialKey": { "enum": ["water.lagoon", "water.river", "water.sea-coast"] },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "variantId"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z0-9_-]+/[a-z0-9_-]+/[a-z0-9_-]+$" },
+        "variantId": { "type": "string", "pattern": "^[a-z0-9_-]+(:[a-z0-9_-]+)?$" }
+      }
+    },
+    "motion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "normalUvVelocity", "normalScale"],
+      "properties": {
+        "phase": { "type": "number", "minimum": 0, "exclusiveMaximum": 1 },
+        "normalUvVelocity": { "$ref": "#/$defs/point2" },
+        "normalScale": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+      }
+    },
+    "reflection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ior", "roughness", "environmentIntensity"],
+      "properties": {
+        "ior": { "type": "number", "minimum": 1, "maximum": 2.333 },
+        "roughness": { "type": "number", "minimum": 0, "maximum": 1 },
+        "environmentIntensity": { "type": "number", "minimum": 0, "maximum": 4 }
+      }
+    },
+    "surfaceRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "waterBodyId", "polygon", "elevation", "depth", "materialKey", "material", "motion", "reflection"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "shorelineId": { "$ref": "#/$defs/id" },
+        "waterBodyId": { "$ref": "#/$defs/id" },
+        "polygon": { "$ref": "#/$defs/polygon" },
+        "elevation": { "type": "number" },
+        "depth": { "type": "number", "exclusiveMinimum": 0 },
+        "materialKey": { "$ref": "#/$defs/materialKey" },
+        "material": { "$ref": "#/$defs/binding" },
+        "motion": { "$ref": "#/$defs/motion" },
+        "reflection": { "$ref": "#/$defs/reflection" }
+      }
+    },
+    "crossing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "network", "refId", "waterBodyId", "path", "width", "level"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["bridge", "tunnel"] },
+        "network": { "enum": ["street", "train", "subway"] },
+        "refId": { "$ref": "#/$defs/id" },
+        "waterBodyId": { "$ref": "#/$defs/id" },
+        "path": { "$ref": "#/$defs/path" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "level": { "type": "number" }
+      }
+    }
+  }
+}
