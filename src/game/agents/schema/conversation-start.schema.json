@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-agents:conversation-start",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["npcId", "timeMin", "position", "heading", "place", "seated"],
+  "properties": {
+    "npcId": { "type": "string", "minLength": 1 },
+    "timeMin": { "type": "number", "minimum": 0 },
+    "position": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" },
+    "heading": { "type": "number" },
+    "place": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/place" },
+    "seated": { "type": "boolean" }
+  }
+}

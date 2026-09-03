@@ -101,6 +101,71 @@ describe( 'NPC continuity integration', () => {
 
 	} );
 
+	it( 'virtualizes distant scheduled bodies and restores the same identity when they are requested again', () => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const actor = controller.appear( { npcId: npc.npcId, timeMin: MON_9 } );
+		const [ hidden ] = controller.updateVisible( {
+			timeMin: MON_9 + 1,
+			playerPosition: [ actor.position[ 0 ] + 200, actor.position[ 1 ], actor.position[ 2 ] ],
+			maxDistance: 100
+		} );
+
+		expect( hidden ).toMatchObject( {
+			npcId: npc.npcId, appearanceSeed: actor.appearanceSeed, visible: false
+		} );
+		const returned = controller.appear( { npcId: npc.npcId, timeMin: MON_9 + 2 } );
+		expect( returned ).toMatchObject( {
+			npcId: npc.npcId, appearanceSeed: actor.appearanceSeed, gender: actor.gender, visible: true
+		} );
+
+	} );
+
+	it( 'owns conversation interruption and walks back without moving the visible body on close', () => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const visible = [ 560, 1, 250 ];
+		const talking = controller.beginConversation( {
+			npcId: npc.npcId, timeMin: MON_9, position: visible, heading: 0,
+			place: { kind: 'edge', id: 'walk-p_cafe' }, seated: false
+		} );
+		expect( talking ).toMatchObject( { npcId: npc.npcId, position: visible, mode: 'conversation', animation: 'idle' } );
+		expect( bridge.behaviorAt( npc.npcId, MON_9 + 1 ).interrupted ).toBe( true );
+
+		let returning = controller.endConversation( { timeMin: MON_9 + 1 } );
+		expect( returning.position ).toEqual( visible );
+		expect( returning.mode ).toBe( 'resuming' );
+		for ( let step = 0; step < 300 && returning.mode === 'resuming'; step ++ ) {
+
+			returning = controller.updateFollow( { timeMin: MON_9 + 1, deltaSeconds: 1, playerPosition: visible } );
+
+		}
+		expect( returning ).toMatchObject( { npcId: npc.npcId, mode: 'schedule', place: { kind: 'parcel', id: 'p_cafe' } } );
+		expect( bridge.behaviorAt( npc.npcId, MON_9 + 1 ).interrupted ).toBe( false );
+
+	} );
+
+	it( 'pauses a follower for conversation without releasing its interruption', () => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const player = [ 560, 1, 250 ];
+		const following = controller.startFollow( { npcId: npc.npcId, timeMin: MON_9, playerPosition: player } );
+		controller.beginConversation( {
+			npcId: npc.npcId, timeMin: MON_9, position: following.position, heading: following.heading,
+			place: following.place, seated: false
+		} );
+		expect( controller.updateFollow( { timeMin: MON_9 + 1, deltaSeconds: 1, playerPosition: player } ).mode ).toBe( 'conversation' );
+		expect( controller.endConversation( { timeMin: MON_9 + 1 } ).mode ).toBe( 'following' );
+		expect( controller.serialize() ).toMatchObject( {
+			follow: { npcId: npc.npcId, mode: 'following', source: 'follow' }, conversation: null
+		} );
+		expect( bridge.behaviorAt( npc.npcId, MON_9 + 2 ).interrupted ).toBe( true );
+
+	} );
+
 	it( 'rejects unavailable places and releases a follower that becomes unavailable', () => {
 
 		const { bridge, controller } = setup();

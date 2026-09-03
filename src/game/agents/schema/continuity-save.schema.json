@@ -17,7 +17,23 @@
           "properties": {
             "npcId": { "type": "string", "minLength": 1 },
             "mode": { "enum": ["following", "resuming"] },
+            "source": { "enum": ["follow", "conversation"] },
             "route": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/route" },
+            "lastTimeMin": { "type": "number", "minimum": 0 }
+          }
+        }
+      ]
+    },
+    "conversation": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["npcId", "ownsInterruption", "lastTimeMin"],
+          "properties": {
+            "npcId": { "type": "string", "minLength": 1 },
+            "ownsInterruption": { "type": "boolean" },
             "lastTimeMin": { "type": "number", "minimum": 0 }
           }
         }

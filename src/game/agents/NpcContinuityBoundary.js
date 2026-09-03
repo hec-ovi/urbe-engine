@@ -10,11 +10,16 @@ import movementNetwork from './schema/movement-network.schema.json';
 import appearanceRequest from './schema/appearance-request.schema.json';
 import unloadRequest from './schema/unload-request.schema.json';
 import actorStateOrNull from './schema/actor-state-or-null.schema.json';
+import conversationStart from './schema/conversation-start.schema.json';
+import conversationStop from './schema/conversation-stop.schema.json';
+import visibleUpdate from './schema/visible-update.schema.json';
+import actorStates from './schema/actor-states.schema.json';
 import { NpcContinuityError } from './NpcContinuityError.js';
 
 const SCHEMAS = [
 	values, appearanceRequest, unloadRequest, followStart, followUpdate, followStop,
-	actorState, actorStateOrNull, continuitySave, places, movementNetwork
+	conversationStart, conversationStop,
+	visibleUpdate, actorState, actorStateOrNull, actorStates, continuitySave, places, movementNetwork
 ];
 
 export class NpcContinuityBoundary {

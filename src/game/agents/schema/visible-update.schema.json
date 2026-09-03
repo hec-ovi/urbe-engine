@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-agents:visible-update",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["timeMin", "playerPosition", "maxDistance"],
+  "properties": {
+    "timeMin": { "type": "number", "minimum": 0 },
+    "playerPosition": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" },
+    "maxDistance": { "type": "number", "exclusiveMinimum": 0 }
+  }
+}

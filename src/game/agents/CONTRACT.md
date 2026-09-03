@@ -13,6 +13,9 @@ Status: the public continuity and follow API is implemented and tested. The Game
 - Follow start: [schema/follow-start.schema.json](schema/follow-start.schema.json). One already-instanced, live `npcId`, simulation time and player position.
 - Follow update: [schema/follow-update.schema.json](schema/follow-update.schema.json). Current simulation time, bounded frame delta and player position.
 - Follow stop: [schema/follow-stop.schema.json](schema/follow-stop.schema.json). Current simulation time.
+- Conversation start: [schema/conversation-start.schema.json](schema/conversation-start.schema.json). Exact npcId, current body position, place, heading and seated state.
+- Conversation stop: [schema/conversation-stop.schema.json](schema/conversation-stop.schema.json). Current simulation time.
+- Visible update: [schema/visible-update.schema.json](schema/visible-update.schema.json). Current time, player position and the offscreen virtualization distance.
 - Restore state: [schema/continuity-save.schema.json](schema/continuity-save.schema.json). A prior output of `serialize()` for the same restored simulation.
 
 The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `resume` per [the simulation contract](../../../../simulation/CONTRACT.md). Its exact continuity output is [npc-continuity.schema.json](../../../../simulation/src/schemas/npc-continuity.schema.json).
@@ -21,6 +24,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 
 - Actor state: [schema/actor-state.schema.json](schema/actor-state.schema.json). Exact npcId, name, type, gender, appearance seed, scheduled place and progress, world position, heading, animation, visibility and control mode.
 - Optional actor state: [schema/actor-state-or-null.schema.json](schema/actor-state-or-null.schema.json). Follow updates without an active follower and unloads of unknown materializations return null.
+- Actor states: [schema/actor-states.schema.json](schema/actor-states.schema.json). Stable npcId-sorted projections for every retained materialization, including invisible virtualized actors.
 - Serializable state: [schema/continuity-save.schema.json](schema/continuity-save.schema.json). Every materialized identity and the active follow or return route.
 
 ## Events
@@ -29,6 +33,8 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - `startFollow(request)` accepts only a live, positioned NPC, interrupts its routine, and routes it toward the player.
 - `updateFollow(request)` replans over `path3`, walks at 1.4 m/s, runs at 2.4 m/s beyond 8 m, and stops 1.8 m from the player. Movement per update never exceeds speed times elapsed time.
 - `stopFollow(request)` resumes the simulation and enters `resuming` mode. The NPC walks from its current position to the current scheduled place or next destination before returning to `schedule` mode.
+- `beginConversation(request)` preserves the body at the visible position and pauses its routine. `endConversation(request)` walks a dialogue-interrupted NPC back into the current schedule. A follower stays interrupted and returns to follow control when dialogue closes.
+- `updateVisible(request)` reprojects visible schedule-controlled actors each frame and marks distant ones invisible without discarding identity or schedule state.
 - `serialize()` and `restore(save)` preserve materialized body traits, world position, schedule progress and active interruption or return state.
 
 ## Errors

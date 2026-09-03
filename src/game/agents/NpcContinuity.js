@@ -24,6 +24,7 @@ export class NpcContinuity {
 		this.places = new Map( this.boundary.input( 'places', places ).map( ( place ) => [ placeKey( place ), place ] ) );
 		this.actors = new Map();
 		this.follow = null;
+		this.conversation = null;
 
 	}
 
@@ -32,7 +33,7 @@ export class NpcContinuity {
 
 		this.boundary.input( 'appearance-request', request );
 		const { npcId, timeMin } = request;
-		if ( this.follow?.npcId === npcId ) {
+		if ( this.follow?.npcId === npcId || this.conversation?.npcId === npcId ) {
 
 			const actor = this.actors.get( npcId );
 			actor.visible = true;
@@ -50,15 +51,67 @@ export class NpcContinuity {
 
 		this.boundary.input( 'unload-request', request );
 		const { npcId } = request;
+		if ( this.follow?.npcId === npcId || this.conversation?.npcId === npcId ) {
+
+			throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${npcId} is under active control` );
+
+		}
 		const actor = this.actors.get( npcId );
 		if ( actor ) actor.visible = false;
 		return this.#actorMaybeOut( actor ?? null );
 
 	}
 
+	/** Reprojects every visible materialization and virtualizes distant schedule-controlled bodies. */
+	updateVisible( request ) {
+
+		this.boundary.input( 'visible-update', request );
+		const controlled = new Set( [ this.follow?.npcId, this.conversation?.npcId ].filter( Boolean ) );
+		const states = [];
+		for ( const [ npcId, actor ] of [ ...this.actors.entries() ].sort( ( a, b ) => a[ 0 ].localeCompare( b[ 0 ] ) ) ) {
+
+			if ( ! actor.visible ) {
+
+				states.push( clone( actor ) );
+				continue;
+
+			}
+			if ( controlled.has( npcId ) ) {
+
+				states.push( clone( actor ) );
+				continue;
+
+			}
+			if ( distance( actor.position, request.playerPosition ) > request.maxDistance ) {
+
+				actor.visible = false;
+				states.push( clone( actor ) );
+				continue;
+
+			}
+			try {
+
+				const scheduled = this.#scheduledActor( npcId, request.timeMin );
+				scheduled.visible = true;
+				this.actors.set( npcId, scheduled );
+				states.push( clone( scheduled ) );
+
+			} catch {
+
+				actor.visible = false;
+				states.push( clone( actor ) );
+
+			}
+
+		}
+		return this.boundary.output( 'actor-states', states );
+
+	}
+
 	startFollow( request ) {
 
 		this.boundary.input( 'follow-start', request );
+		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is in conversation` );
 		if ( this.follow ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.follow.npcId} is already following` );
 		const actor = this.#scheduledActor( request.npcId, request.timeMin );
 		const route = this.routes.route( actor.position, request.playerPosition );
@@ -71,6 +124,7 @@ export class NpcContinuity {
 		this.follow = {
 			npcId: actor.npcId,
 			mode: 'following',
+			source: 'follow',
 			route: savedRoute( route, request.playerPosition, 0 ),
 			lastTimeMin: request.timeMin
 		};
@@ -84,6 +138,14 @@ export class NpcContinuity {
 		if ( ! this.follow ) return this.#actorMaybeOut( null );
 		const actor = this.actors.get( this.follow.npcId );
 		if ( ! actor ) return this.#releaseInvalid( 'E_NPC_UNAVAILABLE', 'followed NPC state is unavailable', request.timeMin );
+		if ( this.conversation?.npcId === actor.npcId ) {
+
+			actor.mode = 'conversation';
+			actor.animation = 'idle';
+			this.follow.lastTimeMin = request.timeMin;
+			return this.#actorOut( actor );
+
+		}
 		try {
 
 			const npc = this.simulation.getNPC( actor.npcId );
@@ -106,6 +168,8 @@ export class NpcContinuity {
 
 		this.boundary.input( 'follow-stop', request );
 		if ( ! this.follow ) throw new NpcContinuityError( 'E_NPC_CONFLICT', 'no NPC is following' );
+		if ( this.follow.mode !== 'following' ) throw new NpcContinuityError( 'E_NPC_CONFLICT', 'NPC is already returning to its schedule' );
+		if ( this.conversation?.npcId === this.follow.npcId ) throw new NpcContinuityError( 'E_NPC_CONFLICT', 'close the conversation before release' );
 		const actor = this.actors.get( this.follow.npcId );
 		if ( ! actor ) return this.#releaseInvalid( 'E_NPC_UNAVAILABLE', 'followed NPC state is unavailable', request.timeMin );
 		this.#resume( this.follow.npcId, request.timeMin );
@@ -133,6 +197,7 @@ export class NpcContinuity {
 		this.follow = {
 			npcId: actor.npcId,
 			mode: 'resuming',
+			source: 'follow',
 			route: savedRoute( route, scheduled.position, 0 ),
 			lastTimeMin: request.timeMin
 		};
@@ -141,12 +206,58 @@ export class NpcContinuity {
 
 	}
 
+	beginConversation( request ) {
+
+		this.boundary.input( 'conversation-start', request );
+		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is already in conversation` );
+		if ( this.follow?.mode === 'resuming' && this.follow.npcId === request.npcId ) this.follow = null;
+		const following = this.follow?.mode === 'following' && this.follow.npcId === request.npcId;
+		const actor = following ? this.actors.get( request.npcId ) : this.#scheduledActor( request.npcId, request.timeMin );
+		if ( ! actor ) throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', `NPC ${request.npcId} has no materialized actor` );
+		if ( ! following ) this.#interrupt( request.npcId, request.timeMin );
+		actor.position = [ ...request.position ];
+		actor.heading = request.heading;
+		actor.place = clone( request.place );
+		actor.visible = true;
+		actor.mode = 'conversation';
+		actor.animation = request.seated ? 'sit' : 'idle';
+		this.actors.set( actor.npcId, actor );
+		this.conversation = {
+			npcId: actor.npcId,
+			ownsInterruption: ! following,
+			lastTimeMin: request.timeMin
+		};
+		return this.#actorOut( actor );
+
+	}
+
+	endConversation( request ) {
+
+		this.boundary.input( 'conversation-stop', request );
+		if ( ! this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', 'no NPC is in conversation' );
+		const conversation = this.conversation;
+		const actor = this.actors.get( conversation.npcId );
+		this.conversation = null;
+		if ( ! actor ) throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', `NPC ${conversation.npcId} has no materialized actor` );
+		if ( ! conversation.ownsInterruption ) {
+
+			actor.mode = 'following';
+			actor.animation = 'idle';
+			return this.#actorOut( actor );
+
+		}
+		this.#resume( actor.npcId, request.timeMin );
+		return this.#startResume( actor, request.timeMin, 'conversation' );
+
+	}
+
 	serialize() {
 
 		return this.boundary.output( 'continuity-save', {
 			version: '1',
 			actors: [ ...this.actors.values() ].sort( ( a, b ) => a.npcId.localeCompare( b.npcId ) ).map( clone ),
-			follow: this.follow ? clone( this.follow ) : null
+			follow: this.follow ? clone( this.follow ) : null,
+			conversation: this.conversation ? clone( this.conversation ) : null
 		} );
 
 	}
@@ -162,9 +273,9 @@ export class NpcContinuity {
 			let npc;
 			try { npc = this.simulation.getNPC( actor.npcId ); }
 			catch { throw new NpcContinuityError( 'E_NPC_INPUT', `save actor ${actor.npcId} is not present in the restored simulation` ); }
-			if ( save.follow?.npcId === actor.npcId && npc.flags?.dead ) {
+			if ( ( save.follow?.npcId === actor.npcId || save.conversation?.npcId === actor.npcId ) && npc.flags?.dead ) {
 
-				throw new NpcContinuityError( 'E_NPC_INPUT', `followed save actor ${actor.npcId} is dead` );
+				throw new NpcContinuityError( 'E_NPC_INPUT', `controlled save actor ${actor.npcId} is dead` );
 
 			}
 			if ( npc.appearanceSeed !== actor.appearanceSeed || npc.gender !== actor.gender || npc.type !== actor.type ||
@@ -180,9 +291,20 @@ export class NpcContinuity {
 			throw new NpcContinuityError( 'E_NPC_INPUT', `follow state references missing actor ${save.follow.npcId}` );
 
 		}
+		if ( save.conversation && ! ids.has( save.conversation.npcId ) ) {
+
+			throw new NpcContinuityError( 'E_NPC_INPUT', `conversation state references missing actor ${save.conversation.npcId}` );
+
+		}
 		this.actors = new Map( save.actors.map( ( actor ) => [ actor.npcId, clone( actor ) ] ) );
 		this.follow = save.follow ? clone( save.follow ) : null;
+		this.conversation = save.conversation ? clone( save.conversation ) : null;
 		if ( this.follow ) this.#interrupt( this.follow.npcId, this.follow.lastTimeMin );
+		if ( this.conversation?.ownsInterruption && this.conversation.npcId !== this.follow?.npcId ) {
+
+			this.#interrupt( this.conversation.npcId, this.conversation.lastTimeMin );
+
+		}
 		return this.serialize();
 
 	}
@@ -229,6 +351,36 @@ export class NpcContinuity {
 		this.#putOnWalkGraph( actor );
 		this.follow.route = savedRoute( route, scheduled.position, travel );
 		if ( route.distanceMeters - travel <= ARRIVAL_DISTANCE ) this.#finishResume( actor, scheduled );
+
+	}
+
+	#startResume( actor, timeMin, source ) {
+
+		let scheduled;
+		try {
+
+			scheduled = this.#scheduledActor( actor.npcId, timeMin );
+
+		} catch ( error ) {
+
+			if ( error?.code !== 'E_NPC_PLACE' ) throw error;
+			scheduled = this.#destinationActor( actor, timeMin );
+
+		}
+		const route = this.routes.route( actor.position, scheduled.position );
+		if ( ! route ) throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${actor.npcId} cannot resume its schedule` );
+		actor.mode = 'resuming';
+		actor.animation = route.distanceMeters > ARRIVAL_DISTANCE ? 'walk' : scheduled.animation;
+		actor.schedule = scheduled.schedule;
+		this.follow = {
+			npcId: actor.npcId,
+			mode: 'resuming',
+			source,
+			route: savedRoute( route, scheduled.position, 0 ),
+			lastTimeMin: timeMin
+		};
+		if ( route.distanceMeters <= ARRIVAL_DISTANCE ) this.#finishResume( actor, scheduled );
+		return this.#actorOut( actor );
 
 	}
 
