@@ -4,6 +4,9 @@ import { MaterialResolver } from '../building/MaterialResolver.js';
 import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { QuestSession } from './quests/QuestSession.js';
+import { QuestGameplay } from './quests/QuestGameplay.js';
+import { ObjectiveRouter } from './routes/ObjectiveRouter.js';
+import { ObjectiveGuide } from './routes/ObjectiveGuide.js';
 import { GamePersistence, mergeInventory, mergeProgress, uniqueLocations } from './persistence/index.js';
 import { groundAnchors } from './agents/Anchors.js';
 import { GameView } from '../ui/views/GameView.js';
@@ -77,7 +80,8 @@ const BINDINGS = [
 	{ action: 'jump', keys: [ 'Space' ] },
 	{ action: 'crouch', keys: [ 'C' ] },
 	{ action: 'sprint', keys: [ 'Shift' ] },
-	{ action: 'doors, lifts and people', keys: [ 'E' ] },
+	{ action: 'interact, take, inspect, listen, steal, work, deliver', keys: [ 'E' ] },
+	{ action: 'read quest document', keys: [ 'R' ] },
 	{ action: 'quests', keys: [ 'J' ] },
 	{ action: 'map', keys: [ 'M' ] },
 	{ action: 'inventory', keys: [ 'I' ] },
@@ -299,6 +303,18 @@ export class GameApp {
 		);
 		this.discoveredLocations.set( this.currentLocation.id, this.currentLocation );
 		this.bookmarks = new Bookmarks( { fixtures, rooms: () => this.stream.rooms, networks: connections.networks } );
+		this.questGameplay = new QuestGameplay( {
+			session: this.quests,
+			atlas,
+			doors: city.doors,
+			crowd: this.crowd,
+			physics: this.physics,
+			playerCollider: this.body.collider,
+			materialFactory: factory
+		} );
+		this.scene.add( this.questGameplay.group );
+		this.probe?.exclude( this.questGameplay.group );
+		this.objectiveGuide = new ObjectiveGuide( new ObjectiveRouter( connections.networks.walk ) );
 
 		// Construct the scene pass before a WebGPU probe bake so its final
 		// material programs can be warmed against that render context.
@@ -321,7 +337,7 @@ export class GameApp {
 
 		this.interactor = new Interactor( {
 			crowd: this.crowd, doors: city.doors, sim: this.sim,
-			controller: this.controller, elevators: this.elevators
+			controller: this.controller, elevators: this.elevators, quests: this.questGameplay
 		} );
 		this.interactor.onConversation = ( conversation ) => {
 
@@ -354,6 +370,7 @@ export class GameApp {
 		this.view.minimap.setVenues( this.venues.marks );
 		this.view.map.setWorld( blockWorld( atlas ) );
 		this.view.map.setVenues( this.venues.marks );
+		this.#updateObjectiveRoute( 0, true );
 		this.view.settings.setValues( { quality: this.tier.name, fog: config.fog, exposure: config.exposure, crowd: config.maxCrowd } );
 		this.view.controls.setBindings( BINDINGS );
 		this.view.readout.setAbout( [
@@ -434,13 +451,25 @@ export class GameApp {
 		this.venues.update( delta, feet, this.clock.timeMin, this.sim, this.lights );
 		this.hitches.time( 'relight', () => this.#relight( feet, delta ) );
 
-		const prompt = this.interactor.update( delta );
+		const playerPlaces = this.locator.refs( feet.x, feet.z, this.standing?.parcelId ?? null );
+		const prompt = this.interactor.update( delta, {
+			timeMin: this.clock.timeMin,
+			playerPlaces,
+			feet,
+			eye: this.controller.eye,
+			look: this.controller.look
+		} );
 		this.view.prompt.update( this.input.locked ? prompt : null );
 
 		if ( this.input.consume( 'KeyE' ) && this.input.locked ) {
 
 			if ( this.interactor.conversation ) this.interactor.close( this.clock );
-			else this.interactor.activate( this.clock );
+			else this.#questActionResult( this.interactor.activate( this.clock ) );
+
+		}
+		if ( this.input.consume( 'KeyR' ) && this.input.locked && ! this.interactor.conversation ) {
+
+			this.#questActionResult( this.interactor.activate( this.clock, 'secondary-interact' ) );
 
 		}
 
@@ -456,6 +485,7 @@ export class GameApp {
 		}
 
 		this.view.setPaused( ! this.input.locked && free );
+		this.#updateObjectiveRoute( delta );
 		this.view.minimap.update( feet, this.controller.yaw );
 		if ( this.view.panels.current === 'MAP' ) this.view.map.setPlayer( feet, this.controller.yaw );
 		this.hitches.time( 'location HUD', () => {
@@ -541,8 +571,86 @@ export class GameApp {
 
 		}
 
+		this.#refreshQuestState();
+
+	}
+
+	/** A QuestActions result updates every player-facing and persisted projection of that runtime state. */
+	#questActionResult( result ) {
+
+		if ( ! result ) return;
+		if ( ! result.ok ) {
+
+			this.view.toast.show( { title: 'Objective', text: result.message } );
+			return;
+
+		}
+
+		if ( result.readText ) this.view.toast.show( { title: result.message, text: result.readText } );
+
+		for ( const completed of result.completed ) {
+
+			for ( const text of completed.presentation.steps ) {
+
+				this.view.toast.show( { title: completed.presentation.title, text } );
+
+			}
+			const ending = completed.presentation.ending;
+			if ( ending ) this.view.summary.show( ending );
+
+		}
+
+		if ( ! result.progressed ) return;
+		this.#refreshQuestState();
+		if ( this.persistence ) this.#saveCurrent().catch( ( error ) => {
+
+			console.error( error );
+			this.view.toast.show( { title: 'Save failed', text: error.message } );
+
+		} );
+
+	}
+
+	#refreshQuestState() {
+
 		this.view.quests.setQuests( this.quests.view() );
 		this.#refreshInventory();
+		this.#updateObjectiveRoute( 0, true );
+
+	}
+
+	#updateObjectiveRoute( deltaSeconds, force = false ) {
+
+		if ( ! this.objectiveGuide || ! this.questGameplay || ! this.body ) return;
+		const feet = this.body.feet;
+		const objective = this.questGameplay.objective( this.clock.timeMin );
+		const destination = objective?.place?.kind === 'parcel'
+			? { kind: 'parcel', id: objective.place.id }
+			: null;
+
+		try {
+
+			const result = this.objectiveGuide.update( {
+				deltaSeconds,
+				from: [ feet.x, feet.y, feet.z ],
+				destination,
+				...( force ? { force: true } : {} )
+			} );
+			if ( ! result.changed ) return;
+			const route = result.route ? {
+				path: result.route.path3.map( ( point ) => [ point[ 0 ], point[ 2 ] ] ),
+				label: objective.text
+			} : null;
+			this.view.minimap.setRoute( route );
+			this.view.map.setRoute( route );
+
+		} catch ( error ) {
+
+			console.warn( 'objective route:', error.message );
+			this.view.minimap.setRoute( null );
+			this.view.map.setRoute( null );
+
+		}
 
 	}
 
@@ -552,24 +660,9 @@ export class GameApp {
 		this.input?.exitLock();
 		if ( ! this.persistence || ! this.body || ! this.controller || ! this.quests ) return;
 
-		const feet = this.body.feet;
-		this.currentLocation = this.locator.location( feet.x, feet.z );
-		this.discoveredLocations.set( this.currentLocation.id, this.currentLocation );
-		const inventory = this.#inventory();
-		const progress = mergeProgress( this.persistence.game, this.quests.persistenceView() );
-
 		try {
 
-			await this.persistence.save( {
-				position: { x: feet.x, y: feet.y, z: feet.z },
-				heading: this.controller.yaw,
-				inventory,
-				quests: progress.quests,
-				sideJobs: progress.sideJobs,
-				currentLocation: this.currentLocation,
-				discoveredLocations: uniqueLocations( [ ...this.discoveredLocations.values() ] ),
-				elapsedSeconds: Math.max( 0, ( performance.now() - this.playStartedAt ) / 1000 )
-			} );
+			await this.#saveCurrent();
 			window.location.assign( '/' );
 
 		} catch ( error ) {
@@ -578,6 +671,26 @@ export class GameApp {
 			this.view.fail( `could not save: ${error.message}` );
 
 		}
+
+	}
+
+	#saveCurrent() {
+
+		const feet = this.body.feet;
+		this.currentLocation = this.locator.location( feet.x, feet.z );
+		this.discoveredLocations.set( this.currentLocation.id, this.currentLocation );
+		const progress = mergeProgress( this.persistence.game, this.quests.persistenceView() );
+
+		return this.persistence.save( {
+			position: { x: feet.x, y: feet.y, z: feet.z },
+			heading: this.controller.yaw,
+			inventory: this.#inventory(),
+			quests: progress.quests,
+			sideJobs: progress.sideJobs,
+			currentLocation: this.currentLocation,
+			discoveredLocations: uniqueLocations( [ ...this.discoveredLocations.values() ] ),
+			elapsedSeconds: Math.max( 0, ( performance.now() - this.playStartedAt ) / 1000 )
+		} );
 
 	}
 

@@ -279,6 +279,35 @@ export class Crowd {
 
 	}
 
+	/**
+	 * Finds the rendered body of one already-cast quest NPC. Nearby anonymous
+	 * crowd handles are resolved in stable order; if the simulation places the
+	 * NPC at a parcel or walk edge that the regular sample omitted, one bounded
+	 * quest body is posted there from that same NPC instance.
+	 */
+	questMember( npcId, timeMin, player, place, fallbackAnchor = null ) {
+
+		for ( const member of this.members.values() ) if ( member.npcId === npcId ) return member;
+
+		const npc = this.sim.getNPC( npcId );
+		const candidates = [ ...this.members.values() ]
+			.filter( ( member ) => ! member.copy && ! member.retiring && ! member.npcId && member.crowdId )
+			.filter( ( member ) => member.type === npc.type && memberAt( member, place ) )
+			.sort( ( left, right ) => left.id.localeCompare( right.id ) );
+
+		for ( const member of candidates ) {
+
+			const instance = this.sim.instantiate( member.crowdId, timeMin );
+			if ( ! instance ) continue;
+			identify( member, instance );
+			if ( instance.npcId === npcId ) return member;
+
+		}
+
+		return this.#postQuestNpc( npc, place, player, fallbackAnchor );
+
+	}
+
 	#reconcile( player, timeMin ) {
 
 		this.#drop( player );
@@ -448,7 +477,7 @@ export class Crowd {
 
 			for ( const member of this.members.values() ) {
 
-				if ( member.parcelId === parcelId ) candidates.push( member );
+				if ( member.parcelId === parcelId && ! member.quest ) candidates.push( member );
 
 			}
 
@@ -597,6 +626,71 @@ export class Crowd {
 
 	}
 
+	#postQuestNpc( npc, place, player, fallbackAnchor ) {
+
+		const seed = hash( `quest:${npc.npcId}` );
+		let position;
+		let parcelId = null;
+
+		if ( place?.kind === 'parcel' ) {
+
+			const parcel = this.places.get( place.id );
+			const anchor = parcel?.inside ?? fallbackAnchor;
+			if ( ! anchor || anchor.distanceTo( player ) > PARCEL_RADIUS ) return null;
+			const angle = ( seed % 6283 ) / 1000;
+			position = anchor.clone().add( new THREE.Vector3( Math.sin( angle ) * 0.8, 0, Math.cos( angle ) * 0.8 ) );
+			parcelId = place.id;
+
+		} else if ( place?.kind === 'edge' ) {
+
+			const edge = this.routes.edges.get( place.id );
+			if ( ! edge ) return null;
+			const at = this.routes.pointAt( edge, edge.length * ( 0.25 + ( seed % 500 ) / 1000 ), 1 );
+			position = new THREE.Vector3( at.x, walkY( edge, at ), at.z );
+			if ( position.distanceTo( player ) > SPAWN_RADIUS ) return null;
+
+		} else return null;
+
+		if ( ! this.#makeRoomForQuest( player ) ) return null;
+
+		const member = this.#add( {
+			...this.#base( {
+				crowdId: `quest:${npc.npcId}`, type: npc.type, gender: npc.gender, activity: 'leisure'
+			}, seed ),
+			stationary: true,
+			quest: true,
+			parcelId,
+			spot: `quest:${npc.npcId}`,
+			clip: CLIP.IDLE,
+			position,
+			heading: angleTo( position, player )
+		} );
+		identify( member, npc );
+
+		return member;
+
+	}
+
+	#makeRoomForQuest( player ) {
+
+		if ( this.capacity < 1 ) return false;
+		while ( this.members.size >= this.capacity ) {
+
+			const victim = [ ...this.members.values() ]
+				.filter( ( member ) => ! member.quest && ! member.frozen && ! member.hero )
+				.sort( ( left, right ) =>
+					Number( Boolean( left.npcId ) ) - Number( Boolean( right.npcId ) ) ||
+					right.position.distanceToSquared( player ) - left.position.distanceToSquared( player ) ||
+					left.id.localeCompare( right.id )
+				)[ 0 ];
+			if ( ! victim ) return false;
+			this.members.delete( victim.id );
+
+		}
+		return true;
+
+	}
+
 	#advance( member, delta, daySeconds ) {
 
 		if ( ! member.stationary && ! member.frozen ) {
@@ -667,8 +761,9 @@ export class Crowd {
 	#write() {
 
 		const counts = this.assets.variants.map( () => 0 );
+		const ordered = [ ...this.members.values() ].sort( ( left, right ) => Number( Boolean( right.quest ) ) - Number( Boolean( left.quest ) ) );
 
-		for ( const member of this.members.values() ) {
+		for ( const member of ordered ) {
 
 			if ( member.hero ) continue;
 
@@ -693,6 +788,30 @@ export class Crowd {
 		}
 
 	}
+
+}
+
+function identify( member, instance ) {
+
+	member.npcId = instance.npcId;
+	member.instance = instance;
+	member.type = instance.type;
+	member.gender = instance.gender ?? member.gender;
+
+}
+
+function memberAt( member, place ) {
+
+	if ( ! place ) return false;
+	if ( place.kind === 'parcel' ) return member.parcelId === place.id;
+	if ( place.kind === 'edge' ) return ! member.stationary && member.edge?.id === place.id;
+	return false;
+
+}
+
+function angleTo( from, to ) {
+
+	return Math.atan2( to.x - from.x, to.z - from.z );
 
 }
 

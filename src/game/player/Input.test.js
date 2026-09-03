@@ -33,6 +33,23 @@ describe( 'game input', () => {
 
 	} );
 
+	it( 'captures primary and secondary interaction presses while pointer locked', () => {
+
+		const { input, fire } = harness();
+		input.locked = true;
+		const primary = { code: 'KeyE', repeat: false, preventDefault: vi.fn() };
+		const secondary = { code: 'KeyR', repeat: false, preventDefault: vi.fn() };
+
+		fire( 'keydown', primary );
+		fire( 'keydown', secondary );
+
+		expect( primary.preventDefault ).toHaveBeenCalled();
+		expect( secondary.preventDefault ).toHaveBeenCalled();
+		expect( input.consume( 'KeyE' ) ).toBe( true );
+		expect( input.consume( 'KeyR' ) ).toBe( true );
+
+	} );
+
 } );
 
 function harness() {

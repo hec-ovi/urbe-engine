@@ -17,4 +17,13 @@ describe( 'saved world location', () => {
 
 	} );
 
+	it( 'returns exact district and parcel refs, preferring the streamed room parcel at an entry', () => {
+
+		const locator = new Locator( atlas );
+		expect( locator.refs( 4, 4 ) ).toEqual( [ { kind: 'district', id: 'd0' }, { kind: 'parcel', id: 'p0' } ] );
+		expect( locator.refs( 12, 12, 'p0' ) ).toEqual( [ { kind: 'district', id: 'd0' }, { kind: 'parcel', id: 'p0' } ] );
+		expect( locator.refs( 30, 30 ) ).toEqual( [] );
+
+	} );
+
 } );

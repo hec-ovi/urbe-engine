@@ -5,7 +5,7 @@ const MOVE_KEYS = {
 	KeyD: 'right', ArrowRight: 'right'
 };
 
-const GAME_KEYS = new Set( [ ...Object.keys( MOVE_KEYS ), 'Space', 'KeyC', 'ShiftLeft', 'ShiftRight' ] );
+const GAME_KEYS = new Set( [ ...Object.keys( MOVE_KEYS ), 'Space', 'KeyC', 'KeyE', 'KeyR', 'ShiftLeft', 'ShiftRight' ] );
 
 /**
  * Keyboard and pointer state, and nothing more. Mouse deltas accumulate

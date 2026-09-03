@@ -19,6 +19,7 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - `targets({ timeMin })` projects active `pickup`, `observe`, `listen`, `steal`, `work`, and `deliver` steps.
 - `perform(request)` maps `take`, `inspect`, `listen`, `steal`, `work`, and `deliver` to the quests runtime's closed player event vocabulary. `read` returns the selected document text without advancing the quest.
 - `objective({ timeMin })` selects the first open questline and first definition-ordered active step for route presentation.
+- `QuestGameplay.candidates(frame)` projects those validated targets into the shared centered interaction route. `QuestGameplay.perform` sends its measured place, visibility, obstruction and reach facts back through `QuestActions.perform`.
 
 ## Errors
 
@@ -30,6 +31,7 @@ Purpose: converts active quest steps into deterministic player interaction targe
 
 - `quests/flow`, through its contract and questline schema.
 - `game/quests/QuestSession`, inside this layer only.
+- The game's crowd, physics query and PBR material factory for live target bodies and measured focus facts.
 
 ## Invariants
 
@@ -39,6 +41,10 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - A failed interaction does not mutate quest progress or inventory.
 - A successful pickup cannot be repeated because its completed step no longer produces an active target.
 - Highlight and icon data identify the same item, cast NPCs, and step consumed by the action.
+- A live pickup prop has the stable `targetKey`, a database-backed body material, and separate outline and icon cues. It leaves the scene only when the accepted result includes its `collected` world change.
+- Cast-person mechanics resolve the exact `actorIds`. A nearby omitted cast NPC may receive one deterministic rendered quest body, within the crowd capacity, at their simulation place.
+- Parcel area mechanics are offered only at their deterministic entry or interior anchor. District observation remains an area action throughout the named district.
+- Quest item data currently publishes a parcel but no room, prop, or transform. The live layer uses the parcel's ground-floor interior entry anchor, or its published access point when no interior door exists. Observe data publishes only a district, so the layer does not invent individual evidence clues.
 
 ## How to modify this blackbox safely
 

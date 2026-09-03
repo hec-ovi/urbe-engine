@@ -20,6 +20,7 @@
   - `physics/`: Rapier world, colliders, player capsule
   - `player/`: input, first-person controller, interaction
   - `agents/`: character assets, pose baking, crowd, and traffic on Connections' authoritative 3D walk, lane and turn paths
+  - `quests/`: cast quest sessions, validated player actions, live target props and cast-person focus (src/game/quests/CONTRACT.md)
   - `routes/`: deterministic shortest objective routes to published parcel, station and stop entries over Connections' authoritative 3D walk graph (src/game/routes/CONTRACT.md)
   - `sim/`: the simulation library host
   - `debug/`: the hitch log, and the renderer work (shader links, texture uploads) that explains a gap the world did not cause

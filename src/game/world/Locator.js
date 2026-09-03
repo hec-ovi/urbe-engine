@@ -33,6 +33,22 @@ export class Locator {
 
 	}
 
+	/** Exact runtime place identities at a point, including an authoritative streamed room parcel. */
+	refs( x, z, roomParcelId = null ) {
+
+		const refs = [];
+		const district = this.districts.find( ( candidate ) => inside( candidate.ring, x, z ) );
+		if ( district ) refs.push( { kind: 'district', id: district.id } );
+
+		const parcel = roomParcelId
+			? this.parcels.find( ( candidate ) => candidate.id === roomParcelId )
+			: this.parcels.find( ( candidate ) => inside( candidate.ring, x, z ) );
+		if ( parcel ) refs.push( { kind: 'parcel', id: parcel.id } );
+
+		return refs;
+
+	}
+
 	/** Stable save-game location, preferring the parcel over its containing district. */
 	location( x, z ) {
 

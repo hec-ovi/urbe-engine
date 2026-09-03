@@ -35,6 +35,24 @@ describe( 'ObjectiveGuide', () => {
 
 	} );
 
+	it( 'bounds retries after a route failure', () => {
+
+		const router = new ObjectiveRouter( {
+			...network(),
+			nodes: [ ...network().nodes, { id: 'island', x: 30, y: 0, z: 0, kind: 'entry', ref: 'p-island' } ]
+		} );
+		const route = vi.spyOn( router, 'route' );
+		const guide = new ObjectiveGuide( router );
+		const destination = { kind: 'parcel', id: 'p-island' };
+
+		expect( () => guide.update( { deltaSeconds: 0, from: [ 0, 0, 0 ], destination } ) ).toThrow( /unreachable/ );
+		expect( guide.update( { deltaSeconds: 0.1, from: [ 4, 0, 0 ], destination } ) ).toEqual( { changed: false, route: null } );
+		expect( route ).toHaveBeenCalledTimes( 1 );
+		expect( () => guide.update( { deltaSeconds: 0.7, from: [ 4, 0, 0 ], destination } ) ).toThrow( /unreachable/ );
+		expect( route ).toHaveBeenCalledTimes( 2 );
+
+	} );
+
 } );
 
 function network() {

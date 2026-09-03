@@ -37,6 +37,7 @@ Purpose: calculates a repeatable route from the player's current feet to an obje
 - Equal-cost choices resolve by edge and node id, so identical inputs produce identical output.
 - The current feet lead to the nearest graph node and count toward the displayed distance.
 - The guide never calls the router every frame. It retains one validated result between bounded reroutes.
+- A failed route attempt clears the presented route and retries only after the same cadence and movement threshold.
 
 ## How to modify this blackbox safely
 

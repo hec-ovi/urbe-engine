@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Crowd } from '../agents/Crowd.js';
 import { Interactor, pick } from './Interactor.js';
@@ -142,6 +142,79 @@ describe( 'E on an NPC', () => {
 		expect( interactor.conversation ).toBe( null );
 		expect( person.frozen ).toBe( false );
 		expect( sim.resumed ).toEqual( [ 'n1' ] );
+
+	} );
+
+} );
+
+describe( 'cast quest NPC bodies', () => {
+
+	it( 'resolves the exact cast NPC from nearby matching crowd handles', () => {
+
+		const { crowd, sim } = street();
+		sim.getNPC = () => ( { npcId: 'n1', type: 'shop_clerk', gender: 'female' } );
+		const player = [ ...crowd.members.values() ][ 0 ].position.clone();
+		const member = crowd.questMember( 'n1', CLOCK.timeMin, player, { kind: 'edge', id: 'e1' } );
+
+		expect( member.npcId ).toBe( 'n1' );
+		expect( member.instance.npcId ).toBe( 'n1' );
+		expect( sim.instantiated ).toEqual( [ 'c|edge|e1|0|390' ] );
+
+	} );
+
+	it( 'posts the actual cast NPC at a nearby parcel anchor when the regular sample omitted them', () => {
+
+		const sim = {
+			crowd: () => ( { agents: [] } ),
+			getNPC: () => ( { npcId: 'cast-guard', type: 'quest_security', gender: 'male' } ),
+			instantiate: () => null
+		};
+		const inside = new THREE.Vector3( 4, 0.12, 5 );
+		const crowd = new Crowd( {
+			assets: { variants: [ {} ], durations: [ 1 ], meshesOf: () => [] },
+			routes: routes(), signals: { green: () => true }, sim,
+			places: new Map( [ [ 'p9', { inside, heading: 0, anchors: {} } ] ] ), capacity: 1
+		} );
+		crowd.members.set( 'ambient', { id: 'ambient', position: inside.clone().add( new THREE.Vector3( 5, 0, 0 ) ), npcId: null } );
+		const member = crowd.questMember( 'cast-guard', CLOCK.timeMin, inside, { kind: 'parcel', id: 'p9' } );
+
+		expect( member ).toMatchObject( { npcId: 'cast-guard', parcelId: 'p9', quest: true, stationary: true } );
+		expect( member.instance.npcId ).toBe( 'cast-guard' );
+		expect( member.position.distanceTo( inside ) ).toBeCloseTo( 0.8 );
+		expect( crowd.members.size ).toBe( 1 );
+		expect( crowd.members.has( 'ambient' ) ).toBe( false );
+
+	} );
+
+} );
+
+describe( 'shared quest interaction route', () => {
+
+	it( 'shows the centered quest prompt and dispatches both symbolic bindings without changing NPC talk', () => {
+
+		const calls = [];
+		const quests = {
+			candidates: vi.fn( () => [ { kind: 'quest', aim: 1, interaction: { prompt: 'E  take drive   R  read drive' } } ] ),
+			perform: vi.fn( ( interaction, binding, timeMin ) => {
+
+				calls.push( { interaction, binding, timeMin } );
+				return { ok: true, action: binding };
+
+			} )
+		};
+		const interactor = new Interactor( {
+			crowd: { within: () => [] }, doors: [], sim: {}, quests,
+			controller: {
+				body: { feet: new THREE.Vector3() }, eye: new THREE.Vector3( 0, 1.7, 0 ), look: new THREE.Vector3( 0, 0, - 1 )
+			}
+		} );
+		const state = { playerPlaces: [ { kind: 'parcel', id: 'p9' } ] };
+
+		expect( interactor.update( 1 / 60, state ) ).toBe( 'E  take drive   R  read drive' );
+		expect( quests.candidates ).toHaveBeenCalledWith( state );
+		expect( interactor.activate( CLOCK ) ).toMatchObject( { action: 'interact' } );
+		expect( interactor.activate( CLOCK, 'secondary-interact' ) ).toMatchObject( { action: 'secondary-interact' } );
+		expect( calls.map( ( call ) => call.binding ) ).toEqual( [ 'interact', 'secondary-interact' ] );
 
 	} );
 

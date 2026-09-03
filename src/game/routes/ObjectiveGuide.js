@@ -43,11 +43,12 @@ export class ObjectiveGuide {
 
 		}
 
-		const route = this.router.route( { from: request.from, destination: request.destination } );
 		this.destinationKey = key;
 		this.routedFrom = [ ...request.from ];
-		this.route = route;
+		if ( objectiveChanged ) this.route = null;
 		this.elapsed = 0;
+		const route = this.router.route( { from: request.from, destination: request.destination } );
+		this.route = route;
 		return this.boundary.output( 'guide-result', { changed: true, route } );
 
 	}

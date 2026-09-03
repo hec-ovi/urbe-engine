@@ -33,13 +33,14 @@ const HANDLE = 1.1;
  */
 export class Interactor {
 
-	constructor( { crowd, doors, sim, controller, elevators } ) {
+	constructor( { crowd, doors, sim, controller, elevators, quests } ) {
 
 		this.crowd = crowd;
 		this.doors = doors;
 		this.sim = sim;
 		this.controller = controller;
 		this.elevators = elevators;
+		this.quests = quests;
 		this.target = null;
 		this.conversation = null;
 		this.onConversation = null;
@@ -47,7 +48,7 @@ export class Interactor {
 	}
 
 	/** @returns the prompt string, or null. */
-	update( delta ) {
+	update( delta, questState ) {
 
 		for ( const door of this.doors ) this.#swing( door, delta );
 
@@ -60,7 +61,8 @@ export class Interactor {
 			this.controller.look,
 			this.doors.filter( ( door ) => door.center.distanceTo( feet ) <= DOOR_RANGE ),
 			this.crowd.within( feet, TALK_RANGE ),
-			this.elevators?.panels( feet, DOOR_RANGE ) ?? []
+			this.elevators?.panels( feet, DOOR_RANGE ) ?? [],
+			this.quests?.candidates( questState ) ?? []
 		);
 
 		return this.target ? prompt( this.target ) : null;
@@ -68,9 +70,16 @@ export class Interactor {
 	}
 
 	/** Called on a real E press. */
-	activate( clock ) {
+	activate( clock, bindingAction = 'interact' ) {
 
 		if ( ! this.target ) return;
+
+		if ( this.target.kind === 'quest' ) {
+
+			return this.quests.perform( this.target.interaction, bindingAction, clock.timeMin );
+
+		}
+		if ( bindingAction !== 'interact' ) return;
 
 		if ( this.target.kind === 'door' ) {
 
@@ -181,7 +190,7 @@ export class Interactor {
  * @param eye the camera position, @param look the unit crosshair ray
  * @returns { kind: 'door'|'npc', door?, person?, aim } or null
  */
-export function pick( eye, look, doors, people, panels = [] ) {
+export function pick( eye, look, doors, people, panels = [], questTargets = [] ) {
 
 	const candidates = [];
 
@@ -202,6 +211,8 @@ export function pick( eye, look, doors, people, panels = [] ) {
 		candidates.push( { kind: 'npc', person, aim: aimAt( eye, look, person.position, CHEST ) } );
 
 	}
+
+	for ( const target of questTargets ) candidates.push( target );
 
 	let best = null;
 
@@ -232,6 +243,7 @@ function aimAt( eye, look, position, rise ) {
 /** What the prompt says, always naming the thing it will act on. */
 function prompt( target ) {
 
+	if ( target.kind === 'quest' ) return target.interaction.prompt;
 	if ( target.kind === 'elevator' ) return target.shaft.label( target );
 
 	if ( target.kind === 'door' ) {
