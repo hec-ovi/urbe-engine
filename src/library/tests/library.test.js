@@ -211,6 +211,11 @@ function savedGame() {
 		},
 		currentLocation: { id: 'p2', name: 'Market Two' },
 		discoveredLocations: [ { id: 'p2', name: 'Market Two' } ],
+		npcState: {
+			timeMin: 1260,
+			simulation: { version: '1', seed: 'fresh-save', events: [] },
+			continuity: { version: '1', actors: [], follow: null, conversation: null }
+		},
 		save: {
 			revision: 1,
 			createdAt: '2026-09-02T20:00:00Z',

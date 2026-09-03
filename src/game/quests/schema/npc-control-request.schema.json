@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:quest-actions:npc-control-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "npcId", "timeMin", "playerPosition"],
+  "properties": {
+    "kind": { "enum": ["start-follow", "release-follow"] },
+    "npcId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+    "timeMin": { "type": "number", "minimum": 0 },
+    "playerPosition": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/vector3" }
+  }
+}

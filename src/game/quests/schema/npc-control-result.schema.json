@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:quest-actions:npc-control-result",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "kind", "npcId", "mode"],
+      "properties": {
+        "ok": { "const": true },
+        "kind": { "enum": ["start-follow", "release-follow"] },
+        "npcId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+        "mode": { "enum": ["following", "resuming", "schedule"] }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "kind", "npcId", "error", "message"],
+      "properties": {
+        "ok": { "const": false },
+        "kind": { "enum": ["start-follow", "release-follow"] },
+        "npcId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+        "error": { "enum": ["not_cast", "unavailable", "unreachable", "conflict"] },
+        "message": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" }
+      }
+    }
+  ]
+}

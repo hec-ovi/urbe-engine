@@ -14,12 +14,14 @@ const CHEST = 1.3;
  */
 export class QuestGameplay {
 
-	constructor( { session, actions, world, crowd, physics, playerCollider, materialFactory } ) {
+	constructor( { session, actions, world, crowd, physics, playerCollider, materialFactory, continuity = null } ) {
 
 		this.boundary = new QuestActionBoundary();
 		this.boundary.input( 'gameplay-world', world );
 		this.actions = actions ?? new QuestActions( session );
+		this.session = session;
 		this.crowd = crowd;
+		this.continuity = continuity;
 		this.physics = physics;
 		this.playerCollider = playerCollider;
 		this.materialFactory = materialFactory;
@@ -30,6 +32,56 @@ export class QuestGameplay {
 		this.actorMarks = new Map();
 		this.changedTargets = new Set();
 		this.liveInteractions = new Map();
+
+	}
+
+	/** Explicit engine control event for an actual NPC already cast in this quest session. */
+	control( request ) {
+
+		this.boundary.input( 'npc-control-request', request );
+		if ( ! this.session?.hasCastNpc( request.npcId ) ) {
+
+			return this.#controlFailure( request, 'not_cast', `NPC ${request.npcId} is not in the active quest cast` );
+
+		}
+		if ( ! this.continuity ) return this.#controlFailure( request, 'unavailable', 'NPC continuity is unavailable' );
+		let actor;
+		try {
+
+			if ( request.kind === 'start-follow' ) {
+
+				actor = this.continuity.startFollow( {
+					npcId: request.npcId,
+					timeMin: request.timeMin,
+					playerPosition: array3( request.playerPosition )
+				} );
+
+			} else {
+
+				const follow = this.continuity.serialize().follow;
+				if ( follow?.npcId !== request.npcId || follow.mode !== 'following' ) {
+
+					return this.#controlFailure( request, 'conflict', `NPC ${request.npcId} is not following` );
+
+				}
+				actor = this.continuity.stopFollow( { timeMin: request.timeMin } );
+
+			}
+			if ( actor.mode === 'released' ) {
+
+				return this.#controlFailure( request, 'unavailable', `NPC ${request.npcId} was released because it became unavailable` );
+
+			}
+			this.crowd.syncActor( actor, vector3( request.playerPosition ) );
+			return this.boundary.output( 'npc-control-result', {
+				ok: true, kind: request.kind, npcId: request.npcId, mode: actor.mode
+			} );
+
+		} catch ( error ) {
+
+			return this.#controlFailure( request, controlError( error ), messageOf( error ) );
+
+		}
 
 	}
 
@@ -144,6 +196,14 @@ export class QuestGameplay {
 		const mark = this.staticMarks.get( target.targetKey );
 		if ( ! mark || ! atPlace( playerPlaces, target.place ) || feet.distanceTo( mark.position ) > AREA_REACH ) return null;
 		return interaction( target, playerPlaces, MIN_AIM );
+
+	}
+
+	#controlFailure( request, error, message ) {
+
+		return this.boundary.output( 'npc-control-result', {
+			ok: false, kind: request.kind, npcId: request.npcId, error, message
+		} );
 
 	}
 
@@ -295,6 +355,26 @@ function aimAt( eye, look, point ) {
 function vector3( value ) {
 
 	return new THREE.Vector3( value.x, value.y, value.z );
+
+}
+
+function array3( value ) {
+
+	return [ value.x, value.y, value.z ];
+
+}
+
+function controlError( error ) {
+
+	if ( error?.code === 'E_NPC_PATH' ) return 'unreachable';
+	if ( error?.code === 'E_NPC_CONFLICT' ) return 'conflict';
+	return 'unavailable';
+
+}
+
+function messageOf( error ) {
+
+	return error instanceof Error ? error.message : String( error );
 
 }
 

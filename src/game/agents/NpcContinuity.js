@@ -70,21 +70,8 @@ export class NpcContinuity {
 		const states = [];
 		for ( const [ npcId, actor ] of [ ...this.actors.entries() ].sort( ( a, b ) => a[ 0 ].localeCompare( b[ 0 ] ) ) ) {
 
-			if ( ! actor.visible ) {
-
-				states.push( clone( actor ) );
-				continue;
-
-			}
 			if ( controlled.has( npcId ) ) {
 
-				states.push( clone( actor ) );
-				continue;
-
-			}
-			if ( distance( actor.position, request.playerPosition ) > request.maxDistance ) {
-
-				actor.visible = false;
 				states.push( clone( actor ) );
 				continue;
 
@@ -92,7 +79,7 @@ export class NpcContinuity {
 			try {
 
 				const scheduled = this.#scheduledActor( npcId, request.timeMin );
-				scheduled.visible = true;
+				scheduled.visible = distance( scheduled.position, request.playerPosition ) <= request.maxDistance;
 				this.actors.set( npcId, scheduled );
 				states.push( clone( scheduled ) );
 
@@ -296,15 +283,17 @@ export class NpcContinuity {
 			throw new NpcContinuityError( 'E_NPC_INPUT', `conversation state references missing actor ${save.conversation.npcId}` );
 
 		}
+		const interrupted = new Set();
+		if ( save.follow?.mode === 'following' ) interrupted.add( save.follow.npcId );
+		if ( save.conversation?.ownsInterruption ) interrupted.add( save.conversation.npcId );
+		for ( const npcId of interrupted ) if ( ! this.simulation.behaviorAt( npcId, 0 )?.interrupted ) {
+
+			throw new NpcContinuityError( 'E_NPC_INPUT', `controlled save actor ${npcId} is not interrupted in the restored simulation` );
+
+		}
 		this.actors = new Map( save.actors.map( ( actor ) => [ actor.npcId, clone( actor ) ] ) );
 		this.follow = save.follow ? clone( save.follow ) : null;
 		this.conversation = save.conversation ? clone( save.conversation ) : null;
-		if ( this.follow ) this.#interrupt( this.follow.npcId, this.follow.lastTimeMin );
-		if ( this.conversation?.ownsInterruption && this.conversation.npcId !== this.follow?.npcId ) {
-
-			this.#interrupt( this.conversation.npcId, this.conversation.lastTimeMin );
-
-		}
 		return this.serialize();
 
 	}

@@ -9,6 +9,7 @@ const SCHEMAS = [
 	'descriptor-ref',
 	'city-descriptor',
 	'game-descriptor',
+	'npc-state',
 	'city-catalog',
 	'game-catalog',
 	'library-catalog',
@@ -23,6 +24,7 @@ export class SchemaBoundary {
 	constructor() {
 
 		this.ajv = new Ajv2020( { allErrors: true, strict: true } );
+		for ( const url of EXTERNAL_SCHEMAS ) this.ajv.addSchema( loadUrl( url ) );
 		for ( const name of SCHEMAS ) this.ajv.addSchema( loadSchema( name ) );
 
 	}
@@ -39,9 +41,21 @@ export class SchemaBoundary {
 
 }
 
+const EXTERNAL_SCHEMAS = [
+	new URL( '../../game/agents/schema/values.schema.json', import.meta.url ),
+	new URL( '../../game/agents/schema/continuity-save.schema.json', import.meta.url ),
+	new URL( '../../../../simulation/src/schemas/simulation-save.schema.json', import.meta.url )
+];
+
 function loadSchema( name ) {
 
 	const url = new URL( `../schema/${name}.schema.json`, import.meta.url );
+	return loadUrl( url );
+
+}
+
+function loadUrl( url ) {
+
 	return JSON.parse( readFileSync( url, 'utf8' ) );
 
 }

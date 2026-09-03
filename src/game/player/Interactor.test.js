@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Crowd } from '../agents/Crowd.js';
+import { CLIP } from '../agents/CharacterAssets.js';
 import { Interactor, pick } from './Interactor.js';
 
 /**
@@ -145,6 +146,36 @@ describe( 'E on an NPC', () => {
 
 	} );
 
+	it( 'hands a named body to continuity for conversation and resumes it from the visible position', () => {
+
+		let actor = null;
+		const continuity = {
+			beginConversation: vi.fn( ( request ) => ( actor = continuityActor( request, 'conversation', 'idle' ) ) ),
+			endConversation: vi.fn( ( request ) => ( {
+				...actor, mode: 'resuming', animation: 'walk', schedule: { ...actor.schedule, progress: request.timeMin / 1000 }
+			} ) )
+		};
+		const { interactor, crowd, sim } = street( continuity );
+		const person = [ ...crowd.members.values() ][ 0 ];
+		const visible = person.position.toArray();
+
+		interactor.update( 1 / 60 );
+		interactor.activate( CLOCK );
+
+		expect( continuity.beginConversation ).toHaveBeenCalledWith( expect.objectContaining( {
+			npcId: 'n1', timeMin: CLOCK.timeMin, position: visible, place: { kind: 'edge', id: 'e1' }
+		} ) );
+		expect( person ).toMatchObject( { npcId: 'n1', frozen: true, talking: true, clip: CLIP.TALK } );
+		expect( sim.interrupted ).toEqual( [] );
+
+		interactor.close( { ...CLOCK, timeMin: CLOCK.timeMin + 1 } );
+		expect( continuity.endConversation ).toHaveBeenCalledWith( { timeMin: CLOCK.timeMin + 1 } );
+		expect( person.position.toArray() ).toEqual( visible );
+		expect( person ).toMatchObject( { npcId: 'n1', frozen: true, talking: false, clip: CLIP.WALK, controlMode: 'resuming' } );
+		expect( sim.resumed ).toEqual( [] );
+
+	} );
+
 } );
 
 describe( 'cast quest NPC bodies', () => {
@@ -250,7 +281,7 @@ describe( 'shared quest interaction route', () => {
 const CLOCK = { timeMin: 780, daySeconds: 46800 };
 
 /** One walker on one edge, with the player standing on top of them. */
-function street() {
+function street( continuity = null ) {
 
 	const sim = simulation( new Map( [ [ 'e1', [ { ...AGENT } ] ], [ 'e2', [] ] ] ) );
 	const crowd = new Crowd( {
@@ -266,7 +297,7 @@ function street() {
 		.add( new THREE.Vector3( 0, 0, 1.5 ) );
 	const panels = [];
 	const interactor = new Interactor( {
-		crowd, doors: [], sim,
+		crowd, doors: [], sim, continuity,
 		controller: {
 			body: { feet },
 			forward: new THREE.Vector3( 0, 0, - 1 ),
@@ -294,6 +325,7 @@ function routes() {
 	return {
 		edges: new Map( [ [ EDGE.id, EDGE ], [ NEIGHBOUR.id, NEIGHBOUR ] ] ),
 		near: () => [ EDGE, NEIGHBOUR ],
+		project: () => ( { edge: EDGE, distance: EDGE.length / 2 } ),
 		pointAt: ( edge, distance ) => ( { x: distance, y: 0, z: 0, heading: 0 } ),
 		exitNode: () => 'n1',
 		nextFrom: () => ( { edge: EDGE, direction: 1 } )
@@ -306,6 +338,7 @@ function simulation( byEdge ) {
 
 	const instantiated = [];
 	const resumed = [];
+	const interrupted = [];
 	const all = () => [ ...byEdge.values() ].flat();
 
 	const sim = {
@@ -313,6 +346,7 @@ function simulation( byEdge ) {
 		neighbour: byEdge.get( 'e2' ),
 		instantiated,
 		resumed,
+		interrupted,
 		npcIds: [ 'n1', 'n2' ],
 		// The pavement here is short, so a radius scope sees everyone on it.
 		crowd: ( timeMin, scope ) => ( { agents: scope.kind === 'radius' ? all() : byEdge.get( scope.id ) ?? [] } ),
@@ -328,10 +362,32 @@ function simulation( byEdge ) {
 
 		},
 		behaviorAt: () => ( { activity: 'commuting', mode: 'street', place: { kind: 'edge', id: 'e1' } } ),
-		interrupt: () => {},
+		getNPC: ( npcId ) => ( {
+			npcId, name: { given: 'Mina', family: 'Costa' }, type: 'shop_clerk', gender: 'female', appearanceSeed: 33
+		} ),
+		interrupt: ( npcId ) => interrupted.push( npcId ),
 		resume: ( npcId ) => resumed.push( npcId )
 	};
 
 	return sim;
+
+}
+
+function continuityActor( request, mode, animation ) {
+
+	return {
+		npcId: request.npcId,
+		name: { given: 'Mina', family: 'Costa' },
+		type: 'shop_clerk',
+		gender: 'female',
+		appearanceSeed: 33,
+		place: request.place,
+		position: request.position,
+		heading: request.heading,
+		animation,
+		mode,
+		schedule: { activity: 'commuting', progress: 0.5, nextDestination: { kind: 'parcel', id: 'p9' } },
+		visible: true
+	};
 
 }

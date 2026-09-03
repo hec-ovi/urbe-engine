@@ -25,7 +25,8 @@
       "type": "array",
       "items": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/location" }
     },
-    "transitJourney": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/transitJourney" }
+    "transitJourney": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/transitJourney" },
+    "npcState": { "$ref": "urn:urbe:engine:library:npc-state" }
   },
   "additionalProperties": false
 }

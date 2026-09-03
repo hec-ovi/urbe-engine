@@ -2,7 +2,7 @@
 
 Purpose: materializes persistent simulation NPC identities and moves their bodies over Connections paths, including quest-directed following and deterministic schedule return.
 
-Status: the public continuity and follow API is implemented and tested. The GameApp and quest-action adapter is pending.
+Status: the public continuity and follow API is wired into the live GameApp, Crowd, Interactor and explicit quest control adapter.
 
 ## Inputs
 
@@ -62,10 +62,9 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - Idle, walk, sprint and seated states select the corresponding purchased clip. Crouch is selected only for an explicit crouch action.
 - An interior waiter, barista or vendor keeps the simulation type chosen for that post. The engine does not reinterpret an interior role as an unrelated type.
 
-## Remaining adapter work
+## Remaining presentation work
 
-- Wire `NpcContinuity` into GameApp, Crowd and quest follow actions after the transit integration settles. Until then the public controller is exercised through engine integration tests but is not called by the live frame loop.
-- Speaking and listening turn coordination still uses the existing talk presentation and is not part of this controller.
+- Speaking and listening turn coordination still uses the existing talk presentation. Conversation interruption and schedule return are owned here, while dialogue turn gestures remain outside this controller.
 
 ## How to modify this blackbox safely
 

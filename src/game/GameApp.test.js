@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import * as THREE from 'three/webgpu';
 import {
-	pickSpawn, playableInteractionOwner, playableTransitPrompt, prepareInteriorStreaming, savedSpawn, transitStartHour
+	GameApp, npcContinuityPlaces, pickSpawn, playableInteractionOwner, playableTransitPrompt,
+	prepareInteriorStreaming, savedSpawn, transitStartHour
 } from './GameApp.js';
 
 describe( 'game spawn', () => {
@@ -82,6 +84,46 @@ describe( 'playable transit integration', () => {
 		expect( playableInteractionOwner( { conversation: null, target: {} }, { aboard: false } ) ).toBe( 'world' );
 		expect( playableInteractionOwner( { conversation: null, target: {} }, { aboard: true } ) ).toBe( 'transit' );
 		expect( playableInteractionOwner( { conversation: null, target: null }, { aboard: false } ) ).toBe( 'transit' );
+
+	} );
+
+} );
+
+describe( 'live NPC continuity integration', () => {
+
+	it( 'publishes all scheduled parcel positions and interior anchors in the controller contract', () => {
+
+		const atlas = { parcels: [
+			{ id: 'cafe', access: { point: [ 5, 6 ] } },
+			{ id: 'home', access: { point: [ 20, 30 ] } }
+		] };
+		const doors = [ {
+			parcelId: 'cafe', inside: new THREE.Vector3( 1, 2, 3 ), normal: new THREE.Vector3( 0, 0, 1 )
+		} ];
+		const buildings = new Map( [ [ 'cafe', { npc: { anchors: [ {
+			id: 'coffee', floor: 0, kind: 'work_spot', position: [ 7, 8 ], facingDeg: 0
+		} ] } } ] ] );
+
+		expect( npcContinuityPlaces( atlas, doors, buildings ) ).toEqual( [
+			{
+				kind: 'parcel', id: 'cafe', position: [ 1, 2, 3 ], heading: 0,
+				anchors: [ { id: 'coffee', position: [ 7, 2, 8 ], heading: Math.PI / 2 } ]
+			},
+			{ kind: 'parcel', id: 'home', position: [ 20, 0.12, 30 ], heading: 0, anchors: [] }
+		] );
+
+	} );
+
+	it( 'exposes only an explicit selected-cast control event with live clock and player position', () => {
+
+		const app = Object.create( GameApp.prototype );
+		app.clock = { timeMin: 725 };
+		app.body = { feet: new THREE.Vector3( 4, 5, 6 ) };
+		app.questGameplay = { control: vi.fn( ( request ) => ( { ok: true, ...request } ) ) };
+
+		expect( app.questNpcControl( { kind: 'start-follow', npcId: 'cast-a' } ) ).toMatchObject( {
+			ok: true, kind: 'start-follow', npcId: 'cast-a', timeMin: 725, playerPosition: { x: 4, y: 5, z: 6 }
+		} );
 
 	} );
 

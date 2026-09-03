@@ -18,7 +18,7 @@ Discovers, validates, loads and saves deterministic city and game descriptors un
 - `listCities`: [schema/city-catalog.schema.json](schema/city-catalog.schema.json).
 - `listGames`: [schema/game-catalog.schema.json](schema/game-catalog.schema.json).
 - `loadCity`: [schema/city-descriptor.schema.json](schema/city-descriptor.schema.json).
-- `loadGame`: [schema/game-descriptor.schema.json](schema/game-descriptor.schema.json). Its optional `transitJourney` preserves an exact waiting or aboard timetable state for playable transit.
+- `loadGame`: [schema/game-descriptor.schema.json](schema/game-descriptor.schema.json). Its optional `transitJourney` preserves an exact waiting or aboard timetable state. Its optional `npcState` is [schema/npc-state.schema.json](schema/npc-state.schema.json), preserving simulation replay, NPC materialization, interruption, follow route and world time.
 - `saveCity`: [schema/city-save-result.schema.json](schema/city-save-result.schema.json).
 - `saveGame`: [schema/save-result.schema.json](schema/save-result.schema.json).
 - Thrown `LibraryError`: [schema/library-error.schema.json](schema/library-error.schema.json).
@@ -33,14 +33,14 @@ Closed set: `E_INVALID_REQUEST`, `E_INVALID_ID`, `E_CITY_NOT_FOUND`, `E_GAME_NOT
 
 ## Dependencies
 
-None. City resources and quest bundles cross this boundary as checksummed file-reference envelopes.
+- Simulation save schema and game NPC agents continuity-save schema. City resources and quest bundles cross this boundary as checksummed file-reference envelopes.
 
 ## Invariants
 
 - Discovery scans only direct child directories and orders descriptors by id using code-point order.
 - Every read and write validates its schema and cross-record relations. One malformed record fails the operation.
 - A city records every building and whether it can host an interior. A game references one existing city, matches its size and selects only eligible buildings. The city remains a shell-only artifact; selected interiors belong to the game.
-- A game save carries its exact position and heading, current and discovered locations, quest and side-job progress, inventory, revision and elapsed play time.
+- A game save carries its exact position and heading, current and discovered locations, quest and side-job progress, inventory, revision and elapsed play time. When present, NPC state carries the matching simulation replay and continuity controller state together with the world clock minute.
 - IDs cannot contain path separators. Resource URIs are relative to their descriptor directory and cannot contain empty, current or parent segments.
 - Descriptor paths cannot be symbolic links. Save replacement is atomic within one filesystem.
 - Save timestamps and revisions come from the request. JSON object keys are recursively sorted, arrays keep their authored order, indentation is two spaces and files end with one newline.

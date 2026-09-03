@@ -97,7 +97,11 @@ describe( 'NPC continuity integration', () => {
 
 		expect( next.controller.restore( saved ) ).toEqual( saved );
 		expect( next.bridge.behaviorAt( npc.npcId, MON_9 + 2 ).interrupted ).toBe( true );
+		expect( next.bridge.serialize() ).toEqual( simSave );
 		expect( next.controller.appear( { npcId: npc.npcId, timeMin: MON_9 + 2 } ) ).toEqual( saved.actors[ 0 ] );
+		const unmatched = setup();
+		expect( code( () => unmatched.controller.restore( saved ) ) ).toBe( 'E_NPC_INPUT' );
+		expect( unmatched.controller.serialize().actors ).toEqual( [] );
 
 	} );
 
@@ -114,6 +118,12 @@ describe( 'NPC continuity integration', () => {
 
 		expect( hidden ).toMatchObject( {
 			npcId: npc.npcId, appearanceSeed: actor.appearanceSeed, visible: false
+		} );
+		const [ nearAgain ] = controller.updateVisible( {
+			timeMin: MON_9 + 2, playerPosition: actor.position, maxDistance: 100
+		} );
+		expect( nearAgain ).toMatchObject( {
+			npcId: npc.npcId, appearanceSeed: actor.appearanceSeed, visible: true
 		} );
 		const returned = controller.appear( { npcId: npc.npcId, timeMin: MON_9 + 2 } );
 		expect( returned ).toMatchObject( {

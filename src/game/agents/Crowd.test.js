@@ -86,6 +86,68 @@ describe( 'Crowd route elevation', () => {
 
 } );
 
+describe( 'persistent NPC projection', () => {
+
+	it( 'updates, unloads and recreates one npcId with the same authored body and animation state', () => {
+
+		const routes = pavement();
+		const instance = {
+			npcId: 'named-worker', name: { given: 'Mina', family: 'Costa' },
+			type: 'barista', gender: 'female', appearanceSeed: 91234
+		};
+		const crowd = new Crowd( {
+			assets: testAssets(), routes, signals: { green: () => true },
+			sim: { getNPC: () => instance, crowd: () => ( { agents: [] } ) },
+			places: new Map(), capacity: 4
+		} );
+		const player = new THREE.Vector3();
+		const actor = persistentActor( instance );
+		const first = crowd.syncActor( actor, player );
+
+		expect( first ).toMatchObject( {
+			npcId: 'named-worker', appearanceSeed: 91234, continuity: true,
+			clip: CLIP.WALK, controlMode: 'following'
+		} );
+		const body = { variant: first.variant, look: first.look };
+		const updated = crowd.syncActor( { ...actor, animation: 'run', position: [ 3, 0, 0 ] }, player );
+		expect( updated ).toBe( first );
+		expect( updated.position.toArray() ).toEqual( [ 3, 0, 0 ] );
+		expect( updated.clip ).toBe( CLIP.RUN );
+		expect( crowd.count ).toBe( 1 );
+
+		expect( crowd.syncActor( { ...actor, visible: false }, player ) ).toBeNull();
+		expect( crowd.count ).toBe( 0 );
+		const returned = crowd.syncActor( { ...actor, animation: 'sit', mode: 'schedule' }, player );
+		expect( returned ).not.toBe( first );
+		expect( returned ).toMatchObject( { npcId: 'named-worker', clip: CLIP.SIT, ...body } );
+
+	} );
+
+	it( 'asks continuity for the cast npcId and rejects a body at the wrong scheduled place', () => {
+
+		const routes = pavement();
+		const instance = {
+			npcId: 'cast-worker', name: { given: 'Ivo', family: 'Reis' },
+			type: 'barista', gender: 'male', appearanceSeed: 44
+		};
+		const actor = persistentActor( instance );
+		const continuity = { appear: vi.fn( () => actor ) };
+		const crowd = new Crowd( {
+			assets: testAssets(), routes, signals: { green: () => true }, continuity,
+			sim: { getNPC: () => instance, crowd: () => ( { agents: [] } ) },
+			places: new Map(), capacity: 4
+		} );
+		const player = new THREE.Vector3();
+
+		expect( crowd.questMember( instance.npcId, 600, player, { kind: 'edge', id: 'e0' } )?.npcId )
+			.toBe( instance.npcId );
+		expect( continuity.appear ).toHaveBeenCalledWith( { npcId: instance.npcId, timeMin: 600 } );
+		expect( crowd.questMember( instance.npcId, 601, player, { kind: 'edge', id: 'e1' } ) ).toBeNull();
+
+	} );
+
+} );
+
 /**
  * A street handle names a sampled agent for one epoch of that pavement, so the
  * same people come back under new handles minute after minute while the ones
@@ -219,6 +281,31 @@ function pavement() {
 	}
 
 	return new WalkRoutes( { walk: { nodes, edges } } );
+
+}
+
+function testAssets() {
+
+	return { variants: Array.from( { length: 8 }, () => ( {} ) ), durations: Array( 8 ).fill( 1 ), meshesOf: () => [] };
+
+}
+
+function persistentActor( instance ) {
+
+	return {
+		npcId: instance.npcId,
+		name: instance.name,
+		type: instance.type,
+		gender: instance.gender,
+		appearanceSeed: instance.appearanceSeed,
+		place: { kind: 'edge', id: 'e0' },
+		position: [ 0, 0, 0 ],
+		heading: 0,
+		animation: 'walk',
+		mode: 'following',
+		schedule: { activity: 'commuting', progress: 0.5, nextDestination: { kind: 'parcel', id: 'p1' } },
+		visible: true
+	};
 
 }
 

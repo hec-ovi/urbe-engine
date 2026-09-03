@@ -47,7 +47,10 @@ export class GamePersistence {
 			discoveredLocations: uniqueLocations( [ ...live.discoveredLocations, live.currentLocation ] ),
 			...( Object.hasOwn( live, 'transitJourney' )
 				? { transitJourney: live.transitJourney }
-				: Object.hasOwn( this.game, 'transitJourney' ) ? { transitJourney: this.game.transitJourney } : {} )
+				: Object.hasOwn( this.game, 'transitJourney' ) ? { transitJourney: this.game.transitJourney } : {} ),
+			...( Object.hasOwn( live, 'npcState' )
+				? { npcState: live.npcState }
+				: Object.hasOwn( this.game, 'npcState' ) ? { npcState: this.game.npcState } : {} )
 		};
 		this.boundary.assert( 'save-current-payload', payload, 'E_SAVE_PAYLOAD', 'saveCurrent payload' );
 

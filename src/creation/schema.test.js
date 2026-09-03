@@ -14,6 +14,12 @@ describe( 'creation contract schemas', () => {
 		const ajv = new Ajv2020( { allErrors: true, strict: true } );
 		const city = await document( '../library/schema/city-descriptor.schema.json' );
 		const game = await document( '../library/schema/game-descriptor.schema.json' );
+		for ( const dependency of [
+			'../game/agents/schema/values.schema.json',
+			'../game/agents/schema/continuity-save.schema.json',
+			'../../../simulation/src/schemas/simulation-save.schema.json',
+			'../library/schema/npc-state.schema.json'
+		] ) ajv.addSchema( await document( dependency ) );
 		ajv.addSchema( city );
 		ajv.addSchema( game );
 

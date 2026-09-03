@@ -13,6 +13,12 @@ export class Boundary {
 	constructor() {
 
 		const ajv = new Ajv2020( { allErrors: true, strict: true } );
+		for ( const url of [
+			new URL( '../../game/agents/schema/values.schema.json', import.meta.url ),
+			new URL( '../../game/agents/schema/continuity-save.schema.json', import.meta.url ),
+			new URL( '../../../../simulation/src/schemas/simulation-save.schema.json', import.meta.url ),
+			new URL( '../../library/schema/npc-state.schema.json', import.meta.url )
+		] ) ajv.addSchema( JSON.parse( readFileSync( url, 'utf8' ) ) );
 		for ( const name of [ 'city-descriptor', 'game-descriptor' ] ) {
 
 			ajv.addSchema( JSON.parse( readFileSync( new URL( `../../library/schema/${name}.schema.json`, import.meta.url ), 'utf8' ) ) );

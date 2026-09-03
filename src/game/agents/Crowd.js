@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { SIDEWALK_HEIGHT } from '../ground/GroundBuilder.js';
-import { CLIP, bodyFor } from './CharacterAssets.js';
+import { CLIP, bodyFor, clipForNpcAnimation } from './CharacterAssets.js';
 import { FRAMES } from './VatBaker.js';
 import { look } from './Appearance.js';
 
@@ -47,7 +47,7 @@ const STREET_REACH = 25;
  */
 export class Crowd {
 
-	constructor( { assets, routes, signals, sim, places, capacity, stress = 0 } ) {
+	constructor( { assets, routes, signals, sim, places, capacity, stress = 0, continuity = null } ) {
 
 		this.assets = assets;
 		this.routes = routes;
@@ -56,6 +56,7 @@ export class Crowd {
 		this.places = places;
 		this.capacity = capacity;
 		this.stress = stress;
+		this.continuity = continuity;
 		this.members = new Map();
 		this.timer = REFRESH_INTERVAL;
 		/** People the simulation reported on the pavements around the player at
@@ -65,6 +66,79 @@ export class Crowd {
 		this.spawns = 0;
 
 		this.push = new THREE.Vector3();
+
+	}
+
+	/**
+	 * Projects one persistent continuity actor into the instanced crowd. The
+	 * actor's npcId and appearance seed own the body across every update.
+	 */
+	syncActor( actor, player ) {
+
+		if ( ! actor ) return null;
+		let member = [ ...this.members.values() ].find( ( candidate ) => candidate.npcId === actor.npcId ) ?? null;
+		if ( ! actor.visible ) {
+
+			if ( member?.continuity ) this.members.delete( member.id );
+			return null;
+
+		}
+		const position = new THREE.Vector3( ...actor.position );
+		const reach = actor.place.kind === 'parcel' ? PARCEL_RADIUS : SPAWN_RADIUS;
+		if ( ! member && position.distanceTo( player ) > reach ) return null;
+		const instance = this.sim.getNPC( actor.npcId );
+
+		if ( ! member ) {
+
+			if ( ! this.#makeRoomForQuest( player ) ) return null;
+			member = this.#add( {
+				...this.#base( {
+					crowdId: `npc:${actor.npcId}`,
+					type: actor.type,
+					gender: actor.gender,
+					activity: actor.schedule.activity
+				}, actor.appearanceSeed ),
+				stationary: true,
+				quest: true,
+				position: position.clone(),
+				heading: actor.heading,
+				clip: clipForNpcAnimation( actor.animation )
+			} );
+
+		}
+		identify( member, instance );
+		member.continuity = true;
+		member.quest = true;
+		member.frozen = true;
+		member.retiring = false;
+		member.position.copy( position );
+		member.heading = actor.heading;
+		member.restClip = clipForNpcAnimation( actor.animation );
+		member.clip = member.talking
+			? member.restClip === CLIP.SIT ? CLIP.SIT_TALK : CLIP.TALK
+			: member.restClip;
+		member.controlMode = actor.mode;
+		member.parcelId = actor.place.kind === 'parcel' ? actor.place.id : null;
+		member.edge = actor.place.kind === 'edge' ? this.routes.edges.get( actor.place.id ) ?? null : null;
+		member.stationary = ! member.edge;
+		member.distance = member.edge ? this.routes.project( actor.position )?.distance ?? 0 : 0;
+		member.direction = 1;
+		member.spot = actor.place.kind === 'parcel' ? `npc:${actor.npcId}` : null;
+		return member;
+
+	}
+
+	syncActors( actors, player ) {
+
+		return actors.map( ( actor ) => this.syncActor( actor, player ) ).filter( Boolean );
+
+	}
+
+	/** Applies one actual simulation instance to a rendered body. */
+	identify( member, instance ) {
+
+		identify( member, instance );
+		return member;
 
 	}
 
@@ -287,6 +361,22 @@ export class Crowd {
 	 */
 	questMember( npcId, timeMin, player, place, fallbackAnchor = null ) {
 
+		if ( this.continuity ) {
+
+			try {
+
+				const actor = this.continuity.appear( { npcId, timeMin } );
+				const member = this.syncActor( actor, player );
+				return member && memberAt( member, place ) ? member : null;
+
+			} catch {
+
+				return null;
+
+			}
+
+		}
+
 		for ( const member of this.members.values() ) {
 
 			if ( member.npcId !== npcId ) continue;
@@ -386,7 +476,7 @@ export class Crowd {
 
 		for ( const member of this.members.values() ) {
 
-			if ( ! member.stationary && ! member.copy ) out.push( member );
+			if ( ! member.stationary && ! member.copy && ! member.continuity ) out.push( member );
 
 		}
 

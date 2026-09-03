@@ -93,7 +93,64 @@ describe( 'live quest target projection', () => {
 
 } );
 
-function setup( actions, { crowd = { questMember: () => null }, blocked = false } = {} ) {
+describe( 'explicit quest NPC control', () => {
+
+	it( 'starts and releases only the selected actual cast npcId', () => {
+
+		const actor = ( mode ) => ( {
+			npcId: 'cast-a', name: { given: 'Ana', family: 'Silva' }, type: 'courier', gender: 'female', appearanceSeed: 8,
+			place: { kind: 'edge', id: 'e1' }, position: [ 1, 0, 2 ], heading: 0, animation: 'walk', mode,
+			schedule: { activity: 'commuting', progress: 0.2, nextDestination: { kind: 'parcel', id: 'p9' } }, visible: true
+		} );
+		const continuity = {
+			startFollow: vi.fn( () => actor( 'following' ) ),
+			stopFollow: vi.fn( () => actor( 'resuming' ) ),
+			serialize: vi.fn( () => ( { follow: { npcId: 'cast-a', mode: 'following' } } ) )
+		};
+		const crowd = { questMember: () => null, syncActor: vi.fn() };
+		const session = { hasCastNpc: ( npcId ) => npcId === 'cast-a' };
+		const gameplay = setup( fakeActions( questTarget( 'observe', [ action( 'inspect', 'Inspect' ) ] ) ), {
+			crowd, session, continuity
+		} );
+		const request = { kind: 'start-follow', npcId: 'cast-a', timeMin: 600, playerPosition: { x: 3, y: 0, z: 4 } };
+
+		expect( gameplay.control( request ) ).toEqual( { ok: true, kind: 'start-follow', npcId: 'cast-a', mode: 'following' } );
+		expect( continuity.startFollow ).toHaveBeenCalledWith( { npcId: 'cast-a', timeMin: 600, playerPosition: [ 3, 0, 4 ] } );
+		expect( crowd.syncActor ).toHaveBeenCalledWith( expect.objectContaining( { npcId: 'cast-a' } ), expect.any( THREE.Vector3 ) );
+
+		expect( gameplay.control( { ...request, kind: 'release-follow' } ) )
+			.toEqual( { ok: true, kind: 'release-follow', npcId: 'cast-a', mode: 'resuming' } );
+		expect( continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: 600 } );
+
+	} );
+
+	it( 'fails closed for a non-cast identity, unavailable actor, or mismatched release', () => {
+
+		const continuity = {
+			startFollow: vi.fn( () => { throw Object.assign( new Error( 'no authored route' ), { code: 'E_NPC_PATH' } ); } ),
+			serialize: vi.fn( () => ( { follow: { npcId: 'cast-b', mode: 'following' } } ) )
+		};
+		const gameplay = setup( fakeActions( questTarget( 'observe', [ action( 'inspect', 'Inspect' ) ] ) ), {
+			session: { hasCastNpc: ( npcId ) => npcId === 'cast-a' },
+			continuity,
+			crowd: { questMember: () => null, syncActor: vi.fn() }
+		} );
+		const request = { kind: 'start-follow', npcId: 'stranger', timeMin: 600, playerPosition: { x: 0, y: 0, z: 0 } };
+
+		expect( gameplay.control( request ) ).toMatchObject( { ok: false, error: 'not_cast', npcId: 'stranger' } );
+		expect( continuity.startFollow ).not.toHaveBeenCalled();
+		expect( gameplay.control( { ...request, npcId: 'cast-a' } ) ).toMatchObject( { ok: false, error: 'unreachable' } );
+		expect( gameplay.control( { ...request, npcId: 'cast-a', kind: 'release-follow' } ) )
+			.toMatchObject( { ok: false, error: 'conflict' } );
+		expect( () => gameplay.control( { ...request, npcId: 'cast-a', kind: 'escort' } ) ).toThrowError( QuestActionError );
+
+	} );
+
+} );
+
+function setup( actions, {
+	crowd = { questMember: () => null }, blocked = false, session = null, continuity = null
+} = {} ) {
 
 	class Ray {
 
@@ -102,7 +159,7 @@ function setup( actions, { crowd = { questMember: () => null }, blocked = false 
 	}
 
 	return new QuestGameplay( {
-		actions,
+		actions, session, continuity,
 		world: { parcels: [ { id: 'p9', anchor: [ 0, 0, - 2 ] } ] },
 		crowd,
 		physics: { rapier: { Ray }, world: { castRay: () => blocked ? { toi: 0.5 } : null } },

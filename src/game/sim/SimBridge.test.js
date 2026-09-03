@@ -55,6 +55,23 @@ describe( 'SimBridge', () => {
 
 	} );
 
+	it( 'restores the same instantiated identity through the public save boundary', () => {
+
+		const first = SimBridge.create( FIXTURE_BLUEPRINT, { networks: undefined }, buildings );
+		const vendor = first.getNPCVendor( { parcelId: 'p_cafe', timeMin: 9 * 60 } );
+		const save = first.serialize();
+		const restored = SimBridge.create( FIXTURE_BLUEPRINT, { networks: undefined }, buildings, {}, null, save );
+
+		expect( restored.getNPC( vendor.npcId ) ).toMatchObject( {
+			npcId: vendor.npcId,
+			appearanceSeed: vendor.appearanceSeed,
+			name: vendor.name,
+			routine: vendor.routine
+		} );
+		expect( restored.serialize() ).toEqual( save );
+
+	} );
+
 } );
 
 function errorCode( run ) {

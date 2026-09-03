@@ -1,4 +1,4 @@
-import { createSimulation } from '../../../../simulation/dist/index.js';
+import { createSimulation, restoreSimulation } from '../../../../simulation/dist/index.js';
 
 /**
  * The simulation library (../simulation/CONTRACT.md) hosted by the game. The
@@ -16,7 +16,7 @@ export class SimBridge {
 	 * @param params statistical overrides per ../simulation/CONTRACT.md
 	 * @param npcTypes the naming box's typed set for this world, or null for the built-in one
 	 */
-	static create( atlas, connections, buildings, params = {}, npcTypes = null ) {
+	static create( atlas, connections, buildings, params = {}, npcTypes = null, save = null ) {
 
 		const interiors = {};
 
@@ -26,14 +26,15 @@ export class SimBridge {
 
 		}
 
-		return new SimBridge( createSimulation( {
+		const input = {
 			seed: atlas.meta.seed,
 			blueprint: atlas,
 			networks: connections.networks,
 			interiors,
 			params,
 			...( npcTypes ? { npcTypes } : {} )
-		} ) );
+		};
+		return new SimBridge( save ? restoreSimulation( input, save ) : createSimulation( input ) );
 
 	}
 
@@ -99,6 +100,12 @@ export class SimBridge {
 	resume( npcId, timeMin ) {
 
 		this.simulation.resume( npcId, timeMin );
+
+	}
+
+	serialize() {
+
+		return this.simulation.serialize();
 
 	}
 

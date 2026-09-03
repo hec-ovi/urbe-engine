@@ -56,6 +56,7 @@ import { CharacterAssets } from './agents/CharacterAssets.js';
 import { HeroCharacter } from './agents/HeroCharacter.js';
 import { Crowd } from './agents/Crowd.js';
 import { WalkRoutes } from './agents/WalkRoutes.js';
+import { NpcContinuity } from './agents/NpcContinuity.js';
 import { CarModels } from './agents/CarModels.js';
 import { Traffic } from './agents/Traffic.js';
 import { SimBridge } from './sim/SimBridge.js';
@@ -69,6 +70,7 @@ const _push = new THREE.Vector3();
 const THEME = 'cyberpunk';
 /** Past this a room is behind opaque walls and haze, so it is not drawn. */
 const ROOM_VISIBLE_RADIUS = 32;
+const NPC_VISIBLE_RADIUS = 115;
 /** Air scattering is wide and weak indoors, tight and small on the street. */
 const INDOOR_HAZE = { spread: 0.55, cap: 3 };
 const OUTDOOR_HAZE = { spread: 0.28, cap: 2.4 };
@@ -165,7 +167,11 @@ export class GameApp {
 		this.persistence = game ? new GamePersistence( { game, gameId: config.gameId } ) : null;
 		this.locator = new Locator( atlas, transitRoutes );
 		this.clock = new GameClock( {
-			startHour: transitStartHour( this.transitJourney, config.startHour ), scale: config.timeScale
+			startHour: transitStartHour(
+				this.transitJourney,
+				game?.npcState ? game.npcState.timeMin / 60 : config.startHour
+			),
+			scale: config.timeScale
 		} );
 
 		this.view.step( 'starting the renderer' );
@@ -266,7 +272,14 @@ export class GameApp {
 		this.stream.onDropBand = ( id ) => this.colliders.dropBand( id );
 
 		this.view.step( 'waking the population' );
-		this.sim = SimBridge.create( atlas, connections, buildings, { streetDensity: config.streetDensity }, npcTypes );
+		this.sim = SimBridge.create(
+			atlas,
+			connections,
+			buildings,
+			{ streetDensity: config.streetDensity },
+			npcTypes,
+			game?.npcState?.simulation ?? null
+		);
 		this.quests = QuestSession.create(
 			questlines,
 			this.sim,
@@ -279,6 +292,13 @@ export class GameApp {
 		this.view.quests.setQuests( this.quests.view() );
 		this.signals = new Signals( connections.networks );
 		const routes = new WalkRoutes( connections.networks );
+		const crowdPlaces = placesOf( city.doors, buildings );
+		this.npcContinuity = new NpcContinuity( {
+			simulation: this.sim,
+			routes,
+			places: npcContinuityPlaces( atlas, city.doors, buildings )
+		} );
+		if ( game?.npcState?.continuity ) this.npcContinuity.restore( game.npcState.continuity );
 
 		this.view.step( 'loading characters' );
 		const assets = await CharacterAssets.load(
@@ -289,9 +309,10 @@ export class GameApp {
 		this.probe?.exclude( assets.group );
 		this.crowd = new Crowd( {
 			assets, routes, sim: this.sim, signals: this.signals,
-			places: placesOf( city.doors, buildings ),
+			places: crowdPlaces,
 			capacity: config.maxCrowd,
-			stress: config.stress
+			stress: config.stress,
+			continuity: this.npcContinuity
 		} );
 
 		this.view.step( 'loading traffic' );
@@ -331,7 +352,8 @@ export class GameApp {
 			crowd: this.crowd,
 			physics: this.physics,
 			playerCollider: this.body.collider,
-			materialFactory: factory
+			materialFactory: factory,
+			continuity: this.npcContinuity
 		} );
 		this.scene.add( this.questGameplay.group );
 		this.probe?.exclude( this.questGameplay.group );
@@ -358,7 +380,8 @@ export class GameApp {
 
 		this.interactor = new Interactor( {
 			crowd: this.crowd, doors: city.doors, sim: this.sim,
-			controller: this.controller, elevators: this.elevators, quests: this.questGameplay
+			controller: this.controller, elevators: this.elevators, quests: this.questGameplay,
+			continuity: this.npcContinuity
 		} );
 		this.interactor.onConversation = ( conversation ) => {
 
@@ -467,7 +490,22 @@ export class GameApp {
 		} );
 
 		this.lights.update( this.camera.position, delta );
-		this.hitches.time( 'crowd', () => this.crowd.update( delta, feet, this.clock ) );
+		this.hitches.time( 'crowd', () => {
+
+			this.npcContinuity.updateFollow( {
+				timeMin: this.clock.timeMin,
+				deltaSeconds: delta,
+				playerPosition: feet.toArray()
+			} );
+			const actors = this.npcContinuity.updateVisible( {
+				timeMin: this.clock.timeMin,
+				playerPosition: feet.toArray(),
+				maxDistance: NPC_VISIBLE_RADIUS
+			} );
+			this.crowd.syncActors( actors, feet );
+			this.crowd.update( delta, feet, this.clock );
+
+		} );
 		this.hero.update( delta );
 		this.hitches.time( 'traffic', () => this.traffic.update( delta, feet, this.clock.daySeconds ) );
 		this.transit.update( feet, this.clock.daySeconds );
@@ -781,8 +819,35 @@ export class GameApp {
 			currentLocation: this.currentLocation,
 			discoveredLocations: uniqueLocations( [ ...this.discoveredLocations.values() ] ),
 			transitJourney: this.transitGameplay.state,
+			npcState: {
+				timeMin: this.clock.timeMin,
+				simulation: this.sim.serialize(),
+				continuity: this.npcContinuity.serialize()
+			},
 			elapsedSeconds: Math.max( 0, ( performance.now() - this.playStartedAt ) / 1000 )
 		} );
+
+	}
+
+	/** Explicit quest control event. It never derives following from dialogue or quest step kind. */
+	questNpcControl( event ) {
+
+		const result = this.questGameplay.control( {
+			...event,
+			timeMin: this.clock.timeMin,
+			playerPosition: {
+				x: this.body.feet.x,
+				y: this.body.feet.y,
+				z: this.body.feet.z
+			}
+		} );
+		if ( result.ok && this.persistence ) this.#saveCurrent().catch( ( error ) => {
+
+			console.error( error );
+			this.view.toast.show( { title: 'Save failed', text: error.message } );
+
+		} );
+		return result;
 
 	}
 
@@ -1001,6 +1066,31 @@ function placesOf( doors, buildings ) {
 		heading: Math.atan2( door.normal.x, door.normal.z ),
 		anchors: groundAnchors( buildings.get( door.parcelId )?.npc, door.inside.y )
 	} ] ) );
+
+}
+
+/** Every scheduled parcel position in the controller's validated JSON shape. */
+export function npcContinuityPlaces( atlas, doors, buildings ) {
+
+	const doorByParcel = new Map( doors.map( ( door ) => [ door.parcelId, door ] ) );
+	return atlas.parcels.map( ( parcel ) => {
+
+		const door = doorByParcel.get( parcel.id );
+		const position = door
+			? door.inside.toArray()
+			: [ parcel.access.point[ 0 ], SIDEWALK_HEIGHT, parcel.access.point[ 1 ] ];
+		const anchors = door
+			? Object.values( groundAnchors( buildings.get( parcel.id )?.npc, door.inside.y ) )
+				.flat()
+				.map( ( anchor ) => ( { id: anchor.id, position: anchor.position.toArray(), heading: anchor.heading } ) )
+			: [];
+		return {
+			kind: 'parcel', id: parcel.id, position,
+			heading: door ? Math.atan2( door.normal.x, door.normal.z ) : 0,
+			anchors
+		};
+
+	} );
 
 }
 

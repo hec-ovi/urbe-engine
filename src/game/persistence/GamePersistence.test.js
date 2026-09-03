@@ -21,6 +21,12 @@ const activeJourney = {
 	boardedStopIndex: 0
 };
 
+const npcState = {
+	timeMin: 780,
+	simulation: { version: '1', seed: 'fixture-seed', events: [] },
+	continuity: { version: '1', actors: [], follow: null, conversation: null }
+};
+
 const liveState = ( elapsedSeconds = 12.5 ) => ( {
 	position: { x: 20, y: 0.12, z: 5 },
 	heading: - 0.75,
@@ -30,6 +36,7 @@ const liveState = ( elapsedSeconds = 12.5 ) => ( {
 	currentLocation: { id: 'p3', name: 'p3 cafe' },
 	discoveredLocations: [ ...gameFixture.discoveredLocations ],
 	transitJourney: activeJourney,
+	npcState,
 	elapsedSeconds
 } );
 
@@ -52,6 +59,7 @@ describe( 'playable game persistence', () => {
 				currentLocation: input.currentLocation,
 				discoveredLocations: input.discoveredLocations,
 				transitJourney: input.transitJourney,
+				npcState: input.npcState,
 				save: {
 					...gameFixture.save,
 					revision: input.expectedRevision + 1,
@@ -75,7 +83,8 @@ describe( 'playable game persistence', () => {
 				updatedAt: '2026-09-03T12:00:00.000Z', playTimeSeconds: 1812.5,
 				player: { position: { x: 20, y: 0.12, z: 5 }, heading: - 0.75 },
 				quests: [ activeQuest ], currentLocation: { id: 'p3', name: 'p3 cafe' },
-				transitJourney: activeJourney
+				transitJourney: activeJourney,
+				npcState
 			}
 		} );
 		expect( requests[ 0 ].input.discoveredLocations ).toEqual( [
@@ -83,6 +92,7 @@ describe( 'playable game persistence', () => {
 		] );
 		expect( saved.save.revision ).toBe( 2 );
 		expect( saved.transitJourney ).toEqual( activeJourney );
+		expect( saved.npcState ).toEqual( npcState );
 
 	} );
 
@@ -98,6 +108,7 @@ describe( 'playable game persistence', () => {
 				player: input.player, quests: input.quests, sideJobs: input.sideJobs,
 				currentLocation: input.currentLocation, discoveredLocations: input.discoveredLocations,
 				transitJourney: input.transitJourney,
+				npcState: input.npcState,
 				save: { ...gameFixture.save, revision: input.expectedRevision + 1, updatedAt: input.updatedAt, playTimeSeconds: input.playTimeSeconds }
 			} );
 
@@ -119,6 +130,8 @@ describe( 'playable game persistence', () => {
 		} );
 		await expect( persistence.save( { ...liveState(), heading: Number.NaN } ) ).rejects.toMatchObject( { code: 'E_LIVE_STATE' } );
 		await expect( persistence.save( { ...liveState(), transitJourney: { status: 'aboard' } } ) )
+			.rejects.toMatchObject( { code: 'E_LIVE_STATE' } );
+		await expect( persistence.save( { ...liveState(), npcState: { ...npcState, continuity: { version: '1' } } } ) )
 			.rejects.toMatchObject( { code: 'E_LIVE_STATE' } );
 		await expect( persistence.save( liveState() ) ).rejects.toMatchObject( { code: 'E_SAVE_RESPONSE' } );
 

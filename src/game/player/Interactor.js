@@ -33,7 +33,7 @@ const HANDLE = 1.1;
  */
 export class Interactor {
 
-	constructor( { crowd, doors, sim, controller, elevators, quests } ) {
+	constructor( { crowd, doors, sim, controller, elevators, quests, continuity = null } ) {
 
 		this.crowd = crowd;
 		this.doors = doors;
@@ -41,6 +41,7 @@ export class Interactor {
 		this.controller = controller;
 		this.elevators = elevators;
 		this.quests = quests;
+		this.continuity = continuity;
 		this.target = null;
 		this.conversation = null;
 		this.onConversation = null;
@@ -109,12 +110,22 @@ export class Interactor {
 
 		if ( ! this.conversation ) return;
 
-		const { person, npcId } = this.conversation;
+		const { npcId, controlled } = this.conversation;
+		let { person } = this.conversation;
 
-		if ( npcId ) this.sim.resume( npcId, clock.timeMin );
+		person.talking = false;
+		if ( npcId && controlled ) {
 
-		person.frozen = false;
-		person.clip = person.restClip ?? CLIP.WALK;
+			const actor = this.continuity.endConversation( { timeMin: clock.timeMin } );
+			person = this.crowd.syncActor( actor, this.controller.body.feet ) ?? person;
+
+		} else {
+
+			if ( npcId ) this.sim.resume( npcId, clock.timeMin );
+			person.frozen = false;
+			person.clip = person.restClip ?? CLIP.WALK;
+
+		}
 		this.conversation = null;
 		this.onConversation?.( null );
 
@@ -142,18 +153,42 @@ export class Interactor {
 			if ( instance ) {
 
 				person.crowdId = handle;
-				person.npcId = instance.npcId;
-				person.instance = instance;
+				if ( this.crowd.identify ) this.crowd.identify( person, instance );
+				else {
+
+					person.npcId = instance.npcId;
+					person.instance = instance;
+
+				}
 
 			}
 
 		}
 
-		if ( person.npcId ) this.sim.interrupt( person.npcId, timeMin );
+		let controlled = false;
+		const place = personPlace( person );
+		if ( person.npcId && this.continuity && place ) {
+
+			const actor = this.continuity.beginConversation( {
+				npcId: person.npcId,
+				timeMin,
+				position: person.position.toArray(),
+				heading: Math.atan2(
+					this.controller.body.feet.x - person.position.x,
+					this.controller.body.feet.z - person.position.z
+				),
+				place,
+				seated: person.clip === CLIP.SIT || person.clip === CLIP.SIT_TALK
+			} );
+			person = this.crowd.syncActor( actor, this.controller.body.feet ) ?? person;
+			controlled = true;
+
+		} else if ( person.npcId ) this.sim.interrupt( person.npcId, timeMin );
 
 		person.frozen = true;
-		person.restClip = person.clip;
-		person.clip = person.clip === CLIP.SIT ? CLIP.SIT_TALK : CLIP.TALK;
+		person.talking = true;
+		person.restClip = person.restClip ?? person.clip;
+		person.clip = person.restClip === CLIP.SIT ? CLIP.SIT_TALK : CLIP.TALK;
 		person.heading = Math.atan2(
 			this.controller.body.feet.x - person.position.x,
 			this.controller.body.feet.z - person.position.z
@@ -162,6 +197,7 @@ export class Interactor {
 		this.conversation = {
 			person,
 			npcId: person.npcId,
+			controlled,
 			instance: person.instance,
 			behavior: person.npcId ? this.sim.behaviorAt( person.npcId, timeMin ) : null
 		};
@@ -184,6 +220,14 @@ export class Interactor {
 		for ( const { pivot, sign } of door.pivots ) pivot.rotation.y = sign * door.open * DOOR_ANGLE;
 
 	}
+
+}
+
+function personPlace( person ) {
+
+	if ( person.parcelId ) return { kind: 'parcel', id: person.parcelId };
+	if ( person.edge?.id ) return { kind: 'edge', id: person.edge.id };
+	return null;
 
 }
 

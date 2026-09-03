@@ -169,6 +169,12 @@ export class QuestSession {
 
 	}
 
+	hasCastNpc( npcId ) {
+
+		return this.entries.some( ( { runtime } ) => Object.values( runtime.cast ).includes( npcId ) );
+
+	}
+
 	/**
 	 * @param event PlayerEvent
 	 * @returns what changed: [{ definition, completed: [QuestStep], ending: QuestEnding | null }], only for questlines the event moved

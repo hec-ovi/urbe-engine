@@ -59,6 +59,11 @@ describe( 'launcher HTTP boundary', () => {
 		const transitJourney = {
 			status: 'waiting', clock: { dayOffset: 86400, lastDaySeconds: 120 }
 		};
+		const npcState = {
+			timeMin: 1562,
+			simulation: { version: '1', seed: 'small-urbe', events: [] },
+			continuity: { version: '1', actors: [], follow: null, conversation: null }
+		};
 		const saved = await api.saveCurrent( {
 			gameId: exported.id,
 			expectedRevision: exported.save.revision,
@@ -69,15 +74,19 @@ describe( 'launcher HTTP boundary', () => {
 			sideJobs: exported.sideJobs,
 			currentLocation: exported.currentLocation,
 			discoveredLocations: exported.discoveredLocations,
-			transitJourney
+			transitJourney,
+			npcState
 		} );
 		expect( saved ).toMatchObject( {
 			id: 'night-shift', player: { position: { x: 16, y: 0.12, z: -2 } },
 			save: { revision: exported.save.revision + 1, playTimeSeconds: exported.save.playTimeSeconds + 12 },
-			transitJourney
+			transitJourney,
+			npcState
 		} );
 		expect( JSON.parse( readFileSync( join( outDir, 'games', 'night-shift', 'game.json' ), 'utf8' ) )
 			.transitJourney ).toEqual( transitJourney );
+		expect( JSON.parse( readFileSync( join( outDir, 'games', 'night-shift', 'game.json' ), 'utf8' ) )
+			.npcState ).toEqual( npcState );
 		await expect( api.saveCurrent( { gameId: 'night-shift' } ) ).rejects.toThrow( 'saveCurrent request is invalid' );
 
 		const imported = { ...exported, id: 'imported-night', name: 'Imported Night', save: { ...exported.save, revision: 5 } };

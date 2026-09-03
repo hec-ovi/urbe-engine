@@ -128,6 +128,9 @@
     "transitJourney": {
       "$ref": "#/$defs/transitJourney"
     },
+    "npcState": {
+      "$ref": "urn:urbe:engine:library:npc-state"
+    },
     "save": {
       "type": "object",
       "required": ["revision", "createdAt", "updatedAt", "playTimeSeconds"],
