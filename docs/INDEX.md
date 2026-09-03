@@ -13,7 +13,7 @@
   - `transit/`: bus stop shelters and signs, buses driven by the timetables' closed-form vehicle positions, station entrances and the shaft, passage and platform room behind each one (src/game/transit/CONTRACT.md)
   - `props/`: seeded alley and service-corner dressing, bags, crates and boxes, clear of doorways and walk lines (src/game/props/CONTRACT.md)
   - `light/`: every fixture as real light in lumens, clustered or batched by backend, per-room light slots with the computed room fill, air glow, the day switch that puts the city's own lights out at sunrise (src/game/light/CONTRACT.md)
-  - `look/`: quality tiers, AgX exposure, height fog tinted by the light in the air, environment probe, the render pipeline with emissive-selected bloom, and the warm-up that builds pipelines and maps before a frame can stall on them (src/game/look/CONTRACT.md)
+  - `look/`: quality tiers with explicit texture budgets, AgX exposure, height fog tinted by the light in the air, environment probe, the render pipeline with emissive-selected bloom, and serial warm-up that builds pipelines and maps before a frame can stall on them (src/game/look/CONTRACT.md)
   - `sky/`: night sky, moon key, stars
   - `physics/`: Rapier world, colliders, player capsule
   - `player/`: input, first-person controller, interaction

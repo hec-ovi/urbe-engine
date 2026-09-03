@@ -24,7 +24,10 @@ const PRESETS = {
 		clusteredLights: 512,
 		batchedLights: 32,
 		probeSize: 64,
-		probeInterval: 120
+		probeInterval: 120,
+		materialMaps: [ 'basecolor', 'normal', 'emission' ],
+		materialVariants: 2,
+		textureAnisotropy: 2
 	},
 	medium: {
 		bloom: { strength: 0.35, radius: 0.03 },
@@ -35,7 +38,10 @@ const PRESETS = {
 		clusteredLights: 1024,
 		batchedLights: 48,
 		probeSize: 64,
-		probeInterval: 90
+		probeInterval: 90,
+		materialMaps: [ 'basecolor', 'normal', 'roughness', 'emission' ],
+		materialVariants: 4,
+		textureAnisotropy: 4
 	},
 	high: {
 		bloom: { strength: 0.35, radius: 0.04 },
@@ -46,7 +52,10 @@ const PRESETS = {
 		clusteredLights: 1024,
 		batchedLights: 48,
 		probeSize: 64,
-		probeInterval: 60
+		probeInterval: 60,
+		materialMaps: [ 'basecolor', 'normal', 'roughness', 'metallic', 'ao', 'emission' ],
+		materialVariants: 6,
+		textureAnisotropy: 8
 	},
 	ultra: {
 		bloom: { strength: 0.4, radius: 0.06 },
@@ -57,7 +66,10 @@ const PRESETS = {
 		clusteredLights: 1024,
 		batchedLights: 48,
 		probeSize: 128,
-		probeInterval: 40
+		probeInterval: 40,
+		materialMaps: [ 'basecolor', 'normal', 'roughness', 'metallic', 'ao', 'emission' ],
+		materialVariants: 12,
+		textureAnisotropy: 8
 	}
 };
 

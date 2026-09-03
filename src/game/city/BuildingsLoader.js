@@ -73,7 +73,9 @@ export class BuildingsLoader {
 			for ( const [ key, geometries ] of building.exterior ) {
 
 				// a building wears one variant of each material; buildings of the same variant merge together
-				const bucket = bucketFor( key, variantFor( this.factory.resolver.resolve( key ), building.parcelId ) );
+				const bucket = bucketFor( key, variantFor(
+					this.factory.resolver.resolve( key ), building.parcelId, this.factory.patternVariants
+				) );
 				if ( ! shellByKey.has( bucket ) ) shellByKey.set( bucket, [] );
 				shellByKey.get( bucket ).push( ...geometries );
 

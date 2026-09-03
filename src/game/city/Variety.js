@@ -4,12 +4,12 @@
  * its parcel id, so a street mixes them and a rebuild keeps each building's.
  * Photographed variants are left out: only pattern variants sit on the grid.
  */
-export function variantFor( entry, parcelId ) {
+export function variantFor( entry, parcelId, limit = Infinity ) {
 
 	if ( ! entry?.variants?.length ) return null;
 
 	const candidates = entry.variants.filter( ( v ) => v.class === 'pattern' );
-	const pool = candidates.length ? candidates : entry.variants;
+	const pool = ( candidates.length ? candidates : entry.variants ).slice( 0, limit );
 	if ( pool.length < 2 ) return pool[ 0 ]?.id ?? null;
 
 	return pool[ hash( parcelId ) % pool.length ].id;

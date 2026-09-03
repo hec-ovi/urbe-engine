@@ -1,5 +1,7 @@
 # Changelog
 
+0.16.21: large cities no longer ask a WebGL driver to compile the whole world concurrently. Warm-up serializes renderables and yields to the driver between batches. The WebGL default low tier limits each material family to two pattern variants and uploads base colour, normal and emission maps; physical roughness and metalness remain as scalar values. Higher tiers add channels, variants and anisotropy explicitly.
+
 0.16.20: a city batch builds every exterior shell and furnishes five deterministic quest or venue parcels by default. The manifest lists shell parcels separately from its interior subset and floor files. The game loads every shell, streams and simulates only that subset, and leaves every other entrance visibly shut with no interaction or interior fetch.
 
 0.16.19: the building viewer generates the requested exterior or interior and checks the response type before handing a GLB to the loader. Missing Vite assets now show as unavailable instead of JSON errors, failed assets keep technical details separate, and an unavailable interior can return to its exterior. A viewport click captures the fly camera; Escape releases it and another click captures it again without taking pointer lock from the overlay controls.

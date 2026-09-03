@@ -1,5 +1,7 @@
 import * as THREE from 'three/webgpu';
 
+const ALL_MAPS = [ 'basecolor', 'normal', 'roughness', 'metallic', 'ao', 'emission' ];
+
 // Kinds the geometry layers place a few millimetres behind another surface
 // (a curtain hangs just inside its window glass). At city distances that gap
 // is below depth-buffer resolution, so the pair flickers; a positive polygon
@@ -50,12 +52,15 @@ async function decodeTint( url ) {
  */
 export class PbrMaterialFactory {
 
-	constructor( resolver ) {
+	constructor( resolver, profile = {} ) {
 
 		this.resolver = resolver;
 		this.loader = new THREE.TextureLoader();
 		this.cache = new Map();
 		this.tints = new Map();
+		this.materialMaps = new Set( profile.materialMaps ?? ALL_MAPS );
+		this.patternVariants = profile.materialVariants ?? Infinity;
+		this.textureAnisotropy = profile.textureAnisotropy ?? 8;
 
 	}
 
@@ -151,6 +156,7 @@ export class PbrMaterialFactory {
 
 		const map = ( name, srgb = false ) => {
 
+			if ( ! this.materialMaps.has( name ) ) return null;
 			const path = variant.maps[ name ];
 
 			if ( ! path ) return null;
@@ -160,7 +166,7 @@ export class PbrMaterialFactory {
 			texture.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
 			texture.wrapS = texture.wrapT = tiled ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
 			texture.repeat.set( repeat[ 0 ], repeat[ 1 ] );
-			texture.anisotropy = 8;
+			texture.anisotropy = this.textureAnisotropy;
 			texture.channel = 0;
 
 			return texture;

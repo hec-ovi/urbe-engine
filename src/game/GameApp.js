@@ -169,7 +169,7 @@ export class GameApp {
 		const resolver = new MaterialResolver();
 		await resolver.loadTheme( THEME );
 		this.resolver = resolver;
-		const factory = new PbrMaterialFactory( resolver );
+		const factory = new PbrMaterialFactory( resolver, this.tier );
 		this.rooms = new RoomLights( factory, this.tier );
 
 		this.view.step( 'laying the ground' );
@@ -288,7 +288,7 @@ export class GameApp {
 		this.look = new LookPipeline( this.renderer, this.scene, this.camera, this.tier );
 		this.warmup = new Warmup( this.renderer, this.scene, this.camera, this.look.mrt );
 		this.stream.warmup = this.warmup;
-		await this.warmup.warm( this.scene );
+		await this.warmup.warmAll( this.scene );
 		this.hero = await HeroCharacter.create( { animation: assets.animation, warmup: this.warmup } );
 		this.scene.add( this.hero.group );
 

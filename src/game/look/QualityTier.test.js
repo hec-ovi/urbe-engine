@@ -27,6 +27,9 @@ describe( 'QualityTier', () => {
 		expect( low.bloom.strength ).toBe( 0 );
 		expect( low.haze ).toBe( false );
 		expect( low.roomSlots ).toBeGreaterThan( 0 );
+		expect( low.materialMaps ).toEqual( [ 'basecolor', 'normal', 'emission' ] );
+		expect( low.materialVariants ).toBeLessThan( ultra.materialVariants );
+		expect( low.textureAnisotropy ).toBeLessThan( ultra.textureAnisotropy );
 
 		expect( ultra.roomSlots ).toBeGreaterThan( low.roomSlots );
 		expect( ultra.probeSize ).toBeGreaterThan( low.probeSize );

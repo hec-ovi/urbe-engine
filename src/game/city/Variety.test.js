@@ -17,6 +17,9 @@ describe( 'variantFor', () => {
 		expect( variantFor( entry, 'p7' ) ).toBe( variantFor( entry, 'p7' ) );
 		expect( variantFor( { variants: [ { id: 'only' } ] }, 'p1' ) ).toBe( 'only' );
 		expect( variantFor( null, 'p1' ) ).toBeNull();
+		const lowPicks = new Set();
+		for ( let i = 0; i < 40; i ++ ) lowPicks.add( variantFor( entry, `p${i}`, 2 ) );
+		expect( lowPicks ).toEqual( new Set( [ 'panel-ochre', 'panel-slate' ] ) );
 		expect( splitBucket( bucketFor( 'cyberpunk/wall/rich', 'panel-slate' ) ) ).toEqual( { key: 'cyberpunk/wall/rich', variantId: 'panel-slate' } );
 		expect( splitBucket( bucketFor( 'cyberpunk/roof/rich', null ) ) ).toEqual( { key: 'cyberpunk/roof/rich', variantId: undefined } );
 

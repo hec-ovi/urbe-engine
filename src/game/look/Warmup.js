@@ -80,4 +80,33 @@ export class Warmup {
 
 	}
 
+	/**
+	 * Warms one renderable at a time. Large WebGL worlds can make a driver
+	 * compile hundreds of programs concurrently when the whole scene is passed
+	 * at once; serial work keeps the same cache result without that peak.
+	 */
+	async warmAll( object ) {
+
+		if ( ! object ) return 0;
+		const renderables = [];
+		object.traverse( ( node ) => { if ( node.material ) renderables.push( node ); } );
+		const started = performance.now();
+
+		for ( let index = 0; index < renderables.length; index ++ ) {
+
+			await this.warm( renderables[ index ] );
+			if ( ( index + 1 ) % 8 === 0 ) await taskYield();
+
+		}
+
+		return performance.now() - started;
+
+	}
+
+}
+
+function taskYield() {
+
+	return new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
+
 }

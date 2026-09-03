@@ -112,4 +112,26 @@ describe( 'Warmup', () => {
 
 	} );
 
+	it( 'warms a world one renderable at a time', async () => {
+
+		const { root } = tree();
+		root.add( new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial() ) );
+		let active = 0;
+		let peak = 0;
+		const compileAsync = vi.fn( async () => {
+
+			active ++;
+			peak = Math.max( peak, active );
+			await Promise.resolve();
+			active --;
+
+		} );
+
+		await new Warmup( fakeRenderer( compileAsync ), new THREE.Scene(), new THREE.PerspectiveCamera() ).warmAll( root );
+
+		expect( compileAsync ).toHaveBeenCalledTimes( 2 );
+		expect( peak ).toBe( 1 );
+
+	} );
+
 } );
