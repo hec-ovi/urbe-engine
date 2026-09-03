@@ -95,6 +95,7 @@ view.minimap.update( { x: 12, z: - 20 }, 0.6 );
 
 view.clock.update( '21:14', 'Salt Wharf' );
 view.clock.setState( 'night' );
+view.setObjective( { title: 'Salt Wharf', objective: 'Check the freight ledger', state: 'active' } );
 view.readout.update( { x: 12, y: 0.12, z: - 20 }, 'Salt Wharf', 'p12' );
 view.readout.setAbout( [ '/atlas/city-urbe-tiny.json', '/out/city-tiny' ] );
 view.stats.update( { frameMs: 8.2, gpuMs: 3.1, drawCalls: 212, triangles: 1840000, lights: 340, tier: 'high', crowd: 187, cars: 14, interiors: 3 } );

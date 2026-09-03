@@ -8,8 +8,9 @@ Layout: `views/` are full panels and the overlays that assemble them, `widgets/`
 The whole game overlay. `mount( parent )` appends it.
 - props (all optional): `onResume()`, `onCloseDialog()`, `onSend( text )`, `onOpen( name )`, `onClose()`, `onLeave()`, `onSettingChange({ key, value })`, `onHangUp()`, `onSummaryClose()`, `onTransitSelect(value)`, `onTransitCancel()`, `menu` (the `MainMenuView` callbacks below)
 - methods: `open( name )`, `close()`, `toggle( name )` with name one of `QUESTS`, `MAP`, `INVENTORY`, `CODEX`, `SETTINGS`, `CONTROLS`; `setPaused( bool )` shows the pause screen and the tab bar together (the bar is hidden while playing and shown while paused or while a panel is open); `step( text )`, `ready()`, `fail( message )` drive the loading surface
+- `setObjective({ title, objective, state: 'active' | 'done' } | null)` updates the persistent gameplay objective; null or an object with no title and no objective hides it
 - front-door methods: `showMainMenu()`, `hideMainMenu()`, `setLibrary(data)`, `setCreationState(data)`. While the menu is shown, gameplay UI is inert and hidden from assistive technology.
-- children the game feeds directly: `clock`, `prompt`, `readout`, `stats`, `minimap`, `pause`, `avatar`, `call`, `toast`, `dialog` (ChatPanel), `summary`, `transit`, `map`, `inventory`, `quests`, `codex`, `settings`, `controls`, `tabs`, `panels`, `mainMenu`
+- children the game feeds directly: `clock`, `prompt`, `readout`, `stats`, `objective`, `minimap`, `pause`, `avatar`, `call`, `toast`, `dialog` (ChatPanel), `summary`, `transit`, `map`, `inventory`, `quests`, `codex`, `settings`, `controls`, `tabs`, `panels`, `mainMenu`
 
 ## MainMenuView (views/MainMenuView.js)
 The full-screen front door. It owns display and selection state only. Storage, generation and game launch remain caller responsibilities.
@@ -63,6 +64,7 @@ One panel over the game at a time.
 - **AvatarCard** (top left): `setAvatar({ name, portraitUrl | canvas, bar })` with bar in 0..1 over 12 segments, `setVisible( bool )`; hidden until the first call
 - **VideoCallPanel**: props `onHangUp()`; `setStream( videoOrCanvas )`, `setName( name )`, `setVisible( bool )`
 - **MissionToast**: `show({ title, text })` slides in under the clock, holds, fades out and removes itself (about 4.4 s)
+- **CurrentObjective**: `setObjective({ title, objective, state: 'active' | 'done' } | null)`; an active or completed objective stays quietly visible and opens QUESTS when activated, while null hides and clears it
 - **MissionSummary**: props `onClose()`; `show({ title, text, outcome: 'done' | 'failed', steps: [{ text, done }] })`, `setVisible( bool )`; it opens as a named dialog focused on continue, and continue or Escape reports the close
 - **HudClock**: `update( time, place )`, `setState( 'dawn' | 'day' | 'dusk' | 'night' )`
 - **InteractPrompt**: `update( text | null )`

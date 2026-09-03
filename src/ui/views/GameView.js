@@ -10,6 +10,7 @@ import { HudClock } from '../widgets/HudClock.js';
 import { InteractPrompt } from '../widgets/InteractPrompt.js';
 import { LocationReadout } from '../widgets/LocationReadout.js';
 import { DebugStats } from '../widgets/DebugStats.js';
+import { CurrentObjective } from '../widgets/CurrentObjective.js';
 import { ChatPanel } from '../widgets/ChatPanel.js';
 import { AvatarCard } from '../widgets/AvatarCard.js';
 import { VideoCallPanel } from '../widgets/VideoCallPanel.js';
@@ -52,6 +53,7 @@ export class GameView {
 		this.prompt = new InteractPrompt();
 		this.readout = new LocationReadout();
 		this.stats = new DebugStats();
+		this.objective = new CurrentObjective( { onOpen: () => this.open( 'QUESTS' ) } );
 		this.minimap = new MinimapView();
 		this.avatar = new AvatarCard();
 		this.call = new VideoCallPanel( { onHangUp } );
@@ -117,6 +119,7 @@ export class GameView {
 			this.prompt.element,
 			this.readout.element,
 			this.stats.element,
+			this.objective.element,
 			this.minimap.element,
 			this.avatar.element,
 			this.call.element,
@@ -221,6 +224,12 @@ export class GameView {
 	setCreationState( state ) {
 
 		this.mainMenu.setCreationState( state );
+
+	}
+
+	setObjective( objective ) {
+
+		this.objective.setObjective( objective );
 
 	}
 

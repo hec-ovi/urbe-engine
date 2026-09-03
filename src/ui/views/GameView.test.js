@@ -50,6 +50,16 @@ describe( 'GameView', () => {
 
 	} );
 
+	it( 'shows the current objective and opens its quest panel', async () => {
+
+		view.setObjective( { title: 'Salt Wharf', objective: 'Check the freight ledger', state: 'active' } );
+		await userEvent.setup().click( screen.getByRole( 'button', { name: /Open current quest: Salt Wharf/ } ) );
+
+		expect( view.panels.current ).toBe( 'QUESTS' );
+		expect( onOpen ).toHaveBeenCalledWith( 'QUESTS' );
+
+	} );
+
 	it( 'loading reports each step, goes away on ready and shows the failure', () => {
 
 		view.step( 'laying the ground' );
