@@ -125,6 +125,9 @@ export class LauncherService {
 			...( Object.hasOwn( input, 'npcState' )
 				? { npcState: input.npcState }
 				: Object.hasOwn( current, 'npcState' ) ? { npcState: current.npcState } : {} ),
+			...( Object.hasOwn( input, 'investigations' )
+				? { investigations: input.investigations }
+				: Object.hasOwn( current, 'investigations' ) ? { investigations: current.investigations } : {} ),
 			save: {
 				...current.save,
 				revision: current.save.revision + 1,

@@ -131,6 +131,10 @@
     "npcState": {
       "$ref": "urn:urbe:engine:library:npc-state"
     },
+    "investigations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/investigationState" }
+    },
     "save": {
       "type": "object",
       "required": ["revision", "createdAt", "updatedAt", "playTimeSeconds"],
@@ -269,6 +273,28 @@
         "name": { "type": "string", "minLength": 1 }
       },
       "additionalProperties": false
+    },
+    "investigationState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "sceneId", "revision", "evidence", "emittedTransitionIds"],
+      "properties": {
+        "contractVersion": { "const": "1.0" },
+        "sceneId": { "$ref": "#/$defs/id" },
+        "revision": { "type": "integer", "minimum": 0 },
+        "evidence": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["evidenceId", "status"],
+            "properties": {
+              "evidenceId": { "$ref": "#/$defs/id" },
+              "status": { "enum": ["undiscovered", "discovered", "collected"] }
+            }
+          }
+        },
+        "emittedTransitionIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+      }
     },
     "transitJourney": {
       "oneOf": [

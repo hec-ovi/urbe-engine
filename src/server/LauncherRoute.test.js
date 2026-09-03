@@ -64,6 +64,11 @@ describe( 'launcher HTTP boundary', () => {
 			simulation: { version: '1', seed: 'small-urbe', events: [] },
 			continuity: { version: '1', actors: [], follow: null, conversation: null }
 		};
+		const investigations = [ {
+			contractVersion: '1.0', sceneId: 'scene-apartment-47', revision: 1,
+			evidence: [ { evidenceId: 'body-position', status: 'discovered' } ],
+			emittedTransitionIds: [ 'unlock-blood-reading' ]
+		} ];
 		const saved = await api.saveCurrent( {
 			gameId: exported.id,
 			expectedRevision: exported.save.revision,
@@ -75,18 +80,22 @@ describe( 'launcher HTTP boundary', () => {
 			currentLocation: exported.currentLocation,
 			discoveredLocations: exported.discoveredLocations,
 			transitJourney,
-			npcState
+			npcState,
+			investigations
 		} );
 		expect( saved ).toMatchObject( {
 			id: 'night-shift', player: { position: { x: 16, y: 0.12, z: -2 } },
 			save: { revision: exported.save.revision + 1, playTimeSeconds: exported.save.playTimeSeconds + 12 },
 			transitJourney,
-			npcState
+			npcState,
+			investigations
 		} );
 		expect( JSON.parse( readFileSync( join( outDir, 'games', 'night-shift', 'game.json' ), 'utf8' ) )
 			.transitJourney ).toEqual( transitJourney );
 		expect( JSON.parse( readFileSync( join( outDir, 'games', 'night-shift', 'game.json' ), 'utf8' ) )
 			.npcState ).toEqual( npcState );
+		expect( JSON.parse( readFileSync( join( outDir, 'games', 'night-shift', 'game.json' ), 'utf8' ) )
+			.investigations ).toEqual( investigations );
 		await expect( api.saveCurrent( { gameId: 'night-shift' } ) ).rejects.toThrow( 'saveCurrent request is invalid' );
 
 		const imported = { ...exported, id: 'imported-night', name: 'Imported Night', save: { ...exported.save, revision: 5 } };

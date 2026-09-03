@@ -50,7 +50,10 @@ export class GamePersistence {
 				: Object.hasOwn( this.game, 'transitJourney' ) ? { transitJourney: this.game.transitJourney } : {} ),
 			...( Object.hasOwn( live, 'npcState' )
 				? { npcState: live.npcState }
-				: Object.hasOwn( this.game, 'npcState' ) ? { npcState: this.game.npcState } : {} )
+				: Object.hasOwn( this.game, 'npcState' ) ? { npcState: this.game.npcState } : {} ),
+			...( Object.hasOwn( live, 'investigations' )
+				? { investigations: live.investigations }
+				: Object.hasOwn( this.game, 'investigations' ) ? { investigations: this.game.investigations } : {} )
 		};
 		this.boundary.assert( 'save-current-payload', payload, 'E_SAVE_PAYLOAD', 'saveCurrent payload' );
 

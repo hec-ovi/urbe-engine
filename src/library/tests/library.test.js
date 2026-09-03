@@ -148,6 +148,12 @@ describe( 'city and game library contract', () => {
 		} );
 		await expectError( library.loadGame( { id: 'night-shift' } ), 'E_INVALID_DESCRIPTOR' );
 
+		writeJson( gamePath, {
+			...savedGame(), id: 'night-shift',
+			investigations: [ { contractVersion: '1.0', sceneId: 'scene-one', revision: 1, evidence: [ { evidenceId: 'clue', status: 'invented' } ], emittedTransitionIds: [] } ]
+		} );
+		await expectError( library.loadGame( { id: 'night-shift' } ), 'E_INVALID_DESCRIPTOR' );
+
 		const cityPath = join( outDir, 'cities', 'small', 'city.json' );
 		const city = JSON.parse( readFileSync( cityPath, 'utf8' ) );
 		writeJson( cityPath, { ...city, buildings: city.buildings.map( ( building ) => ( {
@@ -216,6 +222,10 @@ function savedGame() {
 			simulation: { version: '1', seed: 'fresh-save', events: [] },
 			continuity: { version: '1', actors: [], follow: null, conversation: null }
 		},
+		investigations: [ {
+			contractVersion: '1.0', sceneId: 'scene-one', revision: 1,
+			evidence: [ { evidenceId: 'clue', status: 'discovered' } ], emittedTransitionIds: []
+		} ],
 		save: {
 			revision: 1,
 			createdAt: '2026-09-02T20:00:00Z',

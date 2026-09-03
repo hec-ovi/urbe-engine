@@ -18,7 +18,7 @@ Discovers, validates, loads and saves deterministic city and game descriptors un
 - `listCities`: [schema/city-catalog.schema.json](schema/city-catalog.schema.json).
 - `listGames`: [schema/game-catalog.schema.json](schema/game-catalog.schema.json).
 - `loadCity`: [schema/city-descriptor.schema.json](schema/city-descriptor.schema.json).
-- `loadGame`: [schema/game-descriptor.schema.json](schema/game-descriptor.schema.json). Its optional `transitJourney` preserves an exact waiting or aboard timetable state. Its optional `npcState` is [schema/npc-state.schema.json](schema/npc-state.schema.json), preserving simulation replay, NPC materialization, interruption, follow route and world time.
+- `loadGame`: [schema/game-descriptor.schema.json](schema/game-descriptor.schema.json). Its optional `transitJourney` preserves an exact waiting or aboard timetable state. Its optional `npcState` is [schema/npc-state.schema.json](schema/npc-state.schema.json), preserving simulation replay, NPC materialization, interruption, follow route and world time. Its optional `investigations` array preserves validated evidence discovery, collection and emitted transition state.
 - `saveCity`: [schema/city-save-result.schema.json](schema/city-save-result.schema.json).
 - `saveGame`: [schema/save-result.schema.json](schema/save-result.schema.json).
 - Thrown `LibraryError`: [schema/library-error.schema.json](schema/library-error.schema.json).

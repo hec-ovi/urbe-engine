@@ -5,7 +5,7 @@ Purpose: restores one cataloged game and saves its live player and quest state t
 ## Inputs
 
 - Loaded game descriptor: [schema/game-state.schema.json](schema/game-state.schema.json). The id must equal the `game` URL parameter.
-- Live state at save time: [schema/live-state.schema.json](schema/live-state.schema.json). Position is the player's foot point in world metres, elapsed time is seconds since this run became playable, optional `transitJourney` is the exact serializable transit state, and optional `npcState` is the exact simulation replay plus continuity save at the same world minute.
+- Live state at save time: [schema/live-state.schema.json](schema/live-state.schema.json). Position is the player's foot point in world metres, elapsed time is seconds since this run became playable, optional `transitJourney` is the exact serializable transit state, optional `npcState` is the exact simulation replay plus continuity save at the same world minute, and optional `investigations` contains complete evidence, collection, and one-shot transition state.
 
 ## Outputs
 
@@ -37,6 +37,7 @@ Purpose: restores one cataloged game and saves its live player and quest state t
 - Discovered locations are unique by id and include the current location.
 - An optional transit journey is validated exactly, sent through `saveCurrent`, returned in the game descriptor and restored by the game. Older descriptors without it remain valid.
 - Optional NPC state is validated through the simulation and NPC agent schemas, sent and returned unchanged, and restored before the first live frame. Older descriptors without it remain valid.
+- Optional investigation state is validated, sent and returned unchanged. The investigation blackbox validates every saved scene and evidence id against current authored scenes before rendering. Older descriptors without it remain valid.
 
 ## How to modify this blackbox safely
 
