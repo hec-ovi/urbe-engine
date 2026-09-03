@@ -20,11 +20,11 @@ export class HttpLauncherApi {
 
 	async #call( method, input ) {
 
-		const response = await this.fetcher( '/api/launcher', {
+		const response = await Reflect.apply( this.fetcher, globalThis, [ '/api/launcher', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify( { method, ...( input === undefined ? {} : { input } ) } )
-		} );
+		} ] );
 		const result = await response.json().catch( () => null );
 		if ( ! response.ok ) throw new Error( result?.message ?? `launcher request failed with HTTP ${response.status}` );
 		return result;
