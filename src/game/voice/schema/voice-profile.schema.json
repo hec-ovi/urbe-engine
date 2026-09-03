@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": [
     "version", "profileId", "npcId", "revision", "seed", "language", "delivery",
-    "reference", "engine", "approvedReactions"
+    "engine", "approvedReactions"
   ],
   "properties": {
     "version": { "const": "1" },
@@ -54,6 +54,15 @@
         }
       }
     },
+    "preset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["presetId", "artifactSha256"],
+      "properties": {
+        "presetId": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/id" },
+        "artifactSha256": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/sha256" }
+      }
+    },
     "engine": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/enginePin" },
     "approvedReactions": {
       "type": "array",
@@ -67,5 +76,9 @@
         }
       }
     }
-  }
+  },
+  "oneOf": [
+    { "required": ["reference"], "properties": { "reference": true, "preset": false } },
+    { "required": ["preset"], "properties": { "preset": true, "reference": false } }
+  ]
 }

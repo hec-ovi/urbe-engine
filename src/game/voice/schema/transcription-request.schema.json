@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-voice:transcription-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "requestId", "mediaType", "byteSize", "sha256", "dataBase64"],
+  "properties": {
+    "version": { "const": "1" },
+    "requestId": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/id" },
+    "mediaType": { "enum": ["audio/wav", "audio/webm", "audio/ogg", "audio/mp4"] },
+    "byteSize": { "type": "integer", "minimum": 1, "maximum": 33554432 },
+    "sha256": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/sha256" },
+    "dataBase64": { "type": "string", "minLength": 1, "contentEncoding": "base64" },
+    "language": { "type": "string", "minLength": 2 }
+  }
+}

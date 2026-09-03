@@ -1,24 +1,30 @@
-# NPC voice client
+# Local NPC speech
 
-This folder owns the engine-side contract between structured NPC dialogue and a future local TTS service. It provides deterministic profile and cache identity, a priority queue, cancellation, exact PCM pauses, checked ordered chunks, reaction fallbacks, and JSON packets that a host AudioWorklet can place in a ring buffer.
+The browser sends structured NPC lines to a project-local Chatterbox Nano service and microphone recordings to faster-whisper. The voice client checks profile identity, model and runtime pins, PCM hashes, ordering, cancellation, and cache identity before playback.
 
-`FakeVoiceAdapter` exercises the complete lifecycle without a model:
+## Install and verify
 
-```js
-import { FakeVoiceAdapter, NpcVoiceClient } from './index.js';
-
-const adapter = new FakeVoiceAdapter( { manifest } );
-const voices = new NpcVoiceClient( { adapter } );
-const profileRecord = await voices.registerProfile( profile );
-
-await voices.start( { ...request, profileDigest: profileRecord.profileDigest } );
-const result = await voices.wait( { version: '1', requestId: request.requestId } );
-```
-
-Run the layer tests with:
+The runtime uses its own Python 3.12 environment. It never installs packages globally or downloads models.
 
 ```sh
-npx vitest run src/game/voice/tests/NpcVoiceClient.test.js
+npm run speech-install
+npm run speech-health
+npm run speech-smoke
 ```
 
-No TTS checkpoint is bundled or downloaded. Production use needs a persistent local adapter selected by the recorded bakeoff, plus an audio host that decodes each chunk envelope and forwards frames to an AudioWorklet.
+`speech-health` loads both models. `speech-smoke` synthesizes a WAV and transcribes that generated audio.
+
+The default model root is `$HOME/models/hf`. Override either verified snapshot with `URBE_CHATTERBOX_MODEL_DIR` or `URBE_WHISPER_MODEL_DIR`. CPU and Whisper `int8` are the defaults.
+
+## Browser and Compose
+
+Vite serves the checked browser boundary at `/api/speech`. Without `URBE_SPEECH_URL`, it starts the locked Python process directly. With that setting, it forwards to the container service and preserves request-scoped cancellation.
+
+The container build context is `src/game/voice/runtime`, exposes port `8091`, and needs the Hugging Face model tree mounted at `/models/hf`.
+
+```sh
+docker build -t urbe-speech src/game/voice/runtime
+docker run --rm -p 8091:8091 -v "$HOME/models/hf:/models/hf:ro" urbe-speech
+```
+
+See [CONTRACT.md](CONTRACT.md) for the exact envelopes and errors.

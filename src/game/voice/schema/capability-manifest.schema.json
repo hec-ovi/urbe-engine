@@ -10,7 +10,7 @@
   "properties": {
     "version": { "const": "1" },
     "adapterId": { "$ref": "urn:urbe:engine:npc-voice:values#/$defs/id" },
-    "streaming": { "const": true },
+    "streaming": { "type": "boolean" },
     "cancellable": { "const": true },
     "maxConcurrent": { "type": "integer", "minimum": 1 },
     "languages": {

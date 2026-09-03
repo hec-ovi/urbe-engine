@@ -13,7 +13,11 @@
     "carry-quests": "tsx src/assembly/quests-cli.js",
     "install-character-assets": "node scripts/install-character-assets.mjs",
     "audit-character-assets": "node scripts/install-character-assets.mjs --check",
-    "test": "vitest run"
+    "speech-install": "uv sync --project src/game/voice/runtime --frozen",
+    "speech-health": "uv run --project src/game/voice/runtime --frozen python src/game/voice/runtime/service.py health",
+    "speech-smoke": "uv run --project src/game/voice/runtime --frozen python src/game/voice/runtime/service.py smoke",
+    "test:speech-runtime": "uv run --project src/game/voice/runtime --frozen python -m unittest discover -s src/game/voice/runtime -p 'test_*.py'",
+    "test": "npm run test:speech-runtime && vitest run"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",

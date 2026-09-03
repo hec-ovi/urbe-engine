@@ -1,76 +1,82 @@
 # NPC voice contract
 
-Contract version: 1.0
+Contract version: 1.1
 
 ## Purpose
 
-Turn structured NPC speech into deterministic, checked audio chunk envelopes without binding gameplay to a TTS runtime.
+Turn structured NPC speech into verified local audio, play its absolute PCM timeline, and transcribe microphone media without exposing model internals to gameplay.
 
 ## Inputs
 
-- `NpcVoiceClient.registerProfile(profile)`: one immutable consented NPC identity described by [schema/voice-profile.schema.json](schema/voice-profile.schema.json). The language and pinned engine must match the active capability manifest. Reference media is content-addressed metadata. The client never stores an embedding or model cache in the profile.
-- Adapter capability manifest: `adapter.capabilities()` returns [schema/capability-manifest.schema.json](schema/capability-manifest.schema.json) before the client accepts work. It pins model, runtime, audio format, concurrency, language support, and every structured control.
-- `NpcVoiceClient.start(request)`: a prioritized request described by [schema/speech-request.schema.json](schema/speech-request.schema.json). Content is an ordered array of text and control spans. A request ID can be accepted once.
-- `NpcVoiceClient.wait(request)`: a terminal result lookup described by [schema/wait-request.schema.json](schema/wait-request.schema.json).
-- `NpcVoiceClient.cancel(request)`: a queued or active cancellation described by [schema/cancel-request.schema.json](schema/cancel-request.schema.json).
-- Adapter synthesis call: the client sends each contiguous native segment as [schema/adapter-request.schema.json](schema/adapter-request.schema.json). The adapter receives an `AbortSignal` beside the JSON envelope as process-local cancellation state.
-- Adapter chunk: each yielded adapter value must match [schema/adapter-chunk.schema.json](schema/adapter-chunk.schema.json).
-- `AudioWorkletPacketTransport.push(event)`: one ordered lifecycle envelope described by [schema/lifecycle-event.schema.json](schema/lifecycle-event.schema.json).
-- `AudioWorkletPacketTransport.read(request)`: a cursor read described by [schema/playback-read.schema.json](schema/playback-read.schema.json).
+- `NpcVoiceClient.registerProfile(profile)`: immutable identity in [schema/voice-profile.schema.json](schema/voice-profile.schema.json). The local runtime accepts only preset `chatterbox-nano-built-in` at its exact `conds.pt` SHA-256.
+- `NpcVoiceClient.start(request)`: prioritized structured speech in [schema/speech-request.schema.json](schema/speech-request.schema.json).
+- `wait(request)` and `cancel(request)`: [schema/wait-request.schema.json](schema/wait-request.schema.json) and [schema/cancel-request.schema.json](schema/cancel-request.schema.json).
+- Adapter synthesis: [schema/adapter-request.schema.json](schema/adapter-request.schema.json) and an `AbortSignal`.
+- Adapter chunks: [schema/adapter-chunk.schema.json](schema/adapter-chunk.schema.json).
+- `LocalSpeechRuntime.transcribe(media, options)`: `audio/wav`, normalized `audio/webm`, `audio/ogg`, or `audio/mp4`. Its checked service request is [schema/transcription-request.schema.json](schema/transcription-request.schema.json). `auto` omits the faster-whisper language parameter.
+- `PcmAudioPlayer.play(chunks)`: ordered [schema/audio-chunk.schema.json](schema/audio-chunk.schema.json) values with absolute `startFrame` positions.
+- `AudioWorkletPacketTransport.push(event)` and `read(request)`: [schema/lifecycle-event.schema.json](schema/lifecycle-event.schema.json) and [schema/playback-read.schema.json](schema/playback-read.schema.json).
+
+## Service API
+
+Vite exposes the same routes under `/api/speech`. The container listens on port `8091`.
+
+- `GET /capabilities`: [schema/runtime-capabilities.schema.json](schema/runtime-capabilities.schema.json).
+- `GET /health`: `{status:"ready", tts, stt}` after both models load. `tts` and `stt` are the capability records above.
+- `POST /synthesize`: [schema/adapter-request.schema.json](schema/adapter-request.schema.json), returns `{chunk}` where `chunk` is [schema/adapter-chunk.schema.json](schema/adapter-chunk.schema.json).
+- `POST /transcribe`: [schema/transcription-request.schema.json](schema/transcription-request.schema.json), returns [schema/transcription-result.schema.json](schema/transcription-result.schema.json).
+- `POST /cancel`: `{requestId}`, returns `{requestId,cancelled,previousStatus}`. Cancellation removes only that queued request or terminates its active model process.
+
+POST bodies above 48 MiB fail with HTTP 413 at Vite or HTTP 400 at the direct service. Invalid envelopes, missing or changed artifacts, model load failures, and inference failures return HTTP 503 `{error}`. The browser maps transport failures to `E_VOICE_ADAPTER`.
 
 ## Outputs
 
-- Registered profile record: [schema/profile-record.schema.json](schema/profile-record.schema.json). `profileDigest` is the SHA-256 of canonical profile JSON.
-- Capability query: [schema/capability-manifest.schema.json](schema/capability-manifest.schema.json).
-- Accepted request: [schema/start-result.schema.json](schema/start-result.schema.json). The cache key is known before synthesis starts.
-- Terminal request result: [schema/speech-result.schema.json](schema/speech-result.schema.json). It contains every emitted chunk and realized control, including partial chunks after cancellation or failure.
-- Cancellation result: [schema/cancel-result.schema.json](schema/cancel-result.schema.json).
-- Public audio chunk: [schema/audio-chunk.schema.json](schema/audio-chunk.schema.json). Each chunk has an absolute frame offset, sequence, format, byte count, SHA-256, source, and exactly one inline base64 payload or URI.
-- Playback cursor batch: [schema/playback-batch.schema.json](schema/playback-batch.schema.json). A host can decode these packets and write them into an AudioWorklet ring buffer at `startFrame`.
-- Lifecycle history: [schema/event-history.schema.json](schema/event-history.schema.json).
-
-## Events
-
-[schema/lifecycle-event.schema.json](schema/lifecycle-event.schema.json) defines `accepted`, `started`, `cache-hit`, `chunk`, `completed`, `cancelled`, and `failed`. `eventSequence` and chunk `sequence` both begin at zero per request and have no gaps.
+- Profile record: [schema/profile-record.schema.json](schema/profile-record.schema.json).
+- Accepted and terminal speech: [schema/start-result.schema.json](schema/start-result.schema.json) and [schema/speech-result.schema.json](schema/speech-result.schema.json).
+- Cancellation: [schema/cancel-result.schema.json](schema/cancel-result.schema.json).
+- Public audio: [schema/audio-chunk.schema.json](schema/audio-chunk.schema.json).
+- Playback batch and lifecycle history: [schema/playback-batch.schema.json](schema/playback-batch.schema.json) and [schema/event-history.schema.json](schema/event-history.schema.json).
+- Transcription: [schema/transcription-result.schema.json](schema/transcription-result.schema.json).
 
 ## Errors
 
 Immediate calls fail closed with:
 
-- `E_VOICE_INPUT`: an input does not match its schema.
-- `E_VOICE_OUTPUT`: this layer produced an off-contract value.
-- `E_VOICE_PROFILE`: a profile is unknown, mismatched, invalid for the adapter, or changes an existing revision.
-- `E_VOICE_CONTROL`: the adapter cannot natively execute a control and the profile has no approved reaction fallback.
+- `E_VOICE_INPUT`: input or microphone metadata does not match its schema or advertised capability.
+- `E_VOICE_OUTPUT`: this box produced an invalid value.
+- `E_VOICE_PROFILE`: profile identity, revision, language, preset, or engine pin is invalid.
+- `E_VOICE_CONTROL`: a structured control has no native or approved reaction implementation.
 - `E_VOICE_CONFLICT`: a request ID was reused.
 - `E_VOICE_NOT_FOUND`: `wait` addressed an unknown request.
-- `E_VOICE_CODEC`: a requested or supplied audio format differs from the manifest.
-- `E_VOICE_CACHE`: the injected cache does not implement `get`, `has`, and `set`.
-- `E_VOICE_ADAPTER`: the adapter API is absent.
-- `E_VOICE_CHUNK`: inline audio bytes disagree with declared size, PCM arithmetic, or SHA-256.
-- `E_VOICE_TRANSPORT`: an event or chunk arrived out of order.
+- `E_VOICE_CODEC`: requested, emitted, or playable audio differs from the capability.
+- `E_VOICE_CACHE`: the injected cache is invalid.
+- `E_VOICE_ADAPTER`: service, model, browser audio, or adapter failure.
+- `E_VOICE_CHUNK`: audio bytes disagree with frame count, byte count, or SHA-256.
+- `E_VOICE_ORDER`: chunks overlap, skip sequence, or belong to another request.
+- `E_VOICE_TRANSPORT`: lifecycle packets are out of order.
 
-Terminal failed results use the closed failure set in [schema/values.schema.json](schema/values.schema.json): `E_VOICE_ADAPTER`, `E_VOICE_CHUNK`, `E_VOICE_ORDER`, or `E_VOICE_SILENCE`.
+Terminal results use `E_VOICE_ADAPTER`, `E_VOICE_CHUNK`, `E_VOICE_ORDER`, or `E_VOICE_SILENCE` from [schema/values.schema.json](schema/values.schema.json).
 
 ## Dependencies
 
-- A voice adapter implementing `capabilities()` and async-generator `synthesize(adapterRequest, abortSignal)` at the schemas above.
-- Web Crypto SHA-256, `TextEncoder`, `atob`, and `btoa`.
-- Optional JSON cache implementing `get`, `has`, and `set`.
-
-No model is selected or downloaded by this layer. A local bakeoff must choose and pin a Chatterbox Nano, Pocket TTS, or CosyVoice adapter before production synthesis is connected.
+- Chatterbox repository commit `5de7a54aa4e5e2baadb0182dde554908b48b85c2`, including Nano local loading.
+- `faster-whisper` 1.2.1.
+- Python 3.12, CPU PyTorch 2.6.0, and the exact dependency graph in [runtime/uv.lock](runtime/uv.lock).
+- Chatterbox Nano revision `71ccd1d` and faster-whisper small snapshot `536b066`, supplied outside the repository under the configured model directories.
+- Browser Web Crypto, MediaRecorder, and Web Audio.
 
 ## Invariants
 
-- Profile identity includes stable NPC ID, profile revision, seed, language, delivery, immutable consented reference metadata, transcript, provenance, license, and engine revision.
-- Derived embeddings, generated speaker states, and model caches never enter the profile or its digest.
-- Cache identity includes contract version, profile digest, NPC ID, model and runtime pins, structured content, merged delivery, profile seed, inference seed and options, sample format, and codec version. It excludes request ID and priority.
-- Priorities are `conversation`, `nearby`, then `background`, with FIFO order inside one priority. Active work is bounded by `maxConcurrent`.
-- Unsupported controls never disappear. They fail before enqueue, or use the profile's explicitly approved reaction when the manifest declares `reaction`.
-- `pause_ms` creates zero-valued PCM with exactly `durationMs * sampleRate / 1000` frames. A fractional frame or non-PCM output fails.
-- Inline audio is checked against byte count and SHA-256 before publication. PCM byte count is exactly `frameCount * channels * 2`.
-- Cancelling active work aborts the adapter. Already published chunks stay ordered in the terminal result.
-- The transport contains JSON envelopes only. It does not expose raw shared memory across this contract.
+- Every model file read by either loader has a fixed SHA-256. Capability identity combines all required model artifacts. Runtime identity covers service code, Dockerfile, project metadata, and lockfile.
+- The built-in Nano preset is the only accepted profile. Reference cloning and changed preset digests fail.
+- Cache identity includes contract, profile, NPC, model, runtime, content, delivery, inference, and output pins. Request ID and priority do not affect it.
+- Priorities are `conversation`, `nearby`, then `background`, with FIFO order and one active inference.
+- Unsupported controls do not disappear. Exact pauses produce whole zero-valued PCM frames.
+- Audio bytes are verified before publication, transcription, and playback.
+- Playback places each chunk at its absolute `startFrame`, rejects overlaps and format changes, and resolves cancellation even while Web Audio unlock is pending.
+- Active cancellation terminates inference. Queued cancellation never terminates another request.
+- `speech-health` loads both models. `speech-smoke` performs real Chatterbox synthesis and faster-whisper transcription.
 
 ## How to modify this blackbox safely
 
-Change only this folder. Add or change a schema before changing a public value, keep the contract links exact, and exercise the public client plus transport in `tests/`. Breaking shapes require a parallel contract version and caller migration. A production adapter must preserve model pins, cancellation, ordering, checksums, and capability failures.
+Change only this folder. Define public values in schemas before changing code. Exercise the client, browser adapter, playback, HTTP boundary, cancellation, and real model smoke through their public entrypoints. Breaking shapes require a parallel contract version and caller migration.
