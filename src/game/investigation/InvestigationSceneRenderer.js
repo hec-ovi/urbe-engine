@@ -38,14 +38,20 @@ export class InvestigationSceneRenderer {
 
 	}
 
-	unobstructed( from, to ) {
+	unobstructed( from, to, entityId ) {
 
 		if ( ! this.physics?.world?.castRay || ! this.physics.rapier?.Ray ) return true;
 		const delta = to.clone().sub( from );
 		const distance = delta.length();
 		if ( distance <= 0.08 ) return true;
 		const ray = new this.physics.rapier.Ray( from, delta.multiplyScalar( 1 / distance ) );
-		return ! this.physics.world.castRay( ray, distance - 0.08, true, undefined, undefined, this.playerCollider );
+		const targetHandles = new Set(
+			( this.colliders.get( entityId ) ?? [] ).map( ( handle ) => handle.collider.handle )
+		);
+		return ! this.physics.world.castRay(
+			ray, distance - 0.08, true, undefined, undefined, this.playerCollider, undefined,
+			( collider ) => ! targetHandles.has( collider.handle )
+		);
 
 	}
 

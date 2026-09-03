@@ -32,7 +32,7 @@ Shared ids, coordinates, asset envelopes, material assignments, evidence definit
 - `InvestigationRuntime.perform(request)` applies `inspect` or `take`, then emits only consequence events authored on that evidence and transition.
 - `InvestigationGameplay.create(options)` accepts only version 1.1 scenes whose quest, step, scene, evidence, and place match the loaded quest definition exactly.
 - `InvestigationGameplay.perform(request)` emits `{ kind: "investigated", sceneId, evidenceId, place }` only after `InvestigationRuntime` accepts the authored completion action. The exact selected quest must accept that event before scene state changes.
-- `InvestigationSceneRenderer.create(options)` builds mission primitives and fitted decals with resolved PBR materials. It loads an audited Source body, preserves its original textures, applies the final frame of the named Pro death pose, and fails if any required body, pose, or texture is unavailable.
+- `InvestigationSceneRenderer.create(options)` builds mission primitives and fitted decals with resolved PBR materials. It loads an audited Source body, preserves its original textures, applies the final frame of the named Pro death pose, and fails if any required body, pose, or texture is unavailable. Its occlusion query excludes the selected entity's own collider and the player collider while retaining every other world collider.
 
 ## Errors
 

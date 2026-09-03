@@ -7,6 +7,7 @@ import { InvestigationError } from './InvestigationError.js';
 import { InvestigationGameplay } from './InvestigationGameplay.js';
 import { InvestigationSceneRenderer } from './InvestigationSceneRenderer.js';
 import { SceneAssembler } from './SceneAssembler.js';
+import { Physics } from '../physics/Physics.js';
 
 describe( 'InvestigationGameplay live integration', () => {
 
@@ -80,6 +81,30 @@ describe( 'InvestigationGameplay live integration', () => {
 } );
 
 describe( 'InvestigationSceneRenderer production failures', () => {
+
+	it( 'ignores the selected entity collider while retaining real world occlusion', async () => {
+
+		const scene = new SceneAssembler().assemble( street );
+		const physics = await Physics.create();
+		const renderer = await InvestigationSceneRenderer.create( {
+			assemblies: [ scene ], physics,
+			materialFactory: { build: ( key ) => new THREE.MeshStandardMaterial( { name: key } ) }
+		} );
+		physics.step( 1 / 60 );
+		const entityId = 'broken-control-module';
+		const focus = renderer.focus( entityId ).position;
+		const eye = focus.clone().add( new THREE.Vector3( 0, 0, 2 ) );
+
+		expect( renderer.unobstructed( eye, focus, entityId ) ).toBe( true );
+
+		const wall = new THREE.BoxGeometry( 0.8, 0.8, 0.2 );
+		wall.translate( focus.x, focus.y, focus.z + 1 );
+		physics.addTrimesh( wall );
+		wall.dispose();
+		physics.step( 1 / 60 );
+		expect( renderer.unobstructed( eye, focus, entityId ) ).toBe( false );
+
+	} );
 
 	it( 'keeps the fitted final-pose body offset beneath the authored world transform', async () => {
 
