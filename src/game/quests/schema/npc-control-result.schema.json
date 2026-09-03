@@ -8,9 +8,9 @@
       "required": ["ok", "kind", "npcId", "mode"],
       "properties": {
         "ok": { "const": true },
-        "kind": { "enum": ["start-follow", "release-follow"] },
+        "kind": { "enum": ["start-follow", "release-follow", "start-crouch", "release-crouch"] },
         "npcId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
-        "mode": { "enum": ["following", "resuming", "schedule"] }
+        "mode": { "enum": ["following", "resuming", "schedule", "posing"] }
       }
     },
     {
@@ -19,7 +19,7 @@
       "required": ["ok", "kind", "npcId", "error", "message"],
       "properties": {
         "ok": { "const": false },
-        "kind": { "enum": ["start-follow", "release-follow"] },
+        "kind": { "enum": ["start-follow", "release-follow", "start-crouch", "release-crouch"] },
         "npcId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
         "error": { "enum": ["not_cast", "unavailable", "unreachable", "conflict"] },
         "message": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" }

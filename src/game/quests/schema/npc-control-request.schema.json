@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["kind", "npcId", "timeMin", "playerPosition"],
   "properties": {
-    "kind": { "enum": ["start-follow", "release-follow"] },
+    "kind": { "enum": ["start-follow", "release-follow", "start-crouch", "release-crouch"] },
     "npcId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
     "timeMin": { "type": "number", "minimum": 0 },
     "playerPosition": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/vector3" }

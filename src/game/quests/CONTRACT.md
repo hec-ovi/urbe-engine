@@ -10,7 +10,7 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - Live world projection: [schema/gameplay-world.schema.json](schema/gameplay-world.schema.json). The assembled city publishes one deterministic entry or access anchor per parcel.
 - Live interaction frame: [schema/gameplay-frame.schema.json](schema/gameplay-frame.schema.json). The host supplies validated clock, place and camera facts.
 - Live selected binding: [schema/gameplay-perform.schema.json](schema/gameplay-perform.schema.json). The shared interactor returns only the selected target key, symbolic binding and current clock.
-- NPC control request: [schema/npc-control-request.schema.json](schema/npc-control-request.schema.json). An explicit start-follow or release-follow event names one actual cast npcId, current clock and player position.
+- NPC control request: [schema/npc-control-request.schema.json](schema/npc-control-request.schema.json). An explicit start-follow, release-follow, start-crouch, or release-crouch event names one actual cast npcId, current clock and player position.
 
 ## Outputs
 
@@ -18,7 +18,7 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - Interaction result: [schema/interaction-result.schema.json](schema/interaction-result.schema.json). Success and failure both return current quest inventory. A completed pickup, theft, or delivery includes the matching world state change.
 - Active objective: [schema/active-objective.schema.json](schema/active-objective.schema.json). Includes talk and goto steps as well as direct actions, and carries the runtime's exact current place or null.
 - Live interaction candidates: [schema/gameplay-candidates.schema.json](schema/gameplay-candidates.schema.json). Carries only validated prompt data and stable target identity to the shared interactor. Measured focus facts remain private until the matching target is selected.
-- NPC control result: [schema/npc-control-result.schema.json](schema/npc-control-result.schema.json). Success reports following or schedule-return mode; failure uses the closed `not_cast`, `unavailable`, `unreachable` or `conflict` set.
+- NPC control result: [schema/npc-control-result.schema.json](schema/npc-control-result.schema.json). Success reports following, posing, or schedule-return mode; failure uses the closed `not_cast`, `unavailable`, `unreachable` or `conflict` set.
 
 ## Events
 
@@ -27,7 +27,7 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - `objective({ timeMin })` selects the first open questline and first definition-ordered active step for route presentation.
 - `QuestGameplay.candidates(frame)` projects those validated targets into the shared centered interaction route. `QuestGameplay.perform(request)` resolves the current selected target and sends its measured place, visibility, obstruction and reach facts through `QuestActions.perform`.
 - An accepted `QuestGameplay.perform(request)` sends its stable target key, exact action, and retained cast participants to the gameplay animation coordinator. Rejected actions never start presentation state.
-- `QuestGameplay.control(request)` accepts only an explicit event for an npcId already in the session cast. Conversation and quest-step kinds never imply following, and this API does not add an escort quest mechanic.
+- `QuestGameplay.control(request)` accepts only an explicit event for an npcId already in the session cast. Conversation, player crouch input, and quest-step kinds never imply follow or crouch. An accepted pose event is sent to animation coordination with the exact returned actor state.
 
 ## Errors
 
@@ -55,6 +55,7 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - A live pickup prop has the stable `targetKey`, a database-backed body material, and separate outline and icon cues. It leaves the scene only when the accepted result includes its `collected` world change.
 - Cast-person mechanics resolve the exact `actorIds`. A nearby omitted cast NPC may receive one deterministic rendered quest body, within the crowd capacity, at their simulation place.
 - Follow control resolves only the requested cast npcId and never substitutes a nearby statistical handle.
+- Crouch control resolves only the requested cast npcId, holds it until its matching release, and resumes its persisted simulation routine.
 - Parcel area mechanics are offered only at their deterministic entry or interior anchor. District observation remains an area action throughout the named district.
 - Quest item data currently publishes a parcel but no room, prop, or transform. The live layer uses the parcel's ground-floor interior entry anchor, or its published access point when no interior door exists. Observe data publishes only a district, so the layer does not invent individual evidence clues.
 

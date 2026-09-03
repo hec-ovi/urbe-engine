@@ -80,6 +80,7 @@ The whole run either starts or reports why: any failure during startup is caught
 - A catalog game resumes from its last confirmed revision, and leaving it succeeds only after that next revision is stored.
 - A catalog save includes the optional exact transit journey state. Boarding, disembarking and automatic termination save it through the normal persistence boundary; leaving and quest saves also capture its current state. A direct preview keeps the journey in the session only. A valid aboard restore also restores its absolute timetable clock, while a stale trip fails closed to waiting.
 - A catalog save keeps the simulation replay and NPC continuity state at the same world minute. Named bodies restore with the same npcId, appearance seed, interruption, follow or return route, schedule progress and destination; distant bodies may be virtualized without replacing their identity.
+- An explicit cast NPC crouch is saved with its interrupted routine and exact npcId. Release plays the crouch exit and returns that identity over the walk graph to its current schedule. Player C input never triggers NPC crouch.
 - Animation coordinator state is reconstructed from restored quest and NPC continuity state. It is not stored as a second source of NPC control truth.
 - Interiors are continuous with the street: same scene, real world position, no loading screen and no camera jump.
 - Only manifest `interiors` parcels can open a door, register simulation interior support, or fetch an interior floor. Every other manifest parcel remains a closed exterior shell.

@@ -150,6 +150,55 @@ describe( 'explicit quest NPC control', () => {
 
 	} );
 
+	it( 'starts and releases crouch only for the selected cast NPC', () => {
+
+		const state = { pose: null };
+		const actor = ( mode, animation ) => ( {
+			npcId: 'cast-a', name: { given: 'Ana', family: 'Silva' }, type: 'courier', gender: 'female', appearanceSeed: 8,
+			place: { kind: 'edge', id: 'e1' }, position: [ 1, 0, 2 ], heading: 0, animation, mode,
+			schedule: { activity: 'commuting', progress: 0.2, nextDestination: { kind: 'parcel', id: 'p9' } }, visible: true
+		} );
+		const continuity = {
+			startCrouch: vi.fn( ( request ) => {
+
+				state.pose = { npcId: request.npcId, kind: 'crouch' };
+				return actor( 'posing', 'crouch' );
+
+			} ),
+			releaseCrouch: vi.fn( () => {
+
+				state.pose = null;
+				return actor( 'resuming', 'walk' );
+
+			} ),
+			serialize: vi.fn( () => state )
+		};
+		const crowd = { questMember: () => null, syncActor: vi.fn() };
+		const animations = { npcControl: vi.fn() };
+		const gameplay = setup( fakeActions( questTarget( 'observe', [ action( 'inspect', 'Inspect' ) ] ) ), {
+			crowd, animations, continuity, session: { hasCastNpc: ( npcId ) => npcId === 'cast-a' }
+		} );
+		const request = { kind: 'start-crouch', npcId: 'cast-a', timeMin: 600, playerPosition: { x: 3, y: 0, z: 4 } };
+
+		expect( gameplay.control( request ) ).toEqual( {
+			ok: true, kind: 'start-crouch', npcId: 'cast-a', mode: 'posing'
+		} );
+		expect( continuity.startCrouch ).toHaveBeenCalledWith( { npcId: 'cast-a', timeMin: 600 } );
+		expect( animations.npcControl ).toHaveBeenLastCalledWith( request, expect.objectContaining( { animation: 'crouch' } ) );
+
+		const release = { ...request, kind: 'release-crouch' };
+		expect( gameplay.control( release ) ).toEqual( {
+			ok: true, kind: 'release-crouch', npcId: 'cast-a', mode: 'resuming'
+		} );
+		expect( continuity.releaseCrouch ).toHaveBeenCalledWith( { npcId: 'cast-a', timeMin: 600 } );
+		expect( animations.npcControl ).toHaveBeenLastCalledWith( release, expect.objectContaining( { animation: 'walk' } ) );
+
+		expect( gameplay.control( { ...request, npcId: 'stranger' } ) ).toMatchObject( {
+			ok: false, error: 'not_cast'
+		} );
+
+	} );
+
 	it( 'fails closed for a non-cast identity, unavailable actor, or mismatched release', () => {
 
 		const continuity = {

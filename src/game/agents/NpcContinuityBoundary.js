@@ -3,6 +3,8 @@ import values from './schema/values.schema.json';
 import followStart from './schema/follow-start.schema.json';
 import followUpdate from './schema/follow-update.schema.json';
 import followStop from './schema/follow-stop.schema.json';
+import crouchStart from './schema/crouch-start.schema.json';
+import crouchStop from './schema/crouch-stop.schema.json';
 import actorState from './schema/actor-state.schema.json';
 import continuitySave from './schema/continuity-save.schema.json';
 import places from './schema/places.schema.json';
@@ -18,6 +20,7 @@ import { NpcContinuityError } from './NpcContinuityError.js';
 
 const SCHEMAS = [
 	values, appearanceRequest, unloadRequest, followStart, followUpdate, followStop,
+	crouchStart, crouchStop,
 	conversationStart, conversationStop,
 	visibleUpdate, actorState, actorStateOrNull, actorStates, continuitySave, places, movementNetwork
 ];

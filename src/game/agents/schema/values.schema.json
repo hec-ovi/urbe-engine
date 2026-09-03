@@ -47,7 +47,7 @@
         "position": { "$ref": "#/$defs/vec3" },
         "heading": { "type": "number" },
         "animation": { "enum": ["walk", "run", "idle", "sit", "crouch"] },
-        "mode": { "enum": ["schedule", "following", "resuming", "conversation", "released"] },
+        "mode": { "enum": ["schedule", "following", "resuming", "conversation", "posing", "released"] },
         "schedule": { "$ref": "#/$defs/schedule" },
         "visible": { "type": "boolean" }
       }

@@ -57,7 +57,7 @@ export class QuestGameplay {
 					playerPosition: array3( request.playerPosition )
 				} );
 
-			} else {
+			} else if ( request.kind === 'release-follow' ) {
 
 				const follow = this.continuity.serialize().follow;
 				if ( follow?.npcId !== request.npcId || follow.mode !== 'following' ) {
@@ -67,6 +67,26 @@ export class QuestGameplay {
 				}
 				actor = this.continuity.stopFollow( { timeMin: request.timeMin } );
 
+			} else if ( request.kind === 'start-crouch' ) {
+
+				actor = this.continuity.startCrouch( {
+					npcId: request.npcId,
+					timeMin: request.timeMin
+				} );
+
+			} else {
+
+				const pose = this.continuity.serialize().pose;
+				if ( pose?.npcId !== request.npcId || pose.kind !== 'crouch' ) {
+
+					return this.#controlFailure( request, 'conflict', `NPC ${request.npcId} is not explicitly crouched` );
+
+				}
+				actor = this.continuity.releaseCrouch( {
+					npcId: request.npcId,
+					timeMin: request.timeMin
+				} );
+
 			}
 			if ( actor.mode === 'released' ) {
 
@@ -74,6 +94,7 @@ export class QuestGameplay {
 
 			}
 			this.crowd.syncActor( actor, vector3( request.playerPosition ) );
+			this.animations?.npcControl( request, actor );
 			return this.boundary.output( 'npc-control-result', {
 				ok: true, kind: request.kind, npcId: request.npcId, mode: actor.mode
 			} );

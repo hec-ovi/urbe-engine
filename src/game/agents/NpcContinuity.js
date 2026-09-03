@@ -26,6 +26,7 @@ export class NpcContinuity {
 		this.actors = new Map();
 		this.follow = null;
 		this.conversation = null;
+		this.pose = null;
 
 	}
 
@@ -34,7 +35,7 @@ export class NpcContinuity {
 
 		this.boundary.input( 'appearance-request', request );
 		const { npcId, timeMin } = request;
-		if ( this.follow?.npcId === npcId || this.conversation?.npcId === npcId ) {
+		if ( this.follow?.npcId === npcId || this.conversation?.npcId === npcId || this.pose?.npcId === npcId ) {
 
 			const actor = this.actors.get( npcId );
 			actor.visible = true;
@@ -52,7 +53,7 @@ export class NpcContinuity {
 
 		this.boundary.input( 'unload-request', request );
 		const { npcId } = request;
-		if ( this.follow?.npcId === npcId || this.conversation?.npcId === npcId ) {
+		if ( this.follow?.npcId === npcId || this.conversation?.npcId === npcId || this.pose?.npcId === npcId ) {
 
 			throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${npcId} is under active control` );
 
@@ -67,7 +68,7 @@ export class NpcContinuity {
 	updateVisible( request ) {
 
 		this.boundary.input( 'visible-update', request );
-		const controlled = new Set( [ this.follow?.npcId, this.conversation?.npcId ].filter( Boolean ) );
+		const controlled = new Set( [ this.follow?.npcId, this.conversation?.npcId, this.pose?.npcId ].filter( Boolean ) );
 		const states = [];
 		for ( const [ npcId, actor ] of [ ...this.actors.entries() ].sort( ( a, b ) => a[ 0 ].localeCompare( b[ 0 ] ) ) ) {
 
@@ -101,6 +102,7 @@ export class NpcContinuity {
 		this.boundary.input( 'follow-start', request );
 		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is in conversation` );
 		if ( this.follow ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.follow.npcId} is already following` );
+		if ( this.pose ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.pose.npcId} has an explicit pose` );
 		const actor = this.#scheduledActor( request.npcId, request.timeMin );
 		if ( actor.place.kind === 'route' ) {
 
@@ -122,6 +124,53 @@ export class NpcContinuity {
 			lastTimeMin: request.timeMin
 		};
 		return this.#actorOut( actor );
+
+	}
+
+	/** Freezes one actual identity in crouch until its matching release. */
+	startCrouch( request ) {
+
+		this.boundary.input( 'crouch-start', request );
+		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is in conversation` );
+		if ( this.follow ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.follow.npcId} is under movement control` );
+		if ( this.pose ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.pose.npcId} already has an explicit pose` );
+		const actor = this.#scheduledActor( request.npcId, request.timeMin );
+		if ( actor.place.kind === 'route' ) {
+
+			throw new NpcContinuityError( 'E_NPC_PLACE', `NPC ${request.npcId} cannot crouch while aboard transit` );
+
+		}
+		this.#interrupt( request.npcId, request.timeMin );
+		actor.visible = true;
+		actor.mode = 'posing';
+		actor.animation = selectNpcAnimation( { action: 'crouch' } );
+		this.actors.set( actor.npcId, actor );
+		this.pose = { npcId: actor.npcId, kind: 'crouch', lastTimeMin: request.timeMin };
+		return this.#actorOut( actor );
+
+	}
+
+	/** Releases the exact crouched identity and routes it back to its schedule. */
+	releaseCrouch( request ) {
+
+		this.boundary.input( 'crouch-stop', request );
+		if ( ! this.pose || this.pose.npcId !== request.npcId ) {
+
+			throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${request.npcId} is not explicitly crouched` );
+
+		}
+		const actor = this.actors.get( request.npcId );
+		if ( ! actor ) throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', `NPC ${request.npcId} has no materialized actor` );
+		this.#resume( actor.npcId, request.timeMin );
+		this.pose = null;
+		try { return this.#startResume( actor, request.timeMin, 'crouch' ); }
+		catch ( error ) {
+
+			actor.mode = 'released';
+			actor.animation = 'idle';
+			throw error;
+
+		}
 
 	}
 
@@ -190,6 +239,7 @@ export class NpcContinuity {
 
 		this.boundary.input( 'conversation-start', request );
 		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is already in conversation` );
+		if ( this.pose ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.pose.npcId} has an explicit pose` );
 		if ( this.follow?.mode === 'resuming' && this.follow.npcId === request.npcId ) this.follow = null;
 		const following = this.follow?.mode === 'following' && this.follow.npcId === request.npcId;
 		const actor = following ? this.actors.get( request.npcId ) : this.#scheduledActor( request.npcId, request.timeMin );
@@ -237,7 +287,8 @@ export class NpcContinuity {
 			version: '1',
 			actors: [ ...this.actors.values() ].sort( ( a, b ) => a.npcId.localeCompare( b.npcId ) ).map( clone ),
 			follow: this.follow ? clone( this.follow ) : null,
-			conversation: this.conversation ? clone( this.conversation ) : null
+			conversation: this.conversation ? clone( this.conversation ) : null,
+			pose: this.pose ? clone( this.pose ) : null
 		} );
 
 	}
@@ -253,7 +304,8 @@ export class NpcContinuity {
 			let npc;
 			try { npc = this.simulation.getNPC( actor.npcId ); }
 			catch { throw new NpcContinuityError( 'E_NPC_INPUT', `save actor ${actor.npcId} is not present in the restored simulation` ); }
-			if ( ( save.follow?.npcId === actor.npcId || save.conversation?.npcId === actor.npcId ) && npc.flags?.dead ) {
+			if ( ( save.follow?.npcId === actor.npcId || save.conversation?.npcId === actor.npcId ||
+				save.pose?.npcId === actor.npcId ) && npc.flags?.dead ) {
 
 				throw new NpcContinuityError( 'E_NPC_INPUT', `controlled save actor ${actor.npcId} is dead` );
 
@@ -276,9 +328,36 @@ export class NpcContinuity {
 			throw new NpcContinuityError( 'E_NPC_INPUT', `conversation state references missing actor ${save.conversation.npcId}` );
 
 		}
+		if ( save.pose && ! ids.has( save.pose.npcId ) ) {
+
+			throw new NpcContinuityError( 'E_NPC_INPUT', `pose state references missing actor ${save.pose.npcId}` );
+
+		}
+		if ( save.pose && ( save.follow || save.conversation ) ) {
+
+			throw new NpcContinuityError( 'E_NPC_INPUT', 'pose state conflicts with another NPC control state' );
+
+		}
+		if ( save.pose ) {
+
+			const posed = save.actors.find( ( actor ) => actor.npcId === save.pose.npcId );
+			if ( posed.mode !== 'posing' || posed.animation !== 'crouch' || ! posed.visible ) {
+
+				throw new NpcContinuityError( 'E_NPC_INPUT', `pose state disagrees with actor ${save.pose.npcId}` );
+
+			}
+
+		}
+		const unownedPose = save.actors.find( ( actor ) => actor.mode === 'posing' && save.pose?.npcId !== actor.npcId );
+		if ( unownedPose ) {
+
+			throw new NpcContinuityError( 'E_NPC_INPUT', `posing actor ${unownedPose.npcId} has no matching pose state` );
+
+		}
 		const interrupted = new Set();
 		if ( save.follow?.mode === 'following' ) interrupted.add( save.follow.npcId );
 		if ( save.conversation?.ownsInterruption ) interrupted.add( save.conversation.npcId );
+		if ( save.pose ) interrupted.add( save.pose.npcId );
 		for ( const npcId of interrupted ) if ( ! this.simulation.behaviorAt( npcId, 0 )?.interrupted ) {
 
 			throw new NpcContinuityError( 'E_NPC_INPUT', `controlled save actor ${npcId} is not interrupted in the restored simulation` );
@@ -287,6 +366,7 @@ export class NpcContinuity {
 		this.actors = new Map( save.actors.map( ( actor ) => [ actor.npcId, clone( actor ) ] ) );
 		this.follow = save.follow ? clone( save.follow ) : null;
 		this.conversation = save.conversation ? clone( save.conversation ) : null;
+		this.pose = save.pose ? clone( save.pose ) : null;
 		return this.serialize();
 
 	}

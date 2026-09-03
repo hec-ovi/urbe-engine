@@ -181,6 +181,52 @@ describe( 'NPC continuity integration', () => {
 
 	} );
 
+	it( 'holds explicit crouch through visibility and save restore, then walks back to the routine', () => {
+
+		const first = setup();
+		const npc = first.bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const commute = npc.routine.find( ( entry ) => entry.days.includes( 0 ) && entry.walk?.to.id === 'p_cafe' );
+		const startedAt = commute.startMin + 0.5;
+		const crouched = first.controller.startCrouch( { npcId: npc.npcId, timeMin: startedAt } );
+
+		expect( crouched ).toMatchObject( {
+			npcId: npc.npcId, mode: 'posing', animation: 'crouch', visible: true
+		} );
+		expect( code( () => first.controller.startCrouch( { npcId: npc.npcId } ) ) ).toBe( 'E_NPC_INPUT' );
+		expect( first.bridge.behaviorAt( npc.npcId, startedAt ).interrupted ).toBe( true );
+		expect( first.controller.updateVisible( {
+			timeMin: startedAt + 1, playerPosition: [ 10000, 0, 10000 ], maxDistance: 5
+		} )[ 0 ] ).toEqual( crouched );
+		expect( code( () => first.controller.startFollow( {
+			npcId: npc.npcId, timeMin: startedAt, playerPosition: [ 560, 1, 250 ]
+		} ) ) ).toBe( 'E_NPC_CONFLICT' );
+
+		const saved = first.controller.serialize();
+		const restored = setup( restoreSimulation( simulationInput(), first.bridge.simulation.serialize() ) );
+		expect( restored.controller.restore( saved ) ).toEqual( saved );
+		expect( saved.pose ).toEqual( { npcId: npc.npcId, kind: 'crouch', lastTimeMin: startedAt } );
+		const unowned = structuredClone( saved );
+		unowned.pose = null;
+		expect( code( () => setup( restoreSimulation( simulationInput(), first.bridge.simulation.serialize() ) )
+			.controller.restore( unowned ) ) ).toBe( 'E_NPC_INPUT' );
+
+		let returning = restored.controller.releaseCrouch( { npcId: npc.npcId, timeMin: startedAt + 1 } );
+		expect( restored.controller.serialize().pose ).toBeNull();
+		expect( restored.bridge.behaviorAt( npc.npcId, startedAt + 1 ).interrupted ).toBe( false );
+		for ( let step = 0; step < 300 && returning.mode === 'resuming'; step ++ ) {
+
+			returning = restored.controller.updateFollow( {
+				timeMin: startedAt + 1, deltaSeconds: 1, playerPosition: [ 560, 1, 250 ]
+			} );
+
+		}
+		expect( returning ).toMatchObject( { npcId: npc.npcId, mode: 'schedule', animation: 'walk' } );
+		expect( code( () => restored.controller.releaseCrouch( {
+			npcId: npc.npcId, timeMin: startedAt + 2
+		} ) ) ).toBe( 'E_NPC_CONFLICT' );
+
+	} );
+
 	it( 'virtualizes distant scheduled bodies and restores the same identity when they are requested again', () => {
 
 		const { bridge, controller } = setup();
