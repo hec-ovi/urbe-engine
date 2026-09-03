@@ -86,7 +86,7 @@ describe( 'AnimationCoordinator', () => {
 
 	} );
 
-	it( 'coordinates standing speech with seated listening atomically', async () => {
+	it( 'coordinates standing talking with seated listening atomically', async () => {
 
 		const coordinator = new AnimationCoordinator( await fixture( configUrl ) );
 		const result = coordinator.dispatch( {
