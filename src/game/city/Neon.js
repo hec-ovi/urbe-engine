@@ -19,6 +19,12 @@ const SCREEN_LUMENS = [ 300, 900 ];
 const SCREEN_EMISSIVE = 3;
 
 const SCREEN_KEY = ( tier ) => `cyberpunk/ad-screen/${tier}`;
+const SCREEN_VARIANT = {
+	poor: 'noir-cyan',
+	mid: 'noir-cyan',
+	rich: 'noir-amber',
+	high_rich: 'noir-amber'
+};
 /** The parcel types whose screens advertise the business itself (../../../../materials/CONTRACT.md, rebrand). */
 const ADVERTISERS = new Set( [ 'hotel', 'commerce', 'mall', 'restaurant', 'coffee_shop', 'corpo', 'clinic' ] );
 
@@ -28,6 +34,17 @@ export function brandVariant( name ) {
 	const slug = name.toLowerCase().replace( /[^a-z0-9]+/g, '-' ).replace( /^-|-$/g, '' );
 
 	return slug ? `brand:${slug}` : null;
+
+}
+
+/** Exact materials variant for an unbranded or branded landscape screen. */
+export function screenVariant( tier, brand = null ) {
+
+	const canonical = SCREEN_VARIANT[ tier ];
+
+	if ( ! canonical ) throw new Error( `no canonical ad-screen variant for tier ${tier}` );
+
+	return { key: SCREEN_KEY( tier ), variantId: brand ?? canonical };
 
 }
 const SCREEN_ASPECT = 16 / 9;
@@ -170,7 +187,8 @@ export class Neon {
 		// A named business advertises itself: its screens take its branded
 		// variant, and a name the database has not spelled yet falls back to
 		// the tier's brandless art.
-		const key = brand ? `${SCREEN_KEY( tier )}#${brand}` : SCREEN_KEY( tier );
+		const screen = screenVariant( tier, brand );
+		const key = `${screen.key}#${screen.variantId}`;
 		const width = rng.range( 2.8, Math.min( 6, facade.length * 0.5 ) );
 
 		if ( ! ( width > 1 ) ) return;

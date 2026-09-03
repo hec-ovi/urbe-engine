@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { brandVariant } from './Neon.js';
+import { brandVariant, screenVariant } from './Neon.js';
 
 /**
  * A named business's screens resolve to the variant the materials box spelled
@@ -19,6 +19,30 @@ describe( 'brandVariant', () => {
 	it( 'gives no variant for a name with nothing to spell', () => {
 
 		expect( brandVariant( '???' ) ).toBe( null );
+
+	} );
+
+} );
+
+describe( 'screenVariant', () => {
+
+	it( 'uses the named future-noir variants, never removed numeric ids', () => {
+
+		expect( screenVariant( 'poor' ) ).toEqual( {
+			key: 'cyberpunk/ad-screen/poor', variantId: 'noir-cyan'
+		} );
+		expect( screenVariant( 'high_rich' ) ).toEqual( {
+			key: 'cyberpunk/ad-screen/high_rich', variantId: 'noir-amber'
+		} );
+		expect( screenVariant( 'rich', 'brand:kiro-s-clinic' ) ).toEqual( {
+			key: 'cyberpunk/ad-screen/rich', variantId: 'brand:kiro-s-clinic'
+		} );
+
+	} );
+
+	it( 'fails closed on a tier outside the materials contract', () => {
+
+		expect( () => screenVariant( 'unknown' ) ).toThrow( /no canonical ad-screen variant/ );
 
 	} );
 
