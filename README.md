@@ -8,7 +8,6 @@ Only generated data is rendered. No placeholder geometry, no invented population
 
 ```
 npm install
-npm run speech-install
 npm run dev -- --port 5306
 npm test
 ```
@@ -23,7 +22,6 @@ Other commands:
 - `npm run assemble-city -- --blueprint <path> --out <dir> --workers 8` builds a city directly. Add `--reuse-shells true --interior-parcels <id,id,...>` to furnish an exact set without rebuilding its shells.
 - `npm run simulate` boots the population over an assembled world and prints stats, a crowd slice, three NPC lives, latencies and a conservation check.
 - `npm run install-character-assets` validates and installs the CC0 Source characters and Pro animation pack from the workspace resources folder; `npm run audit-character-assets` verifies the local store without changing it.
-- `npm run speech-install` creates the project-local locked Python environment. `npm run speech-health` loads both speech models, and `npm run speech-smoke` performs real synthesis and transcription.
 - `npm run build` produces the static client.
 
 The client tools stay available on explicit modes: `?mode=city&out=/out/cities/small` shows a whole city, `?mode=building&parcel=<id>&out=/out/games/small` inspects a building, and `?mode=experiment` runs the render scale comparison. Add `source=interior` to the building URL to inspect its furnished version.
@@ -43,12 +41,6 @@ From the family root, `docker compose up` starts every box. The fixed ports are:
 | 5307 | PBR material database preview | [http://localhost:5307/](http://localhost:5307/) |
 
 The quest compiler runs as a worker and has no browser port.
-
-### Local speech
-
-GameApp sends NPC lines to verified Chatterbox Nano and microphone recordings to faster-whisper. Typed and transcribed text share one dialogue path; Source speaking and listening animation follows actual PCM playback and settles on completion, close, replacement or failure.
-
-Vite starts the locked project process when `URBE_SPEECH_URL` is unset. A manually run standalone service listens at `http://localhost:8091`; Compose keeps that service internal and exposes it through Engine `/api/speech`. Its container is built from `src/game/voice/runtime`, mounts the model tree at `/models/hf`, and exposes checked health, capabilities, synthesis, transcription and request-scoped cancellation. See [the voice contract](src/game/voice/CONTRACT.md).
 
 ## Assembly
 
@@ -79,7 +71,7 @@ The output directory matches the blueprint it was built from: assembly removes p
 - **Movement** is a Rapier capsule with a kinematic character controller: pointer-lock mouse look, WASD at 1.4 m/s and 4 m/s on shift, eye height 1.7 m, autostep that makes curbs and interior stairs walkable. Building shells are trimeshes carrying their real door and window openings, so a doorway needs no special case. Lamp posts are thin cylinders you bump into. An interior floor band becomes solid when the stream puts it in the scene and stops being solid when it takes it out, so what you can walk on is exactly what you can see.
 - **HUD**: clock and district, interact prompt, position readout, an about line naming every loaded path, the NPC panel, a minimap, an orbiting full map (M), an inventory grid (I), a pause menu and a live performance readout with frame time, GPU milliseconds, draw calls, lit fixtures, live interiors and the tier in force.
 
-Character, animation and vehicle packs are CC0 assets kept in a model store outside the repo, served from `URBE_MODELS_DIR`. Speech snapshots live under `$HOME/models/hf` by default and may be selected with `URBE_CHATTERBOX_MODEL_DIR` and `URBE_WHISPER_MODEL_DIR`. Blueprints come from the sibling atlas directory, or from `URBE_ATLAS_DIR`.
+Character, animation and vehicle packs are CC0 assets kept in a model store outside the repo, served from `URBE_MODELS_DIR`. Blueprints come from the sibling atlas directory, or from `URBE_ATLAS_DIR`.
 
 A run either starts or reports the failure: anything that goes wrong during startup is caught and shown on the loading panel with its message. There is no partial world.
 

@@ -1,8 +1,10 @@
 # Changelog
 
-0.17.1: exact active cast NPCs materialize for assassination and public transit without extra interactions; fatal impacts resolve rendered bodies to authored NPC ids; rescue acquires follow control before quest progress and rolls it back on rejection. Talk and direct speech routes validate closed envelopes, empty model configuration selects the advertised model, and world creation invokes Atlas through its public command.
+0.17.2: public transit keeps one cast passenger across parcel, station and stop endpoints and persists approach, aboard and arrival progress. NPC dialogue uses the checked text route, and reply gestures settle after a 1.8-second presentation hold.
 
-0.17.0: GameApp consumes Quests v0.8.0 handoff v1.1, runs all 16 action kinds through live hosts, renders authored investigations and hydrology, and provides verified local speech with microphone transcription and request cancellation.
+0.17.1: exact active cast NPCs materialize once for assassination and public transit without extra interactions; fatal impacts resolve rendered bodies to authored NPC ids; rescue acquires follow control before quest progress. Talk routes validate closed envelopes and dependency failures, empty model configuration selects the advertised model, and world creation invokes Atlas through its public command.
+
+0.17.0: GameApp consumes Quests v0.8.0 handoff v1.1, runs all 16 action kinds through live hosts, and renders authored investigations and hydrology.
 
 0.16.26: the launcher separates city and game catalogs and creates a playable game through checked city, interior, quest and save stages.
 

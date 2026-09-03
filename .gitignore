@@ -11,5 +11,4 @@ out/
 CLAUDE.md
 session
 .research/
-src/game/voice/runtime/.venv/
 __pycache__/
