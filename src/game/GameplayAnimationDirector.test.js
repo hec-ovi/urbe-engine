@@ -26,7 +26,7 @@ describe( 'live gameplay animation composition', () => {
 
 		rig.director.npcDialogueTurn( conversation );
 		expect( current( rig.director, scheduled.npcId ).currentClip ).toBe( 'Sitting_Talking_Loop' );
-		rig.director.completeDialogueTurn( conversation );
+		rig.director.update( [ scheduled ], 1.8 );
 		expect( current( rig.director, scheduled.npcId ).currentClip ).toBe( 'Sitting_Idle_Loop' );
 		expect( rig.director.snapshot().actions ).toEqual( [] );
 		rig.director.npcDialogueTurn( conversation );

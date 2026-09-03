@@ -174,11 +174,14 @@ export class GameplayAnimationDirector {
 	npcDialogueTurn( conversation ) {
 
 		const state = this.conversations.get( conversation );
-		return state ? this.#nextTurn( conversation, state.actorId ) : null;
+		if ( ! state ) return null;
+		const started = this.#nextTurn( conversation, state.actorId );
+		this.timed.set( started.actionId, LOOP_HOLD_SECONDS );
+		return started;
 
 	}
 
-	/** Completes the audible turn while leaving the conversation open. */
+	/** Completes the active turn while leaving the conversation open. */
 	completeDialogueTurn( conversation ) {
 
 		const state = this.conversations.get( conversation );

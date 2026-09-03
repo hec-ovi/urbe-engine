@@ -42,6 +42,7 @@ Coordinates quest, dialogue, follow, crouch, and routine animations as one deter
 - The installed Quaternius Universal Animation Library Pro catalog. This layer consumes clip names and never modifies vendor assets.
 
 The live game adapter synchronizes NPC continuity routines, turns accepted quest actions into commands, and sends every ordered transition to Crowd plus the one focused HeroCharacter armature. Coordinator state is presentation derived from persisted quest and NPC continuity state, so it is not duplicated in the game save.
+NPC reply gestures hold for 1.8 seconds unless the player sends another line or closes the conversation first.
 
 A measured physics impact closes the matching grouped action with interruption reason `physics`. The fallen actor receives no later routine projection while Rapier owns its Source rig. Releasing a rejected impact allows the next continuity update to project the latest synchronized routine.
 
