@@ -1,14 +1,11 @@
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { fill, skirt, ringBounds, ledge, Roadway, signedArea } from './Polygons.js';
-import { holesWithin, shaftMouths, stationDepth } from './Stations.js';
+import { holesWithin, shaftMouths } from './Stations.js';
 import { Highways } from './Highways.js';
 
 export const SIDEWALK_HEIGHT = 0.12;
 const CURB_BOTTOM = - 0.06;
-const BEDROCK_Y = - 0.8;
-/** How far the bedrock keeps clear of the deepest thing the city digs. */
-const BEDROCK_CLEARANCE = 2;
 
 const CURB_KEY = 'cyberpunk/curb/poor';
 /** A kerb stone's top, from the edge inward, and how far above the pavement it sits so it never fights it. */
@@ -131,45 +128,12 @@ export class GroundBuilder {
 		if ( highways.colliderGeometry ) solid.push( highways.colliderGeometry );
 
 		const bounds = ringBounds( this.atlas.volumetric.ground.map( ( g ) => g.polygon ) );
-		// Deep enough to be under the deepest thing the city digs, so a station
-		// is a room rather than a hollow inside the rock.
-		const dug = stationDepth( this.atlas );
-		group.add( this.#bedrock( bounds, dug < 0 ? dug - BEDROCK_CLEARANCE : BEDROCK_Y ) );
 
 		return {
 			group,
 			colliderGeometry: BufferGeometryUtils.mergeGeometries( solid.map( clean ), false ),
 			bounds
 		};
-
-	}
-
-	/**
-	 * A dark slab under everything. Nothing in the blueprint needs it, but it
-	 * makes a hole in the ground impossible to see through and gives the
-	 * physics world a floor of last resort.
-	 */
-	#bedrock( bounds, y ) {
-
-		const pad = 120;
-		const width = bounds.max[ 0 ] - bounds.min[ 0 ] + pad * 2;
-		const depth = bounds.max[ 1 ] - bounds.min[ 1 ] + pad * 2;
-		const geometry = new THREE.PlaneGeometry( width, depth );
-		geometry.rotateX( - Math.PI / 2 );
-		geometry.translate(
-			( bounds.min[ 0 ] + bounds.max[ 0 ] ) / 2,
-			y,
-			( bounds.min[ 1 ] + bounds.max[ 1 ] ) / 2
-		);
-
-		const mesh = new THREE.Mesh( geometry, new THREE.MeshStandardMaterial( {
-			color: 0x05070a,
-			roughness: 1,
-			metalness: 0
-		} ) );
-		mesh.name = 'ground:bedrock';
-
-		return mesh;
 
 	}
 

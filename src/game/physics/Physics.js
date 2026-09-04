@@ -45,6 +45,17 @@ export class Physics {
 
 	}
 
+	/** The solid below an infinite horizontal plane. */
+	addHalfSpace( elevation ) {
+
+		if ( ! Number.isFinite( elevation ) ) throw new Error( 'E_PHYSICS_FLOOR: elevation must be finite' );
+		const body = this.world.createRigidBody( RAPIER.RigidBodyDesc.fixed().setTranslation( 0, elevation, 0 ) );
+		const shape = new RAPIER.HalfSpace( { x: 0, y: 1, z: 0 } );
+		const collider = this.world.createCollider( new RAPIER.ColliderDesc( shape ), body );
+		return { body, collider, triangles: 0 };
+
+	}
+
 	/** A fixed trimesh body from a three.js geometry, in world space. */
 	addTrimesh( geometry ) {
 

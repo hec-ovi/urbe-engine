@@ -8,10 +8,6 @@ import { pointInRing } from './Polygons.js';
  * the ground cover. The atlas publishes the shaft's own footprint, so the hole
  * is that footprint exactly: the floor meets the shaft wall and no gap can open
  * between them.
- *
- * The bedrock slab has the same problem from below. It sits under the whole
- * city as a floor of last resort, so it has to sit under the deepest thing the
- * city digs, or a station is a room inside a rock.
  */
 
 /** Every shaft footprint that breaks the surface, as a hole ring. */

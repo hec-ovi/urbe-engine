@@ -16,6 +16,7 @@ import { GameConfig } from './data/GameConfig.js';
 import { WorldSource } from './data/WorldSource.js';
 import { Signals } from './data/Signals.js';
 import { GroundBuilder, SIDEWALK_HEIGHT } from './ground/GroundBuilder.js';
+import { SafetyGround } from './ground/SafetyGround.js';
 import { HydrologyHost } from './hydro/index.js';
 import { pointInRing } from './ground/Polygons.js';
 import { BuildingsLoader } from './city/BuildingsLoader.js';
@@ -276,6 +277,11 @@ export class GameApp {
 
 		this.view.step( 'building the physics world' );
 		this.physics = await Physics.create();
+		this.safetyGround = new SafetyGround( {
+			atlas, buildings, groups: [ ground.group, city.group, links.group, this.transit.group ],
+			physics: this.physics, factory, camera: this.camera
+		} );
+		this.scene.add( this.safetyGround.mesh );
 		this.doorColliders = new DoorColliders( this.physics, city.doors );
 		this.impactWorld = new ImpactWorld( this.physics );
 		this.colliders = new WorldColliders( this.physics );
@@ -546,6 +552,7 @@ export class GameApp {
 		for ( const impact of this.impactWorld.drain() ) this.#ragdoll( impact );
 
 		const feet = this.body.feet;
+		this.safetyGround.update( this.camera );
 
 		this.hitches.time( 'interior stream', () => {
 

@@ -79,7 +79,7 @@ describe( 'GroundBuilder', () => {
 
 	} );
 
-	it( 'opens the floor over every station shaft and puts the bedrock under it', () => {
+	it( 'opens the floor over every station shaft', () => {
 
 		const footprint = [ [ 8, 12 ], [ 12, 12 ], [ 12, 14 ], [ 8, 14 ] ];
 		const covers = [ ROAD, rect( 'sidewalk', 10, 16 ) ];
@@ -100,8 +100,6 @@ describe( 'GroundBuilder', () => {
 		expect( covered( open.geometry, 4, 13 ) ).toBe( true );
 		expect( covered( open.geometry, 16, 13 ) ).toBe( true );
 
-		expect( bedrockY( ground( covers ).group ) ).toBe( - 0.8 );
-		expect( bedrockY( ground( covers, station ).group ) ).toBe( - 14 );
 
 	} );
 
@@ -159,7 +157,6 @@ describe( 'GroundBuilder', () => {
 
 } );
 
-const bedrockY = ( group ) => round( group.getObjectByName( 'ground:bedrock' ).geometry.getAttribute( 'position' ).getY( 0 ) );
 
 /** Whether any triangle of a horizontal fill covers the point. */
 function covered( geometry, x, z ) {

@@ -6,6 +6,7 @@ Purpose: resolves world and player collision, measures vehicle contacts, and tur
 
 - `Physics.create()`: loads the pinned Rapier runtime and creates the fixed-step world.
 - Static geometry: `Physics.addTrimesh(geometry)` and `WorldColliders` accept generated Three.js geometry in world coordinates.
+- Safety collision: `Physics.addHalfSpace(elevation)` accepts a finite world Y and returns `{body, collider, triangles: 0}` for the solid below an infinite horizontal plane. `Physics.remove(handle)` releases it.
 - Moving Exterior leaves: `new DoorColliders(physics, doors)` accepts the exact pivot-local leaf triangles emitted by the shell loader. `sync(door)` copies each rendered hinge rotation to its position-driven Rapier body.
 - Player spawn: `new PlayerBody(physics, feet)` accepts the generated world position.
 - Impact frame: `ImpactWorld.sync({ people, vehicles })` accepts live render projections. Each person has an id, `THREE.Vector3` position and optional fallen state. Each vehicle has an id, position, heading, pitch and speed in metres per second.
@@ -20,6 +21,7 @@ Purpose: resolves world and player collision, measures vehicle contacts, and tur
 
 ## Errors
 
+- `E_PHYSICS_FLOOR`: a half-space elevation is not finite.
 - `E_RAGDOLL_INPUT`: a physics world, frame or impact is missing or invalid.
 - `E_RAGDOLL_RIG`: the character is not the audited Source skeleton or has an invalid body segment.
 - `E_RAGDOLL_OUTPUT`: a produced impact or body summary violates its schema.
@@ -34,6 +36,7 @@ Purpose: resolves world and player collision, measures vehicle contacts, and tur
 ## Invariants
 
 - Physics advances at 1/60 second. Ground, structures and streamed floors use the same generated geometry that is rendered.
+- The safety half-space has no horizontal bounds and remains below the world's lowest authored geometry and basin depth.
 - Each authored physical door leaf has one kinematic trimesh around the same hinge as its rendered pivot. Closed leaves block the capsule and a fully open leaf clears its published opening.
 - Vehicle impact starts only from a Rapier sensor intersection at 2 m/s or faster. A measured contact at 10 m/s or faster is fatal; slower contacts are falls only.
 - A fall starts from the person's current baked animation frame, removes that exact instanced slot and drives the same full Source skeleton. A proxy mesh or alternate skeleton is rejected.
