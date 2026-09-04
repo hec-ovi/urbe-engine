@@ -58,8 +58,9 @@ export class LitWindows {
 
 					if ( opening.kind !== 'window' ) continue;
 					if ( opening.material && this.factory.resolver.resolve( opening.material )?.physical?.transmission === 0 ) continue;
-					const rect = openingRect( floor, opening );
+					const rect = openingRect( floor, opening.glazing ? { ...opening, ...opening.glazing } : opening );
 					if ( ! rect ) continue;
+					rect.housingBackDepth = opening.glazing?.housingBackDepth;
 					for ( const [ index, roomRect ] of windowRects( rect ).entries() ) {
 
 						const seed = `${this.atlas.meta?.seed ?? ''}:${parcel.id}:${floor.elevation}:${opening.id ?? `${opening.edge}:${opening.offset}`}`;

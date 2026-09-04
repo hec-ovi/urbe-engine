@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { Venues, frameStrip } from './Venues.js';
+import { Venues } from './Venues.js';
 
 const atlas = {
 	parcels: [
@@ -85,20 +85,23 @@ describe( 'Venues', () => {
 
 	} );
 
-	it( 'builds one lit frame for the whole city, on the doors that are real', () => {
+	it( 'builds short header fixtures for playable entrances in two city draws', () => {
 
 		const doors = [ door( 'p0' ), door( 'p2' ) ];
 		const group = venues( doors, built( [ 'p0', 'p2' ] ) ).build( doors );
 
 		expect( group.children ).toHaveLength( 2 );
-		expect( group.getObjectByName( 'entrance-frame:housing' ).material.userData.key )
+		expect( group.getObjectByName( 'entrance-header:housing' ).material.userData.key )
 			.toBe( 'cyberpunk/window-frame/mid' );
-		const lens = group.getObjectByName( 'entrance-frame:lens' );
-		expect( lens.material.name ).toBe( 'entrance-frame:light' );
+		const lens = group.getObjectByName( 'entrance-header:lens' );
+		expect( lens.material.name ).toBe( 'entrance-header:light' );
 		expect( lens.material.map ).toBeNull();
 		expect( lens.material.emissiveMap ).toBeNull();
-		expect( lens.material.emissiveIntensity ).toBe( 90 );
-		expect( lens.geometry.getAttribute( 'position' ).count ).toBeGreaterThan( 0 );
+		expect( lens.material.emissiveIntensity ).toBe( 35 );
+		expect( lens.geometry.getAttribute( 'position' ).count ).toBe( 12 );
+		lens.geometry.computeBoundingBox();
+		expect( lens.geometry.boundingBox.min.y ).toBeGreaterThan( doors[ 0 ].height );
+		expect( lens.geometry.boundingBox.max.x - lens.geometry.boundingBox.min.x ).toBeLessThan( doors[ 0 ].width );
 
 	} );
 
@@ -112,10 +115,9 @@ describe( 'Venues', () => {
 			const entry = door( 'p0' );
 			entry.normal.copy( normal );
 			entry.along.set( normal.z, 0, - normal.x );
-			const { housings, lenses } = frameStrip( entry );
-
-			expect( housings ).toHaveLength( 3 );
-			expect( lenses ).toHaveLength( 3 );
+			const group = venues( [ entry ], built( [ 'p0' ] ) ).build( [ entry ] );
+			const housings = [ group.getObjectByName( 'entrance-header:housing' ).geometry ];
+			const lenses = [ group.getObjectByName( 'entrance-header:lens' ).geometry ];
 
 			for ( const geometry of lenses ) {
 

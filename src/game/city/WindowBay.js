@@ -8,7 +8,9 @@ export function windowRects( rect ) {
 		...rect,
 		start: rect.start.clone().lerp( rect.end, index / count ),
 		end: rect.start.clone().lerp( rect.end, ( index + 1 ) / count ),
-		width: rect.width / count
+		width: rect.width / count,
+		outerLeft: index === 0,
+		outerRight: index === count - 1
 	} ) );
 
 }
@@ -16,7 +18,7 @@ export function windowRects( rect ) {
 /** A room's open front starts behind the deepest authored curtain or reveal. */
 export function windowBay( floor, rect, wallDepth, occupied ) {
 
-	const inset = Math.max( 0.2, wallDepth + 0.06 );
+	const inset = Math.max( 0.2, wallDepth + 0.06, ( rect.housingBackDepth ?? 0 ) + 0.06 );
 	const width = rect.width - 0.06;
 	const bottom = Math.max( floor.elevation + 0.06, rect.y0 - 0.5 );
 	const top = Math.min( floor.elevation + floor.height - 0.08, rect.y1 + 0.15 );
@@ -33,7 +35,16 @@ export function windowBay( floor, rect, wallDepth, occupied ) {
 		if ( boundariesCross( footprint, floor.outline ) ) continue;
 		if ( ! clearsBoundary( footprint, floor.outline, Math.max( 0.16, wallDepth ) + 0.03 ) ) continue;
 		if ( occupied.some( ( other ) => overlaps( footprint, other ) ) ) continue;
-		return { footprint, bottom, top, width, depth, point: ( u, y, v ) => {
+		return { footprint, bottom, top, width, depth, returns: Number.isFinite( rect.housingBackDepth ) ? {
+			pocketDepth: Math.max( rect.housingBackDepth, wallDepth + 0.003 ),
+			outerLeft: rect.outerLeft, outerRight: rect.outerRight,
+			housingDepth: rect.housingBackDepth,
+			width: rect.width, bottom: rect.y0, top: rect.y1,
+			point: ( u, y, v ) => [
+				rect.start.x + along[ 0 ] * u - rect.normal.x * v, y,
+				rect.start.z + along[ 1 ] * u - rect.normal.z * v
+			]
+		} : null, point: ( u, y, v ) => {
 
 			const [ x, z ] = point( u, inset + v );
 			return [ x, y, z ];
@@ -64,6 +75,7 @@ export function appendBay( bay, surfaceFor, fixtures, color, level, lit ) {
 			level * brightness, cropRect( aspect, surface.aspect ) );
 
 	}
+	if ( bay.returns ) appendReturns( bay, surfaceFor, color, level );
 	if ( ! lit ) return;
 	const x0 = w * 0.22;
 	const x1 = w * 0.78;
@@ -76,6 +88,39 @@ export function appendBay( bay, surfaceFor, fixtures, color, level, lit ) {
 	face( fixtures, [ [ x1, y, z1 ], [ x1, t, z1 ], [ x0, t, z1 ], [ x0, y, z1 ] ], 22 );
 	face( fixtures, [ [ x0, y, z1 ], [ x0, t, z1 ], [ x0, t, z0 ], [ x0, y, z0 ] ], 22 );
 	face( fixtures, [ [ x1, y, z0 ], [ x1, t, z0 ], [ x1, t, z1 ], [ x1, y, z1 ] ], 22 );
+
+}
+
+/** Connects each open room perimeter to its authored housing, without a front face. */
+function appendReturns( bay, surfaceFor, color, level ) {
+
+	const { width: w, bottom: b, top: t, point: p, returns: r } = bay;
+	const front = ( u, y, depth = r.pocketDepth ) => r.point( u, y, depth );
+	const faces = [
+		[ 'left', [ front( 0, r.bottom ), p( 0, b, 0 ), p( 0, t, 0 ), front( 0, r.top ) ] ],
+		[ 'right', [ p( w, b, 0 ), front( r.width, r.bottom ), front( r.width, r.top ), p( w, t, 0 ) ] ],
+		[ 'floor', [ front( 0, r.bottom ), front( r.width, r.bottom ), p( w, b, 0 ), p( 0, b, 0 ) ] ],
+		[ 'ceiling', [ p( 0, t, 0 ), p( w, t, 0 ), front( r.width, r.top ), front( 0, r.top ) ] ]
+	];
+	if ( r.pocketDepth - r.housingDepth > 1e-6 ) {
+
+		faces.push(
+			[ 'floor', [ front( 0, r.bottom, r.housingDepth ), front( r.width, r.bottom, r.housingDepth ), front( r.width, r.bottom ), front( 0, r.bottom ) ] ],
+			[ 'ceiling', [ front( 0, r.top ), front( r.width, r.top ), front( r.width, r.top, r.housingDepth ), front( 0, r.top, r.housingDepth ) ] ]
+		);
+		if ( r.outerLeft ) faces.push( [ 'left', [ front( 0, r.bottom, r.housingDepth ), front( 0, r.bottom ), front( 0, r.top ), front( 0, r.top, r.housingDepth ) ] ] );
+		if ( r.outerRight ) faces.push( [ 'right', [ front( r.width, r.bottom ), front( r.width, r.bottom, r.housingDepth ), front( r.width, r.top, r.housingDepth ), front( r.width, r.top ) ] ] );
+
+	}
+	for ( const [ role, corners ] of faces ) {
+
+		const surface = surfaceFor( role );
+		const length = ( a, b ) => Math.hypot( ...a.map( ( v, i ) => v - b[ i ] ) );
+		const aspect = ( length( corners[ 0 ], corners[ 1 ] ) + length( corners[ 2 ], corners[ 3 ] ) )
+			/ ( length( corners[ 1 ], corners[ 2 ] ) + length( corners[ 3 ], corners[ 0 ] ) );
+		quad( surface.data, corners, surface.color ?? color, level, cropRect( aspect, surface.aspect ) );
+
+	}
 
 }
 

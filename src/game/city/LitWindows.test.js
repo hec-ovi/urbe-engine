@@ -150,6 +150,53 @@ describe( 'shell window rooms', () => {
 
 	} );
 
+	it( 'seals oblique edge rays from an unlit bay against bright neighboring scenery', () => {
+
+		for ( const housingDepth of [ 0.13, 0.7 ] ) {
+
+			const { windows, floor } = fixture();
+			const glazing = { offset: 2.065, sill: 0.865, width: 3.37, height: 1.87, glassDepth: 0.04, housingBackDepth: housingDepth };
+			floor.openings = [ { id: 'w0', kind: 'window', edge: 0, offset: 2, width: 3.5, height: 2, sill: 0.8, glazing } ];
+			const group = windows.build();
+			const scene = new THREE.Group();
+			const neighbor = new THREE.Mesh( new THREE.PlaneGeometry( 40, 20 ), new THREE.MeshBasicMaterial( { side: THREE.DoubleSide, color: 0xffffff } ) );
+			neighbor.position.set( 10, 5, 8 );
+			scene.add( group, neighbor );
+			scene.updateMatrixWorld( true );
+			for ( const mesh of group.children ) {
+
+				for ( const attribute of Object.values( mesh.geometry.attributes ) ) expect( Array.from( attribute.array ).every( Number.isFinite ) ).toBe( true );
+
+			}
+			const bottom = floor.elevation + glazing.sill;
+			const middle = glazing.offset + glazing.width / 2;
+			const edges = [
+				{ origin: [ 6, 1.84, - 3 ], target: ( inset ) => [ glazing.offset + inset, bottom + 0.6, housingDepth ] },
+				{ origin: [ 0, 1.84, - 3 ], target: ( inset ) => [ glazing.offset + glazing.width - inset, bottom + 0.6, housingDepth ] },
+				{ origin: [ middle, bottom + 4, - 3 ], target: ( inset ) => [ middle, bottom + inset, housingDepth ] },
+				{ origin: [ middle, bottom - 3, - 3 ], target: ( inset ) => [ middle, bottom + glazing.height - inset, housingDepth ] }
+			];
+			for ( const edge of edges ) {
+
+				const origin = new THREE.Vector3( ...edge.origin );
+				for ( const inset of [ 0.002, 0.01, 0.03 ] ) {
+
+					const target = new THREE.Vector3( ...edge.target( inset ) );
+					const hit = new THREE.Raycaster( origin, target.sub( origin ).normalize() ).intersectObject( scene, true )[ 0 ];
+					expect( hit?.object ).not.toBe( neighbor );
+					expect( hit?.object.geometry.getAttribute( 'color' ).getX( hit.face.a ) ).toBe( 0 );
+
+				}
+
+			}
+			windows.dispose();
+			neighbor.geometry.dispose();
+			neighbor.material.dispose();
+
+		}
+
+	} );
+
 	it( 'omits scenic rooms behind material-declared opaque glazing', () => {
 
 		const { windows, floor, factory } = fixture();

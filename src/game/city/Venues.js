@@ -12,32 +12,19 @@ const ASK_RADIUS = 140;
 /** And how often. A rota changes on the hour, never between two frames. */
 const ASK_INTERVAL = 4;
 
-const FRAME_HOUSING_KEY = 'cyberpunk/window-frame/mid';
-const FRAME_KELVIN = 3200;
-/** A door frame strip is read directly, so it sits above street exposure. */
-const FRAME_EMISSIVE = 90;
-const FRAME_HOUSING_WIDTH = 0.11;
-const FRAME_LIGHT_WIDTH = 0.045;
-const FRAME_DEPTH = 0.05;
-const FRAME_CLEARANCE = 0.003;
+const HEADER_HOUSING_KEY = 'cyberpunk/window-frame/mid';
+const HEADER_KELVIN = 3200;
+/** A compact header fixture identifies an entrance with a playable interior. */
+const HEADER_EMISSIVE = 35;
+const HEADER_HOUSING_WIDTH = 0.11;
+const HEADER_LIGHT_WIDTH = 0.045;
+const HEADER_DEPTH = 0.05;
+const HEADER_CLEARANCE = 0.003;
 const DEFAULT_SURFACE_DEPTH = 0.08;
 /** Dark fitted end cap at each end of a continuous light bar. */
-const FRAME_END_CAP = 0.055;
+const HEADER_END_CAP = 0.055;
 
-/**
- * Which buildings are real, said in light.
- *
- * The playtest complaint this answers is "I just do not know which ones are
- * real". A building with an interior has a way in, and now it says so:
- * a thin lit strip runs up both sides of its door frame and over the head, and
- * the entrance fixture the exterior box put there is lit. A parcel with no
- * interior behind it keeps its door shut, so it gets neither, and never offers a
- * prompt. Nothing floats: every marker is a fixture on a real surface.
- *
- * A venue's sign follows the simulation rather than the clock: it is lit while
- * somebody is on duty in there, and dark when the place has shut. The whole
- * city's strips are one merged mesh, so the legibility costs one draw call.
- */
+/** Entrance header lights identify playable interiors; venue signs follow staffing. */
 export class Venues {
 
 	/**
@@ -94,7 +81,7 @@ export class Venues {
 	}
 
 	/**
-	 * The lit strip around every real entrance, as one mesh for the city.
+	 * Compact header fixtures, merged into one housing and one lens draw.
 	 * @param doors the same doors the constructor was given
 	 */
 	build( doors ) {
@@ -106,7 +93,7 @@ export class Venues {
 
 		for ( const door of doors ) {
 
-			const frame = frameStrip( door );
+			const frame = headerFixture( door );
 			housings.push( ...frame.housings );
 			lenses.push( ...frame.lenses );
 
@@ -116,9 +103,9 @@ export class Venues {
 
 			const mesh = new THREE.Mesh(
 				BufferGeometryUtils.mergeGeometries( housings, false ),
-				this.factory.build( FRAME_HOUSING_KEY )
+				this.factory.build( HEADER_HOUSING_KEY )
 			);
-			mesh.name = 'entrance-frame:housing';
+			mesh.name = 'entrance-header:housing';
 			group.add( mesh );
 
 		}
@@ -127,9 +114,9 @@ export class Venues {
 
 			const mesh = new THREE.Mesh(
 				BufferGeometryUtils.mergeGeometries( lenses, false ),
-				frameLightMaterial()
+				headerLightMaterial()
 			);
-			mesh.name = 'entrance-frame:lens';
+			mesh.name = 'entrance-header:lens';
 			group.add( mesh );
 
 		}
@@ -172,15 +159,15 @@ export class Venues {
 }
 
 /** A continuous emitter has no repeated fixture map, mask, or bezel. */
-function frameLightMaterial() {
+function headerLightMaterial() {
 
-	const color = kelvinColor( FRAME_KELVIN );
+	const color = kelvinColor( HEADER_KELVIN );
 
 	return new THREE.MeshStandardMaterial( {
-		name: 'entrance-frame:light',
+		name: 'entrance-header:light',
 		color,
 		emissive: color,
-		emissiveIntensity: FRAME_EMISSIVE,
+		emissiveIntensity: HEADER_EMISSIVE,
 		roughness: 0.45,
 		metalness: 0
 	} );
@@ -213,62 +200,30 @@ function nameOf( building ) {
 
 }
 
-/**
- * Two jambs and a head, standing just proud of the facade around the opening,
- * built in the door's own frame (along the opening, out of it) so a facade at
- * any angle gets its strips on the frame and not on the world axes.
- */
-export function frameStrip( door ) {
+/** A short centered lamp fitted above the entrance in its own facade frame. */
+function headerFixture( door ) {
 
 	const yaw = Math.atan2( door.normal.x, door.normal.z );
-	const y0 = door.center.y;
-	const housings = [];
-	const lenses = [];
-	const rear = ( door.surfaceDepth ?? DEFAULT_SURFACE_DEPTH ) + FRAME_CLEARANCE;
-
-	const bar = ( length, height, lensWidth, lensHeight, offset, y ) => {
-
-		const housing = new THREE.BoxGeometry( length, height, FRAME_DEPTH );
-		housing.deleteAttribute( 'uv1' );
-		housing.rotateY( yaw );
-		housing.translate(
-			door.center.x + door.along.x * offset + door.normal.x * ( rear + FRAME_DEPTH / 2 ),
-			y,
-			door.center.z + door.along.z * offset + door.normal.z * ( rear + FRAME_DEPTH / 2 )
-		);
-		housings.push( housing.toNonIndexed() );
-
-		// The emitting surface is one fitted face, not the six faces of a box.
-		// Its uniform `strip` variant can repeat over any valid door size without
-		// repeating the dark bezel of the canonical lamp texture through the bar.
-		const lens = new THREE.PlaneGeometry( lensWidth, lensHeight );
-		lens.deleteAttribute( 'uv1' );
-		lens.rotateY( yaw );
-		lens.translate(
-			door.center.x + door.along.x * offset + door.normal.x * ( rear + FRAME_DEPTH + 0.001 ),
-			y,
-			door.center.z + door.along.z * offset + door.normal.z * ( rear + FRAME_DEPTH + 0.001 )
-		);
-		lenses.push( lens.toNonIndexed() );
-
-	};
-
-	for ( const side of [ - 1, 1 ] ) {
-
-		bar(
-			FRAME_HOUSING_WIDTH, door.height,
-			FRAME_LIGHT_WIDTH, Math.max( FRAME_LIGHT_WIDTH, door.height - FRAME_END_CAP * 2 ),
-			side * door.width / 2, y0 + door.height / 2
-		);
-
-	}
-
-	bar(
-		door.width + FRAME_HOUSING_WIDTH, FRAME_HOUSING_WIDTH,
-		Math.max( FRAME_LIGHT_WIDTH, door.width + FRAME_HOUSING_WIDTH - FRAME_END_CAP * 2 ), FRAME_LIGHT_WIDTH,
-		0, y0 + door.height
+	const rear = ( door.surfaceDepth ?? DEFAULT_SURFACE_DEPTH ) + HEADER_CLEARANCE;
+	const length = Math.min( 1.2, door.width * 0.45 );
+	const y = door.center.y + door.height + HEADER_HOUSING_WIDTH / 2;
+	const housing = new THREE.BoxGeometry( length, HEADER_HOUSING_WIDTH, HEADER_DEPTH );
+	housing.deleteAttribute( 'uv1' );
+	housing.rotateY( yaw );
+	housing.translate(
+		door.center.x + door.normal.x * ( rear + HEADER_DEPTH / 2 ), y,
+		door.center.z + door.normal.z * ( rear + HEADER_DEPTH / 2 )
 	);
-
-	return { housings, lenses };
+	const lens = new THREE.PlaneGeometry( Math.max( HEADER_LIGHT_WIDTH, length - HEADER_END_CAP * 2 ), HEADER_LIGHT_WIDTH );
+	lens.deleteAttribute( 'uv1' );
+	lens.rotateY( yaw );
+	lens.translate(
+		door.center.x + door.normal.x * ( rear + HEADER_DEPTH + 0.001 ), y,
+		door.center.z + door.normal.z * ( rear + HEADER_DEPTH + 0.001 )
+	);
+	const result = { housings: [ housing.toNonIndexed() ], lenses: [ lens.toNonIndexed() ] };
+	housing.dispose();
+	lens.dispose();
+	return result;
 
 }

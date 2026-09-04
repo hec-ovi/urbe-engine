@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.15: scenic rooms meet authored glazing housings with fitted perimeter returns. Playable entrances carry compact header lights.
+
 0.17.14: upstairs scenic rooms use five textured faces, bounded room widths and seeded wide-image variants. Closed shells retain fitted ground privacy; playable interiors retain their authored windows. Monolithic and large-panel concrete have structural collision.
 
 0.17.13: fitted PBR decals preserve receiver depth and authored basecolor alpha.
