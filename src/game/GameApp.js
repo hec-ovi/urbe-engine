@@ -234,6 +234,7 @@ export class GameApp {
 		const links = new Links( connections, factory, rooftopSpans ).build();
 		const props = new Dressing( atlas, connections.networks.walk, factory ).build();
 		this.transit = new Transit( { atlas, networks: connections.networks, factory } );
+		this.windowRooms = new LitWindows( atlas, buildings, factory );
 		this.scene.add(
 			neon.group,
 			lamps.group,
@@ -242,7 +243,7 @@ export class GameApp {
 			this.transit.group,
 			new LaneMarkings( connections.networks, config.laneMode ).build(),
 			new Crossings( atlas ).build(),
-			new LitWindows( atlas, buildings ).build()
+			this.windowRooms.build( { enabled: ! config.off.has( 'interiors' ) } )
 		);
 
 		this.view.step( 'lighting the street' );
@@ -250,8 +251,7 @@ export class GameApp {
 		this.lights = new CityLights( fixtures, this.lighting.capacity );
 		this.scene.add( this.lights.group );
 		this.roomView = new RoomView( this.stream.rooms, ROOM_VISIBLE_RADIUS );
-		// A building you can walk into says so, and one with nothing behind its
-		// facade says that too, by staying dark and offering no prompt.
+		// Entrance fixtures and prompts identify buildings with playable interiors.
 		this.venues = new Venues( { atlas, buildings, doors: city.entrances, fixtures, factory } );
 		this.scene.add( this.venues.build( city.entrances ) );
 		this.#hangHaze( fixtures );

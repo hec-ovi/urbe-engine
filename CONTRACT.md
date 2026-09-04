@@ -2,7 +2,7 @@
 
 Purpose: assembles the generated city boxes into a cataloged world and serves its launcher, previews, creation flow and playable first-person game.
 
-Status: v0.17.7.
+Status: v0.17.8.
 
 ## Inputs
 
@@ -30,7 +30,7 @@ Status: v0.17.7.
 
 ## Invariants
 
-- Generated data and contracted external model assets are authoritative. Engine does not invent parcels, population, story targets, materials or fallback geometry.
+- Generated data and contracted external model assets are authoritative. Engine does not invent parcels, population, story targets, materials or fallback geometry. Closed shells may carry decorative room bays fitted to their published windows and floor outlines; these have no gameplay or collision role.
 - A catalog game and every save revision remain tied to one validated city, quest bundle, simulation replay and player state.
 - WebGPU is the default renderer. WebGL2 uses the same world and gameplay data through its documented quality fallback.
 

@@ -1,9 +1,5 @@
 const RESORT_INTERVAL = 0.2;
-/**
- * A floor other than the one being stood on is behind a slab. From the street
- * that means the ground floor through its windows and nothing above it, which
- * is what the lit window panes are for.
- */
+/** Vertical visibility band for streamed playable rooms around the player. */
 const FLOOR_BAND = 4.5;
 
 /**

@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.8: closed-shell windows show fitted textured room bays and ceiling strips with seeded night lighting. Playable interiors remain unobstructed.
+
 0.17.7: playable story bundles consume the Quests 0.8.2 producer while retaining handoff format 1.1.
 
 0.17.6: street-light heads stay outside authored building, tree-anchor, highway and movement volumes. Building preview failures expose their closed viewer code and keep the correct retry action. Persistent NPC headings reach the rendered body without changing its appearance.
