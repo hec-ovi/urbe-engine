@@ -2,13 +2,13 @@
 
 Purpose: assembles the generated city boxes into a cataloged world and serves its launcher, previews, creation flow and playable first-person game.
 
-Status: v0.17.6.
+Status: v0.17.7.
 
 ## Inputs
 
 - World assembly consumes Atlas, Connections, Exterior, Interior, Materials, Simulation, Naming and Quests only through the contracts listed below.
 - `npm run assemble` and `npm run assemble-city` take the requests in [src/assembly/CONTRACT.md](src/assembly/CONTRACT.md) and publish [world-manifest.schema.json](src/assembly/schema/world-manifest.schema.json), including the post-exterior rooftop spans fitted by Connections.
-- A playable story is the Quests v0.8.1 handoff `quest-bundle.json` v1.1 plus its six counted catalogs and object-valued `host-capabilities.json`, validated by [src/quest-bundle/CONTRACT.md](src/quest-bundle/CONTRACT.md).
+- A playable story is the Quests v0.8.2 handoff `quest-bundle.json` v1.1 plus its six counted catalogs and object-valued `host-capabilities.json`, validated by [src/quest-bundle/CONTRACT.md](src/quest-bundle/CONTRACT.md).
 - Catalog, import, export, staged creation and revisioned save calls use [launcher-request.schema.json](src/server/schema/launcher-request.schema.json) at `POST /api/launcher`. Browser values use [launcher-api.schema.json](src/launcher/schema/launcher-api.schema.json); stored values use [src/library/CONTRACT.md](src/library/CONTRACT.md).
 - A missing building preview takes [building-build-request.schema.json](src/server/schema/building-build-request.schema.json) at `POST /api/building`.
 - NPC text dialogue takes [talk-request.schema.json](src/server/schema/talk-request.schema.json), including optional live quest state, at `POST /api/talk`. `LLM_BASE_URL` selects an OpenAI-compatible endpoint and `LLM_MODEL` selects its model.

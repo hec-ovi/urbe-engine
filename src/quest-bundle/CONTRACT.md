@@ -1,6 +1,6 @@
 # CONTRACT: quest bundle consumer
 
-Purpose: validates and selects the complete Quests v0.8.1 engine handoff without breaking cross-file references.
+Purpose: validates and selects the complete Quests v0.8.2 engine handoff without breaking cross-file references.
 
 ## Inputs
 

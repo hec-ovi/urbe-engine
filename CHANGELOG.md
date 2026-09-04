@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.7: playable story bundles consume the Quests 0.8.2 producer while retaining handoff format 1.1.
+
 0.17.6: street-light heads stay outside authored building, tree-anchor, highway and movement volumes. Building preview failures expose their closed viewer code and keep the correct retry action. Persistent NPC headings reach the rendered body without changing its appearance.
 
 0.17.5: city manifests carry Connections rooftop spans and the game renders their exact fitted catenaries. Authored two-sided shell surfaces remain two-sided after material resolution. Every Exterior entrance, balcony and roof-bulkhead leaf on an interior parcel has its own stable interaction and a kinematic collider aligned to the rendered hinge.
