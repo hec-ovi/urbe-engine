@@ -104,6 +104,8 @@ describe( 'building entrance availability', () => {
 			const scene = new THREE.Group();
 			scene.add(
 				mesh( 'mergedwall', 'cyberpunk/concrete/mid', 0 ),
+				mesh( 'mergedopaque', 'cyberpunk/window-glass-opaque/rich', 6 ),
+				mesh( 'mergedoffice', 'cyberpunk/window-glass-office/rich', 8 ),
 				mesh( 'mergedframes', 'cyberpunk/window-frame/mid', 2 ),
 				mesh( 'mergedlight', 'cyberpunk/light-fixture/mid', 4 )
 			);
@@ -116,8 +118,8 @@ describe( 'building entrance availability', () => {
 		} ] ] );
 		const city = await new BuildingsLoader( factory, loader ).load( buildings );
 
-		expect( city.group.children ).toHaveLength( 3 );
-		expect( city.shellColliders.get( 'p0' ).getAttribute( 'position' ).count ).toBe( 3 );
+		expect( city.group.children ).toHaveLength( 5 );
+		expect( city.shellColliders.get( 'p0' ).getAttribute( 'position' ).count ).toBe( 9 );
 
 	} );
 

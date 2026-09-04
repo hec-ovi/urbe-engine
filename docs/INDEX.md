@@ -10,6 +10,7 @@
 - `src/quest-bundle/`: atomic consumer and selector for the Quests v0.8.2 handoff v1.1: definitions, objectives, investigations, fixed mechanic bindings, mission asset requests, item bindings and host capabilities (src/quest-bundle/CONTRACT.md).
 
 - `src/game/`: the playable city (`?mode=game`); first-person controller on Rapier, night scene from the assembled GLBs, ground from the blueprint's cover polygons, neon and lit windows, simulation-driven crowd and lane-graph traffic, doors into continuous interiors (src/game/CONTRACT.md). Depends on ../atlas, ../connections, ../materials, ../simulation contracts.
+  - Material-declared opaque windows omit scenic rooms; office and opaque glazing retain shell collision.
   - `data/`: run config, world loading, signal state
   - `ground/`: cover polygons to geometry, highway ramps, decks and supports from Atlas dimensions and elevation knots, the published kerb strip and a kerb cut from pavement edges where no strip exists
   - `city/`: shells with authored surface and blueprint material variants, doors, neon, fitted window room bays with office, apartment and lobby image plates for closed shells, lamps, road paint and the painted crossings at every marked junction, interiors streamed a floor at a time from each floor's own GLB and cut into rooms, and which of them are in view

@@ -34,6 +34,7 @@ const MAIN_THREAD_SLICE_MS = 8;
 // duplicates millions of triangles without changing the walkable shell.
 const COLLIDER_KINDS = new Set( [
 	'concrete', 'wall', 'column', 'window-glass', 'door', 'door-glass',
+	'window-glass-opaque', 'window-glass-office',
 	'floor-slab', 'roof', 'parapet', 'balcony-slab', 'balcony-rail',
 	'roof-artifact', 'ac-unit', 'metal'
 ] );

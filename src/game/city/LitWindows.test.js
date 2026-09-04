@@ -106,6 +106,21 @@ describe( 'shell window rooms', () => {
 
 	} );
 
+	it( 'omits scenic rooms behind material-declared opaque glazing', () => {
+
+		const { windows, floor, factory } = fixture();
+		const key = 'cyberpunk/window-glass-opaque/rich';
+		floor.openings.forEach( ( opening ) => { opening.material = key; } );
+		factory.resolver = { resolve: vi.fn( () => ( { physical: { transmission: 0 } } ) ) };
+		expect( windows.build().children ).toHaveLength( 0 );
+		expect( factory.resolver.resolve ).toHaveBeenCalledWith( key );
+		expect( factory.build ).not.toHaveBeenCalled();
+		factory.resolver.resolve.mockReturnValue( { physical: { transmission: 0.78 } } );
+		expect( windows.build().children.length ).toBeGreaterThan( 0 );
+		windows.dispose();
+
+	} );
+
 	it( 'preserves seed identity, varies lighting between seeds and releases owned resources on rebuild', () => {
 
 		const { windows, map } = fixture();
