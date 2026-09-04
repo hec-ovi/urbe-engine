@@ -1,7 +1,8 @@
 import * as THREE from 'three/webgpu';
+import { InspectionZoom } from './InspectionZoom.js';
 
 export const WALK_SPEED = 1.4;
-export const RUN_SPEED = 4;
+export const RUN_SPEED = 8;
 export const CROUCH_SPEED = 0.9;
 
 const SENSITIVITY = 0.0022;
@@ -21,6 +22,7 @@ export class PlayerController {
 
 		this.body = body;
 		this.camera = camera;
+		this.zoom = new InspectionZoom( camera );
 		this.input = input;
 		this.yaw = 0;
 		this.pitch = 0;
@@ -41,13 +43,7 @@ export class PlayerController {
 
 	update( delta ) {
 
-		const zoom = this.input.locked && ! this.frozen && this.input.zooming ? 2 : 1;
-		if ( this.camera.zoom !== zoom ) {
-
-			this.camera.zoom = zoom;
-			this.camera.updateProjectionMatrix();
-
-		}
+		this.zoom.update( delta, this.input.zooming, this.input.locked && ! this.frozen );
 		this.#look();
 		this.#stance();
 
@@ -82,7 +78,7 @@ export class PlayerController {
 		}
 
 		this.bob = ! this.movementLocked && moving && this.body.grounded
-			? this.bob + delta * BOB_RATE * ( speed / WALK_SPEED )
+			? this.bob + delta * BOB_RATE * ( Math.min( speed, 4 ) / WALK_SPEED )
 			: 0;
 
 		const eye = this.body.eye;

@@ -21,7 +21,7 @@
   - `sky/`: night sky, moon key, stars
   - `physics/`: fixed-step Rapier world, generated trimesh collision, player capsule, measured fatal and nonfatal vehicle contacts and one full Source-rig ragdoll (src/game/physics/CONTRACT.md)
   - `hydro/`: exact Atlas lagoon, river and sea-coast surfaces mounted with Materials-owned PBR bindings and deterministic normal motion (src/game/hydro/CONTRACT.md)
-  - `player/`: input, first-person controller with selectable running speed and held inspection zoom, interaction
+  - `player/`: input, first-person controller with selectable running speed and time-based inspection zoom, interaction
   - `agents/`: character provenance, pose baking, crowd, traffic, persistent NPC materialization, crouch, follow, lead, transit passenger carry and schedule return on Connections' authoritative 3D paths (src/game/agents/CONTRACT.md)
   - `investigation/`: deterministic authored incident assembly and live E/R evidence flow, with exact quest bindings, Source final-pose bodies, mission props, PBR decals and catalog restoration (src/game/investigation/CONTRACT.md)
   - `quests/`: all 16 cast quest actions, including fixed-asset rescue, access, hacking and sabotage, follow or lead escort, fatal-impact assassination and measured public-transit completion (src/game/quests/CONTRACT.md)

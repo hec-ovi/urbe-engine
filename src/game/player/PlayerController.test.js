@@ -109,19 +109,37 @@ describe( 'PlayerController', () => {
 		const original = controller.camera.projectionMatrix.clone();
 		fire( 'mousedown', { button: 2 } );
 		mouse( 20, 0 );
-		controller.update( 0 );
-		expect( controller.camera.zoom ).toBe( 2 );
-		expect( controller.yaw ).toBeCloseTo( - 20 * 0.0022 / 2 );
+		controller.update( 1 / 60 );
+		expect( controller.camera.zoom ).toBeGreaterThan( 1 );
+		expect( controller.camera.zoom ).toBeLessThan( 2 );
+		expect( controller.yaw ).toBeCloseTo( - 20 * 0.0022 / controller.camera.zoom );
 		expect( controller.camera.projectionMatrix.equals( original ) ).toBe( false );
 		fire( 'mouseup', { button: 2 } );
-		controller.update( 0 );
+		const zoomed = controller.camera.zoom;
+		controller.update( 1 / 60 );
+		expect( controller.camera.zoom ).toBeLessThan( zoomed );
+		expect( controller.camera.zoom ).toBeGreaterThan( 1 );
+		for ( let i = 0; i < 30; i ++ ) controller.update( 1 / 60 );
 		expect( controller.camera.projectionMatrix.equals( original ) ).toBe( true );
 		fire( 'mousedown', { button: 2 } );
-		controller.update( 0 );
+		controller.update( 1 / 60 );
 		fire( 'pointerlockchange', {} );
 		controller.update( 0 );
 		expect( input.zooming ).toBe( false );
 		expect( controller.camera.zoom ).toBe( 1 );
+
+	} );
+
+	it( 'uses the same zoom transition at different frame rates', () => {
+
+		const slow = harness();
+		const fast = harness();
+		slow.fire( 'mousedown', { button: 2 } );
+		fast.fire( 'mousedown', { button: 2 } );
+		for ( let i = 0; i < 6; i ++ ) slow.controller.update( 1 / 30 );
+		for ( let i = 0; i < 12; i ++ ) fast.controller.update( 1 / 60 );
+		expect( slow.controller.camera.zoom ).toBeCloseTo( fast.controller.camera.zoom, 10 );
+		expect( slow.controller.camera.zoom ).toBeGreaterThan( 1.95 );
 
 	} );
 
