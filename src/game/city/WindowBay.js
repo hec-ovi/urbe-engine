@@ -33,11 +33,16 @@ export function windowBay( floor, rect, wallDepth, occupied ) {
 }
 
 /** Five room faces and one shallow ceiling luminaire, no front-facing card. */
-export function appendBay( bay, surfaces, fixtures, color, level, lit ) {
+export function appendBay( bay, surfaces, fixtures, color, level, lit, rear = null ) {
 
 	const { width: w, depth: d, bottom: b, top: t, point: p } = bay;
 	const face = ( data, corners, brightness ) => quad( data, corners.map( ( v ) => p( ...v ) ), color, brightness );
-	face( surfaces, [ [ 0, b, d ], [ w, b, d ], [ w, t, d ], [ 0, t, d ] ], level * 0.65 );
+	const rearCorners = [ [ 0, b, d ], [ w, b, d ], [ w, t, d ], [ 0, t, d ] ];
+	if ( rear ) {
+
+		quad( rear.data, rearCorners.map( ( v ) => p( ...v ) ), rear.color, rear.level, cropRect( w / ( t - b ), rear.aspect ) );
+
+	} else face( surfaces, rearCorners, level * 0.65 );
 	face( surfaces, [ [ 0, b, 0 ], [ 0, b, d ], [ 0, t, d ], [ 0, t, 0 ] ], level * 0.45 );
 	face( surfaces, [ [ w, b, d ], [ w, b, 0 ], [ w, t, 0 ], [ w, t, d ] ], level * 0.5 );
 	face( surfaces, [ [ 0, b, 0 ], [ w, b, 0 ], [ w, b, d ], [ 0, b, d ] ], level * 0.2 );
@@ -57,11 +62,12 @@ export function appendBay( bay, surfaces, fixtures, color, level, lit ) {
 
 }
 
-function quad( data, corners, color, level ) {
+function quad( data, corners, color, level, rect = null ) {
 
 	const width = Math.hypot( ...corners[ 1 ].map( ( v, i ) => v - corners[ 0 ][ i ] ) );
 	const height = Math.hypot( ...corners[ 3 ].map( ( v, i ) => v - corners[ 0 ][ i ] ) );
-	const uv = [ [ 0, height ], [ width, height ], [ width, 0 ], [ 0, 0 ] ];
+	const [ u0, v0, u1, v1 ] = rect ?? [ 0, 0, width, height ];
+	const uv = [ [ u0, v1 ], [ u1, v1 ], [ u1, v0 ], [ u0, v0 ] ];
 	for ( const i of [ 0, 1, 2, 0, 2, 3 ] ) {
 
 		data.position.push( ...corners[ i ] );
@@ -69,6 +75,15 @@ function quad( data, corners, color, level ) {
 		data.uv.push( ...uv[ i ] );
 
 	}
+
+}
+
+/** Center crop preserves image proportions on any fitted rear wall. */
+function cropRect( targetAspect, imageAspect ) {
+
+	const u = Math.min( 1, targetAspect / imageAspect );
+	const v = Math.min( 1, imageAspect / targetAspect );
+	return [ ( 1 - u ) / 2, ( 1 - v ) / 2, ( 1 + u ) / 2, ( 1 + v ) / 2 ];
 
 }
 

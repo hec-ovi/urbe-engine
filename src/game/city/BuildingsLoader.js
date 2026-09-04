@@ -173,7 +173,7 @@ export class BuildingsLoader {
 			const key = node.material?.name ?? '';
 			const surface = bucketFor(
 				key,
-				node.material?.userData?.materialVariant,
+				node.material?.userData?.materialVariant ?? blueprint.materialVariants?.[ key ],
 				node.material?.side === THREE.DoubleSide
 			);
 			if ( ! hasInterior && isDoorLeaf( name ) ) {

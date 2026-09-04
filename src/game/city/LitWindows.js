@@ -6,8 +6,10 @@ import { openingRect } from './Openings.js';
 import { windowBay, appendBay } from './WindowBay.js';
 
 const LIT_SHARE = 0.42;
+const GROUND_LIT_SHARE = 0.18;
+const PLATE_KEY = 'cyberpunk/window-room/mid';
 
-/** Fitted scenic rooms behind closed shells, sharing two city-wide draws. */
+/** Fitted scenic rooms behind closed shells, sharing at most five city draws. */
 export class LitWindows {
 
 	constructor( atlas, buildings, factory ) {
@@ -26,12 +28,14 @@ export class LitWindows {
 		if ( ! enabled ) return this.group;
 		const surfaces = { position: [], color: [], uv: [] };
 		const fixtures = { position: [], color: [], uv: [] };
+		const plates = new Map();
 
 		for ( const parcel of this.atlas.parcels ) {
 
 			const building = this.buildings.get( parcel.id );
 			if ( building?.hasInterior !== false ) continue;
 			const domestic = [ 'residential', 'hotel' ].includes( parcel.type );
+			const variant = domestic ? 'apartment' : [ 'offices', 'corpo' ].includes( parcel.type ) ? 'office' : 'lobby';
 			for ( const floor of building.blueprint.floors ) {
 
 				if ( floor.elevation < 0 ) continue;
@@ -45,10 +49,17 @@ export class LitWindows {
 					const bay = windowBay( floor, rect, building.blueprint.facade?.wallDepth ?? 0.5, occupied );
 					if ( ! bay ) continue;
 					occupied.push( bay.footprint );
-					const lit = rng.next() < LIT_SHARE;
+					const lit = rng.next() < ( floor.elevation === 0 ? GROUND_LIT_SHARE : LIT_SHARE );
 					const color = new THREE.Color( domestic ? 0xffd7b0 : 0xe4edff );
-					const level = lit ? rng.range( 8, 16 ) : 0.045;
-					appendBay( bay, surfaces, fixtures, color, level, lit );
+					const level = lit ? rng.range( 8, 16 ) : 0;
+					let rear = null;
+					if ( lit ) {
+
+						if ( ! plates.has( variant ) ) plates.set( variant, { position: [], color: [], uv: [] } );
+						rear = { data: plates.get( variant ), aspect: 1, color: new THREE.Color( 0xffffff ), level: level * 1.8 };
+
+					}
+					appendBay( bay, surfaces, fixtures, color, level, lit, rear );
 
 				}
 
@@ -58,9 +69,16 @@ export class LitWindows {
 
 		if ( surfaces.position.length ) {
 
-			const map = this.factory.build( 'cyberpunk/plaster/mid', 'plain' ).map;
-			this.group.add( mesh( 'rooms', surfaces, map ) );
+			const plaster = this.factory.build( 'cyberpunk/plaster/mid', 'plain' );
+			this.group.add( mesh( 'rooms', surfaces, plaster ) );
 			if ( fixtures.position.length ) this.group.add( mesh( 'fixtures', fixtures ) );
+			for ( const [ variant, data ] of plates ) {
+
+				// Explicit plate IDs also participate on tiers with a small pattern budget.
+				const plate = this.factory.build( PLATE_KEY, variant );
+				this.group.add( mesh( `plate:${variant}`, data, plate ) );
+
+			}
 
 		}
 		return this.group;
@@ -82,7 +100,7 @@ export class LitWindows {
 
 }
 
-function mesh( name, data, map = null ) {
+function mesh( name, data, catalog = null ) {
 
 	const geometry = new THREE.BufferGeometry();
 	for ( const [ name, size ] of [ [ 'position', 3 ], [ 'color', 3 ], [ 'uv', 2 ] ] ) {
@@ -94,7 +112,9 @@ function mesh( name, data, map = null ) {
 	const material = new THREE.MeshBasicNodeMaterial( { side: THREE.DoubleSide, fog: true } );
 	material.colorNode = vec3( 0 );
 	const tint = attribute( 'color', 'vec3' ).mul( nightLevel );
-	material.emissiveNode = map ? tint.mul( texture( map ).rgb ) : tint;
+	const fallback = catalog?.color ?? new THREE.Color( catalog ? 0xff00ff : 0xffffff );
+	const surface = catalog?.map ? texture( catalog.map ).rgb : vec3( fallback.r, fallback.g, fallback.b );
+	material.emissiveNode = tint.mul( surface );
 	const result = new THREE.Mesh( geometry, material );
 	result.name = `lit-windows:${name}`;
 	return result;

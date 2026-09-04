@@ -2,7 +2,7 @@ import { uniform } from 'three/tsl';
 
 /**
  * How much of the night's own light is on, 0 in full day and 1 after dusk.
- * Node materials that write their own emission (the lit window panes) multiply
+ * Node materials that write their own emission (the scenic window rooms) multiply
  * by this, so one uniform switches the whole city with no shader rebuild.
  */
 export const nightLevel = uniform( 1 );

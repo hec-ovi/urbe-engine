@@ -15,21 +15,22 @@ function fixture( { hasInterior = false, seed = 'night', outline = [ [ 0, 0 ], [
 	const buildings = new Map( [ [ 'shell', { hasInterior, blueprint: { facade: { wallDepth: 0.55 }, floors: [ floor ] } } ] ] );
 	const map = new THREE.Texture();
 	const factory = { build: vi.fn( () => ( { map } ) ) };
-	return { windows: new LitWindows( atlas, buildings, factory ), floor, map, factory, buildings };
+	return { windows: new LitWindows( atlas, buildings, factory ), atlas, floor, map, factory, buildings };
 
 }
 
 describe( 'shell window rooms', () => {
 
-	it( 'builds textured recessed rooms and visible ceiling strips in two bounded draws', () => {
+	it( 'builds textured recessed rooms and visible ceiling strips in bounded draws', () => {
 
 		const { windows, factory, floor } = fixture();
 		const group = windows.build();
 		expect( factory.build ).toHaveBeenCalledWith( 'cyberpunk/plaster/mid', 'plain' );
-		expect( group.children ).toHaveLength( 2 );
+		expect( group.children ).toHaveLength( 3 );
 		const rooms = group.getObjectByName( 'lit-windows:rooms' );
 		const lamps = group.getObjectByName( 'lit-windows:fixtures' );
-		expect( rooms.geometry.getAttribute( 'position' ).count ).toBe( 8 * 30 );
+		const plate = group.getObjectByName( 'lit-windows:plate:apartment' );
+		expect( rooms.geometry.getAttribute( 'position' ).count + plate.geometry.getAttribute( 'position' ).count ).toBe( 8 * 30 );
 		const roomVertices = rooms.geometry.getAttribute( 'position' );
 		for ( let i = 0; i < roomVertices.count; i += 3 ) {
 
@@ -54,6 +55,54 @@ describe( 'shell window rooms', () => {
 
 		}
 		windows.dispose();
+
+	} );
+
+	it( 'selects exact room images by use and crops them without stretching or repeating', () => {
+
+		for ( const [ type, variant ] of [ [ 'corpo', 'office' ], [ 'residential', 'apartment' ], [ 'commerce', 'lobby' ] ] ) {
+
+			const { windows, atlas, factory } = fixture();
+			atlas.parcels[ 0 ].type = type;
+			const group = windows.build();
+			expect( factory.build ).toHaveBeenCalledWith( 'cyberpunk/window-room/mid', variant );
+			const plate = group.getObjectByName( `lit-windows:plate:${variant}` );
+			const uv = plate.geometry.getAttribute( 'uv' );
+			const p = plate.geometry.getAttribute( 'position' );
+			for ( const value of uv.array ) {
+
+				expect( value ).toBeGreaterThanOrEqual( 0 );
+				expect( value ).toBeLessThanOrEqual( 1 );
+
+			}
+			const width = Math.hypot( p.getX( 1 ) - p.getX( 0 ), p.getZ( 1 ) - p.getZ( 0 ) );
+			const height = p.getY( 2 ) - p.getY( 1 );
+			expect( ( uv.getX( 1 ) - uv.getX( 0 ) ) / ( uv.getY( 1 ) - uv.getY( 2 ) ) ).toBeCloseTo( width / height, 5 );
+			expect( uv.getY( 0 ) ).toBe( 1 );
+			expect( uv.getY( 2 ) ).toBe( 0 );
+			windows.dispose();
+
+		}
+
+	} );
+
+	it( 'gives unlit rooms opaque black surfaces and fewer ground-floor lit bays', () => {
+
+		const upper = fixture();
+		const ground = fixture();
+		ground.floor.elevation = 0;
+		const up = upper.windows.build();
+		const down = ground.windows.build();
+		const count = ( group ) => ( group.getObjectByName( 'lit-windows:fixtures' )?.geometry.getAttribute( 'position' ).count ?? 0 ) / 30;
+		expect( count( down ) ).toBeLessThan( count( up ) );
+		const rooms = up.getObjectByName( 'lit-windows:rooms' );
+		expect( rooms.material.transparent ).toBe( false );
+		const colors = rooms.geometry.getAttribute( 'color' ).array;
+		let blackTriangles = 0;
+		for ( let i = 0; i < colors.length; i += 9 ) if ( colors.slice( i, i + 9 ).every( ( value ) => value === 0 ) ) blackTriangles ++;
+		expect( blackTriangles ).toBe( ( 8 - count( up ) ) * 10 );
+		upper.windows.dispose();
+		ground.windows.dispose();
 
 	} );
 

@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.9: decorative window rooms carry office, apartment and lobby image plates with fitted UVs. Unlit rooms stay opaque black, with fewer lit ground-floor windows. Shell materials honor blueprint variants beneath per-surface overrides.
+
 0.17.8: closed-shell windows show fitted textured room bays and ceiling strips with seeded night lighting. Playable interiors remain unobstructed.
 
 0.17.7: playable story bundles consume the Quests 0.8.2 producer while retaining handoff format 1.1.

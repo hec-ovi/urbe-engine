@@ -121,6 +121,35 @@ describe( 'building entrance availability', () => {
 
 	} );
 
+	it( 'honors blueprint material choices while keeping per-surface variants more specific', async () => {
+
+		const key = 'cyberpunk/concrete/rich';
+		const blueprint = boxBlueprint();
+		blueprint.materialVariants = { [ key ]: 'panel' };
+		const loader = { loadAsync: async () => {
+
+			const scene = new THREE.Group();
+			const wall = mesh( 'mergedwall', key, 0 );
+			const border = mesh( 'mergedborder', key, 2 );
+			border.material.userData.materialVariant = 'plain';
+			scene.add( wall, border );
+			return { scene };
+
+		} };
+		const build = vi.fn( () => new THREE.MeshBasicMaterial() );
+		const materialFactory = { ...factory, build, patternVariants: 1,
+			resolver: { resolve: () => ( { variants: [ { id: 'plain', class: 'pattern' }, { id: 'panel', class: 'pattern' } ] } ) }
+		};
+		const city = await new BuildingsLoader( materialFactory, loader ).load( new Map( [ [ 'p0', {
+			parcelId: 'p0', blueprint, shellUrl: '/p0.glb', hasInterior: false
+		} ] ] ) );
+		expect( city.group.getObjectByName( `shell:${key}#panel` ) ).toBeTruthy();
+		expect( city.group.getObjectByName( `shell:${key}#plain` ) ).toBeTruthy();
+		expect( build ).toHaveBeenCalledWith( key, 'panel' );
+		expect( build ).toHaveBeenCalledWith( key, 'plain' );
+
+	} );
+
 	it( 'keeps an authored strip separate from ordinary fixtures with the same material key', async () => {
 
 		const fixtureKey = 'cyberpunk/light-fixture/high_rich';
