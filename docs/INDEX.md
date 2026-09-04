@@ -1,5 +1,7 @@
 # Box map
 
+- `src/building/PbrMaterialFactory.js`: resolves shared PBR surfaces; fitted decals use authored basecolor alpha with depth testing and no depth writes.
+
 - root box: see CONTRACT.md.
 - `src/assembly/`: world-assembly slice; atlas parcel + connections apertures -> exterior BuildingRequest, CLI drives exterior to GLB + blueprint and, with --interior, interior to the filled building plus one GLB per floor; after all shells, Exterior roof attachments and closed obstacle prisms go through Connections' rooftop fitter; `npm run assemble-city` writes a QA report and one manifest separating shells, interiors, floors and rooftop spans; `npm run simulate` boots the simulation library over the assembled world (src/assembly/CONTRACT.md). Depends on ../atlas, ../connections, ../exterior, ../interior, ../naming, ../simulation contracts.
 - `src/building/`: building viewer logic; asks the development build boundary for the selected parcel, output and shell or interior source, validates asset MIME before loading, resolves material keys against ../materials' theme database (MaterialResolver), builds PBR materials with world-scale tiling and transmission while preserving authored two-sided surfaces (PbrMaterialFactory), TSL floor slice (FloorSlicer), fly-camera pointer lock and visible loading/error recovery. Open with `npm run dev` then `/?mode=building&parcel=<id>&out=/out/<world>[&source=interior]`; unresolved keys render magenta and are listed.
@@ -10,7 +12,7 @@
 - `src/quest-bundle/`: atomic consumer and selector for the Quests v0.8.2 handoff v1.1: definitions, objectives, investigations, fixed mechanic bindings, mission asset requests, item bindings and host capabilities (src/quest-bundle/CONTRACT.md).
 
 - `src/game/`: the playable city (`?mode=game`); first-person controller on Rapier, night scene from the assembled GLBs, ground from the blueprint's cover polygons, neon and lit windows, simulation-driven crowd and lane-graph traffic, doors into continuous interiors (src/game/CONTRACT.md). Depends on ../atlas, ../connections, ../materials, ../simulation contracts.
-  - Material-declared opaque windows omit scenic rooms; office and opaque glazing retain shell collision.
+  - Material-declared opaque windows omit scenic rooms; office and opaque glazing and concrete surface families retain shell collision. Scenic rooms exist only upstairs, in bays at most 5 m wide with five catalog-bound faces.
   - `data/`: run config, world loading, signal state
   - `ground/`: cover polygons to geometry, highway ramps, decks and supports from Atlas dimensions and elevation knots, the published kerb strip and a kerb cut from pavement edges where no strip exists
   - `city/`: shells with authored surface and blueprint material variants, doors, neon, fitted window room bays with office, apartment and lobby image plates for closed shells, lamps, road paint and the painted crossings at every marked junction, interiors streamed a floor at a time from each floor's own GLB and cut into rooms, and which of them are in view

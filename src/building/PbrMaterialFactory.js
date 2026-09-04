@@ -221,6 +221,7 @@ export class PbrMaterialFactory {
 
 		if ( physical.alphaMode === 'BLEND' ) material.transparent = true;
 		if ( physical.alphaMode === 'MASK' ) material.alphaTest = 0.5;
+		if ( entry.decal ) material.depthWrite = false;
 
 		if ( BEHIND_GLASS.test( key ) ) {
 

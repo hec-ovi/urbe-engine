@@ -2,7 +2,7 @@
 
 Purpose: assembles the generated city boxes into a cataloged world and serves its launcher, previews, creation flow and playable first-person game.
 
-Status: v0.17.12.
+Status: v0.17.13.
 
 ## Inputs
 
@@ -29,6 +29,8 @@ Status: v0.17.12.
 - Development route, launcher, library, creation, gameplay, quest and hydrology failures use the closed sets in their linked contracts. Startup failures are visible and publish no partial world.
 
 ## Invariants
+
+- Shared PBR material resolution preserves fitted decal basecolor alpha, clamped UVs and depth testing without depth writes. Facade grime embeds its opacity in basecolor; it uses that alpha once.
 
 - Generated data and contracted external model assets are authoritative. Engine does not invent parcels, population, story targets, materials or fallback geometry. Closed shells may carry decorative room bays fitted to their published windows and floor outlines; these have no gameplay or collision role.
 - A catalog game and every save revision remain tied to one validated city, quest bundle, simulation replay and player state.

@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.13: fitted PBR decals preserve receiver depth and authored basecolor alpha.
+
 0.17.12: material-declared opaque glazing omits scenic rooms. Office and opaque glass retain structural collision and authored finishes.
 
 0.17.11: inspection running uses 8, 16 and 32 m/s with bounded camera bob. Right-mouse zoom eases in and out independently of frame rate.

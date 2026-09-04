@@ -25,6 +25,30 @@ const factoryFor = ( strength, profile ) => new PbrMaterialFactory( {
  */
 describe( 'PbrMaterialFactory', () => {
 
+	it( 'uses fitted decal basecolor alpha without writing over receiver depth', () => {
+
+		const decal = {
+			alignment: 'exact', aspect: [ 2, 1 ],
+			decal: { worldSize: [ 2, 1 ], edgeInset: 0.02, surfaceOffset: 0.002 },
+			physical: { alphaMode: 'BLEND', roughnessFactor: 0.8, metallicFactor: 0 },
+			variants: [ { id: 'runoff', maps: { basecolor: 'grime-rgba.png', opacity: 'opacity.png' } } ]
+		};
+		const factory = new PbrMaterialFactory( {
+			resolve: () => decal,
+			mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
+		}, { materialMaps: [ 'basecolor' ] } );
+		const material = factory.build( 'cyberpunk/window-grime-sill/poor', 'runoff' );
+
+		expect( material.transparent ).toBe( true );
+		expect( material.depthWrite ).toBe( false );
+		expect( material.depthTest ).toBe( true );
+		expect( material.map.wrapS ).toBe( THREE.ClampToEdgeWrapping );
+		expect( material.map.repeat.toArray() ).toEqual( [ 1, 1 ] );
+		expect( material.alphaMap ).toBeNull();
+		expect( factoryFor( 1 ).build( 'known/wall/mid' ).depthWrite ).toBe( true );
+
+	} );
+
 	it( 'takes the emissive level as authored, whatever the database says', () => {
 
 		const bright = factoryFor( 3 ).variant( 'known/light-fixture/mid', { emissiveLevel: 180 } );
