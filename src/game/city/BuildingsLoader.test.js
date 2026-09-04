@@ -104,6 +104,8 @@ describe( 'building entrance availability', () => {
 			const scene = new THREE.Group();
 			scene.add(
 				mesh( 'mergedwall', 'cyberpunk/concrete/mid', 0 ),
+				mesh( 'mergedmonolith', 'cyberpunk/concrete-monolith/mid', 10 ),
+				mesh( 'mergedlargepanel', 'cyberpunk/concrete-large-panel/rich', 12 ),
 				mesh( 'mergedopaque', 'cyberpunk/window-glass-opaque/rich', 6 ),
 				mesh( 'mergedoffice', 'cyberpunk/window-glass-office/rich', 8 ),
 				mesh( 'mergedframes', 'cyberpunk/window-frame/mid', 2 ),
@@ -118,8 +120,33 @@ describe( 'building entrance availability', () => {
 		} ] ] );
 		const city = await new BuildingsLoader( factory, loader ).load( buildings );
 
-		expect( city.group.children ).toHaveLength( 5 );
-		expect( city.shellColliders.get( 'p0' ).getAttribute( 'position' ).count ).toBe( 9 );
+		expect( city.group.children ).toHaveLength( 7 );
+		expect( city.shellColliders.get( 'p0' ).getAttribute( 'position' ).count ).toBe( 15 );
+
+	} );
+
+	it( 'keeps ground privacy only on closed shells without adding collision or hiding real interiors', async () => {
+
+		for ( const hasInterior of [ false, true ] ) {
+
+			const loader = { loadAsync: async () => {
+
+				const scene = new THREE.Group();
+				const privacy = new THREE.Group();
+				privacy.name = 'ground-privacyw0';
+				privacy.add( mesh( 'covering', 'cyberpunk/curtain/mid', 1 ), mesh( 'backing', 'cyberpunk/window-glass-opaque/mid', 2 ) );
+				scene.add( mesh( 'mergedglass', 'cyberpunk/window-glass/mid', 0 ), privacy );
+				return { scene };
+
+			} };
+			const city = await new BuildingsLoader( factory, loader ).load( new Map( [ [ 'p0', {
+				parcelId: 'p0', blueprint: boxBlueprint(), shellUrl: '/p0.glb', hasInterior
+			} ] ] ) );
+			expect( Boolean( city.group.getObjectByName( 'shell:cyberpunk/curtain/mid' ) ) ).toBe( ! hasInterior );
+			expect( Boolean( city.group.getObjectByName( 'shell:cyberpunk/window-glass-opaque/mid' ) ) ).toBe( ! hasInterior );
+			expect( city.shellColliders.get( 'p0' ).getAttribute( 'position' ).count ).toBe( 3 );
+
+		}
 
 	} );
 

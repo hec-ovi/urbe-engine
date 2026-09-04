@@ -1,5 +1,18 @@
 import { pointInRing } from '../ground/Polygons.js';
 
+/** Scenic rooms follow a human-scale width even behind continuous glazing. */
+export function windowRects( rect ) {
+
+	const count = Math.max( 1, Math.ceil( rect.width / 5 ) );
+	return Array.from( { length: count }, ( _, index ) => ( {
+		...rect,
+		start: rect.start.clone().lerp( rect.end, index / count ),
+		end: rect.start.clone().lerp( rect.end, ( index + 1 ) / count ),
+		width: rect.width / count
+	} ) );
+
+}
+
 /** A room's open front starts behind the deepest authored curtain or reveal. */
 export function windowBay( floor, rect, wallDepth, occupied ) {
 
@@ -33,20 +46,24 @@ export function windowBay( floor, rect, wallDepth, occupied ) {
 }
 
 /** Five room faces and one shallow ceiling luminaire, no front-facing card. */
-export function appendBay( bay, surfaces, fixtures, color, level, lit, rear = null ) {
+export function appendBay( bay, surfaceFor, fixtures, color, level, lit ) {
 
 	const { width: w, depth: d, bottom: b, top: t, point: p } = bay;
 	const face = ( data, corners, brightness ) => quad( data, corners.map( ( v ) => p( ...v ) ), color, brightness );
-	const rearCorners = [ [ 0, b, d ], [ w, b, d ], [ w, t, d ], [ 0, t, d ] ];
-	if ( rear ) {
+	const faces = [
+		[ 'back', [ [ 0, b, d ], [ w, b, d ], [ w, t, d ], [ 0, t, d ] ], w / ( t - b ), 1.8 ],
+		[ 'left', [ [ 0, b, 0 ], [ 0, b, d ], [ 0, t, d ], [ 0, t, 0 ] ], d / ( t - b ), 1 ],
+		[ 'right', [ [ w, b, d ], [ w, b, 0 ], [ w, t, 0 ], [ w, t, d ] ], d / ( t - b ), 1 ],
+		[ 'floor', [ [ 0, b, 0 ], [ w, b, 0 ], [ w, b, d ], [ 0, b, d ] ], w / d, 0.7 ],
+		[ 'ceiling', [ [ 0, t, d ], [ w, t, d ], [ w, t, 0 ], [ 0, t, 0 ] ], w / d, 1 ]
+	];
+	for ( const [ role, corners, aspect, brightness ] of faces ) {
 
-		quad( rear.data, rearCorners.map( ( v ) => p( ...v ) ), rear.color, rear.level, cropRect( w / ( t - b ), rear.aspect ) );
+		const surface = surfaceFor( role );
+		quad( surface.data, corners.map( ( v ) => p( ...v ) ), surface.color ?? color,
+			level * brightness, cropRect( aspect, surface.aspect ) );
 
-	} else face( surfaces, rearCorners, level * 0.65 );
-	face( surfaces, [ [ 0, b, 0 ], [ 0, b, d ], [ 0, t, d ], [ 0, t, 0 ] ], level * 0.45 );
-	face( surfaces, [ [ w, b, d ], [ w, b, 0 ], [ w, t, 0 ], [ w, t, d ] ], level * 0.5 );
-	face( surfaces, [ [ 0, b, 0 ], [ w, b, 0 ], [ w, b, d ], [ 0, b, d ] ], level * 0.2 );
-	face( surfaces, [ [ 0, t, d ], [ w, t, d ], [ w, t, 0 ], [ 0, t, 0 ] ], level );
+	}
 	if ( ! lit ) return;
 	const x0 = w * 0.22;
 	const x1 = w * 0.78;

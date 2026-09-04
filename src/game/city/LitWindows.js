@@ -3,13 +3,13 @@ import { attribute, texture, vec3 } from 'three/tsl';
 import { Rng } from '../../city/Rng.js';
 import { nightLevel } from '../light/NightSwitch.js';
 import { openingRect } from './Openings.js';
-import { windowBay, appendBay } from './WindowBay.js';
+import { windowBay, windowRects, appendBay } from './WindowBay.js';
+import roomBindings from '../../../../materials/bindings/window-room-surfaces.json';
 
 const LIT_SHARE = 0.42;
-const GROUND_LIT_SHARE = 0.18;
-const PLATE_KEY = 'cyberpunk/window-room/mid';
+const WHITE = new THREE.Color( 0xffffff );
 
-/** Fitted scenic rooms behind closed shells, sharing at most five city draws. */
+/** Fitted scenic upper rooms behind closed shells, batched by catalog role. */
 export class LitWindows {
 
 	constructor( atlas, buildings, factory ) {
@@ -26,9 +26,22 @@ export class LitWindows {
 
 		this.dispose();
 		if ( ! enabled ) return this.group;
-		const surfaces = { position: [], color: [], uv: [] };
 		const fixtures = { position: [], color: [], uv: [] };
-		const plates = new Map();
+		const surfaces = new Map();
+		const surfaceFor = ( role, binding, back, lit ) => {
+
+			const { kind, variant: id } = lit ? ( role === 'back' ? back : binding[ role ] ) : binding.left;
+			const bucket = `${kind}:${id}`;
+			if ( ! surfaces.has( bucket ) ) {
+
+				const [ w, h ] = this.factory.resolver.resolve( `cyberpunk/${kind}/mid` )?.aspect ?? [ 1, 1 ];
+				surfaces.set( bucket, { kind, id, aspect: w / h, data: { position: [], color: [], uv: [] } } );
+
+			}
+			const surface = surfaces.get( bucket );
+			return { data: surface.data, aspect: surface.aspect, color: WHITE };
+
+		};
 
 		for ( const parcel of this.atlas.parcels ) {
 
@@ -36,9 +49,10 @@ export class LitWindows {
 			if ( building?.hasInterior !== false ) continue;
 			const domestic = [ 'residential', 'hotel' ].includes( parcel.type );
 			const variant = domestic ? 'apartment' : [ 'offices', 'corpo' ].includes( parcel.type ) ? 'office' : 'lobby';
+			const binding = roomBindings.rooms[ variant ];
 			for ( const floor of building.blueprint.floors ) {
 
-				if ( floor.elevation < 0 ) continue;
+				if ( floor.elevation <= 0 ) continue;
 				const occupied = [];
 				for ( const opening of floor.openings ) {
 
@@ -46,21 +60,20 @@ export class LitWindows {
 					if ( opening.material && this.factory.resolver.resolve( opening.material )?.physical?.transmission === 0 ) continue;
 					const rect = openingRect( floor, opening );
 					if ( ! rect ) continue;
-					const rng = new Rng( hash( `${this.atlas.meta?.seed ?? ''}:${parcel.id}:${floor.elevation}:${opening.id ?? `${opening.edge}:${opening.offset}`}` ) );
-					const bay = windowBay( floor, rect, building.blueprint.facade?.wallDepth ?? 0.5, occupied );
-					if ( ! bay ) continue;
-					occupied.push( bay.footprint );
-					const lit = rng.next() < ( floor.elevation === 0 ? GROUND_LIT_SHARE : LIT_SHARE );
-					const color = new THREE.Color( domestic ? 0xffd7b0 : 0xe4edff );
-					const level = lit ? rng.range( 8, 16 ) : 0;
-					let rear = null;
-					if ( lit ) {
+					for ( const [ index, roomRect ] of windowRects( rect ).entries() ) {
 
-						if ( ! plates.has( variant ) ) plates.set( variant, { position: [], color: [], uv: [] } );
-						rear = { data: plates.get( variant ), aspect: 1, color: new THREE.Color( 0xffffff ), level: level * 1.8 };
+						const seed = `${this.atlas.meta?.seed ?? ''}:${parcel.id}:${floor.elevation}:${opening.id ?? `${opening.edge}:${opening.offset}`}`;
+						const rng = new Rng( hash( index ? `${seed}:bay:${index}` : seed ) );
+						const bay = windowBay( floor, roomRect, building.blueprint.facade?.wallDepth ?? 0.5, occupied );
+						if ( ! bay ) continue;
+						occupied.push( bay.footprint );
+						const lit = rng.next() < LIT_SHARE;
+						const color = new THREE.Color( domestic ? 0xffd7b0 : 0xe4edff );
+						const level = lit ? rng.range( 8, 16 ) : 0;
+						const back = binding.backPool[ Math.floor( rng.next() * binding.backPool.length ) ];
+						appendBay( bay, ( role ) => surfaceFor( role, binding, back, lit ), fixtures, color, level, lit );
 
 					}
-					appendBay( bay, surfaces, fixtures, color, level, lit, rear );
 
 				}
 
@@ -68,20 +81,14 @@ export class LitWindows {
 
 		}
 
-		if ( surfaces.position.length ) {
+		for ( const { kind, id, data } of surfaces.values() ) {
 
-			const plaster = this.factory.build( 'cyberpunk/plaster/mid', 'plain' );
-			this.group.add( mesh( 'rooms', surfaces, plaster ) );
-			if ( fixtures.position.length ) this.group.add( mesh( 'fixtures', fixtures ) );
-			for ( const [ variant, data ] of plates ) {
-
-				// Explicit plate IDs also participate on tiers with a small pattern budget.
-				const plate = this.factory.build( PLATE_KEY, variant );
-				this.group.add( mesh( `plate:${variant}`, data, plate ) );
-
-			}
+			// Exact role variants are independent of the quality tier's pattern budget.
+			const material = this.factory.build( `cyberpunk/${kind}/mid`, id );
+			this.group.add( mesh( `${kind}:${id}`, data, material ) );
 
 		}
+		if ( fixtures.position.length ) this.group.add( mesh( 'fixtures', fixtures ) );
 		return this.group;
 
 	}

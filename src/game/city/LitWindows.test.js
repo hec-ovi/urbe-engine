@@ -14,7 +14,10 @@ function fixture( { hasInterior = false, seed = 'night', outline = [ [ 0, 0 ], [
 	const atlas = { meta: { seed }, parcels: [ { id: 'shell', type: 'residential' } ] };
 	const buildings = new Map( [ [ 'shell', { hasInterior, blueprint: { facade: { wallDepth: 0.55 }, floors: [ floor ] } } ] ] );
 	const map = new THREE.Texture();
-	const factory = { build: vi.fn( () => ( { map } ) ) };
+	const factory = {
+		build: vi.fn( () => ( { map } ) ),
+		resolver: { resolve: vi.fn( ( key ) => ( { aspect: key.includes( 'office-wide' ) ? [ 2, 1 ] : [ 1, 1 ] } ) ) }
+	};
 	return { windows: new LitWindows( atlas, buildings, factory ), atlas, floor, map, factory, buildings };
 
 }
@@ -25,12 +28,12 @@ describe( 'shell window rooms', () => {
 
 		const { windows, factory, floor } = fixture();
 		const group = windows.build();
-		expect( factory.build ).toHaveBeenCalledWith( 'cyberpunk/plaster/mid', 'plain' );
-		expect( group.children ).toHaveLength( 3 );
-		const rooms = group.getObjectByName( 'lit-windows:rooms' );
+		expect( factory.build ).toHaveBeenCalledWith( 'cyberpunk/window-room-wall/mid', 'plain' );
+		expect( group.children ).toHaveLength( 5 );
+		const rooms = group.getObjectByName( 'lit-windows:window-room-wall:plain' );
 		const lamps = group.getObjectByName( 'lit-windows:fixtures' );
-		const plate = group.getObjectByName( 'lit-windows:plate:apartment' );
-		expect( rooms.geometry.getAttribute( 'position' ).count + plate.geometry.getAttribute( 'position' ).count ).toBe( 8 * 30 );
+		expect( group.children.filter( ( mesh ) => mesh !== lamps )
+			.reduce( ( sum, mesh ) => sum + mesh.geometry.getAttribute( 'position' ).count, 0 ) ).toBe( 8 * 30 );
 		const roomVertices = rooms.geometry.getAttribute( 'position' );
 		for ( let i = 0; i < roomVertices.count; i += 3 ) {
 
@@ -65,28 +68,41 @@ describe( 'shell window rooms', () => {
 			const { windows, atlas, factory } = fixture();
 			atlas.parcels[ 0 ].type = type;
 			const group = windows.build();
-			expect( factory.build ).toHaveBeenCalledWith( 'cyberpunk/window-room/mid', variant );
-			const plate = group.getObjectByName( `lit-windows:plate:${variant}` );
-			const uv = plate.geometry.getAttribute( 'uv' );
-			const p = plate.geometry.getAttribute( 'position' );
-			for ( const value of uv.array ) {
+			const backKind = variant === 'apartment' ? 'window-room' : 'window-room-office-wide';
+			const backs = factory.build.mock.calls.filter( ( [ key ] ) => key === `cyberpunk/${backKind}/mid` );
+			expect( backs.length ).toBeGreaterThan( 0 );
+			for ( const [ , id ] of backs ) expect( variant === 'apartment' ? [ 'apartment' ] : [ 'office-a', 'office-b', 'office-c' ] ).toContain( id );
+			for ( const kind of [ 'wall', 'floor', 'ceiling' ] ) {
 
-				expect( value ).toBeGreaterThanOrEqual( 0 );
-				expect( value ).toBeLessThanOrEqual( 1 );
+				expect( factory.build ).toHaveBeenCalledWith( `cyberpunk/window-room-${kind}/mid`, 'plain' );
 
 			}
-			const width = Math.hypot( p.getX( 1 ) - p.getX( 0 ), p.getZ( 1 ) - p.getZ( 0 ) );
-			const height = p.getY( 2 ) - p.getY( 1 );
-			expect( ( uv.getX( 1 ) - uv.getX( 0 ) ) / ( uv.getY( 1 ) - uv.getY( 2 ) ) ).toBeCloseTo( width / height, 5 );
-			expect( uv.getY( 0 ) ).toBe( 1 );
-			expect( uv.getY( 2 ) ).toBe( 0 );
+			for ( const plate of group.children.filter( ( mesh ) => mesh.name !== 'lit-windows:fixtures' ) ) {
+
+				const uv = plate.geometry.getAttribute( 'uv' );
+				const p = plate.geometry.getAttribute( 'position' );
+				for ( const value of uv.array ) {
+
+					expect( value ).toBeGreaterThanOrEqual( 0 );
+					expect( value ).toBeLessThanOrEqual( 1 );
+
+				}
+				const distance = ( a, b ) => Math.hypot( p.getX( a ) - p.getX( b ), p.getY( a ) - p.getY( b ), p.getZ( a ) - p.getZ( b ) );
+				for ( let i = 0; i < p.count; i += 6 ) {
+
+					expect( ( uv.getX( i + 1 ) - uv.getX( i ) ) / ( uv.getY( i + 1 ) - uv.getY( i + 2 ) ) )
+						.toBeCloseTo( distance( i + 1, i ) / distance( i + 2, i + 1 ) / ( plate.name.includes( 'office-wide' ) ? 2 : 1 ), 5 );
+
+				}
+
+			}
 			windows.dispose();
 
 		}
 
 	} );
 
-	it( 'gives unlit rooms opaque black surfaces and fewer ground-floor lit bays', () => {
+	it( 'gives unlit upper rooms opaque black surfaces and excludes ground floors completely', () => {
 
 		const upper = fixture();
 		const ground = fixture();
@@ -94,8 +110,9 @@ describe( 'shell window rooms', () => {
 		const up = upper.windows.build();
 		const down = ground.windows.build();
 		const count = ( group ) => ( group.getObjectByName( 'lit-windows:fixtures' )?.geometry.getAttribute( 'position' ).count ?? 0 ) / 30;
-		expect( count( down ) ).toBeLessThan( count( up ) );
-		const rooms = up.getObjectByName( 'lit-windows:rooms' );
+		expect( down.children ).toHaveLength( 0 );
+		expect( ground.factory.build ).not.toHaveBeenCalled();
+		const rooms = up.getObjectByName( 'lit-windows:window-room-wall:plain' );
 		expect( rooms.material.transparent ).toBe( false );
 		const colors = rooms.geometry.getAttribute( 'color' ).array;
 		let blackTriangles = 0;
@@ -103,6 +120,33 @@ describe( 'shell window rooms', () => {
 		expect( blackTriangles ).toBe( ( 8 - count( up ) ) * 10 );
 		upper.windows.dispose();
 		ground.windows.dispose();
+
+	} );
+
+	it( 'divides long facade openings into room bays no wider than five metres', () => {
+
+		const { windows, floor, atlas, buildings, factory } = fixture( { outline: [ [ 0, 0 ], [ 40, 0 ], [ 40, 10 ], [ 0, 10 ] ] } );
+		atlas.parcels[ 0 ].type = 'corpo';
+		floor.openings = [ { id: 'wide', kind: 'window', edge: 0, offset: 1, width: 30, height: 2, sill: 0.8 } ];
+		buildings.get( 'shell' ).blueprint.floors = [ floor, { ...floor, elevation: 6.5 }, { ...floor, elevation: 10 } ];
+		const group = windows.build();
+		const surfaces = group.children.filter( ( mesh ) => mesh.name !== 'lit-windows:fixtures' );
+		expect( surfaces.reduce( ( sum, mesh ) => sum + mesh.geometry.getAttribute( 'position' ).count, 0 ) ).toBe( 18 * 30 );
+		expect( factory.build.mock.calls.filter( ( [ key ] ) => key === 'cyberpunk/window-room-office-wide/mid' )
+			.map( ( [ , id ] ) => id ).sort() ).toEqual( [ 'office-a', 'office-b', 'office-c' ] );
+		expect( group.children.length ).toBeLessThanOrEqual( 8 );
+		for ( const mesh of surfaces ) {
+
+			const p = mesh.geometry.getAttribute( 'position' );
+			for ( let i = 0; i < p.count; i += 6 ) {
+
+				const x = Array.from( { length: 6 }, ( _, j ) => p.getX( i + j ) );
+				expect( Math.max( ...x ) - Math.min( ...x ) ).toBeLessThanOrEqual( 5 );
+
+			}
+
+		}
+		windows.dispose();
 
 	} );
 
@@ -134,7 +178,7 @@ describe( 'shell window rooms', () => {
 		for ( const dispose of [ ...geometries, ...materials ] ) expect( dispose ).toHaveBeenCalledOnce();
 		expect( textureDispose ).not.toHaveBeenCalled();
 		const other = fixture( { seed: 'other-night' } ).windows;
-		expect( Array.from( other.build().children[ 0 ].geometry.getAttribute( 'color' ).array ) ).not.toEqual( before[ 0 ] );
+		expect( other.build().children.map( ( mesh ) => Array.from( mesh.geometry.getAttribute( 'color' ).array ) ) ).not.toEqual( before );
 		windows.dispose();
 		other.dispose();
 		expect( again.children ).toHaveLength( 0 );

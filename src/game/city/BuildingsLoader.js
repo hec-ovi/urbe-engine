@@ -18,6 +18,7 @@ export const INTERIOR_PREFIX = 'interior';
 // (../../../exterior/CONTRACT.md): the node's origin is where it swings.
 const DOOR = 'door';
 const BALCONY = 'balcony';
+const GROUND_PRIVACY = 'ground-privacy';
 
 const FIXTURE = '/light-fixture/';
 /**
@@ -34,6 +35,7 @@ const MAIN_THREAD_SLICE_MS = 8;
 // duplicates millions of triangles without changing the walkable shell.
 const COLLIDER_KINDS = new Set( [
 	'concrete', 'wall', 'column', 'window-glass', 'door', 'door-glass',
+	'concrete-monolith', 'concrete-large-panel',
 	'window-glass-opaque', 'window-glass-office',
 	'floor-slab', 'roof', 'parapet', 'balcony-slab', 'balcony-rail',
 	'roof-artifact', 'ac-unit', 'metal'
@@ -177,6 +179,12 @@ export class BuildingsLoader {
 				node.material?.userData?.materialVariant ?? blueprint.materialVariants?.[ key ],
 				node.material?.side === THREE.DoubleSide
 			);
+			if ( isGroundPrivacy( node ) ) {
+
+				if ( hasInterior === false ) push( exterior, surface, bake( node ) );
+				continue;
+
+			}
 			if ( ! hasInterior && isDoorLeaf( name ) ) {
 
 				const geometry = bake( node );
@@ -299,6 +307,18 @@ function isDoorMaterial( key ) {
 function isDoorLeaf( name ) {
 
 	return name.startsWith( DOOR ) || name.startsWith( BALCONY );
+
+}
+
+/** GLTF loaders may retain the privacy name on a parent of material meshes. */
+function isGroundPrivacy( node ) {
+
+	for ( let current = node; current; current = current.parent ) {
+
+		if ( current.name?.startsWith( GROUND_PRIVACY ) ) return true;
+
+	}
+	return false;
 
 }
 

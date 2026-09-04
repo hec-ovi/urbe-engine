@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.14: upstairs scenic rooms use five textured faces, bounded room widths and seeded wide-image variants. Closed shells retain fitted ground privacy; playable interiors retain their authored windows. Monolithic and large-panel concrete have structural collision.
+
 0.17.13: fitted PBR decals preserve receiver depth and authored basecolor alpha.
 
 0.17.12: material-declared opaque glazing omits scenic rooms. Office and opaque glass retain structural collision and authored finishes.
