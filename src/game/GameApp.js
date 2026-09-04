@@ -88,6 +88,8 @@ const BINDINGS = [
 	{ action: 'jump', keys: [ 'Space' ] },
 	{ action: 'crouch', keys: [ 'C' ] },
 	{ action: 'sprint', keys: [ 'Shift' ] },
+	{ action: 'running speed: normal / double / quadruple', keys: [ '1', '2', '4' ] },
+	{ action: 'hold zoom', keys: [ 'Right mouse' ] },
 	{ action: 'interact, board, leave transit, take, inspect, listen, steal, work, deliver', keys: [ 'E' ] },
 	{ action: 'read quest document', keys: [ 'R' ] },
 	{ action: 'quests', keys: [ 'J' ] },

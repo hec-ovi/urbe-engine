@@ -5,7 +5,8 @@ const MOVE_KEYS = {
 	KeyD: 'right', ArrowRight: 'right'
 };
 
-const GAME_KEYS = new Set( [ ...Object.keys( MOVE_KEYS ), 'Space', 'KeyC', 'KeyE', 'KeyR', 'ShiftLeft', 'ShiftRight' ] );
+const RUN_MULTIPLIERS = { Digit1: 1, Digit2: 2, Digit4: 4, Numpad1: 1, Numpad2: 2, Numpad4: 4 };
+const GAME_KEYS = new Set( [ ...Object.keys( MOVE_KEYS ), ...Object.keys( RUN_MULTIPLIERS ), 'Space', 'KeyC', 'KeyE', 'KeyR', 'ShiftLeft', 'ShiftRight' ] );
 
 /**
  * Keyboard and pointer state, and nothing more. Mouse deltas accumulate
@@ -21,6 +22,8 @@ export class Input {
 		this.dx = 0;
 		this.dy = 0;
 		this.locked = false;
+		this.runMultiplier = 1;
+		this.zooming = false;
 		this.pressed = new Set();
 		this.onLockChange = null;
 
@@ -29,6 +32,7 @@ export class Input {
 
 				if ( event.repeat ) return;
 				if ( this.locked && GAME_KEYS.has( event.code ) ) event.preventDefault?.();
+				if ( this.locked && RUN_MULTIPLIERS[ event.code ] ) this.runMultiplier = RUN_MULTIPLIERS[ event.code ];
 
 				this.keys.add( event.code );
 				this.pressed.add( event.code );
@@ -36,6 +40,13 @@ export class Input {
 			},
 			keyup: ( event ) => this.keys.delete( event.code ),
 			blur: () => this.clear(),
+			mousedown: ( event ) => {
+
+				if ( this.locked && event.button === 2 ) this.zooming = true;
+
+			},
+			mouseup: ( event ) => { if ( event.button === 2 ) this.zooming = false; },
+			contextmenu: ( event ) => { if ( this.locked ) event.preventDefault(); },
 			mousemove: ( event ) => {
 
 				if ( ! this.locked ) return;
@@ -57,6 +68,9 @@ export class Input {
 		window.addEventListener( 'keyup', this.handlers.keyup );
 		window.addEventListener( 'blur', this.handlers.blur );
 		document.addEventListener( 'mousemove', this.handlers.mousemove );
+		document.addEventListener( 'mousedown', this.handlers.mousedown );
+		document.addEventListener( 'mouseup', this.handlers.mouseup );
+		document.addEventListener( 'contextmenu', this.handlers.contextmenu );
 		document.addEventListener( 'pointerlockchange', this.handlers.pointerlockchange );
 
 	}
@@ -136,6 +150,7 @@ export class Input {
 
 	clear() {
 
+		this.zooming = false;
 		this.keys.clear();
 		this.pressed.clear();
 		this.dx = 0;
@@ -149,6 +164,9 @@ export class Input {
 		window.removeEventListener( 'keyup', this.handlers.keyup );
 		window.removeEventListener( 'blur', this.handlers.blur );
 		document.removeEventListener( 'mousemove', this.handlers.mousemove );
+		document.removeEventListener( 'mousedown', this.handlers.mousedown );
+		document.removeEventListener( 'mouseup', this.handlers.mouseup );
+		document.removeEventListener( 'contextmenu', this.handlers.contextmenu );
 		document.removeEventListener( 'pointerlockchange', this.handlers.pointerlockchange );
 
 	}

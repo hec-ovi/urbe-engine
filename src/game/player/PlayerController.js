@@ -41,11 +41,18 @@ export class PlayerController {
 
 	update( delta ) {
 
+		const zoom = this.input.locked && ! this.frozen && this.input.zooming ? 2 : 1;
+		if ( this.camera.zoom !== zoom ) {
+
+			this.camera.zoom = zoom;
+			this.camera.updateProjectionMatrix();
+
+		}
 		this.#look();
 		this.#stance();
 
 		const axis = this.frozen || this.movementLocked ? { x: 0, z: 0 } : this.input.axis();
-		const speed = this.body.crouched ? CROUCH_SPEED : ( this.input.running ? RUN_SPEED : WALK_SPEED );
+		const speed = this.body.crouched ? CROUCH_SPEED : ( this.input.running ? RUN_SPEED * ( this.input.runMultiplier ?? 1 ) : WALK_SPEED );
 		const moving = axis.x !== 0 || axis.z !== 0;
 
 		const sin = Math.sin( this.yaw );
@@ -142,8 +149,9 @@ export class PlayerController {
 
 		if ( ! this.input.locked || this.frozen ) return;
 
-		this.yaw -= dx * SENSITIVITY;
-		this.pitch = THREE.MathUtils.clamp( this.pitch - dy * SENSITIVITY, - PITCH_LIMIT, PITCH_LIMIT );
+		const sensitivity = SENSITIVITY / this.camera.zoom;
+		this.yaw -= dx * sensitivity;
+		this.pitch = THREE.MathUtils.clamp( this.pitch - dy * sensitivity, - PITCH_LIMIT, PITCH_LIMIT );
 
 	}
 

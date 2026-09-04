@@ -78,6 +78,53 @@ describe( 'PlayerController', () => {
 
 	} );
 
+	it( 'selects doubled and quadrupled running without changing walking or crouching', () => {
+
+		const { controller, body, press, release } = harness();
+		press( 'KeyW' );
+		press( 'ShiftLeft' );
+		for ( const multiplier of [ 2, 4, 1 ] ) {
+
+			press( `Digit${multiplier}` );
+			const before = body.position.z;
+			controller.update( 0.5 );
+			expect( before - body.position.z ).toBeCloseTo( RUN_SPEED * multiplier * 0.5 );
+
+		}
+		press( 'Digit4' );
+		release( 'ShiftLeft' );
+		const before = body.position.z;
+		controller.update( 1 );
+		expect( before - body.position.z ).toBeCloseTo( 1.4 );
+		press( 'ShiftLeft' );
+		press( 'KeyC' );
+		controller.update( 1 );
+		expect( controller.speed ).toBeCloseTo( CROUCH_SPEED );
+
+	} );
+
+	it( 'zooms while right mouse is held and restores the view on release or unlock', () => {
+
+		const { controller, input, fire, mouse } = harness();
+		const original = controller.camera.projectionMatrix.clone();
+		fire( 'mousedown', { button: 2 } );
+		mouse( 20, 0 );
+		controller.update( 0 );
+		expect( controller.camera.zoom ).toBe( 2 );
+		expect( controller.yaw ).toBeCloseTo( - 20 * 0.0022 / 2 );
+		expect( controller.camera.projectionMatrix.equals( original ) ).toBe( false );
+		fire( 'mouseup', { button: 2 } );
+		controller.update( 0 );
+		expect( controller.camera.projectionMatrix.equals( original ) ).toBe( true );
+		fire( 'mousedown', { button: 2 } );
+		controller.update( 0 );
+		fire( 'pointerlockchange', {} );
+		controller.update( 0 );
+		expect( input.zooming ).toBe( false );
+		expect( controller.camera.zoom ).toBe( 1 );
+
+	} );
+
 	it( 'keeps mouse look but ignores walking, jumping and crouching while carried', () => {
 
 		const { controller, body, press, mouse } = harness();
@@ -128,6 +175,8 @@ function harness() {
 
 	return {
 		controller,
+		input,
+		fire: ( type, event ) => listeners.get( type )( event ),
 		body,
 		press: ( code ) => listeners.get( 'keydown' )( { code, repeat: false } ),
 		release: ( code ) => listeners.get( 'keyup' )( { code } ),

@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.10: running supports 1x, 2x and 4x selection; held right mouse provides inspection zoom.
+
 0.17.9: decorative window rooms carry office, apartment and lobby image plates with fitted UVs. Unlit rooms stay opaque black, with fewer lit ground-floor windows. Shell materials honor blueprint variants beneath per-surface overrides.
 
 0.17.8: closed-shell windows show fitted textured room bays and ceiling strips with seeded night lighting. Playable interiors remain unobstructed.
