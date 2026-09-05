@@ -44,12 +44,13 @@ describe( 'StationVolumes', () => {
 
 	it( 'fits the drop into the footprint in steps the controller can take', () => {
 
-		const plan = stairPlan( 8, SIDEWALK_HEIGHT, - 12 );
+		const bottom = - 12;
+		const plan = stairPlan( 8, SIDEWALK_HEIGHT, bottom );
 
 		expect( plan.treads ).toBe( 18 );
 		expect( plan.flights ).toBe( 4 );
 		expect( plan.rise ).toBeLessThanOrEqual( 0.19 );
-		expect( plan.rise * plan.treads * plan.flights ).toBeCloseTo( 12.12, 6 );
+		expect( plan.rise * plan.treads * plan.flights ).toBeCloseTo( SIDEWALK_HEIGHT - bottom, 6 );
 		// One flight has to fit inside the footprint it switchbacks in.
 		expect( plan.run ).toBeLessThan( 8 );
 

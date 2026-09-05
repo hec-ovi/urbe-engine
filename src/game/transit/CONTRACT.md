@@ -83,6 +83,7 @@ Renderer construction throws no transit error. Empty optional collections build 
 - While aboard, the physics capsule is disabled and placed from each exact journey update. Walking, jumping and crouching are disabled; mouse look and panels remain available. Disembarkation and automatic termination re-enable collision at the published place.
 - Identical route data, serialized state and request produce identical output.
 - Geometry UVs use world meters and every visible surface uses a material from `PbrMaterialFactory`.
+- Shelter bases and station stair mouths use Ground's shared `SIDEWALK_HEIGHT` datum. Shaft stairs span that datum to the published shaft bottom, with rises at most 0.19 m.
 - Transit vehicles have no physics collider.
 
 ## How to modify this blackbox safely
