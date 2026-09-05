@@ -3,6 +3,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { pointInRing, Roadway } from '../ground/Polygons.js';
 import { kelvinColor } from '../light/Color.js';
 import { StreetLampClearance } from './StreetLampClearance.js';
+import { StreetLampSeats } from './StreetLampSeats.js';
 
 const SPACING = 19;
 const PLAZA_SPACING = 34;
@@ -20,9 +21,7 @@ const LENS_SEGMENTS = 5;
 const LENS_LENGTH = 0.28;
 const LENS_WIDTH = 0.16;
 const LENS_GAP = 0.035;
-// A street luminaire, in the units three wants: luminous flux and the colour
-// temperature of the lamp inside it. 12000 lm at 3800 K is a neutral mid-power
-// LED head, which keeps concrete and road boundaries readable at night.
+// Street fixture output, luminous flux and colour temperature.
 const LAMP_LUMENS = 24000;
 const LAMP_KELVIN = 5000;
 const LAMP_RANGE = 26;
@@ -76,6 +75,7 @@ export class StreetLamps {
 		this.factory = factory;
 		this.walk = walk;
 		this.clearance = new StreetLampClearance( atlas, walk );
+		this.seats = new StreetLampSeats( atlas );
 
 	}
 
@@ -100,7 +100,7 @@ export class StreetLamps {
 			.filter( ( spot ) => ! plazas.some( ( ring ) => pointInRing( spot.x, spot.z, ring ) ) )
 			.concat( this.#aroundPlazas( plazas ) )
 			.filter( ( spot ) => ! alleys.some( ( alley ) => onPavementOf( spot, alley ) ) )
-			.map( ( spot ) => offAsphalt( roadway, spot ) )
+			.map( ( spot ) => offAsphalt( roadway, spot, this.seats ) )
 			.filter( Boolean ) );
 
 		const structure = [];
@@ -148,12 +148,17 @@ export class StreetLamps {
 
 		for ( const edge of this.atlas.streets.edges ) {
 
-			const offset = edge.width / 2 + Math.max( 1.1, ( edge.sidewalk?.left ?? 2.5 ) * 0.45 );
 			const points = samplePath( edge.path, SPACING );
 
 			points.forEach( ( { point, normal }, i ) => {
 
 				const side = i % 2 ? - 1 : 1;
+				// samplePath's normal points right of the directed route.
+				const bands = edge.crossSection?.sidewalks[ side > 0 ? 'right' : 'left' ].bands;
+				if ( bands && bands.furnishing < POLE_COLLIDER_RADIUS * 2 ) return;
+				const offset = edge.width / 2 + ( bands
+					? bands.curb + bands.border + bands.furnishing / 2
+					: Math.max( 1.1, ( edge.sidewalk?.left ?? 2.5 ) * 0.45 ) );
 
 				spots.push( {
 					x: point.x + normal.x * offset * side,
@@ -515,14 +520,14 @@ const KERB_STEP = 0.5;
  * The spot itself when it stands clear of the asphalt, else the first point
  * behind it (away from the road its arm faces) that does, else null.
  */
-function offAsphalt( roadway, spot ) {
+function offAsphalt( roadway, spot, seats ) {
 
 	for ( let back = 0; back <= KERB_SEARCH; back += KERB_STEP ) {
 
 		const x = spot.x - spot.ax * back;
 		const z = spot.z - spot.az * back;
 
-		if ( ! roadway.covers( x, z ) ) return back ? { ...spot, x, z } : spot;
+		if ( ! roadway.covers( x, z ) && seats.allows( x, z, POLE_COLLIDER_RADIUS ) ) return back ? { ...spot, x, z } : spot;
 
 	}
 
@@ -530,7 +535,7 @@ function offAsphalt( roadway, spot ) {
 
 }
 
-/** Points every `step` metres along a polyline, with the left-hand normal. */
+/** Points every `step` metres along a polyline, with the right-hand normal. */
 export function samplePath( path, step ) {
 
 	const out = [];
