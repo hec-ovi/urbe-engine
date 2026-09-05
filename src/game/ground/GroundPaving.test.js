@@ -87,11 +87,11 @@ describe( 'GroundBuilder fitted paving', () => {
 		atlas.meta.seed = 'a different family seed';
 		expect( selected( build( atlas ) ) ).toEqual( first );
 		expect( first ).toEqual( expect.arrayContaining( [
-			{ key: 'cyberpunk/street-border/mid', variantId: 'industrial', finish: 'border' },
-			{ key: 'cyberpunk/street-paving-body/mid', variantId: 'maintained', finish: 'pavingBody' },
+			{ key: 'cyberpunk/street-graphite-industrial/mid', variantId: 'finish', finish: 'border' },
+			{ key: 'cyberpunk/street-precast-maintained/mid', variantId: 'finish', finish: 'pavingBody' },
 			{ key: 'cyberpunk/street-joint/mid', variantId: 'maintained', finish: 'joint' },
-			{ key: 'cyberpunk/street-border/mid', variantId: 'maintained', finish: 'border' },
-			{ key: 'cyberpunk/street-curb/mid', variantId: 'maintained', finish: 'curb' }
+			{ key: 'cyberpunk/street-graphite-maintained/mid', variantId: 'finish', finish: 'border' },
+			{ key: 'cyberpunk/street-precast-maintained/mid', variantId: 'finish', finish: 'curb' }
 		] ) );
 		expect( first ).toHaveLength( 5 );
 		const body = meshes( build( atlas ) ).find( mesh => mesh.userData.groundConstruction.finish === 'pavingBody' );

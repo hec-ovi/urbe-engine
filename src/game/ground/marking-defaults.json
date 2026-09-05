@@ -1,0 +1,14 @@
+{
+  "lineWidth": 0.12,
+  "edgeInset": 0.2,
+  "centerGap": 0.12,
+  "dashLength": 3,
+  "dashGap": 6,
+  "crossingClearance": 0.3,
+  "stopSetback": 1,
+  "stopWidth": 0.35,
+  "arrowSetback": 2,
+  "arrowLength": 4.5,
+  "arrowWidth": 1.5,
+  "paintOffset": 0.003
+}

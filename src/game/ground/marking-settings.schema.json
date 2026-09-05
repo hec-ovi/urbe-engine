@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ground marking settings",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "lineWidth": { "$ref": "#/$defs/metres" },
+    "edgeInset": { "$ref": "#/$defs/metres" },
+    "centerGap": { "$ref": "#/$defs/metres" },
+    "dashLength": { "$ref": "#/$defs/metres" },
+    "dashGap": { "$ref": "#/$defs/metres" },
+    "crossingClearance": { "$ref": "#/$defs/metres" },
+    "stopSetback": { "$ref": "#/$defs/metres" },
+    "stopWidth": { "$ref": "#/$defs/metres" },
+    "arrowSetback": { "$ref": "#/$defs/metres" },
+    "arrowLength": { "$ref": "#/$defs/metres" },
+    "arrowWidth": { "$ref": "#/$defs/metres" },
+    "paintOffset": { "$ref": "#/$defs/metres" }
+  },
+  "$defs": { "metres": { "type": "number", "exclusiveMinimum": 0 } }
+}

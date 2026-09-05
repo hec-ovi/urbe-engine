@@ -5,6 +5,7 @@ Purpose: renders authored city cover and places an unbounded safety floor below 
 ## In
 
 - `GroundBuilder(atlas, factory).build()`: Atlas cover, station shafts and highway structures; the material factory resolves their catalog surfaces.
+- `GroundMarkings(atlas, road, factory, bindings, settings?).build()`: Atlas crossings/junctions, [Connections road lanes](../../../../connections/schemas/networks.schema.json), PBR factory, [Materials paint bindings](../../../../materials/schema/street-markings.schema.json) and [settings](marking-settings.schema.json), with [defaults](marking-defaults.json).
 - `GroundBuilder.regionFootprints(atlas, band)`: one functional band (`curb`, `border`, `furnishing`, `walking`, `frontage`, `circulation`) from [Atlas fitted paving](../../../../atlas/src/streets/construction/paving/schema.ts).
 - `SafetyGround({atlas, buildings, groups, physics, factory, camera})`: validated Atlas water and station records, loaded exterior blueprints, generated ground/shell/link/transit groups in world coordinates, Physics, material factory and a perspective camera.
 - `SafetyGround.update(camera)`: current camera position, aspect, field of view, zoom and finite far distance.
@@ -12,6 +13,9 @@ Purpose: renders authored city cover and places an unbounded safety floor below 
 ## Out
 
 - GroundBuilder returns `{group, colliderGeometry, bounds}`. Station mouths remain open. Highway geometry follows published profiles and dimensions.
+- GroundMarkings returns `{group, primitives, omitted}`. Each read-only primitive records `kind`, `edgeId`, optional lane/node identity and allowed `turns`, finish (`white` or `accent`) and complete 3D `polygons`. Paint batches into two nonemissive catalog meshes, offset by the declared coating thickness; it has no collision. Ground owns normal paint; debug lane visualization is a separate Game concern.
+- Authored lane boundaries pair exact source offsets and widths. Opposing directions receive double center lines; shared same-direction boundaries receive whole dashes. Atlas's external field planes terminate solid lines and bound complete dashes, stop bars and straight/left/right arrow glyphs from actual `lane.next` labels. Internal junction edges receive no lane paint. A complete arrow that cannot fit reports `complete-glyph-does-not-fit`; it is not clipped.
+- Crossing polygons remain exactly as Atlas published them, at the source profile height. Legacy worlds retain lane `path3` intervals and published crossing polygons, without inferred stop bars or arrows. A legacy crossing requires a constant source profile because it has no authored station. All paint polygons use physical metre UVs and remain independent of street albedo.
 - `regionFootprints` returns read-only `{region, layout, frame, covers}` views over the exact authored records, grouped by region and filtered by functional band. Every finish part remains present, including internal joints and borders. Callers must not mutate these Atlas-owned records. It performs no polygon union or reclassification; legacy worlds return `[]`.
 - Every authored ground polygon is filled completely at its `top`; curb faces use its `bottom`. Fitted paving expands only the supplied integer spans and snapped frame corners into bodies and four disjoint joint strips. Shared edge stations remain vertices through rendering. No cell is clipped, inferred or backed by another face. Solid parts retain their exact polygon and role. Collision triangulates the owner polygons and exposed curb faces.
 - Fitted regions use their stored layout family and the [Materials construction surfaces](../../../../materials/bindings/street-styles.json), following [Atlas finish roles](../../../../atlas/src/streets/construction/paving/CONTRACT.md). Cell pitch never sets texture repeat. Top UVs are frame-local metres (`U`, `-V`); exposed faces use physical edge distance from that frame and world elevation. Curb joints continue down their exposed road-facing boundaries. Meshes batch indexed vertices by family and finish, with `userData.groundConstruction: {familyId, finish}`.
@@ -24,6 +28,7 @@ Purpose: renders authored city cover and places an unbounded safety floor below 
 
 - `E_HIGHWAY_STRUCTURE`: invalid authored highway data.
 - `E_GROUND_CONSTRUCTION`: unsupported paving version, missing or duplicate references, unknown functional band or finish family, invalid frame, module, cell spans, solid role or elevations. Construction input fails before material creation.
+- `E_GROUND_MARKINGS`: missing lane/crossing/approach authority, inconsistent shared boundaries, invalid settings or material bindings, a reversing lane join or a legacy crossing with unknown height.
 - `E_PHYSICS_FLOOR`: the resulting safety elevation is not finite.
 
 ## Invariants
