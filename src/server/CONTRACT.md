@@ -39,11 +39,13 @@ Expose checked development HTTP routes for world builds, the launcher and NPC di
 - Exterior jobs create a unique direct child of Engine `out`, reject a symbolic-link output root, and never replace existing worlds. They carry the supplied blueprint unchanged, without seed lookup or regeneration, and run public `assemble-city --interiors 0`. Connections remains a mandatory gate.
 - The exterior boundary checks only its consumed Atlas envelope and safe unique parcel ids, not all Atlas geometry. Assembly performs downstream validation. `blueprintHash` is SHA-256 over recursively key-sorted JSON; arrays keep their order.
 - Jobs run in submission order, one city batch at a time. They report complete nonempty regular shell/blueprint file pairs. Success additionally requires a schema-valid manifest matching every requested parcel, seed and Atlas version, no interiors, and an unchanged carried blueprint. Partial results never enable opening a completed city. Job state lives until server restart; generated files remain on disk.
+- A declared manifest `connections` reference follows [Assembly's artifact contract](../assembly/CONTRACT.md). Final admission requires its nonempty regular file, the published Connections output schema, both source seeds and SHA-256 over the exact artifact and carried blueprint bytes. Missing or invalid declared data fails with `E_BUILD_INCOMPLETE`; absent-field legacy manifests remain accepted.
 - Capability checks current local prerequisites; POST checks again. Four jobs are retained per server session, including terminal jobs, with no replacement. Terminal jobs release their full input blueprint from memory. The upload limit bounds input storage, not generated shell size.
 
 ## Dependencies
 
 - [Building assembly](../assembly/CONTRACT.md)
+- [Connections](../../../connections/CONTRACT.md)
 - [Launcher](../launcher/CONTRACT.md)
 - [Library](../library/CONTRACT.md)
 - [Quests](../../../quests/CONTRACT.md)

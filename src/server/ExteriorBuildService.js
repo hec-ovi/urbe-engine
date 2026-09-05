@@ -1,8 +1,8 @@
 import { lstatSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import { isDeepStrictEqual } from 'node:util';
 import { ExteriorBuildBoundary, ExteriorBuildError, blueprintHash } from './ExteriorBuildBoundary.js';
 import { ExteriorBatchProcess } from './ExteriorBatchProcess.js';
+import { ExteriorBatchArtifacts } from './ExteriorBatchArtifacts.js';
 
 export class ExteriorBuildService {
 
@@ -74,11 +74,7 @@ export class ExteriorBuildService {
 			let manifest;
 			try {
 
-				manifest = JSON.parse( readFileSync( join( outDir, 'manifest.json' ), 'utf8' ) );
-				const carried = JSON.parse( readFileSync( join( outDir, 'blueprint.json' ), 'utf8' ) );
-				if ( ! this.boundary.manifest( manifest ) || manifest.seed !== blueprint.meta.seed || manifest.atlasVersion !== blueprint.meta.version ||
-					! isDeepStrictEqual( [ ...manifest.parcels ].sort(), blueprint.parcels.map( ( p ) => p.id ).sort() ) ||
-					manifest.interiors.length || Object.keys( manifest.floors ).length || job.completed !== job.total || ! isDeepStrictEqual( carried, blueprint ) ) throw new Error( 'batch artifacts do not match the requested blueprint and complete shell set' );
+				manifest = new ExteriorBatchArtifacts( this.boundary ).read( outDir, blueprint, job.completed );
 
 			} catch ( error ) { throw new ExteriorBuildError( 'E_BUILD_INCOMPLETE', error.message ); }
 			job.manifest = manifest;

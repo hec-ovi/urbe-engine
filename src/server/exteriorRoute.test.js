@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -6,6 +7,8 @@ import { join } from 'node:path';
 import { exteriorRoute } from './exteriorRoute.js';
 import { ExteriorBuildService } from './ExteriorBuildService.js';
 import { ExteriorBuildBoundary } from './ExteriorBuildBoundary.js';
+import { ConnectionsArtifact } from '../assembly/ConnectionsArtifact.js';
+import { OutDir } from '../assembly/OutDir.js';
 
 describe( 'exact blueprint exterior HTTP jobs', () => {
 
@@ -110,6 +113,56 @@ describe( 'exact blueprint exterior HTTP jobs', () => {
 
 	} );
 
+	it( 'admits the published Connections artifact with matching schema, source and byte hashes', async () => {
+
+		const { origin } = await fixture( async ( request ) => finishWithConnections( request ) );
+		const started = await call( origin, 'POST', { blueprint: blueprint() } );
+		const done = await settled( origin, started.body.id );
+
+		expect( done.state ).toBe( 'succeeded' );
+		expect( done.manifest.connections.file ).toBe( 'connections.json' );
+		expect( new ExteriorBuildBoundary().job( done ) ).toBe( true );
+
+	} );
+
+	it.each( [
+		[ 'missing file', ( request ) => rmSync( join( request.outDir, 'connections.json' ) ) ],
+		[ 'changed bytes', ( request ) => writeFileSync( join( request.outDir, 'connections.json' ), '{}' ) ],
+		[ 'invalid JSON with matching hash', ( request ) => replaceConnections( request, '{' ) ],
+		[ 'invalid schema with matching hash', ( request ) => replaceConnections( request, JSON.stringify( { meta: connections().meta } ) ) ],
+		[ 'wrong generator seed', ( request ) => replaceConnections( request, JSON.stringify( { ...connections(), meta: { ...connections().meta, seed: 'another-seed' } } ) ) ],
+		[ 'wrong Atlas seed', ( request ) => replaceConnections( request, JSON.stringify( { ...connections(), meta: { ...connections().meta, atlasSeed: 'another-seed' } } ) ) ],
+		[ 'changed blueprint bytes', ( request ) => writeFileSync( request.blueprintPath, JSON.stringify( blueprint(), null, 2 ) ) ],
+		[ 'changed source with refreshed hash', ( request ) => {
+
+			const changed = blueprint();
+			changed.exactExtension.geometry[ 0 ] += 1;
+			const bytes = JSON.stringify( changed );
+			writeFileSync( request.blueprintPath, bytes );
+			updateManifest( request, ( manifest ) => { manifest.connections.blueprintSha256 = sha256( bytes ); } );
+
+		} ],
+		[ 'symbolic-link payload', ( request ) => {
+
+			const path = join( request.outDir, 'connections.json' );
+			const target = join( request.outDir, 'other.json' );
+			writeFileSync( target, readFileSync( path ) );
+			rmSync( path );
+			symlinkSync( target, path );
+
+		} ]
+	] )( 'refuses a declared Connections artifact with %s', async ( _name, change ) => {
+
+		const { origin } = await fixture( async ( request ) => { finishWithConnections( request ); change( request ); } );
+		const started = await call( origin, 'POST', { blueprint: blueprint() } );
+		const done = await settled( origin, started.body.id );
+
+		expect( done.state ).toBe( 'failed' );
+		expect( done.error.code ).toBe( 'E_BUILD_INCOMPLETE' );
+		expect( done.manifest ).toBe( null );
+
+	} );
+
 	async function fixture( run, { maxJobs, maxRequestBytes } = {} ) {
 
 		const root = mkdtempSync( join( tmpdir(), 'engine-exteriors-' ) );
@@ -143,6 +196,47 @@ function finish( { outDir } ) {
 
 	for ( const id of [ 'p0', 'p1' ] ) writeShell( outDir, id );
 	writeFileSync( join( outDir, 'manifest.json' ), JSON.stringify( { contractVersion: '1.0.0', seed: 'same-seed', atlasVersion: '0.2.4', named: false, namingTheme: null, parcels: [ 'p0', 'p1' ], interiors: [], floors: {} } ) );
+
+}
+
+function finishWithConnections( request ) {
+
+	finish( request );
+	const source = JSON.parse( readFileSync( request.blueprintPath, 'utf8' ) );
+	new OutDir( request.outDir ).writeManifest( source, source.parcels.map( ( parcel ) => parcel.id ), [], null,
+		new ConnectionsArtifact( source, connections() ) );
+
+}
+
+function connections() {
+
+	return {
+		meta: { seed: 'same-seed', atlasSeed: 'same-seed', version: '0.9.0' },
+		links: [], apertures: [], linkRefs: [], layers: [],
+		networks: { walk: { nodes: [], edges: [] }, road: { lanes: [] }, signals: [], transit: { routes: [] }, air: { corridors: [] } }
+	};
+
+}
+
+function replaceConnections( request, bytes ) {
+
+	writeFileSync( join( request.outDir, 'connections.json' ), bytes );
+	updateManifest( request, ( manifest ) => { manifest.connections.sha256 = sha256( bytes ); } );
+
+}
+
+function updateManifest( { outDir }, change ) {
+
+	const path = join( outDir, 'manifest.json' );
+	const manifest = JSON.parse( readFileSync( path, 'utf8' ) );
+	change( manifest );
+	writeFileSync( path, JSON.stringify( manifest ) );
+
+}
+
+function sha256( bytes ) {
+
+	return createHash( 'sha256' ).update( bytes ).digest( 'hex' );
 
 }
 

@@ -22,6 +22,10 @@ export class ExteriorBuildBoundary {
 
 		const ajv = new Ajv2020( { allErrors: true } );
 		for ( const path of [
+			'../../../connections/schemas/link.schema.json',
+			'../../../connections/schemas/aperture.schema.json',
+			'../../../connections/schemas/networks.schema.json',
+			'../../../connections/schemas/output.schema.json',
 			'../../../connections/schemas/rooftop-span.schema.json',
 			'../../../connections/schemas/rooftop-span-output.schema.json',
 			'../assembly/schema/world-manifest.schema.json',
@@ -29,6 +33,7 @@ export class ExteriorBuildBoundary {
 		] ) ajv.addSchema( schema( path ) );
 		this.request = ajv.compile( schema( './schema/exterior-build-request.schema.json' ) );
 		this.manifest = ajv.getSchema( 'https://schemas.urbe.invalid/urbe/engine/world-manifest' );
+		this.connections = ajv.getSchema( 'https://schemas.urbe.invalid/urbe/connections/output' );
 		this.job = ajv.compile( schema( './schema/exterior-build-job.schema.json' ) );
 
 	}
@@ -52,7 +57,13 @@ function schema( path ) {
 
 export function blueprintHash( value ) {
 
-	return createHash( 'sha256' ).update( JSON.stringify( canonical( value ) ) ).digest( 'hex' );
+	return byteHash( JSON.stringify( canonical( value ) ) );
+
+}
+
+export function byteHash( bytes ) {
+
+	return createHash( 'sha256' ).update( bytes ).digest( 'hex' );
 
 }
 
