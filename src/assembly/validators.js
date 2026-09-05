@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import AjvModule from 'ajv/dist/2020.js';
+import { SchemaFiles } from './SchemaFiles.js';
 
 const Ajv2020 = AjvModule.default ?? AjvModule;
 
@@ -27,7 +28,7 @@ function instance() {
 		rooftopSpanOutput.properties.spans.items.$ref = './rooftop-span';
 		ajv.addSchema( loadSchema( INTERIOR_BLUEPRINT ) );
 		ajv.addSchema( loadSchema( INTERIOR_REQUEST ) );
-		ajv.addSchema( loadSchema( EXTERIOR_REQUEST ) );
+		new SchemaFiles( ajv ).add( EXTERIOR_REQUEST );
 		ajv.addSchema( loadSchema( ROOFTOP_SPAN ) );
 		ajv.addSchema( rooftopSpanOutput );
 		ajv.addSchema( loadSchema( WORLD_MANIFEST ) );

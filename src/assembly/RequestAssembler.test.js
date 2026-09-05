@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { RequestAssembler } from './RequestAssembler.js';
-import { signRungs } from './BuildingPipeline.js';
+import { BuildingPipeline, signRungs } from './BuildingPipeline.js';
 import namedCity from './named-city.fixture.json';
 import { validateExteriorRequest } from './validators.js';
 
@@ -47,6 +50,35 @@ const bridgeAperture = aperture( 'l9a', 'bridge', 16.25 );
 const connections = { apertures: [ bridgeAperture, { ...aperture( 'x1a', 'bridge', 16.25 ), buildingId: 'other' } ] };
 
 describe( 'RequestAssembler', () => {
+
+	it( 'validates the published Exterior policy and rejects invalid requests before generation', async () => {
+
+		const request = new RequestAssembler( atlasWith( officeParcel ), connections ).assemble( 'p7' );
+		request.options.coreAdjacency = {
+			glazing: { role: 'circulation', clearDepth: 1.2 },
+			overrides: [ { floor: 1, opening: 'window-1', role: 'room', clearDepth: 2.4 } ]
+		};
+		expect( validateExteriorRequest( request ) ).toEqual( [] );
+
+		request.options.coreAdjacency.glazing.clearDepth = - 1;
+		const dir = mkdtempSync( join( tmpdir(), 'urbe-request-validation-' ) );
+
+		try {
+
+			const pipeline = new BuildingPipeline( { assemble: () => request } );
+			await expect( pipeline.build( 'p7', dir ) ).rejects.toMatchObject( {
+				code: 'E_REQUEST_INVALID',
+				message: expect.stringContaining( '/options/coreAdjacency/glazing/clearDepth must be >= 0' )
+			} );
+			expect( readdirSync( dir ) ).toEqual( [] );
+
+		} finally {
+
+			rmSync( dir, { recursive: true, force: true } );
+
+		}
+
+	} );
 
 	it( 'preserves the published construction frame without inventing one for older worlds', () => {
 
