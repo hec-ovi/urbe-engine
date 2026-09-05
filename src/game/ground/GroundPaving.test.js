@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { GroundBuilder } from './GroundBuilder.js';
+import catalog from '../../../../materials/bindings/street-styles.json' with { type: 'json' };
+
+vi.mock( '../../../../materials/bindings/street-styles.json', async importOriginal => ( {
+	default: structuredClone( ( await importOriginal() ).default )
+} ) );
+const styles = structuredClone( catalog.styles );
+beforeEach( () => { catalog.styles = structuredClone( styles ); } );
 
 const factory = { build: ( key, variantId ) => {
 	const material = new THREE.MeshStandardMaterial();
@@ -165,6 +172,7 @@ describe( 'GroundBuilder fitted paving', () => {
 	} );
 
 	it( 'uses the explicit modern roadway family and validates source semantics before material creation', () => {
+		catalog.styles.find( style => style.id === 'salvaged' ).constructionSurfaces.road = { kind: 'street-road-salvaged', variant: 'finish' };
 		const { atlas, cover, region } = fixture();
 		const paving = atlas.streets.construction.paving;
 		paving.version = '1.1.0';
@@ -179,12 +187,57 @@ describe( 'GroundBuilder fitted paving', () => {
 			expect( road.material.userData ).toEqual( { key: 'cyberpunk/street-road-salvaged/mid', variantId: 'finish' } );
 			expect( road.userData.groundConstruction ).toEqual( { familyId: 'salvaged', finish: 'road' } );
 		}
-		for ( const mutate of [ data => { data.roadwayLayoutId = 'missing'; }, data => { data.regions[ 0 ].sourceId = 'missing'; },
+		for ( const mutate of [ data => { data.roadwayLayoutId = 'missing'; }, data => { data.layouts[ 1 ].familyId = 'missing'; }, data => { data.regions[ 0 ].sourceId = 'missing'; },
 			data => { data.sources[ 0 ].top += 0.01; }, data => { data.sources[ 0 ].surface = 'curb'; } ] ) {
 			const copy = structuredClone( atlas );
 			mutate( copy.streets.construction.paving );
 			let calls = 0;
 			expect( () => new GroundBuilder( copy, { build() { calls ++; } } ).build() ).toThrow( expect.objectContaining( { code: 'E_GROUND_CONSTRUCTION' } ) );
+			expect( calls ).toBe( 0 );
+		}
+	} );
+
+	it( 'keeps the seeded road when a fitted layout has no road override, without changing paving or collision', () => {
+		const { atlas, cover, region } = fixture();
+		const paving = atlas.streets.construction.paving;
+		paving.version = '1.1.0';
+		paving.roadwayLayoutId = 'l0';
+		paving.sources = [ { id: 'source', surface: cover.surface, top: cover.top, bottom: cover.bottom } ];
+		region.sourceId = 'source';
+		const roadCover = { surface: 'roadway', polygon: [ [ 30, 0 ], [ 40, 0 ], [ 40, 5 ], [ 30, 5 ] ], top: 0, bottom: - 0.1 };
+		atlas.volumetric.ground.push( roadCover );
+		const construction = catalog.styles.find( style => style.id === 'industrial' ).constructionSurfaces;
+		construction.road = { kind: 'street-road-industrial', variant: 'finish' };
+		const explicit = build( atlas );
+		delete construction.road;
+		const geometry = result => result.group.children.filter( mesh => mesh.isMesh ).map( mesh => {
+			const { data } = mesh.geometry.toJSON();
+			return data;
+		} );
+		for ( const seed of [ '0', 'other', 'urbe-tiny' ] ) {
+			atlas.meta.seed = seed;
+			const result = build( atlas );
+			const road = result.group.getObjectByName( 'ground:roadway' );
+			const legacy = structuredClone( atlas );
+			legacy.streets.construction.paving.version = '1.0.0';
+			expect( road.material.userData ).toEqual( build( legacy ).group.getObjectByName( 'ground:roadway' ).material.userData );
+			expect( road.userData.groundConstruction ).toBeUndefined();
+			expect( meshes( result ).map( mesh => mesh.material.userData ) ).toEqual( meshes( explicit ).filter( mesh => mesh.name !== 'ground:roadway' ).map( mesh => mesh.material.userData ) );
+			expect( geometry( result ) ).toEqual( geometry( explicit ) );
+			expect( result.colliderGeometry.getAttribute( 'position' ).array ).toEqual( explicit.colliderGeometry.getAttribute( 'position' ).array );
+		}
+	} );
+
+	it( 'rejects a declared malformed road override before creating materials', () => {
+		const { atlas, cover, region } = fixture();
+		Object.assign( atlas.streets.construction.paving, { version: '1.1.0', roadwayLayoutId: 'l0',
+			sources: [ { id: 'source', surface: cover.surface, top: cover.top, bottom: cover.bottom } ] } );
+		region.sourceId = 'source';
+		const construction = catalog.styles.find( style => style.id === 'industrial' ).constructionSurfaces;
+		for ( const road of [ null, {}, { kind: 'street-road' }, { variant: 'industrial' } ] ) {
+			construction.road = road;
+			let calls = 0;
+			expect( () => new GroundBuilder( atlas, { build() { calls ++; } } ).build() ).toThrow( expect.objectContaining( { code: 'E_GROUND_CONSTRUCTION' } ) );
 			expect( calls ).toBe( 0 );
 		}
 	} );

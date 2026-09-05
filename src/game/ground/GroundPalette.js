@@ -9,6 +9,7 @@ export class GroundPalette {
 	static construction( familyId, finish ) {
 
 		const style = catalog.styles.find( style => style.id === familyId );
+		if ( style && finish === 'road' && ! Object.hasOwn( style.constructionSurfaces ?? {}, finish ) ) return null;
 		const binding = style?.constructionSurfaces?.[ finish ];
 		if ( ! binding?.kind || ! binding.variant ) fail( `Unknown construction finish: ${familyId}/${finish}` );
 		return { key: `cyberpunk/${binding.kind}/mid`, variantId: binding.variant };
