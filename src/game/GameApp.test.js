@@ -5,6 +5,7 @@ import {
 	prepareInteriorStreaming, questPlayerPlaces, restoredTransitQuest, savedSpawn, transitStartHour
 } from './GameApp.js';
 import { Locator } from './world/Locator.js';
+import { SIDEWALK_HEIGHT } from './ground/GroundBuilder.js';
 
 describe( 'game spawn', () => {
 
@@ -12,13 +13,13 @@ describe( 'game spawn', () => {
 
 		const networks = { walk: { nodes: [
 			{ id: 'near', x: 0, y: 8, z: 0, kind: 'corner' },
-			{ id: 'far', x: 100, y: 8, z: 0, kind: 'corner' }
+			{ id: 'far', x: 100, y: 11, z: 0, kind: 'corner' }
 		] } };
 		const atlas = { parcels: [ { access: { point: [ 0, 0 ] } } ] };
 		const spawn = pickSpawn( networks, atlas );
 
-		expect( spawn.point.y ).toBeCloseTo( 8.17 );
-		expect( spawn.lookAt.y ).toBeCloseTo( 8.12 );
+		expect( spawn.point.y ).toBeCloseTo( 8 + SIDEWALK_HEIGHT + 0.05 );
+		expect( spawn.lookAt.y ).toBeCloseTo( 11 + SIDEWALK_HEIGHT );
 
 	} );
 
@@ -182,7 +183,7 @@ describe( 'live NPC continuity integration', () => {
 				kind: 'parcel', id: 'cafe', position: [ 1, 2, 3 ], heading: 0,
 				anchors: [ { id: 'coffee', position: [ 7, 2, 8 ], heading: Math.PI / 2 } ]
 			},
-			{ kind: 'parcel', id: 'home', position: [ 20, 0.12, 30 ], heading: 0, anchors: [] }
+			{ kind: 'parcel', id: 'home', position: [ 20, SIDEWALK_HEIGHT, 30 ], heading: 0, anchors: [] }
 		] );
 
 	} );
