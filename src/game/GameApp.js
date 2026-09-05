@@ -30,8 +30,7 @@ import { Elevators } from './city/Elevators.js';
 import { Neon } from './city/Neon.js';
 import { StreetLamps } from './city/StreetLamps.js';
 import { Dressing } from './props/Dressing.js';
-import { LaneMarkings } from './city/LaneMarkings.js';
-import { Crossings } from './city/Crossings.js';
+import { StreetMarkings } from './city/StreetMarkings.js';
 import { LitWindows } from './city/LitWindows.js';
 import { RoomView } from './city/RoomView.js';
 import { Venues } from './city/Venues.js';
@@ -243,8 +242,7 @@ export class GameApp {
 			links.group,
 			props.group,
 			this.transit.group,
-			new LaneMarkings( connections.networks, config.laneMode ).build(),
-			new Crossings( atlas ).build(),
+			await StreetMarkings.build( atlas, connections.networks, factory, resolver, config.laneMode ),
 			this.windowRooms.build( { enabled: ! config.off.has( 'interiors' ) } )
 		);
 
