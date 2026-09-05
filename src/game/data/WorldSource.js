@@ -52,8 +52,8 @@ export class WorldSource {
 
 		try {
 
-			const text = await response.text();
-			return { text, data: JSON.parse( text ) };
+			const bytes = await response.arrayBuffer();
+			return { bytes, data: JSON.parse( new TextDecoder( 'utf-8', { fatal: true } ).decode( bytes ) ) };
 
 		} catch ( error ) {
 

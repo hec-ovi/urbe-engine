@@ -224,7 +224,7 @@ function response( status, body, type = 'application/json' ) {
 		status,
 		headers: { get: () => type },
 		json: async () => body,
-		text: async () => JSON.stringify( body )
+		arrayBuffer: async () => new TextEncoder().encode( JSON.stringify( body ) ).buffer
 	};
 
 }

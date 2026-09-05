@@ -24,9 +24,9 @@ export async function loadWorldConnections( blueprint, reference, readDocument )
 
 	try {
 
-		if ( await sha256( blueprint.text ) !== reference.blueprintSha256 ) throw new Error( 'blueprint byte hash mismatch' );
+		if ( await sha256( blueprint.bytes ) !== reference.blueprintSha256 ) throw new Error( 'blueprint byte hash mismatch' );
 		const document = await readDocument( reference.file );
-		if ( await sha256( document.text ) !== reference.sha256 ) throw new Error( 'Connections byte hash mismatch' );
+		if ( await sha256( document.bytes ) !== reference.sha256 ) throw new Error( 'Connections byte hash mismatch' );
 		if ( ! validate( document.data ) ) throw new Error( ajv.errorsText( validate.errors ) );
 		const { meta } = document.data;
 		if ( meta.seed !== blueprint.data.meta.seed || meta.atlasSeed !== blueprint.data.meta.seed ) throw new Error( 'Connections source seeds mismatch' );
@@ -40,9 +40,9 @@ export async function loadWorldConnections( blueprint, reference, readDocument )
 
 }
 
-async function sha256( text ) {
+async function sha256( bytes ) {
 
-	const digest = await crypto.subtle.digest( 'SHA-256', new TextEncoder().encode( text ) );
+	const digest = await crypto.subtle.digest( 'SHA-256', bytes );
 	return Array.from( new Uint8Array( digest ), ( byte ) => byte.toString( 16 ).padStart( 2, '0' ) ).join( '' );
 
 }
