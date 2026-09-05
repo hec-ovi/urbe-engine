@@ -92,6 +92,7 @@ The whole run either starts or reports why: any failure during startup is caught
 - An explicit cast NPC crouch is saved with its interrupted routine and exact npcId. Release plays the crouch exit and returns that identity over the walk graph to its current schedule. Player C input never triggers NPC crouch.
 - Animation coordinator state is reconstructed from restored quest and NPC continuity state. It is not stored as a second source of NPC control truth.
 - Interiors are continuous with the street: same scene, real world position, no loading screen and no camera jump.
+- Room partitioning and player membership use the [Interior footprint contract](../../../interior/src/core/CONTRACT.md): the outer boundary includes its edge, hole interiors and boundaries are excluded. Worker outlines retain `holes`; each runtime room exposes `holds(feet)` for its footprint and floor band. Its distance-sorting center is an actual interior point. Core geometry remains in its shared floor band, or in another explicitly published room inside that exclusion.
 - Only manifest `interiors` parcels can open a door, register simulation interior support, or fetch an interior floor. Every other manifest parcel remains a closed exterior shell.
 - Every mobile world position preserves the Y coordinate published by Connections; movement is never flattened to XZ.
 - Highway road, structure, supports, lane paint and collision share the dimensions and elevation supplied by Atlas and Connections.

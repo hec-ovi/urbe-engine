@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { pointInRing } from '../ground/Polygons.js';
+import { roomFootprintAnchor, roomFootprintContains } from '../../../../interior/src/core/room-footprint.ts';
 import { albedoOf } from '../light/RoomFill.js';
 import { kelvinColor, luminance } from '../light/Color.js';
 
@@ -65,7 +65,7 @@ export function outlinesOf( floors ) {
 
 	return floors.map( ( { floor, elevation, height, rooms = [] } ) => ( {
 		floor, elevation, height,
-		rooms: rooms.map( ( { id, kind, polygon } ) => ( { id, kind, polygon } ) )
+		rooms: rooms.map( ( { id, kind, polygon, holes } ) => ( { id, kind, polygon, ...( holes?.length ? { holes } : {} ) } ) )
 	} ) );
 
 }
@@ -112,10 +112,12 @@ class FloorOutline {
 		this.top = elevation + height;
 		this.low = elevation - FLOOR_MARGIN;
 		this.high = this.top + FLOOR_MARGIN;
-		this.rooms = rooms.map( ( { id, kind, polygon } ) => ( {
-			id, kind, floor, elevation, height, polygon,
-			center: centreOf( polygon, elevation + height / 2 )
-		} ) );
+		this.rooms = rooms.map( ( room ) => {
+
+			const [ x, z ] = roomFootprintAnchor( room );
+			return { ...room, floor, elevation, height, center: [ x, elevation + height / 2, z ] };
+
+		} );
 		this.grid = new Map();
 
 		this.rooms.forEach( ( room, i ) => {
@@ -154,7 +156,7 @@ class FloorOutline {
 
 			const room = this.rooms[ i ];
 
-			if ( pointInRing( x, z, room.polygon ) ) return room;
+			if ( roomFootprintContains( room, [ x, z ] ) ) return room;
 
 		}
 
@@ -324,14 +326,6 @@ function sort( surface, index, rooms, shared ) {
 
 }
 
-function centreOf( polygon, y ) {
-
-	const sum = polygon.reduce( ( acc, [ x, z ] ) => [ acc[ 0 ] + x, acc[ 1 ] + z ], [ 0, 0 ] );
-
-	return [ sum[ 0 ] / polygon.length, y, sum[ 1 ] / polygon.length ];
-
-}
-
 /**
  * The key a mesh's material names, with the variant the interior box asked for
  * (`extras.materialVariant`, ../interior/CONTRACT.md) appended: a patterned
@@ -408,6 +402,7 @@ export class Room {
 		this.kind = measured.kind;
 		this.center = new THREE.Vector3().fromArray( measured.center );
 		this.polygon = measured.polygon;
+		this.holes = measured.holes ?? [];
 		this.elevation = measured.elevation;
 		this.height = measured.height;
 
@@ -450,6 +445,14 @@ export class Room {
 			this.group.add( mesh );
 
 		}
+
+	}
+
+	/** Published occupied footprint at this storey's height. Core exclusions stay outside. */
+	holds( feet ) {
+
+		return feet.y >= this.elevation - 0.5 && feet.y <= this.elevation + this.height
+			&& roomFootprintContains( this, [ feet.x, feet.z ] );
 
 	}
 

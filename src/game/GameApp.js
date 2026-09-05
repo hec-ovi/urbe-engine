@@ -18,7 +18,6 @@ import { Signals } from './data/Signals.js';
 import { GroundBuilder, SIDEWALK_HEIGHT } from './ground/GroundBuilder.js';
 import { SafetyGround } from './ground/SafetyGround.js';
 import { HydrologyHost } from './hydro/index.js';
-import { pointInRing } from './ground/Polygons.js';
 import { BuildingsLoader } from './city/BuildingsLoader.js';
 import { Links } from './links/Links.js';
 import { Transit } from './transit/Transit.js';
@@ -1065,11 +1064,11 @@ export class GameApp {
 	 */
 	#inside( visible, feet ) {
 
-		if ( holds( this.standing, feet ) && this.standing.group.visible ) return this.standing;
+		if ( this.standing?.holds( feet ) && this.standing.group.visible ) return this.standing;
 
 		for ( const room of visible ) {
 
-			if ( holds( room, feet ) ) return room;
+			if ( room.holds( feet ) ) return room;
 
 		}
 
@@ -1184,16 +1183,6 @@ export function prepareInteriorStreaming( stream, renderer, scene, camera, mrt )
 	stream.warmup = warmup;
 
 	return warmup;
-
-}
-
-/** Whether a point stands on this room's floor, inside its outline. */
-function holds( room, feet ) {
-
-	return Boolean( room )
-		&& feet.y >= room.elevation - 0.5
-		&& feet.y <= room.elevation + room.height
-		&& pointInRing( feet.x, feet.z, room.polygon );
 
 }
 

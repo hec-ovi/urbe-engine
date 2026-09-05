@@ -52,6 +52,33 @@ describe( 'partition', () => {
 
 	const cut = () => partition( surfaces, outlinesOf( floors ) );
 
+	it( 'preserves excluded cores through room cuts, transfer, centers and player membership', () => {
+
+		const hole = [ [ 3, 3 ], [ 3, 7 ], [ 7, 7 ], [ 7, 3 ] ];
+		const documents = [ { floor: 0, elevation: 0, height: 3, lights: [], rooms: [
+			{ id: 'lounge', kind: 'lounge', polygon: [ [ 0, 0 ], [ 10, 0 ], [ 10, 10 ], [ 0, 10 ] ], holes: [ hole ] },
+			{ id: 'bathroom', kind: 'bathroom', polygon: [ [ 4, 4 ], [ 6, 4 ], [ 6, 6 ], [ 4, 6 ] ] }
+		] } ];
+		const patch = ( x, z ) => [ [ x - 0.2, 0, z - 0.2 ], [ x, 0, z + 0.4 ], [ x + 0.2, 0, z - 0.2 ] ];
+		const source = [ surface( 'cyberpunk/tile/mid', [ patch( 1, 1 ), patch( 5, 5 ), patch( 3.5, 3.5 ) ] ) ];
+		const outlines = outlinesOf( documents );
+		expect( outlines[ 0 ].rooms[ 0 ].holes ).toEqual( [ hole ] );
+		const cut = structuredClone( partition( source, outlines ) );
+		expect( cut.rooms.map( ( room ) => [ room.id, room.surfaces.reduce( ( n, s ) => n + triangles( s ), 0 ) ] ) )
+			.toEqual( [ [ 'lounge', 1 ], [ 'bathroom', 1 ] ] );
+		expect( cut.shared.map( ( band ) => [ band.floor, band.surfaces.reduce( ( n, s ) => n + triangles( s ), 0 ) ] ) )
+			.toEqual( [ [ 0, 1 ] ] );
+		const [ lounge, bathroom ] = [ ...assembleRooms( 'p0', cut, documents, reflectance ) ];
+		expect( lounge.holes ).toEqual( [ hole ] );
+		expect( lounge.holds( lounge.center ) ).toBe( true );
+		expect( lounge.holds( { x: 5, y: 1, z: 5 } ) ).toBe( false );
+		expect( lounge.holds( { x: 3, y: 1, z: 5 } ) ).toBe( false );
+		expect( lounge.holds( { x: 0, y: 1, z: 5 } ) ).toBe( true );
+		expect( lounge.holds( { x: 1, y: 4, z: 1 } ) ).toBe( false );
+		expect( bathroom.holds( { x: 5, y: 1, z: 5 } ) ).toBe( true );
+
+	} );
+
 	it( 'puts a surface in the room it stands in and everything else on its floor', () => {
 
 		const { rooms, shared } = cut();
