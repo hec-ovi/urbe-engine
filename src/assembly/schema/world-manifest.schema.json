@@ -31,9 +31,20 @@
         "items": { "type": "string", "pattern": "^-?[0-9]{3}$" }
       }
     },
-    "rooftopSpans": { "$ref": "../connections/rooftop-span-output" }
+    "rooftopSpans": { "$ref": "../connections/rooftop-span-output" },
+    "connections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "file", "sha256", "blueprintSha256" ],
+      "properties": {
+        "file": { "const": "connections.json" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "blueprintSha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
   },
   "$defs": {
-    "parcelId": { "type": "string", "minLength": 1 }
+    "parcelId": { "type": "string", "minLength": 1 },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
   }
 }

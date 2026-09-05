@@ -1,0 +1,21 @@
+{
+  "meta": { "seed": "assembly-connections", "version": "0.7.0", "bounds": { "min": [ -10, -40 ], "max": [ 110, 40 ] } },
+  "districts": [ { "id": "d0", "kind": "residential", "tier": "mid", "boundary": [ [ -10, -40 ], [ 110, -40 ], [ 110, 40 ], [ -10, 40 ] ], "center": [ 50, 0 ], "maxFloors": 8 } ],
+  "streets": {
+    "nodes": [
+      { "id": "n0", "position": [ 0, 0 ], "edgeIds": [ "e0" ], "connections": [ { "level": 0, "edgeIds": [ "e0" ] } ] },
+      { "id": "n1", "position": [ 100, 0 ], "edgeIds": [ "e0" ], "connections": [ { "level": 0, "edgeIds": [ "e0" ] } ] }
+    ],
+    "edges": [ { "id": "e0", "class": "street", "from": "n0", "to": "n1", "path": [ [ 0, 0 ], [ 100, 0 ] ], "width": 8, "sidewalk": { "left": 4, "right": 4 }, "level": 0, "elevationProfile": [ { "distance": 0, "level": 0 }, { "distance": 100, "level": 0 } ] } ],
+    "crossings": []
+  },
+  "parcels": [
+    { "id": "p0", "districtId": "d0", "type": "residential", "tier": "mid", "name": "Café del Sur", "footprint": [ [ 20, -30 ], [ 40, -30 ], [ 40, -10 ], [ 20, -10 ] ], "access": { "edgeId": "e0", "point": [ 30, -6 ] }, "envelope": { "minFloors": 3, "maxFloors": 8, "floorHeight": 3, "maxHeight": 24 } },
+    { "id": "p1", "districtId": "d0", "type": "residential", "tier": "mid", "footprint": [ [ 20, 10 ], [ 40, 10 ], [ 40, 30 ], [ 20, 30 ] ], "access": { "edgeId": "e0", "point": [ 30, 6 ] }, "envelope": { "minFloors": 3, "maxFloors": 8, "floorHeight": 3, "maxHeight": 24 } }
+  ],
+  "transit": { "busStops": [], "busRoutes": [], "trainStations": [], "trainLines": [], "subwayStations": [], "subwayLines": [] },
+  "volumetric": { "buildings": [
+    { "parcelId": "p0", "footprint": [ [ 20, -30 ], [ 40, -30 ], [ 40, -10 ], [ 20, -10 ] ], "height": 24 },
+    { "parcelId": "p1", "footprint": [ [ 20, 10 ], [ 40, 10 ], [ 40, 30 ], [ 20, 30 ] ], "height": 24 }
+  ] }
+}

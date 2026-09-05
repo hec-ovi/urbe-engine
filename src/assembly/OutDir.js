@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { validateWorldManifest } from './validators.js';
 
@@ -149,7 +149,7 @@ export class OutDir {
 	 * the complete interior subset and only that subset's streamable floors.
 	 * The game refuses an out dir whose blueprint is not the one it is playing.
 	 */
-	writeManifest( atlas, parcelIds, interiorIds, rooftopSpans = null ) {
+	writeManifest( atlas, parcelIds, interiorIds, rooftopSpans = null, connectionsArtifact = null ) {
 
 		const parcels = [ ...parcelIds ].sort( ( a, b ) => a.localeCompare( b, undefined, { numeric: true } ) );
 		const interiors = [ ...interiorIds ].sort( ( a, b ) => a.localeCompare( b, undefined, { numeric: true } ) );
@@ -171,13 +171,18 @@ export class OutDir {
 			interiors,
 			floors: Object.fromEntries( interiors.map( ( id ) => [ id, this.floorsOf( id ) ] ) )
 		};
+		const blueprintBytes = JSON.stringify( atlas ) + '\n';
 		if ( rooftopSpans ) manifest.rooftopSpans = rooftopSpans;
+		if ( connectionsArtifact ) manifest.connections = connectionsArtifact.reference( blueprintBytes );
 		const errors = validateWorldManifest( manifest );
 
 		if ( errors.length ) throw new Error( `invalid world manifest: ${errors.map( ( error ) => `${error.instancePath || '/'} ${error.message}` ).join( '; ' )}` );
 
-		writeFileSync( join( this.dir, MANIFEST_FILE ), JSON.stringify( manifest, null, 2 ) + '\n' );
-		writeFileSync( join( this.dir, BLUEPRINT_FILE ), JSON.stringify( atlas ) + '\n' );
+		writeFileSync( join( this.dir, BLUEPRINT_FILE ), blueprintBytes );
+		connectionsArtifact?.write( this.dir );
+		const pendingManifest = join( this.dir, `.${MANIFEST_FILE}.tmp` );
+		writeFileSync( pendingManifest, JSON.stringify( manifest, null, 2 ) + '\n' );
+		renameSync( pendingManifest, join( this.dir, MANIFEST_FILE ) );
 
 		return manifest;
 

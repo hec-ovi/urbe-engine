@@ -10,6 +10,9 @@ const INTERIOR_BLUEPRINT = new URL( '../../../interior/schemas/blueprint.schema.
 const WORLD_MANIFEST = new URL( './schema/world-manifest.schema.json', import.meta.url );
 const ROOFTOP_SPAN = new URL( '../../../connections/schemas/rooftop-span.schema.json', import.meta.url );
 const ROOFTOP_SPAN_OUTPUT = new URL( '../../../connections/schemas/rooftop-span-output.schema.json', import.meta.url );
+const CONNECTIONS_SCHEMAS = [ 'link', 'aperture', 'networks', 'output' ].map(
+	( name ) => new URL( `../../../connections/schemas/${name}.schema.json`, import.meta.url )
+);
 
 let ajv = null;
 
@@ -29,6 +32,19 @@ function instance() {
 		ajv.addSchema( loadSchema( INTERIOR_BLUEPRINT ) );
 		ajv.addSchema( loadSchema( INTERIOR_REQUEST ) );
 		new SchemaFiles( ajv ).add( EXTERIOR_REQUEST );
+		for ( const url of CONNECTIONS_SCHEMAS ) {
+
+			const schema = loadSchema( url );
+			if ( schema.$id === 'urbe/connections/output' ) {
+
+				schema.properties.links.items.$ref = './link';
+				schema.properties.apertures.items.$ref = './aperture';
+				schema.properties.networks.$ref = './networks';
+
+			}
+			ajv.addSchema( schema );
+
+		}
 		ajv.addSchema( loadSchema( ROOFTOP_SPAN ) );
 		ajv.addSchema( rooftopSpanOutput );
 		ajv.addSchema( loadSchema( WORLD_MANIFEST ) );
@@ -36,6 +52,15 @@ function instance() {
 	}
 
 	return ajv;
+
+}
+
+/** @returns [] when valid, else ajv error objects. */
+export function validateConnectionsOutput( connections ) {
+
+	const validate = instance().getSchema( 'urbe/connections/output' );
+
+	return validate( connections ) ? [] : validate.errors;
 
 }
 
