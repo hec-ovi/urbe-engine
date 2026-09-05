@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { groundTriangles } from './GroundTriangulation.js';
 
 /**
  * Atlas ground polygons ([x,z] rings, meters) turned into three.js geometry.
@@ -49,6 +50,18 @@ export function pointInRing( x, z, ring ) {
  * rotation; earcut handles either input winding, so no ring is ever inverted.
  */
 export function fill( ring, y, holes = [] ) {
+
+	const triangles = holes.length ? null : groundTriangles( ring );
+	if ( triangles ) {
+
+		const geometry = new THREE.BufferGeometry();
+		geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( ring.flatMap( ( [ x, z ] ) => [ x, y, z ] ), 3 ) );
+		geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( ring.flatMap( () => [ 0, 1, 0 ] ), 3 ) );
+		geometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( ring.flatMap( ( [ x, z ] ) => [ x, - z ] ), 2 ) );
+		geometry.setIndex( triangles.flat() );
+		return geometry;
+
+	}
 
 	const flat = ( points ) => points.map( ( [ x, z ] ) => new THREE.Vector2( x, - z ) );
 	const shape = new THREE.Shape( flat( ring ) );

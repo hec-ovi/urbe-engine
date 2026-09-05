@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { groundTriangles } from './GroundTriangulation.js';
 
 /** Indexed vertex batches, with no Three.js geometry allocation per cell. */
 export class PavingMesh {
@@ -15,9 +16,9 @@ export class PavingMesh {
 	polygon( polygon, height, frame ) {
 
 		const offset = this.positions.length / 3;
-		const contour = polygon.map( ( [ x, z ] ) => new THREE.Vector2( x, - z ) );
+		const triangles = groundTriangles( polygon ) ?? THREE.ShapeUtils.triangulateShape( polygon.map( ( [ x, z ] ) => new THREE.Vector2( x, - z ) ), [] );
 		for ( const point of polygon ) this.vertex( point, height, [ 0, 1, 0 ], frame.uv( point ) );
-		for ( const triangle of THREE.ShapeUtils.triangulateShape( contour, [] ) ) this.indices.push( ...triangle.map( i => offset + i ) );
+		for ( const triangle of triangles ) this.indices.push( ...triangle.map( i => offset + i ) );
 
 	}
 
