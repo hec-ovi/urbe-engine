@@ -181,7 +181,7 @@ export class MarkingPlan {
 		const polygons = arrowPolygons( turns, s.arrowLength, s.arrowWidth ).map( polygon => polygon.map( ( [ across, along ] ) => {
 
 			const point = path.at( start + along ).point;
-			return [ point[ 0 ] - heading[ 1 ] * across, point[ 1 ], point[ 2 ] + heading[ 0 ] * across ];
+			return [ point[ 0 ] + heading[ 1 ] * across, point[ 1 ], point[ 2 ] - heading[ 0 ] * across ];
 
 		} ) );
 		if ( fits( polygons, planes, s.crossingClearance ) ) this.add( 'arrow', lane.edgeId, polygons, { laneId: lane.id, turns } );

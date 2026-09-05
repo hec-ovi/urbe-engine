@@ -7,7 +7,6 @@ export class MarkingApproaches {
 
 		this.byEdge = new Map();
 		this.internal = new Set();
-		this.modern = Array.isArray( atlas.streets?.construction?.junctions );
 		const edges = new Map( ( atlas.streets?.edges ?? [] ).map( edge => [ edge.id, edge ] ) );
 		for ( const junction of atlas.streets?.construction?.junctions ?? [] ) {
 

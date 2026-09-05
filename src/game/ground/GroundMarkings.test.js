@@ -11,12 +11,14 @@ const factory = { build( key, variantId ) {
 	return material;
 } };
 
-function fixture( { length = 100, angle = 0, reverse = false } = {} ) {
+function fixture( { length = 100, angle = 0, reverse = false, laneCount = 4 } = {} ) {
+	const width = laneCount * 3.5;
+	const offsets = laneCount === 1 ? [ 0 ] : laneCount === 2 ? [ 1.75, - 1.75 ] : [ 5.25, 1.75, - 1.75, - 5.25 ];
 	const point = ( x, z ) => [ 30 + x * Math.cos( angle ) - z * Math.sin( angle ), - 20 + x * Math.sin( angle ) + z * Math.cos( angle ) ];
 	const coordinates = position => [ ( position[ 0 ] - 30 ) * Math.cos( angle ) + ( position[ 2 ] + 20 ) * Math.sin( angle ),
 		- ( position[ 0 ] - 30 ) * Math.sin( angle ) + ( position[ 2 ] + 20 ) * Math.cos( angle ) ];
-	const rect = ( a, b, z0 = - 7, z1 = 7 ) => [ point( a, z0 ), point( b, z0 ), point( b, z1 ), point( a, z1 ) ];
-	const edge = { id: 'e', from: reverse ? 'b' : 'a', to: reverse ? 'a' : 'b', width: 14,
+	const rect = ( a, b, z0 = - width / 2, z1 = width / 2 ) => [ point( a, z0 ), point( b, z0 ), point( b, z1 ), point( a, z1 ) ];
+	const edge = { id: 'e', from: reverse ? 'b' : 'a', to: reverse ? 'a' : 'b', width,
 		path: reverse ? [ point( length, 0 ), point( 0, 0 ) ] : [ point( 0, 0 ), point( length, 0 ) ],
 		elevationProfile: [ { distance: 0, level: 0 }, { distance: length, level: 0 } ] };
 	const near = Math.min( 10, length * 0.2 );
@@ -24,14 +26,14 @@ function fixture( { length = 100, angle = 0, reverse = false } = {} ) {
 	const approaches = limits.map( ( [ from, to ], i ) => ( {
 		nodeId: i ? 'b' : 'a', edgeId: 'e', groupId: `j${i}`, distance: reverse ? length - ( from + to ) / 2 : ( from + to ) / 2,
 		station: reverse ? [ length - to, length - from ] : [ from, to ], field: rect( from, to ), landings: { left: [], right: [] },
-		cut: { left: point( i ? to : from, reverse ? - 7 : 7 ), right: point( i ? to : from, reverse ? 7 : - 7 ) }
+		cut: { left: point( i ? to : from, ( reverse ? - 1 : 1 ) * width / 2 ), right: point( i ? to : from, ( reverse ? 1 : - 1 ) * width / 2 ) }
 	} ) );
 	const crossings = limits.map( ( [ from, to ], i ) => ( {
 		nodeId: i ? 'b' : 'a', junctionId: `j${i}`, segments: [ { edgeId: 'e', width: 3,
-			from: point( ( from + to ) / 2, - 8 ), to: point( ( from + to ) / 2, 8 ),
-			markings: Array.from( { length: 14 }, ( _, j ) => rect( from, to, - 6.75 + j, - 6.25 + j ) ) } ]
+			from: point( ( from + to ) / 2, - width / 2 - 1 ), to: point( ( from + to ) / 2, width / 2 + 1 ),
+			markings: Array.from( { length: Math.floor( width ) }, ( _, j ) => rect( from, to, - width / 2 + 0.25 + j, - width / 2 + 0.75 + j ) ) } ]
 	} ) );
-	const lanes = [ 5.25, 1.75, - 1.75, - 5.25 ].map( ( z, i ) => {
+	const lanes = offsets.map( ( z, i ) => {
 		const forward = z < 0;
 		const path = forward ? [ point( 0, z ), point( length, z ) ] : [ point( length, z ), point( 0, z ) ];
 		return { id: `lane${i}`, edgeId: 'e', index: i % 2, width: 3.5, path3: path.map( ( [ x, z ] ) => [ x, 0, z ] ),
@@ -46,6 +48,19 @@ function fixture( { length = 100, angle = 0, reverse = false } = {} ) {
 function build( data, settings ) { return new GroundMarkings( data.atlas, data.road, factory, bindings, settings ).build(); }
 
 describe( 'GroundMarkings', () => {
+	it( 'derives one-way and two-way paint from the supplied lane count without extra dividers', () => {
+		for ( const laneCount of [ 1, 2 ] ) {
+			const data = fixture( { laneCount } );
+			const result = build( data );
+			expect( result.primitives.filter( primitive => primitive.kind === 'edge' ) ).toHaveLength( 2 );
+			expect( result.primitives.filter( primitive => primitive.kind === 'center' ) ).toHaveLength( laneCount === 1 ? 0 : 2 );
+			expect( result.primitives.filter( primitive => primitive.kind === 'divider' ) ).toEqual( [] );
+			expect( result.primitives.filter( primitive => primitive.kind === 'stop' ) ).toHaveLength( laneCount );
+			for ( const primitive of result.primitives.filter( primitive => primitive.kind !== 'crossing' ) ) {
+				for ( const point of primitive.polygons.flat() ) expect( Math.abs( data.coordinates( point )[ 1 ] ) ).toBeLessThan( laneCount * 3.5 / 2 );
+			}
+		}
+	} );
 	it( 'keeps four-lane paint disjoint and outside the exact complete crossing fields', () => {
 		const data = fixture();
 		const result = build( data );
@@ -78,6 +93,15 @@ describe( 'GroundMarkings', () => {
 			const xs = arrow.polygons.flatMap( polygon => polygon.map( point => data.coordinates( point )[ 0 ] ) );
 			expect( Math.min( ...xs ) ).toBeGreaterThan( lane.id === 'lane0' || lane.id === 'lane1' ? 14 : 75 );
 			expect( Math.max( ...xs ) ).toBeLessThan( lane.id === 'lane0' || lane.id === 'lane1' ? 25 : 86 );
+			if ( arrow.turns.length === 1 && arrow.turns[ 0 ] !== 's' ) {
+				const a = lane.path3[ 0 ], b = lane.path3.at( - 1 );
+				const span = Math.hypot( b[ 0 ] - a[ 0 ], b[ 2 ] - a[ 2 ] );
+				const across = arrow.polygons.flatMap( polygon => polygon.map( point => ( - ( b[ 2 ] - a[ 2 ] ) * ( point[ 0 ] - a[ 0 ] ) + ( b[ 0 ] - a[ 0 ] ) * ( point[ 2 ] - a[ 2 ] ) ) / span ) );
+				const extent = arrow.turns[ 0 ] === 'l' ? Math.max( ...across ) : - Math.min( ...across );
+				expect( extent ).toBeCloseTo( 0.75, 7 );
+				const opposite = arrow.turns[ 0 ] === 'l' ? - Math.min( ...across ) : Math.max( ...across );
+				expect( opposite ).toBeCloseTo( 0.135, 7 );
+			}
 		}
 		for ( const mesh of result.group.children ) {
 			const normal = mesh.geometry.getAttribute( 'normal' );
@@ -109,6 +133,19 @@ describe( 'GroundMarkings', () => {
 		expect( new Set( result.primitives.map( p => p.kind ) ) ).toEqual( new Set( [ 'edge' ] ) );
 		expect( Math.max( ...result.primitives.flatMap( p => p.polygons.flatMap( polygon => polygon.map( point => point[ 1 ] ) ) ) ) ).toBe( 4 );
 		expect( result.group.children[ 0 ].geometry.getAttribute( 'position' ).getY( 0 ) ).toBeCloseTo( 0.003, 6 );
+	} );
+
+	it( 'keeps bent one-way edge strips disjoint through the shared miter', () => {
+		const data = fixture( { laneCount: 1 } );
+		data.atlas.streets.crossings = [];
+		data.atlas.streets.construction.junctions = [];
+		data.atlas.streets.edges[ 0 ].path = [ [ 0, 0 ], [ 20, 0 ], [ 20, 20 ] ];
+		data.road.lanes[ 0 ].path3 = [ [ 0, 0, 0 ], [ 20, 0, 0 ], [ 20, 0, 20 ] ];
+		data.road.lanes[ 0 ].sourceDirection = 'forward';
+		const result = build( data );
+		const polygons = result.primitives.flatMap( primitive => primitive.polygons.map( polygon => polygon.map( ( [ x, , z ] ) => [ x, z ] ) ) );
+		expect( polygons ).toHaveLength( 4 );
+		for ( let i = 0; i < polygons.length; i ++ ) for ( let j = i + 1; j < polygons.length; j ++ ) expect( overlap( polygons[ i ], polygons[ j ] ) ).toBeLessThan( 1e-8 );
 	} );
 
 	it( 'rejects missing authority, unsupported settings and absent material bindings', () => {
