@@ -74,18 +74,19 @@ export class Physics {
 
 	}
 
-	/** A rendered moving surface, expressed around its world-space hinge. */
-	addKinematicTrimesh( geometry, hinge ) {
+	/** A moving surface in body-local coordinates with a world-space rigid pose. */
+	addKinematicTrimesh( geometry, position, rotation = { x: 0, y: 0, z: 0, w: 1 } ) {
 
-		const position = geometry.getAttribute( 'position' );
-		const vertices = position.array instanceof Float32Array
-			? position.array
-			: new Float32Array( position.array );
+		const attribute = geometry.getAttribute( 'position' );
+		const vertices = attribute.array instanceof Float32Array
+			? attribute.array
+			: new Float32Array( attribute.array );
 		const indices = geometry.index
 			? new Uint32Array( geometry.index.array )
-			: sequentialTriangleIndices( position.count );
+			: sequentialTriangleIndices( attribute.count );
 		const body = this.world.createRigidBody(
-			RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation( hinge.x, hinge.y, hinge.z )
+			RAPIER.RigidBodyDesc.kinematicPositionBased()
+				.setTranslation( position.x, position.y, position.z ).setRotation( rotation )
 		);
 		const collider = this.world.createCollider( RAPIER.ColliderDesc.trimesh( vertices, indices ), body );
 

@@ -7,7 +7,8 @@ Purpose: resolves world and player collision, measures vehicle contacts, and tur
 - `Physics.create()`: loads the pinned Rapier runtime and creates the fixed-step world.
 - Static geometry: `Physics.addTrimesh(geometry)` and `WorldColliders` accept generated Three.js geometry in world coordinates.
 - Safety collision: `Physics.addHalfSpace(elevation)` accepts a finite world Y and returns `{body, collider, triangles: 0}` for the solid below an infinite horizontal plane. `Physics.remove(handle)` releases it.
-- Moving Exterior leaves: `new DoorColliders(physics, doors)` accepts the exact pivot-local leaf triangles emitted by the shell loader. `sync(door)` copies each rendered hinge rotation to its position-driven Rapier body.
+- Moving surfaces: `Physics.addKinematicTrimesh(geometry, position, rotation?)` accepts body-local triangles and a world rigid pose; omitted rotation is identity. It returns the Rapier body, collider and triangle count.
+- Moving Exterior leaves: `new DoorColliders(physics, doors)` accepts exact pivot-local leaf triangles from the shell loader. Initial bodies use the rendered world pose. `sync(door)` copies each pivot's world translation and rotation for the next physics step. Pivots and their parents have unit scale.
 - Player spawn: `new PlayerBody(physics, feet)` accepts the generated world position.
 - Impact frame: `ImpactWorld.sync({ people, vehicles })` accepts live render projections. Each person has an id, `THREE.Vector3` position and optional fallen state. Each vehicle has an id, position, heading, pitch and speed in metres per second.
 - Ragdoll impact: [schema/ragdoll-impact.schema.json](schema/ragdoll-impact.schema.json). `Ragdoll.create({ physics, root, impact })` also requires the live physics world and a full Source character root in its current authored pose.
@@ -37,7 +38,7 @@ Purpose: resolves world and player collision, measures vehicle contacts, and tur
 
 - Physics advances at 1/60 second. Ground, structures and streamed floors use the same generated geometry that is rendered.
 - The safety half-space has no horizontal bounds and remains below the world's lowest authored geometry and basin depth.
-- Each authored physical door leaf has one kinematic trimesh around the same hinge as its rendered pivot. Closed leaves block the capsule and a fully open leaf clears its published opening.
+- Each authored physical door leaf has one kinematic trimesh using its rendered pivot's complete rigid pose. Translation and rotation preserve that agreement while closed, partly open and fully open. Authored full-open poses clear their published passage.
 - Vehicle impact starts only from a Rapier sensor intersection at 2 m/s or faster. A measured contact at 10 m/s or faster is fatal; slower contacts are falls only.
 - A fall starts from the person's current baked animation frame, removes that exact instanced slot and drives the same full Source skeleton. A proxy mesh or alternate skeleton is rejected.
 - Ragdoll parts collide with generated world geometry and not with one another. The 15 body masses total 70 kg.
