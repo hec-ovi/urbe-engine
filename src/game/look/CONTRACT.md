@@ -27,7 +27,7 @@ Scene pass with a two-attachment MRT (`output`, `emissive`) -> bloom fed by the 
 - `low` keeps physical units, computed room fill and fog. It disables bloom and the environment probe, limits material variety and uses scalar roughness and metalness to stay inside WebGL texture memory. Medium through ultra keep the probe.
 - The game does not warm the complete city: its program set can occupy either backend for minutes. It does warm each bounded streamed floor while detached, once for the dim binding and once per fixed room-light slot, before that floor can become visible. Fixed light identities keep later camera translation on those pipeline keys.
 
-## Acceptance bands (docs/RESEARCH-LIGHTING.md 9)
+## Acceptance bands
 | statistic | interior | exterior |
 |---|---|---|
 | median linear luminance | 0.005-0.021 | 0.011-0.022 |

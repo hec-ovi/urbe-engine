@@ -11,9 +11,7 @@ const DEFAULTS = {
 	cars: 18,
 	stress: 0,
 	streetDensity: 1,
-	// The exposure the whole look is tuned at: what maps the city's real
-	// photometric levels onto the 1-2% of white the reference frames sit at.
-	// Measured, not guessed (docs/RESEARCH-LIGHTING.md 9).
+	// Maps photometric levels to the luminance bands in ../look/CONTRACT.md.
 	exposure: 0.024,
 	// Street fog density per metre. The first block stays crisp; fog is what
 	// separates the skyline into planes past it.

@@ -12,10 +12,7 @@ const TWILIGHT = - 6;
 const FULL_DAY = 2;
 
 /**
- * Stops off the authored night exposure, per state. Night is what the whole
- * look was graded at (docs/RESEARCH-LIGHTING.md 9); the others come from the
- * real illuminance ratio, not from taste: a sunlit street is about a thousand
- * times a lamp-lit one, which is ten stops.
+ * Exposure offsets from the authored night baseline, in stops.
  */
 const STOPS = { night: 0, dawn: - 4, day: - 8.5, dusk: - 4 };
 
