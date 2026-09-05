@@ -17,7 +17,7 @@
   - `links/`: bridges, AC tubes, tunnels and street wires from Connections' link document, plus post-exterior rooftop antenna spans, merged by material; aperture links are sliced onto their exact carved openings (src/game/links/CONTRACT.md)
   - `transit/`: bus stop shelters and signs, buses driven by the timetables' closed-form vehicle positions, station entrances and the shaft, passage and platform room behind each one; both maps project the enabled Connections routes and their served stops or entrances (src/game/transit/CONTRACT.md)
   - `props/`: seeded alley and service-corner dressing, bags, crates and boxes, clear of doorways and walk lines (src/game/props/CONTRACT.md)
-  - `light/`: every fixture as real light in lumens, clustered or batched by backend, per-room light slots with the computed room fill, air glow, the day switch that puts the city's own lights out at sunrise (src/game/light/CONTRACT.md)
+  - `light/`: fixture power in lumens, backend light pools, room fill and air glow (src/game/light/CONTRACT.md); play uses one fixed night grade independently of the simulation clock.
   - `look/`: quality tiers with explicit texture budgets, AgX exposure, height fog tinted by the light in the air, environment probe, the render pipeline with emissive-selected bloom, and serial warm-up that builds pipelines and maps before a frame can stall on them (src/game/look/CONTRACT.md)
   - `sky/`: night sky, moon key, stars
   - `physics/`: fixed-step Rapier world, generated trimesh collision, player capsule, measured fatal and nonfatal vehicle contacts and one full Source-rig ragdoll (src/game/physics/CONTRACT.md)
@@ -29,7 +29,7 @@
   - `routes/`: deterministic shortest objective routes to published parcel, station and stop entries over Connections' authoritative 3D walk graph (src/game/routes/CONTRACT.md)
   - `sim/`: the simulation library host and exact NPC continuity pass-through (src/game/sim/CONTRACT.md)
   - `debug/`: the hitch log, and the renderer work (shader links, texture uploads) that explains a gap the world did not cause
-  - `time/`, `world/`: game clock, the sun arc and the four sky states it drives, district and parcel lookup, 2D and 3D map models from Atlas and Connections, named camera poses for the lighting tuning protocol
+  - `time/`, `world/`: simulation clock, sky-state arithmetic, district and parcel lookup, map models from Atlas and Connections, named lighting-review camera poses.
 
 ## Scale experiment (docs/RESEARCH.md 9)
 

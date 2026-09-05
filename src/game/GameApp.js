@@ -259,10 +259,8 @@ export class GameApp {
 		this.#hangHaze( fixtures );
 
 		this.view.step( 'raising the sky' );
-		this.sky = new NightSky( this.scene ).build( this.clock.hour );
-		// Everything the city lights itself with, switched together by the hour:
-		// taken off the built scene, so a new kind of lit surface joins by being
-		// added to the world rather than by being registered here.
+		this.sky = new NightSky( this.scene ).build( config.lightingHour );
+		// Emitting surfaces share the scene's fixed night setting.
 		this.night = new NightSwitch( this.lights )
 			.addGroup( neon.group ).addGroup( lamps.group ).addGroup( city.group ).addGroup( this.transit.group ).addGroup( props.group );
 		this.fog = new NightFog( this.scene, config.off.has( 'fog' )
@@ -530,7 +528,7 @@ export class GameApp {
 		this.clock.advance( delta );
 		this.hydrology.update( Math.max( 0, ( performance.now() - this.playStartedAt ) / 1000 ) );
 
-		const day = this.sky.setHour( this.clock.hour );
+		const day = this.sky.day;
 		this.night.set( day.lampsOn );
 		this.exposure.setDaylight( stopsFor( day.state ) );
 		this.view.clock.setState( day.state );
