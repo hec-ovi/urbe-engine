@@ -11,6 +11,8 @@ Purpose: renders authored city cover and places an unbounded safety floor below 
 ## Out
 
 - GroundBuilder returns `{group, colliderGeometry, bounds}`. Station mouths remain open. Highway geometry follows published profiles and dimensions.
+- Every authored ground polygon, including curb tops and corner pieces, is filled completely at its `top`; curb faces use its `bottom`. Rendering and collision use these same triangles. Legacy covers without elevations retain class defaults; exported `SIDEWALK_HEIGHT` is the Atlas default of 0.15 m.
+- Atlas seed selects one complete family from [Materials street styles](../../../../materials/bindings/street-styles.json). Road, paving and continuous curb finishes retain catalog world scale. All cover UVs share the world origin; explicit paving-region grid and perimeter construction remain a separate layout responsibility.
 - SafetyGround exposes `elevation`, `mesh` and its physics `handle`. Elevation is 2 m below the minimum of zero, group geometry, building floors, station volumes and water elevation minus depth.
 - One infinite upward-facing half-space blocks falls everywhere below that elevation. Its two-triangle street-asphalt surface covers the entire camera frustum and keeps world-metre UVs as the camera moves.
 - `dispose()` removes the safety mesh and collider and releases its geometry. Factory materials remain owned by the factory.

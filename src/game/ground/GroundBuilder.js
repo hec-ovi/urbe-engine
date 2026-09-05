@@ -3,38 +3,34 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { fill, skirt, ringBounds, ledge, Roadway, signedArea } from './Polygons.js';
 import { holesWithin, shaftMouths } from './Stations.js';
 import { Highways } from './Highways.js';
+import { GroundPalette } from './GroundPalette.js';
 
-export const SIDEWALK_HEIGHT = 0.12;
+export const SIDEWALK_HEIGHT = 0.15;
 const CURB_BOTTOM = - 0.06;
 
-const CURB_KEY = 'cyberpunk/curb/poor';
-/** A kerb stone's top, from the edge inward, and how far above the pavement it sits so it never fights it. */
+/** Dimensions for legacy covers without authored curb volumes. */
 const CURB_WIDTH = 0.15;
 const CURB_LIP = 0.004;
 
-// Atlas ground surfaces mapped onto material database keys: road, sidewalk
-// and curb are real kinds since materials 0.9 (../materials/CONTRACT.md).
 // `kerb` says where the kerb stone comes from: `face` for the strip the
 // blueprint publishes, which only wants its road-facing side; `grow` for a
 // pavement in a world published without one, which has to cut its own from the
 // edges that meet the road.
 const SURFACES = {
-	roadway: { key: 'cyberpunk/road/high_rich', y: 0, variantId: 'street' },
-	sidewalk: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT, variantId: 'plate', kerb: 'grow' },
-	block: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT, variantId: 'plate' },
-	open: { key: 'cyberpunk/sidewalk/high_rich', y: SIDEWALK_HEIGHT, variantId: 'plate', kerb: 'grow' },
-	curb: { key: CURB_KEY, y: SIDEWALK_HEIGHT + CURB_LIP, kerb: 'face' }
+	roadway: { y: 0 },
+	sidewalk: { y: SIDEWALK_HEIGHT, kerb: 'grow' },
+	block: { y: SIDEWALK_HEIGHT },
+	open: { y: SIDEWALK_HEIGHT, kerb: 'grow' },
+	curb: { y: SIDEWALK_HEIGHT + CURB_LIP, kerb: 'face' }
 };
 
 /**
- * The city floor, straight off the atlas blueprint's volumetric ground cover:
- * roadway at zero, every other surface raised by a real curb, one merged mesh
- * per material so the whole ground costs a handful of draw calls.
+ * The city floor follows complete Atlas cover polygons and their authored
+ * elevations, with one merged mesh per material.
  *
- * Roadway uses the isotropic street asphalt because these cover polygons have
- * a shared world grid rather than one lane axis. Sidewalk, block and open cover
- * use one neutral 2 m plate per tile. Their UV coordinates remain world metres,
- * so every cover shares one grid origin and texture size never follows mesh size.
+ * A seeded catalog family coordinates road, paving and continuous curb finishes.
+ * UV coordinates remain world metres with one shared origin; texture scale
+ * comes from the catalog rather than mesh dimensions.
  */
 export class GroundBuilder {
 
@@ -46,6 +42,7 @@ export class GroundBuilder {
 
 		this.atlas = atlas;
 		this.factory = factory;
+		this.palette = new GroundPalette( atlas.meta?.seed );
 
 	}
 
@@ -63,7 +60,7 @@ export class GroundBuilder {
 
 			if ( ! bySurface.has( cover.surface ) ) bySurface.set( cover.surface, [] );
 
-			bySurface.get( cover.surface ).push( cover.polygon );
+			bySurface.get( cover.surface ).push( cover );
 
 		}
 
@@ -78,12 +75,15 @@ export class GroundBuilder {
 		// unbroken through every junction return, which a pavement edge cannot.
 		const strip = bySurface.has( 'curb' );
 
-		for ( const [ surface, rings ] of bySurface ) {
+		for ( const [ surface, covers ] of bySurface ) {
 
 			const spec = SURFACES[ surface ];
-			const fills = rings.map( ( ring ) => {
+			const fills = covers.map( ( cover ) => {
 
-				if ( surface !== 'curb' ) return fill( ring, spec.y, holesWithin( ring, mouths ) );
+				const ring = cover.polygon;
+				const top = cover.top ?? spec.y;
+
+				if ( surface !== 'curb' || Number.isFinite( cover.top ) ) return fill( ring, top, holesWithin( ring, mouths ) );
 
 				const ccw = signedArea( ring ) > 0;
 				return ledge( ring, spec.y, CURB_WIDTH, ( a, b ) => road.bordersEdge( a, b, ccw ) );
@@ -92,7 +92,8 @@ export class GroundBuilder {
 			const merged = BufferGeometryUtils.mergeGeometries( fills, false );
 			fills.forEach( ( g ) => g.dispose() );
 
-			const mesh = new THREE.Mesh( merged, this.factory.build( spec.key, spec.variantId ) );
+			const material = this.palette.surface( surface );
+			const mesh = new THREE.Mesh( merged, this.factory.build( material.key, material.variantId ) );
 			mesh.name = `ground:${surface}`;
 			mesh.receiveShadow = true;
 			group.add( mesh );
@@ -100,13 +101,16 @@ export class GroundBuilder {
 
 			if ( spec.kerb === 'grow' && strip ) continue;
 
-			for ( const ring of spec.kerb ? rings : [] ) {
+			for ( const cover of spec.kerb ? covers : [] ) {
 
+				const ring = cover.polygon;
+				const top = cover.top ?? spec.y;
+				const bottom = cover.bottom ?? CURB_BOTTOM;
 				const ccw = signedArea( ring ) > 0;
 				const onRoad = ( a, b ) => road.bordersEdge( a, b, ccw );
 
-				curbs.push( skirt( ring, spec.y, CURB_BOTTOM, onRoad ) );
-				if ( spec.kerb === 'grow' ) curbs.push( ledge( ring, spec.y + CURB_LIP, CURB_WIDTH, onRoad ) );
+				curbs.push( skirt( ring, top, bottom, onRoad ) );
+				if ( spec.kerb === 'grow' ) curbs.push( ledge( ring, top + CURB_LIP, CURB_WIDTH, onRoad ) );
 
 			}
 
@@ -116,7 +120,8 @@ export class GroundBuilder {
 
 			const merged = BufferGeometryUtils.mergeGeometries( curbs, false );
 			curbs.forEach( ( g ) => g.dispose() );
-			const mesh = new THREE.Mesh( merged, this.factory.build( CURB_KEY ) );
+			const material = this.palette.surface( 'curb' );
+			const mesh = new THREE.Mesh( merged, this.factory.build( material.key, material.variantId ) );
 			mesh.name = 'ground:kerb';
 			group.add( mesh );
 			solid.push( merged );

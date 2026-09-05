@@ -24,6 +24,42 @@ const STRIP = rect( 'curb', 10, 10.15 );
  */
 describe( 'GroundBuilder', () => {
 
+	it( 'preserves complete authored curb polygons and each cover elevation', () => {
+
+		const curb = { surface: 'curb', bottom: - 0.2, top: 0.24,
+			polygon: [ [ 0, 10 ], [ 20, 10 ], [ 20, 10.2 ], [ 19.8, 10.35 ], [ 0, 10.35 ] ] };
+		const { group, colliderGeometry } = ground( [
+			{ ...ROAD, bottom: - 0.4, top: - 0.03 }, curb,
+			{ ...rect( 'sidewalk', 10.35, 16 ), bottom: 0, top: 0.24 },
+			{ ...rect( 'sidewalk', 16, 20 ), bottom: 0, top: 0.32 }
+		] );
+		const top = group.getObjectByName( 'ground:curb' ).geometry;
+		expect( span( top ) ).toEqual( [ 0.24, 0.24 ] );
+		expect( horizontalArea( top ) ).toBeCloseTo( 6.985, 4 );
+		expect( covered( top, 10, 10.3 ) ).toBe( true );
+		expect( covered( top, 19.99, 10.34 ) ).toBe( false );
+		expect( span( group.getObjectByName( 'ground:roadway' ).geometry ) ).toEqual( [ - 0.03, - 0.03 ] );
+		expect( span( group.getObjectByName( 'ground:sidewalk' ).geometry ) ).toEqual( [ 0.24, 0.32 ] );
+		expect( span( colliderGeometry ) ).toEqual( [ - 0.2, 0.32 ] );
+
+	} );
+
+	it( 'selects reproducible complete material families from the city seed', () => {
+
+		const variants = new Set();
+		for ( const seed of [ '0', '1', '2' ] ) {
+			const atlas = { meta: { seed }, volumetric: { ground: [ ROAD, STRIP, rect( 'sidewalk', 10.15, 16 ) ] } };
+			const build = () => new GroundBuilder( atlas, factory ).build().group.children
+				.filter( object => object.isMesh ).map( object => object.material.userData );
+			const selected = build();
+			expect( build() ).toEqual( selected );
+			expect( new Set( selected.map( material => material.variantId ) ).size ).toBe( 1 );
+			variants.add( selected[ 0 ].variantId );
+		}
+		expect( variants ).toEqual( new Set( [ 'maintained', 'salvaged', 'industrial' ] ) );
+
+	} );
+
 	it( 'lays the published kerb strip at pavement height', () => {
 
 		const { group } = ground( [ ROAD, STRIP, rect( 'sidewalk', 10.15, 16 ) ] );
@@ -140,14 +176,14 @@ describe( 'GroundBuilder', () => {
 
 		const road = group.getObjectByName( 'ground:roadway' );
 		expect( road.material.userData ).toEqual( {
-			key: 'cyberpunk/road/high_rich', variantId: 'street'
+			key: 'cyberpunk/street-road/mid', variantId: 'maintained'
 		} );
 
 		for ( const name of [ 'sidewalk', 'block', 'open' ] ) {
 
 			const surface = group.getObjectByName( `ground:${name}` );
 			expect( surface.material.userData ).toEqual( {
-				key: 'cyberpunk/sidewalk/high_rich', variantId: 'plate'
+				key: 'cyberpunk/street-paving/mid', variantId: 'maintained'
 			} );
 			expect( worldUvErrors( surface.geometry ) ).toEqual( [] );
 
@@ -156,6 +192,19 @@ describe( 'GroundBuilder', () => {
 	} );
 
 } );
+
+function horizontalArea( geometry ) {
+
+	const p = geometry.getAttribute( 'position' );
+	let area = 0;
+	for ( let i = 0; i < ( geometry.index?.count ?? p.count ); i += 3 ) {
+		const [ a, b, c ] = [ 0, 1, 2 ].map( j => geometry.index ? geometry.index.getX( i + j ) : i + j );
+		area += Math.abs( ( p.getX( b ) - p.getX( a ) ) * ( p.getZ( c ) - p.getZ( a ) )
+			- ( p.getZ( b ) - p.getZ( a ) ) * ( p.getX( c ) - p.getX( a ) ) ) / 2;
+	}
+	return area;
+
+}
 
 
 /** Whether any triangle of a horizontal fill covers the point. */
