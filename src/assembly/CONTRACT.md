@@ -10,7 +10,7 @@ Purpose: turns the atlas blueprint plus the connections document into per-parcel
 ## Out
 `RequestAssembler(atlas, connections).assemble(parcelId, { glb })` returns a `BuildingRequest` per ../../../exterior/schemas/building-request.schema.json:
 - seed: `<atlas seed>:<parcelId>`
-- parcel: footprint, access point and nominal maxHeight from the atlas parcel, verbatim
+- parcel: footprint, access point and nominal maxHeight from the Atlas parcel, verbatim. When Atlas publishes `meta.buildingGrid`, `parcel.buildingGrid` carries its origin, angle and spacing unchanged to Exterior; older worlds omit it.
 - building: atlas type and tier verbatim; floors seeded inside the intersection of the atlas envelope and exterior's feasible range, computed with the recipe and constants in ../../../exterior/schemas/floor-constants.json (`floorFeasibility.js`); basements added when a tunnel aperture sits below ground, deep enough at the type's max floor height to reach its base
 - theme: `cyberpunk`
 - apertures: the connections apertures whose buildingId equals the parcel id, verbatim

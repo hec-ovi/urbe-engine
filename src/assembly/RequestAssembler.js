@@ -42,6 +42,7 @@ export class RequestAssembler {
 	constructor( atlas, connections, floorConstants = loadFloorConstants() ) {
 
 		this.worldSeed = atlas.meta.seed;
+		this.buildingGrid = atlas.meta.buildingGrid;
 		this.floorConstants = floorConstants;
 		this.marqueeLimit = marqueeTextLimit();
 		this.parcels = new Map( atlas.parcels.map( ( p ) => [ p.id, p ] ) );
@@ -83,7 +84,8 @@ export class RequestAssembler {
 			parcel: {
 				footprint: parcel.footprint,
 				accessPoint: parcel.access.point,
-				maxHeight: parcel.envelope.maxHeight
+				maxHeight: parcel.envelope.maxHeight,
+				...( this.buildingGrid ? { buildingGrid: this.buildingGrid } : {} )
 			},
 			building: {
 				type: parcel.type,

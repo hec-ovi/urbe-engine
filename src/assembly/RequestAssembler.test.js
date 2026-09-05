@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { RequestAssembler } from './RequestAssembler.js';
 import { signRungs } from './BuildingPipeline.js';
 import namedCity from './named-city.fixture.json';
+import { validateExteriorRequest } from './validators.js';
 
 /** Minimal atlas blueprint slice shaped per ../atlas/CONTRACT.md. */
 function atlasWith( parcel ) {
@@ -46,6 +47,22 @@ const bridgeAperture = aperture( 'l9a', 'bridge', 16.25 );
 const connections = { apertures: [ bridgeAperture, { ...aperture( 'x1a', 'bridge', 16.25 ), buildingId: 'other' } ] };
 
 describe( 'RequestAssembler', () => {
+
+	it( 'preserves the published construction frame without inventing one for older worlds', () => {
+
+		const atlas = atlasWith( officeParcel );
+		const buildingGrid = { origin: [ 14.5, - 8 ], angle: 0.31, spacing: 0.5 };
+		atlas.meta.buildingGrid = buildingGrid;
+		const request = new RequestAssembler( atlas, connections ).assemble( 'p7' );
+		expect( request.parcel.buildingGrid ).toEqual( buildingGrid );
+		expect( request.parcel.footprint ).toEqual( officeParcel.footprint );
+		expect( request.apertures ).toEqual( [ bridgeAperture ] );
+		expect( validateExteriorRequest( request ) ).toEqual( [] );
+		const legacy = new RequestAssembler( atlasWith( officeParcel ), connections ).assemble( 'p7' );
+		expect( legacy.parcel ).not.toHaveProperty( 'buildingGrid' );
+		expect( validateExteriorRequest( legacy ) ).toEqual( [] );
+
+	} );
 
 	it( 'same inputs produce an identical request', () => {
 
