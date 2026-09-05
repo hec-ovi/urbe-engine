@@ -97,8 +97,22 @@ describe( 'HydrologyAdapter', () => {
 		expect( runtime.handoff.crossings ).toEqual( plan.structures );
 		expect( runtime.handoff.crossings ).not.toBe( plan.structures );
 		expect( runtime.handoff.crossings.map( ( item ) => item.kind ) ).toEqual( [ 'bridge', 'tunnel' ] );
+		expect( runtime.handoff.crossings[ 1 ] ).not.toHaveProperty( 'corridor' );
+		runtime.handoff.crossings[ 0 ].corridor[ 0 ][ 0 ][ 0 ] += 1;
+		expect( runtime.handoff.crossings[ 0 ].corridor ).not.toEqual( plan.structures[ 0 ].corridor );
 		expect( runtime ).not.toHaveProperty( 'colliderGeometry' );
 		expect( runtime.handoff.groundExclusions ).toHaveLength( 1 );
+		runtime.dispose();
+
+	} );
+
+	it( 'preserves a cap-only contact without inferring geometry from its repeated path endpoint', () => {
+
+		const plan = structuredClone( HYDROLOGY_FIXTURES[ 1 ] );
+		plan.structures[ 0 ].path = [ [ 64, 25 ], [ 64, 25 ] ];
+		plan.structures[ 0 ].corridor = [ [ [ 60, 22 ], [ 64, 22 ], [ 64, 36 ], [ 60, 36 ] ] ];
+		const runtime = HydrologyAdapter.build( { hydrology: plan }, materialsFixture() );
+		expect( runtime.handoff.crossings ).toEqual( plan.structures );
 		runtime.dispose();
 
 	} );
@@ -129,6 +143,10 @@ describe( 'HydrologyAdapter', () => {
 		crossed.bodies[ 0 ].surfaces[ 0 ] = [ [ 10, 10 ], [ 40, 10 ], [ 15, 40 ], [ 40, 35 ], [ 10, 30 ] ];
 		crossed.bodies[ 0 ].shorelines[ 0 ].path = crossed.bodies[ 0 ].surfaces[ 0 ].map( ( point ) => [ ...point ] );
 		expectCode( () => HydrologyAdapter.build( { hydrology: crossed }, materialsFixture() ), 'E_HYDRO_INPUT' );
+
+		const crossing = structuredClone( HYDROLOGY_FIXTURES[ 1 ] );
+		crossing.structures[ 0 ].corridor = [ [ [ 64, 20 ], [ 84, 20 ], [ 68, 36 ], [ 84, 32 ], [ 64, 30 ] ] ];
+		expectCode( () => HydrologyAdapter.build( { hydrology: crossing }, materialsFixture() ), 'E_HYDRO_INPUT' );
 
 	} );
 

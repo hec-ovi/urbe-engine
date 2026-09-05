@@ -13,14 +13,14 @@ Turns an optional Atlas hydrology plan into exact render geometry and installs i
 
 ## Outputs
 
-- Hydrology handoff: [schema/handoff.schema.json](schema/handoff.schema.json). `runtime.handoff` is JSON data naming every exact water polygon, shoreline-band polygon, published elevation and depth, resolved material, deterministic motion/reflection parameters, ground exclusion, and unchanged Atlas bridge/tunnel record.
+- Hydrology handoff: [schema/handoff.schema.json](schema/handoff.schema.json). `runtime.handoff` is independent JSON data naming every exact water polygon, shoreline-band polygon, published elevation and depth, resolved material, deterministic motion/reflection parameters, ground exclusion, and unchanged Atlas bridge/tunnel record. Optional crossing `corridor` contains simple CCW polygons of the authoritative wet reservation. Its `width` is source metadata; `path` may repeat one endpoint for a cap-only contact. These records do not describe a complete bridge deck or supports.
 - Runtime objects: [schema/runtime-summary.schema.json](schema/runtime-summary.schema.json). A water plan returns `{ group, handoff, update, dispose, summary }`; `group` contains Three.js meshes at the published elevations. The JSON `summary` reports object and triangle counts. No hydrology returns `null`, builds no geometry, resolves no material, and schedules no updates.
 
 ## Events
 
 - `update` scrolls only each owned normal-map clone. It does not move collision data or surface vertices.
 - `dispose` releases every owned geometry, material, and cloned normal map. It is idempotent. Updating after disposal fails closed.
-- `HydrologyHost` adds `group` to the live game scene. Atlas ground cover already excludes every water polygon, so its published `groundExclusions` verify that no water collider is added. Connections consumes the unchanged bridge and tunnel records before the engine builds those crossings.
+- `HydrologyHost` adds `group` to the live game scene. Atlas ground cover already excludes every water polygon, so its published `groundExclusions` verify that no water collider is added. Crossing records remain available in the handoff; this adapter creates no crossing geometry.
 
 ## Errors
 
@@ -39,7 +39,7 @@ Turns an optional Atlas hydrology plan into exact render geometry and installs i
 
 ## Invariants
 
-- Input polygon coordinates, order, elevation, depth, material key, crossing path, width, and level survive unchanged in the handoff.
+- Input polygon coordinates, order, elevation, depth, material key, crossing path, optional corridor, width, and level survive unchanged in the handoff. Every nested coordinate is copied; changing the handoff cannot mutate the source plan. Corridor polygons pass the same winding and topology checks as water surfaces. Atlas owns their exact water-contact validation.
 - Water and shoreline triangles face +Y, stay inside their source polygon bounds, and use world-metre UVs. No bathymetric bottom or inferred bank geometry is created.
 - Motion is deterministic from Atlas `seedId` and hydrology type. It is one scrolling normal-map transform per material, with no render pass, reflection camera, backend branch, or frame-rate accumulation.
 - Water meshes never enter the collider output. Every water surface is instead an explicit ground exclusion, while Atlas crossings remain explicit bridge/tunnel handoffs.

@@ -144,7 +144,11 @@ function buildHandoff( plan, sources ) {
 		waterSurfaces,
 		shorelineBands,
 		groundExclusions,
-		crossings: plan.structures.map( ( crossing ) => ( { ...crossing, path: clonePolygon( crossing.path ) } ) )
+		crossings: plan.structures.map( ( crossing ) => ( {
+			...crossing,
+			path: clonePolygon( crossing.path ),
+			...( crossing.corridor ? { corridor: crossing.corridor.map( clonePolygon ) } : {} )
+		} ) )
 	};
 	return ( sharedBoundary ??= new HydrologyBoundary() ).output( 'handoff', handoff );
 

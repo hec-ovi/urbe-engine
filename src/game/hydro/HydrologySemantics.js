@@ -43,6 +43,7 @@ export function validateHydrologySemantics( plan ) {
 
 		claim( ids, crossing.id );
 		if ( ! bodies.has( crossing.waterBodyId ) ) fail( `Crossing ${crossing.id} names an absent water body` );
+		crossing.corridor?.forEach( ( polygon, index ) => validateRing( polygon, `Crossing corridor ${crossing.id}:${index}` ) );
 
 	}
 

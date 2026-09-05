@@ -87,7 +87,12 @@
         "waterBodyId": { "$ref": "#/$defs/id" },
         "path": { "$ref": "#/$defs/path" },
         "width": { "type": "number", "exclusiveMinimum": 0 },
-        "level": { "type": "number" }
+        "level": { "type": "number" },
+        "corridor": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/polygon" }
+        }
       }
     }
   }

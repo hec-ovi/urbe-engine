@@ -21,7 +21,7 @@
   - `look/`: quality tiers with explicit texture budgets, AgX exposure, height fog tinted by the light in the air, environment probe, the render pipeline with emissive-selected bloom, and serial warm-up that builds pipelines and maps before a frame can stall on them (src/game/look/CONTRACT.md)
   - `sky/`: night sky, moon key, stars
   - `physics/`: fixed-step Rapier world, generated trimesh collision, player capsule, measured fatal and nonfatal vehicle contacts and one full Source-rig ragdoll (src/game/physics/CONTRACT.md)
-  - `hydro/`: exact Atlas lagoon, river and sea-coast surfaces mounted with Materials-owned PBR bindings and deterministic normal motion (src/game/hydro/CONTRACT.md)
+  - `hydro/`: exact Atlas water surfaces and crossing-reservation handoff, with Materials-owned PBR bindings and deterministic normal motion (src/game/hydro/CONTRACT.md)
   - `player/`: input, first-person controller with selectable running speed and time-based inspection zoom, interaction
   - `agents/`: character provenance, pose baking, crowd, traffic, persistent NPC materialization, crouch, follow, lead, transit passenger carry and schedule return on Connections' authoritative 3D paths (src/game/agents/CONTRACT.md)
   - `investigation/`: deterministic authored incident assembly and live E/R evidence flow, with exact quest bindings, Source final-pose bodies, mission props, PBR decals and catalog restoration (src/game/investigation/CONTRACT.md)

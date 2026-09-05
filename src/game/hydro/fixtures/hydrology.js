@@ -69,7 +69,8 @@ function plan( type, seedId, offset, crossings = false ) {
 		structures: crossings ? [
 			{
 				id: 'hw-bridge', kind: 'bridge', network: 'street', refId: 'e7', waterBodyId: bodyId,
-				path: [ [ offset + 4, 25 ], [ offset + 26, 25 ] ], width: 14, level: 0
+				path: [ [ offset + 4, 25 ], [ offset + 26, 25 ] ], width: 14, level: 0,
+				corridor: [ rectangle( offset + 4, 22, offset + 26, 36 ) ]
 			},
 			{
 				id: 'hw-tunnel', kind: 'tunnel', network: 'subway', refId: 'sl2', waterBodyId: bodyId,
