@@ -6,6 +6,7 @@ export class GroundRegions {
 	constructor( atlas ) {
 
 		this.records = [];
+		this.roadwayLayout = null;
 		const paving = atlas.streets?.construction?.paving;
 		const covers = atlas.volumetric?.ground ?? [];
 		if ( ! paving ) {
@@ -14,8 +15,15 @@ export class GroundRegions {
 			return;
 
 		}
-		if ( paving.version !== '1.0.0' ) fail( 'Unsupported paving version' );
+		if ( ! [ '1.0.0', '1.1.0' ].includes( paving.version ) ) fail( 'Unsupported paving version' );
 		const layouts = indexed( paving.layouts, 'layout' );
+		const sources = paving.version === '1.1.0' ? indexed( paving.sources, 'source' ) : null;
+		if ( sources ) {
+
+			this.roadwayLayout = layouts.get( paving.roadwayLayoutId );
+			if ( ! this.roadwayLayout ) fail( 'Unknown roadway paving layout' );
+
+		}
 		const frames = indexed( paving.frames, 'frame' );
 		const regions = indexed( paving.regions, 'region' );
 		const byRegion = new Map( [ ...regions.keys() ].map( id => [ id, [] ] ) );
@@ -33,6 +41,13 @@ export class GroundRegions {
 			const frame = frames.get( region.frameId );
 			if ( ! layout || ! frame || ! BANDS.has( region.band ) ) fail( `Invalid paving region: ${region.id}` );
 			const owned = byRegion.get( region.id );
+			if ( sources ) {
+
+				const source = sources.get( region.sourceId );
+				if ( ! source || ! Number.isFinite( source.bottom ) || ! Number.isFinite( source.top ) || source.bottom > source.top
+					|| owned.some( cover => cover.surface !== source.surface || cover.bottom !== source.bottom || cover.top !== source.top ) ) fail( `Invalid paving source: ${region.sourceId}` );
+
+			}
 			if ( owned.length ) this.records.push( Object.freeze( { region, layout, frame, covers: Object.freeze( owned ) } ) );
 
 		}

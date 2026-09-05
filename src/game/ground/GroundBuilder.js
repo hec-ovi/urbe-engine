@@ -57,7 +57,9 @@ export class GroundBuilder {
 	/** @returns { group, colliderGeometry, bounds } */
 	build() {
 
-		const paving = new GroundPaving( new GroundRegions( this.atlas ).records );
+		const regions = new GroundRegions( this.atlas );
+		const paving = new GroundPaving( regions.records );
+		const roadFinish = regions.roadwayLayout ? GroundPalette.construction( regions.roadwayLayout.familyId, 'road' ) : null;
 
 		const group = new THREE.Group();
 		group.name = 'ground';
@@ -104,9 +106,10 @@ export class GroundBuilder {
 			const merged = BufferGeometryUtils.mergeGeometries( fills, false );
 			fills.forEach( ( g ) => g.dispose() );
 
-			const material = this.palette.surface( surface );
+			const material = surface === 'roadway' && roadFinish ? roadFinish : this.palette.surface( surface );
 			const mesh = new THREE.Mesh( merged, this.factory.build( material.key, material.variantId ) );
 			mesh.name = `ground:${surface}`;
+			if ( surface === 'roadway' && roadFinish ) mesh.userData.groundConstruction = { familyId: regions.roadwayLayout.familyId, finish: 'road' };
 			mesh.receiveShadow = true;
 			group.add( mesh );
 			solid.push( merged );

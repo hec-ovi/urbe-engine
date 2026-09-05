@@ -6,11 +6,15 @@ export class PavingCells {
 
 	constructor( frame, module, spans ) {
 
+		const baseCells = module?.baseCells ?? [ 1, 1 ];
 		if ( ! module || ! pair( module.pitch ) || ! pair( module.joint )
-			|| module.pitch.some( ( pitch, i ) => pitch <= 0 || module.joint[ i ] < 0 || module.joint[ i ] >= pitch ) ) fail( 'Invalid paving module dimensions' );
+			|| ! pair( baseCells ) || baseCells.some( count => ! Number.isSafeInteger( count ) || count < 1 )
+			|| module.pitch.some( ( pitch, i ) => pitch / baseCells[ i ] < 0.001 || module.joint[ i ] < 0 || module.joint[ i ] >= pitch / baseCells[ i ] ) ) fail( 'Invalid paving module dimensions' );
 		if ( ! Array.isArray( spans ) || ! spans.length ) fail( 'Missing paving cells' );
 		this.frame = frame;
 		this.module = module;
+		this.baseCells = baseCells;
+		this.pitch = module.pitch.map( ( pitch, i ) => pitch / baseCells[ i ] );
 		this.spans = spans;
 		this.rows = new Map();
 		let previous;
@@ -21,8 +25,9 @@ export class PavingCells {
 			if ( ! this.rows.has( span.row ) ) this.rows.set( span.row, [] );
 			this.rows.get( span.row ).push( span );
 			previous = span;
-			frame.corner( span.from, span.row, module.pitch );
-			frame.corner( span.to, span.row + 1, module.pitch );
+			if ( ! [ span.from * baseCells[ 0 ], span.to * baseCells[ 0 ], span.row * baseCells[ 1 ], ( span.row + 1 ) * baseCells[ 1 ] ].every( Number.isSafeInteger ) ) fail( 'Paving base index is not safe' );
+			frame.corner( span.from * baseCells[ 0 ], span.row * baseCells[ 1 ], this.pitch );
+			frame.corner( span.to * baseCells[ 0 ], ( span.row + 1 ) * baseCells[ 1 ], this.pitch );
 
 		}
 
@@ -30,40 +35,43 @@ export class PavingCells {
 
 	forEach( visit ) {
 
-		const { pitch, joint } = this.module;
+		const { joint } = this.module;
+		const pitch = this.pitch;
+		const [ columns, rows ] = this.baseCells;
 		const u = cuts( pitch[ 0 ], joint[ 0 ] );
 		const v = cuts( pitch[ 1 ], joint[ 1 ] );
 		for ( const { row, from, to } of this.spans ) {
 
 			for ( let column = from; column < to; column ++ ) {
 
-				const q = [ [ column, row ], [ column + 1, row ], [ column + 1, row + 1 ], [ column, row + 1 ] ]
-					.map( ( [ c, r ] ) => this.frame.corner( c, r, pitch ) );
-				const points = v.map( t => u.map( s => bilinear( q, s, t ) ) );
-				const boundary = [ ! this.has( column, row - 1 ), ! this.has( column + 1, row ),
+				const outside = [ ! this.has( column, row - 1 ), ! this.has( column + 1, row ),
 					! this.has( column, row + 1 ), ! this.has( column - 1, row ) ];
-				const pieces = [];
-				const piece = ( role, left, bottom, right, top ) => {
+				for ( let j = 0; j < rows; j ++ ) for ( let i = 0; i < columns; i ++ ) {
 
-					if ( u[ left ] === u[ right ] || v[ bottom ] === v[ top ] ) return;
-					const polygon = [ points[ bottom ][ left ], points[ bottom ][ right ], points[ top ][ right ], points[ top ][ left ] ];
-					const exposed = [ v[ bottom ] === 0, u[ right ] === 1, v[ top ] === 1, u[ left ] === 0 ]
-						.map( ( edge, i ) => edge && boundary[ i ] );
-					pieces.push( { role, polygon, exposed } );
+					const c = column * columns + i;
+					const r = row * rows + j;
+					const q = [ [ c, r ], [ c + 1, r ], [ c + 1, r + 1 ], [ c, r + 1 ] ]
+						.map( ( [ x, y ] ) => this.frame.corner( x, y, pitch ) );
+					const points = v.map( t => u.map( s => bilinear( q, s, t ) ) );
+					const groupEdge = [ j === 0, i === columns - 1, j === rows - 1, i === 0 ];
+					const boundary = groupEdge.map( ( edge, index ) => edge && outside[ index ] );
+					const pieces = [];
+					// Every base boundary retains its joint-cut vertices. Internal cuts
+					// remain body material, including beside smaller neighboring slabs.
+					for ( let y = 0; y < 3; y ++ ) for ( let x = 0; x < 3; x ++ ) {
 
-				};
-				piece( 'body', 1, 1, 2, 2 );
-				// Both wide strips retain the body's edge stations as real vertices.
-				// This keeps shared boundaries identical after Float32 conversion.
-				for ( let i = 0; i < 3; i ++ ) {
+						if ( u[ x ] === u[ x + 1 ] || v[ y ] === v[ y + 1 ] ) continue;
+						const role = ( y === 0 && groupEdge[ 0 ] ) || ( x === 2 && groupEdge[ 1 ] )
+							|| ( y === 2 && groupEdge[ 2 ] ) || ( x === 0 && groupEdge[ 3 ] ) ? 'joint' : 'body';
+						const polygon = [ points[ y ][ x ], points[ y ][ x + 1 ], points[ y + 1 ][ x + 1 ], points[ y + 1 ][ x ] ];
+						const exposed = [ v[ y ] === 0, u[ x + 1 ] === 1, v[ y + 1 ] === 1, u[ x ] === 0 ]
+							.map( ( edge, index ) => edge && boundary[ index ] );
+						pieces.push( { role, polygon, exposed } );
 
-					piece( 'joint', i, 0, i + 1, 1 );
-					piece( 'joint', i, 2, i + 1, 3 );
+					}
+					visit( pieces );
 
 				}
-				piece( 'joint', 0, 1, 1, 2 );
-				piece( 'joint', 2, 1, 3, 2 );
-				visit( pieces );
 
 			}
 

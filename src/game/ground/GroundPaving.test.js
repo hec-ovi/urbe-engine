@@ -99,6 +99,48 @@ describe( 'GroundBuilder fitted paving', () => {
 		expect( body.geometry.getAttribute( 'uv' ).getX( 0 ) ).toBeCloseTo( 20 - frame.origin[ 0 ], 5 );
 	} );
 
+	it( 'joins rotated 2 by 2 slabs to 1 metre slabs with complete base vertices and no interior group joints', () => {
+		const { atlas, cover, point, module, region } = fixture( { pitch: [ 1, 1 ], joint: [ 0.02, 0.02 ] } );
+		const paving = atlas.streets.construction.paving;
+		paving.version = '1.1.0';
+		paving.roadwayLayoutId = 'l0';
+		paving.sources = [ { id: 'source', surface: cover.surface, top: cover.top, bottom: cover.bottom } ];
+		region.sourceId = 'source';
+		paving.layouts[ 0 ].modules.push( { ...module, id: 'group', pitch: [ 2, 2 ], baseCells: [ 2, 2 ] } );
+		cover.polygon = [ [ 0, 0 ], [ 1, 0 ], [ 2, 0 ], [ 2, 1 ], [ 2, 2 ], [ 1, 2 ], [ 0, 2 ], [ 0, 1 ] ].map( ( [ c, r ] ) => point( c, r ) );
+		cover.construction.part = { kind: 'grid', moduleId: 'group', cells: [ { row: 0, from: 0, to: 1 } ] };
+		atlas.volumetric.ground.push( { ...cover,
+			polygon: [ [ 2, 0 ], [ 3, 0 ], [ 3, 1 ], [ 3, 2 ], [ 2, 2 ], [ 2, 1 ] ].map( ( [ c, r ] ) => point( c, r ) ),
+			construction: { regionId: 'p0', part: { kind: 'grid', moduleId: 'slab', cells: [ { row: 0, from: 2, to: 3 }, { row: 1, from: 2, to: 3 } ] } }
+		} );
+		const result = build( atlas );
+		const rendered = meshes( result );
+		const triangles = rendered.flatMap( mesh => topTriangles( mesh.geometry ) );
+		const expectedArea = atlas.volumetric.ground.reduce( ( area, owner ) => area + polygonArea( owner.polygon ), 0 );
+		expect( sumArea( triangles ) ).toBeCloseTo( expectedArea, 5 );
+		expect( sumArea( topTriangles( result.colliderGeometry ) ) ).toBeCloseTo( expectedArea, 5 );
+		for ( let i = 0; i < triangles.length; i ++ ) for ( let j = i + 1; j < triangles.length; j ++ ) expect( overlapArea( triangles[ i ], triangles[ j ] ) ).toBeLessThan( 1e-8 );
+		const body = rendered.find( mesh => mesh.userData.groundConstruction.finish === 'pavingBody' );
+		let bodyArea = 0;
+		for ( let row = 0; row < 2; row ++ ) for ( let column = 0; column < 3; column ++ ) {
+			const corners = [ point( column, row ), point( column + 1, row ), point( column + 1, row + 1 ), point( column, row + 1 ) ];
+			const u = column === 0 ? [ 0.01, 1 ] : column === 1 ? [ 0, 0.99 ] : [ 0.01, 0.99 ];
+			const v = column === 2 ? [ 0.01, 0.99 ] : row === 0 ? [ 0.01, 1 ] : [ 0, 0.99 ];
+			const inner = [ [ u[ 0 ], v[ 0 ] ], [ u[ 1 ], v[ 0 ] ], [ u[ 1 ], v[ 1 ] ], [ u[ 0 ], v[ 1 ] ] ].map( ( [ s, t ] ) => [ 0, 1 ].map( axis => Math.fround(
+				corners[ 0 ][ axis ] * ( 1 - s ) * ( 1 - t ) + corners[ 1 ][ axis ] * s * ( 1 - t ) + corners[ 2 ][ axis ] * s * t + corners[ 3 ][ axis ] * ( 1 - s ) * t ) ) );
+			bodyArea += polygonArea( inner );
+		}
+		expect( sumArea( topTriangles( body.geometry ) ) ).toBeCloseTo( bodyArea, 5 );
+		const vertices = new Set( triangles.flatMap( triangle => triangle.map( point => point.join( ',' ) ) ) );
+		for ( const row of [ 0, 1, 2 ] ) expect( vertices.has( point( 2, row ).map( Math.fround ).join( ',' ) ) ).toBe( true );
+		const jointTriangles = topTriangles( rendered.find( mesh => mesh.userData.groundConstruction.finish === 'joint' ).geometry );
+		for ( const ring of [ [ [ 0.2, 0.995 ], [ 1.8, 0.995 ], [ 1.8, 1.005 ], [ 0.2, 1.005 ] ],
+			[ [ 0.995, 0.2 ], [ 1.005, 0.2 ], [ 1.005, 1.8 ], [ 0.995, 1.8 ] ] ] ) {
+			const p = ring.map( ( [ c, r ] ) => point( c, r ) );
+			for ( const triangle of jointTriangles ) expect( overlapArea( triangle, [ p[ 0 ], p[ 1 ], p[ 2 ] ] ) + overlapArea( triangle, [ p[ 0 ], p[ 2 ], p[ 3 ] ] ) ).toBeLessThan( 1e-8 );
+		}
+	} );
+
 	it( 'carries curb joints down the exact exposed boundary without interior skirts', () => {
 		const { atlas, cover, point } = fixture( { angle: 0.62, pitch: [ 2, 0.15 ], joint: [ 0.02, 0 ], band: 'curb' } );
 		cover.polygon = [ [ 0, 0 ], [ 1, 0 ], [ 2, 0 ], [ 2, 1 ], [ 1, 1 ], [ 0, 1 ] ].map( ( [ c, r ] ) => point( c, r ) );
@@ -122,11 +164,38 @@ describe( 'GroundBuilder fitted paving', () => {
 		}
 	} );
 
+	it( 'uses the explicit modern roadway family and validates source semantics before material creation', () => {
+		const { atlas, cover, region } = fixture();
+		const paving = atlas.streets.construction.paving;
+		paving.version = '1.1.0';
+		paving.roadwayLayoutId = 'road-layout';
+		paving.layouts.push( { ...paving.layouts[ 0 ], id: 'road-layout', familyId: 'salvaged' } );
+		paving.sources = [ { id: 'source', surface: cover.surface, top: cover.top, bottom: cover.bottom } ];
+		region.sourceId = 'source';
+		atlas.volumetric.ground.push( { surface: 'roadway', polygon: [ [ 30, 0 ], [ 40, 0 ], [ 40, 5 ], [ 30, 5 ] ], top: 0, bottom: - 0.1 } );
+		for ( const seed of [ '0', 'other' ] ) {
+			atlas.meta.seed = seed;
+			const road = build( atlas ).group.getObjectByName( 'ground:roadway' );
+			expect( road.material.userData ).toEqual( { key: 'cyberpunk/street-road-salvaged/mid', variantId: 'finish' } );
+			expect( road.userData.groundConstruction ).toEqual( { familyId: 'salvaged', finish: 'road' } );
+		}
+		for ( const mutate of [ data => { data.roadwayLayoutId = 'missing'; }, data => { data.regions[ 0 ].sourceId = 'missing'; },
+			data => { data.sources[ 0 ].top += 0.01; }, data => { data.sources[ 0 ].surface = 'curb'; } ] ) {
+			const copy = structuredClone( atlas );
+			mutate( copy.streets.construction.paving );
+			let calls = 0;
+			expect( () => new GroundBuilder( copy, { build() { calls ++; } } ).build() ).toThrow( expect.objectContaining( { code: 'E_GROUND_CONSTRUCTION' } ) );
+			expect( calls ).toBe( 0 );
+		}
+	} );
+
 	it( 'rejects invalid families, dimensions and cell references before creating materials', () => {
 		const mutations = [
 			data => { data.atlas.streets.construction.paving.layouts[ 0 ].familyId = 'absent'; },
 			data => { data.cover.construction.part.moduleId = 'absent'; },
 			data => { data.module.joint[ 0 ] = data.module.pitch[ 0 ]; },
+			data => { data.module.baseCells = [ 0, 2 ]; },
+			data => { data.module.baseCells = [ 2, 2 ]; data.module.joint[ 0 ] = data.module.pitch[ 0 ] / 2; },
 			data => { data.frame.u = [ 2, 0 ]; },
 			data => { data.cover.construction.part.cells[ 1 ] = { row: 0, from: 1, to: 3 }; },
 			data => { data.cover.top = NaN; },

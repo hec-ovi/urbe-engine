@@ -80,7 +80,7 @@ export class GroundPaving {
 				cells.forEach( pieces => {
 
 					const joints = pieces.filter( piece => piece.role === 'joint' );
-					body.quads( [ pieces[ 0 ].polygon ], cover.top, frame );
+					body.quads( pieces.filter( piece => piece.role === 'body' ).map( piece => piece.polygon ), cover.top, frame );
 					const jointVertices = joints.length ? batch( familyId, 'joint', joint ) : null;
 					jointVertices?.quads( joints.map( piece => piece.polygon ), cover.top, frame );
 					for ( const { role, polygon, exposed } of pieces ) sides( polygon, exposed, role === 'body' ? body : jointVertices );
