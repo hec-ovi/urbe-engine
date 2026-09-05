@@ -16,6 +16,7 @@ Status: v0.17.16.
 
 ## Outputs
 
+- Development preview serves Materials-owned binding JSON at `/materials/bindings/<name>.json` and theme data/maps at `/materials/<theme>/...`, read-only with current file bytes and no browser cache.
 - `/` is the launcher for separate generated-city and saved-game catalogs. Creation runs city shells, selected interiors, the selected quest bundle and the final game as four validated stages.
 - `?mode=game` plays the assembled city through [src/game/CONTRACT.md](src/game/CONTRACT.md), including revisioned saves, library discovery, world queries, objective guidance, authored investigations and all 16 quest action kinds.
 - The seven measured quest hosts are assassination by fatal Rapier vehicle impact, fixed-asset rescue, escort follow or lead arrival, fixed access, fixed hacking, fixed sabotage and a verified public-transit journey. Each keeps its authored quest, step, actor, target, place and asset identities.

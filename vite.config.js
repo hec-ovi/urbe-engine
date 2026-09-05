@@ -13,6 +13,7 @@ import { createWorldCreation } from './src/creation/index.js';
 // relative to this repo's location, never machine-specific.
 const ROOT = fileURLToPath( new URL( '.', import.meta.url ) );
 const THEMES_DIR = fileURLToPath( new URL( '../materials/themes', import.meta.url ) );
+const BINDINGS_DIR = fileURLToPath( new URL( '../materials/bindings', import.meta.url ) );
 
 // Sibling atlas city blueprints (../atlas/CONTRACT.md), served read-only under
 // /atlas/<sample>.json so the game can load a world by name. Override with
@@ -76,6 +77,7 @@ function mount( name, prefix, dir ) {
 
 export default defineConfig( {
 	plugins: [
+		mount( 'serve-materials-bindings', '/materials/bindings', BINDINGS_DIR ),
 		mount( 'serve-materials-themes', '/materials', THEMES_DIR ),
 		mount( 'serve-atlas-samples', '/atlas', ATLAS_DIR ),
 		mount( 'serve-models', '/models', MODELS_DIR ),

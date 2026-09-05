@@ -1,6 +1,6 @@
 # Box map
 
-- root box: see CONTRACT.md.
+- root box: see CONTRACT.md. Development preview mounts Materials bindings and theme assets separately for the shared material resolver.
 - `src/assembly/`: Atlas parcel and shared building grid + Connections apertures -> Exterior BuildingRequest; CLI builds shells, optional interiors and per-floor GLBs, then fits rooftop spans through Connections. City assembly writes QA and a manifest; simulation CLI boots the assembled world (src/assembly/CONTRACT.md). Depends on Atlas, Connections, Exterior, Interior, Naming and Simulation contracts.
 - `src/building/`: building preview and shared PBR resolution (src/building/CONTRACT.md); catalog maps retain physical scale and absolute surface values, fitted decals retain alpha, authored interior variants and two-sided surfaces survive material replacement. Depends on Materials, the development build boundary and the game quality profile.
 - `src/server/`: checked development routes for previews, exact-blueprint background exterior batches, launcher creation and NPC dialogue (src/server/CONTRACT.md).

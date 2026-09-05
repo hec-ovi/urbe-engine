@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.16: development preview serves Materials binding documents alongside theme assets.
+
 0.17.16: unbounded safety ground catches falls beyond city limits while preserving basement, tunnel and water depths.
 
 0.17.15: scenic rooms meet authored glazing housings with fitted perimeter returns. Playable entrances carry compact header lights.
