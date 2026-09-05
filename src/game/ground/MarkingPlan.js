@@ -9,6 +9,7 @@ export class MarkingPlan {
 	constructor( atlas, road, options = {} ) {
 
 		if ( ! Array.isArray( atlas?.streets?.edges ) ) fail( 'Missing marking street graph' );
+		if ( ! options || typeof options !== 'object' || Array.isArray( options ) ) fail( 'Invalid marking settings' );
 		this.atlas = atlas;
 		this.settings = { ...defaults, ...options };
 		if ( Object.keys( options ).some( key => ! Object.hasOwn( defaults, key ) )
@@ -22,10 +23,11 @@ export class MarkingPlan {
 		if ( ! Array.isArray( road?.lanes ) ) fail( 'Missing marking lane network' );
 		for ( const lane of road.lanes ) {
 
-			if ( this.lanes.has( lane.id ) || ! this.edges.has( lane.edgeId ) || ! Number.isFinite( lane.width ) || lane.width <= this.settings.lineWidth * 2
+			if ( ! lane?.id || this.lanes.has( lane.id ) || ! this.edges.has( lane.edgeId ) || ! Number.isFinite( lane.width ) || lane.width <= this.settings.lineWidth * 2
 				|| ! Array.isArray( lane.path3 ) || lane.path3.length < 2 || lane.path3.some( point => ! Array.isArray( point ) || point.length !== 3 || point.some( value => ! Number.isFinite( value ) ) ) ) fail( 'Invalid marking lane' );
 			if ( ( lane.sourceDirection !== undefined || lane.sourceOffset !== undefined )
 				&& ( ! [ 'forward', 'backward' ].includes( lane.sourceDirection ) || ! Number.isFinite( lane.sourceOffset ) ) ) fail( 'Invalid marking lane source' );
+			if ( lane.next !== undefined && ( ! Array.isArray( lane.next ) || lane.next.some( connection => ! connection?.laneId || ! [ 's', 'l', 'r', 't' ].includes( connection.turn ) ) ) ) fail( 'Invalid marking lane connectivity' );
 			const record = { lane, path: new MarkingPath( lane.path3 ) };
 			this.lanes.set( lane.id, record );
 			if ( ! this.byEdge.has( lane.edgeId ) ) this.byEdge.set( lane.edgeId, [] );
@@ -192,6 +194,7 @@ export class MarkingPlan {
 
 		for ( const crossing of this.atlas.streets?.crossings ?? [] ) {
 
+			if ( ! Array.isArray( crossing?.segments ) ) fail( 'Invalid crossing marking source' );
 			for ( const segment of crossing.segments ) {
 
 				const edge = this.edges.get( segment.edgeId );
@@ -199,7 +202,7 @@ export class MarkingPlan {
 					|| polygon.some( point => ! Array.isArray( point ) || point.length !== 2 || point.some( value => ! Number.isFinite( value ) ) ) ) ) fail( 'Invalid crossing marking source' );
 				const approach = this.approaches.planes( edge.id ).find( plane => plane.nodeId === crossing.nodeId );
 				const profile = edge.elevationProfile;
-				if ( ! Array.isArray( profile ) || ! profile.length ) fail( 'Crossing has no elevation profile' );
+				if ( ! Array.isArray( profile ) || ! profile.length || profile.some( point => ! Number.isFinite( point.distance ) || ! Number.isFinite( point.level ) ) ) fail( 'Crossing has no elevation profile' );
 				let height = profile[ 0 ].level;
 				if ( approach ) height = profileHeight( profile, approach.source.distance );
 				else if ( profile.some( point => point.level !== height ) ) fail( 'Legacy crossing has no constant surface height' );

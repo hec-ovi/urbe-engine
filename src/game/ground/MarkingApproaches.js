@@ -10,11 +10,14 @@ export class MarkingApproaches {
 		const edges = new Map( ( atlas.streets?.edges ?? [] ).map( edge => [ edge.id, edge ] ) );
 		for ( const junction of atlas.streets?.construction?.junctions ?? [] ) {
 
+			if ( ! Array.isArray( junction?.internalEdgeIds ) || ! Array.isArray( junction.approaches ) ) fail( 'Invalid marking junction' );
 			for ( const edgeId of junction.internalEdgeIds ) this.internal.add( edgeId );
 			for ( const approach of junction.approaches ) {
 
 				const edge = edges.get( approach.edgeId );
-				if ( ! edge || ! [ edge.from, edge.to ].includes( approach.nodeId ) || approach.field?.length !== 4 ) fail( 'Invalid marking approach ownership' );
+				if ( ! edge || ! [ edge.from, edge.to ].includes( approach.nodeId ) || approach.field?.length !== 4
+					|| approach.field.some( point => ! point2( point ) ) || ! point2( approach.cut?.left ) || ! point2( approach.cut?.right )
+					|| ! Number.isFinite( approach.distance ) ) fail( 'Invalid marking approach ownership' );
 				const dx = approach.cut.right[ 0 ] - approach.cut.left[ 0 ];
 				const dz = approach.cut.right[ 1 ] - approach.cut.left[ 1 ];
 				const length = Math.hypot( dx, dz );
@@ -36,6 +39,8 @@ export class MarkingApproaches {
 	planes( edgeId ) { return this.byEdge.get( edgeId ) ?? []; }
 
 }
+
+const point2 = point => Array.isArray( point ) && point.length === 2 && point.every( Number.isFinite );
 
 /** A solid line terminates on a common field plane, with its complete width. */
 export function clipPlanes( polygon, planes, margin = 0 ) {

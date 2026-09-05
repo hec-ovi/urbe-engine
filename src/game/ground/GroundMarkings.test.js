@@ -149,11 +149,17 @@ describe( 'GroundMarkings', () => {
 	} );
 
 	it( 'rejects missing authority, unsupported settings and absent material bindings', () => {
-		const data = fixture();
-		data.road.lanes[ 0 ].sourceOffset = NaN;
-		expect( () => build( data ) ).toThrow( expect.objectContaining( { code: 'E_GROUND_MARKINGS' } ) );
+		for ( const mutate of [ data => { data.road.lanes[ 0 ].sourceOffset = NaN; },
+			data => { data.atlas.streets.construction.junctions[ 0 ].approaches[ 0 ].cut = null; },
+			data => { data.road.lanes[ 0 ].next[ 0 ].turn = 'invented'; },
+			data => { data.atlas.streets.crossings[ 0 ].segments[ 0 ].markings[ 0 ][ 0 ][ 0 ] = NaN; } ] ) {
+			const data = fixture();
+			mutate( data );
+			expect( () => build( data ) ).toThrow( expect.objectContaining( { code: 'E_GROUND_MARKINGS' } ) );
+		}
 		expect( () => build( fixture(), { lineWidth: 0 } ) ).toThrow( expect.objectContaining( { code: 'E_GROUND_MARKINGS' } ) );
 		expect( () => new GroundMarkings( fixture().atlas, fixture().road, factory, null ).build() ).toThrow( expect.objectContaining( { code: 'E_GROUND_MARKINGS' } ) );
+		expect( () => new GroundMarkings( fixture().atlas, fixture().road, null, bindings ).build() ).toThrow( expect.objectContaining( { code: 'E_GROUND_MARKINGS' } ) );
 	} );
 } );
 

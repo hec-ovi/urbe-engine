@@ -7,7 +7,9 @@ export class GroundMarkings {
 
 	constructor( atlas, road, factory, bindings, settings = {} ) {
 
-		if ( bindings?.version !== 1 || [ 'white', 'accent' ].some( role => ! bindings.surfaces?.[ role ]?.kind || ! bindings.surfaces[ role ].variant ) ) fail( 'Invalid marking material bindings' );
+		if ( bindings?.version !== 1 || [ 'white', 'accent' ].some( role => ! bindingName( bindings.surfaces?.[ role ]?.kind )
+			|| ! bindingName( bindings.surfaces?.[ role ]?.variant ) ) ) fail( 'Invalid marking material bindings' );
+		if ( typeof factory?.build !== 'function' ) fail( 'Missing marking material factory' );
 		this.plan = new MarkingPlan( atlas, road, settings );
 		this.factory = factory;
 		this.bindings = bindings;
@@ -63,3 +65,5 @@ export class GroundMarkings {
 	}
 
 }
+
+const bindingName = value => typeof value === 'string' && /^[a-z0-9_-]+$/.test( value );
