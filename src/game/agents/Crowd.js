@@ -1012,7 +1012,7 @@ export function crowdClipForName( clipName ) {
 
 /**
  * Connections publishes network grade. The raised city pavement adds its
- * 12 cm surface to sidewalk and access edges; station floors and links already
+ * shared surface datum to sidewalk and access edges; station floors and links already
  * carry their absolute level. A stair blends that surface lift away by the
  * bottom landing so both ends meet the rendered station exactly.
  */

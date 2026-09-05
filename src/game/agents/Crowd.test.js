@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu';
 import { Crowd, crowdClipForName } from './Crowd.js';
 import { CLIP } from './CharacterAssets.js';
 import { WalkRoutes } from './WalkRoutes.js';
+import { SIDEWALK_HEIGHT } from '../ground/GroundBuilder.js';
 
 /**
  * Walking people are not dynamic physics bodies, so the crowd's own pushback
@@ -54,33 +55,40 @@ describe( 'Crowd pushback', () => {
 
 describe( 'Crowd route elevation', () => {
 
-	it( 'places a walker on the authored subway stair height', () => {
+	it( 'joins the raised stair mouth to authored switchback and lower landing heights', () => {
 
 		const routes = new WalkRoutes( { walk: {
 			nodes: [
 				{ id: 'top', x: 0, y: 0, z: 0, kind: 'station-access' },
-				{ id: 'bottom', x: 10, y: - 10, z: 0, kind: 'station-handoff' }
+				{ id: 'bottom', x: 0, y: - 10, z: 0, kind: 'station-handoff' }
 			],
 			edges: [ {
 				id: 'stairs', from: 'top', to: 'bottom', kind: 'stairs', width: 1.2, level: 0,
-				path: [ [ 0, 0 ], [ 10, 0 ] ], path3: [ [ 0, 0, 0 ], [ 10, - 10, 0 ] ]
+				path: [ [ 0, 0 ], [ 5, 0 ], [ 0, 0 ] ], path3: [ [ 0, 0, 0 ], [ 5, - 5, 0 ], [ 0, - 10, 0 ] ]
 			} ]
 		} } );
-		const agent = {
-			crowdId: 'station-walker', type: 'commuter', activity: 'commuting',
-			place: { kind: 'edge', id: 'stairs' }, progress: 0.5, direction: 1
-		};
+		const agents = [
+			{ crowdId: 'mouth', progress: 0, direction: 1 },
+			{ crowdId: 'switchback', progress: 0.5, direction: 1 },
+			{ crowdId: 'lower-landing', progress: 0, direction: - 1 }
+		].map( agent => ( {
+			...agent, type: 'commuter', activity: 'commuting', place: { kind: 'edge', id: 'stairs' }
+		} ) );
 		const crowd = new Crowd( {
 			assets: { variants: [ {} ], durations: [ 1, 1, 1 ], meshesOf: () => [] },
-			routes, signals: { green: () => true }, sim: { crowd: () => ( { agents: [ agent ] } ) },
-			places: new Map(), capacity: 2
+			routes, signals: { green: () => true }, sim: { crowd: () => ( { agents } ) },
+			places: new Map(), capacity: 3
 		} );
 
 		crowd.update( 0, new THREE.Vector3( 5, - 5, 0 ), { timeMin: 0, daySeconds: 0 } );
 
-		const walker = [ ...crowd.members.values() ][ 0 ];
-		expect( walker.position.x ).toBeCloseTo( 5 );
-		expect( walker.position.y ).toBeCloseTo( - 4.93 );
+		const positions = Object.fromEntries( [ ...crowd.members.values() ]
+			.map( walker => [ walker.crowdId, walker.position ] ) );
+		const lowerLanding = - 10 + 0.02;
+		expect( positions.mouth.toArray() ).toEqual( [ 0, SIDEWALK_HEIGHT, 0 ] );
+		expect( positions.switchback.x ).toBeCloseTo( 5 );
+		expect( positions.switchback.y ).toBeCloseTo( ( SIDEWALK_HEIGHT + lowerLanding ) / 2 );
+		expect( positions[ 'lower-landing' ].toArray() ).toEqual( [ 0, lowerLanding, 0 ] );
 
 	} );
 
@@ -330,7 +338,7 @@ describe( 'Crowd over a long session', () => {
 
 const EPOCH = 2;
 const TYPES = [ 'shop_clerk', 'nurse', 'courier' ];
-const PLAYER = new THREE.Vector3( 0, 0.12, 0 );
+const PLAYER = new THREE.Vector3( 0, SIDEWALK_HEIGHT, 0 );
 
 /**
  * The player standing on a straight run of pavement while the simulation

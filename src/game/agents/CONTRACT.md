@@ -58,6 +58,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 
 - Simulation public NPC and continuity APIs.
 - Connections walk graph and transit route output.
+- [Ground](../ground/CONTRACT.md) for the shared raised-pavement datum.
 - Character asset catalog for the audited animation clips.
 
 ## Invariants
@@ -67,6 +68,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - A measured physics impact freezes the exact rendered identity and removes it from interaction and pushback. A rejected impact restores its prior control state. Accepted dynamic body assembly belongs to the game physics contract.
 - Appearance comes from the instance's persistent `appearanceSeed`, including after unload, save restore and reappearance.
 - Scheduled and follow movement samples only Connections `path3`; flat compatibility paths never position a body.
+- Sampled crowd walkers add Ground's `SIDEWALK_HEIGHT` to sidewalk and access grade. Station stairs blend this offset by authored height to 0.02 m clearance at the lower landing; passages, platforms, crossings and links retain that clearance. The blend is independent of travel direction. Explicit continuity positions are used as published.
 - Scheduled passenger transit uses the routine's exact route, board stop, alight stop and progress. Ordered duplicate stops select the shortest forward portion of the route shape, so return legs keep their direction and heading.
 - Follow speed is bounded and its stopping distance is deterministic. Explicit stop does not teleport the visible actor to its schedule.
 - Lead speed is bounded by the same Connections path. Passenger carry requires the exact active follower, route id and a successful non-fallen body projection.
