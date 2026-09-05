@@ -80,7 +80,7 @@ describe( 'WorldSource selective interiors', () => {
 		const world = await new WorldSource( {
 			blueprintUrl: '/atlas/city.json', outBase: '/out/games/night-shift', gameId: 'night-shift'
 		} ).load();
-		expect( world.game ).toBe( game );
+		expect( world.game ).toEqual( game );
 		expect( fetch ).toHaveBeenCalledWith( '/out/games/night-shift/game.json' );
 
 	} );
@@ -193,7 +193,7 @@ describe( 'WorldSource selective interiors', () => {
 			blueprintUrl: '/atlas/city.json', outBase: '/out/games/quest', gameId: 'quest'
 		} );
 		const world = await source.load();
-		expect( world.questBundle.manifest ).toBe( bundle );
+		expect( world.questBundle.manifest ).toEqual( bundle );
 		expect( world.objectives ).toEqual( catalogs.objectives );
 		expect( world.missionAssetRequests ).toEqual( catalogs.missionAssetRequests );
 		expect( world.missionItemBindings ).toEqual( catalogs.missionItemBindings );
@@ -223,7 +223,8 @@ function response( status, body, type = 'application/json' ) {
 		ok: status >= 200 && status < 300,
 		status,
 		headers: { get: () => type },
-		json: async () => body
+		json: async () => body,
+		text: async () => JSON.stringify( body )
 	};
 
 }

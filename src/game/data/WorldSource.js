@@ -1,4 +1,4 @@
-import { runConnections } from '../../assembly/connectionsRunner.js';
+import { loadWorldConnections } from './WorldConnections.js';
 import {
 	QUEST_BUNDLE_FILES, questBundle, questBundleManifest
 } from '../../quest-bundle/index.js';
@@ -14,7 +14,7 @@ const INVESTIGATIONS_FILE = 'quests/investigations.json';
 
 /**
  * Everything the game reads off disk, and nothing else: the atlas blueprint,
- * the connections document generated from it, and per parcel the exterior
+ * its source-bound connections document, and per parcel the exterior
  * blueprint, every shell, and the selected interior NPC support and floor
  * documents written by `npm run assemble-city`, each floor carrying its GLB URL.
  *
@@ -38,6 +38,12 @@ export class WorldSource {
 
 	async #json( url ) {
 
+		return ( await this.#document( url ) ).data;
+
+	}
+
+	async #document( url ) {
+
 		const response = await fetch( url );
 		const type = ( response.headers?.get( 'content-type' ) ?? '' ).split( ';', 1 )[ 0 ].toLowerCase();
 
@@ -46,7 +52,8 @@ export class WorldSource {
 
 		try {
 
-			return await response.json();
+			const text = await response.text();
+			return { text, data: JSON.parse( text ) };
 
 		} catch ( error ) {
 
@@ -84,11 +91,16 @@ export class WorldSource {
 		// Refuse a missing catalog descriptor before starting connections or
 		// loading hundreds of building files.
 		const game = this.gameId ? await this.#json( `${this.outBase}/game.json` ) : null;
-		// The world folder carries the blueprint it was assembled from (named or
-		// not); the atlas sample is the fallback for a folder built before that.
-		const atlas = await this.#json( `${this.outBase}/${BLUEPRINT_FILE}` ).catch( () => this.#json( this.blueprintUrl ) );
-		const manifest = await this.#manifest( atlas );
-		const connections = await runConnections( atlas, { seed: atlas.meta.seed } );
+		const manifest = await this.#manifest();
+		const blueprint = await this.#document( `${this.outBase}/${BLUEPRINT_FILE}` ).catch( ( error ) => {
+
+			if ( Object.hasOwn( manifest, 'connections' ) ) throw error;
+			return this.#document( this.blueprintUrl );
+
+		} );
+		const atlas = blueprint.data;
+		this.#assertBlueprint( manifest, atlas );
+		const connections = await loadWorldConnections( blueprint, manifest.connections, ( file ) => this.#document( `${this.outBase}/${file}` ) );
 
 		const known = new Set( atlas.parcels.map( ( parcel ) => parcel.id ) );
 		const listed = manifest.parcels;
@@ -154,8 +166,8 @@ export class WorldSource {
 
 	}
 
-	/** The out dir's index, and proof it was assembled from this blueprint. */
-	async #manifest( atlas ) {
+	/** The out dir's validated index. */
+	async #manifest() {
 
 		let manifest;
 
@@ -169,6 +181,14 @@ export class WorldSource {
 
 		}
 
+		const errors = worldManifestErrors( manifest );
+		if ( errors.length ) throw new Error( `${this.outBase} has an invalid ${MANIFEST_FILE}: ${errors.join( '; ' )}; re-run assemble-city` );
+		return manifest;
+
+	}
+
+	#assertBlueprint( manifest, atlas ) {
+
 		if ( manifest.seed !== atlas.meta.seed || manifest.atlasVersion !== atlas.meta.version ) {
 
 			throw new Error(
@@ -178,10 +198,8 @@ export class WorldSource {
 
 		}
 
-		const errors = worldManifestErrors( manifest, new Set( atlas.parcels.map( ( parcel ) => parcel.id ) ) );
-		if ( errors.length ) throw new Error( `${this.outBase} has an invalid ${MANIFEST_FILE}: ${errors.join( '; ' )}; re-run assemble-city` );
-
-		return manifest;
+		const known = new Set( atlas.parcels.map( ( parcel ) => parcel.id ) );
+		for ( const id of manifest.parcels ) if ( ! known.has( id ) ) throw new Error( `parcel ${id} is not in the blueprint; re-run assemble-city` );
 
 	}
 

@@ -1,7 +1,7 @@
 import { rooftopSpanErrors } from './RooftopSpanDocument.js';
 
 const REQUIRED_KEYS = [ 'contractVersion', 'seed', 'atlasVersion', 'named', 'namingTheme', 'parcels', 'interiors', 'floors' ];
-const KEYS = new Set( [ ...REQUIRED_KEYS, 'rooftopSpans' ] );
+const KEYS = new Set( [ ...REQUIRED_KEYS, 'rooftopSpans', 'connections' ] );
 const FLOOR_TAG = /^-?[0-9]{3}$/;
 
 /** Runtime validation of assembly's world-manifest schema plus atlas relations. */
@@ -46,6 +46,18 @@ export function worldManifestErrors( manifest, knownParcels ) {
 	}
 
 	if ( Object.hasOwn( manifest, 'rooftopSpans' ) ) rooftopSpanErrors( manifest.rooftopSpans, parcels, errors );
+	if ( Object.hasOwn( manifest, 'connections' ) ) {
+
+		const ref = manifest.connections;
+		if ( ! plainObject( ref ) || Object.keys( ref ).length !== 3 || ref.file !== 'connections.json'
+			|| typeof ref.sha256 !== 'string' || ! /^[0-9a-f]{64}$/.test( ref.sha256 )
+			|| typeof ref.blueprintSha256 !== 'string' || ! /^[0-9a-f]{64}$/.test( ref.blueprintSha256 ) ) {
+
+			errors.push( 'connections must name connections.json and its sha256 and blueprintSha256 byte hashes' );
+
+		}
+
+	}
 
 	return errors;
 

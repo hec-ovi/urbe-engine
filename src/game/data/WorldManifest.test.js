@@ -25,6 +25,21 @@ describe( 'world manifest boundary', () => {
 
 	} );
 
+	it( 'accepts the exact artifact reference and rejects malformed or foreign paths and hashes', () => {
+
+		const connections = { file: 'connections.json', sha256: 'a'.repeat( 64 ), blueprintSha256: 'b'.repeat( 64 ) };
+		expect( worldManifestErrors( { ...manifest, connections } ) ).toEqual( [] );
+		for ( const invalid of [ null, {}, { ...connections, file: '../connections.json' },
+			{ ...connections, sha256: 'A'.repeat( 64 ) }, { ...connections, blueprintSha256: '' }, { ...connections, extra: true } ] ) {
+
+			expect( worldManifestErrors( { ...manifest, connections: invalid } ) ).toContain(
+				'connections must name connections.json and its sha256 and blueprintSha256 byte hashes'
+			);
+
+		}
+
+	} );
+
 	it( 'fails closed when interiors, floors and blueprint parcels disagree', () => {
 
 		const invalid = { ...manifest, parcels: [ 'p0' ], interiors: [ 'p1' ], floors: { p0: [ 'zero' ] } };
