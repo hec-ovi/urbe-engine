@@ -5,6 +5,7 @@ import { holesWithin, shaftMouths } from './Stations.js';
 import { Highways } from './Highways.js';
 import { GroundPalette } from './GroundPalette.js';
 import { GroundRegions } from './GroundRegions.js';
+import { GroundPaving } from './GroundPaving.js';
 
 export const SIDEWALK_HEIGHT = 0.15;
 const CURB_BOTTOM = - 0.06;
@@ -29,9 +30,8 @@ const SURFACES = {
  * The city floor follows complete Atlas cover polygons and their authored
  * elevations, with one merged mesh per material.
  *
- * A seeded catalog family coordinates road, paving and continuous curb finishes.
- * UV coordinates remain world metres with one shared origin; texture scale
- * comes from the catalog rather than mesh dimensions.
+ * Fitted paving follows Atlas cells, frames and finish families. Legacy cover
+ * retains the seeded world family. Texture scale comes from the catalog.
  */
 export class GroundBuilder {
 
@@ -57,12 +57,16 @@ export class GroundBuilder {
 	/** @returns { group, colliderGeometry, bounds } */
 	build() {
 
+		const paving = new GroundPaving( new GroundRegions( this.atlas ).records );
+
 		const group = new THREE.Group();
 		group.name = 'ground';
 
 		const bySurface = new Map();
 
 		for ( const cover of this.atlas.volumetric.ground ) {
+
+			if ( cover.construction ) continue;
 
 			if ( ! SURFACES[ cover.surface ] ) continue;
 
@@ -81,7 +85,7 @@ export class GroundBuilder {
 		const road = new Roadway( this.atlas.volumetric.ground );
 		// The blueprint's own kerb strip wins wherever it is published: it runs
 		// unbroken through every junction return, which a pavement edge cannot.
-		const strip = bySurface.has( 'curb' );
+		const strip = this.atlas.volumetric.ground.some( cover => cover.surface === 'curb' );
 
 		for ( const [ surface, covers ] of bySurface ) {
 
@@ -135,6 +139,10 @@ export class GroundBuilder {
 			solid.push( merged );
 
 		}
+
+		const fitted = paving.build( this.factory, road );
+		group.add( ...fitted.meshes );
+		if ( fitted.colliderGeometry ) solid.push( fitted.colliderGeometry );
 
 		const highways = new Highways( this.atlas, this.factory ).build();
 		group.add( highways.group );

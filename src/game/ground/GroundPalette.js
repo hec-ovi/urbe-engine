@@ -1,9 +1,19 @@
 import catalog from '../../../../materials/bindings/street-styles.json' with { type: 'json' };
+import { fail } from './GroundRegions.js';
 
 const ROLES = { roadway: 'road', sidewalk: 'paving', block: 'paving', open: 'paving', curb: 'curb' };
 
 /** One compatible catalog family per seeded world. Surface regions own their mapping. */
 export class GroundPalette {
+
+	static construction( familyId, finish ) {
+
+		const style = catalog.styles.find( style => style.id === familyId );
+		const binding = style?.constructionSurfaces?.[ finish ];
+		if ( ! binding?.kind || ! binding.variant ) fail( `Unknown construction finish: ${familyId}/${finish}` );
+		return { key: `cyberpunk/${binding.kind}/mid`, variantId: binding.variant };
+
+	}
 
 	constructor( seed = '' ) {
 
