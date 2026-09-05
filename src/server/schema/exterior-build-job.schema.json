@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urbe/engine/exterior-build-job",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "blueprintHash", "state", "out", "total", "completed", "completedParcels", "manifest", "error"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$"},
+    "blueprintHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "state": {"enum": ["queued", "running", "succeeded", "failed"]},
+    "out": {"type": "string", "pattern": "^/out/atlas-exteriors-[A-Za-z0-9_-]+$"},
+    "total": {"type": "integer", "minimum": 1},
+    "completed": {"type": "integer", "minimum": 0},
+    "completedParcels": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "manifest": {"anyOf": [{"type": "null"}, {"$ref": "urbe/engine/world-manifest"}]},
+    "error": {"anyOf": [{"type": "null"}, {"$ref": "urbe/engine/exterior-build-error"}]}
+  }
+}

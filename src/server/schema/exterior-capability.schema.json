@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urbe/engine/exterior-capability",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "available", "reason"],
+  "properties": {
+    "contractVersion": {"const": "1.0"},
+    "available": {"type": "boolean"},
+    "reason": {"type": ["string", "null"]}
+  }
+}

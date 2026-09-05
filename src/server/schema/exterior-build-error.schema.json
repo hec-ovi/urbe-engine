@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urbe/engine/exterior-build-error",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["code", "message"],
+  "properties": {
+    "code": {"enum": ["E_INVALID_REQUEST", "E_UNAVAILABLE", "E_BUSY", "E_JOB_NOT_FOUND", "E_STORAGE", "E_BUILD_FAILED", "E_BUILD_INCOMPLETE"]},
+    "message": {"type": "string"}
+  }
+}

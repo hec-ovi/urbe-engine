@@ -1,4 +1,5 @@
 import { BuildingBuildService } from './BuildingBuildService.js';
+import { exteriorRoute } from './exteriorRoute.js';
 
 /** POST /api/building ensures that one selected Atlas parcel has the requested preview source. */
 export function buildingRoute( engineRoot, atlasDir, service = null ) {
@@ -6,6 +7,8 @@ export function buildingRoute( engineRoot, atlasDir, service = null ) {
 	return {
 		name: 'building-build-route',
 		configureServer( server ) {
+
+			server.middlewares.use( '/api/exteriors', exteriorRoute( engineRoot ) );
 
 			server.middlewares.use( '/api/building', async ( req, res, next ) => {
 
