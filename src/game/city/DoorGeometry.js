@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { openingRect } from './Openings.js';
+import { DoorMotion } from './DoorMotion.js';
 
 const LEAF_DEPTH = 0.25;
 const LEAF_MARGIN = 0.06;
@@ -8,7 +9,7 @@ const DEFAULT_FRAME_DEPTH = 0.08;
 /**
  * Every moving Exterior leaf gets its own interaction frame. The stable
  * opening id is also the ownership boundary for named GLB leaf nodes, so one
- * door can never swing a different entrance, balcony or roof leaf.
+ * door can never move a different entrance, balcony or roof leaf.
  */
 export function doorFrames( blueprint ) {
 
@@ -39,10 +40,18 @@ export function doorFrames( blueprint ) {
 
 }
 
-/** Returns the exact frame named by a sanitized GLTFLoader leaf node. */
-export function doorLeafOwner( name, frames ) {
+/** Finds the named leaf ancestor, retaining its authored origin and index. */
+export function doorLeafFrame( node, frames ) {
 
-	return frames.find( ( candidate ) => String( name ).startsWith( candidate.nodeStem ) ) ?? null;
+	let result = null;
+	for ( let current = node; current; current = current.parent ) {
+		for ( const owner of frames ) {
+			if ( ! String( current.name ).startsWith( owner.nodeStem ) ) continue;
+			const match = String( current.name ).slice( owner.nodeStem.length ).match( /^(\d+)(?:_|$)/ );
+			if ( match ) result = { owner, index: Number( match[ 1 ] ), node: current };
+		}
+	}
+	return result;
 
 }
 
@@ -57,6 +66,7 @@ function frame( blueprint, floor, opening, rect ) {
 		floor: floor.index,
 		kind: opening.kind,
 		role: opening.doorRole ?? null,
+		motion: new DoorMotion( opening.door?.motion ),
 		nodeStem: sanitizeNodeName( `${prefix}:${opening.id}/leaf:` ),
 		hinge: rect.start.clone(),
 		along: rect.end.clone().sub( rect.start ).normalize(),

@@ -4,7 +4,6 @@ import { CLIP } from '../agents/CharacterAssets.js';
 const TALK_RANGE = 2.5;
 const DOOR_RANGE = 3.2;
 const DOOR_SPEED = 2.2;
-const DOOR_ANGLE = ( 100 * Math.PI ) / 180;
 /** Roughly 40 degrees off the crosshair: past that you are not aiming at it. */
 const MIN_AIM = 0.76;
 /**
@@ -28,8 +27,7 @@ const HANDLE = 1.1;
  * making the door unopenable. An aim too close to call goes to the door.
  *
  * Talking freezes that one NPC through the simulation's interrupt and hands
- * back its full identity and routine; the door just swings, because the
- * interior is already there.
+ * back its full identity and routine; a door follows its authored movement.
  */
 export class Interactor {
 
@@ -54,7 +52,7 @@ export class Interactor {
 	/** @returns the prompt string, or null. */
 	update( delta, questState ) {
 
-		for ( const door of this.doors ) this.#swing( door, delta );
+		for ( const door of this.doors ) this.#moveDoor( door, delta );
 
 		if ( this.conversation ) return null;
 
@@ -224,7 +222,7 @@ export class Interactor {
 
 	}
 
-	#swing( door, delta ) {
+	#moveDoor( door, delta ) {
 
 		const wanted = door.wanted ?? 0;
 
@@ -235,7 +233,7 @@ export class Interactor {
 			? Math.min( wanted, door.open + step )
 			: Math.max( wanted, door.open - step );
 
-		for ( const { pivot, sign } of door.pivots ) pivot.rotation.y = sign * door.open * DOOR_ANGLE;
+		door.motion.apply( door.pivots, door.open );
 		this.doorColliders?.sync( door );
 
 	}

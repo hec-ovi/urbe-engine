@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["parcelId", "id", "kind"],
+    "additionalProperties": false,
+    "properties": {
+      "parcelId": { "type": "string", "minLength": 1 },
+      "id": { "type": "string", "minLength": 1 },
+      "kind": { "const": "roller" }
+    }
+  }
+}

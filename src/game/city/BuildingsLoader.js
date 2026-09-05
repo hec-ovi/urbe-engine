@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { doorFrames, doorLeafOwner } from './DoorGeometry.js';
+import { doorFrames, doorLeafFrame } from './DoorGeometry.js';
 import { takeTriangles, centroidAt } from './Triangles.js';
 import { kelvinColor } from '../light/Color.js';
 import { bucketFor, splitBucket, variantFor } from './Variety.js';
@@ -14,8 +14,7 @@ import { bucketFor, splitBucket, variantFor } from './Variety.js';
 const EXTERIOR = 'merged';
 export const INTERIOR_PREFIX = 'interior';
 // Each moving leaf is its own node, `door:<id>/leaf:N` or
-// `balcony:<id>/leaf:N`, sitting on its hinge
-// (../../../exterior/CONTRACT.md): the node's origin is where it swings.
+// `balcony:<id>/leaf:N`, with an authored closed-pose origin.
 const DOOR = 'door';
 const BALCONY = 'balcony';
 const GROUND_PRIVACY = 'ground-privacy';
@@ -51,8 +50,8 @@ const COLLIDER_KINDS = new Set( [
  * carries the identical shell. Interiors stream separately and only near the
  * player (InteriorStream).
  *
- * The entrance door leaf is lifted out of the shell into its own pivoted mesh
- * so it can swing. Exterior meshes arrive without normals, so they get them.
+ * An operable leaf retains its authored node identity and closed-pose origin.
+ * Exterior meshes arrive without normals, so they get them.
  */
 export class BuildingsLoader {
 
@@ -80,11 +79,14 @@ export class BuildingsLoader {
 		const shellByKey = new Map();
 		const doors = [];
 		const entrances = [];
+		const unsupportedDoors = [];
 		const shellColliders = new Map();
 		const centers = new Map();
 		let triangles = 0;
 
 		for ( const building of loaded ) {
+
+			unsupportedDoors.push( ...building.unsupportedDoors );
 
 			for ( const [ surface, geometries ] of building.exterior ) {
 
@@ -133,7 +135,7 @@ export class BuildingsLoader {
 
 		}
 
-		return { group, doors, entrances, shellColliders, centers, triangles };
+		return { group, doors, entrances, shellColliders, centers, triangles, unsupportedDoors };
 
 	}
 
@@ -162,7 +164,11 @@ export class BuildingsLoader {
 		gltf.scene.updateMatrixWorld( true );
 
 		const exterior = new Map();
-		const doors = hasInterior ? doorFrames( blueprint ) : [];
+		const frames = doorFrames( blueprint );
+		const doors = hasInterior ? frames.filter( door => door.motion.supported ) : [];
+		const unsupportedDoors = ( hasInterior ? frames : [] ).filter( door => ! door.motion.supported ).map( door => ( {
+			parcelId, id: door.id, kind: door.motion.kind
+		} ) );
 		const doorParts = new Map( doors.map( ( door ) => [ door, [] ] ) );
 		const exteriorFlat = [];
 
@@ -174,6 +180,7 @@ export class BuildingsLoader {
 
 			const name = node.name ?? '';
 			const key = node.material?.name ?? '';
+			const leafFrame = doorLeafFrame( node, frames );
 			const surface = bucketFor(
 				key,
 				node.material?.userData?.materialVariant ?? blueprint.materialVariants?.[ key ],
@@ -185,7 +192,7 @@ export class BuildingsLoader {
 				continue;
 
 			}
-			if ( ! hasInterior && isDoorLeaf( name ) ) {
+			if ( ( ! hasInterior && ( leafFrame || isDoorLeaf( name ) ) ) || ( leafFrame && ! leafFrame.owner.motion.supported ) ) {
 
 				const geometry = bake( node );
 				push( exterior, surface, geometry );
@@ -194,14 +201,14 @@ export class BuildingsLoader {
 
 			}
 
-			if ( doors.length && isDoorLeaf( name ) ) {
+			if ( doors.length && ( leafFrame || isDoorLeaf( name ) ) ) {
 
-				const owner = doorLeafOwner( name, doors );
 				const geometry = bake( node );
-				if ( owner ) doorParts.get( owner ).push( {
+				if ( leafFrame ) doorParts.get( leafFrame.owner ).push( {
 					key: surface,
 					geometry,
-					hinge: node.getWorldPosition( new THREE.Vector3() )
+					index: leafFrame.index,
+					hinge: leafFrame.node.getWorldPosition( new THREE.Vector3() )
 				} );
 				else {
 
@@ -221,6 +228,8 @@ export class BuildingsLoader {
 			// Older shells merged the leaf into the door material's own mesh.
 			let rest = geometry;
 			if ( doors.length && isDoorMaterial( key ) ) for ( const door of doors ) {
+
+				if ( door.motion.kind === 'pocket' ) continue;
 
 				const [ leaf, remainder ] = splitAt( rest, door.box );
 				if ( leaf ) doorParts.get( door ).push( { key: surface, geometry: leaf, hinge: door.hinge } );
@@ -248,11 +257,13 @@ export class BuildingsLoader {
 
 			const parts = doorParts.get( door );
 			if ( parts.length ) attachLeaves( door, parts, ( key ) => this.#material( key ) );
+			door.motion.validateLeaves( door.pivots );
 
 		}
 
 		return {
 			parcelId,
+			unsupportedDoors,
 			exterior,
 			exteriorFlat: exteriorFlat.length ? BufferGeometryUtils.mergeGeometries( exteriorFlat, false ) : null,
 			center: centerOf( blueprint ),
@@ -385,28 +396,23 @@ function splitAt( geometry, box ) {
 }
 
 /**
- * Re-parents the leaf triangles under a pivot at the hinge edge, so opening
- * the door is a rotation on the pivot and the geometry never moves in place.
- */
-/**
- * Hangs every leaf on the hinge it was delivered on. A leaf whose body lies
- * ahead of its hinge along the opening swings one way, one hung on the far
- * jamb swings the other, so a pair or a triple parts as it opens.
+ * Named leaf indices own every moving material part. Closed-pose geometry is
+ * local to its authored origin; metadata-free merged leaves group by hinge.
  */
 function attachLeaves( door, parts, material ) {
 
 	door.pivots = [];
 	const leaves = new Map();
 
-	for ( const { key, geometry, hinge } of parts ) {
+	for ( const { key, geometry, hinge, index } of parts ) {
 
-		const leafKey = hinge.toArray().join( '/' );
-		if ( ! leaves.has( leafKey ) ) leaves.set( leafKey, { hinge: hinge.clone(), parts: [] } );
+		const leafKey = index ?? hinge.toArray().join( '/' );
+		if ( ! leaves.has( leafKey ) ) leaves.set( leafKey, { index, hinge: hinge.clone(), parts: [] } );
 		leaves.get( leafKey ).parts.push( { key, geometry } );
 
 	}
 
-	for ( const { hinge, parts: leafParts } of leaves.values() ) {
+	for ( const { index, hinge, parts: leafParts } of leaves.values() ) {
 
 		const bounds = new THREE.Box3();
 		const pivot = new THREE.Group();
@@ -427,7 +433,9 @@ function attachLeaves( door, parts, material ) {
 		const sign = bounds.getCenter( _centroid ).sub( hinge ).dot( door.along ) >= 0 ? 1 : - 1;
 		const colliderGeometry = BufferGeometryUtils.mergeGeometries( colliderParts, false );
 		colliderParts.forEach( ( geometry ) => geometry.dispose() );
-		door.pivots.push( { pivot, sign, colliderGeometry } );
+		const leaf = { pivot, index, sign, colliderGeometry };
+		door.motion.prepare( leaf, door.along );
+		door.pivots.push( leaf );
 
 	}
 
