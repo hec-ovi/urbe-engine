@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { PbrScalarMap } from './PbrScalarMap.js';
 
 const ALL_MAPS = [ 'basecolor', 'normal', 'roughness', 'metallic', 'ao', 'emission' ];
 
@@ -58,6 +59,7 @@ export class PbrMaterialFactory {
 		this.loader = new THREE.TextureLoader();
 		this.cache = new Map();
 		this.tints = new Map();
+		this.scalarMaps = new WeakMap();
 		this.materialMaps = new Set( profile.materialMaps ?? ALL_MAPS );
 		this.patternVariants = profile.materialVariants ?? Infinity;
 		this.textureAnisotropy = profile.textureAnisotropy ?? 8;
@@ -112,6 +114,7 @@ export class PbrMaterialFactory {
 		if ( this.cache.has( id ) ) return this.cache.get( id );
 
 		const material = this.build( key, tweaks.variantId ).clone();
+		this.#bindScalarMaps( material );
 		material.emissiveIntensity = tweaks.emissiveLevel !== undefined
 			? tweaks.emissiveLevel
 			: ( material.emissiveIntensity ?? 1 ) * ( tweaks.emissiveScale ?? 1 );
@@ -154,7 +157,7 @@ export class PbrMaterialFactory {
 			? [ 1 / entry.tiling.worldSize[ 0 ], 1 / entry.tiling.worldSize[ 1 ] ]
 			: [ 1, 1 ];
 
-		const map = ( name, srgb = false ) => {
+		const map = ( name, srgb = false, scalarFallback ) => {
 
 			if ( ! this.materialMaps.has( name ) ) return null;
 			const path = variant.maps[ name ];
@@ -165,11 +168,12 @@ export class PbrMaterialFactory {
 			const loaded = new Promise( ( resolve ) => { ready = resolve; } );
 			const texture = this.loader.load(
 				this.resolver.mapUrl( theme, path ),
-				() => ready(), undefined, () => ready()
+				() => ready( true ), undefined, () => ready( false )
 			);
 			// A streamed floor waits on this before asking the renderer to upload
-			// the map. Failed maps still resolve and keep Three's normal fallback.
-			texture[ Symbol.for( 'urbe.texture-ready' ) ] = loaded;
+			// the map. A failed scalar map restores the catalog's surface factor.
+			texture[ Symbol.for( 'urbe.texture-ready' ) ] = loaded.then( () => {} );
+			if ( scalarFallback !== undefined ) this.scalarMaps.set( texture, new PbrScalarMap( texture, scalarFallback, loaded ) );
 			texture.flipY = false;
 			texture.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
 			texture.wrapS = texture.wrapT = tiled ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
@@ -192,12 +196,13 @@ export class PbrMaterialFactory {
 			name: key,
 			map: map( 'basecolor', true ),
 			normalMap: map( 'normal' ),
-			roughnessMap: map( 'roughness' ),
-			metalnessMap: map( 'metallic' ),
+			roughnessMap: map( 'roughness', false, physical.roughnessFactor ?? 1 ),
+			metalnessMap: map( 'metallic', false, physical.metallicFactor ?? 1 ),
 			aoMap: map( 'ao' ),
 			roughness: physical.roughnessFactor ?? 1,
 			metalness: physical.metallicFactor ?? 1
 		} );
+		this.#bindScalarMaps( material );
 
 		if ( variant.maps.basecolor ) material.userData.basecolorUrl = this.resolver.mapUrl( theme, variant.maps.basecolor );
 
@@ -232,6 +237,17 @@ export class PbrMaterialFactory {
 		}
 
 		return material;
+
+	}
+
+	#bindScalarMaps( material ) {
+
+		for ( const channel of [ 'roughness', 'metalness' ] ) {
+
+			const binding = this.scalarMaps.get( material[ `${channel}Map` ] );
+			binding?.bind( material, channel );
+
+		}
 
 	}
 

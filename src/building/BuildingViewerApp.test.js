@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { BuildingViewerApp, materialForViewerSurface } from './BuildingViewerApp.js';
+import { PbrMaterialFactory } from './PbrMaterialFactory.js';
 
 describe( 'building navigation', () => {
 
@@ -36,24 +37,38 @@ describe( 'building navigation', () => {
 
 	} );
 
-	it( 'keeps an authored two-sided material two-sided in the rendered preview', () => {
+	it( 'resolves an authored interior variant and preserves its two-sided surface', () => {
 
-		const factory = {
-			resolver: { resolve: () => ( { variants: [ { id: 'blind', class: 'exact' } ] } ) },
-			build: vi.fn(),
-			variant: vi.fn( () => new THREE.MeshStandardMaterial( { side: THREE.DoubleSide } ) )
-		};
-		const source = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide } );
+		const maps = ( id ) => ( { basecolor: `${id}.png`, roughness: `${id}-r.png`, metallic: `${id}-m.png` } );
+		const factory = new PbrMaterialFactory( {
+			resolve: () => ( {
+				alignment: 'tile', tiling: { worldSize: [ 1.5, 3 ] },
+				physical: { roughnessFactor: 0.64, metallicFactor: 0 },
+				variants: [ { id: 'blind', maps: maps( 'blind' ) }, { id: 'shade', maps: maps( 'shade' ) } ]
+			} ),
+			mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
+		} );
+		factory.loader = { load: ( url, onLoad ) => {
+
+			const texture = new THREE.Texture( { src: url } );
+			queueMicrotask( () => onLoad( texture ) );
+			return texture;
+
+		} };
+		const source = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, roughness: 0.64, metalness: 0 } );
 		source.name = 'cyberpunk/curtain/high_rich';
-		source.userData.materialVariant = 'blind';
+		source.userData.materialVariant = 'shade';
 
 		const result = materialForViewerSurface( factory, source, 'p1' );
 
 		expect( result.side ).toBe( THREE.DoubleSide );
-		expect( factory.variant ).toHaveBeenCalledWith( source.name, {
-			variantId: 'blind', side: THREE.DoubleSide
-		} );
-		expect( factory.build ).not.toHaveBeenCalled();
+		expect( result.map.image.src ).toContain( '/materials/cyberpunk/shade.png' );
+		expect( result.map.repeat.toArray() ).toEqual( [ 1 / 1.5, 1 / 3 ] );
+		expect( result.roughnessMap.image.src ).toContain( '/materials/cyberpunk/shade-r.png' );
+		expect( result.metalnessMap.image.src ).toContain( '/materials/cyberpunk/shade-m.png' );
+		expect( result.roughness ).toBe( 1 );
+		expect( result.metalness ).toBe( 1 );
+		expect( source.roughness ).toBe( 0.64 );
 
 	} );
 

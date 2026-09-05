@@ -25,6 +25,54 @@ const factoryFor = ( strength, profile ) => new PbrMaterialFactory( {
  */
 describe( 'PbrMaterialFactory', () => {
 
+	it( 'preserves absolute surface maps and their linear channels', () => {
+
+		const factory = surfaceFactory();
+		const material = factory.build( 'known/metal/mid' );
+
+		expect( material.roughness ).toBe( 1 );
+		expect( material.metalness ).toBe( 1 );
+		for ( const texture of [ material.normalMap, material.roughnessMap, material.metalnessMap, material.aoMap ] ) {
+
+			expect( texture.colorSpace ).toBe( THREE.NoColorSpace );
+			expect( texture.channel ).toBe( 0 );
+			expect( texture.flipY ).toBe( false );
+
+		}
+		expect( material.map.colorSpace ).toBe( THREE.SRGBColorSpace );
+		expect( material.emissiveMap.colorSpace ).toBe( THREE.SRGBColorSpace );
+		const scalar = surfaceFactory( { materialMaps: [] } ).build( 'known/metal/mid' );
+		expect( scalar.roughness ).toBe( 0.64 );
+		expect( scalar.metalness ).toBe( 0.35 );
+
+	} );
+
+	it( 'uses scalar surfaces after failed map loads, including cached tuned copies', async () => {
+
+		const factory = surfaceFactory( { materialMaps: [ 'roughness', 'metallic' ] } );
+		factory.loader = { load: ( url, onLoad, onProgress, onError ) => {
+
+			const texture = new THREE.Texture();
+			queueMicrotask( () => onError( new Error( 'decode failed' ) ) );
+			return texture;
+
+		} };
+		const base = factory.build( 'known/metal/mid' );
+		const copy = factory.variant( 'known/metal/mid', { side: THREE.DoubleSide } );
+		await Promise.all( [ base.roughnessMap, base.metalnessMap ].map( ( map ) => map[ Symbol.for( 'urbe.texture-ready' ) ] ) );
+
+		for ( const material of [ base, copy ] ) {
+
+			expect( material.roughnessMap ).toBeNull();
+			expect( material.metalnessMap ).toBeNull();
+			expect( material.roughness ).toBe( 0.64 );
+			expect( material.metalness ).toBe( 0.35 );
+
+		}
+		expect( factory.variant( 'known/metal/mid', { side: THREE.DoubleSide } ) ).toBe( copy );
+
+	} );
+
 	it( 'uses fitted decal basecolor alpha without writing over receiver depth', () => {
 
 		const decal = {
@@ -128,3 +176,12 @@ describe( 'PbrMaterialFactory', () => {
 	} );
 
 } );
+
+function surfaceFactory( profile ) {
+
+	return new PbrMaterialFactory( {
+		resolve: () => ( { ...entry( 1 ), physical: { roughnessFactor: 0.64, metallicFactor: 0.35 } } ),
+		mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
+	}, profile );
+
+}
