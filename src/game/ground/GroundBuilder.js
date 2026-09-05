@@ -4,6 +4,7 @@ import { fill, skirt, ringBounds, ledge, Roadway, signedArea } from './Polygons.
 import { holesWithin, shaftMouths } from './Stations.js';
 import { Highways } from './Highways.js';
 import { GroundPalette } from './GroundPalette.js';
+import { GroundRegions } from './GroundRegions.js';
 
 export const SIDEWALK_HEIGHT = 0.15;
 const CURB_BOTTOM = - 0.06;
@@ -33,6 +34,13 @@ const SURFACES = {
  * comes from the catalog rather than mesh dimensions.
  */
 export class GroundBuilder {
+
+	/** Read-only Atlas owner views for a functional band; legacy worlds return []. */
+	static regionFootprints( atlas, band ) {
+
+		return new GroundRegions( atlas ).footprints( band );
+
+	}
 
 	/**
 	 * @param atlas CityBlueprint per ../atlas/CONTRACT.md
