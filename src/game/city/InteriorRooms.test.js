@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-	assembleRooms, buffersOf, geometryOf, materialKey, outlinesOf, partition, plain, reflectanceOf, OUTSIDE_FLOORS
+	assembleRooms, fixturesByRoom, buffersOf, geometryOf, materialKey, outlinesOf, partition, plain, reflectanceOf, OUTSIDE_FLOORS
 } from './InteriorRooms.js';
 
 /** One source mesh of one key, given as triangles of three world-space corners each. */
@@ -187,5 +187,16 @@ describe( 'materialKey', () => {
 		expect( materialKey( { name: 'cyberpunk/concrete/high_rich', userData: {} } ) ).toBe( 'cyberpunk/concrete/high_rich' );
 
 	} );
+
+} );
+
+
+it( 'keeps published linear RGB and world lens vectors when assembling fixtures', () => {
+
+	const source = { ...floors[ 0 ].lights[ 0 ], color: [ 0.025, 0.72, 1 ], axis: [ 0, 1, 0 ], direction: [ 1, 0, 0 ] };
+	const [ fixture ] = fixturesByRoom( { lights: [ source ] } ).get( 'r0' );
+	expect( fixture.color.toArray() ).toEqual( source.color );
+	expect( fixture.axis.toArray() ).toEqual( source.axis );
+	expect( fixture.direction.toArray() ).toEqual( source.direction );
 
 } );

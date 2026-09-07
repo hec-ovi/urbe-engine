@@ -109,3 +109,5 @@ The whole run either starts or reports why: any failure during startup is caught
 ## Depends on
 - ../../../atlas/CONTRACT.md, ../../../connections/CONTRACT.md, ../../../materials/CONTRACT.md, ../../../simulation/CONTRACT.md
 - ../assembly/CONTRACT.md for the assembled world on disk
+
+Interior fixture ingestion retains optional linear RGB, line axes and emitting normals from the floor contract.
