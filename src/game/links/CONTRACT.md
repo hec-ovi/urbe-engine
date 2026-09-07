@@ -42,6 +42,9 @@ A kind this box does not know is skipped.
 ## Errors
 None thrown. A link of a kind this box does not know is skipped rather than drawn wrong.
 
+## Checks
+`npm test -- src/game/links/Links.test.js` exercises `build()` with [links.fixture.json](links.fixture.json), a schema-checked Connections snapshot covering all link kinds, level and sloped sections, and oblique wall cuts. Rooftop cases consume the published Connections fixture and entry point.
+
 ## Depends on
 - `../../../../connections/CONTRACT.md` for `links`, `apertures` and rooftop spans
 - `../../../CONTRACT.md`'s material factory for a key's material

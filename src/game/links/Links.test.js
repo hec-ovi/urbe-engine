@@ -1,10 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { PbrMaterialFactory } from '../../building/PbrMaterialFactory.js';
-import { runConnections } from '../../assembly/connectionsRunner.js';
 import { Links, RAILING, ROOFTOP_WIRE_SIDES } from './Links.js';
 
-const ATLAS_SAMPLE = new URL( '../../../../atlas/samples/city-urbe-small.json', import.meta.url );
+const CONNECTIONS_FIXTURE = new URL( './links.fixture.json', import.meta.url );
 /** Mirrors the wire tube's side count, so the triangle accounting is exact. */
 const WIRE_SIDES = 5;
 const PROMISED_DRAW_CALLS = 3;
@@ -15,14 +14,7 @@ const factory = new PbrMaterialFactory( { resolve: () => null, mapUrl: () => '' 
 
 describe( 'Links', () => {
 
-	let doc;
-
-	beforeAll( async () => {
-
-		const atlas = JSON.parse( readFileSync( ATLAS_SAMPLE, 'utf8' ) );
-		doc = await runConnections( atlas, { seed: atlas.meta.seed } );
-
-	} );
+	const doc = JSON.parse( readFileSync( CONNECTIONS_FIXTURE, 'utf8' ) );
 
 	/**
 	 * The one thing a link cannot get wrong. The facade is carved with the
