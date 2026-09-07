@@ -21,6 +21,7 @@ import { HydrologyHost } from './hydro/index.js';
 import { BuildingsLoader } from './city/BuildingsLoader.js';
 import { Links } from './links/Links.js';
 import { Transit } from './transit/Transit.js';
+import { StationAccess } from './transit/StationAccess.js';
 import { TransitJourney } from './transit/TransitJourney.js';
 import {
 	TransitGameplay, transitErrorMessage, transitServiceLabel, transitStatusLabel
@@ -173,7 +174,8 @@ export class GameApp {
 			atlas, routes: transitRoutes, ...( game?.transitJourney ? { state: game.transitJourney } : {} )
 		} );
 		this.persistence = game ? new GamePersistence( { game, gameId: config.gameId } ) : null;
-		this.locator = new Locator( atlas, transitRoutes );
+		const stationAccess = new StationAccess( atlas );
+		this.locator = new Locator( atlas, transitRoutes, stationAccess.entrances );
 		this.clock = new GameClock( {
 			startHour: transitStartHour(
 				this.transitJourney,
@@ -425,7 +427,7 @@ export class GameApp {
 		} );
 		this.scene.add( this.investigations.group );
 		this.probe?.exclude( this.investigations.group );
-		this.objectiveGuide = new ObjectiveGuide( new ObjectiveRouter( connections.networks.walk ) );
+		this.objectiveGuide = new ObjectiveGuide( new ObjectiveRouter( stationAccess.walk( connections.networks.walk ) ) );
 		this.#refreshCurrentObjective();
 
 		// Construct the scene pass before a WebGPU probe bake so its final
@@ -774,6 +776,15 @@ export class GameApp {
 	#transitAction( action, playerPlaces = null ) {
 
 		if ( ! action ) return;
+		if ( action.action === 'choose-destination' ) {
+
+			this.view.transit.choose( action.destinations.map( destination => ( {
+				id: destination.destinationId, label: `${destination.stationName} · ${destination.lineId}`, value: destination
+			} ) ), 'destination' );
+			this.input.exitLock();
+			return;
+
+		}
 		if ( action.action === 'choose' ) {
 
 			this.view.transit.choose( action.services.map( ( service ) => ( {
@@ -794,7 +805,7 @@ export class GameApp {
 		}
 
 		this.view.transit.close();
-		this.#transitQuestEvent( action, playerPlaces );
+		if ( action.action !== 'station-travel' ) this.#transitQuestEvent( action, playerPlaces );
 		this.#persistTransitState();
 
 	}
@@ -850,7 +861,8 @@ export class GameApp {
 
 		const feet = this.body.feet;
 		const places = questPlayerPlaces( this.locator, feet, this.standing?.parcelId ?? null );
-		this.#transitAction( this.transitGameplay?.board( service ), places );
+		const action = service?.destinationId ? this.transitGameplay?.selectDestination( service ) : this.transitGameplay?.board( service );
+		this.#transitAction( action, places );
 		this.input?.requestLock();
 
 	}

@@ -5,7 +5,7 @@
  */
 export class Locator {
 
-	constructor( atlas, transitRoutes = [] ) {
+	constructor( atlas, transitRoutes = [], stationEntrances = [] ) {
 
 		this.districts = atlas.districts.map( ( d ) => ( {
 			id: d.id,
@@ -31,7 +31,11 @@ export class Locator {
 				position: [ stop.position[ 0 ], busLevels.get( stop.id ) ?? 0, stop.position[ 1 ] ], ring: null
 			} ) ),
 			...( atlas.transit?.trainStations ?? [] ).map( ( station ) => stationPlace( 'train-station', station ) ),
-			...( atlas.transit?.subwayStations ?? [] ).map( ( station ) => stationPlace( 'subway-station', station ) )
+			...( atlas.transit?.subwayStations ?? [] ).map( ( station ) => stationPlace( 'subway-station', station ) ),
+			...stationEntrances.flatMap( entry => [
+				{ kind: `${entry.kind}-station`, id: entry.stationId, position: [ entry.origin[ 0 ], entry.top, entry.origin[ 1 ] ], ring: null },
+				{ kind: `${entry.kind}-station`, id: entry.stationId, position: entry.arrival, ring: null }
+			] )
 		];
 
 	}
