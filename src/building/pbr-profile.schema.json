@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:pbr-profile",
+  "type": "object",
+  "properties": {
+    "materialMaps": { "type": "array", "uniqueItems": true, "items": { "enum": ["basecolor", "normal", "roughness", "metallic", "ao", "emission"] } },
+    "materialVariants": { "type": "integer", "minimum": 1 },
+    "textureAnisotropy": { "type": "number", "minimum": 1 },
+    "textureMaxSize": { "type": "integer", "minimum": 1, "description": "Longest image edge in pixels. Omission keeps source resolution." }
+  }
+}

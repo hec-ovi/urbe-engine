@@ -1,7 +1,9 @@
 import * as THREE from 'three/webgpu';
-import { PbrScalarMap } from './PbrScalarMap.js';
+import { PbrMapBinding } from './PbrMapBinding.js';
+import { PbrTextureBudget } from './PbrTextureBudget.js';
 
 const ALL_MAPS = [ 'basecolor', 'normal', 'roughness', 'metallic', 'ao', 'emission' ];
+const MAP_PROPERTIES = [ [ 'map' ], [ 'normalMap' ], [ 'roughnessMap', 'roughness' ], [ 'metalnessMap', 'metalness' ], [ 'aoMap' ], [ 'emissiveMap' ] ];
 
 // Kinds the geometry layers place a few millimetres behind another surface
 // (a curtain hangs just inside its window glass). At city distances that gap
@@ -59,9 +61,9 @@ export class PbrMaterialFactory {
 		this.loader = new THREE.TextureLoader();
 		this.cache = new Map();
 		this.tints = new Map();
-		this.scalarMaps = new WeakMap();
+		this.mapBindings = new WeakMap();
+		this.textureBudget = new PbrTextureBudget( profile.textureMaxSize );
 		this.materialMaps = new Set( profile.materialMaps ?? ALL_MAPS );
-		this.patternVariants = profile.materialVariants ?? Infinity;
 		this.textureAnisotropy = profile.textureAnisotropy ?? 8;
 
 	}
@@ -114,7 +116,7 @@ export class PbrMaterialFactory {
 		if ( this.cache.has( id ) ) return this.cache.get( id );
 
 		const material = this.build( key, tweaks.variantId ).clone();
-		this.#bindScalarMaps( material );
+		this.#bindMaps( material );
 		material.emissiveIntensity = tweaks.emissiveLevel !== undefined
 			? tweaks.emissiveLevel
 			: ( material.emissiveIntensity ?? 1 ) * ( tweaks.emissiveScale ?? 1 );
@@ -168,12 +170,26 @@ export class PbrMaterialFactory {
 			const loaded = new Promise( ( resolve ) => { ready = resolve; } );
 			const texture = this.loader.load(
 				this.resolver.mapUrl( theme, path ),
-				() => ready( true ), undefined, () => ready( false )
+				loadedTexture => {
+
+					try {
+
+						this.textureBudget.fit( loadedTexture );
+						ready( true );
+
+					} catch {
+
+						loadedTexture.image = null;
+						ready( false );
+
+					}
+
+				}, undefined, () => ready( false )
 			);
 			// A streamed floor waits on this before asking the renderer to upload
 			// the map. A failed scalar map restores the catalog's surface factor.
 			texture[ Symbol.for( 'urbe.texture-ready' ) ] = loaded.then( () => {} );
-			if ( scalarFallback !== undefined ) this.scalarMaps.set( texture, new PbrScalarMap( texture, scalarFallback, loaded ) );
+			this.mapBindings.set( texture, new PbrMapBinding( texture, scalarFallback, loaded ) );
 			texture.flipY = false;
 			texture.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
 			texture.wrapS = texture.wrapT = tiled ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
@@ -202,7 +218,6 @@ export class PbrMaterialFactory {
 			roughness: physical.roughnessFactor ?? 1,
 			metalness: physical.metallicFactor ?? 1
 		} );
-		this.#bindScalarMaps( material );
 
 		if ( variant.maps.basecolor ) material.userData.basecolorUrl = this.resolver.mapUrl( theme, variant.maps.basecolor );
 
@@ -215,6 +230,7 @@ export class PbrMaterialFactory {
 			material.emissiveIntensity = physical.emissiveStrength ?? 1;
 
 		}
+		this.#bindMaps( material );
 
 		if ( ( physical.transmission ?? 0 ) > 0 ) {
 
@@ -240,12 +256,11 @@ export class PbrMaterialFactory {
 
 	}
 
-	#bindScalarMaps( material ) {
+	#bindMaps( material ) {
 
-		for ( const channel of [ 'roughness', 'metalness' ] ) {
+		for ( const [ map, scalar ] of MAP_PROPERTIES ) {
 
-			const binding = this.scalarMaps.get( material[ `${channel}Map` ] );
-			binding?.bind( material, channel );
+			this.mapBindings.get( material[ map ] )?.bind( material, map, scalar );
 
 		}
 

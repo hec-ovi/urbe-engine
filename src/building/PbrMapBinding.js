@@ -1,5 +1,5 @@
-/** Binds an absolute scalar map and its catalog fallback to shared material copies. */
-export class PbrScalarMap {
+/** Keeps decoded maps and scalar fallbacks consistent across shared material copies. */
+export class PbrMapBinding {
 
 	constructor( texture, fallback, loaded ) {
 
@@ -9,15 +9,14 @@ export class PbrScalarMap {
 
 	}
 
-	bind( material, channel ) {
+	bind( material, map, scalar ) {
 
-		material[ channel ] = 1;
+		if ( scalar ) material[ scalar ] = 1;
 		this.loaded.then( ( succeeded ) => {
 
-			const map = `${channel}Map`;
 			if ( succeeded || material[ map ] !== this.texture ) return;
 			material[ map ] = null;
-			material[ channel ] = this.fallback;
+			if ( scalar ) material[ scalar ] = this.fallback;
 			material.needsUpdate = true;
 
 		} );
