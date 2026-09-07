@@ -5,7 +5,7 @@ Purpose: turns every fixture the world published into real light, in photometric
 ## In
 - **Exterior fixtures**: `[{ position: Vector3, lumens, color: Color, range }]`, one per emitter the world actually built (lamp lens, venue sign, entrance fixture, ad screen). Producers are `city/StreetLamps.js` and `city/Neon.js`.
 - **Rooms**: objects carrying `{ center, area, albedo: Color, floorAlbedo: Color, flux, color, fixtures, wear(binding, roomLights), binding }`. Built by `city/InteriorRooms.js` from the interior box's floor documents.
-- **Room fixtures**: the published `lights` entries of a floor, as `{ kind: 'spot'|'strip'|'cove', position, lumens, color, range, beamDeg, diffuse, length, angleDeg, facing }`.
+- **Room fixtures**: the published `lights` entries of a floor, as `{ kind: 'spot'|'strip'|'cove', position, lumens, color, range, beamDeg, diffuse, length, angleDeg, facing, axis?, direction? }`.
 - A quality descriptor (`look/QualityTier.js`): `roomSlots`, `roomSpots`, `roomStrips`, `clusteredLights`, `batchedLights`, `haze`.
 - The renderer, after `init()`.
 
@@ -36,3 +36,5 @@ None thrown. A room with no fixtures gets a dark fill; a backend without cluster
 - ../../../CONTRACT.md's material factory for a key's base material and measured tint
 - ../look/CONTRACT.md for the quality descriptor
 - ../../../../interior/CONTRACT.md for the published floor `lights` and `rooms`
+
+Colored interior lenses retain their published linear RGB. Optional world `axis` and `direction` vectors orient vertical or sloped lines; defaults use XZ `angleDeg` and vertical `facing`. Rectangular lights emit through local -Z; their width follows the lens axis.

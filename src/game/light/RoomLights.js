@@ -266,7 +266,7 @@ function aimSpot( light, fixture ) {
 	light.distance = fixture.range;
 	light.decay = 2;
 	light.intensity = fixture.lumens / Math.max( 0.1, steradians );
-	light.target.position.copy( fixture.position ).add( fixture.facing === 'up' ? UP : _down );
+	light.target.position.copy( fixture.position ).add( fixture.direction ?? ( fixture.facing === 'up' ? UP : _down ) );
 	light.target.updateMatrixWorld();
 
 }
@@ -286,20 +286,16 @@ function aimStrip( light, fixture ) {
 
 }
 
-/**
- * The published strip angle runs from +X toward +Z on the ground plane
- * (../../../../interior/CONTRACT.md); a rotation about +Y turns +X toward -Z,
- * so the yaw is the negated angle. The light lies in its own XY plane and
- * emits along its +Z; the pitch turns that face down at the floor, or up for a cove.
- */
+/** Published world lens axis and emitting normal become a rect light's local X and -Z. */
 export function stripEuler( fixture ) {
 
-	return new THREE.Euler(
-		fixture.facing === 'up' ? - Math.PI / 2 : Math.PI / 2,
-		- THREE.MathUtils.degToRad( fixture.angleDeg ),
-		0,
-		'YXZ'
-	);
+	const angle = THREE.MathUtils.degToRad( fixture.angleDeg ?? 0 );
+	const axis = fixture.axis?.clone() ?? new THREE.Vector3( Math.cos( angle ), 0, Math.sin( angle ) );
+	const normal = fixture.direction?.clone() ?? new THREE.Vector3( 0, fixture.facing === 'up' ? 1 : - 1, 0 );
+	const z = normal.normalize().negate();
+	axis.addScaledVector( z, - axis.dot( z ) ).normalize();
+	const y = new THREE.Vector3().crossVectors( z, axis ).normalize();
+	return new THREE.Euler().setFromRotationMatrix( new THREE.Matrix4().makeBasis( axis, y, z ) );
 
 }
 

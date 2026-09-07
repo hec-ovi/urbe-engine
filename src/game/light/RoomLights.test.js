@@ -128,9 +128,27 @@ describe( 'stripEuler', () => {
 		expect( along.y ).toBeCloseTo( 0 );
 
 		// And the face points at the floor.
-		const facing = new THREE.Vector3( 0, 0, 1 ).applyEuler( stripEuler( { angleDeg: 37, facing: 'down' } ) );
+		const facing = new THREE.Vector3( 0, 0, - 1 ).applyEuler( stripEuler( { angleDeg: 37, facing: 'down' } ) );
 		expect( facing.y ).toBeCloseTo( - 1 );
 
 	} );
+
+} );
+
+
+it( 'aims a vertical colored capsule lens from its published face', () => {
+
+	const lights = new RoomLights( factory, tier );
+	const pod = room( 'pod', 0, 70 );
+	pod.fixtures[ 0 ] = { ...pod.fixtures[ 0 ], kind: 'strip', length: 0.5,
+		color: new THREE.Color( 0.025, 0.72, 1 ), axis: new THREE.Vector3( 0, 1, 0 ), direction: new THREE.Vector3( 1, 0, 0 ) };
+	lights.update( [ pod ], new THREE.Vector3(), 1 );
+	const source = lights.slots[ 0 ].strips[ 0 ];
+	expect( new THREE.Vector3( 1, 0, 0 ).applyEuler( source.rotation ).distanceTo( new THREE.Vector3( 0, 1, 0 ) ) ).toBeLessThan( 1e-12 );
+	const normal = new THREE.Vector3( 0, 0, - 1 ).applyEuler( source.rotation );
+	expect( normal.x ).toBeCloseTo( 1 );
+	expect( normal.y ).toBeCloseTo( 0 );
+	expect( source.power ).toBeCloseTo( 70 );
+	expect( source.color.toArray() ).toEqual( [ 0.025, 0.72, 1 ] );
 
 } );
