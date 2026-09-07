@@ -41,9 +41,9 @@ export class ObjectiveRouter {
 
 		this.boundary.input( 'route-request', request );
 		const start = nearestNode( [ ...this.nodes.values() ], request.from );
-		const destination = destinationNode( this.nodes, request.destination );
+		const destinations = destinationNodes( this.nodes, request.destination );
 
-		if ( ! destination ) {
+		if ( ! destinations.size ) {
 
 			throw new ObjectiveRouteError(
 				'E_OBJECTIVE_ROUTE_DESTINATION',
@@ -52,7 +52,7 @@ export class ObjectiveRouter {
 
 		}
 
-		const route = this.#shortest( start.id, destination.id );
+		const route = this.#shortest( start.id, destinations );
 		if ( ! route ) {
 
 			throw new ObjectiveRouteError(
@@ -76,12 +76,13 @@ export class ObjectiveRouter {
 
 	}
 
-	#shortest( startId, destinationId ) {
+	#shortest( startId, destinations ) {
 
 		const distance = new Map( [ [ startId, 0 ] ] );
 		const previous = new Map();
 		const open = new Set( [ startId ] );
 		const settled = new Set();
+		let destinationId = null;
 
 		while ( open.size ) {
 
@@ -89,7 +90,7 @@ export class ObjectiveRouter {
 			open.delete( current );
 			if ( settled.has( current ) ) continue;
 			settled.add( current );
-			if ( current === destinationId ) break;
+			if ( destinations.has( current ) ) { destinationId = current; break; }
 
 			for ( const leg of this.adjacency.get( current ) ) {
 
@@ -107,7 +108,7 @@ export class ObjectiveRouter {
 
 		}
 
-		if ( ! distance.has( destinationId ) ) return null;
+		if ( destinationId === null ) return null;
 		const legs = [];
 		let at = destinationId;
 		while ( at !== startId ) {
@@ -125,12 +126,12 @@ export class ObjectiveRouter {
 
 }
 
-function destinationNode( nodes, destination ) {
+function destinationNodes( nodes, destination ) {
 
 	const kind = DESTINATION_NODE_KIND[ destination.kind ];
-	return [ ...nodes.values() ]
+	return new Set( [ ...nodes.values() ]
 		.filter( ( node ) => node.kind === kind && node.ref === destination.id )
-		.sort( ( a, b ) => a.id.localeCompare( b.id ) )[ 0 ] ?? null;
+		.map( node => node.id ) );
 
 }
 

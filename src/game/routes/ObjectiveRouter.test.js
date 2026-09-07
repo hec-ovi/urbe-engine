@@ -54,6 +54,17 @@ describe( 'ObjectiveRouter', () => {
 
 	} );
 
+	it( 'chooses the cheapest reachable entrance when a station has several destinations', () => {
+
+		const graph = network();
+		graph.nodes.push( node( 'aaa-isolated', 0, 0, 2, 'station', 'rail-a' ), node( 'zzz-near', 0, 0, 4, 'station', 'rail-a' ) );
+		graph.edges.push( edge( 'near-access', 'a', 'zzz-near', [ [ 0, 0, 0 ], [ 0, 0, 4 ] ] ) );
+		const route = new ObjectiveRouter( graph ).route( { from: [ 0, 0, 0 ], destination: { kind: 'station', id: 'rail-a' } } );
+		expect( route.nodeIds ).toEqual( [ 'a', 'zzz-near' ] );
+		expect( route.distanceMeters ).toBe( 4 );
+
+	} );
+
 	it( 'fails closed for invalid, missing, and disconnected data', () => {
 
 		expect( () => new ObjectiveRouter( { nodes: [], edges: [ { id: 'bad' } ] } ) ).toThrowError( ObjectiveRouteError );

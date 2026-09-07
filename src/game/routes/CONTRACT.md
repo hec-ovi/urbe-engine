@@ -33,7 +33,7 @@ Purpose: calculates a repeatable route from the player's current feet to an obje
 ## Invariants
 
 - Route geometry is composed only from `path3`; flat compatibility paths are never used.
-- Parcel routes finish on the parcel's `entry` node, station routes on the station node, and bus routes on the stop node with the matching `ref`.
+- Parcel routes finish on an `entry` node, station routes on a station node, and bus routes on a stop node with the matching `ref`. When a place has several entrances, the least-cost reachable destination wins; equal costs use node id order.
 - Equal-cost choices resolve by edge and node id, so identical inputs produce identical output.
 - The current feet lead to the nearest graph node and count toward the displayed distance.
 - The guide never calls the router every frame. It retains one validated result between bounded reroutes.
