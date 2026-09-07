@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const ENGINE_ROOT = resolve( dirname( fileURLToPath( import.meta.url ) ), '../..' );
-const BLUEPRINT = resolve( ENGINE_ROOT, '../atlas/samples/city-urbe-tiny.json' );
+const BLUEPRINT = fileURLToPath( new URL( './connections-city.fixture.json', import.meta.url ) );
 
 describe( 'assemble-city CLI', () => {
 
