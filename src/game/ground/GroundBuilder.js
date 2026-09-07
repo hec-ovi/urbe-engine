@@ -144,7 +144,7 @@ export class GroundBuilder {
 		}
 
 		const fitted = paving.build( this.factory, road );
-		group.add( ...fitted.meshes );
+		for ( const mesh of fitted.meshes ) group.add( mesh );
 		if ( fitted.colliderGeometry ) solid.push( fitted.colliderGeometry );
 
 		const highways = new Highways( this.atlas, this.factory ).build();
