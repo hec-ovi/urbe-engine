@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { cp, lstat, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { cp, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createLibrary, LibraryError } from '../../library/index.js';
 import {
@@ -8,6 +8,8 @@ import {
 } from '../../quest-bundle/index.js';
 import { Boundary } from './Boundary.js';
 import { CreationError } from './CreationError.js';
+import { CityTemplate } from './CityTemplate.js';
+import { cityDescriptor, gameDescriptor } from './descriptors.js';
 
 const SIDE_JOB_LIMIT = 3;
 const MAIN_LOCATION_COUNT = 7;
@@ -33,6 +35,8 @@ export class WorldCreation {
 	async generateCity( input ) {
 
 		this.boundary.assert( 'generate-city', input );
+		const template = new CityTemplate( input );
+		input = template.input;
 		const id = safeId( input.name, input.seed );
 		const target = join( this.outDir, 'cities', id );
 		if ( await exists( target ) ) throw new CreationError( 'E_EXISTS', `city ${id} already exists`, 409 );
@@ -43,7 +47,7 @@ export class WorldCreation {
 
 		try {
 
-			await this.run( 'npm', atlasArgs( input, blueprint ), { cwd: this.atlasRoot } );
+			await this.run( 'npm', template.command( blueprint ), { cwd: this.atlasRoot } );
 			await this.run( 'npm', [
 				'run', 'assemble-city', '--', '--blueprint', blueprint, '--out', world,
 				'--workers', '4', '--interiors', '0'
@@ -200,19 +204,24 @@ export class WorldCreation {
 
 		this.boundary.assert( 'create-game', input );
 		const city = await this.#city( input.cityId );
-		const draft = await this.#draft( input.cityId );
-		if ( draft.questId !== input.questId || ! sameIds( draft.interiorIds, input.interiorIds ) ) {
+		const hasQuests = input.questId !== null;
+		const needsDraft = hasQuests || input.interiorIds.length > 0;
+		const draft = needsDraft ? await this.#draft( input.cityId ) : null;
+		if ( draft && ( hasQuests && draft.questId !== input.questId || ! sameIds( draft.interiorIds, input.interiorIds ) ) ) {
 
 			throw new CreationError( 'E_STAGE_MISMATCH', 'game input does not match the current creation stages' );
 
 		}
-		const target = join( this.outDir, 'games', city.id );
-		if ( await exists( target ) ) throw new CreationError( 'E_EXISTS', `game ${city.id} already exists`, 409 );
+		const id = await exists( join( this.outDir, 'games', city.id ) )
+			? `${city.id.slice( 0, 55 )}-${randomUUID().slice( 0, 8 )}` : city.id;
+		const target = join( this.outDir, 'games', id );
 		const temporary = await this.#temporary( 'game-' );
 		const world = join( temporary, 'world' );
 		try {
 
-			await cp( join( this.outDir, 'drafts', city.id ), world, { recursive: true } );
+			await cp( join( this.outDir, needsDraft ? 'drafts' : 'cities', city.id ), world, { recursive: true } );
+			await rm( join( world, 'city.json' ), { force: true } );
+			if ( ! hasQuests ) await rm( join( world, 'quests' ), { recursive: true, force: true } );
 			await rm( join( world, 'quests', 'all.questlines.json' ), { force: true } );
 			await rm( join( world, 'quests', 'questlines.meta.json' ), { force: true } );
 			await rm( join( world, 'draft.json' ), { force: true } );
@@ -223,10 +232,12 @@ export class WorldCreation {
 				throw new CreationError( 'E_OUTPUT_INVALID', 'game manifest does not match the interior stage' );
 
 			}
-			const definitions = ( await readQuestBundle( join( world, 'quests' ), 'game quest bundle' ) ).questlines;
+			const definitions = hasQuests
+				? ( await readQuestBundle( join( world, 'quests' ), 'game quest bundle' ) ).questlines : [];
+			const game = await gameDescriptor( world, id, city, atlas, manifest, definitions, this.clock() );
+			this.boundary.assert( 'game-result', game );
 			await mkdir( join( this.outDir, 'games' ), { recursive: true } );
 			await rename( world, target );
-			const game = await gameDescriptor( target, city, atlas, manifest, definitions, this.clock() );
 			try {
 
 				await this.library.saveGame( { game, expectedRevision: null } );
@@ -322,94 +333,10 @@ export class WorldCreation {
 
 }
 
-function atlasArgs( input, blueprint ) {
-
-	const args = [ 'run', 'generate', '--', '--seed', input.seed, '--out', blueprint ];
-	if ( input.size === 'small' ) args.push( '--size', '400', '--max-floors', '6', '--no-highways', '--no-trains', '--no-subways' );
-	else args.push( '--size', input.size === 'medium' ? '800' : '1000' );
-	return args;
-
-}
-
 function safeId( name, seed ) {
 
 	const slug = ( value ) => value.toLowerCase().normalize( 'NFKD' ).replace( /[^a-z0-9]+/g, '-' ).replace( /^-+|-+$/g, '' );
 	return ( slug( name ) || slug( seed ) || 'city' ).slice( 0, 64 ).replace( /[-._]+$/g, '' );
-
-}
-
-async function cityDescriptor( root, id, input, atlas, now ) {
-
-	return {
-		contractVersion: '1.0.0', id, name: input.name.trim(), size: input.size, seed: input.seed.trim(),
-		generatedAt: now.toISOString(),
-		districtCount: atlas.districts.length,
-		buildings: atlas.parcels.map( ( parcel ) => ( {
-			id: parcel.id, label: parcel.name ?? `${parcel.type.replaceAll( '_', ' ' )} ${parcel.id}`,
-			type: parcel.type, eligible: true
-		} ) ),
-		world: {
-			manifest: await resource( root, 'manifest.json', 'application/json' ),
-			blueprint: await resource( root, 'blueprint.json', 'application/json' )
-		}
-	};
-
-}
-
-async function gameDescriptor( root, city, atlas, manifest, definitions, now ) {
-
-	const current = spawnLocation( atlas );
-	const progress = definitions.map( ( definition, index ) => ( {
-		id: definition.id,
-		title: definition.title,
-		objective: definition.steps[ 0 ]?.narrative?.playerHint ?? definition.premise,
-		state: index === 0 ? 'active' : 'available',
-		totalSteps: definition.steps.length,
-		completedSteps: [],
-		runtime: null
-	} ) );
-	const timestamp = now.toISOString();
-	return {
-		contractVersion: '1.0.0', id: city.id, name: `${city.name} Game`, cityId: city.id, size: city.size,
-		theme: 'cyberpunk', selectedInteriors: manifest.interiors,
-		questBundle: await resource( root, 'quests/quest-bundle.json', 'application/json' ),
-		quests: progress.slice( 0, 1 ), sideJobs: progress.slice( 1 ),
-		player: { position: current.position, heading: current.heading, inventory: [] },
-		currentLocation: current.location,
-		discoveredLocations: [ current.location ],
-		save: { revision: 1, createdAt: timestamp, updatedAt: timestamp, playTimeSeconds: 0 }
-	};
-
-}
-
-function spawnLocation( atlas ) {
-
-	const centre = atlas.parcels.reduce( ( point, parcel ) => ( {
-		x: point.x + parcel.access.point[ 0 ] / atlas.parcels.length,
-		z: point.z + parcel.access.point[ 1 ] / atlas.parcels.length
-	} ), { x: 0, z: 0 } );
-	const parcel = atlas.parcels.reduce( ( best, candidate ) => {
-
-		const distance = ( candidate.access.point[ 0 ] - centre.x ) ** 2 + ( candidate.access.point[ 1 ] - centre.z ) ** 2;
-		return ! best || distance < best.distance ? { candidate, distance } : best;
-
-	}, null ).candidate;
-	return {
-		position: { x: parcel.access.point[ 0 ], y: 0.15, z: parcel.access.point[ 1 ] },
-		heading: 0,
-		location: { id: parcel.id, name: parcel.name ?? `${parcel.type.replaceAll( '_', ' ' )} ${parcel.id}` }
-	};
-
-}
-
-async function resource( root, uri, mediaType ) {
-
-	const path = join( root, uri );
-	const data = await readFile( path );
-	return {
-		uri, mediaType, byteSize: ( await stat( path ) ).size,
-		checksum: `sha256:${createHash( 'sha256' ).update( data ).digest( 'hex' )}`
-	};
 
 }
 

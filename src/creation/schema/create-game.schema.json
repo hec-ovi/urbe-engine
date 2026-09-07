@@ -5,8 +5,8 @@
   "required": ["cityId", "interiorIds", "questId"],
   "properties": {
     "cityId": { "$ref": "#/$defs/id" },
-    "interiorIds": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
-    "questId": { "$ref": "#/$defs/id" }
+    "interiorIds": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
+    "questId": { "anyOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] }
   },
   "additionalProperties": false,
   "$defs": { "id": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$" } }

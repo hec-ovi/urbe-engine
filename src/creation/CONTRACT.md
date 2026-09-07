@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Builds a city, its selected interiors, its materialized quest bundle and the final game as four isolated filesystem stages.
+Builds template cities and saved games, with optional interiors and quests.
 
 ## Inputs
 
@@ -39,6 +39,8 @@ Closed set in [schema/creation-error.schema.json](schema/creation-error.schema.j
 
 - `out/cities/<id>` is a shell-only city. `out/drafts/<id>` is the replaceable creation draft. `out/games/<id>` is the final self-contained game.
 - Small is 400 m with six floors maximum and no regional transit. Medium is 800 m. Large is 1000 m. Atlas receives the user's seed, so the same size and seed regenerate the same geometry.
+- City creation requires only size. Omitted names and seeds receive fresh identities; explicit names and seeds remain supported. Profiles live in [city-templates.json](city-templates.json).
+- `createGame` with `questId: null` creates free play. Empty `interiorIds` copies the city directly; selected interiors must match a completed draft. Free play carries no quest files or quest progress. Each new playthrough has its own id.
 - Automatic interiors include every location needed by the ten-step main quest before adding side-job and then extra buildings. Seven interiors support the main line, eight support two side jobs, and nine support all three.
 - The current recorded story supplies at most three side jobs. A non-empty custom brief fails explicitly because this deterministic path does not call a model.
 - A stage writes into a temporary sibling and publishes only after its command and output checks pass.

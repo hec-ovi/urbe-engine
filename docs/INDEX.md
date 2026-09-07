@@ -6,6 +6,7 @@
 - `src/server/`: checked development routes for previews, exact-blueprint background exterior batches with Connections artifact admission, launcher creation and NPC dialogue (src/server/CONTRACT.md).
 - `src/library/`: filesystem catalog for generated city directories and playable game directories, with schema-validated descriptors, atomic revisioned saves and path containment (src/library/CONTRACT.md).
 - `src/launcher/`: browser orchestration between the isolated front-door UI and the catalog and generation API; validates every callback result before navigation, download or creation state changes (src/launcher/CONTRACT.md).
+- `src/creation/`: size templates to cities and saved games, with optional interiors and quests. Depends on Atlas CLI, Assembly, Quests and Library. Inputs and outputs: [contract](../src/creation/CONTRACT.md).
 - `src/mission-assets/`: Engine-owned renderer-neutral mission object creation for its quest and investigation hosts, with exact dimensions, PBR references, collision, interaction anchors, clearances and canonical payload hashes; placement stays in the consuming runtime (src/mission-assets/CONTRACT.md).
 - `src/quest-bundle/`: atomic consumer and selector for the Quests v0.8.2 handoff v1.1: definitions, objectives, investigations, fixed mechanic bindings, mission asset requests, item bindings and host capabilities (src/quest-bundle/CONTRACT.md).
 

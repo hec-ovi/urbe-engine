@@ -79,6 +79,46 @@ describe( 'playable world creation contract', () => {
 
 	} );
 
+	it( 'creates every size from a template and publishes independent free-play saves without quest commands', async () => {
+
+		const fixture = await setup();
+		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
+		for ( const [ size, metres ] of [ [ 'small', '400' ], [ 'medium', '800' ], [ 'large', '1000' ] ] ) {
+
+			const city = await creation.generateCity( { size } );
+			expect( city ).toMatchObject( { size, name: expect.any( String ), seed: expect.any( String ) } );
+			expect( fixture.calls.at( -2 ).args ).toEqual( expect.arrayContaining( [ '--size', metres ] ) );
+			const input = { cityId: city.id, interiorIds: [], questId: null };
+			const first = await creation.createGame( input );
+			const second = await creation.createGame( input );
+			expect( second.id ).not.toBe( first.id );
+			for ( const game of [ first, second ] ) {
+
+				expect( game ).toMatchObject( { cityId: city.id, selectedInteriors: [], questBundle: null, quests: [], sideJobs: [] } );
+				const root = join( fixture.config.outDir, 'games', game.id );
+				expect( await readJson( join( root, 'game.json' ) ) ).toEqual( game );
+				await expect( readFile( join( root, 'quests/quest-bundle.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+
+			}
+
+		}
+		expect( fixture.calls.map( ( call ) => call.kind ) ).toEqual( [ 'atlas', 'shells', 'atlas', 'shells', 'atlas', 'shells' ] );
+
+	} );
+
+	it( 'keeps selected interiors when quests are skipped and rejects a mismatched selection', async () => {
+
+		const fixture = await setup();
+		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
+		const city = await creation.generateCity( { size: 'small' } );
+		const instances = await creation.generateInstances( { cityId: city.id, mode: 'manual', count: 1, buildingIds: [ 'p0' ] } );
+		await expectCode( creation.createGame( { cityId: city.id, interiorIds: [ 'p1' ], questId: null } ), 'E_STAGE_MISMATCH' );
+		const game = await creation.createGame( { cityId: city.id, interiorIds: instances.ids, questId: null } );
+		expect( game ).toMatchObject( { selectedInteriors: [ 'p0' ], questBundle: null, quests: [], sideJobs: [] } );
+		await expect( readFile( join( fixture.config.outDir, 'games', game.id, 'quests/all.questlines.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+
+	} );
+
 	it( 'keeps a city shell-only when a later stage rejects invalid input', async () => {
 
 		const fixture = await setup();
