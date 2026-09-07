@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { floorAt, InteriorStream } from './InteriorStream.js';
 import { Elevators } from './Elevators.js';
@@ -69,7 +69,7 @@ const factory = {
 };
 
 /** A stream with the building registered 3 m away and the worker stubbed. */
-function stream( { cut, elevators = null, warmup = null } ) {
+function stream( { cut, elevators = null, warmup = null, levels = floors } ) {
 
 	const roomLights = {
 		dim: { room: null },
@@ -83,7 +83,7 @@ function stream( { cut, elevators = null, warmup = null } ) {
 	stream.dropped = [];
 	stream.onColliderBand = ( id, geometry ) => stream.solid.set( id, geometry );
 	stream.onDropBand = ( id ) => { stream.solid.delete( id ); stream.dropped.push( id ); };
-	stream.register( new Map( [ [ 'p0', { floors } ] ] ), new Map( [ [ 'p0', { x: 2, z: 2 } ] ] ) );
+	stream.register( new Map( [ [ 'p0', { floors: levels } ] ] ), new Map( [ [ 'p0', { x: 2, z: 2 } ] ] ) );
 
 	return stream;
 
@@ -108,6 +108,91 @@ async function settle( stream, feet ) {
 
 const roomIds = ( stream ) => stream.rooms.map( ( room ) => room.id ).sort();
 const bandGroup = ( stream, floor ) => stream.group.getObjectByName( `interior:p0:${floor}` );
+
+describe( 'floor collision readiness', () => {
+
+	it( 'passes exact source positions and keeps the floor hidden until collision is complete', async () => {
+
+		const model = stream( { cut: workerFor( [] ), levels: [ floors[ 1 ] ] } );
+		let complete;
+		model.onColliderBand = vi.fn( () => new Promise( resolve => { complete = resolve; } ) );
+		model.update( feetOn( 0 ) );
+		while ( model.loading ) await tick();
+		model.update( feetOn( 0 ) );
+
+		const group = bandGroup( model, 0 ), sourcePositions = [];
+		group.traverse( node => { if ( node.geometry ) sourcePositions.push( node.geometry.attributes.position.array ); } );
+		const [ id, positions ] = model.onColliderBand.mock.calls[ 0 ];
+		expect( id ).toBe( 'p0:0' );
+		expect( positions ).toHaveLength( sourcePositions.length );
+		expect( positions.every( part => sourcePositions.includes( part ) ) ).toBe( true );
+		expect( group.visible ).toBe( false );
+		expect( model.loading ).toBe( 1 );
+		model.update( feetOn( 0 ) );
+		expect( model.onColliderBand ).toHaveBeenCalledOnce();
+
+		complete( true );
+		while ( model.loading ) await tick();
+		expect( group.visible ).toBe( true );
+		expect( group.parent.visible ).toBe( true );
+		model.dispose();
+		expect( model.dropped ).toEqual( [ 'p0:0' ] );
+
+	} );
+
+	it( 'cancels collision outside the visible floor window and ignores stale readiness', async () => {
+
+		const model = stream( { cut: workerFor( [] ), levels: [ floors[ 1 ], floors[ 3 ] ] } );
+		let complete;
+		model.onColliderBand = () => new Promise( resolve => { complete = resolve; } );
+		model.update( feetOn( 0 ) );
+		while ( model.loading ) await tick();
+		model.update( feetOn( 0 ) );
+		const group = bandGroup( model, 0 );
+
+		model.update( feetOn( 2 ) );
+		expect( model.dropped ).toEqual( [ 'p0:0' ] );
+		expect( group.visible ).toBe( false );
+		expect( group.children ).toHaveLength( 1 );
+		complete( true );
+		while ( model.loading ) await tick();
+		expect( group.visible ).toBe( false );
+
+		model.onColliderBand = vi.fn( async () => true );
+		await settle( model, feetOn( 0 ) );
+		expect( model.onColliderBand ).toHaveBeenCalledOnce();
+		expect( group.visible ).toBe( true );
+		model.dispose();
+
+	} );
+
+	it( 'releases a rejected floor and reports its collision failure without exposing it', async () => {
+
+		const model = stream( { cut: workerFor( [] ), levels: [ floors[ 1 ] ] } );
+		model.onColliderBand = vi.fn( async () => { throw new Error( 'cook failed' ); } );
+		model.roomLights.releaseRooms = vi.fn();
+		const warn = vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		try {
+
+			model.update( feetOn( 0 ) );
+			while ( model.loading ) await tick();
+			const group = bandGroup( model, 0 ), disposed = [];
+			group.traverse( node => { if ( node.geometry ) disposed.push( vi.spyOn( node.geometry, 'dispose' ) ); } );
+			await settle( model, feetOn( 0 ) );
+			expect( group.visible ).toBe( false );
+			expect( group.children ).toHaveLength( 0 );
+			expect( model.rooms ).toHaveLength( 0 );
+			expect( model.dropped ).toEqual( [ 'p0:0' ] );
+			expect( model.roomLights.releaseRooms ).toHaveBeenCalledWith( [ expect.objectContaining( { id: 'r0' } ) ] );
+			expect( disposed.every( spy => spy.mock.calls.length === 1 ) ).toBe( true );
+			expect( warn ).toHaveBeenCalledWith( 'floor p0:0 collider: cook failed' );
+			expect( model.onColliderBand ).toHaveBeenCalledOnce();
+
+		} finally { warn.mockRestore(); model.dispose(); }
+
+	} );
+
+} );
 
 /**
  * Streaming a tower a floor at a time only works if the floor the player is on
@@ -187,7 +272,7 @@ describe( 'InteriorStream.update', () => {
 		expect( fetched.sort() ).toEqual( [ urlOf( - 1 ), urlOf( 0 ), urlOf( 1 ) ].sort() );
 		expect( roomIds( landed ) ).toEqual( [ 'r-1', 'r0', 'r1' ] );
 		expect( [ ...landed.solid.keys() ].sort() ).toEqual( [ 'p0:-1', 'p0:0', 'p0:1' ] );
-		expect( landed.solid.get( 'p0:0' ).getAttribute( 'position' ).count ).toBe( 3 + 12 );
+		expect( landed.solid.get( 'p0:0' ).reduce( ( count, positions ) => count + positions.length / 3, 0 ) ).toBe( 3 + 12 );
 		expect( bandGroup( landed, 0 ).visible ).toBe( true );
 		expect( bandGroup( landed, 3 ).children ).toHaveLength( 0 );
 

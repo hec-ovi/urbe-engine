@@ -1,4 +1,4 @@
-import type { BufferGeometry, Color, Group, Object3D } from 'three/webgpu';
+import type { Color, Group, Object3D } from 'three/webgpu';
 import type { InteriorOutline } from './interior-cut';
 import type { RoomLights } from '../../light/RoomLights.js';
 import type { Elevators } from '../Elevators.js';
@@ -26,7 +26,9 @@ export interface InteriorStreamPort {
 	register(buildings: Map<string, { floors: StreamFloor[]; hasInterior?: boolean }>, centers: Map<string, { x: number; z: number }>): void;
 	/** Returns whether room memory or scene membership changed. */
 	update(feet: { x: number; y: number; z: number }): boolean;
-	onColliderBand: ((id: string, geometry: BufferGeometry | null) => void) | null;
+	/** Borrowed world-space triangle arrays. Await full collision readiness before visibility; false cancels. */
+	onColliderBand: ((id: string, positions: readonly Float32Array[]) => Promise<boolean | void> | boolean | void) | null;
+	/** Cancels pending admission or removes a ready band before its geometry is released. */
 	onDropBand: ((id: string) => void) | null;
 	dispose(): void;
 }

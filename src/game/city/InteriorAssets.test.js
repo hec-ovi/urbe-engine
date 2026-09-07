@@ -150,11 +150,11 @@ describe( 'imported furniture across the worker and streamed floor', () => {
 		expect( stream.factory.build.mock.calls ).toEqual( [ [ 'cyberpunk/carpet/mid', undefined ], [ 'cyberpunk/carpet/mid', undefined ], [ 'cyberpunk/carpet/mid', undefined ] ] );
 		expect( stream.factory.tint.mock.calls ).toEqual( [ [ 'cyberpunk/carpet/mid' ] ] );
 		const collider = stream.onColliderBand.mock.calls[ 0 ][ 1 ];
-		expect( collider.attributes.position.count ).toBe( 18 );
-		const colliding = Array.from( collider.attributes.position.array );
+		expect( collider.reduce( ( count, positions ) => count + positions.length / 3, 0 ) ).toBe( 18 );
+		const colliding = collider.flatMap( positions => Array.from( positions ) );
 		for ( let i = 0; i < geometry.attributes.position.array.length; i += 9 ) expect( colliding.join( ',' ) ).toContain( Array.from( geometry.attributes.position.array.slice( i, i + 9 ) ).join( ',' ) );
 		stream.roomLights.update( [ room ], new THREE.Vector3( 2, 0, 2 ), 1 );
-		const owned = [ ...new Set( warmed.map( entry => entry.material ) ), physical.source, basic.source, rendered.map, rendered.normalMap, geometry, collider ];
+		const owned = [ ...new Set( warmed.map( entry => entry.material ) ), physical.source, basic.source, rendered.map, rendered.normalMap, geometry ];
 		const disposal = owned.map( resource => vi.spyOn( resource, 'dispose' ) );
 		stream.update( { x: 200, y: 0, z: 200 } );
 		stream.dispose();

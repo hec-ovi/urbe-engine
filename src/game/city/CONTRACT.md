@@ -16,6 +16,8 @@ Building, door and fixture entries follow the [game contract](../CONTRACT.md). T
 
 Static interior geometry and each detached floor prepare one renderable at a time through `Warmup.warmAll`. Each floor prepares the dim binding and every fixed room-light slot before becoming visible or solid, then returns to dim. Cancellation is checked between renderables. Active preparation settles before its geometry, source maps, decoded images and light clones are released. Preparation errors leave the band hidden and report the floor identifier.
 
+After rendering preparation, `onColliderBand` receives the floor's original world-space position arrays. Its readiness promise keeps the band hidden while Physics prepares exact collision across frames. A floor leaving the visible window calls `onDropBand`, including during admission; stale readiness cannot show it. Collision errors release the floor and report its identifier. One floor loads or prepares collision at a time.
+
 ## Dependencies
 
-[Game](../CONTRACT.md), [Interior](../../../../interior/CONTRACT.md), [material factory](../../building/CONTRACT.md), [Light](../light/CONTRACT.md), [Look](../look/CONTRACT.md).
+[Game](../CONTRACT.md), [Interior](../../../../interior/CONTRACT.md), [material factory](../../building/CONTRACT.md), [Light](../light/CONTRACT.md), [Look](../look/CONTRACT.md), [Physics](../physics/CONTRACT.md).

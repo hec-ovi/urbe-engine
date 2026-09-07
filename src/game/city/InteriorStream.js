@@ -102,8 +102,8 @@ export class InteriorStream {
 	/**
 	 * One pass over what should be open, what should be in memory and what
 	 * should be in the scene. Cheap to call every frame: a hypot per building
-	 * and a subtraction per floor. Collider work shares one frame budget, and
-	 * whatever it leaves unfinished the next pass picks up.
+	 * and a subtraction per floor. Collision admission runs across frames and
+	 * makes each complete floor visible when ready.
 	 *
 	 * @returns whether the set of rooms in memory or in the scene changed
 	 */
@@ -200,15 +200,15 @@ export class InteriorStream {
 
 			} else if ( away > BAND_REACH ) {
 
-				if ( band.live ) this.#hide( band );
+				if ( band.live || band.admission ) this.#hide( band );
 
 			} else if ( band.state === EMPTY ) {
 
 				if ( ! want || away < Math.abs( want.floor - standing ) ) want = band;
 
-			} else if ( band.state === LOADED && ! band.live && ! budget.spent ) {
+			} else if ( band.state === LOADED && ! band.live && ! band.admission && ! this.loading && ! budget.spent ) {
 
-				this.#show( band );
+				this.#show( interior, band );
 
 			}
 
@@ -218,22 +218,42 @@ export class InteriorStream {
 
 	}
 
-	/** A loaded band goes into the scene and into the physics world. */
-	#show( band ) {
+	/** A floor stays hidden until all of its exact collision is admitted. */
+	async #show( interior, band ) {
 
-		band.live = true;
-		band.group.parent.visible = true;
-		band.group.visible = true;
-		this.changed = true;
-
+		const admission = {};
+		band.admission = admission;
+		this.loading ++;
 		const t = performance.now();
-		this.onColliderBand?.( band.id, band.collider() );
-		this.hitches?.note( `band ${band.id} collider`, performance.now() - t );
+		try {
+
+			const ready = await this.onColliderBand?.( band.id, band.solid );
+			if ( band.admission !== admission || band.state !== LOADED || ready === false ) return;
+			band.live = true;
+			band.group.parent.visible = true;
+			band.group.visible = true;
+			this.changed = true;
+
+		} catch ( error ) {
+
+			if ( band.admission !== admission ) return;
+			this.#unload( interior, band );
+			band.state = FAILED;
+			console.warn( `floor ${band.id} collider: ${error?.message ?? error}` );
+
+		} finally {
+
+			if ( band.admission === admission ) band.admission = null;
+			this.loading --;
+			this.hitches?.note( `band ${band.id} collider admission elapsed`, performance.now() - t );
+
+		}
 
 	}
 
 	#hide( band ) {
 
+		band.admission = null;
 		band.live = false;
 		band.group.visible = false;
 		this.onDropBand?.( band.id );
@@ -244,7 +264,7 @@ export class InteriorStream {
 	/** Lets a floor go: out of the scene, out of the shafts, out of memory. */
 	#unload( interior, band ) {
 
-		if ( band.live ) this.#hide( band );
+		if ( band.live || band.admission ) this.#hide( band );
 
 		const gone = new Set( band.rooms );
 
@@ -532,7 +552,7 @@ class FloorBand {
 		this.content = null;
 		this.rooms = [];
 		this.solid = [];
-		this.trimesh = null;
+		this.admission = null;
 		this.sources = null;
 
 	}
@@ -549,37 +569,14 @@ class FloorBand {
 
 	}
 
-	/** Every solid surface of the floor as one position-only geometry, or null with none. */
-	collider() {
-
-		if ( this.trimesh || ! this.solid.length ) return this.trimesh;
-
-		const merged = new Float32Array( this.solid.reduce( ( total, array ) => total + array.length, 0 ) );
-		let at = 0;
-
-		for ( const array of this.solid ) {
-
-			merged.set( array, at );
-			at += array.length;
-
-		}
-
-		this.trimesh = new THREE.BufferGeometry();
-		this.trimesh.setAttribute( 'position', new THREE.BufferAttribute( merged, 3 ) );
-
-		return this.trimesh;
-
-	}
-
 	/** Back to empty: nothing of the floor's geometry is referenced afterwards. */
 	clear( roomLights ) {
 
-		this.trimesh?.dispose();
 		disposeFloor( this, roomLights );
 
 		if ( this.content ) this.group.remove( this.content );
 
-		this.trimesh = null;
+		this.admission = null;
 		this.sources = null;
 		this.content = null;
 		this.rooms = [];
