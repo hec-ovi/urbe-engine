@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { Input } from './Input.js';
 
@@ -34,5 +34,32 @@ it( 'limits inspection controls to captured play and clears zoom on lost focus',
 		canvas.remove();
 
 	}
+
+} );
+
+
+it( 'settles denied capture and permits the next explicit click without overlapping requests', async () => {
+
+	const canvas = document.createElement( 'canvas' );
+	document.body.append( canvas );
+	const input = new Input( canvas );
+	let reject;
+	canvas.requestPointerLock = vi.fn( () => new Promise( ( resolve, fail ) => { reject = fail; } ) );
+	try {
+
+		const first = input.requestLock();
+		expect( input.requestLock() ).toBe( first );
+		expect( canvas.requestPointerLock ).toHaveBeenCalledOnce();
+		reject( new DOMException( 'Capture requires a new click', 'SecurityError' ) );
+		await expect( first ).resolves.toBe( false );
+		expect( input.locked ).toBe( false );
+		canvas.requestPointerLock.mockImplementationOnce( () => {} );
+		await expect( input.requestLock() ).resolves.toBe( true );
+		expect( canvas.requestPointerLock ).toHaveBeenCalledTimes( 2 );
+		canvas.remove();
+		await expect( input.requestLock() ).resolves.toBe( false );
+		expect( canvas.requestPointerLock ).toHaveBeenCalledTimes( 2 );
+
+	} finally { input.dispose(); canvas.remove(); }
 
 } );

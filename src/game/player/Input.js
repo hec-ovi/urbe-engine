@@ -26,6 +26,7 @@ export class Input {
 		this.zooming = false;
 		this.pressed = new Set();
 		this.onLockChange = null;
+		this.lockPending = null;
 
 		this.handlers = {
 			keydown: ( event ) => {
@@ -77,7 +78,28 @@ export class Input {
 
 	requestLock() {
 
-		this.element.requestPointerLock?.();
+		if ( this.locked ) return Promise.resolve( true );
+		if ( this.lockPending ) return this.lockPending;
+		if ( this.element.isConnected === false || ! this.element.requestPointerLock ) return Promise.resolve( false );
+		this.lockPending = this.#capture().finally( () => { this.lockPending = null; } );
+		return this.lockPending;
+
+	}
+
+	async #capture() {
+
+		try {
+
+			await this.element.requestPointerLock();
+			return true;
+
+		} catch {
+
+			this.clear();
+			this.onLockChange?.( this.locked );
+			return false;
+
+		}
 
 	}
 
