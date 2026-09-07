@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.16: four molded-plastic street variants use charcoal PBR, fitted wear panels and deformed silhouettes.
+
 0.17.16: street dressing uses imported models, native PBR delivery props, full-footprint clearance and spatial instancing. A dedicated page previews all models and service pockets.
 
 0.17.16: size templates create named cities; free play supports optional interiors, direct launch and independent saved playthroughs.
