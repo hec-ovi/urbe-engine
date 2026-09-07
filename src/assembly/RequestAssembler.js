@@ -43,6 +43,7 @@ export class RequestAssembler {
 
 		this.worldSeed = atlas.meta.seed;
 		this.buildingGrid = atlas.meta.buildingGrid;
+		this.streetEdges = new Map( ( atlas.streets?.edges ?? [] ).map( ( edge ) => [ edge.id, edge ] ) );
 		this.floorConstants = floorConstants;
 		this.marqueeLimit = marqueeTextLimit();
 		this.parcels = new Map( atlas.parcels.map( ( p ) => [ p.id, p ] ) );
@@ -67,7 +68,7 @@ export class RequestAssembler {
 	 * @param options.signage what the marquee reads: 'name' (default: the
 	 * parcel's name, else its venue word), 'venue' (the word), 'none'
 	 * @returns BuildingRequest per ../exterior/schemas/building-request.schema.json
-	 * @throws AssemblyError E_PARCEL_UNKNOWN | E_ENVELOPE_INFEASIBLE
+	 * @throws AssemblyError E_PARCEL_UNKNOWN | E_ENVELOPE_INFEASIBLE | E_REQUEST_INVALID
 	 */
 	assemble( parcelId, { glb = 'merged', floorCap = null, signage = 'name' } = {} ) {
 
@@ -84,6 +85,7 @@ export class RequestAssembler {
 			parcel: {
 				footprint: parcel.footprint,
 				accessPoint: parcel.access.point,
+				streetAccess: this.#streetAccess( parcel ),
 				maxHeight: parcel.envelope.maxHeight,
 				...( this.buildingGrid ? { buildingGrid: this.buildingGrid } : {} )
 			},
@@ -94,7 +96,7 @@ export class RequestAssembler {
 			},
 			theme: THEME,
 			apertures,
-			options: { glb }
+			options: { glb, doorMotion: 'pocket' }
 		};
 
 		const text = this.#signText( parcel, signage );
@@ -104,6 +106,16 @@ export class RequestAssembler {
 		if ( basements > 0 ) request.building.basements = basements;
 
 		return request;
+
+	}
+
+	/** Authored street identity and geometry keep a corner access point unambiguous. */
+	#streetAccess( parcel ) {
+
+		const edge = this.streetEdges.get( parcel.access.edgeId );
+		if ( ! edge ) throw new AssemblyError( 'E_REQUEST_INVALID',
+			`${parcel.id}: access street ${parcel.access.edgeId} is absent from the Atlas street graph` );
+		return { edgeId: edge.id, path: edge.path };
 
 	}
 

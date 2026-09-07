@@ -10,10 +10,11 @@ Purpose: turns the atlas blueprint plus the connections document into per-parcel
 ## Out
 `RequestAssembler(atlas, connections).assemble(parcelId, { glb })` returns a `BuildingRequest` per ../../../exterior/schemas/building-request.schema.json:
 - seed: `<atlas seed>:<parcelId>`
-- parcel: footprint, access point and nominal maxHeight from the Atlas parcel, verbatim. When Atlas publishes `meta.buildingGrid`, `parcel.buildingGrid` carries its origin, angle and spacing unchanged to Exterior; older worlds omit it.
+- parcel: footprint, access point and nominal maxHeight from the Atlas parcel, verbatim. `parcel.streetAccess { edgeId, path }` carries the exact named access edge and its complete source path from `atlas.streets.edges`; the original access point remains unchanged. Missing access edges fail with `E_REQUEST_INVALID`. When Atlas publishes `meta.buildingGrid`, `parcel.buildingGrid` carries its origin, angle and spacing unchanged to Exterior; older worlds omit it.
 - building: atlas type and tier verbatim; floors seeded inside the intersection of the atlas envelope and exterior's feasible range, computed with the recipe and constants in ../../../exterior/schemas/floor-constants.json (`floorFeasibility.js`); basements added when a tunnel aperture sits below ground, deep enough at the type's max floor height to reach its base
 - theme: `cyberpunk`
 - apertures: the connections apertures whose buildingId equals the parcel id, verbatim
+- options.doorMotion: `pocket` for public entrances. A frontage without a complete passage and cassette fails through Exterior; assembly never substitutes a swing door.
 - options.glb: `merged` (engine runtime default) or `named`
 - options.signage: a `marquee` for the parcel types a passer-by reads off the street (hotel, coffee_shop, commerce, clinic, police, restaurant); every other type gets none, because a blank sign is worse than no sign. The text is the parcel's `name` lettered for exterior's atlas (`signText.js`): diacritics folded onto their base letter, uppercased, any character still outside the charset in ../../../exterior/CONTRACT.md read as the space it reserves (runs collapsed), then whole words in order while they fit the marquee limit exterior's request schema sets (40 characters). A parcel with no name, an empty one, or one whose first word alone passes the limit reads its venue word instead (hotel HOTEL, coffee_shop COFFEE, commerce MARKET, clinic CLINIC, police POLICE, restaurant DINER). `assemble(parcelId, { signage })` picks the rung: `name` (default), `venue` (the word), `none`.
 
@@ -54,7 +55,7 @@ Simulation: `simulationRunner.js` calls simulation's `createSimulation(input)` a
 - `E_CONNECTIONS_SOURCE_MISMATCH`: Connections source seeds differ from Atlas, or Atlas bytes changed after artifact capture (thrown as `AssemblyError`; CLI exit 1 without publishing a new manifest)
 - `E_PARCEL_UNKNOWN`: parcel id not in the atlas blueprint (thrown as `AssemblyError`; CLI exit 1)
 - `E_ENVELOPE_INFEASIBLE`: no floor count satisfies both the atlas envelope and exterior's feasibility recipe for the parcel's apertures (thrown as `AssemblyError`; CLI exit 1)
-- `E_REQUEST_INVALID`: an assembled request fails its schema (CLI exit 1, ajv errors printed)
+- `E_REQUEST_INVALID`: a parcel's named access street is absent, or its assembled request fails the Exterior schema (CLI exit 1, schema errors printed)
 - `E_EXTERIOR_FAILED`: exterior CLI exited nonzero (CLI exit 1, its output printed)
 - `E_CORE_INFEASIBLE`: interior's coreFeasibility gate reports mode none, the footprint cannot hold any core (CLI exit 1; mode, band and core lengths printed)
 - `E_INTERIOR_FAILED`: interior's generateInterior threw (CLI exit 1, its InteriorError code and message printed)

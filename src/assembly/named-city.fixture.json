@@ -4,6 +4,10 @@
     "version": "0.2.4",
     "naming": { "theme": "rain-soaked port city", "model": "hand", "namedAt": "2026-09-01T00:00:00Z" }
   },
+  "streets": { "edges": [
+    { "id": "e1", "path": [ [ 0, -10 ], [ 20, -10 ] ] },
+    { "id": "e2", "path": [ [ 30, -10 ], [ 50, -10 ] ] }
+  ] },
   "parcels": [
     {
       "id": "p1",

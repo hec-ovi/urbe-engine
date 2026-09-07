@@ -10,7 +10,8 @@ import { validateExteriorRequest } from './validators.js';
 /** Minimal atlas blueprint slice shaped per ../atlas/CONTRACT.md. */
 function atlasWith( parcel ) {
 
-	return { meta: { seed: 'urbe' }, parcels: [ parcel ] };
+	return { meta: { seed: 'urbe' }, parcels: [ parcel ],
+		streets: { edges: [ { id: parcel.access.edgeId, path: [ [ - 10, - 8 ], [ 30, - 8 ] ] } ] } };
 
 }
 
