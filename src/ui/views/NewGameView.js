@@ -1,22 +1,9 @@
 import { el } from '../components/dom.js';
 import { CreationSteps } from '../widgets/CreationSteps.js';
+import { CreationForm } from '../components/CreationForm.js';
+import layout from './creation-layout.json' with { type: 'json' };
 
 const STAGES = [ 'city', 'instances', 'quests', 'game' ];
-
-function labelled( label, control, note = '' ) {
-
-	const text = el( 'span', { className: 'creation-field-label', textContent: label } );
-	const field = el( 'label', { className: 'creation-field' }, text, control );
-	if ( note ) field.append( el( 'span', { className: 'creation-field-note', textContent: note } ) );
-	return field;
-
-}
-
-function option( value, label = value ) {
-
-	return el( 'option', { value, textContent: label } );
-
-}
 
 function submit( label, action ) {
 
@@ -26,7 +13,7 @@ function submit( label, action ) {
 
 }
 
-/** City -> selected interiors -> quests/jobs -> playable game. No persistence lives here. */
+/** Presents city creation and optional interiors and quests. */
 export class NewGameView {
 
 	constructor( {
@@ -41,59 +28,36 @@ export class NewGameView {
 		this.state = { city: null, instances: null, quests: null, game: null, busy: null, error: '' };
 		this.current = 1;
 
-		this.name = el( 'input', { className: 'creation-input', type: 'text', value: 'New city', required: true, autocomplete: 'off', ariaLabel: 'City name' } );
-		this.seed = el( 'input', { className: 'creation-input', type: 'text', value: 'urbe', required: true, autocomplete: 'off', ariaLabel: 'Seed' } );
-		this.size = el( 'select', { className: 'creation-input', ariaLabel: 'City size' },
-			option( 'small', 'Small' ), option( 'medium', 'Medium' ), option( 'large', 'Large' )
-		);
-		this.cityAction = submit( 'Generate city', () => this.generateCity() );
+		this.forms = Object.fromEntries( [ 'city', 'instances', 'quests' ].map( ( stage ) => [
+			stage, new CreationForm( layout[ stage ].fields, () => this.sync() )
+		] ) );
+		for ( const form of Object.values( this.forms ) ) Object.assign( this, form.inputs );
+		this.cityAction = submit( layout.city.action, () => this.generateCity() );
 		this.cityStatus = el( 'p', { className: 'creation-stage-status', role: 'status', ariaLive: 'polite' } );
-		this.cityPane = this.pane( '1', 'City geometry', 'Generate the deterministic streets, transit, districts and building shells first.',
-			el( 'div', { className: 'creation-form-grid' },
-				labelled( 'City name', this.name ),
-				labelled( 'Seed', this.seed, 'The same seed and size must produce the same city.' ),
-				labelled( 'Scale', this.size, 'Small, medium and large use verified generation profiles.' )
-			),
-			this.cityAction,
-			this.cityStatus
+		this.cityPane = this.pane( '1', layout.city.title, layout.city.intro,
+			this.forms.city.element, this.cityAction, this.cityStatus
 		);
+		this.freePlayActions = [ 0, 1 ].map( () => submit( layout.freePlay, () => this.createGame( true ) ) );
 
-		this.instanceMode = el( 'select', { className: 'creation-input', ariaLabel: 'Interior selection mode' },
-			option( 'automatic', 'Choose automatically' ), option( 'manual', 'Choose buildings' )
-		);
-		this.instanceCount = el( 'input', { className: 'creation-input', type: 'number', min: 9, max: 24, step: 1, value: 9, ariaLabel: 'Interior count' } );
 		this.buildingList = el( 'fieldset', { className: 'creation-buildings' },
 			el( 'legend', { textContent: 'Buildings available for interiors' } )
 		);
-		this.instanceAction = submit( 'Generate selected interiors', () => this.generateInstances() );
+		this.instanceAction = submit( layout.instances.action, () => this.generateInstances() );
 		this.instanceStatus = el( 'p', { className: 'creation-stage-status', role: 'status', ariaLive: 'polite' } );
-		this.instancePane = this.pane( '2', 'Playable interiors', 'Only selected quest and work locations receive interiors. The rest remain sealed city buildings.',
-			el( 'div', { className: 'creation-form-grid' },
-				labelled( 'Selection', this.instanceMode ),
-				labelled( 'Interior count', this.instanceCount, 'Nine is the minimum and default: seven main-story locations plus two unique side-job locations.' )
-			),
-			this.buildingList,
-			this.instanceAction,
-			this.instanceStatus
+		this.instancePane = this.pane( '2', layout.instances.title, layout.instances.intro,
+			this.freePlayActions[ 0 ], this.forms.instances.element, this.buildingList, this.instanceAction, this.instanceStatus
 		);
 
-		this.mainBrief = el( 'textarea', { className: 'creation-input creation-textarea', placeholder: 'Optional direction for the main story', spellcheck: true, ariaLabel: 'Main story direction' } );
-		this.sideJobs = el( 'input', { className: 'creation-input', type: 'number', min: 0, max: 3, step: 1, value: 3, ariaLabel: 'Side jobs' } );
-		this.questAction = submit( 'Generate story and jobs', () => this.generateQuests() );
+		this.questAction = submit( layout.quests.action, () => this.generateQuests() );
 		this.questStatus = el( 'p', { className: 'creation-stage-status', role: 'status', ariaLive: 'polite' } );
-		this.questPane = this.pane( '3', 'Story and side jobs', 'The story pass defines the narrative. The gameplay pass then maps it onto real people, places, items and supported actions.',
-			el( 'div', { className: 'creation-form-grid' },
-				labelled( 'Main story direction', this.mainBrief, 'Leave blank to derive it from the generated city.' ),
-				labelled( 'Side jobs', this.sideJobs )
-			),
-			this.questAction,
-			this.questStatus
+		this.questPane = this.pane( '3', layout.quests.title, layout.quests.intro,
+			this.freePlayActions[ 1 ], this.forms.quests.element, this.questAction, this.questStatus
 		);
 
 		this.review = el( 'div', { className: 'creation-review' } );
-		this.gameAction = submit( 'Create playable game', () => this.createGame() );
+		this.gameAction = submit( layout.game.action, () => this.createGame() );
 		this.gameStatus = el( 'p', { className: 'creation-stage-status', role: 'status', ariaLive: 'polite' } );
-		this.gamePane = this.pane( '4', 'Playable game', 'Seal the city, its selected interiors, quests and initial playthrough into one loadable game.',
+		this.gamePane = this.pane( '4', layout.game.title, layout.game.intro,
 			this.review,
 			this.gameAction,
 			this.gameStatus
@@ -107,7 +71,7 @@ export class NewGameView {
 		this.element = el( 'section', { className: 'new-game-view', ariaLabel: 'Create a playable game' },
 			el( 'div', { className: 'creation-rail' },
 				el( 'p', { className: 'menu-eyebrow', textContent: 'New game' } ),
-				el( 'h2', { className: 'menu-section-title', textContent: 'Build in four isolated stages' } ),
+				el( 'h2', { className: 'menu-section-title', textContent: layout.title } ),
 				this.steps.element,
 				this.cancel
 			),
@@ -117,7 +81,6 @@ export class NewGameView {
 			)
 		);
 
-		this.instanceMode.addEventListener( 'change', () => this.sync() );
 		this.sync();
 
 	}
@@ -125,7 +88,7 @@ export class NewGameView {
 	pane( number, title, intro, ...children ) {
 
 		const pane = el( 'section', { className: 'creation-pane' },
-			el( 'p', { className: 'menu-eyebrow', textContent: `Stage ${ number } of 4` } ),
+			el( 'p', { className: 'menu-eyebrow', textContent: `Step ${ number }` } ),
 			el( 'h3', { id: `creation-stage-${ number }`, textContent: title } ),
 			el( 'p', { className: 'creation-intro', textContent: intro } ),
 			...children
@@ -139,13 +102,7 @@ export class NewGameView {
 
 		this.state = { city: null, instances: null, quests: null, game: null, busy: null, error: '' };
 		this.current = 1;
-		this.name.value = 'New city';
-		this.seed.value = 'urbe';
-		this.size.value = 'small';
-		this.instanceMode.value = 'automatic';
-		this.instanceCount.value = '9';
-		this.mainBrief.value = '';
-		this.sideJobs.value = '3';
+		for ( const form of Object.values( this.forms ) ) form.reset();
 		this.setBuildings( [] );
 		this.sync();
 
@@ -154,8 +111,6 @@ export class NewGameView {
 	beginWithCity( city ) {
 
 		this.state = { city, instances: null, quests: null, game: null, busy: null, error: '' };
-		this.name.value = city.name || city.id;
-		this.seed.value = city.seed || '';
 		this.size.value = city.size || 'small';
 		this.setBuildings( city.availableBuildings || [] );
 		this.current = 2;
@@ -235,13 +190,8 @@ export class NewGameView {
 
 	generateCity() {
 
-		const name = this.name.value.trim();
-		const seed = this.seed.value.trim();
-		this.name.setAttribute( 'aria-invalid', String( ! name ) );
-		this.seed.setAttribute( 'aria-invalid', String( ! seed ) );
-		if ( ! name || ! seed ) return this.showError( 'City name and seed are required.' );
 		this.clearError();
-		this.handlers.onGenerateCity?.( { name, seed, size: this.size.value } );
+		this.handlers.onGenerateCity?.( { size: this.size.value } );
 
 	}
 
@@ -272,20 +222,20 @@ export class NewGameView {
 		this.handlers.onGenerateQuests?.( {
 			cityId: this.state.city.id,
 			interiorIds: this.state.instances.ids || [],
-			mainBrief: this.mainBrief.value.trim(),
+			mainBrief: '',
 			sideJobs
 		} );
 
 	}
 
-	createGame() {
+	createGame( freePlay = false ) {
 
-		if ( ! this.state.city || ! this.state.instances || ! this.state.quests ) return this.showError( 'City, interiors and quests must all be ready.' );
+		if ( ! this.state.city || ! freePlay && ! this.state.quests ) return this.showError( 'Complete the selected stages first.' );
 		this.clearError();
 		this.handlers.onCreateGame?.( {
 			cityId: this.state.city.id,
-			interiorIds: this.state.instances.ids || [],
-			questId: this.state.quests.id
+			interiorIds: this.state.instances?.ids || [],
+			questId: freePlay ? null : this.state.quests.id
 		} );
 
 	}
@@ -311,12 +261,15 @@ export class NewGameView {
 		[ this.cityPane, this.instancePane, this.questPane, this.gamePane ].forEach( ( pane, index ) => {
 
 			pane.hidden = this.current !== index + 1;
-			pane.setAttribute( 'aria-busy', String( this.state.busy === STAGES[ index ] ) );
+			pane.setAttribute( 'aria-busy', String( Boolean( this.state.busy ) && ( this.current === index + 1 || this.state.busy === STAGES[ index ] ) ) );
 
 		} );
 		this.buildingList.hidden = this.instanceMode.value !== 'manual';
 		this.instanceCount.disabled = this.instanceMode.value === 'manual';
 		const busy = this.state.busy;
+		for ( const button of this.freePlayActions ) button.disabled = busy !== null || ! this.state.city || ! this.handlers.onCreateGame;
+		for ( const form of Object.values( this.forms ) ) for ( const input of Object.values( form.inputs ) ) input.disabled = busy !== null;
+		this.instanceCount.disabled = busy !== null || this.instanceMode.value === 'manual';
 		this.cityAction.disabled = busy !== null || ! this.handlers.onGenerateCity;
 		this.instanceAction.disabled = busy !== null || ! this.state.city || ! this.handlers.onGenerateInstances;
 		this.questAction.disabled = busy !== null || ! this.state.instances || ! this.handlers.onGenerateQuests;
@@ -343,6 +296,7 @@ export class NewGameView {
 
 	stageStatus( stage, handler, ready ) {
 
+		if ( this.state.busy === 'game' ) return 'Opening your city.';
 		if ( this.state.busy === stage ) return 'Working on this stage.';
 		if ( ready ) return ready;
 		if ( ! handler ) return `${ stage[ 0 ].toUpperCase() }${ stage.slice( 1 ) } generation is not connected in the current runtime.`;

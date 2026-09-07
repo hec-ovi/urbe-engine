@@ -1,13 +1,12 @@
 import { el } from '../components/dom.js';
-
-const LABELS = [ 'City', 'Interiors', 'Story and jobs', 'Playable game' ];
+import layout from '../views/creation-layout.json' with { type: 'json' };
 
 /** Four-stage rail. Locked stages are real disabled buttons. */
 export class CreationSteps {
 
 	constructor( { onSelect } ) {
 
-		this.buttons = LABELS.map( ( label, index ) => {
+		this.buttons = layout.stages.map( ( label, index ) => {
 
 			const step = index + 1;
 			const button = el( 'button', { type: 'button', className: 'creation-step', ariaLabel: `Step ${ step }: ${ label }` },

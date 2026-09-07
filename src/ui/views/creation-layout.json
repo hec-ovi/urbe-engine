@@ -1,0 +1,31 @@
+{
+  "title": "Choose a city, then play",
+  "stages": ["City", "Interiors", "Story and jobs", "Playable game"],
+  "city": {
+    "title": "Choose your city",
+    "intro": "Choose a size. Streets and building exteriors are included.",
+    "fields": [{ "key": "size", "label": "City size", "type": "select", "value": "small", "options": [{ "value": "small", "label": "Small" }, { "value": "medium", "label": "Medium" }, { "value": "large", "label": "Big" }] }],
+    "action": "Next"
+  },
+  "instances": {
+    "title": "Playable interiors",
+    "intro": "Enter the city now, or add interiors before continuing.",
+    "fields": [
+      { "key": "instanceMode", "label": "Interior selection mode", "type": "select", "value": "automatic", "options": [{ "value": "automatic", "label": "Choose automatically" }, { "value": "manual", "label": "Choose buildings" }] },
+      { "key": "instanceCount", "label": "Interior count", "type": "number", "min": 9, "max": 24, "step": 1, "value": 9 }
+    ],
+    "action": "Generate selected interiors"
+  },
+  "quests": {
+    "title": "Story and side jobs",
+    "intro": "Play freely, or add the city's story and side jobs.",
+    "fields": [{ "key": "sideJobs", "label": "Side jobs", "type": "number", "min": 0, "max": 3, "step": 1, "value": 3 }],
+    "action": "Generate story and jobs"
+  },
+  "game": {
+    "title": "Playable game",
+    "intro": "Your city and selected story are ready to play.",
+    "action": "Play"
+  },
+  "freePlay": "Play without quests"
+}

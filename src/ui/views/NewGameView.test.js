@@ -28,33 +28,41 @@ describe( 'NewGameView', () => {
 	it( 'starts with only the city stage unlocked and explains an unavailable generator', () => {
 
 		mount();
-		expect( screen.getByRole( 'heading', { name: 'City geometry' } ) ).toBeTruthy();
+		expect( screen.getByRole( 'heading', { name: 'Choose your city' } ) ).toBeTruthy();
 		expect( screen.getByRole( 'button', { name: 'Step 2: Interiors' } ).disabled ).toBe( true );
-		expect( screen.getByRole( 'button', { name: 'Generate city' } ).disabled ).toBe( true );
+		expect( screen.getByRole( 'button', { name: 'Next' } ).disabled ).toBe( true );
 		expect( screen.getByText( 'City generation is not connected in the current runtime.' ) ).toBeTruthy();
 
 	} );
 
-	it( 'validates and reports the exact city brief', async () => {
+	it( 'reports the selected template without asking for a name or seed', async () => {
 
 		const onGenerateCity = vi.fn();
-		const view = mount( { onGenerateCity } );
+		mount( { onGenerateCity } );
 		const user = userEvent.setup();
-		const name = screen.getByLabelText( 'City name' );
-		const seed = screen.getByLabelText( 'Seed' );
-
-		await user.clear( name );
-		await user.clear( seed );
-		await user.click( screen.getByRole( 'button', { name: 'Generate city' } ) );
-		expect( screen.getByRole( 'alert' ).textContent ).toBe( 'City name and seed are required.' );
-		expect( onGenerateCity ).not.toHaveBeenCalled();
-
-		await user.type( name, 'Rain Sector' );
-		await user.type( seed, 'rain-44' );
+		expect( screen.queryByLabelText( 'City name' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Seed' ) ).toBeNull();
 		await user.selectOptions( screen.getByLabelText( 'City size' ), 'large' );
-		await user.click( screen.getByRole( 'button', { name: 'Generate city' } ) );
-		expect( onGenerateCity ).toHaveBeenCalledWith( { name: 'Rain Sector', seed: 'rain-44', size: 'large' } );
-		expect( view.error.hidden ).toBe( true );
+		expect( screen.getByRole( 'option', { name: 'Big' } ).selected ).toBe( true );
+		await user.click( screen.getByRole( 'button', { name: 'Next' } ) );
+		expect( onGenerateCity ).toHaveBeenCalledWith( { size: 'large' } );
+
+	} );
+
+	it( 'can enter free play directly or with completed interiors, with actions locked while saving', async () => {
+
+		const onCreateGame = vi.fn();
+		const view = mount( { onCreateGame } );
+		view.beginWithCity( city );
+		const user = userEvent.setup();
+		await user.click( screen.getByRole( 'button', { name: 'Play without quests' } ) );
+		expect( onCreateGame ).toHaveBeenLastCalledWith( { cityId: city.id, interiorIds: [], questId: null } );
+		view.setCreationState( { instances: { ids: [ 'p11' ], count: 1 } } );
+		await user.click( screen.getByRole( 'button', { name: 'Play without quests' } ) );
+		expect( onCreateGame ).toHaveBeenLastCalledWith( { cityId: city.id, interiorIds: [ 'p11' ], questId: null } );
+		view.setCreationState( { busy: 'game' } );
+		expect( screen.getByRole( 'button', { name: 'Play without quests' } ).disabled ).toBe( true );
+		expect( view.questPane.getAttribute( 'aria-busy' ) ).toBe( 'true' );
 
 	} );
 
@@ -128,7 +136,6 @@ describe( 'NewGameView', () => {
 		const view = mount( { onGenerateQuests } );
 		view.setCreationState( { city, instances: { ids: [ 'p11', 'p64' ], count: 2 } } );
 		const user = userEvent.setup();
-		await user.type( screen.getByLabelText( 'Main story direction' ), 'A missing freight investigation' );
 		const sideJobs = screen.getByLabelText( 'Side jobs' );
 		expect( sideJobs.value ).toBe( '3' );
 		expect( sideJobs.max ).toBe( '3' );
@@ -141,7 +148,7 @@ describe( 'NewGameView', () => {
 		await user.type( sideJobs, '3' );
 		await user.click( screen.getByRole( 'button', { name: 'Generate story and jobs' } ) );
 		expect( onGenerateQuests ).toHaveBeenCalledWith( {
-			cityId: 'city-rain', interiorIds: [ 'p11', 'p64' ], mainBrief: 'A missing freight investigation', sideJobs: 3
+			cityId: 'city-rain', interiorIds: [ 'p11', 'p64' ], mainBrief: '', sideJobs: 3
 		} );
 
 	} );
@@ -157,7 +164,7 @@ describe( 'NewGameView', () => {
 		} );
 		expect( screen.getByRole( 'heading', { name: 'Playable game' } ) ).toBeTruthy();
 		expect( screen.getByText( '9 steps' ) ).toBeTruthy();
-		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Create playable game' } ) );
+		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Play' } ) );
 		expect( onCreateGame ).toHaveBeenCalledWith( {
 			cityId: 'city-rain', interiorIds: [ 'p11', 'p64' ], questId: 'quests-rain'
 		} );
@@ -169,7 +176,7 @@ describe( 'NewGameView', () => {
 		const onCancel = vi.fn();
 		const view = mount( { onGenerateCity: vi.fn(), onCancel } );
 		view.setCreationState( { busy: 'city', error: 'City generation failed validation.' } );
-		expect( screen.getByRole( 'button', { name: 'Generate city' } ).disabled ).toBe( true );
+		expect( screen.getByRole( 'button', { name: 'Next' } ).disabled ).toBe( true );
 		expect( view.cityPane.getAttribute( 'aria-busy' ) ).toBe( 'true' );
 		expect( screen.getByRole( 'alert' ).textContent ).toBe( 'City generation failed validation.' );
 		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Back to library' } ) );

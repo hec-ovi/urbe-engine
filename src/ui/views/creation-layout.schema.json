@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "title",
+    "stages",
+    "city",
+    "instances",
+    "quests",
+    "game",
+    "freePlay"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "string"
+      }
+    },
+    "freePlay": {
+      "type": "string"
+    },
+    "city": {
+      "$ref": "#/$defs/stage"
+    },
+    "instances": {
+      "$ref": "#/$defs/stage"
+    },
+    "quests": {
+      "$ref": "#/$defs/stage"
+    },
+    "game": {
+      "$ref": "#/$defs/stage"
+    }
+  },
+  "$defs": {
+    "field": {
+      "type": "object",
+      "required": [
+        "key",
+        "label",
+        "type",
+        "value"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "select",
+            "number"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "step": {
+          "type": "number"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "value",
+              "label"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "required": [
+        "title",
+        "intro",
+        "action"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "intro": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        }
+      }
+    }
+  }
+}
