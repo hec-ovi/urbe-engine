@@ -4,6 +4,7 @@ import { cutInterior } from './InteriorSurfaces.js';
 import { buffersOf, outlinesOf } from './InteriorRooms.js';
 import { InteriorStream } from './InteriorStream.js';
 import { RoomLights } from '../light/RoomLights.js';
+import { Warmup } from '../look/Warmup.js';
 
 const floor = { floor: 0, elevation: 0, height: 3, glbUrl: '/floor.glb',
 	rooms: [ { id: 'room', kind: 'living', polygon: [ [ 0, 0 ], [ 4, 0 ], [ 4, 4 ], [ 0, 4 ] ] } ], lights: [] };
@@ -92,14 +93,23 @@ describe( 'imported furniture across the worker and streamed floor', () => {
 		expect( cut.data.byteLength ).toBe( 0 );
 		expect( original.image.byteLength ).toBe( 0 );
 		const closeImage = vi.fn(); sent.materials.images[ 0 ].data.close = closeImage;
-		const warmed = [];
-		const stream = harness( sent, { warm: async content => {
+		const warmed = [], renderables = [];
+		const renderer = { compileAsync: async content => {
 
-			content.traverse( mesh => { if ( mesh.material?.map ) warmed.push( { material: mesh.material, detached: content.parent === null } ); } );
-			return 0;
+			let count = 0;
+			const band = stream.group.getObjectByName( 'interior:p0:0' );
+			content.traverse( mesh => {
 
-		} } );
+				if ( mesh.material ) count ++;
+				if ( mesh.material?.map ) warmed.push( { material: mesh.material, detached: band.children.length === 0 && ! band.visible } );
+
+			} );
+			renderables.push( count );
+
+		} };
+		const stream = harness( sent, new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera() ) );
 		await settle( stream );
+		expect( Math.max( ...renderables ) ).toBe( 1 );
 		expect( stream.rooms ).toHaveLength( 1 );
 		const room = stream.rooms[ 0 ];
 		const physical = room.meshes.find( entry => entry.source?.isMeshPhysicalMaterial );
@@ -166,16 +176,16 @@ describe( 'imported furniture across the worker and streamed floor', () => {
 		const closeImage = vi.fn(); cut.materials.images[ 0 ].data.close = closeImage;
 		const owned = new Set();
 		const disposed = [];
-		const stream = harness( cut, { warm: async content => {
+		const renderer = { compileAsync: async content => {
 
-			if ( content.name ) return 0;
 			content.traverse( node => { if ( node.geometry ) owned.add( node.geometry ); if ( node.material?.map ) { owned.add( node.material ); owned.add( node.material.map ); } } );
 			for ( const resource of owned ) disposed.push( vi.spyOn( resource, 'dispose' ) );
 			if ( mode === 'fails' ) throw new Error( 'shader preparation failed' );
 			stream.dispose();
 			return 0;
 
-		} } );
+		} };
+		const stream = harness( cut, new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera() ) );
 		const warn = vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
 		try {
 
@@ -189,6 +199,44 @@ describe( 'imported furniture across the worker and streamed floor', () => {
 			stream.dispose();
 
 		} finally { warn.mockRestore(); }
+
+	} );
+	it( 'stops between renderables after cancellation and retains the active preparation resources until it settles', async () => {
+
+		const cut = cutInterior( fixture().scene, outlinesOf( [ floor ] ) );
+		const closeImage = vi.fn(); cut.materials.images[ 0 ].data.close = closeImage;
+		let finish, started;
+		const active = new Promise( resolve => { finish = resolve; } );
+		const entered = new Promise( resolve => { started = resolve; } );
+		const disposed = [];
+		const renderer = { compileAsync: vi.fn( async object => {
+
+			const owned = new Set();
+			object.traverse( node => {
+
+				if ( node.geometry ) owned.add( node.geometry );
+				if ( node.material ) owned.add( node.material );
+				if ( node.material?.map ) owned.add( node.material.map );
+
+			} );
+			for ( const resource of owned ) disposed.push( vi.spyOn( resource, 'dispose' ) );
+			started();
+			await active;
+
+		} ) };
+		const stream = harness( cut, new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera() ) );
+		stream.update( { x: 2, y: 0.1, z: 2 } );
+		await entered;
+		stream.dispose();
+		for ( const dispose of disposed ) expect( dispose ).not.toHaveBeenCalled();
+		expect( closeImage ).not.toHaveBeenCalled();
+		finish();
+		while ( stream.loading ) await new Promise( resolve => setTimeout( resolve, 0 ) );
+		expect( renderer.compileAsync ).toHaveBeenCalledTimes( 1 );
+		for ( const dispose of disposed ) expect( dispose ).toHaveBeenCalledTimes( 1 );
+		expect( closeImage ).toHaveBeenCalledTimes( 1 );
+		expect( stream.rooms ).toHaveLength( 0 );
+		expect( stream.onColliderBand ).not.toHaveBeenCalled();
 
 	} );
 

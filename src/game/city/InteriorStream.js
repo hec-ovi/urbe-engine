@@ -424,22 +424,24 @@ export class InteriorStream {
 	async #warm( content, rooms, interior, band ) {
 
 		const bindings = [ this.roomLights.dim, ...( this.roomLights.slots ?? [] ) ];
+		const options = { wanted: () => this.#wanted( interior, band ) };
 		let warmed = 0;
 
 		try {
 
 			if ( ! interior.prepared ) {
 
-				warmed += await this.warmup.warm( interior.group );
+				warmed += await this.warmup.warmAll( interior.group, options );
+				if ( ! options.wanted() ) return;
 				interior.prepared = true;
 
 			}
 
 			for ( const binding of bindings ) {
 
-				if ( ! this.#wanted( interior, band ) ) return;
+				if ( ! options.wanted() ) return;
 				for ( const room of rooms ) room.wear( binding, this.roomLights );
-				warmed += await this.warmup.warm( content );
+				warmed += await this.warmup.warmAll( content, options );
 
 			}
 

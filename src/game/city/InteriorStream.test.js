@@ -196,7 +196,7 @@ describe( 'InteriorStream.update', () => {
 	it( 'warms every stable light binding while the floor is still detached', async () => {
 
 		const warmed = [];
-		const warmup = { warm: async ( content ) => {
+		const warmup = { warmAll: async ( content ) => {
 
 			const bindings = new Set();
 			content.traverse( ( node ) => {
