@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { HttpLauncherApi } from '../launcher/HttpLauncherApi.js';
 import { LauncherService } from './LauncherService.js';
 import { launcherRoute } from './launcherRoute.js';
+import { GamePersistence } from '../game/persistence/index.js';
 
 const FIXTURE = fileURLToPath( new URL( '../library/fixtures/out', import.meta.url ) );
 
@@ -110,6 +111,27 @@ describe( 'launcher HTTP boundary', () => {
 		const after = await api.importGame( imported );
 		expect( after.games.map( ( game ) => game.id ) ).toEqual( [ 'night-shift', 'imported-night' ] );
 		expect( JSON.parse( readFileSync( join( outDir, 'games', 'imported-night', 'game.json' ), 'utf8' ) ).save.revision ).toBe( 5 );
+
+
+		const free = { ...exported, id: 'free-play', questBundle: null, selectedInteriors: [], quests: [], sideJobs: [] };
+		await api.importGame( free );
+		const persistence = new GamePersistence( {
+			game: await api.exportGame( free.id ), gameId: free.id,
+			fetcher: ( url, options ) => fetch( base + url, options ),
+			now: () => new Date( '2026-09-06T12:00:00Z' )
+		} );
+		await persistence.save( {
+			position: { x: 22, y: 0.2, z: -8 }, heading: 1.2, inventory: [],
+			quests: [], sideJobs: [], currentLocation: free.currentLocation,
+			discoveredLocations: free.discoveredLocations, elapsedSeconds: 20
+		} );
+		const resumed = await api.exportGame( free.id );
+		expect( resumed ).toMatchObject( {
+			questBundle: null, quests: [], sideJobs: [], selectedInteriors: [],
+			player: { position: { x: 22, y: 0.2, z: -8 }, heading: 1.2 },
+			save: { revision: free.save.revision + 1, playTimeSeconds: free.save.playTimeSeconds + 20 }
+		} );
+		expect( ( await api.continueGame( free.id ) ).playUrl ).toContain( 'game=free-play' );
 
 	} );
 
