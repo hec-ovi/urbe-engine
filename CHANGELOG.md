@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.16: streamed interiors retain imported furniture, source PBR and unlit materials, collision geometry and oriented room lights. Floor disposal releases source maps and lighting clones.
+
 0.17.16: street props use asymmetric arrangements, three wear finishes, four pocket ornaments and authored guardrail variants. Stations expose short stairs and destination terminals with saved travel between connected landings.
 
 0.17.16: NPCs retain Source body proportions, smoothly interpolated normals and one appearance across crowd, dialogue and impact poses.

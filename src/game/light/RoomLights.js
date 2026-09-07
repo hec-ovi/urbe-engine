@@ -61,9 +61,10 @@ export class RoomLights {
 	 * A key may name the variant the interior box asked for after a `#`: a
 	 * patterned ceiling and a plain one are one database entry and two looks.
 	 */
-	materialFor( binding, key ) {
+	materialFor( binding, key, source = null ) {
 
-		let material = binding.materials.get( key );
+		const identity = source ?? key;
+		let material = binding.materials.get( identity );
 
 		if ( ! material ) {
 
@@ -73,14 +74,42 @@ export class RoomLights {
 			// node-material property, and the conversion the renderer does for a
 			// standard material drops it, which leaves the room lit by the
 			// city's own lights, which is to say not at all.
-			material = new THREE.MeshPhysicalNodeMaterial().copy( this.factory.build( entry, variant ) );
+			const base = source ?? this.factory.build( entry, variant );
+			material = ( source?.isMeshBasicMaterial ? new THREE.MeshBasicNodeMaterial() : new THREE.MeshPhysicalNodeMaterial() ).copy( base );
+			// Three's NodeMaterial.copy does not copy inherited material accessors.
+			material.alphaTest = base.alphaTest;
 			material.name = `${key}|room${binding.index}`;
 			material.lightsNode = binding.lightsNode;
-			binding.materials.set( key, material );
+			binding.materials.set( identity, material );
 
 		}
 
 		return material;
+
+	}
+
+	/** Source clones belong to the streamed floor; catalog bindings stay cached. */
+	releaseSources( sources ) {
+
+		for ( const source of sources ) for ( const binding of this.#all() ) {
+
+			binding.materials.get( source )?.dispose();
+			binding.materials.delete( source );
+
+		}
+
+	}
+
+	/** A dropped room must not remain referenced by a live light slot. */
+	releaseRooms( rooms ) {
+
+		const gone = new Set( rooms );
+		for ( const binding of this.#all() ) if ( gone.has( binding.room ) ) {
+
+			binding.room = null;
+			this.#write( binding, null );
+
+		}
 
 	}
 

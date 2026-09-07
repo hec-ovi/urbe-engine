@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { roomFootprintAnchor, roomFootprintContains } from '../../../../interior/src/core/room-footprint.ts';
 import { albedoOf } from '../light/RoomFill.js';
 import { kelvinColor, luminance } from '../light/Color.js';
+import { materialBuffers } from './InteriorMaterials.js';
 
 /** How far a triangle may sit outside a floor's own slab and still belong to it. */
 const FLOOR_MARGIN = 0.3;
@@ -32,12 +33,12 @@ const FLOATS_PER_TRIANGLE = 24;
  * interior worker. Every surface it returns is a view into one block, so the
  * whole cut is one buffer to hand over rather than thousands to copy.
  *
- * @param surfaces [{ key, position, normal, uv }] world space, non-indexed
- * Float32Arrays, one per source mesh
+ * @param surfaces [{ key, sourceId?, position, normal, uv, attributes? }] world
+ * space, non-indexed Float32Arrays. Extra attributes carry { array, itemSize }.
  * @param outlines the floors as `outlinesOf` keeps them
  * @returns { data, rooms, shared }: rooms as [{ id, kind, floor, elevation,
  * height, polygon, center: [x, y, z], surfaces }], shared as [{ floor,
- * surfaces }], every surface { key, position, normal, uv } merged per key and
+ * surfaces }], each surface merged by catalog key or source identity and layout,
  * viewing `data`, a room's also carrying the { area, floorArea } it measured
  */
 export function partition( surfaces, outlines ) {
@@ -70,10 +71,10 @@ export function outlinesOf( floors ) {
 
 }
 
-/** What a worker transfers when it posts a cut: the one buffer every surface views. */
+/** One shared geometry buffer plus unique decoded source images. */
 export function buffersOf( cut ) {
 
-	return [ cut.data.buffer ];
+	return [ cut.data.buffer, ...materialBuffers( cut.materials ) ];
 
 }
 
@@ -179,9 +180,12 @@ function cellOf( cx, cz ) {
  */
 class Bucket {
 
-	constructor( key ) {
+	constructor( surface ) {
 
-		this.key = key;
+		this.key = surface.key;
+		this.sourceId = surface.sourceId;
+		this.attributes = surface.attributes ?? {};
+		this.floats = FLOATS_PER_TRIANGLE + Object.values( this.attributes ).reduce( ( sum, attr ) => sum + attr.itemSize * 3, 0 );
 		this.parts = [];
 		this.count = 0;
 		this.area = 0;
@@ -213,7 +217,13 @@ class Bucket {
 
 		const position = data.subarray( at, at += this.count * 9 );
 		const normal = data.subarray( at, at += this.count * 9 );
-		const uv = data.subarray( at, at + this.count * 6 );
+		const uv = data.subarray( at, at += this.count * 6 );
+		const attributes = {};
+		for ( const [ name, { itemSize } ] of Object.entries( this.attributes ) ) {
+
+			attributes[ name ] = { itemSize, array: data.subarray( at, at += this.count * 3 * itemSize ) };
+
+		}
 		let triangle = 0;
 
 		for ( const { surface, starts } of this.parts ) {
@@ -223,13 +233,20 @@ class Bucket {
 				copy( surface.position, start * 3, position, triangle * 9, 9 );
 				copy( surface.normal, start * 3, normal, triangle * 9, 9 );
 				copy( surface.uv, start * 2, uv, triangle * 6, 6 );
+				for ( const [ name, { array, itemSize } ] of Object.entries( attributes ) ) {
+
+					copy( surface.attributes[ name ].array, start * itemSize, array, triangle * 3 * itemSize, 3 * itemSize );
+
+				}
 				triangle ++;
 
 			}
 
 		}
 
-		return { key: this.key, area: this.area, floorArea: this.floorArea, position, normal, uv };
+		return { key: this.key, ...( this.sourceId ? { sourceId: this.sourceId } : {} ),
+			...( Object.keys( attributes ).length ? { attributes } : {} ),
+			area: this.area, floorArea: this.floorArea, position, normal, uv };
 
 	}
 
@@ -250,7 +267,7 @@ class Block {
 
 		for ( const buckets of bucketMaps ) {
 
-			for ( const bucket of buckets.values() ) floats += bucket.count * FLOATS_PER_TRIANGLE;
+			for ( const bucket of buckets.values() ) floats += bucket.count * bucket.floats;
 
 		}
 
@@ -264,7 +281,7 @@ class Block {
 		return [ ...buckets.values() ].map( ( bucket ) => {
 
 			const surface = bucket.pack( this.data, this.at );
-			this.at += bucket.count * FLOATS_PER_TRIANGLE;
+			this.at += bucket.count * bucket.floats;
 
 			return surface;
 
@@ -274,7 +291,7 @@ class Block {
 
 }
 
-function bucketOf( owners, owner, key ) {
+function bucketOf( owners, owner, surface, key ) {
 
 	let buckets = owners.get( owner );
 
@@ -282,7 +299,7 @@ function bucketOf( owners, owner, key ) {
 
 	let bucket = buckets.get( key );
 
-	if ( ! bucket ) buckets.set( key, bucket = new Bucket( key ) );
+	if ( ! bucket ) buckets.set( key, bucket = new Bucket( surface ) );
 
 	return bucket;
 
@@ -291,7 +308,9 @@ function bucketOf( owners, owner, key ) {
 /** Walks one surface's triangles into room and shared buckets, measuring as it goes. */
 function sort( surface, index, rooms, shared ) {
 
-	const { key, position } = surface;
+	const { position } = surface;
+	const signature = Object.entries( surface.attributes ?? {} ).map( ( [ name, attr ] ) => [ name, attr.itemSize ] ).sort();
+	const key = JSON.stringify( [ surface.sourceId ?? null, surface.key, signature ] );
 
 	for ( let vertex = 0; vertex * 3 < position.length; vertex += 3 ) {
 
@@ -307,12 +326,12 @@ function sort( surface, index, rooms, shared ) {
 
 			// Still on a floor, even with no room around it: a stair flight, a
 			// core wall, the inside of the facade. It belongs to that band.
-			bucketOf( shared, floor?.index ?? OUTSIDE_FLOORS, key ).take( surface, vertex );
+			bucketOf( shared, floor?.index ?? OUTSIDE_FLOORS, surface, key ).take( surface, vertex );
 			continue;
 
 		}
 
-		const bucket = bucketOf( rooms, room, key );
+		const bucket = bucketOf( rooms, room, surface, key );
 		bucket.take( surface, vertex );
 
 		const ux = bx - ax, uy = by - ay, uz = bz - az;
@@ -348,12 +367,13 @@ export function plain( key ) {
 }
 
 /** One posted surface as the geometry a mesh draws, wrapping its arrays as they are. */
-export function geometryOf( { position, normal, uv } ) {
+export function geometryOf( { position, normal, uv, attributes = {} } ) {
 
 	const geometry = new THREE.BufferGeometry();
 	geometry.setAttribute( 'position', new THREE.BufferAttribute( position, 3 ) );
 	geometry.setAttribute( 'normal', new THREE.BufferAttribute( normal, 3 ) );
 	geometry.setAttribute( 'uv', new THREE.BufferAttribute( uv, 2 ) );
+	for ( const [ name, { array, itemSize } ] of Object.entries( attributes ) ) geometry.setAttribute( name, new THREE.BufferAttribute( array, itemSize ) );
 
 	return geometry;
 
@@ -367,9 +387,10 @@ export function geometryOf( { position, normal, uv } ) {
  *
  * @param cut what `partition` returned
  * @param floors the parcel's floor documents (../interior/CONTRACT.md)
- * @param reflectance (key) => { scalar, tint }
+ * @param reflectance (key, sourceId?) => { scalar, tint }
+ * @param materials Map<sourceId, Three.Material> owned by this floor
  */
-export function* assembleRooms( parcelId, cut, floors, reflectance ) {
+export function* assembleRooms( parcelId, cut, floors, reflectance, materials = new Map() ) {
 
 	const fixtures = new Map();
 
@@ -381,7 +402,7 @@ export function* assembleRooms( parcelId, cut, floors, reflectance ) {
 
 	for ( const measured of cut.rooms ) {
 
-		yield new Room( { parcelId, measured, fixtures: fixtures.get( measured.id ) ?? [], reflectance } );
+		yield new Room( { parcelId, measured, fixtures: fixtures.get( measured.id ) ?? [], reflectance, materials } );
 
 	}
 
@@ -394,7 +415,7 @@ export function* assembleRooms( parcelId, cut, floors, reflectance ) {
  */
 export class Room {
 
-	constructor( { parcelId, measured, fixtures, reflectance } ) {
+	constructor( { parcelId, measured, fixtures, reflectance, materials = new Map() } ) {
 
 		this.id = measured.id;
 		this.parcelId = parcelId;
@@ -411,7 +432,7 @@ export class Room {
 
 		for ( const surface of measured.surfaces ) {
 
-			const own = reflectance( surface.key );
+			const own = reflectance( surface.key, surface.sourceId );
 
 			whole.add( surface.area, own );
 			floor.add( surface.floorArea, own );
@@ -441,7 +462,7 @@ export class Room {
 
 			const mesh = new THREE.Mesh( geometryOf( surface ), null );
 			mesh.name = `${this.group.name}:${surface.key}`;
-			this.meshes.push( { mesh, key: surface.key } );
+			this.meshes.push( { mesh, key: surface.key, source: materials.get( surface.sourceId ) } );
 			this.group.add( mesh );
 
 		}
@@ -461,7 +482,7 @@ export class Room {
 
 		this.binding = binding;
 
-		for ( const { mesh, key } of this.meshes ) mesh.material = roomLights.materialFor( binding, key );
+		for ( const { mesh, key, source } of this.meshes ) mesh.material = roomLights.materialFor( binding, key, source );
 
 	}
 

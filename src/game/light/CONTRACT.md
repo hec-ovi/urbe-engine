@@ -6,13 +6,14 @@ Purpose: turns every fixture the world published into real light, in photometric
 - **Exterior fixtures**: `[{ position: Vector3, lumens, color: Color, range }]`, one per emitter the world actually built (lamp lens, venue sign, entrance fixture, ad screen). Producers are `city/StreetLamps.js` and `city/Neon.js`.
 - **Rooms**: objects carrying `{ center, area, albedo: Color, floorAlbedo: Color, flux, color, fixtures, wear(binding, roomLights), binding }`. Built by `city/InteriorRooms.js` from the interior box's floor documents.
 - **Room fixtures**: the published `lights` entries of a floor, as `{ kind: 'spot'|'strip'|'cove', position, lumens, color, range, beamDeg, diffuse, length, angleDeg, facing, axis?, direction? }`.
+- **Imported surfaces**: source materials decoded from the [interior worker payload](../city/schema/interior-cut.d.ts). The streamed floor owns their materials and decoded maps; the light pool owns their per-binding clones.
 - A quality descriptor (`look/QualityTier.js`): `roomSlots`, `roomSpots`, `roomStrips`, `clusteredLights`, `batchedLights`, `haze`.
 - The renderer, after `init()`.
 
 ## Out
 - `LightingSystem.install(renderer, tier) -> { capacity }`: swaps in the lighting system the backend can run and returns how many fixtures may be lit at once.
 - `CityLights(fixtures, capacity)`: `group` of fixed point-light slots to add to the scene, `update(position, delta)` copies the nearest published fixtures into those slots, `count`, and `airColor(position) -> { color, lux }`, the colour of the light filling the air at a point.
-- `RoomLights(factory, tier)`: `update(rooms, position, delta)` binds the nearest rooms to light slots and writes their fixtures and fill into them; `materialFor(binding, key)` is the material a room's mesh wears, and `dim` is the binding for interior geometry belonging to no room. Materials are node materials: a standard one loses `lightsNode` in the conversion the renderer does for it.
+- `RoomLights(factory, tier)`: `update(rooms, position, delta)` binds the nearest rooms to light slots and writes their fixtures and fill into them; `materialFor(binding, key, source?)` is the material a room's mesh wears, and `dim` is the binding for interior geometry belonging to no room. A source Three material keeps its PBR maps, factors, face behavior and alpha threshold, with an independent clone per source identity and binding. Source unlit materials stay unlit. `releaseSources(materials)` disposes those clones; `releaseRooms(rooms)` clears dropped room references from the slots. Catalog materials remain cached. Materials are node materials so room lighting survives renderer conversion.
 - `RoomFill.apply(light, room, flux, color)`: writes the computed interreflected fill onto a hemisphere light. `albedoOf(key)` is the reflectance of a material kind.
 - `Haze.build(fixtures, { spread, cap }) -> Mesh | null`: one merged additive glow mesh, the air lit around each fixture.
 - `kelvinColor(kelvin) -> Color`: blackbody temperature to light colour. `luminance(color)` is its relative brightness.

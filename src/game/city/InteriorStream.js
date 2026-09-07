@@ -1,6 +1,8 @@
 import * as THREE from 'three/webgpu';
 import { assembleRooms, geometryOf, outlinesOf, plain, reflectanceOf } from './InteriorRooms.js';
 import { Haze } from '../light/Haze.js';
+import { luminance } from '../light/Color.js';
+import { closeMaterialImages, InteriorMaterials } from './InteriorMaterials.js';
 
 /** A building's floors are worth fetching this close to its footprint. */
 const LOAD_RADIUS = 70;
@@ -254,7 +256,7 @@ export class InteriorStream {
 		}
 
 		this.elevators?.release( interior.parcelId, band.floor );
-		band.clear();
+		band.clear( this.roomLights );
 
 	}
 
@@ -315,21 +317,49 @@ export class InteriorStream {
 			+ `${Object.entries( cost ).map( ( [ step, ms ] ) => `${step} ${ms} ms` ).join( ', ' )}, `
 			+ `round trip ${( performance.now() - sent ).toFixed( 0 )} ms` );
 
-		if ( ! this.#wanted( interior, band ) ) return null;
+		if ( ! this.#wanted( interior, band ) ) {
 
-		const reflectance = await this.#reflectance( keysOf( cut ) );
+			closeMaterialImages( cut.materials );
+			return null;
+
+		}
+		const built = { content: new THREE.Group(), rooms: [], solid: [], sources: new InteriorMaterials( cut.materials ) };
+		let landed = false;
+		try {
+
+			landed = await this.#land( interior, band, cut, built );
+			return landed ? built : null;
+
+		} finally {
+
+			if ( ! landed ) {
+
+				this.elevators?.release( parcelId, band.floor );
+				disposeFloor( built, this.roomLights );
+
+			}
+
+		}
+
+	}
+
+	async #land( interior, band, cut, { content, rooms, solid, sources } ) {
+
+		const { parcelId } = interior;
+		const reflectance = await this.#reflectance( keysOf( cut ), sources.materials );
 
 		if ( ! this.#wanted( interior, band ) ) return null;
 
 		let budget = new FrameBudget( FRAME_BUDGET_MS );
-		const rooms = [];
 
-		for ( const room of assembleRooms( parcelId, cut, interior.floors, reflectance ) ) {
+		for ( const room of assembleRooms( parcelId, cut, interior.floors, reflectance, sources.materials ) ) {
 
 			// A room is shown by distance and lit by the slot pool on separate
 			// timers, so it enters the scene already dressed in the dim binding.
-			room.wear( this.roomLights.dim, this.roomLights );
 			rooms.push( room );
+			room.group.visible = false;
+			content.add( room.group );
+			room.wear( this.roomLights.dim, this.roomLights );
 
 			if ( ! await this.#rest( budget, interior, band ) ) return null;
 
@@ -338,19 +368,17 @@ export class InteriorStream {
 		this.hitches?.note( `floor ${band.id} rooms ${budget.frames} frames`, budget.busy );
 
 		budget = new FrameBudget( FRAME_BUDGET_MS );
-		const content = new THREE.Group();
-		const solid = [];
 
 		for ( const { surfaces } of cut.shared ) {
 
 			for ( const surface of surfaces ) {
 
-				const material = this.roomLights.materialFor( this.roomLights.dim, surface.key );
+				const material = this.roomLights.materialFor( this.roomLights.dim, surface.key, sources.materials.get( surface.sourceId ) );
 				let geometry = geometryOf( surface );
 
 				// The lift doors are published as geometry like everything else;
 				// the shafts take theirs so they can slide.
-				if ( surface.key.includes( ELEVATOR_DOOR ) ) {
+				if ( ! surface.sourceId && surface.key.includes( ELEVATOR_DOOR ) ) {
 
 					geometry = this.elevators?.claim( parcelId, band.floor, geometry, material, content ) ?? geometry;
 
@@ -363,19 +391,11 @@ export class InteriorStream {
 
 			}
 
-			if ( ! await this.#rest( budget, interior, band ) ) {
-
-				this.elevators?.release( parcelId, band.floor );
-				return null;
-
-			}
+			if ( ! await this.#rest( budget, interior, band ) ) return null;
 
 		}
 
 		for ( const room of rooms ) {
-
-			room.group.visible = false;
-			content.add( room.group );
 
 			for ( const { mesh } of room.meshes ) solid.push( mesh.geometry.getAttribute( 'position' ).array );
 
@@ -396,7 +416,7 @@ export class InteriorStream {
 
 		if ( ! this.#wanted( interior, band ) ) return null;
 
-		return { content, rooms, solid };
+		return true;
 
 	}
 
@@ -446,13 +466,19 @@ export class InteriorStream {
 	}
 
 	/** Reflectance per key: level from what the surface is, hue from its map. */
-	async #reflectance( keys ) {
+	async #reflectance( keys, sources ) {
 
 		const tints = new Map( await Promise.all(
 			[ ...keys ].map( async ( key ) => [ key, await this.factory.tint( plain( key ) ) ] )
 		) );
 
-		return ( key ) => reflectanceOf( plain( key ), tints.get( key ) );
+		return ( key, sourceId ) => {
+
+			const material = sources.get( sourceId );
+			if ( material ) return { scalar: luminance( material.color ) * ( 1 - ( material.metalness ?? 0 ) ), tint: material.color };
+			return reflectanceOf( plain( key ), tints.get( key ) );
+
+		};
 
 	}
 
@@ -505,15 +531,17 @@ class FloorBand {
 		this.rooms = [];
 		this.solid = [];
 		this.trimesh = null;
+		this.sources = null;
 
 	}
 
 	/** Takes what a landing built: the floor's meshes, its rooms, its solid arrays. */
-	take( { content, rooms, solid } ) {
+	take( { content, rooms, solid, sources } ) {
 
 		this.content = content;
 		this.rooms = rooms;
 		this.solid = solid;
+		this.sources = sources;
 		this.group.add( content );
 		this.state = LOADED;
 
@@ -542,20 +570,29 @@ class FloorBand {
 	}
 
 	/** Back to empty: nothing of the floor's geometry is referenced afterwards. */
-	clear() {
+	clear( roomLights ) {
 
 		this.trimesh?.dispose();
-		this.content?.traverse( ( node ) => node.geometry?.dispose() );
+		disposeFloor( this, roomLights );
 
 		if ( this.content ) this.group.remove( this.content );
 
 		this.trimesh = null;
+		this.sources = null;
 		this.content = null;
 		this.rooms = [];
 		this.solid = [];
 		this.state = EMPTY;
 
 	}
+
+}
+
+function disposeFloor( { content, rooms, sources }, roomLights ) {
+
+	roomLights.releaseRooms?.( rooms );
+	content?.traverse( node => node.geometry?.dispose() );
+	sources?.dispose( roomLights );
 
 }
 
@@ -611,6 +648,7 @@ class InteriorWorkerLink {
 
 			this.waiting.delete( data.id );
 
+			if ( ! request ) closeMaterialImages( data.cut?.materials );
 			if ( data.error ) request?.reject( new Error( data.error ) );
 			else request?.resolve( data );
 
@@ -691,7 +729,7 @@ function keysOf( cut ) {
 
 	for ( const owner of [ ...cut.rooms, ...cut.shared ] ) {
 
-		for ( const surface of owner.surfaces ) keys.add( surface.key );
+		for ( const surface of owner.surfaces ) if ( ! surface.sourceId ) keys.add( surface.key );
 
 	}
 

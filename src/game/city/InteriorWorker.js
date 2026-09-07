@@ -1,6 +1,6 @@
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { bake, INTERIOR_PREFIX } from './BuildingsLoader.js';
-import { buffersOf, materialKey, partition } from './InteriorRooms.js';
+import { buffersOf } from './InteriorRooms.js';
+import { cutInterior } from './InteriorSurfaces.js';
 
 /**
  * The interior worker: everything about landing one furnished floor that
@@ -12,11 +12,14 @@ import { buffersOf, materialKey, partition } from './InteriorRooms.js';
  * In: { id, url, outlines } per floor, the outlines being the whole building's
  * so a room is found whichever floor's file its triangles arrive in. Out:
  * { id, cut, bytes, cost } with the milliseconds each step took, or { id, error }.
+ * The structured-clone wire types are in schema/interior-cut.d.ts.
  */
 const loader = new GLTFLoader();
 
 self.onmessage = async ( { data: { id, url, outlines } } ) => {
 
+	let scene;
+	let transferred = new Set();
 	try {
 
 		const marks = [ performance.now() ];
@@ -28,56 +31,53 @@ self.onmessage = async ( { data: { id, url, outlines } } ) => {
 		marks.push( performance.now() );
 
 		const gltf = await loader.parseAsync( bytes, '' );
-		gltf.scene.updateMatrixWorld( true );
+		scene = gltf.scene;
 		marks.push( performance.now() );
 
-		const surfaces = surfacesOf( gltf.scene );
+		const cut = cutInterior( scene, outlines );
 		marks.push( performance.now() );
 
-		const cut = partition( surfaces, outlines );
-		marks.push( performance.now() );
-
-		self.postMessage( { id, cut, bytes: bytes.byteLength, cost: costOf( marks ) }, buffersOf( cut ) );
+		const buffers = buffersOf( cut );
+		self.postMessage( { id, cut, bytes: bytes.byteLength, cost: costOf( marks ) }, buffers );
+		transferred = new Set( buffers );
 
 	} catch ( error ) {
 
 		self.postMessage( { id, error: error?.message ?? String( error ) } );
 
+	} finally {
+
+		const resources = new Set();
+		const images = new Set();
+		scene?.traverse( node => {
+
+			if ( ! node.isMesh ) return;
+			resources.add( node.geometry );
+			for ( const material of Array.isArray( node.material ) ? node.material : [ node.material ] ) {
+
+				resources.add( material );
+				for ( const texture of Object.values( material ).filter( value => value?.isTexture ) ) {
+
+					resources.add( texture ); images.add( texture.source.data );
+
+				}
+
+			}
+
+		} );
+		for ( const resource of resources ) resource.dispose();
+		for ( const image of images ) if ( ! transferred.has( image ) ) image?.close?.();
+
 	}
 
 };
 
-/** Every interior mesh baked to world space, as the arrays the partition reads. */
-function surfacesOf( scene ) {
-
-	const surfaces = [];
-
-	scene.traverse( ( node ) => {
-
-		if ( ! node.isMesh || ! node.name?.startsWith( INTERIOR_PREFIX ) ) return;
-
-		const geometry = bake( node );
-
-		surfaces.push( {
-			key: materialKey( node.material ),
-			position: geometry.getAttribute( 'position' ).array,
-			normal: geometry.getAttribute( 'normal' ).array,
-			uv: geometry.getAttribute( 'uv' ).array
-		} );
-
-	} );
-
-	return surfaces;
-
-}
-
-function costOf( [ start, fetched, parsed, baked, cut ] ) {
+function costOf( [ start, fetched, parsed, cut ] ) {
 
 	return {
 		fetch: Math.round( fetched - start ),
 		parse: Math.round( parsed - fetched ),
-		bake: Math.round( baked - parsed ),
-		cut: Math.round( cut - baked )
+		cut: Math.round( cut - parsed )
 	};
 
 }
