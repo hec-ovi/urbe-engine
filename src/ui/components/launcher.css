@@ -551,7 +551,7 @@
 	gap: 12px;
 }
 
-.creation-field {
+.creation-form-grid .field {
 	display: flex;
 	flex-direction: column;
 	gap: 7px;
@@ -561,24 +561,19 @@
 	background: rgba( 3, 9, 11, 0.38 );
 }
 
-.creation-field:focus-within {
+.creation-form-grid .field:focus-within {
 	border-color: var(--menu-line-bright);
 }
 
-.creation-field-label {
+.creation-form-grid .field-label {
 	color: var(--menu-dim);
 	font-size: 10px;
 	letter-spacing: 0.13em;
 	text-transform: uppercase;
 }
 
-.creation-field-note {
-	color: var(--menu-muted);
-	font-size: 10px;
-	line-height: 1.45;
-}
 
-.creation-input {
+.creation-form-grid .field-input {
 	width: 100%;
 	min-width: 0;
 	border: 0;
@@ -589,23 +584,19 @@
 	font: 12px var(--menu-font);
 }
 
-.creation-input:focus {
+.creation-form-grid .field-input:focus {
 	outline: 1px solid var(--menu-line-bright);
 	outline-offset: 1px;
 }
 
-.creation-input[aria-invalid='true'] {
+.creation-form-grid .field-input[aria-invalid='true'] {
 	border-color: var(--menu-bad);
 }
 
-.creation-input:disabled {
+.creation-form-grid .field-input:disabled {
 	opacity: 0.45;
 }
 
-.creation-textarea {
-	min-height: 92px;
-	resize: vertical;
-}
 
 .creation-submit {
 	min-width: 220px;
