@@ -7,8 +7,8 @@ const DEFAULTS = {
 	startHour: 21,
 	lightingHour: 21,
 	timeScale: 1,
-	crowd: 200,
-	cars: 18,
+	crowd: 0,
+	cars: 0,
 	stress: 0,
 	streetDensity: 1,
 	// Maps photometric levels to the luminance bands in ../look/CONTRACT.md.

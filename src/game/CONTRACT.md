@@ -10,7 +10,7 @@ Purpose: plays the assembled city as a first-person world at street level, at ni
     The directory's own `blueprint.json` (the blueprint it was assembled from, named or not) is the world's blueprint; the atlas sample named by `world` is the fallback. An `npc-types.json` in that directory (the naming box's typed set for this world) drives the population's types and names; absent, the simulation's built-in set does.
   - `backend` (`webgpu` default, `webgl`)
   - `hour` (0-23, default 21): simulation clock start. Rendering uses the separate fixed `GameConfig.lightingHour` of 21, including saved games with a daytime world clock.
-  - `crowd` (default 200), `cars` (default 18): instance capacity
+  - `crowd` (default 0), `cars` (default 0): instance capacity. NPC and car spawning are off by default; explicit positive values enable them for a run.
   - `density` (default 1): the simulation's `params.streetDensity`, the researched share of the population out in public space
   - `stress` (default 0, max 40): debug only, keeps N extra bodies per real street agent walking nearby walk edges to load-test the crowd renderer. They carry no identity of their own and never count towards street density. Off in every normal run.
   - `lanes=debug` paints every lane of the road graph end to end, `lanes=glow` restores the teal emissive centreline strips. Debug only; a normal run gets painted road markings.

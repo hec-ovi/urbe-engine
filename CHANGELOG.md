@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.16: NPC and car spawning default to zero for city inspection; explicit crowd and cars query values enable them per run.
+
 0.17.16: streamed interiors retain imported furniture, source PBR and unlit materials, collision geometry and oriented room lights. Floor disposal releases source maps and lighting clones.
 
 0.17.16: street props use asymmetric arrangements, three wear finishes, four pocket ornaments and authored guardrail variants. Stations expose short stairs and destination terminals with saved travel between connected landings.
