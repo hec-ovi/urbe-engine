@@ -14,6 +14,8 @@ import gameplayUpdateRequest from './schema/gameplay-update-request.schema.json'
 import gameplayServiceSelection from './schema/gameplay-service-selection.schema.json';
 import gameplayView from './schema/gameplay-view.schema.json';
 import gameplayAction from './schema/gameplay-action.schema.json';
+import stationTravel from './schema/station-travel.schema.json';
+import stationAccess from './schema/station-access.schema.json';
 
 const SCHEMAS = [
 	values,
@@ -30,6 +32,8 @@ const SCHEMAS = [
 	gameplayUpdateRequest,
 	gameplayServiceSelection,
 	gameplayView,
+	stationTravel,
+	stationAccess,
 	gameplayAction
 ];
 

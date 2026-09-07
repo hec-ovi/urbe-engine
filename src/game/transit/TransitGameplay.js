@@ -1,4 +1,5 @@
 import { TransitJourney } from './TransitJourney.js';
+import { StationTravel } from './StationTravel.js';
 
 /** Game-facing transit interaction, kept separate from rendering and DOM. */
 export class TransitGameplay {
@@ -7,6 +8,9 @@ export class TransitGameplay {
 
 		this.locator = locator;
 		this.controller = controller;
+		this.stationTravel = new StationTravel( atlas, routes );
+		this.destinations = [];
+		this.offeredDestinations = [];
 		this.restoreRejected = false;
 		this.journey = journey ?? new TransitJourney( { atlas, routes, ...( state ? { state } : {} ) } );
 		if ( state && ! this.journey.valid ) {
@@ -45,8 +49,14 @@ export class TransitGameplay {
 		const position = [ feet.x, feet.y, feet.z ];
 		const place = this.locator.transitPlace( feet.x, feet.y, feet.z );
 		this.latest = { daySeconds, position, place };
+		this.destinations = [];
 
 		if ( this.aboard ) return this.#ride( daySeconds );
+		if ( ! interactionBlocked && this.stationTravel.near( position ) ) {
+			this.services = [];
+			this.destinations = this.stationTravel.choices( position );
+			return { ...waitingView(), prompt: this.destinations.length ? 'E  choose destination' : 'No connected destinations' };
+		}
 		if ( interactionBlocked || ! place ) {
 
 			this.services = [];
@@ -70,6 +80,10 @@ export class TransitGameplay {
 	activate() {
 
 		if ( this.aboard ) return this.#leave();
+		if ( this.destinations.length ) {
+			this.offeredDestinations = [ ...this.destinations ];
+			return { action: 'choose-destination', destinations: this.offeredDestinations };
+		}
 		if ( this.services.length === 0 ) return null;
 		if ( this.services.length > 1 ) {
 
@@ -111,7 +125,18 @@ export class TransitGameplay {
 	cancelSelection() {
 
 		this.offered = [];
+		this.offeredDestinations = [];
 
+	}
+
+	selectDestination( selection ) {
+		if ( this.aboard ) return { action: 'station-travel', result: { ok: false, error: 'E_TRANSIT_ALREADY_ABOARD' } };
+		const allowed = this.offeredDestinations.some( choice => selection && Object.keys( choice ).every( key => choice[ key ] === selection[ key ] ) );
+		const feet = this.controller.body.feet;
+		const result = allowed ? this.stationTravel.travel( selection, [ feet.x, feet.y, feet.z ] ) : { ok: false, error: 'E_TRANSIT_INVALID_DATA' };
+		this.offeredDestinations = []; this.destinations = [];
+		if ( result.ok ) { this.controller.endRide( result.position ); this.controller.yaw = result.heading; }
+		return { action: 'station-travel', result };
 	}
 
 	#ride( daySeconds ) {

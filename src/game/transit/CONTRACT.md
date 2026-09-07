@@ -1,6 +1,6 @@
 # CONTRACT: transit
 
-Purpose: renders published public transport and provides schema-checked boarding over Atlas places and Connections timetables.
+Purpose: renders public transport, short station stairs and destination terminals, with checked journeys between published places.
 
 ## Inputs
 
@@ -18,9 +18,9 @@ Purpose: renders published public transport and provides schema-checked boarding
 
 ## Outputs
 
-- `Transit.group`: one Three.js group containing `bus-shelters`, `station-entrances`, station volumes, `buses`, `trains` and `subways`.
-- `Transit.glows`: exterior fixtures shaped for `light/CONTRACT.md`. Each bus sign emits 180 lm at 5000 K and each station name band emits 900 lm at 4000 K.
-- `Transit.colliders`: position-only trimeshes named `transit:shelters`, `transit:entrances` and `transit:stations` for `physics/WorldColliders.js`.
+- `Transit.group`: one Three.js group containing `bus-shelters`, `station-entrances`, `buses`, `trains` and `subways`. Station entrances contain a short flight, closed landing and destination machine; their geometry stays inside the authored shaft. No platform rooms or passages are built.
+- `Transit.glows`: exterior fixtures shaped for `light/CONTRACT.md`. Each bus sign emits 180 lm at 5000 K and each terminal landing has a 700 lm fixture at 4200 K.
+- `Transit.colliders`: position-only trimeshes named `transit:shelters` and `transit:entrances` for `physics/WorldColliders.js`.
 - `Transit.count`: number of visible bus, train and subway vehicles after `update`.
 - Boardable service list: [schema/service-list.schema.json](schema/service-list.schema.json). Each exact service identifies its route, public line, mode, stop occurrence, next stop, final destination stop, arrival, departure, published position and stable trip id.
 - Board result: [schema/board-result.schema.json](schema/board-result.schema.json). A successful result returns the selected service and serializable aboard state.
@@ -40,6 +40,10 @@ Purpose: renders published public transport and provides schema-checked boarding
 - The first update after service termination automatically changes the journey to waiting and returns the final published stop or platform position. This prevents a missed final dwell from trapping the player aboard.
 - `TransitGameplay.update(request)` carries an aboard controller to the journey result without physics integration. While waiting it queries `Locator.transitPlace` only when the caller reports no higher-priority interaction.
 - `TransitGameplay.activate()` boards the only service, opens an explicit choice for multiple services, or requests disembarkation while aboard. `board(service)` revalidates the chosen dwell and reach through `TransitJourney`.
+- `StationAccess(atlas).entrances`: [access records](schema/station-access.schema.json) share stair, terminal and arrival positions between rendering and interaction. Published approach paths enter a level deck before the short flight. Shaft-free legacy entrances receive a machine at grade.
+- `StationAccess.walk(network)` takes and returns the [player route walk schema](../routes/schema/walk-network.schema.json). It removes deep access edges for these stations and exposes their published street entrance nodes as station destinations. Positions and paths remain authored; the source network is unchanged.
+- `StationTravel(atlas, routes).choices(position)` lists connected destinations only within 1.6 m horizontally and 0.75 m vertically of a terminal landing. `travel(selection, position)` rechecks reach and the published route, then returns the destination landing and facing. Input/output: [terminal schema](schema/station-travel.schema.json). The selected journey is immediate; it does not fabricate a scheduled vehicle ride.
+- `TransitGameplay.activate()` at a terminal returns `choose-destination`, including a single destination. `selectDestination(selection)` returns `station-travel` and moves the controller on success. Cancelling, stale choices and invalid destinations do not move the player.
 
 ## Errors
 
@@ -59,7 +63,7 @@ Renderer construction throws no transit error. Empty optional collections build 
 
 ## Cost
 
-- Bus stops use three city-wide instanced meshes. Station entrances use one merged concrete mesh plus one lit band per mode. Station volumes use two merged meshes.
+- Bus stops use three city-wide instanced meshes. Station entrance surfaces merge by material across the city.
 - Each active vehicle mode uses three instanced meshes for body, glazing and running gear. Capacity is bounded per mode, nearest vehicles win, and vehicles farther than 320 m use no instance.
 - Empty vehicle modes allocate no mesh or draw call. The maximum vehicle cost is nine draw calls across bus, train and subway.
 
@@ -83,7 +87,7 @@ Renderer construction throws no transit error. Empty optional collections build 
 - While aboard, the physics capsule is disabled and placed from each exact journey update. Walking, jumping and crouching are disabled; mouse look and panels remain available. Disembarkation and automatic termination re-enable collision at the published place.
 - Identical route data, serialized state and request produce identical output.
 - Geometry UVs use world meters and every visible surface uses a material from `PbrMaterialFactory`.
-- Shelter bases and station stair mouths use Ground's shared `SIDEWALK_HEIGHT` datum. Shaft stairs span that datum to the published shaft bottom, with rises at most 0.19 m.
+- Station decks use the authored ground top. Short flights have 0.3 m goings and rises at most 0.18 m, ending on a landing within the shaft reservation. Their shared arrival point is clear of the machine and faces the stairs back to the street.
 - Transit vehicles have no physics collider.
 
 ## How to modify this blackbox safely

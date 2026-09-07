@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:transit:station-travel",
+  "$defs": {
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "originId",
+        "destinationId",
+        "routeId",
+        "stationName",
+        "lineId"
+      ],
+      "properties": {
+        "originId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "destinationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "routeId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stationName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lineId": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "result": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ok",
+            "position",
+            "heading",
+            "originStationId",
+            "destinationStationId",
+            "routeId"
+          ],
+          "properties": {
+            "ok": {
+              "const": true
+            },
+            "position": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "number"
+              }
+            },
+            "heading": {
+              "type": "number"
+            },
+            "originStationId": {
+              "type": "string"
+            },
+            "destinationStationId": {
+              "type": "string"
+            },
+            "routeId": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "$ref": "urn:urbe:engine:transit:values#/$defs/errorResult"
+        }
+      ]
+    }
+  },
+  "description": "StationTravel choices takes player position vector3 and returns selections; travel takes selection and position, returns result."
+}

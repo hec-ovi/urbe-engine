@@ -1,7 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { Shelters } from './Shelters.js';
 import { StationEntrances } from './StationEntrances.js';
-import { StationVolumes } from './StationVolumes.js';
 import { Buses } from './Buses.js';
 import { RailVehicles } from './RailVehicles.js';
 
@@ -11,7 +10,7 @@ const BUS_CAPACITY = 24;
 /**
  * Transit life on the street and under it: a shelter and a lit sign on every
  * bus stop, the buses that the timetable has running right now, a portal over
- * every station entrance, and the shaft, passage and platform room behind it.
+ * every station entrance, and its short stair and destination machine.
  * One thing to build, one group to add, one list of glows, one collider set and
  * one call per frame.
  *
@@ -31,7 +30,6 @@ export class Transit {
 
 		const shelters = new Shelters( atlas, factory ).build();
 		const entrances = new StationEntrances( atlas, factory ).build();
-		const volumes = new StationVolumes( atlas, factory ).build();
 
 		this.buses = new Buses( {
 			routes: networks?.transit?.routes ?? [],
@@ -50,17 +48,15 @@ export class Transit {
 		this.group.add(
 			shelters.group,
 			entrances.group,
-			volumes.group,
 			this.buses.group,
 			this.trains.group,
 			this.subways.group
 		);
 
-		this.glows = [ ...shelters.glows, ...entrances.glows, ...volumes.glows ];
+		this.glows = [ ...shelters.glows, ...entrances.glows ];
 		this.colliders = new Map( [
 			[ 'transit:shelters', shelters.collider ],
-			[ 'transit:entrances', entrances.collider ],
-			[ 'transit:stations', volumes.collider ]
+			[ 'transit:entrances', entrances.collider ]
 		] );
 
 	}

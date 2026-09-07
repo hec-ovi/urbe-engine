@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:transit:station-access",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "id",
+      "stationId",
+      "kind",
+      "label",
+      "origin",
+      "heading",
+      "top",
+      "floor",
+      "treads",
+      "bounds",
+      "machine",
+      "arrival",
+      "point"
+    ],
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "stationId": {
+        "type": "string"
+      },
+      "label": {
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "train",
+          "subway"
+        ]
+      },
+      "origin": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 2,
+        "items": {
+          "type": "number"
+        }
+      },
+      "heading": {
+        "type": "number"
+      },
+      "top": {
+        "type": "number"
+      },
+      "floor": {
+        "type": "number"
+      },
+      "treads": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 16
+      },
+      "bounds": {
+        "type": [
+          "array",
+          "null"
+        ],
+        "minItems": 4,
+        "maxItems": 4,
+        "items": {
+          "type": "number"
+        }
+      },
+      "machine": {
+        "type": "array",
+        "minItems": 3,
+        "maxItems": 3,
+        "items": {
+          "type": "number"
+        }
+      },
+      "arrival": {
+        "type": "array",
+        "minItems": 3,
+        "maxItems": 3,
+        "items": {
+          "type": "number"
+        }
+      },
+      "point": {
+        "description": "Function (localX, worldY, localZ) -> world vector3"
+      }
+    }
+  }
+}

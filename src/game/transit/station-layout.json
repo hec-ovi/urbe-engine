@@ -1,0 +1,12 @@
+{
+  "wall": 0.18,
+  "parapet": 1,
+  "deck": 0.45,
+  "landing": 1.2,
+  "going": 0.3,
+  "rise": 0.18,
+  "maxTreads": 16,
+  "terminalReach": 1.6,
+  "terminalHeightTolerance": 0.75,
+  "machine": { "width": 0.58, "height": 1.48, "depth": 0.28 }
+}

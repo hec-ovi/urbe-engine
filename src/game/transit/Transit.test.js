@@ -125,7 +125,7 @@ describe( 'Transit', () => {
 		}
 
 		// One fixture per stop, each on its own shelter rather than stacked.
-		expect( transit.glows.filter( ( glow ) => glow.range < 10 ).length ).toBe( stops );
+		expect( transit.glows.filter( ( glow ) => glow.lumens === 180 ).length ).toBe( stops );
 
 	} );
 
@@ -137,10 +137,12 @@ describe( 'Transit', () => {
 			.reduce( ( total, station ) => total + station.entrances.length, 0 );
 
 		expect( entrances ).toBeGreaterThan( 0 );
-		// One band per mode plus the concrete of every entrance in the city.
-		expect( meshes.length ).toBe( 3 );
+		// Legacy entrances at grade still merge their machines by surface role.
+		expect( meshes.map( mesh => mesh.name ).sort() ).toEqual( [
+			'entrance:edge', 'entrance:metal', 'entrance:paint', 'entrance:rubber', 'entrance:screen', 'entrance:text'
+		] );
 		expect( meshes.every( ( mesh ) => mesh.isInstancedMesh !== true ) ).toBe( true );
-		expect( transit.glows.filter( ( glow ) => glow.range > 10 ).length ).toBe( entrances );
+		expect( transit.glows.filter( ( glow ) => glow.lumens === 700 ).length ).toBe( entrances );
 		expect( transit.colliders.get( 'transit:entrances' ).getAttribute( 'position' ).count )
 			.toBeGreaterThan( 0 );
 		for ( const collider of transit.colliders.values() ) {

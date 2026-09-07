@@ -1,251 +1,67 @@
 import * as THREE from 'three/webgpu';
-import { SIDEWALK_HEIGHT } from '../ground/GroundBuilder.js';
-import { kelvinColor } from '../light/Color.js';
 import { box, merge, solid } from './Shapes.js';
-import { frameOf } from './StationFrame.js';
+import { StationAccess } from './StationAccess.js';
+import { kelvinColor } from '../light/Color.js';
+import layout from './station-layout.json' with { type: 'json' };
 
-// A stair the player capsule can walk: the controller autosteps 0.42 m, so a
-// 0.175 m rise on a 0.30 m going is well inside it, and the 1.8 m clear width
-// is more than twice the 0.7 m capsule. Sixteen treads put the landing 2.8 m
-// under the pavement, which is a mezzanine, and the shaft is closed off there.
-const CLEAR = 1.8;
-const RISE = 0.175;
-const GOING = 0.3;
-const TREADS = 16;
-const LANDING = 1.4;
-const WALL = 0.25;
-/** How far the side walls carry on above the pavement, as a balustrade. */
-const PARAPET = 1;
-const PORTAL_TOP = 2.9;
-const SIGN_BAND = 0.55;
-const SIGN_BOTTOM = 2.35;
-
-const STRUCTURE_KEY = 'cyberpunk/concrete/rich';
-const SIGN_KEY = 'cyberpunk/signage/rich';
-/** A station name band is read from across the street, so it runs hotter than a stop sign. */
-const SIGN_EMISSIVE = 34;
-// The band is a metre-and-a-half of backlit box, several times the little LED
-// box on a bus stop flag, at the neutral white a station is signed in.
-const SIGN_LUMENS = 900;
-const SIGN_KELVIN = 4000;
-const SIGN_RANGE = 15;
-
-/**
- * Every station's entrances, straight off the atlas: a portal at the mouth
- * holding a lit band that names the mode, over the way down.
- *
- * Where the station publishes a shaft, the shaft is the way down and this box
- * only frames it: the portal stands square across the mouth end of that shaft's
- * own footprint and StationVolumes builds the well and the stair inside it.
- * Where it publishes none, there is nothing below to reach, so the entrance
- * carries its own stair down to a mezzanine between two walls that carry on
- * above the pavement as a balustrade, descending towards the station itself,
- * which is the one direction the blueprint fixes for it.
- *
- * A handful of stations is a handful of entrances, so these merge rather than
- * instance: one mesh for the concrete of the whole city, and one lit band per
- * mode, each mode wearing its own sign so a train entrance is not a subway
- * entrance from a distance.
- */
+/** Closed short stair wells with a destination machine on each lower landing. */
 export class StationEntrances {
-
-	/**
-	 * @param atlas CityBlueprint per ../../../../atlas/CONTRACT.md
-	 * @param factory PbrMaterialFactory
-	 */
-	constructor( atlas, factory ) {
-
-		this.atlas = atlas;
-		this.factory = factory;
-
-	}
-
-	/** @returns { group, glows, collider } */
+	constructor( atlas, factory ) { Object.assign( this, { atlas, factory } ); }
 	build() {
-
-		const group = new THREE.Group();
-		group.name = 'station-entrances';
-
-		const structure = [];
-		const glows = [];
-		const models = { true: this.#model( true ), false: this.#model( false ) };
-
-		for ( const mode of MODES ) {
-
-			const signs = [];
-
-			for ( const station of this.atlas.transit?.[ mode.collection ] ?? [] ) {
-
-				station.entrances.forEach( ( entrance, index ) => {
-
-					const shaft = station.shafts?.[ index ];
-					const matrix = shaft ? overShaft( shaft ) : placement( entrance, station.position );
-
-					if ( ! matrix ) return;
-
-					const model = models[ ! shaft ];
-
-					if ( model.structure ) structure.push( model.structure.clone().applyMatrix4( matrix ) );
-					signs.push( model.sign.clone().applyMatrix4( matrix ) );
-					glows.push( {
-						position: model.signPoint.clone().applyMatrix4( matrix ),
-						color: kelvinColor( SIGN_KELVIN ),
-						lumens: SIGN_LUMENS,
-						range: SIGN_RANGE
-					} );
-
-				} );
-
+		const group = new THREE.Group(); group.name = 'station-entrances';
+		const parts = new Map(), collision = [], glows = [];
+		const entrances = new StationAccess( this.atlas ).entrances;
+		for ( const entry of entrances ) {
+			const add = ( role, size, position, angle = 0, physical = true ) => {
+				const geometry = box( ...size ); geometry.rotateX( angle ); geometry.translate( ...position ); geometry.rotateY( entry.heading ); geometry.translate( entry.origin[ 0 ], 0, entry.origin[ 1 ] );
+				if ( ! parts.has( role ) ) parts.set( role, [] ); parts.get( role ).push( geometry );
+				if ( physical ) collision.push( geometry );
+			};
+			const { floor, top, bounds, treads } = entry;
+			let cx = 0, end = 0;
+			if ( bounds ) {
+				const [ left, right, back, front ] = bounds, w = layout.wall, width = right - left - 2 * w;
+				cx = ( left + right ) / 2; end = front - w;
+				add( 'concrete', [ right - left, 0.18, front - back ], [ cx, floor - 0.09, ( front + back ) / 2 ] );
+				add( 'concrete', [ width, top - floor, layout.deck - back ], [ cx, ( floor + top ) / 2, ( layout.deck + back ) / 2 ] );
+				for ( let i = 0; i < treads; i ++ ) {
+					const y = top - ( i + 1 ) * layout.rise;
+					add( 'concrete', [ width, y - floor + 0.18, layout.going ], [ cx, ( y + floor - 0.18 ) / 2, layout.deck + ( i + 0.5 ) * layout.going ] );
+					add( 'edge', [ width, 0.006, 0.035 ], [ cx, y + 0.003, layout.deck + i * layout.going + 0.025 ], 0, false );
+				}
+				for ( const x of [ left + w / 2, right - w / 2 ] ) {
+					add( 'concrete', [ w, top - floor + 0.18, front - back ], [ x, ( top + floor - 0.18 ) / 2, ( front + back ) / 2 ] );
+					for ( const [ from, to ] of [ [ back, - 0.8 ], [ layout.deck, front ] ] ) if ( to > from ) add( 'concrete', [ w, layout.parapet, to - from ], [ x, top + layout.parapet / 2, ( from + to ) / 2 ] );
+					const run = treads * layout.going, drop = top - floor;
+					add( 'metal', [ 0.04, 0.04, Math.hypot( run, drop ) ], [ x + ( x < cx ? 0.12 : - 0.12 ), ( top + floor ) / 2 + 0.83, layout.deck + run / 2 ], Math.atan2( drop, run ) );
+				}
+				for ( const z of [ back + w / 2, front - w / 2 ] ) add( 'concrete', [ width, top + layout.parapet - floor, w ], [ cx, ( top + layout.parapet + floor ) / 2, z ] );
+				add( 'sign', [ Math.min( width, 1.7 ), 0.24, 0.07 ], [ cx, top + 1.12, back + w ], 0, false );
 			}
-
-			const merged = merge( signs );
-
-			if ( ! merged ) continue;
-
-			const mesh = new THREE.Mesh( merged, this.factory.variant( SIGN_KEY, {
-				variantId: mode.variantId,
-				emissiveScale: SIGN_EMISSIVE,
-				emissive: kelvinColor( SIGN_KELVIN )
-			} ) );
-			mesh.name = `entrance:${mode.name}`;
-			group.add( mesh );
-
+			const machineZ = end - layout.machine.depth / 2;
+			add( 'paint', [ layout.machine.width, layout.machine.height, layout.machine.depth ], [ cx, floor + layout.machine.height / 2, machineZ ] );
+			add( 'metal', [ 0.66, 0.07, 0.36 ], [ cx, floor + 0.035, machineZ ] );
+			add( 'rubber', [ 0.49, 0.58, 0.015 ], [ cx, floor + 1.06, machineZ - 0.148 ] );
+			add( 'screen', [ 0.41, 0.47, 0.008 ], [ cx, floor + 1.06, machineZ - 0.16 ], 0, false );
+			for ( let row = 0; row < 3; row ++ ) add( 'text', [ 0.29 - row % 2 * 0.06, 0.016, 0.006 ], [ cx - 0.015, floor + 1.2 - row * 0.13, machineZ - 0.169 ], 0, false );
+			add( 'rubber', [ 0.2, 0.018, 0.012 ], [ cx + 0.09, floor + 0.6, machineZ - 0.148 ] );
+			add( 'edge', [ 0.22, 0.032, 0.004 ], [ cx - 0.06, floor + 0.34, machineZ - 0.144 ], 0, false );
+			glows.push( { position: new THREE.Vector3( ...entry.point( cx, floor + 1.85, machineZ - 0.6 ) ), color: kelvinColor( 4200 ), lumens: 700, range: 7 } );
 		}
-
-		const merged = merge( structure );
-
-		if ( merged ) {
-
-			const mesh = new THREE.Mesh( merged, this.factory.build( STRUCTURE_KEY ) );
-			mesh.name = 'entrance:structure';
-			mesh.castShadow = true;
-			mesh.receiveShadow = true;
-			group.add( mesh );
-
+		for ( const [ role, geometries ] of parts ) {
+			const material = surface( this.factory, role );
+			const mesh = new THREE.Mesh( merge( geometries ), material ); mesh.name = `entrance:${role}`; mesh.castShadow = mesh.receiveShadow = true; group.add( mesh );
 		}
-
-		return { group, glows, collider: solid( structure ) };
-
+		const collider = solid( collision );
+		for ( const geometries of parts.values() ) geometries.forEach( geometry => geometry.dispose() );
+		return { group, glows, collider, entrances };
 	}
-
-	/**
-	 * One entrance, modelled once around its point on the pavement with +Z
-	 * running the way down. Every concrete part is solid: the player walks down
-	 * the treads and along the landing, and cannot step over the balustrade into
-	 * the shaft.
-	 *
-	 * @param descends whether this entrance carries the way down itself. A
-	 * station that publishes a shaft has the descent built there, so the model
-	 * is the portal and its band alone.
-	 */
-	#model( descends ) {
-
-		const parts = [];
-		const bottom = SIDEWALK_HEIGHT - TREADS * RISE;
-		const flight = TREADS * GOING;
-		const floor = bottom - 0.2;
-		const top = SIDEWALK_HEIGHT + PARAPET;
-
-		if ( descends ) {
-
-			for ( let i = 0; i < TREADS; i ++ ) {
-
-				const tread = box( CLEAR, RISE, GOING );
-				tread.translate( 0, SIDEWALK_HEIGHT - ( i + 0.5 ) * RISE, ( i + 0.5 ) * GOING );
-				parts.push( tread );
-
-			}
-
-			const landing = box( CLEAR, 0.2, LANDING );
-			landing.translate( 0, bottom - 0.1, flight + LANDING / 2 );
-			parts.push( landing );
-
-			// Nothing is published past here, so the mezzanine is closed off.
-			const back = box( CLEAR + 2 * WALL, top - floor, WALL );
-			back.translate( 0, ( floor + top ) / 2, flight + LANDING + WALL / 2 );
-			parts.push( back );
-
-			const length = flight + LANDING + WALL + 0.15;
-
-			for ( const sx of [ - 1, 1 ] ) {
-
-				const side = box( WALL, top - floor, length );
-				side.translate( sx * ( CLEAR + WALL ) / 2, ( floor + top ) / 2, length / 2 - 0.15 );
-				parts.push( side );
-
-			}
-
-		}
-
-		for ( const sx of [ - 1, 1 ] ) {
-
-			const post = box( WALL + 0.06, PORTAL_TOP - SIDEWALK_HEIGHT, WALL + 0.06 );
-			post.translate( sx * ( CLEAR + WALL ) / 2, ( SIDEWALK_HEIGHT + PORTAL_TOP ) / 2, - 0.02 );
-			parts.push( post );
-
-		}
-
-		const signZ = - 0.12;
-		const sign = box( CLEAR + 2 * WALL + 0.06, SIGN_BAND, 0.14 );
-		sign.translate( 0, SIGN_BOTTOM + SIGN_BAND / 2, signZ );
-
-		return {
-			structure: merge( parts ),
-			sign,
-			signPoint: new THREE.Vector3( 0, SIGN_BOTTOM + SIGN_BAND / 2, signZ - 0.25 )
-		};
-
-	}
-
 }
 
-const MODES = [
-	{ name: 'train', collection: 'trainStations', variantId: '2' },
-	{ name: 'subway', collection: 'subwayStations', variantId: '1' }
-];
-
-const UP = new THREE.Vector3( 0, 1, 0 );
-const ONE = new THREE.Vector3( 1, 1, 1 );
-
-/**
- * The portal over a published shaft: square across the mouth end of its own
- * footprint, facing the way the first flight runs, which is the end
- * StationVolumes leaves open in the parapet.
- */
-function overShaft( shaft ) {
-
-	const frame = frameOf( shaft.footprint ?? [] );
-
-	if ( ! frame ) return null;
-
-	const [ x, z ] = frame.at( - frame.long / 2, 0 );
-
-	return new THREE.Matrix4().compose(
-		new THREE.Vector3( x, 0, z ),
-		new THREE.Quaternion().setFromAxisAngle( UP, frame.heading ),
-		ONE
-	);
-
-}
-
-/**
- * The entrance stands on its own point and the stair heads for the station,
- * because a stair that descended the other way would run out under the street
- * it came from. An entrance sitting exactly on its station has no direction to
- * take and is dropped.
- */
-function placement( entrance, station ) {
-
-	const dx = station[ 0 ] - entrance[ 0 ];
-	const dz = station[ 1 ] - entrance[ 1 ];
-	const length = Math.hypot( dx, dz );
-
-	if ( length < 1e-3 ) return null;
-
-	return new THREE.Matrix4().compose(
-		new THREE.Vector3( entrance[ 0 ], 0, entrance[ 1 ] ),
-		new THREE.Quaternion().setFromAxisAngle( UP, Math.atan2( dx / length, dz / length ) ),
-		ONE
-	);
-
+function surface( factory, role ) {
+	const key = { concrete: 'cyberpunk/concrete/poor', metal: 'cyberpunk/metal/poor', paint: 'cyberpunk/prop-coating/poor', rubber: 'cyberpunk/rubber/poor', edge: 'cyberpunk/prop-coating/poor', sign: 'cyberpunk/signage/rich', screen: 'cyberpunk/prop-coating/poor', text: 'cyberpunk/prop-coating/poor' }[ role ];
+	if ( [ 'screen', 'text' ].includes( role ) ) return factory.variant( key, { emissive: new THREE.Color( role === 'screen' ? '#174e50' : '#94bda5' ), emissiveLevel: role === 'screen' ? 0.7 : 3 } );
+	if ( role === 'sign' ) return factory.variant( key, { variantId: '1', emissive: kelvinColor( 4000 ), emissiveScale: 8 } );
+	if ( role === 'edge' ) return factory.build( 'cyberpunk/metal/poor', 'zinc' );
+	return factory.build( key );
 }
