@@ -31,7 +31,7 @@ async function show( mode ) {
 		if ( active ) { scene.remove( active.group ); active.dispose(); }
 		active = next; scene.add( next.group );
 		const bounds = new THREE.Box3().setFromObject( next.group ), center = bounds.getCenter( new THREE.Vector3() ), size = bounds.getSize( new THREE.Vector3() );
-		controls.target.copy( center ); camera.position.copy( center ).add( new THREE.Vector3( size.x * 0.65 + 8, Math.max( 12, size.z * 0.6 ), size.z * 0.65 + 8 ) ); controls.update();
+		controls.target.copy( center ); camera.position.copy( center ).add( mode === 'plastic' ? new THREE.Vector3( 1.3, 1.7, Math.max( 3, size.x * 1.25 ) ) : new THREE.Vector3( size.x * 0.65 + 8, Math.max( 12, size.z * 0.6 ), size.z * 0.65 + 8 ) ); controls.update();
 		await renderer.compileAsync( scene, camera ); view.setStatus( next.summary );
 	} catch ( error ) { view.setStatus( error.message ); console.error( error ); }
 	finally { view.setBusy( false ); }
@@ -44,7 +44,7 @@ try {
 	const groundGeometry = new THREE.PlaneGeometry( 400, 400 );
 	for ( let i = 0; i < groundGeometry.attributes.uv.count; i ++ ) groundGeometry.attributes.uv.setXY( i, groundGeometry.attributes.uv.getX( i ) * 400, groundGeometry.attributes.uv.getY( i ) * 400 );
 	const ground = new THREE.Mesh( groundGeometry, groundMaterial ); ground.rotation.x = - Math.PI / 2; ground.position.y = 0.199; ground.receiveShadow = true; scene.add( ground );
-	await show( 'gallery' );
+	await show( 'plastic' );
 	renderer.setAnimationLoop( () => { controls.update(); renderer.render( scene, camera ); } );
 } catch ( error ) { view.setStatus( error.message ); }
 addEventListener( 'resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize( innerWidth, innerHeight ); } );

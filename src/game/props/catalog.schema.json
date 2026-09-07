@@ -101,7 +101,8 @@
               "crate",
               "pallet",
               "paper",
-              "can"
+              "can",
+              "polymer"
             ]
           },
           "size": {
@@ -120,6 +121,45 @@
               "type": "string",
               "pattern": "^#[a-fA-F0-9]{6}$"
             }
+          },
+          "lid": {
+            "enum": [
+              "none",
+              "sealed",
+              "loose"
+            ]
+          },
+          "damage": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "dent",
+              "twist",
+              "sag",
+              "taper"
+            ],
+            "properties": {
+              "dent": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.12
+              },
+              "twist": {
+                "type": "number",
+                "minimum": -0.25,
+                "maximum": 0.25
+              },
+              "sag": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.1
+              },
+              "taper": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.2
+              }
+            }
           }
         },
         "oneOf": [
@@ -133,6 +173,26 @@
             "required": [
               "asset"
             ]
+          }
+        ],
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "shape"
+              ],
+              "properties": {
+                "shape": {
+                  "const": "polymer"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "lid",
+                "damage"
+              ]
+            }
           }
         ]
       }

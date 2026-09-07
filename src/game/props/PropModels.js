@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import catalog from './catalog.json' with { type: 'json' };
 import { ImportedModels } from './ImportedModels.js';
 import { DeliveryModels } from './DeliveryModels.js';
+import { PolymerModels } from './PolymerModels.js';
 import { CargoDetails } from './CargoDetails.js';
 import { metreUvs, solidBox } from './Geometry.js';
 
@@ -30,7 +31,10 @@ export class PropModels {
 						}
 						parts.push( ...CargoDetails.build( spec.size, role => this.material( role ) ) );
 					}
-				} else parts = DeliveryModels.build( spec, role => this.material( role ), catalog.detailColors );
+				} else {
+					const builder = spec.shape === 'polymer' ? PolymerModels : DeliveryModels;
+					parts = builder.build( spec, role => this.material( role ), catalog.detailColors );
+				}
 				const bounds = new THREE.Box3();
 				const lowBounds = new THREE.Box3();
 				for ( const part of parts ) {

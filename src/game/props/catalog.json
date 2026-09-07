@@ -46,6 +46,14 @@
     "metal": {
       "key": "cyberpunk/metal/poor",
       "variant": "zinc"
+    },
+    "polymer": {
+      "key": "cyberpunk/prop-polymer/poor",
+      "variant": "charcoal"
+    },
+    "polymer-face": {
+      "key": "cyberpunk/prop-polymer-face/poor",
+      "variant": "scored"
     }
   },
   "models": [
@@ -209,11 +217,101 @@
         "#ffffff",
         "#e5e6cf"
       ]
+    },
+    {
+      "id": "poly-tote",
+      "kind": "crate",
+      "shape": "polymer",
+      "size": [
+        0.64,
+        0.42,
+        0.46
+      ],
+      "lid": "none",
+      "damage": {
+        "dent": 0.028,
+        "twist": 0.06,
+        "sag": 0.018,
+        "taper": 0.07
+      },
+      "tints": [
+        "#ffffff",
+        "#a6afa8",
+        "#9ba5b2"
+      ]
+    },
+    {
+      "id": "poly-transit",
+      "kind": "box",
+      "shape": "polymer",
+      "size": [
+        0.76,
+        0.36,
+        0.5
+      ],
+      "lid": "sealed",
+      "damage": {
+        "dent": 0.018,
+        "twist": 0.025,
+        "sag": 0.01,
+        "taper": 0.015
+      },
+      "tints": [
+        "#ffffff",
+        "#a6afa8",
+        "#9ba5b2"
+      ]
+    },
+    {
+      "id": "poly-crushed",
+      "kind": "crate",
+      "shape": "polymer",
+      "size": [
+        0.62,
+        0.31,
+        0.5
+      ],
+      "lid": "none",
+      "damage": {
+        "dent": 0.095,
+        "twist": 0.17,
+        "sag": 0.075,
+        "taper": 0.13
+      },
+      "tints": [
+        "#ffffff",
+        "#a6afa8",
+        "#9ba5b2"
+      ]
+    },
+    {
+      "id": "poly-loose",
+      "kind": "box",
+      "shape": "polymer",
+      "size": [
+        0.66,
+        0.43,
+        0.48
+      ],
+      "lid": "loose",
+      "damage": {
+        "dent": 0.055,
+        "twist": -0.075,
+        "sag": 0.035,
+        "taper": 0.035
+      },
+      "tints": [
+        "#ffffff",
+        "#a6afa8",
+        "#9ba5b2"
+      ]
     }
   ],
   "detailColors": {
     "tape": "#9f8460",
     "label": "#e0d8c1",
-    "ink": "#293333"
+    "ink": "#293333",
+    "warning": "#807253",
+    "seal": "#242b2b"
   }
 }

@@ -107,6 +107,40 @@ describe( 'street dressing contract', () => {
 		const atlas = world(); atlas.parcels = []; atlas.streets.planting[ 0 ].kind = 'unknown'; atlas.streets.planting.splice( 1 );
 		const result = await build( atlas ); expect( result.counts.total ).toBe( 0 ); result.dispose();
 	} );
+	it( 'places all four deformed plastic variants with solid bounds, fitted wear UVs and bounded material parts', async () => {
+		const atlas = world( 'plastic-details' );
+		atlas.parcels = Array.from( { length: 8 }, ( _, i ) => ( { id: `p${i}`, districtId: 'd1', type: 'factory', footprint: rect( 20 + i * 100, 20, 60, 40 ), access: { point: [ 50 + i * 100, 20 ] } } ) );
+		atlas.volumetric.ground = [ { polygon: rect( - 80, - 50, 1000, 170 ), surface: 'open', top: 0.2 } ];
+		const namedFactory = { build: key => Object.assign( new THREE.MeshStandardMaterial(), { name: key } ) };
+		const result = await new Dressing( atlas, { edges: [] }, namedFactory, { loadAsset } ).build();
+		const expected = [ 'poly-crushed', 'poly-loose', 'poly-tote', 'poly-transit' ];
+		const plastics = result.placements.filter( p => p.model.startsWith( 'poly-' ) );
+		expect( [ ...new Set( plastics.map( p => p.model ) ) ].sort() ).toEqual( expected );
+		const checked = new Set();
+		for ( const item of plastics ) {
+			const meshes = result.group.children.filter( mesh => mesh.name.startsWith( `props:${item.model}:` ) );
+			const parts = new Set( meshes.map( mesh => mesh.name.split( ':' ).at( - 1 ) ) );
+			expect( parts.size ).toBe( 3 );
+			for ( const mesh of meshes ) {
+				if ( ! checked.has( mesh.geometry ) ) {
+					checked.add( mesh.geometry );
+					const normal = mesh.geometry.attributes.normal;
+					expect( Array.from( { length: normal.count }, ( _, i ) => Math.abs( Math.hypot( normal.getX( i ), normal.getY( i ), normal.getZ( i ) ) - 1 ) ).every( error => error < 1e-4 ) ).toBe( true );
+					if ( mesh.material.name === 'cyberpunk/prop-polymer-face/poor' ) {
+						const uv = mesh.geometry.attributes.uv.array;
+						expect( Math.min( ...uv ) ).toBe( 0 ); expect( Math.max( ...uv ) ).toBe( 1 );
+					}
+				}
+				const box = mesh.geometry.boundingBox.clone().applyMatrix4( item.matrix );
+				expect( box.min.y ).toBeGreaterThanOrEqual( item.bottom - 1e-6 ); expect( box.max.y ).toBeLessThanOrEqual( item.top + 1e-6 );
+			}
+		}
+		const body = result.group.children.find( mesh => mesh.name.startsWith( 'props:poly-crushed:' ) ).geometry;
+		const p = body.attributes.position;
+		const front = Array.from( { length: p.count }, ( _, i ) => [ p.getX( i ), p.getY( i ), p.getZ( i ) ] ).filter( p => p[ 2 ] > 0.12 && p[ 1 ] > 0.08 );
+		expect( Math.max( ...front.map( p => p[ 2 ] ) ) - Math.min( ...front.map( p => p[ 2 ] ) ) ).toBeGreaterThan( 0.035 );
+		result.dispose();
+	} );
 	it( 'releases imported and generated resources once while retaining factory materials, including failed loads', async () => {
 		const resources = [], borrowed = new THREE.MeshStandardMaterial();
 		const retained = vi.spyOn( borrowed, 'dispose' );

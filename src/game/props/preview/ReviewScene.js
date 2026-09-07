@@ -17,7 +17,8 @@ export class ReviewScene {
 		} else {
 			content = await new PropModels( this.factory ).load();
 			let x = 0, z = 0, row = 0;
-			for ( const model of content.models.values() ) {
+			const models = [ ...content.models.values() ].filter( model => mode !== 'plastic' || model.shape === 'polymer' );
+			for ( const model of models ) {
 				if ( row === 4 ) { x = 0; z += 18; row = 0; }
 				for ( const part of model.parts ) {
 					const mesh = new THREE.InstancedMesh( part.geometry, part.material, 1 );
@@ -25,12 +26,12 @@ export class ReviewScene {
 					if ( part.tintable ) mesh.setColorAt( 0, new THREE.Color( model.tints?.[ 0 ] ?? '#ffffff' ) );
 					mesh.computeBoundingSphere(); mesh.castShadow = mesh.receiveShadow = true; group.add( mesh );
 				}
-				x += Math.max( 4, model.size[ 0 ] + 2 ); row ++;
+				x += mode === 'plastic' ? model.size[ 0 ] + 0.3 : Math.max( 4, model.size[ 0 ] + 2 ); row ++;
 			}
-			summary = `${content.models.size} models: folded cartons, crates, pallet, litter, bags, dumpster, two container sizes and two trees.`;
+			summary = mode === 'plastic' ? 'Four molded plastic variants: ribbed tote, sealed transit case, crushed bin and loose-lid case.' : `${models.length} models: plastic cases, cartons, crates, litter, containers and trees.`;
 		}
 		return { group, summary, dispose() {
-			group.traverse( object => { if ( object.isInstancedMesh ) { if ( mode === 'gallery' ) object.dispose(); } else if ( object.isMesh ) object.geometry.dispose(); } );
+			group.traverse( object => { if ( object.isInstancedMesh ) { if ( mode !== 'arrangements' ) object.dispose(); } else if ( object.isMesh ) object.geometry.dispose(); } );
 			content.dispose(); group.clear();
 		} };
 	}

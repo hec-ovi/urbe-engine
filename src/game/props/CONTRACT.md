@@ -15,7 +15,7 @@ Takes authored city land and models, returns sparse street arrangements and tree
 
 [Result schema](result.schema.json) describes counts, placements and scene identities. `group` contains instanced material parts in 64 m cells. `colliders` is a Map of position-only triangle geometry for solid props and tree trunks. `dispose()` releases owned geometry, imported textures and material clones, retaining factory resources.
 
-Cardboard cartons have folded flaps and tape; wooden crates have separate boards and braces. Downloaded bags, dumpsters and containers retain their authored geometry. Container variants have physical ribs, framing and door hardware. Carton tape and label details share one vertex-colored material part. Trees use Atlas tree anchors, with measured crown bounds and trunk collision.
+Cardboard cartons have folded flaps and tape; wooden crates have separate boards and braces. Four dark molded-plastic variants have grip openings, reinforced rims, latches or loose lids, measured dents and twisted walls. Continuous polymer grain covers the body; a fitted scuffed panel adds localized wear. Placement and collision use the deformed bounds. Downloaded bags, dumpsters and containers retain their authored geometry. Container variants have physical ribs, framing and door hardware. Carton tape and label details share one vertex-colored material part. Trees use Atlas tree anchors, with measured crown bounds and trunk collision.
 
 ## Placement
 
