@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["options"],
+  "additionalProperties": false,
+  "properties": {
+    "mode": { "enum": ["service", "destination"], "default": "service" },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["id", "label", "value"], "additionalProperties": false,
+        "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "value": {} }
+      }
+    }
+  }
+}

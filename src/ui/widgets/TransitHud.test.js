@@ -36,7 +36,8 @@ describe( 'TransitHud', () => {
 
 	it( 'cancels with Escape and shows or clears the aboard line', async () => {
 
-		hud.choose( [ { id: 'a', label: 'Train T1', value: {} } ] );
+		hud.choose( [ { id: 'a', label: 'Cinder Terminus', value: {} } ], 'destination' );
+		expect( screen.getByRole( 'dialog', { name: 'Choose a destination' } ) ).toBeTruthy();
 		await userEvent.setup().keyboard( '{Escape}' );
 		expect( onCancel ).toHaveBeenCalledOnce();
 		expect( hud.open ).toBe( false );

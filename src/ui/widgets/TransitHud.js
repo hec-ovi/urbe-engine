@@ -1,4 +1,5 @@
 import { el } from '../components/dom.js';
+import layout from './transit-layout.json' with { type: 'json' };
 
 const noop = () => {};
 
@@ -11,15 +12,15 @@ export class TransitHud {
 		this.onCancel = onCancel;
 		this.status = el( 'div', { className: 'hud-transit-status', ariaLive: 'polite' } );
 		this.status.hidden = true;
-		this.title = el( 'h2', { className: 'hud-transit-title', textContent: 'Choose a service' } );
+		this.title = el( 'h2', { className: 'hud-transit-title', textContent: layout.titles.service } );
 		this.options = el( 'div', { className: 'hud-transit-options' } );
-		this.cancel = el( 'button', { className: 'hud-button', type: 'button', textContent: 'cancel' } );
+		this.cancel = el( 'button', { className: 'hud-button', type: 'button', textContent: layout.cancel } );
 		this.cancel.addEventListener( 'click', () => this.#cancel() );
 		this.chooser = el( 'section', {
 			className: 'hud-transit-chooser',
 			role: 'dialog',
 			ariaModal: 'true',
-			ariaLabel: 'Choose a service'
+			ariaLabel: layout.titles.service
 		}, this.title, this.options, this.cancel );
 		this.title.id = 'transit-choice-title';
 		this.chooser.hidden = true;
@@ -39,7 +40,10 @@ export class TransitHud {
 	}
 
 	/** @param options [{ id, label, value }] */
-	choose( options ) {
+	choose( options, mode = 'service' ) {
+
+		this.title.textContent = layout.titles[ mode ];
+		this.chooser.setAttribute( 'aria-label', layout.titles[ mode ] );
 
 		const buttons = options.map( ( option ) => {
 
