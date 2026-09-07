@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.16: street props use asymmetric arrangements, three wear finishes, four pocket ornaments and authored guardrail variants. Stations expose short stairs and destination terminals with saved travel between connected landings.
+
 0.17.16: NPCs retain Source body proportions, smoothly interpolated normals and one appearance across crowd, dialogue and impact poses.
 
 0.17.16: the minimap keeps forward at the top, aligns route and venue markers with the city, and shows a rotating north marker.
@@ -74,7 +76,6 @@
 
 0.16.13: lamp lenses, entrance diffusers and cab lights use their authored emissive levels.
 
-0.16.12: station shafts contain fitted switchback stairs, passages, lit platform rooms and grade canopies in two city-wide draws.
 
 0.16.11: ground and bedrock geometry leave every published underground station volume reachable.
 
