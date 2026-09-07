@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["at", "game", "stats", "memory", "position", "frames", "hitches"],
+  "properties": {
+    "at": {"type": "number", "minimum": 0},
+    "game": {"type": ["string", "null"]},
+    "stats": {"type": "object", "additionalProperties": {"anyOf": [{"type": "string"}, {"type": "number"}, {"type": "boolean"}, {"type": "null"}]}},
+    "memory": {"type": "object", "additionalProperties": {"type": "number"}},
+    "position": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "number"}},
+    "frames": {
+      "type": "object", "additionalProperties": false,
+      "required": ["count", "median", "p95", "worst"],
+      "properties": {"count": {"type": "integer", "minimum": 1}, "median": {"type": "number"}, "p95": {"type": "number"}, "worst": {"type": "number"}}
+    },
+    "hitches": {
+      "type": "array", "maxItems": 20,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["ms", "notes"],
+        "properties": {"ms": {"type": "number"}, "notes": {"type": "array", "items": {"type": "string"}}}
+      }
+    }
+  }
+}

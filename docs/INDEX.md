@@ -31,7 +31,7 @@
   - `quests/`: all 16 cast quest actions, including fixed-asset rescue, access, hacking and sabotage, follow or lead escort, fatal-impact assassination and measured public-transit completion (src/game/quests/CONTRACT.md)
   - `routes/`: deterministic shortest objective routes to the closest reachable parcel, station and stop entries over Connections' authoritative 3D walk graph (src/game/routes/CONTRACT.md)
   - `sim/`: the simulation library host and exact NPC continuity pass-through (src/game/sim/CONTRACT.md)
-  - `debug/`: the hitch log, and the renderer work (shader links, texture uploads) that explains a gap the world did not cause
+  - `debug/`: frame gaps, subsystem costs and renderer allocation counters, with local development reports ([contract](../src/game/debug/CONTRACT.md), [report schema](../src/game/debug/report.schema.json)). Depends on Game and Vite.
   - `time/`, `world/`: simulation clock, sky-state arithmetic, district and parcel lookup, map models from Atlas and Connections, named lighting-review camera poses.
 
 ## Scale experiment (docs/RESEARCH.md 9)
