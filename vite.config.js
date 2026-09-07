@@ -7,6 +7,7 @@ import { talkRoute } from './src/server/talkRoute.js';
 import { buildingRoute } from './src/server/buildingRoute.js';
 import { launcherRoute } from './src/server/launcherRoute.js';
 import { createWorldCreation } from './src/creation/index.js';
+import { hitchReportPlugin } from './src/game/debug/hitchReportPlugin.js';
 
 // Sibling materials database (../materials/CONTRACT.md), served read-only
 // under /materials/<theme>/... for the building viewer and the game. Path is
@@ -77,6 +78,7 @@ function mount( name, prefix, dir ) {
 
 export default defineConfig( {
 	plugins: [
+		hitchReportPlugin( join( ROOT, 'out', 'diagnostics' ) ),
 		mount( 'serve-materials-bindings', '/materials/bindings', BINDINGS_DIR ),
 		mount( 'serve-materials-themes', '/materials', THEMES_DIR ),
 		mount( 'serve-atlas-samples', '/atlas', ATLAS_DIR ),
@@ -86,6 +88,7 @@ export default defineConfig( {
 		talkRoute( ROOT )
 	],
 	server: {
+		forwardConsole: { unhandledErrors: true, logLevels: [ 'error', 'warn', 'info' ] },
 		// The connections library is consumed as TypeScript source from the
 		// sibling repo (../connections/CONTRACT.md is the coupling surface).
 		fs: { allow: [ '..' ] },
