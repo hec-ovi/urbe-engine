@@ -83,6 +83,14 @@ describe( 'WorldSource selective interiors', () => {
 		expect( world.game ).toEqual( game );
 		expect( fetch ).toHaveBeenCalledWith( '/out/games/night-shift/game.json' );
 
+		game.questBundle = null;
+		vi.mocked( fetch ).mockClear();
+		const freePlay = await new WorldSource( {
+			blueprintUrl: '/atlas/city.json', outBase: '/out/games/night-shift', gameId: 'night-shift'
+		} ).load();
+		expect( freePlay ).toMatchObject( { questBundle: null, questlines: [], investigations: [] } );
+		expect( fetch.mock.calls.some( ( [ url ] ) => url.includes( '/quests/' ) ) ).toBe( false );
+
 	} );
 
 	it( 'loads authored investigations but does not hide malformed scene content', async () => {

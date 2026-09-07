@@ -88,6 +88,7 @@ The whole run either starts or reports why: any failure during startup is caught
 - `E_DOOR_MOTION`: an operable door has invalid travel metadata or an incomplete named pocket-leaf assembly.
 
 ## Invariants
+- A catalog game with `questBundle: null` loads no quest or investigation files. Its free-play state remains empty across save and resume.
 - Generated data determines world geometry and population. Closed-shell windows permit fitted scenic room bays; unbounded safety ground sits below the authored world. All non-emitter surfaces use catalog textures.
 - A catalog game resumes from its last confirmed revision, and leaving it succeeds only after that next revision is stored.
 - A catalog save includes the optional exact timetable journey and quest transportation stage. Boarding, disembarking and automatic termination save both through the normal persistence boundary; leaving and quest saves also capture their current state. A direct preview keeps them in the session only. Restore cross-checks approach, aboard or arrival progress against the exact quest, passenger and follow state. A valid aboard restore also restores its absolute timetable clock, while a stale trip fails closed to waiting.

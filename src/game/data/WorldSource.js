@@ -131,6 +131,12 @@ export class WorldSource {
 	/** Loads a v1.1 bundle atomically, with a legacy questline fallback for older worlds. */
 	async #quests( game ) {
 
+		if ( game?.questBundle === null ) return {
+			questBundle: null, questlines: [], objectives: [], investigations: [],
+			mechanicTargetBindings: [], missionAssetRequests: [], missionItemBindings: [],
+			hostCapabilities: { transportationModes: [] }
+		};
+
 		const reference = game?.questBundle?.uri ?? null;
 		const manifestUri = reference?.endsWith( '/quest-bundle.json' ) || reference === 'quest-bundle.json'
 			? reference
