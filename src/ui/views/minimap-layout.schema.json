@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["size", "pixelsPerMetre", "label", "hint", "north", "compassInset"],
+  "properties": {
+    "size": {"type": "integer", "minimum": 100},
+    "pixelsPerMetre": {"type": "number", "exclusiveMinimum": 0},
+    "label": {"type": "string", "minLength": 1},
+    "hint": {"type": "string", "minLength": 1},
+    "north": {"type": "string", "minLength": 1},
+    "compassInset": {"type": "number", "minimum": 0}
+  },
+  "additionalProperties": false
+}

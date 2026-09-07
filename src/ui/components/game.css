@@ -361,9 +361,8 @@
 }
 
 .hud-minimap-label {
-	position: absolute;
-	right: 5px;
-	top: 4px;
+	padding: 7px 5px;
+	text-align: center;
 	font: 10px var(--ui-mono);
 	line-height: 1;
 	letter-spacing: 0.1em;

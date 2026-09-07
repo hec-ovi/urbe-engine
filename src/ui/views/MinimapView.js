@@ -1,13 +1,14 @@
 import { el } from '../components/dom.js';
 import { CityBake } from './CityBake.js';
 import { MapPainter, MAP_COLORS } from './MapPainter.js';
+import { MinimapFrame } from './MinimapFrame.js';
+import layout from './minimap-layout.json' with { type: 'json' };
 
-const SIZE = 190;
-const PIXELS_PER_METRE = 1.6;
+const SIZE = layout.size;
 
 /**
- * Corner map with the player at its centre, north up. The city is baked once
- * when the map is handed over; every frame blits it at an offset and draws
+ * Corner map with the player at its centre, forward up. The city is baked once
+ * when the map is handed over; every frame turns it with the player and draws
  * the live marks, so the minimap costs one image copy however big the city.
  * Presentation only: it is handed plain [x, z] geometry and a position.
  */
@@ -15,10 +16,10 @@ export class MinimapView {
 
 	constructor() {
 
-		this.canvas = el( 'canvas', { className: 'hud-minimap-canvas', width: SIZE, height: SIZE } );
+		this.canvas = el( 'canvas', { className: 'hud-minimap-canvas', width: SIZE, height: SIZE, ariaLabel: layout.label } );
 		this.element = el( 'div', { className: 'hud-minimap' },
 			this.canvas,
-			el( 'div', { className: 'hud-minimap-label', textContent: 'M' } )
+			el( 'div', { className: 'hud-minimap-label', textContent: layout.hint } )
 		);
 		this.context = this.canvas.getContext( '2d' );
 		this.bake = null;
@@ -31,7 +32,7 @@ export class MinimapView {
 	/** @param map city bounds, roads, blocks and generated 2D transit routes and places. */
 	setMap( map ) {
 
-		this.bake = new CityBake( map, PIXELS_PER_METRE );
+		this.bake = new CityBake( map, layout.pixelsPerMetre );
 
 	}
 
@@ -55,21 +56,16 @@ export class MinimapView {
 		if ( this.element.hidden || ! this.bake ) return;
 
 		const ctx = this.context;
-		const [ px, pz ] = this.bake.toPixels( position.x, position.z );
 		const c = SIZE / 2;
+		const frame = new MinimapFrame( this.bake, position, heading, c );
 
 		ctx.fillStyle = MAP_COLORS.ground;
 		ctx.fillRect( 0, 0, SIZE, SIZE );
-		ctx.drawImage( this.bake.canvas, c - px, c - pz );
+		frame.paintCity( ctx );
 
 		if ( this.route ) {
 
-			const toScreen = ( x, z ) => {
-
-				const [ rx, rz ] = this.bake.toPixels( x, z );
-				return [ c - px + rx, c - pz + rz ];
-
-			};
+			const toScreen = ( x, z ) => frame.toScreen( x, z );
 
 			MapPainter.route( ctx, this.route.path, toScreen );
 			const destination = this.route.path.at( - 1 );
@@ -84,9 +80,7 @@ export class MinimapView {
 
 		for ( const venue of this.venues ) {
 
-			const [ vx, vz ] = this.bake.toPixels( venue.point.x, venue.point.z );
-			const x = c - px + vx;
-			const y = c - pz + vz;
+			const [ x, y ] = frame.toScreen( venue.point.x, venue.point.z );
 
 			if ( x < 0 || y < 0 || x > SIZE || y > SIZE ) continue;
 
@@ -94,7 +88,8 @@ export class MinimapView {
 
 		}
 
-		MapPainter.player( ctx, c, c, heading );
+		MapPainter.player( ctx, c, c, 0 );
+		frame.paintNorth( ctx, layout.north, layout.compassInset );
 
 	}
 

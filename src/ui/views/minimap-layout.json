@@ -1,0 +1,8 @@
+{
+  "size": 190,
+  "pixelsPerMetre": 1.6,
+  "label": "Local map, forward at the top",
+  "hint": "↑ FORWARD · M MAP",
+  "north": "N",
+  "compassInset": 15
+}
