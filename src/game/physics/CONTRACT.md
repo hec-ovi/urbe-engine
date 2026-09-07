@@ -5,7 +5,8 @@ Purpose: resolves world and player collision, measures vehicle contacts, and tur
 ## Inputs
 
 - `Physics.create()`: loads the pinned Rapier runtime and creates the fixed-step world.
-- Static geometry: `Physics.addTrimesh(geometry)` and `WorldColliders` accept generated Three.js geometry in world coordinates.
+- Static geometry: `Physics.addTrimesh(geometry, {enabled: true})` and `WorldColliders` accept generated Three.js geometry in world coordinates. Omitted options enable collision; disabled bodies stay out of simulation and queries.
+- Streamed floors: `WorldColliders.addBand(id, geometry)` accepts borrowed exact triangles through the [band schema](schema/band-admission.d.ts).
 - Safety collision: `Physics.addHalfSpace(elevation)` accepts a finite world Y and returns `{body, collider, triangles: 0}` for the solid below an infinite horizontal plane. `Physics.remove(handle)` releases it.
 - Moving surfaces: `Physics.addKinematicTrimesh(geometry, position, rotation?)` accepts body-local triangles and a world rigid pose; omitted rotation is identity. It returns the Rapier body, collider and triangle count.
 - Moving Exterior leaves: `new DoorColliders(physics, doors)` accepts exact pivot-local leaf triangles from the shell loader. Initial bodies use the rendered world pose. `sync(door)` copies each pivot's world translation and rotation for the next physics step. Pivots and their parents have unit scale.
@@ -19,10 +20,12 @@ Purpose: resolves world and player collision, measures vehicle contacts, and tur
 - Ragdoll summary: [schema/ragdoll-summary.schema.json](schema/ragdoll-summary.schema.json). The accepted Source rig becomes 15 dynamic bodies and 14 spherical joints with 70 kg total mass.
 - Player body position and grounded state are live Three.js values consumed by the game controller.
 - Door collision bodies remain aligned with the rendered leaves while closed, moving and open.
+- Floor readiness, cancellation and resident count follow the [band schema](schema/band-admission.d.ts). `addBand` resolves after every piece is solid; `dropBand` releases ready and pending pieces. Repeated admission of the same resident or pending id reuses its result.
 
 ## Errors
 
 - `E_PHYSICS_FLOOR`: a half-space elevation is not finite.
+- `E_PHYSICS_BAND`: positions are non-finite or do not form complete triangles. Cooking errors reject admission and release its pieces.
 - `E_RAGDOLL_INPUT`: a physics world, frame or impact is missing or invalid.
 - `E_RAGDOLL_RIG`: the character is not the audited Source skeleton or has an invalid body segment.
 - `E_RAGDOLL_OUTPUT`: a produced impact or body summary violates its schema.
@@ -37,6 +40,8 @@ Purpose: resolves world and player collision, measures vehicle contacts, and tur
 ## Invariants
 
 - Physics advances at 1/60 second. Ground, structures and streamed floors use the same generated geometry that is rendered.
+- Fixed trimeshes have zero density, so admitting immovable surfaces requires no mass or inertia calculation.
+- Floor admission preserves every vertex and triangle winding. It cooks at most 2048 triangles per piece, yielding a frame after four pieces or 4 ms of work. Pieces stay disabled until the complete band is ready; cancellation removes them before another cook.
 - The safety half-space has no horizontal bounds and remains below the world's lowest authored geometry and basin depth.
 - Each authored physical door leaf has one kinematic trimesh using its rendered pivot's complete rigid pose. Translation and rotation preserve that agreement while closed, partly open and fully open. Authored full-open poses clear their published passage.
 - Vehicle impact starts only from a Rapier sensor intersection at 2 m/s or faster. A measured contact at 10 m/s or faster is fatal; slower contacts are falls only.

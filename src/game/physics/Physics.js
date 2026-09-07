@@ -57,7 +57,7 @@ export class Physics {
 	}
 
 	/** A fixed trimesh body from a three.js geometry, in world space. */
-	addTrimesh( geometry ) {
+	addTrimesh( geometry, { enabled = true } = {} ) {
 
 		const position = geometry.getAttribute( 'position' );
 		const vertices = position.array instanceof Float32Array
@@ -67,10 +67,14 @@ export class Physics {
 			? new Uint32Array( geometry.index.array )
 			: sequentialTriangleIndices( position.count );
 
-		const body = this.world.createRigidBody( RAPIER.RigidBodyDesc.fixed() );
-		const collider = this.world.createCollider( RAPIER.ColliderDesc.trimesh( vertices, indices ), body );
+		const body = this.world.createRigidBody( RAPIER.RigidBodyDesc.fixed().setEnabled( enabled ) );
+		try {
 
-		return { body, collider, triangles: indices.length / 3 };
+			// Fixed surfaces need no mass or inertia calculation when admitted.
+			const collider = this.world.createCollider( RAPIER.ColliderDesc.trimesh( vertices, indices ).setDensity( 0 ), body );
+			return { body, collider, triangles: indices.length / 3 };
+
+		} catch ( error ) { this.world.removeRigidBody( body ); throw error; }
 
 	}
 

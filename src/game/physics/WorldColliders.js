@@ -1,12 +1,13 @@
+import { BandAdmission } from './BandAdmission.js';
+
 /**
  * What the player can stand on and cannot walk through. The ground and every
  * building shell are fixed trimeshes built once: the shells carry their real
  * door and window openings, so a doorway is walkable without any special case.
  * Street furniture is a cylinder each, not a mesh.
  *
- * Interiors are heavy and arrive a floor band at a time, so a band becomes a
- * trimesh when the stream puts it in the scene and goes away when it takes it
- * out: what the player can walk on is exactly what they can see.
+ * Interior floor bands prepare exact collision pieces across frames, then
+ * become solid together. Taking a band out removes every piece.
  */
 export class WorldColliders {
 
@@ -14,6 +15,7 @@ export class WorldColliders {
 
 		this.physics = physics;
 		this.live = new Map();
+		this.pending = new Map();
 		this.triangles = 0;
 
 	}
@@ -94,23 +96,30 @@ export class WorldColliders {
 
 	}
 
-	/** One floor band of one building becomes solid. */
-	addBand( id, geometry ) {
+	/** Exact floor triangles prepare while disabled, then become solid together. */
+	async addBand( id, geometry ) {
 
-		if ( ! geometry || this.live.has( id ) ) return;
+		if ( this.live.has( id ) ) return true;
+		if ( this.pending.has( id ) ) return this.pending.get( id ).ready;
+		const admission = new BandAdmission( this.physics, geometry );
+		this.pending.set( id, admission );
+		admission.ready = admission.prepare().then( ready => {
 
-		this.live.set( id, this.physics.addTrimesh( geometry ) );
+			const accepted = ready && ! admission.cancelled && this.pending.get( id ) === admission;
+			if ( accepted ) this.live.set( id, admission );
+			return accepted;
+
+		} ).finally( () => { if ( this.pending.get( id ) === admission ) this.pending.delete( id ); } );
+		return admission.ready;
 
 	}
 
 	/** And stops being solid when the stream takes it out of the scene. */
 	dropBand( id ) {
 
-		const handle = this.live.get( id );
-
-		if ( ! handle ) return;
-
-		this.physics.remove( handle );
+		this.pending.get( id )?.cancel();
+		this.pending.delete( id );
+		this.live.get( id )?.cancel();
 		this.live.delete( id );
 
 	}
