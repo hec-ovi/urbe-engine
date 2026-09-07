@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.16: the minimap keeps forward at the top, aligns route and venue markers with the city, and shows a rotating north marker.
+
 0.17.16: four molded-plastic street variants use charcoal PBR, fitted wear panels and deformed silhouettes.
 
 0.17.16: street dressing uses imported models, native PBR delivery props, full-footprint clearance and spatial instancing. A dedicated page previews all models and service pockets.
