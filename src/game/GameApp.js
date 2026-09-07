@@ -46,6 +46,7 @@ import { Exposure } from './look/Exposure.js';
 import { NightFog } from './look/NightFog.js';
 import { HitchLog } from './debug/HitchLog.js';
 import { RenderWork } from './debug/RenderWork.js';
+import { FrameReports } from './debug/FrameReports.js';
 import { EnvironmentProbe } from './look/EnvironmentProbe.js';
 import { LookPipeline } from './look/LookPipeline.js';
 import { Warmup } from './look/Warmup.js';
@@ -481,6 +482,15 @@ export class GameApp {
 		window.addEventListener( 'resize', () => this.#resize() );
 
 		if ( import.meta.env.DEV ) window.__game = this;
+		if ( import.meta.hot ) this.frameReports = new FrameReports(
+			report => import.meta.hot.send( 'urbe:performance', report ),
+			() => ( {
+				game: config.gameId ?? null,
+				stats: { ...this.stats, pointerLocked: Boolean( document.pointerLockElement ), hidden: document.hidden, loadingFloors: this.stream.loading },
+				memory: { ...this.renderer.info.memory },
+				position: this.body.feet.toArray()
+			} )
+		);
 
 		this.baseTriangles = city.triangles + links.triangles + ( this.hydrology.summary?.triangles ?? 0 );
 		this.last = performance.now();
@@ -514,6 +524,7 @@ export class GameApp {
 		// world never asked for and could not otherwise name.
 		const built = this.work.since();
 		if ( built ) this.hitches.note( built );
+		this.frameReports?.frame( now, now - this.last, this.hitches.notes );
 		this.hitches.frame( now - this.last );
 		this.tick( Math.min( 0.05, ( now - this.last ) / 1000 ) );
 		this.last = now;
