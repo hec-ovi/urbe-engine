@@ -75,13 +75,15 @@ describe( 'streamed floor preparation', () => {
 		const scene = {};
 		const camera = {};
 		const mrt = { emissive: true };
-		const warmup = prepareInteriorStreaming( stream, renderer, scene, camera, mrt );
+		const renderTarget = { name: 'scene pass' };
+		const warmup = prepareInteriorStreaming( stream, renderer, scene, camera, mrt, renderTarget );
 
 		expect( stream.warmup ).toBe( warmup );
 		expect( warmup.renderer ).toBe( renderer );
 		expect( warmup.scene ).toBe( scene );
 		expect( warmup.camera ).toBe( camera );
 		expect( warmup.mrt ).toBe( mrt );
+		expect( warmup.renderTarget ).toBe( renderTarget );
 
 	} );
 

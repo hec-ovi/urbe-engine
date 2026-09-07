@@ -435,15 +435,15 @@ export class GameApp {
 		// material programs can be warmed against that render context.
 		this.view.step( 'warming the renderer' );
 		this.look = new LookPipeline( this.renderer, this.scene, this.camera, this.tier );
-		// Compiling the complete city here can occupy either backend for minutes.
-		// Streamed floors are different: one small, detached band can compile while
-		// it is still 70 m away, before walking makes it visible.
 		this.floorWarmup = prepareInteriorStreaming(
-			this.stream, this.renderer, this.scene, this.camera, this.look.mrt
+			this.stream, this.renderer, this.scene, this.camera, this.look.mrt, this.look.renderTarget
 		);
-
 		this.view.step( 'baking the environment' );
 		this.probe?.bake( spawn.point );
+		await this.floorWarmup.warmAll( this.scene, {
+			onProgress: ( done, total ) => this.view.step( `preparing city surfaces ${done} / ${total}` )
+		} );
+
 		this.interactor = new Interactor( {
 			crowd: this.crowd, doors: city.doors, sim: this.sim,
 			controller: this.controller, elevators: this.elevators, quests: this.questGameplay,
@@ -474,6 +474,8 @@ export class GameApp {
 			`/materials/${THEME}`,
 			'/models/quaternius'
 		] );
+		this.view.step( 'preparing the first frame' );
+		this.look.render();
 		this.view.setPaused( true );
 		this.view.ready();
 		this.playStartedAt = performance.now();
@@ -1199,9 +1201,9 @@ export class GameApp {
 }
 
 /** Keeps streamed floor compilation off the first frame that can draw it. */
-export function prepareInteriorStreaming( stream, renderer, scene, camera, mrt ) {
+export function prepareInteriorStreaming( stream, renderer, scene, camera, mrt, renderTarget = null ) {
 
-	const warmup = new Warmup( renderer, scene, camera, mrt );
+	const warmup = new Warmup( renderer, scene, camera, mrt, renderTarget );
 	stream.warmup = warmup;
 
 	return warmup;
