@@ -14,7 +14,7 @@ Purpose: decides how a frame is exposed, coloured and composed, so a city lit in
 - `NightFog(scene, { density, color })`: installs the fog node, height fog outdoors and a thin uniform medium indoors; `update(air, indoor, delta)` retints it from the light actually filling the air and crosses between the two media.
 - `EnvironmentProbe(renderer, scene, tier)`: `bake(position)` and `update(position, crossed)`, the cubemap wet ground and glass reflect. Rebakes on distance, on crossing a threshold, and never twice within two seconds.
 - `LookPipeline(renderer, scene, camera, tier)`: `render()` draws one frame through the chain; `mrt` is the scene pass's multiple render target, or `null` at a tier with no bloom.
-- `Warmup(renderer, scene, camera, mrt)`: `warm(object)` builds the object's pipelines, waits for its maps to decode, and uploads each new map once with a frame yield between uploads. `warmAll(object)` runs that preparation one renderable at a time and yields after every eight. Hidden and frustum-culled objects, including empty instance batches, are staged and left exactly as they were; inactive light objects stay inactive so the fixed budget is never exceeded.
+- `Warmup(renderer, scene, camera, mrt)`: `warm(object)` waits for its maps to decode and uploads each new map once before compiling its pipelines. Each upload yields a frame. `warmAll(object, {wanted?})` prepares one renderable at a time with a frame yield between them; the optional boolean callback cancels before the next renderable. Both return elapsed milliseconds. Hidden and frustum-culled objects, including empty instance batches, are staged only during compilation and restored exactly; inactive lights stay inactive.
 
 ## The chain
 Scene pass with a two-attachment MRT (`output`, `emissive`) -> bloom fed by the emissive attachment -> output colour transform (AgX at the run's exposure) -> ordered dither. Everything before the transform is linear HDR, so the tone response is applied once, last.
@@ -37,7 +37,7 @@ Scene pass with a two-attachment MRT (`output`, `emissive`) -> bloom fed by the 
 | saturation at Y>0.5 | 0.27-0.71 | 0.05-0.73 |
 
 ## Errors
-None thrown. An unknown quality name falls back to the backend's default.
+`warmAll` rejects failed map or pipeline preparation after restoring render state; its caller controls floor admission. Optional `warm` preparation reports failures as warnings. An unknown quality name falls back to the backend's default.
 
 ## Depends on
 - ../light/CONTRACT.md for the air colour the fog reads

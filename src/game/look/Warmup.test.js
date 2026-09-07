@@ -9,7 +9,7 @@ import { Warmup } from './Warmup.js';
  * culled ones are exactly the ones worth warming), it has to compile against
  * the scene the object will be lit by and the outputs the frame writes, it has
  * to leave the tree untouched afterwards, and it must never take the run down
- * with it.
+	 * with it when preparation is optional.
  */
 describe( 'Warmup', () => {
 
@@ -180,6 +180,21 @@ describe( 'Warmup', () => {
 
 	} );
 
+	it( 'rejects required preparation on the first failed compile after restoring the render state', async () => {
+
+		const { root, hidden, mesh } = tree();
+		const compileAsync = vi.fn( async () => { throw new Error( 'pipeline failed' ); } );
+		const renderer = fakeRenderer( compileAsync );
+		root.add( new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial() ) );
+		await expect( new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera() ).warmAll( root ) )
+			.rejects.toThrow( 'pipeline failed' );
+		expect( compileAsync ).toHaveBeenCalledTimes( 1 );
+		expect( hidden.visible ).toBe( false );
+		expect( mesh.frustumCulled ).toBe( true );
+		expect( renderer.mrt ).toBe( 'frame' );
+
+	} );
+
 	it( 'waits for streamed maps and uploads each shared texture once', async () => {
 
 		let ready;
@@ -191,7 +206,11 @@ describe( 'Warmup', () => {
 			new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial( { map: texture } ) ),
 			new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial( { map: texture } ) )
 		);
-		const renderer = fakeRenderer( async () => {} );
+		const renderer = fakeRenderer( async () => {
+
+			expect( renderer.initTexture ).toHaveBeenCalledWith( texture );
+
+		} );
 		renderer.initTexture = vi.fn();
 		const warmup = new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera() );
 		const pending = warmup.warm( root );
@@ -204,6 +223,28 @@ describe( 'Warmup', () => {
 
 		expect( renderer.initTexture ).toHaveBeenCalledTimes( 1 );
 		expect( renderer.initTexture ).toHaveBeenCalledWith( texture );
+
+	} );
+
+	it( 'lets frames run between renderables and stops preparing an unwanted floor', async () => {
+
+		const root = new THREE.Group();
+		for ( let i = 0; i < 10; i ++ ) root.add( new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial() ) );
+		let frame = 0;
+		const compiledAt = [];
+		vi.stubGlobal( 'requestAnimationFrame', callback => setTimeout( () => callback( ++ frame * 16 ), 0 ) );
+		const renderer = fakeRenderer( async () => { compiledAt.push( frame ); } );
+		try {
+
+			await new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera() ).warmAll( root, { wanted: () => frame < 2 } );
+			expect( compiledAt ).toEqual( [ 0, 1 ] );
+
+		} finally {
+
+			vi.unstubAllGlobals();
+			root.traverse( node => { node.geometry?.dispose(); node.material?.dispose(); } );
+
+		}
 
 	} );
 

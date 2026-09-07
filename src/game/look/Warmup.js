@@ -28,30 +28,44 @@ export class Warmup {
 	async warm( object ) {
 
 		if ( ! object || ! this.renderer?.compileAsync ) return 0;
-
 		const started = performance.now();
-		const shown = stage( object );
-		const previous = this.renderer.getMRT?.() ?? null;
-
 		try {
 
-			this.renderer.setMRT?.( this.mrt );
-			await this.renderer.compileAsync( object, this.camera, this.scene );
-			await this.#upload( object );
+			await this.#prepare( object );
 
 		} catch ( error ) {
 
-			// A warm-up that fails costs a stutter later, never the run.
 			console.warn( `warmup: ${error?.message ?? error}` );
+
+		}
+		return performance.now() - started;
+
+	}
+
+	async #prepare( object ) {
+
+		if ( ! object || ! this.renderer?.compileAsync ) return;
+		let shown = null;
+		let previous;
+
+		try {
+
+			await this.#upload( object );
+			shown = stage( object );
+			previous = this.renderer.getMRT?.() ?? null;
+			this.renderer.setMRT?.( this.mrt );
+			await this.renderer.compileAsync( object, this.camera, this.scene );
 
 		} finally {
 
-			this.renderer.setMRT?.( previous );
-			restore( shown );
+			if ( shown ) {
+
+				this.renderer.setMRT?.( previous );
+				restore( shown );
+
+			}
 
 		}
-
-		return performance.now() - started;
 
 	}
 
@@ -68,7 +82,7 @@ export class Warmup {
 			await texture[ Symbol.for( 'urbe.texture-ready' ) ];
 			this.renderer.initTexture( texture );
 			this.uploaded.add( texture );
-			if ( index + 1 < textures.length ) await frameYield();
+			await frameYield();
 
 		}
 
@@ -78,7 +92,7 @@ export class Warmup {
 	 * Warms one renderable at a time so the backend never receives an unbounded
 	 * set of programs in one compile request.
 	 */
-	async warmAll( object ) {
+	async warmAll( object, { wanted = () => true } = {} ) {
 
 		if ( ! object ) return 0;
 		const renderables = [];
@@ -87,8 +101,9 @@ export class Warmup {
 
 		for ( let index = 0; index < renderables.length; index ++ ) {
 
-			await this.warm( renderables[ index ] );
-			if ( ( index + 1 ) % 8 === 0 ) await taskYield();
+			if ( ! wanted() ) break;
+			await this.#prepare( renderables[ index ] );
+			if ( index + 1 < renderables.length ) await frameYield();
 
 		}
 
@@ -130,12 +145,6 @@ function restore( shown ) {
 		if ( instanceCount !== undefined ) node.geometry.instanceCount = instanceCount;
 
 	}
-
-}
-
-function taskYield() {
-
-	return new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
 
 }
 
