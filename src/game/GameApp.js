@@ -30,6 +30,7 @@ import { Elevators } from './city/Elevators.js';
 import { Neon } from './city/Neon.js';
 import { StreetLamps } from './city/StreetLamps.js';
 import { Dressing } from './props/Dressing.js';
+import { DressingObstacles } from './DressingObstacles.js';
 import { StreetMarkings } from './city/StreetMarkings.js';
 import { LitWindows } from './city/LitWindows.js';
 import { RoomView } from './city/RoomView.js';
@@ -233,7 +234,9 @@ export class GameApp {
 		const neon = new Neon( atlas, buildings, factory ).build();
 		const lamps = new StreetLamps( atlas, factory, connections.networks.walk ).build();
 		const links = new Links( connections, factory, rooftopSpans ).build();
-		const props = new Dressing( atlas, connections.networks.walk, factory ).build();
+		const props = await new Dressing( atlas, connections.networks.walk, factory, {
+			obstacles: DressingObstacles.fromPosts( lamps.posts )
+		} ).build();
 		this.transit = new Transit( { atlas, networks: connections.networks, factory } );
 		this.windowRooms = new LitWindows( atlas, buildings, factory );
 		this.scene.add(
