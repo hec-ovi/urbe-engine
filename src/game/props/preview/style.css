@@ -1,0 +1,10 @@
+* { box-sizing: border-box; }
+body { margin: 0; background: #182127; color: #e3e4db; font: 14px system-ui, sans-serif; }
+#stage { position: fixed; inset: 0; }
+canvas { display: block; width: 100%; height: 100%; }
+aside { position: fixed; top: 20px; left: 20px; width: 300px; padding: 20px; background: #172025f0; border: 1px solid #46525a; }
+h1 { font-size: 22px; font-weight: 500; margin: 0 0 20px; }
+label { display: grid; grid-template-columns: 52px 1fr; align-items: center; margin-bottom: 12px; }
+select { min-width: 0; padding: 8px; color: inherit; background: #222f35; border: 1px solid #59666b; font: inherit; }
+p { color: #b0b8b7; line-height: 1.5; }
+output { display: block; padding-top: 12px; border-top: 1px solid #46525a; line-height: 1.5; }

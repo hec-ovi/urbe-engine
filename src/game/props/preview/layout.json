@@ -1,0 +1,8 @@
+{
+  "title":"Street details",
+  "hint":"Drag to orbit. Scroll to move closer.",
+  "fields":[
+    {"id":"scene","label":"View","options":[{"value":"gallery","label":"All models"},{"value":"arrangements","label":"Special-place arrangements"}]},
+    {"id":"light","label":"Light","options":[{"value":"day","label":"Daylight"},{"value":"night","label":"Night"}]}
+  ]
+}

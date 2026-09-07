@@ -18,7 +18,7 @@
     - Door loading retains named closed-pose leaves, applies authored pocket or swing motion, and reports unsupported fixed mechanisms; Physics consumes the resulting complete poses.
   - `links/`: bridges, AC tubes, tunnels and street wires from Connections' link document, plus post-exterior rooftop antenna spans, merged by material; aperture links are sliced onto their exact carved openings (src/game/links/CONTRACT.md)
   - `transit/`: bus stop shelters and signs, buses driven by the timetables' closed-form vehicle positions, station entrances and the shaft, passage and platform room behind each one; both maps project the enabled Connections routes and their served stops or entrances (src/game/transit/CONTRACT.md)
-  - `props/`: seeded alley and service-corner dressing, bags, crates and boxes, clear of doorways and walk lines (src/game/props/CONTRACT.md)
+  - `props/`: seeded refuse and delivery arrangements, full-size service containers and imported trees on authored land; catalog, arrangement, option and result schemas in src/game/props/CONTRACT.md. Depends on Atlas, Connections, Ground and Materials
   - `light/`: fixture power in lumens, backend light pools, room fill and air glow (src/game/light/CONTRACT.md); play uses one fixed night grade independently of the simulation clock.
   - `look/`: quality tiers with explicit texture budgets, AgX exposure, height fog tinted by the light in the air, environment probe, the render pipeline with emissive-selected bloom, and serial warm-up that builds pipelines and maps before a frame can stall on them (src/game/look/CONTRACT.md)
   - `sky/`: night sky, moon key, stars

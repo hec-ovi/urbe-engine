@@ -1,0 +1,12 @@
+{
+  "$schema":"http://json-schema.org/draft-07/schema#",
+  "type":"object","required":["group","counts","colliders","placements","dispose"],
+  "properties":{
+    "group":{"type":"object","required":["name","children"],"properties":{"name":{"const":"props"},"children":{"type":"array"}}},
+    "counts":{"type":"object","required":["total","box","crate","pallet","litter","bag","dumpster","container","tree"],"additionalProperties":{"type":"integer","minimum":0}},
+    "colliders":{"description":"Map<string, BufferGeometry>, position-only nonindexed triangles"},
+    "dispose":{"description":"Idempotent function releasing owned GPU resources"},
+    "placements":{"type":"array","items":{"type":"object","required":["id","arrangement","model","kind","matrix","color","footprint","support","lowFootprint","bottom","top"],"properties":{"id":{"type":"string"},"arrangement":{"type":"string"},"model":{"type":"string"},"kind":{"type":"string"},"matrix":{"type":"object","required":["elements"],"properties":{"elements":{"type":"array","minItems":16,"maxItems":16,"items":{"type":"number"}}}},"color":{"type":"string"},"footprint":{"$ref":"#/$defs/ring"},"support":{"$ref":"#/$defs/ring"},"lowFootprint":{"$ref":"#/$defs/ring"},"bottom":{"type":"number"},"top":{"type":"number"}}}}
+  },
+  "$defs":{"ring":{"type":"array","minItems":4,"items":{"type":"array","minItems":2,"maxItems":2,"items":{"type":"number"}}}}
+}

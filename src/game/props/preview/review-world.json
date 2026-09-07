@@ -1,0 +1,94 @@
+{
+  "meta": {
+    "seed": "service-review-0"
+  },
+  "districts": [
+    {
+      "id": "d1",
+      "kind": "industrial"
+    }
+  ],
+  "parcels": [
+    {
+      "id": "p1",
+      "districtId": "d1",
+      "type": "factory",
+      "footprint": [
+        [
+          20,
+          20
+        ],
+        [
+          80,
+          20
+        ],
+        [
+          80,
+          60
+        ],
+        [
+          20,
+          60
+        ]
+      ],
+      "access": {
+        "point": [
+          50,
+          20
+        ]
+      }
+    }
+  ],
+  "streets": {
+    "edges": [],
+    "planting": [
+      {
+        "edgeId": "e1",
+        "kind": "tree",
+        "position": [
+          -10,
+          15
+        ]
+      },
+      {
+        "edgeId": "e1",
+        "kind": "tree",
+        "position": [
+          -10,
+          35
+        ]
+      }
+    ],
+    "highwayStructures": []
+  },
+  "transit": {
+    "subwayStations": []
+  },
+  "volumetric": {
+    "ground": [
+      {
+        "polygon": [
+          [
+            -40,
+            -20
+          ],
+          [
+            110,
+            -20
+          ],
+          [
+            110,
+            90
+          ],
+          [
+            -40,
+            90
+          ]
+        ],
+        "surface": "open",
+        "bottom": 0,
+        "top": 0.2
+      }
+    ]
+  }
+}

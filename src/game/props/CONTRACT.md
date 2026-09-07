@@ -1,37 +1,36 @@
-# CONTRACT: props (game inner box)
+# Street props
 
-Purpose: dresses the city with the things a real one leaves against a wall, down the alleys and around the backs of the blocks, in three instanced draws however much of it there is.
+Takes authored city land and models, returns sparse street arrangements and tree instances.
 
-## In
-- Atlas blueprint per ../../../../atlas/CONTRACT.md. Read: `streets.edges` (an `alley` is pedestrian ground between two blocks, carriageway 0), `parcels` (`footprint` counter-clockwise, `access.point` for the street door), `meta.seed`.
-- `networks.walk` per ../../../../connections/CONTRACT.md: the authoritative walkable segments, which is what nothing may stand on.
-- A material factory (../../../CONTRACT.md): `build(key, variantId)`.
+## Input
 
-## Out
-- `Dressing(atlas, walk, factory).build() -> { group, colliders, counts }`
-  - `group`: named `props`, one `InstancedMesh` per model (`props:bag`, `props:crate`, `props:box`), each the whole city's worth of that model.
-  - `colliders`: a `Map` holding one merged position-only `BufferGeometry` under `props`, which is the shape `physics/WorldColliders.addShells` takes. Crates and boxes only.
-  - `counts`: `{ total, bag, crate, box }`.
+- `await new Dressing(atlas, walk, factory, options?).build()`.
+- Atlas [blueprint](../../../../atlas/schema/blueprint.ts): parcels, streets, planting, ground cover and station reservations.
+- Connections [walk graph](../../../../connections/schemas/networks.schema.json): full widths and elevated `path3`.
+- Materials [factory](../../building/CONTRACT.md): `build(key, variantId)`.
+- [Options](options.schema.json): optional `loadAsset(url) -> Promise<{scene}>` replaces GLTFLoader transport; `obstacles: [{footprint,bottom,top}]` reserves already-built fixture volumes.
+- [Catalog](catalog.json), [schema](catalog.schema.json): model sources, metre dimensions and materials. [Arrangements](arrangements.json), [schema](arrangements.schema.json): site frequency and supported delivery/refuse slots.
 
-## What stands where
-- **Alleys**: piles of one to four bin bags against one wall, sides alternating down the alley.
-- **Gaps**: where two buildings' facades face each other closer than 7 m, bags or crates against one of them.
-- **Service corners**: the corners of a block more than 14 m from its own street door, where the deliveries stack: one to three crates squared up to the wall, with a box or two beside them.
+## Output
 
-Models: a bin bag (a lumpy sack about 0.5 m), a wooden crate (0.6 m), a moulded plastic box (0.5 x 0.45 m). Bags and boxes wear `cyberpunk/plastic/poor` in its `bag` variant, crates `cyberpunk/wood/poor`.
+[Result schema](result.schema.json) describes counts, placements and scene identities. `group` contains instanced material parts in 64 m cells. `colliders` is a Map of position-only triangle geometry for solid props and tree trunks. `dispose()` releases owned geometry, imported textures and material clones, retaining factory resources.
 
-## Invariants
-- Deterministic: the same atlas dresses identically on every run, off one seeded stream taken from `meta.seed`.
-- Nothing blocks anything. No prop stands inside a building footprint, within 3.5 m of a parcel's street access point, or within 1.1 m of a walk-graph edge, and two piles never stand within 2.8 m of each other.
-- Everything stands on the pavement, at y = 0.12 (`ground/GroundBuilder.js`).
-- Three draw calls for the city, whatever the count: one instanced mesh per model, instanced across the whole world.
-- Crates and boxes are solid and publish a collider. A bag does not: a sack of rubbish gives way, and a collider on one would turn a pile of it into a wall the player is stopped by.
-- Geometry UVs are metres in model space, which is what the tiled material entries expect. An instanced prop is drawn from its own geometry at every one of its positions, so model metres are the only metres its UVs can carry.
+Cardboard cartons have folded flaps and tape; wooden crates have separate boards and braces. Downloaded bags, dumpsters and containers retain their authored geometry. Container variants have physical ribs, framing and door hardware. Carton tape and label details share one vertex-colored material part. Trees use Atlas tree anchors, with measured crown bounds and trunk collision.
 
-## Errors
-None thrown. A city with no alleys, no gaps and no service corners dresses to an empty group and an empty collider map.
+## Placement
 
-## Depends on
-- ../../../../atlas/CONTRACT.md and ../../../../connections/CONTRACT.md for the world it reads
-- ../../../CONTRACT.md for a key's material
-- ../city/StreetLamps.js for `samplePath`, ../ground/Polygons.js for ring geometry, ../ground/GroundBuilder.js for the pavement height, ../../city/Rng.js for the seeded stream
+The seed selects refuse, delivery and service-yard arrangements. Whole footprints must fit equal-height authored land, clear buildings, door aprons, street fixtures, walk widths and station reservations. Large containers require block/open land and are never shrunk to fit. A failed arrangement is omitted atomically. Trees reserve their trunk at ground level and their crown against buildings; low foliage also clears pedestrian paths. Draw count depends on occupied cells, geometry variants and material parts, never one mesh per item.
+
+Missing or malformed model assets throw `E_PROP_ASSET` with the URL. Missing authored support admits no decoration. Unknown planting kinds are skipped. Same inputs give the same placements.
+
+## Review
+
+[Review page](preview/CONTRACT.md): `/src/game/props/preview/` shows every model and authored service pockets in daylight or night.
+
+## Assets
+
+`node src/game/props/install.mjs --source <downloads>` installs catalog GLBs under `$URBE_MODELS_DIR/street-props`; the default model root is `~/models/quaternius`. `--check` audits installed files. Source models and their embedded license metadata stay local. Native PBR sources and requests live in Materials `sources/street-props` and `batch/cyberpunk/street-props`.
+
+## Dependencies
+
+[Atlas](../../../../atlas/CONTRACT.md), [Connections](../../../../connections/CONTRACT.md), [Ground](../ground/CONTRACT.md), [Materials](../../../../materials/CONTRACT.md), [material factory](../../building/CONTRACT.md).

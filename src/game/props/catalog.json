@@ -1,0 +1,219 @@
+{
+  "assets": [
+    {
+      "id": "pine",
+      "file": "tree_3d_model_fir_spruce_pine.glb",
+      "height": 7.5
+    },
+    {
+      "id": "maple",
+      "file": "maple_tree.glb",
+      "height": 8
+    },
+    {
+      "id": "bags",
+      "file": "animal_crossing_new_horizons_trash_bags.glb",
+      "height": 0.6
+    },
+    {
+      "id": "dumpster",
+      "file": "heavy_duty_dumpster.glb",
+      "height": 1.94
+    },
+    {
+      "id": "container",
+      "file": "container_low.glb",
+      "size": [
+        2.44,
+        2.59,
+        12.19
+      ]
+    }
+  ],
+  "materials": {
+    "cardboard": {
+      "key": "cyberpunk/prop-cardboard/poor",
+      "variant": "kraft"
+    },
+    "wood": {
+      "key": "cyberpunk/prop-wood/poor",
+      "variant": "sawn"
+    },
+    "paint": {
+      "key": "cyberpunk/prop-coating/poor",
+      "variant": "worn"
+    },
+    "metal": {
+      "key": "cyberpunk/metal/poor",
+      "variant": "zinc"
+    }
+  },
+  "models": [
+    {
+      "id": "carton-small",
+      "kind": "box",
+      "shape": "carton",
+      "size": [
+        0.46,
+        0.3,
+        0.36
+      ]
+    },
+    {
+      "id": "carton-tall",
+      "kind": "box",
+      "shape": "carton",
+      "size": [
+        0.48,
+        0.62,
+        0.42
+      ]
+    },
+    {
+      "id": "carton-wide",
+      "kind": "box",
+      "shape": "carton",
+      "size": [
+        0.8,
+        0.26,
+        0.56
+      ]
+    },
+    {
+      "id": "carton-open",
+      "kind": "box",
+      "shape": "carton",
+      "size": [
+        0.58,
+        0.4,
+        0.46
+      ],
+      "open": true
+    },
+    {
+      "id": "crate-small",
+      "kind": "crate",
+      "shape": "crate",
+      "size": [
+        0.7,
+        0.56,
+        0.54
+      ]
+    },
+    {
+      "id": "crate-large",
+      "kind": "crate",
+      "shape": "crate",
+      "size": [
+        1,
+        0.72,
+        0.65
+      ]
+    },
+    {
+      "id": "pallet",
+      "kind": "pallet",
+      "shape": "pallet",
+      "size": [
+        1.2,
+        0.14,
+        0.8
+      ]
+    },
+    {
+      "id": "paper",
+      "kind": "litter",
+      "shape": "paper",
+      "size": [
+        0.28,
+        0.016,
+        0.38
+      ]
+    },
+    {
+      "id": "can",
+      "kind": "litter",
+      "shape": "can",
+      "size": [
+        0.07,
+        0.08,
+        0.13
+      ]
+    },
+    {
+      "id": "bag",
+      "kind": "bag",
+      "asset": "bags",
+      "tints": [
+        "#535e5e",
+        "#61726d",
+        "#a4a9a4"
+      ]
+    },
+    {
+      "id": "dumpster",
+      "kind": "dumpster",
+      "asset": "dumpster",
+      "tints": [
+        "#ffffff",
+        "#a4afb8",
+        "#aab8a0"
+      ]
+    },
+    {
+      "id": "cargo-40",
+      "kind": "container",
+      "asset": "container",
+      "size": [
+        2.44,
+        2.59,
+        12.19
+      ],
+      "cargo": true,
+      "tints": [
+        "#63818a",
+        "#8e654b",
+        "#73816b"
+      ]
+    },
+    {
+      "id": "cargo-20",
+      "kind": "container",
+      "asset": "container",
+      "size": [
+        2.44,
+        2.59,
+        6.06
+      ],
+      "cargo": true,
+      "tints": [
+        "#8e654b",
+        "#73816b",
+        "#63818a"
+      ]
+    },
+    {
+      "id": "pine",
+      "kind": "tree",
+      "asset": "pine",
+      "tints": [
+        "#ffffff",
+        "#dbe8dd"
+      ]
+    },
+    {
+      "id": "maple",
+      "kind": "tree",
+      "asset": "maple",
+      "tints": [
+        "#ffffff",
+        "#e5e6cf"
+      ]
+    }
+  ],
+  "detailColors": {
+    "tape": "#9f8460",
+    "label": "#e0d8c1",
+    "ink": "#293333"
+  }
+}
