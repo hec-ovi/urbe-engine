@@ -6,6 +6,7 @@ import { Highways } from './Highways.js';
 import { GroundPalette } from './GroundPalette.js';
 import { GroundRegions } from './GroundRegions.js';
 import { GroundPaving } from './GroundPaving.js';
+import { GroundModules } from './GroundModules.js';
 
 export const SIDEWALK_HEIGHT = 0.15;
 const CURB_BOTTOM = - 0.06;
@@ -59,6 +60,7 @@ export class GroundBuilder {
 
 		const regions = new GroundRegions( this.atlas );
 		const paving = new GroundPaving( regions.records );
+		const modules = new GroundModules( this.atlas );
 		const roadFinish = regions.roadwayLayout ? GroundPalette.construction( regions.roadwayLayout.familyId, 'road' ) : null;
 
 		const group = new THREE.Group();
@@ -68,7 +70,7 @@ export class GroundBuilder {
 
 		for ( const cover of this.atlas.volumetric.ground ) {
 
-			if ( cover.construction ) continue;
+			if ( cover.construction || cover.moduleBlockId !== undefined ) continue;
 
 			if ( ! SURFACES[ cover.surface ] ) continue;
 
@@ -106,7 +108,7 @@ export class GroundBuilder {
 			const merged = BufferGeometryUtils.mergeGeometries( fills, false );
 			fills.forEach( ( g ) => g.dispose() );
 
-			const material = surface === 'roadway' && roadFinish ? roadFinish : this.palette.surface( surface );
+			const material = surface === 'roadway' && roadFinish ? roadFinish : this.palette.surface( surface, modules.active );
 			const mesh = new THREE.Mesh( merged, this.factory.build( material.key, material.variantId ) );
 			mesh.name = `ground:${surface}`;
 			if ( surface === 'roadway' && roadFinish ) mesh.userData.groundConstruction = { familyId: regions.roadwayLayout.familyId, finish: 'road' };
@@ -147,17 +149,23 @@ export class GroundBuilder {
 		for ( const mesh of fitted.meshes ) group.add( mesh );
 		if ( fitted.colliderGeometry ) solid.push( fitted.colliderGeometry );
 
+		const physical = modules.build( this.factory );
+		for ( const mesh of physical.meshes ) group.add( mesh );
+		if ( physical.colliderGeometry ) solid.push( physical.colliderGeometry );
+
 		const highways = new Highways( this.atlas, this.factory ).build();
 		group.add( highways.group );
 		if ( highways.colliderGeometry ) solid.push( highways.colliderGeometry );
 
 		const bounds = ringBounds( this.atlas.volumetric.ground.map( ( g ) => g.polygon ) );
 
-		return {
-			group,
-			colliderGeometry: BufferGeometryUtils.mergeGeometries( solid.map( clean ), false ),
-			bounds
-		};
+		const copies = solid.map( clean );
+		const colliderGeometry = copies.length ? BufferGeometryUtils.mergeGeometries( copies, false ) : null;
+		copies.forEach( geometry => geometry.dispose() );
+		fitted.colliderGeometry?.dispose();
+		physical.colliderGeometry?.dispose();
+		highways.colliderGeometry?.dispose();
+		return { group, colliderGeometry, bounds };
 
 	}
 
@@ -166,11 +174,9 @@ export class GroundBuilder {
 /** A collider wants positions and nothing else, in one uniform layout. */
 function clean( geometry ) {
 
-	const flat = geometry.index ? geometry.toNonIndexed() : geometry;
 	const copy = new THREE.BufferGeometry();
-	copy.setAttribute( 'position', flat.getAttribute( 'position' ).clone() );
-
-	if ( flat !== geometry ) flat.dispose();
+	copy.setAttribute( 'position', geometry.getAttribute( 'position' ).clone() );
+	copy.setIndex( geometry.index?.clone() ?? Array.from( { length: geometry.getAttribute( 'position' ).count }, ( _, i ) => i ) );
 
 	return copy;
 
