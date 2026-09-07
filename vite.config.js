@@ -76,7 +76,7 @@ function mount( name, prefix, dir ) {
 
 }
 
-export default defineConfig( {
+export default defineConfig( ( { mode } ) => ( {
 	plugins: [
 		hitchReportPlugin( join( ROOT, 'out', 'diagnostics' ) ),
 		mount( 'serve-materials-bindings', '/materials/bindings', BINDINGS_DIR ),
@@ -94,10 +94,10 @@ export default defineConfig( {
 		fs: { allow: [ '..' ] },
 		// Assembled worlds under out/ are served, never watched: a city is
 		// thousands of files and the watcher would run out of inotify handles.
-		watch: { ignored: [ '**/out/**' ] }
+		watch: mode === 'play' ? null : { ignored: [ '**/out/**' ] }
 	},
 	build: {
 		target: 'esnext',
 		chunkSizeWarningLimit: 4000
 	}
-} );
+} ) );

@@ -6,6 +6,8 @@ Status: v0.17.16.
 
 ## Inputs
 
+- `npm run play` serves the local game with file watching disabled; restart to load completed changes. `npm run dev` enables source reloads. Both accept Vite server arguments.
+
 - World assembly consumes Atlas, Connections, Exterior, Interior, Materials, Simulation, Naming and Quests only through the contracts listed below.
 - `npm run assemble` and `npm run assemble-city` take the requests in [src/assembly/CONTRACT.md](src/assembly/CONTRACT.md) and publish [world-manifest.schema.json](src/assembly/schema/world-manifest.schema.json), including the post-exterior rooftop spans fitted by Connections.
 - A playable story is the Quests v0.8.2 handoff `quest-bundle.json` v1.1 plus its six counted catalogs and object-valued `host-capabilities.json`, validated by [src/quest-bundle/CONTRACT.md](src/quest-bundle/CONTRACT.md).

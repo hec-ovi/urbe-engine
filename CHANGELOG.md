@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.16: stable play sessions, street-facing pocket entrances, complete PBR channels with bounded texture sizes, prepared world rendering and collision admission across frames.
+
 0.17.16: NPC and car spawning default to zero for city inspection; explicit crowd and cars query values enable them per run.
 
 0.17.16: streamed interiors retain imported furniture, source PBR and unlit materials, collision geometry and oriented room lights. Floor disposal releases source maps and lighting clones.

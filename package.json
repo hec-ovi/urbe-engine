@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "play": "vite --mode play",
     "build": "vite build",
     "preview": "vite preview",
     "assemble": "tsx src/assembly/cli.js",

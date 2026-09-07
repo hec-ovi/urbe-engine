@@ -8,9 +8,11 @@ Only generated data is rendered. No placeholder geometry, no invented population
 
 ```
 npm install
-npm run dev -- --port 5306
+npm run play -- --port 5306
 npm test
 ```
+
+`npm run play` keeps the current session stable while source files change. Restart it to apply completed changes. `npm run dev` enables automatic reloads for development.
 
 Open [http://localhost:5306/](http://localhost:5306/). The front door keeps generated cities and playable games in separate libraries. New Game starts with Small, Medium or Big, then Next generates the city streets and building exteriors. Names and seeds are automatic. Play without quests enters a saved free-play game immediately. Interiors and the built-in story with up to three side jobs are optional; automatic interior selection uses nine locations. Play opens the new game directly.
 
@@ -73,7 +75,7 @@ The output directory matches the blueprint it was built from: assembly removes p
 - **The look** is AgX tone response at one authored exposure, dropping 1.6 stops when you step into a room and coming back over 0.6 s. Height fog carries the colour of the light actually filling the air, so a street under sodium lamps reads warm and its shadows are never black. An environment probe baked from the city at your position is what wet ground and glass reflect on medium through ultra. Bloom is fed by the emissive channel, so tubes, lenses and lit windows glow and the walls they light do not. Low disables the probe and bloom, keeps base colour, normal and emission maps, and holds pattern families to two variants; higher tiers add texture channels and variety.
 - **People** come from Simulation, with persistent identity, appearance and routines. Pedestrians follow Connections' 3D paths at 1.4 m/s and wait at signalled crossings. The crowd uses the original regular Source bodies, eyes, eyebrows and hair, with smooth animated normals and seeded clothing colours. Pro motion preserves each body's bone lengths. Dialogue and measured impacts keep the same body and hairstyle when loading its full rig. Two baked body and hair pairs keep the crowd at four draw calls; maps are downscaled for the crowd.
 - **Cars** drive each lane's 3D path at its posted speed, carry lane elevation and body pitch over ramps, hold at a red, then drive the turn connection's 3D curve through the intersection onto the next lane, keeping a following gap.
-- **Movement** is a Rapier capsule with a kinematic character controller: pointer-lock mouse look, WASD at 1.4 m/s and 4 m/s on shift, eye height 1.7 m, autostep that makes curbs and interior stairs walkable. Building shells are trimeshes carrying their real door and window openings; each moving leaf uses its rendered triangles as a hinged kinematic collider, blocking the capsule while closed and clearing the opening while open. Lamp posts are thin cylinders you bump into. An interior floor band becomes solid when the stream puts it in the scene and stops being solid when it takes it out, so what you can walk on is exactly what you can see.
+- **Movement** is a Rapier capsule with a kinematic character controller: pointer-lock mouse look, WASD at 1.4 m/s and 4 m/s on shift, eye height 1.7 m, autostep that makes curbs and interior stairs walkable. Building shells are trimeshes carrying their real door and window openings; each moving leaf uses its rendered triangles as a kinematic collider following its authored pocket or swing travel, blocking the capsule while closed and clearing the opening while open. Lamp posts are thin cylinders you bump into. An interior floor band becomes solid when the stream puts it in the scene and stops being solid when it takes it out, so what you can walk on is exactly what you can see.
 - **HUD**: clock and district, interact prompt, position readout, an about line naming every loaded path, the NPC panel, a minimap, an orbiting full map (M), an inventory grid (I), a pause menu and a live performance readout with frame time, GPU milliseconds, draw calls, lit fixtures, live interiors and the tier in force.
 
 Character, animation and vehicle packs are CC0 assets kept in a model store outside the repo, served from `URBE_MODELS_DIR`. Blueprints come from the sibling atlas directory, or from `URBE_ATLAS_DIR`.
