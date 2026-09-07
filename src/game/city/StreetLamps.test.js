@@ -1,21 +1,21 @@
-import fs from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { runConnections } from '../../assembly/connectionsRunner.js';
+import Ajv from 'ajv/dist/2020.js';
+import networkSchema from '../../../../connections/schemas/networks.schema.json' with { type: 'json' };
 import { pointInRing } from '../ground/Polygons.js';
 import { kelvinColor } from '../light/Color.js';
 import { BODY_RADIUS } from '../physics/PlayerBody.js';
 import { StreetLamps, WALL_LUMENS, streetLampAssembly } from './StreetLamps.js';
+import { streetLampFixture } from './fixtures/street-lamps.js';
 
-const SAMPLE = new URL( '../../../../atlas/samples/city-urbe-small.json', import.meta.url );
 const MIN_GAP = 6;
 const factory = { build: () => null, variant: () => null };
 
 /**
  * The promise is coverage: a player walking the city is never on a stretch that
  * no fixture reaches, and the fixtures that make that true hang on real walls.
- * The city itself is the only fair test of it, so this runs against the small
- * sample blueprint and its real walk graph.
+ * Authored streets and walk routes exercise coverage, mounting and clearance
+ * without generating another box's topology.
  */
 describe( 'StreetLamps', () => {
 
@@ -23,10 +23,11 @@ describe( 'StreetLamps', () => {
 	let lamps;
 	let walk;
 
-	beforeAll( async () => {
+	beforeAll( () => {
 
-		atlas = JSON.parse( fs.readFileSync( SAMPLE, 'utf8' ) );
-		walk = ( await runConnections( atlas, { seed: atlas.meta.seed } ) ).networks.walk;
+		( { atlas, walk } = streetLampFixture() );
+		const ajv = new Ajv();
+		expect( ajv.validate( { ...networkSchema.properties.walk, $defs: networkSchema.$defs }, walk ), JSON.stringify( ajv.errors ) ).toBe( true );
 		lamps = new StreetLamps( atlas, factory, walk ).build();
 
 	} );
