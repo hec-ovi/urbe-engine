@@ -12,7 +12,7 @@ npm run dev -- --port 5306
 npm test
 ```
 
-Open [http://localhost:5306/](http://localhost:5306/). The front door keeps generated cities and playable games in separate libraries. New Game runs four stages: city shells, selected interiors, the main quest plus up to three side jobs, then the saved game. Automatic creation uses nine interiors. Manual creation furnishes only the buildings selected in stage 2.
+Open [http://localhost:5306/](http://localhost:5306/). The front door keeps generated cities and playable games in separate libraries. New Game starts with Small, Medium or Big, then Next generates the city streets and building exteriors. Names and seeds are automatic. Play without quests enters a saved free-play game immediately. Interiors and the built-in story with up to three side jobs are optional; automatic interior selection uses nine locations. Play opens the new game directly.
 
 Catalog games open directly with `/?mode=game&game=<id>`. A catalog game loads its own city, interiors, quests, player position, inventory and discovered locations from `out/games/<id>`, then saves the current state before returning to the launcher. A city remains a shell-only artifact under `out/cities/<id>`.
 
@@ -44,7 +44,7 @@ The quest compiler runs as a worker and has no browser port.
 
 ## Assembly
 
-`assemble-city` runs the movement/link layer once over the blueprint, then generates every exterior shell in parallel. After the shells exist, it sends their published mast attachments plus building, roof-access and equipment prisms through Connections' rooftop cable fitter. Its direct CLI default furnishes five buildings referenced by carried questlines; `--interiors N` changes that count. The staged game creator uses nine so the ten-step main quest and three side jobs have every required location. The other buildings stay closed shells. A QA report separates shell failures from interior candidates that stayed closed. Interiors are requested in `keys` texture mode, so the runtime resolves materials itself. Each furnished interior is written per floor (`interior/floors/<tag>.glb` beside each floor JSON), which is what the game streams.
+`assemble-city` runs the movement/link layer once over the blueprint, then generates every exterior shell in parallel. After the shells exist, it sends their published mast attachments plus building, roof-access and equipment prisms through Connections' rooftop cable fitter. Its direct CLI default furnishes five buildings referenced by carried questlines; `--interiors N` changes that count. Optional automatic interior creation uses nine so the ten-step main quest and three side jobs have every required location. Free play can use the city exteriors alone. The other buildings stay closed shells. A QA report separates shell failures from interior candidates that stayed closed. Interiors are requested in `keys` texture mode, so the runtime resolves materials itself. Each furnished interior is written per floor (`interior/floors/<tag>.glb` beside each floor JSON), which is what the game streams.
 
 Venue parcels (hotel, coffee shop, market, clinic, police, diner) ask exterior for a lettered marquee saying what the place is, until the naming pass gives it a name. Everything else gets no sign, because a blank one is worse than none.
 

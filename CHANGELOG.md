@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.16: size templates create named cities; free play supports optional interiors, direct launch and independent saved playthroughs.
+
 0.17.16: development preview serves Materials binding documents alongside theme assets.
 
 0.17.16: unbounded safety ground catches falls beyond city limits while preserving basement, tunnel and water depths.

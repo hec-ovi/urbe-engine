@@ -17,7 +17,7 @@ Status: v0.17.16.
 ## Outputs
 
 - Development preview serves Materials-owned binding JSON at `/materials/bindings/<name>.json` and theme data/maps at `/materials/<theme>/...`, read-only with current file bytes and no browser cache.
-- `/` is the launcher for separate generated-city and saved-game catalogs. Creation runs city shells, selected interiors, the selected quest bundle and the final game as four validated stages.
+- `/` is the launcher for separate generated-city and saved-game catalogs. Creation selects a Small, Medium or Big template and generates city shells. Free play creates and opens a saved game immediately; interiors and quests are optional validated stages.
 - `?mode=game` plays the assembled city through [src/game/CONTRACT.md](src/game/CONTRACT.md), including revisioned saves, library discovery, world queries, objective guidance, authored investigations and all 16 quest action kinds.
 - The seven measured quest hosts are assassination by fatal Rapier vehicle impact, fixed-asset rescue, escort follow or lead arrival, fixed access, fixed hacking, fixed sabotage and a verified public-transit journey. Each keeps its authored quest, step, actor, target, place and asset identities.
 - `?mode=city&out=/out/<world>` shows each manifest parcel and opens its building viewer. `?mode=building&parcel=<id>&out=/out/<world>[&source=interior]` shows the exterior or furnished interior and can request a missing build. It preserves the GLB's authored two-sided surfaces while replacing material keys. Its source state is loading, ready, unavailable or failed with retry and exterior recovery actions; a viewport click captures the camera, Escape releases it, and source and floor controls remain usable while released.
@@ -34,7 +34,7 @@ Status: v0.17.16.
 - Shared PBR material resolution preserves fitted decal basecolor alpha, clamped UVs and depth testing without depth writes. Facade grime embeds its opacity in basecolor; it uses that alpha once.
 
 - Generated data and contracted external model assets are authoritative. Engine does not invent parcels, population, story targets, materials or fallback geometry. Closed shells may carry decorative room bays fitted to their published windows and floor outlines; these have no gameplay or collision role.
-- A catalog game and every save revision remain tied to one validated city, quest bundle, simulation replay and player state.
+- A catalog game and every save revision remain tied to one validated city, optional quest bundle, simulation replay and player state.
 - WebGPU is the default renderer. WebGL2 uses the same world and gameplay data through its documented quality fallback.
 
 ## Dependencies
