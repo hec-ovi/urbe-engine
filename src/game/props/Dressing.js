@@ -5,6 +5,8 @@ import { PropModels } from './PropModels.js';
 import { Sites } from './Sites.js';
 import { Clearance } from './Clearance.js';
 import { Arrangements } from './Arrangements.js';
+import { AuthoredRails } from './AuthoredRails.js';
+import { seedOf } from './Placement.js';
 
 /** Public street-dressing entry. Whole arrangements are admitted before batching. */
 export class Dressing {
@@ -13,7 +15,8 @@ export class Dressing {
 		const models = await new PropModels( this.factory, this.options.loadAsset ).load();
 		try {
 			const clearance = new Clearance( this.atlas, this.walk, this.options.obstacles ), arrange = new Arrangements( models );
-			const placements = [];
+			const placements = new AuthoredRails( this.atlas, models ).build();
+			for ( const rail of placements ) clearance.block( rail.footprint, rail.bottom, rail.top, 0.12 );
 			for ( const site of new Sites( this.atlas ).all() ) {
 				const items = arrange.at( site, new Rng( seedOf( `${this.atlas.meta.seed}:${site.id}` ) ) );
 				if ( ! items.length ) continue;
@@ -28,19 +31,19 @@ export class Dressing {
 
 function assemble( models, placements ) {
 	const group = new THREE.Group(); group.name = 'props';
-	const batches = new Map(), counts = { total: placements.length }, solids = [];
+	const batches = new Map(), counts = { total: placements.length, guardrail: 0 }, solids = [];
 	for ( const spec of models.models.values() ) counts[ spec.kind ] = 0;
 	for ( const item of placements ) {
 		const model = models.get( item.model ), position = new THREE.Vector3().setFromMatrixPosition( item.matrix );
 		counts[ item.kind ] ++;
-		const key = `${item.model}:${Math.floor( position.x / 64 )}:${Math.floor( position.z / 64 )}`;
+		const key = `${item.model}:${item.finish}:${Math.floor( position.x / 64 )}:${Math.floor( position.z / 64 )}`;
 		if ( ! batches.has( key ) ) batches.set( key, [] );
 		batches.get( key ).push( item );
 		if ( model.collider ) solids.push( model.collider.clone().applyMatrix4( item.matrix ) );
 	}
 	for ( const [ key, items ] of batches ) {
 		const model = models.get( items[ 0 ].model );
-		model.parts.forEach( ( part, partIndex ) => {
+		model.appearances.get( items[ 0 ].finish ).forEach( ( part, partIndex ) => {
 			const mesh = new THREE.InstancedMesh( part.geometry, part.material, items.length );
 			mesh.name = `props:${key}:${partIndex}`; mesh.castShadow = mesh.receiveShadow = true;
 			items.forEach( ( item, i ) => { mesh.setMatrixAt( i, item.matrix ); if ( part.tintable ) mesh.setColorAt( i, new THREE.Color( item.color ) ); } );
@@ -58,9 +61,4 @@ function assemble( models, placements ) {
 		group.traverse( object => { if ( object.isInstancedMesh ) object.dispose(); } ); group.clear();
 		for ( const geometry of colliders.values() ) geometry.dispose(); colliders.clear(); models.dispose();
 	} };
-}
-function seedOf( seed ) {
-	let hash = 2166136261;
-	for ( const char of seed ) hash = Math.imul( hash ^ char.charCodeAt( 0 ), 16777619 );
-	return hash >>> 0;
 }

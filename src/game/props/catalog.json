@@ -305,6 +305,70 @@
         "#a6afa8",
         "#9ba5b2"
       ]
+    },
+    {
+      "id": "relay-cabinet",
+      "kind": "ornament",
+      "shape": "cabinet",
+      "size": [
+        0.68,
+        1.36,
+        0.38
+      ],
+      "open": false,
+      "tints": [
+        "#8d9692",
+        "#667574",
+        "#948577"
+      ]
+    },
+    {
+      "id": "pump-cabinet",
+      "kind": "ornament",
+      "shape": "cabinet",
+      "size": [
+        0.91,
+        0.92,
+        0.5
+      ],
+      "open": true,
+      "tints": [
+        "#566b69",
+        "#8a785d",
+        "#797f89"
+      ]
+    },
+    {
+      "id": "bench-repaired",
+      "kind": "ornament",
+      "shape": "bench",
+      "size": [
+        1.72,
+        0.88,
+        0.5
+      ],
+      "open": true,
+      "tints": [
+        "#9a9689",
+        "#718582",
+        "#7c818b"
+      ]
+    },
+    {
+      "id": "memorial-shrine",
+      "kind": "ornament",
+      "shape": "memorial",
+      "size": [
+        0.58,
+        0.86,
+        0.43
+      ],
+      "open": false,
+      "tints": [
+        "#7e8786",
+        "#8c8777",
+        "#8e979a"
+      ]
     }
   ],
   "detailColors": {
@@ -313,5 +377,40 @@
     "ink": "#293333",
     "warning": "#807253",
     "seal": "#242b2b"
-  }
+  },
+  "finishes": [
+    {
+      "id": "worn",
+      "offset": [
+        0,
+        0
+      ],
+      "phase": 0.3,
+      "wear": 0.12
+    },
+    {
+      "id": "weathered",
+      "offset": [
+        0.23,
+        0.41
+      ],
+      "phase": 2.7,
+      "wear": 0.34,
+      "materials": {
+        "polymer-face": {
+          "key": "cyberpunk/prop-polymer-face/poor",
+          "variant": "abraded"
+        }
+      }
+    },
+    {
+      "id": "salvaged",
+      "offset": [
+        0.57,
+        0.16
+      ],
+      "phase": 5.8,
+      "wear": 0.24
+    }
+  ]
 }

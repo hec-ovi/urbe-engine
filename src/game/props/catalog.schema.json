@@ -6,7 +6,8 @@
     "assets",
     "materials",
     "models",
-    "detailColors"
+    "detailColors",
+    "finishes"
   ],
   "properties": {
     "assets": {
@@ -89,7 +90,8 @@
               "bag",
               "dumpster",
               "container",
-              "tree"
+              "tree",
+              "ornament"
             ]
           },
           "asset": {
@@ -102,7 +104,10 @@
               "pallet",
               "paper",
               "can",
-              "polymer"
+              "polymer",
+              "cabinet",
+              "bench",
+              "memorial"
             ]
           },
           "size": {
@@ -207,6 +212,60 @@
       "additionalProperties": {
         "type": "string",
         "pattern": "^#[a-fA-F0-9]{6}$"
+      }
+    },
+    "finishes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "offset",
+          "phase",
+          "wear"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          },
+          "phase": {
+            "type": "number"
+          },
+          "wear": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.6
+          },
+          "materials": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "variant"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "variant": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },

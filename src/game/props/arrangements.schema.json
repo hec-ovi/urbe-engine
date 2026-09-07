@@ -4,7 +4,8 @@
   "additionalProperties": false,
   "required": [
     "chance",
-    "recipes"
+    "recipes",
+    "variation"
   ],
   "properties": {
     "chance": {
@@ -77,10 +78,55 @@
                 "on": {
                   "type": "integer",
                   "minimum": 0
+                },
+                "jitter": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "items": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 0.5
+                  }
+                },
+                "yaw": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 3.15
+                },
+                "chance": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
                 }
               }
             }
           }
+        }
+      }
+    },
+    "variation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jitter",
+        "yaw"
+      ],
+      "properties": {
+        "jitter": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.5
+          }
+        },
+        "yaw": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3.15
         }
       }
     }

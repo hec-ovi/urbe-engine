@@ -18,8 +18,9 @@ export class Parts {
 		const batches = new Map();
 		for ( const [ role, geometries ] of this.roles ) {
 			const surface = material( role ), tintable = role !== 'metal' && ! colors[ role ];
-			const key = `${surface.uuid}:${tintable}`;
-			if ( ! batches.has( key ) ) batches.set( key, { material: surface, tintable, pieces: [] } );
+			const fitted = role === 'polymer-face';
+			const key = `${surface.uuid}:${tintable}:${fitted}`;
+			if ( ! batches.has( key ) ) batches.set( key, { material: surface, tintable, fitted, pieces: [] } );
 			for ( const source of geometries ) {
 				const geometry = triangleGeometry( source ); source.dispose();
 				if ( surface.vertexColors ) {
@@ -31,9 +32,9 @@ export class Parts {
 				batches.get( key ).pieces.push( geometry );
 			}
 		}
-		return [ ...batches.values() ].map( ( { material, tintable, pieces } ) => {
+		return [ ...batches.values() ].map( ( { material, tintable, fitted, pieces } ) => {
 			const geometry = mergeGeometries( pieces ); pieces.forEach( part => part.dispose() );
-			return { geometry, material, tintable };
+			return { geometry, material, tintable, fitted };
 		} );
 	}
 }

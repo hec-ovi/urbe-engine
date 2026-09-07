@@ -59,7 +59,161 @@
         ]
       }
     ],
-    "highwayStructures": []
+    "highwayStructures": [],
+    "construction": {
+      "modules": {
+        "version": "1.0.0",
+        "definitions": [
+          {
+            "id": "guardrail:2",
+            "parts": [
+              {
+                "role": "guardrail",
+                "polygon": [
+                  [
+                    0.08,
+                    0.46
+                  ],
+                  [
+                    0.16,
+                    0.46
+                  ],
+                  [
+                    0.16,
+                    0.54
+                  ],
+                  [
+                    0.08,
+                    0.54
+                  ]
+                ],
+                "bottom": 0.2,
+                "top": 1.2
+              },
+              {
+                "role": "guardrail",
+                "polygon": [
+                  [
+                    1.84,
+                    0.46
+                  ],
+                  [
+                    1.9200000000000002,
+                    0.46
+                  ],
+                  [
+                    1.9200000000000002,
+                    0.54
+                  ],
+                  [
+                    1.84,
+                    0.54
+                  ]
+                ],
+                "bottom": 0.2,
+                "top": 1.2
+              },
+              {
+                "role": "guardrail",
+                "polygon": [
+                  [
+                    0.16,
+                    0.46
+                  ],
+                  [
+                    1.8399999999999999,
+                    0.46
+                  ],
+                  [
+                    1.8399999999999999,
+                    0.54
+                  ],
+                  [
+                    0.16,
+                    0.54
+                  ]
+                ],
+                "bottom": 1.12,
+                "top": 1.2
+              },
+              {
+                "role": "guardrail",
+                "polygon": [
+                  [
+                    0.16,
+                    0.46
+                  ],
+                  [
+                    1.8399999999999999,
+                    0.46
+                  ],
+                  [
+                    1.8399999999999999,
+                    0.54
+                  ],
+                  [
+                    0.16,
+                    0.54
+                  ]
+                ],
+                "bottom": 0.68,
+                "top": 0.76
+              }
+            ]
+          }
+        ],
+        "placements": [
+          {
+            "moduleId": "guardrail:2",
+            "blockId": "review",
+            "origin": [
+              22,
+              12
+            ],
+            "turn": 0,
+            "count": 2,
+            "step": 2,
+            "finish": "industrial"
+          },
+          {
+            "moduleId": "guardrail:2",
+            "blockId": "review",
+            "origin": [
+              34,
+              12
+            ],
+            "turn": 0,
+            "count": 2,
+            "step": 2,
+            "finish": "industrial"
+          },
+          {
+            "moduleId": "guardrail:2",
+            "blockId": "review",
+            "origin": [
+              46,
+              12
+            ],
+            "turn": 0,
+            "count": 2,
+            "step": 2,
+            "finish": "industrial"
+          },
+          {
+            "moduleId": "guardrail:2",
+            "blockId": "review",
+            "origin": [
+              58,
+              12
+            ],
+            "turn": 0,
+            "count": 2,
+            "step": 2,
+            "finish": "industrial"
+          }
+        ]
+      }
+    }
   },
   "transit": {
     "subwayStations": []

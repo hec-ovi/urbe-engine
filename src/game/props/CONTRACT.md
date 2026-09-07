@@ -1,6 +1,6 @@
 # Street props
 
-Takes authored city land and models, returns sparse street arrangements and tree instances.
+Takes authored city land and models, returns sparse street arrangements, ornaments, trees and guardrails.
 
 ## Input
 
@@ -19,7 +19,9 @@ Cardboard cartons have folded flaps and tape; wooden crates have separate boards
 
 ## Placement
 
-The seed selects refuse, delivery and service-yard arrangements. Whole footprints must fit equal-height authored land, clear buildings, door aprons, street fixtures, walk widths and station reservations. Large containers require block/open land and are never shrunk to fit. A failed arrangement is omitted atomically. Trees reserve their trunk at ground level and their crown against buildings; low foliage also clears pedestrian paths. Draw count depends on occupied cells, geometry variants and material parts, never one mesh per item.
+The seed selects refuse, delivery and service-yard arrangements. Slots vary their spacing, angle, finish and presence within catalog limits; stacked items remain supported. Facade stations use uneven intervals. Utility cabinets, worn benches and memorial fixtures occupy the same checked pockets. Whole footprints must fit equal-height authored land, clear buildings, door aprons, street fixtures, walk widths and station reservations. Large containers require block/open land and are never shrunk to fit. A failed arrangement is omitted atomically. Trees reserve their trunk at ground level and their crown against buildings; low foliage also clears pedestrian paths. Draw count depends on occupied cells, geometry variants, finishes and material parts, never one mesh per item.
+
+Procedural props have three shared finishes with independently placed grain and localized wear. Exact panel UVs retain their full artwork. Every placement reports its finish. Guardrails consume Atlas module placements, retaining their posts, bars, metre extents and quarter turns; open, braced and slatted infill variants stay within the authored envelope. Rails reserve that envelope against loose props and use their visible triangles for collision. No module records means no rails.
 
 Missing or malformed model assets throw `E_PROP_ASSET` with the URL. Missing authored support admits no decoration. Unknown planting kinds are skipped. Same inputs give the same placements.
 

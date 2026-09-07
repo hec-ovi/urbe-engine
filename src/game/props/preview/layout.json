@@ -11,6 +11,18 @@
           "label": "Dark plastic variants"
         },
         {
+          "value": "finishes",
+          "label": "Surface wear comparison"
+        },
+        {
+          "value": "ornaments",
+          "label": "Pocket ornaments"
+        },
+        {
+          "value": "rails",
+          "label": "Guardrail variants"
+        },
+        {
           "value": "gallery",
           "label": "All models"
         },

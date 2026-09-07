@@ -1,5 +1,7 @@
 import { signedArea } from '../ground/Polygons.js';
 import { pointDistance, SpatialIndex } from './Footprints.js';
+import { Rng } from '../../city/Rng.js';
+import { seedOf } from './Placement.js';
 
 /** Authored planting points and usable lengths of rear facades. */
 export class Sites {
@@ -19,16 +21,18 @@ export class Sites {
 				const length = Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ] );
 				if ( length < 3 ) continue;
 				const tx = ( b[ 0 ] - a[ 0 ] ) / length, tz = ( b[ 1 ] - a[ 1 ] ) / length, nx = tz * sign, nz = - tx * sign;
-				for ( let along = 2; along < length - 1; along += 14 ) {
+				const rng = new Rng( seedOf( `${this.atlas.meta.seed}:sites:${parcel.id}:${i}` ) );
+				let station = 0;
+				for ( let along = rng.range( 2, 6 ); along < length - 1; along += rng.range( 11, 21 ) ) {
 					const x = a[ 0 ] + tx * along, z = a[ 1 ] + tz * along;
 					if ( Math.hypot( x - parcel.access.point[ 0 ], z - parcel.access.point[ 1 ] ) < 10 ) continue;
 					const point = [ x + nx, z + nz ];
 					const gap = [ ...facades.query( [ point ], 6 ) ].some( wall => wall.id !== parcel.id && pointDistance( point, wall.a, wall.b ) < 6 );
-					pockets.push( { id: `${parcel.id}:${i}:${along}`, x, z, nx, nz, kind: gap ? 'gap' : 'corner' } );
+					pockets.push( { id: `${parcel.id}:${i}:${station ++}`, owner: parcel.id, x, z, nx, nz, kind: gap ? 'gap' : 'corner' } );
 				}
-				if ( industrial ) for ( let along = 7; along < length - 6; along += 16 ) {
+				if ( industrial ) for ( let along = rng.range( 7, 11 ); along < length - 6; along += rng.range( 16, 25 ) ) {
 					const x = a[ 0 ] + tx * along, z = a[ 1 ] + tz * along;
-					if ( Math.hypot( x - parcel.access.point[ 0 ], z - parcel.access.point[ 1 ] ) > 12 ) yards.push( { id: `${parcel.id}:yard:${i}:${along}`, x, z, nx, nz, kind: 'yard' } );
+					if ( Math.hypot( x - parcel.access.point[ 0 ], z - parcel.access.point[ 1 ] ) > 12 ) yards.push( { id: `${parcel.id}:yard:${i}:${station ++}`, owner: parcel.id, x, z, nx, nz, kind: 'yard' } );
 				}
 			}
 		}

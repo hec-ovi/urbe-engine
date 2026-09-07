@@ -1,14 +1,18 @@
 {
-  "chance":{"gap":0.2,"corner":0.22,"yard":0.35},
-  "recipes":[
-    {"id":"refuse-pocket","sites":["gap","corner"],"slots":[{"models":["bag"],"at":[0,0]},{"models":["paper"],"at":[0.75,0.48],"turn":0.25},{"models":["can"],"at":[-0.5,0.48],"turn":1.1}]},
-    {"id":"refuse-pair","sites":["gap","corner"],"slots":[{"models":["bag"],"at":[-0.5,0]},{"models":["bag"],"at":[0.5,0.08],"turn":1.2},{"models":["paper"],"at":[0.2,1],"turn":0.6}]},
-    {"id":"parcel-delivery","sites":["corner","gap"],"slots":[{"models":["carton-wide"],"at":[0,0]},{"models":["carton-small"],"at":[0,0],"on":0},{"models":["carton-tall","carton-open"],"at":[0.92,0.02]}]},
-    {"id":"pallet-delivery","sites":["corner"],"slots":[{"models":["pallet"],"at":[0,0]},{"models":["crate-large"],"at":[0,0],"on":0},{"models":["carton-small","carton-tall"],"at":[0,0],"on":1}]},
-    {"id":"crate-return","sites":["corner","gap"],"slots":[{"models":["crate-small"],"at":[0,0]},{"models":["crate-small"],"at":[0,0],"on":0},{"models":["carton-open"],"at":[1,0.1]}]},
-    {"id":"dumpster-service","sites":["yard","corner"],"slots":[{"models":["dumpster"],"at":[0,0],"turn":1.5707963267948966},{"models":["bag"],"at":[2.1,0.15]},{"models":["paper"],"at":[1.8,0.95],"turn":0.4}]},
-    {"id":"container-yard","sites":["yard"],"slots":[{"models":["cargo-20","cargo-40"],"at":[0,0],"turn":1.5707963267948966}]},
+  "chance": {"gap":0.2,"corner":0.22,"yard":0.35},
+  "variation": {"jitter":[0.13,0.1],"yaw":0.18},
+  "recipes": [
+    {"id":"refuse-pocket","sites":["gap","corner"],"slots":[{"models":["bag"],"at":[0,0]},{"models":["paper"],"at":[0.75,0.48],"turn":0.25,"chance":0.65,"yaw":1.2,"jitter":[0.24,0.19]},{"models":["can"],"at":[-0.5,0.48],"turn":1.1,"chance":0.65,"yaw":1.2,"jitter":[0.24,0.19]}]},
+    {"id":"refuse-pair","sites":["gap","corner"],"slots":[{"models":["bag"],"at":[-0.5,0]},{"models":["bag"],"at":[0.5,0.08],"turn":1.2},{"models":["paper"],"at":[0.2,1],"turn":0.6,"chance":0.65,"yaw":1.2,"jitter":[0.24,0.19]}]},
+    {"id":"parcel-delivery","sites":["corner","gap"],"slots":[{"models":["carton-wide"],"at":[0,0]},{"models":["carton-small"],"at":[0,0],"on":0,"yaw":0.11,"jitter":[0.07,0.05]},{"models":["carton-tall","carton-open"],"at":[0.92,0.02]}]},
+    {"id":"pallet-delivery","sites":["corner"],"slots":[{"models":["pallet"],"at":[0,0]},{"models":["crate-large"],"at":[0,0],"on":0,"yaw":0.11,"jitter":[0.07,0.05]},{"models":["carton-small","carton-tall"],"at":[0,0],"on":1,"yaw":0.11,"jitter":[0.07,0.05]}]},
+    {"id":"crate-return","sites":["corner","gap"],"slots":[{"models":["crate-small"],"at":[0,0]},{"models":["carton-small"],"at":[0,0],"on":0,"yaw":0.11,"jitter":[0.07,0.05]},{"models":["carton-open"],"at":[1,0.1]}]},
+    {"id":"dumpster-service","sites":["yard","corner"],"slots":[{"models":["dumpster"],"at":[0,0],"turn":1.5707963267948966},{"models":["bag"],"at":[2.1,0.15]},{"models":["paper"],"at":[1.8,0.95],"turn":0.4,"chance":0.65,"yaw":1.2,"jitter":[0.24,0.19]}]},
+    {"id":"container-yard","sites":["yard"],"slots":[{"models":["cargo-20","cargo-40"],"at":[0,0],"turn":1.5707963267948966,"yaw":0.035,"jitter":[0.2,0.12]}]},
     {"id":"polymer-freight","sites":["corner","gap"],"slots":[{"models":["poly-transit"],"at":[0,0]},{"models":["poly-tote"],"at":[1.03,0.04]}]},
-    {"id":"damaged-storage","sites":["corner","gap"],"slots":[{"models":["poly-loose"],"at":[0,0]},{"models":["poly-crushed"],"at":[1.05,0.04]},{"models":["can"],"at":[0.65,0.68],"turn":0.7}]}
+    {"id":"damaged-storage","sites":["corner","gap"],"slots":[{"models":["poly-loose"],"at":[0,0]},{"models":["poly-crushed"],"at":[1.05,0.04]},{"models":["can"],"at":[0.65,0.68],"turn":0.7,"chance":0.65,"yaw":1.2,"jitter":[0.24,0.19]}]},
+    {"id":"relay-service","sites":["corner","gap"],"slots":[{"models":["relay-cabinet","pump-cabinet"],"at":[0,0],"yaw":0.025},{"models":["poly-tote","carton-open"],"at":[1.05,0.16],"chance":0.75},{"models":["can"],"at":[0.72,0.96],"chance":0.4,"yaw":1.2}]},
+    {"id":"quiet-bench","sites":["corner"],"slots":[{"models":["bench-repaired"],"at":[0,0],"yaw":0.055},{"models":["bag","paper"],"at":[1.47,0.17],"chance":0.6}]},
+    {"id":"memorial-pocket","sites":["corner","gap"],"slots":[{"models":["memorial-shrine"],"at":[0,0],"yaw":0.06},{"models":["paper"],"at":[-0.61,0.44],"chance":0.45,"yaw":1.1}]}
   ]
 }

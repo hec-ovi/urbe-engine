@@ -31,7 +31,7 @@ async function show( mode ) {
 		if ( active ) { scene.remove( active.group ); active.dispose(); }
 		active = next; scene.add( next.group );
 		const bounds = new THREE.Box3().setFromObject( next.group ), center = bounds.getCenter( new THREE.Vector3() ), size = bounds.getSize( new THREE.Vector3() );
-		controls.target.copy( center ); camera.position.copy( center ).add( mode === 'plastic' ? new THREE.Vector3( 1.3, 1.7, Math.max( 3, size.x * 1.25 ) ) : new THREE.Vector3( size.x * 0.65 + 8, Math.max( 12, size.z * 0.6 ), size.z * 0.65 + 8 ) ); controls.update();
+		controls.target.copy( center ); camera.position.copy( center ).add( ! [ 'gallery', 'arrangements' ].includes( mode ) ? new THREE.Vector3( 1.3, Math.max( 1.7, size.z ), Math.max( 3, size.x * 1.25, size.z * 1.5 ) ) : new THREE.Vector3( size.x * 0.65 + 8, Math.max( 12, size.z * 0.6 ), size.z * 0.65 + 8 ) ); controls.update();
 		await renderer.compileAsync( scene, camera ); view.setStatus( next.summary );
 	} catch ( error ) { view.setStatus( error.message ); console.error( error ); }
 	finally { view.setBusy( false ); }
