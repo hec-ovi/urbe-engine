@@ -30,6 +30,8 @@ function probe() {
 	const convolved = [];
 	const p = new EnvironmentProbe( r, scene, { probeSize: 8, probeInterval: 10 }, null, ( renderer, texture, previous ) => {
 
+		expect( renderer.getMRT() ).toBeNull();
+		expect( renderer.toneMapping ).toBe( THREE.NoToneMapping );
 		const target = previous ?? { texture: { id: convolved.length }, dispose: () => { throw new Error( 'Resident environment was disposed' ); } };
 		convolved.push( target );
 		return target;

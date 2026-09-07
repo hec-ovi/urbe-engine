@@ -139,6 +139,8 @@ export class EnvironmentProbe {
 			renderer.outputColorSpace = THREE.ColorManagement.workingColorSpace;
 			if ( renderer.reversedDepthBuffer && renderer.autoClear === false ) renderer.clearDepth();
 			renderer.render( this.scene, this.camera.children[ this.face ] );
+			this.face ++;
+			if ( ! this.baking ) this.#finish();
 
 		} finally {
 
@@ -150,8 +152,6 @@ export class EnvironmentProbe {
 
 		}
 
-		this.face ++;
-		if ( ! this.baking ) this.#finish();
 		this.hitches?.note( this.baking ? `probe face ${this.face}` : 'probe convolve', performance.now() - t );
 
 	}
