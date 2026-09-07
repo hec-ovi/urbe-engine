@@ -95,13 +95,9 @@ describe( 'LauncherApp', () => {
 		await made.app.start();
 		const user = userEvent.setup();
 		await user.click( screen.getByRole( 'button', { name: 'New game' } ) );
-		await user.clear( screen.getByLabelText( 'City name' ) );
-		await user.type( screen.getByLabelText( 'City name' ), 'Rain Sector' );
-		await user.clear( screen.getByLabelText( 'Seed' ) );
-		await user.type( screen.getByLabelText( 'Seed' ), 'rain-44' );
-		await user.click( screen.getByRole( 'button', { name: 'Generate city' } ) );
+		await user.click( screen.getByRole( 'button', { name: 'Next' } ) );
 		await screen.findByRole( 'heading', { name: 'Playable interiors' } );
-		expect( made.api.generateCity ).toHaveBeenCalledWith( { name: 'Rain Sector', seed: 'rain-44', size: 'small' } );
+		expect( made.api.generateCity ).toHaveBeenCalledWith( { size: 'small' } );
 
 		await user.click( screen.getByRole( 'button', { name: 'Generate selected interiors' } ) );
 		await screen.findByRole( 'heading', { name: 'Story and side jobs' } );
@@ -115,12 +111,27 @@ describe( 'LauncherApp', () => {
 			cityId: 'rain-city', interiorIds, mainBrief: '', sideJobs: 3
 		} );
 
-		await user.click( screen.getByRole( 'button', { name: 'Create playable game' } ) );
-		await screen.findByRole( 'heading', { name: 'Your games' } );
+		await user.click( screen.getByRole( 'button', { name: 'Play' } ) );
+		await waitFor( () => expect( made.navigate ).toHaveBeenCalledWith( '/?mode=game&out=/out/rain' ) );
 		expect( made.api.createGame ).toHaveBeenCalledWith( {
 			cityId: 'rain-city', interiorIds, questId: 'rain-quests'
 		} );
-		expect( screen.getByRole( 'heading', { name: 'Salt Wharf' } ) ).toBeTruthy();
+		expect( made.api.continueGame ).toHaveBeenCalledWith( game.id );
+
+	} );
+
+	it( 'opens a template city without calling interior or quest generation', async () => {
+
+		const made = make();
+		await made.app.start();
+		const user = userEvent.setup();
+		await user.click( screen.getByRole( 'button', { name: 'New game' } ) );
+		await user.click( screen.getByRole( 'button', { name: 'Next' } ) );
+		await user.click( await screen.findByRole( 'button', { name: 'Play without quests' } ) );
+		await waitFor( () => expect( made.navigate ).toHaveBeenCalledWith( '/?mode=game&out=/out/rain' ) );
+		expect( made.api.createGame ).toHaveBeenCalledWith( { cityId: city.id, interiorIds: [], questId: null } );
+		expect( made.api.generateInstances ).not.toHaveBeenCalled();
+		expect( made.api.generateQuests ).not.toHaveBeenCalled();
 
 	} );
 
@@ -138,8 +149,8 @@ describe( 'LauncherApp', () => {
 		made.app.view.setCreationState( {
 			city, instances: { ids: [ 'p11' ], count: 1 }, quests: { id: 'rain-quests', mainSteps: 8, sideJobs: 3 }
 		} );
-		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Create playable game' } ) );
-		await screen.findByRole( 'heading', { name: 'Your games' } );
+		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Play' } ) );
+		await waitFor( () => expect( made.navigate ).toHaveBeenCalledWith( '/?mode=game&out=/out/rain' ) );
 		expect( apiValue.catalog ).toHaveBeenCalledTimes( 2 );
 
 	} );
@@ -152,8 +163,8 @@ describe( 'LauncherApp', () => {
 		await made.app.start();
 		const user = userEvent.setup();
 		await user.click( screen.getByRole( 'button', { name: 'New game' } ) );
-		await user.click( screen.getByRole( 'button', { name: 'Generate city' } ) );
-		expect( screen.getByRole( 'button', { name: 'Generate city' } ).disabled ).toBe( true );
+		await user.click( screen.getByRole( 'button', { name: 'Next' } ) );
+		expect( screen.getByRole( 'button', { name: 'Next' } ).disabled ).toBe( true );
 		expect( screen.getByText( 'Working on this stage.' ) ).toBeTruthy();
 		release( { city } );
 		await screen.findByRole( 'heading', { name: 'Playable interiors' } );
@@ -166,9 +177,9 @@ describe( 'LauncherApp', () => {
 		await made.app.start();
 		const user = userEvent.setup();
 		await user.click( screen.getByRole( 'button', { name: 'New game' } ) );
-		await user.click( screen.getByRole( 'button', { name: 'Generate city' } ) );
+		await user.click( screen.getByRole( 'button', { name: 'Next' } ) );
 		await waitFor( () => expect( screen.getByRole( 'alert' ).textContent ).toContain( 'atlas refused the seed' ) );
-		expect( screen.getByRole( 'button', { name: 'Generate city' } ).disabled ).toBe( false );
+		expect( screen.getByRole( 'button', { name: 'Next' } ).disabled ).toBe( false );
 
 	} );
 

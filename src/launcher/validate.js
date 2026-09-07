@@ -144,8 +144,8 @@ export function cityInput( value ) {
 
 	object( value, 'city input' );
 	keys( value, [ 'name', 'seed', 'size' ], 'city input' );
-	text( value.name, 'city input.name' );
-	text( value.seed, 'city input.seed' );
+	if ( value.name !== undefined ) text( value.name, 'city input.name' );
+	if ( value.seed !== undefined ) text( value.seed, 'city input.seed' );
 	if ( ! [ 'small', 'medium', 'large' ].includes( value.size ) ) throw new TypeError( 'city input.size must be small, medium or large.' );
 	return value;
 
@@ -167,7 +167,7 @@ export function instancesInput( value ) {
 	keys( value, [ 'cityId', 'mode', 'count', 'buildingIds' ], 'instances input' );
 	text( value.cityId, 'instances input.cityId' );
 	if ( ! [ 'automatic', 'manual' ].includes( value.mode ) ) throw new TypeError( 'instances input.mode must be automatic or manual.' );
-	integer( value.count, 'instances input.count', 1, 24 );
+	integer( value.count, 'instances input.count', value.mode === 'automatic' ? 9 : 1, 24 );
 	ids( value.buildingIds, 'instances input.buildingIds' );
 	if ( value.mode === 'manual' && value.buildingIds.length !== value.count ) throw new TypeError( 'manual instances count must equal the selected building count.' );
 	return value;
@@ -193,7 +193,7 @@ export function questsInput( value ) {
 	text( value.cityId, 'quests input.cityId' );
 	ids( value.interiorIds, 'quests input.interiorIds', 1 );
 	if ( typeof value.mainBrief !== 'string' ) throw new TypeError( 'quests input.mainBrief must be a string.' );
-	integer( value.sideJobs, 'quests input.sideJobs', 0, 24 );
+	integer( value.sideJobs, 'quests input.sideJobs', 0, 3 );
 	return value;
 
 }
@@ -216,8 +216,8 @@ export function gameInput( value ) {
 	object( value, 'game input' );
 	keys( value, [ 'cityId', 'interiorIds', 'questId' ], 'game input' );
 	text( value.cityId, 'game input.cityId' );
-	ids( value.interiorIds, 'game input.interiorIds', 1 );
-	text( value.questId, 'game input.questId' );
+	ids( value.interiorIds, 'game input.interiorIds' );
+	if ( value.questId !== null ) text( value.questId, 'game input.questId' );
 	return value;
 
 }

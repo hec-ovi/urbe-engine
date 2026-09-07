@@ -217,7 +217,7 @@ export class LauncherApp {
 			return { game: result.game };
 
 		} );
-		if ( update ) this.view.openLibrary( 'games' );
+		if ( update ) await this.continueGame( update.game.id );
 
 	}
 
