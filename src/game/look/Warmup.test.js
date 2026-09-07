@@ -76,19 +76,31 @@ describe( 'Warmup', () => {
 		const compileAsync = vi.fn( async () => {} );
 		const renderer = fakeRenderer( compileAsync );
 		const mrt = { emissive: true };
+		const target = { name: 'scene pass', samples: 4 };
+		renderer.toneMapping = THREE.AgXToneMapping;
+		renderer.outputColorSpace = THREE.SRGBColorSpace;
+		let renderTarget = null;
+		renderer.getRenderTarget = () => renderTarget;
+		renderer.setRenderTarget = next => { renderTarget = next; };
 
 		let during = null;
 		compileAsync.mockImplementation( async () => {
 
 			during = renderer.mrt;
+			expect( renderTarget ).toBe( target );
+			expect( renderer.toneMapping ).toBe( THREE.NoToneMapping );
+			expect( renderer.outputColorSpace ).toBe( THREE.ColorManagement.workingColorSpace );
 
 		} );
 
-		await new Warmup( renderer, scene, camera, mrt ).warm( root );
+		await new Warmup( renderer, scene, camera, mrt, target ).warm( root );
 
 		expect( compileAsync ).toHaveBeenCalledWith( root, camera, scene );
 		expect( during ).toBe( mrt );
 		expect( renderer.mrt ).toBe( 'frame' );
+		expect( renderTarget ).toBeNull();
+		expect( renderer.toneMapping ).toBe( THREE.AgXToneMapping );
+		expect( renderer.outputColorSpace ).toBe( THREE.SRGBColorSpace );
 
 	} );
 

@@ -1,21 +1,10 @@
 const TIERS = [ 'low', 'medium', 'high', 'ultra' ];
 
-/**
- * What each tier turns on. Bloom is tuned against the measured glow profile of
- * a street lamp, not by eye: its halo falls under a tenth of the source's peak
- * within about five source radii and never reaches a fifth of the frame.
- *
- * `low` is not a broken `high`: it keeps physical light units, the computed
- * room fill, the fog floor and selective bloom, which is most of what the
- * reference frames are made of, and gives up the per-fragment luxuries.
- * The haze geometry (lit air drawn as quads around fixtures) is off on every
- * tier: it reads as a smear indoors, and the fog floor already lifts the darks.
- *
- * Every effect downstream reads this descriptor, never the backend, so the
- * WebGL2 fallback is one default choice rather than a second pipeline.
- */
+// Tiers bound texture dimensions and lighting cost while retaining authored PBR channels.
+const MATERIAL_MAPS = Object.freeze( [ 'basecolor', 'normal', 'roughness', 'metallic', 'ao', 'emission' ] );
 const PRESETS = {
 	low: {
+		textureMaxSize: 1024,
 		bloom: { strength: 0, radius: 0.0 },
 		haze: false,
 		roomSlots: 2,
@@ -25,11 +14,12 @@ const PRESETS = {
 		batchedLights: 32,
 		probeSize: 0,
 		probeInterval: 120,
-		materialMaps: [ 'basecolor', 'normal', 'emission' ],
+		materialMaps: MATERIAL_MAPS,
 		materialVariants: 2,
 		textureAnisotropy: 2
 	},
 	medium: {
+		textureMaxSize: 1024,
 		bloom: { strength: 0.35, radius: 0.03 },
 		haze: false,
 		roomSlots: 3,
@@ -39,11 +29,12 @@ const PRESETS = {
 		batchedLights: 48,
 		probeSize: 64,
 		probeInterval: 90,
-		materialMaps: [ 'basecolor', 'normal', 'roughness', 'emission' ],
+		materialMaps: MATERIAL_MAPS,
 		materialVariants: 4,
 		textureAnisotropy: 4
 	},
 	high: {
+		textureMaxSize: 2048,
 		bloom: { strength: 0.35, radius: 0.04 },
 		haze: false,
 		roomSlots: 4,
@@ -53,11 +44,12 @@ const PRESETS = {
 		batchedLights: 48,
 		probeSize: 64,
 		probeInterval: 60,
-		materialMaps: [ 'basecolor', 'normal', 'roughness', 'metallic', 'ao', 'emission' ],
+		materialMaps: MATERIAL_MAPS,
 		materialVariants: 6,
 		textureAnisotropy: 8
 	},
 	ultra: {
+		textureMaxSize: 4096,
 		bloom: { strength: 0.4, radius: 0.06 },
 		haze: false,
 		roomSlots: 6,
@@ -67,7 +59,7 @@ const PRESETS = {
 		batchedLights: 48,
 		probeSize: 128,
 		probeInterval: 40,
-		materialMaps: [ 'basecolor', 'normal', 'roughness', 'metallic', 'ao', 'emission' ],
+		materialMaps: MATERIAL_MAPS,
 		materialVariants: 12,
 		textureAnisotropy: 8
 	}

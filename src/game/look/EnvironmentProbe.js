@@ -29,14 +29,15 @@ export class EnvironmentProbe {
 	 * @param tier quality descriptor (probeSize, probeInterval in metres)
 	 * @param convolve turns the rendered cube into the prefiltered environment; the PMREM generator unless a test says otherwise
 	 */
-	constructor( renderer, scene, tier, hitches = null, convolve = pmrem ) {
+	constructor( renderer, scene, tier, hitches = null, convolve = null ) {
 
 		this.renderer = renderer;
 		this.hitches = hitches;
 		this.scene = scene;
 		this.size = tier.probeSize;
 		this.interval = tier.probeInterval;
-		this.convolve = convolve;
+		this.generator = convolve ? null : new THREE.PMREMGenerator( renderer );
+		this.convolve = convolve ?? ( ( renderer, texture, target ) => this.generator.fromCubemap( texture, target ) );
 		this.at = null;
 		this.target = null;
 		this.last = - Infinity;
@@ -125,15 +126,29 @@ export class EnvironmentProbe {
 		const current = renderer.getRenderTarget();
 		const xr = renderer.xr.enabled;
 
-		for ( const group of shown ) group.visible = false;
-		renderer.xr.enabled = false;
-		this.cube.texture.generateMipmaps = false;
-		renderer.setRenderTarget( this.cube, this.face, 0 );
-		if ( renderer.reversedDepthBuffer && renderer.autoClear === false ) renderer.clearDepth();
-		renderer.render( this.scene, this.camera.children[ this.face ] );
-		renderer.setRenderTarget( current );
-		renderer.xr.enabled = xr;
-		for ( const group of shown ) group.visible = true;
+		const previousMRT = renderer.getMRT();
+		const tone = renderer.toneMapping, color = renderer.outputColorSpace;
+		try {
+
+			for ( const group of shown ) group.visible = false;
+			renderer.xr.enabled = false;
+			this.cube.texture.generateMipmaps = false;
+			renderer.setRenderTarget( this.cube, this.face, 0 );
+			renderer.setMRT( null );
+			renderer.toneMapping = THREE.NoToneMapping;
+			renderer.outputColorSpace = THREE.ColorManagement.workingColorSpace;
+			if ( renderer.reversedDepthBuffer && renderer.autoClear === false ) renderer.clearDepth();
+			renderer.render( this.scene, this.camera.children[ this.face ] );
+
+		} finally {
+
+			renderer.setRenderTarget( current );
+			renderer.setMRT( previousMRT );
+			renderer.toneMapping = tone; renderer.outputColorSpace = color;
+			renderer.xr.enabled = xr;
+			for ( const group of shown ) group.visible = true;
+
+		}
 
 		this.face ++;
 		if ( ! this.baking ) this.#finish();
@@ -144,20 +159,10 @@ export class EnvironmentProbe {
 	#finish() {
 
 		const previous = this.target;
-		this.target = this.convolve( this.renderer, this.cube.texture );
+		this.target = this.convolve( this.renderer, this.cube.texture, previous );
 		this.scene.environment = this.target.texture;
-		previous?.dispose();
+		if ( previous && previous !== this.target ) previous.dispose();
 
 	}
-
-}
-
-/** The prefiltered environment from a rendered cube. */
-function pmrem( renderer, cubemap ) {
-
-	const generator = new THREE.PMREMGenerator( renderer );
-	const target = generator.fromCubemap( cubemap );
-	generator.dispose();
-	return target;
 
 }

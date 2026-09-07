@@ -1,3 +1,5 @@
+import { ColorManagement, NoToneMapping } from 'three/webgpu';
+
 /**
  * Builds WebGPU pipelines and maps before a frame first draws them.
  *
@@ -11,12 +13,13 @@ export class Warmup {
 	 * @param scene the scene the object lives in or is going to, for its lights
 	 * @param mrt the render pipeline's scene-pass MRT, or null when it has none
 	 */
-	constructor( renderer, scene, camera, mrt = null ) {
+	constructor( renderer, scene, camera, mrt = null, renderTarget = null ) {
 
 		this.renderer = renderer;
 		this.scene = scene;
 		this.camera = camera;
 		this.mrt = mrt;
+		this.renderTarget = renderTarget;
 		this.uploaded = new WeakSet();
 
 	}
@@ -47,12 +50,24 @@ export class Warmup {
 		if ( ! object || ! this.renderer?.compileAsync ) return;
 		let shown = null;
 		let previous;
+		let previousTarget;
+		let previousTone, previousColor;
 
 		try {
 
 			await this.#upload( object );
 			shown = stage( object );
 			previous = this.renderer.getMRT?.() ?? null;
+			previousTarget = this.renderer.getRenderTarget?.() ?? null;
+			previousTone = this.renderer.toneMapping;
+			previousColor = this.renderer.outputColorSpace;
+			if ( this.renderTarget ) {
+
+				this.renderer.toneMapping = NoToneMapping;
+				this.renderer.outputColorSpace = ColorManagement.workingColorSpace;
+
+			}
+			this.renderer.setRenderTarget?.( this.renderTarget );
 			this.renderer.setMRT?.( this.mrt );
 			await this.renderer.compileAsync( object, this.camera, this.scene );
 
@@ -61,6 +76,9 @@ export class Warmup {
 			if ( shown ) {
 
 				this.renderer.setMRT?.( previous );
+				this.renderer.setRenderTarget?.( previousTarget );
+				this.renderer.toneMapping = previousTone;
+				this.renderer.outputColorSpace = previousColor;
 				restore( shown );
 
 			}
@@ -92,7 +110,7 @@ export class Warmup {
 	 * Warms one renderable at a time so the backend never receives an unbounded
 	 * set of programs in one compile request.
 	 */
-	async warmAll( object, { wanted = () => true } = {} ) {
+	async warmAll( object, { wanted = () => true, onProgress = () => {} } = {} ) {
 
 		if ( ! object ) return 0;
 		const renderables = [];
@@ -103,6 +121,7 @@ export class Warmup {
 
 			if ( ! wanted() ) break;
 			await this.#prepare( renderables[ index ] );
+			onProgress( index + 1, renderables.length );
 			if ( index + 1 < renderables.length ) await frameYield();
 
 		}

@@ -27,7 +27,10 @@ describe( 'QualityTier', () => {
 		expect( low.bloom.strength ).toBe( 0 );
 		expect( low.haze ).toBe( false );
 		expect( low.roomSlots ).toBeGreaterThan( 0 );
-		expect( low.materialMaps ).toEqual( [ 'basecolor', 'normal', 'emission' ] );
+		for ( const name of QualityTier.names() ) expect( QualityTier.describe( name ).materialMaps )
+			.toEqual( [ 'basecolor', 'normal', 'roughness', 'metallic', 'ao', 'emission' ] );
+		expect( low.textureMaxSize ).toBe( 1024 );
+		expect( low.textureMaxSize ).toBeLessThan( ultra.textureMaxSize );
 		expect( low.materialVariants ).toBeLessThan( ultra.materialVariants );
 		expect( low.textureAnisotropy ).toBeLessThan( ultra.textureAnisotropy );
 		expect( low.probeSize ).toBe( 0 );
