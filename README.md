@@ -22,9 +22,12 @@ Other commands:
 - `npm run assemble-city -- --blueprint <path> --out <dir> --workers 8` builds a city directly. Add `--reuse-shells true --interior-parcels <id,id,...>` to furnish an exact set without rebuilding its shells.
 - `npm run simulate` boots the population over an assembled world and prints stats, a crowd slice, three NPC lives, latencies and a conservation check.
 - `npm run install-character-assets` validates and installs the CC0 Source characters and Pro animation pack from the workspace resources folder; `npm run audit-character-assets` verifies the local store without changing it.
+- `node src/game/props/install.mjs --source <downloads>` installs the [street model catalog](src/game/props/CONTRACT.md). `--check` verifies it. Models use `URBE_MODELS_DIR`, default `~/models/quaternius`.
 - `npm run build` produces the static client.
 
 The client tools stay available on explicit modes: `?mode=city&out=/out/cities/small` shows a whole city, `?mode=building&parcel=<id>&out=/out/games/small` inspects a building, and `?mode=experiment` runs the render scale comparison. Add `source=interior` to the building URL to inspect its furnished version.
+
+The [street detail review](http://localhost:5306/src/game/props/preview/) shows imported trees, bags, dumpsters and containers beside native PBR cartons, crates and litter. Its arrangement view demonstrates sparse service pockets.
 
 ## Local preview services
 
