@@ -22,7 +22,7 @@ export class VatBaker {
 	static bake( root, meshes, clips ) {
 
 		const mixer = new THREE.AnimationMixer( root );
-		const actions = clips.map( ( clip ) => mixer.clipAction( stripRootMotion( clip ) ) );
+		const actions = clips.map( ( clip ) => mixer.clipAction( clip ) );
 		const rows = clips.length * FRAMES;
 
 		const targets = meshes.map( ( mesh ) => {
@@ -123,18 +123,5 @@ function skinNormal( mesh, index, target, skin, boundSkin ) {
 
 	boundSkin.multiplyMatrices( mesh.bindMatrixInverse, skin ).multiply( mesh.bindMatrix );
 	target.fromBufferAttribute( source, index ).transformDirection( boundSkin );
-
-}
-
-/**
- * Locomotion is driven by the game, not the clip, so the root's own travel is
- * dropped and only its rotation and the rest of the skeleton are kept.
- */
-function stripRootMotion( clip ) {
-
-	const copy = clip.clone();
-	copy.tracks = copy.tracks.filter( ( track ) => track.name !== 'root.position' );
-
-	return copy;
 
 }

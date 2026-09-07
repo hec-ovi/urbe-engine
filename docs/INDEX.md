@@ -25,7 +25,7 @@
   - `physics/`: fixed-step Rapier world, generated trimesh collision, player capsule, measured fatal and nonfatal vehicle contacts and one full Source-rig ragdoll (src/game/physics/CONTRACT.md)
   - `hydro/`: exact Atlas water surfaces and crossing-reservation handoff, with Materials-owned PBR bindings and deterministic normal motion (src/game/hydro/CONTRACT.md)
   - `player/`: input, first-person controller with selectable running speed and time-based inspection zoom, interaction
-  - `agents/`: character provenance, pose baking, crowd, traffic, persistent NPC materialization, crouch, follow, lead, transit passenger carry and schedule return on Connections' authoritative 3D paths (src/game/agents/CONTRACT.md)
+  - `agents/`: character provenance, proportion-preserving animation transfer, smooth pose baking, crowd, traffic, persistent NPC materialization, crouch, follow, lead, transit passenger carry and schedule return on Connections' authoritative 3D paths (src/game/agents/CONTRACT.md). Character inputs and outputs use the original Three.js scenes and clips; actor requests and results use the linked contract schemas.
   - `investigation/`: deterministic authored incident assembly and live E/R evidence flow, with exact quest bindings, Source final-pose bodies, mission props, PBR decals and catalog restoration (src/game/investigation/CONTRACT.md)
   - `quests/`: all 16 cast quest actions, including fixed-asset rescue, access, hacking and sabotage, follow or lead escort, fatal-impact assassination and measured public-transit completion (src/game/quests/CONTRACT.md)
   - `routes/`: deterministic shortest objective routes to published parcel, station and stop entries over Connections' authoritative 3D walk graph (src/game/routes/CONTRACT.md)

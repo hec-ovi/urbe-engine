@@ -1,5 +1,7 @@
 # Changelog
 
+0.17.16: NPCs retain Source body proportions, smoothly interpolated normals and one appearance across crowd, dialogue and impact poses.
+
 0.17.16: the minimap keeps forward at the top, aligns route and venue markers with the city, and shows a rotating north marker.
 
 0.17.16: four molded-plastic street variants use charcoal PBR, fitted wear panels and deformed silhouettes.
@@ -50,7 +52,7 @@
 
 0.16.24: highway decks use lane-aligned asphalt UVs across the published width and along the elevation profile.
 
-0.16.23: the character store verifies six Source bodies, 32 compatible hair rigs and 120 Pro clips; focused NPCs use the complete compatible style catalog.
+0.16.23: the character store verifies six Source bodies, 32 compatible hair rigs and 120 Pro clips; the asset catalog includes every original body and hairstyle.
 
 0.16.22: WebGL light slots keep stable ids, opaque surfaces use the standard shader, startup and streamed work use bounded batches, and hitch logs time each frame subsystem.
 

@@ -26,18 +26,19 @@ describe( 'character catalog', () => {
 
 	} );
 
-	it( 'keeps mass-crowd bodies gender-correct and picks hero shapes deterministically', () => {
+	it( 'keeps the crowd body and hairstyle when an NPC receives a full rig', () => {
 
 		expect( CROWD_MODELS ).toHaveLength( 2 );
 		expect( bodyFor( 'male', 9 ) ).toBe( 0 );
 		expect( bodyFor( 'female', 8 ) ).toBe( 1 );
 		expect( avatarFor( 'female', 4 ) ).toEqual( avatarFor( 'female', 4 ) );
 		expect( avatarFor( 'female', 4 ).gender ).toBe( 'female' );
-		expect( avatarFor( 'female', 4 ).hairs[ 0 ] ).toMatch( /_Teen\.gltf$/ );
+		for ( const gender of [ 'male', 'female' ] ) {
 
-		const maleLooks = new Set( Array.from( { length: 84 }, ( _, seed ) => avatarFor( 'male', seed ).hairs.join( '+' ) ) );
-		expect( maleLooks.size ).toBeGreaterThan( HAIRSTYLES.male.adult.length );
-		expect( [ ...maleLooks ].some( ( hair ) => hair.includes( 'Hair_Beard' ) ) ).toBe( true );
+			const original = CROWD_MODELS[ bodyFor( gender, 4 ) ];
+			expect( avatarFor( gender, 4 ) ).toEqual( { ...original, hairs: [ original.hair ] } );
+
+		}
 
 	} );
 

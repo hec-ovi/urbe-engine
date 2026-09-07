@@ -73,20 +73,12 @@ export function bodyFor( gender, seed ) {
 
 }
 
-/** A full-quality player or focused NPC gets a deterministic shape of its gender. */
+/** A focused or fallen NPC keeps the exact body and hairstyle visible in the crowd. */
 export function avatarFor( gender, seed ) {
 
-	const matching = CHARACTER_MODELS.filter( ( entry ) => ! gender || entry.gender === gender );
-	const pool = matching.length ? matching : CHARACTER_MODELS;
 	const value = Number.isInteger( seed ) ? seed >>> 0 : 0;
-	const shape = pool[ value % pool.length ];
-	const teen = shape.id.startsWith( 'teen-' );
-	const styles = HAIRSTYLES[ shape.gender ];
-	const head = styles[ teen ? 'teen' : 'adult' ][ Math.floor( value / pool.length ) % styles.adult.length ];
-	const facial = styles[ teen ? 'teenFacial' : 'facial' ];
-	const faceIndex = Math.floor( value / ( pool.length * styles.adult.length ) ) % ( facial.length + 1 );
-
-	return { ...shape, hairs: [ head, ...( faceIndex ? [ facial[ faceIndex - 1 ] ] : [] ) ] };
+	const shape = CROWD_MODELS[ bodyFor( gender, value ) ];
+	return { ...shape, hairs: [ shape.hair ] };
 
 }
 

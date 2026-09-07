@@ -67,6 +67,8 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - One npcId owns one rendered body. Resolving a cast worker already present at a parcel post converts that body to continuity control without adding another body.
 - A measured physics impact freezes the exact rendered identity and removes it from interaction and pushback. A rejected impact restores its prior control state. Accepted dynamic body assembly belongs to the game physics contract.
 - Appearance comes from the instance's persistent `appearanceSeed`, including after unload, save restore and reappearance.
+- Source geometry, skin weights, UVs and authored normals remain intact. Baked normals interpolate across each triangle on WebGPU and WebGL.
+- Pro clips transfer rotations and scaled pelvis motion onto the body's original bone lengths. Crowd, focused dialogue and impact poses use the same transferred clips and the same body and hairstyle.
 - Scheduled and follow movement samples only Connections `path3`; flat compatibility paths never position a body.
 - Sampled crowd walkers add Ground's `SIDEWALK_HEIGHT` to sidewalk and access grade. Station stairs blend this offset by authored height to 0.02 m clearance at the lower landing; passages, platforms, crossings and links retain that clearance. The blend is independent of travel direction. Explicit continuity positions are used as published.
 - Scheduled passenger transit uses the routine's exact route, board stop, alight stop and progress. Ordered duplicate stops select the shortest forward portion of the route shape, so return legs keep their direction and heading.

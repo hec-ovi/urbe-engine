@@ -10,6 +10,7 @@ import {
 import { dressedColorNode } from './BodyMesh.js';
 import { garments } from './Garments.js';
 import { FRAMES } from './VatBaker.js';
+import { CharacterAnimations } from './CharacterAnimations.js';
 import { Ragdoll } from '../physics/Ragdoll.js';
 
 const TALK = 'Idle_Talking_Loop';
@@ -84,6 +85,7 @@ export class HeroCharacter {
 		root.visible = true;
 		this.active = {
 			person, root, mixer, descriptor, key: modelKey( descriptor ),
+			motions: source.motions,
 			playback: null, sequence: 0, currentAction: null, currentClip: null
 		};
 		mixer.addEventListener( 'finished', ( event ) => this.#finished( mixer, event ) );
@@ -112,7 +114,7 @@ export class HeroCharacter {
 			const source = await this.#model( descriptor );
 			if ( this.fallen ) return false;
 			root = characterRoot( source, person, `fallen-${descriptor.id}` );
-			poseAtCrowdFrame( root, this.animation, person );
+			poseAtCrowdFrame( root, this.animation, source.motions, person );
 			if ( samePerson( this.active?.person, person ) ) this.#dropActive();
 			ragdoll = Ragdoll.create( { physics, root, impact } );
 			this.group.add( root );
@@ -202,7 +204,7 @@ export class HeroCharacter {
 				clipName: segment.clipName,
 				loop: Boolean( segment.loop ),
 				blendMs: segment.blendMs ?? BLEND_MS,
-				clip: withoutRootTravel( clip )
+				clip
 			};
 
 		} );
@@ -227,7 +229,7 @@ export class HeroCharacter {
 		const segment = playback.segments[ playback.index ];
 		if ( ! segment ) return;
 		const previous = active.currentAction;
-		const action = active.mixer.clipAction( segment.clip );
+		const action = active.mixer.clipAction( active.motions.clip( segment.clip ) );
 		action.reset();
 		action.enabled = true;
 		action.clampWhenFinished = ! segment.loop;
@@ -270,6 +272,7 @@ export class HeroCharacter {
 			this.models.set( key, Promise.resolve( this.loadModel( descriptor ) ).then( ( model ) => {
 
 				assertRigCompatibility( model.scene, this.animation.scene );
+				model.motions = new CharacterAnimations( model.scene, this.animation.scene );
 				for ( const hair of modelHairs( model ) ) {
 
 					assertRigCompatibility( hair.scene, this.animation.scene );
@@ -340,17 +343,17 @@ function characterRoot( source, person, name ) {
 }
 
 /** Reconstructs the baked person's authored frame before physics owns it. */
-function poseAtCrowdFrame( root, animation, person ) {
+function poseAtCrowdFrame( root, animation, motions, person ) {
 
 	const name = CROWD_CLIP_NAMES[ person.clip ] ?? CROWD_CLIP_NAMES[ 1 ];
 	const clip = THREE.AnimationClip.findByName( animation.animations, name );
 	if ( ! clip ) throw new Error( `Pro animation library is missing ${name}` );
 	const mixer = new THREE.AnimationMixer( root );
-	const action = mixer.clipAction( withoutRootTravel( clip ) );
+	const action = mixer.clipAction( motions.clip( clip ) );
 	action.play();
 	mixer.setTime( ( ( person.frame ?? 0 ) % FRAMES / FRAMES ) * clip.duration );
 	root.updateWorldMatrix( true, true );
-	mixer.stopAllAction();
+	action.paused = true;
 
 }
 
@@ -474,15 +477,5 @@ function disposeModel( model ) {
 	for ( const texture of textures ) texture.dispose();
 	for ( const material of materials ) material.dispose();
 	for ( const geometry of geometries ) geometry.dispose();
-
-}
-
-/** Locomotion belongs to the world position, so an animation cannot move it. */
-function withoutRootTravel( clip ) {
-
-	const copy = clip.clone();
-	copy.tracks = copy.tracks.filter( ( track ) => track.name !== 'root.position' );
-
-	return copy;
 
 }

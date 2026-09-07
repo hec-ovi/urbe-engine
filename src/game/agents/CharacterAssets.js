@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VatBaker } from './VatBaker.js';
 import { BodyMesh } from './BodyMesh.js';
 import { HairMesh } from './HairMesh.js';
+import { CharacterAnimations } from './CharacterAnimations.js';
 import { garments } from './Garments.js';
 import {
 	ANIMATION_URL, CHARACTER_MANIFEST_URL, CHARACTER_ROOT, CROWD_CLIP_NAMES, CROWD_MODELS,
@@ -88,8 +89,10 @@ export class CharacterAssets {
 			// Read off the skeleton before baking: the pose buffers have no
 			// bones left to ask.
 			const bodyCloth = garments( body );
-			const [ bakedBody, bakedEyes, bakedEyebrows ] = VatBaker.bake( root, [ body, eyes, eyebrows ], clips );
-			const [ bakedHair ] = VatBaker.bake( hairRoot, [ hair ], clips );
+			const motions = new CharacterAnimations( root, animationGltf.scene );
+			const bodyClips = clips.map( ( clip ) => motions.clip( clip ) );
+			const [ bakedBody, bakedEyes, bakedEyebrows ] = VatBaker.bake( root, [ body, eyes, eyebrows ], bodyClips );
+			const [ bakedHair ] = VatBaker.bake( hairRoot, [ hair ], bodyClips );
 			const baked = mergeBaked( [ bakedBody, bakedEyes ] );
 			const bakedHeadHair = mergeBaked( [ bakedHair, bakedEyebrows ] );
 			const cloth = crowdCloth( bodyCloth, bakedEyes.vertexCount );

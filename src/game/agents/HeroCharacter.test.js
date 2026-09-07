@@ -27,6 +27,7 @@ describe( 'focused character', () => {
 		expect( await hero.show( person ) ).toBe( true );
 		expect( loaded ).toHaveLength( 1 );
 		expect( loaded[ 0 ].gender ).toBe( 'female' );
+		expect( loaded[ 0 ].file ).toBe( 'Regular_Female_FullBody.gltf' );
 		expect( person.hero ).toBe( true );
 		expect( hero.active.root.position ).toEqual( person.position );
 		expect( warm ).toHaveBeenCalledOnce();
@@ -84,7 +85,7 @@ describe( 'focused character', () => {
 		await hero.show( person( 1 ) );
 
 		expect( hero.models.size ).toBe( 1 );
-		expect( hero.active.descriptor.id ).toBe( 'teen-female' );
+		expect( hero.active.descriptor.id ).toBe( 'regular-female' );
 
 	} );
 
@@ -152,7 +153,12 @@ describe( 'focused character', () => {
 	it( 'replaces the baked slot with the same articulated Source body for a measured impact', async () => {
 
 		const source = humanoidRig();
-		const clip = new THREE.AnimationClip( 'Walk_Loop', 1, [] );
+		const headTurn = new THREE.Quaternion().setFromAxisAngle( new THREE.Vector3( 0, 1, 0 ), 0.6 );
+		const clip = new THREE.AnimationClip( 'Walk_Loop', 1, [
+			new THREE.QuaternionKeyframeTrack( 'Head.quaternion', [ 0, 0.5, 1 ], [
+				0, 0, 0, 1, ...headTurn.toArray(), 0, 0, 0, 1
+			] )
+		] );
 		const hero = new HeroCharacter( {
 			animation: { scene: humanoidRig(), animations: [ clip ] },
 			loadModel: () => ( { scene: source } )
@@ -161,7 +167,7 @@ describe( 'focused character', () => {
 		physics.addTrimesh( new THREE.BoxGeometry( 20, 0.1, 20 ).translate( 0, - 0.05, 0 ) );
 		const person = {
 			npcId: 'npc-impact', gender: 'female', appearanceSeed: 7,
-			clip: 0, frame: 0, hero: false, position: new THREE.Vector3(), heading: 0
+			clip: 0, frame: 16, hero: false, position: new THREE.Vector3(), heading: 0
 		};
 
 		expect( await hero.fall( person, physics, {
@@ -169,6 +175,7 @@ describe( 'focused character', () => {
 		} ) ).toBe( true );
 		expect( person.hero ).toBe( true );
 		expect( hero.fallen.ragdoll.summary ).toEqual( { bodies: 15, joints: 14, totalMassKg: 70 } );
+		expect( hero.fallen.root.getObjectByName( 'Head' ).quaternion.angleTo( headTurn ) ).toBeLessThan( 1e-3 );
 		expect( hero.group.children ).toEqual( [ hero.fallen.root ] );
 
 		physics.step( 1 / 60 );
