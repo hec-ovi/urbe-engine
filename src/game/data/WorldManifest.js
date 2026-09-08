@@ -1,7 +1,7 @@
 import { rooftopSpanErrors } from './RooftopSpanDocument.js';
 
 const REQUIRED_KEYS = [ 'contractVersion', 'seed', 'atlasVersion', 'named', 'namingTheme', 'parcels', 'interiors', 'floors' ];
-const KEYS = new Set( [ ...REQUIRED_KEYS, 'rooftopSpans', 'connections', 'blueprint' ] );
+const KEYS = new Set( [ ...REQUIRED_KEYS, 'rooftopSpans', 'connections', 'blueprint', 'shellCatalog' ] );
 const FLOOR_TAG = /^-?[0-9]{3}$/;
 
 /** Runtime validation of assembly's world-manifest schema plus atlas relations. */
@@ -49,6 +49,11 @@ export function worldManifestErrors( manifest, knownParcels ) {
 	if ( Object.hasOwn( manifest, 'blueprint' ) && ! archiveReference( manifest.blueprint, 'blueprint' ) ) {
 
 		errors.push( 'blueprint must name blueprint/index.json, archive encoding and its sha256 byte hash' );
+
+	}
+	if ( Object.hasOwn( manifest, 'shellCatalog' ) && ! archiveReference( manifest.shellCatalog, 'shells' ) ) {
+
+		errors.push( 'shellCatalog must name shells/index.json, archive encoding and its sha256 byte hash' );
 
 	}
 	if ( Object.hasOwn( manifest, 'connections' ) ) {

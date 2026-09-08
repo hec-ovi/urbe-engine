@@ -1,4 +1,6 @@
 import { readWorldDocument } from './WorldDocument.js';
+import { BuildingSource } from './BuildingSource.js';
+import { initialBuildingIds, loadShellCatalog } from './WorldShellCatalog.js';
 import { loadWorldConnections } from './WorldConnections.js';
 import {
 	QUEST_BUNDLE_FILES, questBundle, questBundleManifest
@@ -13,20 +15,7 @@ const QUESTLINES_FILE = 'quests/questlines.json';
 const QUEST_BUNDLE_FILE = 'quests/quest-bundle.json';
 const INVESTIGATIONS_FILE = 'quests/investigations.json';
 
-/**
- * Everything the game reads off disk, and nothing else: the atlas blueprint,
- * its source-bound connections document, and per parcel the exterior
- * blueprint, every shell, and the selected interior NPC support and floor
- * documents written by `npm run assemble-city`, each floor carrying its GLB URL.
- *
- * Which buildings exist, and which floors each has, is the out dir's
- * manifest, never the directory listing: a blueprint that merges two lots
- * leaves the old parcel's folder behind, and loading it would stand a whole
- * building inside the one that replaced it. The manifest also names the
- * blueprint it was assembled from, so a world built from a different one is
- * refused instead of drawn wrong. A blueprint parcel the batch could not build
- * is reported as unbuilt.
- */
+/** Loads source-bound world documents and manifest-owned building sources. */
 export class WorldSource {
 
 	constructor( { blueprintUrl, outBase, gameId = null } ) {
@@ -92,13 +81,11 @@ export class WorldSource {
 		const connections = await loadWorldConnections( blueprint, manifest.connections, ( file, reference ) => this.#document( `${this.outBase}/${file}`, reference ) );
 
 		const known = new Set( atlas.parcels.map( ( parcel ) => parcel.id ) );
-		const listed = manifest.parcels;
-		const interiors = new Set( manifest.interiors );
-
-		const buildings = new Map(
-			( await Promise.all( listed.map( ( id ) => this.#loadBuilding( id, manifest.floors[ id ], interiors.has( id ) ) ) ) )
-				.map( ( building ) => [ building.parcelId, building ] )
-		);
+		const listedSet = new Set( manifest.parcels );
+		const shellCatalog = await loadShellCatalog( manifest, ( file, reference ) => this.#document( `${this.outBase}/${file}`, reference ) );
+		const sources = new BuildingSource( { manifest, outBase: this.outBase, readJson: url => this.#json( url ) } );
+		const loadBuildings = ids => sources.load( ids );
+		const buildings = await loadBuildings( initialBuildingIds( shellCatalog, manifest, game ) );
 		const quests = await this.#quests( game );
 
 		return {
@@ -106,13 +93,15 @@ export class WorldSource {
 			connections,
 			rooftopSpans: manifest.rooftopSpans ?? emptyRooftopSpans( atlas.meta.seed ),
 			buildings,
+			shellCatalog,
+			loadBuildings,
 			// Catalog games carry the player and quest runtime beside their world.
 			// Direct city previews have no descriptor and retain session-only play.
 			game,
 			// The naming box's typed set for this world, when the out dir carries one.
 			npcTypes: await this.#json( `${this.outBase}/${NPC_TYPES_FILE}` ).catch( () => null ),
 			...quests,
-			unbuilt: [ ...known ].filter( ( id ) => ! buildings.has( id ) )
+			unbuilt: [ ...known ].filter( ( id ) => ! listedSet.has( id ) )
 		};
 
 	}
@@ -195,42 +184,6 @@ export class WorldSource {
 
 		const known = new Set( atlas.parcels.map( ( parcel ) => parcel.id ) );
 		for ( const id of manifest.parcels ) if ( ! known.has( id ) ) throw new Error( `parcel ${id} is not in the blueprint; re-run assemble-city` );
-
-	}
-
-	/** @param tags the parcel's floor file tags, as the manifest lists them */
-	async #loadBuilding( parcelId, tags, hasInterior ) {
-
-		const base = `${this.outBase}/${parcelId}`;
-		const blueprint = await this.#json( `${base}/${parcelId}.blueprint.json` );
-		const [ npc, floors ] = hasInterior
-			? await Promise.all( [ this.#json( `${base}/interior/npc.json` ), this.#floors( base, tags ) ] )
-			: [ null, [] ];
-
-		return {
-			parcelId,
-			blueprint,
-			npc,
-			floors,
-			hasInterior,
-			// The runtime shell the city loads for every building.
-			shellUrl: `${base}/${parcelId}.glb`
-		};
-
-	}
-
-	/**
-	 * The interior floor documents, which carry the room polygons and the light
-	 * fixtures the game lights each room from, each with the URL of the GLB
-	 * holding that floor's furnished geometry, which the game streams a floor at
-	 * a time.
-	 */
-	#floors( base, tags ) {
-
-		return Promise.all( tags.map( async ( tag ) => ( {
-			...await this.#json( `${base}/interior/floors/${tag}.json` ),
-			glbUrl: `${base}/interior/floors/${tag}.glb`
-		} ) ) );
 
 	}
 

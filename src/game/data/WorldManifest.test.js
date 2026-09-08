@@ -59,6 +59,20 @@ describe( 'world manifest boundary', () => {
 
 	} );
 
+	it( 'accepts the shell catalog archive reference and rejects another location or encoding', () => {
+
+		const shellCatalog = { file: 'shells/index.json', encoding: 'archive', sha256: 'a'.repeat( 64 ) };
+		expect( worldManifestErrors( { ...manifest, shellCatalog } ) ).toEqual( [] );
+		for ( const invalid of [ { ...shellCatalog, file: 'other/index.json' }, { ...shellCatalog, encoding: 'json' }, null ] ) {
+
+			expect( worldManifestErrors( { ...manifest, shellCatalog: invalid } ) ).toContain(
+				'shellCatalog must name shells/index.json, archive encoding and its sha256 byte hash'
+			);
+
+		}
+
+	} );
+
 	it( 'fails closed when interiors, floors and blueprint parcels disagree', () => {
 
 		const invalid = { ...manifest, parcels: [ 'p0' ], interiors: [ 'p1' ], floors: { p0: [ 'zero' ] } };
