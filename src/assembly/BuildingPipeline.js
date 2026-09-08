@@ -18,9 +18,10 @@ const EXTERIOR_DIR = fileURLToPath( new URL( '../../../exterior/', import.meta.u
  */
 export class BuildingPipeline {
 
-	constructor( assembler ) {
+	constructor( assembler, { exterior = null } = {} ) {
 
 		this.assembler = assembler;
+		this.exterior = exterior;
 
 	}
 
@@ -106,6 +107,7 @@ export class BuildingPipeline {
 
 		const requestPath = join( outDir, `${request.buildingId}.request.json` );
 		writeFileSync( requestPath, JSON.stringify( request, null, 2 ) + '\n' );
+		if ( this.exterior ) return this.exterior.run( request, outDir );
 
 		const { status, output } = await new Promise( ( resolvePromise ) => {
 

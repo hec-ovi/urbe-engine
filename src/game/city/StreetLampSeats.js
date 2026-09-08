@@ -1,4 +1,5 @@
 import { GroundBuilder } from '../ground/GroundBuilder.js';
+import { StreetFixtureIndex } from './StreetFixtureIndex.js';
 
 /** Fits a pole's complete circular base in authored furnishing land. */
 export class StreetLampSeats {
@@ -6,13 +7,11 @@ export class StreetLampSeats {
 	constructor( atlas ) {
 
 		this.active = Boolean( atlas.streets?.construction?.paving );
-		this.covers = GroundBuilder.regionFootprints( atlas, 'furnishing' ).flatMap( ( { covers } ) => covers.map( ( { polygon } ) => ( {
-			polygon,
-			minX: Math.min( ...polygon.map( point => point[ 0 ] ) ),
-			maxX: Math.max( ...polygon.map( point => point[ 0 ] ) ),
-			minZ: Math.min( ...polygon.map( point => point[ 1 ] ) ),
-			maxZ: Math.max( ...polygon.map( point => point[ 1 ] ) )
-		} ) ) );
+		this.covers = new StreetFixtureIndex();
+		if ( ! this.active ) return;
+		for ( const { covers } of GroundBuilder.regionFootprints( atlas, 'furnishing' ) ) {
+			for ( const { polygon } of covers ) this.covers.add( polygon, polygon );
+		}
 
 	}
 
@@ -20,11 +19,9 @@ export class StreetLampSeats {
 
 		if ( ! this.active ) return true;
 		let area = 0;
-		for ( const cover of this.covers ) {
+		for ( const polygon of this.covers.near( x, z, radius ) ) {
 
-			if ( x + radius < cover.minX || x - radius > cover.maxX
-				|| z + radius < cover.minZ || z - radius > cover.maxZ ) continue;
-			area += circleArea( cover.polygon, x, z, radius );
+			area += circleArea( polygon, x, z, radius );
 
 		}
 		const required = Math.PI * radius * radius;

@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { pointInRing } from '../ground/Polygons.js';
 import { BODY_RADIUS } from '../physics/PlayerBody.js';
+import { StreetFixtureIndex } from './StreetFixtureIndex.js';
 
 /** Atlas publishes a tree anchor point, not a crown radius. */
 const TREE_HEAD_CLEARANCE = 0;
@@ -12,8 +13,25 @@ export class StreetLampClearance {
 
 	constructor( atlas, walk ) {
 
-		this.atlas = atlas;
-		this.walk = walk;
+		this.buildings = new StreetFixtureIndex();
+		this.trees = new StreetFixtureIndex();
+		this.highways = new StreetFixtureIndex();
+		this.walk = new StreetFixtureIndex();
+		this.source = { atlas, walk };
+
+	}
+
+	*index() {
+
+		const { atlas, walk } = this.source;
+		for ( const building of atlas.volumetric.buildings ) { this.buildings.add( building, building.footprint ); yield; }
+		for ( const item of atlas.streets.planting ) { if ( item.kind === 'tree' ) this.trees.add( item, [ item.position ] ); yield; }
+		for ( const highway of atlas.streets.highwayStructures ) {
+			this.highways.add( highway, [ ...highway.path, ...highway.supports.flatMap( support => support.footprint ) ], highway.width / 2 );
+			yield;
+		}
+		for ( const edge of walk?.edges ?? [] ) { this.walk.add( edge, edge.path3?.map( point => [ point[ 0 ], point[ 2 ] ] ) ?? edge.path ); yield; }
+		this.source = null;
 
 	}
 
@@ -22,27 +40,28 @@ export class StreetLampClearance {
 		const segment = headSegment( head );
 		const radius = head.width / 2;
 		const top = head.underside + head.height;
+		const near = head.length / 2 + radius + BODY_RADIUS;
 
-		for ( const building of this.atlas.volumetric.buildings ) {
+		for ( const building of this.buildings.near( head.center.x, head.center.z, near ) ) {
 
 			if ( building.height >= head.underside && segmentToRing( segment, building.footprint ) < radius ) return false;
 
 		}
 
-		for ( const planting of this.atlas.streets.planting ) {
+		for ( const planting of this.trees.near( head.center.x, head.center.z, near ) ) {
 
 			if ( planting.kind === 'tree'
 				&& pointToSegment( planting.position, segment[ 0 ], segment[ 1 ] ) < TREE_HEAD_CLEARANCE + radius ) return false;
 
 		}
 
-		for ( const highway of this.atlas.streets.highwayStructures ) {
+		for ( const highway of this.highways.near( head.center.x, head.center.z, near ) ) {
 
 			if ( ! clearsHighway( head, segment, radius, top, highway ) ) return false;
 
 		}
 
-		return clearsMovement( head, segment, radius + BODY_RADIUS, top, this.walk );
+		return clearsMovement( head, segment, radius + BODY_RADIUS, top, { edges: this.walk.near( head.center.x, head.center.z, near ) } );
 
 	}
 

@@ -78,6 +78,8 @@ Simulation: `simulationRunner.js` calls simulation's `createSimulation(input)` a
 - The CLI needs a TS-capable loader for the connections and interior entries; the npm script runs it under tsx.
 
 ## Depends on
+
+City batches use `ExteriorWorkers(count)` to reuse producer workers through the [worker port](schema/exterior-workers.d.ts). `run(request, outDir)` takes Exterior's [BuildingRequest](../../../exterior/schemas/building-request.schema.json), writes its original keys-only GLB and [blueprint](../../../exterior/schemas/blueprint.schema.json), and returns the blueprint. `close()` releases workers and rejects unfinished jobs. `BuildingPipeline(assembler, {exterior})` accepts this port; single-building calls retain their CLI path. Producer validation and generation errors remain `E_EXTERIOR_FAILED`.
 - ../../../atlas/CONTRACT.md
 - ../../../connections/CONTRACT.md
 - ../../../exterior/CONTRACT.md

@@ -17,6 +17,7 @@ import { join, resolve } from 'node:path';
 import { RequestAssembler } from './RequestAssembler.js';
 import { runConnections, runRooftopSpans } from './connectionsRunner.js';
 import { BuildingPipeline } from './BuildingPipeline.js';
+import { ExteriorWorkers } from './ExteriorWorkers.js';
 import { OutDir, MANIFEST_FILE } from './OutDir.js';
 import { interiorPlan, parseCityArgs } from './CityPlan.js';
 import { collectShellArtifacts } from './ShellArtifacts.js';
@@ -53,7 +54,8 @@ const source = await loadBlueprint( args.blueprint );
 const { atlas } = source;
 const connections = await runConnections( atlas, { seed: atlas.meta.seed } );
 const connectionsArtifact = new ConnectionsArtifact( atlas, connections );
-const pipeline = new BuildingPipeline( new RequestAssembler( atlas, connections ) );
+const exterior = new ExteriorWorkers( args.workers );
+const pipeline = new BuildingPipeline( new RequestAssembler( atlas, connections ), { exterior } );
 const outDir = resolve( args.out );
 const out = new OutDir( outDir );
 
@@ -208,6 +210,7 @@ writeFileSync( join( outDir, 'qa-report.json' ), JSON.stringify( {
 	interiorFailures
 }, null, 2 ) + '\n' );
 
+await exterior.close();
 const { catalog, rooftopRequest } = await collectShellArtifacts( outDir, shells, { seed: atlas.meta.seed } );
 const rooftopSpans = await runRooftopSpans( rooftopRequest );
 if ( out.carryTypes( source.path ) ) console.log( 'typed NPC set carried in beside the blueprint' );
