@@ -41,8 +41,8 @@ describe( 'WorldSource assembled Connections', () => {
 	it.each( [
 		[ 'missing file', ( f ) => f.files.delete( '/out/city/connections.json' ), 'HTTP 404' ],
 		[ 'HTML response', ( f ) => f.files.set( '/out/city/connections.json', () => new Response( '<html>', { headers: { 'content-type': 'text/html' } } ) ), 'expected JSON' ],
-		[ 'corrupt bytes', ( f ) => f.files.set( '/out/city/connections.json', `${serialize( document )} ` ), 'Connections byte hash' ],
-		[ 'added UTF-8 byte order mark', ( f ) => f.files.set( '/out/city/connections.json', `\uFEFF${serialize( document )}` ), 'Connections byte hash' ],
+		[ 'corrupt bytes', ( f ) => f.files.set( '/out/city/connections.json', `${serialize( document )} ` ), 'byte hash' ],
+		[ 'added UTF-8 byte order mark', ( f ) => f.files.set( '/out/city/connections.json', `\uFEFF${serialize( document )}` ), 'byte hash' ],
 		[ 'invalid JSON', ( f ) => f.replaceConnections( '{' ), 'invalid JSON' ],
 		[ 'invalid movement schema', ( f ) => {
 			const invalid = structuredClone( document );

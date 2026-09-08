@@ -1,7 +1,7 @@
 import { rooftopSpanErrors } from './RooftopSpanDocument.js';
 
 const REQUIRED_KEYS = [ 'contractVersion', 'seed', 'atlasVersion', 'named', 'namingTheme', 'parcels', 'interiors', 'floors' ];
-const KEYS = new Set( [ ...REQUIRED_KEYS, 'rooftopSpans', 'connections' ] );
+const KEYS = new Set( [ ...REQUIRED_KEYS, 'rooftopSpans', 'connections', 'blueprint' ] );
 const FLOOR_TAG = /^-?[0-9]{3}$/;
 
 /** Runtime validation of assembly's world-manifest schema plus atlas relations. */
@@ -46,16 +46,20 @@ export function worldManifestErrors( manifest, knownParcels ) {
 	}
 
 	if ( Object.hasOwn( manifest, 'rooftopSpans' ) ) rooftopSpanErrors( manifest.rooftopSpans, parcels, errors );
+	if ( Object.hasOwn( manifest, 'blueprint' ) && ! archiveReference( manifest.blueprint, 'blueprint' ) ) {
+
+		errors.push( 'blueprint must name blueprint/index.json, archive encoding and its sha256 byte hash' );
+
+	}
 	if ( Object.hasOwn( manifest, 'connections' ) ) {
 
 		const ref = manifest.connections;
-		if ( ! plainObject( ref ) || Object.keys( ref ).length !== 3 || ref.file !== 'connections.json'
-			|| typeof ref.sha256 !== 'string' || ! /^[0-9a-f]{64}$/.test( ref.sha256 )
-			|| typeof ref.blueprintSha256 !== 'string' || ! /^[0-9a-f]{64}$/.test( ref.blueprintSha256 ) ) {
-
-			errors.push( 'connections must name connections.json and its sha256 and blueprintSha256 byte hashes' );
-
-		}
+		const valid = plainObject( ref ) && hash( ref.blueprintSha256 ) && (
+			ref.encoding === 'archive'
+				? archiveReference( ref, 'connections', [ 'blueprintSha256' ] )
+				: Object.keys( ref ).length === 3 && ref.file === 'connections.json' && hash( ref.sha256 )
+		);
+		if ( ! valid ) errors.push( 'connections must name connections.json or its archive and its sha256 and blueprintSha256 byte hashes' );
 
 	}
 
@@ -81,5 +85,19 @@ function stringSet( value, name, errors ) {
 function plainObject( value ) {
 
 	return Boolean( value ) && typeof value === 'object' && ! Array.isArray( value );
+
+}
+
+function archiveReference( ref, name, extra = [] ) {
+
+	return plainObject( ref ) && ref.encoding === 'archive' && ref.file === `${name}/index.json`
+		&& hash( ref.sha256 ) && Object.keys( ref ).length === 3 + extra.length
+		&& Object.keys( ref ).every( key => [ 'file', 'encoding', 'sha256', ...extra ].includes( key ) );
+
+}
+
+function hash( value ) {
+
+	return typeof value === 'string' && /^[0-9a-f]{64}$/.test( value );
 
 }

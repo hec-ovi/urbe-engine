@@ -1,3 +1,4 @@
+import { readWorldDocument } from './WorldDocument.js';
 import { loadWorldConnections } from './WorldConnections.js';
 import {
 	QUEST_BUNDLE_FILES, questBundle, questBundleManifest
@@ -42,24 +43,9 @@ export class WorldSource {
 
 	}
 
-	async #document( url ) {
+	#document( url, reference = {} ) {
 
-		const response = await fetch( url );
-		const type = ( response.headers?.get( 'content-type' ) ?? '' ).split( ';', 1 )[ 0 ].toLowerCase();
-
-		if ( ! response.ok ) throw new Error( `${url}: HTTP ${response.status}` );
-		if ( type && type !== 'application/json' ) throw new Error( `${url}: expected JSON, received ${type}` );
-
-		try {
-
-			const bytes = await response.arrayBuffer();
-			return { bytes, data: JSON.parse( new TextDecoder( 'utf-8', { fatal: true } ).decode( bytes ) ) };
-
-		} catch ( error ) {
-
-			throw new Error( `${url}: invalid JSON (${error.message})` );
-
-		}
+		return readWorldDocument( url, reference );
 
 	}
 
@@ -92,15 +78,18 @@ export class WorldSource {
 		// loading hundreds of building files.
 		const game = this.gameId ? await this.#json( `${this.outBase}/game.json` ) : null;
 		const manifest = await this.#manifest();
-		const blueprint = await this.#document( `${this.outBase}/${BLUEPRINT_FILE}` ).catch( ( error ) => {
+		const blueprint = await this.#document(
+			`${this.outBase}/${manifest.blueprint?.file ?? BLUEPRINT_FILE}`,
+			{ ...manifest.blueprint, projection: manifest.connections ? blueprintProjection : undefined }
+		).catch( ( error ) => {
 
-			if ( Object.hasOwn( manifest, 'connections' ) ) throw error;
+			if ( manifest.blueprint || Object.hasOwn( manifest, 'connections' ) ) throw error;
 			return this.#document( this.blueprintUrl );
 
 		} );
 		const atlas = blueprint.data;
 		this.#assertBlueprint( manifest, atlas );
-		const connections = await loadWorldConnections( blueprint, manifest.connections, ( file ) => this.#document( `${this.outBase}/${file}` ) );
+		const connections = await loadWorldConnections( blueprint, manifest.connections, ( file, reference ) => this.#document( `${this.outBase}/${file}`, reference ) );
 
 		const known = new Set( atlas.parcels.map( ( parcel ) => parcel.id ) );
 		const listed = manifest.parcels;
@@ -253,5 +242,14 @@ function emptyRooftopSpans( seed ) {
 		meta: { seed: `${seed}:rooftop-spans`, schemaVersion: '1.0.0', generatorVersion: 'legacy' },
 		spans: []
 	};
+
+}
+
+/** Construction proofs stay in their archive; older blueprints may omit them. */
+function blueprintProjection( { root } ) {
+
+	return Object.hasOwn( root?.streets?.construction ?? {}, 'planningReservations' )
+		? { omit: [ '/streets/construction/planningReservations' ] }
+		: null;
 
 }

@@ -33,10 +33,29 @@ describe( 'world manifest boundary', () => {
 			{ ...connections, sha256: 'A'.repeat( 64 ) }, { ...connections, blueprintSha256: '' }, { ...connections, extra: true } ] ) {
 
 			expect( worldManifestErrors( { ...manifest, connections: invalid } ) ).toContain(
-				'connections must name connections.json and its sha256 and blueprintSha256 byte hashes'
+				'connections must name connections.json or its archive and its sha256 and blueprintSha256 byte hashes'
 			);
 
 		}
+
+	} );
+
+	it( 'accepts archive indices and rejects inconsistent archive reference shapes', () => {
+
+		const blueprint = { file: 'blueprint/index.json', encoding: 'archive', sha256: 'a'.repeat( 64 ) };
+		const connections = { file: 'connections/index.json', encoding: 'archive', sha256: 'b'.repeat( 64 ), blueprintSha256: blueprint.sha256 };
+		expect( worldManifestErrors( { ...manifest, blueprint, connections } ) ).toEqual( [] );
+		for ( const invalid of [ { ...blueprint, file: '../blueprint/index.json' }, { ...blueprint, encoding: 'json' },
+			{ ...blueprint, sha256: '' }, { ...blueprint, extra: true } ] ) {
+
+			expect( worldManifestErrors( { ...manifest, blueprint: invalid, connections } ) ).toContain(
+				'blueprint must name blueprint/index.json, archive encoding and its sha256 byte hash'
+			);
+
+		}
+		expect( worldManifestErrors( { ...manifest, connections: { ...connections, file: 'connections.json' } } ) ).toContain(
+			'connections must name connections.json or its archive and its sha256 and blueprintSha256 byte hashes'
+		);
 
 	} );
 
