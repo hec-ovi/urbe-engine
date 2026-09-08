@@ -1,6 +1,9 @@
 import { copyFileSync, existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { hashJson } from '../world-archive/index.js';
 import { validateWorldManifest } from './validators.js';
+import { ArchiveFiles } from './ArchiveFiles.js';
+import { writeJsonFile } from './JsonFile.js';
 
 export const MANIFEST_FILE = 'manifest.json';
 export const MANIFEST_VERSION = '1.0.0';
@@ -151,6 +154,34 @@ export class OutDir {
 	 */
 	writeManifest( atlas, parcelIds, interiorIds, rooftopSpans = null, connectionsArtifact = null ) {
 
+		const references = connectionsArtifact ? { connections: connectionsArtifact.referenceFor( hashJson( atlas ) ) } : {};
+		const manifest = this.#manifest( atlas, parcelIds, interiorIds, rooftopSpans, references );
+		writeJsonFile( join( this.dir, BLUEPRINT_FILE ), atlas );
+		connectionsArtifact?.write( this.dir );
+		const pendingManifest = join( this.dir, `.${MANIFEST_FILE}.tmp` );
+		writeFileSync( pendingManifest, JSON.stringify( manifest, null, 2 ) + '\n' );
+		renameSync( pendingManifest, join( this.dir, MANIFEST_FILE ) );
+		return manifest;
+
+	}
+
+	/** Publishes bounded archives and references their exact index bytes. */
+	async writeArchiveManifest( atlas, parcelIds, interiorIds, rooftopSpans = null, connectionsArtifact = null, options ) {
+
+		const files = new ArchiveFiles( this.dir );
+		try {
+
+			const references = await files.prepare( atlas, connectionsArtifact, options );
+			const manifest = this.#manifest( atlas, parcelIds, interiorIds, rooftopSpans, references );
+			files.publish( manifest );
+			return manifest;
+
+		} finally { files.dispose(); }
+
+	}
+
+	#manifest( atlas, parcelIds, interiorIds, rooftopSpans, references ) {
+
 		const parcels = [ ...parcelIds ].sort( ( a, b ) => a.localeCompare( b, undefined, { numeric: true } ) );
 		const interiors = [ ...interiorIds ].sort( ( a, b ) => a.localeCompare( b, undefined, { numeric: true } ) );
 		const shells = new Set( parcels );
@@ -171,18 +202,11 @@ export class OutDir {
 			interiors,
 			floors: Object.fromEntries( interiors.map( ( id ) => [ id, this.floorsOf( id ) ] ) )
 		};
-		const blueprintBytes = JSON.stringify( atlas ) + '\n';
 		if ( rooftopSpans ) manifest.rooftopSpans = rooftopSpans;
-		if ( connectionsArtifact ) manifest.connections = connectionsArtifact.reference( blueprintBytes );
+		Object.assign( manifest, references );
 		const errors = validateWorldManifest( manifest );
 
 		if ( errors.length ) throw new Error( `invalid world manifest: ${errors.map( ( error ) => `${error.instancePath || '/'} ${error.message}` ).join( '; ' )}` );
-
-		writeFileSync( join( this.dir, BLUEPRINT_FILE ), blueprintBytes );
-		connectionsArtifact?.write( this.dir );
-		const pendingManifest = join( this.dir, `.${MANIFEST_FILE}.tmp` );
-		writeFileSync( pendingManifest, JSON.stringify( manifest, null, 2 ) + '\n' );
-		renameSync( pendingManifest, join( this.dir, MANIFEST_FILE ) );
 
 		return manifest;
 

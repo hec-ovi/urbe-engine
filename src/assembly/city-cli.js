@@ -21,6 +21,7 @@ import { OutDir, MANIFEST_FILE } from './OutDir.js';
 import { interiorPlan, parseCityArgs } from './CityPlan.js';
 import { rooftopSpanRequest } from './RooftopSpanPlan.js';
 import { ConnectionsArtifact } from './ConnectionsArtifact.js';
+import { loadBlueprint } from './BlueprintInput.js';
 
 function dirBytes( dir ) {
 
@@ -48,7 +49,8 @@ if ( ! args ) {
 }
 
 const started = performance.now();
-const atlas = JSON.parse( readFileSync( resolve( args.blueprint ), 'utf8' ) );
+const source = await loadBlueprint( args.blueprint );
+const { atlas } = source;
 const connections = await runConnections( atlas, { seed: atlas.meta.seed } );
 const connectionsArtifact = new ConnectionsArtifact( atlas, connections );
 const pipeline = new BuildingPipeline( new RequestAssembler( atlas, connections ) );
@@ -211,8 +213,10 @@ const rooftopBuildings = shells.map( ( buildingId ) => ( {
 	blueprint: JSON.parse( readFileSync( join( outDir, buildingId, `${buildingId}.blueprint.json` ), 'utf8' ) )
 } ) );
 const rooftopSpans = await runRooftopSpans( rooftopSpanRequest( atlas, rooftopBuildings ) );
-if ( out.carryTypes( resolve( args.blueprint ) ) ) console.log( 'typed NPC set carried in beside the blueprint' );
-const manifest = out.writeManifest( atlas, shells, readyInteriors, rooftopSpans, connectionsArtifact );
+if ( out.carryTypes( source.path ) ) console.log( 'typed NPC set carried in beside the blueprint' );
+const manifest = source.encoding === 'archive'
+	? await out.writeArchiveManifest( atlas, shells, readyInteriors, rooftopSpans, connectionsArtifact )
+	: out.writeManifest( atlas, shells, readyInteriors, rooftopSpans, connectionsArtifact );
 
 console.log( `\n${totals.passed}/${totals.parcels} shells passed, ${totals.failed} failed; ${totals.interiorsReady}/${totals.interiorsRequested} interiors ready; ${( totals.wallMs / 1000 ).toFixed( 1 )} s, ${( totals.bytes / 1e6 ).toFixed( 1 )} MB` );
 for ( const r of failed ) console.log( `  ${r.parcelId}  ${r.error}` );

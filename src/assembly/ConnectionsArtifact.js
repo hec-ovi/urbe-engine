@@ -1,15 +1,16 @@
-import { createHash } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { hashJson, writeWorldArchive } from '../world-archive/index.js';
 import { AssemblyError } from './RequestAssembler.js';
 import { validateConnectionsOutput } from './validators.js';
+import { writeJsonFile } from './JsonFile.js';
 
 export const CONNECTIONS_FILE = 'connections.json';
 
 /** Captures one validated generation and its complete Atlas source binding. */
 export class ConnectionsArtifact {
 
-	#bytes;
+	#document;
+	#source;
 	#reference;
 
 	constructor( atlas, connections ) {
@@ -29,19 +30,20 @@ export class ConnectionsArtifact {
 
 		}
 
-		this.#bytes = JSON.stringify( connections ) + '\n';
+		this.#document = structuredClone( connections );
+		this.#source = hashJson( atlas );
 		this.#reference = Object.freeze( {
 			file: CONNECTIONS_FILE,
-			sha256: sha256( this.#bytes ),
-			blueprintSha256: sha256( JSON.stringify( atlas ) + '\n' )
+			sha256: hashJson( this.#document ).sha256,
+			blueprintSha256: this.#source.sha256
 		} );
 
 	}
 
-	/** Checks the exact blueprint bytes that OutDir will publish. */
-	reference( blueprintBytes ) {
+	/** Checks a bounded canonical hash or an archive's original-content binding. */
+	referenceFor( binding ) {
 
-		if ( sha256( blueprintBytes ) !== this.#reference.blueprintSha256 ) {
+		if ( binding.sha256 !== this.#source.sha256 || binding.bytes !== this.#source.bytes ) {
 
 			throw new AssemblyError( 'E_CONNECTIONS_SOURCE_MISMATCH', 'Atlas content changed after Connections generation' );
 
@@ -53,14 +55,14 @@ export class ConnectionsArtifact {
 
 	write( dir ) {
 
-		writeFileSync( join( dir, CONNECTIONS_FILE ), this.#bytes );
+		writeJsonFile( join( dir, CONNECTIONS_FILE ), this.#document );
 
 	}
 
-}
+	writeArchive( dir, options ) {
 
-function sha256( bytes ) {
+		return writeWorldArchive( this.#document, dir, options );
 
-	return createHash( 'sha256' ).update( bytes, 'utf8' ).digest( 'hex' );
+	}
 
 }

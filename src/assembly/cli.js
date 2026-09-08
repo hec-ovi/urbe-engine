@@ -7,12 +7,13 @@
  * under <dir>/interior/.
  */
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, resolve } from 'node:path';
 import { RequestAssembler } from './RequestAssembler.js';
 import { runConnections } from './connectionsRunner.js';
 import { BuildingPipeline } from './BuildingPipeline.js';
+import { loadBlueprint } from './BlueprintInput.js';
 
 const ATLAS_SAMPLE = fileURLToPath( new URL( '../../../atlas/samples/city-urbe.json', import.meta.url ) );
 
@@ -61,7 +62,7 @@ if ( ! args ) {
 
 }
 
-const atlas = JSON.parse( readFileSync( resolve( args.blueprint ), 'utf8' ) );
+const { atlas } = await loadBlueprint( args.blueprint );
 const connections = await runConnections( atlas, { seed: atlas.meta.seed } );
 const pipeline = new BuildingPipeline( new RequestAssembler( atlas, connections ) );
 const outDir = resolve( args.out );

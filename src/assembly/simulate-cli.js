@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { join, resolve } from 'node:path';
 import { runConnections } from './connectionsRunner.js';
 import { runCreateSimulation } from './simulationRunner.js';
+import { loadBlueprint } from './BlueprintInput.js';
 
 const ATLAS_SAMPLE = fileURLToPath( new URL( '../../../atlas/samples/city-urbe.json', import.meta.url ) );
 const OUT_DIR = fileURLToPath( new URL( '../../out/', import.meta.url ) );
@@ -75,7 +76,7 @@ if ( ! args ) {
 
 }
 
-const blueprint = JSON.parse( readFileSync( resolve( args.blueprint ), 'utf8' ) );
+const { atlas: blueprint } = await loadBlueprint( args.blueprint );
 const networks = ( await runConnections( blueprint, { seed: blueprint.meta.seed } ) ).networks;
 const interiors = loadInteriors( resolve( args.interiors ) );
 console.log( `inputs: atlas ${blueprint.meta.version} seed ${blueprint.meta.seed}, networks, interiors for ${Object.keys( interiors ).length} parcels` );

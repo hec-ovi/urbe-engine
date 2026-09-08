@@ -32,7 +32,31 @@
       }
     },
     "rooftopSpans": { "$ref": "../connections/rooftop-span-output" },
+    "blueprint": { "$ref": "#/$defs/archiveBlueprint" },
     "connections": {
+      "oneOf": [
+        { "$ref": "#/$defs/jsonConnections" },
+        { "$ref": "#/$defs/archiveConnections" }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [ "connections" ],
+        "properties": { "connections": { "required": [ "encoding" ] } }
+      },
+      "then": { "required": [ "blueprint" ] }
+    },
+    {
+      "if": { "required": [ "blueprint" ] },
+      "then": { "properties": { "connections": { "$ref": "#/$defs/archiveConnections" } } }
+    }
+  ],
+  "$defs": {
+    "parcelId": { "type": "string", "minLength": 1 },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "jsonConnections": {
       "type": "object",
       "additionalProperties": false,
       "required": [ "file", "sha256", "blueprintSha256" ],
@@ -41,10 +65,27 @@
         "sha256": { "$ref": "#/$defs/sha256" },
         "blueprintSha256": { "$ref": "#/$defs/sha256" }
       }
+    },
+    "archiveBlueprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "file", "encoding", "sha256" ],
+      "properties": {
+        "file": { "const": "blueprint/index.json" },
+        "encoding": { "const": "archive" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "archiveConnections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "file", "encoding", "sha256", "blueprintSha256" ],
+      "properties": {
+        "file": { "const": "connections/index.json" },
+        "encoding": { "const": "archive" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "blueprintSha256": { "$ref": "#/$defs/sha256" }
+      }
     }
-  },
-  "$defs": {
-    "parcelId": { "type": "string", "minLength": 1 },
-    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
   }
 }

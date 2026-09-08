@@ -3,7 +3,7 @@
 Purpose: turns the atlas blueprint plus the connections document into per-parcel exterior BuildingRequests, drives exterior to produce each building's GLB and blueprint, and optionally drives interior to fill the shell.
 
 ## In
-- atlas blueprint: `CityBlueprint` per ../../../atlas/CONTRACT.md; every CLI takes `--blueprint <path>` and defaults to the committed sample `../../../atlas/samples/city-urbe.json` (assemble-city requires it explicitly). A named world per ../../../naming/CONTRACT.md (the same blueprint with `name` on its nameables and `meta.naming`) is taken through the same flag: parcel names become sign text, district names are not read.
+- atlas blueprint: `CityBlueprint` per ../../../atlas/CONTRACT.md; every CLI takes `--blueprint <path>` as ordinary JSON or a [World Archive](../world-archive/CONTRACT.md) directory or `index.json`, and defaults to the committed sample `../../../atlas/samples/city-urbe.json` (assemble-city requires it explicitly). A named world per ../../../naming/CONTRACT.md (the same blueprint with `name` on its nameables and `meta.naming`) is taken through the same flag: parcel names become sign text, district names are not read.
 - connections document: `ConnectionsOutput` per ../../../connections/CONTRACT.md, produced in-process by `connectionsRunner.js` calling the library entry `generate(atlas, { seed })` with the atlas seed.
 - rooftop fitting runs after every shell. `RooftopSpanPlan` takes each finished Exterior blueprint's nested mast `externalAttachments`, plus closed building, roof-access and non-mast equipment prisms, and calls Connections `generateRooftopSpans(request)`. The complete scene comes from generated blueprints; assembly adds no endpoint or obstacle geometry.
 
@@ -28,7 +28,7 @@ Exterior request validation loads its published local schema dependencies unchan
 
 City batch: `npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--interiors N] [--parcel <id,id,...>] [--reuse-shells true] [--interior-parcels <id,id,...>]` runs connections once, then builds the merged runtime shell and blueprint for every parcel, N in parallel (default 4). `--reuse-shells true` makes the command require and retain every existing shell instead, so a generated city can become a game without rebuilding its geometry; it cannot be combined with `--parcel`. It furnishes five buildings by default. `--interior-parcels` supplies the exact unique subset for a manual build and makes its length the target. Otherwise parcels explicitly referenced anywhere in carried `<out>/quests/questlines.json` rank first; remaining slots come from commerce, mall, restaurant, coffee shop, hotel, clinic, hospital and police parcels. Both automatic groups use a stable hash of the atlas seed and parcel id, never input order. A candidate whose interior fails keeps its complete shell closed and the next candidate is tried. `<dir>/qa-report.json` separates shell failures from interior failures. Exit 0 only when every shell and the requested interior count finish.
 
-The out dir contains exactly the blueprint it was built from (`OutDir.js`). Parcel folders absent from that blueprint are removed before the run, and only folders carrying an assembly request or blueprint are touched. `<dir>/blueprint.json` is the batch blueprint and `<dir>/npc-types.json` is the naming box's typed set found beside it, so the folder is the whole world the game loads; `<dir>/manifest.json` conforms to [schema/world-manifest.schema.json](schema/world-manifest.schema.json) and is written last:
+The out dir contains exactly the blueprint it was built from (`OutDir.js`). Parcel folders absent from that blueprint are removed before the run, and only folders carrying an assembly request or blueprint are touched. The batch blueprint is `<dir>/blueprint.json` for JSON input or `<dir>/blueprint/index.json` plus its archive parts for archive input, and `<dir>/npc-types.json` is the naming box's typed set found beside it, so the folder is the whole world the game loads; `<dir>/manifest.json` conforms to [schema/world-manifest.schema.json](schema/world-manifest.schema.json) and is written last:
 
 ```
 {
@@ -44,7 +44,9 @@ The out dir contains exactly the blueprint it was built from (`OutDir.js`). Parc
 
 `named` says whether the blueprint's parcels carry names, and `namingTheme` is `meta.naming.theme` when the blueprint records one, else null. `parcels` is every id with a complete exterior blueprint and GLB. `interiors` is the subset with `interior/building.glb`, `interior/npc.json`, and a GLB beside every floor document; `floors` has exactly those ids and lists their tags lowest first. `rooftopSpans` is Connections' validated schema 1.0.0 output and may be empty. Older manifest 1.0.0 documents without that additive field load as an empty span set. A shell that is deliberately closed remains in `parcels` and is not a failure. This is the only list of buildings, floors and rooftop spans the game loads: a directory listing would pick up stale output, and the seed and version let the game refuse an out dir assembled from a different blueprint outright.
 
-Every city batch also writes `connections.json`, the unchanged [Connections output](../../../connections/schemas/output.schema.json) from its single base generation. `ConnectionsArtifact(atlas, connections)` checks that schema and `meta.seed === meta.atlasSeed === atlas.meta.seed`, then captures compact JSON plus LF and a SHA-256 source binding. `OutDir.writeManifest(atlas, parcelIds, interiorIds, rooftopSpans?, connectionsArtifact?)` checks the captured binding against the blueprint being published. The manifest's `connections` reference follows [schema/world-manifest.schema.json](schema/world-manifest.schema.json): `sha256` covers every UTF-8 byte of `connections.json`; `blueprintSha256` covers every UTF-8 byte of `blueprint.json`, including its LF. The file name is fixed. Blueprint, Connections, QA and carried NPC types precede atomic publication of the final manifest.
+Every city batch persists the unchanged [Connections output](../../../connections/schemas/output.schema.json) from its single base generation. `ConnectionsArtifact(atlas, connections)` checks that schema and matching source seeds, then captures an immutable Connections snapshot and canonical JSON-plus-LF hashes through World Archive's bounded byte iterator. `OutDir.writeManifest(atlas, parcelIds, interiorIds, rooftopSpans?, connectionsArtifact?)` synchronously publishes ordinary `blueprint.json` and `connections.json` with the existing bytes and manifest shape. Its Connections reference hashes both complete files, including LF. No whole-document JSON string is allocated.
+
+For archive input, `await OutDir.writeArchiveManifest(atlas, parcelIds, interiorIds, rooftopSpans?, connectionsArtifact?, options?)` writes both documents through World Archive; options follow its [write schema](../world-archive/schema/api.d.ts). The additive manifest references are `blueprint: {file:"blueprint/index.json", encoding:"archive", sha256}` and `connections: {file:"connections/index.json", encoding:"archive", sha256, blueprintSha256}`. These digests cover exact index bytes; `blueprintSha256` equals the blueprint reference hash. The blueprint index's original-content binding must match the Atlas hash captured at Connections generation. Both archives prepare before publication; failed replacement restores the prior archives. The complete manifest shape is shared by both encodings and follows [schema/world-manifest.schema.json](schema/world-manifest.schema.json). Blueprint, Connections, QA and carried NPC types precede atomic final-manifest publication.
 
 Manifest 1.0.0 without `connections` remains readable through the game's existing generation path; omitting the optional artifact in `writeManifest` preserves that shape. A declared reference requires its file, valid JSON and Connections schema, matching source seeds and both byte hashes. Missing, invalid or source-mismatched declared data fails world loading and never regenerates.
 
@@ -52,13 +54,14 @@ Simulation: `simulationRunner.js` calls simulation's `createSimulation(input)` a
 
 ## Errors
 - `E_CONNECTIONS_INVALID`: generated Connections fails its published output schema (thrown as `AssemblyError`; CLI exit 1 before shell work)
-- `E_CONNECTIONS_SOURCE_MISMATCH`: Connections source seeds differ from Atlas, or Atlas bytes changed after artifact capture (thrown as `AssemblyError`; CLI exit 1 without publishing a new manifest)
+- `E_CONNECTIONS_SOURCE_MISMATCH`: Connections source seeds differ from Atlas, an input archive's original-content binding is false, or Atlas bytes changed after artifact capture (thrown as `AssemblyError`; CLI exit 1 without publishing a new manifest)
 - `E_PARCEL_UNKNOWN`: parcel id not in the atlas blueprint (thrown as `AssemblyError`; CLI exit 1)
 - `E_ENVELOPE_INFEASIBLE`: no floor count satisfies both the atlas envelope and exterior's feasibility recipe for the parcel's apertures (thrown as `AssemblyError`; CLI exit 1)
-- `E_REQUEST_INVALID`: a parcel's named access street is absent, or its assembled request fails the Exterior schema (CLI exit 1, schema errors printed)
+- `E_REQUEST_INVALID`: an archive input has no fixed `index.json` name, a parcel's named access street is absent, or its assembled request fails the Exterior schema (CLI exit 1, schema errors printed)
 - `E_EXTERIOR_FAILED`: exterior CLI exited nonzero (CLI exit 1, its output printed)
 - `E_CORE_INFEASIBLE`: interior's coreFeasibility gate reports mode none, the footprint cannot hold any core (CLI exit 1; mode, band and core lengths printed)
 - `E_INTERIOR_FAILED`: interior's generateInterior threw (CLI exit 1, its InteriorError code and message printed)
+- `E_ARCHIVE_*`: World Archive input, part, hash or publication failure, passed through its public contract (CLI exit 1)
 - usage error: CLI exit 2
 
 ## Invariants
@@ -76,3 +79,4 @@ Simulation: `simulationRunner.js` calls simulation's `createSimulation(input)` a
 - ../../../interior/CONTRACT.md
 - ../../../naming/CONTRACT.md
 - ../../../simulation/CONTRACT.md
+- ../world-archive/CONTRACT.md

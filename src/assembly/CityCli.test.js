@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { readWorldArchive, writeWorldArchive } from '../world-archive/index.js';
 
 const ENGINE_ROOT = resolve( dirname( fileURLToPath( import.meta.url ) ), '../..' );
 const BLUEPRINT = fileURLToPath( new URL( './connections-city.fixture.json', import.meta.url ) );
@@ -19,10 +20,19 @@ describe( 'assemble-city CLI', () => {
 
 	} );
 
-	it( 'turns a complete shell-only city into a validated reusable stage without rebuilding it', () => {
+	it.each( [ 'json', 'archive-file', 'archive-directory' ] )( 'reuses a complete city from %s without rebuilding its shells', async ( encoding ) => {
 
 		root = mkdtempSync( join( tmpdir(), 'urbe-city-stage-' ) );
 		const atlas = JSON.parse( readFileSync( BLUEPRINT, 'utf8' ) );
+		let blueprintPath = BLUEPRINT;
+		if ( encoding !== 'json' ) {
+
+			const input = join( root, 'input' );
+			await writeWorldArchive( atlas, input, { maxRecords: 1, maxPartBytes: 4096 } );
+			writeFileSync( join( input, 'npc-types.json' ), '{"types":[]}' );
+			blueprintPath = encoding === 'archive-file' ? join( input, 'index.json' ) : input;
+
+		}
 
 		for ( const parcel of atlas.parcels ) {
 
@@ -36,7 +46,7 @@ describe( 'assemble-city CLI', () => {
 
 		const run = spawnSync( process.execPath, [
 			'--import', 'tsx', 'src/assembly/city-cli.js',
-			'--blueprint', BLUEPRINT, '--out', root,
+			'--blueprint', blueprintPath, '--out', root,
 			'--reuse-shells', 'true', '--interiors', '0'
 		], { cwd: ENGINE_ROOT, encoding: 'utf8' } );
 
@@ -49,6 +59,21 @@ describe( 'assemble-city CLI', () => {
 			parcels: atlas.parcels.length, passed: atlas.parcels.length, failed: 0,
 			interiorsRequested: 0, interiorsReady: 0
 		} );
+		if ( encoding !== 'json' ) {
+
+			expect( manifest.blueprint.file ).toBe( 'blueprint/index.json' );
+			expect( manifest.connections.file ).toBe( 'connections/index.json' );
+			expect( manifest.connections.blueprintSha256 ).toBe( manifest.blueprint.sha256 );
+			expect( await readWorldArchive( join( root, 'blueprint' ) ) ).toEqual( atlas );
+			expect( ( await readWorldArchive( join( root, 'connections' ) ) ).meta.atlasSeed ).toBe( atlas.meta.seed );
+			expect( JSON.parse( readFileSync( join( root, 'npc-types.json' ) ) ) ).toEqual( { types: [] } );
+
+		} else {
+
+			expect( manifest ).not.toHaveProperty( 'blueprint' );
+			expect( manifest.connections.file ).toBe( 'connections.json' );
+
+		}
 
 	}, 20_000 );
 
