@@ -173,6 +173,38 @@ describe( 'Traffic', () => {
 
 	} );
 
+	it( 'fills 500 distinct road positions and retains them inside an expanded population window', () => {
+
+		const lanes = Array.from( { length: 500 }, ( _, index ) => {
+
+			const x = ( index % 25 ) * 10 - 120;
+			const z = Math.floor( index / 25 ) * 10 + 160;
+			return {
+				id: `lane:${index}`, speed: 0, next: [],
+				path3: [ [ x, 2, z ], [ x + 8, 2, z ] ]
+			};
+
+		} );
+		let rendered = 0;
+		const traffic = new Traffic( {
+			networks: { road: { lanes } },
+			models: { ...stubModels(), commit: ( counts ) => { rendered = counts.reduce( ( sum, n ) => sum + n, 0 ); } },
+			signals: { green: () => true }, capacity: 500, spawnRadius: 500
+		} );
+		const player = new THREE.Vector3();
+		traffic.update( 0, player, 0 );
+		expect( traffic.count ).toBe( 500 );
+		expect( rendered ).toBe( 500 );
+		expect( new Set( traffic.cars.map( car => car.position.toArray().join( ',' ) ) ).size ).toBe( 500 );
+		expect( traffic.cars.every( car => car.position.y === 2.02 && car.position.distanceTo( player ) < 500 ) ).toBe( true );
+		const ids = traffic.cars.map( car => car.id );
+		traffic.update( 1.5, player, 0 );
+		expect( traffic.cars.map( car => car.id ) ).toEqual( ids );
+		traffic.update( 1.5, new THREE.Vector3( 1000, 0, 0 ), 0 );
+		expect( traffic.count ).toBe( 0 );
+
+	} );
+
 	it( 'refuses a lane with no authoritative 3D path', () => {
 
 		const networks = corner( 20 );

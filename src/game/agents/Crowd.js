@@ -6,7 +6,7 @@ import { look } from './Appearance.js';
 
 const WALK_SPEED = 1.4;
 const SPAWN_RADIUS = 90;
-const DESPAWN_RADIUS = 115;
+const DESPAWN_MARGIN = 25;
 /** How far off somebody the simulation no longer reports may leave the world:
  *  far enough back that nobody is ever seen going out. */
 const RETIRE_RADIUS = 60;
@@ -47,7 +47,7 @@ const STREET_REACH = 25;
  */
 export class Crowd {
 
-	constructor( { assets, routes, signals, sim, places, capacity, stress = 0, continuity = null } ) {
+	constructor( { assets, routes, signals, sim, places, capacity, spawnRadius = SPAWN_RADIUS, stress = 0, continuity = null } ) {
 
 		this.assets = assets;
 		this.routes = routes;
@@ -55,6 +55,7 @@ export class Crowd {
 		this.sim = sim;
 		this.places = places;
 		this.capacity = capacity;
+		this.spawnRadius = spawnRadius;
 		this.stress = stress;
 		this.continuity = continuity;
 		this.members = new Map();
@@ -85,7 +86,7 @@ export class Crowd {
 
 		}
 		const position = new THREE.Vector3( ...actor.position );
-		const reach = actor.place.kind === 'parcel' ? PARCEL_RADIUS : SPAWN_RADIUS;
+		const reach = actor.place.kind === 'parcel' ? PARCEL_RADIUS : this.spawnRadius;
 		if ( ! member && position.distanceTo( player ) > reach ) return null;
 		const instance = this.sim.getNPC( actor.npcId );
 
@@ -494,7 +495,7 @@ export class Crowd {
 
 			if ( member.frozen ) continue;
 
-			const reach = member.retiring ? RETIRE_RADIUS : DESPAWN_RADIUS;
+			const reach = member.retiring ? RETIRE_RADIUS : this.spawnRadius + DESPAWN_MARGIN;
 
 			if ( member.position.distanceTo( player ) > reach ) this.members.delete( id );
 
@@ -596,7 +597,7 @@ export class Crowd {
 	#streetAgents( timeMin, player ) {
 
 		const out = [];
-		const scope = { kind: 'radius', x: player.x, z: player.z, metres: SPAWN_RADIUS };
+		const scope = { kind: 'radius', x: player.x, z: player.z, metres: this.spawnRadius };
 
 		for ( const agent of this.#agentsIn( timeMin, scope, this.capacity ) ) {
 
@@ -659,7 +660,7 @@ export class Crowd {
 
 		if ( ! this.stress || ! street.length ) return;
 
-		const spread = this.routes.near( player, 0, SPAWN_RADIUS );
+		const spread = this.routes.near( player, 0, this.spawnRadius );
 		const standing = [];
 
 		for ( const member of this.members.values() ) {
@@ -815,7 +816,7 @@ export class Crowd {
 			if ( ! edge ) return null;
 			const at = this.routes.pointAt( edge, edge.length * ( current?.progress ?? 0.5 ), 1 );
 			position = new THREE.Vector3( at.x, walkY( edge, at ), at.z );
-			if ( position.distanceTo( player ) > SPAWN_RADIUS ) return null;
+			if ( position.distanceTo( player ) > this.spawnRadius ) return null;
 
 		} else return null;
 

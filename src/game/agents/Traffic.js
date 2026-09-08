@@ -3,7 +3,7 @@ import { Rng } from '../../city/Rng.js';
 import { measure, sample } from './Polyline.js';
 
 const SPAWN_RADIUS = 110;
-const DESPAWN_RADIUS = 140;
+const DESPAWN_MARGIN = 30;
 const REFRESH_INTERVAL = 1.5;
 const STOP_MARGIN = 5;
 /** Clear road a car keeps in front of the one ahead, bumper to bumper. */
@@ -27,20 +27,20 @@ const YIELD_STOP = 1.5;
  * never jumped. Cars keep a following gap on the line they share, and spawn
  * into a gap wide enough for one, so two never stand in the same place.
  *
- * A car leaves the world when it is further than DESPAWN_RADIUS from the
- * player, or when the lane it is on has no turn connection at all, which is
- * the edge of the road network.
+ * A car leaves past the spawning radius plus 30 metres, or when its lane
+ * has no turn connection, the edge of the road network.
  */
 export class Traffic {
 
 	/** @param seed the world's seed; any string or number, one traffic stream per world. */
-	constructor( { networks, models, signals, capacity, seed = 1 } ) {
+	constructor( { networks, models, signals, capacity, spawnRadius = SPAWN_RADIUS, seed = 1 } ) {
 
 		this.push = new THREE.Vector3();
 
 		this.models = models;
 		this.signals = signals;
 		this.capacity = capacity;
+		this.spawnRadius = spawnRadius;
 		this.seed = typeof seed === 'number' ? seed >>> 0 : hash( String( seed ) );
 		this.cars = [];
 		this.spawned = 0;
@@ -116,7 +116,7 @@ export class Traffic {
 
 	#reconcile( player ) {
 
-		this.cars = this.cars.filter( ( car ) => car.position.distanceTo( player ) < DESPAWN_RADIUS );
+		this.cars = this.cars.filter( ( car ) => car.position.distanceTo( player ) < this.spawnRadius + DESPAWN_MARGIN );
 
 		if ( this.cars.length >= this.capacity ) return;
 
@@ -139,7 +139,7 @@ export class Traffic {
 
 			const distance = Math.hypot( lane.mid[ 0 ] - player.x, lane.mid[ 2 ] - player.z );
 
-			if ( distance > SPAWN_RADIUS || distance < 12 ) continue;
+			if ( distance > this.spawnRadius || distance < 12 ) continue;
 
 			const spawnIndex = this.spawned ++;
 			const rng = new Rng( mix( this.seed, spawnIndex ) );

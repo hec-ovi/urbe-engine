@@ -336,6 +336,7 @@ export class GameApp {
 			assets, routes, sim: this.sim, signals: this.signals,
 			places: crowdPlaces,
 			capacity: config.maxCrowd,
+			spawnRadius: config.crowdRadius,
 			stress: config.stress,
 			continuity: this.npcContinuity
 		} );
@@ -357,6 +358,7 @@ export class GameApp {
 		this.traffic = new Traffic( {
 			networks: connections.networks, models: carModels,
 			signals: this.signals, capacity: config.maxCars,
+			spawnRadius: config.carRadius,
 			seed: atlas.meta.seed
 		} );
 

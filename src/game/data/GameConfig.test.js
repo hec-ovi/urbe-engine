@@ -40,6 +40,25 @@ describe( 'game URL configuration', () => {
 
 	} );
 
+	it( 'retains the requested 500-person and 500-car performance load', () => {
+
+		window.history.replaceState( {}, '', '/?mode=game&crowd=500&cars=500&crowdRadius=500&carRadius=500' );
+		expect( GameConfig.fromUrl() ).toMatchObject( { maxCrowd: 500, maxCars: 500, crowdRadius: 500, carRadius: 500 } );
+
+	} );
+
+	it( 'keeps ordinary population windows and bounds explicit radii and capacities', () => {
+
+		expect( GameConfig.fromUrl() ).toMatchObject( {
+			maxCrowd: 0, maxCars: 0, crowdRadius: 90, carRadius: 110
+		} );
+		window.history.replaceState( {}, '', '/?crowd=900&cars=900&crowdRadius=-1&carRadius=20000' );
+		expect( GameConfig.fromUrl() ).toMatchObject( {
+			maxCrowd: 600, maxCars: 600, crowdRadius: 1, carRadius: 10000
+		} );
+
+	} );
+
 	it( 'refuses a game id that could escape the game directory', () => {
 
 		window.history.replaceState( {}, '', '/?mode=game&game=../outside' );

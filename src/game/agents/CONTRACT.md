@@ -6,6 +6,7 @@ Status: the public continuity and follow API is wired into the live GameApp, Cro
 
 ## Inputs
 
+- Crowd and traffic population options: [schema/population-window.schema.json](schema/population-window.schema.json). Capacity bounds resident bodies. `spawnRadius` defaults to 90 m for Crowd and 110 m for Traffic; offscreen removal adds 25 m and 30 m respectively. Crowd consumes real simulation handles within the chosen circle; Traffic fills free positions on Connections lanes over successive refreshes. A larger capacity does not invent population or road space.
 - Movement network: [schema/movement-network.schema.json](schema/movement-network.schema.json). `WalkRoutes` indexes `connections.networks.walk`; every movement edge must carry authoritative `path3`. Scheduled transit materialization also consumes the matching Connections route's ordered stops, timetable, service window and 3D shape.
 - Place anchors: [schema/places.schema.json](schema/places.schema.json). Optional loaded parcel and public transport stop positions plus interior anchor ids, positions and headings. Rail station ids use the simulation's `stop` place kind at the published platform level.
 - Appearance request: [schema/appearance-request.schema.json](schema/appearance-request.schema.json). One already-instanced npcId and current simulation time.

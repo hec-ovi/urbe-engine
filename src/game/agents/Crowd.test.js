@@ -94,6 +94,50 @@ describe( 'Crowd route elevation', () => {
 
 } );
 
+describe( 'Crowd population window', () => {
+
+	it( 'renders 500 unique simulation handles on their authoritative paths beyond the ordinary window', () => {
+
+		const edges = Array.from( { length: 500 }, ( _, index ) => {
+
+			const x = ( index % 25 ) * 10 - 120;
+			const z = Math.floor( index / 25 ) * 10 + 160;
+			return {
+				id: `edge:${index}`, from: `from:${index}`, to: `to:${index}`, kind: 'sidewalk',
+				path3: [ [ x, 2, z ], [ x + 8, 2, z ] ]
+			};
+
+		} );
+		const routes = new WalkRoutes( { walk: { nodes: [], edges } } );
+		const agents = edges.map( ( edge, index ) => ( {
+			crowdId: `trip:${index}`, type: 'commuter', activity: 'commuting',
+			place: { kind: 'edge', id: edge.id }, progress: 0.5, direction: 1
+		} ) );
+		const sim = { crowd: vi.fn( () => ( { agents } ) ) };
+		let rendered = 0;
+		const mesh = { setInstance: () => {}, commit: count => { rendered += count; } };
+		const crowd = new Crowd( {
+			assets: { variants: [ {}, {} ], durations: [ 1, 1, 1 ], meshesOf: () => [ mesh ] },
+			routes, signals: { green: () => true }, sim, places: new Map(), capacity: 500, spawnRadius: 500
+		} );
+		const player = new THREE.Vector3();
+		crowd.update( 0, player, { timeMin: 1260, daySeconds: 75600 } );
+		expect( sim.crowd ).toHaveBeenCalledWith( 1260, { kind: 'radius', x: 0, z: 0, metres: 500 }, { maxAgents: 500 } );
+		expect( crowd.count ).toBe( 500 );
+		expect( rendered ).toBe( 500 );
+		expect( new Set( [ ...crowd.members.values() ].map( member => member.crowdId ) ).size ).toBe( 500 );
+		expect( [ ...crowd.members.values() ].every( member => ! member.copy && member.position.y === 2 + SIDEWALK_HEIGHT ) ).toBe( true );
+		const bodies = [ ...crowd.members.keys() ];
+		crowd.update( 3, player, { timeMin: 1260, daySeconds: 75603 } );
+		expect( [ ...crowd.members.keys() ] ).toEqual( bodies );
+		sim.crowd.mockReturnValue( { agents: [] } );
+		crowd.update( 3, new THREE.Vector3( 1000, 0, 0 ), { timeMin: 1260, daySeconds: 75606 } );
+		expect( crowd.count ).toBe( 0 );
+
+	} );
+
+} );
+
 describe( 'persistent NPC projection', () => {
 
 	it( 'updates, unloads and recreates one npcId with the same authored body and animation state', () => {
