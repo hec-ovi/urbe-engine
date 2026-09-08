@@ -1,41 +1,26 @@
 import * as THREE from 'three/webgpu';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { Rng } from '../../city/Rng.js';
-import { PropModels } from './PropModels.js';
-import { Sites } from './Sites.js';
-import { Clearance } from './Clearance.js';
-import { Arrangements } from './Arrangements.js';
-import { AuthoredRails } from './AuthoredRails.js';
-import { seedOf } from './Placement.js';
+import { planDressing } from './DressingPlan.js';
+import { PropStream } from './PropStream.js';
 
 /** Public street-dressing entry. Whole arrangements are admitted before batching. */
 export class Dressing {
 	constructor( atlas, walk, factory, options = {} ) { Object.assign( this, { atlas, walk, factory, options } ); }
 	async build() {
-		const models = await new PropModels( this.factory, this.options.loadAsset ).load();
-		try {
-			const clearance = new Clearance( this.atlas, this.walk, this.options.obstacles ), arrange = new Arrangements( models );
-			const placements = new AuthoredRails( this.atlas, models ).build();
-			for ( const rail of placements ) clearance.block( rail.footprint, rail.bottom, rail.top, 0.12 );
-			for ( const site of new Sites( this.atlas ).all() ) {
-				const items = arrange.at( site, new Rng( seedOf( `${this.atlas.meta.seed}:${site.id}` ) ) );
-				if ( ! items.length ) continue;
-				const elevation = clearance.claim( items, site.kind === 'yard' );
-				if ( elevation === null ) continue;
-				for ( const item of items ) { item.matrix.elements[ 13 ] += elevation; item.bottom += elevation; item.top += elevation; placements.push( item ); }
-			}
-			return assemble( models, placements );
-		} catch ( error ) { models.dispose(); throw error; }
+		const { models, placements, counts } = await planDressing( this.atlas, this.walk, this.factory, this.options );
+		try { return assemble( models, placements, counts ); } catch ( error ) { models.dispose(); throw error; }
+	}
+	async stream( options = {} ) {
+		PropStream.validate( options );
+		return new PropStream( await planDressing( this.atlas, this.walk, this.factory, this.options ), options );
 	}
 }
 
-function assemble( models, placements ) {
+function assemble( models, placements, counts ) {
 	const group = new THREE.Group(); group.name = 'props';
-	const batches = new Map(), counts = { total: placements.length, guardrail: 0 }, solids = [];
-	for ( const spec of models.models.values() ) counts[ spec.kind ] = 0;
+	const batches = new Map(), solids = [];
 	for ( const item of placements ) {
 		const model = models.get( item.model ), position = new THREE.Vector3().setFromMatrixPosition( item.matrix );
-		counts[ item.kind ] ++;
 		const key = `${item.model}:${item.finish}:${Math.floor( position.x / 64 )}:${Math.floor( position.z / 64 )}`;
 		if ( ! batches.has( key ) ) batches.set( key, [] );
 		batches.get( key ).push( item );
