@@ -21,6 +21,7 @@ export class Warmup {
 		this.mrt = mrt;
 		this.renderTarget = renderTarget;
 		this.uploaded = new WeakSet();
+		this.preparing = Promise.resolve();
 
 	}
 
@@ -46,6 +47,14 @@ export class Warmup {
 	}
 
 	async #prepare( object ) {
+
+		const pending = this.preparing.then( () => this.#compile( object ) );
+		this.preparing = pending.catch( () => {} );
+		return pending;
+
+	}
+
+	async #compile( object ) {
 
 		if ( ! object || ! this.renderer?.compileAsync ) return;
 		let shown = null;

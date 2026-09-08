@@ -192,6 +192,29 @@ describe( 'Warmup', () => {
 
 	} );
 
+	it( 'serializes independent streaming requests and continues after one fails', async () => {
+
+		const a = tree(), b = tree();
+		let active = 0, peak = 0;
+		const renderer = fakeRenderer( async object => {
+
+			active ++;
+			peak = Math.max( peak, active );
+			await new Promise( resolve => setTimeout( resolve, 1 ) );
+			active --;
+			if ( object === a.mesh ) throw new Error( 'first cell failed' );
+
+		} );
+		const warmup = new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera(), { scene: true } );
+		const results = await Promise.allSettled( [ warmup.warmAll( a.root ), warmup.warmAll( b.root ) ] );
+		expect( results.map( result => result.status ) ).toEqual( [ 'rejected', 'fulfilled' ] );
+		expect( peak ).toBe( 1 );
+		expect( renderer.mrt ).toBe( 'frame' );
+		expect( a.hidden.visible ).toBe( false );
+		expect( b.hidden.visible ).toBe( false );
+
+	} );
+
 	it( 'rejects required preparation on the first failed compile after restoring the render state', async () => {
 
 		const { root, hidden, mesh } = tree();
