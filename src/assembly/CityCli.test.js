@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { readWorldArchive, writeWorldArchive } from '../world-archive/index.js';
+import shellBlueprints from './shell-blueprints.fixture.json';
 
 const ENGINE_ROOT = resolve( dirname( fileURLToPath( import.meta.url ) ), '../..' );
 const BLUEPRINT = fileURLToPath( new URL( './connections-city.fixture.json', import.meta.url ) );
@@ -39,7 +40,7 @@ describe( 'assemble-city CLI', () => {
 			const dir = join( root, parcel.id );
 			mkdirSync( dir, { recursive: true } );
 			writeFileSync( join( dir, `${parcel.id}.request.json` ), JSON.stringify( { parcel: { footprint: parcel.footprint } } ) );
-			writeFileSync( join( dir, `${parcel.id}.blueprint.json` ), '{}' );
+			writeFileSync( join( dir, `${parcel.id}.blueprint.json` ), JSON.stringify( shellBlueprints[ parcel.id ] ) );
 			writeFileSync( join( dir, `${parcel.id}.glb` ), 'glb' );
 
 		}
@@ -55,6 +56,8 @@ describe( 'assemble-city CLI', () => {
 		const report = JSON.parse( readFileSync( join( root, 'qa-report.json' ), 'utf8' ) );
 		expect( manifest.parcels ).toHaveLength( atlas.parcels.length );
 		expect( manifest.interiors ).toEqual( [] );
+		expect( manifest.shellCatalog.file ).toBe( 'shells/index.json' );
+		expect( ( await readWorldArchive( join( root, 'shells' ) ) ).buildings.map( building => building.id ) ).toEqual( manifest.parcels );
 		expect( report.totals ).toMatchObject( {
 			parcels: atlas.parcels.length, passed: atlas.parcels.length, failed: 0,
 			interiorsRequested: 0, interiorsReady: 0

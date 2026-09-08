@@ -7,20 +7,47 @@ const ACCESS_CLEARANCE = 1;
  */
 export function rooftopSpanRequest( atlas, buildings, { seed, params } = {} ) {
 
-	const usable = buildings.filter( ( entry ) => entry.blueprint?.roof?.outline?.length >= 3 );
-	const request = {
-		seed: seed ?? `${atlas.meta.seed}:rooftop-spans`,
-		attachments: usable.flatMap( ( entry ) => attachmentsOf( entry ) ),
-		volumes: [
-			...usable.map( ( entry ) => buildingVolume( entry ) ),
-			...usable.flatMap( ( entry ) => accessVolume( entry ) ),
-			...usable.flatMap( ( entry ) => equipmentVolumes( entry ) )
-		]
-	};
+	const plan = new RooftopSpanPlan( atlas, { seed, params } );
+	for ( const { buildingId, blueprint } of buildings ) plan.add( buildingId, blueprint );
+	return plan.request();
 
-	if ( params ) request.params = params;
+}
 
-	return request;
+/** Retains only Connections attachment and obstacle records between shells. */
+export class RooftopSpanPlan {
+
+	constructor( atlas, { seed, params } = {} ) {
+
+		this.seed = seed ?? `${atlas.meta.seed}:rooftop-spans`;
+		this.params = params;
+		this.attachments = [];
+		this.buildings = [];
+		this.access = [];
+		this.equipment = [];
+
+	}
+
+	add( buildingId, blueprint ) {
+
+		if ( ! ( blueprint?.roof?.outline?.length >= 3 ) ) return;
+		const entry = { buildingId, blueprint };
+		this.attachments.push( ...attachmentsOf( entry ) );
+		this.buildings.push( buildingVolume( entry ) );
+		this.access.push( ...accessVolume( entry ) );
+		this.equipment.push( ...equipmentVolumes( entry ) );
+
+	}
+
+	request() {
+
+		return {
+			seed: this.seed,
+			attachments: this.attachments,
+			volumes: [ ...this.buildings, ...this.access, ...this.equipment ],
+			...( this.params ? { params: this.params } : {} )
+		};
+
+	}
 
 }
 

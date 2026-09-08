@@ -1,25 +1,57 @@
 import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { writeWorldArchive } from '../world-archive/index.js';
-import { sha256 } from './JsonFile.js';
+import { hashJson, writeWorldArchive } from '../world-archive/index.js';
+import { sha256, writeJsonFile } from './JsonFile.js';
 
-/** Prepares both archives before replacing any published document or manifest. */
-export class ArchiveFiles {
+/** Prepares world documents before replacing any published file or manifest. */
+export class WorldFiles {
 
 	constructor( directory ) {
 
 		this.directory = directory;
 		this.stage = mkdtempSync( join( directory, '.world-archive-' ) );
-		this.names = [ 'blueprint' ];
+		this.names = [];
 
 	}
 
-	async prepare( atlas, connectionsArtifact, options ) {
+	async prepare( atlas, connectionsArtifact, { encoding, archiveOptions, catalog } ) {
+
+		const references = encoding === 'archive'
+			? await this.#archives( atlas, connectionsArtifact, archiveOptions )
+			: this.#json( atlas, connectionsArtifact );
+		if ( catalog ) {
+
+			await writeWorldArchive( catalog, join( this.stage, 'shells' ), archiveOptions );
+			this.names.push( 'shells' );
+			references.shellCatalog = archiveReference( this.stage, 'shells' );
+
+		}
+		return references;
+
+	}
+
+	#json( atlas, connectionsArtifact ) {
+
+		const references = connectionsArtifact ? { connections: connectionsArtifact.referenceFor( hashJson( atlas ) ) } : {};
+		writeJsonFile( join( this.stage, 'blueprint.json' ), atlas );
+		this.names.push( 'blueprint.json' );
+		if ( connectionsArtifact ) {
+
+			connectionsArtifact.write( this.stage );
+			this.names.push( 'connections.json' );
+
+		}
+		return references;
+
+	}
+
+	async #archives( atlas, connectionsArtifact, options ) {
 
 		const blueprintDirectory = join( this.stage, 'blueprint' );
 		const index = await writeWorldArchive( atlas, blueprintDirectory, options );
 		connectionsArtifact?.referenceFor( index.json );
 		const blueprint = archiveReference( this.stage, 'blueprint' );
+		this.names.push( 'blueprint' );
 		if ( ! connectionsArtifact ) return { blueprint };
 
 		await connectionsArtifact.writeArchive( join( this.stage, 'connections' ), options );

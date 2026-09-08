@@ -8,6 +8,7 @@ const EXTERIOR_REQUEST = new URL( '../../../exterior/schemas/building-request.sc
 const INTERIOR_REQUEST = new URL( '../../../interior/schemas/request.schema.json', import.meta.url );
 const INTERIOR_BLUEPRINT = new URL( '../../../interior/schemas/blueprint.schema.json', import.meta.url );
 const WORLD_MANIFEST = new URL( './schema/world-manifest.schema.json', import.meta.url );
+const SHELL_CATALOG = new URL( './schema/shell-catalog.schema.json', import.meta.url );
 const ROOFTOP_SPAN = new URL( '../../../connections/schemas/rooftop-span.schema.json', import.meta.url );
 const ROOFTOP_SPAN_OUTPUT = new URL( '../../../connections/schemas/rooftop-span-output.schema.json', import.meta.url );
 const CONNECTIONS_SCHEMAS = [ 'link', 'aperture', 'networks', 'output' ].map(
@@ -48,6 +49,7 @@ function instance() {
 		ajv.addSchema( loadSchema( ROOFTOP_SPAN ) );
 		ajv.addSchema( rooftopSpanOutput );
 		ajv.addSchema( loadSchema( WORLD_MANIFEST ) );
+		ajv.addSchema( loadSchema( SHELL_CATALOG ) );
 
 	}
 
@@ -70,6 +72,20 @@ export function validateWorldManifest( manifest ) {
 	const validate = instance().getSchema( 'urbe/engine/world-manifest' );
 
 	return validate( manifest ) ? [] : validate.errors;
+
+}
+
+export function validateShellCatalog( catalog ) {
+
+	const validate = instance().getSchema( 'urbe/engine/shell-catalog' );
+	return validate( catalog ) ? [] : validate.errors;
+
+}
+
+export function validateExteriorBlueprint( blueprint ) {
+
+	const validate = instance().getSchema( 'urbe/exterior/blueprint' );
+	return validate( blueprint ) ? [] : validate.errors;
 
 }
 

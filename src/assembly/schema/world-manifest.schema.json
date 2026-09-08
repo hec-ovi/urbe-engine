@@ -33,6 +33,14 @@
     },
     "rooftopSpans": { "$ref": "../connections/rooftop-span-output" },
     "blueprint": { "$ref": "#/$defs/archiveBlueprint" },
+    "shellCatalog": {
+      "type": "object", "additionalProperties": false, "required": [ "file", "encoding", "sha256" ],
+      "properties": {
+        "file": { "const": "shells/index.json" },
+        "encoding": { "const": "archive" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
     "connections": {
       "oneOf": [
         { "$ref": "#/$defs/jsonConnections" },

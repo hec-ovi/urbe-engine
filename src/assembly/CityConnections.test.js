@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it, vi } from 'vitest';
 import { runConnections } from './connectionsRunner.js';
 import atlas from './connections-city.fixture.json';
+import shellBlueprints from './shell-blueprints.fixture.json';
 
 vi.mock( './connectionsRunner.js', async ( original ) => {
 
@@ -32,7 +33,7 @@ it( 'city CLI generates Connections once and persists that complete document', a
 		const parcelDir = join( dir, parcel.id );
 		mkdirSync( parcelDir );
 		writeFileSync( join( parcelDir, `${parcel.id}.request.json` ), JSON.stringify( { parcel: { footprint: parcel.footprint } } ) );
-		writeFileSync( join( parcelDir, `${parcel.id}.blueprint.json` ), '{}' );
+		writeFileSync( join( parcelDir, `${parcel.id}.blueprint.json` ), JSON.stringify( shellBlueprints[ parcel.id ] ) );
 		writeFileSync( join( parcelDir, `${parcel.id}.glb` ), 'glb' );
 
 	}

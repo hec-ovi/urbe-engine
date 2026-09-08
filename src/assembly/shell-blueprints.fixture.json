@@ -1,0 +1,846 @@
+{
+  "p0": {
+    "buildingId": "p0",
+    "seed": "assembly-connections:p0",
+    "bounds": {
+      "footprint": [
+        [ 21.5, -28.5 ],
+        [ 38.5, -28.5 ],
+        [ 38.5, -11.5 ],
+        [ 21.5, -11.5 ]
+      ],
+      "height": 18.5
+    },
+    "floors": [
+      {
+        "index": 0,
+        "kind": "lobby",
+        "elevation": 0,
+        "height": 5.5,
+        "outline": [
+          [ 21.5, -28.5 ],
+          [ 38.5, -28.5 ],
+          [ 38.5, -11.5 ],
+          [ 21.5, -11.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 1,
+        "kind": "residential",
+        "elevation": 5.5,
+        "height": 3,
+        "outline": [
+          [ 21.5, -28.5 ],
+          [ 38.5, -28.5 ],
+          [ 38.5, -11.5 ],
+          [ 21.5, -11.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 2,
+        "kind": "residential",
+        "elevation": 8.5,
+        "height": 3,
+        "outline": [
+          [ 21.5, -28.5 ],
+          [ 38.5, -28.5 ],
+          [ 38.5, -11.5 ],
+          [ 21.5, -11.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 3,
+        "kind": "residential",
+        "elevation": 11.5,
+        "height": 3,
+        "outline": [
+          [ 21.5, -28.5 ],
+          [ 38.5, -28.5 ],
+          [ 38.5, -11.5 ],
+          [ 21.5, -11.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 4,
+        "kind": "residential",
+        "elevation": 14.5,
+        "height": 3,
+        "outline": [
+          [ 21.5, -28.5 ],
+          [ 38.5, -28.5 ],
+          [ 38.5, -11.5 ],
+          [ 21.5, -11.5 ]
+        ],
+        "openings": []
+      }
+    ],
+    "balconyBands": [],
+    "facade": {
+      "surfacePattern": {
+        "kind": "continuous"
+      },
+      "groundMaterial": {
+        "key": "cyberpunk/concrete-monolith/mid",
+        "variantId": "native-cast"
+      },
+      "exteriorStyle": "residential-modest",
+      "style": "panel",
+      "panelModule": 2,
+      "panelPattern": {
+        "width": 2,
+        "height": 1,
+        "jointWidth": 0.02,
+        "origin": "face-floor",
+        "boundary": "centered-solid-border"
+      },
+      "materialPlan": {
+        "palette": "neutral-dystopian",
+        "field": {
+          "key": "cyberpunk/concrete-monolith/mid",
+          "variantId": "native-cast"
+        },
+        "border": {
+          "key": "cyberpunk/concrete-monolith/mid",
+          "variantId": "native-cast"
+        },
+        "trim": {
+          "key": "cyberpunk/wall-trim/mid",
+          "variantId": "paint"
+        }
+      },
+      "wallDepth": 0.262,
+      "coreAdjacency": {
+        "glazing": {
+          "role": "circulation",
+          "clearDepth": 1.2
+        }
+      },
+      "slabBand": {
+        "below": 0.5,
+        "above": 0
+      },
+      "grids": []
+    },
+    "facadeServices": {
+      "version": 1,
+      "units": [],
+      "networks": [],
+      "clotheslines": [],
+      "damagedWindows": [],
+      "limits": {
+        "maxNetworks": 12,
+        "maxSegments": 96,
+        "maxSupports": 96,
+        "maxUnits": 24,
+        "maxClotheslines": 4,
+        "maxClothItems": 16,
+        "maxDamagedWindows": 3,
+        "maxTriangles": 6000,
+        "maxMaterialKeys": 3,
+        "maxDrawCalls": 3
+      },
+      "stats": {
+        "networks": 0,
+        "segments": 0,
+        "supports": 0,
+        "units": 0,
+        "clotheslines": 0,
+        "clothItems": 0,
+        "damagedWindows": 0,
+        "triangles": 0,
+        "materialKeys": 0,
+        "drawCalls": 0
+      }
+    },
+    "roof": {
+      "elevation": 17.5,
+      "outline": [
+        [ 21.5, -28.5 ],
+        [ 38.5, -28.5 ],
+        [ 38.5, -11.5 ],
+        [ 21.5, -11.5 ]
+      ],
+      "parapetHeight": 1,
+      "bulkhead": null,
+      "artifacts": []
+    },
+    "materials": [
+      "cyberpunk/ac-unit/mid",
+      "cyberpunk/balcony-rail/mid",
+      "cyberpunk/balcony-slab/mid",
+      "cyberpunk/concrete-monolith/mid",
+      "cyberpunk/curtain/mid",
+      "cyberpunk/door-glass/mid",
+      "cyberpunk/door/mid",
+      "cyberpunk/fabric/mid",
+      "cyberpunk/floor-slab/mid",
+      "cyberpunk/metal/mid",
+      "cyberpunk/roof-artifact/mid",
+      "cyberpunk/roof/mid",
+      "cyberpunk/wall-trim/mid",
+      "cyberpunk/window-frame/mid",
+      "cyberpunk/window-glass/mid",
+      "cyberpunk/window-grime-jamb/mid",
+      "cyberpunk/window-grime-sill/mid"
+    ],
+    "materialVariants": {
+      "cyberpunk/ac-unit/mid": "grille",
+      "cyberpunk/balcony-rail/mid": "paint",
+      "cyberpunk/balcony-slab/mid": "plain",
+      "cyberpunk/concrete-monolith/mid": "native-cast",
+      "cyberpunk/curtain/mid": "slat",
+      "cyberpunk/door-glass/mid": "1",
+      "cyberpunk/door/mid": "paint",
+      "cyberpunk/floor-slab/mid": "plain",
+      "cyberpunk/metal/mid": "paint",
+      "cyberpunk/roof/mid": "plain",
+      "cyberpunk/wall-trim/mid": "paint",
+      "cyberpunk/window-frame/mid": "paint",
+      "cyberpunk/window-glass/mid": "1"
+    }
+  },
+  "p1": {
+    "buildingId": "p1",
+    "seed": "assembly-connections:p1",
+    "bounds": {
+      "footprint": [
+        [ 21.5, 11.5 ],
+        [ 38.5, 11.5 ],
+        [ 38.5, 28.5 ],
+        [ 21.5, 28.5 ]
+      ],
+      "height": 24.9
+    },
+    "floors": [
+      {
+        "index": 0,
+        "kind": "lobby",
+        "elevation": 0,
+        "height": 5.5,
+        "outline": [
+          [ 21.5, 11.5 ],
+          [ 38.5, 11.5 ],
+          [ 38.5, 28.5 ],
+          [ 21.5, 28.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 1,
+        "kind": "residential",
+        "elevation": 5.5,
+        "height": 2.5999999999999996,
+        "outline": [
+          [ 21.5, 11.5 ],
+          [ 38.5, 11.5 ],
+          [ 38.5, 28.5 ],
+          [ 21.5, 28.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 2,
+        "kind": "residential",
+        "elevation": 8.1,
+        "height": 2.6500000000000004,
+        "outline": [
+          [ 21.5, 11.5 ],
+          [ 38.5, 11.5 ],
+          [ 38.5, 28.5 ],
+          [ 21.5, 28.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 3,
+        "kind": "residential",
+        "elevation": 10.75,
+        "height": 2.6500000000000004,
+        "outline": [
+          [ 21.5, 11.5 ],
+          [ 38.5, 11.5 ],
+          [ 38.5, 28.5 ],
+          [ 21.5, 28.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 4,
+        "kind": "residential",
+        "elevation": 13.4,
+        "height": 2.6500000000000004,
+        "outline": [
+          [ 21.5, 11.5 ],
+          [ 38.5, 11.5 ],
+          [ 38.5, 28.5 ],
+          [ 21.5, 28.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 5,
+        "kind": "residential",
+        "elevation": 16.05,
+        "height": 2.6499999999999986,
+        "outline": [
+          [ 21.5, 11.5 ],
+          [ 38.5, 11.5 ],
+          [ 38.5, 28.5 ],
+          [ 21.5, 28.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 6,
+        "kind": "residential",
+        "elevation": 18.7,
+        "height": 2.650000000000002,
+        "outline": [
+          [ 21.5, 11.5 ],
+          [ 38.5, 11.5 ],
+          [ 38.5, 28.5 ],
+          [ 21.5, 28.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 7,
+        "kind": "residential",
+        "elevation": 21.35,
+        "height": 2.6499999999999986,
+        "outline": [
+          [ 21.5, 11.5 ],
+          [ 38.5, 11.5 ],
+          [ 38.5, 28.5 ],
+          [ 21.5, 28.5 ]
+        ],
+        "openings": []
+      }
+    ],
+    "balconyBands": [],
+    "facade": {
+      "surfacePattern": {
+        "kind": "continuous"
+      },
+      "groundMaterial": {
+        "key": "cyberpunk/concrete-monolith/mid",
+        "variantId": "native-cast"
+      },
+      "exteriorStyle": "residential-modest",
+      "style": "panel",
+      "panelModule": 2,
+      "panelPattern": {
+        "width": 2,
+        "height": 1,
+        "jointWidth": 0.02,
+        "origin": "face-floor",
+        "boundary": "centered-solid-border"
+      },
+      "materialPlan": {
+        "palette": "neutral-dystopian",
+        "field": {
+          "key": "cyberpunk/concrete-monolith/mid",
+          "variantId": "native-cast"
+        },
+        "border": {
+          "key": "cyberpunk/concrete-monolith/mid",
+          "variantId": "native-cast"
+        },
+        "trim": {
+          "key": "cyberpunk/wall-trim/mid",
+          "variantId": "paint"
+        }
+      },
+      "wallDepth": 0.345,
+      "coreAdjacency": {
+        "glazing": {
+          "role": "circulation",
+          "clearDepth": 1.2
+        }
+      },
+      "slabBand": {
+        "below": 0.5,
+        "above": 0
+      },
+      "grids": []
+    },
+    "facadeServices": {
+      "version": 1,
+      "units": [],
+      "networks": [],
+      "clotheslines": [],
+      "damagedWindows": [],
+      "limits": {
+        "maxNetworks": 12,
+        "maxSegments": 96,
+        "maxSupports": 96,
+        "maxUnits": 24,
+        "maxClotheslines": 4,
+        "maxClothItems": 16,
+        "maxDamagedWindows": 3,
+        "maxTriangles": 6000,
+        "maxMaterialKeys": 3,
+        "maxDrawCalls": 3
+      },
+      "stats": {
+        "networks": 0,
+        "segments": 0,
+        "supports": 0,
+        "units": 0,
+        "clotheslines": 0,
+        "clothItems": 0,
+        "damagedWindows": 0,
+        "triangles": 0,
+        "materialKeys": 0,
+        "drawCalls": 0
+      }
+    },
+    "roof": {
+      "elevation": 24,
+      "outline": [
+        [ 21.5, 11.5 ],
+        [ 38.5, 11.5 ],
+        [ 38.5, 28.5 ],
+        [ 21.5, 28.5 ]
+      ],
+      "parapetHeight": 0.9,
+      "bulkhead": null,
+      "artifacts": []
+    },
+    "materials": [
+      "cyberpunk/ac-unit/mid",
+      "cyberpunk/balcony-rail/mid",
+      "cyberpunk/balcony-slab/mid",
+      "cyberpunk/concrete-monolith/mid",
+      "cyberpunk/curtain/mid",
+      "cyberpunk/door-glass/mid",
+      "cyberpunk/door/mid",
+      "cyberpunk/fabric/mid",
+      "cyberpunk/floor-slab/mid",
+      "cyberpunk/light-fixture/mid",
+      "cyberpunk/metal/mid",
+      "cyberpunk/roof-artifact/mid",
+      "cyberpunk/roof/mid",
+      "cyberpunk/wall-trim/mid",
+      "cyberpunk/window-frame/mid",
+      "cyberpunk/window-glass/mid",
+      "cyberpunk/window-grime-jamb/mid",
+      "cyberpunk/window-grime-sill/mid"
+    ],
+    "materialVariants": {
+      "cyberpunk/ac-unit/mid": "grille",
+      "cyberpunk/balcony-rail/mid": "paint",
+      "cyberpunk/balcony-slab/mid": "plain",
+      "cyberpunk/concrete-monolith/mid": "native-cast",
+      "cyberpunk/curtain/mid": "slat",
+      "cyberpunk/door-glass/mid": "1",
+      "cyberpunk/door/mid": "paint",
+      "cyberpunk/floor-slab/mid": "plain",
+      "cyberpunk/light-fixture/mid": "lamp",
+      "cyberpunk/metal/mid": "paint",
+      "cyberpunk/roof/mid": "plain",
+      "cyberpunk/wall-trim/mid": "paint",
+      "cyberpunk/window-frame/mid": "paint",
+      "cyberpunk/window-glass/mid": "1"
+    }
+  },
+  "tower": {
+    "buildingId": "tower",
+    "seed": "catalog-actual-setback",
+    "bounds": {
+      "footprint": [
+        [ 2.5, 2.5 ],
+        [ 97.5, 2.5 ],
+        [ 97.5, 57.5 ],
+        [ 2.5, 57.5 ]
+      ],
+      "height": 73.55
+    },
+    "floors": [
+      {
+        "index": 0,
+        "kind": "lobby",
+        "elevation": 0,
+        "height": 6,
+        "outline": [
+          [ 2.5, 2.5 ],
+          [ 97.5, 2.5 ],
+          [ 97.5, 57.5 ],
+          [ 2.5, 57.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 1,
+        "kind": "offices",
+        "elevation": 6,
+        "height": 3.5,
+        "outline": [
+          [ 2.5, 2.5 ],
+          [ 97.5, 2.5 ],
+          [ 97.5, 57.5 ],
+          [ 2.5, 57.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 2,
+        "kind": "offices",
+        "elevation": 9.5,
+        "height": 3.5,
+        "outline": [
+          [ 2.5, 2.5 ],
+          [ 97.5, 2.5 ],
+          [ 97.5, 57.5 ],
+          [ 2.5, 57.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 3,
+        "kind": "offices",
+        "elevation": 13,
+        "height": 3.5,
+        "outline": [
+          [ 2.5, 2.5 ],
+          [ 97.5, 2.5 ],
+          [ 97.5, 57.5 ],
+          [ 2.5, 57.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 4,
+        "kind": "offices",
+        "elevation": 16.5,
+        "height": 3.5,
+        "outline": [
+          [ 2.5, 2.5 ],
+          [ 97.5, 2.5 ],
+          [ 97.5, 57.5 ],
+          [ 2.5, 57.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 5,
+        "kind": "offices",
+        "elevation": 20,
+        "height": 3.5,
+        "outline": [
+          [ 2.5, 2.5 ],
+          [ 97.5, 2.5 ],
+          [ 97.5, 57.5 ],
+          [ 2.5, 57.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 6,
+        "kind": "offices",
+        "elevation": 23.5,
+        "height": 3.5,
+        "outline": [
+          [ 2.5, 2.5 ],
+          [ 97.5, 2.5 ],
+          [ 97.5, 57.5 ],
+          [ 2.5, 57.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 7,
+        "kind": "offices",
+        "elevation": 27,
+        "height": 3.5,
+        "outline": [
+          [ 6, 6 ],
+          [ 94, 6 ],
+          [ 94, 54 ],
+          [ 6, 54 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 8,
+        "kind": "offices",
+        "elevation": 30.5,
+        "height": 3.5,
+        "outline": [
+          [ 6, 6 ],
+          [ 94, 6 ],
+          [ 94, 54 ],
+          [ 6, 54 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 9,
+        "kind": "offices",
+        "elevation": 34,
+        "height": 3.5,
+        "outline": [
+          [ 6, 6 ],
+          [ 94, 6 ],
+          [ 94, 54 ],
+          [ 6, 54 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 10,
+        "kind": "offices",
+        "elevation": 37.5,
+        "height": 3.5,
+        "outline": [
+          [ 6, 6 ],
+          [ 94, 6 ],
+          [ 94, 54 ],
+          [ 6, 54 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 11,
+        "kind": "offices",
+        "elevation": 41,
+        "height": 3.5,
+        "outline": [
+          [ 6, 6 ],
+          [ 94, 6 ],
+          [ 94, 54 ],
+          [ 6, 54 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 12,
+        "kind": "offices",
+        "elevation": 44.5,
+        "height": 3.5,
+        "outline": [
+          [ 6, 6 ],
+          [ 94, 6 ],
+          [ 94, 54 ],
+          [ 6, 54 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 13,
+        "kind": "offices",
+        "elevation": 48,
+        "height": 3.5,
+        "outline": [
+          [ 6, 6 ],
+          [ 94, 6 ],
+          [ 94, 54 ],
+          [ 6, 54 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 14,
+        "kind": "offices",
+        "elevation": 51.5,
+        "height": 3.5,
+        "outline": [
+          [ 6, 6 ],
+          [ 94, 6 ],
+          [ 94, 54 ],
+          [ 6, 54 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 15,
+        "kind": "offices",
+        "elevation": 55,
+        "height": 3.5,
+        "outline": [
+          [ 8.5, 8.5 ],
+          [ 91.5, 8.5 ],
+          [ 91.5, 51.5 ],
+          [ 8.5, 51.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 16,
+        "kind": "offices",
+        "elevation": 58.5,
+        "height": 3.5,
+        "outline": [
+          [ 8.5, 8.5 ],
+          [ 91.5, 8.5 ],
+          [ 91.5, 51.5 ],
+          [ 8.5, 51.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 17,
+        "kind": "offices",
+        "elevation": 62,
+        "height": 3.5,
+        "outline": [
+          [ 8.5, 8.5 ],
+          [ 91.5, 8.5 ],
+          [ 91.5, 51.5 ],
+          [ 8.5, 51.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 18,
+        "kind": "offices",
+        "elevation": 65.5,
+        "height": 3.5,
+        "outline": [
+          [ 8.5, 8.5 ],
+          [ 91.5, 8.5 ],
+          [ 91.5, 51.5 ],
+          [ 8.5, 51.5 ]
+        ],
+        "openings": []
+      },
+      {
+        "index": 19,
+        "kind": "offices",
+        "elevation": 69,
+        "height": 3.5,
+        "outline": [
+          [ 8.5, 8.5 ],
+          [ 91.5, 8.5 ],
+          [ 91.5, 51.5 ],
+          [ 8.5, 51.5 ]
+        ],
+        "openings": []
+      }
+    ],
+    "balconyBands": [],
+    "facade": {
+      "surfacePattern": {
+        "kind": "continuous"
+      },
+      "groundMaterial": {
+        "key": "cyberpunk/concrete-monolith/rich",
+        "variantId": "native-graphite"
+      },
+      "exteriorStyle": "premium-obsidian",
+      "style": "curtain-wall",
+      "panelModule": 2,
+      "panelPattern": {
+        "width": 2,
+        "height": 1,
+        "jointWidth": 0.02,
+        "origin": "face-floor",
+        "boundary": "centered-solid-border"
+      },
+      "materialPlan": {
+        "palette": "neutral-dystopian",
+        "field": {
+          "key": "cyberpunk/concrete-monolith/rich",
+          "variantId": "native-graphite"
+        },
+        "border": {
+          "key": "cyberpunk/concrete-monolith/rich",
+          "variantId": "native-graphite"
+        },
+        "trim": {
+          "key": "cyberpunk/wall-trim/rich",
+          "variantId": "paint"
+        }
+      },
+      "wallDepth": 0.258,
+      "coreAdjacency": {
+        "glazing": {
+          "role": "circulation",
+          "clearDepth": 1.2
+        }
+      },
+      "slabBand": {
+        "below": 1,
+        "above": 0
+      },
+      "grids": []
+    },
+    "facadeServices": {
+      "version": 1,
+      "units": [],
+      "networks": [],
+      "clotheslines": [],
+      "damagedWindows": [],
+      "limits": {
+        "maxNetworks": 12,
+        "maxSegments": 96,
+        "maxSupports": 96,
+        "maxUnits": 24,
+        "maxClotheslines": 4,
+        "maxClothItems": 16,
+        "maxDamagedWindows": 3,
+        "maxTriangles": 6000,
+        "maxMaterialKeys": 3,
+        "maxDrawCalls": 3
+      },
+      "stats": {
+        "networks": 0,
+        "segments": 0,
+        "supports": 0,
+        "units": 0,
+        "clotheslines": 0,
+        "clothItems": 0,
+        "damagedWindows": 0,
+        "triangles": 0,
+        "materialKeys": 0,
+        "drawCalls": 0
+      }
+    },
+    "roof": {
+      "elevation": 72.5,
+      "outline": [
+        [ 8.5, 8.5 ],
+        [ 91.5, 8.5 ],
+        [ 91.5, 51.5 ],
+        [ 8.5, 51.5 ]
+      ],
+      "parapetHeight": 1.05,
+      "bulkhead": null,
+      "artifacts": []
+    },
+    "materials": [
+      "cyberpunk/ad-screen/rich",
+      "cyberpunk/balcony-rail/rich",
+      "cyberpunk/balcony-slab/rich",
+      "cyberpunk/concrete-monolith/rich",
+      "cyberpunk/curtain/rich",
+      "cyberpunk/door-glass/rich",
+      "cyberpunk/door/rich",
+      "cyberpunk/floor-slab/rich",
+      "cyberpunk/light-fixture/rich",
+      "cyberpunk/metal/rich",
+      "cyberpunk/roof-artifact/rich",
+      "cyberpunk/roof/rich",
+      "cyberpunk/window-frame/rich",
+      "cyberpunk/window-glass-opaque/rich"
+    ],
+    "materialVariants": {
+      "cyberpunk/balcony-rail/rich": "paint",
+      "cyberpunk/balcony-slab/rich": "plain",
+      "cyberpunk/concrete-monolith/rich": "native-graphite",
+      "cyberpunk/curtain/rich": "shade",
+      "cyberpunk/door-glass/rich": "1",
+      "cyberpunk/door/rich": "satin",
+      "cyberpunk/floor-slab/rich": "plain",
+      "cyberpunk/light-fixture/rich": "lamp",
+      "cyberpunk/metal/rich": "paint",
+      "cyberpunk/roof/rich": "plain",
+      "cyberpunk/window-frame/rich": "paint",
+      "cyberpunk/window-glass-opaque/rich": "dark"
+    }
+  }
+}

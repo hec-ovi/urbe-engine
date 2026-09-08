@@ -1,9 +1,10 @@
 import { copyFileSync, existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { hashJson } from '../world-archive/index.js';
-import { validateWorldManifest } from './validators.js';
-import { ArchiveFiles } from './ArchiveFiles.js';
+import { validateShellCatalog, validateWorldManifest } from './validators.js';
+import { WorldFiles } from './WorldFiles.js';
 import { writeJsonFile } from './JsonFile.js';
+import { AssemblyError } from './RequestAssembler.js';
 
 export const MANIFEST_FILE = 'manifest.json';
 export const MANIFEST_VERSION = '1.0.0';
@@ -168,15 +169,42 @@ export class OutDir {
 	/** Publishes bounded archives and references their exact index bytes. */
 	async writeArchiveManifest( atlas, parcelIds, interiorIds, rooftopSpans = null, connectionsArtifact = null, options ) {
 
-		const files = new ArchiveFiles( this.dir );
+		return this.publishManifest( atlas, parcelIds, interiorIds, {
+			rooftopSpans, connectionsArtifact, encoding: 'archive', archiveOptions: options
+		} );
+
+	}
+
+	/** Publishes source documents and a compact shell catalog as one world. */
+	async publishManifest( atlas, parcelIds, interiorIds, {
+		rooftopSpans = null, connectionsArtifact = null, catalog = null, encoding = 'json', archiveOptions
+	} = {} ) {
+
+		if ( ! [ 'json', 'archive' ].includes( encoding ) ) throw new AssemblyError( 'E_REQUEST_INVALID', 'unknown world document encoding' );
+		if ( catalog ) this.#checkCatalog( atlas, parcelIds, catalog );
+		const files = new WorldFiles( this.dir );
 		try {
 
-			const references = await files.prepare( atlas, connectionsArtifact, options );
+			const references = await files.prepare( atlas, connectionsArtifact, { encoding, archiveOptions, catalog } );
 			const manifest = this.#manifest( atlas, parcelIds, interiorIds, rooftopSpans, references );
 			files.publish( manifest );
 			return manifest;
 
 		} finally { files.dispose(); }
+
+	}
+
+	#checkCatalog( atlas, parcelIds, catalog ) {
+
+		const errors = validateShellCatalog( catalog );
+		if ( errors.length ) throw new AssemblyError( 'E_SHELL_CATALOG', `catalog schema: ${errors[ 0 ].instancePath} ${errors[ 0 ].message}` );
+		const ids = new Set( catalog.buildings.map( building => building.id ) );
+		if ( catalog.seed !== atlas.meta.seed || ids.size !== catalog.buildings.length
+			|| ids.size !== parcelIds.length || parcelIds.some( id => ! ids.has( id ) ) ) {
+
+			throw new AssemblyError( 'E_SHELL_CATALOG', 'catalog seed and shell IDs must equal the published world' );
+
+		}
 
 	}
 

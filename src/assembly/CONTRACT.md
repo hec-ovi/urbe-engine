@@ -50,6 +50,10 @@ For archive input, `await OutDir.writeArchiveManifest(atlas, parcelIds, interior
 
 Manifest 1.0.0 without `connections` remains readable through the game's existing generation path; omitting the optional artifact in `writeManifest` preserves that shape. A declared reference requires its file, valid JSON and Connections schema, matching source seeds and both byte hashes. Missing, invalid or source-mismatched declared data fails world loading and never regenerates.
 
+Shell streaming: the city CLI reads one completed Exterior blueprint at a time. `ShellArtifacts.js` exports `collectShellArtifacts(directory, parcelIds, {seed})`, which returns a [shell catalog](schema/shell-catalog.schema.json) and the projected Connections rooftop request; full blueprints and openings are released after each record. The catalog retains actual nonnegative floor count, basement count, Exterior massing bounds, a ground-plane center, consecutive identical floor-outline/material bands, and exact roof outline, elevation and parapet height. Band materials come from `facade.materialPlan.field`, with an authored `groundMaterial` on floor zero. Roof material comes from the published roof key and variant; the parapet proxy keeps the material-plan concrete field. No Atlas representative height enters the catalog.
+
+`await OutDir.publishManifest(atlas, parcelIds, interiorIds, {rooftopSpans, connectionsArtifact, catalog, encoding, archiveOptions})` prepares source documents plus the catalog, then publishes one final manifest. `encoding` defaults to `json`; archive options follow World Archive. The additive reference `shellCatalog: {file:"shells/index.json", encoding:"archive", sha256}` hashes exact index bytes. Catalog IDs must equal manifest shell IDs and its seed must equal Atlas. Full `${id}/${id}.blueprint.json` and `${id}/${id}.glb` files remain available for proximity loading. Legacy manifests may omit the catalog.
+
 Simulation: `simulationRunner.js` calls simulation's `createSimulation(input)` as a black box. `npm run simulate -- --time <minutes> [--district <id>] [--blueprint <path>] [--interiors <dir>]` boots it over the blueprint, connections' networks and the npc.json of every assembled building under the interiors dir (default `out/`) (synthetic fallback elsewhere, default npcTypes and name pool), prints population stats, the scoped crowd slice, three instantiated lives (a sampled crowd agent's handle, coffee vendor at midday, a reservation), latency measurements and a conservation check; usage error exit 2, no live crowd agent exit 1.
 
 ## Errors
@@ -61,6 +65,7 @@ Simulation: `simulationRunner.js` calls simulation's `createSimulation(input)` a
 - `E_EXTERIOR_FAILED`: exterior CLI exited nonzero (CLI exit 1, its output printed)
 - `E_CORE_INFEASIBLE`: interior's coreFeasibility gate reports mode none, the footprint cannot hold any core (CLI exit 1; mode, band and core lengths printed)
 - `E_INTERIOR_FAILED`: interior's generateInterior threw (CLI exit 1, its InteriorError code and message printed)
+- `E_SHELL_CATALOG`: an Exterior shell lacks valid massing or published material bindings, or its catalog seed and IDs differ from the manifest (CLI exit 1)
 - `E_ARCHIVE_*`: World Archive input, part, hash or publication failure, passed through its public contract (CLI exit 1)
 - usage error: CLI exit 2
 
