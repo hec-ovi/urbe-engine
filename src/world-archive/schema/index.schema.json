@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urbe-engine/world-archive/index",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "json", "root", "collections"],
+  "properties": {
+    "format": { "const": "urbe-world-archive" },
+    "version": { "const": "1.0.0" },
+    "json": { "$ref": "#/$defs/binding" },
+    "root": {},
+    "collections": { "type": "array", "items": { "$ref": "#/$defs/collection" } }
+  },
+  "$defs": {
+    "binding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sha256", "bytes"],
+      "properties": {
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "bytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "collection": {
+      "type": "object", "additionalProperties": false,
+      "required": ["pointer", "count", "parts"],
+      "properties": {
+        "pointer": { "type": "string", "pattern": "^(?:/(?:[^~]|~[01])*)*$" },
+        "count": { "type": "integer", "minimum": 0 },
+        "parts": { "type": "array", "items": { "$ref": "#/$defs/part" } }
+      }
+    },
+    "part": {
+      "type": "object", "additionalProperties": false,
+      "required": ["file", "start", "count", "bytes", "sha256"],
+      "properties": {
+        "file": { "type": "string", "pattern": "^parts/\\d{8,}\\.json$" },
+        "start": { "type": "integer", "minimum": 0 },
+        "count": { "type": "integer", "minimum": 1 },
+        "bytes": { "type": "integer", "minimum": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    }
+  }
+}
