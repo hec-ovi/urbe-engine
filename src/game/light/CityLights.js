@@ -24,14 +24,14 @@ export class CityLights {
 	 * @param fixtures [{ position: Vector3, lumens, color: Color, range }]
 	 * @param capacity how many may be lit at once
 	 */
-	constructor( fixtures, capacity ) {
+	constructor( fixtures, capacity, { streamed = false } = {} ) {
 
-		this.fixtures = fixtures;
+		this.fixtures = [ ...fixtures ];
 		this.capacity = capacity;
 		this.group = new THREE.Group();
 		this.group.name = 'city-lights';
 		this.lights = Array.from(
-			{ length: Math.min( capacity, fixtures.length ) },
+			{ length: streamed ? capacity : Math.min( capacity, fixtures.length ) },
 			() => new THREE.PointLight()
 		);
 		this.selection = this.lights.map( ( _, index ) => index );
@@ -48,6 +48,18 @@ export class CityLights {
 			this.#assign( slot, slot );
 
 		}
+
+	}
+
+	/** Replaces resident fixtures while retaining every prepared light slot. */
+	setFixtures( fixtures ) {
+
+		const dim = new Map( this.fixtures.map( ( fixture, index ) => [ fixture, this.fixtureDim[ index ] ] ) );
+		this.fixtures = [ ...fixtures ];
+		this.fixtureDim = fixtures.map( fixture => dim.get( fixture ) ?? 1 );
+		this.ranked = fixtures.map( ( _, index ) => ( { index, distance: 0 } ) );
+		this.timer = RESHUFFLE_INTERVAL;
+		for ( let slot = 0; slot < this.lights.length; slot ++ ) this.#assign( slot, slot );
 
 	}
 
@@ -85,6 +97,13 @@ export class CityLights {
 		const fixture = this.fixtures[ index ];
 
 		this.selection[ slot ] = index;
+		if ( ! fixture ) {
+
+			light.power = 0;
+			light.distance = 1;
+			return;
+
+		}
 		light.position.copy( fixture.position );
 		light.color.copy( fixture.color );
 		light.distance = fixture.range;
@@ -96,7 +115,7 @@ export class CityLights {
 	#power( slot ) {
 
 		const index = this.selection[ slot ];
-		this.lights[ slot ].power = this.fixtures[ index ].lumens * this.dim * this.fixtureDim[ index ];
+		this.lights[ slot ].power = this.fixtures[ index ] ? this.fixtures[ index ].lumens * this.dim * this.fixtureDim[ index ] : 0;
 
 	}
 

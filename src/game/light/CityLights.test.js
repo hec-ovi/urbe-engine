@@ -17,6 +17,25 @@ const fixture = ( x, lumens, color ) => ( {
  */
 describe( 'CityLights', () => {
 
+	it( 'replaces streamed fixtures with stable slots and retained per-fixture dimming', () => {
+
+		const a = fixture( 0, 1000 ), b = fixture( 10, 2000 ), c = fixture( 20, 3000 );
+		const lights = new CityLights( [ a ], 2, { streamed: true } );
+		const slots = [ ...lights.lights ];
+		expect( slots[ 1 ].power ).toBe( 0 );
+		lights.setFixtureDim( 0, 0.5 );
+		lights.setFixtures( [ c, b, a ] );
+		lights.update( new THREE.Vector3(), 1 );
+		expect( lights.lights ).toEqual( slots );
+		expect( slots.map( light => light.power ) ).toEqual( [ 500, 2000 ] );
+		lights.setFixtures( [] );
+		lights.setDim( 1 );
+		expect( lights.lights ).toEqual( slots );
+		expect( slots.map( light => light.power ) ).toEqual( [ 0, 0 ] );
+		expect( lights.group.children ).toEqual( slots );
+
+	} );
+
 	it( 'lights each fixture at its published flux, with inverse-square falloff', () => {
 
 		const lights = new CityLights( [ fixture( 0, 12000, 0xffffff ) ], 8 );
