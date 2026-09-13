@@ -61,7 +61,7 @@ export class GroundTiles {
 		const x = Math.floor( ( bounds.min[ 0 ] + bounds.max[ 0 ] ) / ( 2 * this.cellSize ) );
 		const z = Math.floor( ( bounds.min[ 1 ] + bounds.max[ 1 ] ) / ( 2 * this.cellSize ) );
 		const id = `ground:${x}:${z}`;
-		if ( ! this.tiles.has( id ) ) this.tiles.set( id, { id, covers: [], modules: [], highways: [], bounds: { min: [ Infinity, Infinity ], max: [ - Infinity, - Infinity ] } } );
+		if ( ! this.tiles.has( id ) ) this.tiles.set( id, { id, page: `ground-page:${Math.floor( x * this.cellSize / 512 )}:${Math.floor( z * this.cellSize / 512 )}`, covers: [], modules: [], highways: [], bounds: { min: [ Infinity, Infinity ], max: [ - Infinity, - Infinity ] } } );
 		const tile = this.tiles.get( id );
 		for ( const axis of [ 0, 1 ] ) {
 

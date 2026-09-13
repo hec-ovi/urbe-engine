@@ -2,9 +2,8 @@ import * as THREE from 'three/webgpu';
 import { GroundTiles, fail } from './GroundTiles.js';
 import { GroundMeshBuilder } from './GroundMeshBuilder.js';
 import { groundTriangles } from './GroundTriangles.js';
-import { GroundBatches } from './GroundBatches.js';
-
-const yieldFrame = () => new Promise( resolve => typeof requestAnimationFrame === 'function' ? requestAnimationFrame( resolve ) : setTimeout( resolve, 0 ) );
+import { GroundPages } from './GroundPages.js';
+import { yieldGroundFrame } from './GroundPageGeometry.js';
 
 /** Serial tile admission with independent render and collision windows. */
 export class GroundStream {
@@ -17,7 +16,7 @@ export class GroundStream {
 		this.bounds = this.index.bounds;
 		this.group = new THREE.Group();
 		this.group.name = 'ground';
-		this.batches = new GroundBatches( this.group );
+		this.pages = new GroundPages( this.group );
 		this.geometries = new Map();
 		this.resident = new Map();
 		this.retiring = new Set();
@@ -69,7 +68,7 @@ export class GroundStream {
 			this.error = error;
 			throw error;
 
-		} ).finally( () => { this.pending = null; if ( this.disposed ) this.batches.dispose(); } );
+		} ).finally( () => { this.pending = null; if ( this.disposed ) this.pages.dispose(); } );
 		return this.pending;
 
 	}
@@ -86,11 +85,11 @@ export class GroundStream {
 				let tile = this.resident.get( id );
 				if ( ! tile ) {
 
-					await yieldFrame();
+					await yieldGroundFrame();
 					if ( this.disposed || completed !== this.revision ) break;
 					const built = new GroundMeshBuilder( this.index.project( wanted.tile ), this.factory,
 						{ ...this.index.context, moduleGeometries: this.geometries } ).build();
-					tile = { group: built.group, visible: false, collision: null, solid: false, pending: false };
+					tile = { page: wanted.tile.page, group: built.group, visible: false, collision: null, solid: false, pending: false };
 					tile.group.name = id;
 					this.resident.set( id, tile );
 
@@ -113,18 +112,8 @@ export class GroundStream {
 
 			}
 			if ( this.disposed || completed !== this.revision ) continue;
-			const changed = this.batches.add( this.resident ), { prepare } = this.settings;
-			this.needsPreparation ||= changed;
-			if ( prepare && ( this.needsPreparation || this.prepared !== prepare ) ) {
-
-				await prepare( this.group, { wanted: () => ! this.disposed && completed === this.revision } );
-				if ( this.disposed || completed !== this.revision ) continue;
-				this.prepared = prepare;
-
-			}
-			this.needsPreparation = false;
-			this.batches.show();
-			for ( const tile of this.resident.values() ) tile.visible = true;
+			await this.pages.update( this.resident, { prepare: this.settings.prepare,
+				wanted: () => ! this.disposed && completed === this.revision } );
 
 		}
 		this.settledRevision = this.revision;
@@ -142,7 +131,7 @@ export class GroundStream {
 	drop( id, tile ) {
 
 		this.dropCollision( id, tile );
-		this.batches.drop( id );
+		this.pages.drop( id );
 		this.resident.delete( id );
 		if ( tile.pending ) this.retiring.add( tile );
 		else this.release( tile );
@@ -177,7 +166,7 @@ export class GroundStream {
 		this.wanted.clear();
 		for ( const [ id, tile ] of this.resident ) this.drop( id, tile );
 		this.pruneGeometries();
-		if ( ! this.pending ) this.batches.dispose();
+		if ( ! this.pending ) this.pages.dispose();
 		this.group.removeFromParent();
 
 	}

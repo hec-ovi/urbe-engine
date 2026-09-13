@@ -8,7 +8,7 @@ export interface GroundWindow {
 	/** Physical collision distance in metres. Defaults to radius. */
 	collisionRadius?: number;
 	collision?: BandCollisionPort;
-	/** Prepares the shared material batch group before new instances become visible. Optional for initial scene warmup. */
+	/** Prepares each changed material page group before it becomes visible. Optional for initial scene warmup. */
 	prepare?: (group: Group, state: {wanted(): boolean}) => Promise<unknown>;
 }
 export interface GroundStream {

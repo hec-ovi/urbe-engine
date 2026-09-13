@@ -55,23 +55,25 @@ describe( 'GroundBuilder spatial stream', () => {
 		expect( canonical( pieces ) ).toEqual( canonical( [ eager.colliderGeometry.toNonIndexed().attributes.position.array ] ) );
 		expect( stream.stats ).toMatchObject( { resident: stream.stats.indexed, collision: stream.stats.indexed, pending: false } );
 		expect( rendered( stream.group ) ).toEqual( rendered( eager.group ) );
-		expect( stream.group.children.length ).toBeLessThanOrEqual( materials.size );
-		const repeats = stream.group.children.filter( mesh => mesh.instanceCount >= 144 );
-		expect( repeats.length ).toBeGreaterThan( 0 );
-		for ( const mesh of repeats ) {
+		expect( stream.group.children.length ).toBeLessThanOrEqual( 4 );
+		const disposed = vi.fn();
+		stream.group.traverse( mesh => {
 
-			expect( mesh.isBatchedMesh ).toBe( true );
-			expect( mesh.perObjectFrustumCulled ).toBe( true );
-			const ids = new Set();
-			for ( let i = 0; i < mesh.instanceCount; i ++ ) ids.add( mesh.getGeometryIdAt( i ) );
-			expect( ids.size ).toBeLessThan( 10 );
+			if ( ! mesh.isMesh ) return;
+			expect( mesh.isBatchedMesh || mesh.isInstancedMesh ).not.toBe( true );
+			expect( mesh.geometry.groups ).toHaveLength( 0 );
+			expect( mesh.frustumCulled ).toBe( true );
+			mesh.geometry.addEventListener( 'dispose', disposed );
 
-		}
-		const buffers = new Map( stream.group.children.map( mesh => [ mesh, mesh.geometry ] ) );
+		} );
+		const pages = [ ...stream.group.children ];
+		await stream.update( { x: 282, z: 250 }, { radius: 1000 } );
+		expect( stream.group.children ).toEqual( pages );
+		expect( disposed ).not.toHaveBeenCalled();
 		await stream.update( { x: 0, z: 0 }, { radius: 16 } );
+		expect( disposed ).toHaveBeenCalled();
 		await stream.update( { x: 250, z: 250 }, { radius: 1000 } );
 		expect( rendered( stream.group ) ).toEqual( rendered( eager.group ) );
-		for ( const mesh of stream.group.children ) expect( mesh.geometry ).toBe( buffers.get( mesh ) );
 		expect( atlas ).toEqual( original );
 		stream.dispose();
 		expect( collision.bands.size ).toBe( 0 );
@@ -86,11 +88,11 @@ describe( 'GroundBuilder spatial stream', () => {
 		const groups = [ ...stream.group.children ], collision = collisionPort(), prepare = vi.fn( async () => {} );
 		await stream.update( { x: 0, z: 0 }, { collision, prepare } );
 		expect( stream.group.children ).toEqual( groups );
-		expect( prepare ).toHaveBeenCalledOnce();
+		expect( prepare ).toHaveBeenCalledTimes( groups.length );
 		expect( collision.addBand.mock.calls.length ).toBeGreaterThan( 0 );
 		expect( collision.addBand.mock.calls.length ).toBeLessThan( stream.stats.resident );
 		for ( let i = 0; i < 100; i ++ ) await stream.update( { x: 1, z: 1 } );
-		expect( prepare ).toHaveBeenCalledOnce();
+		expect( prepare ).toHaveBeenCalledTimes( groups.length );
 		expect( collision.addBand.mock.calls.length ).toBe( collision.bands.size );
 		stream.dispose();
 
@@ -182,19 +184,12 @@ function rendered( group ) {
 
 		if ( ! mesh.isMesh ) return;
 		const geometry = mesh.geometry, positions = geometry.getAttribute( 'position' ), normals = geometry.getAttribute( 'normal' ), uvs = geometry.getAttribute( 'uv' );
-		const count = mesh.isBatchedMesh ? mesh.maxInstanceCount : mesh.isInstancedMesh ? mesh.count : 1;
+		const count = mesh.isInstancedMesh ? mesh.count : 1;
 		for ( let copy = 0; copy < count; copy ++ ) {
 
 			let start = 0, size = geometry.index?.count ?? positions.count;
 			transform.copy( mesh.matrixWorld );
-			if ( mesh.isBatchedMesh ) {
-
-				try { if ( ! mesh.getVisibleAt( copy ) ) continue; } catch { continue; }
-				const range = mesh.getGeometryRangeAt( mesh.getGeometryIdAt( copy ), {} );
-				start = range.indexStart; size = range.indexCount;
-
-			}
-			if ( mesh.isBatchedMesh || mesh.isInstancedMesh ) { mesh.getMatrixAt( copy, instance ); transform.multiply( instance ); }
+			if ( mesh.isInstancedMesh ) { mesh.getMatrixAt( copy, instance ); transform.multiply( instance ); }
 			normalMatrix.getNormalMatrix( transform );
 			for ( let i = start; i < start + size; i += 3 ) {
 
@@ -204,7 +199,7 @@ function rendered( group ) {
 					const index = geometry.index ? geometry.index.getX( i + j ) : i + j;
 					point.fromBufferAttribute( positions, index ).applyMatrix4( transform );
 					normal.fromBufferAttribute( normals, index ).applyMatrix3( normalMatrix );
-					values.push( ...[ ...point, ...normal, uvs.getX( index ), uvs.getY( index ) ].map( value => Math.round( value * 1e5 ) / 1e5 ) );
+					values.push( ...[ ...point, ...normal, uvs.getX( index ), uvs.getY( index ) ].map( value => Math.round( Math.fround( value ) * 1e5 ) / 1e5 ) );
 
 				}
 				triangles.push( values.join( ',' ) );

@@ -19,6 +19,7 @@ import { GroundBuilder, SIDEWALK_HEIGHT } from './ground/GroundBuilder.js';
 import { SafetyGround } from './ground/SafetyGround.js';
 import { HydrologyHost } from './hydro/index.js';
 import { BuildingsLoader } from './city/BuildingsLoader.js';
+import { ShellScene } from './ShellScene.js';
 import { Links } from './links/Links.js';
 import { Transit } from './transit/Transit.js';
 import { StationAccess } from './transit/StationAccess.js';
@@ -168,8 +169,10 @@ export class GameApp {
 		const source = new WorldSource( config );
 		const {
 			atlas, connections, rooftopSpans, buildings, unbuilt, npcTypes, questlines, investigations,
-			mechanicTargetBindings, missionAssetRequests, missionItemBindings, game
+			mechanicTargetBindings, missionAssetRequests, missionItemBindings, game, shellCatalog, loadBuildings
 		} = await source.load();
+		const spawn = game ? savedSpawn( game ) : pickSpawn( connections.networks, atlas );
+		const spatial = shellCatalog && shellCatalog.buildings.length > 250;
 		const transitRoutes = connections.networks.transit.routes;
 		this.transitJourney = new TransitJourney( {
 			atlas, routes: transitRoutes, ...( game?.transitJourney ? { state: game.transitJourney } : {} )
@@ -213,14 +216,28 @@ export class GameApp {
 			materialCatalog: resolver.missionCatalog( THEME )
 		} );
 		this.rooms = new RoomLights( factory, this.tier );
+		this.physics = await Physics.create();
+		this.colliders = new WorldColliders( this.physics );
 
 		this.view.step( 'laying the ground' );
-		const ground = new GroundBuilder( atlas, factory ).build();
+		const groundBuilder = new GroundBuilder( atlas, factory );
+		const ground = spatial ? groundBuilder.stream() : groundBuilder.build();
+		if ( spatial ) {
+
+			this.groundStream = ground;
+			await ground.update( spawn.point, { radius: FAR_PLANE, collisionRadius: 256, collision: this.colliders } );
+
+		}
 		this.scene.add( ground.group );
 		this.hydrology = await HydrologyHost.install( { blueprint: atlas, factory, scene: this.scene } );
 
 		this.view.step( `loading ${buildings.size} buildings` );
-		const city = await new BuildingsLoader( factory ).load( buildings );
+		if ( spatial ) this.shellScene = new ShellScene( {
+			atlas, catalog: shellCatalog, factory, buildings, loadBuildings,
+			physics: this.physics, colliders: this.colliders,
+			interiors: ! config.off.has( 'interiors' ), haze: this.tier.haze ? OUTDOOR_HAZE : null
+		} );
+		const city = spatial ? await this.shellScene.stream.load( spawn.point ) : await new BuildingsLoader( factory ).load( buildings );
 		this.scene.add( city.group );
 
 		this.elevators = new Elevators( factory );
@@ -234,7 +251,7 @@ export class GameApp {
 		this.scene.add( this.stream.group );
 
 		this.view.step( 'hanging the neon' );
-		const neon = new Neon( atlas, buildings, factory ).build();
+		const neon = spatial ? { group: new THREE.Group(), glows: [] } : new Neon( atlas, buildings, factory ).build();
 		const lamps = new StreetLamps( atlas, factory, connections.networks.walk ).build();
 		const links = new Links( connections, factory, rooftopSpans ).build();
 		const props = await new Dressing( atlas, connections.networks.walk, factory, {
@@ -249,24 +266,33 @@ export class GameApp {
 			props.group,
 			this.transit.group,
 			await StreetMarkings.build( atlas, connections.networks, factory, resolver, config.laneMode ),
-			this.windowRooms.build( { enabled: ! config.off.has( 'interiors' ) } )
+			this.windowRooms.build( { enabled: ! spatial && ! config.off.has( 'interiors' ) } )
 		);
 
 		this.view.step( 'lighting the street' );
-		const fixtures = [ ...neon.glows, ...lamps.glows, ...this.transit.glows ];
-		this.lights = new CityLights( fixtures, this.lighting.capacity );
+		const stableFixtures = [ ...( this.shellScene?.pinnedGlows ?? neon.glows ), ...lamps.glows, ...this.transit.glows ];
+		const fixtures = [ ...stableFixtures, ...( this.shellScene?.streamedGlows ?? [] ) ];
+		this.lights = new CityLights( fixtures, this.lighting.capacity, { streamed: Boolean( spatial ) } );
+		if ( this.shellScene ) this.shellScene.onFixturesChanged = () => {
+
+			fixtures.length = 0;
+			fixtures.push( ...stableFixtures, ...this.shellScene.streamedGlows );
+			this.lights.setFixtures( fixtures );
+
+		};
 		this.scene.add( this.lights.group );
 		this.roomView = new RoomView( this.stream.rooms, ROOM_VISIBLE_RADIUS );
 		// Entrance fixtures and prompts identify buildings with playable interiors.
 		this.venues = new Venues( { atlas, buildings, doors: city.entrances, fixtures, factory } );
 		this.scene.add( this.venues.build( city.entrances ) );
-		this.#hangHaze( fixtures );
+		this.#hangHaze( spatial ? [ ...lamps.glows, ...this.transit.glows ] : fixtures );
 
 		this.view.step( 'raising the sky' );
 		this.sky = new NightSky( this.scene ).build( config.lightingHour );
 		// Emitting surfaces share the scene's fixed night setting.
 		this.night = new NightSwitch( this.lights )
 			.addGroup( neon.group ).addGroup( lamps.group ).addGroup( city.group ).addGroup( this.transit.group ).addGroup( props.group );
+		if ( this.shellScene ) this.shellScene.night = this.night;
 		this.fog = new NightFog( this.scene, config.off.has( 'fog' )
 			? { density: 0, indoorDensity: 0, color: SKY_COLOR }
 			: { density: config.fog, color: SKY_COLOR } );
@@ -277,7 +303,6 @@ export class GameApp {
 		if ( this.hydrology.group ) this.probe?.exclude( this.hydrology.group );
 
 		this.view.step( 'building the physics world' );
-		this.physics = await Physics.create();
 		this.safetyGround = new SafetyGround( {
 			atlas, buildings, groups: [ ground.group, city.group, links.group, this.transit.group ],
 			physics: this.physics, factory, camera: this.camera
@@ -285,7 +310,6 @@ export class GameApp {
 		this.scene.add( this.safetyGround.mesh );
 		this.doorColliders = new DoorColliders( this.physics, city.doors );
 		this.impactWorld = new ImpactWorld( this.physics );
-		this.colliders = new WorldColliders( this.physics );
 		this.colliders.addStatic( ground.colliderGeometry, 'ground' );
 		await this.colliders.addStaticsAsync( city.shellColliders, { release: true } );
 		city.shellColliders.clear();
@@ -363,7 +387,6 @@ export class GameApp {
 		} );
 
 		this.view.step( 'stepping outside' );
-		const spawn = game ? savedSpawn( game ) : pickSpawn( connections.networks, atlas );
 		this.body = new PlayerBody( this.physics, spawn.point );
 		this.input = new Input( this.renderer.domElement );
 		this.controller = new PlayerController( { body: this.body, camera: this.camera, input: this.input } );
@@ -440,6 +463,10 @@ export class GameApp {
 		this.floorWarmup = prepareInteriorStreaming(
 			this.stream, this.renderer, this.scene, this.camera, this.look.mrt, this.look.renderTarget
 		);
+		if ( this.shellScene ) this.shellScene.warmup = this.floorWarmup;
+		if ( this.groundStream ) await this.groundStream.update( spawn.point, {
+			prepare: ( group, options ) => this.floorWarmup.warmAll( group, options )
+		} );
 		this.view.step( 'baking the environment' );
 		this.probe?.bake( spawn.point );
 		await this.floorWarmup.warmAll( this.scene, {
@@ -568,6 +595,8 @@ export class GameApp {
 
 		const feet = this.body.feet;
 		this.safetyGround.update( this.camera );
+		this.shellScene?.stream.update( feet );
+		this.groundStream?.update( feet ).catch( error => console.error( 'ground streaming', error ) );
 
 		this.hitches.time( 'interior stream', () => {
 
