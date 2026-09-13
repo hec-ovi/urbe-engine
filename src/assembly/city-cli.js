@@ -1,16 +1,4 @@
-/**
- * npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--interiors N] [--parcel <id,id,...>]
- *   [--reuse-shells true] [--interior-parcels <id,id,...>]
- * Full-city batch: connections once for the whole blueprint, then every shell
- * in parallel and a small deterministic quest/venue interior subset. Failures
- * are recorded in the QA report; an interior failure leaves its shell closed.
- *
- * The out dir ends holding exactly this blueprint: folders for parcels it no
- * longer has are removed first, and <dir>/manifest.json names the blueprint and
- * complete shells plus the explicit interior subset, which the game loads. Writes
- * <dir>/qa-report.json too and prints the summary. Exit 0 when every parcel
- * passed and the interior target is met, 1 otherwise.
- */
+/** Assembles source-bound city artifacts and optional selected interiors through producer APIs. */
 
 import { existsSync, readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';

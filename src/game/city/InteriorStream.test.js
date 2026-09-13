@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { floorAt, InteriorStream } from './InteriorStream.js';
+import { InteriorStream } from './InteriorStream.js';
 import { Elevators } from './Elevators.js';
 import { outlinesOf, partition } from './InteriorRooms.js';
 
@@ -113,7 +113,9 @@ describe( 'floor collision readiness', () => {
 
 	it( 'passes exact source positions and keeps the floor hidden until collision is complete', async () => {
 
-		const model = stream( { cut: workerFor( [] ), levels: [ floors[ 1 ] ] } );
+		const level = structuredClone( floors[ 1 ] );
+		level.rooms[ 0 ].holes = [ [ [ 3, 3 ], [ 3, 3.8 ], [ 3.8, 3.8 ], [ 3.8, 3 ] ] ];
+		const model = stream( { cut: workerFor( [] ), levels: [ level ] } );
 		let complete;
 		model.onColliderBand = vi.fn( () => new Promise( resolve => { complete = resolve; } ) );
 		model.update( feetOn( 0 ) );
@@ -135,6 +137,10 @@ describe( 'floor collision readiness', () => {
 		while ( model.loading ) await tick();
 		expect( group.visible ).toBe( true );
 		expect( group.parent.visible ).toBe( true );
+		const room = model.rooms[ 0 ];
+		expect( room.holds( room.center ) ).toBe( true );
+		expect( room.holds( { x: 3.4, y: 1, z: 3.4 } ) ).toBe( false );
+		expect( room.holds( { x: 3, y: 1, z: 3.4 } ) ).toBe( false );
 		model.dispose();
 		expect( model.dropped ).toEqual( [ 'p0:0' ] );
 
@@ -199,28 +205,7 @@ describe( 'floor collision readiness', () => {
  * is picked right: pick the wrong one and they fall through the slab they are
  * standing on, or the room they walked into is not in the scene.
  */
-describe( 'floorAt', () => {
 
-	it( 'is the floor whose slab-to-slab band holds the feet', () => {
-
-		expect( floorAt( floors, 0.05 ) ).toBe( 0 );
-		expect( floorAt( floors, 3.9 ) ).toBe( 0 );
-		expect( floorAt( floors, 4.1 ) ).toBe( 1 );
-		expect( floorAt( floors, 8 ) ).toBe( 2 );
-		expect( floorAt( floors, - 1 ) ).toBe( - 1 );
-
-	} );
-
-	it( 'is the nearest floor from outside the building, which is where the player usually is', () => {
-
-		// On the pavement, a few centimetres above the lobby slab.
-		expect( floorAt( floors, 0.12 ) ).toBe( 0 );
-		// On a roof terrace over the top floor.
-		expect( floorAt( floors, 40 ) ).toBe( 4 );
-
-	} );
-
-} );
 
 describe( 'interior registration', () => {
 

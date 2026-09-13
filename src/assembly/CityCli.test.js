@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +18,20 @@ describe( 'assemble-city CLI', () => {
 
 		if ( root ) rmSync( root, { recursive: true, force: true } );
 		root = null;
+
+	} );
+
+	it( 'rejects invalid and contradictory CLI inputs before publishing artifacts', () => {
+
+		root = mkdtempSync( join( tmpdir(), 'urbe-city-invalid-' ) );
+		for ( const options of [ [ '--workers', '2.5' ], [ '--reuse-shells', 'true', '--parcel', 'p0' ], [ '--interior-parcels', 'p0,p0' ] ] ) {
+
+			const run = spawnSync( process.execPath, [ '--import', 'tsx', 'src/assembly/city-cli.js',
+				'--blueprint', BLUEPRINT, '--out', root, ...options ], { cwd: ENGINE_ROOT, encoding: 'utf8' } );
+			expect( run.status ).toBe( 2 );
+			expect( existsSync( join( root, 'manifest.json' ) ) ).toBe( false );
+
+		}
 
 	} );
 

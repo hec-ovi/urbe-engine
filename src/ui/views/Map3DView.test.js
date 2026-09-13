@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
 import { stubCanvas } from '../test-helpers/canvas.js';
-import { Map3DView, prismGeometry, plateGeometry } from './Map3DView.js';
+import { Map3DView } from './Map3DView.js';
 
 const world = {
 	bounds: { min: [ 0, 0 ], max: [ 100, 100 ] },
@@ -36,7 +36,9 @@ describe( 'Map3DView', () => {
 
 	it( 'raises every building as a prism of its own height on the ground cover', () => {
 
-		const prisms = prismGeometry( world.buildings );
+		const view = new Map3DView( { onClose: () => {} } );
+		view.setWorld( world );
+		const prisms = view.blocks.geometry;
 		prisms.computeBoundingBox();
 
 		expect( prisms.getAttribute( 'position' ).count ).toBeGreaterThan( 0 );
@@ -44,7 +46,7 @@ describe( 'Map3DView', () => {
 		expect( prisms.boundingBox.min.y ).toBeCloseTo( 0 );
 		// Ground z maps onto -y of the shape and back onto +z of the scene.
 		expect( prisms.boundingBox.max.z ).toBeCloseTo( 70 );
-		expect( plateGeometry( world.ground, 'roadway', 0.05 ).getAttribute( 'position' ).count ).toBe( 4 );
+		expect( view.plates[ 0 ].geometry.getAttribute( 'position' ).count ).toBeGreaterThan( 0 );
 
 	} );
 

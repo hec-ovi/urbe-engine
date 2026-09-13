@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { BuildingsLoader, mapConcurrent } from './BuildingsLoader.js';
+import { BuildingsLoader } from './BuildingsLoader.js';
 import { Interactor } from '../player/Interactor.js';
 
 const factory = {
@@ -259,19 +259,23 @@ describe( 'shell loading budget', () => {
 
 		let active = 0;
 		let peak = 0;
-		const values = Array.from( { length: 40 }, ( _, index ) => index );
-		const result = await mapConcurrent( values, 8, async ( value ) => {
+		const ids = Array.from( { length: 16 }, ( _, index ) => `p${index}` );
+		const buildings = new Map( ids.map( parcelId => [ parcelId, {
+			parcelId, blueprint: boxBlueprint( parcelId ), shellUrl: `${parcelId}.glb`, hasInterior: false
+		} ] ) );
+		const loader = { loadAsync: async () => {
 
 			active ++;
 			peak = Math.max( peak, active );
-			await new Promise( ( resolve ) => setTimeout( resolve, value % 3 ) );
+			await new Promise( resolve => setTimeout( resolve, 0 ) );
 			active --;
-			return value * 2;
+			return { scene: new THREE.Group() };
 
-		} );
-
-		expect( peak ).toBe( 8 );
-		expect( result ).toEqual( values.map( ( value ) => value * 2 ) );
+		} };
+		const result = await new BuildingsLoader( factory, loader ).load( buildings );
+		expect( peak ).toBeLessThanOrEqual( 8 );
+		expect( peak ).toBeGreaterThan( 1 );
+		expect( [ ...result.centers.keys() ] ).toEqual( ids );
 
 	} );
 

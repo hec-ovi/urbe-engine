@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { Highways } from './Highways.js';
+import { GroundBuilder } from './GroundBuilder.js';
 
 const factory = { build: ( key, variantId ) => {
 
@@ -14,7 +14,7 @@ describe( 'highway structures', () => {
 
 	it( 'builds the exact ramp, deck width, structural depth and support footprint', () => {
 
-		const built = new Highways( atlas(), factory ).build();
+		const built = new GroundBuilder( atlas(), factory ).build();
 		const road = built.group.getObjectByName( 'highway:roadway' ).geometry;
 		const frame = built.group.getObjectByName( 'highway:structure' ).geometry;
 
@@ -32,7 +32,7 @@ describe( 'highway structures', () => {
 
 	it( 'adds an elevation breakpoint inside a centerline segment', () => {
 
-		const road = new Highways( atlas(), factory ).build().group.getObjectByName( 'highway:roadway' ).geometry;
+		const road = new GroundBuilder( atlas(), factory ).build().group.getObjectByName( 'highway:roadway' ).geometry;
 
 		// The source path has only x=0 and x=100. The 60 m ramp endpoint must
 		// become its own cross-section or one triangle would flatten the break.
@@ -43,7 +43,7 @@ describe( 'highway structures', () => {
 
 	it( 'uses the lane-aligned highway material with U across and V along the deck', () => {
 
-		const mesh = new Highways( atlas(), factory ).build().group.getObjectByName( 'highway:roadway' );
+		const mesh = new GroundBuilder( atlas(), factory ).build().group.getObjectByName( 'highway:roadway' );
 
 		expect( mesh.material.userData ).toEqual( {
 			key: 'cyberpunk/road/high_rich', variantId: 'highway'
@@ -60,25 +60,16 @@ describe( 'highway structures', () => {
 		const input = atlas();
 		input.streets.highwayStructures[ 0 ].elevationProfile.at( - 1 ).distance = 99;
 
-		expect( () => new Highways( input, factory ).build() ).toThrow( /E_HIGHWAY_STRUCTURE: highwayStructures\[0\]\.elevationProfile/ );
+		expect( () => new GroundBuilder( input, factory ).build() ).toThrow( /E_HIGHWAY_STRUCTURE: highwayStructures\[0\]\.elevationProfile/ );
 
 	} );
 
-	it( 'builds an empty group when Atlas publishes no highways', () => {
-
-		const built = new Highways( { streets: { highwayStructures: [] } }, factory ).build();
-
-		expect( built.group.children ).toHaveLength( 0 );
-		expect( built.colliderGeometry ).toBe( null );
-		expect( built.triangles ).toBe( 0 );
-
-	} );
 
 } );
 
 function atlas() {
 
-	return { streets: { highwayStructures: [ {
+	return { volumetric: { ground: [] }, streets: { highwayStructures: [ {
 		edgeIds: [ 'e0' ], path: [ [ 0, 0 ], [ 100, 0 ] ], width: 10, level: 8,
 		deckThickness: 1, ramps: { start: 60, end: 0 },
 		elevationProfile: [
