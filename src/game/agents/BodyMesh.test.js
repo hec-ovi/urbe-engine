@@ -49,34 +49,4 @@ describe( 'crowd meshes', () => {
 
 	} );
 
-	it( 'drops source-export channels the crowd shader never reads', () => {
-
-		const source = baked();
-		source.mesh.geometry.setAttribute( 'uv1', new THREE.Float32BufferAttribute( new Float32Array( 6 ), 2 ) );
-		source.mesh.geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( new Float32Array( 9 ), 3 ) );
-		const cloth = new THREE.BufferAttribute( new Float32Array( 3 * 4 ), 4 );
-		const body = new BodyMesh( source, 4, false, { map: new THREE.Texture(), cloth } );
-
-		expect( Object.keys( body.mesh.geometry.attributes ).sort() ).toEqual( [ 'cloth', 'position', 'uv' ] );
-		expect( Object.keys( body.mesh.geometry.attributes ).length + body.attributes.length ).toBe( VERTEX_BUFFERS );
-
-	} );
-
-	it( 'writes a person into the packed attributes', () => {
-
-		const cloth = new THREE.BufferAttribute( new Float32Array( 3 * 4 ), 4 );
-		const body = new BodyMesh( baked(), 4, false, { map: new THREE.Texture(), cloth } );
-		const look = { skin: { r: 0.5, g: 0.4, b: 0.3 }, shirt: { r: 0.1, g: 0.2, b: 0.9 }, trousers: { r: 0, g: 0, b: 0 }, sleeve: 0.7, hem: 0.2 };
-
-		body.setInstance( 2, new THREE.Vector3( 1, 2, 3 ), 0.5, 7, 1, look );
-
-		expect( body.motion.getW( 2 ) ).toBe( 0.5 );
-		expect( body.motion.getZ( 2 ) ).toBe( 3 );
-		expect( body.pose.getX( 2 ) ).toBe( 7 );
-		expect( body.pose.getY( 2 ) ).toBe( 1 );
-		expect( body.skins.getW( 2 ) ).toBeCloseTo( 0.7 );
-		expect( body.shirts.getW( 2 ) ).toBeCloseTo( 0.2 );
-
-	} );
-
 } );

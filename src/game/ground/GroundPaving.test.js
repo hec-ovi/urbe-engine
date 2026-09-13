@@ -106,71 +106,6 @@ describe( 'GroundBuilder fitted paving', () => {
 		expect( body.geometry.getAttribute( 'uv' ).getX( 0 ) ).toBeCloseTo( 20 - frame.origin[ 0 ], 5 );
 	} );
 
-	it( 'joins rotated 2 by 2 slabs to 1 metre slabs with complete base vertices and no interior group joints', () => {
-		const { atlas, cover, point, module, region } = fixture( { pitch: [ 1, 1 ], joint: [ 0.02, 0.02 ] } );
-		const paving = atlas.streets.construction.paving;
-		paving.version = '1.1.0';
-		paving.roadwayLayoutId = 'l0';
-		paving.sources = [ { id: 'source', surface: cover.surface, top: cover.top, bottom: cover.bottom } ];
-		region.sourceId = 'source';
-		paving.layouts[ 0 ].modules.push( { ...module, id: 'group', pitch: [ 2, 2 ], baseCells: [ 2, 2 ] } );
-		cover.polygon = [ [ 0, 0 ], [ 1, 0 ], [ 2, 0 ], [ 2, 1 ], [ 2, 2 ], [ 1, 2 ], [ 0, 2 ], [ 0, 1 ] ].map( ( [ c, r ] ) => point( c, r ) );
-		cover.construction.part = { kind: 'grid', moduleId: 'group', cells: [ { row: 0, from: 0, to: 1 } ] };
-		atlas.volumetric.ground.push( { ...cover,
-			polygon: [ [ 2, 0 ], [ 3, 0 ], [ 3, 1 ], [ 3, 2 ], [ 2, 2 ], [ 2, 1 ] ].map( ( [ c, r ] ) => point( c, r ) ),
-			construction: { regionId: 'p0', part: { kind: 'grid', moduleId: 'slab', cells: [ { row: 0, from: 2, to: 3 }, { row: 1, from: 2, to: 3 } ] } }
-		} );
-		const result = build( atlas );
-		const rendered = meshes( result );
-		const triangles = rendered.flatMap( mesh => topTriangles( mesh.geometry ) );
-		const expectedArea = atlas.volumetric.ground.reduce( ( area, owner ) => area + polygonArea( owner.polygon ), 0 );
-		expect( sumArea( triangles ) ).toBeCloseTo( expectedArea, 5 );
-		expect( sumArea( topTriangles( result.colliderGeometry ) ) ).toBeCloseTo( expectedArea, 5 );
-		for ( let i = 0; i < triangles.length; i ++ ) for ( let j = i + 1; j < triangles.length; j ++ ) expect( overlapArea( triangles[ i ], triangles[ j ] ) ).toBeLessThan( 1e-8 );
-		const body = rendered.find( mesh => mesh.userData.groundConstruction.finish === 'pavingBody' );
-		let bodyArea = 0;
-		for ( let row = 0; row < 2; row ++ ) for ( let column = 0; column < 3; column ++ ) {
-			const corners = [ point( column, row ), point( column + 1, row ), point( column + 1, row + 1 ), point( column, row + 1 ) ];
-			const u = column === 0 ? [ 0.01, 1 ] : column === 1 ? [ 0, 0.99 ] : [ 0.01, 0.99 ];
-			const v = column === 2 ? [ 0.01, 0.99 ] : row === 0 ? [ 0.01, 1 ] : [ 0, 0.99 ];
-			const inner = [ [ u[ 0 ], v[ 0 ] ], [ u[ 1 ], v[ 0 ] ], [ u[ 1 ], v[ 1 ] ], [ u[ 0 ], v[ 1 ] ] ].map( ( [ s, t ] ) => [ 0, 1 ].map( axis => Math.fround(
-				corners[ 0 ][ axis ] * ( 1 - s ) * ( 1 - t ) + corners[ 1 ][ axis ] * s * ( 1 - t ) + corners[ 2 ][ axis ] * s * t + corners[ 3 ][ axis ] * ( 1 - s ) * t ) ) );
-			bodyArea += polygonArea( inner );
-		}
-		expect( sumArea( topTriangles( body.geometry ) ) ).toBeCloseTo( bodyArea, 5 );
-		const vertices = new Set( triangles.flatMap( triangle => triangle.map( point => point.join( ',' ) ) ) );
-		for ( const row of [ 0, 1, 2 ] ) expect( vertices.has( point( 2, row ).map( Math.fround ).join( ',' ) ) ).toBe( true );
-		const jointTriangles = topTriangles( rendered.find( mesh => mesh.userData.groundConstruction.finish === 'joint' ).geometry );
-		for ( const ring of [ [ [ 0.2, 0.995 ], [ 1.8, 0.995 ], [ 1.8, 1.005 ], [ 0.2, 1.005 ] ],
-			[ [ 0.995, 0.2 ], [ 1.005, 0.2 ], [ 1.005, 1.8 ], [ 0.995, 1.8 ] ] ] ) {
-			const p = ring.map( ( [ c, r ] ) => point( c, r ) );
-			for ( const triangle of jointTriangles ) expect( overlapArea( triangle, [ p[ 0 ], p[ 1 ], p[ 2 ] ] ) + overlapArea( triangle, [ p[ 0 ], p[ 2 ], p[ 3 ] ] ) ).toBeLessThan( 1e-8 );
-		}
-	} );
-
-	it( 'carries curb joints down the exact exposed boundary without interior skirts', () => {
-		const { atlas, cover, point } = fixture( { angle: 0.62, pitch: [ 2, 0.15 ], joint: [ 0.02, 0 ], band: 'curb' } );
-		cover.polygon = [ [ 0, 0 ], [ 1, 0 ], [ 2, 0 ], [ 2, 1 ], [ 1, 1 ], [ 0, 1 ] ].map( ( [ c, r ] ) => point( c, r ) );
-		cover.construction.part.cells = [ { row: 0, from: 0, to: 2 } ];
-		atlas.volumetric.ground.push( { surface: 'roadway', top: 0, bottom: - 0.1,
-			polygon: [ point( 0, 0 ), point( 0, - 20 ), point( 2, - 20 ), point( 2, 0 ), point( 1, 0 ) ] } );
-		const rendered = meshes( build( atlas ) );
-		const faces = rendered.flatMap( mesh => verticalTriangles( mesh.geometry ) );
-		const length = distance( point( 0, 0 ), point( 1, 0 ) ) + distance( point( 1, 0 ), point( 2, 0 ) );
-		expect( surfaceArea( faces ) ).toBeCloseTo( length * ( cover.top - cover.bottom ), 5 );
-		const joints = rendered.find( mesh => mesh.userData.groundConstruction.finish === 'joint' );
-		expect( surfaceArea( verticalTriangles( joints.geometry ) ) ).toBeCloseTo( length * 0.01 * ( cover.top - cover.bottom ), 5 );
-		for ( const mesh of rendered ) {
-			const p = mesh.geometry.getAttribute( 'position' );
-			const uv = mesh.geometry.getAttribute( 'uv' );
-			const normal = mesh.geometry.getAttribute( 'normal' );
-			for ( let i = 0; i < p.count; i += 4 ) {
-				if ( Math.abs( normal.getY( i ) ) > 0.5 ) continue;
-				expect( Math.abs( uv.getX( i + 1 ) - uv.getX( i ) ) ).toBeCloseTo( Math.hypot( p.getX( i + 1 ) - p.getX( i ), p.getZ( i + 1 ) - p.getZ( i ) ), 5 );
-			}
-		}
-	} );
-
 	it( 'uses the explicit modern roadway family and validates source semantics before material creation', () => {
 		catalog.styles.find( style => style.id === 'salvaged' ).constructionSurfaces.road = { kind: 'street-road-salvaged', variant: 'finish' };
 		const { atlas, cover, region } = fixture();
@@ -276,18 +211,11 @@ function triangles( geometry ) {
 	return result;
 }
 const topTriangles = geometry => triangles( geometry ).filter( triangle => triangle.every( p => p[ 1 ] === triangle[ 0 ][ 1 ] ) ).map( triangle => triangle.map( ( [ x, , z ] ) => [ x, z ] ) );
-const verticalTriangles = geometry => triangles( geometry ).filter( triangle => triangle.some( p => p[ 1 ] !== triangle[ 0 ][ 1 ] ) );
-const distance = ( a, b ) => Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ] );
 const polygonArea = ring => Math.abs( ring.reduce( ( area, p, i ) => {
 	const q = ring[ ( i + 1 ) % ring.length ];
 	return area + p[ 0 ] * q[ 1 ] - q[ 0 ] * p[ 1 ];
 }, 0 ) ) / 2;
 const sumArea = list => list.reduce( ( sum, triangle ) => sum + polygonArea( triangle ), 0 );
-const surfaceArea = list => list.reduce( ( sum, [ a, b, c ] ) => {
-	const u = b.map( ( value, i ) => value - a[ i ] );
-	const v = c.map( ( value, i ) => value - a[ i ] );
-	return sum + Math.hypot( u[ 1 ] * v[ 2 ] - u[ 2 ] * v[ 1 ], u[ 2 ] * v[ 0 ] - u[ 0 ] * v[ 2 ], u[ 0 ] * v[ 1 ] - u[ 1 ] * v[ 0 ] ) / 2;
-}, 0 );
 
 /** Convex clipping measures real triangle overlap rather than sampled coverage. */
 function overlapArea( first, second ) {

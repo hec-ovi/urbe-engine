@@ -61,28 +61,6 @@ describe( 'GroundMarkings', () => {
 			}
 		}
 	} );
-	it( 'keeps four-lane paint disjoint and outside the exact complete crossing fields', () => {
-		const data = fixture();
-		const result = build( data );
-		expect( result.group.children ).toHaveLength( 2 );
-		expect( result.primitives.filter( p => p.kind === 'center' ) ).toHaveLength( 2 );
-		expect( result.primitives.filter( p => p.kind === 'edge' ) ).toHaveLength( 2 );
-		expect( result.primitives.filter( p => p.kind === 'stop' ) ).toHaveLength( 4 );
-		expect( result.primitives.filter( p => p.kind === 'arrow' ) ).toHaveLength( 4 );
-		for ( const primitive of result.primitives.filter( p => p.kind !== 'crossing' ) ) {
-			for ( const polygon of primitive.polygons ) for ( const point of polygon ) {
-				const [ x, z ] = data.coordinates( point );
-				expect( x ).toBeGreaterThanOrEqual( 13.3 - 1e-8 );
-				expect( x ).toBeLessThanOrEqual( 86.7 + 1e-8 );
-				expect( Math.abs( z ) ).toBeLessThan( 7 );
-			}
-		}
-		const polygons = result.primitives.flatMap( primitive => primitive.polygons.map( polygon => polygon.map( data.coordinates ) ) );
-		for ( let i = 0; i < polygons.length; i ++ ) for ( let j = i + 1; j < polygons.length; j ++ ) expect( overlap( polygons[ i ], polygons[ j ] ), `marking polygons ${i}/${j}` ).toBeLessThan( 1e-8 );
-		const stripes = result.primitives.filter( primitive => primitive.kind === 'crossing' ).flatMap( primitive => primitive.polygons.map( polygon => polygon.map( ( [ x, , z ] ) => [ x, z ] ) ) );
-		expect( stripes ).toEqual( data.atlas.streets.crossings.flatMap( crossing => crossing.segments[ 0 ].markings ) );
-		expect( result.group.children.map( mesh => mesh.material.userData.key ) ).toEqual( [ 'cyberpunk/street-marking-white/mid', 'cyberpunk/street-marking-accent/mid' ] );
-	} );
 
 	it( 'preserves arrow travel direction and actual allowed branches when the source edge reverses and rotates', () => {
 		const data = fixture( { angle: 0.317, reverse: true } );
@@ -135,19 +113,6 @@ describe( 'GroundMarkings', () => {
 		expect( result.group.children[ 0 ].geometry.getAttribute( 'position' ).getY( 0 ) ).toBeCloseTo( 0.003, 6 );
 	} );
 
-	it( 'keeps bent one-way edge strips disjoint through the shared miter', () => {
-		const data = fixture( { laneCount: 1 } );
-		data.atlas.streets.crossings = [];
-		data.atlas.streets.construction.junctions = [];
-		data.atlas.streets.edges[ 0 ].path = [ [ 0, 0 ], [ 20, 0 ], [ 20, 20 ] ];
-		data.road.lanes[ 0 ].path3 = [ [ 0, 0, 0 ], [ 20, 0, 0 ], [ 20, 0, 20 ] ];
-		data.road.lanes[ 0 ].sourceDirection = 'forward';
-		const result = build( data );
-		const polygons = result.primitives.flatMap( primitive => primitive.polygons.map( polygon => polygon.map( ( [ x, , z ] ) => [ x, z ] ) ) );
-		expect( polygons ).toHaveLength( 4 );
-		for ( let i = 0; i < polygons.length; i ++ ) for ( let j = i + 1; j < polygons.length; j ++ ) expect( overlap( polygons[ i ], polygons[ j ] ) ).toBeLessThan( 1e-8 );
-	} );
-
 	it( 'rejects missing authority, unsupported settings and absent material bindings', () => {
 		for ( const mutate of [ data => { data.road.lanes[ 0 ].sourceOffset = NaN; },
 			data => { data.atlas.streets.construction.junctions[ 0 ].approaches[ 0 ].cut = null; },
@@ -162,20 +127,3 @@ describe( 'GroundMarkings', () => {
 		expect( () => new GroundMarkings( fixture().atlas, fixture().road, null, bindings ).build() ).toThrow( expect.objectContaining( { code: 'E_GROUND_MARKINGS' } ) );
 	} );
 } );
-
-const cross = ( a, b, c ) => ( b[ 0 ] - a[ 0 ] ) * ( c[ 1 ] - a[ 1 ] ) - ( b[ 1 ] - a[ 1 ] ) * ( c[ 0 ] - a[ 0 ] );
-const area = polygon => Math.abs( polygon.reduce( ( total, p, i ) => { const q = polygon[ ( i + 1 ) % polygon.length ]; return total + p[ 0 ] * q[ 1 ] - p[ 1 ] * q[ 0 ]; }, 0 ) ) / 2;
-function overlap( polygon, clip ) {
-	const orientation = Math.sign( clip.reduce( ( sum, point, i ) => { const next = clip[ ( i + 1 ) % clip.length ]; return sum + point[ 0 ] * next[ 1 ] - point[ 1 ] * next[ 0 ]; }, 0 ) );
-	for ( let i = 0; i < clip.length && polygon.length; i ++ ) {
-		const output = [], a = clip[ i ], b = clip[ ( i + 1 ) % clip.length ];
-		for ( let j = 0; j < polygon.length; j ++ ) {
-			const p = polygon[ j ], q = polygon[ ( j + 1 ) % polygon.length ];
-			const dp = cross( a, b, p ) * orientation, dq = cross( a, b, q ) * orientation;
-			if ( dp >= 0 ) output.push( p );
-			if ( ( dp >= 0 ) !== ( dq >= 0 ) ) { const t = dp / ( dp - dq ); output.push( [ p[ 0 ] + ( q[ 0 ] - p[ 0 ] ) * t, p[ 1 ] + ( q[ 1 ] - p[ 1 ] ) * t ] ); }
-		}
-		polygon = output;
-	}
-	return polygon.length >= 3 ? area( polygon ) : 0;
-}

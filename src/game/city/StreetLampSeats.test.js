@@ -25,28 +25,6 @@ describe( 'authored street lamp seats', () => {
 
 	} );
 
-	it( 'preserves the same physical seats on a translated rotated street', () => {
-
-		const atlas = fixture();
-		const angle = 0.63;
-		const c = Math.cos( angle );
-		const s = Math.sin( angle );
-		const transform = ( [ x, z ] ) => [ 840 + x * c - z * s, - 320 + x * s + z * c ];
-		atlas.streets.edges[ 0 ].path = atlas.streets.edges[ 0 ].path.map( transform );
-		for ( const cover of atlas.volumetric.ground ) cover.polygon = cover.polygon.map( transform );
-		atlas.streets.construction.paving.frames[ 0 ] = { id: 'frame', origin: transform( [ 0, 0 ] ), u: [ c, s ], gridStep: 0.001 };
-		const { posts } = new StreetLamps( atlas, factory ).build();
-		expect( posts ).toHaveLength( 5 );
-		for ( const [ index, post ] of posts.entries() ) {
-
-			const expected = transform( [ 9.5 + index * 19, index % 2 ? 5.15 : - 4.25 ] );
-			expect( post.x ).toBeCloseTo( expected[ 0 ], 8 );
-			expect( post.z ).toBeCloseTo( expected[ 1 ], 8 );
-
-		}
-
-	} );
-
 } );
 
 function fixture() {

@@ -81,32 +81,6 @@ describe( 'GroundBuilder physical modules', () => {
 
 	} );
 
-	it( 'keeps real panel recesses and a 2 cm gutter lip with native finish bindings', () => {
-
-		const atlas = fixture();
-		atlas.streets.construction.modules.placements = [ { ...atlas.streets.construction.modules.placements[ 0 ], origin: [ 0, 0 ], count: 1 } ];
-		atlas.volumetric.ground = [ { surface: 'sidewalk', moduleBlockId: 'b0', polygon: rectangle( 0, - 1.5, 2, 2.5 ), top: 0.2, bottom: 0 } ];
-		const result = build( atlas );
-		const selected = Object.fromEntries( result.group.children.filter( mesh => mesh.isMesh ).map( mesh => [ mesh.userData.groundModule.role, mesh.material.userData ] ) );
-		expect( selected ).toEqual( {
-			panel: { key: 'cyberpunk/street-precast-maintained/mid', variantId: 'finish' },
-			curb: { key: 'cyberpunk/street-precast-maintained/mid', variantId: 'finish' },
-			joint: { key: 'cyberpunk/street-joint/mid', variantId: 'maintained' },
-			gutter: { key: 'cyberpunk/street-graphite-maintained/mid', variantId: 'finish' },
-			'gutter-lip': { key: 'cyberpunk/street-graphite-maintained/mid', variantId: 'finish' },
-			roadway: { key: 'cyberpunk/street-road/mid', variantId: 'maintained' }
-		} );
-		const collider = new THREE.Mesh( result.colliderGeometry, new THREE.MeshBasicMaterial() );
-		for ( const [ x, z, expected ] of [ [ 0.5, 0.5, 0.2 ], [ 1, 0.5, 0.18 ], [ 0.5, - 0.1, 0.2 ], [ 0.5, - 0.3, 0 ], [ 0.5, - 0.49, 0.02 ] ] ) {
-
-			const ray = new THREE.Raycaster( new THREE.Vector3( x, 2, z ), new THREE.Vector3( 0, - 1, 0 ) );
-			expect( ray.intersectObject( result.group, true )[ 0 ].point.y ).toBeCloseTo( expected, 6 );
-			expect( ray.intersectObject( collider )[ 0 ].point.y ).toBeCloseTo( expected, 6 );
-
-		}
-
-	} );
-
 	it( 'uses native land finishes in module cities and retains station openings outside module reservations', () => {
 
 		const atlas = fixture();

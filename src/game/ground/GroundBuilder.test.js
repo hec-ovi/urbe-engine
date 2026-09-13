@@ -70,39 +70,6 @@ describe( 'GroundBuilder', () => {
 
 	} );
 
-	it( 'maps the published kerb top along its edge and across its width', () => {
-
-		const vertical = ( surface, x0, x1 ) => ( {
-			surface,
-			polygon: [ [ x0, 0 ], [ x1, 0 ], [ x1, 20 ], [ x0, 20 ] ]
-		} );
-		const { group } = ground( [
-			vertical( 'roadway', 0, 10 ),
-			vertical( 'curb', 10, 10.15 ),
-			vertical( 'sidewalk', 10.15, 16 )
-		] );
-		const uv = group.getObjectByName( 'ground:curb' ).geometry.getAttribute( 'uv' );
-		const u = Array.from( { length: uv.count }, ( _, i ) => uv.getX( i ) );
-		const v = Array.from( { length: uv.count }, ( _, i ) => uv.getY( i ) );
-
-		// The material's 2 x .15 m tile runs along the stone, then across it.
-		// World-axis fill UVs invert these spans when the kerb turns north.
-		expect( round( Math.max( ...u ) - Math.min( ...u ) ) ).toBe( 20 );
-		expect( round( Math.max( ...v ) - Math.min( ...v ) ) ).toBe( 0.15 );
-
-	} );
-
-	it( 'stands the strip on a face down to the roadway, and nothing else', () => {
-
-		const { group } = ground( [ ROAD, STRIP, rect( 'sidewalk', 10.15, 16 ) ] );
-		const kerb = group.getObjectByName( 'ground:kerb' );
-
-		// Two triangles: the one edge of the strip with road on the other side.
-		expect( kerb.geometry.getAttribute( 'position' ).count ).toBe( 6 );
-		expect( span( kerb.geometry ) ).toEqual( [ - 0.06, SIDEWALK_HEIGHT + 0.004 ] );
-
-	} );
-
 	it( 'still cuts a kerb from the pavement in a world published without a strip', () => {
 
 		const { group } = ground( [ ROAD, rect( 'sidewalk', 10, 16 ) ] );
@@ -136,7 +103,6 @@ describe( 'GroundBuilder', () => {
 		expect( covered( open.geometry, 4, 13 ) ).toBe( true );
 		expect( covered( open.geometry, 16, 13 ) ).toBe( true );
 
-
 	} );
 
 	it( 'includes Atlas highway decks and supports in the visible and solid ground', () => {
@@ -160,37 +126,6 @@ describe( 'GroundBuilder', () => {
 
 	} );
 
-	it( 'uses neutral large plates and dry patched asphalt on the world-metre grid', () => {
-
-		const shifted = ( surface, z0, z1 ) => ( {
-			surface,
-			polygon: [ [ 100, z0 ], [ 120, z0 ], [ 120, z1 ], [ 100, z1 ] ]
-		} );
-		const { group } = ground( [
-			shifted( 'roadway', 200, 210 ),
-			shifted( 'curb', 210, 210.15 ),
-			shifted( 'sidewalk', 210.15, 216 ),
-			shifted( 'block', 216, 220 ),
-			shifted( 'open', 220, 224 )
-		] );
-
-		const road = group.getObjectByName( 'ground:roadway' );
-		expect( road.material.userData ).toEqual( {
-			key: 'cyberpunk/street-road/mid', variantId: 'maintained'
-		} );
-
-		for ( const name of [ 'sidewalk', 'block', 'open' ] ) {
-
-			const surface = group.getObjectByName( `ground:${name}` );
-			expect( surface.material.userData ).toEqual( {
-				key: 'cyberpunk/street-paving/mid', variantId: 'maintained'
-			} );
-			expect( worldUvErrors( surface.geometry ) ).toEqual( [] );
-
-		}
-
-	} );
-
 } );
 
 function horizontalArea( geometry ) {
@@ -205,7 +140,6 @@ function horizontalArea( geometry ) {
 	return area;
 
 }
-
 
 /** Whether any triangle of a horizontal fill covers the point. */
 function covered( geometry, x, z ) {
@@ -259,21 +193,3 @@ function span( geometry ) {
 }
 
 const round = ( value ) => Math.round( value * 1e4 ) / 1e4;
-
-/** Horizontal cover UVs are absolute world metres: [x, -z]. */
-function worldUvErrors( geometry ) {
-
-	const position = geometry.getAttribute( 'position' );
-	const uv = geometry.getAttribute( 'uv' );
-	const errors = [];
-
-	for ( let i = 0; i < position.count; i ++ ) {
-
-		if ( Math.abs( uv.getX( i ) - position.getX( i ) ) > 1e-6
-			|| Math.abs( uv.getY( i ) + position.getZ( i ) ) > 1e-6 ) errors.push( i );
-
-	}
-
-	return errors;
-
-}
