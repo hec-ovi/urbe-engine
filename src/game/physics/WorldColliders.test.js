@@ -5,34 +5,44 @@ import { Physics } from './Physics.js';
 
 describe( 'city collider installation', () => {
 
-	it( 'cooks every exact geometry in bounded slices and releases staging data', async () => {
+	it( 'cooks static sources in bounded disabled pieces and releases staging data', async () => {
 
-		const added = [];
-		const physics = { addTrimesh: ( geometry ) => {
+		const geometry = floorGeometry(), handles = [], chunks = [];
+		const physics = {
+			addTrimesh( chunk, { enabled } ) {
 
-			added.push( geometry.id );
-			return { triangles: 2 };
+				chunks.push( chunk.attributes.position.count / 3 );
+				const handle = { triangles: chunk.attributes.position.count / 3,
+					body: { setEnabled: vi.fn() } };
+				expect( enabled ).toBe( false );
+				handles.push( handle );
+				return handle;
 
-		} };
-		const geometries = Array.from( { length: 12 }, ( _, id ) => ( { id, dispose: vi.fn() } ) );
+			},
+			addPost: vi.fn(), remove: vi.fn()
+		};
+		const disposed = vi.spyOn( geometry, 'dispose' );
 		const colliders = new WorldColliders( physics );
-
-		await colliders.addStaticsAsync( geometries, { sliceMs: 0, release: true } );
-
-		expect( added ).toEqual( geometries.map( ( geometry ) => geometry.id ) );
-		expect( geometries.every( ( geometry ) => geometry.dispose.mock.calls.length === 1 ) ).toBe( true );
-		expect( colliders.triangles ).toBe( 24 );
+		await colliders.addStaticsAsync( new Map( [ [ 'shell', geometry ] ] ), { release: true } );
+		expect( chunks.every( count => count <= 2048 ) ).toBe( true );
+		expect( colliders.triangles ).toBe( geometry.index.count / 3 );
+		expect( handles.every( handle => handle.body.setEnabled.mock.calls[ 0 ][ 0 ] ) ).toBe( true );
+		expect( disposed ).toHaveBeenCalledOnce();
+		const posts = [ { x: 1, z: 2, height: 4, radius: 0.1, base: 0 } ];
+		await colliders.addPostsAsync( posts );
+		expect( physics.addPost ).toHaveBeenCalledWith( posts[ 0 ] );
 
 	} );
 
-	it( 'keeps map labels on collider failures', async () => {
+	it( 'keeps the source label on failed admission and releases staging geometry', async () => {
 
-		const bad = { getAttribute: () => ( { count: 9 } ), dispose: vi.fn() };
-		const colliders = new WorldColliders( { addTrimesh: () => { throw new Error( 'wasm rejected mesh' ); } } );
-
+		const bad = floorGeometry( 2 ), disposed = vi.spyOn( bad, 'dispose' );
+		const colliders = new WorldColliders( {
+			addTrimesh: () => { throw new Error( 'wasm rejected mesh' ); }, remove: vi.fn()
+		} );
 		await expect( colliders.addStaticsAsync( new Map( [ [ 'building p15', bad ] ] ), { release: true } ) )
-			.rejects.toThrow( 'building p15 collider failed (3 triangles): wasm rejected mesh' );
-		expect( bad.dispose ).toHaveBeenCalledOnce();
+			.rejects.toThrow( 'building p15 collider failed: wasm rejected mesh' );
+		expect( disposed ).toHaveBeenCalledOnce();
 
 	} );
 

@@ -220,14 +220,8 @@ export class GameApp {
 		this.colliders = new WorldColliders( this.physics );
 
 		this.view.step( 'laying the ground' );
-		const groundBuilder = new GroundBuilder( atlas, factory );
-		const ground = spatial ? groundBuilder.stream() : groundBuilder.build();
-		if ( spatial ) {
-
-			this.groundStream = ground;
-			await ground.update( spawn.point, { radius: FAR_PLANE, collisionRadius: 256, collision: this.colliders } );
-
-		}
+		const ground = this.groundStream = new GroundBuilder( atlas, factory ).stream();
+		await ground.update( spawn.point, { radius: FAR_PLANE, collisionRadius: 256, collision: this.colliders } );
 		this.scene.add( ground.group );
 		this.hydrology = await HydrologyHost.install( { blueprint: atlas, factory, scene: this.scene } );
 
@@ -254,9 +248,10 @@ export class GameApp {
 		const neon = spatial ? { group: new THREE.Group(), glows: [] } : new Neon( atlas, buildings, factory ).build();
 		const lamps = new StreetLamps( atlas, factory, connections.networks.walk ).build();
 		const links = new Links( connections, factory, rooftopSpans ).build();
-		const props = await new Dressing( atlas, connections.networks.walk, factory, {
+		const props = this.propsStream = await new Dressing( atlas, connections.networks.walk, factory, {
 			obstacles: DressingObstacles.fromPosts( lamps.posts )
-		} ).build();
+		} ).stream();
+		await props.update( spawn.point, { radius: FAR_PLANE, collisionRadius: 256, collision: this.colliders } );
 		this.transit = new Transit( { atlas, networks: connections.networks, factory } );
 		this.windowRooms = new LitWindows( atlas, buildings, factory );
 		this.scene.add(
@@ -310,13 +305,11 @@ export class GameApp {
 		this.scene.add( this.safetyGround.mesh );
 		this.doorColliders = new DoorColliders( this.physics, city.doors );
 		this.impactWorld = new ImpactWorld( this.physics );
-		this.colliders.addStatic( ground.colliderGeometry, 'ground' );
 		await this.colliders.addStaticsAsync( city.shellColliders, { release: true } );
 		city.shellColliders.clear();
-		this.colliders.addStatic( links.colliderGeometry, 'building links' );
-		this.colliders.addStatics( this.transit.colliders );
-		this.colliders.addStatics( props.colliders );
-		this.colliders.addPosts( lamps.posts );
+		await this.colliders.addStaticsAsync( [ [ 'building links', links.colliderGeometry ] ], { release: true } );
+		await this.colliders.addStaticsAsync( this.transit.colliders );
+		await this.colliders.addPostsAsync( lamps.posts );
 		this.stream.onColliderBand = ( id, geometry ) => this.colliders.addBand( id, geometry );
 		this.stream.onDropBand = ( id ) => this.colliders.dropBand( id );
 
@@ -467,6 +460,9 @@ export class GameApp {
 		if ( this.groundStream ) await this.groundStream.update( spawn.point, {
 			prepare: ( group, options ) => this.floorWarmup.warmAll( group, options )
 		} );
+		await this.propsStream.update( spawn.point, {
+			prepare: ( group, options ) => this.floorWarmup.warmAll( group, options )
+		} );
 		this.view.step( 'baking the environment' );
 		this.probe?.bake( spawn.point );
 		await this.floorWarmup.warmAll( this.scene, {
@@ -597,6 +593,7 @@ export class GameApp {
 		this.safetyGround.update( this.camera );
 		this.shellScene?.stream.update( feet );
 		this.groundStream?.update( feet ).catch( error => console.error( 'ground streaming', error ) );
+		this.propsStream?.update( feet ).catch( error => console.error( 'prop streaming', error ) );
 
 		this.hitches.time( 'interior stream', () => {
 

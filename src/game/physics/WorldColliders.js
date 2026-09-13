@@ -1,13 +1,8 @@
 import { BandAdmission } from './BandAdmission.js';
 
 /**
- * What the player can stand on and cannot walk through. The ground and every
- * building shell are fixed trimeshes built once: the shells carry their real
- * door and window openings, so a doorway is walkable without any special case.
- * Street furniture is a cylinder each, not a mesh.
- *
- * Interior floor bands prepare exact collision pieces across frames, then
- * become solid together. Taking a band out removes every piece.
+ * Installs exact static geometry and admits streamed floor collision.
+ * Each source prepares in bounded pieces before becoming solid.
  */
 export class WorldColliders {
 
@@ -20,45 +15,7 @@ export class WorldColliders {
 
 	}
 
-	/**
-	 * One piece of the world that never moves and is always solid: the ground,
-	 * a building shell, a bridge deck, a bus shelter. World space, merged.
-	 */
-	addStatic( geometry, label = 'static world geometry' ) {
-
-		if ( ! geometry ) return;
-
-		try {
-
-			this.triangles += this.physics.addTrimesh( geometry ).triangles;
-
-		} catch ( error ) {
-
-			const position = geometry.getAttribute?.( 'position' );
-			const triangles = position ? position.count / 3 : 0;
-			throw new Error( `${label} collider failed (${triangles} triangles): ${error?.message ?? error}`, { cause: error } );
-
-		}
-
-	}
-
-	/** @param geometries any iterable of them */
-	addStatics( geometries ) {
-
-		let index = 0;
-		for ( const item of geometries ) {
-
-			const [ label, geometry ] = labelled( item, index ++ );
-			this.addStatic( geometry, label );
-
-		}
-
-	}
-
-	/**
-	 * Adds a large set without holding the main thread across the whole city.
-	 * Each geometry is still one exact trimesh; the yield only separates cooks.
-	 */
+	/** Prepares exact static triangles in bounded pieces before enabling each source. */
 	async addStaticsAsync( geometries, { sliceMs = 8, release = false } = {} ) {
 
 		let since = performance.now();
@@ -69,7 +26,13 @@ export class WorldColliders {
 			const [ label, geometry ] = labelled( item, index );
 			try {
 
-				this.addStatic( geometry, label );
+				const admission = new BandAdmission( this.physics, geometry );
+				await admission.prepare();
+				this.triangles += admission.handles.reduce( ( sum, handle ) => sum + handle.triangles, 0 );
+
+			} catch ( error ) {
+
+				throw new Error( `${label} collider failed: ${error?.message ?? error}`, { cause: error } );
 
 			} finally {
 
@@ -89,10 +52,21 @@ export class WorldColliders {
 
 	}
 
-	/** @param posts [{ x, z, base, height, radius }] lamp poles and the like */
-	addPosts( posts ) {
+	/** Installs fixed posts across frames during scene loading. */
+	async addPostsAsync( posts ) {
 
-		for ( const post of posts ) this.physics.addPost( post );
+		let since = performance.now();
+		for ( const post of posts ) {
+
+			this.physics.addPost( post );
+			if ( performance.now() - since >= 4 ) {
+
+				await taskYield();
+				since = performance.now();
+
+			}
+
+		}
 
 	}
 
