@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import { MeshoptSimplifier } from 'meshoptimizer';
 import { ARCHETYPES } from '../city/archetypes.js';
 
-// Index-only LOD chains over one shared vertex array, per docs/RESEARCH.md 1.
+// Index-only LOD chains over one shared vertex array, shared by every instance.
 const LOD_RATIOS = [ 1, 0.3, 0.1 ];
 
 export const LOD_COUNT = LOD_RATIOS.length;

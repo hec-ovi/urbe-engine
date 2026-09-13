@@ -83,7 +83,3 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 
 - The gameplay animation coordinator owns speaking and listening gestures. This controller publishes the exact identity, posture, follow mode, and routine resume state it consumes.
 - Simulation route workers publish a route workplace but no trip assignment. They fail closed because no authoritative vehicle position or route progress exists; passenger commute legs carry the required transit assignment.
-
-## How to modify this blackbox safely
-
-Keep simulation identities and Connections geometry authoritative. Update every affected schema and this contract, exercise behavior through `NpcContinuity`, then run the complete engine test and build commands.

@@ -89,7 +89,3 @@ Renderer construction throws no transit error. Empty optional collections build 
 - Geometry UVs use world meters and every visible surface uses a material from `PbrMaterialFactory`.
 - Station decks use the authored ground top. Short flights have 0.3 m goings and rises at most 0.18 m, ending on a landing within the shaft reservation. Their shared arrival point is clear of the machine and faces the stairs back to the street.
 - Transit vehicles have no physics collider.
-
-## How to modify this blackbox safely
-
-Keep timetable math aligned with Connections' `transitVehiclesAt`, including its dwell boundary behavior. Update every affected schema and focused journey or renderer test, then run the complete engine tests and build.

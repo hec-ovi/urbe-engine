@@ -45,7 +45,3 @@ Turns an optional Atlas hydrology plan into exact render geometry and installs i
 - Water meshes never enter the collider output. Every water surface is instead an explicit ground exclusion, while Atlas crossings remain explicit bridge/tunnel handoffs.
 - A missing material never becomes the material factory's fallback.
 - A no-water blueprint never requests the Materials binding document and mounts no scene object.
-
-## How to modify this blackbox safely
-
-Read only this folder plus the Atlas, materials, ground, and lighting contracts. Update the schemas and fixtures with every payload change. Run this folder's tests, then the full engine tests and build. Host integration belongs outside this layer.

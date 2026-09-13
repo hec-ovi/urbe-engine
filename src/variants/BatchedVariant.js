@@ -5,7 +5,7 @@ import { ARCHETYPES } from '../city/archetypes.js';
 /**
  * Variant B: one BatchedMesh holding every building, perObjectFrustumCulled.
  * One multi-draw call on WebGL; one draw per visible instance on WebGPU
- * (docs/RESEARCH.md 0). No LOD.
+ * No LOD.
  */
 export class BatchedVariant extends Variant {
 

@@ -34,7 +34,3 @@ The bridge adds no error codes. Methods other than the nullable crowd-handle ada
 - The engine does not infer a second NPC type, role, home, schedule, appearance seed or current place.
 - A waiter or barista returned through this bridge is the exact worker selected by the simulation for that interior post.
 - Continuity data is not flattened or rewritten.
-
-## How to modify this blackbox safely
-
-Keep this class as a narrow adapter. Add behavior to simulation or to its renderer-side consumer, expose only the necessary pass-through here, then test through `SimBridge`.

@@ -12,7 +12,7 @@ import { LOD_COUNT } from '../scene/ArchetypeGeometries.js';
  * LOD by camera distance and appends the building id to that LOD's visible
  * list, bumping the instanceCount of its IndirectStorageBufferAttribute.
  * The vertex stage reads the visible list to place each box. This is the
- * r185 webgpu_struct_drawindirect pattern (docs/RESEARCH.md 0 and 9).
+ * r185 webgpu_struct_drawindirect pattern with compute culling.
  * WebGPU backend only.
  */
 export class IndirectVariant extends Variant {

@@ -74,7 +74,3 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - Crouch control resolves only the requested cast npcId, holds it until its matching release, and resumes its persisted simulation routine.
 - Parcel area mechanics are offered only at their deterministic entry or interior anchor. District observation remains an area action throughout the named district.
 - Quest item data currently publishes a parcel but no room or transform. The live layer places the exact bound assembly at the parcel's ground-floor interior entry anchor, or its published access point when no interior door exists. An absent binding, fixed assembly, missing `take` anchor or unresolved material produces no pickup. Observe data publishes only a district, so the layer does not invent individual evidence clues.
-
-## How to modify this blackbox safely
-
-Keep action mapping closed and deterministic. Add a runtime event before advertising its mechanic here. Update every affected schema and run the quest action tests plus the full engine suite.

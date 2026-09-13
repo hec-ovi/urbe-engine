@@ -41,9 +41,6 @@ Purpose: connect the isolated game front door to a catalog and generation API wi
 - JSON files are parsed before they cross into the API. Invalid JSON never reaches `api.importGame`.
 - No API rejection escapes an event listener as an unhandled promise rejection.
 
-## How to modify this blackbox safely
-
-Keep changes inside `src/launcher`. Update both schemas before changing API shapes, exercise actions through the real menu with user-event, and verify invalid input and rejected API calls do not navigate or download.
 
 ## Depends on
 

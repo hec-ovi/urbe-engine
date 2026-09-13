@@ -39,7 +39,3 @@ Purpose: restores one cataloged game and saves its live player and quest state t
 - Optional quest transit progress is validated against the quest schema, sent and returned unchanged, then cross-checked against the restored quest, cast, follower and timetable journey. A descriptor may omit it.
 - Optional NPC state is validated through the simulation and NPC agent schemas, sent and returned unchanged, and restored before the first live frame. A descriptor may omit it.
 - Optional investigation state is validated, sent and returned unchanged. The investigation blackbox validates every saved scene and evidence id against current authored scenes before rendering. A descriptor may omit it.
-
-## How to modify this blackbox safely
-
-Keep payload changes additive unless the launcher and game descriptor accept the new shape first. Run the persistence tests and the complete engine test suite.

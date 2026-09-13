@@ -1,53 +1,41 @@
-# CONTRACT: engine
+# Engine contract
 
-Purpose: assembles the generated city boxes into a cataloged world and serves its launcher, previews, creation flow and playable first-person game.
+Version 0.17.17. Loads assembled city artifacts into a first-person game and exposes catalog, creation, preview, dialogue and save adapters.
 
-Status: v0.17.16.
+## Inputs and outputs
 
-## Inputs
+| Entry | Request | Result |
+| --- | --- | --- |
+| `npm run play` | Vite arguments; `--port 5306` selects the port | Launcher at `/`, resource mounts and HTTP routes. `npm run dev` also watches source files. |
+| `POST /api/launcher` | [Method and input](src/server/schema/launcher-request.schema.json) | Method results below |
+| `?mode=game` | [Query and parsed settings](src/game/data/schema/game-config.d.ts) | Playable session through [Game](src/game/CONTRACT.md) |
+| Assembly CLIs | [Assembly requests and flags](src/assembly/CONTRACT.md) | [World manifest](src/assembly/schema/world-manifest.schema.json), GLBs and floor documents |
+| `POST /api/building` | [Building request](src/server/schema/building-build-request.schema.json) | [Building result](src/server/schema/building-build-result.schema.json) |
+| `POST /api/talk` | [NPC, behavior, line, time and optional quests](src/server/schema/talk-request.schema.json) | [Reply](src/server/schema/talk-response.schema.json) |
+| `/api/exteriors` | [Capability and exact-blueprint jobs](src/server/CONTRACT.md) | [Capability](src/server/schema/exterior-capability.schema.json) or [job](src/server/schema/exterior-build-job.schema.json) |
 
-- `npm run play` serves the local game with file watching disabled; restart to load completed changes. `npm run dev` enables source reloads. Both accept Vite server arguments.
+Launcher `catalog` and `importGame` return the [browser catalog](src/launcher/schema/catalog.schema.json). `continueGame` returns [playUrl](src/launcher/schema/launcher-api.schema.json#/$defs/continueResult). `exportGame` and `saveCurrent` return a [game descriptor](src/library/schema/game-descriptor.schema.json); `exportCity` returns a [city descriptor](src/library/schema/city-descriptor.schema.json). Creation results use the corresponding `generateCityResult`, `generateInstancesResult`, `generateQuestsResult` and `createGameResult` definitions in the [launcher API schema](src/launcher/schema/launcher-api.schema.json).
 
-- World assembly consumes Atlas, Connections, Exterior, Interior, Materials, Simulation, Naming and Quests only through the contracts listed below.
-- `npm run assemble` and `npm run assemble-city` take the requests in [src/assembly/CONTRACT.md](src/assembly/CONTRACT.md) and publish [world-manifest.schema.json](src/assembly/schema/world-manifest.schema.json), including the post-exterior rooftop spans fitted by Connections.
-- A playable story is the Quests v0.8.2 handoff `quest-bundle.json` v1.1 plus its six counted catalogs and object-valued `host-capabilities.json`, validated by [src/quest-bundle/CONTRACT.md](src/quest-bundle/CONTRACT.md).
-- Catalog, import, export, staged creation and revisioned save calls use [launcher-request.schema.json](src/server/schema/launcher-request.schema.json) at `POST /api/launcher`. Browser values use [launcher-api.schema.json](src/launcher/schema/launcher-api.schema.json); stored values use [src/library/CONTRACT.md](src/library/CONTRACT.md).
-- A missing building preview takes [building-build-request.schema.json](src/server/schema/building-build-request.schema.json) at `POST /api/building`.
-- NPC text dialogue takes [talk-request.schema.json](src/server/schema/talk-request.schema.json), including optional live quest state, at `POST /api/talk`. `LLM_BASE_URL` selects an OpenAI-compatible endpoint and `LLM_MODEL` selects its model.
-- Browser modes are `?mode=game`, `?mode=city`, `?mode=building` and `?mode=experiment`, with their exact query settings in the relevant contracts.
+A catalog game owns its directory and acknowledged save revision. A direct `out` preview is session-only. JSON exports contain descriptors and references, not packaged model or texture bytes. World and quest format versions remain separate from the Engine package version.
 
-## Outputs
+## Previews
 
-- Development preview serves Materials-owned binding JSON at `/materials/bindings/<name>.json` and theme data/maps at `/materials/<theme>/...`, read-only with current file bytes and no browser cache.
-- `/` is the launcher for separate generated-city and saved-game catalogs. Creation selects a Small, Medium or Big template and generates city shells. Free play creates and opens a saved game immediately; interiors and quests are optional validated stages.
-- `?mode=game` plays the assembled city through [src/game/CONTRACT.md](src/game/CONTRACT.md), including revisioned saves, library discovery, world queries, objective guidance, authored investigations and all 16 quest action kinds.
-- The seven measured quest hosts are assassination by fatal Rapier vehicle impact, fixed-asset rescue, escort follow or lead arrival, fixed access, fixed hacking, fixed sabotage and a verified public-transit journey. Each keeps its authored quest, step, actor, target, place and asset identities.
-- `?mode=city&out=/out/<world>` shows each manifest parcel and opens its building viewer. `?mode=building&parcel=<id>&out=/out/<world>[&source=interior]` shows the exterior or furnished interior and can request a missing build. It preserves the GLB's authored two-sided surfaces while replacing material keys. Its source state is loading, ready, unavailable or failed with retry and exterior recovery actions; a viewport click captures the camera, Escape releases it, and source and floor controls remain usable while released.
-- `POST /api/building` returns [building-build-result.schema.json](src/server/schema/building-build-result.schema.json).
-- `POST /api/talk` returns [talk-response.schema.json](src/server/schema/talk-response.schema.json).
+- `?mode=city&out=/out/<world>`: generated city and parcel selection.
+- `?mode=building&parcel=<id>&out=/out/<world>&source=shell|interior`: [building preview](src/building/CONTRACT.md).
+- `?mode=experiment`: [render experiment](docs/INDEX.md#previews) with URL settings from `RunConfig`.
+- `/src/game/props/preview/`: [street models](src/game/props/preview/CONTRACT.md).
 
 ## Errors
 
-- Building preview build failures use [building-build-error.schema.json](src/server/schema/building-build-error.schema.json): `E_INVALID_REQUEST`, `E_WORLD_NOT_FOUND`, `E_WORLD_INVALID`, `E_PARCEL_NOT_FOUND`, `E_BUILD_FAILED`, `E_BUILD_INCOMPLETE`. Viewer asset failures are `E_BUILD_RESPONSE`, `E_BLUEPRINT_UNAVAILABLE`, `E_BLUEPRINT_INVALID`, `E_SOURCE_UNAVAILABLE`, `E_SOURCE_RESPONSE`, and `E_SOURCE_LOAD`.
-- Development route, launcher, library, creation, gameplay, quest and hydrology failures use the closed sets in their linked contracts. Startup failures are visible and publish no partial world.
+- Launcher returns `{code,message}`: `E_INVALID_REQUEST`, `E_CREATION_UNAVAILABLE`, `E_LAUNCHER`, plus [Library](src/library/schema/library-error.schema.json) and [Creation](src/creation/schema/creation-error.schema.json) codes.
+- Building and exterior routes declare the closed sets in [building errors](src/server/schema/building-build-error.schema.json) and [exterior errors](src/server/schema/exterior-build-error.schema.json).
+- Talk returns HTTP 400 for malformed input or 502 for service failure, with [an error string](src/server/schema/talk-error.schema.json).
+- Game admission, asset loading, persistence and interaction failures follow [Game](src/game/CONTRACT.md) and its linked interfaces. Startup failure displays its message and does not grant play.
 
-## Invariants
-
-- Shared PBR material resolution preserves fitted decal basecolor alpha, clamped UVs and depth testing without depth writes. Facade grime embeds its opacity in basecolor; it uses that alpha once.
-
-- Generated data and contracted external model assets are authoritative. Engine does not invent parcels, population, story targets, materials or fallback geometry. Closed shells may carry decorative room bays fitted to their published windows and floor outlines; these have no gameplay or collision role.
-- A catalog game and every save revision remain tied to one validated city, optional quest bundle, simulation replay and player state.
-- WebGPU is the default renderer. WebGL2 uses the same world and gameplay data through its documented quality fallback.
+Launcher and building routes can also pass through a dependency's error code. Startup has no global error enum. Closing those existing output surfaces requires the proposals in [Issues](docs/ISSUES.md).
 
 ## Dependencies
 
-- [Development server](src/server/CONTRACT.md)
+[Atlas](../atlas/CONTRACT.md), [Connections](../connections/CONTRACT.md), [Exterior](../exterior/CONTRACT.md), [Interior](../interior/CONTRACT.md), [Materials](../materials/CONTRACT.md), [Simulation](../simulation/CONTRACT.md), [Naming](../naming/CONTRACT.md) and [Quests](../quests/CONTRACT.md). Internal boundaries and schema links: [box map](docs/INDEX.md).
 
-- [Atlas](../atlas/CONTRACT.md)
-- [Connections](../connections/CONTRACT.md)
-- [Exterior](../exterior/CONTRACT.md)
-- [Interior](../interior/CONTRACT.md)
-- [Materials](../materials/CONTRACT.md)
-- [Simulation](../simulation/CONTRACT.md)
-- [Naming](../naming/CONTRACT.md)
-- [Quests](../quests/CONTRACT.md)
+Rendering uses Three.js with WebGPU and WebGL2 paths; physics uses Rapier; mesh optimization uses meshoptimizer. Source identities, dimensions, material keys and published artifact versions remain producer-owned.

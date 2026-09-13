@@ -38,7 +38,3 @@ Purpose: calculates a repeatable route from the player's current feet to an obje
 - The current feet lead to the nearest graph node and count toward the displayed distance.
 - The guide never calls the router every frame. It retains one validated result between bounded reroutes.
 - A failed route attempt clears the presented route and retries only after the same cadence and movement threshold.
-
-## How to modify this blackbox safely
-
-Keep graph validation fail-closed and preserve 3D geometry. Update the exact schemas and route tests, then run the full engine test suite.

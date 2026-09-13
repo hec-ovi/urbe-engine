@@ -45,7 +45,3 @@ Closed set in [schema/creation-error.schema.json](schema/creation-error.schema.j
 - The current recorded story supplies at most three side jobs. A non-empty custom brief fails explicitly because this deterministic path does not call a model.
 - A stage writes into a temporary sibling and publishes only after its command and output checks pass.
 - Quest selection rewrites definitions, objectives, investigations, fixed mechanic bindings, mission item bindings, referenced mission asset requests and manifest counts together. It preserves the validated host capability object. A final game references `quests/quest-bundle.json`; full authoring metadata and unselected definitions do not ship with it.
-
-## How to modify this blackbox safely
-
-Update schemas and this contract first. Keep process execution and filesystem mutation private. Test through `index.js` with real temporary directories, then run one real Atlas, assembly and quest materialization sequence.

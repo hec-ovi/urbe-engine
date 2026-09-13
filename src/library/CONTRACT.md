@@ -44,7 +44,3 @@ Closed set: `E_INVALID_REQUEST`, `E_INVALID_ID`, `E_CITY_NOT_FOUND`, `E_GAME_NOT
 - IDs cannot contain path separators. Resource URIs are relative to their descriptor directory and cannot contain empty, current or parent segments.
 - Descriptor paths cannot be symbolic links. Save replacement is atomic within one filesystem.
 - Save timestamps and revisions come from the request. JSON object keys are recursively sorted, arrays keep their authored order, indentation is two spaces and files end with one newline.
-
-## How to modify this blackbox safely
-
-Change `schema/` and this contract before changing the public surface in `index.js`. Keep filesystem code in `src/`, test through `index.js`, and run `npm test -- src/library/tests/library.test.js`.

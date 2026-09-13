@@ -1,87 +1,31 @@
 # urbe-engine
 
-The assembler and the game client. It turns every generated layer of a city (blueprint, links, building shells, interiors, materials, population, names, questlines) into one world on disk, then plays that world first person at street level in the browser on three.js WebGPU.
-
-Only generated data is rendered. No placeholder geometry, no invented population, no untextured surface outside the deliberate light emitters.
+Version 0.17.17. Loads an assembled city into a first-person Three.js game with streamed buildings, physics, NPCs, quests and revisioned saves.
 
 ## Run
 
-```
+```sh
 npm install
 npm run play -- --port 5306
-npm test
 ```
 
-`npm run play` keeps the current session stable while source files change. Restart it to apply completed changes. `npm run dev` enables automatic reloads for development.
+Open [the launcher](http://localhost:5306/). It lists cities and saved games, imports and exports descriptors, and calls creation APIs for optional interiors and stories. A game with `questBundle: null` supports free play.
 
-Open [http://localhost:5306/](http://localhost:5306/). The front door keeps generated cities and playable games in separate libraries. New Game starts with Small, Medium or Big, then Next generates the city streets and building exteriors. Names and seeds are automatic. Play without quests enters a saved free-play game immediately. Interiors and the built-in story with up to three side jobs are optional; automatic interior selection uses nine locations. Play opens the new game directly.
+`npm run dev` enables source reloads. `npm run build` builds the browser client; the development HTTP routes and resource mounts require the Vite server. `npm test` runs the contract suites, including local HTTP listeners.
 
-Catalog games open directly with `/?mode=game&game=<id>`. A catalog game loads its own city, interiors, quests, player position, inventory and discovered locations from `out/games/<id>`, then saves the current state before returning to the launcher. A city remains a shell-only artifact under `out/cities/<id>`.
+## Call
 
-Other commands:
+[SKILL.md](SKILL.md) gives a copyable catalog-to-play example. [CONTRACT.md](CONTRACT.md) links requests, results and errors. [docs/INDEX.md](docs/INDEX.md) maps runtime responsibilities.
 
-- `npm run assemble -- --parcel <id> --out <dir> [--glb merged|named] [--interior]` builds a single parcel end to end.
-- `npm run assemble-city -- --blueprint <path> --out <dir> --workers 8` builds a city directly. Add `--reuse-shells true --interior-parcels <id,id,...>` to furnish an exact set without rebuilding its shells.
-- `npm run simulate` boots the population over an assembled world and prints stats, a crowd slice, three NPC lives, latencies and a conservation check.
-- `npm run install-character-assets` validates and installs the CC0 Source characters and Pro animation pack from the workspace resources folder; `npm run audit-character-assets` verifies the local store without changing it.
-- `node src/game/props/install.mjs --source <downloads>` installs the [street model catalog](src/game/props/CONTRACT.md). `--check` verifies it. Models use `URBE_MODELS_DIR`, default `~/models/quaternius`.
-- `npm run build` produces the static client.
+- `/?mode=game&game=<id>` restores a catalog game. `/?mode=game&out=/out/<world>` opens a session-only preview.
+- `npm run assemble -- --parcel <id> --blueprint <path> --out <dir>` builds one parcel; `--interior` adds its interior.
+- `npm run assemble-city -- --blueprint <path> --out <dir>` builds a city. Options and output layout: [Assembly](src/assembly/CONTRACT.md).
+- Building, city, scale and street-prop previews: [preview interfaces](CONTRACT.md#previews).
 
-The client tools stay available on explicit modes: `?mode=city&out=/out/cities/small` shows a whole city, `?mode=building&parcel=<id>&out=/out/games/small` inspects a building, and `?mode=experiment` runs the render scale comparison. Add `source=interior` to the building URL to inspect its furnished version.
+## Resources
 
-The [street detail review](http://localhost:5306/src/game/props/preview/) shows imported trees, bags, dumpsters and containers beside native PBR cartons, crates and litter. Its arrangement view demonstrates sparse service pockets.
+The server mounts sibling Materials catalogs, Atlas samples and Engine `out/`. `URBE_ATLAS_DIR` overrides the sample directory. `URBE_MODELS_DIR` selects character, animation and prop assets, default `~/models/quaternius`. [Character installation](src/game/agents/CONTRACT.md) and [prop installation](src/game/props/CONTRACT.md) describe their audited stores.
 
-## Local preview services
+Text dialogue uses `LLM_BASE_URL` (default `http://localhost:8080/v1`) and `LLM_MODEL` (default first advertised model). Prompts come from Quests.
 
-From the family root, `docker compose up` starts every box. The fixed ports are:
-
-| Port | Service | Open |
-| --- | --- | --- |
-| 5301 | Atlas map and city generator | [http://localhost:5301/](http://localhost:5301/) |
-| 5302 | Connections, roads and transit networks | [http://localhost:5302/](http://localhost:5302/) |
-| 5303 | Exterior building shell preview | [http://localhost:5303/](http://localhost:5303/) |
-| 5304 | Furnished interior preview | [http://localhost:5304/](http://localhost:5304/) |
-| 5305 | Population simulation testbed | [http://localhost:5305/testbed/](http://localhost:5305/testbed/) |
-| 5306 | Engine launcher and playable games | [http://localhost:5306/](http://localhost:5306/) |
-| 5307 | PBR material database preview | [http://localhost:5307/](http://localhost:5307/) |
-
-The quest compiler runs as a worker and has no browser port.
-
-## Assembly
-
-`assemble-city` runs the movement/link layer once over the blueprint, then generates every exterior shell in parallel. After the shells exist, it sends their published mast attachments plus building, roof-access and equipment prisms through Connections' rooftop cable fitter. Its direct CLI default furnishes five buildings referenced by carried questlines; `--interiors N` changes that count. Optional automatic interior creation uses nine so the ten-step main quest and three side jobs have every required location. Free play can use the city exteriors alone. The other buildings stay closed shells. A QA report separates shell failures from interior candidates that stayed closed. Interiors are requested in `keys` texture mode, so the runtime resolves materials itself. Each furnished interior is written per floor (`interior/floors/<tag>.glb` beside each floor JSON), which is what the game streams.
-
-Venue parcels (hotel, coffee shop, market, clinic, police, diner) ask exterior for a lettered marquee saying what the place is, until the naming pass gives it a name. Everything else gets no sign, because a blank one is worse than none.
-
-The output directory matches the blueprint it was built from: assembly removes parcel folders absent from that blueprint, and `manifest.json` names every complete shell in `parcels`, the enterable subset in `interiors`, floor files only for that subset, and the validated rooftop span document. The game loads only this manifest.
-
-## The game
-
-`?mode=game&game=<id>` loads a saved catalog game. Without `game`, the direct preview takes its run from `world` (atlas sample), `out` (assembled directory), `backend` (`webgpu` default, `webgl`), `hour` (world clock, default 21), `crowd` and `cars` (instance capacity), `density` (street population scale, default 1), and `quality` (`low`, `medium`, `high`, `ultra`; unset follows the backend). Debug views are off unless asked for: `lanes=debug` paints the whole lane graph, `lanes=glow` puts the teal centreline strips back, `exposure` moves the grade one variable at a time.
-
-- **Streets** are the blueprint's ground cover: grade roadway in the material database's dry street variant, sidewalks and blocks in its 2 m plate variant raised 12 cm, and curb stone around every raised road edge. Highways use the lane-aligned road variant over Atlas' exact path and width, with U across the lanes and V along the elevation profile; their deck frame and supports use the concrete entry. Road paint follows each lane's 3D path: broken white lines between lanes running the same way, a solid double line against oncoming traffic.
-- **Buildings** merge across the city by material key, authored variant and face behavior, so a patterned lamp, a continuous entrance strip and a two-sided curtain keep their published surfaces. Shells come from each parcel's own exterior GLB. Every authored entrance, balcony and roof-bulkhead leaf on an interior building keeps its own stable hinge and interaction. Only the manifest's interior subset streams per floor: within 70 m of one, only the floors within one of yours are fetched, cut into rooms in a worker and made solid, one more above and below stays in memory for the stairs and lifts, and everything further is dropped with its vertex data.
-- **Which buildings are enterable**: a compact warm header lamp marks each playable entrance, and the minimap marks enterable venues. Venue signs light while somebody is on duty. Closed shells keep their doors fixed and offer no marker or interaction prompt.
-- **Links between buildings** are built from Connections' own paths and cross-sections: bridges and AC tubes you can walk through, tubes you can also walk on top of, tunnels at their basement apertures, street wires, and selected rooftop antenna cables fitted after the Exterior shells exist. Aperture ends are sliced onto their exact facade holes. Rooftop cables follow the published catenary samples at the published thickness from mast endpoint to mast endpoint and share the wire material bucket.
-- **Transit** puts a shelter and a lit sign at every bus stop, drives buses along their routes at the positions the timetables give in closed form, and builds each train and subway station's street entrances as stairs down with signage. The minimap and full map draw exactly the generated lines and their served stops or entrances; the full map keeps the published route height. Shelters and buses are instanced, so the count never grows the draw calls.
-- **Safety ground** extends without collision bounds beneath the world. Its textured surface follows the view; basement floors, tunnels and water basins remain clear above it.
-- **Water** mounts every authored Atlas lagoon, river and sea-coast polygon at its exact elevation. Each type resolves the Materials water-surface binding and moves only its cloned normal map; no water collider, fallback material or inferred crossing is added.
-- **Stories** consume the complete Quests v0.8.2 bundle. Talk, goto, pickup, observe, listen, steal, work and delivery use their live world interactions. Rescue acquires exact follow control before progress; access, hacking and sabotage require their authored mission asset. Escort controls the authored follower or leader until exact arrival. Assassination materializes its cast body and requires a fatal measured vehicle impact. Public transit materializes its passenger at the origin and verifies trip, destination and cargo. Investigations place authored bodies, props, decals and evidence, while objective guidance routes to published parcel, station and stop entries.
-- **Lifts** are rideable. E at a landing calls the cab and opens the doors, E inside takes you to the next floor the shaft serves, and a moving cab carries you with it. The doors are the ones the interior layer published, cut out of their floor band and given a slide.
-- **The day** runs on the same 1:1 clock. The sun's arc drives sky state, exposure and night lighting together. A run starts at night.
-- **Street lighting** uses shell signs, facade ad screens, alternating lamp posts and fitted wall packs. Their supports clear buildings, tree anchors, highways and pedestrian movement. Alleys carry seeded service-corner dressing.
-- **Window rooms** give closed shells shallow textured interiors and visible ceiling strips, with seeded lit occupancy. They are decorative emissive surfaces, with no light cast onto curtains or the street. Playable interiors retain their own rooms and fixtures.
-- **Light** is photometric throughout. A street luminaire carries 24000 lm at 5000 K, an entrance fixture 800 lm, a facade pack 3000 lm, and a venue sign 140 to 420 lm; each has inverse-square decay and the range it publishes. WebGPU bins them into a cluster grid, so hundreds cost a compute dispatch rather than a shading term each; the WebGL2 fallback batches the nearest into uniform arrays, where lights coming and going never recompile a material. Interiors are cut into the rooms the interior layer published and lit by their own fixtures, through a fixed pool of light slots, and each room's fill light is computed from its own surfaces and its fixtures' flux rather than dialled by hand.
-- **The look** is AgX tone response at one authored exposure, dropping 1.6 stops when you step into a room and coming back over 0.6 s. Height fog carries the colour of the light actually filling the air, so a street under sodium lamps reads warm and its shadows are never black. An environment probe baked from the city at your position is what wet ground and glass reflect on medium through ultra. Bloom is fed by the emissive channel, so tubes, lenses and lit windows glow and the walls they light do not. Low disables the probe and bloom, keeps base colour, normal and emission maps, and holds pattern families to two variants; higher tiers add texture channels and variety.
-- **People** come from Simulation, with persistent identity, appearance and routines. Pedestrians follow Connections' 3D paths at 1.4 m/s and wait at signalled crossings. The crowd uses the original regular Source bodies, eyes, eyebrows and hair, with smooth animated normals and seeded clothing colours. Pro motion preserves each body's bone lengths. Dialogue and measured impacts keep the same body and hairstyle when loading its full rig. Two baked body and hair pairs keep the crowd at four draw calls; maps are downscaled for the crowd.
-- **Cars** drive each lane's 3D path at its posted speed, carry lane elevation and body pitch over ramps, hold at a red, then drive the turn connection's 3D curve through the intersection onto the next lane, keeping a following gap.
-- **Movement** is a Rapier capsule with a kinematic character controller: pointer-lock mouse look, WASD at 1.4 m/s and 4 m/s on shift, eye height 1.7 m, autostep that makes curbs and interior stairs walkable. Building shells are trimeshes carrying their real door and window openings; each moving leaf uses its rendered triangles as a kinematic collider following its authored pocket or swing travel, blocking the capsule while closed and clearing the opening while open. Lamp posts are thin cylinders you bump into. An interior floor band becomes solid when the stream puts it in the scene and stops being solid when it takes it out, so what you can walk on is exactly what you can see.
-- **HUD**: clock and district, interact prompt, position readout, an about line naming every loaded path, the NPC panel, a minimap, an orbiting full map (M), an inventory grid (I), a pause menu and a live performance readout with frame time, GPU milliseconds, draw calls, lit fixtures, live interiors and the tier in force.
-
-Character, animation and vehicle packs are CC0 assets kept in a model store outside the repo, served from `URBE_MODELS_DIR`. Blueprints come from the sibling atlas directory, or from `URBE_ATLAS_DIR`.
-
-A run either starts or reports the failure: anything that goes wrong during startup is caught and shown on the loading panel with its message. There is no partial world.
-
-## In the urbe family
-
-It depends on every other box: the plan from [urbe-atlas](https://github.com/hec-ovi/urbe-atlas), links and networks from [urbe-transit](https://github.com/hec-ovi/urbe-transit), shells from [buildingforge](https://github.com/hec-ovi/buildingforge), interiors from [interiorforge](https://github.com/hec-ovi/interiorforge), textures from [pbrforge](https://github.com/hec-ovi/pbrforge), people from [urbe-population](https://github.com/hec-ovi/urbe-population), names from [urbe-namer](https://github.com/hec-ovi/urbe-namer) and stories from [urbe-quests](https://github.com/hec-ovi/urbe-quests). The full picture lives in [urbe](https://github.com/hec-ovi/urbe).
+Exports contain JSON descriptors and references. Asset packaging and complete-game portability are open in [docs/ISSUES.md](docs/ISSUES.md). Crowd and car capacities default to zero; explicit `crowd` and `cars` query values enable them. Large-world moving performance remains an acceptance task.

@@ -58,7 +58,3 @@ A measured physics impact closes the matching grouped action with interruption r
 - Routine updates received during a quest action leave the active clip intact. The latest update becomes authoritative when the routine resumes.
 - The same config, snapshot, and command sequence produces byte-equivalent JSON values and transition ordering.
 - Inputs and outputs are schema validated and fail closed. Original GLB, glTF, FBX, texture, and Blender files remain untouched.
-
-## How to modify this blackbox safely
-
-Add a variant only when its exact clip exists in the audited Pro catalog. Update clip requirements, command schema, fixtures, lifecycle tests, and this contract together. Exercise entry, completion or interruption, save restore, and routine resume before exposing the variant to an adapter.

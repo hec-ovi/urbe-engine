@@ -50,7 +50,3 @@ Expose checked development HTTP routes for world builds, the launcher and NPC di
 - [Library](../library/CONTRACT.md)
 - [Quests](../../../quests/CONTRACT.md)
 - [Simulation](../../../simulation/CONTRACT.md)
-
-## How to modify this blackbox safely
-
-Change schemas before route shapes. Exercise each route through HTTP, including one accepted request and every declared response class.

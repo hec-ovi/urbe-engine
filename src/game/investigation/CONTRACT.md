@@ -68,7 +68,3 @@ Shared ids, coordinates, asset envelopes, material assignments, evidence definit
 - Asset media crosses by reference with URI, media type, byte size and SHA-256 checksum. Materials cross as PBR database keys, never as anonymous colors.
 - The renderer never substitutes an untextured body or anonymous prop. Every visible mission primitive and decal resolves its authored MaterialFactory key; Source bodies retain their original mapped materials.
 - Collection hides the exact rendered entity and removes its collider. Save restoration repeats that world change before the first interaction frame.
-
-## How to modify this blackbox safely
-
-Change only this folder. Update the exact input and output schemas before changing placement or state behavior. Keep geometry checks deterministic and consequence kinds closed. Add an interior and street fixture for new placement behavior, cover invalid and persistence paths, then run the focused tests and the full engine suite.

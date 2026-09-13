@@ -11,7 +11,7 @@ __pycache__/
 # Local authoring data; public technical docs are listed explicitly.
 /docs/*
 !/docs/INDEX.md
-!/docs/RESEARCH.md
+!/docs/ISSUES.md
 inbox/
 .research/
 

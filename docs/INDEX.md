@@ -1,49 +1,46 @@
 # Box map
 
-- root box: see CONTRACT.md. Development preview mounts Materials bindings and theme assets separately for the shared material resolver.
-- `src/world-archive/`: lossless JSON collection archives with bounded, hashed parts and selective server or browser reads ([contract](../src/world-archive/CONTRACT.md), [index schema](../src/world-archive/schema/index.schema.json), [API schema](../src/world-archive/schema/api.d.ts)). Depends on platform filesystem, fetch and SHA-256 APIs.
-- `src/assembly/`: Atlas parcel, named access street and shared building grid + Connections apertures -> Exterior BuildingRequest with pocket entrances; CLI builds shells, optional interiors and per-floor GLBs, then fits rooftop spans through Connections. City assembly publishes plain JSON or bounded World Archive documents, source-bound Connections, a compact source-derived shell catalog, QA and a final manifest; simulation CLI boots the assembled world (src/assembly/CONTRACT.md). Depends on Atlas, Connections, Exterior, Interior, Naming, Simulation and World Archive contracts.
-- `src/building/`: building preview and shared PBR resolution (src/building/CONTRACT.md); optional [texture dimensions](../src/building/pbr-profile.schema.json) bound GPU resources while retaining physical scale, surface channels and decal alpha. Authored interior variants and two-sided surfaces survive material replacement. Depends on Materials, the development build boundary and the game quality profile.
-- `src/server/`: checked development routes for previews, exact-blueprint background exterior batches with Connections artifact admission, launcher creation and NPC dialogue (src/server/CONTRACT.md).
-- `src/library/`: filesystem catalog for generated city directories and playable game directories, with schema-validated descriptors, atomic revisioned saves and path containment (src/library/CONTRACT.md).
-- `src/launcher/`: browser orchestration between the isolated front-door UI and the catalog and generation API; validates every callback result before navigation, download or creation state changes (src/launcher/CONTRACT.md).
-- `src/creation/`: size templates to cities and saved games, with optional interiors and quests. Depends on Atlas CLI, Assembly, Quests and Library. Inputs and outputs: [contract](../src/creation/CONTRACT.md).
-- `src/mission-assets/`: Engine-owned renderer-neutral mission object creation for its quest and investigation hosts, with exact dimensions, PBR references, collision, interaction anchors, clearances and canonical payload hashes; placement stays in the consuming runtime (src/mission-assets/CONTRACT.md).
-- `src/quest-bundle/`: atomic consumer and selector for the Quests v0.8.2 handoff v1.1: definitions, objectives, investigations, fixed mechanic bindings, mission asset requests, item bindings and host capabilities (src/quest-bundle/CONTRACT.md).
+[Engine 0.17.17 contract](../CONTRACT.md), [agent calling guide](../SKILL.md), [cross-box proposals](ISSUES.md). Raw requirements and local verification records stay untracked.
 
-- `src/game/`: the playable city (`?mode=game`); first-person controller on Rapier, night scene from the assembled GLBs, ground from the blueprint's physical street modules and cover polygons, neon and lit windows, simulation-driven crowd and lane-graph traffic, doors into continuous interiors (src/game/CONTRACT.md). Depends on ../atlas, ../connections, ../materials, ../simulation contracts.
-  - NPC and car spawning default to zero; `crowd` and `cars` accept up to 600 each. `crowdRadius` and `carRadius` select the population area while preserving simulation identities and lane positions ([options](../src/game/agents/schema/population-window.schema.json)).
-  - Material-declared opaque windows omit scenic rooms; office and opaque glazing and concrete surface families retain shell collision. Upstairs scenic bays meet published glazing housings with sealed returns; playable entrances carry compact header lights.
-  - `data/`: run config, plain or archived worlds with source-bound Connections, optional construction-proof projection, signal state. Depends on World Archive; inputs follow the Assembly manifest schema.
-  - `ground/`: spatially streamed physical streets with exact material geometry pages, shared native PBR templates and bounded local collision, legacy cover, fitted paving, paint, station openings and highways; an infinite safety floor below the world (src/game/ground/CONTRACT.md). Inputs: [Atlas modules](../../atlas/src/streets/construction/modules/schema.ts), [stream options and ports](../src/game/ground/schema/stream.d.ts). Depends on Atlas, Connections, Exterior, Materials and game physics.
-  - `city/`: shells, doors, facade scenery, street fixtures and streamed interior rooms ([contract](../src/game/city/CONTRACT.md), [stream schema](../src/game/city/schema/interior-stream.d.ts)). Floors prepare one renderable at a time for every fixed light binding before visibility. Street markings select Ground's catalog-bound paint or explicit lane diagnostics. Lamp bases fit Ground's authored furnishing regions. Street fixtures keep source-ordered whole-plan reservations and instance nearby original models with separate rendering and collision windows ([ports](../src/game/city/schema/street-fixtures.d.ts)); Light consumes resident glows and Props consumes stable post reservations. Room cuts, centers and player membership consume Interior's contracted outer ring and hole exclusions through its core footprint helpers; floor bands retain all shared core geometry. Imported furniture and source PBR travel through the [worker schema](../src/game/city/schema/interior-cut.d.ts).
-  - `city/streaming/`: nearby original shells and source-derived distant massing ([contract](../src/game/city/streaming/CONTRACT.md), [ports](../src/game/city/streaming/schema/stream.d.ts)). Depends on Assembly shell catalog, BuildingsLoader and the shared material factory.
-    - Door loading retains named closed-pose leaves, applies authored pocket or swing motion, and reports unsupported fixed mechanisms; Physics consumes the resulting complete poses.
-  - `links/`: bridges, AC tubes, tunnels and street wires from Connections' link document, plus post-exterior rooftop antenna spans, merged by material; aperture links are sliced onto their exact carved openings (src/game/links/CONTRACT.md). Its local fixture covers level and sloped links, oblique cuts and all material buckets.
-  - `transit/`: bus shelters, scheduled vehicles, short station stairs and destination terminals; both maps project enabled Connections routes and their served stops or entrances. Terminal journeys connect published stations (src/game/transit/CONTRACT.md).
-  - `props/`: asymmetric refuse, delivery and ornament pockets, varied surface wear, full-size containers, imported trees and guardrail variants on Atlas reservations; shared model batches and exact local collision follow the [stream window](../src/game/props/stream.d.ts); catalog, arrangement, option and result schemas in src/game/props/CONTRACT.md. Depends on Atlas, Connections, Ground and Materials
-  - `light/`: fixture power in lumens, backend light pools, room fill and air glow (src/game/light/CONTRACT.md); play uses one fixed night grade independently of the simulation clock.
-  - `look/`: quality tiers with explicit texture budgets, AgX exposure, height fog tinted by the light in the air, environment probe, the render pipeline with emissive-selected bloom, and serial warm-up that builds pipelines and maps before a frame can stall on them (src/game/look/CONTRACT.md)
-  - `sky/`: night sky, moon key, stars
-  - `physics/`: fixed-step Rapier world, exact floor collision prepared in disabled pieces across frames, player capsule, measured fatal and nonfatal vehicle contacts and one full Source-rig ragdoll ([contract](../src/game/physics/CONTRACT.md), [band schema](../src/game/physics/schema/band-admission.d.ts)). City waits for complete band readiness before visibility.
-  - `hydro/`: exact Atlas water surfaces and crossing-reservation handoff, with Materials-owned PBR bindings and deterministic normal motion (src/game/hydro/CONTRACT.md)
-  - `player/`: captured input, first-person movement and aimed interaction ([contract](../src/game/player/CONTRACT.md), [input schema](../src/game/player/schema/input.d.ts)); depends on Physics, City, Agents, Simulation, Quests and Investigation
-  - `agents/`: character provenance, proportion-preserving animation transfer, smooth pose baking, crowd, traffic, persistent NPC materialization, crouch, follow, lead, transit passenger carry and schedule return on Connections' authoritative 3D paths (src/game/agents/CONTRACT.md). Character inputs and outputs use the original Three.js scenes and clips; actor requests and results use the linked contract schemas.
-  - `investigation/`: deterministic authored incident assembly and live E/R evidence flow, with exact quest bindings, Source final-pose bodies, mission props, PBR decals and catalog restoration (src/game/investigation/CONTRACT.md)
-  - `quests/`: all 16 cast quest actions, including fixed-asset rescue, access, hacking and sabotage, follow or lead escort, fatal-impact assassination and measured public-transit completion (src/game/quests/CONTRACT.md)
-  - `routes/`: deterministic shortest objective routes to the closest reachable parcel, station and stop entries over Connections' authoritative 3D walk graph (src/game/routes/CONTRACT.md)
-  - `sim/`: the simulation library host and exact NPC continuity pass-through (src/game/sim/CONTRACT.md)
-  - `debug/`: frame gaps, subsystem costs and renderer allocation counters, with local development reports ([contract](../src/game/debug/CONTRACT.md), [report schema](../src/game/debug/report.schema.json)). Depends on Game and Vite.
-  - `time/`, `world/`: simulation clock, sky-state arithmetic, district and parcel lookup, map models from Atlas and Connections, named lighting-review camera poses.
+| Folder | Purpose and dependencies | Inputs and outputs |
+| --- | --- | --- |
+| `src/assembly` | Build city artifacts through Atlas, Connections, Exterior, Interior, Naming and Simulation | [Contract](../src/assembly/CONTRACT.md), [manifest](../src/assembly/schema/world-manifest.schema.json), [shell catalog](../src/assembly/schema/shell-catalog.schema.json) |
+| `src/world-archive` | Read/write bounded hashed JSON collections using filesystem or fetch | [Contract](../src/world-archive/CONTRACT.md), [ports](../src/world-archive/schema/api.d.ts), [index](../src/world-archive/schema/index.schema.json) |
+| `src/server` | HTTP adapters for Library, Creation, Assembly and Quests dialogue | [Contract and route schemas](../src/server/CONTRACT.md) |
+| `src/library` | Catalog and revisioned filesystem saves | [Contract and schemas](../src/library/CONTRACT.md) |
+| `src/creation` | Create cities and playthroughs through Atlas, Assembly, Quests and Library | [Contract and schemas](../src/creation/CONTRACT.md) |
+| `src/launcher` | Call server APIs and pass results to UI | [Contract](../src/launcher/CONTRACT.md), [API](../src/launcher/schema/launcher-api.schema.json) |
+| `src/building` | Preview authored models and resolve Materials PBR | [Contract](../src/building/CONTRACT.md), [texture profile](../src/building/pbr-profile.schema.json) |
+| `src/quest-bundle` | Validate the Quests handoff | [Contract](../src/quest-bundle/CONTRACT.md), [manifest](../src/quest-bundle/schema/manifest.schema.json) |
+| `src/mission-assets` | Build measured mission objects from Materials references | [Contract and schemas](../src/mission-assets/CONTRACT.md) |
+| `src/game` | Load, stream and play the city through the runtime interfaces below | [Contract](../src/game/CONTRACT.md), [query](../src/game/data/schema/game-config.d.ts) |
+| `src/ui` | Present values and report player actions to Launcher and Game | [Component contract and layout schemas](../src/ui/CONTRACT.md) |
 
-## Scale experiment (docs/RESEARCH.md 9)
+## Game runtime
 
-Vite app measuring three interchangeable renderings of one seeded placeholder city. Run `npm run dev`, pick variant, count (1k-50k), backend; results panel exports JSON.
+| Folder | Responsibility and dependencies | Boundary |
+| --- | --- | --- |
+| `data` | Source admission through Assembly and World Archive | [Building sources](../src/game/data/schema/world-buildings.d.ts) |
+| `ground` | Atlas ground residency, Materials surfaces and Physics admission | [Contract](../src/game/ground/CONTRACT.md), [stream](../src/game/ground/schema/stream.d.ts) |
+| `city` | Exterior shells, Interior floors, doors, scenic rooms and fixtures | [Contract](../src/game/city/CONTRACT.md), [floor stream](../src/game/city/schema/interior-stream.d.ts), [fixture stream](../src/game/city/schema/street-fixtures.d.ts) |
+| `city/streaming` | Nearby original shells and source-derived skyline | [Contract](../src/game/city/streaming/CONTRACT.md), [ports](../src/game/city/streaming/schema/stream.d.ts) |
+| `props` | Source land/model placements with Ground clearance and Physics | [Contract](../src/game/props/CONTRACT.md), [stream](../src/game/props/stream.d.ts) |
+| `links` | Connection geometry and materials | [Contract](../src/game/links/CONTRACT.md) |
+| `physics` | Rapier world, player body and actor impacts | [Contract](../src/game/physics/CONTRACT.md), [band admission](../src/game/physics/schema/band-admission.d.ts) |
+| `player` | Captured input and interaction through Physics, City and Agents | [Contract](../src/game/player/CONTRACT.md), [input](../src/game/player/schema/input.d.ts) |
+| `sim` | Narrow Simulation adapter | [Contract and schemas](../src/game/sim/CONTRACT.md) |
+| `agents` | Nearby characters and cars from Simulation and Connections | [Contract and schemas](../src/game/agents/CONTRACT.md) |
+| `animation` | Accepted action clip sequences for Agents | [Contract and schemas](../src/game/animation/CONTRACT.md) |
+| `quests` | Exact story action, target and progress coordination | [Contract and schemas](../src/game/quests/CONTRACT.md) |
+| `investigation` | Authored evidence scenes and saved discoveries | [Contract and schemas](../src/game/investigation/CONTRACT.md) |
+| `routes` | Objective paths over Connections | [Contract and schemas](../src/game/routes/CONTRACT.md) |
+| `transit` | Timetables, boarding and station destinations | [Contract and schemas](../src/game/transit/CONTRACT.md) |
+| `hydro` | Atlas water surfaces with Materials bindings | [Contract and schemas](../src/game/hydro/CONTRACT.md) |
+| `light`, `look`, `sky` | Fixture lighting, prepared rendering and fixed night setting | [Light](../src/game/light/CONTRACT.md), [Look](../src/game/look/CONTRACT.md), [Game](../src/game/CONTRACT.md) |
+| `persistence` | Coherent live state and acknowledged Library revisions | [Contract and schemas](../src/game/persistence/CONTRACT.md) |
+| `debug` | Frame/subsystem timing and renderer allocation reports | [Contract](../src/game/debug/CONTRACT.md), [report](../src/game/debug/report.schema.json) |
+| `time`, `world`, `talk` | Host clock, spatial queries, map values and text transport | [Game](../src/game/CONTRACT.md), [talk request](../src/server/schema/talk-request.schema.json), [reply](../src/server/schema/talk-response.schema.json) |
 
-- `src/city/`: seeded deterministic city data, pure JS, no rendering types (Rng, archetypes, CityGenerator + its test)
-- `src/scene/`: shared stage (ArchetypeGeometries with meshopt LOD chains, SceneBuilder: lights, ground, orbit camera)
-- `src/variants/`: the three contenders behind one Variant interface (MeshVariant, BatchedVariant, IndirectVariant with TSL compute cull/LOD into indirect draws, createVariant)
-- `src/app/`: run wiring (App, RunConfig via URL query, RendererFactory, Metrics)
-- `src/ui/`: overlay only (src/ui/CONTRACT.md); views/GameView with PanelHost over Map3DView, InventoryView, QuestsView, CodexView, SettingsView, ControlsView plus a forward-up MinimapView with north marker, BuildingView, ExperimentView; widgets/TabBar, ChatPanel, AvatarCard, VideoCallPanel, MissionToast, MissionSummary, HudClock, InteractPrompt, LocationReadout, DebugStats, PauseMenu and the viewer panels; components/ primitives and stylesheets; preview.html shows the whole overlay with sample data
+## Previews
 
-Dependency direction: ui -> app -> variants -> scene -> city.
+`src/city/CityApp.js` shows assembled parcels. The retained `?mode=experiment` entry wires `src/app` to `src/variants`, `src/scene` and the seeded `src/city/CityGenerator.js`; its settings come from `src/app/RunConfig.js`. These previews use `src/ui`. Street models have a [separate preview contract](../src/game/props/preview/CONTRACT.md).
