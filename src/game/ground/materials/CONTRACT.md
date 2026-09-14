@@ -10,13 +10,17 @@ The [port schema](schema/ports.d.ts) defines optional road roughness and geometr
 
 ## Rules
 
+`new NativeTextureSource(options?).load` supplies the texture resource port. Its [options](schema/ports.d.ts) choose the public theme URL, image decoder, fetch implementation, preparation/budget callback and anisotropy. Defaults use `/materials`, browser fetch, PNG decoding and anisotropy 8. Each texture identity downloads once; SHA-256 and original pixel dimensions must match before the preparation callback. Readiness includes that callback. `dispose()` frees its textures and prevents pending work from becoming ready.
+
 The [source equations and UV rules](../../../../../materials/sources/streets/scene-native/CONTRACT.md) govern all eleven effects. Shader values use the supplied source coefficients. World coordinates drive asphalt offset blending with unshifted gradients. Complete panel UVs, mask UVs and curb UVs remain producer-owned. Colors decode from sRGB; opacity is applied once. Coated surfaces use physical node materials. Other surfaces use standard node materials.
 
-The texture port must return a distinct configured resource for each texture identity, matching its published color space, axis wraps and `flipY=true`. Its readiness includes successful decoding and any texture budgeting. Only paths beginning `themes/` are accepted; hosts map the remainder under their public theme URL. Raw source directories have no public route. The box performs no network requests and does not own image resizing or GPU preparation.
+The texture port must return a distinct configured resource for each texture identity, matching its published color space, axis wraps and `flipY=true`. Its readiness includes successful decoding and any texture budgeting. Only paths beginning `themes/` are accepted; hosts map the remainder under their public theme URL. Raw source directories have no public route. The material factory performs no network requests and does not own image resizing or GPU preparation.
 
 ## Errors
 
 `E_STREET_MATERIAL`: malformed catalog, missing map identity, unknown surface, invalid texture resource, invalid override, missing geometry attributes or use after disposal. Texture readiness errors propagate from the resource port. Failed resources never become a scalar substitute.
+
+`E_STREET_TEXTURE`: invalid source options/reference, conflicting identity, failed HTTP/hash/dimension/decode/preparation checks, or disposed source. These failures reject readiness and retain no decoded image.
 
 ## Dependencies
 

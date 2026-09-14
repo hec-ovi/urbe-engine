@@ -15,6 +15,13 @@ export interface NativeTextureResource {
 /** Receives a validated theme-relative path and its complete published definition. */
 export type NativeTexturePort = (id: string, themePath: string, definition: NativeTextureDefinition) => NativeTextureResource;
 export interface NativeMaterialOptions { roadRoughness?: number }
+export interface NativeTextureSourceOptions {
+	baseUrl?: string;
+	fetch?: typeof globalThis.fetch;
+	decode?: (bytes: ArrayBuffer) => Promise<TexImageSource>;
+	prepareTexture?: (texture: Texture) => void | Promise<void>;
+	anisotropy?: number;
+}
 export declare const MATERIAL_RESOURCES: unique symbol;
 export type NativeStreetMaterial = Material & { readonly [MATERIAL_RESOURCES]: readonly NativeTextureResource[] };
 export interface NativeStreetMaterialPort {
