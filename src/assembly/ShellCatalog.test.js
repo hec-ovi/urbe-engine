@@ -68,6 +68,25 @@ describe( 'completed-shell streaming catalog', () => {
 
 	} );
 
+	it( 'uses explicit portable roof identity and rejects a conflicting named variant', async () => {
+
+		sources( [ 'p0' ] );
+		const blueprint = structuredClone( blueprints.p0 );
+		const key = 'cyberpunk/exterior-weathered-concrete/mid';
+		blueprint.materials = blueprint.materials.filter( value => value.split( '/' )[ 1 ] !== 'roof' );
+		blueprint.materials.push( key );
+		blueprint.materialVariants[ key ] = 'native';
+		blueprint.roof.material = { key, variantId: 'native' };
+		const file = join( root, 'p0/p0.blueprint.json' );
+		writeFileSync( file, JSON.stringify( blueprint ) );
+		const result = await collectShellArtifacts( root, [ 'p0' ], { seed: atlas.meta.seed } );
+		expect( result.catalog.buildings[ 0 ].roof.material ).toEqual( blueprint.roof.material );
+		blueprint.roof.material.variantId = 'unpublished';
+		writeFileSync( file, JSON.stringify( blueprint ) );
+		await expect( collectShellArtifacts( root, [ 'p0' ], { seed: atlas.meta.seed } ) ).rejects.toMatchObject( { code: 'E_SHELL_CATALOG' } );
+
+	} );
+
 	it.each( [ 'json', 'archive' ] )( 'publishes a checked catalog alongside %s source documents and retains full shell files', async ( encoding ) => {
 
 		const ids = [ 'p0', 'p1' ];

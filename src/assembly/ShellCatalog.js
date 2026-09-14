@@ -38,9 +38,11 @@ export class ShellCatalog {
 		if ( Math.abs( blueprint.bounds.height - blueprint.roof.elevation - blueprint.roof.parapetHeight ) > 1e-6 ) fail( id, 'published bounds differ from the roof and parapet height' );
 		const ring = blueprint.bounds.footprint;
 		const xs = ring.map( point => point[ 0 ] ), zs = ring.map( point => point[ 1 ] );
-		const roofKeys = blueprint.materials.filter( key => key.split( '/' )[ 1 ] === 'roof' );
-		const key = roofKeys[ 0 ], variantId = blueprint.materialVariants[ key ];
-		if ( roofKeys.length !== 1 || ! variantId ) fail( id, 'missing unambiguous published roof material variant' );
+		const explicitRoof = blueprint.roof.material;
+		const roofKeys = explicitRoof ? [ explicitRoof.key ] : blueprint.materials.filter( key => key.split( '/' )[ 1 ] === 'roof' );
+		const key = roofKeys[ 0 ], variantId = explicitRoof ? explicitRoof.variantId : blueprint.materialVariants[ key ];
+		if ( roofKeys.length !== 1 || ! variantId || ! blueprint.materials.includes( key )
+			|| blueprint.materialVariants[ key ] !== variantId ) fail( id, 'missing unambiguous published roof material variant' );
 		this.buildings.push( {
 			id,
 			bounds: { min: [ Math.min( ...xs ), 0, Math.min( ...zs ) ], max: [ Math.max( ...xs ), blueprint.bounds.height, Math.max( ...zs ) ] },
