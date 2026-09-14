@@ -27,6 +27,15 @@ export function constantsForType( floorConstants, type ) {
 
 }
 
+/** Integer division retains exact grid counts within the input/subtraction/division error bound. */
+function integerQuotient( value, divisor, operandMagnitude = Math.abs( value ) ) {
+
+	const quotient = value / divisor, nearest = Math.round( quotient );
+	const error = Number.EPSILON * ( operandMagnitude / Math.abs( divisor ) + Math.abs( quotient ) );
+	return Math.abs( quotient - nearest ) <= error ? nearest : quotient;
+
+}
+
 /**
  * Legal floor count range using the active generation-policy minimum. reqH(b) is the tallest walkable
  * aperture height at base b: the floor pinned at b must contain the aperture's
@@ -53,7 +62,7 @@ export function feasibleFloorRange( { maxHeight, apertures, minFloorHeight, maxF
 
 	if ( reqHByBase.size === 0 ) {
 
-		const max = Math.floor( maxHeight / minFloorHeight );
+		const max = Math.floor( integerQuotient( maxHeight, minFloorHeight ) );
 
 		return max >= 1 ? { min: 1, max } : null;
 
@@ -67,10 +76,10 @@ export function feasibleFloorRange( { maxHeight, apertures, minFloorHeight, maxF
 
 	}
 
-	const gapMaxFloors = ( gap, reqH ) =>
+	const gapMaxFloors = ( gap, reqH, magnitude ) =>
 		reqH > minFloorHeight
-			? 1 + Math.floor( ( gap - reqH ) / minFloorHeight )
-			: Math.floor( gap / minFloorHeight );
+			? 1 + Math.floor( integerQuotient( gap - reqH, minFloorHeight, magnitude + Math.abs( reqH ) ) )
+			: Math.floor( integerQuotient( gap, minFloorHeight, magnitude ) );
 
 	let min = 0;
 	let max = 0;
@@ -79,12 +88,12 @@ export function feasibleFloorRange( { maxHeight, apertures, minFloorHeight, maxF
 
 	for ( const base of bases ) {
 
-		const gap = base - previous;
+		const gap = base - previous, magnitude = Math.abs( base ) + Math.abs( previous );
 
-		if ( gap < Math.max( previousReqH, minFloorHeight ) ) return null;
+		if ( integerQuotient( gap, Math.max( previousReqH, minFloorHeight ), magnitude ) < 1 ) return null;
 
-		const gapMin = Math.ceil( gap / maxFloorHeight );
-		const gapMax = gapMaxFloors( gap, previousReqH );
+		const gapMin = Math.ceil( integerQuotient( gap, maxFloorHeight, magnitude ) );
+		const gapMax = gapMaxFloors( gap, previousReqH, magnitude );
 
 		if ( gapMin > gapMax ) return null;
 
@@ -95,13 +104,13 @@ export function feasibleFloorRange( { maxHeight, apertures, minFloorHeight, maxF
 
 	}
 
-	const room = maxHeight - previous;
+	const room = maxHeight - previous, magnitude = Math.abs( maxHeight ) + Math.abs( previous );
 
-	if ( room < Math.max( previousReqH, minFloorHeight ) ) return null;
+	if ( integerQuotient( room, Math.max( previousReqH, minFloorHeight ), magnitude ) < 1 ) return null;
 
 	return {
 		min: min + 1,
-		max: max + gapMaxFloors( room, previousReqH )
+		max: max + gapMaxFloors( room, previousReqH, magnitude )
 	};
 
 }
@@ -120,10 +129,10 @@ export function feasibleBasementRange( { apertures, minFloorHeight, maxFloorHeig
 	let previous = 0, min = 0, max = 0;
 	for ( const depth of [ ...required.keys() ].sort( ( a, b ) => a - b ) ) {
 
-		const height = required.get( depth ), gap = depth - previous;
-		if ( height > maxFloorHeight || gap < Math.max( height, minFloorHeight ) ) return null;
-		const low = Math.ceil( gap / maxFloorHeight );
-		const high = 1 + Math.floor( ( gap - Math.max( height, minFloorHeight ) ) / minFloorHeight );
+		const height = required.get( depth ), gap = depth - previous, magnitude = Math.abs( depth ) + Math.abs( previous );
+		if ( height > maxFloorHeight || integerQuotient( gap, Math.max( height, minFloorHeight ), magnitude ) < 1 ) return null;
+		const low = Math.ceil( integerQuotient( gap, maxFloorHeight, magnitude ) );
+		const high = 1 + Math.floor( integerQuotient( gap - Math.max( height, minFloorHeight ), minFloorHeight, magnitude + Math.max( height, minFloorHeight ) ) );
 		if ( low > high ) return null;
 		min += low; max += high; previous = depth;
 

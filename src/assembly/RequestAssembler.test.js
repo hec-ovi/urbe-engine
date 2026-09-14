@@ -211,6 +211,28 @@ describe( 'RequestAssembler', () => {
 
 	} );
 
+	it( 'retains integral floor counts across one-ULP fixed anchor values', () => {
+
+		for ( const [ type, maxHeight, bases ] of [
+			[ 'offices', 144, [ 54, 62.99999999999999 ] ],
+			[ 'residential', 139.5, [ 54, 62.99999999999999, 76.5, 94.5 ] ]
+		] ) {
+
+			const parcel = { ...officeParcel, type, envelope: { minFloors: 15, maxFloors: 32, maxHeight } };
+			const pinned = { apertures: bases.map( ( base, index ) => aperture( `fixed${index}`, 'bridge', base ) ) };
+			const before = structuredClone( pinned );
+			const request = new RequestAssembler( atlasWith( parcel ), pinned ).assemble( 'p7' );
+			expect( request.building.floors ).toBeGreaterThanOrEqual( 15 );
+			expect( request.apertures ).toEqual( before.apertures );
+			expect( pinned ).toEqual( before );
+
+		}
+		const short = { ...officeParcel, type: 'residential' };
+		expect( () => new RequestAssembler( atlasWith( short ), { apertures: [ aperture( 'short', 'bridge', 4.49999999 ) ] } ).assemble( 'p7' ) )
+			.toThrow( expect.objectContaining( { code: 'E_ENVELOPE_INFEASIBLE' } ) );
+
+	} );
+
 	it( 'uses published clear-height policy, retains taller family minima and fixed basement bases', () => {
 
 		const constants = structuredClone( loadFloorConstants() );

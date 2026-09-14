@@ -60,7 +60,7 @@
     {
       "if": {
         "required": [ "connections" ],
-        "properties": { "connections": { "required": [ "encoding" ] } }
+        "properties": { "connections": { "type": "object", "required": [ "encoding" ] } }
       },
       "then": { "required": [ "blueprint" ] }
     },
