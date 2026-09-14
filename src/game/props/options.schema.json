@@ -3,6 +3,12 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "replacedModuleOwnerIds": {
+      "description": "Atlas module owner IDs whose hardware is constructed by the saved Streets bundle.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
     "loadAsset": {
       "description": "Function(url) returning Promise<{scene: THREE.Group}>; defaults to GLTFLoader.loadAsync."
     },

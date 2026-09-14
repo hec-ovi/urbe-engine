@@ -144,6 +144,12 @@ describe( 'street dressing contract', () => {
 		atlas.streets.construction = { modules: { version: '1.0.0', definitions: [ definition ], placements: records } };
 		const result = await build( atlas );
 		expect( result.counts.guardrail ).toBe( 36 ); expect( result.counts.tree ).toBe( 0 );
+		const original = JSON.stringify( atlas );
+		const native = await build( atlas, { edges: [] }, { replacedModuleOwnerIds: [ 'b0' ] } );
+		expect( native.counts.guardrail ).toBe( 33 );
+		expect( native.placements.some( item => item.id.startsWith( 'rail:0:' ) ) ).toBe( false );
+		expect( JSON.stringify( atlas ) ).toBe( original );
+		native.dispose();
 		expect( new Set( result.placements.map( item => item.model.split( ':' ).at( - 1 ) ) ) ).toEqual( new Set( [ 'open', 'braced', 'slatted' ] ) );
 		const localBounds = new THREE.Box3( new THREE.Vector3( 0, 0.2, - 0.07 ), new THREE.Vector3( 2, 1.2, 0.07 ) );
 		for ( let i = 0; i < records.length; i ++ ) {

@@ -8,7 +8,10 @@ import catalog from './catalog.json' with { type: 'json' };
 
 /** Published posts and rails with infill contained by the same reserved envelope. */
 export class AuthoredRails {
-	constructor( atlas, models ) { Object.assign( this, { atlas, models } ); }
+	constructor( atlas, models, replacedModuleOwnerIds = [] ) {
+		Object.assign( this, { atlas, models } );
+		this.replaced = new Set( replacedModuleOwnerIds );
+	}
 	build() {
 		const modules = this.atlas.streets.construction?.modules;
 		if ( ! modules ) return [];
@@ -24,7 +27,7 @@ export class AuthoredRails {
 		}
 		const items = [];
 		modules.placements.forEach( ( record, index ) => {
-			if ( ! definitions.has( record.moduleId ) ) return;
+			if ( ! definitions.has( record.moduleId ) || this.replaced.has( record.blockId ) ) return;
 			const rng = new Rng( seedOf( `${this.atlas.meta.seed}:rail:${record.blockId}:${index}` ) );
 			const model = this.models.get( `rail:${record.moduleId}:${pick( [ 'open', 'braced', 'slatted' ], rng )}` );
 			const c = [ 1, 0, - 1, 0 ][ record.turn ], s = [ 0, 1, 0, - 1 ][ record.turn ];

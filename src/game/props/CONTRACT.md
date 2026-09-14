@@ -9,7 +9,7 @@ Takes authored city land and models, returns sparse street arrangements, ornamen
 - Atlas [blueprint](../../../../atlas/schema/blueprint.ts): parcels, streets, planting, ground cover and station reservations.
 - Connections [walk graph](../../../../connections/schemas/networks.schema.json): full widths and elevated `path3`.
 - Materials [factory](../../building/CONTRACT.md): `build(key, variantId)`.
-- [Options](options.schema.json): optional `loadAsset(url) -> Promise<{scene}>` replaces GLTFLoader transport; `obstacles: [{footprint,bottom,top}]` reserves already-built fixture volumes.
+- [Options](options.schema.json): optional `loadAsset(url) -> Promise<{scene}>` replaces GLTFLoader transport; `obstacles: [{footprint,bottom,top}]` reserves already-built fixture volumes. `replacedModuleOwnerIds` excludes exactly those Atlas owners from authored rail construction. Original Atlas land remains available for prop clearance; native street features enter through obstacle volumes.
 - [Catalog](catalog.json), [schema](catalog.schema.json): model sources, metre dimensions and materials. [Arrangements](arrangements.json), [schema](arrangements.schema.json): site frequency and supported delivery/refuse slots.
 
 ## Output
