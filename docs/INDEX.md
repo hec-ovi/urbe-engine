@@ -22,6 +22,7 @@
 | --- | --- | --- |
 | `data` | Source admission through Assembly and World Archive | [Building sources](../src/game/data/schema/world-buildings.d.ts) |
 | `ground` | Atlas ground residency, Materials surfaces and Physics admission | [Contract](../src/game/ground/CONTRACT.md), [stream](../src/game/ground/schema/stream.d.ts) |
+| `ground/materials` | Native street shading from authored Materials effects and texture resources | [Contract](../src/game/ground/materials/CONTRACT.md), [ports](../src/game/ground/materials/schema/ports.d.ts) |
 | `city` | Exterior shells, Interior floors, doors, scenic rooms and fixtures | [Contract](../src/game/city/CONTRACT.md), [floor stream](../src/game/city/schema/interior-stream.d.ts), [fixture stream](../src/game/city/schema/street-fixtures.d.ts) |
 | `city/streaming` | Nearby original shells and source-derived skyline | [Contract](../src/game/city/streaming/CONTRACT.md), [ports](../src/game/city/streaming/schema/stream.d.ts) |
 | `props` | Source land/model placements with Ground clearance and Physics | [Contract](../src/game/props/CONTRACT.md), [stream](../src/game/props/stream.d.ts) |
