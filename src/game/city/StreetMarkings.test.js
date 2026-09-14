@@ -10,6 +10,25 @@ describe( 'game street markings', () => {
 		accent: { kind: 'street-marking-orange', variant: 'paint' }
 	} };
 
+	it( 'leaves ordinary paint to native streets while retaining elevated highway paint', async () => {
+		const resolver = { loadBindings: vi.fn( async () => bindings ) };
+		const empty = await StreetMarkings.build( atlas, { road: { lanes: [] } }, {}, resolver, 'paint', true );
+		expect( empty.children ).toHaveLength( 0 ); expect( resolver.loadBindings ).not.toHaveBeenCalled();
+		const source = { streets: { nodes: [], crossings: [], edges: [
+			{ id: 'highway', class: 'highway', path: [ [ 0, 0 ], [ 30, 0 ] ] },
+			{ id: 'road', class: 'local', path: [ [ 0, 20 ], [ 30, 20 ] ] }
+		] } };
+		const lanes = source.streets.edges.map( ( edge, i ) => ( {
+			id: edge.id, edgeId: edge.id, width: 3.5, path3: edge.path.map( ( [ x, z ] ) => [ x, i ? 0 : 8, z ] )
+		} ) );
+		const original = JSON.stringify( { source, lanes } );
+		const group = await StreetMarkings.build( source, { road: { lanes } }, { build: () => new THREE.MeshStandardMaterial() }, resolver, 'paint', true );
+		expect( group.children.length ).toBeGreaterThan( 0 );
+		const bounds = new THREE.Box3().setFromObject( group );
+		expect( bounds.min.y ).toBeCloseTo( 8.003 ); expect( bounds.max.z ).toBeLessThan( 2 );
+		expect( JSON.stringify( { source, lanes } ) ).toBe( original );
+	} );
+
 	it( 'loads catalog bindings and returns only the Ground normal-paint group', async () => {
 
 		const resolver = { loadBindings: vi.fn( async () => bindings ) };

@@ -6,6 +6,8 @@ Building and door entries follow the [game contract](../CONTRACT.md). This contr
 
 ## Input
 
+- `StreetMarkings.build(atlas, networks, factory, resolver, mode, native=false)` returns a marking group. With `native:true`, the saved bundle owns ordinary paint and this builder retains highway paint only. Explicit `debug` or `glow` modes still show authoritative lane diagnostics.
+
 - [Stream schema](schema/interior-stream.d.ts): constructor ports, registration, player feet and callbacks.
 - Floor documents follow [Interior's floor schema](../../../../interior/schemas/floor.schema.json), with the floor's `glbUrl` added by WorldSource.
 - Worker geometry and source materials follow the [cut schema](schema/interior-cut.d.ts).
