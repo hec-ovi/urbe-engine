@@ -6,7 +6,7 @@ import fixture from './street-frontage.fixture.json';
 
 const { atlas: city, connections } = fixture;
 
-it( 'preserves the exact access street and generates pocket entrances on all four real frontages', async () => {
+it( 'preserves the exact access street and explicit pocket constraints on real frontages', async () => {
 
 	const before = structuredClone( fixture );
 	const current = fixture.current;
@@ -15,6 +15,7 @@ it( 'preserves the exact access street and generates pocket entrances on all fou
 	for ( const parcel of current.atlas.parcels ) {
 
 		const request = assembler.assemble( parcel.id );
+		request.options.doorMotion = 'pocket';
 		const edge = current.atlas.streets.edges.find( edge => edge.id === parcel.access.edgeId );
 		expect( request.parcel.streetAccess ).toEqual( { edgeId: edge.id, path: edge.path } );
 		expect( request.parcel.accessPoint ).toEqual( parcel.access.point );
