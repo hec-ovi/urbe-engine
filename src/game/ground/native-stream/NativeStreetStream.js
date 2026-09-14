@@ -65,7 +65,7 @@ export class NativeStreetStream {
 				tile.busy = true;
 				try {
 					const { prepare, collision } = this.settings;
-					const current = () => ! this.disposed && this.resident.get( id ) === tile && this.wanted.has( id );
+						const current = () => ! this.disposed && this.resident.get( id ) === tile && this.wanted.has( id ) && prepare === this.settings.prepare;
 					if ( prepare && tile.prepared !== prepare ) {
 						await prepare( tile.group, { wanted: current } );
 						if ( ! current() ) continue;

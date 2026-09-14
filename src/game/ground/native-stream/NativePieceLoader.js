@@ -41,10 +41,11 @@ export class NativePieceLoader {
 			if ( triangles !== piece.triangles || collision !== piece.hasCollision || surfaces.size !== piece.surfaceIds.length ) {
 				throw streamError( `${piece.id}: geometry differs from manifest` );
 			}
-			const actual = new Box3().setFromObject( scene );
+			const actual = new Box3().setFromObject( scene, true );
 			const min = new Vector3().fromArray( piece.bounds.min ), max = new Vector3().fromArray( piece.bounds.max );
 			const precision = Math.max( 0.0001, ...piece.bounds.min.map( Math.abs ), ...piece.bounds.max.map( Math.abs ) ) * 1e-6 + 0.0001;
-			if ( actual.isEmpty() || actual.min.distanceTo( min ) > precision || actual.max.distanceTo( max ) > precision ) {
+			if ( actual.isEmpty() || ! [ ...actual.min.toArray(), ...actual.max.toArray() ].every( Number.isFinite )
+				|| actual.min.distanceTo( min ) > precision || actual.max.distanceTo( max ) > precision ) {
 				throw streamError( `${piece.id}: decoded bounds differ from manifest` );
 			}
 			await Promise.all( resources );

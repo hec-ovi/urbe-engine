@@ -3,8 +3,8 @@ import { MeshBasicMaterial } from 'three/webgpu';
 import { NativeStreetStream } from './NativeStreetStream.js';
 
 // Independent minimal producer GLB: a road and a noncolliding coating, both rebased by one node transform.
-function streetFixture( { tagged = true } = {} ) {
-	const data = new Float32Array( [ 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 0 ] );
+function streetFixture( { tagged = true, vertexX = 4 } = {} ) {
+	const data = new Float32Array( [ 0, 0, 0, 0, 0, 4, vertexX, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 0 ] );
 	const document = {
 		asset: { version: '2.0' }, scene: 0, scenes: [ { nodes: [ 0, 1 ] } ], buffers: [ { byteLength: data.byteLength } ],
 		bufferViews: [ [ 0, 36 ], [ 36, 36 ], [ 72, 24 ], [ 96, 12 ], [ 108, 12 ] ].map( ( [ byteOffset, byteLength ] ) => ( { buffer: 0, byteOffset, byteLength } ) ),
@@ -61,11 +61,33 @@ describe( 'native street runtime', () => {
 		expect( stream.group.children ).toHaveLength( 0 );
 	} );
 
-	it( 'rejects missing collision authority, inconsistent manifests, failed source reads and invalid windows', async () => {
+	it( 'keeps a piece detached until its current preparation port finishes', async () => {
+		const data = streetFixture(), stream = new NativeStreetStream( data.source, data.materials );
+		let finishFirst, finishCurrent;
+		const first = vi.fn( () => new Promise( resolve => { finishFirst = resolve; } ) );
+		const current = vi.fn( () => new Promise( resolve => { finishCurrent = resolve; } ) );
+		const pending = stream.update( { x: 130, z: 0 }, { prepare: first } );
+		await vi.waitFor( () => expect( first ).toHaveBeenCalledOnce() );
+		const latest = stream.update( { x: 130, z: 0 }, { prepare: current } );
+		expect( latest ).toBe( pending );
+		finishFirst();
+		await vi.waitFor( () => expect( current ).toHaveBeenCalledOnce() );
+		expect( stream.group.children ).toHaveLength( 0 );
+		expect( current.mock.calls[ 0 ][ 0 ].parent ).toBeNull();
+		finishCurrent(); await latest;
+		expect( stream.group.children ).toHaveLength( 1 );
+		stream.dispose();
+	} );
+
+	it( 'rejects invalid decoded geometry, failed source reads and invalid windows', async () => {
 		const absent = streetFixture( { tagged: false } );
 		await expect( new NativeStreetStream( absent.source, absent.materials ).update( { x: 130, z: 0 } ) ).rejects.toMatchObject( { code: 'E_NATIVE_STREET_STREAM' } );
 		const count = streetFixture(); count.source.manifest.pieces[ 0 ].triangles = 3;
 		await expect( new NativeStreetStream( count.source, count.materials ).update( { x: 130, z: 0 } ) ).rejects.toThrow( /differs from manifest/ );
+		for ( const vertexX of [ 40, NaN ] ) {
+			const bounds = streetFixture( { vertexX } );
+			await expect( new NativeStreetStream( bounds.source, bounds.materials ).update( { x: 130, z: 0 } ) ).rejects.toThrow( /decoded bounds differ/ );
+		}
 		const failed = streetFixture(); failed.source.readPiece.mockRejectedValue( new Error( 'asset unavailable' ) );
 		const stream = new NativeStreetStream( failed.source, failed.materials );
 		await expect( stream.update( { x: 130, z: 0 } ) ).rejects.toThrow( /asset unavailable/ );
