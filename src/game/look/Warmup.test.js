@@ -230,7 +230,7 @@ describe( 'Warmup', () => {
 
 	} );
 
-	it( 'waits for streamed maps and uploads each shared texture once', async () => {
+	it.each( [ 'map', 'node' ] )( 'waits for streamed %s resources and uploads each shared texture once', async ( kind ) => {
 
 		let ready;
 		const loaded = new Promise( ( resolve ) => { ready = resolve; } );
@@ -241,6 +241,12 @@ describe( 'Warmup', () => {
 			new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial( { map: texture } ) ),
 			new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial( { map: texture } ) )
 		);
+		if ( kind === 'node' ) for ( const mesh of root.children ) {
+
+			mesh.material.map = null;
+			mesh.material[ Symbol.for( 'urbe.material-resources' ) ] = [ { texture, ready: loaded } ];
+
+		}
 		const renderer = fakeRenderer( async () => {
 
 			expect( renderer.initTexture ).toHaveBeenCalledWith( texture );
@@ -258,6 +264,23 @@ describe( 'Warmup', () => {
 
 		expect( renderer.initTexture ).toHaveBeenCalledTimes( 1 );
 		expect( renderer.initTexture ).toHaveBeenCalledWith( texture );
+
+	} );
+
+	it( 'rejects failed node texture readiness before GPU upload or compilation', async () => {
+
+		const { root, mesh } = tree();
+		let reject;
+		const ready = new Promise( ( resolve, failure ) => { reject = failure; } );
+		mesh.material[ Symbol.for( 'urbe.material-resources' ) ] = [ { texture: new THREE.Texture(), ready } ];
+		const renderer = fakeRenderer( vi.fn() );
+		renderer.initTexture = vi.fn();
+		const pending = new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera() ).warmAll( root );
+		await Promise.resolve();
+		reject( new Error( 'source map missing' ) );
+		await expect( pending ).rejects.toThrow( 'source map missing' );
+		expect( renderer.initTexture ).not.toHaveBeenCalled();
+		expect( renderer.compileAsync ).not.toHaveBeenCalled();
 
 	} );
 

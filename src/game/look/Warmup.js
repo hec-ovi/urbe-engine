@@ -99,15 +99,13 @@ export class Warmup {
 	/** Decodes and uploads each new map once, yielding between individual uploads. */
 	async #upload( object ) {
 
-		if ( ! this.renderer?.initTexture ) return;
-
-		const textures = texturesOf( object ).filter( ( texture ) => ! this.uploaded.has( texture ) );
+		const textures = texturesOf( object ).filter( ( { texture } ) => ! this.uploaded.has( texture ) );
 
 		for ( let index = 0; index < textures.length; index ++ ) {
 
-			const texture = textures[ index ];
-			await texture[ Symbol.for( 'urbe.texture-ready' ) ];
-			this.renderer.initTexture( texture );
+			const { texture, ready } = textures[ index ];
+			await Promise.all( ready );
+			this.renderer.initTexture?.( texture );
 			this.uploaded.add( texture );
 			await frameYield();
 
@@ -187,10 +185,19 @@ function frameYield() {
 
 }
 
-/** Unique textures reached directly from every material in one object tree. */
+/** Shared maps and explicit node-material resources, with all readiness promises. */
 function texturesOf( object ) {
 
-	const textures = new Set();
+	const textures = new Map();
+	const add = ( texture, ready ) => {
+
+		if ( ! texture?.isTexture ) throw new Error( 'Invalid material texture resource' );
+		if ( ! textures.has( texture ) ) textures.set( texture, new Set() );
+		const pending = textures.get( texture );
+		pending.add( texture[ Symbol.for( 'urbe.texture-ready' ) ] );
+		if ( ready ) pending.add( ready );
+
+	};
 
 	object.traverse( ( node ) => {
 
@@ -199,12 +206,18 @@ function texturesOf( object ) {
 		for ( const material of materials ) {
 
 			if ( ! material ) continue;
-			for ( const value of Object.values( material ) ) if ( value?.isTexture ) textures.add( value );
+			for ( const value of Object.values( material ) ) if ( value?.isTexture ) add( value );
+			for ( const resource of material[ Symbol.for( 'urbe.material-resources' ) ] ?? [] ) {
+
+				if ( typeof resource?.ready?.then !== 'function' ) throw new Error( 'Material texture readiness is required' );
+				add( resource.texture, resource.ready );
+
+			}
 
 		}
 
 	} );
 
-	return [ ...textures ];
+	return [ ...textures ].map( ( [ texture, ready ] ) => ( { texture, ready: [ ...ready ] } ) );
 
 }
