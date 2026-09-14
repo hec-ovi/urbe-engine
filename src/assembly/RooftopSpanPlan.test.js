@@ -27,13 +27,15 @@ describe( 'rooftop span assembly boundary', () => {
 
 	} );
 
-	it( 'calls the public rooftop fitter and preserves its canonical result', async () => {
+	it( 'preserves canonical rooftop geometry and the source package version', async () => {
 
 		const result = await runRooftopSpans( FIXTURE );
 		const pairs = result.spans.map( ( span ) => [ span.a.buildingId, span.b.buildingId ] );
+		const { generatorVersion, ...meta } = result.meta;
 
 		expect( pairs ).toEqual( [ [ 'p135', 'p136' ], [ 'p71', 'p76' ] ] );
-		expect( sha256( JSON.stringify( result ) ) ).toBe( '32c7c2634de7f0ae47d9c5f360e18de176e9be279d46ea55c334325fc5f17333' );
+		expect( generatorVersion ).toBe( json( new URL( 'package.json', CONNECTIONS ) ).version );
+		expect( sha256( JSON.stringify( { ...result, meta } ) ) ).toBe( 'daaf4e81d6e003fdcba2d1e52ff628e5c0fe94f38ca68b475ac18c4be34c46cc' );
 
 	} );
 
