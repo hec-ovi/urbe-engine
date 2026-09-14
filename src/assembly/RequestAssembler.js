@@ -96,7 +96,7 @@ export class RequestAssembler {
 			},
 			theme: THEME,
 			apertures,
-			options: { glb, doorMotion: 'pocket' }
+			options: { glb, doorMotion: 'pocket', architecture: 'auto' }
 		};
 
 		const text = this.#signText( parcel, signage );

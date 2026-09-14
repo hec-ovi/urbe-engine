@@ -109,6 +109,7 @@ describe( 'RequestAssembler', () => {
 		expect( a.building.tier ).toBe( 'rich' );
 		expect( a.theme ).toBe( 'cyberpunk' );
 		expect( a.options.glb ).toBe( 'merged' );
+		expect( a.options.architecture ).toBe( 'auto' );
 
 	} );
 
