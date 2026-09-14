@@ -6,6 +6,7 @@ import { RequestAssembler } from './RequestAssembler.js';
 import { BuildingPipeline, signRungs } from './BuildingPipeline.js';
 import namedCity from './named-city.fixture.json';
 import { validateExteriorRequest } from './validators.js';
+import { loadFloorConstants } from './floorFeasibility.js';
 
 /** Minimal atlas blueprint slice shaped per ../atlas/CONTRACT.md. */
 function atlasWith( parcel ) {
@@ -142,7 +143,7 @@ describe( 'RequestAssembler', () => {
 
 			const parcel = { ...officeParcel, type };
 
-			return new RequestAssembler( atlasWith( parcel ), connections ).assemble( 'p7' ).options.signage;
+			return new RequestAssembler( atlasWith( parcel ), { apertures: [] } ).assemble( 'p7' ).options.signage;
 
 		};
 
@@ -152,7 +153,7 @@ describe( 'RequestAssembler', () => {
 		expect( sign( 'residential' ) ).toBe( undefined );
 
 		// a facade the word does not fit on wears none rather than failing
-		const bare = new RequestAssembler( atlasWith( { ...officeParcel, type: 'hotel' } ), connections )
+		const bare = new RequestAssembler( atlasWith( { ...officeParcel, type: 'hotel' } ), { apertures: [] } )
 			.assemble( 'p7', { signage: 'none' } );
 		expect( bare.options.signage ).toBe( undefined );
 
@@ -182,30 +183,51 @@ describe( 'RequestAssembler', () => {
 
 	it( 'chooses a floor count inside exterior\'s feasible range', () => {
 
-		// hotel constants 2.8/5.0, bases {8, 16} under maxHeight 22.4: recipe gives
+		// Active hotel pitch4.5..5.0, bases9/18 under maxHeight27: recipe gives
 		// gaps [2..2] + [2..2] plus 1..2 floors above the top base -> feasible 5..6.
 		// Envelope 6..7 intersects it only at 6; duplicate bases and the wire
 		// anchor must not widen the range.
 		const hotelParcel = {
 			...officeParcel,
 			type: 'hotel',
-			envelope: { minFloors: 6, maxFloors: 7, floorHeight: 3.2, maxHeight: 22.4 }
+			envelope: { minFloors: 6, maxFloors: 7, floorHeight: 3.2, maxHeight: 27 }
 		};
 		const pinned = { apertures: [
-			aperture( 'l1a', 'bridge', 8 ),
-			aperture( 'l2a', 'bridge', 16 ),
-			aperture( 'l3a', 'ac-tube', 8, 1.6 ),
-			aperture( 'l4a', 'ac-tube', 16, 1.6 ),
+			aperture( 'l1a', 'bridge', 9 ),
+			aperture( 'l2a', 'bridge', 18 ),
+			aperture( 'l3a', 'ac-tube', 9, 1.6 ),
+			aperture( 'l4a', 'ac-tube', 18, 1.6 ),
 			aperture( 'l5a', 'wire-anchor', 20, 0.1 )
 		] };
 
 		const request = new RequestAssembler( atlasWith( hotelParcel ), pinned ).assemble( 'p7' );
 		expect( request.building.floors ).toBe( 6 );
 
-		// No apertures: envelope 4..12 intersected with 1..floor(48 / 3.4) = 14.
+		// No apertures: envelope4..12 intersects the active pitch range1..10.
 		const plain = new RequestAssembler( atlasWith( officeParcel ), { apertures: [] } ).assemble( 'p7' );
 		expect( plain.building.floors ).toBeGreaterThanOrEqual( 4 );
-		expect( plain.building.floors ).toBeLessThanOrEqual( 12 );
+		expect( plain.building.floors ).toBeLessThanOrEqual( 10 );
+
+	} );
+
+	it( 'uses published clear-height policy, retains taller family minima and fixed basement bases', () => {
+
+		const constants = structuredClone( loadFloorConstants() );
+		constants.constants.residential.minFloorHeight = 6;
+		constants.constants.residential.maxFloorHeight = 9;
+		const parcel = { ...officeParcel, type: 'residential', envelope: { minFloors: 8, maxFloors: 8, maxHeight: 36 } };
+		expect( new RequestAssembler( atlasWith( parcel ), { apertures: [] }, constants ).assemble( 'p7' ).building.floors ).toBe( 6 );
+
+		const pinned = { apertures: [ aperture( 't0', 'tunnel', - 9 ), aperture( 'w0', 'wire-anchor', - 20, 0.1 ) ] };
+		const before = structuredClone( pinned );
+		const request = new RequestAssembler( atlasWith( officeParcel ), pinned ).assemble( 'p7' );
+		expect( request.building.basements ).toBe( 2 );
+		expect( request.apertures ).toEqual( before.apertures );
+		expect( pinned ).toEqual( before );
+		const tallGround = { apertures: [ aperture( 'g0', 'bridge', 0, 7 ) ] };
+		expect( () => new RequestAssembler( atlasWith( officeParcel ), tallGround ).assemble( 'p7' ) ).toThrow( expect.objectContaining( { code: 'E_ENVELOPE_INFEASIBLE' } ) );
+		const incompatible = { apertures: [ aperture( 't0', 'tunnel', - 8 ) ] };
+		expect( () => new RequestAssembler( atlasWith( officeParcel ), incompatible ).assemble( 'p7' ) ).toThrow( expect.objectContaining( { code: 'E_ENVELOPE_INFEASIBLE' } ) );
 
 	} );
 

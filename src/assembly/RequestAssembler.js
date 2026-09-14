@@ -1,5 +1,5 @@
 import { pickInt } from './hash.js';
-import { loadFloorConstants, constantsForType, feasibleFloorRange } from './floorFeasibility.js';
+import { loadFloorConstants, constantsForType, feasibleFloorRange, feasibleBasementRange } from './floorFeasibility.js';
 import { signText } from './signText.js';
 import { marqueeTextLimit } from './validators.js';
 
@@ -198,19 +198,9 @@ export class RequestAssembler {
 	/** Below-ground apertures (tunnels) need basements deep enough to reach their base. */
 	#chooseBasements( parcel, apertures ) {
 
-		let depth = 0;
-
-		for ( const aperture of apertures ) {
-
-			if ( aperture.base < 0 ) depth = Math.max( depth, - aperture.base );
-
-		}
-
-		if ( depth === 0 ) return 0;
-
-		const { maxFloorHeight } = constantsForType( this.floorConstants, parcel.type );
-
-		return Math.ceil( depth / maxFloorHeight );
+		const range = feasibleBasementRange( { apertures, ...constantsForType( this.floorConstants, parcel.type ) } );
+		if ( ! range ) throw new AssemblyError( 'E_ENVELOPE_INFEASIBLE', `${parcel.id}: fixed basement apertures cannot fit the active Exterior floor policy` );
+		return range.min;
 
 	}
 
