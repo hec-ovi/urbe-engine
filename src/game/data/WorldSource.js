@@ -6,6 +6,7 @@ import {
 	QUEST_BUNDLE_FILES, questBundle, questBundleManifest
 } from '../../quest-bundle/index.js';
 import { worldManifestErrors } from './WorldManifest.js';
+import { openNativeStreetSource } from '../ground/native/NativeStreetSource.js';
 
 /** The out dir's own index, written by assemble-city (../assembly/CONTRACT.md). */
 const MANIFEST_FILE = 'manifest.json';
@@ -72,13 +73,16 @@ export class WorldSource {
 			{ ...manifest.blueprint, projection: manifest.connections ? blueprintProjection : undefined }
 		).catch( ( error ) => {
 
-			if ( manifest.blueprint || Object.hasOwn( manifest, 'connections' ) ) throw error;
+			if ( manifest.blueprint || Object.hasOwn( manifest, 'connections' ) || Object.hasOwn( manifest, 'streets' ) ) throw error;
 			return this.#document( this.blueprintUrl );
 
 		} );
 		const atlas = blueprint.data;
 		this.#assertBlueprint( manifest, atlas );
 		const connections = await loadWorldConnections( blueprint, manifest.connections, ( file, reference ) => this.#document( `${this.outBase}/${file}`, reference ) );
+		const nativeStreets = manifest.streets ? await openNativeStreetSource( {
+			baseUrl: this.outBase, reference: manifest.streets, blueprint
+		} ) : null;
 
 		const known = new Set( atlas.parcels.map( ( parcel ) => parcel.id ) );
 		const listedSet = new Set( manifest.parcels );
@@ -91,6 +95,7 @@ export class WorldSource {
 		return {
 			atlas,
 			connections,
+			nativeStreets,
 			rooftopSpans: manifest.rooftopSpans ?? emptyRooftopSpans( atlas.meta.seed ),
 			buildings,
 			shellCatalog,

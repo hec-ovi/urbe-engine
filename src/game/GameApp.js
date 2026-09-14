@@ -15,7 +15,8 @@ import { GameView } from '../ui/views/GameView.js';
 import { GameConfig } from './data/GameConfig.js';
 import { WorldSource } from './data/WorldSource.js';
 import { Signals } from './data/Signals.js';
-import { GroundBuilder, SIDEWALK_HEIGHT } from './ground/GroundBuilder.js';
+import { SIDEWALK_HEIGHT } from './ground/GroundBuilder.js';
+import { GroundScene } from './ground/GroundScene.js';
 import { SafetyGround } from './ground/SafetyGround.js';
 import { HydrologyHost } from './hydro/index.js';
 import { BuildingsLoader } from './city/BuildingsLoader.js';
@@ -168,7 +169,7 @@ export class GameApp {
 		this.view.step( 'reading the world' );
 		const source = new WorldSource( config );
 		const {
-			atlas, connections, rooftopSpans, buildings, unbuilt, npcTypes, questlines, investigations,
+			atlas, connections, nativeStreets, rooftopSpans, buildings, unbuilt, npcTypes, questlines, investigations,
 			mechanicTargetBindings, missionAssetRequests, missionItemBindings, game, shellCatalog, loadBuildings
 		} = await source.load();
 		const spawn = game ? savedSpawn( game ) : pickSpawn( connections.networks, atlas );
@@ -220,7 +221,9 @@ export class GameApp {
 		this.colliders = new WorldColliders( this.physics );
 
 		this.view.step( 'laying the ground' );
-		const ground = this.groundStream = new GroundBuilder( atlas, factory ).stream();
+		this.nativeStreets = nativeStreets;
+		const ground = this.groundStream = new GroundScene( atlas, factory, nativeStreets,
+			{ anisotropy: this.tier.textureAnisotropy ?? 8 } );
 		await ground.update( spawn.point, { radius: FAR_PLANE, collisionRadius: 256, collision: this.colliders } );
 		this.scene.add( ground.group );
 		this.hydrology = await HydrologyHost.install( { blueprint: atlas, factory, scene: this.scene } );
@@ -249,7 +252,10 @@ export class GameApp {
 		const lamps = new StreetLamps( atlas, factory, connections.networks.walk ).build();
 		const links = new Links( connections, factory, rooftopSpans ).build();
 		const props = this.propsStream = await new Dressing( atlas, connections.networks.walk, factory, {
-			obstacles: DressingObstacles.fromPosts( lamps.posts )
+			replacedModuleOwnerIds: nativeStreets?.manifest.ground.replacements.moduleOwnerIds ?? [],
+			obstacles: [ ...DressingObstacles.fromPosts( lamps.posts ), ...( nativeStreets?.manifest.features ?? [] ).map( feature => ( {
+				footprint: feature.footprint, bottom: feature.bounds.min[ 1 ], top: feature.bounds.max[ 1 ]
+			} ) ) ]
 		} ).stream();
 		await props.update( spawn.point, { radius: FAR_PLANE, collisionRadius: 256, collision: this.colliders } );
 		this.transit = new Transit( { atlas, networks: connections.networks, factory } );
@@ -260,7 +266,7 @@ export class GameApp {
 			links.group,
 			props.group,
 			this.transit.group,
-			await StreetMarkings.build( atlas, connections.networks, factory, resolver, config.laneMode ),
+			await StreetMarkings.build( atlas, connections.networks, factory, resolver, config.laneMode, Boolean( nativeStreets ) ),
 			this.windowRooms.build( { enabled: ! spatial && ! config.off.has( 'interiors' ) } )
 		);
 
