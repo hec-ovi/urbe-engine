@@ -197,5 +197,247 @@
         "linkId": "l58"
       }
     ]
+  },
+  "current": {
+    "source": {
+      "atlasVersion": "0.23.0",
+      "atlasParams": {
+        "seed": "street-frontage-current",
+        "size": {
+          "width": 800,
+          "depth": 800
+        },
+        "features": {
+          "highways": false,
+          "subways": false
+        }
+      },
+      "connections": "none authored"
+    },
+    "atlas": {
+      "meta": {
+        "seed": "street-frontage-current",
+        "version": "0.23.0",
+        "buildingGrid": {
+          "origin": [
+            0,
+            0
+          ],
+          "angle": 0,
+          "spacing": 0.5
+        }
+      },
+      "parcels": [
+        {
+          "id": "p0",
+          "type": "offices",
+          "tier": "rich",
+          "footprint": [
+            [
+              44,
+              44
+            ],
+            [
+              99.5,
+              44
+            ],
+            [
+              99.5,
+              103
+            ],
+            [
+              44,
+              103
+            ]
+          ],
+          "access": {
+            "edgeId": "e42",
+            "point": [
+              43,
+              104.268
+            ]
+          },
+          "envelope": {
+            "minFloors": 11,
+            "maxFloors": 22,
+            "floorHeight": 4.5,
+            "maxHeight": 99
+          }
+        },
+        {
+          "id": "p1",
+          "type": "offices",
+          "tier": "rich",
+          "footprint": [
+            [
+              44,
+              105.5
+            ],
+            [
+              72,
+              105.5
+            ],
+            [
+              72,
+              150
+            ],
+            [
+              44,
+              150
+            ]
+          ],
+          "access": {
+            "edgeId": "e6",
+            "point": [
+              73.408,
+              151
+            ]
+          },
+          "envelope": {
+            "minFloors": 7,
+            "maxFloors": 10,
+            "floorHeight": 4.5,
+            "maxHeight": 45
+          }
+        },
+        {
+          "id": "p3",
+          "type": "offices",
+          "tier": "rich",
+          "footprint": [
+            [
+              102,
+              44
+            ],
+            [
+              158,
+              44
+            ],
+            [
+              158,
+              85.5
+            ],
+            [
+              102,
+              85.5
+            ]
+          ],
+          "access": {
+            "edgeId": "e48",
+            "point": [
+              159,
+              86.827
+            ]
+          },
+          "envelope": {
+            "minFloors": 8,
+            "maxFloors": 11,
+            "floorHeight": 4.5,
+            "maxHeight": 49.5
+          }
+        },
+        {
+          "id": "p19",
+          "type": "hotel",
+          "tier": "rich",
+          "footprint": [
+            [
+              462.5,
+              44
+            ],
+            [
+              487.5,
+              44
+            ],
+            [
+              487.5,
+              107.5
+            ],
+            [
+              462.5,
+              107.5
+            ]
+          ],
+          "access": {
+            "edgeId": "e3",
+            "point": [
+              461.105,
+              43
+            ]
+          },
+          "envelope": {
+            "minFloors": 8,
+            "maxFloors": 14,
+            "floorHeight": 4.5,
+            "maxHeight": 63
+          }
+        }
+      ],
+      "streets": {
+        "edges": [
+          {
+            "id": "e3",
+            "path": [
+              [
+                400.5,
+                29.5
+              ],
+              [
+                558.5,
+                29.5
+              ]
+            ]
+          },
+          {
+            "id": "e6",
+            "path": [
+              [
+                29.5,
+                159.5
+              ],
+              [
+                167.5,
+                159.5
+              ]
+            ]
+          },
+          {
+            "id": "e42",
+            "path": [
+              [
+                29.5,
+                29.5
+              ],
+              [
+                29.5,
+                159.5
+              ]
+            ]
+          },
+          {
+            "id": "e48",
+            "path": [
+              [
+                167.5,
+                29.5
+              ],
+              [
+                167.5,
+                159.5
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    "connections": {
+      "apertures": []
+    },
+    "sourceFaces": {
+      "p0": 3,
+      "p1": 2,
+      "p3": 1,
+      "p19": 0
+    }
   }
 }
