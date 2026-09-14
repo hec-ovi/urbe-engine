@@ -41,6 +41,14 @@
         "sha256": { "$ref": "#/$defs/sha256" }
       }
     },
+    "streets": {
+      "type": "object", "additionalProperties": false, "required": [ "file", "sha256", "blueprintSha256" ],
+      "properties": {
+        "file": { "const": "streets/manifest.json" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "blueprintSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
     "connections": {
       "oneOf": [
         { "$ref": "#/$defs/jsonConnections" },
@@ -59,7 +67,8 @@
     {
       "if": { "required": [ "blueprint" ] },
       "then": { "properties": { "connections": { "$ref": "#/$defs/archiveConnections" } } }
-    }
+    },
+    { "if": { "required": [ "streets" ] }, "then": { "not": { "required": [ "blueprint" ] } } }
   ],
   "$defs": {
     "parcelId": { "type": "string", "minLength": 1 },

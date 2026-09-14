@@ -8,7 +8,7 @@ import { readWorldArchive, writeWorldArchive } from '../world-archive/index.js';
 import shellBlueprints from './shell-blueprints.fixture.json';
 
 const ENGINE_ROOT = resolve( dirname( fileURLToPath( import.meta.url ) ), '../..' );
-const BLUEPRINT = fileURLToPath( new URL( './connections-city.fixture.json', import.meta.url ) );
+const BLUEPRINT = fileURLToPath( new URL( './native-city.fixture.json', import.meta.url ) );
 
 describe( 'assemble-city CLI', () => {
 
@@ -35,7 +35,7 @@ describe( 'assemble-city CLI', () => {
 
 	} );
 
-	it.each( [ 'json', 'archive-file', 'archive-directory' ] )( 'reuses a complete city from %s without rebuilding its shells', async ( encoding ) => {
+	it.each( [ 'json', 'archive-file', 'archive-directory' ] )( 'publishes native JSON streets and explicitly rejects %s archive input', async ( encoding ) => {
 
 		root = mkdtempSync( join( tmpdir(), 'urbe-city-stage-' ) );
 		const atlas = JSON.parse( readFileSync( BLUEPRINT, 'utf8' ) );
@@ -46,6 +46,16 @@ describe( 'assemble-city CLI', () => {
 			await writeWorldArchive( atlas, input, { maxRecords: 1, maxPartBytes: 4096 } );
 			writeFileSync( join( input, 'npc-types.json' ), '{"types":[]}' );
 			blueprintPath = encoding === 'archive-file' ? join( input, 'index.json' ) : input;
+
+		}
+
+		if ( encoding !== 'json' ) {
+
+			const run = spawnSync( process.execPath, [ '--import', 'tsx', 'src/assembly/city-cli.js', '--blueprint', blueprintPath, '--out', root, '--reuse-shells', 'true', '--interiors', '0' ], { cwd: ENGINE_ROOT, encoding: 'utf8' } );
+			expect( run.status ).toBe( 1 );
+			expect( run.stderr ).toContain( 'E_STREETS_ARCHIVE_UNSUPPORTED' );
+			expect( existsSync( join( root, 'manifest.json' ) ) ).toBe( false );
+			return;
 
 		}
 
@@ -76,21 +86,10 @@ describe( 'assemble-city CLI', () => {
 			parcels: atlas.parcels.length, passed: atlas.parcels.length, failed: 0,
 			interiorsRequested: 0, interiorsReady: 0
 		} );
-		if ( encoding !== 'json' ) {
-
-			expect( manifest.blueprint.file ).toBe( 'blueprint/index.json' );
-			expect( manifest.connections.file ).toBe( 'connections/index.json' );
-			expect( manifest.connections.blueprintSha256 ).toBe( manifest.blueprint.sha256 );
-			expect( await readWorldArchive( join( root, 'blueprint' ) ) ).toEqual( atlas );
-			expect( ( await readWorldArchive( join( root, 'connections' ) ) ).meta.atlasSeed ).toBe( atlas.meta.seed );
-			expect( JSON.parse( readFileSync( join( root, 'npc-types.json' ) ) ) ).toEqual( { types: [] } );
-
-		} else {
-
-			expect( manifest ).not.toHaveProperty( 'blueprint' );
-			expect( manifest.connections.file ).toBe( 'connections.json' );
-
-		}
+		expect( manifest ).not.toHaveProperty( 'blueprint' );
+		expect( manifest.connections.file ).toBe( 'connections.json' );
+		expect( manifest.streets.file ).toBe( 'streets/manifest.json' );
+		expect( manifest.streets.blueprintSha256 ).toBe( manifest.connections.blueprintSha256 );
 
 	}, 20_000 );
 

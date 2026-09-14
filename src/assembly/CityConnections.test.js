@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it, vi } from 'vitest';
 import { runConnections } from './connectionsRunner.js';
-import atlas from './connections-city.fixture.json';
+import atlas from './native-city.fixture.json';
 import shellBlueprints from './shell-blueprints.fixture.json';
 
 vi.mock( './connectionsRunner.js', async ( original ) => {
@@ -37,7 +37,7 @@ it( 'city CLI generates Connections once and persists that complete document', a
 		writeFileSync( join( parcelDir, `${parcel.id}.glb` ), 'glb' );
 
 	}
-	const blueprintPath = fileURLToPath( new URL( './connections-city.fixture.json', import.meta.url ) );
+	const blueprintPath = fileURLToPath( new URL( './native-city.fixture.json', import.meta.url ) );
 	process.argv = [ process.execPath, 'city-cli.js', '--blueprint', blueprintPath, '--out', dir,
 		'--reuse-shells', 'true', '--interiors', '0' ];
 	const exit = vi.spyOn( process, 'exit' ).mockImplementation( () => {} );

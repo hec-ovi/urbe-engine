@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSyn
 import { join } from 'node:path';
 import { hashJson, writeWorldArchive } from '../world-archive/index.js';
 import { sha256, writeJsonFile } from './JsonFile.js';
+import { buildStreetArtifacts } from './StreetArtifacts.js';
 
 /** Prepares world documents before replacing any published file or manifest. */
 export class WorldFiles {
@@ -14,7 +15,7 @@ export class WorldFiles {
 
 	}
 
-	async prepare( atlas, connectionsArtifact, { encoding, archiveOptions, catalog } ) {
+	async prepare( atlas, connectionsArtifact, { encoding, archiveOptions, catalog, streets } ) {
 
 		const references = encoding === 'archive'
 			? await this.#archives( atlas, connectionsArtifact, archiveOptions )
@@ -24,6 +25,12 @@ export class WorldFiles {
 			await writeWorldArchive( catalog, join( this.stage, 'shells' ), archiveOptions );
 			this.names.push( 'shells' );
 			references.shellCatalog = archiveReference( this.stage, 'shells' );
+
+		}
+		if ( streets ) {
+
+			references.streets = await buildStreetArtifacts( this.stage, atlas, streets === true ? {} : streets );
+			this.names.push( 'streets' );
 
 		}
 		return references;

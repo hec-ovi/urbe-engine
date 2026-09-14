@@ -177,15 +177,17 @@ export class OutDir {
 
 	/** Publishes source documents and a compact shell catalog as one world. */
 	async publishManifest( atlas, parcelIds, interiorIds, {
-		rooftopSpans = null, connectionsArtifact = null, catalog = null, encoding = 'json', archiveOptions
+		rooftopSpans = null, connectionsArtifact = null, catalog = null, encoding = 'json', archiveOptions, streets = false
 	} = {} ) {
 
 		if ( ! [ 'json', 'archive' ].includes( encoding ) ) throw new AssemblyError( 'E_REQUEST_INVALID', 'unknown world document encoding' );
+		if ( streets && encoding !== 'json' ) throw new AssemblyError( 'E_STREETS_ARCHIVE_UNSUPPORTED', 'native streets require an ordinary staged blueprint.json' );
+		if ( streets !== false && streets !== true && ( ! streets || typeof streets !== 'object' || Array.isArray( streets ) ) ) throw new AssemblyError( 'E_REQUEST_INVALID', 'streets must be true, false or native street options' );
 		if ( catalog ) this.#checkCatalog( atlas, parcelIds, catalog );
 		const files = new WorldFiles( this.dir );
 		try {
 
-			const references = await files.prepare( atlas, connectionsArtifact, { encoding, archiveOptions, catalog } );
+			const references = await files.prepare( atlas, connectionsArtifact, { encoding, archiveOptions, catalog, streets } );
 			const manifest = this.#manifest( atlas, parcelIds, interiorIds, rooftopSpans, references );
 			files.publish( manifest );
 			return manifest;

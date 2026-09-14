@@ -2,7 +2,7 @@
 
 import { existsSync, readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { RequestAssembler } from './RequestAssembler.js';
+import { RequestAssembler, AssemblyError } from './RequestAssembler.js';
 import { runConnections, runRooftopSpans } from './connectionsRunner.js';
 import { BuildingPipeline } from './BuildingPipeline.js';
 import { ExteriorWorkers } from './ExteriorWorkers.js';
@@ -39,6 +39,7 @@ if ( ! args ) {
 
 const started = performance.now();
 const source = await loadBlueprint( args.blueprint );
+if ( source.encoding !== 'json' ) throw new AssemblyError( 'E_STREETS_ARCHIVE_UNSUPPORTED', 'native city assembly requires an ordinary blueprint JSON input' );
 const { atlas } = source;
 const connections = await runConnections( atlas, { seed: atlas.meta.seed } );
 const connectionsArtifact = new ConnectionsArtifact( atlas, connections );
@@ -203,7 +204,7 @@ const { catalog, rooftopRequest } = await collectShellArtifacts( outDir, shells,
 const rooftopSpans = await runRooftopSpans( rooftopRequest );
 if ( out.carryTypes( source.path ) ) console.log( 'typed NPC set carried in beside the blueprint' );
 const manifest = await out.publishManifest( atlas, shells, readyInteriors, {
-	rooftopSpans, connectionsArtifact, catalog, encoding: source.encoding
+	rooftopSpans, connectionsArtifact, catalog, encoding: source.encoding, streets: true
 } );
 
 console.log( `\n${totals.passed}/${totals.parcels} shells passed, ${totals.failed} failed; ${totals.interiorsReady}/${totals.interiorsRequested} interiors ready; ${( totals.wallMs / 1000 ).toFixed( 1 )} s, ${( totals.bytes / 1e6 ).toFixed( 1 )} MB` );
