@@ -36,6 +36,7 @@ const COLLIDER_KINDS = new Set( [
 	'concrete', 'wall', 'column', 'window-glass', 'door', 'door-glass',
 	'concrete-monolith', 'concrete-large-panel',
 	'paired-cladding',
+	'paired-cladding-metal', 'paired-window-glass',
 	'window-glass-opaque', 'window-glass-office',
 	'floor-slab', 'roof', 'parapet', 'balcony-slab', 'balcony-rail',
 	'roof-artifact', 'ac-unit', 'metal'

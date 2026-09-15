@@ -17,6 +17,8 @@ Building and door entries follow the [game contract](../CONTRACT.md). This contr
 
 An Exterior opening with `scenery` references its authored `scenery:<floor>` GLB node. Closed shells render those nodes with their published materials and skip generated room replacements for those openings. Buildings selected for real interiors omit the scenic nodes. Scenic geometry creates no collision; paired cladding remains solid shell geometry.
 
+Optional `scenery.lights` entries publish actual fixture positions, colors, lumens and finite ranges. Neon passes them into the shared CityLights pool for closed shells. Opening IDs identify their sources; dark rooms emit zero lumens. Source positions and fixture geometry share one placement calculation.
+
 `group`, `rooms`, `liveInteriors`, `update(feet)` and collider callbacks follow the stream schema. Registration opens buildings within 70 m and drops them past 95 m. The nearest requested floor loads first, one at a time. The player's floor and its neighbors are visible and solid; one further floor on either side stays in memory.
 
 Static interior geometry and each detached floor prepare one renderable at a time through `Warmup.warmAll`. Each floor prepares the dim binding and every fixed room-light slot before becoming visible or solid, then returns to dim. Cancellation is checked between renderables. Active preparation settles before its geometry, source maps, decoded images and light clones are released. Preparation errors leave the band hidden and report the floor identifier.

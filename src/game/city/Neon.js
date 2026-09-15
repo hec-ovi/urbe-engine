@@ -3,6 +3,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { Rng } from '../../city/Rng.js';
 import { signedArea } from '../ground/Polygons.js';
 import { kelvinColor } from '../light/Color.js';
+import { scenicLights } from './ScenicLights.js';
 
 // Colours only ever drive the point lights that spill onto the street; the
 // panels themselves are lit by their own emission maps from the materials
@@ -87,6 +88,7 @@ export class Neon {
 			const building = this.buildings.get( parcel.id );
 
 			if ( ! building ) continue;
+			glows.push( ...scenicLights( building ) );
 
 			const rng = new Rng( hash( parcel.id ) );
 
