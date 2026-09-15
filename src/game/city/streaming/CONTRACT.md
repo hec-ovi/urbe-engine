@@ -14,6 +14,8 @@ Distant walls and roofs within 1,100 m use exact catalog outlines, elevations an
 
 `dispose()` cancels pending work and releases owned geometry. Loaded sources must match the requested catalog IDs. Invalid distances or positions throw `E_SHELL_SETTINGS` or `E_SHELL_POSITION`; source mismatches report `E_SHELL_SOURCE`. Failed initial admission rejects `load` with `E_SHELL_LOAD`. Later loading and preparation failures report through `onError` and keep distant geometry. The optional loader port follows BuildingsLoader's public result and defaults to the original GLB loader.
 
+Release also disposes materials marked `ownedScenicMaterial`; shared factory materials and their maps remain alive.
+
 ## Dependencies
 
 Assembly shell catalog, City BuildingsLoader, shared PBR factory and Three.js.

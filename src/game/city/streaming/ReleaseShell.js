@@ -2,7 +2,13 @@
 export function releaseShell( cell ) {
 
 	const geometries = new Set();
-	cell.group.traverse( node => { if ( node.geometry ) geometries.add( node.geometry ); } );
+	const materials = new Set();
+	cell.group.traverse( node => {
+		if ( node.geometry ) geometries.add( node.geometry );
+		for ( const material of Array.isArray( node.material ) ? node.material : [ node.material ] ) {
+			if ( material?.userData?.ownedScenicMaterial ) materials.add( material );
+		}
+	} );
 	for ( const pieces of cell.shellColliders?.values() ?? [] ) {
 
 		for ( const geometry of Array.isArray( pieces ) ? pieces : [ pieces ] ) geometries.add( geometry );
@@ -14,6 +20,7 @@ export function releaseShell( cell ) {
 
 	}
 	for ( const geometry of geometries ) geometry.dispose();
+	for ( const material of materials ) material.dispose();
 	cell.group.removeFromParent();
 
 }

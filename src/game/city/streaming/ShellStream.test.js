@@ -38,6 +38,21 @@ function fixture( overrides = {} ) {
 
 describe( 'ShellStream public admission', () => {
 
+	it( 'releases cell-owned scenic materials while retaining shared maps', async () => {
+		const material = new THREE.MeshBasicMaterial();
+		material.userData.ownedScenicMaterial = true;
+		const map = new THREE.Texture(); material.map = map;
+		const dispose = vi.fn(), disposeMap = vi.fn();
+		material.addEventListener( 'dispose', dispose ); map.addEventListener( 'dispose', disposeMap );
+		const { stream } = fixture( { loader: { load: async () => {
+			const group = new THREE.Group(); group.add( new THREE.Mesh( new THREE.BoxGeometry(), material ) );
+			return { group, doors: [], entrances: [], shellColliders: new Map(), centers: new Map(), triangles: 12 };
+		} } } );
+		await stream.load( { x: 0, z: 0 } ); await stream.dispose();
+		expect( dispose ).toHaveBeenCalled();
+		expect( disposeMap ).not.toHaveBeenCalled();
+	} );
+
 	it( 'retains interiors, releases distant full shells, and reloads original sources on return', async () => {
 
 		const { stream, sources, loadBuildings, dispose, shared } = fixture();
