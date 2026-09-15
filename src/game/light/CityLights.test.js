@@ -67,9 +67,27 @@ describe( 'CityLights', () => {
 		expect( lights.count ).toBe( 2 );
 
 		lights.update( new THREE.Vector3( 0, 0, 0 ), 1 );
+		lights.update( new THREE.Vector3( 0, 0, 0 ), 0.5 );
 		expect( lights.lights ).toEqual( slots );
 		expect( lights.lights.map( ( light ) => light.position.x ) ).toEqual( [ 0, 50 ] );
 
+	} );
+
+	it( 'fades a replaced source to zero before moving its stable slot', () => {
+		const lights = new CityLights( [ fixture( 0, 1000 ), fixture( 100, 2000 ) ], 1 );
+		lights.update( new THREE.Vector3( 0, 0, 0 ), 1 );
+		const slot = lights.lights[ 0 ];
+		lights.update( new THREE.Vector3( 100, 0, 0 ), 1 );
+		expect( slot.position.x ).toBe( 0 );
+		lights.update( new THREE.Vector3( 100, 0, 0 ), 0.125 );
+		expect( slot.power ).toBeCloseTo( 500 );
+		expect( slot.position.x ).toBe( 0 );
+		lights.update( new THREE.Vector3( 100, 0, 0 ), 0.125 );
+		expect( slot.position.x ).toBe( 100 );
+		expect( slot.power ).toBeCloseTo( 0 );
+		lights.update( new THREE.Vector3( 100, 0, 0 ), 0.25 );
+		expect( slot.power ).toBeCloseTo( 2000 );
+		expect( lights.lights[ 0 ] ).toBe( slot );
 	} );
 
 	it( 'keeps a fixture dimmed when it later enters a light slot', () => {

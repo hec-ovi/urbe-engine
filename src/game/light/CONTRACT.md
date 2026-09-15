@@ -12,7 +12,7 @@ Purpose: turns every fixture the world published into real light, in photometric
 
 ## Out
 - `LightingSystem.install(renderer, tier) -> { capacity }`: swaps in the lighting system the backend can run and returns how many fixtures may be lit at once.
-- `CityLights(fixtures, capacity)`: `group` of fixed point-light slots to add to the scene, `update(position, delta)` copies the nearest published fixtures into those slots, `count`, and `airColor(position) -> { color, lux }`, the colour of the light filling the air at a point.
+- `CityLights(fixtures, capacity)`: `group` of fixed point-light slots to add to the scene, `update(position, delta)` selects nearby published fixtures with stable assignments and smooth handoffs, `count`, and `airColor(position) -> { color, lux }`, the colour of the light filling the air at a point.
 - `CityLights(fixtures, capacity, {streamed:true})` reserves the complete fixed slot pool. `setFixtures(fixtures)` replaces resident sources, retaining dimming by fixture identity. Empty slots emit zero power and retain their renderer identity.
 - `RoomLights(factory, tier)`: `update(rooms, position, delta)` binds the nearest rooms to light slots and writes their fixtures and fill into them; `materialFor(binding, key, source?)` is the material a room's mesh wears, and `dim` is the binding for interior geometry belonging to no room. A source Three material keeps its PBR maps, factors, face behavior and alpha threshold, with an independent clone per source identity and binding. Source unlit materials stay unlit. `releaseSources(materials)` disposes those clones; `releaseRooms(rooms)` clears dropped room references from the slots. Catalog materials remain cached. Materials are node materials so room lighting survives renderer conversion.
 - `RoomFill.apply(light, room, flux, color)`: writes the computed interreflected fill onto a hemisphere light. `albedoOf(key)` is the reflectance of a material kind.
@@ -30,6 +30,7 @@ Purpose: turns every fixture the world published into real light, in photometric
 - Room light sets come from a fixed pool of light objects whose ids never change. A lights node hashes light ids into the shader cache key, so a set built per room would compile a shader per room.
 - Exterior fixtures use a fixed pool of unshadowed point-light objects whose ids never change. Walking copies position, colour, range and power from the nearest fixtures into those slots. Daylight sets their power to zero without removing them from the scene. The renderer therefore keeps the same light cache key for every frame.
 - Exterior slots are exactly the set clustered lighting bins on the GPU; nothing else may join that set.
+- Runtime replacement fades a slot out, relocates it at zero power, then fades it in over 0.5 seconds. Retained sources keep their slots; a 15 percent squared-distance preference prevents repeated swaps at a boundary. Startup selects immediately. Streaming preserves retained fixture identities and dimming.
 
 ## Errors
 None thrown. A room with no fixtures gets a dark fill; a backend without clustering gets batching.

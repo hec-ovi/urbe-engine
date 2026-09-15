@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu';
 const RESHUFFLE_INTERVAL = 0.25;
 /** How far out a fixture still counts as filling the air the player is in. */
 const AIR_RADIUS = 45;
+const HANDOFF_SECONDS = 0.5;
 
 /**
  * Every exterior fixture the city built, as a real light in photometric units:
@@ -39,6 +40,10 @@ export class CityLights {
 		this.ranked = fixtures.map( ( _, index ) => ( { index, distance: 0 } ) );
 		this.timer = RESHUFFLE_INTERVAL;
 		this.dim = 1;
+		this.clock = 0;
+		this.initialized = false;
+		this.weights = this.lights.map( () => 1 );
+		this.handoffs = this.lights.map( () => null );
 
 		for ( let slot = 0; slot < this.lights.length; slot ++ ) {
 
@@ -55,11 +60,17 @@ export class CityLights {
 	setFixtures( fixtures ) {
 
 		const dim = new Map( this.fixtures.map( ( fixture, index ) => [ fixture, this.fixtureDim[ index ] ] ) );
+		const retained = this.selection.map( index => this.fixtures[ index ] );
 		this.fixtures = [ ...fixtures ];
 		this.fixtureDim = fixtures.map( fixture => dim.get( fixture ) ?? 1 );
 		this.ranked = fixtures.map( ( _, index ) => ( { index, distance: 0 } ) );
 		this.timer = RESHUFFLE_INTERVAL;
-		for ( let slot = 0; slot < this.lights.length; slot ++ ) this.#assign( slot, slot );
+		const indices = new Map( fixtures.map( ( fixture, index ) => [ fixture, index ] ) );
+		for ( let slot = 0; slot < this.lights.length; slot ++ ) {
+			this.handoffs[ slot ] = null;
+			this.weights[ slot ] = 1;
+			this.#assign( slot, indices.get( retained[ slot ] ) ?? -1 );
+		}
 
 	}
 
@@ -115,7 +126,7 @@ export class CityLights {
 	#power( slot ) {
 
 		const index = this.selection[ slot ];
-		this.lights[ slot ].power = this.fixtures[ index ] ? this.fixtures[ index ].lumens * this.dim * this.fixtureDim[ index ] : 0;
+		this.lights[ slot ].power = this.fixtures[ index ] ? this.fixtures[ index ].lumens * this.dim * this.fixtureDim[ index ] * this.weights[ slot ] : 0;
 
 	}
 
@@ -126,8 +137,8 @@ export class CityLights {
 	}
 
 	update( position, delta ) {
-
-		if ( this.fixtures.length <= this.lights.length ) return;
+		this.clock += delta;
+		this.#advanceHandoffs();
 
 		this.timer += delta;
 
@@ -135,22 +146,45 @@ export class CityLights {
 
 		this.timer = 0;
 
+		const retained = new Set( [ ...this.selection, ...this.handoffs.filter( Boolean ).map( item => item.index ) ] );
 		for ( const entry of this.ranked ) {
 
 			entry.distance = this.fixtures[ entry.index ].position.distanceToSquared( position );
+			if ( this.initialized && retained.has( entry.index ) ) entry.distance *= 0.85;
 
 		}
 
 		this.ranked.sort( ( a, b ) => a.distance - b.distance || a.index - b.index );
 
-		for ( let slot = 0; slot < this.lights.length; slot ++ ) {
-
-			const index = this.ranked[ slot ].index;
-
-			if ( this.selection[ slot ] !== index ) this.#assign( slot, index );
-
+		const desired = this.ranked.slice( 0, this.lights.length ).map( item => item.index );
+		if ( ! this.initialized ) {
+			for ( let slot = 0; slot < this.lights.length; slot++ ) this.#assign( slot, desired[ slot ] ?? -1 );
+			this.initialized = true;
+			return;
+		}
+		const occupied = new Set( this.selection );
+		for ( const pending of this.handoffs ) if ( pending ) occupied.add( pending.index );
+		const incoming = desired.filter( index => ! occupied.has( index ) );
+		for ( let slot = 0; slot < this.lights.length && incoming.length; slot++ ) {
+			if ( this.handoffs[ slot ] || desired.includes( this.selection[ slot ] ) ) continue;
+			this.handoffs[ slot ] = { index: incoming.shift(), start: this.clock, assigned: false };
 		}
 
+	}
+
+	#advanceHandoffs() {
+		for ( let slot = 0; slot < this.lights.length; slot++ ) {
+			const pending = this.handoffs[ slot ];
+			if ( ! pending ) continue;
+			const progress = Math.min( 1, ( this.clock - pending.start ) / HANDOFF_SECONDS );
+			if ( progress < 0.5 ) this.weights[ slot ] = 1 - progress * 2;
+			else {
+				this.weights[ slot ] = ( progress - 0.5 ) * 2;
+				if ( ! pending.assigned ) { this.#assign( slot, pending.index ); pending.assigned = true; }
+			}
+			this.#power( slot );
+			if ( progress === 1 ) this.handoffs[ slot ] = null;
+		}
 	}
 
 	/**
