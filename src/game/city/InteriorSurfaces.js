@@ -1,5 +1,5 @@
 import { Float32BufferAttribute } from 'three/webgpu';
-import { bake, INTERIOR_PREFIX } from './BuildingsLoader.js';
+import { bake, INTERIOR_PREFIX } from './GeometryBake.js';
 import { materialKey, partition } from './InteriorRooms.js';
 import { materialPacketOf } from './InteriorMaterials.js';
 

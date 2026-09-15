@@ -1,3 +1,4 @@
+import { bake } from './GeometryBake.js';
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -5,6 +6,7 @@ import { doorFrames, doorLeafFrame } from './DoorGeometry.js';
 import { takeTriangles, centroidAt } from './Triangles.js';
 import { kelvinColor } from '../light/Color.js';
 import { bucketFor, splitBucket, variantFor } from './Variety.js';
+import { ScenicSurface } from './ScenicSurface.js';
 
 // The GLB names its nodes `merged:<key>` and `interior:<key>`, but GLTFLoader
 // runs node names through PropertyBinding.sanitizeNodeName, which strips the
@@ -12,7 +14,7 @@ import { bucketFor, splitBucket, variantFor } from './Variety.js';
 // survives intact, so that is what the split matches on. Material names are
 // not sanitized, so the material key still arrives whole.
 const EXTERIOR = 'merged';
-export const INTERIOR_PREFIX = 'interior';
+export { INTERIOR_PREFIX, bake } from './GeometryBake.js';
 // Each moving leaf is its own node, `door:<id>/leaf:N` or
 // `balcony:<id>/leaf:N`, with an authored closed-pose origin.
 const DOOR = 'door';
@@ -123,7 +125,8 @@ export class BuildingsLoader {
 			const merged = BufferGeometryUtils.mergeGeometries( geometries, false );
 			geometries.forEach( ( g ) => g.dispose() );
 			triangles += merged.getAttribute( 'position' ).count / 3;
-			const mesh = new THREE.Mesh( merged, this.#material( key ) );
+			const baseMaterial = this.#material( key );
+			const mesh = new THREE.Mesh( merged, merged.hasAttribute( 'scenicRadiance' ) ? ScenicSurface.material( baseMaterial ) : baseMaterial );
 			mesh.name = `shell:${key}`;
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
@@ -163,6 +166,7 @@ export class BuildingsLoader {
 	async #loadOne( { parcelId, blueprint, shellUrl, hasInterior = true } ) {
 
 		const gltf = await this.loader.loadAsync( shellUrl );
+		const scenic = new ScenicSurface( blueprint );
 		gltf.scene.updateMatrixWorld( true );
 
 		const exterior = new Map();
@@ -190,7 +194,11 @@ export class BuildingsLoader {
 			);
 			if ( isShellScenery( node ) ) {
 
-				if ( hasInterior === false ) push( exterior, surface, bake( node ) );
+				if ( hasInterior === false ) {
+					const geometry = bake( node );
+					push( exterior, surface, ScenicSurface.supports( key )
+						? scenic.bake( geometry, key, this.factory.resolver.resolve( key )?.physical?.emissiveStrength ?? 1 ) : geometry );
+				}
 				continue;
 
 			}
@@ -340,28 +348,6 @@ function push( map, key, geometry ) {
 	if ( ! map.has( key ) ) map.set( key, [] );
 
 	map.get( key ).push( geometry );
-
-}
-
-/** World-space, non-indexed, always with normals. Merging needs one layout. */
-export function bake( mesh ) {
-
-	const geometry = ( mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone() );
-	geometry.applyMatrix4( mesh.matrixWorld );
-
-	if ( ! geometry.getAttribute( 'normal' ) ) geometry.computeVertexNormals();
-	if ( ! geometry.getAttribute( 'uv' ) ) {
-
-		const count = geometry.getAttribute( 'position' ).count;
-		geometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( new Float32Array( count * 2 ), 2 ) );
-
-	}
-
-	geometry.deleteAttribute( 'tangent' );
-	geometry.deleteAttribute( 'uv1' );
-	geometry.deleteAttribute( 'color' );
-
-	return geometry;
 
 }
 

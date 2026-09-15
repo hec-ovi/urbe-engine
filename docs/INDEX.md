@@ -48,5 +48,6 @@
 
 City preserves Exterior-authored scenic nodes on closed shells and uses opening metadata to avoid duplicate room geometry.
 Authored scenic fixtures feed the existing fixed light pool through `city/ScenicLights.js`.
+Scenic receiver surfaces bake fixture illumination once through `city/ScenicSurface.js`; camera movement does not select their illumination. Light slots use stable assignments and half-second handoffs.
 
 `src/city/CityApp.js` shows assembled parcels. The retained `?mode=experiment` entry wires `src/app` to `src/variants`, `src/scene` and the seeded `src/city/CityGenerator.js`; its settings come from `src/app/RunConfig.js`. These previews use `src/ui`. Street models have a [separate preview contract](../src/game/props/preview/CONTRACT.md).
