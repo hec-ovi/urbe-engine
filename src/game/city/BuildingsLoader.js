@@ -35,6 +35,7 @@ const MAIN_THREAD_SLICE_MS = 8;
 const COLLIDER_KINDS = new Set( [
 	'concrete', 'wall', 'column', 'window-glass', 'door', 'door-glass',
 	'concrete-monolith', 'concrete-large-panel',
+	'paired-cladding',
 	'window-glass-opaque', 'window-glass-office',
 	'floor-slab', 'roof', 'parapet', 'balcony-slab', 'balcony-rail',
 	'roof-artifact', 'ac-unit', 'metal'
@@ -186,7 +187,7 @@ export class BuildingsLoader {
 				node.material?.userData?.materialVariant ?? blueprint.materialVariants?.[ key ],
 				node.material?.side === THREE.DoubleSide
 			);
-			if ( isGroundPrivacy( node ) ) {
+			if ( isShellScenery( node ) ) {
 
 				if ( hasInterior === false ) push( exterior, surface, bake( node ) );
 				continue;
@@ -321,12 +322,12 @@ function isDoorLeaf( name ) {
 
 }
 
-/** GLTF loaders may retain the privacy name on a parent of material meshes. */
-function isGroundPrivacy( node ) {
+/** GLTF loaders may retain a shell scenery name on the parent of material meshes. */
+function isShellScenery( node ) {
 
 	for ( let current = node; current; current = current.parent ) {
 
-		if ( current.name?.startsWith( GROUND_PRIVACY ) ) return true;
+		if ( current.name?.startsWith( GROUND_PRIVACY ) || current.name?.startsWith( 'scenery' ) ) return true;
 
 	}
 	return false;

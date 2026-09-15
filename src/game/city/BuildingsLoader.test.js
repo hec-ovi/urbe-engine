@@ -125,7 +125,7 @@ describe( 'building entrance availability', () => {
 
 	} );
 
-	it( 'keeps ground privacy only on closed shells without adding collision or hiding real interiors', async () => {
+	it( 'keeps shell scenery on closed shells and excludes it from real interiors and collision', async () => {
 
 		for ( const hasInterior of [ false, true ] ) {
 
@@ -135,7 +135,11 @@ describe( 'building entrance availability', () => {
 				const privacy = new THREE.Group();
 				privacy.name = 'ground-privacyw0';
 				privacy.add( mesh( 'covering', 'cyberpunk/curtain/mid', 1 ), mesh( 'backing', 'cyberpunk/window-glass-opaque/mid', 2 ) );
-				scene.add( mesh( 'mergedglass', 'cyberpunk/window-glass/mid', 0 ), privacy );
+				const scenery = new THREE.Group();
+				scenery.name = 'scenery1';
+				scenery.add( mesh( 'room', 'cyberpunk/paired-room-lit/mid', 4 ) );
+				scene.add( mesh( 'mergedglass', 'cyberpunk/window-glass/mid', 0 ), privacy, scenery,
+					mesh( 'mergedcladding', 'cyberpunk/paired-cladding/mid', 5 ) );
 				return { scene };
 
 			} };
@@ -144,7 +148,8 @@ describe( 'building entrance availability', () => {
 			} ] ] ) );
 			expect( Boolean( city.group.getObjectByName( 'shell:cyberpunk/curtain/mid' ) ) ).toBe( ! hasInterior );
 			expect( Boolean( city.group.getObjectByName( 'shell:cyberpunk/window-glass-opaque/mid' ) ) ).toBe( ! hasInterior );
-			expect( city.shellColliders.get( 'p0' ).getAttribute( 'position' ).count ).toBe( 3 );
+			expect( Boolean( city.group.getObjectByName( 'shell:cyberpunk/paired-room-lit/mid' ) ) ).toBe( ! hasInterior );
+			expect( city.shellColliders.get( 'p0' ).getAttribute( 'position' ).count ).toBe( 6 );
 
 		}
 

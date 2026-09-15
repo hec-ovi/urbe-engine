@@ -56,7 +56,7 @@ export class LitWindows {
 				const occupied = [];
 				for ( const opening of floor.openings ) {
 
-					if ( opening.kind !== 'window' ) continue;
+					if ( opening.kind !== 'window' || opening.scenery ) continue;
 					if ( opening.material && this.factory.resolver.resolve( opening.material )?.physical?.transmission === 0 ) continue;
 					const rect = openingRect( floor, opening.glazing ? { ...opening, ...opening.glazing } : opening );
 					if ( ! rect ) continue;

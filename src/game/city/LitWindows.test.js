@@ -24,6 +24,15 @@ function fixture( { hasInterior = false, seed = 'night', outline = [ [ 0, 0 ], [
 
 describe( 'shell window rooms', () => {
 
+	it( 'uses authored exterior room nodes without generating a second room', () => {
+
+		const { windows, floor, factory } = fixture();
+		floor.openings.forEach( opening => { opening.scenery = { nodeId: 'scenery:1' }; } );
+		expect( windows.build().children ).toHaveLength( 0 );
+		expect( factory.build ).not.toHaveBeenCalled();
+
+	} );
+
 	it( 'builds textured recessed rooms and visible ceiling strips in bounded draws', () => {
 
 		const { windows, factory, floor } = fixture();
