@@ -8,7 +8,7 @@ export interface ShellRecord {
   bounds: {min: Point3; max: Point3};
   floorCount: number;
   basementCount: number;
-  bands: {bottom: number; top: number; outline: Point2[]; material: MaterialBinding}[];
+  bands: {bottom: number; top: number; outline: Point2[]; topOutline?: Point2[]; material: MaterialBinding}[];
   roof: {elevation: number; outline: Point2[]; parapetHeight: number;
     material: MaterialBinding; parapetMaterial: MaterialBinding};
 }
@@ -36,6 +36,8 @@ export interface ShellCell {
   entrances: unknown[];
   shellColliders: Map<string, unknown>;
   triangles: number;
+  unresolvedModelInstances?: {parcelId: string; index: number; kind: string}[];
+  disposeModelInstances?(): void;
 }
 export declare class ShellStream {
   constructor(settings: ShellStreamSettings);

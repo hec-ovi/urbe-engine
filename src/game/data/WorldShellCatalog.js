@@ -29,6 +29,7 @@ export async function loadShellCatalog( manifest, readDocument ) {
 
 			}
 			if ( building.bands.some( band => band.top <= band.bottom ) ) throw new Error( `${building.id} bands must have positive height` );
+			if ( building.bands.some( band => band.topOutline && band.topOutline.length !== band.outline.length ) ) throw new Error( `${building.id} band outlines must have matching vertices` );
 
 		}
 		return data;

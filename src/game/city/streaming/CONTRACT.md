@@ -10,11 +10,14 @@ Loads nearby original building shells and draws distant massing from the publish
 
 An optional `prepare(cell)` port prepares rendering and collision before a cell becomes visible. `added(cell)` and `removed(cell)` bind and release host resources. Cells load serially. Stale work is released without becoming visible. Errors reach `onError` and preserve the distant source geometry.
 
+Bands with `topOutline` connect their lower and upper vertices as sloping faces; their caps use the upper outline.
+
 Distant walls and roofs within 1,100 m use exact catalog outlines, elevations and material bindings, merged by material across the visible window. Original shell cells replace their distant counterpart only after complete admission. Dropping a cell restores its distant representation and releases its geometry and noninterior source documents. Factory materials remain shared.
 
 `dispose()` cancels pending work and releases owned geometry. Loaded sources must match the requested catalog IDs. Invalid distances or positions throw `E_SHELL_SETTINGS` or `E_SHELL_POSITION`; source mismatches report `E_SHELL_SOURCE`. Failed initial admission rejects `load` with `E_SHELL_LOAD`. Later loading and preparation failures report through `onError` and keep distant geometry. The optional loader port follows BuildingsLoader's public result and defaults to the original GLB loader.
 
 Release also disposes materials marked `ownedScenicMaterial`; shared factory materials and their maps remain alive.
+Building model groups call their cell-owned disposer before shell traversal, including cancelled admission, preparation failure and eviction. Their imported textures and instance buffers are released with their geometry.
 
 ## Dependencies
 

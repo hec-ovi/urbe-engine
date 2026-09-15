@@ -38,6 +38,21 @@ function fixture( overrides = {} ) {
 
 describe( 'ShellStream public admission', () => {
 
+	it( 'keeps tapered upper outlines in the distant silhouette', async () => {
+		const tower = record( 'far', 1000, 240 );
+		tower.bands[0].topOutline = [[1002,2],[1008,2],[1008,8],[1002,8]];
+		tower.roof.outline = tower.bands[0].topOutline;
+		const { stream } = fixture( { catalog: { version: '1.0.0', seed: 'test', buildings: [record('home',0),record('near',200),tower] } } );
+		await stream.load({x:0,z:0});
+		const geometry = stream.group.getObjectByName('distant-shells').children[0].geometry;
+		const p=geometry.getAttribute('position');
+		const upper=[];
+		for(let i=0;i<p.count;i++) if(p.getY(i)===240) upper.push(p.getX(i));
+		expect(Math.min(...upper)).toBe(1002);
+		expect(Math.max(...upper)).toBe(1008);
+		await stream.dispose();
+	} );
+
 	it( 'releases cell-owned scenic materials while retaining shared maps', async () => {
 		const material = new THREE.MeshBasicMaterial();
 		material.userData.ownedScenicMaterial = true;

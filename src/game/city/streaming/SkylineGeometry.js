@@ -14,8 +14,8 @@ export class SkylineGeometry {
 
 		for ( const band of record.bands ) {
 
-			this.walls( band.outline, band.bottom, band.top, band.material );
-			if ( band.top !== record.roof.elevation ) this.cap( band.outline, band.top, record.roof.material );
+			this.walls( band.outline, band.bottom, band.top, band.material, band.topOutline );
+			if ( band.top !== record.roof.elevation ) this.cap( band.topOutline ?? band.outline, band.top, record.roof.material );
 
 		}
 		const roof = record.roof;
@@ -25,16 +25,18 @@ export class SkylineGeometry {
 
 	}
 
-	walls( outline, bottom, top, material ) {
+	walls( outline, bottom, top, material, topOutline = outline ) {
 
 		const bucket = this.bucket( material );
 		for ( let i = 0; i < outline.length; i ++ ) {
 
 			const a = outline[ i ], b = outline[ ( i + 1 ) % outline.length ];
 			const length = Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ] );
-			const normal = [ ( b[ 1 ] - a[ 1 ] ) / length, 0, ( a[ 0 ] - b[ 0 ] ) / length ];
-			const vertices = [ [ a[ 0 ], bottom, a[ 1 ] ], [ a[ 0 ], top, a[ 1 ] ],
-				[ b[ 0 ], top, b[ 1 ] ], [ b[ 0 ], bottom, b[ 1 ] ] ];
+			const ta = topOutline[ i ], tb = topOutline[ ( i + 1 ) % topOutline.length ];
+			const normal = new THREE.Vector3( ta[ 0 ] - a[ 0 ], top - bottom, ta[ 1 ] - a[ 1 ] )
+				.cross( new THREE.Vector3( tb[ 0 ] - a[ 0 ], top - bottom, tb[ 1 ] - a[ 1 ] ) ).normalize().toArray();
+			const vertices = [ [ a[ 0 ], bottom, a[ 1 ] ], [ ta[ 0 ], top, ta[ 1 ] ],
+				[ tb[ 0 ], top, tb[ 1 ] ], [ b[ 0 ], bottom, b[ 1 ] ] ];
 			const uv = [ [ 0, bottom ], [ 0, top ], [ length, top ], [ length, bottom ] ];
 			for ( const vertex of [ 0, 1, 2, 0, 2, 3 ] ) {
 

@@ -1,6 +1,7 @@
 /** Geometry is cell-owned; materials and their maps belong to the factory. */
 export function releaseShell( cell ) {
 
+	cell.disposeModelInstances?.();
 	const geometries = new Set();
 	const materials = new Set();
 	cell.group.traverse( node => {
@@ -11,7 +12,7 @@ export function releaseShell( cell ) {
 	} );
 	for ( const pieces of cell.shellColliders?.values() ?? [] ) {
 
-		for ( const geometry of Array.isArray( pieces ) ? pieces : [ pieces ] ) geometries.add( geometry );
+		for ( const geometry of Array.isArray( pieces ) ? pieces : [ pieces ] ) if ( geometry ) geometries.add( geometry );
 
 	}
 	for ( const door of cell.doors ?? [] ) {

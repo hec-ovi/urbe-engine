@@ -29,9 +29,10 @@ export class ShellCatalog {
 			if ( previous && Math.abs( previous.top - floor.elevation ) > 1e-6 ) fail( id, 'noncontiguous authored storey heights' );
 			const material = floor.index === 0 ? blueprint.facade.groundMaterial ?? field : field;
 			const top = floor.elevation + floor.height;
-			if ( previous && sameOutline( previous.outline, floor.outline )
+			if ( previous && !previous.topOutline && !floor.topOutline && sameOutline( previous.outline, floor.outline )
 				&& previous.material.key === material.key && previous.material.variantId === material.variantId ) previous.top = top;
-			else bands.push( { bottom: floor.elevation, top, outline: floor.outline, material: { ...material } } );
+			else bands.push( { bottom: floor.elevation, top, outline: floor.outline,
+				...( floor.topOutline ? { topOutline: floor.topOutline } : {} ), material: { ...material } } );
 
 		}
 		if ( Math.abs( bands.at( - 1 ).top - blueprint.roof.elevation ) > 1e-6 ) fail( id, 'roof elevation differs from the final authored storey' );

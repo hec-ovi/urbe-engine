@@ -160,7 +160,7 @@ export class Neon {
 
 		for ( const light of blueprint.lights ?? [] ) {
 
-			if ( light.kind !== 'entrance' ) continue;
+			if ( light.kind !== 'entrance' && light.lumens === undefined ) continue;
 
 			const [ nx, nz ] = light.normal;
 
@@ -170,11 +170,11 @@ export class Neon {
 					light.position[ 1 ],
 					light.position[ 2 ] + nz * 0.4
 				),
-				color: kelvinColor( DOOR_KELVIN ),
-				lumens: DOOR_LUMENS,
-				range: DOOR_RANGE,
+				color: light.color ? new THREE.Color( light.color ) : kelvinColor( DOOR_KELVIN ),
+				lumens: light.lumens ?? DOOR_LUMENS,
+				range: light.range ?? DOOR_RANGE,
 				parcelId,
-				kind: 'entrance'
+				kind: light.kind === 'entrance' ? 'entrance' : 'facade'
 			} );
 
 		}

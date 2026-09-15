@@ -27,6 +27,7 @@
         "bottom": { "type": "number", "minimum": 0 },
         "top": { "type": "number", "exclusiveMinimum": 0 },
         "outline": { "$ref": "#/$defs/outline" },
+        "topOutline": { "$ref": "#/$defs/outline" },
         "material": { "$ref": "#/$defs/material" }
       }
     },

@@ -9,6 +9,7 @@ Building and door entries follow the [game contract](../CONTRACT.md). This contr
 - `StreetMarkings.build(atlas, networks, factory, resolver, mode, native=false)` returns a marking group. With `native:true`, the saved bundle owns ordinary paint and this builder retains highway paint only. Explicit `debug` or `glow` modes still show authoritative lane diagnostics.
 
 - [Stream schema](schema/interior-stream.d.ts): constructor ports, registration, player feet and callbacks.
+- `BuildingsLoader(factory, loader?, options?).load(buildings)` also consumes optional Exterior `modelInstances`, with [building model settings and outputs](schema/building-models.d.ts). The [asset mapping](building-models.json) chooses installed Props catalog models for each vegetation kind.
 - Floor documents follow [Interior's floor schema](../../../../interior/schemas/floor.schema.json), with the floor's `glbUrl` added by WorldSource.
 - Worker geometry and source materials follow the [cut schema](schema/interior-cut.d.ts).
 - `StreetLamps(atlas, factory, walk?)` takes the Game contract's Atlas world, material factory and optional Connections walk graph. `.stream(options?)` follows the [street fixture schema](schema/street-fixtures.d.ts).
@@ -16,6 +17,10 @@ Building and door entries follow the [game contract](../CONTRACT.md). This contr
 ## Output
 
 An Exterior opening with `scenery` references its authored `scenery:<floor>` GLB node. Closed shells render those nodes with their published materials and skip generated room replacements for those openings. Buildings selected for real interiors omit the scenic nodes. Scenic geometry creates no collision; paired cladding remains solid shell geometry.
+
+Optional facade accent light color, flux and range override entrance defaults. Opaque black glazing, garden concrete, corporate panels, ivory panels, facade chrome and cast exterior concrete retain shell collision. Authored scenery and imported plant instances stay outside that collision path regardless of material.
+
+Building vegetation preserves imported geometry, textures and proportions, with its original root at the authored position and yaw. Uniform scaling fits the whole model inside its local size box. Material parts are instanced per source model in each loaded shell group. These decorative plants add no collision. Pine supplies tall planting requested as ornamental trees or palms; scaled maple supplies shrubs. A null asset mapping omits that kind and reports it in `unresolvedModelInstances`. Configured assets that fail loading reject with `E_PROP_ASSET`; malformed placements or unknown configured assets reject with `E_BUILDING_MODEL`. Cell release calls `disposeModelInstances()` to release instance buffers, source geometry, materials and images after admission has settled.
 
 Optional `scenery.lights` entries publish actual fixture positions, colors, lumens and finite ranges. Neon passes them into the shared CityLights pool for closed shells. Opening IDs identify their sources; dark rooms emit zero lumens. Source positions and fixture geometry share one placement calculation.
 
@@ -33,4 +38,4 @@ Street fixtures belong to exactly one half-open cell by their final mounting pos
 
 ## Dependencies
 
-[Game](../CONTRACT.md), [Interior](../../../../interior/CONTRACT.md), [material factory](../../building/CONTRACT.md), [Light](../light/CONTRACT.md), [Look](../look/CONTRACT.md), [Physics](../physics/CONTRACT.md).
+[Game](../CONTRACT.md), [Interior](../../../../interior/CONTRACT.md), [Props asset loader](../props/CONTRACT.md), [material factory](../../building/CONTRACT.md), [Light](../light/CONTRACT.md), [Look](../look/CONTRACT.md), [Physics](../physics/CONTRACT.md).

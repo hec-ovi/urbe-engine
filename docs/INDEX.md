@@ -25,7 +25,7 @@
 | `ground/materials` | Native street shading from authored Materials effects and texture resources | [Contract](../src/game/ground/materials/CONTRACT.md), [ports](../src/game/ground/materials/schema/ports.d.ts) |
 | `ground/native` | Read saved street bundles, verify their source identity and select retained ground | [Contract](../src/game/ground/native/CONTRACT.md), [ports](../src/game/ground/native/schema/ports.d.ts) |
 | `ground/native-stream` | Stream original native street GLBs and their physical triangles | [Contract](../src/game/ground/native-stream/CONTRACT.md), [stream](../src/game/ground/schema/stream.d.ts) |
-| `city` | Exterior shells, Interior floors, doors, scenic rooms and fixtures | [Contract](../src/game/city/CONTRACT.md), [floor stream](../src/game/city/schema/interior-stream.d.ts), [fixture stream](../src/game/city/schema/street-fixtures.d.ts) |
+| `city` | Exterior shells, Interior floors, doors, scenic rooms and fixtures; building vegetation uses the Props asset loader | [Contract](../src/game/city/CONTRACT.md), [floor stream](../src/game/city/schema/interior-stream.d.ts), [fixture stream](../src/game/city/schema/street-fixtures.d.ts), [building models](../src/game/city/schema/building-models.d.ts) |
 | `city/streaming` | Nearby original shells and source-derived skyline | [Contract](../src/game/city/streaming/CONTRACT.md), [ports](../src/game/city/streaming/schema/stream.d.ts) |
 | `props` | Source land/model placements with Ground clearance and Physics | [Contract](../src/game/props/CONTRACT.md), [stream](../src/game/props/stream.d.ts) |
 | `links` | Connection geometry and materials | [Contract](../src/game/links/CONTRACT.md) |
@@ -43,6 +43,8 @@
 | `persistence` | Coherent live state and acknowledged Library revisions | [Contract and schemas](../src/game/persistence/CONTRACT.md) |
 | `debug` | Frame/subsystem timing and renderer allocation reports | [Contract](../src/game/debug/CONTRACT.md), [report](../src/game/debug/report.schema.json) |
 | `time`, `world`, `talk` | Host clock, spatial queries, map values and text transport | [Game](../src/game/CONTRACT.md), [talk request](../src/server/schema/talk-request.schema.json), [reply](../src/server/schema/talk-response.schema.json) |
+
+Catalogs preserve tapered upper outlines for distant rendering; authored podium lights and reflective black glazing use their source properties.
 
 ## Previews
 

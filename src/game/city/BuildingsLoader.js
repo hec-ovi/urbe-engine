@@ -7,6 +7,7 @@ import { takeTriangles, centroidAt } from './Triangles.js';
 import { kelvinColor } from '../light/Color.js';
 import { bucketFor, splitBucket, variantFor } from './Variety.js';
 import { ScenicSurface } from './ScenicSurface.js';
+import { BuildingModels } from './BuildingModels.js';
 
 // The GLB names its nodes `merged:<key>` and `interior:<key>`, but GLTFLoader
 // runs node names through PropertyBinding.sanitizeNodeName, which strips the
@@ -39,6 +40,8 @@ const COLLIDER_KINDS = new Set( [
 	'concrete-monolith', 'concrete-large-panel',
 	'paired-cladding',
 	'paired-cladding-metal', 'paired-window-glass',
+	'paired-window-black', 'garden-concrete',
+	'corporate-panel', 'ivory-panel', 'facade-chrome', 'exterior-cast-concrete',
 	'window-glass-opaque', 'window-glass-office',
 	'floor-slab', 'roof', 'parapet', 'balcony-slab', 'balcony-rail',
 	'roof-artifact', 'ac-unit', 'metal'
@@ -60,10 +63,11 @@ const COLLIDER_KINDS = new Set( [
 export class BuildingsLoader {
 
 	/** @param factory PbrMaterialFactory */
-	constructor( factory, loader = new GLTFLoader() ) {
+	constructor( factory, loader = new GLTFLoader(), modelOptions = {} ) {
 
 		this.factory = factory;
 		this.loader = loader;
+		this.modelOptions = modelOptions;
 
 	}
 
@@ -72,6 +76,25 @@ export class BuildingsLoader {
 	 * @returns { group, doors, shellColliders, centers, triangles }
 	 */
 	async load( buildings ) {
+
+		const models = await new BuildingModels( url => this.loader.loadAsync( url ), this.modelOptions ).load( buildings );
+		try {
+
+			const city = await this.#loadShells( buildings );
+			if ( models.group.children.length ) city.group.add( models.group );
+			city.triangles += models.triangles;
+			return { ...city, unresolvedModelInstances: models.unresolved, disposeModelInstances: () => models.dispose() };
+
+		} catch ( error ) {
+
+			models.dispose();
+			throw error;
+
+		}
+
+	}
+
+	async #loadShells( buildings ) {
 
 		const loaded = await mapConcurrent(
 			[ ...buildings.values() ], LOAD_CONCURRENCY, ( entry ) => this.#loadOne( entry )

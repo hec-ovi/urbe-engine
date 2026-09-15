@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { BuildingsLoader } from './BuildingsLoader.js';
 import { Interactor } from '../player/Interactor.js';
+import { releaseShell } from './streaming/ReleaseShell.js';
 
 const factory = {
 	resolver: { resolve: () => null },
@@ -122,6 +123,45 @@ describe( 'building entrance availability', () => {
 
 		expect( city.group.children ).toHaveLength( 7 );
 		expect( city.shellColliders.get( 'p0' ).getAttribute( 'position' ).count ).toBe( 15 );
+
+	} );
+
+	it( 'keeps family walls solid while structural-looking scenery and imported trees remain decorative', async () => {
+
+		const kinds = [ 'corporate-panel', 'ivory-panel', 'facade-chrome', 'exterior-cast-concrete', 'garden-concrete', 'paired-window-black' ];
+		const blueprint = boxBlueprint();
+		blueprint.modelInstances = [ { kind: 'ornamental-tree', position: [ 40, 0, 40 ], size: [ 2, 4, 2 ] } ];
+		const loader = { loadAsync: async url => {
+
+			const scene = new THREE.Group();
+			if ( url.startsWith( '/models/' ) ) {
+
+				const material = new THREE.MeshStandardMaterial( { name: 'cyberpunk/corporate-panel/mid' } );
+				scene.add( new THREE.Mesh( new THREE.BoxGeometry( 2, 4, 2 ).translate( 0, 2, 0 ), material ) );
+
+			} else {
+
+				kinds.forEach( ( kind, index ) => scene.add( mesh( `merged${kind}`, `cyberpunk/${kind}/mid`, index * 2 ) ) );
+				const scenery = new THREE.Group();
+				scenery.name = 'scenery1';
+				scenery.add( mesh( 'room', 'cyberpunk/corporate-panel/mid', 30 ) );
+				scene.add( scenery );
+
+			}
+			return { scene };
+
+		} };
+		const city = await new BuildingsLoader( factory, loader ).load( new Map( [ [ 'p0', {
+			parcelId: 'p0', blueprint, shellUrl: '/p0.glb', hasInterior: false
+		} ] ] ) );
+		const collider = city.shellColliders.get( 'p0' );
+		expect( collider.attributes.position.count ).toBe( kinds.length * 3 );
+		const actual = Array.from( collider.attributes.position.array );
+		const expected = kinds.flatMap( ( _, index ) => [ index * 2, 0, 0, index * 2 + 1, 0, 0, index * 2, 1, 0 ] );
+		expect( actual ).toEqual( expected );
+		expect( city.group.getObjectByName( 'shell:cyberpunk/corporate-panel/mid' ).geometry.attributes.position.count ).toBe( 6 );
+		expect( city.group.getObjectByName( 'building-model:pine:0' ) ).toBeTruthy();
+		releaseShell( city );
 
 	} );
 

@@ -29,6 +29,19 @@ function sources( ids ) {
 
 describe( 'completed-shell streaming catalog', () => {
 
+	it( 'retains authored upper outlines for tapered bands', async () => {
+		sources( [ 'p0' ] );
+		const blueprint = structuredClone( blueprints.p0 );
+		const floor = blueprint.floors.at( -1 );
+		const center = floor.outline.reduce( ( sum, p ) => [ sum[0] + p[0] / floor.outline.length, sum[1] + p[1] / floor.outline.length ], [0,0] );
+		floor.topOutline = floor.outline.map( p => [ center[0] + (p[0] - center[0]) * 0.9, center[1] + (p[1] - center[1]) * 0.9 ] );
+		blueprint.roof.outline = floor.topOutline;
+		writeFileSync( join( root, 'p0/p0.blueprint.json' ), JSON.stringify( blueprint ) );
+		const { catalog } = await collectShellArtifacts( root, [ 'p0' ], { seed: atlas.meta.seed } );
+		expect( validateShellCatalog( catalog ) ).toEqual( [] );
+		expect( catalog.buildings[0].bands.at(-1).topOutline ).toEqual( floor.topOutline );
+	} );
+
 	it( 'projects authored storeys, setbacks, roof and concrete bindings without retaining full blueprints', async () => {
 
 		const ids = [ 'p0', 'tower', 'p1' ];

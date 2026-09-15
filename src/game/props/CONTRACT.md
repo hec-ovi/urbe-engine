@@ -11,6 +11,7 @@ Takes authored city land and models, returns sparse street arrangements, ornamen
 - Materials [factory](../../building/CONTRACT.md): `build(key, variantId)`.
 - [Options](options.schema.json): optional `loadAsset(url) -> Promise<{scene}>` replaces GLTFLoader transport; `obstacles: [{footprint,bottom,top}]` reserves already-built fixture volumes. `replacedModuleOwnerIds` excludes exactly those Atlas owners from authored rail construction. Original Atlas land remains available for prop clearance; native street features enter through obstacle volumes.
 - [Catalog](catalog.json), [schema](catalog.schema.json): model sources, metre dimensions and materials. [Arrangements](arrangements.json), [schema](arrangements.schema.json): site frequency and supported delivery/refuse slots.
+- `new ImportedModels(loadAsset?).load(spec)` accepts one catalog asset and returns normalized `{geometry, material, tintable}` mesh parts. Tree origins stay at their authored root; every model rests at Y=0. Original maps remain attached. `dispose()` releases all loaded geometry, cloned/source materials, maps and decoded images; callers await pending loads first. The [asset-loader schema](asset-loader.d.ts) defines these ports.
 
 ## Output
 
