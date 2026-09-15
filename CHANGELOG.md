@@ -1,5 +1,7 @@
 # Changelog
 
+0.18.0: shell geometry batches preserve material bindings and per-surface lighting requirements.
+
 0.18.0: tapered shell skylines, authored facade lights, reflective glazing and imported entrance planting.
 
 0.18.0: source-bound native Streets generation, original GLB and material streaming with physical collision, preserved highway and station rendering, and 4 m clear exterior floor allocation.

@@ -8,6 +8,7 @@ import { kelvinColor } from '../light/Color.js';
 import { bucketFor, splitBucket, variantFor } from './Variety.js';
 import { ScenicSurface } from './ScenicSurface.js';
 import { BuildingModels } from './BuildingModels.js';
+import { ShellBatches } from './ShellBatches.js';
 
 // The GLB names its nodes `merged:<key>` and `interior:<key>`, but GLTFLoader
 // runs node names through PropertyBinding.sanitizeNodeName, which strips the
@@ -48,17 +49,9 @@ const COLLIDER_KINDS = new Set( [
 ] );
 
 /**
- * Every building's shell, loaded once for the whole city: the skyline is
- * visible from everywhere, so it is one merge by material key and one draw
- * call per key.
- *
- * The shell comes from the parcel's own exterior GLB, which is under a
- * megabyte, and not from the furnished interior GLB, which is tens of them and
- * carries the identical shell. Interiors stream separately and only near the
- * player (InteriorStream).
- *
- * An operable leaf retains its authored node identity and closed-pose origin.
- * Exterior meshes arrive without normals, so they get them.
+ * Loads the requested original shells, merging compatible material and shading
+ * batches. Moving leaves keep their authored identities and closed-pose origins.
+ * Furnished interiors load separately through InteriorStream.
  */
 export class BuildingsLoader {
 
@@ -103,7 +96,7 @@ export class BuildingsLoader {
 		const group = new THREE.Group();
 		group.name = 'city';
 
-		const shellByKey = new Map();
+		const shellBatches = new ShellBatches();
 		const doors = [];
 		const entrances = [];
 		const unsupportedDoors = [];
@@ -123,8 +116,7 @@ export class BuildingsLoader {
 				const bucket = bucketFor( key, authoredVariant ?? variantFor(
 					this.factory.resolver.resolve( key ), building.parcelId, this.factory.patternVariants
 				), doubleSided );
-				if ( ! shellByKey.has( bucket ) ) shellByKey.set( bucket, [] );
-				shellByKey.get( bucket ).push( ...geometries );
+				shellBatches.add( bucket, geometries );
 
 			}
 
@@ -143,13 +135,13 @@ export class BuildingsLoader {
 		}
 
 		let sliceStarted = performance.now();
-		for ( const [ key, geometries ] of shellByKey ) {
+		for ( const { key, scenic, geometries } of shellBatches.values() ) {
 
 			const merged = BufferGeometryUtils.mergeGeometries( geometries, false );
 			geometries.forEach( ( g ) => g.dispose() );
 			triangles += merged.getAttribute( 'position' ).count / 3;
 			const baseMaterial = this.#material( key );
-			const mesh = new THREE.Mesh( merged, merged.hasAttribute( 'scenicRadiance' ) ? ScenicSurface.material( baseMaterial ) : baseMaterial );
+			const mesh = new THREE.Mesh( merged, scenic ? ScenicSurface.material( baseMaterial ) : baseMaterial );
 			mesh.name = `shell:${key}`;
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
