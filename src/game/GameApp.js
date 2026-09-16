@@ -253,7 +253,7 @@ export class GameApp {
 		const links = new Links( connections, factory, rooftopSpans ).build();
 		const props = this.propsStream = await new Dressing( atlas, connections.networks.walk, factory, {
 			replacedModuleOwnerIds: nativeStreets?.manifest.ground.replacements.moduleOwnerIds ?? [],
-			obstacles: [ ...DressingObstacles.fromPosts( lamps.posts ), ...( nativeStreets?.manifest.features ?? [] ).map( feature => ( {
+			obstacles: [ ...DressingObstacles.fromPosts( lamps.posts ), ...( nativeStreets?.manifest.features ?? [] ).filter( feature => feature.kind !== 'tree-grate' ).map( feature => ( {
 				footprint: feature.footprint, bottom: feature.bounds.min[ 1 ], top: feature.bounds.max[ 1 ]
 			} ) ) ]
 		} ).stream();

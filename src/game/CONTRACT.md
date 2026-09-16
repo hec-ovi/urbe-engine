@@ -59,3 +59,5 @@ General unresolved material keys render magenta and are counted; bound mission a
 ## Dependencies
 
 [Atlas](../../../atlas/CONTRACT.md), [Connections](../../../connections/CONTRACT.md), [Exterior](../../../exterior/CONTRACT.md), [Interior](../../../interior/CONTRACT.md), [Materials](../../../materials/CONTRACT.md), [Simulation](../../../simulation/CONTRACT.md), [Naming](../../../naming/CONTRACT.md), [Quests](../../../quests/CONTRACT.md), [Assembly](../assembly/CONTRACT.md), [Library](../library/CONTRACT.md) and the runtime interfaces above.
+
+Native tree-grate receivers share Atlas median tree anchors with Props. Their bodies remain in native collision; dressing admission permits their matching tree to occupy the receiver.
