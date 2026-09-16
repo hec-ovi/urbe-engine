@@ -7,7 +7,8 @@ import { seedOf } from './Placement.js';
 export class Sites {
 	constructor( atlas ) { this.atlas = atlas; }
 	all() {
-		const trees = ( this.atlas.streets.planting ?? [] ).filter( point => point.kind === 'tree' ).map( ( point, i ) => ( { id: `tree:${point.edgeId}:${i}`, kind: 'tree', x: point.position[ 0 ], z: point.position[ 1 ], nx: 0, nz: 1 } ) );
+		const medianTrees = ( this.atlas.streets.construction?.medians ?? [] ).flatMap( median => median.ornaments.filter( item => item.kind === 'tree' ).map( item => ( { ...item, edgeId: median.edgeId } ) ) );
+		const trees = [ ...( this.atlas.streets.planting ?? [] ), ...medianTrees ].filter( point => point.kind === 'tree' ).map( ( point, i ) => ( { id: `tree:${point.edgeId}:${i}`, kind: 'tree', x: point.position[ 0 ], z: point.position[ 1 ], nx: 0, nz: 1 } ) );
 		const facades = new SpatialIndex(), yards = [], pockets = [];
 		for ( const parcel of this.atlas.parcels ) for ( let i = 0; i < parcel.footprint.length; i ++ ) {
 			const a = parcel.footprint[ i ], b = parcel.footprint[ ( i + 1 ) % parcel.footprint.length ];
