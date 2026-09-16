@@ -53,6 +53,23 @@ describe( 'POST /api/building', () => {
 
 	} );
 
+	it( 'reuses the authored exterior in a nested saved-game folder', async () => {
+
+		const { service, builds } = fixture();
+		const parcelDir = join( root, 'out', 'games', 'review', 'p136' );
+		mkdirSync( parcelDir, { recursive: true } );
+		writeFileSync( join( parcelDir, 'p136.blueprint.json' ), '{}' );
+		writeFileSync( join( parcelDir, 'p136.glb' ), 'authored shell' );
+		const origin = await serve( service );
+
+		const result = await post( origin, { parcel: 'p136', out: '/out/games/review', source: 'shell' } );
+
+		expect( result.status ).toBe( 200 );
+		expect( result.body ).toEqual( { parcel: 'p136', out: '/out/games/review', source: 'shell', built: false } );
+		expect( builds ).toEqual( [] );
+
+	} );
+
 	it( 'returns closed visible errors for absent worlds, parcels and malformed input', async () => {
 
 		const { service } = fixture();
@@ -69,6 +86,10 @@ describe( 'POST /api/building', () => {
 		const invalid = await post( origin, { parcel: '../p136', out: '/out/urbe' } );
 		expect( invalid.status ).toBe( 400 );
 		expect( invalid.body.code ).toBe( 'E_INVALID_REQUEST' );
+
+		const traversal = await post( origin, { parcel: 'p136', out: '/out/games/../urbe' } );
+		expect( traversal.status ).toBe( 400 );
+		expect( traversal.body.code ).toBe( 'E_INVALID_REQUEST' );
 
 		const malformed = await fetch( `${origin}/api/building`, { method: 'POST', body: '{' } );
 		expect( malformed.status ).toBe( 400 );
