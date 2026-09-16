@@ -49,6 +49,14 @@ export class StreetLampPlan {
 			this.records.push( { id: `lamp:${this.records.length}`, kind: 'post', ...spot, post, glow } );
 			this.posts.push( post ); this.glows.push( glow );
 		};
+		for ( const median of this.atlas.streets.construction?.medians ?? [] ) {
+			const edge = this.atlas.streets.edges.find( value => value.id === median.edgeId );
+			const a = edge.path[ 0 ], b = edge.path.at( - 1 ), length = Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ] );
+			for ( const point of median.ornaments ) if ( point.kind === 'pole' ) {
+				accept( { x: point.position[ 0 ], z: point.position[ 1 ], ax: -( b[ 1 ] - a[ 1 ] ) / length, az: ( b[ 0 ] - a[ 0 ] ) / length } );
+				yield;
+			}
+		}
 		for ( const spot of this.#alongStreets() ) {
 			if ( ! plazas.near( spot.x, spot.z ).some( ring => pointInRing( spot.x, spot.z, ring ) ) ) accept( spot );
 			yield;
@@ -84,10 +92,11 @@ export class StreetLampPlan {
 
 				const side = i % 2 ? - 1 : 1;
 				// samplePath's normal points right of the directed route.
-				const bands = edge.crossSection?.sidewalks[ side > 0 ? 'right' : 'left' ].bands;
+				const section = edge.crossSection?.sidewalks[ side > 0 ? 'right' : 'left' ];
+				const bands = section?.bands;
 				if ( bands && bands.furnishing < POLE_COLLIDER_RADIUS * 2 ) continue;
 				const offset = edge.width / 2 + ( bands
-					? bands.curb + bands.border + bands.furnishing / 2
+					? ( section.geometry?.edge.gutter.width ?? 0 ) + bands.curb + bands.border + bands.furnishing / 2
 					: Math.max( 1.1, ( edge.sidewalk?.left ?? 2.5 ) * 0.45 ) );
 
 				yield {

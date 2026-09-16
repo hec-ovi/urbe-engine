@@ -25,7 +25,7 @@ export class StreetLampClearance {
 
 		const { atlas, walk } = this.source;
 		for ( const building of atlas.volumetric.buildings ) { this.buildings.add( building, building.footprint ); yield; }
-		for ( const item of atlas.streets.planting ) { if ( item.kind === 'tree' ) this.trees.add( item, [ item.position ] ); yield; }
+		for ( const item of [ ...atlas.streets.planting, ...( atlas.streets.construction?.medians ?? [] ).flatMap( median => median.ornaments ) ] ) { if ( item.kind === 'tree' ) this.trees.add( item, [ item.position ] ); yield; }
 		for ( const highway of atlas.streets.highwayStructures ) {
 			this.highways.add( highway, [ ...highway.path, ...highway.supports.flatMap( support => support.footprint ) ], highway.width / 2 );
 			yield;
