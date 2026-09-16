@@ -9,6 +9,7 @@ import { parking } from './effects/parking.js';
 import { roadPaint } from './effects/roadPaint.js';
 import { decal } from './effects/decal.js';
 import { solid } from './effects/solid.js';
+import { display } from './effects/display.js';
 
 export const EFFECTS = { asphalt, photographed, polished, mineral, 'metal-panel': metalPanel,
-	hardware, 'cast-concrete': castConcrete, parking, 'road-paint': roadPaint, decal, solid };
+	hardware, 'cast-concrete': castConcrete, parking, 'road-paint': roadPaint, decal, solid, display };
