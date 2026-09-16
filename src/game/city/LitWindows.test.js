@@ -24,6 +24,25 @@ function fixture( { hasInterior = false, seed = 'night', outline = [ [ 0, 0 ], [
 
 describe( 'shell window rooms', () => {
 
+	it( 'measures its one metre depth from the glazing instead of the shell lining', () => {
+
+		const { windows, floor, buildings } = fixture();
+		buildings.get( 'shell' ).blueprint.facade.wallDepth = 4;
+		floor.openings = [ { ...floor.openings[ 0 ], glazing: {
+			offset: 0.65, width: 1.8, sill: 0.8, height: 2, glassDepth: 0.2, housingBackDepth: 0.29
+		} } ];
+		const depths = windows.build().children.flatMap( mesh => {
+
+			const positions = mesh.geometry.getAttribute( 'position' );
+			return Array.from( { length: positions.count }, ( _, i ) => positions.getZ( i ) );
+
+		} );
+		expect( Math.min( ...depths ) ).toBeCloseTo( 0.2 );
+		expect( Math.max( ...depths ) ).toBeCloseTo( 1.2 );
+		windows.dispose();
+
+	} );
+
 	it( 'uses authored exterior room nodes without generating a second room', () => {
 
 		const { windows, floor, factory } = fixture();
@@ -58,8 +77,8 @@ describe( 'shell window rooms', () => {
 			for ( let i = 0; i < p.count; i ++ ) {
 
 				expect( pointInRing( p.getX( i ), p.getZ( i ), floor.outline ) ).toBe( true );
-				expect( p.getZ( i ) ).toBeGreaterThanOrEqual( 0.6 );
-				expect( p.getZ( i ) ).toBeLessThanOrEqual( 3.21 );
+						expect( p.getZ( i ) ).toBeGreaterThanOrEqual( 0.55 - 1e-6 );
+						expect( p.getZ( i ) ).toBeLessThanOrEqual( 1.55 + 1e-6 );
 				expect( p.getY( i ) ).toBeGreaterThan( floor.elevation );
 				expect( p.getY( i ) ).toBeLessThan( floor.elevation + floor.height );
 

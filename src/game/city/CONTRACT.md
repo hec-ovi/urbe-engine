@@ -18,6 +18,8 @@ Building and door entries follow the [game contract](../CONTRACT.md). This contr
 
 An Exterior opening with `scenery` references its authored `scenery:<floor>` GLB node. Closed shells render those nodes with their published materials and skip generated room replacements for those openings. Buildings selected for real interiors omit the scenic nodes. Scenic geometry creates no collision; paired cladding remains solid shell geometry.
 
+Fallback window scenes use one rectangular box per window, one metre deep behind the published glazing plane, with one rear image and ceiling lighting. Unfittable boxes are omitted. Window dimensions remain unchanged.
+
 Optional facade accent light color, flux and range override entrance defaults. Opaque black glazing, garden concrete, corporate panels, ivory panels, facade chrome and cast exterior concrete retain shell collision. Authored scenery and imported plant instances stay outside that collision path regardless of material.
 
 Building vegetation preserves imported geometry, textures and proportions, with its original root at the authored position and yaw. Uniform scaling fits the whole model inside its local size box. Material parts are instanced per source model in each loaded shell group. These decorative plants add no collision. Pine supplies tall planting requested as ornamental trees or palms; scaled maple supplies shrubs. A null asset mapping omits that kind and reports it in `unresolvedModelInstances`. Configured assets that fail loading reject with `E_PROP_ASSET`; malformed placements or unknown configured assets reject with `E_BUILDING_MODEL`. Cell release calls `disposeModelInstances()` to release instance buffers, source geometry, materials and images after admission has settled.

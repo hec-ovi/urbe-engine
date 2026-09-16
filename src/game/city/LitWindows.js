@@ -3,7 +3,7 @@ import { attribute, texture, vec3 } from 'three/tsl';
 import { Rng } from '../../city/Rng.js';
 import { nightLevel } from '../light/NightSwitch.js';
 import { openingRect } from './Openings.js';
-import { windowBay, windowRects, appendBay } from './WindowBay.js';
+import { windowBay, appendBay } from './WindowBay.js';
 import roomBindings from '../../../../materials/bindings/window-room-surfaces.json';
 
 const LIT_SHARE = 0.42;
@@ -61,20 +61,17 @@ export class LitWindows {
 					const rect = openingRect( floor, opening.glazing ? { ...opening, ...opening.glazing } : opening );
 					if ( ! rect ) continue;
 					rect.housingBackDepth = opening.glazing?.housingBackDepth;
-					for ( const [ index, roomRect ] of windowRects( rect ).entries() ) {
-
-						const seed = `${this.atlas.meta?.seed ?? ''}:${parcel.id}:${floor.elevation}:${opening.id ?? `${opening.edge}:${opening.offset}`}`;
-						const rng = new Rng( hash( index ? `${seed}:bay:${index}` : seed ) );
-						const bay = windowBay( floor, roomRect, building.blueprint.facade?.wallDepth ?? 0.5, occupied );
-						if ( ! bay ) continue;
-						occupied.push( bay.footprint );
-						const lit = rng.next() < LIT_SHARE;
-						const color = new THREE.Color( domestic ? 0xffd7b0 : 0xe4edff );
-						const level = lit ? rng.range( 8, 16 ) : 0;
-						const back = binding.backPool[ Math.floor( rng.next() * binding.backPool.length ) ];
-						appendBay( bay, ( role ) => surfaceFor( role, binding, back, lit ), fixtures, color, level, lit );
-
-					}
+					rect.glassDepth = opening.glazing?.glassDepth;
+					const seed = `${this.atlas.meta?.seed ?? ''}:${parcel.id}:${floor.elevation}:${opening.id ?? `${opening.edge}:${opening.offset}`}`;
+					const rng = new Rng( hash( seed ) );
+					const bay = windowBay( floor, rect, building.blueprint.facade?.wallDepth ?? 0.5, occupied );
+					if ( ! bay ) continue;
+					occupied.push( bay.footprint );
+					const lit = rng.next() < LIT_SHARE;
+					const color = new THREE.Color( domestic ? 0xffd7b0 : 0xe4edff );
+					const level = lit ? rng.range( 8, 16 ) : 0;
+					const back = binding.backPool[ Math.floor( rng.next() * binding.backPool.length ) ];
+					appendBay( bay, ( role ) => surfaceFor( role, binding, back, lit ), fixtures, color, level, lit );
 
 				}
 

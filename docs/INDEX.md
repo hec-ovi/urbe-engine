@@ -51,6 +51,7 @@ Catalogs preserve tapered upper outlines for distant rendering; authored podium 
 The building route accepts output folders under `/out`, including nested city and saved-game catalogs, and reuses their existing models.
 
 City preserves Exterior-authored scenic nodes on closed shells and uses opening metadata to avoid duplicate room geometry.
+Fallback window scenes are rectangular, one metre deep, with one rear image and ceiling lighting.
 Authored scenic fixtures feed the existing fixed light pool through `city/ScenicLights.js`.
 Scenic receiver surfaces bake fixture illumination once through `city/ScenicSurface.js`; camera movement does not select their illumination. Shell batches group material bindings by receiver shading, preserving ordinary surfaces that share those materials. Light slots use stable assignments and half-second handoffs.
 
