@@ -1,5 +1,7 @@
 # Changelog
 
+0.19.0: Atlas district streets, emissive parking and marquee surfaces, median trees and street fixtures.
+
 0.18.0: shell geometry batches preserve material bindings and per-surface lighting requirements.
 
 0.18.0: tapered shell skylines, authored facade lights, reflective glazing and imported entrance planting.
