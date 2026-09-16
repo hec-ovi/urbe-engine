@@ -24,4 +24,4 @@ Loads a saved street manifest and its verified asset bytes for Game.
 
 ## Dependencies
 
-Streets native request/result contract; Atlas blueprint 0.22.0 or 0.23.0 with reservations 1.0.0; browser fetch and Web Crypto. This box creates no renderer or geometry.
+Streets native request/result contract; Atlas blueprint 0.22.0, 0.23.0 or 0.24.0 with reservations 1.0.0; browser fetch and Web Crypto. This box creates no renderer or geometry.
