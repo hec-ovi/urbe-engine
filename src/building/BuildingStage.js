@@ -13,7 +13,8 @@ const GROUND_COLOR = 0x2c3036;
  */
 export class BuildingStage {
 
-	static build( boundingBox, domElement, onLockChange = null ) {
+	/** @param facing which way the building's entrance looks, when it has one */
+	static build( boundingBox, domElement, { facing = null, onLockChange = null } = {} ) {
 
 		const size = boundingBox.getSize( new THREE.Vector3() );
 		const center = boundingBox.getCenter( new THREE.Vector3() );
@@ -34,10 +35,14 @@ export class BuildingStage {
 		// and tiled detail read at the scale they read at in the game.
 		const aspect = window.innerWidth / window.innerHeight;
 		const camera = new THREE.PerspectiveCamera( LOOK.fov, aspect, LOOK.near, LOOK.far );
-		// Standing off a corner at a quarter of the building's height: a facade
-		// is judged from in front of it, not from above its roof.
+		// Off the corner of the face the entrance looks out of, at a quarter of
+		// the building's height: that is the side the street lights, and a
+		// facade is judged from in front of it rather than from above its roof.
 		const standoff = fitDistance( size, aspect, LOOK.fov );
-		camera.position.set( center.x + standoff * 0.7, center.y + size.y * 0.25, center.z + standoff * 0.7 );
+		const view = quarterTurn( facing ?? new THREE.Vector3( 1, 0, 1 ).normalize() );
+		camera.position.set(
+			center.x + view.x * standoff, center.y + size.y * 0.25, center.z + view.z * standoff
+		);
 
 		const controls = new FlyCamera( camera, domElement, onLockChange );
 		controls.lookAt( center );
@@ -45,6 +50,19 @@ export class BuildingStage {
 		return { scene, camera, controls };
 
 	}
+
+}
+
+/** Swung a quarter turn off dead ahead, so the frame carries two faces. */
+function quarterTurn( direction ) {
+
+	const turn = Math.PI / 8;
+
+	return new THREE.Vector3(
+		direction.x * Math.cos( turn ) - direction.z * Math.sin( turn ),
+		0,
+		direction.x * Math.sin( turn ) + direction.z * Math.cos( turn )
+	).normalize();
 
 }
 

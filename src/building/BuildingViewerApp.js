@@ -141,11 +141,10 @@ export class BuildingViewerApp {
 		this.#dressSurfaces( building, { factory, blueprint, parcel, hasInterior } );
 
 		const bounds = new THREE.Box3().setFromObject( building );
-		const stage = BuildingStage.build(
-			bounds,
-			this.renderer.domElement,
-			( captured, failed ) => this.view.setCameraCaptured( captured, failed )
-		);
+		const stage = BuildingStage.build( bounds, this.renderer.domElement, {
+			facing: facadeNormal( blueprint ),
+			onLockChange: ( captured, failed ) => this.view.setCameraCaptured( captured, failed )
+		} );
 		stage.scene.add( building );
 		Object.assign( this, stage ); // scene, camera, controls
 
@@ -266,6 +265,16 @@ export class BuildingViewerApp {
 		this.renderer.setSize( window.innerWidth, window.innerHeight );
 
 	}
+
+}
+
+/** Which way the building looks out: where Exterior put its entrance or its sign. */
+function facadeNormal( blueprint ) {
+
+	const normal = ( blueprint.lights ?? [] ).find( ( light ) => light.kind === 'entrance' )?.normal
+		?? blueprint.signage?.[ 0 ]?.normal;
+
+	return normal ? new THREE.Vector3( normal[ 0 ], 0, normal[ 1 ] ).normalize() : null;
 
 }
 
