@@ -31,7 +31,6 @@ describe( 'QualityTier', () => {
 			.toEqual( [ 'basecolor', 'normal', 'roughness', 'metallic', 'ao', 'emission' ] );
 		expect( low.textureMaxSize ).toBe( 1024 );
 		expect( low.textureMaxSize ).toBeLessThan( ultra.textureMaxSize );
-		expect( low.materialVariants ).toBeLessThan( ultra.materialVariants );
 		expect( low.textureAnisotropy ).toBeLessThan( ultra.textureAnisotropy );
 		expect( low.probeSize ).toBe( 0 );
 

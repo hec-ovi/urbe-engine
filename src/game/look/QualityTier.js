@@ -15,7 +15,6 @@ const PRESETS = {
 		probeSize: 0,
 		probeInterval: 120,
 		materialMaps: MATERIAL_MAPS,
-		materialVariants: 2,
 		textureAnisotropy: 2
 	},
 	medium: {
@@ -30,7 +29,6 @@ const PRESETS = {
 		probeSize: 64,
 		probeInterval: 90,
 		materialMaps: MATERIAL_MAPS,
-		materialVariants: 4,
 		textureAnisotropy: 4
 	},
 	high: {
@@ -45,7 +43,6 @@ const PRESETS = {
 		probeSize: 64,
 		probeInterval: 60,
 		materialMaps: MATERIAL_MAPS,
-		materialVariants: 6,
 		textureAnisotropy: 8
 	},
 	ultra: {
@@ -60,7 +57,6 @@ const PRESETS = {
 		probeSize: 128,
 		probeInterval: 40,
 		materialMaps: MATERIAL_MAPS,
-		materialVariants: 12,
 		textureAnisotropy: 8
 	}
 };

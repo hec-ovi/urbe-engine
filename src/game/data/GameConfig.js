@@ -1,11 +1,12 @@
 import { QualityTier } from '../look/QualityTier.js';
+import { LOOK } from '../look/LookSettings.js';
 
 const DEFAULTS = {
 	world: 'city-urbe-tiny',
 	out: '/out/city-tiny',
 	backend: 'webgpu',
-	startHour: 21,
-	lightingHour: 21,
+	startHour: LOOK.hour,
+	lightingHour: LOOK.hour,
 	timeScale: 1,
 	crowd: 0,
 	cars: 0,
@@ -13,11 +14,8 @@ const DEFAULTS = {
 	carRadius: 110,
 	stress: 0,
 	streetDensity: 1,
-	// Maps photometric levels to the luminance bands in ../look/CONTRACT.md.
-	exposure: 0.024,
-	// Street fog density per metre. The first block stays crisp; fog is what
-	// separates the skyline into planes past it.
-	fog: 0.0003
+	exposure: LOOK.exposure,
+	fog: LOOK.fog
 };
 
 const LANE_MODES = [ 'paint', 'glow', 'debug' ];

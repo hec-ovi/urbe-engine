@@ -4,7 +4,6 @@
   "type": "object",
   "properties": {
     "materialMaps": { "type": "array", "uniqueItems": true, "items": { "enum": ["basecolor", "normal", "roughness", "metallic", "ao", "emission"] } },
-    "materialVariants": { "type": "integer", "minimum": 1 },
     "textureAnisotropy": { "type": "number", "minimum": 1 },
     "textureMaxSize": { "type": "integer", "minimum": 1, "description": "Longest image edge in pixels. Omission keeps source resolution." }
   }

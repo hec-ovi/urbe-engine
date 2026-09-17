@@ -40,19 +40,14 @@ import { RoomView } from './city/RoomView.js';
 import { Venues } from './city/Venues.js';
 import { CityLights } from './light/CityLights.js';
 import { NightSwitch } from './light/NightSwitch.js';
-import { LightingSystem } from './light/LightingSystem.js';
+import { NightLook } from './look/NightLook.js';
+import { LOOK } from './look/LookSettings.js';
 import { RoomLights } from './light/RoomLights.js';
 import { Haze } from './light/Haze.js';
-import { QualityTier } from './look/QualityTier.js';
-import { Exposure } from './look/Exposure.js';
-import { NightFog } from './look/NightFog.js';
 import { HitchLog } from './debug/HitchLog.js';
 import { RenderWork } from './debug/RenderWork.js';
 import { FrameReports } from './debug/FrameReports.js';
-import { EnvironmentProbe } from './look/EnvironmentProbe.js';
-import { LookPipeline } from './look/LookPipeline.js';
 import { Warmup } from './look/Warmup.js';
-import { NightSky, SKY_COLOR } from './sky/NightSky.js';
 import { Physics, WorldColliders, DoorColliders, PlayerBody, BODY_RADIUS, ImpactWorld } from './physics/index.js';
 import { Input } from './player/Input.js';
 import { PlayerController } from './player/PlayerController.js';
@@ -80,8 +75,6 @@ const NPC_VISIBLE_RADIUS = 115;
 /** Air scattering is wide and weak indoors, tight and small on the street. */
 const INDOOR_HAZE = { spread: 0.55, cap: 3 };
 const OUTDOOR_HAZE = { spread: 0.28, cap: 2.4 };
-// A near plane this far out is still inside the player capsule, and it buys
-// the depth precision that keeps coplanar facade layers from flickering.
 /** The HUD panels and the key that opens each, as the tab bar labels them. */
 const PANEL_KEYS = [
 	[ 'KeyJ', 'QUESTS' ], [ 'KeyM', 'MAP' ], [ 'KeyI', 'INVENTORY' ],
@@ -110,8 +103,9 @@ const BINDINGS = [
 const STILL_RADIUS = 0.1;
 const STILL_SECONDS = 1;
 
-const NEAR_PLANE = 0.2;
-const FAR_PLANE = 900;
+/** The camera's depth range, which is also how far the world streams. */
+const NEAR_PLANE = LOOK.near;
+const FAR_PLANE = LOOK.far;
 
 /**
  * One playable run of the city: mode=game. Loads the assembled world, builds
@@ -194,16 +188,18 @@ export class GameApp {
 		// After init, because that is when the WebGPU-to-WebGL2 fallback has
 		// already happened and the tier is a choice about cost, not backend.
 		const backend = RendererFactory.actualBackend( this.renderer );
-		this.tier = QualityTier.describe( config.quality, backend );
 		this.stats.backend = backend;
-		if ( config.off.has( 'bloom' ) ) this.tier.bloom = { strength: 0, radius: 0 };
-		if ( config.off.has( 'haze' ) ) this.tier.haze = false;
-		this.lighting = LightingSystem.install( this.renderer, this.tier );
-		this.exposure = new Exposure( this.renderer, config.exposure );
+		this.look = NightLook.begin( this.renderer, {
+			quality: config.quality, backend, exposure: config.exposure,
+			bloom: ! config.off.has( 'bloom' ), haze: ! config.off.has( 'haze' )
+		} );
+		this.tier = this.look.tier;
+		this.lighting = this.look.lighting;
+		this.exposure = this.look.exposure;
 		document.body.prepend( this.renderer.domElement );
 
 		this.scene = new THREE.Scene();
-		this.camera = new THREE.PerspectiveCamera( 72, window.innerWidth / window.innerHeight, NEAR_PLANE, FAR_PLANE );
+		this.camera = new THREE.PerspectiveCamera( LOOK.fov, window.innerWidth / window.innerHeight, NEAR_PLANE, FAR_PLANE );
 
 		this.view.step( 'resolving materials' );
 		const resolver = new MaterialResolver();
@@ -289,17 +285,19 @@ export class GameApp {
 		this.#hangHaze( spatial ? [ ...lamps.glows, ...this.transit.glows ] : fixtures );
 
 		this.view.step( 'raising the sky' );
-		this.sky = new NightSky( this.scene ).build( config.lightingHour );
+		this.look.raise( this.scene, {
+			hour: config.lightingHour,
+			fog: config.off.has( 'fog' ) ? { density: 0, indoorDensity: 0 } : { density: config.fog },
+			probe: ! config.off.has( 'probe' ),
+			hitches: this.hitches
+		} );
+		this.sky = this.look.sky;
+		this.fog = this.look.fog;
+		this.probe = this.look.probe;
 		// Emitting surfaces share the scene's fixed night setting.
 		this.night = new NightSwitch( this.lights )
 			.addGroup( neon.group ).addGroup( lamps.group ).addGroup( city.group ).addGroup( this.transit.group ).addGroup( props.group );
 		if ( this.shellScene ) this.shellScene.night = this.night;
-		this.fog = new NightFog( this.scene, config.off.has( 'fog' )
-			? { density: 0, indoorDensity: 0, color: SKY_COLOR }
-			: { density: config.fog, color: SKY_COLOR } );
-		this.probe = config.off.has( 'probe' ) || this.tier.probeSize === 0
-			? null
-			: new EnvironmentProbe( this.renderer, this.scene, this.tier, this.hitches );
 		this.probe?.exclude( this.stream.group, props.group, this.transit.group );
 		if ( this.hydrology.group ) this.probe?.exclude( this.hydrology.group );
 
@@ -458,9 +456,9 @@ export class GameApp {
 		// Construct the scene pass before a WebGPU probe bake so its final
 		// material programs can be warmed against that render context.
 		this.view.step( 'warming the renderer' );
-		this.look = new LookPipeline( this.renderer, this.scene, this.camera, this.tier );
+		this.look.compose( this.camera );
 		this.floorWarmup = prepareInteriorStreaming(
-			this.stream, this.renderer, this.scene, this.camera, this.look.mrt, this.look.renderTarget
+			this.stream, this.renderer, this.scene, this.camera, this.look.pipeline.mrt, this.look.pipeline.renderTarget
 		);
 		if ( this.shellScene ) this.shellScene.warmup = this.floorWarmup;
 		if ( this.groundStream ) await this.groundStream.update( spawn.point, {
