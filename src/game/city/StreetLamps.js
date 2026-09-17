@@ -10,10 +10,21 @@ export class StreetLamps {
 
 	constructor( atlas, factory, walk = null ) { this.atlas = atlas; this.factory = factory; this.walk = walk; }
 
+	/**
+	 * Where this world's street fixtures stand and what they emit, planned
+	 * without building any of their models: `{ records, posts, glows }`.
+	 */
+	static plan( atlas, walk = null ) {
+
+		const plan = new StreetLampPlan( atlas, walk );
+		for ( const _ of plan.steps() ) { /* Complete source planning. */ }
+		return plan;
+
+	}
+
 	build() {
 
-		const plan = new StreetLampPlan( this.atlas, this.walk );
-		for ( const _ of plan.steps() ) { /* Complete source planning. */ }
+		const plan = StreetLamps.plan( this.atlas, this.walk );
 		const models = new StreetLampInstances( this.factory );
 		const group = models.build( plan.records );
 		group.name = 'lamps';

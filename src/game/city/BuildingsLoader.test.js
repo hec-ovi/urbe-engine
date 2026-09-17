@@ -211,7 +211,7 @@ describe( 'building entrance availability', () => {
 
 		} };
 		const build = vi.fn( () => new THREE.MeshBasicMaterial() );
-		const materialFactory = { ...factory, build, patternVariants: 1,
+		const materialFactory = { ...factory, build,
 			resolver: { resolve: () => ( { variants: [ { id: 'plain', class: 'pattern' }, { id: 'panel', class: 'pattern' } ] } ) }
 		};
 		const city = await new BuildingsLoader( materialFactory, loader ).load( new Map( [ [ 'p0', {

@@ -4,9 +4,9 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { doorFrames, doorLeafFrame } from './DoorGeometry.js';
 import { takeTriangles, centroidAt } from './Triangles.js';
-import { kelvinColor } from '../light/Color.js';
-import { bucketFor, splitBucket, variantFor } from './Variety.js';
+import { bucketFor, splitBucket } from './Variety.js';
 import { ScenicSurface } from './ScenicSurface.js';
+import { isSceneryNode, shellMaterial, shellScenery, shellVariant } from './ShellSurface.js';
 import { BuildingModels } from './BuildingModels.js';
 import { ShellBatches } from './ShellBatches.js';
 
@@ -21,16 +21,6 @@ export { INTERIOR_PREFIX, bake } from './GeometryBake.js';
 // `balcony:<id>/leaf:N`, with an authored closed-pose origin.
 const DOOR = 'door';
 const BALCONY = 'balcony';
-const GROUND_PRIVACY = 'ground-privacy';
-
-const FIXTURE = '/light-fixture/';
-/**
- * A lit diffuser is looked at directly, so it sits well above road exposure.
- * This is the level the night grade was tuned at, stated outright rather than
- * multiplied onto whatever strength the database authored the map with.
- */
-const FIXTURE_EMISSIVE = 180;
-const FIXTURE_KELVIN = 2700;
 const LOAD_CONCURRENCY = 8;
 const MAIN_THREAD_SLICE_MS = 8;
 // Only surfaces that can stop or support a person enter Rapier. Window frames,
@@ -111,11 +101,9 @@ export class BuildingsLoader {
 			for ( const [ surface, geometries ] of building.exterior ) {
 
 				const { key, variantId: authoredVariant, doubleSided } = splitBucket( surface );
-				// An authored surface keeps its exact look. Otherwise the building
-				// wears one seeded pattern variant of the material.
-				const bucket = bucketFor( key, authoredVariant ?? variantFor(
-					this.factory.resolver.resolve( key ), building.parcelId, this.factory.patternVariants
-				), doubleSided );
+				const bucket = bucketFor( key, shellVariant( this.factory, {
+					key, authored: authoredVariant, parcelId: building.parcelId
+				} ), doubleSided );
 				shellBatches.add( bucket, geometries );
 
 			}
@@ -140,7 +128,7 @@ export class BuildingsLoader {
 			const merged = BufferGeometryUtils.mergeGeometries( geometries, false );
 			geometries.forEach( ( g ) => g.dispose() );
 			triangles += merged.getAttribute( 'position' ).count / 3;
-			const baseMaterial = this.#material( key );
+			const baseMaterial = shellMaterial( this.factory, splitBucket( key ) );
 			const mesh = new THREE.Mesh( merged, scenic ? ScenicSurface.material( baseMaterial ) : baseMaterial );
 			mesh.name = `shell:${key}`;
 			mesh.castShadow = true;
@@ -156,25 +144,6 @@ export class BuildingsLoader {
 		}
 
 		return { group, doors, entrances, shellColliders, centers, triangles, unsupportedDoors };
-
-	}
-
-	/** The material for a merge bucket (key and the variant it wears); a lit diffuser reads as its own lamp. */
-	#material( bucket ) {
-
-		const { key, variantId, doubleSided } = splitBucket( bucket );
-		const side = doubleSided ? THREE.DoubleSide : undefined;
-
-		return key.includes( FIXTURE )
-			? this.factory.variant( key, {
-				variantId,
-				emissiveLevel: FIXTURE_EMISSIVE,
-				emissive: kelvinColor( FIXTURE_KELVIN ),
-				...( side !== undefined ? { side } : {} )
-			} )
-			: side === undefined
-				? this.factory.build( key, variantId )
-				: this.factory.variant( key, { variantId, side } );
 
 	}
 
@@ -204,16 +173,13 @@ export class BuildingsLoader {
 			const leafFrame = doorLeafFrame( node, frames );
 			const surface = bucketFor(
 				key,
-				node.material?.userData?.materialVariant ?? blueprint.materialVariants?.[ key ],
+				shellVariant( this.factory, { key, authored: node.material?.userData?.materialVariant, blueprint } ),
 				node.material?.side === THREE.DoubleSide
 			);
-			if ( isShellScenery( node ) ) {
+			if ( isSceneryNode( node ) ) {
 
-				if ( hasInterior === false ) {
-					const geometry = bake( node );
-					push( exterior, surface, ScenicSurface.supports( key )
-						? scenic.bake( geometry, key, this.factory.resolver.resolve( key )?.physical?.emissiveStrength ?? 1 ) : geometry );
-				}
+				const geometry = shellScenery( node, this.factory, { key, hasInterior, scenic } );
+				if ( geometry ) push( exterior, surface, geometry );
 				continue;
 
 			}
@@ -281,7 +247,7 @@ export class BuildingsLoader {
 		for ( const door of doors ) {
 
 			const parts = doorParts.get( door );
-			if ( parts.length ) attachLeaves( door, parts, ( key ) => this.#material( key ) );
+			if ( parts.length ) attachLeaves( door, parts, ( key ) => shellMaterial( this.factory, splitBucket( key ) ) );
 			door.motion.validateLeaves( door.pivots );
 
 		}
@@ -343,18 +309,6 @@ function isDoorMaterial( key ) {
 function isDoorLeaf( name ) {
 
 	return name.startsWith( DOOR ) || name.startsWith( BALCONY );
-
-}
-
-/** GLTF loaders may retain a shell scenery name on the parent of material meshes. */
-function isShellScenery( node ) {
-
-	for ( let current = node; current; current = current.parent ) {
-
-		if ( current.name?.startsWith( GROUND_PRIVACY ) || current.name?.startsWith( 'scenery' ) ) return true;
-
-	}
-	return false;
 
 }
 

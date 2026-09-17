@@ -13,10 +13,14 @@ Building and door entries follow the [game contract](../CONTRACT.md). This contr
 - Floor documents follow [Interior's floor schema](../../../../interior/schemas/floor.schema.json), with the floor's `glbUrl` added by WorldSource.
 - Worker geometry and source materials follow the [cut schema](schema/interior-cut.d.ts).
 - `StreetLamps(atlas, factory, walk?)` takes the Game contract's Atlas world, material factory and optional Connections walk graph. `.stream(options?)` follows the [street fixture schema](schema/street-fixtures.d.ts).
+- `ShellSurface.js` answers what one shell surface wears, for the city and the [building preview](../../building/CONTRACT.md) alike: `shellVariant(factory, {key, authored, blueprint, parcelId})`, `shellMaterial(factory, {key, variantId, doubleSided})`, `isSceneryNode(node)` and `shellScenery(node, factory, {key, hasInterior, scenic})`.
+- `ShellFixtures.js`: `shellGlows({parcelId, blueprint, hasInterior, rng?})` returns every fixture a building carries itself, in lumens, and `parcelSeed(parcelId)` is the seeded stream its signs are drawn from.
 
 ## Output
 
 An Exterior opening with `scenery` references its authored `scenery:<floor>` GLB node. Closed shells render those nodes with their published materials and skip generated room replacements for those openings. Buildings selected for real interiors omit the scenic nodes. Scenic geometry creates no collision; paired cladding remains solid shell geometry.
+
+A surface variant is the one authored on it, else the one its building published for that key, else the pattern seeded by its parcel. A key containing `/light-fixture/` is a lit diffuser: it is built at emissive level 180 at 2700 K instead of its catalog strength.
 
 Fallback window scenes use one rectangular box per window, one metre deep behind the published glazing plane, with one rear image and ceiling lighting. Unfittable boxes are omitted. Window dimensions remain unchanged.
 
