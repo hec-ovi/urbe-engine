@@ -1,9 +1,10 @@
 import { interiorCandidates } from './InteriorSelection.js';
+import { defaultWorkers } from './Parallelism.js';
 
 /** Parse the pair-based city CLI without allowing contradictory shell modes. */
 export function parseCityArgs( argv ) {
 
-	const args = { workers: 4, interiors: 5, parcels: null, reuseShells: false, interiorParcels: null };
+	const args = { workers: defaultWorkers(), interiors: 5, parcels: null, reuseShells: false, interiorParcels: null };
 
 	if ( argv.length % 2 !== 0 ) return null;
 	for ( let i = 0; i < argv.length; i += 2 ) {

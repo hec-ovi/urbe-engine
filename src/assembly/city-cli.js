@@ -43,18 +43,19 @@ if ( source.encoding !== 'json' ) throw new AssemblyError( 'E_STREETS_ARCHIVE_UN
 const { atlas } = source;
 const connections = await runConnections( atlas, { seed: atlas.meta.seed } );
 const connectionsArtifact = new ConnectionsArtifact( atlas, connections );
-const exterior = new ExteriorWorkers( args.workers );
-const pipeline = new BuildingPipeline( new RequestAssembler( atlas, connections ), { exterior } );
 const outDir = resolve( args.out );
 const out = new OutDir( outDir );
 
 const parcelIds = atlas.parcels.map( ( p ) => p.id );
 const stale = out.prune( atlas.parcels );
 const queue = args.reuseShells ? [] : parcelIds.filter( ( id ) => ! args.parcels || args.parcels.includes( id ) );
+const workers = Math.max( 1, Math.min( args.workers, queue.length || 1 ) );
+const exterior = new ExteriorWorkers( workers );
+const pipeline = new BuildingPipeline( new RequestAssembler( atlas, connections ), { exterior } );
 
 console.log( args.reuseShells
 	? `city ${atlas.meta.seed}: reusing ${parcelIds.length} shells`
-	: `city ${atlas.meta.seed}: ${queue.length} parcels, ${args.workers} workers` );
+	: `city ${atlas.meta.seed}: ${queue.length} parcels, ${workers} workers` );
 if ( stale.length ) console.log( `dropped ${stale.length} folders this blueprint no longer has: ${stale.join( ', ' )}` );
 
 const results = [];
@@ -103,7 +104,7 @@ async function worker() {
 
 }
 
-await Promise.all( Array.from( { length: args.workers }, worker ) );
+await Promise.all( Array.from( { length: workers }, worker ) );
 
 const shells = out.shells( parcelIds );
 

@@ -50,7 +50,7 @@ export class WorldCreation {
 			await this.run( 'npm', template.command( blueprint ), { cwd: this.atlasRoot } );
 			await this.run( 'npm', [
 				'run', 'assemble-city', '--', '--blueprint', blueprint, '--out', world,
-				'--workers', '4', '--interiors', '0'
+				'--interiors', '0'
 			], { cwd: this.engineRoot } );
 			const atlas = await json( join( world, 'blueprint.json' ), 'generated city blueprint' );
 			const manifest = await json( join( world, 'manifest.json' ), 'generated city manifest' );
