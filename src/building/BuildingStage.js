@@ -35,11 +35,12 @@ export class BuildingStage {
 		// and tiled detail read at the scale they read at in the game.
 		const aspect = window.innerWidth / window.innerHeight;
 		const camera = new THREE.PerspectiveCamera( LOOK.fov, aspect, LOOK.near, LOOK.far );
-		// Off the corner of the face the entrance looks out of, at a quarter of
-		// the building's height: that is the side the street lights, and a
-		// facade is judged from in front of it rather than from above its roof.
+		// In front of the face the entrance looks out of, swung far enough off it
+		// to carry a second face, at a quarter of the building's height: that is
+		// the side the street lights, and a facade is judged from in front of it
+		// rather than from above its roof.
 		const standoff = fitDistance( size, aspect, LOOK.fov );
-		const view = quarterTurn( facing ?? new THREE.Vector3( 1, 0, 1 ).normalize() );
+		const view = swungOff( facing ?? new THREE.Vector3( 1, 0, 1 ).normalize() );
 		camera.position.set(
 			center.x + view.x * standoff, center.y + size.y * 0.25, center.z + view.z * standoff
 		);
@@ -53,15 +54,14 @@ export class BuildingStage {
 
 }
 
-/** Swung a quarter turn off dead ahead, so the frame carries two faces. */
-function quarterTurn( direction ) {
+/** The same direction, turned 22.5 degrees, so the frame carries two faces. */
+function swungOff( direction ) {
 
 	const turn = Math.PI / 8;
+	const cos = Math.cos( turn ), sin = Math.sin( turn );
 
 	return new THREE.Vector3(
-		direction.x * Math.cos( turn ) - direction.z * Math.sin( turn ),
-		0,
-		direction.x * Math.sin( turn ) + direction.z * Math.cos( turn )
+		direction.x * cos - direction.z * sin, 0, direction.x * sin + direction.z * cos
 	).normalize();
 
 }
