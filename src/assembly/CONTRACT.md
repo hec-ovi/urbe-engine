@@ -89,6 +89,8 @@ Simulation: `simulationRunner.js` calls simulation's `createSimulation(input)` a
 
 ## Depends on
 
+`KitCatalog(worldSeed)` groups parcels that want the same building, per the [modular kit design](../../../docs/modular-kit.md). `add(parcelId, request)` normalizes a `BuildingRequest` by taking placement out of it: the lot becomes a rectangle at the origin with its street side south, so only position and rotation still differ. Equal normalized requests share a kit id and seed; `requests()` lists each kit once and `table()` lists one placement row per parcel. `add` returns null and records the parcel in `bespoke` when no kit can stand on it: a lot that is not a rectangle, an access point off its edges, or apertures of its own. `kitToWorld(frame, point)` maps the kit's own frame back onto the lot, so a placement reproduces the parcel's exact footprint and access point.
+
 City batches use `ExteriorWorkers(count)` to reuse producer workers through the [worker port](schema/exterior-workers.d.ts). `run(request, outDir)` takes Exterior's [BuildingRequest](../../../exterior/schemas/building-request.schema.json), writes its original keys-only GLB and [blueprint](../../../exterior/schemas/blueprint.schema.json), and returns the blueprint. `close()` releases workers and rejects unfinished jobs. `BuildingPipeline(assembler, {exterior})` accepts this port; single-building calls retain their CLI path. Producer validation and generation errors remain `E_EXTERIOR_FAILED`.
 - ../../../atlas/CONTRACT.md
 - ../../../streets/CONTRACT.md
