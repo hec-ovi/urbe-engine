@@ -177,7 +177,8 @@ export class OutDir {
 
 	/** Publishes source documents and a compact shell catalog as one world. */
 	async publishManifest( atlas, parcelIds, interiorIds, {
-		rooftopSpans = null, connectionsArtifact = null, catalog = null, encoding = 'json', archiveOptions, streets = false
+		rooftopSpans = null, connectionsArtifact = null, catalog = null, encoding = 'json', archiveOptions, streets = false,
+		streetsPrepared = null
 	} = {} ) {
 
 		if ( ! [ 'json', 'archive' ].includes( encoding ) ) throw new AssemblyError( 'E_REQUEST_INVALID', 'unknown world document encoding' );
@@ -187,7 +188,7 @@ export class OutDir {
 		const files = new WorldFiles( this.dir );
 		try {
 
-			const references = await files.prepare( atlas, connectionsArtifact, { encoding, archiveOptions, catalog, streets } );
+			const references = await files.prepare( atlas, connectionsArtifact, { encoding, archiveOptions, catalog, streets, streetsPrepared } );
 			const manifest = this.#manifest( atlas, parcelIds, interiorIds, rooftopSpans, references );
 			files.publish( manifest );
 			return manifest;

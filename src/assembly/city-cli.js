@@ -6,6 +6,7 @@ import { RequestAssembler, AssemblyError } from './RequestAssembler.js';
 import { runConnections, runRooftopSpans } from './connectionsRunner.js';
 import { BuildingPipeline } from './BuildingPipeline.js';
 import { ExteriorWorkers } from './ExteriorWorkers.js';
+import { StreetsAhead } from './StreetsAhead.js';
 import { OutDir, MANIFEST_FILE } from './OutDir.js';
 import { interiorPlan, parseCityArgs } from './CityPlan.js';
 import { collectShellArtifacts } from './ShellArtifacts.js';
@@ -50,6 +51,7 @@ const parcelIds = atlas.parcels.map( ( p ) => p.id );
 const stale = out.prune( atlas.parcels );
 const queue = args.reuseShells ? [] : parcelIds.filter( ( id ) => ! args.parcels || args.parcels.includes( id ) );
 const workers = Math.max( 1, Math.min( args.workers, queue.length || 1 ) );
+const streets = new StreetsAhead( outDir, atlas );
 const exterior = new ExteriorWorkers( workers );
 const pipeline = new BuildingPipeline( new RequestAssembler( atlas, connections ), { exterior } );
 
@@ -201,12 +203,16 @@ writeFileSync( join( outDir, 'qa-report.json' ), JSON.stringify( {
 }, null, 2 ) + '\n' );
 
 await exterior.close();
+console.log( `reading ${shells.length} shell blueprints` );
 const { catalog, rooftopRequest } = await collectShellArtifacts( outDir, shells, { seed: atlas.meta.seed } );
 const rooftopSpans = await runRooftopSpans( rooftopRequest );
 if ( out.carryTypes( source.path ) ) console.log( 'typed NPC set carried in beside the blueprint' );
+const streetsPrepared = await streets.prepared();
+console.log( `streets built in ${( streetsPrepared.ms / 1000 ).toFixed( 1 )} s alongside the shells` );
 const manifest = await out.publishManifest( atlas, shells, readyInteriors, {
-	rooftopSpans, connectionsArtifact, catalog, encoding: source.encoding, streets: true
+	rooftopSpans, connectionsArtifact, catalog, encoding: source.encoding, streets: true, streetsPrepared
 } );
+streets.dispose();
 
 console.log( `\n${totals.passed}/${totals.parcels} shells passed, ${totals.failed} failed; ${totals.interiorsReady}/${totals.interiorsRequested} interiors ready; ${( totals.wallMs / 1000 ).toFixed( 1 )} s, ${( totals.bytes / 1e6 ).toFixed( 1 )} MB` );
 for ( const r of failed ) console.log( `  ${r.parcelId}  ${r.error}` );

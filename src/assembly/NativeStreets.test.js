@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import atlas from './native-city.fixture.json';
 import { OutDir } from './OutDir.js';
 import { sha256 } from './JsonFile.js';
+import { StreetsAhead } from './StreetsAhead.js';
 
 let directory;
 afterEach( () => { if ( directory ) rmSync( directory, { recursive: true, force: true } ); } );
@@ -35,5 +36,23 @@ it( 'rejects archive-native publication before creating staging artifacts', asyn
 	directory = mkdtempSync( join( tmpdir(), 'assembly-streets-archive-' ) );
 	await expect( new OutDir( directory ).publishManifest( atlas, [], [], { encoding: 'archive', streets: true } ) ).rejects.toMatchObject( { code: 'E_STREETS_ARCHIVE_UNSUPPORTED' } );
 	expect( readdirSync( directory ) ).toEqual( [] );
+
+} );
+
+it( 'adopts an ahead-of-time streets build and refuses one bound to other bytes', async () => {
+
+	directory = mkdtempSync( join( tmpdir(), 'assembly-streets-ahead-' ) );
+	const ahead = new StreetsAhead( directory, atlas );
+	const prepared = await ahead.prepared();
+	const other = { ...prepared, reference: { ...prepared.reference, blueprintSha256: sha256( Buffer.from( 'other city' ) ) } };
+	await expect( new OutDir( directory ).publishManifest( atlas, [], [], { streets: true, streetsPrepared: other } ) )
+		.rejects.toMatchObject( { code: 'E_STREETS_SOURCE_MISMATCH' } );
+
+	const manifest = await new OutDir( directory ).publishManifest( atlas, [], [], { streets: true, streetsPrepared: prepared } );
+	expect( manifest.streets ).toEqual( prepared.reference );
+	expect( manifest.streets.blueprintSha256 ).toBe( sha256( readFileSync( join( directory, 'blueprint.json' ) ) ) );
+	const streets = JSON.parse( readFileSync( join( directory, manifest.streets.file ) ) );
+	for ( const piece of streets.pieces ) expect( sha256( readFileSync( join( directory, 'streets', piece.asset ) ) ) ).toBe( piece.sha256 );
+	ahead.dispose();
 
 } );

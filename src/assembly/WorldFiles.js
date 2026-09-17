@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { hashJson, writeWorldArchive } from '../world-archive/index.js';
 import { sha256, writeJsonFile } from './JsonFile.js';
 import { buildStreetArtifacts } from './StreetArtifacts.js';
+import { AssemblyError } from './RequestAssembler.js';
 
 /** Prepares world documents before replacing any published file or manifest. */
 export class WorldFiles {
@@ -15,7 +16,7 @@ export class WorldFiles {
 
 	}
 
-	async prepare( atlas, connectionsArtifact, { encoding, archiveOptions, catalog, streets } ) {
+	async prepare( atlas, connectionsArtifact, { encoding, archiveOptions, catalog, streets, streetsPrepared } ) {
 
 		const references = encoding === 'archive'
 			? await this.#archives( atlas, connectionsArtifact, archiveOptions )
@@ -29,11 +30,28 @@ export class WorldFiles {
 		}
 		if ( streets ) {
 
-			references.streets = await buildStreetArtifacts( this.stage, atlas, streets === true ? {} : streets );
+			references.streets = streetsPrepared
+				? this.#adoptStreets( streetsPrepared )
+				: await buildStreetArtifacts( this.stage, atlas, streets === true ? {} : streets );
 			this.names.push( 'streets' );
 
 		}
 		return references;
+
+	}
+
+	/** Takes an ahead-of-time build only while it binds the bytes this world publishes. */
+	#adoptStreets( { stage, reference } ) {
+
+		const staged = sha256( readFileSync( join( this.stage, 'blueprint.json' ) ) );
+		const manifest = join( stage, 'streets', 'manifest.json' );
+		if ( reference.blueprintSha256 !== staged || ! existsSync( manifest ) || sha256( readFileSync( manifest ) ) !== reference.sha256 ) {
+
+			throw new AssemblyError( 'E_STREETS_SOURCE_MISMATCH', 'prepared streets must bind the exact staged blueprint and manifest bytes' );
+
+		}
+		renameSync( join( stage, 'streets' ), join( this.stage, 'streets' ) );
+		return reference;
 
 	}
 
