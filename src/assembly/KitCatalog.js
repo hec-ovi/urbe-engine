@@ -2,15 +2,18 @@ import { fnv1a } from './hash.js';
 
 const QUARTER_TURNS = [ 'south', 'east', 'north', 'west' ];
 const GRID = 1e-6;
+// The doorstep stands on the sidewalk, a curb and its gutter outside the lot.
+const STOOP = 1.5;
 
 /**
- * Groups parcels that want the same building into one kit and a placement each.
+ * Groups parcels that want the same building into one kit and a placement each,
+ * per the modular kit design (../../../docs/modular-kit.md).
  *
- * Two parcels share a kit when their requests are equal once placement is
- * taken out of them: the lot becomes a rectangle at the origin with its street
- * side south, so position and rotation are the only things left that differ.
- * A parcel whose lot is not a rectangle, or that carries apertures of its own,
- * keeps a building of its own.
+ * The lot Atlas publishes is the frame: a parcel's request is normalized into
+ * its own lot with the street side south, so two parcels on the same standard
+ * lot size wanting the same building share a kit and differ only by position
+ * and rotation. A landmark, a lot off the standard catalog, or a parcel whose
+ * own links carve its facade keeps a building of its own.
  */
 export class KitCatalog {
 
@@ -24,26 +27,26 @@ export class KitCatalog {
 	}
 
 	/**
-	 * @param parcelId atlas parcel id
+	 * @param parcel the atlas parcel, for its lot, lotSize and landmark flag
 	 * @param request its BuildingRequest from RequestAssembler
 	 * @returns the kit id it joined, or null when it keeps its own building
 	 */
-	add( parcelId, request ) {
+	add( parcel, request ) {
 
-		const frame = placementFrame( request );
+		const frame = placementFrame( parcel, request );
 
 		if ( ! frame ) {
 
-			this.bespoke.push( parcelId );
+			this.bespoke.push( parcel.id );
 			return null;
 
 		}
 
-		const normalized = this.#normalize( request, frame );
+		const normalized = normalize( request, frame );
 		const id = `k${fnv1a( JSON.stringify( normalized ) ).toString( 16 )}`;
 
 		if ( ! this.kits.has( id ) ) this.kits.set( id, { ...normalized, seed: `${this.worldSeed}:kit:${id}`, buildingId: id } );
-		this.placements.push( { parcelId, kit: id, position: frame.position, rotation: frame.rotation } );
+		this.placements.push( { parcelId: parcel.id, kit: id, lotSize: parcel.lotSize, position: frame.position, rotation: frame.rotation } );
 		return id;
 
 	}
@@ -54,69 +57,40 @@ export class KitCatalog {
 	/** @returns the placement table, one row per parcel that joined a kit. */
 	table() { return [ ...this.placements ].sort( ( a, b ) => a.parcelId.localeCompare( b.parcelId, undefined, { numeric: true } ) ); }
 
-	/** Moves the lot to the origin with its street side south and drops the parcel's identity. */
-	#normalize( request, frame ) {
-
-		const { width, depth } = frame;
-		const footprint = [ [ 0, 0 ], [ width, 0 ], [ width, depth ], [ 0, depth ] ];
-		const accessPoint = [ round( frame.access ), 0 ];
-
-		return {
-			...request,
-			seed: null,
-			buildingId: null,
-			parcel: {
-				...request.parcel,
-				footprint,
-				accessPoint,
-				streetAccess: { edgeId: 'kit', path: [ [ 0, 0 ], [ width, 0 ] ] }
-			}
-		};
-
-	}
-
 }
 
 /**
- * The lot's own frame when it can host a kit: an axis-aligned rectangle whose
- * street side becomes south, with the world position and rotation that put the
- * kit back where the parcel is.
+ * The lot's own frame when it can host a kit: the standard lot rectangle turned
+ * so its street side is south, with the world position and rotation that put
+ * the kit back where the parcel is. Null when this parcel needs its own
+ * building: a landmark, a lot off the standard catalog or not a rectangle, an
+ * access point that misses its lot, or links that carve this facade alone.
  */
-export function placementFrame( request ) {
+export function placementFrame( parcel, request ) {
 
-	const { footprint, accessPoint } = request.parcel;
+	if ( parcel.landmark || ! parcel.lotSize || request.apertures?.length ) return null;
 
-	if ( request.apertures?.length || footprint.length !== 4 ) return null;
+	const lot = rectangle( parcel.lot );
 
-	const xs = footprint.map( ( point ) => point[ 0 ] );
-	const zs = footprint.map( ( point ) => point[ 1 ] );
-	const min = [ Math.min( ...xs ), Math.min( ...zs ) ];
-	const max = [ Math.max( ...xs ), Math.max( ...zs ) ];
-	const corners = [ [ min[ 0 ], min[ 1 ] ], [ max[ 0 ], min[ 1 ] ], [ max[ 0 ], max[ 1 ] ], [ min[ 0 ], max[ 1 ] ] ];
-	const ordered = [ ...footprint ].sort( compare );
+	if ( ! lot ) return null;
 
-	if ( [ ...corners ].sort( compare ).some( ( corner, index ) => ! same( corner, ordered[ index ] ) ) ) return null;
-
-	const size = [ max[ 0 ] - min[ 0 ], max[ 1 ] - min[ 1 ] ];
-	const turns = QUARTER_TURNS.indexOf( streetSide( accessPoint, min, max ) );
+	const turns = QUARTER_TURNS.indexOf( streetSide( request.parcel.accessPoint, lot.min, lot.max ) );
 
 	if ( turns < 0 ) return null;
 
 	const swapped = turns % 2 === 1;
-	const width = swapped ? size[ 1 ] : size[ 0 ];
-	const depth = swapped ? size[ 0 ] : size[ 1 ];
-	const local = [ accessPoint[ 0 ] - min[ 0 ], accessPoint[ 1 ] - min[ 1 ] ];
-	const access = [ local[ 0 ], local[ 1 ], size[ 0 ] - local[ 0 ], size[ 1 ] - local[ 1 ] ][ turns ];
 
-	return { width, depth, access, rotation: turns * 90, lot: size, position: [ round( min[ 0 ] ), round( min[ 1 ] ) ] };
+	return {
+		lot: lot.size,
+		width: swapped ? lot.size[ 1 ] : lot.size[ 0 ],
+		depth: swapped ? lot.size[ 0 ] : lot.size[ 1 ],
+		rotation: turns * 90,
+		position: lot.min.map( round )
+	};
 
 }
 
-/**
- * A point of the kit's own frame in world coordinates. The kit is authored with
- * its street side south at the origin; `rotation` turns it back onto the lot and
- * `position` is the lot's minimum corner.
- */
+/** A point of the kit's own frame in world coordinates. */
 export function kitToWorld( { rotation, lot, position }, [ u, v ] ) {
 
 	const [ width, depth ] = lot;
@@ -131,14 +105,87 @@ export function kitToWorld( { rotation, lot, position }, [ u, v ] ) {
 
 }
 
-/** Which side of the lot the access point sits on, or null when it sits on none. */
+/** The same request expressed in the kit's own frame, with the parcel's identity gone. */
+function normalize( request, frame ) {
+
+	const toKit = ( point ) => worldToKit( frame, point );
+
+	return {
+		...request,
+		seed: null,
+		buildingId: null,
+		parcel: {
+			...request.parcel,
+			lot: [ [ 0, 0 ], [ frame.width, 0 ], [ frame.width, frame.depth ], [ 0, frame.depth ] ],
+			footprint: canonicalRing( request.parcel.footprint.map( toKit ) ),
+			accessPoint: toKit( request.parcel.accessPoint ),
+			streetAccess: { edgeId: 'kit', path: [ [ 0, 0 ], [ frame.width, 0 ] ] }
+		}
+	};
+
+}
+
+/** The inverse of kitToWorld: a world point in the kit's own frame. */
+export function worldToKit( { rotation, lot, position }, point ) {
+
+	const [ width, depth ] = lot;
+	const u = point[ 0 ] - position[ 0 ];
+	const v = point[ 1 ] - position[ 1 ];
+	const local = [
+		[ u, v ],
+		[ v, width - u ],
+		[ width - u, depth - v ],
+		[ depth - v, u ]
+	][ rotation / 90 ];
+
+	return [ round( local[ 0 ] ), round( local[ 1 ] ) ];
+
+}
+
+/** The same ring started at its lowest corner, so a turned lot hashes as itself. */
+function canonicalRing( ring ) {
+
+	let start = 0;
+	for ( let index = 1; index < ring.length; index ++ ) if ( compare( ring[ index ], ring[ start ] ) < 0 ) start = index;
+	return ring.map( ( _, index ) => ring[ ( start + index ) % ring.length ] );
+
+}
+
+/** The axis-aligned rectangle a polygon describes, or null when it describes none. */
+function rectangle( polygon ) {
+
+	if ( ! Array.isArray( polygon ) || polygon.length !== 4 ) return null;
+
+	const xs = polygon.map( ( point ) => point[ 0 ] );
+	const zs = polygon.map( ( point ) => point[ 1 ] );
+	const min = [ Math.min( ...xs ), Math.min( ...zs ) ];
+	const max = [ Math.max( ...xs ), Math.max( ...zs ) ];
+	const corners = [ [ min[ 0 ], min[ 1 ] ], [ max[ 0 ], min[ 1 ] ], [ max[ 0 ], max[ 1 ] ], [ min[ 0 ], max[ 1 ] ] ];
+	const ordered = [ ...polygon ].sort( compare );
+
+	if ( [ ...corners ].sort( compare ).some( ( corner, index ) => ! same( corner, ordered[ index ] ) ) ) return null;
+
+	return { min, max, size: [ max[ 0 ] - min[ 0 ], max[ 1 ] - min[ 1 ] ] };
+
+}
+
+/**
+ * Which side of the lot the parcel is entered from, or null when the access
+ * point belongs to no side of it. The point is the doorstep on the sidewalk, so
+ * it sits a curb and gutter outside its own lot; anything within STOOP of one
+ * side, and along that side's run, names it.
+ */
 function streetSide( point, min, max ) {
 
-	if ( Math.abs( point[ 1 ] - min[ 1 ] ) <= GRID ) return 'south';
-	if ( Math.abs( point[ 0 ] - max[ 0 ] ) <= GRID ) return 'east';
-	if ( Math.abs( point[ 1 ] - max[ 1 ] ) <= GRID ) return 'north';
-	if ( Math.abs( point[ 0 ] - min[ 0 ] ) <= GRID ) return 'west';
-	return null;
+	const sides = [
+		{ side: 'south', distance: Math.abs( point[ 1 ] - min[ 1 ] ), along: point[ 0 ], span: [ min[ 0 ], max[ 0 ] ] },
+		{ side: 'east', distance: Math.abs( point[ 0 ] - max[ 0 ] ), along: point[ 1 ], span: [ min[ 1 ], max[ 1 ] ] },
+		{ side: 'north', distance: Math.abs( point[ 1 ] - max[ 1 ] ), along: point[ 0 ], span: [ min[ 0 ], max[ 0 ] ] },
+		{ side: 'west', distance: Math.abs( point[ 0 ] - min[ 0 ] ), along: point[ 1 ], span: [ min[ 1 ], max[ 1 ] ] }
+	].filter( ( side ) => side.along >= side.span[ 0 ] - STOOP && side.along <= side.span[ 1 ] + STOOP )
+		.sort( ( a, b ) => a.distance - b.distance );
+
+	return sides.length && sides[ 0 ].distance <= STOOP ? sides[ 0 ].side : null;
 
 }
 
