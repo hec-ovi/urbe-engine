@@ -1,6 +1,6 @@
 # Box map
 
-[Engine 0.19.0 contract](../CONTRACT.md), [agent calling guide](../SKILL.md), [cross-box proposals](ISSUES.md). Raw requirements and local verification records stay untracked.
+[Engine 0.19.1 contract](../CONTRACT.md), [agent calling guide](../SKILL.md), [cross-box proposals](ISSUES.md). Raw requirements and local verification records stay untracked.
 
 | Folder | Purpose and dependencies | Inputs and outputs |
 | --- | --- | --- |
@@ -49,6 +49,8 @@ Catalogs preserve tapered upper outlines for distant rendering; authored podium 
 ## Previews
 
 The building route accepts output folders under `/out`, including nested city and saved-game catalogs, and reuses their existing models.
+
+It draws the game's own frame: the shared night look (`game/look/NightLook.js`), the shell surface rules (`game/city/ShellSurface.js`), the building's own fixtures (`game/city/ShellFixtures.js`) and its world's street lamps, so modelling and materials can be judged from it. The room lights of a generated interior stay with the game, and a preview-only floor slice masks what sits above the chosen floor.
 
 City preserves Exterior-authored scenic nodes on closed shells and uses opening metadata to avoid duplicate room geometry.
 Fallback window scenes are rectangular, one metre deep, with one rear image and ceiling lighting.

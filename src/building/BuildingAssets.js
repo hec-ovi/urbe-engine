@@ -27,6 +27,7 @@ export class BuildingAssets {
 	constructor( parcel, out = '/out' ) {
 
 		this.parcel = parcel;
+		this.world = out;
 		this.base = `${out}/${parcel}`;
 
 	}
@@ -39,7 +40,7 @@ export class BuildingAssets {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify( {
 				parcel: this.parcel,
-				out: this.base.slice( 0, - ( this.parcel.length + 1 ) ),
+				out: this.world,
 				source
 			} )
 		} );
@@ -89,6 +90,22 @@ export class BuildingAssets {
 			);
 
 		}
+
+	}
+
+	/**
+	 * The world this parcel stands in, when `out` is a built city: its Atlas
+	 * blueprint and the walk graph street fixtures are planned from. A single
+	 * building folder has neither, and gets `null`.
+	 */
+	async loadWorld() {
+
+		const [ atlas, connections ] = await Promise.all( [
+			readJson( `${this.world}/blueprint.json` ),
+			readJson( `${this.world}/connections.json` )
+		] );
+
+		return atlas && connections ? { atlas, walk: connections.networks?.walk ?? null } : null;
 
 	}
 
@@ -157,6 +174,17 @@ export class BuildingAssets {
 			: `${this.base}/${this.parcel}.glb`;
 
 	}
+
+}
+
+/** A world document, or null where this output folder has none. */
+async function readJson( url ) {
+
+	const response = await fetch( url ).catch( () => null );
+
+	if ( ! response?.ok || mediaType( response ) !== 'application/json' ) return null;
+
+	return response.json().catch( () => null );
 
 }
 

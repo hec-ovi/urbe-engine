@@ -5,7 +5,7 @@ description: Load and play an assembled Urbe city, or call its launcher, creatio
 
 # Urbe Engine
 
-Version 0.19.0. Engine loads city artifacts into a first-person game with streaming, physics, NPCs, quests and saved progress.
+Version 0.19.1. Engine loads city artifacts into a first-person game with streaming, physics, NPCs, quests and saved progress.
 
 ## Call
 

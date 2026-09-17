@@ -1,4 +1,4 @@
-import { float, positionWorld, select, uniform } from 'three/tsl';
+import { positionWorld, uniform } from 'three/tsl';
 
 const CEILING_INSET = 0.05; // cut just below the floor's ceiling, meters
 const NO_SLICE = 1e6; // cut far above any building: nothing discarded
@@ -23,8 +23,10 @@ export class FloorSlicer {
 	/** Wires the slice cut into a material; call once per material. */
 	attach( material ) {
 
-		material.opacityNode = select( positionWorld.y.greaterThan( this.cut ), float( 0 ), float( 1 ) );
-		material.alphaTestNode = float( 0.5 );
+		// A mask, never opacity: it discards before the alpha chain runs, so a
+		// blended decal, a masked cutout and a transmissive pane all keep the
+		// exact alpha behaviour the catalog authored for them.
+		material.maskNode = positionWorld.y.lessThanEqual( this.cut );
 
 	}
 

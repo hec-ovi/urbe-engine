@@ -1,5 +1,7 @@
 # Changelog
 
+0.19.1: the building preview renders the game's own frame, through one shared night look and one shared set of shell surface rules.
+
 0.19.0: Atlas district streets, emissive parking and marquee surfaces, median trees and street fixtures.
 
 0.18.0: shell geometry batches preserve material bindings and per-surface lighting requirements.

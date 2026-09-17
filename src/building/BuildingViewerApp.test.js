@@ -32,12 +32,12 @@ describe( 'building navigation', () => {
 		window.history.replaceState( null, '', '/?mode=building&parcel=p2&out=/out/small&source=interior&backend=webgl' );
 
 		expect( BuildingViewerApp.configFromUrl() ).toEqual( {
-			parcel: 'p2', out: '/out/small', source: 'interior', backend: 'webgl'
+			parcel: 'p2', out: '/out/small', source: 'interior', backend: 'webgl', quality: null
 		} );
 
 	} );
 
-	it( 'resolves an authored interior variant and preserves its two-sided surface', () => {
+	it( 'resolves the published variant and preserves an authored two-sided surface', () => {
 
 		const maps = ( id ) => ( { basecolor: `${id}.png`, roughness: `${id}-r.png`, metallic: `${id}-m.png` } );
 		const factory = new PbrMaterialFactory( {
@@ -58,8 +58,12 @@ describe( 'building navigation', () => {
 		const source = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, roughness: 0.64, metalness: 0 } );
 		source.name = 'cyberpunk/curtain/high_rich';
 		source.userData.materialVariant = 'shade';
+		const blueprint = { materialVariants: { 'cyberpunk/curtain/high_rich': 'blind' } };
 
-		const result = materialForViewerSurface( factory, source, 'p1' );
+		const published = new THREE.MeshStandardMaterial();
+		published.name = source.name;
+
+		const result = materialForViewerSurface( factory, source, { parcel: 'p1', blueprint } );
 
 		expect( result.side ).toBe( THREE.DoubleSide );
 		expect( result.map.image.src ).toContain( '/materials/cyberpunk/shade.png' );
@@ -69,6 +73,9 @@ describe( 'building navigation', () => {
 		expect( result.roughness ).toBe( 1 );
 		expect( result.metalness ).toBe( 1 );
 		expect( source.roughness ).toBe( 0.64 );
+		// Nothing authored on the surface: the building's published choice wins.
+		expect( materialForViewerSurface( factory, published, { parcel: 'p1', blueprint } ).map.image.src )
+			.toContain( '/materials/cyberpunk/blind.png' );
 
 	} );
 
