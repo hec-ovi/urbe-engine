@@ -14,11 +14,14 @@ import { BuildingStage } from './BuildingStage.js';
 import { MaterialResolver } from './MaterialResolver.js';
 import { PbrMaterialFactory } from './PbrMaterialFactory.js';
 import { FloorSlicer } from './FloorSlicer.js';
+import { PreviewProgress } from './PreviewProgress.js';
 import { BuildingView } from '../ui/views/BuildingView.js';
 
 const DEFAULT_THEME = 'cyberpunk';
 /** One building's HDR frame is not worth paying for twice on a dense display. */
 const MAX_PIXEL_RATIO = 2;
+/** How long the preview prepares before showing the building regardless. */
+const PREPARE_BUDGET_MS = 15000;
 
 /**
  * One building viewer run, described by the URL query:
@@ -105,31 +108,44 @@ export class BuildingViewerApp {
 		const { parcel, out, backend, source, quality } = this.config;
 		const assets = new BuildingAssets( parcel, out );
 		this.view.clearIssue();
-		this.view.setStatus( `${parcel} · ${source} · loading`, 'loading' );
-		await assets.ensure( source );
+		const progress = new PreviewProgress(
+			( text ) => this.view.setStatus( `${parcel} · ${source} · ${text}`, 'loading' )
+		);
 
-		const [ blueprint, selected, interior, world ] = await Promise.all( [
+		await progress.run( 'requesting the build', () => assets.ensure( source ) );
+
+		const [ blueprint, selected, interior, world ] = await progress.run( 'reading the world', () => Promise.all( [
 			assets.loadBlueprint(),
 			assets.inspectScene( source ),
 			source === 'interior' ? Promise.resolve( null ) : assets.inspectScene( 'interior' ),
 			assets.loadWorld()
-		] );
+		] ) );
 
 		if ( ! selected.available ) throw new BuildingAssetError(
 			selected.state, selected.code, selected.message, selected.details
 		);
 		this.view.setSource( source, source === 'interior' || interior.available );
 
-		this.renderer = await RendererFactory.create( backend );
-		this.renderer.setPixelRatio( Math.min( window.devicePixelRatio, MAX_PIXEL_RATIO ) );
-		document.body.prepend( this.renderer.domElement );
+		const look = await progress.run( 'starting the renderer', async () => {
 
+			this.renderer = await RendererFactory.create( backend );
+			this.renderer.setPixelRatio( Math.min( window.devicePixelRatio, MAX_PIXEL_RATIO ) );
+			document.body.prepend( this.renderer.domElement );
+
+			return NightLook.begin( this.renderer, { quality, backend: RendererFactory.actualBackend( this.renderer ) } );
+
+		} );
+		this.look = look;
 		const actualBackend = RendererFactory.actualBackend( this.renderer );
-		const look = this.look = NightLook.begin( this.renderer, { quality, backend: actualBackend } );
 
-		const resolver = new MaterialResolver();
-		await resolver.loadTheme( DEFAULT_THEME );
-		const factory = new PbrMaterialFactory( resolver, look.tier );
+		const factory = await progress.run( 'resolving materials', async () => {
+
+			const resolver = this.resolver = new MaterialResolver();
+			await resolver.loadTheme( DEFAULT_THEME );
+
+			return new PbrMaterialFactory( resolver, look.tier );
+
+		} );
 
 		this.slicer = new FloorSlicer( blueprint.floors );
 		this.view.setFloorOptions( this.slicer.options() );
@@ -137,8 +153,14 @@ export class BuildingViewerApp {
 		// A parcel whose interior is generated shows that interior in the game,
 		// so its painted rooms are the shell's only where none exists.
 		const hasInterior = source === 'interior' || interior.available;
-		const building = await assets.loadScene( source, selected );
-		this.#dressSurfaces( building, { factory, blueprint, parcel, hasInterior } );
+		const building = await progress.run( 'reading the model', async () => {
+
+			const scene = await assets.loadScene( source, selected );
+			this.#dressSurfaces( scene, { factory, blueprint, parcel, hasInterior } );
+
+			return scene;
+
+		} );
 
 		const bounds = new THREE.Box3().setFromObject( building );
 		const stage = BuildingStage.build( bounds, this.renderer.domElement, {
@@ -148,31 +170,39 @@ export class BuildingViewerApp {
 		stage.scene.add( building );
 		Object.assign( this, stage ); // scene, camera, controls
 
-		look.raise( this.scene ).compose( this.camera );
+		await progress.run( 'lighting the street', async () => {
 
-		// What lights this building in the city: the fixtures it carries itself
-		// and the street's lamps, each where the world puts them. Other parcels'
-		// own fixtures stay out, because their buildings are not on this stage.
-		this.lights = new CityLights( [
-			...shellGlows( { parcelId: parcel, blueprint, hasInterior } ),
-			...( world ? StreetLamps.plan( world.atlas, world.walk ).glows : [] )
-		], look.lighting.capacity );
-		this.scene.add( this.lights.group );
-		if ( world ) this.scene.add( this.#litWindows( { world, blueprint, parcel, hasInterior, factory } ) );
+			look.raise( this.scene ).compose( this.camera );
+
+			// What lights this building in the city: the fixtures it carries
+			// itself and the street's lamps, each where the world puts them.
+			// Other parcels' own fixtures stay out, because their buildings are
+			// not on this stage.
+			this.lights = new CityLights( [
+				...shellGlows( { parcelId: parcel, blueprint, hasInterior } ),
+				...( world ? StreetLamps.plan( world.atlas, world.walk ).glows : [] )
+			], look.lighting.capacity );
+			this.scene.add( this.lights.group );
+			if ( world ) this.scene.add( this.#litWindows( { world, blueprint, parcel, hasInterior, factory } ) );
+
+		} );
 
 		// Decoded, uploaded and compiled before anything is judged on it, and
-		// before the probe bakes the surfaces it will reflect.
-		this.view.setStatus( `${parcel} · ${source} · preparing`, 'loading' );
-		await new Warmup( this.renderer, this.scene, this.camera, look.pipeline.mrt, look.pipeline.renderTarget )
-			.warm( this.scene );
-		// One bake, from where the review starts: a fly camera never stands
-		// still long enough for the game's walking rebake to mean anything.
-		look.probe?.bake( this.camera.position );
+		// before the probe bakes the surfaces it will reflect. It runs against a
+		// budget: a machine that cannot finish it in that time gets its first
+		// frame anyway, with the rest compiled as it draws.
+		const prepared = await progress.run( 'preparing surfaces', () => this.#prepare( look, progress ) );
+
+		await progress.run( 'baking reflections', async () => look.probe?.bake( this.camera.position ) );
 
 		if ( import.meta.env.DEV ) window.__viewer = this; // headless verification handle
 
-		this.view.setReport( resolver.report() );
-		this.view.setStatus( `${parcel} · ${source} · ready · ${actualBackend} · ${look.tier.name}`, 'ready' );
+		this.view.setReport( this.resolver.report() );
+		this.view.setStatus(
+			`${parcel} · ${source} · ready · ${actualBackend} · ${look.tier.name}${prepared.note}`,
+			'ready'
+		);
+		console.info( `building preview: ${progress.timeline}` );
 
 		window.addEventListener( 'resize', () => this.resize() );
 		let last = performance.now();
@@ -186,6 +216,42 @@ export class BuildingViewerApp {
 			this.look.render();
 
 		} );
+
+	}
+
+	/**
+	 * Every map decoded and every pipeline compiled before the first frame, for
+	 * as long as the budget allows. What is left over compiles on the frame that
+	 * first draws it, which costs a stutter rather than a wait.
+	 */
+	async #prepare( look, progress ) {
+
+		const warmup = new Warmup(
+			this.renderer, this.scene, this.camera, look.pipeline.mrt, look.pipeline.renderTarget
+		);
+		const started = performance.now();
+		let done = 0;
+		let total = 0;
+
+		await warmup.warmAll( this.scene, {
+			wanted: () => performance.now() - started < PREPARE_BUDGET_MS,
+			onProgress: ( completed, count ) => {
+
+				done = completed;
+				total = count;
+				progress.step( completed, count );
+
+			}
+		} );
+
+		if ( done >= total ) return { done, total, note: '' };
+
+		console.warn(
+			`building preview: prepared ${done} of ${total} surfaces in ${PREPARE_BUDGET_MS / 1000}s and went on. `
+			+ 'Preparation waits for animation frames, which a browser stops for a window it cannot see.'
+		);
+
+		return { done, total, note: ` · prepared ${done}/${total}` };
 
 	}
 
