@@ -1,13 +1,12 @@
-import { Color, Group, InstancedMesh, Matrix4 } from 'three/webgpu';
 import { cityGltfLoader } from '../../data/CityGltfLoader.js';
 import { mapConcurrent } from '../../city/BuildingsLoader.js';
-import { KitPieceDraw } from '../../city/kit/KitPieceDraw.js';
+import { plain } from '../../city/GeometryBake.js';
+import { compact } from '../../city/kit/BatchGeometry.js';
+import { MaterialBatches } from '../../city/kit/MaterialBatches.js';
 import { byteHash } from '../native/NativeStreetChecks.js';
 import { streetPieceBoxes } from './StreetPieceBoxes.js';
 
 const LOAD_CONCURRENCY = 8;
-const WHITE = new Color( 1, 1, 1 );
-const _matrix = new Matrix4();
 
 export const streamError = ( message, cause ) =>
 	Object.assign( new Error( `E_NATIVE_STREET_STREAM: ${message}` ), { code: 'E_NATIVE_STREET_STREAM', ...( cause ? { cause } : {} ) } );
@@ -17,13 +16,17 @@ export const streamError = ( message, cause ) =>
  *
  * Every piece in `kit.json` is read through the source, checked against the
  * size and hash the kit publishes for it and decoded once. What comes out is
- * one instanced draw per piece primitive for the entire city: admitting a cell
- * writes matrices into draws that already exist, so the draw count follows the
- * kit and not how much street is standing.
+ * one batch per native surface the kit wears, holding every piece primitive
+ * that wears it: admitting a cell appends matrices to batches that already
+ * exist, so the draw count follows the kit's surfaces and not how many pieces
+ * it has or how much street is standing.
  *
- * Decoded geometry is kept exactly as the producer quantized it. The piece's
- * own node transform rides in the instance matrix instead, which is what keeps
- * one copy of every piece in memory however many placements use it.
+ * A primitive is rebased into its piece's own metres as it is read: the
+ * producer quantizes positions and hangs the scale back to metres on the node,
+ * and several primitives share one vertex buffer. A batch has one buffer per
+ * attribute, so each primitive is compacted to the vertices it draws and its
+ * node transform folded in, which leaves the placement matrix as the whole
+ * instance matrix.
  */
 export class StreetPieces {
 
@@ -40,31 +43,23 @@ export class StreetPieces {
 		this.loader = loader;
 		this.pieces = new Map();
 		this.abort = new AbortController();
-		this.group = new Group();
-		this.group.name = 'street-pieces';
-		// One mesh per distinct surface, for the renderer to compile against.
-		// Warming every draw would compile the same 28 programs 1,178 times.
-		this.warmGroup = new Group();
-		this.warmGroup.name = 'street-pieces:warm';
+		this.batches = new MaterialBatches( 'street-pieces' );
+		this.group = this.batches.group;
 		this.ready = this.#load();
 
 	}
 
-	/** One draw per piece primitive, for the whole city. */
-	get drawCount() {
+	/** One draw per native surface, for the whole city. */
+	get batchCount() {
 
-		let total = 0;
-		for ( const piece of this.pieces.values() ) for ( const part of piece.parts ) total += part.draw.meshes.length;
-		return total;
+		return this.batches.batchCount;
 
 	}
 
 	/** How many copies of every piece are standing. */
-	get instanceCount() {
+	get copyCount() {
 
-		let total = 0;
-		for ( const piece of this.pieces.values() ) for ( const part of piece.parts ) total += part.draw.count;
-		return total;
+		return this.batches.copies;
 
 	}
 
@@ -75,72 +70,46 @@ export class StreetPieces {
 
 	}
 
+	/** Room for the copies a cell is about to place, one reallocation per batch. */
+	reserve( pieceIds ) {
+
+		this.batches.reserve( pieceIds );
+
+	}
+
 	/**
 	 * Draws one more copy of a piece.
 	 * @param handles the caller's release list, appended in place
 	 */
 	admit( placement, world, handles ) {
 
-		const piece = this.pieces.get( placement.piece );
-		if ( ! piece ) throw streamError( `no piece ${placement.piece} in this kit` );
+		if ( ! this.pieces.has( placement.piece ) ) throw streamError( `no piece ${placement.piece} in this kit` );
 
-		for ( const part of piece.parts ) {
-
-			handles.push( part.draw.add( _matrix.multiplyMatrices( world, part.base ), WHITE, { slot: - 1 } ) );
-			// A draw that outgrows its buffers builds new meshes for them.
-			if ( part.meshes !== part.draw.meshes ) shadows( part );
-
-		}
+		handles.push( this.batches.admit( placement.piece, world ) );
 
 	}
 
 	release( handle ) {
 
-		handle.draw.remove( handle );
+		this.batches.release( handle );
 
 	}
 
 	dispose() {
 
 		this.abort.abort();
-		for ( const piece of this.pieces.values() ) {
-
-			for ( const part of piece.parts ) part.draw.dispose();
-			for ( const geometry of piece.geometries ) geometry.dispose();
-
-		}
+		this.batches.dispose();
+		for ( const piece of this.pieces.values() ) for ( const { geometry } of piece.surfaces ) geometry.dispose();
 		this.pieces.clear();
-		for ( const mesh of this.warmGroup.children ) mesh.dispose();
-		this.warmGroup.clear();
-		this.group.clear();
-		this.group.removeFromParent();
 
 	}
 
 	async #load() {
 
 		const loaded = await mapConcurrent( this.kit.pieces, LOAD_CONCURRENCY, entry => this.#piece( entry ) );
-		const warmed = new Set();
 
-		for ( const piece of loaded ) {
-
-			this.pieces.set( piece.id, piece );
-			for ( const part of piece.parts ) {
-
-				this.group.add( part.draw.group );
-				shadows( part );
-				for ( const [ index, mesh ] of part.draw.meshes.entries() ) {
-
-					const surface = part.surfaces[ index ].bucket;
-					if ( warmed.has( surface ) ) continue;
-					warmed.add( surface );
-					this.warmGroup.add( warmMesh( mesh ) );
-
-				}
-
-			}
-
-		}
+		for ( const piece of loaded ) this.pieces.set( piece.id, piece );
+		this.batches.build( loaded );
 
 		return this;
 
@@ -154,7 +123,7 @@ export class StreetPieces {
 
 		const { scene } = await this.loader.parseAsync( bytes, '' );
 		scene.updateMatrixWorld( true );
-		const parts = new Map(), geometries = [], resources = new Set(), originals = new Set();
+		const surfaces = [], resources = new Set(), originals = new Set();
 		const triangles = [];
 		let count = 0;
 
@@ -178,12 +147,10 @@ export class StreetPieces {
 				const indices = mesh.geometry.index?.count ?? mesh.geometry.getAttribute( 'position' ).count;
 				if ( indices % 3 ) throw streamError( `${entry.id}: incomplete triangles` );
 				count += indices / 3;
-				geometries.push( mesh.geometry );
 				if ( collides && entry.hasCollision ) pieceTriangles( mesh, triangles );
 
-				const key = mesh.matrixWorld.elements.join( ',' );
-				if ( ! parts.has( key ) ) parts.set( key, { base: mesh.matrixWorld.clone(), surfaces: [] } );
-				parts.get( key ).surfaces.push( { bucket: surfaceId, geometry: mesh.geometry, material, collides } );
+				// Paint and scans lie flat on the road; only bodies cast shadows.
+				surfaces.push( { bucket: surfaceId, geometry: rebased( mesh ), material, castShadow: collides } );
 
 			} );
 
@@ -193,7 +160,7 @@ export class StreetPieces {
 
 		} catch ( error ) {
 
-			for ( const geometry of geometries ) geometry.dispose();
+			for ( const { geometry } of surfaces ) geometry.dispose();
 			throw error;
 
 		} finally {
@@ -202,24 +169,20 @@ export class StreetPieces {
 
 		}
 
-		return {
-			id: entry.id,
-			geometries,
-			parts: [ ...parts.values() ].map( part => ( {
-				base: part.base, surfaces: part.surfaces, draw: new KitPieceDraw( `street:${entry.id}`, part.surfaces )
-			} ) ),
-			boxes: entry.hasCollision ? streetPieceBoxes( triangles, entry.bounds ) : []
-		};
+		return { id: entry.id, surfaces, boxes: entry.hasCollision ? streetPieceBoxes( triangles, entry.bounds ) : [] };
 
 	}
 
 }
 
-/** Paint and scans lie flat on the road; only bodies cast shadows. */
-function shadows( part ) {
+/** One primitive in its piece's own metres: the vertices it draws, dequantized. */
+function rebased( mesh ) {
 
-	part.meshes = part.draw.meshes;
-	for ( const [ index, mesh ] of part.meshes.entries() ) mesh.castShadow = part.surfaces[ index ].collides;
+	const geometry = compact( mesh.geometry );
+	plain( geometry, 'position' );
+	geometry.applyMatrix4( mesh.matrixWorld );
+
+	return geometry;
 
 }
 
@@ -240,20 +203,5 @@ function pieceTriangles( mesh, out ) {
 		);
 
 	}
-
-}
-
-/** The same geometry, material and instance buffers the real draw uses. */
-function warmMesh( mesh ) {
-
-	const warm = new InstancedMesh( mesh.geometry, mesh.material, 0 );
-	warm.name = `${mesh.name}:warm`;
-	warm.instanceMatrix = mesh.instanceMatrix;
-	warm.instanceColor = mesh.instanceColor;
-	warm.castShadow = mesh.castShadow;
-	warm.receiveShadow = true;
-	warm.frustumCulled = false;
-
-	return warm;
 
 }

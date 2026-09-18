@@ -106,15 +106,32 @@ async function shown( loader, sources ) {
 
 }
 
+/** Copies standing in the shared batches, over the whole city. */
 function live( pieces ) {
 
-	return [ ...pieces.pieces.values() ].reduce( ( total, piece ) => total + piece.draw.count + ( piece.leafDraw?.count ?? 0 ), 0 );
+	return pieces.batches.copies;
+
+}
+
+/** Every material the kit's pieces and their leaves wear between them. */
+function materialsOf( pieces ) {
+
+	const buckets = new Set();
+
+	for ( const piece of pieces.pieces.values() ) {
+
+		for ( const { bucket } of piece.surfaces ) buckets.add( bucket );
+		for ( const leaf of piece.leaves ) for ( const { bucket } of leaf.surfaces ) buckets.add( bucket );
+
+	}
+
+	return buckets;
 
 }
 
 describe( 'the city draws every kit building from shared pieces', () => {
 
-	it( 'loads each piece once, keeps one draw per surface, and appends and drops exactly a cell\'s copies', async () => {
+	it( 'loads each piece once, keeps one batch per material, and appends and drops exactly a cell\'s copies', async () => {
 
 		const { kit, pieces, reads } = await openKit();
 		await pieces.ready;
@@ -124,8 +141,17 @@ describe( 'the city draws every kit building from shared pieces', () => {
 		expect( new Set( reads ).size ).toBe( files.length );
 
 		// Six families, nine pieces each: 198 shared surfaces plus the six
-		// entrance leaf pairs that a closed building draws with its piece.
-		expect( pieces.drawCount ).toBe( 204 );
+		// entrance leaf pairs a closed building draws with its piece, wearing
+		// fifteen materials between them. One batch each, for the whole city.
+		const materials = materialsOf( pieces );
+		expect( materials.size ).toBe( 15 );
+		expect( pieces.batchCount ).toBe( materials.size );
+		expect( [ ...pieces.batches.batches.keys() ].sort() ).toEqual( [ ...materials ].sort() );
+
+		// Facades cast and receive; per copy culling answers for the batch.
+		const meshes = [ ...pieces.batches.batches.values() ].map( ( batch ) => batch.mesh );
+		expect( meshes.every( ( mesh ) => mesh.isBatchedMesh && mesh.castShadow && mesh.receiveShadow ) ).toBe( true );
+		expect( meshes.every( ( mesh ) => mesh.perObjectFrustumCulled && ! mesh.frustumCulled ) ).toBe( true );
 
 		const loader = new KitCellLoader( { pieces, factory, readJson: serving() } );
 		const hidden = await loader.load( new Map( [ source( 'p1', false ) ] ) );
@@ -140,12 +166,57 @@ describe( 'the city draws every kit building from shared pieces', () => {
 
 		const other = await shown( loader, [ source( 'p2', false ) ] );
 		expect( live( pieces ) ).toBe( one * 2 );
-		expect( pieces.drawCount ).toBe( 204 );
+		expect( pieces.batchCount ).toBe( materials.size );
 
 		other.disposeModelInstances();
 		expect( live( pieces ) ).toBe( one );
 
 		hidden.disposeModelInstances();
+		expect( live( pieces ) ).toBe( 0 );
+
+	} );
+
+	it( 'appends a copy as one instance per surface, with its geometry, matrix and tint, and grows past its first capacity', async () => {
+
+		const { pieces } = await openKit();
+		await pieces.ready;
+
+		const pieceId = [ ...pieces.pieces.keys() ].find( ( id ) => pieces.leaves( id ).length );
+		const piece = pieces.pieces.get( pieceId );
+		const colour = new THREE.Color( 0.25, 0.5, 0.75 );
+		const matrix = new THREE.Matrix4().makeRotationY( Math.PI / 2 ).setPosition( 12, 4.5, - 7 );
+		const handle = pieces.admit( pieceId, matrix, colour );
+
+		// One instance per surface, each in the batch its material owns, each
+		// pointing at the geometry that surface was registered as.
+		expect( handle.parts.map( ( part ) => part.batch.name ) )
+			.toEqual( piece.surfaces.map( ( surface ) => `kit-pieces:${surface.bucket}` ) );
+		expect( handle.leaf.parts ).toHaveLength( piece.leaves.flatMap( ( leaf ) => leaf.surfaces ).length );
+
+		for ( const [ index, { batch, geometryId } ] of [ ...handle.parts, ...handle.leaf.parts ].entries() ) {
+
+			const instance = [ ...handle.instances, ...handle.leaf.instances ][ index ];
+			expect( batch.mesh.getGeometryIdAt( instance ) ).toBe( geometryId );
+			expect( batch.mesh.getMatrixAt( instance, new THREE.Matrix4() ).elements )
+				.toEqual( matrix.elements.map( ( value ) => expect.closeTo( value, 4 ) ) );
+			expect( batch.mesh.getColorAt( instance, new THREE.Color() ).toArray() )
+				.toEqual( colour.toArray().map( ( value ) => expect.closeTo( value, 5 ) ) );
+
+		}
+
+		// A batch that runs out of room reallocates without losing a copy.
+		const batch = handle.parts[ 0 ].batch;
+		const first = batch.capacity;
+		const held = [];
+		for ( let i = 0; i < first * 2; i ++ ) held.push( pieces.admit( pieceId, matrix, colour ) );
+
+		expect( batch.capacity ).toBeGreaterThan( first );
+		expect( batch.count ).toBe( held.length + 1 );
+		expect( batch.mesh.getMatrixAt( handle.instances[ 0 ], new THREE.Matrix4() ).elements )
+			.toEqual( matrix.elements.map( ( value ) => expect.closeTo( value, 4 ) ) );
+
+		for ( const one of held ) pieces.release( one );
+		pieces.release( handle );
 		expect( live( pieces ) ).toBe( 0 );
 
 	} );

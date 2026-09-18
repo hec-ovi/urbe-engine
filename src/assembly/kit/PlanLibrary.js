@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { AssemblyError } from '../RequestAssembler.js';
 import { writeJsonFile } from '../JsonFile.js';
-import { planFile, PLANS_FOLDER } from './KitFiles.js';
+import { planBlueprintFile, planFile, PLANS_FOLDER } from './KitFiles.js';
+import { packPlanBlueprint } from './PlanBlueprint.js';
 import { planFrom } from './KitPlanning.js';
 import { schemaMessage, validateKitPlan } from './KitSchemas.js';
 
@@ -23,11 +24,18 @@ const PLAN_BUILDING = { type: 'residential', tier: 'rich' };
  */
 export class PlanLibrary {
 
-	/** @param kit a loaded KitManifest; its own seed names the published pieces */
-	constructor( kit ) {
+	/**
+	 * @param kit a loaded KitManifest; its own seed names the published pieces
+	 * @param buildingGrid the city's construction lattice, which is where the
+	 * room envelope behind the facade is fitted; a plan is fitted on the same
+	 * lattice as the parcels it stands on
+	 */
+	constructor( kit, buildingGrid = null ) {
 
 		this.kit = kit;
+		this.buildingGrid = buildingGrid;
 		this.plans = new Map();
+		this.blueprints = new Map();
 
 	}
 
@@ -49,11 +57,19 @@ export class PlanLibrary {
 
 		if ( held ) return held;
 
-		const drawn = this.#draw( id, family, bays, floors );
+		const { document, blueprint } = this.#draw( id, family, bays, floors );
 
-		this.plans.set( id, drawn );
+		this.plans.set( id, document );
+		this.blueprints.set( id, blueprint );
 
-		return drawn;
+		return document;
+
+	}
+
+	/** The blueprint of one plan, in the plan's own frame. */
+	blueprint( id ) {
+
+		return this.blueprints.get( id ) ?? null;
 
 	}
 
@@ -71,23 +87,32 @@ export class PlanLibrary {
 	 * no standing building names any more, so the folder holds exactly the
 	 * buildings the world has. A partial run keeps the plans it did not redraw.
 	 * @param used every plan id the world's kit parcels name
-	 * @returns those ids, sorted
+	 * @param composed the plans whose parcels read their blueprint from here; a
+	 * parcel an earlier run left a blueprint of its own keeps reading that one,
+	 * so a run that redraws part of a city does not have to redraw every plan
+	 * @returns the used ids, sorted
 	 * @throws AssemblyError E_KIT_PLACEMENTS when a standing parcel names a plan
 	 * this out dir does not hold
 	 */
-	publish( outDir, used = new Set( this.plans.keys() ) ) {
+	publish( outDir, used = new Set( this.plans.keys() ), composed = used ) {
 
 		const directory = join( outDir, PLANS_FOLDER );
 
 		mkdirSync( directory, { recursive: true } );
-		for ( const [ id, plan ] of this.plans ) writeJsonFile( join( directory, planFile( id ) ), plan );
+		for ( const [ id, plan ] of this.plans ) {
+
+			writeJsonFile( join( directory, planFile( id ) ), plan );
+			writeJsonFile( join( directory, planBlueprintFile( id ) ), this.blueprints.get( id ) );
+
+		}
 		for ( const name of readdirSync( directory ) ) {
 
-			if ( ! used.has( name.replace( /\.json$/, '' ) ) ) rmSync( join( directory, name ), { force: true } );
+			if ( ! used.has( name.replace( /(\.blueprint)?\.json$/, '' ) ) ) rmSync( join( directory, name ), { force: true } );
 
 		}
 
-		const missing = [ ...used ].filter( ( id ) => ! existsSync( join( directory, planFile( id ) ) ) );
+		const missing = [ ...used ].filter( ( id ) => ! existsSync( join( directory, planFile( id ) ) )
+			|| ( composed.has( id ) && ! existsSync( join( directory, planBlueprintFile( id ) ) ) ) );
 
 		if ( missing.length ) {
 
@@ -111,13 +136,14 @@ export class PlanLibrary {
 			parcel: {
 				footprint: rectangle( bays.across * this.kit.module.bay, bays.deep * this.kit.module.bay ),
 				accessPoint: [ bays.across * this.kit.module.bay / 2, 0 ],
-				maxHeight: this.height( family, floors )
+				maxHeight: this.height( family, floors ),
+				...( this.buildingGrid ? { buildingGrid: this.buildingGrid } : {} )
 			},
 			building: { ...PLAN_BUILDING, floors },
 			// Face 0 is the street side of every plan; the parcel's frame turns it.
 			entranceEdge: 0
 		};
-		const plan = planFrom( request, { id, bays, floors } );
+		const { blueprint, ...plan } = planFrom( request, { id, bays, floors } );
 
 		// A plan is read thousands of times and written once, so it names each
 		// piece file once and every copy by its index.
@@ -135,7 +161,7 @@ export class PlanLibrary {
 
 		if ( invalidPlan.length ) throw new AssemblyError( 'E_KIT_PLACEMENTS', `${id}: plan document: ${schemaMessage( invalidPlan )}` );
 
-		return document;
+		return { document, blueprint: packPlanBlueprint( blueprint ) };
 
 	}
 

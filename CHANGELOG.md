@@ -1,5 +1,7 @@
 # Changelog
 
+0.23.0: every piece runtime draws one batch per material, and kit buildings share one blueprint per plan.
+
 0.22.1: tests cover the contract surface once each, 420 cases in eleven seconds, and compressed maps fill their texture in place.
 
 0.22.0: kit buildings plan once per block template with one variation per block, parcels are compact records over shared plans, kits and catalogs live once in the shared store, and a failed parcel becomes an empty lot instead of a failed city.

@@ -104,7 +104,9 @@ export class WorldSource {
 		const kit = await this.#kit( manifest );
 		const interiorModules = await this.#resource( manifest.interiorModules );
 		const interiorProps = await this.#resource( manifest.interiorProps );
-		const sources = new BuildingSource( { manifest, outBase: this.outBase, readJson: url => this.#json( url ) } );
+		const sources = new BuildingSource( {
+			manifest, outBase: this.outBase, plansUrl: `${this.outBase}/${PLANS_FOLDER}`, readJson: url => this.#json( url )
+		} );
 		const loadBuildings = ids => sources.load( ids );
 		const buildings = await loadBuildings( initialBuildingIds( shellCatalog, manifest, game ) );
 		const quests = await this.#quests( game );

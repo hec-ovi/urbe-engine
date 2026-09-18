@@ -5,9 +5,11 @@ const FIRST_CAPACITY = 64;
 const MAX_RANGES = 64;
 
 /**
- * Every copy of one shared piece in the city, drawn once per surface it wears.
- * Facade pieces and interior modules both stream this way; `name` is the whole
- * name the group and its meshes take.
+ * Every copy of one shared furniture model in the city, drawn once per surface
+ * it wears. A catalog prop wears materials of its own, so its copies stream
+ * this way; the kits whose pieces share materials batch by material instead
+ * ([MaterialBatches.js](MaterialBatches.js)). `name` is the whole name the
+ * group and its meshes take.
  *
  * The surfaces of a piece share one slot index and one pair of instance
  * buffers: a matrix written once is what all of them draw with, and the

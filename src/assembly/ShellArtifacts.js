@@ -1,19 +1,19 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { BuildingBlueprints } from './BuildingBlueprints.js';
 import { ShellCatalog } from './ShellCatalog.js';
 import { RooftopSpanPlan } from './RooftopSpanPlan.js';
 import { AssemblyError } from './RequestAssembler.js';
 
-/** Keeps only compact projections while reading one completed shell at a time. */
+/** Keeps only compact projections while reading one standing building at a time. */
 export async function collectShellArtifacts( directory, parcelIds, { seed } ) {
 
 	const catalog = new ShellCatalog( seed );
 	const rooftops = new RooftopSpanPlan( { meta: { seed } } );
+	const blueprints = new BuildingBlueprints( directory );
 	for ( const id of parcelIds ) {
 
 		try {
 
-			const blueprint = JSON.parse( await readFile( join( directory, id, `${id}.blueprint.json` ), 'utf8' ) );
+			const blueprint = await blueprints.of( id );
 			catalog.add( id, blueprint );
 			rooftops.add( id, blueprint );
 

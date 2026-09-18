@@ -11,7 +11,8 @@ import { InteriorModules, MODULES_FILE, PROPS_FILE } from './InteriorModules.js'
 import { sharedRoot } from './SharedResources.js';
 import { collectShellArtifacts } from './ShellArtifacts.js';
 import { validateExteriorBlueprint } from './validators.js';
-import { KitManifest, blueprintFile, placementsFile, schemaMessage, validateKitPlacements } from './kit/index.js';
+import { BuildingBlueprints } from './BuildingBlueprints.js';
+import { KitManifest, blueprintFile, placementsFile, planBlueprintFile, schemaMessage, validateKitPlacements, PLANS_FOLDER } from './kit/index.js';
 
 const ENGINE_ROOT = resolve( dirname( fileURLToPath( import.meta.url ) ), '../..' );
 const BLUEPRINT = fileURLToPath( new URL( './kit-city.fixture.json', import.meta.url ) );
@@ -101,23 +102,30 @@ describe( 'assemble-city kit path', () => {
 	it( 'stands ordinary parcels on kit pieces, generates the landmark and publishes the world they make', async () => {
 
 		const { root, report, has, file } = city();
+		const blueprints = new BuildingBlueprints( root );
 
 		expect( report.totals ).toMatchObject( { parcels: 3, passed: 3, failed: 0, kit: 2, generated: 1 } );
 		expect( report.parcels.map( ( parcel ) => [ parcel.parcelId, parcel.source ] ) )
 			.toEqual( [ [ 'p0', 'shell' ], [ 'p1', 'kit' ], [ 'p2', 'kit' ] ] );
 
+		// The landmark is generated, so it keeps its own geometry and its own blueprint.
 		expect( has( 'p0', 'p0.glb' ) ).toBe( true );
+		expect( has( 'p0', blueprintFile( 'p0' ) ) ).toBe( true );
 		expect( has( 'p0', placementsFile( 'p0' ) ) ).toBe( false );
 
 		for ( const parcelId of [ 'p1', 'p2' ] ) {
 
 			expect( has( parcelId, `${parcelId}.glb` ) ).toBe( false );
+			// A kit parcel is its frame alone; its blueprint belongs to its plan.
+			expect( has( parcelId, blueprintFile( parcelId ) ) ).toBe( false );
 			const table = JSON.parse( file( parcelId, placementsFile( parcelId ) ).toString( 'utf8' ) );
-			const blueprint = JSON.parse( file( parcelId, blueprintFile( parcelId ) ).toString( 'utf8' ) );
+			const blueprint = await blueprints.of( parcelId );
 
 			expect( schemaMessage( validateKitPlacements( table ) ) ).toBe( '' );
 			expect( schemaMessage( validateExteriorBlueprint( blueprint ) ) ).toBe( '' );
+			expect( existsSync( join( root, PLANS_FOLDER, planBlueprintFile( table.plan ) ) ) ).toBe( true );
 			expect( table.parcel ).toBe( parcelId );
+			expect( blueprint.buildingId ).toBe( parcelId );
 
 		}
 
@@ -233,9 +241,9 @@ describe( 'assemble-city kit path', () => {
 		expect( report.totals ).toMatchObject( { passed: 3, failed: 0, interiorsReady: 0, interiorsFailed: 1 } );
 		expect( report.interiorFailures[ 0 ].error ).toContain( 'E_INTERIOR_FAILED' );
 		expect( report.parcels.find( ( parcel ) => parcel.parcelId === 'p1' ).interior ).toBe( 'closed' );
-		// The shell still stands, closed: its pieces and its blueprint are untouched.
+		// The shell still stands, closed: its record and its plan are untouched.
 		expect( has( 'p1', placementsFile( 'p1' ) ) ).toBe( true );
-		expect( has( 'p1', blueprintFile( 'p1' ) ) ).toBe( true );
+		expect( existsSync( join( root, PLANS_FOLDER ) ) ).toBe( true );
 		expect( existsSync( join( root, 'p1', 'interior' ) ) ).toBe( false );
 		expect( new OutDir( root ).interiors( PARCELS ) ).toEqual( [] );
 

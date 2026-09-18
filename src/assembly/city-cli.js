@@ -12,7 +12,8 @@ import { interiorPlan, parseCityArgs } from './CityPlan.js';
 import { collectShellArtifacts } from './ShellArtifacts.js';
 import { ConnectionsArtifact } from './ConnectionsArtifact.js';
 import { loadBlueprint } from './BlueprintInput.js';
-import { KitAssembler, KitManifest, blueprintFile } from './kit/index.js';
+import { KitAssembler, KitManifest } from './kit/index.js';
+import { BuildingBlueprints } from './BuildingBlueprints.js';
 import { InteriorModules } from './InteriorModules.js';
 
 function dirBytes( dir ) {
@@ -242,6 +243,19 @@ if ( orphaned.size ) {
 }
 
 const shells = out.shells( parcelIds );
+// A kit building's blueprint is its plan's, turned into the frame the parcel
+// stands in, so the plans are published before anything reads a blueprint.
+const kitParcels = out.kits( shells );
+if ( kitParcels.length && ! kit ) throw new AssemblyError( 'E_KIT_MANIFEST', `${kitParcels.length} buildings stand from pieces but no kit is published` );
+const kitPlans = kitParcels.length ? out.kitPlans( kitParcels ) : new Map();
+// A parcel an earlier run left a blueprint of its own keeps reading that file,
+// so a run over part of a city publishes only the plans its parcels compose from.
+const ownBlueprint = new Set( out.ownBlueprints( kitParcels ) );
+const composedPlans = new Set( [ ...kitPlans ].filter( ( [ id ] ) => ! ownBlueprint.has( id ) ).map( ( [ , plan ] ) => plan ) );
+const plans = kitParcels.length
+	? kitAssembler.plans.publish( outDir, new Set( kitPlans.values() ), composedPlans )
+	: [];
+const blueprints = new BuildingBlueprints( outDir );
 
 /** How each parcel is drawn, read from what its own folder holds. */
 function classify( ids ) {
@@ -297,14 +311,14 @@ for ( const failure of interiorFailures ) console.log( `${failure.parcelId}  int
 // One copy of the shared modules every furnished building draws, published on
 // the first interior so a set that cannot be published keeps them all closed.
 const modules = new InteriorModules();
-const kitBuilt = new Set( out.kits( shells ) );
+const kitBuilt = new Set( kitParcels );
 
 for ( const id of candidates ) {
 
 	if ( readyInteriors.length >= interiorTarget ) break;
 
 	const parcelDir = join( outDir, id );
-	const blueprint = JSON.parse( readFileSync( join( parcelDir, blueprintFile( id ) ), 'utf8' ) );
+	const blueprint = await blueprints.of( id );
 
 	// Interior fills a ground, a middle and a crown layout, so a building
 	// shorter than three floors has nothing to fill and is not a candidate.
@@ -347,18 +361,17 @@ for ( const id of candidates ) {
 
 // Read once, after every building is final, so the report and the manifest
 // name the same source for every parcel.
-const { kits: kitParcels, sources } = classify( shells );
+const { sources } = classify( shells );
 const generated = shells.filter( ( id ) => sources[ id ] === 'shell' );
 // One copy of the pieces in the shared store, which the world binds by hash.
-if ( kitParcels.length && ! kit ) throw new AssemblyError( 'E_KIT_MANIFEST', `${kitParcels.length} buildings stand from pieces but no kit is published` );
 const kitReference = kitParcels.length ? kit.publish() : null;
-const kitPlans = kitParcels.length ? out.kitPlans( kitParcels ) : new Map();
-const plans = kitParcels.length ? kitAssembler.plans.publish( outDir, new Set( kitPlans.values() ) ) : [];
-// What each standing building is: the block template that dressed it and the plan it stands from.
+// What each standing building is: the block template that dressed it, the plan
+// it stands from, and where its blueprint is read from.
 const buildings = Object.fromEntries( [ ...kitPlans ].map( ( [ id, plan ] ) => [ id, {
 	template: kitAssembler.templates.slotOf.get( id )?.templateId ?? null,
 	slot: kitAssembler.templates.slotOf.get( id )?.slot ?? null,
-	plan
+	plan,
+	blueprint: ownBlueprint.has( id ) ? 'parcel' : 'plan'
 } ] ) );
 if ( kitReference ) console.log( `${kitParcels.length} buildings stand from ${plans.length} plans of ${kit.ids().length} shared families` );
 const interiorResources = readyInteriors.length ? modules.references : null;

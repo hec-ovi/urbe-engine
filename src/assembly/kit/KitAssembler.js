@@ -8,6 +8,7 @@ import { chooseFamily } from './FamilyChoice.js';
 import { BlockTemplates } from './BlockTemplates.js';
 import { TemplateDressing } from './TemplateDressing.js';
 import { PlanLibrary, placesAs } from './PlanLibrary.js';
+import { blueprintDrift, parcelBlueprint } from './PlanBlueprint.js';
 import { planFrom } from './KitPlanning.js';
 import { schemaMessage, validateKitPlacements } from './KitSchemas.js';
 import { blueprintFile, generatedFiles, placementsFile } from './KitFiles.js';
@@ -23,8 +24,9 @@ const QUARTER = Math.PI / 2;
  * repeats a handful of block designs with one variation each. A block Atlas
  * tiled on its own keeps the per-parcel choice.
  *
- * Exterior plans the parcel's own building to publish the blueprint everything
- * downstream reads, and the record points at the plan that places the pieces.
+ * Exterior plans the parcel's own building so the record can be checked against
+ * it: the pieces have to stand where the plan puts them, and the blueprint the
+ * plan composes for this frame has to be the one Exterior drew here.
  */
 export class KitAssembler {
 
@@ -43,7 +45,7 @@ export class KitAssembler {
 		this.kit = kit;
 		this.templates = new BlockTemplates( atlas );
 		this.dressing = new TemplateDressing( atlas, this.templates, kit );
-		this.plans = new PlanLibrary( kit );
+		this.plans = new PlanLibrary( kit, atlas.meta.buildingGrid ?? null );
 
 	}
 
@@ -134,9 +136,11 @@ export class KitAssembler {
 	}
 
 	/**
-	 * Writes this parcel's placement record and its building blueprint, and drops
-	 * the geometry of a generated shell that stood here before, so the folder
-	 * holds one building and the world ships no dead GLB.
+	 * Writes this parcel's placement record and drops whatever a generated shell
+	 * left here before, so the folder holds one building and the world ships no
+	 * dead geometry. The blueprint stays with the plan: this parcel's is the
+	 * plan's document in the frame below, which is checked here against the one
+	 * Exterior draws for the parcel itself.
 	 * @returns the placement record
 	 * @throws AssemblyError E_KIT_FIT | E_KIT_PLACEMENTS
 	 */
@@ -160,11 +164,18 @@ export class KitAssembler {
 		}
 
 		const document = this.#document( chosen, plan, frame, blueprint );
+		const drift = blueprintDrift( parcelBlueprint( this.plans.blueprint( plan.id ), document ), blueprint );
+
+		if ( drift ) {
+
+			throw new AssemblyError( 'E_KIT_PLACEMENTS', `${parcelId}: plan ${plan.id} composes a different building at ${drift}` );
+
+		}
 
 		mkdirSync( parcelDir, { recursive: true } );
 		for ( const name of generatedFiles( parcelId ) ) rmSync( join( parcelDir, name ), { force: true } );
+		rmSync( join( parcelDir, blueprintFile( parcelId ) ), { force: true } );
 		writeJsonFile( join( parcelDir, placementsFile( parcelId ) ), document );
-		writeJsonFile( join( parcelDir, blueprintFile( parcelId ) ), blueprint );
 
 		return document;
 
@@ -188,7 +199,11 @@ export class KitAssembler {
 
 	}
 
-	/** The floor count a family can stand on this parcel, or null when none can. */
+	/**
+	 * The floor count a family can stand on this parcel, or null when none can.
+	 * The floor minimum is the published family's own; the kit states how short
+	 * its bands can stand and the parcel envelope states how tall.
+	 */
 	#floors( family, parcel, wanted ) {
 
 		const range = this.kit.fitsFloors( family, parcel.envelope.maxHeight );
@@ -214,6 +229,7 @@ export class KitAssembler {
 		const turn = Math.atan2( - ( to[ 1 ] - from[ 1 ] ), to[ 0 ] - from[ 0 ] ) / QUARTER;
 
 		return {
+			face,
 			origin: [ from[ 0 ], 0, from[ 1 ] ],
 			// Lot edges turn by exact quarters; keep the frame exact too.
 			rotationY: Math.round( turn ) * QUARTER,
@@ -224,6 +240,7 @@ export class KitAssembler {
 
 	#document( { parcelId, family, floors, signText, absorbs }, plan, frame, blueprint ) {
 
+
 		const ring = blueprint.bounds.footprint;
 		const xs = ring.map( ( point ) => point[ 0 ] );
 		const zs = ring.map( ( point ) => point[ 1 ] );
@@ -232,6 +249,7 @@ export class KitAssembler {
 			plan: plan.id,
 			origin: frame.origin,
 			rotationY: frame.rotationY,
+			face: frame.face,
 			lot: this.parcels.get( parcelId ).lot,
 			bounds: {
 				min: [ Math.min( ...xs ), 0, Math.min( ...zs ) ],
@@ -240,6 +258,10 @@ export class KitAssembler {
 			signText,
 			family,
 			floors,
+			// What the parcel is used for, which its own type and tier decide and
+			// the shared plan cannot say.
+			floorKinds: blueprint.floors.map( ( floor ) => floor.kind ),
+			exteriorStyle: blueprint.facade.exteriorStyle,
 			tint: parcelId,
 			...( absorbs ? { absorbs } : {} )
 		};

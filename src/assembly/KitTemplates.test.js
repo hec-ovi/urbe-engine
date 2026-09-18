@@ -5,7 +5,12 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { KitPlacement } from '../game/city/kit/KitPlacement.js';
-import { blueprintFile, placementsFile, planPath, PLANS_FOLDER } from './kit/index.js';
+import { openingRect } from '../game/city/Openings.js';
+import { RequestAssembler } from './RequestAssembler.js';
+import { planFrom } from './kit/KitPlanning.js';
+import {
+	blueprintFile, KitAssembler, KitManifest, parcelBlueprint, placementsFile, planBlueprintFile, planPath, PLANS_FOLDER
+} from './kit/index.js';
 
 const ENGINE_ROOT = resolve( dirname( fileURLToPath( import.meta.url ) ), '../..' );
 const TINY = fileURLToPath( new URL( '../../../atlas/samples/city-urbe-tiny.json', import.meta.url ) );
@@ -32,7 +37,15 @@ function assemble( blueprint = TINY, options = [ '--interiors', '0' ] ) {
 		manifest: JSON.parse( readFileSync( join( root, 'manifest.json' ), 'utf8' ) ),
 		record: ( id ) => JSON.parse( readFileSync( join( root, id, placementsFile( id ) ), 'utf8' ) ),
 		plan: ( id ) => JSON.parse( readFileSync( join( root, planPath( id ) ), 'utf8' ) ),
-		blueprint: ( id ) => JSON.parse( readFileSync( join( root, id, blueprintFile( id ) ), 'utf8' ) )
+		// What a consumer gets for one parcel: its plan's blueprint in its frame.
+		blueprint: ( id ) => {
+
+			const record = JSON.parse( readFileSync( join( root, id, placementsFile( id ) ), 'utf8' ) );
+
+			return parcelBlueprint( JSON.parse( readFileSync(
+				join( root, PLANS_FOLDER, planBlueprintFile( record.plan ) ), 'utf8' ) ), record );
+
+		}
 	};
 
 }
@@ -121,8 +134,15 @@ describe( 'block templates and shared building plans', () => {
 
 		expect( totals.kit ).toBe( kits.length );
 		expect( totals.plans ).toBeLessThan( totals.kit );
-		expect( readdirSync( join( city.root, PLANS_FOLDER ) ) ).toHaveLength( totals.plans );
-		for ( const id of kits ) expect( statSync( join( city.root, id, placementsFile( id ) ) ).size ).toBeLessThan( 1024 );
+		// One plan document and one plan blueprint each, and a parcel is its frame
+		// alone: a city's building data grows with its buildings, not its lots.
+		expect( readdirSync( join( city.root, PLANS_FOLDER ) ) ).toHaveLength( totals.plans * 2 );
+		for ( const id of kits ) {
+
+			expect( statSync( join( city.root, id, placementsFile( id ) ) ).size ).toBeLessThan( 1024 );
+			expect( existsSync( join( city.root, id, blueprintFile( id ) ) ) ).toBe( false );
+
+		}
 
 	} );
 
@@ -190,6 +210,46 @@ describe( 'block templates and shared building plans', () => {
 
 	} );
 
+	it( 'composes a parcel blueprint from its plan, exactly where Exterior draws it on the parcel', () => {
+
+		const kitAssembler = new KitAssembler( atlas, new RequestAssembler( atlas, { apertures: [] } ), KitManifest.load() );
+		const records = Object.keys( city.manifest.buildings ).map( ( id ) => city.record( id ) );
+		const shared = records.filter( ( record ) => record.plan === commonest( records.map( ( entry ) => entry.plan ) ) );
+		// Two parcels of one building in different places, and one of every way a
+		// lot can be turned, so the frame is exercised over all four faces.
+		const turned = [ ...new Map( records.map( ( record ) => [ record.rotationY, record ] ) ).values() ];
+
+		expect( shared.length ).toBeGreaterThan( 1 );
+		expect( new Set( shared.map( ( record ) => record.origin.join() ) ).size ).toBe( shared.length );
+		expect( turned.length ).toBe( 4 );
+
+		for ( const record of [ ...shared.slice( 0, 2 ), ...turned ] ) {
+
+			const id = record.parcel;
+			const chosen = kitAssembler.candidate( id );
+			const { blueprint } = planFrom( chosen.request, { id, bays: chosen.bays, floors: chosen.floors } );
+			const composed = city.blueprint( id );
+
+			expect( composed.buildingId ).toBe( id );
+			expect( composed.floors.map( ( floor ) => floor.kind ) ).toEqual( blueprint.floors.map( ( floor ) => floor.kind ) );
+			for ( const kind of [ null, 'door' ] ) {
+
+				const placed = openings( composed, kind );
+				const drawn = openings( blueprint, kind );
+
+				expect( placed.length, `${id} ${kind ?? 'openings'}` ).toBe( drawn.length );
+				for ( const [ at, corner ] of placed.entries() ) {
+
+					for ( const axis of corner.keys() ) expect( corner[ axis ] ).toBeCloseTo( drawn[ at ][ axis ], 3 );
+
+				}
+
+			}
+
+		}
+
+	}, 300_000 );
+
 	it( 'publishes an empty lot for a parcel that cannot be built, and still stands the city', () => {
 
 		const broken = atlas.parcels[ 3 ].id;
@@ -211,6 +271,24 @@ describe( 'block templates and shared building plans', () => {
 	}, 300_000 );
 
 } );
+
+/** Every opening of a building, as the world rectangle it cuts, in a stable order. */
+function openings( blueprint, kind ) {
+
+	return blueprint.floors
+		.flatMap( ( floor ) => ( floor.openings ?? [] )
+			.filter( ( opening ) => ! kind || opening.kind === kind )
+			.map( ( opening ) => {
+
+				const rect = openingRect( floor, opening );
+
+				return [ rect.start.x, rect.start.z, rect.end.x, rect.end.z, rect.y0, rect.y1 ];
+
+			} ) )
+		.sort( ( a, b ) => a.findIndex( ( value, axis ) => value !== b[ axis ] ) < 0 ? 0
+			: a[ a.findIndex( ( value, axis ) => value !== b[ axis ] ) ] - b[ a.findIndex( ( value, axis ) => value !== b[ axis ] ) ] );
+
+}
 
 /** The value most of a template's blocks agree on for one lot. */
 function commonest( values ) {

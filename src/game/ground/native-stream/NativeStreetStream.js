@@ -10,11 +10,11 @@ const _world = new Matrix4();
 /**
  * The saved street around the player, drawn from the shared piece kit.
  *
- * The kit loads once for the whole city and owns the draws. A cell is then
- * only a list of placements: admitting it appends their matrices to draws that
- * already stand, dropping it takes those copies back out, and nothing decodes
- * or uploads geometry again. Collision follows the same list as one fixed
- * cuboid body per cell.
+ * The kit loads once for the whole city and owns the batches, one per native
+ * surface. A cell is then only a list of placements: admitting it appends their
+ * matrices to batches that already stand, dropping it takes those copies back
+ * out, and nothing decodes or uploads geometry again. Collision follows the
+ * same list as one fixed cuboid body per cell.
  */
 export class NativeStreetStream {
 
@@ -86,6 +86,7 @@ export class NativeStreetStream {
 			const revision = this.revision;
 			await this.pieces.ready;
 			if ( this.disposed || revision !== this.revision ) continue;
+			this.reserve();
 			if ( ! await this.warm() ) continue;
 
 			let deadline = performance.now() + SLICE_MS;
@@ -110,23 +111,40 @@ export class NativeStreetStream {
 	}
 
 	/**
-	 * The draws are the city's, so nothing is admitted until the current
-	 * preparation port has compiled them; one mesh per surface answers for
-	 * every draw that wears it.
+	 * Room for every cell this window still wants, in one reallocation per
+	 * batch and before anything compiles: a batch that grows afterwards is a
+	 * batch the renderer has to build a pipeline for again.
+	 */
+	reserve() {
+
+		const wanted = [];
+		for ( const [ id, { cell } ] of this.wanted ) {
+
+			if ( ! this.resident.has( id ) ) for ( const placement of cell.placements ) wanted.push( placement.piece );
+
+		}
+		this.pieces.reserve( wanted );
+
+	}
+
+	/**
+	 * The batches are the city's, so nothing is admitted until the current
+	 * preparation port has compiled them: one compile per surface, whatever
+	 * pieces wear it.
 	 */
 	async warm() {
 
 		const { prepare } = this.settings;
 		if ( ! prepare || this.prepared === prepare ) return true;
 		const current = () => ! this.disposed && prepare === this.settings.prepare;
-		await prepare( this.pieces.warmGroup, { wanted: current } );
+		await prepare( this.pieces.group, { wanted: current } );
 		if ( ! current() ) return false;
 		this.prepared = prepare;
 		return true;
 
 	}
 
-	/** Every placement of one cell, appended to the shared draws. */
+	/** Every placement of one cell, appended to the shared batches. */
 	admit( id, cell ) {
 
 		const handles = [];

@@ -9,6 +9,7 @@ import { InteriorProps } from './InteriorProps.js';
 import { InteriorStream } from './InteriorStream.js';
 import { partsOf } from './InteriorBoxes.js';
 import { Elevators } from './Elevators.js';
+import { Warmup } from '../look/Warmup.js';
 
 const MODULE_DIR = new URL( '../../../../interior/out/modules', import.meta.url ).pathname;
 const PROP_DIR = new URL( '../props/fixtures', import.meta.url ).pathname;
@@ -133,7 +134,7 @@ async function settle( model, feet ) {
 const metres = ( value ) => Number( value.toFixed( 6 ) );
 const feetOn = ( floor ) => ( { x: 12, y: floor * 4.5 + 0.1, z: 16 } );
 const bandOf = ( model, floor ) => model.live.get( 'p1' ).bands.find( ( band ) => band.floor === floor );
-const standing = ( draws ) => [ ...draws.values() ].reduce( ( total, one ) => total + one.draw.count, 0 );
+const propCopies = ( model ) => [ ...model.props.props.values() ].reduce( ( total, one ) => total + one.draw.count, 0 );
 
 describe( 'the city draws every furnished floor from shared modules', () => {
 
@@ -144,11 +145,11 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		expect( reads ).toHaveLength( catalog.modules.length );
 		expect( new Set( reads ).size ).toBe( catalog.modules.length );
 
-		// Seventeen modules wearing twenty-seven material slots between them:
-		// one instanced draw each, for the whole city.
-		const slots = catalog.modules.reduce( ( total, module ) => total + module.materialSlots.length, 0 );
-		expect( modules.drawCount ).toBe( slots );
-		expect( modules.drawCount ).toBe( 27 );
+		// Seventeen modules wearing twenty-seven material surfaces between them,
+		// over six distinct slots: one batch each, for the whole city.
+		const slots = new Set( catalog.modules.flatMap( ( module ) => module.materialSlots ) );
+		expect( modules.batchCount ).toBe( slots.size );
+		expect( modules.batchCount ).toBe( 6 );
 
 		for ( const record of catalog.modules ) {
 
@@ -195,6 +196,25 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 	} );
 
+	it( 'compiles once per batch, which is what the loading counter counts', async () => {
+
+		const { modules } = await openModules();
+		const compiled = [];
+		const warmup = new Warmup(
+			{ compileAsync: async ( object ) => { compiled.push( object ); } },
+			new THREE.Scene(), new THREE.PerspectiveCamera()
+		);
+		const progress = [];
+
+		await warmup.warmAll( modules.group, { onProgress: ( done, total ) => progress.push( [ done, total ] ) } );
+
+		// Twenty-seven module surfaces, six compiles.
+		expect( compiled ).toHaveLength( modules.batchCount );
+		expect( progress.at( - 1 ) ).toEqual( [ modules.batchCount, modules.batchCount ] );
+		modules.dispose();
+
+	} );
+
 	it( 'appends a floor\'s modules and furniture at its own elevation, and takes exactly those back on a drop', async () => {
 
 		const model = await stream();
@@ -204,7 +224,7 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		const band = bandOf( model, 1 );
 		const copies = band.record.placements.length;
 		expect( band.handles ).toHaveLength( copies - liftCopies( band.record.placements ) );
-		expect( standing( model.modules.modules ) + standing( model.props.props ) ).toBe( band.handles.length + neighbours( model, 1 ) );
+		expect( model.modules.copyCount + propCopies( model ) ).toBe( band.handles.length + neighbours( model, 1 ) );
 
 		// A copy stands at its placement plus the floor's own elevation.
 		const wall = band.record.placements.find( ( one ) => one.module === 'wall-segment' );
@@ -219,8 +239,8 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 		// Walking far enough away drops the building and every copy with it.
 		model.update( { x: 400, y: 0, z: 400 } );
-		expect( standing( model.modules.modules ) ).toBe( 0 );
-		expect( standing( model.props.props ) ).toBe( 0 );
+		expect( model.modules.copyCount ).toBe( 0 );
+		expect( propCopies( model ) ).toBe( 0 );
 		expect( model.rooms ).toHaveLength( 0 );
 
 	} );
@@ -271,7 +291,7 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 			expect( bandOf( model, 0 ).state ).toBe( 'failed' );
 			expect( warn ).toHaveBeenCalledWith( expect.stringMatching( /E_INTERIOR_MODULE: p1:0 places garden-taper\/bay/ ) );
-			expect( standing( model.modules.modules ) ).toBeGreaterThan( 0 );
+			expect( model.modules.copyCount ).toBeGreaterThan( 0 );
 
 		} finally { warn.mockRestore(); }
 

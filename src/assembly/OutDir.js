@@ -5,7 +5,7 @@ import { validateShellCatalog, validateWorldManifest } from './validators.js';
 import { WorldFiles } from './WorldFiles.js';
 import { writeJsonFile } from './JsonFile.js';
 import { AssemblyError } from './RequestAssembler.js';
-import { placementsFile } from './kit/KitFiles.js';
+import { blueprintFile, placementsFile } from './kit/KitFiles.js';
 import { NPC_FILE } from './interiorRunner.js';
 
 export const MANIFEST_FILE = 'manifest.json';
@@ -60,7 +60,8 @@ export class OutDir {
 
 			const path = join( this.dir, name );
 			const ours = existsSync( join( path, `${name}.request.json` ) )
-				|| existsSync( join( path, `${name}.blueprint.json` ) );
+				|| existsSync( join( path, blueprintFile( name ) ) )
+				|| existsSync( join( path, placementsFile( name ) ) );
 			const wanted = ground.get( name );
 			const built = ours ? this.#builtOn( path, name ) : null;
 
@@ -103,8 +104,9 @@ export class OutDir {
 
 	/**
 	 * The parcels whose exterior is complete on disk, whether or not they are
-	 * enterable. Every standing building publishes a blueprint; it is drawn
-	 * either from its own GLB or from its kit placement table.
+	 * enterable. A generated shell stands as its own GLB and blueprint; a kit
+	 * parcel stands as its placement record, which names the plan both its
+	 * pieces and its blueprint come from.
 	 */
 	shells( parcelIds ) {
 
@@ -112,8 +114,8 @@ export class OutDir {
 
 			const path = join( this.dir, id );
 
-			return existsSync( join( path, `${id}.blueprint.json` ) )
-				&& ( existsSync( join( path, `${id}.glb` ) ) || existsSync( join( path, placementsFile( id ) ) ) );
+			return existsSync( join( path, placementsFile( id ) ) )
+				|| ( existsSync( join( path, blueprintFile( id ) ) ) && existsSync( join( path, `${id}.glb` ) ) );
 
 		} );
 
@@ -123,6 +125,17 @@ export class OutDir {
 	kits( parcelIds ) {
 
 		return parcelIds.filter( ( id ) => existsSync( join( this.dir, id, placementsFile( id ) ) ) );
+
+	}
+
+	/**
+	 * The kit parcels that still carry a blueprint of their own, from a run
+	 * before the document moved to the plan. They keep reading that file; only
+	 * the rest are composed from their plan's.
+	 */
+	ownBlueprints( parcelIds ) {
+
+		return parcelIds.filter( ( id ) => existsSync( join( this.dir, id, blueprintFile( id ) ) ) );
 
 	}
 

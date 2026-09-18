@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { Box3, ClampToEdgeWrapping, Matrix4, NoColorSpace, RepeatWrapping, SRGBColorSpace, Texture, Vector3 } from 'three/webgpu';
+import { Box3, ClampToEdgeWrapping, Matrix4, NoColorSpace, RepeatWrapping, SRGBColorSpace, Texture } from 'three/webgpu';
 import { NativeStreetMaterials } from '../materials/NativeStreetMaterials.js';
 import { NativeStreetStream } from './NativeStreetStream.js';
 import { placementMatrix } from './StreetCells.js';
@@ -10,6 +10,7 @@ import { placementMatrix } from './StreetCells.js';
 const BUNDLE = fileURLToPath( new URL( '../../../../../streets/out/units-tiny-0.7.0/', import.meta.url ) );
 const MANIFEST = JSON.parse( readFileSync( `${BUNDLE}manifest.json`, 'utf8' ) );
 const PRIMITIVES = MANIFEST.kit.pieces.reduce( ( total, piece ) => total + piece.surfaces.length, 0 );
+const SURFACES = new Set( MANIFEST.kit.pieces.flatMap( piece => piece.surfaces ) );
 
 function bundle( manifest = structuredClone( MANIFEST ) ) {
 	const files = new Map( manifest.kit.pieces.map( piece => [ piece.id, `${BUNDLE}streets/${piece.file}` ] ) );
@@ -37,17 +38,21 @@ function standing( stream, manifest ) {
 	return [ ...stream.resident.keys() ].flatMap( key => cellOf( manifest, key ) );
 }
 
-/** The world box of one drawn copy, straight out of the instance buffer. */
-function drawnBox( pieces, pieceId, slot ) {
-	const box = new Box3(), matrix = new Matrix4(), point = new Vector3();
-	for ( const part of pieces.pieces.get( pieceId ).parts ) {
-		matrix.fromArray( part.draw.matrices.array, slot * 16 );
-		for ( const { geometry } of part.surfaces ) {
-			const position = geometry.getAttribute( 'position' );
-			for ( let i = 0; i < position.count; i ++ ) box.expandByPoint( point.fromBufferAttribute( position, i ).applyMatrix4( matrix ) );
-		}
-	}
+/** The piece box one copy draws, in piece metres, straight out of its batches. */
+function batchedBox( handle ) {
+	const box = new Box3();
+	for ( const { batch, geometryId } of handle.parts ) box.union( batch.mesh.getBoundingBoxAt( geometryId, new Box3() ) );
 	return box;
+}
+
+/** The matrix one copy draws with, straight out of its batch. */
+function batchedMatrix( handle ) {
+	return handle.parts[ 0 ].batch.mesh.getMatrixAt( handle.instances[ 0 ], new Matrix4() );
+}
+
+/** Every copy standing right now, paired with the placement that appended it. */
+function drawn( stream, manifest ) {
+	return [ ...stream.resident ].flatMap( ( [ key, cell ] ) => cellOf( manifest, key ).map( ( placement, index ) => [ placement, cell.handles[ index ] ] ) );
 }
 
 /** How much ground each cuboid top covers, in square metres. */
@@ -62,14 +67,24 @@ function coverage( boxes ) {
 
 describe( 'saved street kit runtime', () => {
 
-	it( 'loads every kit piece once and owns one instanced draw per piece primitive', async () => {
+	it( 'loads every kit piece once and owns one batch per native surface', async () => {
 		const world = bundle(), stream = new NativeStreetStream( world.source, world.materials );
 		await stream.update( { x: 200, z: 200 }, { radius: 512 } );
 		expect( world.readPiece ).toHaveBeenCalledTimes( MANIFEST.kit.pieces.length );
-		expect( stream.pieces.drawCount ).toBe( PRIMITIVES );
-		let meshes = 0;
-		stream.group.traverse( node => { if ( node.isInstancedMesh ) meshes ++; } );
-		expect( meshes ).toBe( PRIMITIVES );
+		// 131 pieces wearing 1,178 primitives between them, over 28 surfaces.
+		expect( PRIMITIVES ).toBe( 1178 );
+		expect( stream.pieces.batchCount ).toBe( SURFACES.size );
+		const batches = [];
+		stream.group.traverse( node => { if ( node.isBatchedMesh ) batches.push( node ); } );
+		expect( batches ).toHaveLength( SURFACES.size );
+		// Per copy culling answers for the batch, so the object test is off.
+		expect( batches.every( node => node.perObjectFrustumCulled && ! node.frustumCulled ) ).toBe( true );
+		expect( batches.filter( node => node.sortObjects ).every( node => node.material.transparent ) ).toBe( true );
+		// Paint and scans lie flat on the road; only bodies cast.
+		expect( new Set( batches.filter( node => node.castShadow ).map( node => node.material.userData.streetNativeSurface ) ) )
+			.toEqual( new Set( [ 'asphalt', 'basalt', 'curb', 'darkMetal', 'district-curb-blue', 'district-gutter-blue', 'district-hex',
+				'district-junction-blue', 'district-panel-blue', 'district-panel-dark', 'gutter', 'joint', 'metal', 'ochre', 'ordinary',
+				'plastic', 'green', 'tread' ] ) );
 		await stream.update( { x: 264, z: 200 } );
 		expect( world.readPiece ).toHaveBeenCalledTimes( MANIFEST.kit.pieces.length );
 		expect( stream.stats ).toMatchObject( { indexed: 525, pending: false } );
@@ -77,19 +92,51 @@ describe( 'saved street kit runtime', () => {
 		expect( () => stream.update( { x: 0, z: 0 } ) ).toThrow( /disposed/ );
 	} );
 
-	it( 'appends a cell\'s copies to the shared draws and takes them out again', async () => {
+	it( 'appends a cell\'s copies to the shared batches and takes them out again', async () => {
 		const world = bundle(), stream = new NativeStreetStream( world.source, world.materials );
 		await stream.update( { x: 200, z: 200 }, { radius: 16 } );
 		const copies = standing( stream, world.manifest );
 		expect( stream.resident.size ).toBeGreaterThan( 0 );
 		expect( copies.length ).toBeGreaterThan( 0 );
-		expect( stream.pieces.instanceCount ).toBe( copies.length );
+		expect( stream.pieces.copyCount ).toBe( copies.length );
+
+		// A copy is one instance per primitive of its piece, in the batch its
+		// surface wears, and the surfaces of one piece stay together.
+		const pieces = new Map( MANIFEST.kit.pieces.map( piece => [ piece.id, piece ] ) );
+		for ( const [ placement, handle ] of drawn( stream, world.manifest ) ) {
+			const piece = pieces.get( placement.piece );
+			expect( handle.parts ).toHaveLength( piece.surfaces.length );
+			expect( new Set( handle.parts.map( part => part.batch.name ) ) )
+				.toEqual( new Set( piece.surfaces.map( surface => `street-pieces:${surface}` ) ) );
+			expect( handle.instances.every( Number.isInteger ) ).toBe( true );
+		}
+
 		await stream.update( { x: 200, z: 200 }, { radius: 512 } );
-		expect( stream.pieces.instanceCount ).toBe( standing( stream, world.manifest ).length );
+		expect( stream.pieces.copyCount ).toBe( standing( stream, world.manifest ).length );
 		await stream.update( { x: 9000, z: 9000 } );
 		expect( stream.resident.size ).toBe( 0 );
-		expect( stream.pieces.instanceCount ).toBe( 0 );
-		expect( stream.pieces.drawCount ).toBe( PRIMITIVES );
+		expect( stream.pieces.copyCount ).toBe( 0 );
+		expect( stream.pieces.batchCount ).toBe( SURFACES.size );
+		stream.dispose();
+	} );
+
+	it( 'grows a batch for a cell that wants more copies than it holds, keeping the copies already standing', async () => {
+		const world = bundle(), stream = new NativeStreetStream( world.source, world.materials );
+		await stream.update( { x: 200, z: 200 }, { radius: 16 } );
+		const before = drawn( stream, world.manifest ).map( ( [ placement, handle ] ) => [ placement, batchedMatrix( handle ) ] );
+		const batch = stream.pieces.batches.batches.get( 'joint' );
+		expect( before.length ).toBeGreaterThan( 0 );
+
+		const capacity = batch.capacity;
+		await stream.update( { x: 200, z: 200 }, { radius: 512 } );
+		expect( batch.capacity ).toBeGreaterThan( capacity );
+		expect( batch.count ).toBeLessThanOrEqual( batch.capacity );
+
+		// Every copy that was already standing still draws where it stood.
+		const after = new Map( drawn( stream, world.manifest ).map( ( [ placement, handle ] ) => [ placement, batchedMatrix( handle ) ] ) );
+		for ( const [ placement, matrix ] of before ) {
+			expect( after.get( placement ).elements ).toEqual( matrix.elements.map( value => expect.closeTo( value, 6 ) ) );
+		}
 		stream.dispose();
 	} );
 
@@ -142,22 +189,21 @@ describe( 'saved street kit runtime', () => {
 		const world = bundle(), stream = new NativeStreetStream( world.source, world.materials );
 		await stream.update( { x: 200, z: 200 }, { radius: 64 } );
 		const pieces = new Map( MANIFEST.kit.pieces.map( piece => [ piece.id, piece ] ) );
-		const slots = new Map();
 		let checked = 0;
 
-		for ( const placement of standing( stream, world.manifest ) ) {
-			const slot = slots.get( placement.piece ) ?? 0;
-			slots.set( placement.piece, slot + 1 );
+		// The piece's own node transform is folded into the batched geometry,
+		// so the whole instance matrix is the placement, and the geometry it
+		// points at covers the piece's published bounds in piece metres.
+		for ( const [ placement, handle ] of drawn( stream, world.manifest ) ) {
 			if ( ! placement.scale ) continue;
 			const { bounds } = pieces.get( placement.piece );
-			const expected = new Box3();
-			const matrix = placementMatrix( placement );
-			for ( const x of [ bounds.min[ 0 ], bounds.max[ 0 ] ] ) for ( const z of [ bounds.min[ 2 ], bounds.max[ 2 ] ] ) {
-				for ( const y of [ bounds.min[ 1 ], bounds.max[ 1 ] ] ) expected.expandByPoint( new Vector3( x, y, z ).applyMatrix4( matrix ) );
-			}
-			const drawn = drawnBox( stream.pieces, placement.piece, slot );
-			expect( drawn.min.toArray() ).toEqual( expected.min.toArray().map( value => expect.closeTo( value, 3 ) ) );
-			expect( drawn.max.toArray() ).toEqual( expected.max.toArray().map( value => expect.closeTo( value, 3 ) ) );
+			// The matrices texture holds 32-bit floats, so a metre carries to
+			// well under a tenth of a millimetre.
+			expect( batchedMatrix( handle ).elements )
+				.toEqual( placementMatrix( placement ).elements.map( value => expect.closeTo( value, 4 ) ) );
+			const box = batchedBox( handle );
+			expect( box.min.toArray() ).toEqual( bounds.min.map( value => expect.closeTo( value, 3 ) ) );
+			expect( box.max.toArray() ).toEqual( bounds.max.map( value => expect.closeTo( value, 3 ) ) );
 			checked ++;
 		}
 
@@ -177,17 +223,20 @@ describe( 'saved street kit runtime', () => {
 			.rejects.toMatchObject( { code: 'E_NATIVE_STREET_STREAM', message: /no piece road\/none\/999/ } );
 	} );
 
-	it( 'compiles the shared draws before the first copy is drawn', async () => {
+	it( 'compiles one batch per surface before the first copy is drawn', async () => {
 		const world = bundle(), stream = new NativeStreetStream( world.source, world.materials );
-		const surfaces = new Set();
+		const warmed = [];
 		const prepare = vi.fn( async group => {
-			expect( stream.pieces.instanceCount ).toBe( 0 );
-			group.traverse( node => { if ( node.isInstancedMesh ) surfaces.add( node.material.userData.streetNativeSurface ); } );
+			expect( stream.pieces.copyCount ).toBe( 0 );
+			group.traverse( node => { if ( node.material ) warmed.push( node.material.userData.streetNativeSurface ); } );
 		} );
 		await stream.update( { x: 200, z: 200 }, { radius: 64, prepare } );
 		expect( prepare ).toHaveBeenCalledOnce();
-		expect( surfaces.size ).toBe( new Set( MANIFEST.kit.pieces.flatMap( piece => piece.surfaces ) ).size );
-		expect( stream.pieces.instanceCount ).toBeGreaterThan( 0 );
+		// What the loading counter counts: one compile per surface, not one per
+		// piece primitive that wears it.
+		expect( warmed ).toHaveLength( SURFACES.size );
+		expect( new Set( warmed ) ).toEqual( SURFACES );
+		expect( stream.pieces.copyCount ).toBeGreaterThan( 0 );
 		await stream.update( { x: 232, z: 200 } );
 		expect( prepare ).toHaveBeenCalledOnce();
 		stream.dispose();

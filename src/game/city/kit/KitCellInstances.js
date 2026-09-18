@@ -1,14 +1,14 @@
 import * as THREE from 'three/webgpu';
 
 /**
- * One cell's copies of the shared kit draws, appended only while the stream
+ * One cell's copies of the shared kit batches, appended only while the stream
  * shows the cell.
  *
- * The draws belong to the whole city, so a cell cannot hide its buildings by
- * hiding a group of its own: a matrix in the buffer is a building on screen.
+ * The batches belong to the whole city, so a cell cannot hide its buildings by
+ * hiding a group of its own: an instance in a batch is a building on screen.
  * The stream admits a cell hidden and turns it visible once the skyline that
  * replaces its impostors is standing, so this binds that same flag: nothing of
- * this cell reaches the buffers until then, and a cell dropped before it is
+ * this cell reaches the batches until then, and a cell dropped before it is
  * ever shown appends nothing at all.
  */
 export class KitCellInstances {
@@ -58,6 +58,10 @@ export class KitCellInstances {
 
 		const handles = [];
 		this.handles = handles;
+
+		// The batches grow once for everything this cell places, so appending
+		// its copies never reallocates part way through.
+		this.pieces.reserve( this.buildings.flatMap( ( { placement } ) => placement.placements.map( ( piece ) => piece.piece ) ) );
 
 		for ( const { placement, colour, swinging } of this.buildings ) {
 

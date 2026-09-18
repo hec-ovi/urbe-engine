@@ -464,7 +464,8 @@ class FloorBand {
 
 		if ( this.handles ) return;
 
-		this.handles = this.copies.map( ( { draws, id, matrix } ) => ( { draws, handle: draws.admit( id, matrix, WHITE ) } ) );
+		reserve( this.copies );
+		this.handles = this.copies.map( ( { draws, id, matrix } ) => ( { draws, handle: draws.admit( id, matrix ) } ) );
 		this.group.visible = true;
 
 	}
@@ -504,6 +505,26 @@ class FloorBand {
 function disposeContent( content ) {
 
 	content.traverse( ( node ) => node.geometry?.dispose() );
+
+}
+
+/**
+ * Room for this floor's copies in one reallocation per batch, before the first
+ * of them is appended: the module batches are the city's, and a batch that
+ * grows is a batch the renderer builds a pipeline for again. The furniture
+ * draws keep their own growth.
+ */
+function reserve( copies ) {
+
+	const wanted = new Map();
+
+	for ( const { draws, id } of copies ) {
+
+		if ( ! wanted.has( draws ) ) wanted.set( draws, [] );
+		wanted.get( draws ).push( id );
+
+	}
+	for ( const [ draws, ids ] of wanted ) draws.reserve?.( ids );
 
 }
 
@@ -591,7 +612,6 @@ function ground( center, point ) {
 
 }
 
-const WHITE = new THREE.Color( 1, 1, 1 );
 const _rotation = new THREE.Matrix4();
 const _scale = new THREE.Matrix4();
 const _point = new THREE.Vector3();

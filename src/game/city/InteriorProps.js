@@ -3,6 +3,8 @@ import { cityGltfLoader } from '../data/CityGltfLoader.js';
 import { ImportedModels } from '../props/ImportedModels.js';
 import { KitPieceDraw } from './kit/KitPieceDraw.js';
 
+const WHITE = new THREE.Color( 1, 1, 1 );
+
 /**
  * The furniture a furnished floor stands on, loaded once for the city.
  *
@@ -61,7 +63,7 @@ export class InteriorProps {
 
 	}
 
-	admit( id, matrix, color ) {
+	admit( id, matrix, color = WHITE ) {
 
 		const prop = this.props.get( id );
 		if ( ! prop ) throw propError( `no furniture ${id} in this catalog` );

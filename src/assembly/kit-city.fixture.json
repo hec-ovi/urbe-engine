@@ -12,7 +12,8 @@
     80
    ]
   },
-  "units": "meters",
+  "buildingGrid": {"origin": [0, 0], "angle": 0, "spacing": 0.5},
+    "units": "meters",
   "boundary": [
    [
     -10,

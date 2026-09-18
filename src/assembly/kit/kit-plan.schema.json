@@ -37,7 +37,7 @@
     },
     "floors": {
       "type": "integer",
-      "minimum": 3
+      "minimum": 2
     },
     "bands": {
       "$ref": "https://urbe.dev/exterior/placement.schema.json#/properties/bands"

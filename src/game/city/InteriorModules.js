@@ -1,9 +1,8 @@
-import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { cityGltfLoader } from '../data/CityGltfLoader.js';
 import { mapConcurrent } from './BuildingsLoader.js';
 import { bake } from './GeometryBake.js';
-import { KitPieceDraw } from './kit/KitPieceDraw.js';
+import { MaterialBatches } from './kit/MaterialBatches.js';
 
 const LOAD_CONCURRENCY = 8;
 /** A catalog key is theme, kind and tier; anything else is a node name. */
@@ -15,10 +14,11 @@ const KEY = /^[a-z0-9_-]+\/[a-z0-9_-]+\/[a-z0-9_-]+$/;
  * Interior publishes one shared module set for the world: a wall segment, a
  * floor and ceiling tile, a door frame, a window return, the stair flights, the
  * lift car and its doors, a ceiling strip and a picture frame. A furnished
- * floor is a table of copies of those, so what comes out here is one
- * `InstancedMesh` per module surface for the entire city: admitting a floor
- * appends matrices to draws that already exist, and the draw count follows the
- * catalog rather than the number of rooms standing.
+ * floor is a table of copies of those, so what comes out here is one batch per
+ * material slot for the entire city, holding every module surface that wears
+ * it: admitting a floor appends matrices to batches that already exist, and the
+ * draw count follows the slots the catalog publishes rather than the modules
+ * wearing them or the number of rooms standing.
  *
  * A module file that is missing, refuses to decode or does not match the byte
  * count `modules.json` publishes fails the whole set with `E_INTERIOR_MODULE`.
@@ -39,19 +39,23 @@ export class InteriorModules {
 		this.loader = loader;
 		this.readBinary = readBinary;
 		this.modules = new Map();
-		this.group = new THREE.Group();
-		this.group.name = 'interior-modules';
+		this.batches = new MaterialBatches( 'interior-modules' );
+		this.group = this.batches.group;
 		this.ready = this.#load();
 
 	}
 
-	/** One draw per module surface, for the whole city. */
-	get drawCount() {
+	/** One draw per material slot, for the whole city. */
+	get batchCount() {
 
-		let total = 0;
-		for ( const module of this.modules.values() ) total += module.draw.meshes.length;
+		return this.batches.batchCount;
 
-		return total;
+	}
+
+	/** How many module copies are standing. */
+	get copyCount() {
+
+		return this.batches.copies;
 
 	}
 
@@ -84,30 +88,36 @@ export class InteriorModules {
 
 	}
 
+	/** Room for the copies a floor is about to place, one reallocation per batch. */
+	reserve( ids ) {
+
+		this.batches.reserve( ids );
+
+	}
+
 	/**
 	 * Draws one more copy of a module.
 	 * @returns a handle to hand back to `release`
 	 */
-	admit( id, matrix, color ) {
+	admit( id, matrix ) {
 
-		const module = this.modules.get( id );
-		if ( ! module ) throw moduleError( `no module ${id} in this catalog` );
+		if ( ! this.modules.has( id ) ) throw moduleError( `no module ${id} in this catalog` );
 
-		return module.draw.add( matrix, color, { slot: - 1 } );
+		return this.batches.admit( id, matrix );
 
 	}
 
 	release( handle ) {
 
-		handle.draw.remove( handle );
+		this.batches.release( handle );
 
 	}
 
 	dispose() {
 
+		this.batches.dispose();
 		for ( const module of this.modules.values() ) {
 
-			module.draw.dispose();
 			for ( const { geometry, material } of module.surfaces ) {
 
 				geometry.dispose();
@@ -117,8 +127,6 @@ export class InteriorModules {
 
 		}
 		this.modules.clear();
-		this.group.clear();
-		this.group.removeFromParent();
 
 	}
 
@@ -126,12 +134,8 @@ export class InteriorModules {
 
 		const loaded = await mapConcurrent( this.catalog.modules, LOAD_CONCURRENCY, ( module ) => this.#module( module ) );
 
-		for ( const module of loaded ) {
-
-			this.modules.set( module.id, module );
-			this.group.add( module.draw.group );
-
-		}
+		for ( const module of loaded ) this.modules.set( module.id, module );
+		this.batches.build( loaded );
 
 		return this;
 
@@ -166,8 +170,7 @@ export class InteriorModules {
 			origin: record.origin,
 			slots: record.materialSlots,
 			triangles: record.triangles ?? 0,
-			surfaces,
-			draw: new KitPieceDraw( `interior:${record.id}`, surfaces )
+			surfaces
 		};
 
 	}
