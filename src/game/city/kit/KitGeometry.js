@@ -1,4 +1,6 @@
 import * as THREE from 'three/webgpu';
+import { prepare } from './BatchGeometry.js';
+import { placementError } from './KitPieces.js';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { bake } from '../GeometryBake.js';
 import { bucketFor, splitBucket } from '../Variety.js';
@@ -91,8 +93,12 @@ function merged( buckets, factory ) {
 
 	return [ ...buckets ].map( ( [ bucket, geometries ] ) => {
 
-		const geometry = geometries.length === 1 ? geometries[ 0 ] : BufferGeometryUtils.mergeGeometries( geometries, false );
-		if ( geometries.length > 1 ) for ( const part of geometries ) part.dispose();
+		// A family shell mixes primitives with and without scenery attributes
+		// inside one material; conform the layout before merging.
+		const parts = geometries.length === 1 ? geometries : prepare( geometries );
+		const geometry = parts.length === 1 ? parts[ 0 ] : BufferGeometryUtils.mergeGeometries( parts, false );
+		if ( ! geometry ) throw placementError( `${bucket}: shell primitives do not merge` );
+		if ( parts.length > 1 ) for ( const part of parts ) part.dispose();
 		geometry.computeBoundingBox();
 
 		return { bucket, geometry, material: shellMaterial( factory, splitBucket( bucket ) ) };
