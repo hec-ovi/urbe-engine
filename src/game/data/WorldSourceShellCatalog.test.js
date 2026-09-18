@@ -50,12 +50,12 @@ it( 'loads nearby authored bounds and every interior, then admits explicit dista
 
 } );
 
-it( 'keeps every shell resident for a small catalog even when its bounds are distant', async () => {
+it( 'streams a small catalog the same way, leaving distant shells for the stream to admit', async () => {
 
-	const fixture = await serve( { count: 20 } );
+	const fixture = await serve( { count: 20, interiors: false } );
 	const world = await fixture.source.load();
-	expect( [ ...world.buildings.keys() ] ).toEqual( fixture.manifest.parcels );
-	expect( fixture.requested ).toContain( '/out/catalog/p19/p19.blueprint.json' );
+	expect( [ ...world.buildings.keys() ] ).toEqual( [ 'p0', 'p1', 'p2' ] );
+	expect( fixture.requested.some( path => path.includes( '/p19/' ) ) ).toBe( false );
 
 } );
 

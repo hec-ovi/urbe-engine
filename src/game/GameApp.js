@@ -167,7 +167,7 @@ export class GameApp {
 			mechanicTargetBindings, missionAssetRequests, missionItemBindings, game, shellCatalog, loadBuildings
 		} = await source.load();
 		const spawn = game ? savedSpawn( game ) : pickSpawn( connections.networks, atlas );
-		const spatial = shellCatalog && shellCatalog.buildings.length > 250;
+		const spatial = Boolean( shellCatalog );
 		const transitRoutes = connections.networks.transit.routes;
 		this.transitJourney = new TransitJourney( {
 			atlas, routes: transitRoutes, ...( game?.transitJourney ? { state: game.transitJourney } : {} )

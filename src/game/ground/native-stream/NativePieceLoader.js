@@ -1,5 +1,5 @@
 import { Box3, Vector3 } from 'three/webgpu';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { cityGltfLoader } from '../../data/CityGltfLoader.js';
 
 export const streamError = message => Object.assign( new Error( message ), { code: 'E_NATIVE_STREET_STREAM' } );
 
@@ -9,7 +9,7 @@ export class NativePieceLoader {
 	constructor( source, materials ) {
 		this.source = source;
 		this.materials = materials;
-		this.loader = new GLTFLoader();
+		this.loader = cityGltfLoader();
 	}
 
 	async load( piece, signal ) {

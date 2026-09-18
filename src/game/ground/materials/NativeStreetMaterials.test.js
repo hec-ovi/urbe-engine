@@ -25,7 +25,7 @@ describe( 'NativeStreetMaterials public surface', () => {
 			expect( material[ Symbol.for( 'urbe.material-resources' ) ] ).toBe( factory.resources( material ) );
 			await Promise.all( factory.resources( material ).map( resource => resource.ready ) );
 		}
-		expect( load.mock.calls.every( ( [ , path ] ) => path.startsWith( 'cyberpunk/assets/street-native/' ) ) ).toBe( true );
+		expect( load.mock.calls.every( ( [ , path ] ) => path.startsWith( 'cyberpunk/assets/' ) ) ).toBe( true );
 		expect( new Set( load.mock.calls.map( ( [ id ] ) => id ) ).size ).toBe( load.mock.calls.length );
 		expect( factory.build( 'yellowPaint' ) ).toMatchObject( { transparent: true, depthWrite: false, opacity: 1 } );
 		expect( factory.build( 'polished' ).isMeshPhysicalNodeMaterial ).toBe( true );

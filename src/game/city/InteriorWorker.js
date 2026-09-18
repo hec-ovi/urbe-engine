@@ -1,4 +1,4 @@
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { cityGltfLoader } from '../data/CityGltfLoader.js';
 import { buffersOf } from './InteriorRooms.js';
 import { cutInterior } from './InteriorSurfaces.js';
 
@@ -14,7 +14,7 @@ import { cutInterior } from './InteriorSurfaces.js';
  * { id, cut, bytes, cost } with the milliseconds each step took, or { id, error }.
  * The structured-clone wire types are in schema/interior-cut.d.ts.
  */
-const loader = new GLTFLoader();
+const loader = cityGltfLoader();
 
 self.onmessage = async ( { data: { id, url, outlines } } ) => {
 

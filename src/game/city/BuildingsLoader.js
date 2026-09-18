@@ -1,7 +1,7 @@
 import { bake } from './GeometryBake.js';
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { cityGltfLoader } from '../data/CityGltfLoader.js';
 import { doorFrames, doorLeafFrame } from './DoorGeometry.js';
 import { takeTriangles, centroidAt } from './Triangles.js';
 import { bucketFor, splitBucket } from './Variety.js';
@@ -46,7 +46,7 @@ const COLLIDER_KINDS = new Set( [
 export class BuildingsLoader {
 
 	/** @param factory PbrMaterialFactory */
-	constructor( factory, loader = new GLTFLoader(), modelOptions = {} ) {
+	constructor( factory, loader = cityGltfLoader(), modelOptions = {} ) {
 
 		this.factory = factory;
 		this.loader = loader;

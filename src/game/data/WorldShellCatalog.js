@@ -42,10 +42,10 @@ export async function loadShellCatalog( manifest, readDocument ) {
 
 }
 
-/** All interiors and nearby authored bounds form the initial large-city window. */
+/** All interiors and nearby authored bounds form the initial window; a city without a catalog loads whole. */
 export function initialBuildingIds( catalog, manifest, game ) {
 
-	if ( ! catalog || manifest.parcels.length <= 250 ) return manifest.parcels;
+	if ( ! catalog ) return manifest.parcels;
 	const interiors = new Set( manifest.interiors );
 	const point = initialPoint( catalog, manifest, game );
 	const nearby = new Set( catalog.buildings.filter( building => {
