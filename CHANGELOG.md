@@ -14,7 +14,7 @@
 
 0.19.3: city batches open a quarter of the cores; an optional temperature ceiling narrows the batch while the CPU runs hot.
 
-0.19.2: loading work no longer waits on animation frames a browser has stopped, and the building preview reports every stage it runs.
+0.19.2: loading work continues when the browser has stopped animation frames, and the building preview reports every stage it runs.
 
 0.19.1: the building preview renders the game's own frame, through one shared night look and one shared set of shell surface rules.
 

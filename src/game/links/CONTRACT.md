@@ -8,7 +8,7 @@ Purpose: builds every inter-building link and fitted rooftop antenna span Connec
 - A `PbrMaterialFactory` (`../../building/PbrMaterialFactory.js`) for the material behind a key.
 
 ## Out
-`new Links( connections, factory ).build()` returns:
+`new Links( connections, factory, rooftopSpans? ).build()` returns:
 - `group`: one `THREE.Group` named `links`, holding one merged mesh per material key. Add it to the scene.
 - `colliderGeometry`: one merged position-only `BufferGeometry` covering every walkable link surface in the city, or `null` when there is none. Static and small, so it goes into the physics world once as a trimesh (`../physics/WorldColliders.js`), never streamed.
 - `triangles`, `drawCalls`: what the box costs.

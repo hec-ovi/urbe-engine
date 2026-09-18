@@ -7,7 +7,7 @@ Draws every kit building from shared pieces and a plan the city repeats: one bat
 - The piece kit `kit.json` and its GLBs, which every city shares from `/out/shared/kit/<hash>/`, loaded once through the city GLTF loader. `KitPieces({ kit, baseUrl, factory, loader?, readBinary? })` starts that load; `ready` resolves when every piece is standing.
 - Per building `<out>/<parcel>/<parcel>.placements.json`: the id of the plan it stands from, `origin`, `rotationY` and `face` (where that plan's origin stands, how far it is turned and which lot face it fronts), plus `parcel`, `family`, `floors`, `floorKinds`, `exteriorStyle`, `signText`, `lot`, `bounds` and `tint`. Under a kilobyte. All of a cell's records are read at once, eight requests deep.
 - Per distinct building `<out>/kit/plans/<plan>.json`: every piece of it in its own metres, origin at zero and face 0 along +X, with `pieces` naming each file once and a copy carrying its index. A city has a few dozen plans and thousands of buildings, so each plan is read once and every cell that wants it waits on that read. The world matrix of a copy is the parcel's frame times the plan's placement.
-- The building blueprint, which `BuildingSource` carries as it always did and now composes from `<out>/kit/plans/<plan>.blueprint.json` and the record's frame, and which is where the colliders read every opening past the street entrance.
+- The building blueprint, which `BuildingSource` composes from `<out>/kit/plans/<plan>.blueprint.json` and the record's frame, and which is where the colliders read every opening past the street entrance.
 - `BuildingSource` entries with `source: "kit"` and `placementsUrl`. Anything else stays a landmark shell and loads through `BuildingsLoader`.
 - The shared PBR factory for piece materials and `WorldColliders.addBoxes` for collision.
 
@@ -22,7 +22,7 @@ Draws every kit building from shared pieces and a plan the city repeats: one bat
 
 ## Rules
 
-- Streaming radii for kit cells: load within 384 m, keep within 640 m, skyline beyond, from the shell catalog as today.
+- Streaming radii for kit cells: load within 384 m, keep within 640 m, skyline beyond, matching the shell stream.
 - A batch is a three `BatchedMesh`, which serves both backends. WebGPU has no multi-draw, so it loops one indexed draw per visible copy inside the batch's single pipeline and bind group; WebGL2 uses `WEBGL_multi_draw`, or the per-draw fallback where the extension is missing. What the batch saves is the pipeline and the per-mesh render object, not the draw command.
 - A batch that grows, and a batch taking its first coloured copy, gets new instance buffers, and a draw already built reads the ones it was built from. Both dispose the batch material, which is what makes the renderer build the draws again, in the shadow pass as well as the colour pass; the material keeps drawing unchanged.
 - Kit batches cast and receive shadows. The batch object is not frustum tested, because one sphere over every copy in the city can only answer "visible"; each copy is tested instead, against the geometry it draws. Opaque batches do not sort.

@@ -4,7 +4,7 @@ Use this skill when a quest or interior needs a measured reusable prop or one of
 
 ## Resolve the request
 
-Choose exactly one family from the contract. Preserve the authored purpose as supplied. Do not infer a victim, owner, target, location, evidence meaning, access credential or quest consequence from that purpose.
+Set `contractVersion` to `"1.0"`. Choose exactly one family from the contract. Preserve the authored purpose as supplied. Do not infer a victim, owner, target, location, evidence meaning, access credential or quest consequence from that purpose.
 
 Measure the required outer width, height and depth in meters. The creator scales its parts to those exact bounds and returns unit scale. Pick a different family or revise the dimensions when they fall outside the family range; do not disguise a dimension error with placement scale.
 

@@ -4,7 +4,7 @@
 
 | Folder | Purpose and dependencies | Inputs and outputs |
 | --- | --- | --- |
-| `src/assembly` | Build city artifacts through Atlas, Streets, Connections, Exterior, Interior, Naming and Simulation | [Contract](../src/assembly/CONTRACT.md), [manifest](../src/assembly/schema/world-manifest.schema.json), [shell catalog](../src/assembly/schema/shell-catalog.schema.json) |
+| `src/assembly` | Assemble cities: kit placements over shared plans, generated landmark shells, native streets, interiors; kits and catalogs live once under `out/shared` | [Contract](../src/assembly/CONTRACT.md), [manifest](../src/assembly/schema/world-manifest.schema.json), [shell catalog](../src/assembly/schema/shell-catalog.schema.json) |
 | `src/assembly/kit` | Dress a block from its Atlas template, plan each distinct building once and give a parcel only the frame it stands in | [Contract](../src/assembly/kit/CONTRACT.md), [placement record](../src/assembly/kit/kit-placements.schema.json), [building plan](../src/assembly/kit/kit-plan.schema.json) |
 | `src/world-archive` | Read/write bounded hashed JSON collections using filesystem or fetch | [Contract](../src/world-archive/CONTRACT.md), [ports](../src/world-archive/schema/api.d.ts), [index](../src/world-archive/schema/index.schema.json) |
 | `src/server` | HTTP adapters for Library, Creation, Assembly and Quests dialogue | [Contract and route schemas](../src/server/CONTRACT.md) |
@@ -22,12 +22,12 @@
 | Folder | Responsibility and dependencies | Boundary |
 | --- | --- | --- |
 | `data` | Source admission through Assembly and World Archive | [Building sources](../src/game/data/schema/world-buildings.d.ts) |
-| `ground` | Atlas ground residency, Materials surfaces and Physics admission | [Contract](../src/game/ground/CONTRACT.md), [stream](../src/game/ground/schema/stream.d.ts) |
+| `ground` | Native street residency plus retained Atlas ground, Materials surfaces and Physics admission | [Contract](../src/game/ground/CONTRACT.md), [stream](../src/game/ground/schema/stream.d.ts) |
 | `ground/materials` | Native street shading from authored Materials effects and texture resources | [Contract](../src/game/ground/materials/CONTRACT.md), [ports](../src/game/ground/materials/schema/ports.d.ts) |
-| `ground/native` | Read saved street bundles, verify their source identity and select retained ground | [Contract](../src/game/ground/native/CONTRACT.md), [ports](../src/game/ground/native/schema/ports.d.ts) |
+| `ground/native` | Read saved street bundles, resolve the street kit from `/out/shared` when `sharedKit` is set, and select retained ground | [Contract](../src/game/ground/native/CONTRACT.md), [ports](../src/game/ground/native/schema/ports.d.ts) |
 | `ground/native-stream` | Draw saved streets as one batch per native surface over a city-wide piece kit, and admit their cuboids | [Contract](../src/game/ground/native-stream/CONTRACT.md), [stream](../src/game/ground/schema/stream.d.ts) |
-| `city` | Exterior shells, furnished interior floors drawn from shared room modules, doors, scenic rooms and fixtures; building vegetation uses the Props asset loader | [Contract](../src/game/city/CONTRACT.md), [floor stream](../src/game/city/schema/interior-stream.d.ts), [fixture stream](../src/game/city/schema/street-fixtures.d.ts), [building models](../src/game/city/schema/building-models.d.ts) |
-| `city/streaming` | Nearby original shells and source-derived skyline | [Contract](../src/game/city/streaming/CONTRACT.md), [ports](../src/game/city/streaming/schema/stream.d.ts) |
+| `city` | Exterior shells, furnished floors from shared room modules (three layouts per building), doors, scenic rooms and fixtures; building vegetation uses the Props asset loader | [Contract](../src/game/city/CONTRACT.md), [floor stream](../src/game/city/schema/interior-stream.d.ts), [fixture stream](../src/game/city/schema/street-fixtures.d.ts), [building models](../src/game/city/schema/building-models.d.ts) |
+| `city/streaming` | Nearby original shells and source-derived skyline; kit worlds load within 384 m and drop beyond 640 m through `KitCellLoader` | [Contract](../src/game/city/streaming/CONTRACT.md), [ports](../src/game/city/streaming/schema/stream.d.ts) |
 | `city/kit` | Kit pieces batched by material, and cuboid colliders per streamed cell | [Contract](../src/game/city/kit/CONTRACT.md) |
 | `props` | Source land/model placements with Ground clearance and Physics | [Contract](../src/game/props/CONTRACT.md), [stream](../src/game/props/stream.d.ts) |
 | `links` | Connection geometry and materials | [Contract](../src/game/links/CONTRACT.md) |
@@ -50,13 +50,6 @@ Catalogs preserve tapered upper outlines for distant rendering; authored podium 
 
 ## Previews
 
-The building route accepts output folders under `/out`, including nested city and saved-game catalogs, and reuses their existing models.
+The building route accepts output folders under `/out`, including nested city and saved-game catalogs, and reuses their existing models. It draws the game's own frame (night look, shell surface rules, building fixtures and street lamps) so modelling and materials can be judged from it. A preview-only floor slice masks what sits above the chosen floor. Scenic nodes, fallback window boxes and baked scenic receivers are specified in [City](../src/game/city/CONTRACT.md).
 
-It draws the game's own frame: the shared night look (`game/look/NightLook.js`), the shell surface rules (`game/city/ShellSurface.js`), the building's own fixtures (`game/city/ShellFixtures.js`) and its world's street lamps, so modelling and materials can be judged from it. The room lights of a generated interior stay with the game, and a preview-only floor slice masks what sits above the chosen floor.
-
-City preserves Exterior-authored scenic nodes on closed shells and uses opening metadata to avoid duplicate room geometry.
-Fallback window scenes are rectangular, one metre deep, with one rear image and ceiling lighting.
-Authored scenic fixtures feed the existing fixed light pool through `city/ScenicLights.js`.
-Scenic receiver surfaces bake fixture illumination once through `city/ScenicSurface.js`; camera movement does not select their illumination. Shell batches group material bindings by receiver shading, preserving ordinary surfaces that share those materials. Light slots use stable assignments and half-second handoffs.
-
-`src/city/CityApp.js` shows assembled parcels. The retained `?mode=experiment` entry wires `src/app` to `src/variants`, `src/scene` and the seeded `src/city/CityGenerator.js`; its settings come from `src/app/RunConfig.js`. These previews use `src/ui`. Street models have a [separate preview contract](../src/game/props/preview/CONTRACT.md).
+`src/city/CityApp.js` shows assembled parcels. `?mode=experiment` wires `src/app` to `src/variants`, `src/scene` and the seeded `src/city/CityGenerator.js`; settings come from `src/app/RunConfig.js`. These previews use `src/ui`. Street models have a [separate preview contract](../src/game/props/preview/CONTRACT.md).

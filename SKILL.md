@@ -5,7 +5,7 @@ description: Load and play an assembled Urbe city, or call its launcher, creatio
 
 # Urbe Engine
 
-Version 0.19.2. Engine loads city artifacts into a first-person game with streaming, physics, NPCs, quests and saved progress.
+Version 0.23.0. Engine loads city artifacts into a first-person game with streaming, physics, NPCs, quests and saved progress.
 
 ## Call
 
@@ -22,7 +22,7 @@ Query values are strings; [the query and parsed-setting types](src/game/data/sch
 | `mode` | launcher | `game` enters play |
 | `game` | absent | Catalog ID; restores its directory and save |
 | `out` | `/out/city-tiny` | Preview artifact directory; ignored with `game` |
-| `world` | `city-urbe-tiny` | Atlas sample fallback for a legacy preview |
+| `world` | `city-urbe-tiny` | Atlas sample fallback for a direct preview |
 | `backend` | `webgpu` | `webgl` selects WebGL2 |
 | `quality` | backend default | High on WebGPU, low on WebGL2; medium and ultra also supported |
 | `hour` | `21` | Start world hour, 0-23; saved world time takes precedence; lighting stays at 21 |

@@ -3,7 +3,7 @@
 Purpose: turns every fixture the world published into real light, in photometric units, at a cost that does not grow with the city.
 
 ## In
-- **Exterior fixtures**: `[{ position: Vector3, lumens, color: Color, range }]`, one per emitter the world actually built (lamp lens, venue sign, entrance fixture, ad screen). Producers are `city/StreetLamps.js` and `city/Neon.js`.
+- **Exterior fixtures**: `[{ position: Vector3, lumens, color: Color, range }]`, one per emitter the world actually built (lamp lens, venue sign, entrance fixture, ad screen, transit glow). Producers are `city/StreetLamps.js`, `city/Neon.js` and `transit.glows`.
 - **Rooms**: objects carrying `{ center, area, albedo: Color, floorAlbedo: Color, flux, color, fixtures, wear(binding), binding }`. Built by `city/InteriorRooms.js` from the interior box's floor layouts; their surfaces are drawn by the shared module draws, so a room carries measurements and fixtures, not geometry.
 - **Room fixtures**: the published `lights` entries of a floor, as `{ kind: 'spot'|'strip'|'cove', position, lumens, color, range, beamDeg, diffuse, length, angleDeg, facing, axis?, direction? }`.
 - A quality descriptor (`look/QualityTier.js`): `roomSlots`, `roomSpots`, `roomStrips`, `clusteredLights`, `batchedLights`, `haze`.

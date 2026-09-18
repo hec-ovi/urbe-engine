@@ -59,7 +59,7 @@ Every journey method returns either `ok: true` or `ok: false` with one code from
 - `E_TRANSIT_ALREADY_ABOARD`: listing or boarding was requested during a journey.
 - `E_TRANSIT_NOT_ABOARD`: update or disembark was requested while waiting.
 
-Renderer construction throws no transit error. Empty optional collections build nothing, as before.
+Renderer construction throws no transit error. Empty optional collections build nothing.
 
 ## Cost
 
