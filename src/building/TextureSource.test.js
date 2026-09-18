@@ -6,10 +6,15 @@ describe( 'texture source', () => {
 	it( 'routes ktx2 files to the transcoder and images to the image loader', () => {
 
 		const images = { load: vi.fn( () => 'image' ) };
-		const ktx2 = { load: vi.fn( () => 'compressed' ), detectSupport: vi.fn(), dispose: vi.fn() };
+		const ktx2 = { load: vi.fn( ( url, onLoad ) => onLoad( { image: { width: 4, height: 4 }, mipmaps: [ 'level' ], format: 7, minFilter: 3 } ) ), detectSupport: vi.fn(), dispose: vi.fn() };
 		const source = new TextureSource( { images, ktx2 } );
 		expect( source.load( '/m/basecolor.png', () => {} ) ).toBe( 'image' );
-		expect( source.load( '/m/basecolor.ktx2', () => {} ) ).toBe( 'compressed' );
+		const loaded = vi.fn();
+		const texture = source.load( '/m/basecolor.ktx2', loaded );
+		expect( texture.isCompressedTexture ).toBe( true );
+		expect( loaded ).toHaveBeenCalledWith( texture );
+		expect( texture.mipmaps ).toEqual( [ 'level' ] );
+		expect( texture.image ).toEqual( { width: 4, height: 4 } );
 		expect( images.load ).toHaveBeenCalledTimes( 1 );
 		expect( ktx2.load ).toHaveBeenCalledTimes( 1 );
 

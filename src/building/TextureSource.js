@@ -35,9 +35,23 @@ export class TextureSource {
 	/** Returns the texture at once and fills it when the file arrives, like TextureLoader. */
 	load( url, onLoad, onError ) {
 
-		return url.endsWith( '.ktx2' )
-			? this.ktx2.load( url, onLoad, undefined, onError )
-			: this.images.load( url, onLoad, undefined, onError );
+		if ( ! url.endsWith( '.ktx2' ) ) return this.images.load( url, onLoad, undefined, onError );
+
+		// The transcoder hands back its own texture; the caller already holds
+		// this one, so the decoded levels move into it.
+		const texture = new THREE.CompressedTexture();
+		this.ktx2.load( url, ( loaded ) => {
+
+			for ( const key of [ 'image', 'mipmaps', 'format', 'type', 'internalFormat', 'minFilter', 'magFilter', 'generateMipmaps', 'premultiplyAlpha', 'unpackAlignment' ] ) {
+
+				if ( loaded[ key ] !== undefined ) texture[ key ] = loaded[ key ];
+
+			}
+			texture.needsUpdate = true;
+			onLoad( texture );
+
+		}, undefined, onError );
+		return texture;
 
 	}
 
