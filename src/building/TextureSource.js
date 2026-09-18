@@ -37,16 +37,19 @@ export class TextureSource {
 
 		if ( ! url.endsWith( '.ktx2' ) ) return this.images.load( url, onLoad, undefined, onError );
 
-		// The transcoder hands back its own texture; the caller already holds
-		// this one, so the decoded levels move into it.
-		const texture = new THREE.CompressedTexture();
+		// The caller holds this placeholder from now on (a plain texture with no
+		// image uploads as nothing, like an image still downloading); when the
+		// transcoder answers, its decoded levels move in and the texture becomes
+		// compressed in place.
+		const texture = new THREE.Texture();
 		this.ktx2.load( url, ( loaded ) => {
 
-			for ( const key of [ 'image', 'mipmaps', 'format', 'type', 'internalFormat', 'minFilter', 'magFilter', 'generateMipmaps', 'premultiplyAlpha', 'unpackAlignment' ] ) {
+			for ( const key of [ 'isCompressedTexture', 'image', 'mipmaps', 'format', 'type', 'internalFormat', 'minFilter', 'magFilter', 'generateMipmaps', 'premultiplyAlpha', 'unpackAlignment' ] ) {
 
 				if ( loaded[ key ] !== undefined ) texture[ key ] = loaded[ key ];
 
 			}
+			texture.flipY = false;
 			texture.needsUpdate = true;
 			onLoad( texture );
 

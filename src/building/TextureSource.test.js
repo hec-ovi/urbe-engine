@@ -6,7 +6,7 @@ describe( 'texture source', () => {
 	it( 'routes ktx2 files to the transcoder and images to the image loader', () => {
 
 		const images = { load: vi.fn( () => 'image' ) };
-		const ktx2 = { load: vi.fn( ( url, onLoad ) => onLoad( { image: { width: 4, height: 4 }, mipmaps: [ 'level' ], format: 7, minFilter: 3 } ) ), detectSupport: vi.fn(), dispose: vi.fn() };
+		const ktx2 = { load: vi.fn( ( url, onLoad ) => onLoad( { isCompressedTexture: true, image: { width: 4, height: 4 }, mipmaps: [ 'level' ], format: 7, minFilter: 3 } ) ), detectSupport: vi.fn(), dispose: vi.fn() };
 		const source = new TextureSource( { images, ktx2 } );
 		expect( source.load( '/m/basecolor.png', () => {} ) ).toBe( 'image' );
 		const loaded = vi.fn();
