@@ -1,7 +1,8 @@
 import { rooftopSpanErrors } from './RooftopSpanDocument.js';
 
 const REQUIRED_KEYS = [ 'contractVersion', 'seed', 'atlasVersion', 'named', 'namingTheme', 'parcels', 'interiors', 'floors' ];
-const KEYS = new Set( [ ...REQUIRED_KEYS, 'rooftopSpans', 'connections', 'blueprint', 'shellCatalog', 'streets' ] );
+const KEYS = new Set( [ ...REQUIRED_KEYS, 'rooftopSpans', 'connections', 'blueprint', 'shellCatalog', 'streets', 'kit', 'sources' ] );
+const SOURCES = new Set( [ 'kit', 'shell' ] );
 const FLOOR_TAG = /^-?[0-9]{3}$/;
 
 /** Runtime validation of assembly's world-manifest schema plus atlas relations. */
@@ -65,6 +66,29 @@ export function worldManifestErrors( manifest, knownParcels ) {
 				: Object.keys( ref ).length === 3 && ref.file === 'connections.json' && hash( ref.sha256 )
 		);
 		if ( ! valid ) errors.push( 'connections must name connections.json or its archive and its sha256 and blueprintSha256 byte hashes' );
+
+	}
+	if ( Object.hasOwn( manifest, 'kit' ) ) {
+
+		const ref = manifest.kit;
+		if ( ! plainObject( ref ) || Object.keys( ref ).length !== 2 || typeof ref.file !== 'string'
+			|| ! ref.file.endsWith( 'kit.json' ) || ! hash( ref.sha256 ) ) {
+
+			errors.push( 'kit must name the copied kit.json and its sha256 byte hash' );
+
+		}
+
+	}
+	if ( Object.hasOwn( manifest, 'sources' ) ) {
+
+		if ( ! plainObject( manifest.sources ) ) errors.push( 'sources must be an object' );
+		else for ( const [ id, value ] of Object.entries( manifest.sources ) ) {
+
+			if ( ! SOURCES.has( value ) ) errors.push( `sources.${id} must be kit or shell` );
+			else if ( parcels && ! parcels.has( id ) ) errors.push( `sources.${id} is not a manifest parcel` );
+			else if ( value === 'kit' && ! Object.hasOwn( manifest, 'kit' ) ) errors.push( `sources.${id} is kit, but the manifest publishes no kit` );
+
+		}
 
 	}
 	if ( Object.hasOwn( manifest, 'streets' ) ) {

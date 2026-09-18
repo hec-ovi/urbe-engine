@@ -97,7 +97,7 @@ describe( 'LauncherApp', () => {
 		await user.click( screen.getByRole( 'button', { name: 'New game' } ) );
 		await user.click( screen.getByRole( 'button', { name: 'Next' } ) );
 		await screen.findByRole( 'heading', { name: 'Playable interiors' } );
-		expect( made.api.generateCity ).toHaveBeenCalledWith( { size: 'small' } );
+		expect( made.api.generateCity ).toHaveBeenCalledWith( { size: 'large' } );
 
 		await user.click( screen.getByRole( 'button', { name: 'Generate selected interiors' } ) );
 		await screen.findByRole( 'heading', { name: 'Story and side jobs' } );

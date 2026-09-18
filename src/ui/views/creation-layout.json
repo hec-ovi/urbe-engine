@@ -4,7 +4,7 @@
   "city": {
     "title": "Choose your city",
     "intro": "Choose a size. Streets and building exteriors are included.",
-    "fields": [{ "key": "size", "label": "City size", "type": "select", "value": "small", "options": [{ "value": "small", "label": "Small" }, { "value": "medium", "label": "Medium" }, { "value": "large", "label": "Big" }] }],
+    "fields": [{ "key": "size", "label": "City size", "type": "select", "value": "large", "options": [{ "value": "small", "label": "Small" }, { "value": "medium", "label": "Medium" }, { "value": "large", "label": "Big" }] }],
     "action": "Next"
   },
   "instances": {

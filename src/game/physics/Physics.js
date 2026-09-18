@@ -99,6 +99,40 @@ export class Physics {
 	}
 
 	/**
+	 * One fixed body carrying a compound of upright cuboids. Rapier keeps a
+	 * compound as a single broad-phase entry, so a whole cell of kit buildings
+	 * costs one body and no triangle cooking at all.
+	 * @param boxes [{ center: [x,y,z], halfExtents: [hx,hy,hz], rotationY }]
+	 */
+	addBoxes( boxes ) {
+
+		const body = this.world.createRigidBody( RAPIER.RigidBodyDesc.fixed() );
+
+		try {
+
+			for ( const { center, halfExtents, rotationY = 0 } of boxes ) {
+
+				if ( ! finiteTriple( center ) || ! finiteTriple( halfExtents ) || halfExtents.some( ( value ) => value <= 0 ) || ! Number.isFinite( rotationY ) ) {
+
+					throw new Error( 'E_PHYSICS_BOXES: a cuboid needs a finite centre, positive half extents and a finite yaw' );
+
+				}
+				this.world.createCollider(
+					RAPIER.ColliderDesc.cuboid( halfExtents[ 0 ], halfExtents[ 1 ], halfExtents[ 2 ] ).setDensity( 0 )
+						.setTranslation( center[ 0 ], center[ 1 ], center[ 2 ] )
+						.setRotation( { x: 0, y: Math.sin( rotationY / 2 ), z: 0, w: Math.cos( rotationY / 2 ) } ),
+					body
+				);
+
+			}
+
+			return { body, boxes: boxes.length, triangles: 0 };
+
+		} catch ( error ) { this.world.removeRigidBody( body ); throw error; }
+
+	}
+
+	/**
 	 * A fixed upright cylinder standing on the ground: street furniture the
 	 * player bumps into, at a fraction of what the same shape costs as a
 	 * trimesh.
@@ -120,6 +154,12 @@ export class Physics {
 		this.world.removeRigidBody( handle.body );
 
 	}
+
+}
+
+function finiteTriple( values ) {
+
+	return Array.isArray( values ) && values.length === 3 && values.every( ( value ) => Number.isFinite( value ) );
 
 }
 

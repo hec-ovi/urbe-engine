@@ -1,24 +1,41 @@
 import { ShellStream } from './city/streaming/ShellStream.js';
+import { KitPieces } from './city/kit/KitPieces.js';
+import { KitCellLoader } from './city/kit/KitCells.js';
 import { Neon } from './city/Neon.js';
 import { LitWindows } from './city/LitWindows.js';
 import { DoorColliders } from './physics/index.js';
 import { Haze } from './light/Haze.js';
 
+/** Kit cells are cheap enough to keep a wider window resident than merged shells. */
+const KIT_LOAD_RADIUS = 384;
+const KIT_DROP_RADIUS = 640;
+
 /** Binds shell admission to the game's render, fixture and physics ports. */
 export class ShellScene {
 
-	constructor( { atlas, catalog, factory, buildings, loadBuildings, physics, colliders, interiors, haze } ) {
+	constructor( { atlas, catalog, factory, buildings, loadBuildings, physics, colliders, interiors, haze, kit = null } ) {
 
 		this.atlas = atlas;
 		this.parcels = new Map( atlas.parcels.map( parcel => [ parcel.id, parcel ] ) );
 		Object.assign( this, { factory, physics, colliders, interiors, haze } );
 		this.cells = new Map();
+		this.pieces = kit ? new KitPieces( { kit: kit.document, baseUrl: kit.baseUrl, factory } ) : null;
 		this.stream = new ShellStream( {
 			catalog, factory, buildings, loadBuildings,
+			...( this.pieces ? {
+				loader: new KitCellLoader( { pieces: this.pieces, factory } ),
+				loadRadius: KIT_LOAD_RADIUS,
+				dropRadius: KIT_DROP_RADIUS
+			} : {} ),
 			prepare: cell => this.#prepare( cell ),
 			added: cell => { this.cells.set( cell.id, cell ); this.onFixturesChanged?.(); },
 			removed: cell => this.#remove( cell )
 		} );
+		// The kit draws belong to the whole city, not to any one cell, so they
+		// hang off the stream itself. A cell's copies only enter them when the
+		// stream turns that cell visible, which is after the skyline that still
+		// carries its impostors has been rebuilt without them.
+		if ( this.pieces ) this.stream.group.add( this.pieces.group );
 
 	}
 
@@ -54,6 +71,9 @@ export class ShellScene {
 		}
 		this.night?.addGroup( cell.group );
 		await this.warmup?.warmAll( cell.group );
+		// One fixed body for the whole cell: every kit building in it is a
+		// compound of cuboids, with nothing to cook across frames.
+		if ( cell.boxColliders?.length ) this.colliders.addBoxes( `kit:${cell.id}`, cell.boxColliders );
 		for ( const [ id, geometry ] of cell.shellColliders ) {
 
 			if ( ! await this.colliders.addBand( `shell:${id}`, geometry ) ) throw new Error( `shell ${id}: collision admission cancelled` );
@@ -67,6 +87,7 @@ export class ShellScene {
 
 	#remove( cell ) {
 
+		this.colliders.dropBand( `kit:${cell.id}` );
 		for ( const id of cell.ids ) this.colliders.dropBand( `shell:${id}` );
 		for ( const door of cell.doors ) for ( const leaf of door.pivots ) {
 

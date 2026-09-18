@@ -87,6 +87,7 @@ export class WorldSource {
 		const known = new Set( atlas.parcels.map( ( parcel ) => parcel.id ) );
 		const listedSet = new Set( manifest.parcels );
 		const shellCatalog = await loadShellCatalog( manifest, ( file, reference ) => this.#document( `${this.outBase}/${file}`, reference ) );
+		const kit = await this.#kit( manifest );
 		const sources = new BuildingSource( { manifest, outBase: this.outBase, readJson: url => this.#json( url ) } );
 		const loadBuildings = ids => sources.load( ids );
 		const buildings = await loadBuildings( initialBuildingIds( shellCatalog, manifest, game ) );
@@ -99,6 +100,7 @@ export class WorldSource {
 			rooftopSpans: manifest.rooftopSpans ?? emptyRooftopSpans( atlas.meta.seed ),
 			buildings,
 			shellCatalog,
+			kit,
 			loadBuildings,
 			// Catalog games carry the player and quest runtime beside their world.
 			// Direct city previews have no descriptor and retain session-only play.
@@ -108,6 +110,22 @@ export class WorldSource {
 			...quests,
 			unbuilt: [ ...known ].filter( ( id ) => ! listedSet.has( id ) )
 		};
+
+	}
+
+	/**
+	 * The Exterior piece kit this world was built from, copied beside it and
+	 * hashed in the manifest. `baseUrl` is what its piece files are relative to.
+	 * @returns { document, baseUrl } or null for a world of generated shells
+	 */
+	async #kit( manifest ) {
+
+		if ( ! manifest.kit ) return null;
+
+		const file = manifest.kit.file;
+		const { data } = await this.#document( `${this.outBase}/${file}`, manifest.kit );
+
+		return { document: data, baseUrl: `${this.outBase}/${file.slice( 0, file.lastIndexOf( '/' ) + 1 )}`.replace( /\/+$/, '' ) };
 
 	}
 

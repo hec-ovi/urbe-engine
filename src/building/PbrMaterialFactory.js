@@ -1,3 +1,4 @@
+import { TextureSource } from './TextureSource.js';
 import * as THREE from 'three/webgpu';
 import { PbrMapBinding } from './PbrMapBinding.js';
 import { PbrTextureBudget } from './PbrTextureBudget.js';
@@ -55,10 +56,10 @@ async function decodeTint( url ) {
  */
 export class PbrMaterialFactory {
 
-	constructor( resolver, profile = {} ) {
+	constructor( resolver, profile = {}, textures = new TextureSource() ) {
 
 		this.resolver = resolver;
-		this.loader = new THREE.TextureLoader();
+		this.textures = textures;
 		this.cache = new Map();
 		this.tints = new Map();
 		this.mapBindings = new WeakMap();
@@ -162,13 +163,14 @@ export class PbrMaterialFactory {
 		const map = ( name, srgb = false, scalarFallback ) => {
 
 			if ( ! this.materialMaps.has( name ) ) return null;
-			const path = variant.maps[ name ];
+			// The catalog publishes a compressed sibling for maps that have one.
+			const path = this.textures.choose( { image: variant.maps[ name ], ktx2: variant.ktx2?.[ name ] } );
 
 			if ( ! path ) return null;
 
 			let ready;
 			const loaded = new Promise( ( resolve ) => { ready = resolve; } );
-			const texture = this.loader.load(
+			const texture = this.textures.load(
 				this.resolver.mapUrl( theme, path ),
 				loadedTexture => {
 
@@ -184,7 +186,7 @@ export class PbrMaterialFactory {
 
 					}
 
-				}, undefined, () => ready( false )
+				}, () => ready( false )
 			);
 			// A streamed floor waits on this before asking the renderer to upload
 			// the map. A failed scalar map restores the catalog's surface factor.

@@ -5,6 +5,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { BuildingViewerApp, materialForViewerSurface } from './BuildingViewerApp.js';
 import { PbrMaterialFactory } from './PbrMaterialFactory.js';
+import { TextureSource } from './TextureSource.js';
+
+const fakeTextures = ( load ) => new TextureSource( {
+	images: { load: ( url, onLoad, onProgress, onError ) => load( url, onLoad, onError ) },
+	ktx2: { load() {}, detectSupport() {}, dispose() {} }
+} );
 
 describe( 'building navigation', () => {
 
@@ -48,13 +54,13 @@ describe( 'building navigation', () => {
 			} ),
 			mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
 		} );
-		factory.loader = { load: ( url, onLoad ) => {
+		factory.textures = fakeTextures( ( url, onLoad ) => {
 
 			const texture = new THREE.Texture( { src: url } );
 			queueMicrotask( () => onLoad( texture ) );
 			return texture;
 
-		} };
+		} );
 		const source = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, roughness: 0.64, metalness: 0 } );
 		source.name = 'cyberpunk/curtain/high_rich';
 		source.userData.materialVariant = 'shade';

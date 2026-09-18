@@ -1,5 +1,5 @@
 {
-  "small": { "label": "Small", "args": ["--size", "400", "--max-floors", "6", "--no-highways", "--no-trains", "--no-subways"] },
-  "medium": { "label": "Medium", "args": ["--size", "800", "--no-trains"] },
-  "large": { "label": "Big", "args": ["--size", "1000", "--no-trains"] }
+  "small": { "label": "Small", "args": ["--size", "500", "--no-trains"] },
+  "medium": { "label": "Medium", "args": ["--size", "1000", "--no-trains"] },
+  "large": { "label": "Big", "args": ["--size", "3000", "--no-trains"] }
 }

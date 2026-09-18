@@ -2,6 +2,12 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { PbrMaterialFactory } from './PbrMaterialFactory.js';
+import { TextureSource } from './TextureSource.js';
+
+const fakeTextures = ( load ) => new TextureSource( {
+	images: { load: ( url, onLoad, onProgress, onError ) => load( url, onLoad, onError ) },
+	ktx2: { load() {}, detectSupport() {}, dispose() {} }
+} );
 
 const entry = ( emissiveStrength ) => ( {
 	alignment: 'tile',
@@ -50,13 +56,13 @@ describe( 'PbrMaterialFactory', () => {
 	it( 'uses scalar surfaces after failed map loads, including cached tuned copies', async () => {
 
 		const factory = surfaceFactory( { materialMaps: [ 'roughness', 'metallic' ] } );
-		factory.loader = { load: ( url, onLoad, onProgress, onError ) => {
+		factory.textures = fakeTextures( ( url, onLoad, onError ) => {
 
 			const texture = new THREE.Texture();
 			queueMicrotask( () => onError( new Error( 'decode failed' ) ) );
 			return texture;
 
-		} };
+		} );
 		const base = factory.build( 'known/metal/mid' );
 		const copy = factory.variant( 'known/metal/mid', { side: THREE.DoubleSide } );
 		await Promise.all( [ base.roughnessMap, base.metalnessMap ].map( ( map ) => map[ Symbol.for( 'urbe.texture-ready' ) ] ) );
@@ -162,13 +168,13 @@ describe( 'PbrMaterialFactory', () => {
 	it( 'exposes when each map is decoded for streamed GPU upload', async () => {
 
 		const factory = factoryFor( 1, { materialMaps: [ 'basecolor' ] } );
-		factory.loader = { load: ( url, onLoad ) => {
+		factory.textures = fakeTextures( ( url, onLoad ) => {
 
 			const texture = new THREE.Texture();
 			queueMicrotask( () => onLoad( texture ) );
 			return texture;
 
-		} };
+		} );
 		const material = factory.build( 'known/wall/mid' );
 
 		await expect( material.map[ Symbol.for( 'urbe.texture-ready' ) ] ).resolves.toBeUndefined();

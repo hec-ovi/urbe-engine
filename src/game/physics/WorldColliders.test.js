@@ -109,6 +109,29 @@ describe( 'streamed band collision admission', () => {
 		} finally { vi.unstubAllGlobals(); geometry.dispose(); physics.world.free(); }
 	} );
 
+	it( 'holds a cell of kit buildings as one fixed body of cuboids and frees it on a drop', async () => {
+		const physics = await Physics.create(), colliders = new WorldColliders( physics );
+		const boxes = [
+			{ center: [ 0, 4, 0 ], halfExtents: [ 12, 4, 0.25 ], rotationY: 0 },
+			{ center: [ 6, 4, 8 ], halfExtents: [ 0.25, 4, 16 ], rotationY: Math.PI / 2 }
+		];
+		try {
+			expect( colliders.addBoxes( 'kit:0:0', boxes ) ).toBe( true );
+			expect( colliders.boxes ).toBe( 2 );
+			expect( physics.world.bodies.len() ).toBe( 1 );
+			expect( physics.world.colliders.len() ).toBe( 2 );
+			expect( colliders.addBoxes( 'kit:0:0', boxes ) ).toBe( true );
+			expect( physics.world.bodies.len() ).toBe( 1 );
+			colliders.dropBand( 'kit:0:0' );
+			expect( colliders.boxes ).toBe( 0 );
+			expect( physics.world.bodies.len() ).toBe( 0 );
+			expect( physics.world.colliders.len() ).toBe( 0 );
+			expect( () => colliders.addBoxes( 'bad', [ { center: [ 0, 0, 0 ], halfExtents: [ 1, 0, 1 ] } ] ) )
+				.toThrow( 'E_PHYSICS_BOXES' );
+			expect( physics.world.bodies.len() ).toBe( 0 );
+		} finally { physics.world.free(); }
+	} );
+
 	it( 'releases both completed pieces and the current body when Rapier rejects a cook', async () => {
 		const physics = await Physics.create(), colliders = new WorldColliders( physics );
 		const triangle = new Float32Array( [ 0, 0, 0, 0, 0, 1, 1, 0, 0 ] );

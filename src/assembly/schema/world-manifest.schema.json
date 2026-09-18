@@ -41,6 +41,20 @@
         "sha256": { "$ref": "#/$defs/sha256" }
       }
     },
+    "kit": {
+      "type": "object", "additionalProperties": false, "required": [ "file", "sha256" ],
+      "description": "The piece kit copied beside the world, present when any parcel was assembled from it.",
+      "properties": {
+        "file": { "const": "kit/kit.json" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sources": {
+      "type": "object",
+      "description": "How each parcel is drawn: its own GLB, or the kit pieces.",
+      "propertyNames": { "$ref": "#/$defs/parcelId" },
+      "additionalProperties": { "enum": [ "kit", "shell" ] }
+    },
     "streets": {
       "type": "object", "additionalProperties": false, "required": [ "file", "sha256", "blueprintSha256" ],
       "properties": {

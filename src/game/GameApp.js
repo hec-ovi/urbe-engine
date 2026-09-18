@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { RendererFactory } from '../app/RendererFactory.js';
 import { MaterialResolver } from '../building/MaterialResolver.js';
+import { TextureSource } from '../building/TextureSource.js';
 import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { QuestSession } from './quests/QuestSession.js';
@@ -164,7 +165,7 @@ export class GameApp {
 		const source = new WorldSource( config );
 		const {
 			atlas, connections, nativeStreets, rooftopSpans, buildings, unbuilt, npcTypes, questlines, investigations,
-			mechanicTargetBindings, missionAssetRequests, missionItemBindings, game, shellCatalog, loadBuildings
+			mechanicTargetBindings, missionAssetRequests, missionItemBindings, game, shellCatalog, kit, loadBuildings
 		} = await source.load();
 		const spawn = game ? savedSpawn( game ) : pickSpawn( connections.networks, atlas );
 		const spatial = Boolean( shellCatalog );
@@ -205,7 +206,7 @@ export class GameApp {
 		const resolver = new MaterialResolver();
 		await resolver.loadTheme( THEME );
 		this.resolver = resolver;
-		const factory = new PbrMaterialFactory( resolver, this.tier );
+		const factory = new PbrMaterialFactory( resolver, this.tier, new TextureSource().detect( this.renderer ) );
 		this.missionItems = new MissionItemAssets( {
 			requests: missionAssetRequests,
 			bindings: missionItemBindings,
@@ -226,7 +227,7 @@ export class GameApp {
 
 		this.view.step( `loading ${buildings.size} buildings` );
 		if ( spatial ) this.shellScene = new ShellScene( {
-			atlas, catalog: shellCatalog, factory, buildings, loadBuildings,
+			atlas, catalog: shellCatalog, factory, buildings, loadBuildings, kit,
 			physics: this.physics, colliders: this.colliders,
 			interiors: ! config.off.has( 'interiors' ), haze: this.tier.haze ? OUTDOOR_HAZE : null
 		} );

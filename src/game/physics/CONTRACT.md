@@ -8,6 +8,7 @@ Purpose: resolves world and player collision, measures vehicle contacts, and tur
 - Static geometry: `Physics.addTrimesh(geometry, {enabled: true})` and `WorldColliders` accept generated Three.js geometry in world coordinates. Omitted options enable collision; disabled bodies stay out of simulation and queries.
 - `WorldColliders.addStaticsAsync(geometries, {sliceMs: 8, release: false})` prepares labelled or unlabelled static sources in bounded disabled pieces. Complete sources enable after preparation; `release` disposes staging geometry. `addPostsAsync(posts)` yields during fixed-post installation. Both resolve when installation completes.
 - Streamed floors: `WorldColliders.addBand(id, geometry)` accepts borrowed exact triangles through the [band schema](schema/band-admission.d.ts).
+- Cuboid compounds: `Physics.addBoxes(boxes)` takes `[{center: [x,y,z], halfExtents: [hx,hy,hz], rotationY}]` in world coordinates and returns `{body, boxes, triangles: 0}`, one fixed body carrying every cuboid. `WorldColliders.addBoxes(id, boxes)` holds that body under an id and returns true; `dropBand(id)` releases it, and `boxes` counts the live cuboids. Kit buildings admit a whole cell this way.
 - Safety collision: `Physics.addHalfSpace(elevation)` accepts a finite world Y and returns `{body, collider, triangles: 0}` for the solid below an infinite horizontal plane. `Physics.remove(handle)` releases it.
 - Moving surfaces: `Physics.addKinematicTrimesh(geometry, position, rotation?)` accepts body-local triangles and a world rigid pose; omitted rotation is identity. It returns the Rapier body, collider and triangle count.
 - Moving Exterior leaves: `new DoorColliders(physics, doors)` accepts exact pivot-local leaf triangles from the shell loader. Initial bodies use the rendered world pose. `sync(door)` copies each pivot's world translation and rotation for the next physics step. Pivots and their parents have unit scale.
@@ -27,6 +28,7 @@ Purpose: resolves world and player collision, measures vehicle contacts, and tur
 
 - `E_PHYSICS_FLOOR`: a half-space elevation is not finite.
 - `E_PHYSICS_BAND`: positions are non-finite or do not form complete triangles. Cooking errors reject admission and release its pieces.
+- `E_PHYSICS_BOXES`: a cuboid has a non-finite centre or yaw, or a half extent that is not positive. The whole body is released and nothing is admitted.
 - `E_RAGDOLL_INPUT`: a physics world, frame or impact is missing or invalid.
 - `E_RAGDOLL_RIG`: the character is not the audited Source skeleton or has an invalid body segment.
 - `E_RAGDOLL_OUTPUT`: a produced impact or body summary violates its schema.
@@ -42,6 +44,7 @@ Purpose: resolves world and player collision, measures vehicle contacts, and tur
 
 - Physics advances at 1/60 second. Ground, structures and streamed floors use the same generated geometry that is rendered.
 - Fixed trimeshes have zero density, so admitting immovable surfaces requires no mass or inertia calculation.
+- A cuboid compound is one broad-phase entry however many parts it holds, and needs no cooking, so it becomes solid in the call that admits it. A second admission of the same id keeps the body already standing.
 - Floor admission preserves every vertex and triangle winding. It cooks at most 2048 triangles per piece, yielding a frame after four pieces or 4 ms of work. Pieces stay disabled until the complete band is ready; cancellation removes them before another cook.
 - The safety half-space has no horizontal bounds and remains below the world's lowest authored geometry and basin depth.
 - Each authored physical door leaf has one kinematic trimesh using its rendered pivot's complete rigid pose. Translation and rotation preserve that agreement while closed, partly open and fully open. Authored full-open poses clear their published passage.

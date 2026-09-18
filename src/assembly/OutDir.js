@@ -5,6 +5,7 @@ import { validateShellCatalog, validateWorldManifest } from './validators.js';
 import { WorldFiles } from './WorldFiles.js';
 import { writeJsonFile } from './JsonFile.js';
 import { AssemblyError } from './RequestAssembler.js';
+import { placementsFile } from './kit/KitFiles.js';
 
 export const MANIFEST_FILE = 'manifest.json';
 export const MANIFEST_VERSION = '1.0.0';
@@ -47,17 +48,21 @@ export class OutDir {
 	 */
 	prune( parcels ) {
 
-		const footprints = new Map( parcels.map( ( parcel ) => [ parcel.id, JSON.stringify( parcel.footprint ) ] ) );
+		const ground = new Map( parcels.map( ( parcel ) => [ parcel.id, {
+			footprint: ringKey( parcel.footprint ), lot: ringKey( parcel.lot )
+		} ] ) );
 		const removed = [];
 
 		for ( const name of this.#folders() ) {
 
 			const path = join( this.dir, name );
-			const request = join( path, `${name}.request.json` );
-			const ours = existsSync( request ) || existsSync( join( path, `${name}.blueprint.json` ) );
+			const ours = existsSync( join( path, `${name}.request.json` ) )
+				|| existsSync( join( path, `${name}.blueprint.json` ) );
+			const wanted = ground.get( name );
+			const built = ours ? this.#builtOn( path, name ) : null;
 
 			if ( ! ours ) continue;
-			if ( footprints.has( name ) && this.#builtOn( request ) === footprints.get( name ) ) continue;
+			if ( wanted && built && ( built === wanted.footprint || built === wanted.lot ) ) continue;
 
 			rmSync( path, { recursive: true, force: true } );
 			removed.push( name );
@@ -75,6 +80,17 @@ export class OutDir {
 
 	}
 
+	/**
+	 * Removes a kit placement table, for a parcel the generator builds now. The
+	 * table names the pieces of the building that stood here before, and a
+	 * folder carrying both is drawn from the stale one.
+	 */
+	dropPlacements( parcelId ) {
+
+		rmSync( join( this.dir, parcelId, placementsFile( parcelId ) ), { force: true } );
+
+	}
+
 	/** Removes only furnished output. The exterior remains a valid closed shell. */
 	dropInterior( parcelId ) {
 
@@ -83,8 +99,9 @@ export class OutDir {
 	}
 
 	/**
-	 * The parcels whose exterior is complete on disk. These are the buildings
-	 * that stand in the city whether or not they are enterable.
+	 * The parcels whose exterior is complete on disk, whether or not they are
+	 * enterable. Every standing building publishes a blueprint; it is drawn
+	 * either from its own GLB or from its kit placement table.
 	 */
 	shells( parcelIds ) {
 
@@ -93,9 +110,16 @@ export class OutDir {
 			const path = join( this.dir, id );
 
 			return existsSync( join( path, `${id}.blueprint.json` ) )
-				&& existsSync( join( path, `${id}.glb` ) );
+				&& ( existsSync( join( path, `${id}.glb` ) ) || existsSync( join( path, placementsFile( id ) ) ) );
 
 		} );
+
+	}
+
+	/** The parcels standing as kit buildings: their placement table is on disk. */
+	kits( parcelIds ) {
+
+		return parcelIds.filter( ( id ) => existsSync( join( this.dir, id, placementsFile( id ) ) ) );
 
 	}
 
@@ -178,7 +202,7 @@ export class OutDir {
 	/** Publishes source documents and a compact shell catalog as one world. */
 	async publishManifest( atlas, parcelIds, interiorIds, {
 		rooftopSpans = null, connectionsArtifact = null, catalog = null, encoding = 'json', archiveOptions, streets = false,
-		streetsPrepared = null
+		streetsPrepared = null, kit = null, sources = null
 	} = {} ) {
 
 		if ( ! [ 'json', 'archive' ].includes( encoding ) ) throw new AssemblyError( 'E_REQUEST_INVALID', 'unknown world document encoding' );
@@ -189,7 +213,9 @@ export class OutDir {
 		try {
 
 			const references = await files.prepare( atlas, connectionsArtifact, { encoding, archiveOptions, catalog, streets, streetsPrepared } );
-			const manifest = this.#manifest( atlas, parcelIds, interiorIds, rooftopSpans, references );
+			const manifest = this.#manifest( atlas, parcelIds, interiorIds, rooftopSpans, {
+				...references, ...( kit ? { kit } : {} ), ...( sources ? { sources } : {} )
+			} );
 			files.publish( manifest );
 			return manifest;
 
@@ -223,6 +249,13 @@ export class OutDir {
 
 		}
 
+		for ( const [ id, source ] of Object.entries( references.sources ?? {} ) ) {
+
+			if ( ! shells.has( id ) ) throw new Error( `manifest source ${id} is not a listed parcel` );
+			if ( source === 'kit' && ! references.kit ) throw new Error( `manifest source ${id} is kit, but no kit is published` );
+
+		}
+
 		const manifest = {
 			contractVersion: MANIFEST_VERSION,
 			seed: atlas.meta.seed,
@@ -243,18 +276,20 @@ export class OutDir {
 
 	}
 
-	/** The lot the folder's stored request was built on, or null when unreadable. */
-	#builtOn( requestPath ) {
+	/**
+	 * The ground the folder says it was built on: the stored request's
+	 * footprint for a generated shell, the lot for a kit table. Null when the
+	 * folder carries neither.
+	 */
+	#builtOn( path, id ) {
 
-		try {
+		const request = readJson( join( path, `${id}.request.json` ) );
 
-			return JSON.stringify( JSON.parse( readFileSync( requestPath, 'utf8' ) ).parcel.footprint );
+		if ( request ) return ringKey( request.parcel?.footprint );
 
-		} catch {
+		const placements = readJson( join( path, placementsFile( id ) ) );
 
-			return null;
-
-		}
+		return placements ? ringKey( placements.lot ) : null;
 
 	}
 
@@ -263,6 +298,27 @@ export class OutDir {
 		if ( ! existsSync( this.dir ) ) return [];
 
 		return readdirSync( this.dir ).filter( ( name ) => statSync( join( this.dir, name ) ).isDirectory() );
+
+	}
+
+}
+
+/** A ring as its own corners, so the same ground compares equal however it is wound. */
+function ringKey( ring ) {
+
+	return Array.isArray( ring ) ? JSON.stringify( ring.map( ( point ) => `${point}` ).sort() ) : null;
+
+}
+
+function readJson( path ) {
+
+	try {
+
+		return JSON.parse( readFileSync( path, 'utf8' ) );
+
+	} catch {
+
+		return null;
 
 	}
 

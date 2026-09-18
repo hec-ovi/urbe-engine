@@ -23,6 +23,9 @@ export class StreetsAhead {
 			this.worker.on( 'exit', ( code ) => reject( new AssemblyError( 'E_STREETS_BUILD', `Streets worker exited (${code})` ) ) );
 
 		} );
+		// The build finishes long before the shells do; holding the outcome here
+		// keeps a failed build from ending the run before its buildings land.
+		this.done.catch( () => {} );
 		this.worker.postMessage( { stage: this.stage, options } );
 
 	}

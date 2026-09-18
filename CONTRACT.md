@@ -1,6 +1,6 @@
 # Engine contract
 
-Version 0.19.4. Loads assembled city artifacts into a first-person game and exposes catalog, creation, preview, dialogue and save adapters.
+Version 0.20.0. Loads assembled city artifacts into a first-person game and exposes catalog, creation, preview, dialogue and save adapters.
 
 ## Inputs and outputs
 
@@ -9,7 +9,7 @@ Version 0.19.4. Loads assembled city artifacts into a first-person game and expo
 | `npm run play` | Vite arguments; `--port 5306` selects the port | Launcher at `/`, resource mounts and HTTP routes. `npm run dev` also watches source files. |
 | `POST /api/launcher` | [Method and input](src/server/schema/launcher-request.schema.json) | Method results below |
 | `?mode=game` | [Query and parsed settings](src/game/data/schema/game-config.d.ts) | Playable session through [Game](src/game/CONTRACT.md) |
-| Assembly CLIs | [Assembly requests and flags](src/assembly/CONTRACT.md) | [World manifest](src/assembly/schema/world-manifest.schema.json), GLBs and floor documents |
+| Assembly CLIs | [Assembly requests and flags](src/assembly/CONTRACT.md) | [World manifest](src/assembly/schema/world-manifest.schema.json), [kit placement tables](src/assembly/kit/kit-placements.schema.json), GLBs and floor documents |
 | `POST /api/building` | [Building request](src/server/schema/building-build-request.schema.json) | [Building result](src/server/schema/building-build-result.schema.json) |
 | `POST /api/talk` | [NPC, behavior, line, time and optional quests](src/server/schema/talk-request.schema.json) | [Reply](src/server/schema/talk-response.schema.json) |
 | `/api/exteriors` | [Capability and exact-blueprint jobs](src/server/CONTRACT.md) | [Capability](src/server/schema/exterior-capability.schema.json) or [job](src/server/schema/exterior-build-job.schema.json) |

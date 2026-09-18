@@ -1,11 +1,11 @@
 # Box map
 
-[Engine 0.19.4 contract](../CONTRACT.md), [agent calling guide](../SKILL.md), [cross-box proposals](ISSUES.md). Raw requirements and local verification records stay untracked.
+[Engine 0.20.0 contract](../CONTRACT.md), [agent calling guide](../SKILL.md), [cross-box proposals](ISSUES.md). Raw requirements and local verification records stay untracked.
 
 | Folder | Purpose and dependencies | Inputs and outputs |
 | --- | --- | --- |
 | `src/assembly` | Build city artifacts through Atlas, Streets, Connections, Exterior, Interior, Naming and Simulation | [Contract](../src/assembly/CONTRACT.md), [manifest](../src/assembly/schema/world-manifest.schema.json), [shell catalog](../src/assembly/schema/shell-catalog.schema.json) |
-| `src/assembly/kit` | Place Exterior kit pieces per parcel instead of generating a unique shell | [Contract](../src/assembly/kit/CONTRACT.md) |
+| `src/assembly/kit` | Place Exterior kit pieces per parcel instead of generating a unique shell | [Contract](../src/assembly/kit/CONTRACT.md), [placement table](../src/assembly/kit/kit-placements.schema.json) |
 | `src/world-archive` | Read/write bounded hashed JSON collections using filesystem or fetch | [Contract](../src/world-archive/CONTRACT.md), [ports](../src/world-archive/schema/api.d.ts), [index](../src/world-archive/schema/index.schema.json) |
 | `src/server` | HTTP adapters for Library, Creation, Assembly and Quests dialogue | [Contract and route schemas](../src/server/CONTRACT.md) |
 | `src/library` | Catalog and revisioned filesystem saves | [Contract and schemas](../src/library/CONTRACT.md) |

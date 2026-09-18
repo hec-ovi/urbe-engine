@@ -75,7 +75,6 @@ describe( 'playable world creation contract', () => {
 		expect( fixture.calls[ 0 ].args.slice( 0, 7 ) ).toEqual( [
 			'run', 'generate', '--', '--seed', 'canal-17', '--out', expect.any( String )
 		] );
-		expect( fixture.calls[ 0 ].args ).toEqual( expect.arrayContaining( [ '--size', '400', '--max-floors', '6', '--no-highways', '--no-trains', '--no-subways' ] ) );
 
 	} );
 
@@ -83,7 +82,7 @@ describe( 'playable world creation contract', () => {
 
 		const fixture = await setup();
 		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
-		for ( const [ size, metres ] of [ [ 'small', '400' ], [ 'medium', '800' ], [ 'large', '1000' ] ] ) {
+		for ( const [ size, metres ] of [ [ 'small', '500' ], [ 'medium', '1000' ], [ 'large', '3000' ] ] ) {
 
 			const city = await creation.generateCity( { size } );
 			expect( city ).toMatchObject( { size, name: expect.any( String ), seed: expect.any( String ) } );

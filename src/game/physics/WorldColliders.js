@@ -1,8 +1,10 @@
 import { BandAdmission } from './BandAdmission.js';
 
 /**
- * Installs exact static geometry and admits streamed floor collision.
- * Each source prepares in bounded pieces before becoming solid.
+ * Installs exact static geometry, cuboid compounds and streamed floor
+ * collision. Triangle sources prepare in bounded pieces before becoming solid;
+ * cuboids are solid the moment they are admitted. Every admission is held by
+ * its id and released by `dropBand`.
  */
 export class WorldColliders {
 
@@ -12,6 +14,7 @@ export class WorldColliders {
 		this.live = new Map();
 		this.pending = new Map();
 		this.triangles = 0;
+		this.boxes = 0;
 
 	}
 
@@ -70,6 +73,21 @@ export class WorldColliders {
 
 	}
 
+	/**
+	 * A cuboid compound becomes solid at once: cuboids need no cooking, so there
+	 * is nothing to spread across frames. One id, one fixed body.
+	 * @param boxes [{ center, halfExtents, rotationY }]
+	 */
+	addBoxes( id, boxes ) {
+
+		if ( this.live.has( id ) ) return true;
+		const handle = this.physics.addBoxes( boxes );
+		this.live.set( id, { boxes: handle.boxes, cancel: () => this.physics.remove( handle ) } );
+		this.boxes += handle.boxes;
+		return true;
+
+	}
+
 	/** Exact floor triangles prepare while disabled, then become solid together. */
 	async addBand( id, geometry ) {
 
@@ -93,7 +111,13 @@ export class WorldColliders {
 
 		this.pending.get( id )?.cancel();
 		this.pending.delete( id );
-		this.live.get( id )?.cancel();
+		const live = this.live.get( id );
+		if ( live ) {
+
+			this.boxes -= live.boxes ?? 0;
+			live.cancel();
+
+		}
 		this.live.delete( id );
 
 	}

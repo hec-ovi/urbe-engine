@@ -14,7 +14,7 @@ export class PbrTextureBudget {
 
 	fit( texture ) {
 
-		if ( this.maxSize === undefined ) return;
+		if ( this.maxSize === undefined || texture.isCompressedTexture ) return;
 		const image = texture.image;
 		const width = image?.naturalWidth ?? image?.width;
 		const height = image?.naturalHeight ?? image?.height;

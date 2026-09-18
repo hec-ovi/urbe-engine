@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urbe/engine/kit-placements",
+  "title": "Kit building placement table",
+  "description": "One ordinary building: what it is made of, and Exterior's placement plan in the parcel's own metres. Its blueprint stands beside it as <parcel>.blueprint.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [ "parcel", "family", "baysAcross", "baysDeep", "floors", "signText", "lot", "bounds", "plan" ],
+  "properties": {
+    "parcel": { "type": "string", "minLength": 1 },
+    "family": { "$ref": "https://urbe.dev/exterior/kit.schema.json#/$defs/familyId" },
+    "baysAcross": { "type": "integer", "minimum": 2, "description": "Bays along the first lot edge: an edge of 8N metres is two 4 m corner arms and N-1 straight bays, so each face places N pieces." },
+    "baysDeep": { "type": "integer", "minimum": 2 },
+    "floors": { "type": "integer", "minimum": 3 },
+    "signText": { "type": [ "string", "null" ], "description": "What the marquee anchor reads, lettered for Exterior's atlas, or null for a building with no sign." },
+    "lot": {
+      "description": "The Atlas lot the pieces stand on, wound the way Exterior reads a footprint.",
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 }
+    },
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "min", "max" ],
+      "description": "World box of the published massing, for cell binning without opening the blueprint.",
+      "properties": {
+        "min": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+        "max": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "family", "bands", "placements", "signAnchors", "doors" ],
+      "description": "Exterior's plan as it published it, with the blueprint kept in its own file.",
+      "properties": {
+        "family": { "$ref": "https://urbe.dev/exterior/placement.schema.json#/properties/family" },
+        "bands": { "$ref": "https://urbe.dev/exterior/placement.schema.json#/properties/bands" },
+        "placements": { "$ref": "https://urbe.dev/exterior/placement.schema.json#/properties/placements" },
+        "signAnchors": { "$ref": "https://urbe.dev/exterior/placement.schema.json#/properties/signAnchors" },
+        "doors": { "$ref": "https://urbe.dev/exterior/placement.schema.json#/properties/doors" }
+      }
+    }
+  }
+}

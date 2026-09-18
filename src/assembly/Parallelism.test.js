@@ -24,7 +24,7 @@ describe( 'batch parallelism', () => {
 
 	} );
 
-	it( 'holds the batch under 90 C unless the environment says otherwise', () => {
+	it( 'throttles on temperature only when the environment sets a ceiling', () => {
 
 		expect( maxTemperature( {} ) ).toBe( DEFAULT_MAX_TEMP );
 		expect( maxTemperature( { [ MAX_TEMP_ENV ]: '70' } ) ).toBe( 70 );

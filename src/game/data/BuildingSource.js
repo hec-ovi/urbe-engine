@@ -1,10 +1,16 @@
-/** Manifest-bound building documents, with one shared request budget. */
+/**
+ * Manifest-bound building documents, with one shared request budget. A parcel
+ * assembled from kit pieces carries its placement table instead of a shell GLB.
+ */
 export class BuildingSource {
 
 	constructor( { manifest, outBase, readJson } ) {
 
 		this.ids = new Set( manifest.parcels );
 		this.interiors = new Set( manifest.interiors );
+		// Which path assembly took for each parcel. A world with no kit took the
+		// per-parcel generator for every one of them.
+		this.sources = manifest.sources ?? {};
 		this.floors = manifest.floors;
 		this.outBase = outBase;
 		this.readJson = readJson;
@@ -38,7 +44,14 @@ export class BuildingSource {
 				glbUrl: `${base}/interior/floors/${tag}.glb`
 			} ) ) )
 		] ) : [ null, [] ];
-		return { parcelId, blueprint, npc, floors, hasInterior, shellUrl: `${base}/${parcelId}.glb` };
+		const source = this.sources[ parcelId ] === 'kit' ? 'kit' : 'shell';
+
+		return {
+			parcelId, blueprint, npc, floors, hasInterior, source,
+			...( source === 'kit'
+				? { placementsUrl: `${base}/${parcelId}.placements.json` }
+				: { shellUrl: `${base}/${parcelId}.glb` } )
+		};
 
 	}
 

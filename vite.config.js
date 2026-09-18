@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 import { homedir } from 'node:os';
+import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { talkRoute } from './src/server/talkRoute.js';
 import { buildingRoute } from './src/server/buildingRoute.js';
@@ -14,6 +15,8 @@ import { hitchReportPlugin } from './src/game/debug/hitchReportPlugin.js';
 // relative to this repo's location, never machine-specific.
 const ROOT = fileURLToPath( new URL( '.', import.meta.url ) );
 const THEMES_DIR = fileURLToPath( new URL( '../materials/themes', import.meta.url ) );
+const TEST_WORKERS = Math.max( 1, Math.floor( availableParallelism() / 4 ) );
+const BASIS_DIR = fileURLToPath( new URL( './node_modules/three/examples/jsm/libs/basis', import.meta.url ) );
 const BINDINGS_DIR = fileURLToPath( new URL( '../materials/bindings', import.meta.url ) );
 
 // Sibling atlas city blueprints (../atlas/CONTRACT.md), served read-only under
@@ -77,10 +80,13 @@ function mount( name, prefix, dir ) {
 }
 
 export default defineConfig( ( { mode } ) => ( {
+	// Tests, like batches, take a quarter of the machine: a full pool pins the package near 100 C.
+	test: { maxWorkers: TEST_WORKERS },
 	plugins: [
 		hitchReportPlugin( join( ROOT, 'out', 'diagnostics' ) ),
 		mount( 'serve-materials-bindings', '/materials/bindings', BINDINGS_DIR ),
 		mount( 'serve-materials-themes', '/materials', THEMES_DIR ),
+		mount( 'serve-basis-transcoder', '/basis', BASIS_DIR ),
 		mount( 'serve-atlas-samples', '/atlas', ATLAS_DIR ),
 		mount( 'serve-models', '/models', MODELS_DIR ),
 		buildingRoute( ROOT, ATLAS_DIR ),
