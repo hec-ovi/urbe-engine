@@ -1,39 +1,50 @@
 import * as THREE from 'three/webgpu';
 import { placementError } from './KitPieces.js';
 
-const QUARTER = Math.PI / 2;
-
 /**
- * One parcel's `<parcel>.placements.json`, read into the world.
+ * One building standing in the world: the plan it is made of, and the frame it
+ * stands in.
  *
- * Kit assembly plans every building in world metres: piece positions, doors
- * and sign anchors are where they stand, and `lot` is the parcel's rectangle
- * as a world ring whose first edge is face 0. The lot frame here only serves
- * the colliders and openings, which are cut along the lot's edges.
+ * A city is a few dozen distinct buildings placed thousands of times, so kit
+ * assembly writes each one's pieces once, at the origin with face 0 along +X,
+ * and gives a parcel only `<parcel>.placements.json`: the plan's id, where its
+ * origin stands and how far it is turned. The world matrix of a piece copy is
+ * that frame times the plan's own placement.
  */
 export class KitPlacement {
 
-	constructor( parcelId, document, { bay = 8 } = {} ) {
+	/**
+	 * @param record the parcel's `<parcel>.placements.json`
+	 * @param plan the `kit/plans/<plan>.json` it names
+	 */
+	constructor( parcelId, record, plan, { bay = 8 } = {} ) {
 
-		// Kit assembly wraps Exterior's own plan in the parcel's frame; a bare
-		// plan reads the same way.
-		const plan = document.plan ?? document;
-		const frame = readFrame( document );
+		const origin = record.origin ?? [ 0, 0, 0 ];
 
 		this.parcelId = parcelId;
-		this.family = document.family ?? plan.family;
-		this.placements = plan.placements ?? [];
-		this.rotationY = frame.rotationY;
-		this.lot = readLot( document, bay );
-		this.height = readHeight( document, plan );
+		this.plan = plan.id;
+		this.family = plan.family;
+		// The plan names each piece file once; a copy carries its index.
+		this.placements = ( plan.placements ?? [] ).map( ( copy ) => ( {
+			piece: plan.pieces[ copy.piece ],
+			face: copy.face,
+			position: copy.position,
+			rotationY: copy.rotationY
+		} ) );
+		this.rotationY = record.rotationY ?? 0;
+		/** What this building's instance colour is hashed from. */
+		this.tint = record.tint ?? parcelId;
+		this.lot = { width: ( plan.baysAcross ?? 0 ) * bay, depth: ( plan.baysDeep ?? 0 ) * bay };
+		this.height = Math.max( 0, ...( plan.bands ?? [] ).map( ( band ) => band.base + band.height ) );
 		this.toWorld = new THREE.Matrix4()
-			.makeTranslation( frame.origin.x, frame.origin.y, frame.origin.z )
-			.multiply( new THREE.Matrix4().makeRotationY( frame.rotationY ) );
-		this.base = frame.origin.y;
+			.makeTranslation( origin[ 0 ], origin[ 1 ], origin[ 2 ] )
+			.multiply( new THREE.Matrix4().makeRotationY( this.rotationY ) );
+		this.base = origin[ 1 ];
 		this.center = this.point( this.lot.width / 2, 0, this.lot.depth / 2 );
 		this.door = readDoor( plan, this );
 
 		if ( ! this.placements.length ) throw placementError( `${parcelId} places no pieces` );
+		if ( this.placements.some( ( copy ) => ! copy.piece ) ) throw placementError( `${parcelId} names a piece its plan does not list` );
 		if ( ! ( this.lot.width > 0 ) || ! ( this.lot.depth > 0 ) || ! ( this.height > 0 ) ) {
 
 			throw placementError( `${parcelId} has no lot extent or envelope height` );
@@ -42,11 +53,13 @@ export class KitPlacement {
 
 	}
 
-	/** The world matrix of one piece copy; the table already speaks world metres. */
+	/** The world matrix of one piece copy: this building's frame times the plan's. */
 	matrixOf( placement, target = new THREE.Matrix4() ) {
 
-		return target.makeTranslation( placement.position[ 0 ], placement.position[ 1 ], placement.position[ 2 ] )
-			.multiply( _rotation.makeRotationY( placement.rotationY ) );
+		target.makeRotationY( placement.rotationY );
+		target.setPosition( placement.position[ 0 ], placement.position[ 1 ], placement.position[ 2 ] );
+
+		return target.premultiply( this.toWorld );
 
 	}
 
@@ -84,77 +97,26 @@ export class KitPlacement {
 
 }
 
-const _rotation = new THREE.Matrix4();
-const _toLot = new THREE.Matrix4();
+/** The one entrance, with the lot edge it sits in. The plan speaks its own metres. */
+function readDoor( plan, placement ) {
 
-/**
- * The lot frame from the world ring: origin at the first corner, X along the
- * first edge. A table without a ring (a bare plan) sits at the origin.
- */
-function readFrame( document ) {
-
-	const ring = Array.isArray( document.lot ) && document.lot.length === 4 ? document.lot : null;
-	const base = document.bounds?.min?.[ 1 ] ?? 0;
-
-	if ( ! ring ) return { origin: new THREE.Vector3( 0, base, 0 ), rotationY: 0 };
-
-	const rotation = Math.atan2( - ( ring[ 1 ][ 1 ] - ring[ 0 ][ 1 ] ), ring[ 1 ][ 0 ] - ring[ 0 ][ 0 ] );
-
-	return {
-		origin: new THREE.Vector3( ring[ 0 ][ 0 ], base, ring[ 0 ][ 1 ] ),
-		// A quarter turn is exact in the plan; keep it exact here too.
-		rotationY: Math.abs( rotation / QUARTER - Math.round( rotation / QUARTER ) ) < 1e-9
-			? Math.round( rotation / QUARTER ) * QUARTER
-			: rotation
-	};
-
-}
-
-/** Bay counts describe the lot exactly; published bounds answer for older tables. */
-function readLot( document, bay ) {
-
-	if ( Number.isInteger( document.baysAcross ) && Number.isInteger( document.baysDeep ) ) {
-
-		return { width: document.baysAcross * bay, depth: document.baysDeep * bay };
-
-	}
-	const { min, max } = document.bounds ?? {};
-
-	return { width: ( max?.[ 0 ] ?? 0 ) - ( min?.[ 0 ] ?? 0 ), depth: ( max?.[ 2 ] ?? 0 ) - ( min?.[ 2 ] ?? 0 ) };
-
-}
-
-/** Where the roof is: the top of the last band, or the published bounds. */
-function readHeight( document, plan ) {
-
-	const bands = plan.bands ?? [];
-	if ( bands.length ) return Math.max( ...bands.map( ( band ) => band.base + band.height ) );
-
-	return ( document.bounds?.max?.[ 1 ] ?? 0 ) - ( document.bounds?.min?.[ 1 ] ?? 0 );
-
-}
-
-/** The one entrance, in world metres, with the lot edge it sits in. */
-function readDoor( document, placement ) {
-
-	const record = document.doors?.[ 0 ];
+	const record = plan.doors?.[ 0 ];
 	if ( ! record ) return null;
 
-	const host = document.placements?.[ record.placement ];
-	// The table speaks world metres; the lot-local point serves the wall cut.
-	const position = new THREE.Vector3( ...record.position );
-	const facing = new THREE.Vector3( ...record.facing ).setY( 0 ).normalize();
+	const host = placement.placements[ record.placement ];
+	const local = new THREE.Vector3( ...record.position );
+	const facing = new THREE.Vector3( ...record.facing ).setY( 0 ).normalize().transformDirection( placement.toWorld );
 
 	return {
 		id: record.id,
 		width: record.width,
 		height: record.height,
 		leaves: record.leaves,
-		local: position.clone().applyMatrix4( _toLot.copy( placement.toWorld ).invert() ),
+		local,
 		face: host?.face ?? 0,
 		piece: host?.piece ?? null,
 		placement: record.placement,
-		position,
+		position: local.clone().applyMatrix4( placement.toWorld ),
 		facing,
 		// Along the opening, left to right seen from outside: the axis the two
 		// leaves hinge from and the axis a wall is split along.

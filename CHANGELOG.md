@@ -1,5 +1,7 @@
 # Changelog
 
+0.22.0: kit buildings plan once per block template with one variation per block, parcels are compact records over shared plans, kits and catalogs live once in the shared store, and a failed parcel becomes an empty lot instead of a failed city.
+
 0.21.0: streets draw from the Streets piece kit and placements with cuboid colliders, interiors draw from shared modules and three layouts per building, and cities publish both catalogs beside the world.
 
 0.20.0: ordinary parcels assemble from the Exterior piece kit as placement tables, the runtime draws them instanced with cuboid colliders and streams them by cell, the launcher defaults to a 3000 m city, and tests run on a quarter of the cores.

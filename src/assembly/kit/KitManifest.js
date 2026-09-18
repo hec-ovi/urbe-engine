@@ -1,14 +1,15 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { AssemblyError } from '../RequestAssembler.js';
 import { sha256 } from '../JsonFile.js';
 import { validateKitManifest, schemaMessage } from './KitSchemas.js';
+import { share } from '../SharedResources.js';
 
 /** Where Exterior's `npm run kit` publishes the pieces every ordinary building is made of. */
 export const KIT_DIR = fileURLToPath( new URL( '../../../../exterior/out/kit/', import.meta.url ) );
-/** The file the world manifest points the game at. */
-export const KIT_FILE = 'kit/kit.json';
+/** The file the world manifest points the game at, inside the shared store. */
+export const KIT_FILE = 'kit.json';
 
 /**
  * The piece kit on disk: its families, the module they repeat on, what each
@@ -114,25 +115,13 @@ export class KitManifest {
 	}
 
 	/**
-	 * Copies the kit beside the world, so the game loads one city folder.
-	 * @returns the manifest reference to the copy
+	 * Puts the kit in the shared store, where every city built from it reads the
+	 * same copy instead of carrying one each.
+	 * @returns the manifest reference to that copy
 	 */
-	publish( outDir ) {
+	publish() {
 
-		const destination = join( outDir, 'kit' );
-
-		mkdirSync( outDir, { recursive: true } );
-
-		// A world built from the copy it already carries holds exactly these pieces.
-		if ( resolve( destination ) !== resolve( this.dir ) ) {
-
-			// Exactly this kit, so a family the kit no longer has leaves no pieces behind.
-			rmSync( destination, { recursive: true, force: true } );
-			cpSync( this.dir, destination, { recursive: true } );
-
-		}
-
-		return { file: KIT_FILE, sha256: this.sha256 };
+		return { file: KIT_FILE, sha256: this.sha256, shared: share( 'kit', this.sha256, this.dir ) };
 
 	}
 

@@ -7,7 +7,8 @@ import { spawnSync } from 'node:child_process';
 import AjvModule from 'ajv/dist/2020.js';
 import { OutDir } from './OutDir.js';
 import { SchemaFiles } from './SchemaFiles.js';
-import { InteriorModules, MODULES_FILE, MODULES_FOLDER, PROPS_FILE } from './InteriorModules.js';
+import { InteriorModules, MODULES_FILE, PROPS_FILE } from './InteriorModules.js';
+import { sharedRoot } from './SharedResources.js';
 import { collectShellArtifacts } from './ShellArtifacts.js';
 import { validateExteriorBlueprint } from './validators.js';
 import { KitManifest, blueprintFile, placementsFile, schemaMessage, validateKitPlacements } from './kit/index.js';
@@ -135,8 +136,11 @@ describe( 'assemble-city kit path', () => {
 		}
 
 		const kit = KitManifest.load();
+		const shared = join( sharedRoot(), kit.publish().shared );
 
-		expect( readFileSync( join( root, 'kit', 'kit.json' ) ).equals( readFileSync( join( kit.dir, 'kit.json' ) ) ) ).toBe( true );
+		// The world references the one shared copy instead of carrying its own.
+		expect( readFileSync( join( shared, 'kit.json' ) ).equals( readFileSync( join( kit.dir, 'kit.json' ) ) ) ).toBe( true );
+		expect( existsSync( join( root, 'kit', 'kit.json' ) ) ).toBe( false );
 
 	}, 120_000 );
 
@@ -233,40 +237,39 @@ describe( 'assemble-city kit path', () => {
 		const { root } = city( { options: [ '--interior-parcels', 'p1' ] } );
 		const out = new OutDir( root );
 		const shells = out.shells( PARCELS );
-		const bytes = readFileSync( join( root, MODULES_FILE ) );
-		// The world already carries the set, so publishing again keeps those bytes.
-		const references = await new InteriorModules( join( root, MODULES_FOLDER ) ).publish( root );
+		const references = await new InteriorModules().publish();
+		const set = join( sharedRoot(), references.modules.shared );
+		const bytes = readFileSync( join( set, MODULES_FILE ) );
 		const manifest = await out.publishManifest( atlas, shells, out.interiors( shells ), {
 			interiorModules: references.modules, interiorProps: references.props
 		} );
 
-		expect( readFileSync( join( root, MODULES_FILE ) ).equals( bytes ) ).toBe( true );
-		expect( manifest.interiorModules ).toEqual( { file: MODULES_FILE, sha256: references.modules.sha256 } );
+		// The world names the set by its bytes and carries none of it.
+		expect( manifest.interiorModules ).toEqual( references.modules );
+		expect( existsSync( join( root, 'interior-modules' ) ) ).toBe( false );
 		expect( manifest.interiors ).toEqual( [ 'p1' ] );
 		expect( manifest.floors.p1 ).toEqual( [ '000', '001', '002', '003', '004' ] );
 		expect( JSON.parse( bytes.toString( 'utf8' ) ).modules.length ).toBeGreaterThan( 0 );
 
 	}, 120_000 );
 
-	it( 'publishes the furniture catalog and its models beside the modules', () => {
+	it( 'publishes the furniture catalog and its models beside the modules', async () => {
 
-		const { root, file } = city( { options: [ '--interior-parcels', 'p1' ] } );
-		const catalog = JSON.parse( readFileSync( join( root, PROPS_FILE ), 'utf8' ) );
+		const { file } = city( { options: [ '--interior-parcels', 'p1' ] } );
+		const { props } = await new InteriorModules().publish();
+		const set = join( sharedRoot(), props.shared );
+		const catalog = JSON.parse( readFileSync( join( set, PROPS_FILE ), 'utf8' ) );
 		const building = JSON.parse( file( 'p1', join( 'interior', 'building.json' ) ).toString( 'utf8' ) );
 
 		// building.json names both catalogs against one resource base, so both stand there.
-		expect( join( dirname( MODULES_FILE ), building.modules ) ).toBe( MODULES_FILE );
-		expect( join( dirname( MODULES_FILE ), building.props ) ).toBe( PROPS_FILE );
+		expect( building.modules ).toBe( MODULES_FILE );
+		expect( building.props ).toBe( PROPS_FILE );
 
 		// Every furniture id a placement can name resolves to a model that travelled with it.
 		const models = catalog.assets.filter( ( asset ) => asset.modelUri );
 
 		expect( models.length ).toBeGreaterThan( 0 );
-		for ( const asset of models ) {
-
-			expect( existsSync( join( root, MODULES_FOLDER, asset.modelUri ) ) ).toBe( true );
-
-		}
+		for ( const asset of models ) expect( existsSync( join( set, asset.modelUri ) ) ).toBe( true );
 
 	}, 120_000 );
 
@@ -281,7 +284,7 @@ describe( 'assemble-city kit path', () => {
 		expect( report.totals ).toMatchObject( { interiorsReady: 0, interiorsFailed: 0 } );
 		expect( stdout ).toContain( 'fewer than three floors' );
 		expect( has( 'p0', 'p0.glb' ) ).toBe( true );
-		expect( existsSync( join( root, MODULES_FOLDER ) ) ).toBe( false );
+		expect( report.totals.interiorsReady ).toBe( 0 );
 
 	}, 120_000 );
 
@@ -311,14 +314,16 @@ describe( 'assemble-city kit path', () => {
 		const kits = out.kits( shells );
 		const kit = KitManifest.load();
 		const { catalog } = await collectShellArtifacts( root, shells, { seed: atlas.meta.seed } );
+		const reference = kit.publish();
 		const manifest = await out.publishManifest( atlas, shells, [], {
-			catalog, kit: kit.publish( root ),
+			catalog, kit: reference,
 			sources: Object.fromEntries( shells.map( ( id ) => [ id, kits.includes( id ) ? 'kit' : 'shell' ] ) )
 		} );
 
 		expect( shells ).toEqual( PARCELS );
 		expect( kits ).toEqual( [ 'p1', 'p2' ] );
-		expect( manifest.kit ).toEqual( { file: 'kit/kit.json', sha256: kit.sha256 } );
+		expect( manifest.kit ).toEqual( reference );
+		expect( reference.shared ).toBe( `kit/${kit.sha256.slice( 0, 16 )}` );
 		expect( manifest.sources ).toEqual( { p0: 'shell', p1: 'kit', p2: 'kit' } );
 		expect( catalog.buildings.map( ( building ) => building.id ) ).toEqual( PARCELS );
 

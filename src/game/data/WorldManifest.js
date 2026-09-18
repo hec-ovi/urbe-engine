@@ -2,8 +2,11 @@ import { rooftopSpanErrors } from './RooftopSpanDocument.js';
 
 const REQUIRED_KEYS = [ 'contractVersion', 'seed', 'atlasVersion', 'named', 'namingTheme', 'parcels', 'interiors' ];
 const KEYS = new Set( [ ...REQUIRED_KEYS, 'floors', 'rooftopSpans', 'connections', 'blueprint', 'shellCatalog',
-	'streets', 'kit', 'sources', 'interiorModules', 'interiorProps' ] );
-const SOURCES = new Set( [ 'kit', 'shell' ] );
+	'streets', 'kit', 'sources', 'buildings', 'interiorModules', 'interiorProps' ] );
+/** How a parcel is drawn, or `empty` for a lot the city has no building on. */
+const SOURCES = new Set( [ 'kit', 'shell', 'empty' ] );
+/** Where a set stands in the shared store: `<kind>/<first 16 hex of its sha256>`. */
+const SHARED = /^[a-z-]+\/[0-9a-f]{16}$/;
 
 /** Runtime validation of assembly's world-manifest schema plus atlas relations. */
 export function worldManifestErrors( manifest, knownParcels ) {
@@ -33,11 +36,9 @@ export function worldManifestErrors( manifest, knownParcels ) {
 
 		if ( ! Object.hasOwn( manifest, key ) ) continue;
 
-		const ref = manifest[ key ];
-		if ( ! plainObject( ref ) || Object.keys( ref ).length !== 2 || typeof ref.file !== 'string'
-			|| ! ref.file.endsWith( file ) || ! hash( ref.sha256 ) ) {
+		if ( ! resource( manifest[ key ], file ) ) {
 
-			errors.push( `${key} must name the copied ${file} and its sha256 byte hash` );
+			errors.push( `${key} must name ${file}, its sha256 byte hash and where it stands` );
 
 		}
 
@@ -66,11 +67,9 @@ export function worldManifestErrors( manifest, knownParcels ) {
 	}
 	if ( Object.hasOwn( manifest, 'kit' ) ) {
 
-		const ref = manifest.kit;
-		if ( ! plainObject( ref ) || Object.keys( ref ).length !== 2 || typeof ref.file !== 'string'
-			|| ! ref.file.endsWith( 'kit.json' ) || ! hash( ref.sha256 ) ) {
+		if ( ! resource( manifest.kit, 'kit.json' ) ) {
 
-			errors.push( 'kit must name the copied kit.json and its sha256 byte hash' );
+			errors.push( 'kit must name kit.json, its sha256 byte hash and where it stands' );
 
 		}
 
@@ -80,22 +79,45 @@ export function worldManifestErrors( manifest, knownParcels ) {
 		if ( ! plainObject( manifest.sources ) ) errors.push( 'sources must be an object' );
 		else for ( const [ id, value ] of Object.entries( manifest.sources ) ) {
 
-			if ( ! SOURCES.has( value ) ) errors.push( `sources.${id} must be kit or shell` );
-			else if ( parcels && ! parcels.has( id ) ) errors.push( `sources.${id} is not a manifest parcel` );
+			// An empty lot is a parcel the city has no building on, so it is named
+			// here and stands in no other list.
+			if ( ! SOURCES.has( value ) ) errors.push( `sources.${id} must be kit, shell or empty` );
+			else if ( parcels && parcels.has( id ) !== ( value !== 'empty' ) ) errors.push( `sources.${id} is ${value}, which does not match what stands` );
 			else if ( value === 'kit' && ! Object.hasOwn( manifest, 'kit' ) ) errors.push( `sources.${id} is kit, but the manifest publishes no kit` );
+
+		}
+
+	}
+	if ( Object.hasOwn( manifest, 'buildings' ) ) {
+
+		if ( ! plainObject( manifest.buildings ) ) errors.push( 'buildings must be an object' );
+		else for ( const [ id, entry ] of Object.entries( manifest.buildings ) ) {
+
+			if ( ! plainObject( entry ) || typeof entry.plan !== 'string' || ! entry.plan ) errors.push( `buildings.${id} must name the plan it stands from` );
+			else if ( manifest.sources?.[ id ] !== 'kit' ) errors.push( `buildings.${id} is not a kit parcel` );
 
 		}
 
 	}
 	if ( Object.hasOwn( manifest, 'streets' ) ) {
 		const ref = manifest.streets;
-		if ( ! plainObject( ref ) || Object.keys( ref ).length !== 4 || ref.file !== 'streets/manifest.json'
-			|| ! hash( ref.sha256 ) || ! hash( ref.kitSha256 ) || ! hash( ref.blueprintSha256 ) || manifest.blueprint ) {
+		if ( ! plainObject( ref ) || ! [ 4, 5 ].includes( Object.keys( ref ).length ) || ref.file !== 'streets/manifest.json'
+			|| ! hash( ref.sha256 ) || ! hash( ref.kitSha256 ) || ! hash( ref.blueprintSha256 ) || manifest.blueprint
+			|| ( Object.hasOwn( ref, 'sharedKit' ) && ! SHARED.test( ref.sharedKit ) ) ) {
 			errors.push( 'streets must name streets/manifest.json with sha256 and blueprintSha256 hashes of ordinary JSON sources' );
 		}
 	}
 
 	return errors;
+
+}
+
+/** One resource the world binds: its file, its bytes, and the shared set it stands in. */
+function resource( ref, file ) {
+
+	return plainObject( ref ) && [ 2, 3 ].includes( Object.keys( ref ).length )
+		&& typeof ref.file === 'string' && ref.file.endsWith( file ) && hash( ref.sha256 )
+		&& ( ! Object.hasOwn( ref, 'shared' ) || SHARED.test( ref.shared ) );
 
 }
 

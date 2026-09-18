@@ -119,10 +119,26 @@ export class OutDir {
 
 	}
 
-	/** The parcels standing as kit buildings: their placement table is on disk. */
+	/** The parcels standing as kit buildings: their placement record is on disk. */
 	kits( parcelIds ) {
 
 		return parcelIds.filter( ( id ) => existsSync( join( this.dir, id, placementsFile( id ) ) ) );
+
+	}
+
+	/** Which building plan each standing kit parcel names. @returns Map<parcelId, plan id> */
+	kitPlans( parcelIds ) {
+
+		const named = new Map();
+
+		for ( const id of this.kits( parcelIds ) ) {
+
+			const plan = readJson( join( this.dir, id, placementsFile( id ) ) )?.plan;
+			if ( plan ) named.set( id, plan );
+
+		}
+
+		return named;
 
 	}
 
@@ -201,7 +217,7 @@ export class OutDir {
 	/** Publishes source documents and a compact shell catalog as one world. */
 	async publishManifest( atlas, parcelIds, interiorIds, {
 		rooftopSpans = null, connectionsArtifact = null, catalog = null, encoding = 'json', archiveOptions, streets = false,
-		streetsPrepared = null, kit = null, interiorModules = null, interiorProps = null, sources = null
+		streetsPrepared = null, kit = null, interiorModules = null, interiorProps = null, sources = null, buildings = null
 	} = {} ) {
 
 		if ( ! [ 'json', 'archive' ].includes( encoding ) ) throw new AssemblyError( 'E_REQUEST_INVALID', 'unknown world document encoding' );
@@ -214,7 +230,8 @@ export class OutDir {
 			const references = await files.prepare( atlas, connectionsArtifact, { encoding, archiveOptions, catalog, streets, streetsPrepared } );
 			const manifest = this.#manifest( atlas, parcelIds, interiorIds, rooftopSpans, {
 				...references, ...( kit ? { kit } : {} ), ...( interiorModules ? { interiorModules } : {} ),
-				...( interiorProps ? { interiorProps } : {} ), ...( sources ? { sources } : {} )
+				...( interiorProps ? { interiorProps } : {} ), ...( sources ? { sources } : {} ),
+				...( buildings ? { buildings } : {} )
 			} );
 			files.publish( manifest );
 			return manifest;
@@ -251,8 +268,20 @@ export class OutDir {
 
 		for ( const [ id, source ] of Object.entries( references.sources ?? {} ) ) {
 
-			if ( ! shells.has( id ) ) throw new Error( `manifest source ${id} is not a listed parcel` );
+			// An empty lot is a parcel the city deliberately has no building on:
+			// it is named here and stands in no other list.
+			if ( source === 'empty' ? shells.has( id ) : ! shells.has( id ) ) {
+
+				throw new Error( `manifest source ${id} is ${source}, which does not match what stands` );
+
+			}
 			if ( source === 'kit' && ! references.kit ) throw new Error( `manifest source ${id} is kit, but no kit is published` );
+
+		}
+
+		for ( const id of Object.keys( references.buildings ?? {} ) ) {
+
+			if ( references.sources?.[ id ] !== 'kit' ) throw new Error( `manifest building ${id} is not a kit parcel` );
 
 		}
 

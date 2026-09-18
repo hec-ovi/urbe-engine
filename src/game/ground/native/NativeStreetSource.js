@@ -16,9 +16,11 @@ class StreetSource {
 	#pieceBase;
 	#abort = new AbortController();
 	static async open( options ) {
-		const { reference, blueprint, baseUrl, fetch: read = globalThis.fetch } = options ?? {};
-		if ( ! record( reference ) || Object.keys( reference ).length !== 4 || reference.file !== 'streets/manifest.json'
+		const { reference, blueprint, baseUrl, sharedBase = '/out/shared', fetch: read = globalThis.fetch } = options ?? {};
+		const shared = reference?.sharedKit;
+		if ( ! record( reference ) || ! [ 4, 5 ].includes( Object.keys( reference ).length ) || reference.file !== 'streets/manifest.json'
 			|| ! hashValue( reference.sha256 ) || ! hashValue( reference.kitSha256 ) || ! hashValue( reference.blueprintSha256 )
+			|| ( Object.keys( reference ).length === 5 && ! /^[a-z-]+\/[0-9a-f]{16}$/.test( shared ?? '' ) )
 			|| ! blueprint?.bytes || ! record( blueprint.data )
 			|| typeof baseUrl !== 'string' || ! baseUrl || typeof read !== 'function' ) fail( 'Invalid street source options' );
 		const source = new StreetSource( baseUrl.replace( /\/$/, '' ), read, blueprint.data );
@@ -30,9 +32,10 @@ class StreetSource {
 			await checkStreetMetadata( manifest, blueprint, hash );
 			source.#manifest = freeze( manifest );
 			source.#pieces = new Map( manifest.kit.pieces.map( piece => [ piece.id, piece ] ) );
-			// Piece files sit beside the kit document, whose path the manifest
-			// already gives from the world root.
-			source.#pieceBase = folder( manifest.files.kit );
+			// The street kit is the same bytes for every city of this design, so it
+			// stands in the shared store and its pieces sit beside it there. A
+			// world that carries its own copy keeps them where the manifest says.
+			source.#pieceBase = shared ? `${sharedBase}/${shared}/` : folder( manifest.files.kit );
 			return source;
 		} catch ( error ) {
 			source.dispose();
@@ -50,7 +53,7 @@ class StreetSource {
 		if ( this.#abort.signal.aborted ) fail( 'Street source is disposed' );
 		try {
 			const read = this.#fetch;
-			const response = await read( `${this.#baseUrl}/${path}`, { signal: signal ? AbortSignal.any( [ this.#abort.signal, signal ] ) : this.#abort.signal } );
+			const response = await read( path.startsWith( '/' ) ? path : `${this.#baseUrl}/${path}`, { signal: signal ? AbortSignal.any( [ this.#abort.signal, signal ] ) : this.#abort.signal } );
 			if ( ! response.ok ) fail( `${path}: HTTP ${response.status}` );
 			const bytes = await response.arrayBuffer();
 			if ( hash && await byteHash( bytes ) !== hash ) fail( `${path}: byte hash mismatch` );

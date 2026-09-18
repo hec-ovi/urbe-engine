@@ -6,15 +6,21 @@ import atlas from './native-city.fixture.json';
 import { OutDir } from './OutDir.js';
 import { sha256 } from './JsonFile.js';
 import { StreetsAhead } from './StreetsAhead.js';
+import { sharedPath, sharedRoot } from './SharedResources.js';
 
 let directory;
 afterEach( () => { if ( directory ) rmSync( directory, { recursive: true, force: true } ); } );
 
-/** Reads the published bundle and proves every piece and placement the kit promises. */
-function readBundle( root ) {
+/**
+ * Reads the published bundle and proves every piece and placement the kit
+ * promises. The world keeps its own placements; the kit and its piece files
+ * stand in the shared store every city of this design reads.
+ */
+function readBundle( root, reference ) {
 
+	const kitDir = join( sharedRoot(), reference.sharedKit );
 	const manifestBytes = readFileSync( join( root, 'streets', 'manifest.json' ) );
-	const kitBytes = readFileSync( join( root, 'streets', 'kit.json' ) );
+	const kitBytes = readFileSync( join( kitDir, 'kit.json' ) );
 	const placementBytes = readFileSync( join( root, 'streets', 'placements.json' ) );
 	const manifest = JSON.parse( manifestBytes );
 	const kit = JSON.parse( kitBytes );
@@ -27,7 +33,7 @@ function readBundle( root ) {
 	expect( placements.placements ).toHaveLength( manifest.statistics.placements );
 	expect( manifest ).not.toHaveProperty( 'assets' );
 
-	for ( const piece of kit.pieces ) expect( sha256( readFileSync( join( root, 'streets', piece.file ) ) ) ).toBe( piece.sha256 );
+	for ( const piece of kit.pieces ) expect( sha256( readFileSync( join( kitDir, piece.file ) ) ) ).toBe( piece.sha256 );
 	const pieces = new Set( kit.pieces.map( piece => piece.id ) );
 	for ( const placement of placements.placements ) expect( pieces.has( placement.piece ) ).toBe( true );
 
@@ -40,9 +46,12 @@ it( 'publishes the street kit, its placements and its pieces bound to the staged
 	directory = mkdtempSync( join( tmpdir(), 'assembly-streets-' ) );
 	const manifest = await new OutDir( directory ).publishManifest( atlas, [], [], { streets: true } );
 	const blueprintBytes = readFileSync( join( directory, 'blueprint.json' ) );
-	const { manifest: streets, digests } = readBundle( directory );
+	const { manifest: streets, digests } = readBundle( directory, manifest.streets );
 
-	expect( manifest.streets ).toEqual( { file: 'streets/manifest.json', ...digests, blueprintSha256: sha256( blueprintBytes ) } );
+	expect( manifest.streets ).toEqual( {
+		file: 'streets/manifest.json', ...digests, blueprintSha256: sha256( blueprintBytes ),
+		sharedKit: sharedPath( 'streets-kit', digests.kitSha256 )
+	} );
 	expect( streets.meta ).toMatchObject( {
 		version: '0.3.0', architectureVersion: atlas.meta.version,
 		blueprintEncoding: 'json-file-bytes', blueprintHash: manifest.streets.blueprintSha256
@@ -50,7 +59,7 @@ it( 'publishes the street kit, its placements and its pieces bound to the staged
 	expect( JSON.parse( blueprintBytes ) ).toEqual( atlas );
 	expect( readdirSync( directory ).some( name => name.startsWith( '.world-archive-' ) ) ).toBe( false );
 
-	const documents = [ 'blueprint.json', 'manifest.json', 'streets/manifest.json', 'streets/kit.json', 'streets/placements.json' ];
+	const documents = [ 'blueprint.json', 'manifest.json', 'streets/manifest.json', 'streets/placements.json' ];
 	const before = documents.map( name => readFileSync( join( directory, name ) ) );
 	await expect( new OutDir( directory ).publishManifest( atlas, [], [], { streets: { nativeMaterials: join( directory, 'missing.json' ) } } ) ).rejects.toMatchObject( { code: 'E_STREETS_BUILD' } );
 	for ( const [ index, name ] of documents.entries() ) expect( readFileSync( join( directory, name ) ) ).toEqual( before[ index ] );
@@ -81,9 +90,9 @@ it( 'adopts an ahead-of-time streets build and refuses one bound to other bytes'
 	}
 
 	const manifest = await new OutDir( directory ).publishManifest( atlas, [], [], { streets: true, streetsPrepared: prepared } );
-	expect( manifest.streets ).toEqual( prepared.reference );
+	expect( manifest.streets ).toEqual( { ...prepared.reference, sharedKit: sharedPath( 'streets-kit', prepared.reference.kitSha256 ) } );
 	expect( manifest.streets.blueprintSha256 ).toBe( sha256( readFileSync( join( directory, 'blueprint.json' ) ) ) );
-	const { digests } = readBundle( directory );
+	const { digests } = readBundle( directory, manifest.streets );
 	expect( digests ).toEqual( { sha256: manifest.streets.sha256, kitSha256: manifest.streets.kitSha256 } );
 	ahead.dispose();
 

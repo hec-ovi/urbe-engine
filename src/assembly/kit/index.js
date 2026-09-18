@@ -2,5 +2,7 @@
 
 export { KitManifest } from './KitManifest.js';
 export { KitAssembler } from './KitAssembler.js';
-export { blueprintFile, generatedFiles, placementsFile } from './KitFiles.js';
-export { schemaMessage, validateKitPlacements } from './KitSchemas.js';
+export { PlanLibrary } from './PlanLibrary.js';
+export { BlockTemplates } from './BlockTemplates.js';
+export { blueprintFile, generatedFiles, placementsFile, planPath, PLANS_FOLDER } from './KitFiles.js';
+export { schemaMessage, validateKitPlacements, validateKitPlan } from './KitSchemas.js';

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RequestAssembler } from '../RequestAssembler.js';
 import { validateExteriorBlueprint } from '../validators.js';
-import { KitAssembler, KitManifest, blueprintFile, placementsFile, schemaMessage, validateKitPlacements } from './index.js';
+import { KitAssembler, KitManifest, blueprintFile, placementsFile, planPath, schemaMessage, validateKitPlacements, validateKitPlan } from './index.js';
 
 const atlas = JSON.parse( readFileSync( fileURLToPath( new URL( '../kit-city.fixture.json', import.meta.url ) ), 'utf8' ) );
 
@@ -37,9 +37,16 @@ function build( parcelId ) {
 
 	const { kitAssembler } = assembler();
 	const root = mkdtempSync( join( tmpdir(), 'urbe-kit-' ) );
-	const table = kitAssembler.build( parcelId, join( root, parcelId ) );
+	const record = kitAssembler.build( parcelId, join( root, parcelId ) );
 
-	return { root, table, read: ( name ) => readFileSync( join( root, parcelId, name ) ) };
+	kitAssembler.plans.publish( root );
+
+	return {
+		root,
+		record,
+		plan: JSON.parse( readFileSync( join( root, planPath( record.plan ) ), 'utf8' ) ),
+		read: ( name ) => readFileSync( join( root, parcelId, name ) )
+	};
 
 }
 
@@ -55,9 +62,9 @@ describe( 'kit assembly', () => {
 
 	} );
 
-	it( 'writes a placement table and the building blueprint, both valid', () => {
+	it( 'writes a placement record, the plan it names and the building blueprint, all valid', () => {
 
-		const { root, table, read } = build( 'p1' );
+		const { root, record, plan, read } = build( 'p1' );
 
 		try {
 
@@ -65,11 +72,13 @@ describe( 'kit assembly', () => {
 			const blueprint = JSON.parse( read( blueprintFile( 'p1' ) ).toString( 'utf8' ) );
 
 			expect( schemaMessage( validateKitPlacements( document ) ) ).toBe( '' );
+			expect( schemaMessage( validateKitPlan( plan ) ) ).toBe( '' );
 			expect( schemaMessage( validateExteriorBlueprint( blueprint ) ) ).toBe( '' );
-			expect( document ).toEqual( JSON.parse( JSON.stringify( table ) ) );
+			expect( document ).toEqual( JSON.parse( JSON.stringify( record ) ) );
 			expect( blueprint.buildingId ).toBe( 'p1' );
 			expect( document.signText ).toBe( 'CAFE DEL SUR' );
-			expect( document.plan.doors ).toHaveLength( 1 );
+			expect( plan.id ).toBe( document.plan );
+			expect( plan.doors ).toHaveLength( 1 );
 
 		} finally { rmSync( root, { recursive: true, force: true } ); }
 
@@ -77,14 +86,14 @@ describe( 'kit assembly', () => {
 
 	it( 'reads the lot as bays: an edge of 8N metres places N pieces per face', () => {
 
-		const { root, table } = build( 'p2' );
+		const { root, record, plan } = build( 'p2' );
 
 		try {
 
-			expect( [ table.baysAcross, table.baysDeep ] ).toEqual( [ 5, 7 ] );
-			expect( table.plan.placements ).toHaveLength( table.floors * 2 * ( 5 + 7 ) );
-			expect( table.bounds.max[ 0 ] - table.bounds.min[ 0 ] ).toBeCloseTo( 40, 6 );
-			expect( table.bounds.max[ 2 ] - table.bounds.min[ 2 ] ).toBeCloseTo( 56, 6 );
+			expect( [ plan.baysAcross, plan.baysDeep ].sort() ).toEqual( [ 5, 7 ] );
+			expect( plan.placements ).toHaveLength( record.floors * 2 * ( 5 + 7 ) );
+			expect( record.bounds.max[ 0 ] - record.bounds.min[ 0 ] ).toBeCloseTo( 40, 6 );
+			expect( record.bounds.max[ 2 ] - record.bounds.min[ 2 ] ).toBeCloseTo( 56, 6 );
 
 		} finally { rmSync( root, { recursive: true, force: true } ); }
 

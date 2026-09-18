@@ -54,10 +54,9 @@ const stale = out.prune( atlas.parcels );
 const wanted = args.reuseShells ? [] : parcelIds.filter( ( id ) => ! args.parcels || args.parcels.includes( id ) );
 const assembler = new RequestAssembler( atlas, connections );
 // Without Exterior's published pieces every parcel is generated, so a machine
-// that has not built the kit still assembles a city it can play; a world that
-// already carries its own copy keeps building from it. A kit that is there but
-// broken still ends the run.
-const kit = KitManifest.find() ?? KitManifest.find( join( outDir, 'kit' ) );
+// that has not built the kit still assembles a city it can play. A kit that is
+// there but broken still ends the run.
+const kit = KitManifest.find();
 const kitAssembler = kit ? new KitAssembler( atlas, assembler, kit ) : null;
 
 const questlinesPath = join( outDir, 'quests', 'questlines.json' );
@@ -72,9 +71,15 @@ if ( planned.unknown.length ) {
 }
 
 // A building is furnished from its own blueprint, which both paths publish, so
-// a parcel picked to open keeps whichever path it would take anyway.
-const kitQueue = new Set( wanted.filter( ( id ) => kitAssembler?.candidate( id ) ) );
-const queue = wanted.filter( ( id ) => ! kitQueue.has( id ) );
+// a parcel picked to open keeps whichever path it would take anyway. A lot a
+// block's merge took over stands empty: its neighbour's building covers it.
+// Only a neighbour the kit really takes gives it up, so a host the kit passes
+// over, a landmark among them, leaves this lot its own building.
+const merged = new Map( wanted.map( ( id ) => [ id, kitAssembler?.absorbedBy( id ) ?? null ] )
+	.filter( ( [ , host ] ) => host && kitAssembler.candidate( host ) ) );
+const selected = new Set( wanted );
+const kitQueue = new Set( wanted.filter( ( id ) => ! merged.has( id ) && kitAssembler?.candidate( id ) ) );
+const queue = wanted.filter( ( id ) => ! kitQueue.has( id ) && ! merged.has( id ) );
 const workers = Math.max( 1, Math.min( args.workers, queue.length || 1 ) );
 const streets = new StreetsAhead( outDir, atlas );
 const exterior = new ExteriorWorkers( workers );
@@ -87,6 +92,36 @@ if ( ! kit ) console.log( "no piece kit found: every building is generated (run 
 if ( stale.length ) console.log( `dropped ${stale.length} folders this blueprint no longer has: ${stale.join( ', ' )}` );
 
 const results = [];
+const parcelsById = new Map( atlas.parcels.map( ( parcel ) => [ parcel.id, parcel ] ) );
+
+/**
+ * A city never fails because one parcel failed. A parcel whose building could
+ * not be made ships nothing and is published as the empty lot it is, with what
+ * it was going to be, so the report says what the city is missing and where.
+ */
+function emptyLot( parcelId, error, ms = 0 ) {
+
+	const parcel = parcelsById.get( parcelId );
+	const xs = ( parcel?.lot ?? [] ).map( ( point ) => point[ 0 ] );
+	const zs = ( parcel?.lot ?? [] ).map( ( point ) => point[ 1 ] );
+
+	// Nothing on disk, so the manifest and the report agree on what stands.
+	out.drop( parcelId );
+	console.log( `${parcelId}  empty  ${error}` );
+
+	return {
+		parcelId,
+		ok: false,
+		source: 'empty',
+		error,
+		lot: xs.length ? { width: Math.max( ...xs ) - Math.min( ...xs ), depth: Math.max( ...zs ) - Math.min( ...zs ) } : null,
+		type: parcel?.type ?? null,
+		tier: parcel?.tier ?? null,
+		floors: parcel?.envelope?.maxFloors ?? null,
+		ms
+	};
+
+}
 
 async function worker() {
 
@@ -118,19 +153,7 @@ async function worker() {
 
 		} catch ( error ) {
 
-			// A parcel that failed leaves nothing on disk, so the manifest and
-			// the report agree on what the world actually holds.
-			out.drop( id );
-
-			const result = {
-				parcelId: id,
-				ok: false,
-				source: 'shell',
-				error: `${error.code ?? 'ERROR'}: ${error.message}`,
-				ms: Math.round( performance.now() - t0 )
-			};
-			results.push( result );
-			console.log( `${id}  FAIL  ${result.error}` );
+			results.push( emptyLot( id, `${error.code ?? 'ERROR'}: ${error.message}`, Math.round( performance.now() - t0 ) ) );
 
 		}
 
@@ -162,13 +185,11 @@ async function buildKitParcels() {
 				bytes: dirBytes( parcelDir )
 			};
 			results.push( result );
-			console.log( `${id}  kit  ${table.family}  ${table.baysAcross}x${table.baysDeep} bays  ${result.floors}f  ${result.sign ? `"${result.sign}"  ` : ''}${result.ms} ms  ${result.bytes} bytes` );
+			console.log( `${id}  kit  ${table.plan}${table.absorbs ? ` over ${table.absorbs}` : ''}  ${result.sign ? `"${result.sign}"  ` : ''}${result.ms} ms  ${result.bytes} bytes` );
 
 		} catch ( error ) {
 
-			out.drop( id );
-			results.push( { parcelId: id, ok: false, source: 'kit', error: `${error.code ?? 'ERROR'}: ${error.message}`, ms: Math.round( performance.now() - t0 ) } );
-			console.log( `${id}  FAIL  ${error.code ?? 'ERROR'}: ${error.message}` );
+			results.push( emptyLot( id, `${error.code ?? 'ERROR'}: ${error.message}`, Math.round( performance.now() - t0 ) ) );
 
 		}
 
@@ -183,15 +204,58 @@ const generating = Promise.all( Array.from( { length: workers }, worker ) );
 await buildKitParcels();
 await generating;
 
+// A lot a block's variation merged into its neighbour is empty on purpose, but
+// only while that neighbour stands. A host whose building failed leaves this
+// lot its own generated shell, so one failure never costs two lots.
+const built = new Set( results.filter( ( result ) => result.ok ).map( ( result ) => result.parcelId ) );
+const orphaned = new Map();
+
+for ( const [ id, host ] of merged ) {
+
+	// A host this run did not build keeps whatever its folder already holds.
+	if ( built.has( host ) || ! selected.has( host ) ) {
+
+		out.drop( id );
+		results.push( { parcelId: id, ok: true, source: 'empty', mergedInto: host, ms: 0, bytes: 0 } );
+
+	} else {
+
+		orphaned.set( id, host );
+		queue.push( id );
+
+	}
+
+}
+
+if ( orphaned.size ) {
+
+	await Promise.all( Array.from( { length: Math.min( workers, queue.length ) }, worker ) );
+
+	for ( const [ id, host ] of orphaned ) {
+
+		const result = results.find( ( entry ) => entry.parcelId === id );
+
+		if ( result?.ok ) result.kitFallback = `${host} stands no building over this lot`;
+
+	}
+
+}
+
 const shells = out.shells( parcelIds );
 
-/** How each standing parcel is drawn, read from what its own folder holds. */
+/** How each parcel is drawn, read from what its own folder holds. */
 function classify( ids ) {
 
 	const kits = out.kits( ids );
 	const kitSet = new Set( kits );
+	const standing = new Set( ids );
 
-	return { kits, sources: Object.fromEntries( ids.map( ( id ) => [ id, kitSet.has( id ) ? 'kit' : 'shell' ] ) ) };
+	return {
+		kits,
+		sources: Object.fromEntries( parcelIds
+			.filter( ( id ) => standing.has( id ) || ! args.parcels )
+			.map( ( id ) => [ id, standing.has( id ) ? ( kitSet.has( id ) ? 'kit' : 'shell' ) : 'empty' ] ) )
+	};
 
 }
 
@@ -199,13 +263,6 @@ function classify( ids ) {
 const { candidates, target: interiorTarget, unavailable: unavailableInteriors } = interiorPlan(
 	atlas, questlines, shells, args
 );
-
-if ( unavailableInteriors.length ) {
-
-	console.error( `E_INTERIOR_SELECTION: missing shell: ${unavailableInteriors.join( ', ' )}` );
-	process.exit( 1 );
-
-}
 
 for ( const id of shells ) out.dropInterior( id );
 
@@ -229,7 +286,14 @@ if ( args.reuseShells ) {
 }
 
 const readyInteriors = [];
-const interiorFailures = [];
+// A manual selection can name a lot with no building on it. The city stands
+// either way, so that one is reported and the rest of the selection opens.
+const interiorFailures = unavailableInteriors.map( ( id ) => ( {
+	parcelId: id, error: 'E_INTERIOR_SELECTION: no building stands on this parcel'
+} ) );
+
+for ( const failure of interiorFailures ) console.log( `${failure.parcelId}  interior  SKIP  ${failure.error}` );
+
 // One copy of the shared modules every furnished building draws, published on
 // the first interior so a set that cannot be published keeps them all closed.
 const modules = new InteriorModules();
@@ -254,7 +318,7 @@ for ( const id of candidates ) {
 	const t0 = performance.now();
 	try {
 
-		await modules.publish( outDir );
+		await modules.publish();
 		const { request: refit, coreMode } = await pipeline.furnish( id, parcelDir, {
 			blueprint, refit: ! kitBuilt.has( id )
 		} );
@@ -285,23 +349,39 @@ for ( const id of candidates ) {
 // name the same source for every parcel.
 const { kits: kitParcels, sources } = classify( shells );
 const generated = shells.filter( ( id ) => sources[ id ] === 'shell' );
-// One copy of the pieces beside the world, so the folder plays on its own.
+// One copy of the pieces in the shared store, which the world binds by hash.
 if ( kitParcels.length && ! kit ) throw new AssemblyError( 'E_KIT_MANIFEST', `${kitParcels.length} buildings stand from pieces but no kit is published` );
-const kitReference = kitParcels.length ? kit.publish( outDir ) : null;
-if ( kitReference ) console.log( `kit copied beside the world: ${kitParcels.length} buildings share ${kit.ids().length} families` );
+const kitReference = kitParcels.length ? kit.publish() : null;
+const kitPlans = kitParcels.length ? out.kitPlans( kitParcels ) : new Map();
+const plans = kitParcels.length ? kitAssembler.plans.publish( outDir, new Set( kitPlans.values() ) ) : [];
+// What each standing building is: the block template that dressed it and the plan it stands from.
+const buildings = Object.fromEntries( [ ...kitPlans ].map( ( [ id, plan ] ) => [ id, {
+	template: kitAssembler.templates.slotOf.get( id )?.templateId ?? null,
+	slot: kitAssembler.templates.slotOf.get( id )?.slot ?? null,
+	plan
+} ] ) );
+if ( kitReference ) console.log( `${kitParcels.length} buildings stand from ${plans.length} plans of ${kit.ids().length} shared families` );
 const interiorResources = readyInteriors.length ? modules.references : null;
-if ( interiorResources ) console.log( `interior modules and furniture copied beside the world: ${readyInteriors.length} furnished buildings share one set` );
-for ( const result of results ) if ( sources[ result.parcelId ] ) result.source = sources[ result.parcelId ];
+if ( interiorResources ) console.log( `${readyInteriors.length} furnished buildings share one interior module and furniture set` );
+for ( const result of results ) {
+
+	if ( sources[ result.parcelId ] ) result.source = sources[ result.parcelId ];
+	if ( buildings[ result.parcelId ] ) Object.assign( result, buildings[ result.parcelId ] );
+
+}
 
 results.sort( ( a, b ) => a.parcelId.localeCompare( b.parcelId, undefined, { numeric: true } ) );
 
 const failed = results.filter( ( r ) => ! r.ok );
+const empty = results.filter( ( r ) => r.source === 'empty' );
 const totals = {
 	parcels: results.length,
 	passed: results.length - failed.length,
 	failed: failed.length,
 	kit: kitParcels.length,
 	generated: generated.length,
+	empty: empty.length,
+	plans: plans.length,
 	interiorsRequested: interiorTarget,
 	interiorsReady: readyInteriors.length,
 	interiorsFailed: interiorFailures.length,
@@ -313,6 +393,7 @@ writeFileSync( join( outDir, 'qa-report.json' ), JSON.stringify( {
 	blueprint: resolve( args.blueprint ),
 	seed: atlas.meta.seed,
 	totals,
+	plans,
 	parcels: results,
 	interiorFailures
 }, null, 2 ) + '\n' );
@@ -326,11 +407,12 @@ const streetsPrepared = await streets.prepared();
 console.log( `streets built in ${( streetsPrepared.ms / 1000 ).toFixed( 1 )} s alongside the shells` );
 const manifest = await out.publishManifest( atlas, shells, readyInteriors, {
 	rooftopSpans, connectionsArtifact, catalog, encoding: source.encoding, streets: true, streetsPrepared,
-	kit: kitReference, interiorModules: interiorResources?.modules ?? null, interiorProps: interiorResources?.props ?? null, sources
+	kit: kitReference, interiorModules: interiorResources?.modules ?? null, interiorProps: interiorResources?.props ?? null,
+	sources, buildings: kitParcels.length ? buildings : null
 } );
 streets.dispose();
 
-console.log( `\n${totals.passed}/${totals.parcels} buildings passed (${totals.kit} kit, ${totals.generated} generated), ${totals.failed} failed; ${totals.interiorsReady}/${totals.interiorsRequested} interiors ready; ${( totals.wallMs / 1000 ).toFixed( 1 )} s, ${( totals.bytes / 1e6 ).toFixed( 1 )} MB` );
+console.log( `\n${totals.passed}/${totals.parcels} buildings passed (${totals.kit} kit from ${totals.plans} plans, ${totals.generated} generated), ${totals.empty} empty lots; ${totals.interiorsReady}/${totals.interiorsRequested} interiors ready; ${( totals.wallMs / 1000 ).toFixed( 1 )} s, ${( totals.bytes / 1e6 ).toFixed( 1 )} MB` );
 for ( const r of failed ) console.log( `  ${r.parcelId}  ${r.error}` );
 for ( const r of interiorFailures ) console.log( `  ${r.parcelId} interior kept closed  ${r.error}` );
 if ( exterior.governor.summary() ) console.log( `heat: ${exterior.governor.summary()}` );
@@ -338,4 +420,5 @@ console.log( `qa report: ${join( outDir, 'qa-report.json' )}` );
 const naming = manifest.named ? `, named${manifest.namingTheme ? `: ${manifest.namingTheme}` : ''}` : '';
 console.log( `manifest: ${join( outDir, MANIFEST_FILE )} (${manifest.parcels.length} buildings, ${kitParcels.length} from the kit, ${manifest.interiors.length} interiors, ${manifest.rooftopSpans.spans.length} rooftop spans, atlas ${manifest.atlasVersion}${naming})` );
 
-process.exit( failed.length > 0 || readyInteriors.length < interiorTarget ? 1 : 0 );
+// The manifest is published: the city stands, whatever single lots it is missing.
+process.exit( 0 );

@@ -1,9 +1,10 @@
-import { readFileSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AssemblyError } from './RequestAssembler.js';
 import { fnv1a } from './hash.js';
 import { sha256 } from './JsonFile.js';
+import { share, sharedRoot, take } from './SharedResources.js';
 
 const ENTRY = new URL( '../../../streets/src/index.ts', import.meta.url ).href;
 const MATERIALS = fileURLToPath( new URL( '../../../materials/bindings/street-native.json', import.meta.url ) );
@@ -62,5 +63,30 @@ function flatten( stage, bundle ) {
 		sha256: sha256( readFileSync( join( published, 'manifest.json' ) ) ),
 		kitSha256: sha256( readFileSync( join( published, 'kit.json' ) ) )
 	};
+
+}
+
+/**
+ * Moves the street kit and its piece files into the shared store, so a world
+ * ships only the manifest and the placements that are its own.
+ * @returns the kit's path under the store, which the manifest names
+ */
+export function shareStreetKit( published, kitSha256 ) {
+
+	mkdirSync( sharedRoot(), { recursive: true } );
+
+	const staged = mkdtempSync( join( sharedRoot(), '.streets-kit-' ) );
+
+	try {
+
+		for ( const name of [ 'kit.json', 'pieces' ] ) {
+
+			if ( existsSync( join( published, name ) ) ) take( join( published, name ), join( staged, name ) );
+
+		}
+
+		return share( 'streets-kit', kitSha256, staged, { move: true } );
+
+	} finally { rmSync( staged, { recursive: true, force: true } ); }
 
 }

@@ -109,7 +109,7 @@ export function validateInteriorRequest( request ) {
 
 }
 
-/** The shared module catalog the city copies beside the world. */
+/** The shared module catalog every furnished building draws its rooms from. */
 export function validateInteriorModules( catalog ) {
 
 	const validate = instance().getSchema( 'https://urbe.dev/interior/modules.schema.json' );

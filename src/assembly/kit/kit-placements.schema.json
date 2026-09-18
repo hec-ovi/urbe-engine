@@ -1,20 +1,21 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urbe/engine/kit-placements",
-  "title": "Kit building placement table",
-  "description": "One ordinary building: what it is made of, and Exterior's placement plan in the parcel's own metres. Its blueprint stands beside it as <parcel>.blueprint.json.",
+  "title": "Kit building placement record",
+  "description": "One ordinary building: the plan it stands from and the frame it stands in. The pieces themselves are in <out>/kit/plans/<plan>.json, shared by every parcel of the same family, bay count and floor count. Its blueprint stands beside it as <parcel>.blueprint.json.",
   "type": "object",
   "additionalProperties": false,
-  "required": [ "parcel", "family", "baysAcross", "baysDeep", "floors", "signText", "lot", "bounds", "plan" ],
+  "required": [ "parcel", "plan", "origin", "rotationY", "lot", "bounds", "signText", "family", "floors", "tint" ],
   "properties": {
     "parcel": { "type": "string", "minLength": 1 },
-    "family": { "$ref": "https://urbe.dev/exterior/kit.schema.json#/$defs/familyId" },
-    "baysAcross": { "type": "integer", "minimum": 2, "description": "Bays along the first lot edge: an edge of 8N metres is two 4 m corner arms and N-1 straight bays, so each face places N pieces." },
-    "baysDeep": { "type": "integer", "minimum": 2 },
-    "floors": { "type": "integer", "minimum": 3 },
-    "signText": { "type": [ "string", "null" ], "description": "What the marquee anchor reads, lettered for Exterior's atlas, or null for a building with no sign." },
+    "plan": { "type": "string", "minLength": 1, "description": "The plan id; its file is kit/plans/<plan>.json." },
+    "origin": {
+      "description": "Where the plan's origin stands in the world: the entrance-face corner of the ground this building covers.",
+      "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" }
+    },
+    "rotationY": { "type": "number", "description": "Radians about Y that turn the plan's face 0 onto the street side." },
     "lot": {
-      "description": "The Atlas lot the pieces stand on, wound the way Exterior reads a footprint.",
+      "description": "The Atlas lot this parcel owns, which is what identifies the folder's ground. A merged building covers this lot and its neighbour's; the ground it actually stands on is the plan's bays in the frame above.",
       "type": "array",
       "minItems": 4,
       "maxItems": 4,
@@ -30,18 +31,10 @@
         "max": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 }
       }
     },
-    "plan": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [ "family", "bands", "placements", "signAnchors", "doors" ],
-      "description": "Exterior's plan as it published it, with the blueprint kept in its own file.",
-      "properties": {
-        "family": { "$ref": "https://urbe.dev/exterior/placement.schema.json#/properties/family" },
-        "bands": { "$ref": "https://urbe.dev/exterior/placement.schema.json#/properties/bands" },
-        "placements": { "$ref": "https://urbe.dev/exterior/placement.schema.json#/properties/placements" },
-        "signAnchors": { "$ref": "https://urbe.dev/exterior/placement.schema.json#/properties/signAnchors" },
-        "doors": { "$ref": "https://urbe.dev/exterior/placement.schema.json#/properties/doors" }
-      }
-    }
+    "signText": { "type": [ "string", "null" ], "description": "What the marquee anchor reads, lettered for Exterior's atlas, or null for a building with no sign." },
+    "family": { "$ref": "https://urbe.dev/exterior/kit.schema.json#/$defs/familyId" },
+    "floors": { "type": "integer", "minimum": 3 },
+    "tint": { "type": "string", "minLength": 1, "description": "What this building's instance colour is hashed from, so two neighbours of one family differ." },
+    "absorbs": { "type": "string", "minLength": 1, "description": "The neighbouring parcel this building was merged over; that parcel stands empty." }
   }
 }

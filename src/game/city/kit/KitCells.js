@@ -28,15 +28,40 @@ export class KitCellLoader {
 
 	/**
 	 * @param pieces KitPieces
+	 * @param plansUrl where the city's building plans stand, `<world>/kit/plans`
 	 * @param readJson reads one URL into a parsed document
 	 * @param shells the original loader, for landmark parcels
 	 */
-	constructor( { pieces, factory, readJson = readPlacements, shells = new BuildingsLoader( factory ) } ) {
+	constructor( { pieces, factory, plansUrl = 'kit/plans', readJson = readPlacements, shells = new BuildingsLoader( factory ) } ) {
 
 		this.pieces = pieces;
 		this.factory = factory;
+		this.plansUrl = plansUrl;
 		this.readJson = readJson;
 		this.shells = shells;
+		// A city has a few dozen plans and thousands of buildings, so each plan
+		// is read once and every cell that wants it waits on that same read.
+		this.plans = new Map();
+
+	}
+
+	/** One building plan, read once per city. */
+	plan( id ) {
+
+		const held = this.plans.get( id );
+
+		if ( held ) return held;
+
+		const reading = this.readJson( `${this.plansUrl}/${id}.json` ).catch( ( error ) => {
+
+			this.plans.delete( id );
+			throw error;
+
+		} );
+
+		this.plans.set( id, reading );
+
+		return reading;
 
 	}
 
@@ -58,23 +83,25 @@ export class KitCellLoader {
 
 		try {
 
-			const tables = await mapConcurrent( kit, READ_CONCURRENCY, ( source ) => this.readJson( source.placementsUrl ) );
+			const records = await mapConcurrent( kit, READ_CONCURRENCY, ( source ) => this.readJson( source.placementsUrl ) );
+			const plans = new Map( await Promise.all( [ ...new Set( records.map( ( record ) => record.plan ) ) ]
+				.map( async ( id ) => [ id, await this.plan( id ) ] ) ) );
 
 			for ( const [ index, source ] of kit.entries() ) {
 
-				const placement = new KitPlacement( source.parcelId, tables[ index ], this.pieces.kit.module );
+				const record = records[ index ];
+				const placement = new KitPlacement( source.parcelId, record, plans.get( record.plan ), this.pieces.kit.module );
 				const door = source.hasInterior ? kitDoor( placement, this.pieces ) : null;
-				const blueprint = source.blueprint ?? tables[ index ].blueprint ?? tables[ index ].plan?.blueprint ?? null;
 
 				triangles += this.#counted( placement );
 				boxColliders.push( ...buildingBoxes( placement, {
 					swinging: Boolean( door ),
-					openings: interiorOpenings( placement, blueprint )
+					openings: interiorOpenings( placement, source.blueprint ?? null )
 				} ) );
 				base.centers.set( source.parcelId, placement.center );
 				standing.push( {
 					placement,
-					colour: tintFor( placement.family, placement.parcelId, new THREE.Color() ),
+					colour: tintFor( placement.family, placement.tint, new THREE.Color() ),
 					swinging: Boolean( door )
 				} );
 

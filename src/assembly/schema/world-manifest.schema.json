@@ -43,33 +43,52 @@
     },
     "kit": {
       "type": "object", "additionalProperties": false, "required": [ "file", "sha256" ],
-      "description": "The piece kit copied beside the world, present when any parcel was assembled from it.",
+      "description": "The piece kit this world was built from, in the shared store, present when any parcel was assembled from it.",
       "properties": {
-        "file": { "const": "kit/kit.json" },
-        "sha256": { "$ref": "#/$defs/sha256" }
+        "file": { "const": "kit.json" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "shared": { "$ref": "#/$defs/sharedSet" }
       }
     },
     "interiorModules": {
       "type": "object", "additionalProperties": false, "required": [ "file", "sha256" ],
-      "description": "The shared interior module set copied beside the world, present when any building is furnished.",
+      "description": "The shared interior module set, present when any building is furnished.",
       "properties": {
-        "file": { "const": "interior-modules/modules.json" },
-        "sha256": { "$ref": "#/$defs/sha256" }
+        "file": { "const": "modules.json" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "shared": { "$ref": "#/$defs/sharedSet" }
       }
     },
     "interiorProps": {
       "type": "object", "additionalProperties": false, "required": [ "file", "sha256" ],
-      "description": "The furniture catalog copied beside the module set, with the models it names.",
+      "description": "The furniture catalog beside the module set, with the models it names.",
       "properties": {
-        "file": { "const": "interior-modules/catalog.json" },
-        "sha256": { "$ref": "#/$defs/sha256" }
+        "file": { "const": "catalog.json" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "shared": { "$ref": "#/$defs/sharedSet" }
       }
     },
     "sources": {
       "type": "object",
-      "description": "How each parcel is drawn: its own GLB, or the kit pieces.",
+      "description": "How each parcel is drawn: its own GLB, the kit pieces, or nothing at all.",
       "propertyNames": { "$ref": "#/$defs/parcelId" },
-      "additionalProperties": { "enum": [ "kit", "shell" ] }
+      "additionalProperties": { "enum": [ "kit", "shell", "empty" ] }
+    },
+    "buildings": {
+      "type": "object",
+      "description": "What each kit parcel stands from: the Atlas block template and lot slot it was dressed by, and the building plan its pieces come from.",
+      "propertyNames": { "$ref": "#/$defs/parcelId" },
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false, "required": [ "template", "slot", "plan" ],
+        "properties": {
+          "template": {
+            "type": [ "string", "null" ],
+            "description": "meta.blockTemplates id, or null for a block Atlas tiled on its own."
+          },
+          "slot": { "type": [ "integer", "null" ], "minimum": 0 },
+          "plan": { "type": "string", "minLength": 1, "description": "kit/plans/<plan>.json" }
+        }
+      }
     },
     "streets": {
       "type": "object", "additionalProperties": false, "required": [ "file", "sha256", "kitSha256", "blueprintSha256" ],
@@ -78,7 +97,8 @@
         "file": { "const": "streets/manifest.json" },
         "sha256": { "$ref": "#/$defs/sha256" },
         "kitSha256": { "$ref": "#/$defs/sha256" },
-        "blueprintSha256": { "$ref": "#/$defs/sha256" }
+        "blueprintSha256": { "$ref": "#/$defs/sha256" },
+        "sharedKit": { "$ref": "#/$defs/sharedSet" }
       }
     },
     "connections": {
@@ -105,6 +125,11 @@
   "$defs": {
     "parcelId": { "type": "string", "minLength": 1 },
     "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "sharedSet": {
+      "type": "string",
+      "pattern": "^[a-z-]+/[0-9a-f]{16}$",
+      "description": "Where this set stands in the shared store, under /out/shared. Absent for a world that carries its own copy."
+    },
     "jsonConnections": {
       "type": "object",
       "additionalProperties": false,

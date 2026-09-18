@@ -41,7 +41,11 @@ export function interiorPlan( atlas, questlines, shells, args ) {
 	const requested = args.interiorParcels ?? [];
 
 	return {
-		candidates: args.interiorParcels ?? interiorCandidates( atlas, questlines, shells ),
+		// A parcel with no building cannot open one, so it leaves the candidates
+		// and is reported in `unavailable` instead.
+		candidates: args.interiorParcels
+			? requested.filter( ( id ) => available.has( id ) )
+			: interiorCandidates( atlas, questlines, shells ),
 		target: args.interiorParcels ? requested.length : args.interiors,
 		unknown: requested.filter( ( id ) => ! known.has( id ) ),
 		unavailable: requested.filter( ( id ) => known.has( id ) && ! available.has( id ) )

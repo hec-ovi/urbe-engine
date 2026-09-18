@@ -1,29 +1,31 @@
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { AssemblyError } from './RequestAssembler.js';
 import { sha256 } from './JsonFile.js';
 import { validateInteriorModules } from './validators.js';
 import { INTERIOR_ENTRY } from './interiorRunner.js';
+import { share, sharedRoot } from './SharedResources.js';
 
 /** Where interior's `npm run modules -- --out out/modules` publishes the shared set. */
 export const MODULES_DIR = fileURLToPath( new URL( '../../../interior/out/modules/', import.meta.url ) );
 /** Interior's furniture catalog, with the models its `modelUri` names beside it. */
 export const PROPS_DIR = fileURLToPath( new URL( '../../../interior/src/assets/', import.meta.url ) );
-/** The folder every furnished building draws its geometry from, one per city. */
-export const MODULES_FOLDER = 'interior-modules';
-/** The module catalog the world manifest points the game at. */
-export const MODULES_FILE = `${MODULES_FOLDER}/modules.json`;
+/** What the shared store calls the set every furnished building draws from. */
+export const MODULES_KIND = 'interior-modules';
+/** The module catalog the world manifest points the game at, inside that folder. */
+export const MODULES_FILE = 'modules.json';
 /** The furniture catalog beside it, the second catalog `interior/building.json` names. */
-export const PROPS_FILE = `${MODULES_FOLDER}/catalog.json`;
+export const PROPS_FILE = 'catalog.json';
 
 /**
  * The shared interior resources: the room modules a floor is built from and the
- * furniture catalog its placements name. Every furnished building references the
- * same pair, so a city copies both into one folder beside the world, the way the
- * piece kit is copied, and the manifest binds those exact catalog bytes. That
- * folder is the resource base `building.json` resolves `modules` and `props`
- * against. A machine that has not published the module set builds it in process.
+ * furniture catalog its placements name. Every furnished building in every city
+ * references the same pair, and the furniture with its models is 64 MB, so both
+ * go into one folder in the shared store named for their own bytes and a world's
+ * manifest binds those bytes. That folder is the resource base `building.json`
+ * resolves `modules` and `props` against. A machine that has not published the
+ * module set builds it in process.
  */
 export class InteriorModules {
 
@@ -36,49 +38,54 @@ export class InteriorModules {
 
 		this.dir = dir;
 		this.propsDir = propsDir;
-		/** The manifest references, once both sets stand beside the world. */
+		/** The manifest references, once both sets stand in the shared store. */
 		this.references = null;
 
 	}
 
 	/**
-	 * Copies both sets beside the world once per run.
-	 * @returns the manifest references `{ modules: { file, sha256 }, props: { file, sha256 } }`
+	 * Puts both sets in the shared store once per run, where every city that
+	 * furnishes a building reads the same copy. The furniture alone is 64 MB, so
+	 * a world references it by hash instead of carrying it.
+	 * @returns the manifest references `{ modules: { file, sha256, shared }, props: { file, sha256, shared } }`
 	 * @throws AssemblyError E_INTERIOR_FAILED, which keeps the building closed
 	 */
-	async publish( outDir ) {
+	async publish() {
 
 		if ( this.references ) return this.references;
 
-		const destination = join( outDir, MODULES_FOLDER );
+		mkdirSync( sharedRoot(), { recursive: true } );
 
-		mkdirSync( outDir, { recursive: true } );
+		const staged = mkdtempSync( join( sharedRoot(), '.staging-' ) );
 
-		if ( existsSync( join( this.dir, 'modules.json' ) ) ) {
+		try {
 
-			// A world built from the copy it already carries holds exactly these modules.
-			if ( resolve( destination ) !== resolve( this.dir ) ) {
+			if ( existsSync( join( this.dir, 'modules.json' ) ) ) cpSync( this.dir, staged, { recursive: true } );
+			else await this.#build( staged );
 
-				rmSync( destination, { recursive: true, force: true } );
-				cpSync( this.dir, destination, { recursive: true } );
+			const modules = this.#catalog( staged, MODULES_FILE );
+			const errors = validateInteriorModules( modules.document );
+
+			if ( errors.length ) {
+
+				throw new AssemblyError( 'E_INTERIOR_FAILED',
+					`interior modules schema: ${errors.map( ( e ) => `${e.instancePath || '/'} ${e.message}` ).join( '; ' )}` );
 
 			}
 
-		} else await this.#build( destination );
+			const props = this.#props( staged );
+			// One folder for the pair, named for both catalogs: a world that binds
+			// these module bytes binds exactly this furniture too.
+			const shared = share( MODULES_KIND, sha256( `${modules.reference.sha256}${props.sha256}` ), staged, { move: true } );
 
-		const modules = this.#catalog( destination, 'modules.json', MODULES_FILE );
-		const errors = validateInteriorModules( modules.document );
+			this.references = {
+				modules: { ...modules.reference, shared },
+				props: { ...props, shared }
+			};
 
-		if ( errors.length ) {
+			return this.references;
 
-			throw new AssemblyError( 'E_INTERIOR_FAILED',
-				`interior modules schema: ${errors.map( ( e ) => `${e.instancePath || '/'} ${e.message}` ).join( '; ' )}` );
-
-		}
-
-		this.references = { modules: modules.reference, props: this.#props( destination ) };
-
-		return this.references;
+		} finally { rmSync( staged, { recursive: true, force: true } ); }
 
 	}
 
@@ -93,9 +100,9 @@ export class InteriorModules {
 
 		}
 
-		copyFileSync( source, join( destination, 'catalog.json' ) );
+		copyFileSync( source, join( destination, PROPS_FILE ) );
 
-		const { document, reference } = this.#catalog( destination, 'catalog.json', PROPS_FILE );
+		const { document, reference } = this.#catalog( destination, PROPS_FILE );
 
 		if ( ! Array.isArray( document.assets ) ) {
 
@@ -129,9 +136,9 @@ export class InteriorModules {
 	}
 
 	/** One published catalog: its parsed document and the bytes the manifest binds. */
-	#catalog( destination, name, file ) {
+	#catalog( directory, file ) {
 
-		const bytes = readFileSync( join( destination, name ) );
+		const bytes = readFileSync( join( directory, file ) );
 
 		try {
 

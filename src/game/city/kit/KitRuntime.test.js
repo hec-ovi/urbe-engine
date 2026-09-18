@@ -34,33 +34,48 @@ async function openKit( { mutate = ( kit ) => kit } = {} ) {
 }
 
 /**
- * One parcel's placement table in the shape Kit assembly writes: Exterior's
- * own plan in the parcel's frame. Assembly keeps the blueprint in its own file,
- * so the plan here carries none either.
+ * One building in the shape kit assembly writes it: the plan, drawn once at the
+ * origin with face 0 along +X, and the parcel record that stands it somewhere.
  */
-function table( { parcel = 'p1', family = 'mirror-frame', width = 24, depth = 32, floors = 5, transform } = {} ) {
+function building( { parcel = 'p1', family = 'mirror-frame', width = 24, depth = 32, floors = 5, frame } = {} ) {
 
-	// The same request Kit assembly sends: the lot as a world ring whose first
-	// edge is face 0, so every position in the plan comes back in world metres.
-	const frame = transform ?? { position: [ 100, 0, 50 ], rotationY: Math.PI / 2 };
-	const lot = worldRing( frame, width, depth );
-	const { blueprint, ...plan } = planAssembly( {
+	const at = frame ?? { position: [ 100, 0, 50 ], rotationY: Math.PI / 2 };
+	const { blueprint, ...drawn } = planAssembly( {
 		family, buildingId: parcel, seed: 'kit', theme: 'cyberpunk',
-		parcel: { footprint: lot, accessPoint: [ ( lot[ 0 ][ 0 ] + lot[ 1 ][ 0 ] ) / 2, ( lot[ 0 ][ 1 ] + lot[ 1 ][ 1 ] ) / 2 ], maxHeight: 200 },
-		building: { type: 'offices', tier: 'mid', floors }
+		parcel: { footprint: [ [ 0, 0 ], [ width, 0 ], [ width, depth ], [ 0, depth ] ], accessPoint: [ width / 2, 0 ], maxHeight: 200 },
+		building: { type: 'offices', tier: 'mid', floors },
+		entranceEdge: 0
 	} );
+	const pieces = [ ...new Set( drawn.placements.map( ( piece ) => piece.piece ) ) ];
+	const id = `${family}-${width / 8}x${depth / 8}x${floors}f`;
+	const lot = worldRing( at, width, depth );
 
 	return {
-		parcel,
-		family,
-		baysAcross: width / 8,
-		baysDeep: depth / 8,
-		floors,
-		signText: null,
-		lot,
-		bounds: { min: [ Math.min( ...lot.map( c => c[ 0 ] ) ), frame.position[ 1 ], Math.min( ...lot.map( c => c[ 1 ] ) ) ], max: [ Math.max( ...lot.map( c => c[ 0 ] ) ), frame.position[ 1 ] + floors * 4.5, Math.max( ...lot.map( c => c[ 1 ] ) ) ] },
-		plan
+		plan: {
+			id, family: drawn.family, baysAcross: width / 8, baysDeep: depth / 8, floors,
+			bands: drawn.bands,
+			pieces,
+			placements: drawn.placements.map( ( { piece, face, position, rotationY } ) => ( {
+				piece: pieces.indexOf( piece ), face, position, rotationY
+			} ) ),
+			signAnchors: drawn.signAnchors, doors: drawn.doors
+		},
+		record: {
+			parcel, plan: id, origin: at.position, rotationY: at.rotationY, lot,
+			bounds: {
+				min: [ Math.min( ...lot.map( c => c[ 0 ] ) ), at.position[ 1 ], Math.min( ...lot.map( c => c[ 1 ] ) ) ],
+				max: [ Math.max( ...lot.map( c => c[ 0 ] ) ), at.position[ 1 ] + floors * 4.5, Math.max( ...lot.map( c => c[ 1 ] ) ) ]
+			},
+			signText: null, family, floors, tint: parcel
+		}
 	};
+
+}
+
+/** Serves a world of one building: every parcel stands from the same plan. */
+function serving( one = building() ) {
+
+	return async ( url ) => url.endsWith( `${one.plan.id}.json` ) ? one.plan : { ...one.record, parcel: url.slice( 1, url.indexOf( '.' ) ) };
 
 }
 
@@ -113,7 +128,7 @@ describe( 'the city draws every kit building from shared pieces', () => {
 		const draws = pieces.drawCount;
 		expect( draws ).toBe( 204 );
 
-		const loader = new KitCellLoader( { pieces, factory, readJson: async () => table() } );
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving() } );
 		const first = await shown( loader, [ source( 'p1', false ) ] );
 		const second = await shown( loader, [ source( 'p2', false ), source( 'p3', false ) ] );
 
@@ -129,7 +144,7 @@ describe( 'the city draws every kit building from shared pieces', () => {
 	it( 'appends a cell\'s instances on admission and takes exactly those back out on a drop', async () => {
 
 		const { pieces } = await openKit();
-		const loader = new KitCellLoader( { pieces, factory, readJson: async () => table() } );
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving() } );
 
 		const hidden = await loader.load( new Map( [ source( 'p1', false ) ] ) );
 		// Nothing of a cell reaches the shared draws while the skyline still
@@ -139,7 +154,7 @@ describe( 'the city draws every kit building from shared pieces', () => {
 		hidden.group.visible = true;
 		const resident = hidden;
 		const one = live( pieces );
-		const copies = table().plan.placements.length;
+		const copies = building().plan.placements.length;
 		expect( one ).toBe( copies + 1 );
 
 		const other = await shown( loader, [ source( 'p2', false ) ] );
@@ -156,7 +171,7 @@ describe( 'the city draws every kit building from shared pieces', () => {
 	it( 'gives every building a cuboid compound and no triangles at all', async () => {
 
 		const { pieces } = await openKit();
-		const loader = new KitCellLoader( { pieces, factory, readJson: async () => table() } );
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving() } );
 		const closed = await loader.load( new Map( [ source( 'p1', false ) ] ) );
 
 		// Three plain walls, the entrance wall as two jambs and a lintel, the
@@ -180,7 +195,7 @@ describe( 'the city draws every kit building from shared pieces', () => {
 
 		const { pieces } = await openKit();
 		await pieces.ready;
-		const loader = new KitCellLoader( { pieces, factory, readJson: async () => table() } );
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving() } );
 		const first = await shown( loader, [ source( 'p1', false ) ] );
 		const draw = [ ...pieces.pieces.values() ].map( ( piece ) => piece.draw )
 			.find( ( one ) => one.count > 0 && one.meshes.length > 1 );
@@ -208,11 +223,13 @@ describe( 'the city draws every kit building from shared pieces', () => {
 	it( 'cuts the walls and the roof cap wherever the interior reserves an opening', async () => {
 
 		const { pieces } = await openKit();
-		const flat = table( { transform: { position: [ 0, 0, 0 ], rotationY: 0 } } );
-		const loader = new KitCellLoader( { pieces, factory, readJson: async () => flat } );
+		const flat = building( { frame: { position: [ 0, 0, 0 ], rotationY: 0 } } );
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving( flat ) } );
 
 		const plain = await loader.load( new Map( [ source( 'p1', false ) ] ) );
 		const cut = await loader.load( new Map( [ source( 'p2', false, reserving() ) ] ) );
+		// Inside the roof cap, whose top is where the plan's last band ends.
+		const roof = flat.plan.bands.at( - 1 ).base + flat.plan.bands.at( - 1 ).height - 0.2;
 
 		expect( cut.boxColliders.length ).toBeGreaterThan( plain.boxColliders.length );
 
@@ -220,20 +237,20 @@ describe( 'the city draws every kit building from shared pieces', () => {
 		// beside each of them still stand.
 		expect( solidAt( cut.boxColliders, 23.75, 1.2, 11 ) ).toBe( false );
 		expect( solidAt( cut.boxColliders, 23.75, 1.2, 20 ) ).toBe( true );
-		expect( solidAt( cut.boxColliders, 12, 23, 16 ) ).toBe( false );
-		expect( solidAt( cut.boxColliders, 4, 23, 4 ) ).toBe( true );
+		expect( solidAt( cut.boxColliders, 12, roof, 16 ) ).toBe( false );
+		expect( solidAt( cut.boxColliders, 4, roof, 4 ) ).toBe( true );
 
 		// Without the blueprint the same building is sealed everywhere but its
 		// entrance.
 		expect( solidAt( plain.boxColliders, 23.75, 1.2, 11 ) ).toBe( true );
-		expect( solidAt( plain.boxColliders, 12, 23, 16 ) ).toBe( true );
+		expect( solidAt( plain.boxColliders, 12, roof, 16 ) ).toBe( true );
 
 	} );
 
 	it( 'publishes the entrance from the placement table and swings its leaves', async () => {
 
 		const { pieces } = await openKit();
-		const loader = new KitCellLoader( { pieces, factory, readJson: async () => table() } );
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving() } );
 		const cell = await shown( loader, [ source( 'p1', true ) ] );
 
 		expect( cell.entrances ).toEqual( cell.doors );
@@ -263,9 +280,10 @@ describe( 'the city draws every kit building from shared pieces', () => {
 	it( 'refuses a placement naming a piece the kit does not publish', async () => {
 
 		const { pieces } = await openKit();
-		const stray = table();
-		stray.plan.placements[ 2 ] = { ...stray.plan.placements[ 2 ], piece: 'garden-taper/middle/bay' };
-		const loader = new KitCellLoader( { pieces, factory, readJson: async () => stray } );
+		const stray = building();
+		stray.plan.pieces.push( 'garden-taper/middle/bay' );
+		stray.plan.placements[ 2 ] = { ...stray.plan.placements[ 2 ], piece: stray.plan.pieces.length - 1 };
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving( stray ) } );
 
 		await expect( loader.load( new Map( [ source( 'p1', false ) ] ) ) )
 			.rejects.toThrow( /E_KIT_PLACEMENT: p1 places garden-taper\/middle\/bay/ );

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSyn
 import { join } from 'node:path';
 import { hashJson, writeWorldArchive } from '../world-archive/index.js';
 import { sha256, writeJsonFile } from './JsonFile.js';
-import { buildStreetArtifacts } from './StreetArtifacts.js';
+import { buildStreetArtifacts, shareStreetKit } from './StreetArtifacts.js';
 import { AssemblyError } from './RequestAssembler.js';
 
 /** Prepares world documents before replacing any published file or manifest. */
@@ -30,9 +30,12 @@ export class WorldFiles {
 		}
 		if ( streets ) {
 
-			references.streets = streetsPrepared
+			const reference = streetsPrepared
 				? this.#adoptStreets( streetsPrepared )
 				: await buildStreetArtifacts( this.stage, atlas, streets === true ? {} : streets );
+			// The street pieces are the same 42 MB for every city of this design,
+			// so they go to the shared store and the world keeps its placements.
+			references.streets = { ...reference, sharedKit: shareStreetKit( join( this.stage, 'streets' ), reference.kitSha256 ) };
 			this.names.push( 'streets' );
 
 		}

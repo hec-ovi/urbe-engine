@@ -13,17 +13,31 @@ const MANIFEST_FILE = 'manifest.json';
 const NPC_TYPES_FILE = 'npc-types.json';
 const BLUEPRINT_FILE = 'blueprint.json';
 const QUESTLINES_FILE = 'quests/questlines.json';
+/** Where kit assembly writes this city's building plans (../assembly/kit/CONTRACT.md). */
+const PLANS_FOLDER = 'kit/plans';
+/** The store every world reads its shared resources from (../assembly/SharedResources.js). */
+const SHARED_BASE = '/out/shared';
 const QUEST_BUNDLE_FILE = 'quests/quest-bundle.json';
 const INVESTIGATIONS_FILE = 'quests/investigations.json';
 
 /** Loads source-bound world documents and manifest-owned building sources. */
 export class WorldSource {
 
-	constructor( { blueprintUrl, outBase, gameId = null } ) {
+	constructor( { blueprintUrl, outBase, gameId = null, sharedBase = SHARED_BASE } ) {
 
 		this.blueprintUrl = blueprintUrl;
 		this.outBase = outBase;
 		this.gameId = gameId;
+		// The piece kit, the street kit and the interior modules are the same
+		// bytes for every city, so they stand in one store every world reads.
+		this.sharedBase = sharedBase;
+
+	}
+
+	/** Where one manifest reference's files stand: the shared store, or this world. */
+	#baseOf( reference ) {
+
+		return reference.shared ? `${this.sharedBase}/${reference.shared}` : this.outBase;
 
 	}
 
@@ -81,7 +95,7 @@ export class WorldSource {
 		this.#assertBlueprint( manifest, atlas );
 		const connections = await loadWorldConnections( blueprint, manifest.connections, ( file, reference ) => this.#document( `${this.outBase}/${file}`, reference ) );
 		const nativeStreets = manifest.streets ? await openNativeStreetSource( {
-			baseUrl: this.outBase, reference: manifest.streets, blueprint
+			baseUrl: this.outBase, sharedBase: this.sharedBase, reference: manifest.streets, blueprint
 		} ) : null;
 
 		const known = new Set( atlas.parcels.map( ( parcel ) => parcel.id ) );
@@ -118,24 +132,31 @@ export class WorldSource {
 	}
 
 	/**
-	 * The Exterior piece kit this world was built from, copied beside it and
-	 * hashed in the manifest. `baseUrl` is what its piece files are relative to.
-	 * @returns { document, baseUrl } or null for a world of generated shells
+	 * The Exterior piece kit this world was built from and the building plans
+	 * beside it. `baseUrl` is what its piece files are relative to; `plansUrl` is
+	 * where `<parcel>.placements.json` resolves its plan id, which is always in
+	 * the world's own folder because the plans are this city's buildings.
+	 * @returns { document, baseUrl, plansUrl } or null for a world of generated shells
 	 */
 	async #kit( manifest ) {
 
 		if ( ! manifest.kit ) return null;
 
 		const file = manifest.kit.file;
-		const { data } = await this.#document( `${this.outBase}/${file}`, manifest.kit );
+		const base = this.#baseOf( manifest.kit );
+		const { data } = await this.#document( `${base}/${file}`, manifest.kit );
 
-		return { document: data, baseUrl: `${this.outBase}/${file.slice( 0, file.lastIndexOf( '/' ) + 1 )}`.replace( /\/+$/, '' ) };
+		return {
+			document: data,
+			baseUrl: `${base}/${file.slice( 0, file.lastIndexOf( '/' ) + 1 )}`.replace( /\/+$/, '' ),
+			plansUrl: `${this.outBase}/${PLANS_FOLDER}`
+		};
 
 	}
 
 	/**
-	 * One city resource catalog copied beside the world and hashed in the
-	 * manifest: the shared interior modules, the shared furniture.
+	 * One city resource catalog the manifest binds by hash, beside the world or
+	 * in the shared store: the shared interior modules, the shared furniture.
 	 * @returns { document, baseUrl } or null when the world publishes none
 	 */
 	async #resource( reference ) {
@@ -143,9 +164,10 @@ export class WorldSource {
 		if ( ! reference ) return null;
 
 		const { file } = reference;
-		const { data } = await this.#document( `${this.outBase}/${file}`, reference );
+		const base = this.#baseOf( reference );
+		const { data } = await this.#document( `${base}/${file}`, reference );
 
-		return { document: data, baseUrl: `${this.outBase}/${file.slice( 0, file.lastIndexOf( '/' ) + 1 )}`.replace( /\/+$/, '' ) };
+		return { document: data, baseUrl: `${base}/${file.slice( 0, file.lastIndexOf( '/' ) + 1 )}`.replace( /\/+$/, '' ) };
 
 	}
 
