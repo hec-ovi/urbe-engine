@@ -5,6 +5,7 @@
 | Folder | Purpose and dependencies | Inputs and outputs |
 | --- | --- | --- |
 | `src/assembly` | Build city artifacts through Atlas, Streets, Connections, Exterior, Interior, Naming and Simulation | [Contract](../src/assembly/CONTRACT.md), [manifest](../src/assembly/schema/world-manifest.schema.json), [shell catalog](../src/assembly/schema/shell-catalog.schema.json) |
+| `src/assembly/kit` | Place Exterior kit pieces per parcel instead of generating a unique shell | [Contract](../src/assembly/kit/CONTRACT.md) |
 | `src/world-archive` | Read/write bounded hashed JSON collections using filesystem or fetch | [Contract](../src/world-archive/CONTRACT.md), [ports](../src/world-archive/schema/api.d.ts), [index](../src/world-archive/schema/index.schema.json) |
 | `src/server` | HTTP adapters for Library, Creation, Assembly and Quests dialogue | [Contract and route schemas](../src/server/CONTRACT.md) |
 | `src/library` | Catalog and revisioned filesystem saves | [Contract and schemas](../src/library/CONTRACT.md) |
@@ -27,6 +28,7 @@
 | `ground/native-stream` | Stream original native street GLBs and their physical triangles | [Contract](../src/game/ground/native-stream/CONTRACT.md), [stream](../src/game/ground/schema/stream.d.ts) |
 | `city` | Exterior shells, Interior floors, doors, scenic rooms and fixtures; building vegetation uses the Props asset loader | [Contract](../src/game/city/CONTRACT.md), [floor stream](../src/game/city/schema/interior-stream.d.ts), [fixture stream](../src/game/city/schema/street-fixtures.d.ts), [building models](../src/game/city/schema/building-models.d.ts) |
 | `city/streaming` | Nearby original shells and source-derived skyline | [Contract](../src/game/city/streaming/CONTRACT.md), [ports](../src/game/city/streaming/schema/stream.d.ts) |
+| `city/kit` | Instanced kit pieces and cuboid colliders per streamed cell | [Contract](../src/game/city/kit/CONTRACT.md) |
 | `props` | Source land/model placements with Ground clearance and Physics | [Contract](../src/game/props/CONTRACT.md), [stream](../src/game/props/stream.d.ts) |
 | `links` | Connection geometry and materials | [Contract](../src/game/links/CONTRACT.md) |
 | `physics` | Rapier world, player body and actor impacts | [Contract](../src/game/physics/CONTRACT.md), [band admission](../src/game/physics/schema/band-admission.d.ts) |
