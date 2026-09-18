@@ -244,7 +244,7 @@ for ( const id of candidates ) {
 
 	// Interior fills a ground, a middle and a crown layout, so a building
 	// shorter than three floors has nothing to fill and is not a candidate.
-	if ( blueprint.floors.length < 3 ) {
+	if ( blueprint.floors.filter( ( floor ) => floor.index >= 0 ).length < 3 ) {
 
 		console.log( `${id}  interior  SKIP  fewer than three floors` );
 		continue;
