@@ -1,14 +1,15 @@
 /**
  * Batch width: a quarter of the machine unless the caller asks for an exact
  * count. A shell generator saturates a core; opening one per core pins a
- * 32-core machine near 100 C. The thermal governor narrows the batch further
- * while the package runs hot.
+ * 32-thread machine near 100 C. The thermal governor narrows the batch further
+ * while the package runs hot. The ceiling sits above a single core's boost
+ * reading (about 85 C on a Strix Halo Tctl sensor) so one worker always runs.
  */
 import { availableParallelism } from 'node:os';
 
 export const WORKERS_ENV = 'URBE_ASSEMBLY_WORKERS';
 export const MAX_TEMP_ENV = 'URBE_ASSEMBLY_MAX_TEMP';
-export const DEFAULT_MAX_TEMP = 80;
+export const DEFAULT_MAX_TEMP = 90;
 const CORE_SHARE = 4;
 
 export function defaultWorkers( env = process.env ) {

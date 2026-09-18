@@ -2,7 +2,7 @@
 
 0.19.4: every city with a shell catalog streams by distance, and city loaders decode quantized, meshopt-compressed producer geometry.
 
-0.19.3: city batches open a quarter of the cores and hold the CPU under 80 C, narrowing the batch while it runs hot.
+0.19.3: city batches open a quarter of the cores and hold the CPU under 90 C, narrowing the batch while it runs hot.
 
 0.19.2: loading work no longer waits on animation frames a browser has stopped, and the building preview reports every stage it runs.
 

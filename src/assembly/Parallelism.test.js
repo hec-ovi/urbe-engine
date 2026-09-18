@@ -24,7 +24,7 @@ describe( 'batch parallelism', () => {
 
 	} );
 
-	it( 'holds the batch under 80 C unless the environment says otherwise', () => {
+	it( 'holds the batch under 90 C unless the environment says otherwise', () => {
 
 		expect( maxTemperature( {} ) ).toBe( DEFAULT_MAX_TEMP );
 		expect( maxTemperature( { [ MAX_TEMP_ENV ]: '70' } ) ).toBe( 70 );
