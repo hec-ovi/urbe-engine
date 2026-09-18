@@ -12,7 +12,8 @@ import { interiorPlan, parseCityArgs } from './CityPlan.js';
 import { collectShellArtifacts } from './ShellArtifacts.js';
 import { ConnectionsArtifact } from './ConnectionsArtifact.js';
 import { loadBlueprint } from './BlueprintInput.js';
-import { KitAssembler, KitManifest } from './kit/index.js';
+import { KitAssembler, KitManifest, blueprintFile } from './kit/index.js';
+import { InteriorModules } from './InteriorModules.js';
 
 function dirBytes( dir ) {
 
@@ -61,9 +62,6 @@ const kitAssembler = kit ? new KitAssembler( atlas, assembler, kit ) : null;
 
 const questlinesPath = join( outDir, 'quests', 'questlines.json' );
 const questlines = existsSync( questlinesPath ) ? JSON.parse( readFileSync( questlinesPath, 'utf8' ) ) : [];
-// An interior is furnished into a generated shell, so the parcels this run
-// opens take the generator instead of being built once from pieces and again
-// from scratch. Everything else ordinary is placed from the kit in process.
 const planned = interiorPlan( atlas, questlines, parcelIds, args );
 
 if ( planned.unknown.length ) {
@@ -73,8 +71,9 @@ if ( planned.unknown.length ) {
 
 }
 
-const opening = new Set( planned.candidates.slice( 0, planned.target ) );
-const kitQueue = new Set( wanted.filter( ( id ) => ! opening.has( id ) && kitAssembler?.candidate( id ) ) );
+// A building is furnished from its own blueprint, which both paths publish, so
+// a parcel picked to open keeps whichever path it would take anyway.
+const kitQueue = new Set( wanted.filter( ( id ) => kitAssembler?.candidate( id ) ) );
 const queue = wanted.filter( ( id ) => ! kitQueue.has( id ) );
 const workers = Math.max( 1, Math.min( args.workers, queue.length || 1 ) );
 const streets = new StreetsAhead( outDir, atlas );
@@ -196,8 +195,7 @@ function classify( ids ) {
 
 }
 
-// Any standing building can open: a kit parcel picked for an interior is
-// generated here and ends the run as a shell.
+// Any standing building can open, from its pieces or from its own GLB.
 const { candidates, target: interiorTarget, unavailable: unavailableInteriors } = interiorPlan(
 	atlas, questlines, shells, args
 );
@@ -232,25 +230,41 @@ if ( args.reuseShells ) {
 
 const readyInteriors = [];
 const interiorFailures = [];
+// One copy of the shared modules every furnished building draws, published on
+// the first interior so a set that cannot be published keeps them all closed.
+const modules = new InteriorModules();
+const kitBuilt = new Set( out.kits( shells ) );
 
 for ( const id of candidates ) {
 
 	if ( readyInteriors.length >= interiorTarget ) break;
 
+	const parcelDir = join( outDir, id );
+	const blueprint = JSON.parse( readFileSync( join( parcelDir, blueprintFile( id ) ), 'utf8' ) );
+
+	// Interior fills a ground, a middle and a crown layout, so a building
+	// shorter than three floors has nothing to fill and is not a candidate.
+	if ( blueprint.floors.length < 3 ) {
+
+		console.log( `${id}  interior  SKIP  fewer than three floors` );
+		continue;
+
+	}
+
 	const t0 = performance.now();
 	try {
 
-		const { request, coreMode } = await pipeline.build( id, join( outDir, id ), { glb: 'merged', interior: true } );
-		// An opened building is drawn from the shell it was just generated as.
-		out.dropPlacements( id );
+		await modules.publish( outDir );
+		const { request: refit, coreMode } = await pipeline.furnish( id, parcelDir, {
+			blueprint, refit: ! kitBuilt.has( id )
+		} );
 		readyInteriors.push( id );
 		const result = results.find( ( entry ) => entry.parcelId === id );
 		if ( result ) Object.assign( result, {
-			floors: request.building.floors,
-			basements: request.building.basements ?? 0,
+			...( refit ? { floors: refit.building.floors, basements: refit.building.basements ?? 0 } : {} ),
 			coreMode,
 			interior: 'ready',
-			bytes: dirBytes( join( outDir, id ) )
+			bytes: dirBytes( parcelDir )
 		} );
 		console.log( `${id}  interior  ready  ${coreMode}  ${Math.round( performance.now() - t0 )} ms` );
 
@@ -275,6 +289,8 @@ const generated = shells.filter( ( id ) => sources[ id ] === 'shell' );
 if ( kitParcels.length && ! kit ) throw new AssemblyError( 'E_KIT_MANIFEST', `${kitParcels.length} buildings stand from pieces but no kit is published` );
 const kitReference = kitParcels.length ? kit.publish( outDir ) : null;
 if ( kitReference ) console.log( `kit copied beside the world: ${kitParcels.length} buildings share ${kit.ids().length} families` );
+const interiorResources = readyInteriors.length ? modules.references : null;
+if ( interiorResources ) console.log( `interior modules and furniture copied beside the world: ${readyInteriors.length} furnished buildings share one set` );
 for ( const result of results ) if ( sources[ result.parcelId ] ) result.source = sources[ result.parcelId ];
 
 results.sort( ( a, b ) => a.parcelId.localeCompare( b.parcelId, undefined, { numeric: true } ) );
@@ -310,7 +326,7 @@ const streetsPrepared = await streets.prepared();
 console.log( `streets built in ${( streetsPrepared.ms / 1000 ).toFixed( 1 )} s alongside the shells` );
 const manifest = await out.publishManifest( atlas, shells, readyInteriors, {
 	rooftopSpans, connectionsArtifact, catalog, encoding: source.encoding, streets: true, streetsPrepared,
-	kit: kitReference, sources
+	kit: kitReference, interiorModules: interiorResources?.modules ?? null, interiorProps: interiorResources?.props ?? null, sources
 } );
 streets.dispose();
 

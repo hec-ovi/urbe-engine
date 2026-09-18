@@ -6,6 +6,7 @@ import { WorldFiles } from './WorldFiles.js';
 import { writeJsonFile } from './JsonFile.js';
 import { AssemblyError } from './RequestAssembler.js';
 import { placementsFile } from './kit/KitFiles.js';
+import { NPC_FILE } from './interiorRunner.js';
 
 export const MANIFEST_FILE = 'manifest.json';
 export const MANIFEST_VERSION = '1.0.0';
@@ -13,6 +14,8 @@ export const MANIFEST_VERSION = '1.0.0';
 export const BLUEPRINT_FILE = 'blueprint.json';
 /** The naming box's typed set, carried in from beside the blueprint when it has one. */
 export const NPC_TYPES_FILE = 'npc-types.json';
+/** Interior's own index of one furnished building: its layouts, floors and connectors. */
+export const INTERIOR_BUILDING_FILE = 'building.json';
 
 /** Zero-padded floor file tag; basements keep their minus sign (-001). */
 export function floorTag( index ) {
@@ -123,36 +126,32 @@ export class OutDir {
 
 	}
 
-	/** The shell parcels whose furnished interior is complete and streamable. */
+	/** The shell parcels whose furnished interior is complete. */
 	interiors( parcelIds ) {
 
 		const shells = new Set( this.shells( parcelIds ) );
 
-		return parcelIds.filter( ( id ) => shells.has( id )
-			&& existsSync( join( this.dir, id, 'interior', 'building.glb' ) )
-			&& existsSync( join( this.dir, id, 'interior', 'npc.json' ) )
-			&& this.floorsOf( id ) !== null );
+		return parcelIds.filter( ( id ) => shells.has( id ) && this.floorsOf( id ) !== null );
 
 	}
 
 	/**
-	 * The floor tags of one parcel, lowest first, or null when a floor document
-	 * has no GLB beside it (or there are no floors at all).
+	 * The floor tags of one parcel, lowest first, or null when the building
+	 * document, one of the three layouts it names or its NPC support is missing.
+	 * A furnished building is JSON alone: its geometry is the city's shared
+	 * module set, so there is nothing per floor to stream.
 	 */
 	floorsOf( parcelId ) {
 
-		const floorsDir = join( this.dir, parcelId, 'interior', 'floors' );
+		const interiorDir = join( this.dir, parcelId, 'interior' );
+		const building = readJson( join( interiorDir, INTERIOR_BUILDING_FILE ) );
+		const layouts = Object.values( building?.layouts ?? {} );
 
-		if ( ! existsSync( floorsDir ) ) return null;
+		if ( ! building?.floors?.length || layouts.length !== 3 ) return null;
+		if ( ! existsSync( join( interiorDir, NPC_FILE ) ) ) return null;
+		if ( ! layouts.every( ( file ) => existsSync( join( interiorDir, file ) ) ) ) return null;
 
-		const tags = readdirSync( floorsDir )
-			.filter( ( name ) => name.endsWith( '.json' ) )
-			.map( ( name ) => name.slice( 0, - 5 ) )
-			.sort( ( a, b ) => Number( a ) - Number( b ) );
-
-		if ( ! tags.length ) return null;
-
-		return tags.every( ( tag ) => existsSync( join( floorsDir, `${tag}.glb` ) ) ) ? tags : null;
+		return building.floors.map( ( floor ) => floorTag( floor.index ) ).sort( ( a, b ) => Number( a ) - Number( b ) );
 
 	}
 
@@ -202,7 +201,7 @@ export class OutDir {
 	/** Publishes source documents and a compact shell catalog as one world. */
 	async publishManifest( atlas, parcelIds, interiorIds, {
 		rooftopSpans = null, connectionsArtifact = null, catalog = null, encoding = 'json', archiveOptions, streets = false,
-		streetsPrepared = null, kit = null, sources = null
+		streetsPrepared = null, kit = null, interiorModules = null, interiorProps = null, sources = null
 	} = {} ) {
 
 		if ( ! [ 'json', 'archive' ].includes( encoding ) ) throw new AssemblyError( 'E_REQUEST_INVALID', 'unknown world document encoding' );
@@ -214,7 +213,8 @@ export class OutDir {
 
 			const references = await files.prepare( atlas, connectionsArtifact, { encoding, archiveOptions, catalog, streets, streetsPrepared } );
 			const manifest = this.#manifest( atlas, parcelIds, interiorIds, rooftopSpans, {
-				...references, ...( kit ? { kit } : {} ), ...( sources ? { sources } : {} )
+				...references, ...( kit ? { kit } : {} ), ...( interiorModules ? { interiorModules } : {} ),
+				...( interiorProps ? { interiorProps } : {} ), ...( sources ? { sources } : {} )
 			} );
 			files.publish( manifest );
 			return manifest;

@@ -2,7 +2,7 @@ export const hashValue = value => typeof value === 'string' && /^[a-f0-9]{64}$/.
 export const record = value => value !== null && typeof value === 'object' && ! Array.isArray( value );
 export const vector = ( value, size ) => Array.isArray( value ) && value.length === size && value.every( Number.isFinite );
 export const bounds = value => record( value ) && vector( value.min, 3 ) && vector( value.max, 3 ) && value.min.every( ( n, axis ) => n <= value.max[ axis ] );
-export const pathValue = value => typeof value === 'string' && /^[a-zA-Z0-9._/-]+$/.test( value ) && value.split( '/' ).every( part => part && part !== '.' && part !== '..' );
+export const pathValue = value => typeof value === 'string' && /^[a-zA-Z0-9._+/-]+$/.test( value ) && value.split( '/' ).every( part => part && part !== '.' && part !== '..' );
 
 export function fail( message, cause ) {
 	throw Object.assign( new Error( `E_WORLD_STREETS: ${message}` ), { code: 'E_WORLD_STREETS', ...( cause ? { cause } : {} ) } );

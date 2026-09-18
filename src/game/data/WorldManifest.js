@@ -1,9 +1,9 @@
 import { rooftopSpanErrors } from './RooftopSpanDocument.js';
 
-const REQUIRED_KEYS = [ 'contractVersion', 'seed', 'atlasVersion', 'named', 'namingTheme', 'parcels', 'interiors', 'floors' ];
-const KEYS = new Set( [ ...REQUIRED_KEYS, 'rooftopSpans', 'connections', 'blueprint', 'shellCatalog', 'streets', 'kit', 'sources' ] );
+const REQUIRED_KEYS = [ 'contractVersion', 'seed', 'atlasVersion', 'named', 'namingTheme', 'parcels', 'interiors' ];
+const KEYS = new Set( [ ...REQUIRED_KEYS, 'floors', 'rooftopSpans', 'connections', 'blueprint', 'shellCatalog',
+	'streets', 'kit', 'sources', 'interiorModules', 'interiorProps' ] );
 const SOURCES = new Set( [ 'kit', 'shell' ] );
-const FLOOR_TAG = /^-?[0-9]{3}$/;
 
 /** Runtime validation of assembly's world-manifest schema plus atlas relations. */
 export function worldManifestErrors( manifest, knownParcels ) {
@@ -24,28 +24,24 @@ export function worldManifestErrors( manifest, knownParcels ) {
 	if ( parcels && knownParcels ) for ( const id of parcels ) if ( ! knownParcels.has( id ) ) errors.push( `parcel ${id} is not in the blueprint` );
 	if ( parcels && interiors ) for ( const id of interiors ) if ( ! parcels.has( id ) ) errors.push( `interior ${id} has no shell parcel` );
 
-	if ( ! plainObject( manifest.floors ) ) errors.push( 'floors must be an object' );
-	else {
+	if ( interiors?.size && ! Object.hasOwn( manifest, 'interiorModules' ) ) {
 
-		const floorIds = new Set( Object.keys( manifest.floors ) );
-		for ( const [ id, tags ] of Object.entries( manifest.floors ) ) {
+		errors.push( 'a world with interiors must publish interiorModules' );
 
-			if ( ! Array.isArray( tags ) || ! tags.length || tags.some( ( tag ) => typeof tag !== 'string' || ! FLOOR_TAG.test( tag ) ) ) {
+	}
+	for ( const [ key, file ] of [ [ 'interiorModules', 'modules.json' ], [ 'interiorProps', 'catalog.json' ] ] ) {
 
-				errors.push( `floors.${id} must contain floor tags` );
+		if ( ! Object.hasOwn( manifest, key ) ) continue;
 
-			} else if ( new Set( tags ).size !== tags.length ) errors.push( `floors.${id} contains duplicates` );
+		const ref = manifest[ key ];
+		if ( ! plainObject( ref ) || Object.keys( ref ).length !== 2 || typeof ref.file !== 'string'
+			|| ! ref.file.endsWith( file ) || ! hash( ref.sha256 ) ) {
 
-		}
-		if ( interiors ) {
-
-			for ( const id of interiors ) if ( ! floorIds.has( id ) ) errors.push( `interior ${id} lists no floors` );
-			for ( const id of floorIds ) if ( ! interiors.has( id ) ) errors.push( `floors.${id} is not an interior` );
+			errors.push( `${key} must name the copied ${file} and its sha256 byte hash` );
 
 		}
 
 	}
-
 	if ( Object.hasOwn( manifest, 'rooftopSpans' ) ) rooftopSpanErrors( manifest.rooftopSpans, parcels, errors );
 	if ( Object.hasOwn( manifest, 'blueprint' ) && ! archiveReference( manifest.blueprint, 'blueprint' ) ) {
 
@@ -93,8 +89,8 @@ export function worldManifestErrors( manifest, knownParcels ) {
 	}
 	if ( Object.hasOwn( manifest, 'streets' ) ) {
 		const ref = manifest.streets;
-		if ( ! plainObject( ref ) || Object.keys( ref ).length !== 3 || ref.file !== 'streets/manifest.json'
-			|| ! hash( ref.sha256 ) || ! hash( ref.blueprintSha256 ) || manifest.blueprint ) {
+		if ( ! plainObject( ref ) || Object.keys( ref ).length !== 4 || ref.file !== 'streets/manifest.json'
+			|| ! hash( ref.sha256 ) || ! hash( ref.kitSha256 ) || ! hash( ref.blueprintSha256 ) || manifest.blueprint ) {
 			errors.push( 'streets must name streets/manifest.json with sha256 and blueprintSha256 hashes of ordinary JSON sources' );
 		}
 	}

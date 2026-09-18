@@ -1,6 +1,7 @@
 /**
  * Manifest-bound building documents, with one shared request budget. A parcel
- * assembled from kit pieces carries its placement table instead of a shell GLB.
+ * assembled from kit pieces carries its placement table instead of a shell GLB,
+ * and a furnished one carries the three placement layouts its floors reuse.
  */
 export class BuildingSource {
 
@@ -11,7 +12,6 @@ export class BuildingSource {
 		// Which path assembly took for each parcel. A world with no kit took the
 		// per-parcel generator for every one of them.
 		this.sources = manifest.sources ?? {};
-		this.floors = manifest.floors;
 		this.outBase = outBase;
 		this.readJson = readJson;
 		this.active = 0;
@@ -37,21 +37,28 @@ export class BuildingSource {
 		const base = `${this.outBase}/${parcelId}`;
 		const blueprint = await this.#json( `${base}/${parcelId}.blueprint.json` );
 		const hasInterior = this.interiors.has( parcelId );
-		const [ npc, floors ] = hasInterior ? await Promise.all( [
-			this.#json( `${base}/interior/npc.json` ),
-			Promise.all( this.floors[ parcelId ].map( async tag => ( {
-				...await this.#json( `${base}/interior/floors/${tag}.json` ),
-				glbUrl: `${base}/interior/floors/${tag}.glb`
-			} ) ) )
-		] ) : [ null, [] ];
+		const [ npc, interior ] = hasInterior
+			? await Promise.all( [ this.#json( `${base}/interior/npc.json` ), this.#interior( base ) ] )
+			: [ null, null ];
 		const source = this.sources[ parcelId ] === 'kit' ? 'kit' : 'shell';
 
 		return {
-			parcelId, blueprint, npc, floors, hasInterior, source,
+			parcelId, blueprint, npc, interior, hasInterior, source,
 			...( source === 'kit'
 				? { placementsUrl: `${base}/${parcelId}.placements.json` }
 				: { shellUrl: `${base}/${parcelId}.glb` } )
 		};
+
+	}
+
+	/** The building manifest and the three layouts its floors name, beside it. */
+	async #interior( base ) {
+
+		const building = await this.#json( `${base}/interior/building.json` );
+		const names = Object.entries( building.layouts );
+		const tables = await Promise.all( names.map( ( [ , file ] ) => this.#json( `${base}/interior/${file}` ) ) );
+
+		return { building, layouts: Object.fromEntries( names.map( ( [ id ], at ) => [ id, tables[ at ] ] ) ) };
 
 	}
 

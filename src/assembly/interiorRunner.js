@@ -1,25 +1,36 @@
 /**
- * Black-box runner for the interior library (../interior/CONTRACT.md):
- * imports the sibling package by path and calls generateInterior(request).
- * The entry is TypeScript, so this module must run under a TS-capable loader (tsx).
+ * Black-box runner for the interior library (../interior/CONTRACT.md): imports
+ * the sibling package by path and calls its public entries. The entry is
+ * TypeScript, so this module must run under a TS-capable loader (tsx).
  */
 
-const INTERIOR_ENTRY = new URL( '../../../interior/src/index.ts', import.meta.url ).href;
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+export const INTERIOR_ENTRY = new URL( '../../../interior/src/index.ts', import.meta.url ).href;
+
+/** The expanded NPC support beside the building, for simulation and the runtime. */
+export const NPC_FILE = 'npc.json';
 
 /**
- * The engine runtime resolves material keys itself through the materials
- * database (src/building/MaterialResolver.js), so the assembled world keeps
- * the keys. The per-floor GLBs are asked for alongside the whole building: the
- * game streams a tower one floor at a time.
+ * One furnished building on disk. Interior places its three reusable layouts
+ * (ground, middle, crown) and writes them itself; `expandBuilding` turns them
+ * into the building's own per-floor identities, elevations and connectors,
+ * which is what `npc.json` carries. Geometry stays in the shared module set the
+ * city publishes once, so a building ships as JSON alone.
  *
- * @returns InteriorResult: { glb: Uint8Array, floorGlbs: Map<floorIndex, Uint8Array>,
- * floors: FloorInterior[], npc: NpcSupport }
+ * @returns the BuildingManifest interior wrote to `building.json`
  */
-export async function runInterior( request ) {
+export async function runInterior( request, interiorDir ) {
 
-	const { generateInterior } = await import( INTERIOR_ENTRY );
+	const { generate, writePlacements, expandBuilding } = await import( INTERIOR_ENTRY );
+	const result = await generate( request );
 
-	return generateInterior( request, { textures: { mode: 'keys' }, floorGlbs: true } );
+	await writePlacements( result, interiorDir );
+	const { npc } = expandBuilding( result );
+	writeFileSync( join( interiorDir, NPC_FILE ), JSON.stringify( npc ) + '\n' );
+
+	return result.building;
 
 }
 

@@ -14,18 +14,31 @@ function LIFT() {
 
 }
 
-/** A pair of door leaves standing on the +x face of that shaft, at one floor. */
-function doorGeometry( elevation ) {
+/**
+ * The published `lift-doors` module: two leaves meeting at its own zero, in the
+ * module's frame, exactly as the module catalog hands it over.
+ */
+function doorModule() {
 
 	const quad = ( x0, x1 ) => [
-		[ 11.25, elevation, 20 + x0 ], [ 11.25, elevation, 20 + x1 ], [ 11.25, elevation + 2.1, 20 + x1 ],
-		[ 11.25, elevation, 20 + x0 ], [ 11.25, elevation + 2.1, 20 + x1 ], [ 11.25, elevation + 2.1, 20 + x0 ]
+		[ x0, 0, 0 ], [ x1, 0, 0 ], [ x1, 2.2, 0 ],
+		[ x0, 0, 0 ], [ x1, 2.2, 0 ], [ x0, 2.2, 0 ]
 	];
-	const points = [ ...quad( - 1, 0 ), ...quad( 0, 1 ) ];
 	const geometry = new THREE.BufferGeometry();
-	geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( points.flat(), 3 ) );
+	geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [ ...quad( - 0.55, 0 ), ...quad( 0, 0.55 ) ].flat(), 3 ) );
+	geometry.computeBoundingBox();
 
-	return geometry;
+	return {
+		boundsOf: () => ( { size: [ 1.1, 2.2, 0.06 ], origin: [ 0.55, 0, 0.03 ] } ),
+		surfacesOf: () => [ { geometry, material: new THREE.MeshBasicMaterial() } ]
+	};
+
+}
+
+/** Where a landing's leaves stand: on the +x face of that shaft, at one floor. */
+function doorPlacement( x = 11.25 ) {
+
+	return { module: 'lift-doors', position: [ x, 0, 21.25 ], rotationY: Math.PI / 2, scale: [ 1, 1, 1 ] };
 
 }
 
@@ -63,32 +76,34 @@ describe( 'Elevators', () => {
 
 	} );
 
-	it( 'takes the published door leaves out of the floor band they arrived in', () => {
+	it( 'hangs the published landing module on sliders and gives it a call panel', () => {
 
 		const { elevators, group } = shafts();
 		const band = new THREE.Group();
-		const left = elevators.claim( 'p1', 0, doorGeometry( 0 ), new THREE.MeshBasicMaterial(), band );
+		const taken = elevators.mount( 'p1', 0, doorPlacement(), doorModule(), band );
 
-		// Both leaves and the call plate went to the shaft, and nothing was left
+		expect( taken ).toBe( true );
+		// One pivot in the band: two leaves and the call plate, and nothing left
 		// behind as a second static door standing in front of the sliding one.
-		expect( band.children ).toHaveLength( 3 );
-		expect( left ).toBe( null );
+		expect( band.children ).toHaveLength( 1 );
+		const [ stop ] = elevators.shafts[ 0 ].stops;
+		expect( stop.leaves ).toHaveLength( 2 );
+		expect( stop.leaves.map( ( leaf ) => Math.sign( leaf.userData.slide.x ) ).sort() ).toEqual( [ - 1, 1 ] );
+		// The panel stands a pace out from the leaves, away from the shaft.
+		expect( stop.panel.x ).toBeGreaterThan( 11.25 );
 		expect( group.children ).toHaveLength( 1 );
 
 	} );
 
-	it( 'leaves geometry that belongs to no shaft alone, without a word', () => {
+	it( 'leaves a placement that belongs to no shaft alone, without a word', () => {
 
 		const { elevators } = shafts();
-		const far = doorGeometry( 0 );
-		far.translate( 40, 0, 0 );
 		const band = new THREE.Group();
 		const errors = vi.spyOn( console, 'error' ).mockImplementation( () => {} );
 
-		const left = elevators.claim( 'p1', 0, far, new THREE.MeshBasicMaterial(), band );
+		const taken = elevators.mount( 'p1', 0, doorPlacement( 51.25 ), doorModule(), band );
 
-		expect( left.getAttribute( 'position' ).count ).toBe( 12 );
-		// A stop with no leaves in this band hangs nothing and logs nothing.
+		expect( taken ).toBe( false );
 		expect( band.children ).toHaveLength( 0 );
 		expect( errors ).not.toHaveBeenCalled();
 		errors.mockRestore();
@@ -99,7 +114,7 @@ describe( 'Elevators', () => {
 
 		const { elevators } = shafts();
 		const [ shaft ] = elevators.shafts;
-		const body = playerAt( 10, 0.05, 20 );
+		const body = playerAt( 11.25, 0.05, 21.25 );
 
 		// Standing in the cab on the ground floor, pressing for the next floor.
 		const inside = elevators.panels( body.feet, 3.2 ).find( ( p ) => p.inside );

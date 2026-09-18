@@ -3,14 +3,18 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { triangleGeometry } from './Geometry.js';
 
-/** Static glTF meshes baked once into world-oriented, metre-sized material parts. */
+/**
+ * Static glTF meshes baked once into world-oriented, metre-sized material parts.
+ * `baseUrl` is the directory a spec's `file` is relative to.
+ */
 export class ImportedModels {
-	constructor( loadAsset = url => new GLTFLoader().loadAsync( url ) ) {
+	constructor( loadAsset = url => new GLTFLoader().loadAsync( url ), baseUrl = '/models/street-props' ) {
 		this.loadAsset = loadAsset;
+		this.baseUrl = String( baseUrl ).replace( /\/+$/, '' );
 		this.resources = new Set();
 	}
 	async load( spec ) {
-		const url = `/models/street-props/${spec.file}`;
+		const url = `${this.baseUrl}/${spec.file}`;
 		try {
 			const { scene } = await this.loadAsset( url );
 			scene.traverse( mesh => {

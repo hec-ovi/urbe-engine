@@ -127,7 +127,7 @@ export class RequestAssembler {
 	 * assignments omitted so interior derives kinds from the blueprint floor slots
 	 * @throws AssemblyError E_PARCEL_UNKNOWN
 	 */
-	assembleInterior( parcelId, { blueprint, shellGlb } ) {
+	assembleInterior( parcelId, { blueprint, shellGlb = null } ) {
 
 		const parcel = this.parcels.get( parcelId );
 
@@ -136,7 +136,8 @@ export class RequestAssembler {
 		return {
 			seed: `${this.worldSeed}:${parcelId}`,
 			building: { id: parcelId, type: parcel.type, tier: parcel.tier },
-			shellGlb,
+			// Metadata interior keeps; a kit building has no GLB of its own.
+			...( shellGlb ? { shellGlb } : {} ),
 			blueprint,
 			materialTheme: THEME
 		};

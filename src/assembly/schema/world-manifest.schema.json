@@ -49,6 +49,22 @@
         "sha256": { "$ref": "#/$defs/sha256" }
       }
     },
+    "interiorModules": {
+      "type": "object", "additionalProperties": false, "required": [ "file", "sha256" ],
+      "description": "The shared interior module set copied beside the world, present when any building is furnished.",
+      "properties": {
+        "file": { "const": "interior-modules/modules.json" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "interiorProps": {
+      "type": "object", "additionalProperties": false, "required": [ "file", "sha256" ],
+      "description": "The furniture catalog copied beside the module set, with the models it names.",
+      "properties": {
+        "file": { "const": "interior-modules/catalog.json" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
     "sources": {
       "type": "object",
       "description": "How each parcel is drawn: its own GLB, or the kit pieces.",
@@ -56,10 +72,12 @@
       "additionalProperties": { "enum": [ "kit", "shell" ] }
     },
     "streets": {
-      "type": "object", "additionalProperties": false, "required": [ "file", "sha256", "blueprintSha256" ],
+      "type": "object", "additionalProperties": false, "required": [ "file", "sha256", "kitSha256", "blueprintSha256" ],
+      "description": "The street bundle: its manifest, the shared piece kit beside it, and the blueprint both were built from.",
       "properties": {
         "file": { "const": "streets/manifest.json" },
         "sha256": { "$ref": "#/$defs/sha256" },
+        "kitSha256": { "$ref": "#/$defs/sha256" },
         "blueprintSha256": { "$ref": "#/$defs/sha256" }
       }
     },

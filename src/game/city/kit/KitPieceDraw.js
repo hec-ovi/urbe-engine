@@ -5,7 +5,9 @@ const FIRST_CAPACITY = 64;
 const MAX_RANGES = 64;
 
 /**
- * Every copy of one kit piece in the city, drawn once per surface it wears.
+ * Every copy of one shared piece in the city, drawn once per surface it wears.
+ * Facade pieces and interior modules both stream this way; `name` is the whole
+ * name the group and its meshes take.
  *
  * The surfaces of a piece share one slot index and one pair of instance
  * buffers: a matrix written once is what all of them draw with, and the
@@ -28,7 +30,7 @@ export class KitPieceDraw {
 		this.matrices = instanceBuffer( FIRST_CAPACITY, 16 );
 		this.colors = instanceBuffer( FIRST_CAPACITY, 3, 1 );
 		this.group = new THREE.Group();
-		this.group.name = `kit:${name}`;
+		this.group.name = name;
 		this.meshes = surfaces.map( ( surface ) => this.#mesh( surface ) );
 		for ( const mesh of this.meshes ) this.group.add( mesh );
 
@@ -90,7 +92,7 @@ export class KitPieceDraw {
 	#mesh( { bucket, geometry, material } ) {
 
 		const mesh = new THREE.InstancedMesh( geometry, material, 0 );
-		mesh.name = `kit:${this.name}:${bucket}`;
+		mesh.name = `${this.name}:${bucket}`;
 		// Every surface of the piece reads the one buffer pair this draw keeps.
 		mesh.instanceMatrix = this.matrices;
 		mesh.instanceColor = this.colors;

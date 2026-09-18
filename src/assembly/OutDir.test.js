@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { OutDir, MANIFEST_FILE, BLUEPRINT_FILE, NPC_TYPES_FILE } from './OutDir.js';
-import { writeInteriorFiles } from './BuildingPipeline.js';
 import namedCity from './named-city.fixture.json';
 
 /**
@@ -73,13 +72,13 @@ describe( 'OutDir', () => {
 
 	} );
 
-	it( 'lists every shell and only complete interiors with their floor files', () => {
+	it( 'lists every shell and only complete interiors with their layouts', () => {
 
 		dir = worldWith( [ 'p0', 'p1', 'p2' ] );
 		// p1 got as far as its shell and then failed: no interior on disk
 		rmSync( join( dir, 'p1', 'interior' ), { recursive: true } );
-		// p2 has a floor document with no GLB beside it: the game could not stream it
-		rmSync( join( dir, 'p2', 'interior', 'floors', '000.glb' ) );
+		// p2 names three layouts and one of them was never written
+		rmSync( join( dir, 'p2', 'interior', 'layouts', 'crown.json' ) );
 
 		const out = new OutDir( dir );
 		const atlas = { meta: { seed: 'urbe-tiny', version: '0.2.4' }, parcels: [ parcel( 'p0' ), parcel( 'p1' ), parcel( 'p2' ) ] };
@@ -90,7 +89,7 @@ describe( 'OutDir', () => {
 		expect( manifest ).toEqual( {
 			contractVersion: '1.0.0', seed: 'urbe-tiny', atlasVersion: '0.2.4',
 			named: false, namingTheme: null,
-			parcels: [ 'p0', 'p1', 'p2' ], interiors: [ 'p0' ], floors: { p0: [ '-001', '000' ] }
+			parcels: [ 'p0', 'p1', 'p2' ], interiors: [ 'p0' ], floors: { p0: [ '000', '001', '002' ] }
 		} );
 		expect( existsSync( join( dir, MANIFEST_FILE ) ) ).toBe( true );
 
@@ -151,32 +150,28 @@ describe( 'OutDir', () => {
 
 	} );
 
-	it( 'writes an interior as the whole building plus one document and one GLB per floor', () => {
+	it( 'reads a furnished building\'s floors off the document interior wrote', () => {
 
-		dir = mkdtempSync( join( tmpdir(), 'urbe-out-' ) );
-		const interiorDir = join( dir, 'p0', 'interior' );
+		dir = worldWith( [ 'p0' ] );
 
-		writeInteriorFiles( interiorDir, interior() );
-
-		expect( readdirSync( interiorDir ).sort() ).toEqual( [ 'building.glb', 'floors', 'npc.json' ] );
-		expect( readdirSync( join( interiorDir, 'floors' ) ).sort() ).toEqual( [ '-001.glb', '-001.json', '000.glb', '000.json' ] );
-		expect( readFileSync( join( interiorDir, 'floors', '-001.glb' ) ) ).toEqual( Buffer.from( [ 1 ] ) );
-		expect( JSON.parse( readFileSync( join( interiorDir, 'floors', '000.json' ), 'utf8' ) ).floor ).toBe( 0 );
-		expect( new OutDir( dir ).floorsOf( 'p0' ) ).toEqual( [ '-001', '000' ] );
+		expect( new OutDir( dir ).floorsOf( 'p0' ) ).toEqual( [ '000', '001', '002' ] );
 
 	} );
 
 } );
 
-/** An InteriorResult as the interior library returns it, two floors of it. */
-function interior() {
+/** A furnished building on disk as interior writes it: three layouts and no geometry. */
+function writeInterior( interiorDir ) {
 
-	return {
-		glb: Buffer.from( [ 0 ] ),
-		floorGlbs: new Map( [ [ - 1, Buffer.from( [ 1 ] ) ], [ 0, Buffer.from( [ 2 ] ) ] ] ),
-		floors: [ { floor: - 1 }, { floor: 0 } ],
-		npc: {}
-	};
+	const layouts = { ground: 'layouts/ground.json', middle: 'layouts/middle.json', crown: 'layouts/crown.json' };
+
+	mkdirSync( join( interiorDir, 'layouts' ), { recursive: true } );
+	writeFileSync( join( interiorDir, 'building.json' ), JSON.stringify( {
+		version: 1, buildingId: 'p', modules: 'modules.json', props: 'catalog.json', layouts,
+		floors: [ 0, 1, 2 ].map( ( index ) => ( { index, layout: 'middle', elevation: index * 4, openings: {} } ) )
+	} ) + '\n' );
+	for ( const file of Object.values( layouts ) ) writeFileSync( join( interiorDir, file ), '{}\n' );
+	writeFileSync( join( interiorDir, 'npc.json' ), '{}\n' );
 
 }
 
@@ -199,7 +194,7 @@ function worldWith( ids ) {
 			JSON.stringify( { buildingId: id, parcel: { footprint: parcel( id ).footprint } } ) + '\n' );
 		writeFileSync( join( dir, id, `${id}.blueprint.json` ), '{}\n' );
 		writeFileSync( join( dir, id, `${id}.glb` ), 'glb' );
-		writeInteriorFiles( join( dir, id, 'interior' ), interior() );
+		writeInterior( join( dir, id, 'interior' ) );
 
 	}
 

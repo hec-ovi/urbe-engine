@@ -1,24 +1,24 @@
 import * as THREE from 'three/webgpu';
-import { assembleRooms, geometryOf, outlinesOf, plain, reflectanceOf } from './InteriorRooms.js';
+import { buildingFloors } from './InteriorLayouts.js';
+import { floorBoxes } from './InteriorBoxes.js';
+import { moduleError } from './InteriorModules.js';
+import { roomsOf } from './InteriorRooms.js';
 import { Haze } from '../light/Haze.js';
-import { luminance } from '../light/Color.js';
-import { closeMaterialImages, InteriorMaterials } from './InteriorMaterials.js';
-import { frameYield } from '../../app/FrameYield.js';
 
-/** A building's floors are worth fetching this close to its footprint. */
+/** A building's floors are worth building this close to its footprint. */
 const LOAD_RADIUS = 70;
 /** And the building is let go past this, with hysteresis so a boundary cannot thrash. */
 const DROP_RADIUS = 95;
-/** One floor at a time: the worker is one thread and the frame gets one landing. */
+/** One floor at a time: the frame gets one landing. */
 const CONCURRENCY = 1;
-/** The published key whose geometry the lifts take their sliding leaves from. */
-const ELEVATOR_DOOR = '/elevator_door/';
-/** Floors above and below the one the player is on that are fetched and in the scene. */
+/** Floors above and below the one the player is on that are in the scene. */
 const BAND_REACH = 1;
-/** One floor further stays in memory, so a landing halfway up the stairs never refetches. */
+/** One floor further stays built, so a landing halfway up the stairs never rebuilds. */
 const KEEP_REACH = BAND_REACH + 1;
-/** Main-thread work the stream may take in one frame before the rest waits for the next. */
-const FRAME_BUDGET_MS = 8;
+/** The module the lifts move themselves, one car per shaft. */
+const LIFT_CAR = 'lift-car';
+/** And the landing leaves they slide open. */
+const LIFT_DOORS = 'lift-doors';
 
 const EMPTY = 'empty';
 const LOADING = 'loading';
@@ -26,47 +26,51 @@ const LOADED = 'loaded';
 const FAILED = 'failed';
 
 /**
- * Interiors, streamed a floor at a time. A furnished tower is tens of
- * megabytes and sixty floors of geometry, and the player is only ever on one
- * of them, so neither the file nor the building belongs in memory:
+ * Interiors, streamed a floor at a time.
+ *
+ * A furnished building is three placement tables: a ground layout, one middle
+ * layout every middle floor shares, and a crown. A floor is a list of copies
+ * of the city's shared room modules plus catalog furniture, so nothing about
+ * it is fetched per floor and nothing about it is per-floor geometry:
  *
  * - a building within reach is opened: its shafts are registered from its
- *   floor documents and every floor gets a band, empty until it is wanted;
- * - only the floors within one of the player's own are fetched, nearest
- *   building first, and each floor's own GLB is parsed, baked to world space
- *   and cut into the rooms the interior box published in a worker
- *   (InteriorWorker.js); the frame only wraps the arrays it posts back;
+ *   floor records and every floor gets a band, empty until it is wanted;
+ * - a floor within one of the player's own is built: its placements become
+ *   instances of the shared module and furniture draws at that floor's
+ *   elevation, its rooms are published for the light pool, and its modules
+ *   become one cuboid compound;
  * - those same floors are in the scene and in the physics world, one more
- *   above and below stays in memory, and a floor further away than that is
- *   dropped, vertex data and all. Walking up the stairs moves the window;
+ *   above and below stays built, and a floor further away than that drops its
+ *   instances. Walking up the stairs moves the window;
  * - past a wider radius the whole building is let go.
  *
- * The shells are not here: they load once for the whole city (BuildingsLoader)
- * because the skyline is visible from everywhere.
+ * The shells are not here: they load once for the whole city (BuildingsLoader,
+ * kit runtime) because the skyline is visible from everywhere.
  */
 export class InteriorStream {
 
 	/**
-	 * @param factory PbrMaterialFactory, for the reflectance of each key
-	 * @param roomLights RoomLights, which owns every interior material
+	 * @param modules InteriorModules, the city's shared room module draws
+	 * @param props InteriorProps, the city's shared furniture draws, or null
+	 * @param roomLights RoomLights, which the published rooms are lit through
 	 * @param haze { spread, cap } for the air inside a room, or null at tiers
 	 * that do not draw it
 	 * @param warmup a `Warmup` (src/game/look/Warmup.js), which builds a landed
-	 * floor's pipelines and maps before it is ever drawn; the run sets it once
-	 * the render pipeline exists. Without one a floor stalls the frame it first
-	 * appears on.
+	 * floor's own renderables before it is ever drawn
 	 */
-	constructor( { factory, roomLights, haze, elevators, hitches = null, warmup = null } ) {
+	constructor( { modules, props = null, roomLights, haze, elevators, hitches = null, warmup = null } ) {
 
-		this.factory = factory;
-		this.hitches = hitches;
-		this.warmup = warmup;
+		this.modules = modules;
+		this.props = props;
 		this.roomLights = roomLights;
 		this.haze = haze;
 		this.elevators = elevators;
-		this.worker = new InteriorWorkerLink();
+		this.hitches = hitches;
+		this.warmup = warmup;
 		this.group = new THREE.Group();
 		this.group.name = 'interiors';
+		if ( modules ) this.group.add( modules.group );
+		if ( props ) this.group.add( props.group );
 		this.pending = new Map();
 		this.live = new Map();
 		this.loading = 0;
@@ -78,16 +82,19 @@ export class InteriorStream {
 	}
 
 	/**
-	 * @param buildings Map<parcelId, { floors }>, each floor document carrying
-	 * the `glbUrl` of its own geometry (WorldSource)
+	 * @param buildings Map<parcelId, { interior: { building, layouts }, hasInterior }>
 	 * @param centers Map<parcelId, { x, z }> footprint centres
 	 */
 	register( buildings, centers ) {
 
 		for ( const [ parcelId, building ] of buildings ) {
 
-			if ( building.hasInterior === false ) continue;
-			this.pending.set( parcelId, { parcelId, floors: building.floors, center: centers.get( parcelId ) } );
+			if ( building.hasInterior === false || ! building.interior ) continue;
+			this.pending.set( parcelId, {
+				parcelId,
+				floors: buildingFloors( parcelId, building.interior ),
+				center: centers.get( parcelId )
+			} );
 
 		}
 
@@ -101,10 +108,9 @@ export class InteriorStream {
 	}
 
 	/**
-	 * One pass over what should be open, what should be in memory and what
-	 * should be in the scene. Cheap to call every frame: a hypot per building
-	 * and a subtraction per floor. Collision admission runs across frames and
-	 * makes each complete floor visible when ready.
+	 * One pass over what should be open, what should be built and what should
+	 * be in the scene. Cheap to call every frame: a hypot per building and a
+	 * subtraction per floor.
 	 *
 	 * @returns whether the set of rooms in memory or in the scene changed
 	 */
@@ -118,7 +124,6 @@ export class InteriorStream {
 
 		}
 
-		const budget = new FrameBudget( FRAME_BUDGET_MS );
 		let next = null;
 
 		for ( const [ parcelId, interior ] of this.live ) {
@@ -132,7 +137,7 @@ export class InteriorStream {
 
 			}
 
-			const want = this.#band( interior, feet, budget );
+			const want = this.#band( interior, feet );
 
 			// Nearest building first: the one being walked into is the one whose
 			// floor has to be there, and the far side of the block can wait.
@@ -146,16 +151,14 @@ export class InteriorStream {
 
 	}
 
-	/** Lets every interior go and stops the worker. */
+	/** Lets every interior go. */
 	dispose() {
 
 		for ( const parcelId of [ ...this.live.keys() ] ) this.#drop( parcelId );
 
-		this.worker.dispose();
-
 	}
 
-	/** A building within reach: shafts from its floor documents, a band per floor. */
+	/** A building within reach: shafts from its floor records, a band per floor. */
 	#open( entry ) {
 
 		const interior = new Interior( entry );
@@ -180,13 +183,13 @@ export class InteriorStream {
 	}
 
 	/**
-	 * Which floors of one building are in memory and in the scene. The player's
-	 * own floor is whichever band holds their feet, so standing on the street
-	 * puts the ground floor and its neighbours in and leaves the tower above out.
+	 * Which floors of one building are built and in the scene. The player's own
+	 * floor is whichever band holds their feet, so standing on the street puts
+	 * the ground floor and its neighbours in and leaves the tower above out.
 	 *
-	 * @returns the empty band nearest the player's floor that wants fetching, if any
+	 * @returns the empty band nearest the player's floor that wants building, if any
 	 */
-	#band( interior, feet, budget ) {
+	#band( interior, feet ) {
 
 		const standing = floorAt( interior.bands, feet.y );
 		let want = null;
@@ -207,7 +210,7 @@ export class InteriorStream {
 
 				if ( ! want || away < Math.abs( want.floor - standing ) ) want = band;
 
-			} else if ( band.state === LOADED && ! band.live && ! band.admission && ! this.loading && ! budget.spent ) {
+			} else if ( band.state === LOADED && ! band.live && ! band.admission && ! this.loading ) {
 
 				this.#show( interior, band );
 
@@ -219,7 +222,7 @@ export class InteriorStream {
 
 	}
 
-	/** A floor stays hidden until all of its exact collision is admitted. */
+	/** A floor stays out of the draws and out of the scene until it is solid. */
 	async #show( interior, band ) {
 
 		const admission = {};
@@ -232,7 +235,7 @@ export class InteriorStream {
 			if ( band.admission !== admission || band.state !== LOADED || ready === false ) return;
 			band.live = true;
 			band.group.parent.visible = true;
-			band.group.visible = true;
+			band.show();
 			this.changed = true;
 
 		} catch ( error ) {
@@ -256,13 +259,13 @@ export class InteriorStream {
 
 		band.admission = null;
 		band.live = false;
-		band.group.visible = false;
+		band.hide();
 		this.onDropBand?.( band.id );
 		this.changed = true;
 
 	}
 
-	/** Lets a floor go: out of the scene, out of the shafts, out of memory. */
+	/** Lets a floor go: out of the draws, out of the shafts, out of memory. */
 	#unload( interior, band ) {
 
 		if ( band.live || band.admission ) this.#hide( band );
@@ -276,8 +279,9 @@ export class InteriorStream {
 
 		}
 
+		this.roomLights?.releaseRooms?.( band.rooms );
 		this.elevators?.release( interior.parcelId, band.floor );
-		band.clear( this.roomLights );
+		band.clear();
 
 	}
 
@@ -290,7 +294,7 @@ export class InteriorStream {
 
 			const built = await this.#build( interior, band );
 
-			// A drop can have overtaken the load on a fast walk past a building.
+			// A drop can have overtaken the build on a fast walk past a building.
 			if ( ! built ) return;
 
 			band.take( built );
@@ -299,7 +303,7 @@ export class InteriorStream {
 
 		} catch ( error ) {
 
-			// A load nobody waits for any more fails quietly.
+			// A build nobody waits for any more fails quietly.
 			if ( ! this.#wanted( interior, band ) ) return;
 
 			band.state = FAILED;
@@ -313,7 +317,7 @@ export class InteriorStream {
 
 	}
 
-	/** Whether the floor is still wanted since its load began. */
+	/** Whether the floor is still wanted since its build began. */
 	#wanted( interior, band ) {
 
 		return band.state === LOADING && this.live.get( interior.parcelId ) === interior;
@@ -321,186 +325,75 @@ export class InteriorStream {
 	}
 
 	/**
-	 * Lands one floor: the worker cuts it, the frame assembles rooms and the
-	 * band's own surfaces from what it posted, each step spread over as many
-	 * frames as its budget takes and noted with its thread time. Everything is
-	 * built aside and handed over whole, so a load that stops being wanted
+	 * Builds one floor: every placement becomes an instance of a shared draw at
+	 * this floor's elevation, the modules become one cuboid compound, the lift
+	 * takes its own landing leaves, and the rooms are published. Everything is
+	 * built aside and handed over whole, so a build that stops being wanted
 	 * leaves nothing behind.
 	 *
-	 * @returns { content, rooms, solid }, or null when it stopped being wanted
+	 * @returns what the band takes, or null when it stopped being wanted
 	 */
 	async #build( interior, band ) {
 
-		const { parcelId } = interior;
-		const sent = performance.now();
-		const { cut, bytes, cost } = await this.worker.cut( band.glbUrl, interior.outlines );
-		this.hitches?.note( `floor ${band.id} off thread ${( bytes / 1048576 ).toFixed( 1 )} MB: `
-			+ `${Object.entries( cost ).map( ( [ step, ms ] ) => `${step} ${ms} ms` ).join( ', ' )}, `
-			+ `round trip ${( performance.now() - sent ).toFixed( 0 )} ms` );
+		const { record } = band;
+		const started = performance.now();
 
-		if ( ! this.#wanted( interior, band ) ) {
-
-			closeMaterialImages( cut.materials );
-			return null;
-
-		}
-		const built = { content: new THREE.Group(), rooms: [], solid: [], sources: new InteriorMaterials( cut.materials ) };
-		let landed = false;
-		try {
-
-			landed = await this.#land( interior, band, cut, built );
-			return landed ? built : null;
-
-		} finally {
-
-			if ( ! landed ) {
-
-				this.elevators?.release( parcelId, band.floor );
-				disposeFloor( built, this.roomLights );
-
-			}
-
-		}
-
-	}
-
-	async #land( interior, band, cut, { content, rooms, solid, sources } ) {
-
-		const { parcelId } = interior;
-		const reflectance = await this.#reflectance( keysOf( cut ), sources.materials );
+		await this.props?.prepare( record.placements.filter( ( one ) => one.prop ).map( ( one ) => one.prop ) );
 
 		if ( ! this.#wanted( interior, band ) ) return null;
 
-		let budget = new FrameBudget( FRAME_BUDGET_MS );
+		const copies = [];
+		const content = new THREE.Group();
+		content.name = `interior:${band.id}`;
 
-		for ( const room of assembleRooms( parcelId, cut, interior.floors, reflectance, sources.materials ) ) {
+		for ( const placement of record.placements ) {
 
-			// A room is shown by distance and lit by the slot pool on separate
-			// timers, so it enters the scene already dressed in the dim binding.
-			rooms.push( room );
-			room.group.visible = false;
-			content.add( room.group );
-			room.wear( this.roomLights.dim, this.roomLights );
+			// The lifts move their own copies, so those never enter the shared draws.
+			if ( placement.module === LIFT_CAR || placement.module === LIFT_DOORS ) {
 
-			if ( ! await this.#rest( budget, interior, band ) ) return null;
-
-		}
-
-		this.hitches?.note( `floor ${band.id} rooms ${budget.frames} frames`, budget.busy );
-
-		budget = new FrameBudget( FRAME_BUDGET_MS );
-
-		for ( const { surfaces } of cut.shared ) {
-
-			for ( const surface of surfaces ) {
-
-				const material = this.roomLights.materialFor( this.roomLights.dim, surface.key, sources.materials.get( surface.sourceId ) );
-				let geometry = geometryOf( surface );
-
-				// The lift doors are published as geometry like everything else;
-				// the shafts take theirs so they can slide.
-				if ( ! surface.sourceId && surface.key.includes( ELEVATOR_DOOR ) ) {
-
-					geometry = this.elevators?.claim( parcelId, band.floor, geometry, material, content ) ?? geometry;
-
-				}
-
-				if ( ! geometry ) continue;
-
-				content.add( new THREE.Mesh( geometry, material ) );
-				solid.push( geometry.getAttribute( 'position' ).array );
+				this.elevators?.mount( interior.parcelId, record.floor, placement, this.modules, content );
+				continue;
 
 			}
+			if ( placement.module && ! this.modules.has( placement.module ) ) {
 
-			if ( ! await this.#rest( budget, interior, band ) ) return null;
+				throw moduleError( `${band.id} places ${placement.module}` );
+
+			}
+			// A world published without a furniture catalog stands unfurnished.
+			if ( placement.prop && ! this.props ) continue;
+			copies.push( {
+				draws: placement.module ? this.modules : this.props,
+				id: placement.module ?? placement.prop,
+				matrix: matrixOf( placement, record.elevation )
+			} );
 
 		}
 
-		for ( const room of rooms ) {
-
-			for ( const { mesh } of room.meshes ) solid.push( mesh.geometry.getAttribute( 'position' ).array );
-
-		}
-
-		// The air inside the floor's rooms, parented to the band so it is
-		// culled and dropped with the floor it belongs to.
+		const rooms = roomsOf( record, this.modules );
 		const glow = this.haze && Haze.build( rooms.flatMap( ( room ) => room.fixtures ), this.haze );
 
 		if ( glow ) content.add( glow );
 
-		this.hitches?.note( `floor ${band.id} band ${budget.frames} frames`, budget.busy );
+		this.hitches?.note( `floor ${band.id} ${copies.length} copies`, performance.now() - started );
 
-		// The floor is whole and still nowhere. Compile its dim view and every
-		// fixed room-light slot now: walking through the doorway must not create a
-		// new lighting pipeline on the first visible frame.
-		if ( this.warmup ) await this.#warm( content, rooms, interior, band );
+		// The floor's own renderables are the lift leaves and its haze; the
+		// module and furniture draws were compiled once for the whole city.
+		if ( this.warmup ) await this.warmup.warmAll( content, { wanted: () => this.#wanted( interior, band ) } );
 
-		if ( ! this.#wanted( interior, band ) ) return null;
+		if ( ! this.#wanted( interior, band ) ) {
 
-		return true;
-
-	}
-
-	/** Warms each stable room-light binding, then restores the detached floor to dim. */
-	async #warm( content, rooms, interior, band ) {
-
-		const bindings = [ this.roomLights.dim, ...( this.roomLights.slots ?? [] ) ];
-		const options = { wanted: () => this.#wanted( interior, band ) };
-		let warmed = 0;
-
-		try {
-
-			if ( ! interior.prepared ) {
-
-				warmed += await this.warmup.warmAll( interior.group, options );
-				if ( ! options.wanted() ) return;
-				interior.prepared = true;
-
-			}
-
-			for ( const binding of bindings ) {
-
-				if ( ! options.wanted() ) return;
-				for ( const room of rooms ) room.wear( binding, this.roomLights );
-				warmed += await this.warmup.warmAll( content, options );
-
-			}
-
-		} finally {
-
-			for ( const room of rooms ) room.wear( this.roomLights.dim, this.roomLights );
+			disposeContent( content );
+			return null;
 
 		}
 
-		this.hitches?.note( `floor ${band.id} warm ${bindings.length} bindings`, warmed );
-
-	}
-
-	/**
-	 * Lets the frame go once the budget is spent.
-	 * @returns whether the floor is still wanted afterwards
-	 */
-	async #rest( budget, interior, band ) {
-
-		await budget.rest();
-
-		return this.#wanted( interior, band );
-
-	}
-
-	/** Reflectance per key: level from what the surface is, hue from its map. */
-	async #reflectance( keys, sources ) {
-
-		const tints = new Map( await Promise.all(
-			[ ...keys ].map( async ( key ) => [ key, await this.factory.tint( plain( key ) ) ] )
-		) );
-
-		return ( key, sourceId ) => {
-
-			const material = sources.get( sourceId );
-			if ( material ) return { scalar: luminance( material.color ) * ( 1 - ( material.metalness ?? 0 ) ), tint: material.color };
-			return reflectanceOf( plain( key ), tints.get( key ) );
-
+		return {
+			content, rooms, copies,
+			solid: {
+				boxes: floorBoxes( record.placements, record.elevation, ( id ) => this.modules.boundsOf( id ) ),
+				positions: propTriangles( record.placements, record.elevation, this.props )
+			}
 		};
 
 	}
@@ -515,14 +408,10 @@ class Interior {
 		this.parcelId = parcelId;
 		this.center = center;
 		this.floors = floors;
-		this.outlines = outlinesOf( floors );
 		this.group = new THREE.Group();
 		this.group.name = `interior:${parcelId}`;
 		this.group.visible = false;
-		this.prepared = false;
-		this.bands = [ ...floors ]
-			.sort( ( a, b ) => a.floor - b.floor )
-			.map( ( floor ) => new FloorBand( parcelId, floor ) );
+		this.bands = floors.map( ( record ) => new FloorBand( record ) );
 
 		for ( const band of this.bands ) this.group.add( band.group );
 
@@ -531,200 +420,137 @@ class Interior {
 }
 
 /**
- * One floor of one interior: fetched while the player is within a floor of it,
- * in the scene and solid while it stays so. Its collider is built the first
- * time it goes live, from the same arrays its meshes draw, and everything is
- * let go together, so a tower's other floors never cost a byte.
+ * One floor of one interior: built while the player is within a floor of it,
+ * drawn and solid while it stays so. Its copies only reach the shared instance
+ * buffers while it is shown, so a floor hidden behind the one above draws
+ * nothing and a tower's other floors cost neither a draw nor a matrix.
  */
 class FloorBand {
 
-	constructor( parcelId, { floor, elevation, height, glbUrl } ) {
+	constructor( record ) {
 
-		this.id = `${parcelId}:${floor}`;
-		this.floor = floor;
-		this.elevation = elevation;
-		this.height = height;
-		this.glbUrl = glbUrl;
+		this.record = record;
+		this.id = record.id;
+		this.floor = record.floor;
+		this.elevation = record.elevation;
+		this.height = record.height;
 		this.group = new THREE.Group();
 		this.group.name = `interior:${this.id}`;
 		this.group.visible = false;
 		this.state = EMPTY;
 		this.live = false;
 		this.content = null;
+		this.copies = [];
+		this.handles = null;
 		this.rooms = [];
-		this.solid = [];
+		this.solid = { boxes: [], positions: [] };
 		this.admission = null;
-		this.sources = null;
 
 	}
 
-	/** Takes what a landing built: the floor's meshes, its rooms, its solid arrays. */
-	take( { content, rooms, solid, sources } ) {
+	/** Takes what a build made: the floor's own meshes, its rooms, its copies. */
+	take( { content, rooms, copies, solid } ) {
 
 		this.content = content;
 		this.rooms = rooms;
+		this.copies = copies;
 		this.solid = solid;
-		this.sources = sources;
 		this.group.add( content );
 		this.state = LOADED;
 
 	}
 
-	/** Back to empty: nothing of the floor's geometry is referenced afterwards. */
-	clear( roomLights ) {
+	show() {
 
-		disposeFloor( this, roomLights );
+		if ( this.handles ) return;
 
-		if ( this.content ) this.group.remove( this.content );
+		this.handles = this.copies.map( ( { draws, id, matrix } ) => ( { draws, handle: draws.admit( id, matrix, WHITE ) } ) );
+		this.group.visible = true;
 
+	}
+
+	hide() {
+
+		this.group.visible = false;
+		if ( ! this.handles ) return;
+
+		for ( const { draws, handle } of this.handles ) draws.release( handle );
+		this.handles = null;
+
+	}
+
+	/** Back to empty: nothing of the floor is referenced afterwards. */
+	clear() {
+
+		this.hide();
+
+		if ( this.content ) {
+
+			this.group.remove( this.content );
+			disposeContent( this.content );
+
+		}
 		this.admission = null;
-		this.sources = null;
 		this.content = null;
+		this.copies = [];
 		this.rooms = [];
-		this.solid = [];
+		this.solid = { boxes: [], positions: [] };
 		this.state = EMPTY;
 
 	}
 
 }
 
-function disposeFloor( { content, rooms, sources }, roomLights ) {
+function disposeContent( content ) {
 
-	roomLights.releaseRooms?.( rooms );
-	content?.traverse( node => node.geometry?.dispose() );
-	sources?.dispose( roomLights );
+	content.traverse( ( node ) => node.geometry?.dispose() );
+
+}
+
+/** One placement's world matrix: scale, then yaw, then position on its floor. */
+function matrixOf( { position, rotationY, scale }, elevation ) {
+
+	return new THREE.Matrix4()
+		.makeTranslation( position[ 0 ], position[ 1 ] + elevation, position[ 2 ] )
+		.multiply( _rotation.makeRotationY( rotationY ) )
+		.multiply( _scale.makeScale( scale[ 0 ], scale[ 1 ], scale[ 2 ] ) );
 
 }
 
 /**
- * The stream's side of the interior worker: one worker for the run, started
- * by the first load, one request answered at a time, terminated on dispose.
- * Stubbed in tests, which run where there is no Worker.
+ * Furniture keeps the exact collision the street props have: its own triangles
+ * in world space, one borrowed array per material part per copy.
  */
-class InteriorWorkerLink {
+function propTriangles( placements, elevation, props ) {
 
-	constructor() {
+	const positions = [];
 
-		this.worker = null;
-		this.waiting = new Map();
-		this.serial = 0;
+	if ( ! props ) return positions;
 
-	}
+	for ( const placement of placements ) {
 
-	/**
-	 * @param url one floor's GLB
-	 * @param outlines the building's floors as `outlinesOf` keeps them
-	 * @returns { cut, bytes, cost } as InteriorWorker.js posts them
-	 */
-	cut( url, outlines ) {
+		if ( ! placement.prop ) continue;
 
-		const id = this.serial ++;
+		const matrix = matrixOf( placement, elevation );
 
-		return new Promise( ( resolve, reject ) => {
+		for ( const { geometry } of props.surfacesOf( placement.prop ) ) {
 
-			this.waiting.set( id, { resolve, reject } );
-			this.#worker().postMessage( { id, url, outlines } );
+			const source = geometry.getAttribute( 'position' );
+			const moved = new Float32Array( source.count * 3 );
 
-		} );
+			for ( let vertex = 0; vertex < source.count; vertex ++ ) {
 
-	}
+				_point.fromBufferAttribute( source, vertex ).applyMatrix4( matrix ).toArray( moved, vertex * 3 );
 
-	dispose() {
+			}
 
-		this.worker?.terminate();
-		this.worker = null;
-		this.#fail( 'interior stream disposed' );
+			positions.push( moved );
+
+		}
 
 	}
 
-	#worker() {
-
-		if ( this.worker ) return this.worker;
-
-		this.worker = new Worker( new URL( './InteriorWorker.js', import.meta.url ), { type: 'module' } );
-		this.worker.onmessage = ( { data } ) => {
-
-			const request = this.waiting.get( data.id );
-
-			this.waiting.delete( data.id );
-
-			if ( ! request ) closeMaterialImages( data.cut?.materials );
-			if ( data.error ) request?.reject( new Error( data.error ) );
-			else request?.resolve( data );
-
-		};
-		this.worker.onerror = ( event ) => this.#fail( event.message || 'interior worker failed' );
-
-		return this.worker;
-
-	}
-
-	#fail( message ) {
-
-		for ( const request of this.waiting.values() ) request.reject( new Error( message ) );
-
-		this.waiting.clear();
-
-	}
-
-}
-
-/**
- * How much of a frame the stream may take. A loop checks in after each piece
- * of work; once the slice has run past the budget, the next piece waits for
- * the next frame. Keeps the thread time it took, over how many frames.
- */
-class FrameBudget {
-
-	constructor( ms ) {
-
-		this.ms = ms;
-		this.since = performance.now();
-		this.rested = 0;
-		this.frames = 1;
-
-	}
-
-	get spent() {
-
-		return performance.now() - this.since >= this.ms;
-
-	}
-
-	/** Thread time spent so far, the waits between frames left out. */
-	get busy() {
-
-		return this.rested + performance.now() - this.since;
-
-	}
-
-	async rest() {
-
-		if ( ! this.spent ) return;
-
-		this.rested += performance.now() - this.since;
-		await frameYield();
-		this.since = performance.now();
-		this.frames ++;
-
-	}
-
-}
-
-
-
-/** Every material key a cut carries. */
-function keysOf( cut ) {
-
-	const keys = new Set();
-
-	for ( const owner of [ ...cut.rooms, ...cut.shared ] ) {
-
-		for ( const surface of owner.surfaces ) if ( ! surface.sourceId ) keys.add( surface.key );
-
-	}
-
-	return keys;
+	return positions;
 
 }
 
@@ -764,3 +590,8 @@ function ground( center, point ) {
 	return Math.hypot( center.x - point.x, center.z - point.z );
 
 }
+
+const WHITE = new THREE.Color( 1, 1, 1 );
+const _rotation = new THREE.Matrix4();
+const _scale = new THREE.Matrix4();
+const _point = new THREE.Vector3();

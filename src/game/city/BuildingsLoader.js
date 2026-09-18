@@ -16,7 +16,6 @@ import { ShellBatches } from './ShellBatches.js';
 // survives intact, so that is what the split matches on. Material names are
 // not sanitized, so the material key still arrives whole.
 const EXTERIOR = 'merged';
-export { INTERIOR_PREFIX, bake } from './GeometryBake.js';
 // Each moving leaf is its own node, `door:<id>/leaf:N` or
 // `balcony:<id>/leaf:N`, with an authored closed-pose origin.
 const DOOR = 'door';

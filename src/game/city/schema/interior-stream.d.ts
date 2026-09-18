@@ -1,16 +1,30 @@
-import type { Color, Group, Object3D } from 'three/webgpu';
-import type { InteriorOutline } from './interior-cut';
+import type { Group, Object3D } from 'three/webgpu';
+import type { InteriorModules } from '../InteriorModules.js';
+import type { InteriorProps } from '../InteriorProps.js';
 import type { RoomLights } from '../../light/RoomLights.js';
 import type { Elevators } from '../Elevators.js';
 
-/** Full floor fields follow Interior's floor.schema.json. */
-export interface StreamFloor extends InteriorOutline {
-	glbUrl: string;
-	[field: string]: unknown;
+/** `building.json` and the three layouts it names, as BuildingSource reads them. */
+export interface InteriorSource {
+	building: {
+		floors: Array<{ index: number; layout: 'ground' | 'middle' | 'crown'; elevation: number }>;
+		layouts: Record<'ground' | 'middle' | 'crown', string>;
+		[field: string]: unknown;
+	};
+	/** Full layout fields follow Interior's floor-placement.schema.json. */
+	layouts: Record<'ground' | 'middle' | 'crown', Record<string, unknown>>;
+}
+
+/** What one floor's modules and furniture are to the physics world. */
+export interface FloorSolid {
+	boxes: Array<{ center: [number, number, number]; halfExtents: [number, number, number]; rotationY: number }>;
+	/** Borrowed world-space furniture triangles, packed xyz. */
+	positions: Float32Array[];
 }
 
 export interface StreamOptions {
-	factory: { tint(key: string): Promise<Color | null> };
+	modules: InteriorModules;
+	props?: InteriorProps | null;
 	roomLights: RoomLights;
 	haze: { spread: number; cap: number } | null;
 	elevators?: Elevators;
@@ -23,12 +37,12 @@ export interface InteriorStreamPort {
 	/** Room views consumed by RoomLights, per Light's contract. */
 	rooms: Parameters<RoomLights['update']>[0];
 	readonly liveInteriors: number;
-	register(buildings: Map<string, { floors: StreamFloor[]; hasInterior?: boolean }>, centers: Map<string, { x: number; z: number }>): void;
+	register(buildings: Map<string, { interior: InteriorSource | null; hasInterior?: boolean }>, centers: Map<string, { x: number; z: number }>): void;
 	/** Returns whether room memory or scene membership changed. */
 	update(feet: { x: number; y: number; z: number }): boolean;
-	/** Borrowed world-space triangle arrays. Await full collision readiness before visibility; false cancels. */
-	onColliderBand: ((id: string, positions: readonly Float32Array[]) => Promise<boolean | void> | boolean | void) | null;
-	/** Cancels pending admission or removes a ready band before its geometry is released. */
+	/** Await full collision readiness before the floor is drawn; false cancels. */
+	onColliderBand: ((id: string, solid: FloorSolid) => Promise<boolean | void> | boolean | void) | null;
+	/** Cancels pending admission or removes a ready floor before its instances are released. */
 	onDropBand: ((id: string) => void) | null;
 	dispose(): void;
 }

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorldSource } from './WorldSource.js';
 
@@ -5,13 +6,32 @@ vi.mock( '../../assembly/connectionsRunner.js', () => ( {
 	runConnections: vi.fn( async () => ( { networks: { walk: {}, drive: {} } } ) )
 } ) );
 
+const modules = { version: 1, grid: 0.5, modules: [] };
+
+function moduleHash() {
+
+	return createHash( 'sha256' ).update( JSON.stringify( modules ) ).digest( 'hex' );
+
+}
+
 const atlas = {
 	meta: { seed: 'city', version: '0.14.0' },
 	parcels: [ { id: 'p0' }, { id: 'p1' } ]
 };
 const manifest = {
 	contractVersion: '1.0.0', seed: 'city', atlasVersion: '0.14.0', named: false, namingTheme: null,
-	parcels: [ 'p0', 'p1' ], interiors: [ 'p1' ], floors: { p1: [ '000' ] }
+	parcels: [ 'p0', 'p1' ], interiors: [ 'p1' ],
+	interiorModules: { file: 'interior-modules/modules.json', sha256: moduleHash() }
+};
+
+/** What Interior publishes per furnished parcel: a manifest and the layouts it names. */
+const interior = {
+	building: {
+		version: 1, buildingId: 'p1', modules: 'modules.json', props: 'catalog.json',
+		layouts: { ground: 'layouts/ground.json', middle: 'layouts/middle.json', crown: 'layouts/crown.json' },
+		floors: [ { index: 0, layout: 'ground', elevation: 0, openings: {} } ], connectors: []
+	},
+	layouts: { ground: { id: 'ground' }, middle: { id: 'middle' }, crown: { id: 'crown' } }
 };
 
 describe( 'WorldSource selective interiors', () => {
@@ -23,10 +43,14 @@ describe( 'WorldSource selective interiors', () => {
 		const documents = new Map( [
 			[ '/out/city/blueprint.json', atlas ],
 			[ '/out/city/manifest.json', manifest ],
+			[ '/out/city/interior-modules/modules.json', modules ],
 			[ '/out/city/p0/p0.blueprint.json', { buildingId: 'p0' } ],
 			[ '/out/city/p1/p1.blueprint.json', { buildingId: 'p1' } ],
 			[ '/out/city/p1/interior/npc.json', { buildingId: 'p1' } ],
-			[ '/out/city/p1/interior/floors/000.json', { floor: 0 } ]
+			[ '/out/city/p1/interior/building.json', interior.building ],
+			[ '/out/city/p1/interior/layouts/ground.json', interior.layouts.ground ],
+			[ '/out/city/p1/interior/layouts/middle.json', interior.layouts.middle ],
+			[ '/out/city/p1/interior/layouts/crown.json', interior.layouts.crown ]
 		] );
 		const requested = [];
 		vi.stubGlobal( 'fetch', vi.fn( async ( url ) => {
@@ -41,10 +65,8 @@ describe( 'WorldSource selective interiors', () => {
 		const world = await new WorldSource( { blueprintUrl: '/atlas/city.json', outBase: '/out/city' } ).load();
 
 		expect( [ ...world.buildings.keys() ] ).toEqual( [ 'p0', 'p1' ] );
-		expect( world.buildings.get( 'p0' ) ).toMatchObject( { hasInterior: false, npc: null, floors: [] } );
-		expect( world.buildings.get( 'p1' ) ).toMatchObject( {
-			hasInterior: true, npc: { buildingId: 'p1' }, floors: [ { floor: 0, glbUrl: '/out/city/p1/interior/floors/000.glb' } ]
-		} );
+		expect( world.buildings.get( 'p0' ) ).toMatchObject( { hasInterior: false, npc: null, interior: null } );
+		expect( world.buildings.get( 'p1' ) ).toMatchObject( { hasInterior: true, npc: { buildingId: 'p1' }, interior } );
 		expect( requested.some( ( url ) => url.includes( '/p0/interior/' ) ) ).toBe( false );
 		expect( world.unbuilt ).toEqual( [] );
 
@@ -66,7 +88,7 @@ describe( 'WorldSource selective interiors', () => {
 		const game = { id: 'night-shift', player: { position: { x: 1, y: 2, z: 3 } } };
 		const documents = new Map( [
 			[ '/out/games/night-shift/blueprint.json', atlas ],
-			[ '/out/games/night-shift/manifest.json', { ...manifest, parcels: [], interiors: [], floors: {} } ],
+			[ '/out/games/night-shift/manifest.json', { ...manifest, parcels: [], interiors: [], interiorModules: undefined } ],
 			[ '/out/games/night-shift/game.json', game ]
 		] );
 		vi.stubGlobal( 'fetch', vi.fn( async ( url ) => {
@@ -97,7 +119,7 @@ describe( 'WorldSource selective interiors', () => {
 
 		const documents = new Map( [
 			[ '/out/city/blueprint.json', atlas ],
-			[ '/out/city/manifest.json', { ...manifest, parcels: [], interiors: [], floors: {} } ],
+			[ '/out/city/manifest.json', { ...manifest, parcels: [], interiors: [], interiorModules: undefined } ],
 			[ '/out/city/quests/investigations.json', [ { sceneId: 'scene-one' } ] ]
 		] );
 		vi.stubGlobal( 'fetch', vi.fn( async ( url ) => {
@@ -127,7 +149,7 @@ describe( 'WorldSource selective interiors', () => {
 
 		const documents = new Map( [
 			[ '/out/city/blueprint.json', atlas ],
-			[ '/out/city/manifest.json', { ...manifest, parcels: [], interiors: [], floors: {} } ]
+			[ '/out/city/manifest.json', { ...manifest, parcels: [], interiors: [], interiorModules: undefined } ]
 		] );
 		vi.stubGlobal( 'fetch', vi.fn( async ( url ) => {
 
@@ -184,7 +206,7 @@ describe( 'WorldSource selective interiors', () => {
 		};
 		const documents = new Map( [
 			[ '/out/games/quest/blueprint.json', atlas ],
-			[ '/out/games/quest/manifest.json', { ...manifest, parcels: [], interiors: [], floors: {} } ],
+			[ '/out/games/quest/manifest.json', { ...manifest, parcels: [], interiors: [], interiorModules: undefined } ],
 			[ '/out/games/quest/game.json', { id: 'quest', questBundle: { uri: 'quests/quest-bundle.json' } } ],
 			[ '/out/games/quest/quests/quest-bundle.json', bundle ],
 			...Object.entries( bundle.files ).map( ( [ name, file ] ) => [ `/out/games/quest/quests/${file}`, catalogs[ name ] ] )

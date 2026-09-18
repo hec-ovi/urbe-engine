@@ -1,6 +1,6 @@
 # Box map
 
-[Engine 0.20.0 contract](../CONTRACT.md), [agent calling guide](../SKILL.md), [cross-box proposals](ISSUES.md). Raw requirements and local verification records stay untracked.
+[Engine 0.21.0 contract](../CONTRACT.md), [agent calling guide](../SKILL.md), [cross-box proposals](ISSUES.md). Raw requirements and local verification records stay untracked.
 
 | Folder | Purpose and dependencies | Inputs and outputs |
 | --- | --- | --- |
@@ -25,8 +25,8 @@
 | `ground` | Atlas ground residency, Materials surfaces and Physics admission | [Contract](../src/game/ground/CONTRACT.md), [stream](../src/game/ground/schema/stream.d.ts) |
 | `ground/materials` | Native street shading from authored Materials effects and texture resources | [Contract](../src/game/ground/materials/CONTRACT.md), [ports](../src/game/ground/materials/schema/ports.d.ts) |
 | `ground/native` | Read saved street bundles, verify their source identity and select retained ground | [Contract](../src/game/ground/native/CONTRACT.md), [ports](../src/game/ground/native/schema/ports.d.ts) |
-| `ground/native-stream` | Stream original native street GLBs and their physical triangles | [Contract](../src/game/ground/native-stream/CONTRACT.md), [stream](../src/game/ground/schema/stream.d.ts) |
-| `city` | Exterior shells, Interior floors, doors, scenic rooms and fixtures; building vegetation uses the Props asset loader | [Contract](../src/game/city/CONTRACT.md), [floor stream](../src/game/city/schema/interior-stream.d.ts), [fixture stream](../src/game/city/schema/street-fixtures.d.ts), [building models](../src/game/city/schema/building-models.d.ts) |
+| `ground/native-stream` | Draw saved streets as instanced copies of one city-wide piece kit and admit their cuboids | [Contract](../src/game/ground/native-stream/CONTRACT.md), [stream](../src/game/ground/schema/stream.d.ts) |
+| `city` | Exterior shells, furnished interior floors drawn from shared room modules, doors, scenic rooms and fixtures; building vegetation uses the Props asset loader | [Contract](../src/game/city/CONTRACT.md), [floor stream](../src/game/city/schema/interior-stream.d.ts), [fixture stream](../src/game/city/schema/street-fixtures.d.ts), [building models](../src/game/city/schema/building-models.d.ts) |
 | `city/streaming` | Nearby original shells and source-derived skyline | [Contract](../src/game/city/streaming/CONTRACT.md), [ports](../src/game/city/streaming/schema/stream.d.ts) |
 | `city/kit` | Instanced kit pieces and cuboid colliders per streamed cell | [Contract](../src/game/city/kit/CONTRACT.md) |
 | `props` | Source land/model placements with Ground clearance and Physics | [Contract](../src/game/props/CONTRACT.md), [stream](../src/game/props/stream.d.ts) |

@@ -30,6 +30,8 @@ import {
 	TransitGameplay, transitErrorMessage, transitServiceLabel, transitStatusLabel
 } from './transit/TransitGameplay.js';
 import { InteriorStream } from './city/InteriorStream.js';
+import { InteriorModules } from './city/InteriorModules.js';
+import { InteriorProps } from './city/InteriorProps.js';
 import { Elevators } from './city/Elevators.js';
 import { Neon } from './city/Neon.js';
 import { StreetLamps } from './city/StreetLamps.js';
@@ -165,7 +167,8 @@ export class GameApp {
 		const source = new WorldSource( config );
 		const {
 			atlas, connections, nativeStreets, rooftopSpans, buildings, unbuilt, npcTypes, questlines, investigations,
-			mechanicTargetBindings, missionAssetRequests, missionItemBindings, game, shellCatalog, kit, loadBuildings
+			mechanicTargetBindings, missionAssetRequests, missionItemBindings, game, shellCatalog, kit,
+			interiorModules, interiorProps, loadBuildings
 		} = await source.load();
 		const spawn = game ? savedSpawn( game ) : pickSpawn( connections.networks, atlas );
 		const spatial = Boolean( shellCatalog );
@@ -237,11 +240,20 @@ export class GameApp {
 		this.elevators = new Elevators( factory );
 		this.hitches = new HitchLog();
 		this.work = new RenderWork( this.renderer.info );
+		// The room modules and the furniture are the city's, not any building's:
+		// loaded once, drawn once per surface however many floors are standing.
+		this.interiorModules = interiorModules
+			? new InteriorModules( { catalog: interiorModules.document, baseUrl: interiorModules.baseUrl, factory } )
+			: null;
+		this.interiorProps = interiorProps
+			? new InteriorProps( { catalog: interiorProps.document, baseUrl: interiorProps.baseUrl } )
+			: null;
+		await this.interiorModules?.ready;
 		this.stream = new InteriorStream( {
-			factory, roomLights: this.rooms, elevators: this.elevators,
+			modules: this.interiorModules, props: this.interiorProps, roomLights: this.rooms, elevators: this.elevators,
 			haze: this.tier.haze ? INDOOR_HAZE : null, hitches: this.hitches
 		} );
-		if ( ! config.off.has( 'interiors' ) ) this.stream.register( buildings, city.centers );
+		if ( this.interiorModules && ! config.off.has( 'interiors' ) ) this.stream.register( buildings, city.centers );
 		this.scene.add( this.stream.group );
 
 		this.view.step( 'hanging the neon' );
@@ -315,8 +327,20 @@ export class GameApp {
 		await this.colliders.addStaticsAsync( [ [ 'building links', links.colliderGeometry ] ], { release: true } );
 		await this.colliders.addStaticsAsync( this.transit.colliders );
 		await this.colliders.addPostsAsync( lamps.posts );
-		this.stream.onColliderBand = ( id, geometry ) => this.colliders.addBand( id, geometry );
-		this.stream.onDropBand = ( id ) => this.colliders.dropBand( id );
+		// A floor's modules are cuboids and become solid at once; its furniture
+		// keeps the exact triangles the street props use and cooks across frames.
+		this.stream.onColliderBand = ( id, { boxes, positions } ) => {
+
+			if ( boxes.length ) this.colliders.addBoxes( `interior:${id}`, boxes );
+			return positions.length ? this.colliders.addBand( `interior:${id}/props`, positions ) : true;
+
+		};
+		this.stream.onDropBand = ( id ) => {
+
+			this.colliders.dropBand( `interior:${id}` );
+			this.colliders.dropBand( `interior:${id}/props` );
+
+		};
 
 		this.view.step( 'waking the population' );
 		this.sim = SimBridge.create(
@@ -1123,7 +1147,7 @@ export class GameApp {
 	 */
 	#inside( visible, feet ) {
 
-		if ( this.standing?.holds( feet ) && this.standing.group.visible ) return this.standing;
+		if ( this.standing?.holds( feet ) && this.standing.visible ) return this.standing;
 
 		for ( const room of visible ) {
 

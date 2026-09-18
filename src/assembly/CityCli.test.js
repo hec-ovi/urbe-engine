@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { readWorldArchive, writeWorldArchive } from '../world-archive/index.js';
-import shellBlueprints from './shell-blueprints.fixture.json';
+import { shellBlueprint } from './shell-blueprints.fixture.js';
 
 const ENGINE_ROOT = resolve( dirname( fileURLToPath( import.meta.url ) ), '../..' );
 const BLUEPRINT = fileURLToPath( new URL( './native-city.fixture.json', import.meta.url ) );
@@ -64,7 +64,7 @@ describe( 'assemble-city CLI', () => {
 			const dir = join( root, parcel.id );
 			mkdirSync( dir, { recursive: true } );
 			writeFileSync( join( dir, `${parcel.id}.request.json` ), JSON.stringify( { parcel: { footprint: parcel.footprint } } ) );
-			writeFileSync( join( dir, `${parcel.id}.blueprint.json` ), JSON.stringify( shellBlueprints[ parcel.id ] ) );
+			writeFileSync( join( dir, `${parcel.id}.blueprint.json` ), JSON.stringify( shellBlueprint( parcel ) ) );
 			writeFileSync( join( dir, `${parcel.id}.glb` ), 'glb' );
 
 		}

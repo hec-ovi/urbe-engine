@@ -3,14 +3,14 @@ const RESORT_INTERVAL = 0.2;
 const FLOOR_BAND = 4.5;
 
 /**
- * Which interior rooms are worth drawing, nearest first.
+ * Which interior rooms are worth lighting, nearest first.
  *
- * A city of a thousand rooms cannot draw them all, and it never needs to: past
- * a block a room is behind opaque walls and haze, and a floor above the one
- * being stood on is behind a slab. So a room is shown only while it is within
- * reach and on the level the player is on, and the order it comes back in is
- * the order the light slots are handed out, so the room being stood in is
- * always the one lit by its own fixtures.
+ * A city of a thousand rooms cannot light them all, and it never needs to:
+ * past a block a room is behind opaque walls and haze, and a floor above the
+ * one being stood on is behind a slab. So a room counts as in view only while
+ * it is within reach and on the level the player is on, and the order it comes
+ * back in is the order the light slots are handed out, so the room being stood
+ * in is always the one lit by its own fixtures.
  */
 export class RoomView {
 
@@ -49,10 +49,10 @@ export class RoomView {
 
 			const d = room.center.distanceToSquared( position );
 
-			room.group.visible = d < this.radiusSq
+			room.visible = d < this.radiusSq
 				&& Math.abs( room.center.y - position.y ) < FLOOR_BAND;
 
-			if ( room.group.visible ) near.push( { room, d } );
+			if ( room.visible ) near.push( { room, d } );
 
 		}
 

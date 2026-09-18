@@ -4,7 +4,7 @@ import { bounds, fail, hashValue, jsonHash, pathValue, record, strings, vector }
 export async function checkStreetMetadata( manifest, blueprint, blueprintHash ) {
 	const meta = manifest?.meta, ground = manifest?.ground, delegated = manifest?.delegated;
 	const atlas = blueprint.data, original = atlas?.volumetric?.ground;
-	if ( ! [ '0.2.0', '0.3.0' ].includes( meta?.version ) || meta.architectureVersion !== '0.26.0' || meta.reservationVersion !== '2.1.0'
+	if ( meta?.version !== '0.3.0' || meta.architectureVersion !== '0.26.0' || meta.reservationVersion !== '2.1.0'
 		|| meta.designVersion !== 'native-1.0.0' || meta.units !== 'meters' || typeof meta.generatorVersion !== 'string' || ! meta.generatorVersion
 		|| ! Number.isSafeInteger( meta.seed ) || ! hashValue( meta.blueprintHash ) || ! hashValue( meta.nativeCatalogHash )
 		|| atlas?.meta?.version !== meta.architectureVersion || atlas.streets?.construction?.planningReservations?.version !== meta.reservationVersion ) fail( 'Unsupported street source versions' );
@@ -35,16 +35,26 @@ export async function checkStreetMetadata( manifest, blueprint, blueprintHash ) 
 	const stationIds = strings( delegated.stations.stationIds, 'station identities' );
 	if ( stationIds.size !== stations.length || stations.some( station => ! stationIds.has( station.id ) ) ) fail( 'Delegated station identities differ' );
 	if ( await jsonHash( highways ) !== delegated.highways.hash || await jsonHash( stations ) !== delegated.stations.hash ) fail( 'Delegated infrastructure hash mismatch' );
-	if ( ! Array.isArray( manifest.pieces ) || ! manifest.pieces.length || ! Array.isArray( manifest.features ) ) fail( 'Missing street pieces/features' );
+	const kit = manifest.kit, placements = manifest.placements, files = manifest.files;
+	if ( ! record( files ) || ! pathValue( files.kit ) || ! pathValue( files.placements ) ) fail( 'Invalid street bundle file paths' );
+	if ( kit?.version !== '1.0.0' || kit.units !== 'meters' || kit.module !== 8 || ! Array.isArray( kit.pieces ) || ! kit.pieces.length
+		|| placements?.version !== '1.0.0' || ! Number.isFinite( placements.cellSize ) || placements.cellSize <= 0
+		|| ! Array.isArray( placements.placements ) || ! placements.placements.length || ! Array.isArray( manifest.features ) ) fail( 'Missing street kit, placements or features' );
 	const ids = new Set(), paths = new Set();
-	for ( const piece of manifest.pieces ) {
-		if ( typeof piece?.id !== 'string' || ! piece.id || ids.has( piece.id ) || ! pathValue( piece.asset ) || paths.has( piece.asset ) || ! hashValue( piece.sha256 )
-			|| ! bounds( piece.bounds ) || ! vector( piece.origin, 3 ) || typeof piece.hasCollision !== 'boolean'
-			|| ! Number.isSafeInteger( piece.triangles ) || piece.triangles < 1 ) fail( 'Invalid street piece' );
-		ids.add( piece.id ); paths.add( piece.asset );
-		strings( piece.ownerIds, 'piece owner IDs' );
-		for ( const id of strings( piece.groundIds, 'piece ground IDs' ) ) if ( ! groundIds.has( id ) ) fail( 'Piece references missing ground' );
-		for ( const id of strings( piece.surfaceIds, 'piece surface IDs' ) ) if ( ! Object.hasOwn( manifest.materials.binding.surfaces ?? {}, id ) ) fail( 'Piece references missing surface' );
+	for ( const piece of kit.pieces ) {
+		if ( typeof piece?.id !== 'string' || ! piece.id || ids.has( piece.id ) || ! pathValue( piece.file ) || paths.has( piece.file ) || ! hashValue( piece.sha256 )
+			|| ! bounds( piece.bounds ) || typeof piece.hasCollision !== 'boolean' || ! Number.isSafeInteger( piece.bytes ) || piece.bytes < 1
+			|| ! Number.isSafeInteger( piece.triangles ) || piece.triangles < 1 ) fail( 'Invalid street kit piece' );
+		ids.add( piece.id ); paths.add( piece.file );
+		for ( const id of strings( piece.surfaces, 'piece surfaces' ) ) if ( ! Object.hasOwn( manifest.materials.binding.surfaces ?? {}, id ) ) fail( 'Piece references missing surface' );
+	}
+	for ( const placement of placements.placements ) {
+		if ( ! ids.has( placement?.piece ) || ! vector( placement.position, 3 ) || ! Number.isFinite( placement.rotationY )
+			|| ! Array.isArray( placement.cell ) || placement.cell.length !== 2
+			|| placement.cell.some( ( value, axis ) => value !== Math.floor( placement.position[ axis * 2 ] / placements.cellSize ) )
+			|| typeof placement.ownerId !== 'string' || ! placement.ownerId
+			|| ( placement.scale !== undefined && ( ! vector( placement.scale, 3 ) || placement.scale.some( value => value <= 0 ) ) ) ) fail( 'Invalid street placement' );
+		strings( placement.ownerIds, 'placement owner IDs' );
 	}
 	ids.clear();
 	for ( const feature of manifest.features ) {

@@ -88,6 +88,8 @@ export class WorldSource {
 		const listedSet = new Set( manifest.parcels );
 		const shellCatalog = await loadShellCatalog( manifest, ( file, reference ) => this.#document( `${this.outBase}/${file}`, reference ) );
 		const kit = await this.#kit( manifest );
+		const interiorModules = await this.#resource( manifest.interiorModules );
+		const interiorProps = await this.#resource( manifest.interiorProps );
 		const sources = new BuildingSource( { manifest, outBase: this.outBase, readJson: url => this.#json( url ) } );
 		const loadBuildings = ids => sources.load( ids );
 		const buildings = await loadBuildings( initialBuildingIds( shellCatalog, manifest, game ) );
@@ -101,6 +103,8 @@ export class WorldSource {
 			buildings,
 			shellCatalog,
 			kit,
+			interiorModules,
+			interiorProps,
 			loadBuildings,
 			// Catalog games carry the player and quest runtime beside their world.
 			// Direct city previews have no descriptor and retain session-only play.
@@ -124,6 +128,22 @@ export class WorldSource {
 
 		const file = manifest.kit.file;
 		const { data } = await this.#document( `${this.outBase}/${file}`, manifest.kit );
+
+		return { document: data, baseUrl: `${this.outBase}/${file.slice( 0, file.lastIndexOf( '/' ) + 1 )}`.replace( /\/+$/, '' ) };
+
+	}
+
+	/**
+	 * One city resource catalog copied beside the world and hashed in the
+	 * manifest: the shared interior modules, the shared furniture.
+	 * @returns { document, baseUrl } or null when the world publishes none
+	 */
+	async #resource( reference ) {
+
+		if ( ! reference ) return null;
+
+		const { file } = reference;
+		const { data } = await this.#document( `${this.outBase}/${file}`, reference );
 
 		return { document: data, baseUrl: `${this.outBase}/${file.slice( 0, file.lastIndexOf( '/' ) + 1 )}`.replace( /\/+$/, '' ) };
 

@@ -44,13 +44,14 @@ export class WorldFiles {
 	#adoptStreets( { stage, reference } ) {
 
 		const staged = sha256( readFileSync( join( this.stage, 'blueprint.json' ) ) );
-		const manifest = join( stage, 'streets', 'manifest.json' );
-		if ( reference.blueprintSha256 !== staged || ! existsSync( manifest ) || sha256( readFileSync( manifest ) ) !== reference.sha256 ) {
+		const bundle = join( stage, 'streets' );
+		const bound = ( name, digest ) => existsSync( join( bundle, name ) ) && sha256( readFileSync( join( bundle, name ) ) ) === digest;
+		if ( reference.blueprintSha256 !== staged || ! bound( 'manifest.json', reference.sha256 ) || ! bound( 'kit.json', reference.kitSha256 ) ) {
 
-			throw new AssemblyError( 'E_STREETS_SOURCE_MISMATCH', 'prepared streets must bind the exact staged blueprint and manifest bytes' );
+			throw new AssemblyError( 'E_STREETS_SOURCE_MISMATCH', 'prepared streets must bind the exact staged blueprint, manifest and kit bytes' );
 
 		}
-		renameSync( join( stage, 'streets' ), join( this.stage, 'streets' ) );
+		renameSync( bundle, join( this.stage, 'streets' ) );
 		return reference;
 
 	}

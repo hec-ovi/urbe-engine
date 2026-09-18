@@ -164,8 +164,8 @@ export class KitPieces {
 			triangles: piece.triangles ?? 0,
 			surfaces,
 			leaves,
-			draw: new KitPieceDraw( piece.id, surfaces ),
-			leafDraw: leaves.length ? new KitPieceDraw( `${piece.id}/leaves`, leaves.flatMap( ( leaf ) => leaf.surfaces ) ) : null
+			draw: new KitPieceDraw( `kit:${piece.id}`, surfaces ),
+			leafDraw: leaves.length ? new KitPieceDraw( `kit:${piece.id}/leaves`, leaves.flatMap( ( leaf ) => leaf.surfaces ) ) : null
 		};
 
 	}

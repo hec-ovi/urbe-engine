@@ -7,6 +7,7 @@ const Ajv2020 = AjvModule.default ?? AjvModule;
 const EXTERIOR_REQUEST = new URL( '../../../exterior/schemas/building-request.schema.json', import.meta.url );
 const INTERIOR_REQUEST = new URL( '../../../interior/schemas/request.schema.json', import.meta.url );
 const INTERIOR_BLUEPRINT = new URL( '../../../interior/schemas/blueprint.schema.json', import.meta.url );
+const INTERIOR_MODULES = new URL( '../../../interior/schemas/modules.schema.json', import.meta.url );
 const WORLD_MANIFEST = new URL( './schema/world-manifest.schema.json', import.meta.url );
 const SHELL_CATALOG = new URL( './schema/shell-catalog.schema.json', import.meta.url );
 const ROOFTOP_SPAN = new URL( '../../../connections/schemas/rooftop-span.schema.json', import.meta.url );
@@ -32,6 +33,7 @@ function instance() {
 		rooftopSpanOutput.properties.spans.items.$ref = './rooftop-span';
 		ajv.addSchema( loadSchema( INTERIOR_BLUEPRINT ) );
 		ajv.addSchema( loadSchema( INTERIOR_REQUEST ) );
+		ajv.addSchema( loadSchema( INTERIOR_MODULES ) );
 		new SchemaFiles( ajv ).add( EXTERIOR_REQUEST );
 		for ( const url of CONNECTIONS_SCHEMAS ) {
 
@@ -104,6 +106,15 @@ export function validateInteriorRequest( request ) {
 	const validate = instance().getSchema( 'urbe/interior/request' );
 
 	return validate( request ) ? [] : validate.errors;
+
+}
+
+/** The shared module catalog the city copies beside the world. */
+export function validateInteriorModules( catalog ) {
+
+	const validate = instance().getSchema( 'https://urbe.dev/interior/modules.schema.json' );
+
+	return validate( catalog ) ? [] : validate.errors;
 
 }
 

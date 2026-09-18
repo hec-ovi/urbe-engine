@@ -1,9 +1,8 @@
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { AssemblyError } from './RequestAssembler.js';
-import { floorTag } from './OutDir.js';
 import { runInterior, runCoreFeasibility } from './interiorRunner.js';
 import { validateExteriorRequest, validateInteriorRequest } from './validators.js';
 
@@ -13,8 +12,9 @@ const EXTERIOR_DIR = fileURLToPath( new URL( '../../../exterior/', import.meta.u
  * The per-parcel chain shared by the single and city CLIs: assemble and
  * validate the exterior request, run exterior's CLI, then optionally gate on
  * interior core feasibility (walkup parcels re-pick floors inside the cap and
- * regenerate the shell) and fill the building. Failures throw AssemblyError;
- * nothing here exits the process.
+ * regenerate the shell) and furnish it. A building that already stands is
+ * furnished on its own through `furnish`. Failures throw AssemblyError; nothing
+ * here exits the process.
  */
 export class BuildingPipeline {
 
@@ -27,40 +27,52 @@ export class BuildingPipeline {
 
 	/**
 	 * @param options.glb 'merged' (runtime default) | 'named'
-	 * @param options.interior also generate the interior into <outDir>/interior/
+	 * @param options.interior also furnish the building into <outDir>/interior/
 	 * @returns { request, blueprint, coreMode } for the built parcel
 	 */
 	async build( parcelId, outDir, { glb = 'merged', interior = false } = {} ) {
 
 		mkdirSync( outDir, { recursive: true } );
 
-		let { request, blueprint } = await this.#shell( parcelId, outDir, { glb } );
-		let coreMode = null;
+		const shell = await this.#shell( parcelId, outDir, { glb } );
 
-		if ( interior ) {
+		if ( ! interior ) return { ...shell, coreMode: null };
 
-			let core = await runCoreFeasibility( blueprint );
+		const furnished = await this.furnish( parcelId, outDir, { blueprint: shell.blueprint, glb } );
 
-			if ( core.mode === 'walkup' && request.building.floors > core.walkupMaxFloors ) {
+		return { ...shell, ...furnished, request: furnished.request ?? shell.request };
 
-				( { request, blueprint } = await this.#shell( parcelId, outDir, { glb, floorCap: core.walkupMaxFloors } ) );
-				core = await runCoreFeasibility( blueprint );
+	}
 
-			}
+	/**
+	 * Furnishes a building that already stands, from its own blueprint: the kit
+	 * table's or the generated shell's. A generated shell whose core only fits a
+	 * walkup re-picks its floors inside the cap and is regenerated, so `refit`
+	 * is false for a kit building, which keeps its pieces or stays closed.
+	 * @returns { request, blueprint, coreMode }; request is set only on a re-pick
+	 */
+	async furnish( parcelId, outDir, { blueprint, glb = 'merged', refit = true } = {} ) {
 
-			if ( ! core.fits ) {
+		let request = null;
+		let core = await runCoreFeasibility( blueprint );
 
-				throw new AssemblyError( 'E_CORE_INFEASIBLE',
-					`mode ${core.mode}: band ${core.bandLength} m, core ${core.minCoreLength} m, compact ${core.minCompactCoreLength} m, walkup ${core.minWalkupCoreLength} m (crossDepthOk ${core.crossDepthOk})` );
+		if ( refit && core.mode === 'walkup' && aboveGround( blueprint ) > core.walkupMaxFloors ) {
 
-			}
-
-			coreMode = core.mode;
-			await this.#generateInterior( parcelId, blueprint, outDir );
+			( { request, blueprint } = await this.#shell( parcelId, outDir, { glb, floorCap: core.walkupMaxFloors } ) );
+			core = await runCoreFeasibility( blueprint );
 
 		}
 
-		return { request, blueprint, coreMode };
+		if ( ! core.fits ) {
+
+			throw new AssemblyError( 'E_CORE_INFEASIBLE',
+				`mode ${core.mode}: band ${core.bandLength} m, core ${core.minCoreLength} m, compact ${core.minCompactCoreLength} m, walkup ${core.minWalkupCoreLength} m (crossDepthOk ${core.crossDepthOk})` );
+
+		}
+
+		await this.#generateInterior( parcelId, blueprint, outDir );
+
+		return { request, blueprint, coreMode: core.mode };
 
 	}
 
@@ -137,9 +149,11 @@ export class BuildingPipeline {
 
 	async #generateInterior( parcelId, blueprint, outDir ) {
 
+		const shellGlb = join( outDir, `${parcelId}.glb` );
 		const interiorRequest = this.assembler.assembleInterior( parcelId, {
 			blueprint,
-			shellGlb: join( outDir, `${parcelId}.glb` )
+			// A building standing from kit pieces has no GLB of its own.
+			shellGlb: existsSync( shellGlb ) ? shellGlb : null
 		} );
 		const errors = validateInteriorRequest( interiorRequest );
 
@@ -150,45 +164,15 @@ export class BuildingPipeline {
 
 		}
 
-		let interior;
-
 		try {
 
-			interior = await runInterior( interiorRequest );
+			return await runInterior( interiorRequest, join( outDir, 'interior' ) );
 
 		} catch ( error ) {
 
 			throw new AssemblyError( 'E_INTERIOR_FAILED', `${error.code ?? error.name}: ${error.message}` );
 
 		}
-
-		writeInteriorFiles( join( outDir, 'interior' ), interior );
-
-	}
-
-}
-
-/**
- * One InteriorResult on disk: the whole building for the viewer, and per floor
- * its document plus its own GLB under `floors/`, which is what the game streams.
- */
-export function writeInteriorFiles( interiorDir, { glb, floorGlbs, floors, npc } ) {
-
-	const floorsDir = join( interiorDir, 'floors' );
-
-	mkdirSync( floorsDir, { recursive: true } );
-	writeFileSync( join( interiorDir, 'building.glb' ), glb );
-	writeFileSync( join( interiorDir, 'npc.json' ), JSON.stringify( npc, null, 2 ) + '\n' );
-
-	for ( const floor of floors ) {
-
-		writeFileSync( join( floorsDir, `${floorTag( floor.floor )}.json` ), JSON.stringify( floor, null, 2 ) + '\n' );
-
-	}
-
-	for ( const [ index, bytes ] of floorGlbs ) {
-
-		writeFileSync( join( floorsDir, `${floorTag( index )}.glb` ), bytes );
 
 	}
 
@@ -214,5 +198,12 @@ export function* signRungs( assemble ) {
 		yield { request, text };
 
 	}
+
+}
+
+/** The storeys a building has at or above the street, basements excluded. */
+function aboveGround( blueprint ) {
+
+	return blueprint.floors.filter( ( floor ) => floor.index >= 0 ).length;
 
 }

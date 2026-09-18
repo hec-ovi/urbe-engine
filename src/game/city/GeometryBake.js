@@ -1,7 +1,5 @@
 import { Float32BufferAttribute } from 'three';
 
-export const INTERIOR_PREFIX = 'interior';
-
 /** World-space, non-indexed, always with normals. Merging needs one layout. */
 export function bake( mesh ) {
 

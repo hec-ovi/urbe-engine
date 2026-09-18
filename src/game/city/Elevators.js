@@ -1,8 +1,9 @@
 import * as THREE from 'three/webgpu';
-import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { takeTriangles, centroidAt } from './Triangles.js';
 import { kelvinColor } from '../light/Color.js';
 
+/** The published modules the shafts own: the car that rides and the leaves that slide. */
+const CAR_MODULE = 'lift-car';
 /** How far outside its shaft a door leaf may sit and still belong to it. */
 const DOOR_REACH = 0.5;
 /** Cab travel, in metres a second: a real lift in a low-rise building. */
@@ -17,9 +18,7 @@ const PLATE_OFF = 0.25;
 const PLATE_WIDTH = 0.12;
 const PLATE_HEIGHT = 0.18;
 const PLATE_PROUD = 0.015;
-const CAB_CLEAR = 0.12;
 const CAB_HEIGHT = 2.4;
-const CAB_KEY = 'cyberpunk/metal/rich';
 const CAB_LIGHT_KEY = 'cyberpunk/light-fixture/mid';
 const CAB_KELVIN = 3800;
 /** Looked at directly inside a small box, so it sits above street exposure. */
@@ -28,13 +27,12 @@ const CAB_EMISSIVE = 120;
 /**
  * The lifts, made rideable.
  *
- * The interior box publishes the shafts and where each floor's doors are, and
- * the GLB already carries those doors as geometry, so nothing here invents a
- * lift: the published leaves are cut out of the floor band they arrived in and
- * given a slide, and a cab is built inside the shaft the shafts document
- * describes. Which triangles belong to which shaft is decided by where they
- * are, not by a convention about edge numbering, so the door plane and the way
- * it faces are read off the geometry itself.
+ * The interior box publishes the shafts in its floor documents and places the
+ * car and the landing leaves as modules, so nothing here invents a lift: the
+ * published car stands in a group that rides its shaft, and each landing's
+ * leaves are that module split at its own centre and hung on sliders. Which
+ * shaft a placement belongs to is decided by where it stands, not by a
+ * convention about edge numbering.
  *
  * Riding is a call and a choice: E at a landing brings the cab and opens it, E
  * inside takes the next floor the shaft serves. While the cab moves it carries
@@ -103,43 +101,40 @@ export class Elevators {
 	}
 
 	/**
-	 * Takes this band's published door leaves into the shafts that own them.
-	 * @returns the geometry left over, which is everything that is not a door.
+	 * Binds one floor's lift modules to the shaft that owns them.
+	 *
+	 * The car and the landing leaves move, so their copies are drawn here
+	 * rather than instanced with the rest of the floor: the car is the
+	 * published module standing in the group that rides the shaft, and the
+	 * leaves are that module split at its own centre and hung on sliders.
+	 *
+	 * @param placement a `lift-car` or `lift-doors` placement, in its floor's frame
+	 * @param modules the city module catalog
+	 * @param group the floor's own content, which owns the leaves
+	 * @returns whether a shaft took it
 	 */
-	claim( parcelId, floor, geometry, material, group ) {
+	mount( parcelId, floor, placement, modules, group ) {
 
 		const stops = ( this.byBuilding.get( parcelId ) ?? [] )
 			.map( ( shaft ) => shaft.stopAt( floor ) )
-			.filter( Boolean );
+			.filter( ( stop ) => stop?.owns( placement.position ) );
 
-		if ( ! stops.length ) return geometry;
+		if ( ! stops.length ) return false;
 
-		const position = geometry.getAttribute( 'position' );
-		const mine = stops.map( () => [] );
-		const rest = [];
+		const [ stop ] = stops;
 
-		for ( let i = 0; i < position.count; i += 3 ) {
+		if ( placement.module === CAR_MODULE ) {
 
-			centroidAt( position, i, _centroid, _a, _b, _c );
-
-			const slot = stops.findIndex( ( stop ) => stop.holds( _centroid ) );
-
-			( slot < 0 ? rest : mine[ slot ] ).push( i );
+			stop.shaft.mountCar( placement, modules );
+			return true;
 
 		}
 
-		stops.forEach( ( stop, i ) => {
+		const leaves = stop.mount( placement, modules.surfacesOf( placement.module ) );
 
-			const leaves = stop.takeLeaves( geometry, mine[ i ], material );
+		if ( leaves.length ) group.add( ...leaves );
 
-			if ( leaves.length ) group.add( ...leaves );
-
-		} );
-
-		const left = takeTriangles( geometry, rest );
-		geometry.dispose();
-
-		return left;
+		return true;
 
 	}
 
@@ -170,12 +165,15 @@ class Shaft {
 
 		this.parcelId = parcelId;
 		this.id = `${parcelId}:${lift.id}`;
+		// A core rect is published by its minimum corner; the shaft is its middle.
 		this.rect = lift.rect;
+		this.centre = { x: lift.rect.x + lift.rect.w / 2, z: lift.rect.z + lift.rect.d / 2 };
 		this.factory = factory;
 		this.stops = [];
 		this.at = 0;
 		this.target = 0;
 		this.cab = null;
+		this.car = null;
 
 	}
 
@@ -191,7 +189,7 @@ class Shaft {
 
 	}
 
-	/** The cab: a box open on the door side, with its own light in it. */
+	/** The cab: the group that rides the shaft, with its own light in it. */
 	build() {
 
 		this.stops.sort( ( a, b ) => a.elevation - b.elevation );
@@ -201,31 +199,40 @@ class Shaft {
 
 		const group = new THREE.Group();
 		group.name = `elevator:${this.id}`;
-
-		const w = this.rect.w - CAB_CLEAR * 2;
-		const d = this.rect.d - CAB_CLEAR * 2;
-		const shell = [
-			slab( w, 0.08, d, 0, 0.04, 0 ),
-			slab( w, 0.06, d, 0, CAB_HEIGHT, 0 ),
-			slab( 0.06, CAB_HEIGHT, d, - w / 2, CAB_HEIGHT / 2, 0 ),
-			slab( 0.06, CAB_HEIGHT, d, w / 2, CAB_HEIGHT / 2, 0 ),
-			slab( w, CAB_HEIGHT, 0.06, 0, CAB_HEIGHT / 2, - d / 2 )
-		];
-
-		const body = new THREE.Mesh(
-			BufferGeometryUtils.mergeGeometries( shell, false ),
-			this.factory.build( CAB_KEY )
-		);
-		const lamp = new THREE.Mesh(
-			slab( w * 0.5, 0.04, d * 0.5, 0, CAB_HEIGHT - 0.08, 0 ),
-			this.factory.variant( CAB_LIGHT_KEY, { emissiveLevel: CAB_EMISSIVE, emissive: kelvinColor( CAB_KELVIN ) } )
-		);
+		group.position.set( this.centre.x, this.at, this.centre.z );
 
 		this.cab = group;
-		group.add( body, lamp );
-		group.position.set( this.rect.x, this.at, this.rect.z );
 
 		return group;
+
+	}
+
+	/**
+	 * Stands the published car in the cab, once per shaft: every floor places
+	 * the same car at the same pose, and only one of them rides.
+	 */
+	mountCar( placement, modules ) {
+
+		if ( this.car ) return;
+
+		const bounds = modules.boundsOf( placement.module );
+		const surfaces = modules.surfacesOf( placement.module );
+		if ( ! bounds || ! surfaces.length ) return;
+
+		const car = new THREE.Group();
+		car.rotation.y = placement.rotationY;
+		car.scale.set( ...placement.scale );
+
+		for ( const { geometry, material } of surfaces ) car.add( new THREE.Mesh( geometry, material ) );
+
+		const [ width, height, depth ] = bounds.size;
+		car.add( new THREE.Mesh(
+			slab( width * 0.5, 0.04, depth * 0.5, 0, height - 0.16, 0 ),
+			this.factory.variant( CAB_LIGHT_KEY, { emissiveLevel: CAB_EMISSIVE, emissive: kelvinColor( CAB_KELVIN ) } )
+		) );
+
+		this.car = car;
+		this.cab.add( car );
 
 	}
 
@@ -239,8 +246,8 @@ class Shaft {
 	holds( point ) {
 
 		return point.y >= this.at - 0.4 && point.y < this.at + CAB_HEIGHT
-			&& Math.abs( point.x - this.rect.x ) < this.rect.w / 2
-			&& Math.abs( point.z - this.rect.z ) < this.rect.d / 2;
+			&& Math.abs( point.x - this.centre.x ) < this.rect.w / 2
+			&& Math.abs( point.z - this.centre.z ) < this.rect.d / 2;
 
 	}
 
@@ -262,7 +269,7 @@ class Shaft {
 
 			out.push( {
 				kind: 'elevator', shaft: this, stop: null, inside: true,
-				center: new THREE.Vector3( this.rect.x, this.at + PANEL_HEIGHT, this.rect.z )
+				center: new THREE.Vector3( this.centre.x, this.at + PANEL_HEIGHT, this.centre.z )
 			} );
 
 		}
@@ -337,96 +344,95 @@ class Stop {
 		this.open = 0;
 		this.wanted = 0;
 		this.leaves = [];
+		this.pivot = null;
 		this.panel = null;
 
 	}
 
-	/** A triangle of this floor standing in or just outside this shaft. */
-	holds( point ) {
+	/** Whether a placement of this floor stands in or just outside this shaft. */
+	owns( position ) {
 
-		return point.y >= this.elevation - 0.2 && point.y < this.elevation + this.height
-			&& Math.abs( point.x - this.shaft.rect.x ) < this.shaft.rect.w / 2 + DOOR_REACH
-			&& Math.abs( point.z - this.shaft.rect.z ) < this.shaft.rect.d / 2 + DOOR_REACH;
+		return Math.abs( position[ 0 ] - this.shaft.centre.x ) < this.shaft.rect.w / 2 + DOOR_REACH
+			&& Math.abs( position[ 2 ] - this.shaft.centre.z ) < this.shaft.rect.d / 2 + DOOR_REACH;
 
 	}
 
 	/**
-	 * Splits the claimed triangles into two leaves and hangs them on sliders.
-	 * The door plane, which way it faces and how wide it is all come off the
-	 * geometry, so no convention about which edge of a shaft rect is the front
-	 * has to be right.
+	 * Hangs this landing's published leaves on their sliders.
+	 *
+	 * The module is authored as two leaves meeting at its own zero, so the
+	 * split is that plane: everything left of it runs one way, everything right
+	 * of it the other. Which way the landing faces comes from where it sits
+	 * relative to its shaft, so no convention about the published door edge has
+	 * to be right.
+	 *
+	 * @param placement the `lift-doors` placement, in this floor's frame
+	 * @param surfaces the module's own surfaces, in the module's frame
+	 * @returns the pivots to add to the scene
 	 */
-	takeLeaves( geometry, starts, material ) {
+	mount( placement, surfaces ) {
 
-		if ( ! starts.length ) return [];
+		if ( ! surfaces.length ) return [];
 
-		const box = new THREE.Box3();
-		const position = geometry.getAttribute( 'position' );
-
-		for ( const start of starts ) {
-
-			for ( let v = 0; v < 3; v ++ ) box.expandByPoint( _a.fromBufferAttribute( position, start + v ) );
-
-		}
-
-		const size = box.getSize( new THREE.Vector3() );
-		const centre = box.getCenter( new THREE.Vector3() );
-		// The door is thin one way and wide the other; the thin axis is the way
-		// it faces and the wide one is the way its leaves run.
-		const acrossX = size.x >= size.z;
-		const width = acrossX ? size.x : size.z;
-		const facing = new THREE.Vector3(
-			acrossX ? 0 : Math.sign( centre.x - this.shaft.rect.x ) || 1,
-			0,
-			acrossX ? Math.sign( centre.z - this.shaft.rect.z ) || 1 : 0
+		const pivot = new THREE.Group();
+		pivot.position.set(
+			placement.position[ 0 ],
+			this.elevation + placement.position[ 1 ],
+			placement.position[ 2 ]
 		);
+		pivot.rotation.y = placement.rotationY;
+		pivot.scale.set( ...placement.scale );
 
-		const left = [];
-		const right = [];
+		const bounds = new THREE.Box3();
+		for ( const { geometry } of surfaces ) bounds.union( geometry.boundingBox ?? new THREE.Box3().setFromBufferAttribute( geometry.getAttribute( 'position' ) ) );
+		const width = bounds.max.x - bounds.min.x;
 
-		for ( const start of starts ) {
+		for ( const side of [ - 1, 1 ] ) {
 
-			centroidAt( position, start, _centroid, _a, _b, _c );
-			( ( acrossX ? _centroid.x : _centroid.z ) < ( acrossX ? centre.x : centre.z ) ? left : right ).push( start );
+			const leaf = new THREE.Group();
+			leaf.userData.slide = new THREE.Vector3( side * width / 2, 0, 0 );
 
-		}
+			for ( const { geometry, material } of surfaces ) {
 
-		for ( const [ side, indices ] of [ [ - 1, left ], [ 1, right ] ] ) {
+				const part = takeTriangles( geometry, halfOf( geometry, side ) );
+				if ( part ) leaf.add( new THREE.Mesh( part, material ) );
 
-			const part = takeTriangles( geometry, indices );
-
-			if ( ! part ) continue;
-
-			const pivot = new THREE.Group();
-			pivot.userData.slide = acrossX
-				? new THREE.Vector3( side * width / 2, 0, 0 )
-				: new THREE.Vector3( 0, 0, side * width / 2 );
-			pivot.add( new THREE.Mesh( part, material ) );
-			this.leaves.push( pivot );
+			}
+			if ( leaf.children.length ) this.leaves.push( leaf );
 
 		}
 
-		// The call plate beside the door: the geometry the prompt points at, a hand
-		// wide on the wall at chest height, past the jamb on the side the run goes.
+		// The call plate beside the door: the geometry the prompt points at, a
+		// hand wide on the wall at chest height, past the jamb.
 		const plate = new THREE.Group();
-		const beside = acrossX ? new THREE.Vector3( width / 2 + PLATE_OFF, 0, 0 ) : new THREE.Vector3( 0, 0, width / 2 + PLATE_OFF );
-		plate.position.copy( centre ).add( beside ).addScaledVector( facing, PLATE_PROUD ).setY( this.elevation + PANEL_HEIGHT );
-		plate.userData.slide = new THREE.Vector3();
+		plate.position.set( width / 2 + PLATE_OFF, PANEL_HEIGHT - placement.position[ 1 ], PLATE_PROUD );
 		plate.add( new THREE.Mesh(
-			acrossX ? new THREE.BoxGeometry( PLATE_WIDTH, PLATE_HEIGHT, PLATE_PROUD * 2 ) : new THREE.BoxGeometry( PLATE_PROUD * 2, PLATE_HEIGHT, PLATE_WIDTH ),
-			material
+			new THREE.BoxGeometry( PLATE_WIDTH, PLATE_HEIGHT, PLATE_PROUD * 2 ),
+			surfaces[ 0 ].material
 		) );
-		this.leaves.push( plate );
+		pivot.add( plate );
 
-		this.panel = centre.clone().addScaledVector( facing, PANEL_OUT ).setY( this.elevation + PANEL_HEIGHT );
+		for ( const leaf of this.leaves ) pivot.add( leaf );
 
-		return this.leaves;
+		// Where the prompt floats: a pace out from the leaves, on the side away
+		// from the shaft.
+		pivot.updateMatrixWorld( true );
+		const outward = _facing.set( 0, 0, 1 ).applyAxisAngle( _up, placement.rotationY );
+		const sign = Math.sign(
+			( pivot.position.x - this.shaft.centre.x ) * outward.x + ( pivot.position.z - this.shaft.centre.z ) * outward.z
+		) || 1;
+		this.panel = new THREE.Vector3( pivot.position.x, this.elevation + PANEL_HEIGHT, pivot.position.z )
+			.addScaledVector( outward, sign * PANEL_OUT );
+		this.pivot = pivot;
+
+		return [ pivot ];
 
 	}
 
 	release() {
 
 		this.leaves = [];
+		this.pivot = null;
 		this.panel = null;
 
 	}
@@ -448,6 +454,23 @@ class Stop {
 
 }
 
+/** The triangles of one leaf: those whose centroid lies on that side of the module's zero. */
+function halfOf( geometry, side ) {
+
+	const position = geometry.getAttribute( 'position' );
+	const starts = [];
+
+	for ( let i = 0; i < position.count; i += 3 ) {
+
+		centroidAt( position, i, _centroid, _a, _b, _c );
+		if ( Math.sign( _centroid.x ) === side ) starts.push( i );
+
+	}
+
+	return starts;
+
+}
+
 /** An axis-aligned slab of geometry, in metres, around the cab's own origin. */
 function slab( w, h, d, x, y, z ) {
 
@@ -464,3 +487,5 @@ const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _centroid = new THREE.Vector3();
 const _lift = new THREE.Vector3();
+const _facing = new THREE.Vector3();
+const _up = new THREE.Vector3( 0, 1, 0 );

@@ -3,7 +3,7 @@
  * Loads the atlas blueprint (the committed urbe sample by default), generates
  * the connections document, then runs the building pipeline for one parcel:
  * request written and validated, exterior GLB and blueprint, and with
- * --interior the core-gated interior (building.glb, floors/*.json, npc.json)
+ * --interior the core-gated interior (building.json, layouts/*.json, npc.json)
  * under <dir>/interior/.
  */
 

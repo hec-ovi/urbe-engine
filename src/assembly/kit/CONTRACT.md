@@ -24,10 +24,10 @@ Turns an Atlas parcel into a table of Exterior kit pieces, so a city ships a few
 
 ## Rules
 
-- A parcel keeps the generator when it is a landmark, when its lot is not a rectangle of whole bays, when connections carve its facade or it needs a basement, when no family fits its height, or when the run furnishes its interior, which is built into a generated shell.
+- A parcel keeps the generator when it is a landmark, when its lot is not a rectangle of whole bays, when connections carve its facade or it needs a basement, or when no family fits its height. A parcel the run opens keeps the kit: its blueprint is the one interior is furnished from.
 - Family choice is a stable hash of the atlas seed and the parcel id over the families whose published `fits` accept the lot and the floor count.
 - Bays follow the lot: an edge of 8N metres is two 4 m corner arms and N-1 straight bays, so each face places N pieces. `baysAcross` and `baysDeep` are those N, the count `fits.bays` is stated in, and a storey places 2 x (across + deep) pieces.
-- Floors are the count the shared request picked, held inside the family's own range and its height: ground plus (F-2) middle bands plus the crown must fit the parcel envelope. Three floors is the minimum a kit building has.
+- Floors are the count the shared request picked, held inside the family's own range and its height: ground plus (F-2) middle bands plus the crown must fit the parcel envelope. Two floors is the minimum: ground with the crown directly on it. Interiors need three.
 - Pieces are planned with the kit's own seed, so the table names exactly the piece files published beside the world.
 - Every request is checked against the kit request schema and every result against the placement and table schemas before anything is written, and the piece count must tile the lot.
 - Same blueprint, same kit, same buildings, byte for byte.

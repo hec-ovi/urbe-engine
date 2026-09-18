@@ -27,7 +27,7 @@ it( 'loads nearby authored bounds and every interior, then admits explicit dista
 
 		expect( world.buildings.get( id ) ).toMatchObject( {
 			hasInterior: true, npc: { buildingId: id },
-			floors: [ { floor: 0, glbUrl: `/out/catalog/${id}/interior/floors/000.glb` }, { floor: 1, glbUrl: `/out/catalog/${id}/interior/floors/001.glb` } ]
+			interior: { building: interiorBuilding( id ), layouts: { ground: { id: 'layouts/ground.json' }, middle: { id: 'layouts/middle.json' }, crown: { id: 'layouts/crown.json' } } }
 		} );
 
 	}
@@ -38,7 +38,7 @@ it( 'loads nearby authored bounds and every interior, then admits explicit dista
 	const [ first, second ] = await Promise.all( [ world.loadBuildings( firstIds ), world.loadBuildings( secondIds ) ] );
 	expect( [ ...first.keys() ] ).toEqual( firstIds );
 	expect( [ ...second.keys() ] ).toEqual( secondIds );
-	expect( first.get( 'p3' ) ).toMatchObject( { parcelId: 'p3', blueprint: { buildingId: 'p3' }, hasInterior: false, npc: null, floors: [] } );
+	expect( first.get( 'p3' ) ).toMatchObject( { parcelId: 'p3', blueprint: { buildingId: 'p3' }, hasInterior: false, npc: null, interior: null } );
 	expect( fixture.requested ).toContain( '/out/catalog/p3/p3.blueprint.json' );
 	expect( [ ...world.buildings.keys() ] ).toEqual( initialIds );
 	expect( fixture.peak() ).toBe( 8 );
@@ -119,9 +119,11 @@ async function serve( { count = 320, game = true, interiors = true, change = () 
 	await writeWorldArchive( catalog, directory, { maxRecords: 50 } );
 	const json = value => JSON.stringify( value );
 	const hash = value => createHash( 'sha256' ).update( value ).digest( 'hex' );
+	const modules = { version: 1, grid: 0.5, modules: [] };
 	const manifest = {
 		contractVersion: '1.0.0', seed: 'catalog', atlasVersion: '0.21.0', named: false, namingTheme: null,
-		parcels: ids, interiors: inside, floors: Object.fromEntries( inside.map( id => [ id, [ '000', '001' ] ] ) ),
+		parcels: ids, interiors: inside,
+		...( inside.length ? { interiorModules: { file: 'interior-modules/modules.json', sha256: hash( json( modules ) ) } } : {} ),
 		connections: { file: 'connections.json', sha256: hash( json( connections ) ), blueprintSha256: hash( json( atlas ) ) },
 		shellCatalog: { file: 'shells/index.json', encoding: 'archive', sha256: hash( await readFile( join( directory, 'index.json' ) ) ) }
 	};
@@ -129,9 +131,11 @@ async function serve( { count = 320, game = true, interiors = true, change = () 
 		[ '/out/catalog/manifest.json', manifest ], [ '/out/catalog/blueprint.json', atlas ], [ '/out/catalog/connections.json', connections ],
 		[ '/out/catalog/game.json', { id: 'catalog', questBundle: null, player: { position: { x: 0, y: 0.2, z: 0 } } } ],
 		...ids.map( id => [ `/out/catalog/${id}/${id}.blueprint.json`, { buildingId: id } ] ),
+		[ '/out/catalog/interior-modules/modules.json', modules ],
 		...inside.flatMap( id => [
 			[ `/out/catalog/${id}/interior/npc.json`, { buildingId: id } ],
-			[ `/out/catalog/${id}/interior/floors/000.json`, { floor: 0 } ], [ `/out/catalog/${id}/interior/floors/001.json`, { floor: 1 } ]
+			[ `/out/catalog/${id}/interior/building.json`, interiorBuilding( id ) ],
+			...Object.values( interiorBuilding( id ).layouts ).map( file => [ `/out/catalog/${id}/interior/${file}`, { id: file } ] )
 		] )
 	] );
 	const requested = [];
@@ -160,6 +164,18 @@ async function serve( { count = 320, game = true, interiors = true, change = () 
 	return {
 		source: new WorldSource( { outBase: '/out/catalog', gameId: game ? 'catalog' : null } ),
 		catalog, manifest, requested, peak: () => maximum
+	};
+
+}
+
+/** One furnished parcel's manifest, as Interior writes it. */
+function interiorBuilding( id ) {
+
+	return {
+		version: 1, buildingId: id, modules: 'modules.json', props: 'catalog.json',
+		layouts: { ground: 'layouts/ground.json', middle: 'layouts/middle.json', crown: 'layouts/crown.json' },
+		floors: [ { index: 0, layout: 'ground', elevation: 0, openings: {} }, { index: 1, layout: 'crown', elevation: 4, openings: {} } ],
+		connectors: []
 	};
 
 }

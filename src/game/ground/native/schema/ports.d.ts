@@ -4,6 +4,7 @@ import type { CityBlueprint } from '../../../../../../atlas/schema/blueprint.ts'
 export interface WorldStreetReference {
 	file: 'streets/manifest.json';
 	sha256: string;
+	kitSha256: string;
 	blueprintSha256: string;
 }
 export interface NativeSourceOptions {
