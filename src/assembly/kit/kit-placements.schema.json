@@ -33,7 +33,7 @@
     },
     "signText": { "type": [ "string", "null" ], "description": "What the marquee anchor reads, lettered for Exterior's atlas, or null for a building with no sign." },
     "family": { "$ref": "https://urbe.dev/exterior/kit.schema.json#/$defs/familyId" },
-    "floors": { "type": "integer", "minimum": 3 },
+    "floors": { "type": "integer", "minimum": 2 },
     "tint": { "type": "string", "minLength": 1, "description": "What this building's instance colour is hashed from, so two neighbours of one family differ." },
     "absorbs": { "type": "string", "minLength": 1, "description": "The neighbouring parcel this building was merged over; that parcel stands empty." }
   }
