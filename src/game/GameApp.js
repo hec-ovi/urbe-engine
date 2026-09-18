@@ -259,7 +259,7 @@ export class GameApp {
 		this.view.step( 'hanging the neon' );
 		const neon = spatial ? { group: new THREE.Group(), glows: [] } : new Neon( atlas, buildings, factory ).build();
 		const lamps = new StreetLamps( atlas, factory, connections.networks.walk ).build();
-		const links = new Links( connections, factory, rooftopSpans ).build();
+		const links = new Links( connections, factory, rooftopSpans, { hosts: roofElevations( shellCatalog, buildings ) } ).build();
 		const props = this.propsStream = await new Dressing( atlas, connections.networks.walk, factory, {
 			replacedModuleOwnerIds: nativeStreets?.manifest.ground.replacements.moduleOwnerIds ?? [],
 			obstacles: [ ...DressingObstacles.fromPosts( lamps.posts ), ...( nativeStreets?.manifest.features ?? [] ).filter( feature => feature.kind !== 'tree-grate' ).map( feature => ( {
@@ -1277,6 +1277,20 @@ export function prepareInteriorStreaming( stream, renderer, scene, camera, mrt, 
 function roomAir( room ) {
 
 	return { color: room.color, lux: room.flux / Math.max( 1, room.area ) };
+
+}
+
+/**
+ * How high each building this world stands reaches, for the things hung
+ * between them. A world with a shell catalog publishes every parcel's massing
+ * there, whether or not that parcel is loaded right now; one without a catalog
+ * knows only the buildings it has read.
+ */
+function roofElevations( shellCatalog, buildings ) {
+
+	return new Map( shellCatalog
+		? shellCatalog.buildings.map( ( record ) => [ record.id, record.roof.elevation ] )
+		: [ ...buildings ].map( ( [ id, source ] ) => [ id, source.blueprint.bounds.height ] ) );
 
 }
 

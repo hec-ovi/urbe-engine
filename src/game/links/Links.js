@@ -20,6 +20,8 @@ const WIRE_SIDES = 5;
 export const ROOFTOP_WIRE_SIDES = 8;
 /** A parapet a person cannot go over, which is what stops a walk off a deck. */
 export const RAILING = 1.1;
+/** Float slack on an end that lands exactly on the roof it was planned against. */
+const ROOF_SLACK = 0.001;
 
 /**
  * Every inter-building link the connections box published, as geometry and as
@@ -40,27 +42,38 @@ export class Links {
 	/**
 	 * @param connections the connections document (`links` and `apertures`)
 	 * @param factory PbrMaterialFactory
+	 * @param hosts parcel id to roof elevation, for the buildings this world
+	 *   stands. Omit it to draw every published link.
 	 */
-	constructor( connections, factory, rooftopSpans = { spans: [] } ) {
+	constructor( connections, factory, rooftopSpans = { spans: [] }, { hosts = null } = {} ) {
 
 		this.links = connections.links;
 		this.rooftopSpans = rooftopSpans?.spans ?? [];
 		this.planes = cutPlanes( connections.apertures );
 		this.factory = factory;
+		this.hosts = hosts;
 
 	}
 
-	/** @returns { group, colliderGeometry, triangles, drawCalls } */
+	/** @returns { group, colliderGeometry, triangles, drawCalls, unhosted } */
 	build() {
 
 		const byKey = new Map();
 		const solid = [];
+		let unhosted = 0;
 
 		for ( const link of [ ...this.links, ...this.#rooftopLinks() ] ) {
 
 			const key = KEYS[ link.kind ];
 
 			if ( ! key ) continue;
+
+			if ( ! this.#hosted( link ) ) {
+
+				unhosted ++;
+				continue;
+
+			}
 
 			const geometry = this.#sweep( link );
 
@@ -97,8 +110,34 @@ export class Links {
 			group,
 			colliderGeometry: solid.length ? BufferGeometryUtils.mergeGeometries( solid, false ) : null,
 			triangles,
-			drawCalls: byKey.size
+			drawCalls: byKey.size,
+			unhosted
 		};
+
+	}
+
+	/**
+	 * Whether both ends of this link have a building to hang from.
+	 *
+	 * Connections plans a link against the massing a parcel was expected to
+	 * carry. A lot that ends up merged away leaves nothing at that end, and a
+	 * building that ends up shorter than the massing leaves the end above its
+	 * roof; either way the link hangs in the air, so it is not drawn. A caller
+	 * that does not say what stands gets every published link.
+	 */
+	#hosted( link ) {
+
+		if ( ! this.hosts || ! link.a ) return true;
+
+		for ( const [ end, at ] of [ [ link.a, 0 ], [ link.b, link.path.length - 1 ] ] ) {
+
+			const roof = this.hosts.get( end.buildingId );
+
+			if ( roof === undefined || link.path[ at ][ 1 ] > roof + ROOF_SLACK ) return false;
+
+		}
+
+		return true;
 
 	}
 

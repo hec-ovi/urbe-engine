@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { Box3, ClampToEdgeWrapping, Matrix4, NoColorSpace, RepeatWrapping, SRGBColorSpace, Texture } from 'three/webgpu';
 import { NativeStreetMaterials } from '../materials/NativeStreetMaterials.js';
+import { requiredAttributes } from '../materials/NativeGeometry.js';
 import { NativeStreetStream } from './NativeStreetStream.js';
 import { placementMatrix } from './StreetCells.js';
 
@@ -221,6 +222,36 @@ describe( 'saved street kit runtime', () => {
 		unknown.manifest.placements.placements[ 0 ].piece = 'road/none/999';
 		await expect( new NativeStreetStream( unknown.source, unknown.materials ).update( { x: 60, z: 40 } ) )
 			.rejects.toMatchObject( { code: 'E_NATIVE_STREET_STREAM', message: /no piece road\/none\/999/ } );
+	} );
+
+	/**
+	 * A batch draws its own buffers, not the ones each primitive arrived in.
+	 * Filling one settles any disagreement between its primitives by rewriting
+	 * the attribute for all of them, so a surface can reach the renderer
+	 * without the UVs or the wear its effect samples and draw flat and
+	 * untextured instead of failing. What the batch holds is what is checked.
+	 */
+	it( 'keeps the attributes every surface\'s effect needs in the batch it fills', async () => {
+		const world = bundle(), stream = new NativeStreetStream( world.source, world.materials );
+		await stream.update( { x: 200, z: 200 }, { radius: 64 } );
+		const binding = world.manifest.materials.binding;
+		for ( const [ surfaceId, batch ] of stream.pieces.batches.batches ) {
+			const geometry = batch.mesh.geometry;
+			const vertices = geometry.getAttribute( 'position' ).count;
+			for ( const [ name, itemSize ] of Object.entries( requiredAttributes( binding.surfaces[ surfaceId ].effect ) ) ) {
+				expect( geometry.getAttribute( name ) ).toMatchObject( { itemSize, count: vertices } );
+			}
+		}
+
+		const stripped = bundle();
+		const streetPieces = new NativeStreetStream( stripped.source, stripped.materials ).pieces;
+		const build = streetPieces.batches.build.bind( streetPieces.batches );
+		streetPieces.batches.build = entries => {
+			const built = build( entries );
+			for ( const batch of built.batches.values() ) batch.mesh.geometry.deleteAttribute( 'uv' );
+			return built;
+		};
+		await expect( streetPieces.ready ).rejects.toMatchObject( { code: 'E_STREET_MATERIAL', message: /uv/ } );
 	} );
 
 	it( 'compiles one batch per surface before the first copy is drawn', async () => {

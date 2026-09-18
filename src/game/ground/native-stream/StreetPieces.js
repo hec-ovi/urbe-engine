@@ -111,6 +111,13 @@ export class StreetPieces {
 		for ( const piece of loaded ) this.pieces.set( piece.id, piece );
 		this.batches.build( loaded );
 
+		// A batch draws its own buffers, not the ones each primitive was checked
+		// on: a bucket whose primitives disagree on an attribute settles it by
+		// rewriting them, and a surface that lost its UVs or its wear that way
+		// renders flat and untextured instead of failing. The batch answers for
+		// itself before a single copy stands.
+		for ( const batch of this.batches.batches.values() ) this.materials.assertGeometry( batch.material, batch.mesh.geometry );
+
 		return this;
 
 	}

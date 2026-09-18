@@ -89,6 +89,37 @@ describe( 'Links', () => {
 
 	} );
 
+	/**
+	 * Connections plans a link against the massing a parcel was expected to
+	 * carry. When the world stands something else - a lot merged away, or a
+	 * building shorter than that massing - the link has nothing to hang from
+	 * and reads as a bar floating in the air beside or above the towers.
+	 */
+	it( 'draws only the links the standing buildings can carry', () => {
+
+		const everything = new Links( doc, factory ).build();
+		const hosts = new Map( [ [ 'p0', 90 ], [ 'p1', 40 ], [ 'p2', 30 ], [ 'p3', 30 ], [ 'p4', 20 ] ] );
+		const hosted = new Links( doc, factory, { spans: [] }, { hosts } ).build();
+
+		// p14 is not there at all, and p1 stops 41 m below the tube on it.
+		expect( everything.unhosted ).toBe( 0 );
+		expect( hosted.unhosted ).toBe( 2 );
+		expect( hosted.triangles ).toBeLessThan( everything.triangles );
+
+		const kept = doc.links.filter( ( link ) => [ link.a, link.b ].every( ( end, at ) => {
+
+			const roof = hosts.get( end.buildingId );
+			return roof !== undefined && link.path[ at ? link.path.length - 1 : 0 ][ 1 ] <= roof;
+
+		} ) );
+
+		expect( kept.map( ( link ) => link.id ).sort() ).toEqual( [ 'l0', 'l10', 'l20', 'l9' ] );
+		// Nothing is left standing above the roofs that carry it.
+		expect( topOf( everything.group ) ).toBeGreaterThan( 85 );
+		expect( topOf( hosted.group ) ).toBeLessThan( 40 );
+
+	} );
+
 	it( 'renders rooftop span thickness, catenary samples and exact mast endpoints', async () => {
 
 		const request = JSON.parse( readFileSync( ROOFTOP_FIXTURE, 'utf8' ) );
@@ -121,6 +152,22 @@ describe( 'Links', () => {
 	} );
 
 } );
+
+/** The highest point anything in this group reaches. */
+function topOf( group ) {
+
+	let top = - Infinity;
+
+	for ( const mesh of group.children ) {
+
+		const position = mesh.geometry.getAttribute( 'position' );
+		for ( let i = 0; i < position.count; i ++ ) top = Math.max( top, position.getY( i ) );
+
+	}
+
+	return top;
+
+}
 
 function pathStations( path ) {
 

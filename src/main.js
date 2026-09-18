@@ -5,7 +5,10 @@ async function start() {
 	if ( mode === 'game' ) {
 
 		const { GameApp } = await import( './game/GameApp.js' );
-		await new GameApp( GameApp.configFromUrl() ).start();
+		const game = new GameApp( GameApp.configFromUrl() );
+		// The running game, reachable from the console for measurements.
+		window.urbe = game;
+		await game.start();
 
 	} else if ( mode === 'city' ) {
 

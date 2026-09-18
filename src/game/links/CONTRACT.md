@@ -6,12 +6,14 @@ Purpose: builds every inter-building link and fitted rooftop antenna span Connec
 - **The connections document** (`../../../../connections/CONTRACT.md`): `links` and `apertures`. Each link carries its centerline `path`, a `crossSection` (`rect` or `circle`), `walkable: { over, inside }` and both endpoint aperture ids. Each aperture carries `cut.polygon`, the exact opening on the face plane.
 - **The rooftop span document** (`../../../../connections/schemas/rooftop-span-output.schema.json`): each span carries exact attachment endpoints, the rendering path evaluated from its authoritative catenary, cable thickness, sag and arc length. Assembly stores this document in the world manifest after Exterior has published every roof attachment and obstacle.
 - A `PbrMaterialFactory` (`../../building/PbrMaterialFactory.js`) for the material behind a key.
+- `hosts`, optional: parcel id to roof elevation for the buildings this world stands. Omit it and every published link is drawn.
 
 ## Out
-`new Links( connections, factory, rooftopSpans? ).build()` returns:
+`new Links( connections, factory, rooftopSpans?, { hosts? } ).build()` returns:
 - `group`: one `THREE.Group` named `links`, holding one merged mesh per material key. Add it to the scene.
 - `colliderGeometry`: one merged position-only `BufferGeometry` covering every walkable link surface in the city, or `null` when there is none. Static and small, so it goes into the physics world once as a trimesh (`../physics/WorldColliders.js`), never streamed.
 - `triangles`, `drawCalls`: what the box costs.
+- `unhosted`: how many published links were left out because the buildings at their ends cannot carry them.
 
 ## Kinds
 The section comes from the link, never from here; these are what each kind is built as.
@@ -27,6 +29,7 @@ The section comes from the link, never from here; these are what each kind is bu
 A kind this box does not know is skipped.
 
 ## Invariants
+- A link is drawn only when both of its ends have a building to hang from: `hosts` names the parcel and the end sits no higher than that parcel's roof. Connections plans a link against the massing a parcel was expected to carry, so a lot that ended up merged away or a building that ended up shorter leaves the link floating in the air; those are counted in `unhosted` and neither drawn nor made solid. A caller that passes no `hosts` keeps every published link.
 - A link's geometry is its own `path` and `crossSection` and nothing else. Ends are never inset or extended: `path[0]` and the last point already sit on the two face planes.
 - Each end face is sliced by the plane of its aperture's `cut.polygon`, so a diagonal link closes on the carved hole. The end cross section coincides with the cut polygon to within a millimetre.
 - The section frame is the one the apertures were cut with: `right` horizontal and square to the axis, `up` square to both. A sloped link tilts its section with the axis.
@@ -43,7 +46,7 @@ A kind this box does not know is skipped.
 None thrown. A link of a kind this box does not know is skipped rather than drawn wrong.
 
 ## Checks
-`npm test -- src/game/links/Links.test.js` exercises `build()` with [links.fixture.json](links.fixture.json), a schema-checked Connections snapshot covering all link kinds, level and sloped sections, and oblique wall cuts. Rooftop cases consume the published Connections fixture and entry point.
+`npm test -- src/game/links/Links.test.js` exercises `build()` with [links.fixture.json](links.fixture.json), a schema-checked Connections snapshot covering all link kinds, level and sloped sections, and oblique wall cuts, and with a `hosts` map that drops one merged-away parcel and one building too short for its tube. Rooftop cases consume the published Connections fixture and entry point.
 
 ## Depends on
 - `../../../../connections/CONTRACT.md` for `links`, `apertures` and rooftop spans
