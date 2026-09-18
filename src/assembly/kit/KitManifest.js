@@ -107,7 +107,7 @@ export class KitManifest {
 
 		const { fits: { floors }, bands } = this.family( id );
 		const byHeight = Math.floor( ( maxHeight - bands.ground.height - bands.crown.height ) / bands.middle.height + 1e-9 ) + 2;
-		const min = Math.max( floors.minimum, 3 );
+		const min = floors.minimum;
 		const max = Math.min( floors.maximum ?? Infinity, byHeight );
 
 		return max >= min ? { min, max } : null;
