@@ -9,16 +9,13 @@ import { QualityTier } from './QualityTier.js';
  */
 describe( 'QualityTier', () => {
 
-	it( 'lets the backend choose only when the run does not', () => {
+	it( 'lets the backend choose only when the run does not, and keeps the look at every tier', () => {
 
 		expect( QualityTier.describe( null, 'webgpu' ).name ).toBe( 'high' );
 		expect( QualityTier.describe( null, 'webgl' ).name ).toBe( 'low' );
 		expect( QualityTier.describe( 'ultra', 'webgl' ).name ).toBe( 'ultra' );
 		expect( QualityTier.describe( 'nonsense', 'webgpu' ).name ).toBe( 'high' );
 
-	} );
-
-	it( 'keeps the look at every tier and spends more at the top', () => {
 
 		const low = QualityTier.describe( 'low', 'webgl' );
 		const ultra = QualityTier.describe( 'ultra', 'webgpu' );

@@ -25,13 +25,9 @@ describe( 'SimBridge', () => {
 		expect( types ).toContain( 'dock_hawker' );
 		expect( types ).not.toContain( 'shop_clerk' );
 
-	} );
+		const withoutSet = SimBridge.create( FIXTURE_BLUEPRINT, { networks: undefined }, buildings );
 
-	it( 'falls back to the built-in set when the world carries none', () => {
-
-		const sim = SimBridge.create( FIXTURE_BLUEPRINT, { networks: undefined }, buildings );
-
-		expect( Object.keys( sim.simulation.populationStats().typeCounts ) ).toContain( 'shop_clerk' );
+		expect( Object.keys( withoutSet.simulation.populationStats().typeCounts ) ).toContain( 'shop_clerk' );
 
 	} );
 

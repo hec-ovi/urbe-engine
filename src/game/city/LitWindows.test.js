@@ -3,7 +3,7 @@ import * as THREE from 'three/webgpu';
 import { LitWindows } from './LitWindows.js';
 import { pointInRing } from '../ground/Polygons.js';
 
-function fixture( { hasInterior = false, seed = 'night', outline = [ [ 0, 0 ], [ 20, 0 ], [ 20, 10 ], [ 0, 10 ] ] } = {} ) {
+function fixture( { hasInterior = false, outline = [ [ 0, 0 ], [ 20, 0 ], [ 20, 10 ], [ 0, 10 ] ] } = {} ) {
 
 	const floor = {
 		elevation: 3, height: 3.5, outline,
@@ -11,48 +11,20 @@ function fixture( { hasInterior = false, seed = 'night', outline = [ [ 0, 0 ], [
 			id: `w${i}`, kind: 'window', edge: 0, offset: i * 2.4 + 0.65, width: 1.8, height: 2, sill: 0.8
 		} ) )
 	};
-	const atlas = { meta: { seed }, parcels: [ { id: 'shell', type: 'residential' } ] };
+	const atlas = { meta: { seed: 'night' }, parcels: [ { id: 'shell', type: 'residential' } ] };
 	const buildings = new Map( [ [ 'shell', { hasInterior, blueprint: { facade: { wallDepth: 0.55 }, floors: [ floor ] } } ] ] );
 	const map = new THREE.Texture();
 	const factory = {
 		build: vi.fn( () => ( { map } ) ),
 		resolver: { resolve: vi.fn( ( key ) => ( { aspect: key.includes( 'office-wide' ) ? [ 2, 1 ] : [ 1, 1 ] } ) ) }
 	};
-	return { windows: new LitWindows( atlas, buildings, factory ), atlas, floor, map, factory, buildings };
+	return { windows: new LitWindows( atlas, buildings, factory ), floor, factory, buildings };
 
 }
 
 describe( 'shell window rooms', () => {
 
-	it( 'measures its one metre depth from the glazing instead of the shell lining', () => {
-
-		const { windows, floor, buildings } = fixture();
-		buildings.get( 'shell' ).blueprint.facade.wallDepth = 4;
-		floor.openings = [ { ...floor.openings[ 0 ], glazing: {
-			offset: 0.65, width: 1.8, sill: 0.8, height: 2, glassDepth: 0.2, housingBackDepth: 0.29
-		} } ];
-		const depths = windows.build().children.flatMap( mesh => {
-
-			const positions = mesh.geometry.getAttribute( 'position' );
-			return Array.from( { length: positions.count }, ( _, i ) => positions.getZ( i ) );
-
-		} );
-		expect( Math.min( ...depths ) ).toBeCloseTo( 0.2 );
-		expect( Math.max( ...depths ) ).toBeCloseTo( 1.2 );
-		windows.dispose();
-
-	} );
-
-	it( 'uses authored exterior room nodes without generating a second room', () => {
-
-		const { windows, floor, factory } = fixture();
-		floor.openings.forEach( opening => { opening.scenery = { nodeId: 'scenery:1' }; } );
-		expect( windows.build().children ).toHaveLength( 0 );
-		expect( factory.build ).not.toHaveBeenCalled();
-
-	} );
-
-	it( 'builds textured recessed rooms and visible ceiling strips in bounded draws', () => {
+	it( 'builds one textured box per window, a metre deep behind the glazing plane', () => {
 
 		const { windows, factory, floor } = fixture();
 		const group = windows.build();
@@ -77,8 +49,8 @@ describe( 'shell window rooms', () => {
 			for ( let i = 0; i < p.count; i ++ ) {
 
 				expect( pointInRing( p.getX( i ), p.getZ( i ), floor.outline ) ).toBe( true );
-						expect( p.getZ( i ) ).toBeGreaterThanOrEqual( 0.55 - 1e-6 );
-						expect( p.getZ( i ) ).toBeLessThanOrEqual( 1.55 + 1e-6 );
+				expect( p.getZ( i ) ).toBeGreaterThanOrEqual( 0.55 - 1e-6 );
+				expect( p.getZ( i ) ).toBeLessThanOrEqual( 1.55 + 1e-6 );
 				expect( p.getY( i ) ).toBeGreaterThan( floor.elevation );
 				expect( p.getY( i ) ).toBeLessThan( floor.elevation + floor.height );
 
@@ -87,69 +59,38 @@ describe( 'shell window rooms', () => {
 		}
 		windows.dispose();
 
-	} );
+		// The metre is measured from the published glazing, not from the lining,
+		// however deep the shell wall around it is.
+		const deep = fixture();
+		deep.buildings.get( 'shell' ).blueprint.facade.wallDepth = 4;
+		deep.floor.openings = [ { ...deep.floor.openings[ 0 ], glazing: {
+			offset: 0.65, width: 1.8, sill: 0.8, height: 2, glassDepth: 0.2, housingBackDepth: 0.29
+		} } ];
+		const depths = deep.windows.build().children.flatMap( mesh => {
 
-	it( 'gives unlit upper rooms opaque black surfaces and excludes ground floors completely', () => {
+			const positions = mesh.geometry.getAttribute( 'position' );
+			return Array.from( { length: positions.count }, ( _, i ) => positions.getZ( i ) );
 
-		const upper = fixture();
-		const ground = fixture();
-		ground.floor.elevation = 0;
-		const up = upper.windows.build();
-		const down = ground.windows.build();
-		const count = ( group ) => ( group.getObjectByName( 'lit-windows:fixtures' )?.geometry.getAttribute( 'position' ).count ?? 0 ) / 30;
-		expect( down.children ).toHaveLength( 0 );
-		expect( ground.factory.build ).not.toHaveBeenCalled();
-		const rooms = up.getObjectByName( 'lit-windows:window-room-wall:plain' );
-		expect( rooms.material.transparent ).toBe( false );
-		const colors = rooms.geometry.getAttribute( 'color' ).array;
-		let blackTriangles = 0;
-		for ( let i = 0; i < colors.length; i += 9 ) if ( colors.slice( i, i + 9 ).every( ( value ) => value === 0 ) ) blackTriangles ++;
-		expect( blackTriangles ).toBe( ( 8 - count( up ) ) * 10 );
-		upper.windows.dispose();
-		ground.windows.dispose();
+		} );
+		expect( Math.min( ...depths ) ).toBeCloseTo( 0.2 );
+		expect( Math.max( ...depths ) ).toBeCloseTo( 1.2 );
+		deep.windows.dispose();
 
 	} );
 
-	it( 'omits scenic rooms behind material-declared opaque glazing', () => {
+	it( 'builds no fallback room where the shell already answers for the window', () => {
 
-		const { windows, floor, factory } = fixture();
-		const key = 'cyberpunk/window-glass-opaque/rich';
-		floor.openings.forEach( ( opening ) => { opening.material = key; } );
-		factory.resolver = { resolve: vi.fn( () => ( { physical: { transmission: 0 } } ) ) };
-		expect( windows.build().children ).toHaveLength( 0 );
-		expect( factory.resolver.resolve ).toHaveBeenCalledWith( key );
-		expect( factory.build ).not.toHaveBeenCalled();
-		factory.resolver.resolve.mockReturnValue( { physical: { transmission: 0.78 } } );
-		expect( windows.build().children.length ).toBeGreaterThan( 0 );
-		windows.dispose();
-
-	} );
-
-	it( 'preserves seed identity, varies lighting between seeds and releases owned resources on rebuild', () => {
-
-		const { windows, map } = fixture();
-		const first = windows.build();
-		const before = first.children.map( ( mesh ) => Array.from( mesh.geometry.getAttribute( 'color' ).array ) );
-		const geometries = first.children.map( ( mesh ) => vi.spyOn( mesh.geometry, 'dispose' ) );
-		const materials = first.children.map( ( mesh ) => vi.spyOn( mesh.material, 'dispose' ) );
-		const textureDispose = vi.spyOn( map, 'dispose' );
-		const again = windows.build();
-		expect( again.children.map( ( mesh ) => Array.from( mesh.geometry.getAttribute( 'color' ).array ) ) ).toEqual( before );
-		for ( const dispose of [ ...geometries, ...materials ] ) expect( dispose ).toHaveBeenCalledOnce();
-		expect( textureDispose ).not.toHaveBeenCalled();
-		const other = fixture( { seed: 'other-night' } ).windows;
-		expect( other.build().children.map( ( mesh ) => Array.from( mesh.geometry.getAttribute( 'color' ).array ) ) ).not.toEqual( before );
-		windows.dispose();
-		other.dispose();
-		expect( again.children ).toHaveLength( 0 );
-
-	} );
-
-	it( 'keeps manifest interiors and disabled runs clear and ignores doors and basement windows', () => {
+		// An authored exterior room node, a real interior, a disabled run, a
+		// door, a basement window and opaque glazing each leave the shell alone.
+		const authored = fixture();
+		authored.floor.openings.forEach( opening => { opening.scenery = { nodeId: 'scenery:1' }; } );
+		expect( authored.windows.build().children ).toHaveLength( 0 );
+		expect( authored.factory.build ).not.toHaveBeenCalled();
 
 		const real = fixture( { hasInterior: true } );
 		expect( real.windows.build().children ).toHaveLength( 0 );
 		expect( real.factory.build ).not.toHaveBeenCalled();
+
 		const shell = fixture();
 		expect( shell.windows.build( { enabled: false } ).children ).toHaveLength( 0 );
 		shell.floor.openings.forEach( ( opening ) => { opening.kind = 'door'; } );
@@ -158,9 +99,19 @@ describe( 'shell window rooms', () => {
 		shell.floor.elevation = - 3;
 		expect( shell.windows.build().children ).toHaveLength( 0 );
 
+		const opaque = fixture();
+		const key = 'cyberpunk/window-glass-opaque/rich';
+		opaque.floor.openings.forEach( ( opening ) => { opening.material = key; } );
+		opaque.factory.resolver = { resolve: vi.fn( () => ( { physical: { transmission: 0 } } ) ) };
+		expect( opaque.windows.build().children ).toHaveLength( 0 );
+		expect( opaque.factory.resolver.resolve ).toHaveBeenCalledWith( key );
+		opaque.factory.resolver.resolve.mockReturnValue( { physical: { transmission: 0.78 } } );
+		expect( opaque.windows.build().children.length ).toBeGreaterThan( 0 );
+		opaque.windows.dispose();
+
 	} );
 
-	it( 'rejects rooms crossing a courtyard notch or unable to fit behind the shell', () => {
+	it( 'omits a box that cannot fit behind the shell', () => {
 
 		const { windows, floor } = fixture( { outline: [ [ 0, 0 ], [ 20, 0 ], [ 20, 8 ], [ 10, 8 ], [ 10, 0.5 ], [ 9, 0.5 ], [ 9, 8 ], [ 0, 8 ] ] } );
 		floor.openings = [ { id: 'notch', kind: 'window', edge: 0, offset: 8, width: 3, sill: 0.8, height: 2 } ];

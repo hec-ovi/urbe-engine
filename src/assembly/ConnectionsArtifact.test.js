@@ -27,14 +27,24 @@ describe( 'assembled Connections artifact', () => {
 
 	} );
 
-	it( 'publishes captured Connections bytes and binds every byte of the source blueprint', () => {
+	function directory() {
 
 		dir = mkdtempSync( join( tmpdir(), 'urbe-connections-' ) );
+
+		return dir;
+
+	}
+
+	it( 'publishes captured Connections bytes and binds every byte of the source blueprint', () => {
+
 		const source = structuredClone( atlas );
 		const document = structuredClone( connections );
 		const artifact = new ConnectionsArtifact( source, document );
+
+		// the artifact holds its own snapshot: a later edit of the document never reaches the world
 		document.networks.walk.edges.length = 0;
-		const manifest = new OutDir( dir ).writeManifest( source, [], [], null, artifact );
+
+		const manifest = new OutDir( directory() ).writeManifest( source, [], [], null, artifact );
 		const payloadBytes = readFileSync( join( dir, CONNECTIONS_FILE ) );
 		const blueprintBytes = readFileSync( join( dir, BLUEPRINT_FILE ) );
 
@@ -50,75 +60,57 @@ describe( 'assembled Connections artifact', () => {
 
 	} );
 
-	it( 'refuses absent or schema-invalid output before publishing a manifest', () => {
+	it( 'refuses invalid, mismatched or unwritable Connections data without publishing a manifest', () => {
 
-		dir = mkdtempSync( join( tmpdir(), 'urbe-connections-' ) );
 		const malformed = structuredClone( connections );
 		malformed.networks.walk.edges[ 0 ].path3 = [ [ 0, 0 ] ];
+		const out = new OutDir( directory() );
+
 		for ( const document of [ undefined, malformed ] ) {
 
-			expect( () => new OutDir( dir ).writeManifest( atlas, [], [], null,
-				new ConnectionsArtifact( atlas, document ) ) ).toThrow( expect.objectContaining( { code: 'E_CONNECTIONS_INVALID' } ) );
+			expect( () => out.writeManifest( atlas, [], [], null, new ConnectionsArtifact( atlas, document ) ) )
+				.toThrow( expect.objectContaining( { code: 'E_CONNECTIONS_INVALID' } ) );
 
 		}
-		expect( existsSync( join( dir, MANIFEST_FILE ) ) ).toBe( false );
-		expect( existsSync( join( dir, CONNECTIONS_FILE ) ) ).toBe( false );
 
-	} );
-
-	it( 'rejects mismatched source seeds and same-seed Atlas changes after capture', () => {
-
-		dir = mkdtempSync( join( tmpdir(), 'urbe-connections-' ) );
 		for ( const field of [ 'seed', 'atlasSeed' ] ) {
 
 			const document = { ...connections, meta: { ...connections.meta, [ field ]: 'different-city' } };
+
 			expect( () => new ConnectionsArtifact( atlas, document ) )
 				.toThrow( expect.objectContaining( { code: 'E_CONNECTIONS_SOURCE_MISMATCH' } ) );
 
 		}
+
 		const artifact = new ConnectionsArtifact( atlas, connections );
 		const moved = structuredClone( atlas );
 		moved.parcels[ 0 ].footprint[ 0 ][ 0 ] += 1;
 
-		expect( () => new OutDir( dir ).writeManifest( moved, [], [], null, artifact ) )
+		expect( () => out.writeManifest( moved, [], [], null, artifact ) )
 			.toThrow( expect.objectContaining( { code: 'E_CONNECTIONS_SOURCE_MISMATCH' } ) );
 		expect( existsSync( join( dir, MANIFEST_FILE ) ) ).toBe( false );
+		expect( existsSync( join( dir, CONNECTIONS_FILE ) ) ).toBe( false );
 
-	} );
+		// a manifest without the artifact stays readable, and a published world keeps its
+		// previous manifest when one of the documents cannot be written
+		const manifest = out.writeManifest( atlas, [], [] );
 
-	it.each( [ BLUEPRINT_FILE, CONNECTIONS_FILE, '.manifest.json.tmp' ] )(
-		'keeps the previous manifest when %s cannot be written', ( blockedFile ) => {
-
-			dir = mkdtempSync( join( tmpdir(), 'urbe-connections-' ) );
-			const out = new OutDir( dir );
-			out.writeManifest( atlas, [], [] );
-			const previous = readFileSync( join( dir, MANIFEST_FILE ), 'utf8' );
-			const blocked = join( dir, blockedFile );
-			if ( existsSync( blocked ) ) rmSync( blocked );
-			mkdirSync( blocked );
-
-			expect( () => out.writeManifest( atlas, [], [], null, new ConnectionsArtifact( atlas, connections ) ) ).toThrow();
-			expect( readFileSync( join( dir, MANIFEST_FILE ), 'utf8' ) ).toBe( previous );
-
-		}
-	);
-
-	it( 'accepts the absent-field manifest and requires a complete fixed-file digest reference when declared', () => {
-
-		dir = mkdtempSync( join( tmpdir(), 'urbe-connections-' ) );
-		const manifest = new OutDir( dir ).writeManifest( atlas, [], [] );
 		expect( manifest ).not.toHaveProperty( 'connections' );
 		expect( validateWorldManifest( manifest ) ).toEqual( [] );
+
+		const previous = readFileSync( join( dir, MANIFEST_FILE ), 'utf8' );
+
+		mkdirSync( join( dir, CONNECTIONS_FILE ) );
+		expect( () => out.writeManifest( atlas, [], [], null, artifact ) ).toThrow();
+		expect( readFileSync( join( dir, MANIFEST_FILE ), 'utf8' ) ).toBe( previous );
+
+		// a declared reference has to name the fixed file and carry both complete digests
 		for ( const reference of [
 			null,
 			{ file: '../connections.json', sha256: '0'.repeat( 64 ), blueprintSha256: '0'.repeat( 64 ) },
 			{ file: CONNECTIONS_FILE, sha256: '0'.repeat( 64 ) },
 			{ file: CONNECTIONS_FILE, sha256: 'wrong', blueprintSha256: '0'.repeat( 64 ) }
-		] ) {
-
-			expect( validateWorldManifest( { ...manifest, connections: reference } ).length ).toBeGreaterThan( 0 );
-
-		}
+		] ) expect( validateWorldManifest( { ...manifest, connections: reference } ).length ).toBeGreaterThan( 0 );
 
 	} );
 

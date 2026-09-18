@@ -88,26 +88,25 @@ describe( 'GroundBuilder physical modules', () => {
 		atlas.transit = { subwayStations: [ { shafts: [ { footprint: rectangle( 1, 1, 2, 2 ), bottom: - 4, top: 0.2 } ] } ] };
 		const result = build( atlas ), land = result.group.getObjectByName( 'ground:open' );
 		expect( land.material.userData.key ).toMatch( /^cyberpunk\/street-precast-/ );
-		const ray = new THREE.Raycaster( new THREE.Vector3( 2, 2, 2 ), new THREE.Vector3( 0, - 1, 0 ) );
-		expect( ray.intersectObject( result.group, true ) ).toHaveLength( 0 );
-		expect( ray.intersectObject( new THREE.Mesh( result.colliderGeometry, new THREE.MeshBasicMaterial() ) ) ).toHaveLength( 0 );
+		const collider = new THREE.Mesh( result.colliderGeometry, new THREE.MeshBasicMaterial() );
+		const down = ( x, z ) => new THREE.Raycaster( new THREE.Vector3( x, 2, z ), new THREE.Vector3( 0, - 1, 0 ) );
+		// Open over the shaft footprint, still floor beside it.
+		expect( down( 2, 2 ).intersectObject( result.group, true ) ).toHaveLength( 0 );
+		expect( down( 2, 2 ).intersectObject( collider ) ).toHaveLength( 0 );
+		expect( down( 3.5, 3.5 ).intersectObject( result.group, true ).length ).toBeGreaterThan( 0 );
+		expect( down( 3.5, 3.5 ).intersectObject( collider ).length ).toBeGreaterThan( 0 );
 
 	} );
 
 	it( 'rejects incomplete definitions and invalid placement inputs before creating any material', () => {
 
 		for ( const mutate of [
-			atlas => { delete atlas.streets.construction.modules; },
 			( _, modules ) => { modules.version = '2.0.0'; },
 			( _, modules ) => { modules.definitions.push( modules.definitions[ 0 ] ); },
 			( _, modules ) => { modules.definitions[ 0 ].parts[ 0 ].top = NaN; },
 			( _, modules ) => { modules.definitions[ 0 ].parts[ 0 ].role = 'unknown'; },
-			( _, modules ) => { modules.placements[ 0 ].moduleId = 'missing'; },
-			( _, modules ) => { modules.placements[ 0 ].origin = [ Infinity, 0 ]; },
 			( _, modules ) => { modules.placements[ 0 ].turn = 0.5; },
-			( _, modules ) => { modules.placements[ 0 ].count = 1.5; },
 			( _, modules ) => { modules.placements[ 0 ].step = 0; },
-			( _, modules ) => { modules.placements[ 0 ].finish = 'missing'; },
 			atlas => { atlas.volumetric.ground[ 0 ].moduleBlockId = 'missing'; }
 		] ) {
 

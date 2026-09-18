@@ -21,11 +21,13 @@ const city = {
 	]
 };
 
+const alerts = () => screen.getAllByRole( 'alert' ).map( ( node ) => node.textContent );
+
 describe( 'NewGameView', () => {
 
 	beforeEach( () => document.body.replaceChildren() );
 
-	it( 'starts with only the city stage unlocked and explains an unavailable generator', () => {
+	it( 'stage 1: only the city stage is unlocked, a missing generator is explained, and the chosen size goes out', async () => {
 
 		mount();
 		expect( screen.getByRole( 'heading', { name: 'Choose your city' } ) ).toBeTruthy();
@@ -33,10 +35,7 @@ describe( 'NewGameView', () => {
 		expect( screen.getByRole( 'button', { name: 'Next' } ).disabled ).toBe( true );
 		expect( screen.getByText( 'City generation is not connected in the current runtime.' ) ).toBeTruthy();
 
-	} );
-
-	it( 'reports the selected template without asking for a name or seed', async () => {
-
+		document.body.replaceChildren();
 		const onGenerateCity = vi.fn();
 		mount( { onGenerateCity } );
 		const user = userEvent.setup();
@@ -49,101 +48,69 @@ describe( 'NewGameView', () => {
 
 	} );
 
-	it( 'can enter free play directly or with completed interiors, with actions locked while saving', async () => {
-
-		const onCreateGame = vi.fn();
-		const view = mount( { onCreateGame } );
-		view.beginWithCity( city );
-		const user = userEvent.setup();
-		await user.click( screen.getByRole( 'button', { name: 'Play without quests' } ) );
-		expect( onCreateGame ).toHaveBeenLastCalledWith( { cityId: city.id, interiorIds: [], questId: null } );
-		view.setCreationState( { instances: { ids: [ 'p11' ], count: 1 } } );
-		await user.click( screen.getByRole( 'button', { name: 'Play without quests' } ) );
-		expect( onCreateGame ).toHaveBeenLastCalledWith( { cityId: city.id, interiorIds: [ 'p11' ], questId: null } );
-		view.setCreationState( { busy: 'game' } );
-		expect( screen.getByRole( 'button', { name: 'Play without quests' } ).disabled ).toBe( true );
-		expect( view.questPane.getAttribute( 'aria-busy' ) ).toBe( 'true' );
-
-	} );
-
-	it( 'unlocks interiors only when the caller supplies a generated city', () => {
-
-		const view = mount( { onGenerateCity: vi.fn(), onGenerateInstances: vi.fn() } );
-		view.setCreationState( { city } );
-		expect( screen.getByRole( 'heading', { name: 'Playable interiors' } ) ).toBeTruthy();
-		expect( screen.getByText( '146 buildings ready.' ) ).toBeTruthy();
-		expect( screen.getByRole( 'button', { name: 'Step 2: Interiors' } ).disabled ).toBe( false );
-		expect( screen.getByRole( 'button', { name: 'Step 3: Story and jobs' } ).disabled ).toBe( true );
-		expect( screen.getByLabelText( 'Interior count' ).value ).toBe( '9' );
-		expect( screen.getByLabelText( 'Interior count' ).min ).toBe( '9' );
-
-	} );
-
-	it( 'requires a manual building selection and sends only selected eligible ids', async () => {
+	it( 'stage 2: a generated city unlocks interiors, the count stays within 9 and 24, and manual mode sends the eligible ids it selected', async () => {
 
 		const onGenerateInstances = vi.fn();
 		const view = mount( { onGenerateInstances } );
 		view.beginWithCity( city );
 		const user = userEvent.setup();
+		const generate = screen.getByRole( 'button', { name: 'Generate selected interiors' } );
+
+		expect( screen.getByRole( 'heading', { name: 'Playable interiors' } ) ).toBeTruthy();
+		expect( screen.getByText( '146 buildings ready.' ) ).toBeTruthy();
+		expect( screen.getByRole( 'button', { name: 'Step 2: Interiors' } ).disabled ).toBe( false );
+		expect( screen.getByRole( 'button', { name: 'Step 3: Story and jobs' } ).disabled ).toBe( true );
+
+		const amount = screen.getByLabelText( 'Interior count' );
+		expect( amount.value ).toBe( '9' );
+		expect( amount.min ).toBe( '9' );
+		await user.clear( amount );
+		await user.type( amount, '8' );
+		await user.click( generate );
+		expect( alerts() ).toContain( 'Automatic interior count must be between 9 and 24.' );
+		expect( onGenerateInstances ).not.toHaveBeenCalled();
+
+		await user.clear( amount );
+		await user.type( amount, '12' );
+		await user.click( generate );
+		expect( onGenerateInstances ).toHaveBeenLastCalledWith( {
+			cityId: 'city-rain', mode: 'automatic', count: 12, buildingIds: []
+		} );
+
 		await user.selectOptions( screen.getByLabelText( 'Interior selection mode' ), 'manual' );
-		await user.click( screen.getByRole( 'button', { name: 'Generate selected interiors' } ) );
-		expect( screen.getByRole( 'alert' ).textContent ).toBe( 'Select at least one building for a manual interior build.' );
+		await user.click( generate );
+		expect( alerts() ).toContain( 'Select at least one building for a manual interior build.' );
 
 		await user.click( screen.getByRole( 'checkbox', { name: /Quay Office/ } ) );
 		await user.click( screen.getByRole( 'checkbox', { name: /Bar Nadir/ } ) );
 		expect( screen.getByRole( 'checkbox', { name: /Substation/ } ).disabled ).toBe( true );
-		await user.click( screen.getByRole( 'button', { name: 'Generate selected interiors' } ) );
-		expect( onGenerateInstances ).toHaveBeenCalledWith( {
+		await user.click( generate );
+		expect( onGenerateInstances ).toHaveBeenLastCalledWith( {
 			cityId: 'city-rain', mode: 'manual', count: 2, buildingIds: [ 'p11', 'p64' ]
 		} );
 
 	} );
 
-	it( 'rejects an automatic interior count below the nine-location minimum', async () => {
-
-		const onGenerateInstances = vi.fn();
-		const view = mount( { onGenerateInstances } );
-		view.beginWithCity( city );
-		const user = userEvent.setup();
-		const amount = screen.getByLabelText( 'Interior count' );
-		await user.clear( amount );
-		await user.type( amount, '8' );
-		await user.click( screen.getByRole( 'button', { name: 'Generate selected interiors' } ) );
-		expect( screen.getByRole( 'alert' ).textContent ).toBe( 'Automatic interior count must be between 9 and 24.' );
-		expect( onGenerateInstances ).not.toHaveBeenCalled();
-
-	} );
-
-	it( 'reports automatic interior generation with its requested count', async () => {
-
-		const onGenerateInstances = vi.fn();
-		const view = mount( { onGenerateInstances } );
-		view.beginWithCity( city );
-		const user = userEvent.setup();
-		const amount = screen.getByLabelText( 'Interior count' );
-		await user.clear( amount );
-		await user.type( amount, '12' );
-		await user.click( screen.getByRole( 'button', { name: 'Generate selected interiors' } ) );
-		expect( onGenerateInstances ).toHaveBeenCalledWith( {
-			cityId: 'city-rain', mode: 'automatic', count: 12, buildingIds: []
-		} );
-
-	} );
-
-	it( 'carries generated interiors into the story request', async () => {
+	it( 'stages 3 and 4: side jobs stay within 0 and 3, the story carries its interiors, and a game is created with or without quests while busy locks the pane', async () => {
 
 		const onGenerateQuests = vi.fn();
-		const view = mount( { onGenerateQuests } );
+		const onCreateGame = vi.fn();
+		const view = mount( { onGenerateQuests, onCreateGame } );
 		view.setCreationState( { city, instances: { ids: [ 'p11', 'p64' ], count: 2 } } );
 		const user = userEvent.setup();
+
+		await user.click( screen.getByRole( 'button', { name: 'Play without quests' } ) );
+		expect( onCreateGame ).toHaveBeenLastCalledWith( { cityId: 'city-rain', interiorIds: [ 'p11', 'p64' ], questId: null } );
+
 		const sideJobs = screen.getByLabelText( 'Side jobs' );
 		expect( sideJobs.value ).toBe( '3' );
 		expect( sideJobs.max ).toBe( '3' );
 		await user.clear( sideJobs );
 		await user.type( sideJobs, '4' );
 		await user.click( screen.getByRole( 'button', { name: 'Generate story and jobs' } ) );
-		expect( screen.getByRole( 'alert' ).textContent ).toBe( 'Side jobs must be between 0 and 3.' );
+		expect( alerts() ).toContain( 'Side jobs must be between 0 and 3.' );
 		expect( onGenerateQuests ).not.toHaveBeenCalled();
+
 		await user.clear( sideJobs );
 		await user.type( sideJobs, '3' );
 		await user.click( screen.getByRole( 'button', { name: 'Generate story and jobs' } ) );
@@ -151,36 +118,18 @@ describe( 'NewGameView', () => {
 			cityId: 'city-rain', interiorIds: [ 'p11', 'p64' ], mainBrief: '', sideJobs: 3
 		} );
 
-	} );
-
-	it( 'creates a game only after all three source artifacts exist', async () => {
-
-		const onCreateGame = vi.fn();
-		const view = mount( { onCreateGame } );
-		view.setCreationState( {
-			city,
-			instances: { ids: [ 'p11', 'p64' ], count: 2 },
-			quests: { id: 'quests-rain', mainSteps: 9, sideJobs: 3 }
-		} );
+		view.setCreationState( { quests: { id: 'quests-rain', mainSteps: 9, sideJobs: 3 } } );
 		expect( screen.getByRole( 'heading', { name: 'Playable game' } ) ).toBeTruthy();
 		expect( screen.getByText( '9 steps' ) ).toBeTruthy();
-		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Play' } ) );
-		expect( onCreateGame ).toHaveBeenCalledWith( {
+		await user.click( screen.getByRole( 'button', { name: 'Play' } ) );
+		expect( onCreateGame ).toHaveBeenLastCalledWith( {
 			cityId: 'city-rain', interiorIds: [ 'p11', 'p64' ], questId: 'quests-rain'
 		} );
 
-	} );
-
-	it( 'locks actions while a stage is busy, shows caller errors and reports cancel', async () => {
-
-		const onCancel = vi.fn();
-		const view = mount( { onGenerateCity: vi.fn(), onCancel } );
-		view.setCreationState( { busy: 'city', error: 'City generation failed validation.' } );
-		expect( screen.getByRole( 'button', { name: 'Next' } ).disabled ).toBe( true );
-		expect( view.cityPane.getAttribute( 'aria-busy' ) ).toBe( 'true' );
-		expect( screen.getByRole( 'alert' ).textContent ).toBe( 'City generation failed validation.' );
-		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Back to library' } ) );
-		expect( onCancel ).toHaveBeenCalledOnce();
+		view.setCreationState( { busy: 'game', error: 'Game creation failed validation.' } );
+		expect( screen.getByRole( 'button', { name: 'Play' } ).disabled ).toBe( true );
+		expect( view.gamePane.getAttribute( 'aria-busy' ) ).toBe( 'true' );
+		expect( alerts() ).toContain( 'Game creation failed validation.' );
 
 	} );
 

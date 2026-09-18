@@ -12,7 +12,7 @@ const record = ( id, x, top = 12 ) => ( {
 } );
 const source = ( id, hasInterior = false ) => ( { parcelId: id, hasInterior } );
 
-function fixture( overrides = {} ) {
+function fixture( { scenic = null, ...overrides } = {} ) {
 
 	const sources = new Map( [ [ 'home', source( 'home', true ) ], [ 'near', source( 'near' ) ] ] );
 	const dispose = vi.fn();
@@ -24,6 +24,7 @@ function fixture( overrides = {} ) {
 		geometry.addEventListener( 'dispose', dispose );
 		const group = new THREE.Group();
 		group.add( new THREE.Mesh( geometry, shared ) );
+		if ( scenic ) group.add( new THREE.Mesh( new THREE.BoxGeometry(), scenic ) );
 		return { group, doors: [], entrances: [], shellColliders: new Map(), centers: new Map(), triangles: buildings.size * 12 };
 
 	} ) };
@@ -38,39 +39,15 @@ function fixture( overrides = {} ) {
 
 describe( 'ShellStream public admission', () => {
 
-	it( 'keeps tapered upper outlines in the distant silhouette', async () => {
-		const tower = record( 'far', 1000, 240 );
-		tower.bands[0].topOutline = [[1002,2],[1008,2],[1008,8],[1002,8]];
-		tower.roof.outline = tower.bands[0].topOutline;
-		const { stream } = fixture( { catalog: { version: '1.0.0', seed: 'test', buildings: [record('home',0),record('near',200),tower] } } );
-		await stream.load({x:0,z:0});
-		const geometry = stream.group.getObjectByName('distant-shells').children[0].geometry;
-		const p=geometry.getAttribute('position');
-		const upper=[];
-		for(let i=0;i<p.count;i++) if(p.getY(i)===240) upper.push(p.getX(i));
-		expect(Math.min(...upper)).toBe(1002);
-		expect(Math.max(...upper)).toBe(1008);
-		await stream.dispose();
-	} );
-
-	it( 'releases cell-owned scenic materials while retaining shared maps', async () => {
-		const material = new THREE.MeshBasicMaterial();
-		material.userData.ownedScenicMaterial = true;
-		const map = new THREE.Texture(); material.map = map;
-		const dispose = vi.fn(), disposeMap = vi.fn();
-		material.addEventListener( 'dispose', dispose ); map.addEventListener( 'dispose', disposeMap );
-		const { stream } = fixture( { loader: { load: async () => {
-			const group = new THREE.Group(); group.add( new THREE.Mesh( new THREE.BoxGeometry(), material ) );
-			return { group, doors: [], entrances: [], shellColliders: new Map(), centers: new Map(), triangles: 12 };
-		} } } );
-		await stream.load( { x: 0, z: 0 } ); await stream.dispose();
-		expect( dispose ).toHaveBeenCalled();
-		expect( disposeMap ).not.toHaveBeenCalled();
-	} );
-
 	it( 'retains interiors, releases distant full shells, and reloads original sources on return', async () => {
 
-		const { stream, sources, loadBuildings, dispose, shared } = fixture();
+		const scenic = new THREE.MeshBasicMaterial();
+		scenic.userData.ownedScenicMaterial = true;
+		scenic.map = new THREE.Texture();
+		const scenicDisposal = vi.fn(), mapDisposal = vi.fn();
+		scenic.addEventListener( 'dispose', scenicDisposal );
+		scenic.map.addEventListener( 'dispose', mapDisposal );
+		const { stream, sources, loadBuildings, dispose, shared } = fixture( { scenic } );
 		const materialDisposal = vi.fn();
 		shared.addEventListener( 'dispose', materialDisposal );
 		await stream.load( { x: 0, z: 0 } );
@@ -87,6 +64,10 @@ describe( 'ShellStream public admission', () => {
 		expect( sources.has( 'far' ) ).toBe( false );
 		await stream.dispose();
 		expect( dispose ).toHaveBeenCalledTimes( 4 );
+		// A cell owns the scenic materials it built and releases them; the
+		// shared factory material and its maps outlive every cell.
+		expect( scenicDisposal ).toHaveBeenCalled();
+		expect( mapDisposal ).not.toHaveBeenCalled();
 		expect( materialDisposal ).not.toHaveBeenCalled();
 
 	} );
@@ -111,15 +92,27 @@ describe( 'ShellStream public admission', () => {
 
 	} );
 
-	it( 'renders authored distant tower height, outward triangles and exact material variants', async () => {
+	it( 'renders the authored distant silhouette with outward triangles and exact material variants', async () => {
 
-		const { stream, factory } = fixture();
+		const tower = record( 'far', 1000, 240 );
+		tower.bands[ 0 ].topOutline = [ [ 1002, 2 ], [ 1008, 2 ], [ 1008, 8 ], [ 1002, 8 ] ];
+		tower.roof.outline = tower.bands[ 0 ].topOutline;
+		const { stream, factory } = fixture( { catalog: { version: '1.0.0', seed: 'test', buildings: [ record( 'home', 0 ), record( 'near', 200 ), tower ] } } );
 		await stream.load( { x: 0, z: 0 } );
 		const distant = stream.group.getObjectByName( 'distant-shells' );
 		const geometry = distant.children[ 0 ].geometry;
 		geometry.computeBoundingBox();
 		expect( geometry.boundingBox.min.x ).toBe( 1000 );
 		expect( geometry.boundingBox.max.y ).toBe( 241 );
+		// A tapered band carries its own upper outline into the silhouette.
+		const upper = [];
+		for ( let i = 0; i < geometry.getAttribute( 'position' ).count; i ++ ) {
+
+			if ( geometry.getAttribute( 'position' ).getY( i ) === 240 ) upper.push( geometry.getAttribute( 'position' ).getX( i ) );
+
+		}
+		expect( Math.min( ...upper ) ).toBe( 1002 );
+		expect( Math.max( ...upper ) ).toBe( 1008 );
 		expect( factory.build ).toHaveBeenCalledWith( material.key, material.variantId );
 		const p = geometry.getAttribute( 'position' ), n = geometry.getAttribute( 'normal' );
 		for ( let i = 0; i < p.count; i += 3 ) {

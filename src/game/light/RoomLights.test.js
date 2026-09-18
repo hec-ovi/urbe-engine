@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { RoomLights, stripEuler } from './RoomLights.js';
+import { RoomLights } from './RoomLights.js';
 
 const tier = { roomSlots: 2, roomSpots: 2, roomStrips: 1 };
 
@@ -42,34 +42,22 @@ const factory = { build: () => new THREE.MeshStandardNodeMaterial() };
  */
 describe( 'RoomLights', () => {
 
-	it( 'keeps the same light ids as rooms come and go', () => {
-
-		const lights = new RoomLights( factory, tier );
-		const a = room( 'a', 0, 2000 );
-		const b = room( 'b', 5, 1000 );
-		const c = room( 'c', 40, 500 );
-
-		const ids = () => lights.slots.flatMap( ( slot ) => slot.members.map( ( light ) => light.id ) );
-
-		lights.update( [ a, b ], new THREE.Vector3(), 1 );
-		const first = ids();
-
-		lights.update( [ c, a ], new THREE.Vector3( 40, 0, 0 ), 1 );
-
-		expect( ids() ).toEqual( first );
-
-	} );
-
-	it( 'gives the nearest rooms a slot and everything else the dim set', () => {
+	it( 'gives the nearest rooms a slot and everything else the dim set, keeping the same light ids', () => {
 
 		const lights = new RoomLights( factory, tier );
 		const near = [ room( 'a', 0, 2000 ), room( 'b', 5, 1000 ), room( 'c', 9, 800 ) ];
+		const ids = () => lights.slots.flatMap( ( slot ) => slot.members.map( ( light ) => light.id ) );
 
 		lights.update( near, new THREE.Vector3(), 1 );
+		const first = ids();
 
 		expect( near[ 0 ].binding ).toBe( lights.slots[ 0 ] );
 		expect( near[ 1 ].binding ).toBe( lights.slots[ 1 ] );
 		expect( near[ 2 ].binding ).toBe( lights.dim );
+
+		lights.update( [ room( 'd', 40, 500 ), near[ 0 ] ], new THREE.Vector3( 40, 0, 0 ), 1 );
+
+		expect( ids() ).toEqual( first );
 
 	} );
 
@@ -92,6 +80,24 @@ describe( 'RoomLights', () => {
 
 	} );
 
+	it( 'aims a vertical colored capsule lens from its published face', () => {
+
+		const lights = new RoomLights( factory, tier );
+		const pod = room( 'pod', 0, 70 );
+		pod.fixtures[ 0 ] = { ...pod.fixtures[ 0 ], kind: 'strip', length: 0.5,
+			color: new THREE.Color( 0.025, 0.72, 1 ), axis: new THREE.Vector3( 0, 1, 0 ), direction: new THREE.Vector3( 1, 0, 0 ) };
+		lights.update( [ pod ], new THREE.Vector3(), 1 );
+		const source = lights.slots[ 0 ].strips[ 0 ];
+
+		expect( new THREE.Vector3( 1, 0, 0 ).applyEuler( source.rotation ).distanceTo( new THREE.Vector3( 0, 1, 0 ) ) ).toBeLessThan( 1e-12 );
+		const normal = new THREE.Vector3( 0, 0, - 1 ).applyEuler( source.rotation );
+		expect( normal.x ).toBeCloseTo( 1 );
+		expect( normal.y ).toBeCloseTo( 0 );
+		expect( source.power ).toBeCloseTo( 70 );
+		expect( source.color.toArray() ).toEqual( [ 0.025, 0.72, 1 ] );
+
+	} );
+
 	it( 'compiles one material per binding and key, not one per room', () => {
 
 		const lights = new RoomLights( factory, tier );
@@ -108,47 +114,5 @@ describe( 'RoomLights', () => {
 		expect( first.isNodeMaterial ).toBe( true );
 
 	} );
-
-} );
-
-/**
- * The strip's light has to lie along the housing the interior box drew, or
- * the glow lands beside the fixture: the two boxes measure the angle the same
- * way, and this pins the mapping onto three's rotation.
- */
-describe( 'stripEuler', () => {
-
-	it( 'lays the light along the published angle, +X toward +Z', () => {
-
-		const along = new THREE.Vector3( 1, 0, 0 ).applyEuler( stripEuler( { angleDeg: 37, facing: 'down' } ) );
-		const rad = THREE.MathUtils.degToRad( 37 );
-
-		expect( along.x ).toBeCloseTo( Math.cos( rad ) );
-		expect( along.z ).toBeCloseTo( Math.sin( rad ) );
-		expect( along.y ).toBeCloseTo( 0 );
-
-		// And the face points at the floor.
-		const facing = new THREE.Vector3( 0, 0, - 1 ).applyEuler( stripEuler( { angleDeg: 37, facing: 'down' } ) );
-		expect( facing.y ).toBeCloseTo( - 1 );
-
-	} );
-
-} );
-
-
-it( 'aims a vertical colored capsule lens from its published face', () => {
-
-	const lights = new RoomLights( factory, tier );
-	const pod = room( 'pod', 0, 70 );
-	pod.fixtures[ 0 ] = { ...pod.fixtures[ 0 ], kind: 'strip', length: 0.5,
-		color: new THREE.Color( 0.025, 0.72, 1 ), axis: new THREE.Vector3( 0, 1, 0 ), direction: new THREE.Vector3( 1, 0, 0 ) };
-	lights.update( [ pod ], new THREE.Vector3(), 1 );
-	const source = lights.slots[ 0 ].strips[ 0 ];
-	expect( new THREE.Vector3( 1, 0, 0 ).applyEuler( source.rotation ).distanceTo( new THREE.Vector3( 0, 1, 0 ) ) ).toBeLessThan( 1e-12 );
-	const normal = new THREE.Vector3( 0, 0, - 1 ).applyEuler( source.rotation );
-	expect( normal.x ).toBeCloseTo( 1 );
-	expect( normal.y ).toBeCloseTo( 0 );
-	expect( source.power ).toBeCloseTo( 70 );
-	expect( source.color.toArray() ).toEqual( [ 0.025, 0.72, 1 ] );
 
 } );

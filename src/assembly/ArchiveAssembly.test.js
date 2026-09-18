@@ -13,14 +13,23 @@ import atlas from './connections-city.fixture.json';
 
 const options = { maxRecords: 1, maxPartBytes: 4096 };
 const digest = bytes => createHash( 'sha256' ).update( bytes ).digest( 'hex' );
-let root;
+const roots = [];
 let connections;
 beforeAll( async () => { connections = await runConnections( atlas, { seed: atlas.meta.seed } ); } );
-afterEach( () => { vi.restoreAllMocks(); if ( root ) rmSync( root, { recursive: true, force: true } ); root = null; } );
+afterEach( () => {
+
+	vi.restoreAllMocks();
+	for ( const root of roots ) rmSync( root, { recursive: true, force: true } );
+	roots.length = 0;
+
+} );
 
 function directory() {
 
-	root = mkdtempSync( join( tmpdir(), 'urbe-archive-assembly-' ) );
+	const root = mkdtempSync( join( tmpdir(), 'urbe-archive-assembly-' ) );
+
+	roots.push( root );
+
 	return root;
 
 }
@@ -29,7 +38,8 @@ describe( 'archive assembly publication', () => {
 
 	it( 'publishes bounded parts with exact index hashes and immutable source roundtrips', async () => {
 
-		const out = new OutDir( directory() );
+		const root = directory();
+		const out = new OutDir( root );
 		const document = structuredClone( connections );
 		const captured = structuredClone( document );
 		const stringify = JSON.stringify;
@@ -73,23 +83,7 @@ describe( 'archive assembly publication', () => {
 
 	} );
 
-	it( 'rejects changed source content and preserves previously published archives and manifest', async () => {
-
-		const out = new OutDir( directory() );
-		const artifact = new ConnectionsArtifact( atlas, connections );
-		await out.writeArchiveManifest( atlas, [], [], null, artifact, options );
-		const previous = readFileSync( join( root, 'manifest.json' ) );
-		const moved = structuredClone( atlas );
-		moved.parcels[ 0 ].footprint[ 0 ][ 0 ] += 1;
-		await expect( out.writeArchiveManifest( moved, [], [], null, artifact, options ) )
-			.rejects.toMatchObject( { code: 'E_CONNECTIONS_SOURCE_MISMATCH' } );
-		expect( readFileSync( join( root, 'manifest.json' ) ) ).toEqual( previous );
-		expect( await readWorldArchive( join( root, 'blueprint' ) ) ).toEqual( atlas );
-		expect( readdirSync( root ).sort() ).toEqual( [ 'blueprint', 'connections', 'manifest.json' ] );
-
-	} );
-
-	it( 'reads archive files and directories and rejects a false original-content binding', async () => {
+	it( 'reads archive input by its fixed name and keeps the published world when a republication fails', async () => {
 
 		const source = join( directory(), 'source' );
 		await writeWorldArchive( atlas, source, options );
@@ -106,20 +100,25 @@ describe( 'archive assembly publication', () => {
 		writeFileSync( join( source, 'index.json' ), JSON.stringify( index ) + '\n' );
 		await expect( loadBlueprint( source ) ).rejects.toMatchObject( { code: 'E_CONNECTIONS_SOURCE_MISMATCH' } );
 
-	} );
-
-	it( 'rolls back prepared archive replacements when manifest publication fails', async () => {
-
-		const out = new OutDir( directory() );
+		const root = directory();
+		const out = new OutDir( root );
 		const artifact = new ConnectionsArtifact( atlas, connections );
 		await out.writeArchiveManifest( atlas, [], [], null, artifact, options );
+		const previous = readFileSync( join( root, 'manifest.json' ) );
 		const original = readFileSync( join( root, 'blueprint/index.json' ) );
-		rmSync( join( root, 'manifest.json' ) );
-		mkdirSync( join( root, 'manifest.json' ) );
 		const moved = structuredClone( atlas );
 		moved.parcels[ 0 ].footprint[ 0 ][ 0 ] += 1;
+
+		await expect( out.writeArchiveManifest( moved, [], [], null, artifact, options ) )
+			.rejects.toMatchObject( { code: 'E_CONNECTIONS_SOURCE_MISMATCH' } );
+		expect( readFileSync( join( root, 'manifest.json' ) ) ).toEqual( previous );
+
+		// the manifest cannot be written at all: the prepared archives roll back to what stood
+		rmSync( join( root, 'manifest.json' ) );
+		mkdirSync( join( root, 'manifest.json' ) );
 		await expect( out.writeArchiveManifest( moved, [], [], null, new ConnectionsArtifact( moved, connections ), options ) ).rejects.toThrow();
 		expect( readFileSync( join( root, 'blueprint/index.json' ) ) ).toEqual( original );
+		expect( await readWorldArchive( join( root, 'blueprint' ) ) ).toEqual( atlas );
 		expect( await readWorldArchive( join( root, 'connections' ) ) ).toEqual( connections );
 		expect( readdirSync( root ).sort() ).toEqual( [ 'blueprint', 'connections', 'manifest.json' ] );
 

@@ -19,7 +19,10 @@ describe( 'highway structures', () => {
 		const frame = built.group.getObjectByName( 'highway:structure' ).geometry;
 
 		expect( levelsAt( road, 0 ) ).toEqual( [ 0 ] );
+		// The source path has only x=0 and x=100. The 60 m ramp endpoint must
+		// become its own cross-section or one triangle would flatten the break.
 		expect( levelsAt( road, 60 ) ).toEqual( [ 8 ] );
+		expect( levelsAt( road, 30 ) ).toEqual( [] );
 		expect( levelsAt( road, 100 ) ).toEqual( [ 8 ] );
 		expect( range( road, 'z' ) ).toEqual( [ - 5, 5 ] );
 		expect( range( frame, 'y' ) ).toEqual( [ - 1, 8 ] );
@@ -27,17 +30,6 @@ describe( 'highway structures', () => {
 		for ( const x of [ 49, 51 ] ) expect( values( frame, 'x' ) ).toContain( x );
 		expect( built.colliderGeometry ).not.toBe( null );
 		expect( range( built.colliderGeometry, 'y' ) ).toEqual( [ - 1, 8 ] );
-
-	} );
-
-	it( 'adds an elevation breakpoint inside a centerline segment', () => {
-
-		const road = new GroundBuilder( atlas(), factory ).build().group.getObjectByName( 'highway:roadway' ).geometry;
-
-		// The source path has only x=0 and x=100. The 60 m ramp endpoint must
-		// become its own cross-section or one triangle would flatten the break.
-		expect( values( road, 'x' ) ).toContain( 60 );
-		expect( levelsAt( road, 30 ) ).toEqual( [] );
 
 	} );
 

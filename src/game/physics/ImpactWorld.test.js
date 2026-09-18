@@ -34,29 +34,25 @@ describe( 'live vehicle and pedestrian impact physics', () => {
 
 	} );
 
-	it( 'classifies only a measured high-speed contact as fatal', async () => {
+	it( 'classifies only a measured high-speed contact as fatal, and disposes idempotently', async () => {
 
 		const physics = await Physics.create();
 		const impacts = new ImpactWorld( physics );
 		impacts.sync( {
-			people: [ { id: 'person:mark', position: new THREE.Vector3() } ],
-			vehicles: [ { id: 'car:fast', position: new THREE.Vector3(), heading: 0, pitch: 0, speed: 12 } ]
+			people: [
+				{ id: 'person:mark', position: new THREE.Vector3() },
+				{ id: 'person:slow', position: new THREE.Vector3( 40, 0, 0 ) }
+			],
+			vehicles: [
+				{ id: 'car:fast', position: new THREE.Vector3(), heading: 0, pitch: 0, speed: 12 },
+				{ id: 'car:slow', position: new THREE.Vector3( 40, 0, 0 ), heading: 0, pitch: 0, speed: 1.9 }
+			]
 		} );
 		physics.step( 1 / 60 );
-		expect( impacts.drain()[ 0 ] ).toMatchObject( { personId: 'person:mark', impactSpeed: 12, fatal: true } );
+		const measured = impacts.drain();
 
-	} );
-
-	it( 'does not turn a slow overlap into an impact and cleans up idempotently', async () => {
-
-		const physics = await Physics.create();
-		const impacts = new ImpactWorld( physics );
-		impacts.sync( {
-			people: [ { id: 'person:slow', position: new THREE.Vector3() } ],
-			vehicles: [ { id: 'car:slow', position: new THREE.Vector3(), heading: 0, pitch: 0, speed: 1.9 } ]
-		} );
-		physics.step( 1 / 60 );
-		expect( impacts.drain() ).toEqual( [] );
+		expect( measured ).toHaveLength( 1 );
+		expect( measured[ 0 ] ).toMatchObject( { personId: 'person:mark', impactSpeed: 12, fatal: true } );
 
 		impacts.dispose();
 		impacts.dispose();

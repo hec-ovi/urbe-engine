@@ -4,7 +4,7 @@ import { ObjectiveRouter } from './ObjectiveRouter.js';
 
 describe( 'ObjectiveGuide', () => {
 
-	it( 'routes an objective immediately, then reroutes changed feet only at the bounded cadence', () => {
+	it( 'routes an objective immediately, reroutes only at the bounded cadence, and clears a non-routable one', () => {
 
 		const router = new ObjectiveRouter( network() );
 		const route = vi.spyOn( router, 'route' );
@@ -12,23 +12,11 @@ describe( 'ObjectiveGuide', () => {
 		const destination = { kind: 'parcel', id: 'p9' };
 
 		expect( guide.update( { deltaSeconds: 0, from: [ 0, 0, 0 ], destination } ).changed ).toBe( true );
-		expect( route ).toHaveBeenCalledTimes( 1 );
 		expect( guide.update( { deltaSeconds: 0.4, from: [ 4, 0, 0 ], destination } ).changed ).toBe( false );
-		expect( route ).toHaveBeenCalledTimes( 1 );
 		expect( guide.update( { deltaSeconds: 0.36, from: [ 4, 0, 0 ], destination } ).changed ).toBe( true );
-		expect( route ).toHaveBeenCalledTimes( 2 );
-
 		// Cadence elapsed, but sub-threshold foot drift keeps the current route.
 		expect( guide.update( { deltaSeconds: 1, from: [ 4.5, 0, 0 ], destination } ).changed ).toBe( false );
 		expect( route ).toHaveBeenCalledTimes( 2 );
-
-	} );
-
-	it( 'clears on a non-routable objective and routes a changed destination without waiting', () => {
-
-		const router = new ObjectiveRouter( network() );
-		const guide = new ObjectiveGuide( router );
-		guide.update( { deltaSeconds: 0, from: [ 0, 0, 0 ], destination: { kind: 'parcel', id: 'p9' } } );
 
 		expect( guide.update( { deltaSeconds: 0, from: [ 0, 0, 0 ], destination: null } ) ).toEqual( { changed: true, route: null } );
 		expect( guide.update( { deltaSeconds: 0, from: [ 0, 0, 0 ], destination: null } ) ).toEqual( { changed: false, route: null } );

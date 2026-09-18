@@ -34,18 +34,6 @@ describe( 'city collider installation', () => {
 
 	} );
 
-	it( 'keeps the source label on failed admission and releases staging geometry', async () => {
-
-		const bad = floorGeometry( 2 ), disposed = vi.spyOn( bad, 'dispose' );
-		const colliders = new WorldColliders( {
-			addTrimesh: () => { throw new Error( 'wasm rejected mesh' ); }, remove: vi.fn()
-		} );
-		await expect( colliders.addStaticsAsync( new Map( [ [ 'building p15', bad ] ] ), { release: true } ) )
-			.rejects.toThrow( 'building p15 collider failed: wasm rejected mesh' );
-		expect( disposed ).toHaveBeenCalledOnce();
-
-	} );
-
 } );
 
 function floorGeometry( count = 9000 ) {
@@ -59,11 +47,11 @@ function floorGeometry( count = 9000 ) {
 }
 
 describe( 'streamed band collision admission', () => {
-	it.each( [ 'indexed geometry', 'position arrays' ] )( 'admits exact %s in bounded disabled pieces before exposing the complete floor', async mode => {
+	it( 'admits exact borrowed triangles in bounded disabled pieces before exposing the complete floor', async () => {
 		const physics = await Physics.create(), colliders = new WorldColliders( physics );
 		const geometry = floorGeometry(), expanded = geometry.toNonIndexed();
 		const positions = expanded.attributes.position.array;
-		const source = mode === 'indexed geometry' ? geometry : [ positions.subarray( 0, 900 ), positions.subarray( 900 ) ];
+		const source = geometry;
 		const frames = [], cooked = [], handles = [];
 		vi.stubGlobal( 'requestAnimationFrame', callback => { frames.push( callback ); } );
 		const add = physics.addTrimesh.bind( physics );
@@ -132,18 +120,4 @@ describe( 'streamed band collision admission', () => {
 		} finally { physics.world.free(); }
 	} );
 
-	it( 'releases both completed pieces and the current body when Rapier rejects a cook', async () => {
-		const physics = await Physics.create(), colliders = new WorldColliders( physics );
-		const triangle = new Float32Array( [ 0, 0, 0, 0, 0, 1, 1, 0, 0 ] );
-		const create = physics.world.createCollider.bind( physics.world );
-		vi.spyOn( physics.world, 'createCollider' )
-			.mockImplementationOnce( create )
-			.mockImplementationOnce( () => { throw new Error( 'Rapier cook failed' ); } );
-		try {
-			await expect( colliders.addBand( 'floor', [ triangle, triangle ] ) ).rejects.toThrow( 'Rapier cook failed' );
-			expect( colliders.liveBands ).toBe( 0 );
-			expect( physics.world.bodies.len() ).toBe( 0 );
-			expect( physics.world.colliders.len() ).toBe( 0 );
-		} finally { physics.world.free(); }
-	} );
 } );

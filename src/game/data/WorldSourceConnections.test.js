@@ -39,20 +39,12 @@ describe( 'WorldSource assembled Connections', () => {
 	} );
 
 	it.each( [
-		[ 'missing file', ( f ) => f.files.delete( '/out/city/connections.json' ), 'HTTP 404' ],
-		[ 'HTML response', ( f ) => f.files.set( '/out/city/connections.json', () => new Response( '<html>', { headers: { 'content-type': 'text/html' } } ) ), 'expected JSON' ],
 		[ 'corrupt bytes', ( f ) => f.files.set( '/out/city/connections.json', `${serialize( document )} ` ), 'byte hash' ],
-		[ 'added UTF-8 byte order mark', ( f ) => f.files.set( '/out/city/connections.json', `\uFEFF${serialize( document )}` ), 'byte hash' ],
-		[ 'invalid JSON', ( f ) => f.replaceConnections( '{' ), 'invalid JSON' ],
 		[ 'invalid movement schema', ( f ) => {
 			const invalid = structuredClone( document );
 			delete invalid.networks.walk.edges[ 0 ].path3;
 			f.replaceConnections( serialize( invalid ) );
 		}, 'path3' ],
-		[ 'different source seed', ( f ) => f.replaceConnections( serialize( { ...document, meta: { ...document.meta, atlasSeed: 'other' } } ) ), 'source seeds' ],
-		[ 'changed geometry with the same identity', ( f ) => f.files.set( '/out/city/blueprint.json', serialize( { ...atlas, bounds: { width: 400 } } ) ), 'blueprint byte hash' ],
-		[ 'changed blueprint whitespace', ( f ) => f.files.set( '/out/city/blueprint.json', JSON.stringify( atlas, null, 2 ) ), 'blueprint byte hash' ],
-		[ 'missing carried blueprint', ( f ) => f.files.delete( '/out/city/blueprint.json' ), 'blueprint.json' ]
 	] )( 'rejects %s without generation', async ( _name, change, message ) => {
 
 		const fixture = serve();

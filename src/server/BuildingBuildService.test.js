@@ -20,7 +20,7 @@ describe( 'POST /api/building', () => {
 
 	} );
 
-	it( 'builds the selected parcel from its Atlas sample once and reports the existing exterior thereafter', async () => {
+	it( 'builds each requested source once, reports the existing one after, and reuses an authored nested shell', async () => {
 
 		const { service, builds } = fixture();
 		const origin = await serve( service );
@@ -30,43 +30,23 @@ describe( 'POST /api/building', () => {
 		expect( first.body ).toEqual( { parcel: 'p136', out: '/out/urbe', source: 'shell', built: true } );
 		expect( builds ).toEqual( [ { parcel: 'p136', source: 'shell', world: 'city-urbe.json', out: 'p136' } ] );
 
-		const second = await post( origin, { parcel: 'p136', out: '/out/urbe' } );
-		expect( second.body ).toEqual( { parcel: 'p136', out: '/out/urbe', source: 'shell', built: false } );
-		expect( builds ).toHaveLength( 1 );
-
-	} );
-
-	it( 'builds an interior on demand even when the exterior already exists', async () => {
-
-		const { service, builds } = fixture();
-		const origin = await serve( service );
-		await post( origin, { parcel: 'p136', out: '/out/urbe' } );
+		expect( ( await post( origin, { parcel: 'p136', out: '/out/urbe' } ) ).body ).toEqual( {
+			parcel: 'p136', out: '/out/urbe', source: 'shell', built: false
+		} );
 
 		const interior = await post( origin, { parcel: 'p136', out: '/out/urbe', source: 'interior' } );
-
-		expect( interior.status ).toBe( 200 );
 		expect( interior.body ).toEqual( { parcel: 'p136', out: '/out/urbe', source: 'interior', built: true } );
+		expect( ( await post( origin, { parcel: 'p136', out: '/out/urbe', source: 'interior' } ) ).body.built ).toBe( false );
 		expect( builds.map( ( build ) => build.source ) ).toEqual( [ 'shell', 'interior' ] );
 
-		const existing = await post( origin, { parcel: 'p136', out: '/out/urbe', source: 'interior' } );
-		expect( existing.body.built ).toBe( false );
-
-	} );
-
-	it( 'reuses the authored exterior in a nested saved-game folder', async () => {
-
-		const { service, builds } = fixture();
 		const parcelDir = join( root, 'out', 'games', 'review', 'p136' );
 		mkdirSync( parcelDir, { recursive: true } );
 		writeFileSync( join( parcelDir, 'p136.blueprint.json' ), '{}' );
 		writeFileSync( join( parcelDir, 'p136.glb' ), 'authored shell' );
-		const origin = await serve( service );
-
-		const result = await post( origin, { parcel: 'p136', out: '/out/games/review', source: 'shell' } );
-
-		expect( result.status ).toBe( 200 );
-		expect( result.body ).toEqual( { parcel: 'p136', out: '/out/games/review', source: 'shell', built: false } );
-		expect( builds ).toEqual( [] );
+		expect( ( await post( origin, { parcel: 'p136', out: '/out/games/review', source: 'shell' } ) ).body ).toEqual( {
+			parcel: 'p136', out: '/out/games/review', source: 'shell', built: false
+		} );
+		expect( builds ).toHaveLength( 2 );
 
 	} );
 
@@ -83,13 +63,13 @@ describe( 'POST /api/building', () => {
 		expect( parcel.status ).toBe( 404 );
 		expect( parcel.body ).toEqual( { code: 'E_PARCEL_NOT_FOUND', message: 'p404 is not a parcel in /out/urbe' } );
 
-		const invalid = await post( origin, { parcel: '../p136', out: '/out/urbe' } );
-		expect( invalid.status ).toBe( 400 );
-		expect( invalid.body.code ).toBe( 'E_INVALID_REQUEST' );
+		for ( const request of [ { parcel: '../p136', out: '/out/urbe' }, { parcel: 'p136', out: '/out/games/../urbe' } ] ) {
 
-		const traversal = await post( origin, { parcel: 'p136', out: '/out/games/../urbe' } );
-		expect( traversal.status ).toBe( 400 );
-		expect( traversal.body.code ).toBe( 'E_INVALID_REQUEST' );
+			const invalid = await post( origin, request );
+			expect( invalid.status ).toBe( 400 );
+			expect( invalid.body.code ).toBe( 'E_INVALID_REQUEST' );
+
+		}
 
 		const malformed = await fetch( `${origin}/api/building`, { method: 'POST', body: '{' } );
 		expect( malformed.status ).toBe( 400 );

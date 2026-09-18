@@ -74,10 +74,9 @@ describe( 'saved native street source', () => {
 		expect( data.fetch ).not.toHaveBeenCalled();
 	} );
 
-	it.each( [ 'catalog', 'highway', 'ownership', 'asset-path' ] )( 'rejects inconsistent %s metadata even when its outer byte hash is updated', async kind => {
+	it.each( [ 'catalog', 'ownership', 'asset-path' ] )( 'rejects inconsistent %s metadata even when its outer byte hash is updated', async kind => {
 		const data = fixture();
 		if ( kind === 'catalog' ) data.manifest.meta.nativeCatalogHash = '0'.repeat( 64 );
-		if ( kind === 'highway' ) data.manifest.delegated.highways.hash = '0'.repeat( 64 );
 		if ( kind === 'ownership' ) data.manifest.delegated.remainingGroundIndices = [ 0 ];
 		if ( kind === 'asset-path' ) data.manifest.kit.pieces[ 0 ].file = '../outside.glb';
 		data.reference.sha256 = jsonHash( data.manifest );

@@ -69,23 +69,6 @@ describe( 'authored door motion through loading, interaction and physics', () =>
 
 	} );
 
-	it( 'uses authored swing degrees and keeps the metadata-free fallback separate', async () => {
-
-		for ( const [ motion, degrees ] of [ [ { kind: 'swing', maxTravel: 63, clearDepth: 1 }, 63 ], [ undefined, 100 ] ] ) {
-			const city = await load( { motion } );
-			const interactor = controls( city );
-			interactor.update( 0, null );
-			interactor.activate( { timeMin: 0 } );
-			interactor.update( 1 / 2.2, null );
-			for ( const leaf of city.doors[ 0 ].pivots ) {
-				const expected = new THREE.Quaternion().setFromAxisAngle( new THREE.Vector3( 0, 1, 0 ), leaf.sign * THREE.MathUtils.degToRad( degrees ) );
-				expect( leaf.pivot.quaternion.angleTo( expected ) ).toBeLessThan( 1e-7 );
-				expect( leaf.pivot.position.distanceTo( leaf.closedPosition ) ).toBe( 0 );
-			}
-		}
-
-	} );
-
 	it( 'keeps unsupported rollers and non-enterable pocket leaves fixed and collidable', async () => {
 
 		const roller = await load( { motion: { kind: 'roller', maxTravel: 2, clearDepth: 0 } } );

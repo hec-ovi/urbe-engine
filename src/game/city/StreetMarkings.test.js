@@ -55,33 +55,24 @@ describe( 'game street markings', () => {
 
 	} );
 
-	it( 'propagates a missing binding without producing substitute paint', async () => {
-
-		const error = new Error( 'missing binding' );
-		const resolver = { loadBindings: async () => { throw error; } };
-		await expect( StreetMarkings.build( atlas, { road: { lanes: [] } }, {}, resolver, 'paint' ) ).rejects.toBe( error );
-
-	} );
-
-	it.each( [ 'debug', 'glow' ] )( 'keeps %s centerlines on authoritative ramp heights without loading paint', async mode => {
+	it( 'keeps diagnostics on authoritative ramp heights and refuses paint or lanes it cannot trust', async () => {
 
 		const resolver = { loadBindings: vi.fn() };
-		const networks = { road: { lanes: [ {
-			id: 'ramp', index: 0, path3: [ [ 0, 0, 0 ], [ 30, 8, 0 ] ]
-		} ] } };
-		const group = await StreetMarkings.build( atlas, networks, {}, resolver, mode );
+		const networks = { road: { lanes: [ { id: 'ramp', index: 0, path3: [ [ 0, 0, 0 ], [ 30, 8, 0 ] ] } ] } };
+		const group = await StreetMarkings.build( atlas, networks, {}, resolver, 'debug' );
 		expect( resolver.loadBindings ).not.toHaveBeenCalled();
 		expect( group.name ).toBe( 'lane-debug' );
 		const position = group.children[ 0 ].geometry.getAttribute( 'position' );
 		const heights = Array.from( { length: position.count }, ( _, i ) => position.getY( i ) );
-		expect( Math.max( ...heights ) ).toBeCloseTo( 8 + ( mode === 'debug' ? 0.02 : 0.012 ) );
+		expect( Math.max( ...heights ) ).toBeCloseTo( 8.02 );
 
-	} );
-
-	it( 'refuses a diagnostic lane without its 3D path', async () => {
-
+		// A lane without its authoritative height, and a catalog that cannot
+		// answer, both stop the build instead of inventing substitute paint.
 		await expect( StreetMarkings.build( atlas, { road: { lanes: [ { id: 'missing' } ] } }, {}, {}, 'debug' ) )
 			.rejects.toThrow( /E_MOVEMENT_PATH3/ );
+		const error = new Error( 'missing binding' );
+		await expect( StreetMarkings.build( atlas, { road: { lanes: [] } }, {}, { loadBindings: async () => { throw error; } }, 'paint' ) )
+			.rejects.toBe( error );
 
 	} );
 

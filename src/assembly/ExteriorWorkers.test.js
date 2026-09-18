@@ -12,36 +12,39 @@ const request = {
 };
 
 describe( 'persistent Exterior producer workers', () => {
-	it( 'writes deterministic producer shells across queued jobs and recovers from invalid input', async () => {
+
+	it( 'writes deterministic producer shells across queued jobs, and closing rejects what is unfinished', async () => {
 
 		const root = await mkdtemp( join( tmpdir(), 'urbe-exterior-workers-' ) );
 		const pool = new ExteriorWorkers( 1 );
+
+		expect( () => new ExteriorWorkers( 0 ) ).toThrow( 'worker count' );
+
 		try {
 
 			await expect( pool.run( { ...request, building: { ...request.building, floors: - 1 } }, join( root, 'bad' ) ) ).rejects.toThrow( 'E_' );
 			const [ a, b ] = await Promise.all( [ pool.run( request, join( root, 'a' ) ), pool.run( request, join( root, 'b' ) ) ] );
+
 			expect( a ).toEqual( b );
 			expect( a.floors.filter( floor => floor.index >= 0 ) ).toHaveLength( 3 );
 			for ( const file of [ 'p1.glb', 'p1.blueprint.json' ] ) {
 
 				const bytes = await readFile( join( root, 'a', file ) );
+
 				expect( bytes.length ).toBeGreaterThan( 100 );
 				expect( await readFile( join( root, 'b', file ) ) ).toEqual( bytes );
 
 			}
 
+			const unfinished = Promise.allSettled( [ pool.run( request, join( root, 'c' ) ), pool.run( request, join( root, 'd' ) ) ] );
+
+			await pool.close();
+			expect( ( await unfinished ).every( result => result.status === 'rejected' ) ).toBe( true );
+
 		} finally { await pool.close(); await rm( root, { recursive: true, force: true } ); }
+
 		await expect( pool.run( request, root ) ).rejects.toThrow( 'closed' );
 
 	}, 30000 );
 
-	it( 'rejects unfinished jobs when the pool closes', async () => {
-
-		const pool = new ExteriorWorkers( 1 );
-		const jobs = Promise.allSettled( [ pool.run( request, 'unused' ), pool.run( request, 'unused' ) ] );
-		await pool.close();
-		expect( ( await jobs ).every( result => result.status === 'rejected' ) ).toBe( true );
-		expect( () => new ExteriorWorkers( 0 ) ).toThrow( 'worker count' );
-
-	} );
 } );

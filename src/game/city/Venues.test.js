@@ -59,53 +59,24 @@ function venues( doors, buildings ) {
 const built = ( ids, signage = [] ) => new Map( ids.map( ( id ) => [ id, { blueprint: { signage } } ] ) );
 
 /**
- * The playtest complaint was that a real building and a sealed one look the
- * same. What has to hold is that only a building with a way in is marked, that
- * the mark is a fixture on the door and not a floating icon, and that a venue's
- * sign follows who is actually working there.
+ * A real building and a sealed one have to look different: only a building with
+ * a way in is marked, the mark is a fixture on the door rather than a floating
+ * icon, and a venue's sign follows who is actually working there.
  */
 describe( 'Venues', () => {
 
-	it( 'marks only the venues that have a way in', () => {
+	it( 'marks only the venues that have a way in, and names the door after its sign', () => {
 
-		const marks = venues( [ door( 'p0' ), door( 'p1' ) ], built( [ 'p0', 'p1' ] ) ).marks;
+		const doors = [ door( 'p0' ), door( 'p1' ) ];
+		const marks = venues( doors, built( [ 'p0', 'p1' ], [ { text: 'COFFEE' } ] ) ).marks;
 
 		// p1 is a home, p2 has a door in no building the world built.
 		expect( marks.map( ( entry ) => entry.parcelId ) ).toEqual( [ 'p0' ] );
-
-	} );
-
-	it( 'names the door after the sign over it, so the prompt can say where', () => {
-
-		const doors = [ door( 'p0' ) ];
-
-		venues( doors, built( [ 'p0' ], [ { text: 'COFFEE' } ] ) );
-
 		expect( doors[ 0 ].name ).toBe( 'COFFEE' );
 
 	} );
 
-	it( 'builds short header fixtures for playable entrances in two city draws', () => {
-
-		const doors = [ door( 'p0' ), door( 'p2' ) ];
-		const group = venues( doors, built( [ 'p0', 'p2' ] ) ).build( doors );
-
-		expect( group.children ).toHaveLength( 2 );
-		expect( group.getObjectByName( 'entrance-header:housing' ).material.userData.key )
-			.toBe( 'cyberpunk/window-frame/mid' );
-		const lens = group.getObjectByName( 'entrance-header:lens' );
-		expect( lens.material.name ).toBe( 'entrance-header:light' );
-		expect( lens.material.map ).toBeNull();
-		expect( lens.material.emissiveMap ).toBeNull();
-		expect( lens.material.emissiveIntensity ).toBe( 35 );
-		expect( lens.geometry.getAttribute( 'position' ).count ).toBe( 12 );
-		lens.geometry.computeBoundingBox();
-		expect( lens.geometry.boundingBox.min.y ).toBeGreaterThan( doors[ 0 ].height );
-		expect( lens.geometry.boundingBox.max.x - lens.geometry.boundingBox.min.x ).toBeLessThan( doors[ 0 ].width );
-
-	} );
-
-	it( 'keeps every emitting face outward on rotated entrances', () => {
+	it( 'hangs an outward header fixture over every playable entrance and puts its sign out with the rota', () => {
 
 		for ( const normal of [
 			new THREE.Vector3( 0, 0, 1 ), new THREE.Vector3( 1, 0, 0 ),
@@ -116,48 +87,49 @@ describe( 'Venues', () => {
 			entry.normal.copy( normal );
 			entry.along.set( normal.z, 0, - normal.x );
 			const group = venues( [ entry ], built( [ 'p0' ] ) ).build( [ entry ] );
-			const housings = [ group.getObjectByName( 'entrance-header:housing' ).geometry ];
-			const lenses = [ group.getObjectByName( 'entrance-header:lens' ).geometry ];
+			const housing = group.getObjectByName( 'entrance-header:housing' );
+			const lens = group.getObjectByName( 'entrance-header:lens' );
 
-			for ( const geometry of lenses ) {
+			// Two city draws for every entrance: the housing and the lit lens.
+			expect( group.children ).toHaveLength( 2 );
+			expect( housing.material.userData.key ).toBe( 'cyberpunk/window-frame/mid' );
+			expect( lens.material.name ).toBe( 'entrance-header:light' );
+			expect( lens.material.map ).toBeNull();
+			expect( lens.material.emissiveMap ).toBeNull();
+			expect( lens.material.emissiveIntensity ).toBe( 35 );
+			expect( lens.geometry.getAttribute( 'position' ).count ).toBe( 6 );
+			lens.geometry.computeBoundingBox();
+			expect( lens.geometry.boundingBox.min.y ).toBeGreaterThan( entry.height );
+			expect( lens.geometry.boundingBox.max.x - lens.geometry.boundingBox.min.x ).toBeLessThan( entry.width );
 
-				const normals = geometry.getAttribute( 'normal' );
+			// Every emitting face looks out of the building, in front of the wall.
+			const faces = lens.geometry.getAttribute( 'normal' );
+			for ( let i = 0; i < faces.count; i ++ ) {
 
-				for ( let i = 0; i < normals.count; i ++ ) {
-
-					const face = new THREE.Vector3().fromBufferAttribute( normals, i );
-					expect( face.dot( normal ) ).toBeCloseTo( 1, 6 );
-
-				}
+				expect( new THREE.Vector3().fromBufferAttribute( faces, i ).dot( normal ) ).toBeCloseTo( 1, 6 );
 
 			}
 
-			const housingDepths = housings.flatMap( ( geometry ) => projectedDepths( geometry, entry ) );
-			const lensDepths = lenses.flatMap( ( geometry ) => projectedDepths( geometry, entry ) );
+			const housingDepths = projectedDepths( housing.geometry, entry );
+			const lensDepths = projectedDepths( lens.geometry, entry );
 			expect( Math.min( ...housingDepths ) ).toBeGreaterThan( entry.surfaceDepth );
 			expect( Math.min( ...lensDepths ) ).toBeGreaterThan( Math.max( ...housingDepths ) );
 
 		}
 
-	} );
-
-	it( 'puts a venue sign out when the simulation has nobody working there', () => {
-
 		const model = venues( [ door( 'p0' ), door( 'p2' ) ], built( [ 'p0', 'p2' ] ) );
 		const dims = new Map();
 		const lights = { setFixtureDim: ( index, dim ) => dims.set( index, dim ) };
-		const shut = { crowd: () => ( { agents: [] } ) };
-		const open = { crowd: () => ( { agents: [ {} ] } ) };
 		const feet = new THREE.Vector3();
 
-		model.update( 10, feet, 780, shut, lights );
+		model.update( 10, feet, 780, { crowd: () => ( { agents: [] } ) }, lights );
 
 		expect( dims.get( 0 ) ).toBe( 0 );
 		expect( dims.get( 2 ) ).toBe( 0 );
 		// The entrance fixture is not a sign and never goes out with the rota.
 		expect( dims.has( 1 ) ).toBe( false );
 
-		model.update( 10, feet, 1200, open, lights );
+		model.update( 10, feet, 1200, { crowd: () => ( { agents: [ {} ] } ) }, lights );
 
 		expect( dims.get( 0 ) ).toBe( 1 );
 

@@ -15,7 +15,7 @@ const request = {
 
 describe( 'mission item asset binding', () => {
 
-	it( 'creates the exact request and resolves only its authored quest and item pair', () => {
+	it( 'creates the exact request and resolves only its authored item and fixed mechanic bindings', () => {
 
 		const assets = new MissionItemAssets( {
 			requests: [ request ],
@@ -29,6 +29,21 @@ describe( 'mission item asset binding', () => {
 		expect( assets.get( 'quest.other', 'item.file' ) ).toBe( null );
 		expect( assets.get( 'quest.case', 'item.other' ) ).toBe( null );
 
+		const fixed = new MissionItemAssets( {
+			requests: [ request ], bindings: [],
+			mechanicBindings: [ {
+				questId: 'quest.case', stepId: 'open-case', targetId: 'case',
+				assetId: request.assetId, interactionId: 'inspect'
+			} ],
+			materialCatalog: catalog
+		} );
+		expect( fixed.mechanic( 'quest.case', 'open-case' ) ).toMatchObject( {
+			binding: { assetId: request.assetId, interactionId: 'inspect' },
+			assembly: { assetId: request.assetId },
+			anchor: { interaction: 'inspect' }
+		} );
+		expect( fixed.mechanic( 'quest.case', 'other' ) ).toBeNull();
+
 	} );
 
 	it( 'fails before play when a material or bound asset does not exist', () => {
@@ -40,26 +55,6 @@ describe( 'mission item asset binding', () => {
 		expect( () => new MissionItemAssets( {
 			requests: [], bindings: [ { questId: 'q', itemId: 'i', assetId: 'asset.missing' } ], materialCatalog: catalog
 		} ) ).toThrow( expect.objectContaining( { code: 'E_NOT_FOUND' } ) );
-
-	} );
-
-	it( 'resolves an exact fixed mechanic assembly and authored interaction anchor', () => {
-
-		const assets = new MissionItemAssets( {
-			requests: [ request ], bindings: [],
-			mechanicBindings: [ {
-				questId: 'quest.case', stepId: 'open-case', targetId: 'case',
-				assetId: request.assetId, interactionId: 'inspect'
-			} ],
-			materialCatalog: catalog
-		} );
-
-		expect( assets.mechanic( 'quest.case', 'open-case' ) ).toMatchObject( {
-			binding: { assetId: request.assetId, interactionId: 'inspect' },
-			assembly: { assetId: request.assetId },
-			anchor: { interaction: 'inspect' }
-		} );
-		expect( assets.mechanic( 'quest.case', 'other' ) ).toBeNull();
 
 	} );
 

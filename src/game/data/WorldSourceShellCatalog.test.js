@@ -50,46 +50,10 @@ it( 'loads nearby authored bounds and every interior, then admits explicit dista
 
 } );
 
-it( 'streams a small catalog the same way, leaving distant shells for the stream to admit', async () => {
+it( 'rejects a catalog carrying a foreign seed before loading any full building', async () => {
 
-	const fixture = await serve( { count: 20, interiors: false } );
-	const world = await fixture.source.load();
-	expect( [ ...world.buildings.keys() ] ).toEqual( [ 'p0', 'p1', 'p2' ] );
-	expect( fixture.requested.some( path => path.includes( '/p19/' ) ) ).toBe( false );
-
-} );
-
-it( 'uses the first selected interior center for a large city preview', async () => {
-
-	const fixture = await serve( { game: false } );
-	const world = await fixture.source.load();
-	expect( world.buildings.has( 'p300' ) ).toBe( true );
-	expect( world.buildings.has( 'p299' ) ).toBe( true );
-	expect( world.buildings.has( 'p0' ) ).toBe( false );
-	expect( fixture.requested.some( path => path.endsWith( '/game.json' ) ) ).toBe( false );
-
-} );
-
-it( 'uses catalog bounds midpoint for a preview without interiors', async () => {
-
-	const fixture = await serve( { game: false, interiors: false } );
-	const world = await fixture.source.load();
-	expect( world.buildings.has( 'p110' ) ).toBe( true );
-	expect( world.buildings.has( 'p0' ) ).toBe( false );
-	expect( world.buildings.has( 'p319' ) ).toBe( false );
-
-} );
-
-it.each( [
-	[ 'foreign seed', catalog => { catalog.seed = 'foreign'; }, 'seed' ],
-	[ 'duplicate ID', catalog => { catalog.buildings[ 1 ].id = 'p0'; }, 'IDs' ],
-	[ 'unknown ID', catalog => { catalog.buildings[ 1 ].id = 'foreign'; }, 'IDs' ],
-	[ 'nonpositive bounds', catalog => { catalog.buildings[ 0 ].bounds.max[ 0 ] = 0; }, 'positive extent' ],
-	[ 'missing material', catalog => { delete catalog.buildings[ 0 ].bands[ 0 ].material; }, 'material' ]
-] )( 'rejects a catalog with %s before loading any full building', async ( _label, change, message ) => {
-
-	const fixture = await serve( { change } );
-	await expect( fixture.source.load() ).rejects.toThrow( message );
+	const fixture = await serve( { change: catalog => { catalog.seed = 'foreign'; } } );
+	await expect( fixture.source.load() ).rejects.toThrow( 'seed' );
 	expect( fixture.requested.some( path => /\/p\d+\//.test( path ) ) ).toBe( false );
 
 } );

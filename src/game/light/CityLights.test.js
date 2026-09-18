@@ -17,25 +17,6 @@ const fixture = ( x, lumens, color ) => ( {
  */
 describe( 'CityLights', () => {
 
-	it( 'replaces streamed fixtures with stable slots and retained per-fixture dimming', () => {
-
-		const a = fixture( 0, 1000 ), b = fixture( 10, 2000 ), c = fixture( 20, 3000 );
-		const lights = new CityLights( [ a ], 2, { streamed: true } );
-		const slots = [ ...lights.lights ];
-		expect( slots[ 1 ].power ).toBe( 0 );
-		lights.setFixtureDim( 0, 0.5 );
-		lights.setFixtures( [ c, b, a ] );
-		lights.update( new THREE.Vector3(), 1 );
-		expect( lights.lights ).toEqual( slots );
-		expect( slots.map( light => light.power ) ).toEqual( [ 500, 2000 ] );
-		lights.setFixtures( [] );
-		lights.setDim( 1 );
-		expect( lights.lights ).toEqual( slots );
-		expect( slots.map( light => light.power ) ).toEqual( [ 0, 0 ] );
-		expect( lights.group.children ).toEqual( slots );
-
-	} );
-
 	it( 'lights each fixture at its published flux, with inverse-square falloff', () => {
 
 		const lights = new CityLights( [ fixture( 0, 12000, 0xffffff ) ], 8 );
@@ -52,7 +33,7 @@ describe( 'CityLights', () => {
 
 	} );
 
-	it( 'keeps the nearest fixtures lit when the backend cannot carry them all', () => {
+	it( 'keeps the nearest fixtures lit in stable slots, and daylight only turns them down', () => {
 
 		const lights = new CityLights(
 			[ fixture( 0, 1000 ), fixture( 50, 1000 ), fixture( 100, 1000 ) ],
@@ -71,54 +52,33 @@ describe( 'CityLights', () => {
 		expect( lights.lights ).toEqual( slots );
 		expect( lights.lights.map( ( light ) => light.position.x ) ).toEqual( [ 0, 50 ] );
 
-	} );
-
-	it( 'fades a replaced source to zero before moving its stable slot', () => {
-		const lights = new CityLights( [ fixture( 0, 1000 ), fixture( 100, 2000 ) ], 1 );
-		lights.update( new THREE.Vector3( 0, 0, 0 ), 1 );
-		const slot = lights.lights[ 0 ];
-		lights.update( new THREE.Vector3( 100, 0, 0 ), 1 );
-		expect( slot.position.x ).toBe( 0 );
-		lights.update( new THREE.Vector3( 100, 0, 0 ), 0.125 );
-		expect( slot.power ).toBeCloseTo( 500 );
-		expect( slot.position.x ).toBe( 0 );
-		lights.update( new THREE.Vector3( 100, 0, 0 ), 0.125 );
-		expect( slot.position.x ).toBe( 100 );
-		expect( slot.power ).toBeCloseTo( 0 );
-		lights.update( new THREE.Vector3( 100, 0, 0 ), 0.25 );
-		expect( slot.power ).toBeCloseTo( 2000 );
-		expect( lights.lights[ 0 ] ).toBe( slot );
-	} );
-
-	it( 'keeps a fixture dimmed when it later enters a light slot', () => {
-
-		const lights = new CityLights(
-			[ fixture( 0, 1000 ), fixture( 50, 2000 ), fixture( 100, 3000 ) ],
-			1
-		);
-
-		lights.setFixtureDim( 2, 0 );
-		lights.update( new THREE.Vector3( 100, 0, 0 ), 1 );
-
-		expect( lights.lights[ 0 ].position.x ).toBe( 100 );
-		expect( lights.lights[ 0 ].power ).toBe( 0 );
-
-	} );
-
-	it( 'turns daylight slots down without removing their stable light identities', () => {
-
-		const lights = new CityLights( [ fixture( 0, 12000, 0xffffff ) ], 1 );
-		const slot = lights.lights[ 0 ];
-
 		lights.setDim( 0 );
 
 		expect( lights.group.visible ).toBe( true );
-		expect( lights.lights[ 0 ] ).toBe( slot );
-		expect( slot.power ).toBe( 0 );
+		expect( lights.lights ).toEqual( slots );
+		expect( slots.map( ( light ) => light.power ) ).toEqual( [ 0, 0 ] );
 
 	} );
 
-	it( 'reads back the colour of the light filling the air, weighted by flux', () => {
+	it( 'replaces streamed fixtures in the same slots and keeps per-fixture dimming', () => {
+
+		const a = fixture( 0, 1000 ), b = fixture( 10, 2000 ), c = fixture( 20, 3000 );
+		const lights = new CityLights( [ a ], 2, { streamed: true } );
+		const slots = [ ...lights.lights ];
+		expect( slots[ 1 ].power ).toBe( 0 );
+		lights.setFixtureDim( 0, 0.5 );
+		lights.setFixtures( [ c, b, a ] );
+		lights.update( new THREE.Vector3(), 1 );
+		expect( lights.lights ).toEqual( slots );
+		expect( slots.map( light => light.power ) ).toEqual( [ 500, 2000 ] );
+		lights.setFixtures( [] );
+		lights.update( new THREE.Vector3(), 1 );
+		expect( lights.lights ).toEqual( slots );
+		expect( lights.group.children ).toEqual( slots );
+
+	} );
+
+	it( 'reads back the colour of the light filling the air, weighted by flux, and nothing out of reach', () => {
 
 		const lights = new CityLights( [
 			fixture( 0, 9000, 0xff0000 ),
@@ -129,15 +89,7 @@ describe( 'CityLights', () => {
 
 		expect( air.color.r ).toBeGreaterThan( air.color.b );
 		expect( air.lux ).toBeGreaterThan( 0 );
-
-	} );
-
-	it( 'reports no air colour where no fixture reaches', () => {
-
-		const lights = new CityLights( [ fixture( 0, 9000, 0xff0000 ) ], 8 );
-		const air = lights.airColor( new THREE.Vector3( 500, 0, 0 ) );
-
-		expect( air.lux ).toBe( 0 );
+		expect( lights.airColor( new THREE.Vector3( 500, 0, 0 ) ).lux ).toBe( 0 );
 
 	} );
 

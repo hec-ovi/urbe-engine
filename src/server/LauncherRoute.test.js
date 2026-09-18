@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cpSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HttpLauncherApi } from '../launcher/HttpLauncherApi.js';
 import { LauncherService } from './LauncherService.js';
@@ -97,14 +97,8 @@ describe( 'launcher HTTP boundary', () => {
 			npcState,
 			investigations
 		} );
-		expect( JSON.parse( readFileSync( join( outDir, 'games', 'night-shift', 'game.json' ), 'utf8' ) )
-			.transitJourney ).toEqual( transitJourney );
-		expect( JSON.parse( readFileSync( join( outDir, 'games', 'night-shift', 'game.json' ), 'utf8' ) )
-			.questTransit ).toEqual( questTransit );
-		expect( JSON.parse( readFileSync( join( outDir, 'games', 'night-shift', 'game.json' ), 'utf8' ) )
-			.npcState ).toEqual( npcState );
-		expect( JSON.parse( readFileSync( join( outDir, 'games', 'night-shift', 'game.json' ), 'utf8' ) )
-			.investigations ).toEqual( investigations );
+		expect( JSON.parse( readFileSync( join( outDir, 'games', 'night-shift', 'game.json' ), 'utf8' ) ) )
+			.toMatchObject( { transitJourney, questTransit, npcState, investigations } );
 		await expect( api.saveCurrent( { gameId: 'night-shift' } ) ).rejects.toThrow( 'saveCurrent request is invalid' );
 
 		const imported = { ...exported, id: 'imported-night', name: 'Imported Night', save: { ...exported.save, revision: 5 } };

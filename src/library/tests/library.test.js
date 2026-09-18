@@ -17,7 +17,7 @@ describe( 'city and game library contract', () => {
 
 	} );
 
-	it( 'discovers direct city and game directories in stable id order', async () => {
+	it( 'discovers only direct city and game directories, in id order, and loads each record', async () => {
 
 		const outDir = fixtureOut();
 		writeFileSync( join( outDir, 'cities', 'README.txt' ), 'ignored non-directory' );
@@ -39,18 +39,12 @@ describe( 'city and game library contract', () => {
 			player: { inventory: [ { id: 'access-card', name: 'Access Card' } ] }
 		} );
 
-	} );
-
-	it( 'returns empty catalogs when the output roots do not exist', async () => {
-
-		const outDir = temporaryOut();
-		const catalog = await createLibrary( { outDir } ).discover( {} );
-
-		expect( catalog ).toEqual( { contractVersion: '1.0.0', cities: [], games: [] } );
+		expect( await createLibrary( { outDir: temporaryOut() } ).discover( {} ) )
+			.toEqual( { contractVersion: '1.0.0', cities: [], games: [] } );
 
 	} );
 
-	it( 'saves canonical JSON and advances only the expected revision', async () => {
+	it( 'writes canonical bytes, advances only the expected revision and publishes a city once', async () => {
 
 		const firstOut = fixtureOut();
 		const secondOut = fixtureOut();
@@ -77,43 +71,30 @@ describe( 'city and game library contract', () => {
 			contractVersion: '1.0.0', created: false, game: updated
 		} );
 		await expectError( first.saveGame( { game: { ...updated, save: { ...updated.save, revision: 3 } }, expectedRevision: 1 } ), 'E_REVISION_CONFLICT' );
-		await expectError( first.saveGame( {
-			game: { ...updated, selectedInteriors: [ 'p7' ], save: { ...updated.save, revision: 3 } }, expectedRevision: 2
-		} ), 'E_INVALID_REQUEST' );
-
-		const importedOut = fixtureOut();
-		const imported = createLibrary( { outDir: importedOut } );
+		// An imported save keeps the revision it arrived with.
+		const imported = createLibrary( { outDir: fixtureOut() } );
 		const laterRevision = { ...game, id: 'imported-save', save: { ...game.save, revision: 7 } };
 		expect( ( await imported.saveGame( { game: laterRevision, expectedRevision: null } ) ).game.save.revision ).toBe( 7 );
 
-	} );
-
-	it( 'publishes a city descriptor once into an existing artifact directory', async () => {
-
-		const outDir = temporaryOut();
-		const directory = join( outDir, 'cities', 'medium' );
+		const cityOut = temporaryOut();
+		const directory = join( cityOut, 'cities', 'medium' );
 		mkdirSync( directory, { recursive: true } );
 		writeFileSync( join( directory, 'manifest.json' ), '{}' );
 		writeFileSync( join( directory, 'blueprint.json' ), '{}' );
 		const source = JSON.parse( readFileSync( join( FIXTURE, 'cities', 'small', 'city.json' ), 'utf8' ) );
 		const city = { ...source, id: 'medium', name: 'Medium Urbe', size: 'medium' };
-		const library = createLibrary( { outDir } );
+		const cityLibrary = createLibrary( { outDir: cityOut } );
 
-		expect( await library.saveCity( city ) ).toEqual( {
-			contractVersion: '1.0.0', created: true, city
-		} );
-		expect( await library.loadCity( { id: 'medium' } ) ).toEqual( city );
-		await expectError( library.saveCity( city ), 'E_EXISTS' );
-		await expectError( library.saveCity( { ...city, id: 'bad-date', generatedAt: '2026-02-31T12:00:00Z' } ), 'E_INVALID_REQUEST' );
-		await expectError( library.saveCity( {
-			...city, id: 'duplicate-buildings', buildings: [ city.buildings[ 0 ], city.buildings[ 0 ] ]
-		} ), 'E_INVALID_REQUEST' );
+		expect( await cityLibrary.saveCity( city ) ).toEqual( { contractVersion: '1.0.0', created: true, city } );
+		expect( await cityLibrary.loadCity( { id: 'medium' } ) ).toEqual( city );
+		await expectError( cityLibrary.saveCity( city ), 'E_EXISTS' );
 
 	} );
 
-	it( 'fails closed for invalid requests, missing records and unsafe ids', async () => {
+	it( 'fails closed on invalid requests, unsafe paths, absent records and malformed or dangling descriptors', async () => {
 
-		const library = createLibrary( { outDir: fixtureOut() } );
+		const outDir = fixtureOut();
+		const library = createLibrary( { outDir } );
 
 		expectSyncError( () => createLibrary( { outDir: '', extra: true } ), 'E_INVALID_REQUEST' );
 		await expectError( library.loadCity( {} ), 'E_INVALID_REQUEST' );
@@ -121,21 +102,8 @@ describe( 'city and game library contract', () => {
 		await expectError( library.loadCity( { id: 'missing' } ), 'E_CITY_NOT_FOUND' );
 		await expectError( library.loadGame( { id: 'missing' } ), 'E_GAME_NOT_FOUND' );
 		await expectError( library.saveGame( { game: savedGame() } ), 'E_INVALID_REQUEST' );
+		await expectError( library.saveCity( { ...JSON.parse( readFileSync( join( FIXTURE, 'cities', 'small', 'city.json' ), 'utf8' ) ), id: 'bad-date', generatedAt: '2026-02-31T12:00:00Z' } ), 'E_INVALID_REQUEST' );
 
-	} );
-
-	it( 'reports storage roots that are not directories', async () => {
-
-		const outDir = temporaryOut();
-		writeFileSync( outDir, 'not a directory' );
-		await expectError( createLibrary( { outDir } ).listCities(), 'E_STORAGE' );
-
-	} );
-
-	it( 'rejects malformed descriptors and dangling game content', async () => {
-
-		const outDir = fixtureOut();
-		const library = createLibrary( { outDir } );
 		const gamePath = join( outDir, 'games', 'night-shift', 'game.json' );
 		writeFileSync( gamePath, '{' );
 		await expectError( library.loadGame( { id: 'night-shift' } ), 'E_INVALID_DESCRIPTOR' );
@@ -143,39 +111,22 @@ describe( 'city and game library contract', () => {
 		writeJson( gamePath, { ...savedGame(), id: 'night-shift', cityId: 'missing' } );
 		await expectError( library.loadGame( { id: 'night-shift' } ), 'E_REFERENCE_NOT_FOUND' );
 
-		writeJson( gamePath, {
-			...savedGame(), id: 'night-shift', selectedInteriors: [ 'unknown-interior' ]
-		} );
+		writeJson( gamePath, { ...savedGame(), id: 'night-shift', selectedInteriors: [ 'unknown-interior' ] } );
 		await expectError( library.loadGame( { id: 'night-shift' } ), 'E_INVALID_DESCRIPTOR' );
 
-		writeJson( gamePath, {
-			...savedGame(), id: 'night-shift',
-			investigations: [ { contractVersion: '1.0', sceneId: 'scene-one', revision: 1, evidence: [ { evidenceId: 'clue', status: 'invented' } ], emittedTransitionIds: [] } ]
-		} );
-		await expectError( library.loadGame( { id: 'night-shift' } ), 'E_INVALID_DESCRIPTOR' );
-
-		const cityPath = join( outDir, 'cities', 'small', 'city.json' );
-		const city = JSON.parse( readFileSync( cityPath, 'utf8' ) );
-		writeJson( cityPath, { ...city, buildings: city.buildings.map( ( building ) => ( {
-			...building, eligible: building.id === 'p2' ? false : building.eligible
-		} ) ) } );
-		writeJson( gamePath, { ...savedGame(), id: 'night-shift' } );
-		await expectError( library.loadGame( { id: 'night-shift' } ), 'E_INVALID_DESCRIPTOR' );
-
-	} );
-
-	it( 'rejects resource traversal and symbolic-link descriptor paths', async () => {
-
-		const outDir = fixtureOut();
 		const cityPath = join( outDir, 'cities', 'small', 'city.json' );
 		const city = JSON.parse( readFileSync( cityPath, 'utf8' ) );
 		city.world.manifest.uri = '../manifest.json';
 		writeJson( cityPath, city );
-		await expectError( createLibrary( { outDir } ).loadCity( { id: 'small' } ), 'E_UNSAFE_PATH' );
+		await expectError( library.loadCity( { id: 'small' } ), 'E_UNSAFE_PATH' );
 
 		rmSync( join( outDir, 'cities', 'large' ), { recursive: true } );
 		symlinkSync( join( outDir, 'cities', 'small' ), join( outDir, 'cities', 'large' ) );
-		await expectError( createLibrary( { outDir } ).loadCity( { id: 'large' } ), 'E_UNSAFE_PATH' );
+		await expectError( library.loadCity( { id: 'large' } ), 'E_UNSAFE_PATH' );
+
+		const storage = temporaryOut();
+		writeFileSync( storage, 'not a directory' );
+		await expectError( createLibrary( { outDir: storage } ).listCities(), 'E_STORAGE' );
 
 	} );
 

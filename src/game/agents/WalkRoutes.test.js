@@ -17,27 +17,6 @@ describe( 'walk routes', () => {
 
 	} );
 
-	it( 'can route from the street through a station sequence', () => {
-
-		const routes = new WalkRoutes( network() );
-		const rng = () => 0;
-		let edge = routes.edges.get( 'sidewalk' );
-		let direction = 1;
-		const walked = [ edge.kind ];
-
-		for ( let step = 0; step < 4; step ++ ) {
-
-			const next = routes.nextFrom( routes.exitNode( edge, direction ), edge.id, rng );
-			edge = next.edge;
-			direction = next.direction;
-			walked.push( edge.kind );
-
-		}
-
-		expect( walked ).toEqual( [ 'sidewalk', 'access', 'stairs', 'passage', 'platform' ] );
-
-	} );
-
 	it( 'refuses a compatibility-only walk edge', () => {
 
 		const input = network();

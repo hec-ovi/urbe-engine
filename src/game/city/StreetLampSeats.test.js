@@ -1,29 +1,25 @@
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { StreetLamps } from './StreetLamps.js';
 
 const factory = { build: () => null, variant: () => null };
 const rect = ( x0, z0, x1, z1 ) => [ [ x0, z0 ], [ x1, z0 ], [ x1, z1 ], [ x0, z1 ] ];
 
-describe( 'authored street lamp seats', () => {
+it( 'seats every pole on a complete furnishing base and refuses an incomplete one', () => {
 
-	it( 'uses each side furnishing band and accepts a base across an internal finish seam', () => {
+	const atlas = fixture();
+	const { posts } = new StreetLamps( atlas, factory ).build();
 
-		const atlas = fixture();
-		const { posts } = new StreetLamps( atlas, factory ).build();
-		expect( posts ).toHaveLength( 5 );
-		expect( posts.map( post => post.z ) ).toEqual( [ - 4.25, 5.15, - 4.25, 5.15, - 4.25 ] );
+	// Each side's own furnishing band, including a base across an internal finish seam.
+	expect( posts ).toHaveLength( 5 );
+	expect( posts.map( post => post.z ) ).toEqual( [ - 4.25, 5.15, - 4.25, 5.15, - 4.25 ] );
 
-	} );
-
-	it( 'rejects incomplete pole bases instead of seating them in walking space', () => {
-
-		const atlas = fixture();
-		atlas.volumetric.ground = atlas.volumetric.ground.filter( cover => cover.id !== 'right-outer' );
-		const { posts } = new StreetLamps( atlas, factory ).build();
-		expect( posts ).toHaveLength( 2 );
-		expect( posts.every( post => post.z > 0 ) ).toBe( true );
-
-	} );
+	// Without the outer cover the right band is no longer a complete base, so
+	// nothing is seated there rather than standing in walking space.
+	const incomplete = fixture();
+	incomplete.volumetric.ground = incomplete.volumetric.ground.filter( cover => cover.id !== 'right-outer' );
+	const remaining = new StreetLamps( incomplete, factory ).build().posts;
+	expect( remaining ).toHaveLength( 2 );
+	expect( remaining.every( post => post.z > 0 ) ).toBe( true );
 
 } );
 

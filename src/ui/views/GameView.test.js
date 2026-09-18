@@ -5,26 +5,31 @@ import userEvent from '@testing-library/user-event';
 import { stubCanvas } from '../test-helpers/canvas.js';
 import { GameView } from './GameView.js';
 
-/** The overlay wires the bar to the host and keeps the loading surface. */
+/** The overlay wires the bar to the host, keeps the loading surface and the front door. */
 describe( 'GameView', () => {
 
-	let view, onOpen, onClose;
+	let view, onOpen, onClose, onLeave;
 
 	beforeEach( () => {
 
+		document.body.replaceChildren();
 		stubCanvas();
 		onOpen = vi.fn();
 		onClose = vi.fn();
-		view = new GameView( { onOpen, onClose } );
+		onLeave = vi.fn();
+		view = new GameView( { onOpen, onClose, onLeave, menu: { onContinue: vi.fn() } } );
 		view.mount( document.body );
 
 	} );
 
-	it( 'a tab opens its panel and lights up; the same tab again closes it', async () => {
+	it( 'routes tabs and names to one panel, keeps the bar up only while paused or open, and opens QUESTS from the objective', async () => {
 
 		const user = userEvent.setup();
+		expect( view.tabs.element.hidden ).toBe( true );
+
 		// The bar is reached from the pause screen.
 		view.setPaused( true );
+		expect( view.tabs.element.hidden ).toBe( false );
 		const tab = screen.getByRole( 'button', { name: /^MAP/ } );
 
 		await user.click( tab );
@@ -36,31 +41,23 @@ describe( 'GameView', () => {
 		expect( tab.classList.contains( 'is-active' ) ).toBe( false );
 		expect( onClose ).toHaveBeenCalledOnce();
 
-	} );
-
-	it( 'open and close by name reach the host', () => {
-
+		view.setPaused( false );
+		expect( view.tabs.element.hidden ).toBe( true );
 		view.open( 'INVENTORY' );
 		expect( view.inventory.element.hidden ).toBe( false );
-		view.open( 'CODEX' );
-		expect( view.codex.element.hidden ).toBe( false );
-		expect( view.panels.current ).toBe( 'CODEX' );
+		expect( view.tabs.element.hidden ).toBe( false );
 		view.close();
 		expect( view.panels.current ).toBeNull();
-
-	} );
-
-	it( 'shows the current objective and opens its quest panel', async () => {
+		expect( view.tabs.element.hidden ).toBe( true );
 
 		view.setObjective( { title: 'Salt Wharf', objective: 'Check the freight ledger', state: 'active' } );
-		await userEvent.setup().click( screen.getByRole( 'button', { name: /Open current quest: Salt Wharf/ } ) );
-
+		await user.click( screen.getByRole( 'button', { name: /Open current quest: Salt Wharf/ } ) );
 		expect( view.panels.current ).toBe( 'QUESTS' );
 		expect( onOpen ).toHaveBeenCalledWith( 'QUESTS' );
 
 	} );
 
-	it( 'loading reports each step, goes away on ready and shows the failure', () => {
+	it( 'reports loading steps, ready and failure, then opens the game directory from Leave with gameplay inert', async () => {
 
 		view.step( 'laying the ground' );
 		expect( screen.getByText( 'laying the ground' ) ).toBeTruthy();
@@ -72,13 +69,6 @@ describe( 'GameView', () => {
 		expect( view.loading.hidden ).toBe( false );
 		expect( screen.getByText( 'no manifest' ) ).toBeTruthy();
 
-	} );
-
-	it( 'opens the full game directory from Leave and exposes its data ports', async () => {
-
-		const onLeave = vi.fn();
-		const view = new GameView( { onLeave, menu: { onContinue: vi.fn() } } );
-		view.mount( document.body );
 		view.setLibrary( { games: [ { id: 'g1', name: 'Night run', playable: true } ] } );
 		view.setPaused( true );
 		await userEvent.setup().click( view.tabs.element.querySelector( '.is-leave' ) );
@@ -86,36 +76,10 @@ describe( 'GameView', () => {
 		expect( view.gameplayElements.every( ( element ) => element.inert ) ).toBe( true );
 		expect( screen.getByRole( 'heading', { name: 'Night run' } ) ).toBeTruthy();
 		expect( onLeave ).toHaveBeenCalledOnce();
+
 		view.hideMainMenu();
 		expect( view.mainMenu.element.hidden ).toBe( true );
 		expect( view.gameplayElements.every( ( element ) => ! element.inert ) ).toBe( true );
-
-	} );
-
-} );
-
-describe( 'GameView tab bar', () => {
-
-	it( 'is up only while paused or while a panel is open', () => {
-
-		document.body.replaceChildren();
-		stubCanvas();
-		const view = new GameView( {} );
-		view.mount( document.body );
-
-		expect( view.tabs.element.hidden ).toBe( true );
-
-		view.setPaused( true );
-		expect( view.tabs.element.hidden ).toBe( false );
-
-		view.setPaused( false );
-		expect( view.tabs.element.hidden ).toBe( true );
-
-		view.open( 'MAP' );
-		expect( view.tabs.element.hidden ).toBe( false );
-
-		view.close();
-		expect( view.tabs.element.hidden ).toBe( true );
 
 	} );
 

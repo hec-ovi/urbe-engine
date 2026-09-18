@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
 import { QuestSession } from '../quests/QuestSession.js';
+import { quest, step } from '../quests/quest.test-fixtures.js';
 import interior from './fixtures/interior-incident.json';
 import street from './fixtures/street-incident.json';
 import { InvestigationError } from './InvestigationError.js';
@@ -106,15 +107,13 @@ describe( 'InvestigationSceneRenderer production failures', () => {
 
 	} );
 
-	it( 'keeps the fitted final-pose body offset beneath the authored world transform', async () => {
+	it( 'renders the authored final pose and fails closed on an unavailable material or body', async () => {
 
 		const scene = new SceneAssembler().assemble( interior );
+		const materialFactory = { build: ( key ) => new THREE.MeshStandardMaterial( { name: key } ) };
 		const animation = { scene: rig(), animations: [ new THREE.AnimationClip( 'Death02', 1, [] ) ] };
 		const renderer = await InvestigationSceneRenderer.create( {
-			assemblies: [ scene ],
-			materialFactory: { build: ( key ) => new THREE.MeshStandardMaterial( { name: key } ) },
-			animation,
-			loadGltf: async () => ( { scene: rig() } )
+			assemblies: [ scene ], materialFactory, animation, loadGltf: async () => ( { scene: rig() } )
 		} );
 		const body = renderer.visuals.get( 'courier-body' ).object;
 		const authored = scene.entities.find( ( entity ) => entity.entityId === 'courier-body' ).transform.position;
@@ -122,23 +121,13 @@ describe( 'InvestigationSceneRenderer production failures', () => {
 		expect( body.children[ 0 ].position.y ).toBeGreaterThan( 0 );
 		expect( body.userData.finalPose ).toBe( 'Death02' );
 
-	} );
-
-	it( 'fails closed for unavailable PBR materials', async () => {
-
-		const scene = new SceneAssembler().assemble( street );
 		await expect( InvestigationSceneRenderer.create( {
-			assemblies: [ scene ], materialFactory: { build: ( key ) => ( { name: 'unresolved:' + key } ) }
+			assemblies: [ new SceneAssembler().assemble( street ) ],
+			materialFactory: { build: ( key ) => ( { name: 'unresolved:' + key } ) }
 		} ) ).rejects.toMatchObject( { code: 'E_INVESTIGATION_MATERIAL' } );
 
-	} );
-
-	it( 'fails closed when the authored Source body cannot load', async () => {
-
-		const scene = new SceneAssembler().assemble( interior );
 		await expect( InvestigationSceneRenderer.create( {
-			assemblies: [ scene ],
-			materialFactory: { build: ( key ) => new THREE.MeshStandardMaterial( { name: key } ) },
+			assemblies: [ scene ], materialFactory,
 			animation: { scene: new THREE.Group(), animations: [] },
 			loadGltf: async () => { throw new Error( '404' ); }
 		} ) ).rejects.toMatchObject( { code: 'E_INVESTIGATION_ASSET' } );
@@ -193,22 +182,21 @@ function questDefinition() {
 		[ 'inspect-blood-direction', 'blood-direction', 'blood-fact', 'blood-found' ],
 		[ 'take-access-drive', 'access-card', 'drive-fact', 'drive-found' ]
 	];
-	return {
-		id: interior.questId, title: 'Missing courier', premise: 'Read the authored incident.', roles: [],
+	return quest( interior.questId, {
 		items: evidence.map( ( item ) => ( { itemId: item[ 2 ], name: item[ 2 ], description: item[ 2 ] + ' recorded.', kind: 'information' } ) ),
-		facts: [], acts: [ { actId: 'scene', title: 'Incident', summary: 'Inspect the evidence in order.' } ],
-		steps: evidence.map( ( item, index ) => ( {
-			stepId: item[ 0 ], actId: 'scene',
-			narrative: { description: item[ 1 ] + ' resolved.', playerHint: 'Inspect ' + item[ 1 ] + '.', stake: 'The scene remains unresolved.' },
-			target: { kind: 'investigation', sceneId: interior.sceneId, evidenceId: item[ 1 ], evidenceItemId: item[ 2 ], subjectRoleIds: [], place: { parcelId: 'p47' }, completionFlag: item[ 3 ] },
-			gives: [ item[ 2 ] ], needs: index ? [ evidence[ index - 1 ][ 2 ] ] : [], conditions: [],
-			effects: [ { kind: 'setFlag', flag: item[ 3 ] } ],
-			next: index < evidence.length - 1 ? [ { toStepId: evidence[ index + 1 ][ 0 ], when: [ { kind: 'flagSet', flag: item[ 3 ] } ] } ] : [],
-			branching: 'parallel', ...( index === evidence.length - 1 ? { endingId: 'scene-resolved' } : {} )
-		} ) ),
-		endings: [ { endingId: 'scene-resolved', title: 'Scene resolved', epilogue: 'The evidence route is recorded.' } ],
-		flags: evidence.map( ( item ) => item[ 3 ] ), entryStepIds: [ evidence[ 0 ][ 0 ] ]
-	};
+		flags: evidence.map( ( item ) => item[ 3 ] ),
+		endingId: 'scene-resolved',
+		steps: evidence.map( ( item, index ) => step( item[ 0 ], {
+			kind: 'investigation', sceneId: interior.sceneId, evidenceId: item[ 1 ], evidenceItemId: item[ 2 ],
+			subjectRoleIds: [], place: { parcelId: 'p47' }, completionFlag: item[ 3 ]
+		}, {
+			wantedByRoleId: null, hint: 'Inspect ' + item[ 1 ], gives: [ item[ 2 ] ],
+			needs: index ? [ evidence[ index - 1 ][ 2 ] ] : [],
+			next: index < evidence.length - 1
+				? [ { toStepId: evidence[ index + 1 ][ 0 ], when: [ { kind: 'flagSet', flag: item[ 3 ] } ] } ] : [],
+			...( index === evidence.length - 1 ? { endingId: 'scene-resolved' } : {} )
+		} ) )
+	} );
 
 }
 

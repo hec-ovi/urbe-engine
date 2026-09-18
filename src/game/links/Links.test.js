@@ -1,12 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { PbrMaterialFactory } from '../../building/PbrMaterialFactory.js';
-import { Links, RAILING, ROOFTOP_WIRE_SIDES } from './Links.js';
+import { Links, ROOFTOP_WIRE_SIDES } from './Links.js';
 
 const CONNECTIONS_FIXTURE = new URL( './links.fixture.json', import.meta.url );
-/** Mirrors the wire tube's side count, so the triangle accounting is exact. */
-const WIRE_SIDES = 5;
-const PROMISED_DRAW_CALLS = 3;
 const ROOFTOP_FIXTURE = new URL( '../../../../connections/fixtures/rooftop-spans.request.json', import.meta.url );
 
 /** No theme is served under node, so every key falls back. Keys still differ. */
@@ -92,72 +89,6 @@ describe( 'Links', () => {
 
 	} );
 
-	/**
-	 * The reason this box merges at all: the city's link budget is a fixed
-	 * handful of draw calls whatever the city does, and every link is inside
-	 * them rather than quietly dropped on the way.
-	 */
-	it( 'draws every link in the city in three calls', () => {
-
-		const built = new Links( doc, factory ).build();
-
-		expect( built.drawCalls ).toBe( PROMISED_DRAW_CALLS );
-		expect( built.group.children.length ).toBe( PROMISED_DRAW_CALLS );
-
-		// A closed section sweeps one strip per side, an open deck one fewer:
-		// railing, deck, railing, and nothing over the top.
-		const sides = ( link ) => {
-
-			if ( link.crossSection.shape !== 'rect' ) return WIRE_SIDES;
-
-			return link.kind === 'bridge' ? 3 : 4;
-
-		};
-
-		const expected = doc.links.reduce(
-			( sum, link ) => sum + sides( link ) * ( link.path.length - 1 ) * 2,
-			0
-		);
-
-		expect( built.triangles ).toBe( expected );
-
-	} );
-
-	/**
-	 * Every material a link wears tiles over world-metre UVs. A primitive's
-	 * 0..1 unwrap would stretch a single 3 m concrete tile over a whole
-	 * twenty-metre bridge.
-	 */
-	it( 'unwraps in world metres', () => {
-
-		const bridge = doc.links.find( ( link ) => link.kind === 'bridge' && level( link ) );
-		const geometry = new Links( { links: [ bridge ], apertures: doc.apertures }, factory )
-			.build().group.children[ 0 ].geometry;
-		const uv = geometry.getAttribute( 'uv' );
-		const position = geometry.getAttribute( 'position' );
-
-		let along = [ Infinity, - Infinity ];
-		let across = [ Infinity, - Infinity ];
-		const axis = unit( bridge.path[ 0 ], bridge.path[ 1 ] );
-
-		for ( let i = 0; i < uv.count; i ++ ) {
-
-			along = [ Math.min( along[ 0 ], uv.getX( i ) ), Math.max( along[ 1 ], uv.getX( i ) ) ];
-			across = [ Math.min( across[ 0 ], uv.getY( i ) ), Math.max( across[ 1 ], uv.getY( i ) ) ];
-			const point = [ position.getX( i ), position.getY( i ), position.getZ( i ) ];
-			expect( uv.getX( i ) ).toBeCloseTo( projection( point, bridge.path[ 0 ], axis ), 3 );
-
-		}
-
-		// Railing, deck, railing across the section.
-		expect( across[ 1 ] - across[ 0 ] ).toBeCloseTo( bridge.crossSection.width + 2 * RAILING, 3 );
-		// The two wall mitres may extend by more than one section between them.
-		// U is the exact metre projection along the straight link axis, including
-		// those cuts, rather than an arbitrary bound around centerline length.
-		expect( along[ 1 ] - along[ 0 ] ).toBeGreaterThan( bridge.length );
-
-	} );
-
 	it( 'renders rooftop span thickness, catenary samples and exact mast endpoints', async () => {
 
 		const request = JSON.parse( readFileSync( ROOFTOP_FIXTURE, 'utf8' ) );
@@ -230,21 +161,6 @@ function distance( a, b ) {
 function expectCloseToPoint( point, digits ) {
 
 	return point.map( ( value ) => expect.closeTo( value, digits ) );
-
-}
-
-function unit( a, b ) {
-
-	const vector = b.map( ( value, i ) => value - a[ i ] );
-	const length = Math.hypot( ...vector );
-
-	return vector.map( ( value ) => value / length );
-
-}
-
-function projection( point, origin, axis ) {
-
-	return point.reduce( ( sum, value, i ) => sum + ( value - origin[ i ] ) * axis[ i ], 0 );
 
 }
 

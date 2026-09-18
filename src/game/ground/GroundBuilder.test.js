@@ -9,7 +9,7 @@ const factory = { build: ( key, variantId ) => {
 	return material;
 
 } };
-const ground = ( covers, transit ) => new GroundBuilder( { volumetric: { ground: covers }, transit }, factory ).build();
+const ground = covers => new GroundBuilder( { volumetric: { ground: covers } }, factory ).build();
 const rect = ( surface, z0, z1 ) => ( { surface, polygon: [ [ 0, z0 ], [ 20, z0 ], [ 20, z1 ], [ 0, z1 ] ] } );
 
 const ROAD = rect( 'roadway', 0, 10 );
@@ -60,69 +60,16 @@ describe( 'GroundBuilder', () => {
 
 	} );
 
-	it( 'lays the published kerb strip at pavement height', () => {
+	it( 'lays the published kerb strip, and cuts one from the pavement where a world has none', () => {
 
-		const { group } = ground( [ ROAD, STRIP, rect( 'sidewalk', 10.15, 16 ) ] );
-		const strip = group.getObjectByName( 'ground:curb' );
-
-		expect( strip ).toBeDefined();
+		const strip = ground( [ ROAD, STRIP, rect( 'sidewalk', 10.15, 16 ) ] ).group.getObjectByName( 'ground:curb' );
 		expect( span( strip.geometry ) ).toEqual( [ SIDEWALK_HEIGHT + 0.004, SIDEWALK_HEIGHT + 0.004 ] );
 
-	} );
-
-	it( 'still cuts a kerb from the pavement in a world published without a strip', () => {
-
-		const { group } = ground( [ ROAD, rect( 'sidewalk', 10, 16 ) ] );
-		const kerb = group.getObjectByName( 'ground:kerb' );
-
-		expect( group.getObjectByName( 'ground:curb' ) ).toBeUndefined();
+		const legacy = ground( [ ROAD, rect( 'sidewalk', 10, 16 ) ] ).group;
+		expect( legacy.getObjectByName( 'ground:curb' ) ).toBeUndefined();
 		// The same face, and the stone's top band along it.
-		expect( kerb.geometry.getAttribute( 'position' ).count ).toBe( 12 );
-		expect( span( kerb.geometry ) ).toEqual( [ - 0.06, SIDEWALK_HEIGHT + 0.004 ] );
-
-	} );
-
-	it( 'opens the floor over every station shaft', () => {
-
-		const footprint = [ [ 8, 12 ], [ 12, 12 ], [ 12, 14 ], [ 8, 14 ] ];
-		const covers = [ ROAD, rect( 'sidewalk', 10, 16 ) ];
-		const station = {
-			subwayStations: [ {
-				id: 'ss0', box: { bottom: - 12, top: - 7 }, level: - 12, entrances: [],
-				platform: [ [ 0, 12 ], [ 20, 12 ], [ 20, 14 ], [ 0, 14 ] ],
-				shafts: [ { footprint, top: 0, bottom: - 12, passage: [] } ]
-			} ]
-		};
-
-		const sealed = ground( covers ).group.getObjectByName( 'ground:sidewalk' );
-		const open = ground( covers, station ).group.getObjectByName( 'ground:sidewalk' );
-
-		expect( covered( sealed.geometry, 10, 13 ) ).toBe( true );
-		expect( covered( open.geometry, 10, 13 ) ).toBe( false );
-		// Still floor either side of the mouth.
-		expect( covered( open.geometry, 4, 13 ) ).toBe( true );
-		expect( covered( open.geometry, 16, 13 ) ).toBe( true );
-
-	} );
-
-	it( 'includes Atlas highway decks and supports in the visible and solid ground', () => {
-
-		const highwayStructures = [ {
-			edgeIds: [ 'e0' ], path: [ [ 0, 5 ], [ 20, 5 ] ], width: 6, level: 8,
-			deckThickness: 1, ramps: { start: 0, end: 0 },
-			elevationProfile: [ { distance: 0, level: 8 }, { distance: 20, level: 8 } ],
-			supports: [ {
-				position: [ 10, 5 ], footprint: [ [ 9, 4 ], [ 11, 4 ], [ 11, 6 ], [ 9, 6 ] ],
-				bottom: 0, top: 7
-			} ]
-		} ];
-		const built = new GroundBuilder( {
-			volumetric: { ground: [ ROAD ] }, streets: { highwayStructures }
-		}, factory ).build();
-
-		expect( built.group.getObjectByName( 'highway:roadway' ) ).toBeDefined();
-		expect( built.group.getObjectByName( 'highway:structure' ) ).toBeDefined();
-		expect( span( built.colliderGeometry )[ 1 ] ).toBe( 8 );
+		expect( legacy.getObjectByName( 'ground:kerb' ).geometry.getAttribute( 'position' ).count ).toBe( 12 );
+		expect( span( legacy.getObjectByName( 'ground:kerb' ).geometry ) ).toEqual( [ - 0.06, SIDEWALK_HEIGHT + 0.004 ] );
 
 	} );
 

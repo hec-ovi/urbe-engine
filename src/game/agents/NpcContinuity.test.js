@@ -46,6 +46,22 @@ describe( 'NPC continuity integration', () => {
 		expect( reappeared.gender ).toBe( home.gender );
 		expect( reappeared.schedule.progress ).toBeCloseTo( 0.25 / ( inbound.endMin - inbound.startMin ) );
 
+		// the same identity survives distance virtualization in both directions
+		const [ far ] = controller.updateVisible( {
+			timeMin: inbound.startMin + 0.5,
+			playerPosition: [ reappeared.position[ 0 ] + 200, reappeared.position[ 1 ], reappeared.position[ 2 ] ],
+			maxDistance: 100
+		} );
+		expect( far ).toMatchObject( {
+			npcId: npc.npcId, appearanceSeed: home.appearanceSeed, visible: false
+		} );
+		const [ near ] = controller.updateVisible( {
+			timeMin: inbound.startMin + 0.75, playerPosition: reappeared.position, maxDistance: 100
+		} );
+		expect( near ).toMatchObject( {
+			npcId: npc.npcId, appearanceSeed: home.appearanceSeed, gender: home.gender, visible: true
+		} );
+
 	} );
 
 	it( 'projects one named commuter over the authoritative transit path3 and restores it exactly', () => {
@@ -175,9 +191,6 @@ describe( 'NPC continuity integration', () => {
 		expect( next.bridge.behaviorAt( npc.npcId, MON_9 + 2 ).interrupted ).toBe( true );
 		expect( next.bridge.serialize() ).toEqual( simSave );
 		expect( next.controller.appear( { npcId: npc.npcId, timeMin: MON_9 + 2 } ) ).toEqual( saved.actors[ 0 ] );
-		const unmatched = setup();
-		expect( code( () => unmatched.controller.restore( saved ) ) ).toBe( 'E_NPC_INPUT' );
-		expect( unmatched.controller.serialize().actors ).toEqual( [] );
 
 	} );
 
@@ -239,10 +252,6 @@ describe( 'NPC continuity integration', () => {
 		const restored = setup( restoreSimulation( simulationInput(), first.bridge.simulation.serialize() ) );
 		expect( restored.controller.restore( saved ) ).toEqual( saved );
 		expect( saved.pose ).toEqual( { npcId: npc.npcId, kind: 'crouch', lastTimeMin: startedAt } );
-		const unowned = structuredClone( saved );
-		unowned.pose = null;
-		expect( code( () => setup( restoreSimulation( simulationInput(), first.bridge.simulation.serialize() ) )
-			.controller.restore( unowned ) ) ).toBe( 'E_NPC_INPUT' );
 
 		let returning = restored.controller.releaseCrouch( { npcId: npc.npcId, timeMin: startedAt + 1 } );
 		expect( restored.controller.serialize().pose ).toBeNull();
@@ -258,33 +267,6 @@ describe( 'NPC continuity integration', () => {
 		expect( code( () => restored.controller.releaseCrouch( {
 			npcId: npc.npcId, timeMin: startedAt + 2
 		} ) ) ).toBe( 'E_NPC_CONFLICT' );
-
-	} );
-
-	it( 'virtualizes distant scheduled bodies and restores the same identity when they are requested again', () => {
-
-		const { bridge, controller } = setup();
-		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
-		const actor = controller.appear( { npcId: npc.npcId, timeMin: MON_9 } );
-		const [ hidden ] = controller.updateVisible( {
-			timeMin: MON_9 + 1,
-			playerPosition: [ actor.position[ 0 ] + 200, actor.position[ 1 ], actor.position[ 2 ] ],
-			maxDistance: 100
-		} );
-
-		expect( hidden ).toMatchObject( {
-			npcId: npc.npcId, appearanceSeed: actor.appearanceSeed, visible: false
-		} );
-		const [ nearAgain ] = controller.updateVisible( {
-			timeMin: MON_9 + 2, playerPosition: actor.position, maxDistance: 100
-		} );
-		expect( nearAgain ).toMatchObject( {
-			npcId: npc.npcId, appearanceSeed: actor.appearanceSeed, visible: true
-		} );
-		const returned = controller.appear( { npcId: npc.npcId, timeMin: MON_9 + 2 } );
-		expect( returned ).toMatchObject( {
-			npcId: npc.npcId, appearanceSeed: actor.appearanceSeed, gender: actor.gender, visible: true
-		} );
 
 	} );
 
@@ -311,28 +293,25 @@ describe( 'NPC continuity integration', () => {
 		expect( returning ).toMatchObject( { npcId: npc.npcId, mode: 'schedule', place: { kind: 'parcel', id: 'p_cafe' } } );
 		expect( bridge.behaviorAt( npc.npcId, MON_9 + 1 ).interrupted ).toBe( false );
 
-	} );
-
-	it( 'pauses a follower for conversation without releasing its interruption', () => {
-
-		const { bridge, controller } = setup();
-		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
-		const player = [ 560, 1, 250 ];
-		const following = controller.startFollow( { npcId: npc.npcId, timeMin: MON_9, playerPosition: player } );
-		controller.beginConversation( {
-			npcId: npc.npcId, timeMin: MON_9, position: following.position, heading: following.heading,
+		// a follower keeps its interruption and returns to follow control
+		const escort = setup();
+		const walker = escort.bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const following = escort.controller.startFollow( {
+			npcId: walker.npcId, timeMin: MON_9, playerPosition: visible
+		} );
+		escort.controller.beginConversation( {
+			npcId: walker.npcId, timeMin: MON_9, position: following.position, heading: following.heading,
 			place: following.place, seated: false
 		} );
-		expect( controller.updateFollow( { timeMin: MON_9 + 1, deltaSeconds: 1, playerPosition: player } ).mode ).toBe( 'conversation' );
-		expect( controller.endConversation( { timeMin: MON_9 + 1 } ).mode ).toBe( 'following' );
-		expect( controller.serialize() ).toMatchObject( {
-			follow: { npcId: npc.npcId, mode: 'following', source: 'follow' }, conversation: null
-		} );
-		expect( bridge.behaviorAt( npc.npcId, MON_9 + 2 ).interrupted ).toBe( true );
+		expect( escort.controller.updateFollow( {
+			timeMin: MON_9 + 1, deltaSeconds: 1, playerPosition: visible
+		} ).mode ).toBe( 'conversation' );
+		expect( escort.controller.endConversation( { timeMin: MON_9 + 1 } ).mode ).toBe( 'following' );
+		expect( escort.bridge.behaviorAt( walker.npcId, MON_9 + 2 ).interrupted ).toBe( true );
 
 	} );
 
-	it( 'rejects unavailable places and releases a follower that becomes unavailable', () => {
+	it( 'fails closed on unknown, placeless, unavailable and malformed identities', () => {
 
 		const { bridge, controller } = setup();
 		expect( code( () => controller.startFollow( { npcId: 'missing', timeMin: MON_9, playerPosition: [ 0, 0, 0 ] } ) ) ).toBe( 'E_NPC_UNKNOWN' );
@@ -341,23 +320,17 @@ describe( 'NPC continuity integration', () => {
 		expect( code( () => controller.startFollow( { npcId: driver.npcId, timeMin: MON_9, playerPosition: [ 0, 0, 0 ] } ) ) ).toBe( 'E_NPC_PLACE' );
 
 		const worker = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		expect( code( () => controller.startFollow( { npcId: worker.npcId, timeMin: MON_9 } ) ) ).toBe( 'E_NPC_INPUT' );
+		const actor = controller.appear( { npcId: worker.npcId, timeMin: MON_9 } );
+		const invalid = controller.serialize();
+		invalid.actors[ 0 ] = { ...actor, appearanceSeed: ( actor.appearanceSeed + 1 ) >>> 0 };
+		expect( code( () => controller.restore( invalid ) ) ).toBe( 'E_NPC_INPUT' );
+
 		controller.startFollow( { npcId: worker.npcId, timeMin: MON_9, playerPosition: [ 560, 1, 250 ] } );
 		bridge.applyFlag( worker.npcId, { kind: 'die' } );
 		const released = controller.updateFollow( { timeMin: MON_9 + 1, deltaSeconds: 1, playerPosition: [ 560, 1, 250 ] } );
 		expect( released.mode ).toBe( 'released' );
 		expect( controller.serialize().follow ).toBeNull();
-
-	} );
-
-	it( 'rejects malformed requests and identity-mismatched restore data at the public boundary', () => {
-
-		const { bridge, controller } = setup();
-		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
-		expect( code( () => controller.startFollow( { npcId: npc.npcId, timeMin: MON_9 } ) ) ).toBe( 'E_NPC_INPUT' );
-		const actor = controller.appear( { npcId: npc.npcId, timeMin: MON_9 } );
-		const invalid = controller.serialize();
-		invalid.actors[ 0 ] = { ...actor, appearanceSeed: ( actor.appearanceSeed + 1 ) >>> 0 };
-		expect( code( () => controller.restore( invalid ) ) ).toBe( 'E_NPC_INPUT' );
 
 	} );
 

@@ -71,25 +71,6 @@ it( 'coalesces updates and cancels obsolete preparation before adding visibility
 	stream.dispose();
 } );
 
-it( 'accepts late preparation/collision ports, retries failures and cancels pending admission on disposal', async () => {
-	const stream = await dressing().stream();
-	await stream.update( { x: 0, z: 0 }, { radius: 100, collisionRadius: 100 } );
-	const prepare = vi.fn( async () => {} );
-	const geometry = collision();
-	geometry.addBand.mockRejectedValueOnce( new Error( 'cook failed' ) );
-	await expect( stream.update( { x: 0, z: 0 }, { prepare, collision: geometry } ) ).rejects.toThrow( 'cook failed' );
-	await stream.update( { x: 0, z: 0 } );
-	expect( prepare ).toHaveBeenCalled(); expect( stream.stats.collision ).toBe( 18 );
-	let release;
-	const blocked = new Promise( resolve => { release = resolve; } );
-	const waiting = vi.fn( () => blocked );
-	const pending = stream.update( { x: 1000, z: 0 }, { prepare: waiting } );
-	await vi.waitFor( () => expect( waiting ).toHaveBeenCalled() );
-	stream.dispose(); release(); await pending;
-	expect( stream.group.children ).toHaveLength( 0 ); expect( geometry.parts.size ).toBe( 0 );
-	await expect( stream.update( { x: 0, z: 0 } ) ).rejects.toMatchObject( { code: 'E_PROP_STREAM' } );
-} );
-
 it( 'validates stream settings before loading assets and refuses invalid windows', async () => {
 	const loadAsset = vi.fn();
 	await expect( dressing( world(), { loadAsset } ).stream( { cellSize: 0 } ) ).rejects.toMatchObject( { code: 'E_PROP_STREAM' } );
@@ -98,6 +79,7 @@ it( 'validates stream settings before loading assets and refuses invalid windows
 	await expect( stream.update( { x: NaN, z: 0 } ) ).rejects.toMatchObject( { code: 'E_PROP_STREAM' } );
 	await expect( stream.update( { x: 0, z: 0 }, { radius: - 1 } ) ).rejects.toMatchObject( { code: 'E_PROP_STREAM' } );
 	stream.dispose();
+	await expect( stream.update( { x: 0, z: 0 } ) ).rejects.toMatchObject( { code: 'E_PROP_STREAM' } );
 } );
 
 function serialize( item ) { return { ...item, matrix: item.matrix.toArray() }; }

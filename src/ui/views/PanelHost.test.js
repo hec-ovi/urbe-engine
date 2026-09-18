@@ -8,7 +8,7 @@ const fakeView = () => ( { element: document.createElement( 'div' ), shown: vi.f
 /** One panel at a time, Esc closes, and the game hears every open and close. */
 describe( 'PanelHost', () => {
 
-	let views, onOpen, onClose, host;
+	let views, onOpen, onClose, host, trigger;
 
 	beforeEach( () => {
 
@@ -18,95 +18,53 @@ describe( 'PanelHost', () => {
 		onClose = vi.fn();
 		host = new PanelHost( { views, onOpen, onClose } );
 		document.body.replaceChildren( host.element );
+		trigger = document.createElement( 'button' );
+		document.body.prepend( trigger );
+		trigger.focus();
 
 	} );
 
 	afterEach( () => vi.useRealTimers() );
 
-	it( 'starts with every view hidden', () => {
+	it( 'opens one view at a time as a focused dialog, closes the one before it, hands focus back, and answers Escape and toggle', () => {
 
 		expect( views.A.element.hidden ).toBe( true );
-		expect( views.B.element.hidden ).toBe( true );
 		expect( host.current ).toBeNull();
 
-	} );
-
-	it( 'open shows that view, tells it, and reports the name', () => {
-
-		const trigger = document.createElement( 'button' );
-		document.body.prepend( trigger );
-		trigger.focus();
 		host.open( 'A' );
-
 		expect( views.A.element.hidden ).toBe( false );
 		expect( views.A.element.inert ).toBe( false );
 		expect( views.A.element.getAttribute( 'role' ) ).toBe( 'dialog' );
 		expect( views.A.element.getAttribute( 'aria-label' ) ).toBe( 'A' );
 		expect( document.activeElement ).toBe( views.A.element );
-		expect( views.A.element.classList.contains( 'is-open' ) ).toBe( true );
 		expect( views.A.shown ).toHaveBeenCalledOnce();
 		expect( onOpen ).toHaveBeenCalledWith( 'A' );
 		expect( host.element.classList.contains( 'is-open' ) ).toBe( true );
 
-	} );
-
-	it( 'opening another closes the one before, after its transition', () => {
-
-		host.open( 'A' );
 		host.open( 'B' );
-
 		expect( views.A.element.classList.contains( 'is-open' ) ).toBe( false );
 		vi.runAllTimers();
 		expect( views.A.element.hidden ).toBe( true );
 		expect( views.B.element.hidden ).toBe( false );
 		expect( host.current ).toBe( 'B' );
 
-	} );
-
-	it( 'close hides the open view and reports it', () => {
-
-		host.open( 'A' );
 		host.close();
-		expect( views.A.element.inert ).toBe( true );
-		expect( views.A.element.getAttribute( 'aria-hidden' ) ).toBe( 'true' );
+		expect( views.B.element.inert ).toBe( true );
+		expect( views.B.element.getAttribute( 'aria-hidden' ) ).toBe( 'true' );
 		vi.runAllTimers();
-
-		expect( views.A.element.hidden ).toBe( true );
+		expect( views.B.element.hidden ).toBe( true );
 		expect( host.current ).toBeNull();
 		expect( onClose ).toHaveBeenCalledOnce();
 		expect( host.element.classList.contains( 'is-open' ) ).toBe( false );
-
-	} );
-
-	it( 'returns focus to the control that opened the panel', () => {
-
-		const trigger = document.createElement( 'button' );
-		document.body.prepend( trigger );
-		trigger.focus();
-		host.open( 'B' );
-		host.close();
-
 		expect( document.activeElement ).toBe( trigger );
 
-	} );
-
-	it( 'Escape closes, and does nothing once closed', () => {
-
-		host.open( 'A' );
+		// Escape closes the open panel, and is ignored once nothing is open.
+		host.toggle( 'A' );
+		expect( host.current ).toBe( 'A' );
 		fireEvent.keyDown( window, { key: 'Escape' } );
 		fireEvent.keyDown( window, { key: 'Escape' } );
-
 		expect( host.current ).toBeNull();
-		expect( onClose ).toHaveBeenCalledOnce();
-
-	} );
-
-	it( 'toggle opens a closed view and closes an open one', () => {
-
-		host.toggle( 'B' );
-		expect( host.current ).toBe( 'B' );
-		host.toggle( 'B' );
-		expect( host.current ).toBeNull();
+		expect( onClose ).toHaveBeenCalledTimes( 2 );
 
 	} );
 

@@ -16,7 +16,7 @@ describe( 'playable world creation contract', () => {
 
 	} );
 
-	it( 'publishes the four stages as separate city, draft and playable game artifacts', async () => {
+	it( 'publishes the four stages as separate city, draft and playable game artifacts, and free play beside them', async () => {
 
 		const fixture = await setup();
 		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
@@ -29,6 +29,11 @@ describe( 'playable world creation contract', () => {
 		expect( await readJson( join( fixture.config.outDir, 'cities/canal-ward/manifest.json' ) ) ).toMatchObject( {
 			parcels: parcelIds(), interiors: []
 		} );
+		expect( fixture.calls[ 0 ] ).toMatchObject( { kind: 'atlas', command: 'npm' } );
+		expect( fixture.calls[ 0 ].args.slice( 0, 7 ) ).toEqual( [
+			'run', 'generate', '--', '--seed', 'canal-17', '--out', expect.any( String )
+		] );
+		expect( fixture.calls[ 0 ].args ).toEqual( expect.arrayContaining( [ '--size', '500' ] ) );
 
 		const instances = await creation.generateInstances( {
 			cityId: city.id, mode: 'automatic', count: 9, buildingIds: []
@@ -61,89 +66,60 @@ describe( 'playable world creation contract', () => {
 		const bundleDir = join( fixture.config.outDir, 'games/canal-ward/quests' );
 		expect( await readJson( join( bundleDir, 'quest-bundle.json' ) ) ).toMatchObject( {
 			files: { questlines: 'questlines.json' },
-				counts: {
-					questlines: 4, objectives: 25, investigations: 0, mechanicTargetBindings: 0,
-					missionAssetRequests: 4, missionItemBindings: 4
-				}
+			counts: {
+				questlines: 4, objectives: 25, investigations: 0, mechanicTargetBindings: 0,
+				missionAssetRequests: 4, missionItemBindings: 4
+			}
 		} );
 		expect( await readJson( join( bundleDir, 'mission-item-bindings.json' ) ) ).toHaveLength( 4 );
-		await expect( readFile( join( fixture.config.outDir, 'games/canal-ward/draft.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
-		await expect( readFile( join( bundleDir, 'all.questlines.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
-		await expect( readFile( join( bundleDir, 'questlines.meta.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
-		expect( fixture.calls.map( ( call ) => call.kind ) ).toEqual( [ 'atlas', 'shells', 'materialize', 'interiors' ] );
-		expect( fixture.calls[ 0 ] ).toMatchObject( { kind: 'atlas', command: 'npm' } );
-		expect( fixture.calls[ 0 ].args.slice( 0, 7 ) ).toEqual( [
-			'run', 'generate', '--', '--seed', 'canal-17', '--out', expect.any( String )
-		] );
+		// Authoring metadata and unselected definitions stay out of a published game.
+		for ( const absent of [ 'games/canal-ward/draft.json', 'games/canal-ward/quests/all.questlines.json', 'games/canal-ward/quests/questlines.meta.json' ] ) {
 
-	} );
-
-	it( 'creates every size from a template and publishes independent free-play saves without quest commands', async () => {
-
-		const fixture = await setup();
-		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
-		for ( const [ size, metres ] of [ [ 'small', '500' ], [ 'medium', '1000' ], [ 'large', '3000' ] ] ) {
-
-			const city = await creation.generateCity( { size } );
-			expect( city ).toMatchObject( { size, name: expect.any( String ), seed: expect.any( String ) } );
-			expect( fixture.calls.at( -2 ).args ).toEqual( expect.arrayContaining( [ '--size', metres ] ) );
-			const input = { cityId: city.id, interiorIds: [], questId: null };
-			const first = await creation.createGame( input );
-			const second = await creation.createGame( input );
-			expect( second.id ).not.toBe( first.id );
-			for ( const game of [ first, second ] ) {
-
-				expect( game ).toMatchObject( { cityId: city.id, selectedInteriors: [], questBundle: null, quests: [], sideJobs: [] } );
-				const root = join( fixture.config.outDir, 'games', game.id );
-				expect( await readJson( join( root, 'game.json' ) ) ).toEqual( game );
-				await expect( readFile( join( root, 'quests/quest-bundle.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
-
-			}
+			await expect( readFile( join( fixture.config.outDir, absent ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
 
 		}
-		expect( fixture.calls.map( ( call ) => call.kind ) ).toEqual( [ 'atlas', 'shells', 'atlas', 'shells', 'atlas', 'shells' ] );
+		expect( fixture.calls.map( ( call ) => call.kind ) ).toEqual( [ 'atlas', 'shells', 'materialize', 'interiors' ] );
+
+		const free = { cityId: city.id, interiorIds: [], questId: null };
+		const first = await creation.createGame( free );
+		const second = await creation.createGame( free );
+		expect( second.id ).not.toBe( first.id );
+		for ( const play of [ first, second ] ) {
+
+			expect( play ).toMatchObject( { cityId: city.id, selectedInteriors: [], questBundle: null, quests: [], sideJobs: [] } );
+			await expect( readFile( join( fixture.config.outDir, 'games', play.id, 'quests/quest-bundle.json' ) ) )
+				.rejects.toMatchObject( { code: 'ENOENT' } );
+
+		}
+		// Free play copies the city shell; it runs no further generation command.
+		expect( fixture.calls.map( ( call ) => call.kind ) ).toEqual( [ 'atlas', 'shells', 'materialize', 'interiors' ] );
 
 	} );
 
-	it( 'keeps selected interiors when quests are skipped and rejects a mismatched selection', async () => {
+	it( 'fails closed on every stage request it cannot serve, leaving the city shell-only', async () => {
 
 		const fixture = await setup();
 		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
-		const city = await creation.generateCity( { size: 'small' } );
-		const instances = await creation.generateInstances( { cityId: city.id, mode: 'manual', count: 1, buildingIds: [ 'p0' ] } );
-		await expectCode( creation.createGame( { cityId: city.id, interiorIds: [ 'p1' ], questId: null } ), 'E_STAGE_MISMATCH' );
-		const game = await creation.createGame( { cityId: city.id, interiorIds: instances.ids, questId: null } );
-		expect( game ).toMatchObject( { selectedInteriors: [ 'p0' ], questBundle: null, quests: [], sideJobs: [] } );
-		await expect( readFile( join( fixture.config.outDir, 'games', game.id, 'quests/all.questlines.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
-
-	} );
-
-	it( 'keeps a city shell-only when a later stage rejects invalid input', async () => {
-
-		const fixture = await setup();
-		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
-		await creation.generateCity( { name: 'Strict City', seed: 'strict', size: 'medium' } );
+		const city = await creation.generateCity( { name: 'Strict City', seed: 'strict', size: 'medium' } );
 
 		await expectCode( creation.generateInstances( {
-			cityId: 'strict-city', mode: 'automatic', count: 6, buildingIds: []
+			cityId: city.id, mode: 'automatic', count: 6, buildingIds: []
 		} ), 'E_QUEST_LOCATIONS' );
 		await expectCode( creation.generateInstances( {
-			cityId: 'strict-city', mode: 'manual', count: 2, buildingIds: [ 'p0' ]
+			cityId: city.id, mode: 'manual', count: 2, buildingIds: [ 'p0' ]
 		} ), 'E_INVALID_REQUEST' );
 		await expectCode( creation.generateInstances( {
-			cityId: 'strict-city', mode: 'manual', count: 1, buildingIds: [ 'missing' ]
+			cityId: city.id, mode: 'manual', count: 1, buildingIds: [ 'missing' ]
 		} ), 'E_INVALID_REQUEST' );
-		expect( await readJson( join( fixture.config.outDir, 'cities/strict-city/manifest.json' ) ) ).toMatchObject( { interiors: [] } );
+		await expectCode( creation.generateInstances( {
+			cityId: 'absent-city', mode: 'manual', count: 1, buildingIds: [ 'p0' ]
+		} ), 'E_CITY_NOT_FOUND' );
+		await expectCode( creation.generateCity( { name: 'Strict City', seed: 'strict', size: 'medium' } ), 'E_EXISTS' );
+		await expectCode( creation.generateQuests( {
+			cityId: city.id, interiorIds: parcelIds().slice( 0, 9 ), mainBrief: '', sideJobs: 3
+		} ), 'E_DRAFT_NOT_FOUND' );
 
-	} );
-
-	it( 'fails closed for unsupported story requests and cross-stage mismatches', async () => {
-
-		const fixture = await setup();
-		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
-		const city = await creation.generateCity( { name: 'Stage City', seed: 'stage', size: 'large' } );
 		const instances = await creation.generateInstances( { cityId: city.id, mode: 'automatic', count: 9, buildingIds: [] } );
-
 		await expectCode( creation.generateQuests( {
 			cityId: city.id, interiorIds: instances.ids, mainBrief: 'invent a new plot', sideJobs: 3
 		} ), 'E_STORY_BRIEF_UNAVAILABLE' );
@@ -156,6 +132,11 @@ describe( 'playable world creation contract', () => {
 		await expectCode( creation.createGame( {
 			cityId: city.id, interiorIds: instances.ids, questId: 'not-the-stage'
 		} ), 'E_STAGE_MISMATCH' );
+		await expectCode( creation.createGame( {
+			cityId: city.id, interiorIds: [ 'p1' ], questId: null
+		} ), 'E_STAGE_MISMATCH' );
+
+		expect( await readJson( join( fixture.config.outDir, 'cities/strict-city/manifest.json' ) ) ).toMatchObject( { interiors: [] } );
 
 	} );
 

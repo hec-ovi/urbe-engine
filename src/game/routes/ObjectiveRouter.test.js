@@ -4,7 +4,7 @@ import { ObjectiveRouteError } from './ObjectiveRouteError.js';
 
 describe( 'ObjectiveRouter', () => {
 
-	it( 'routes from the current feet to the exact parcel entry over path3', () => {
+	it( 'routes the current feet to the exact parcel, station and stop destination over path3', () => {
 
 		const router = new ObjectiveRouter( network() );
 		const route = router.route( { from: [ - 1, 0, 0 ], destination: { kind: 'parcel', id: 'p9' } } );
@@ -14,43 +14,12 @@ describe( 'ObjectiveRouter', () => {
 		expect( route.path3 ).toEqual( [ [ - 1, 0, 0 ], [ 0, 0, 0 ], [ 5, 2, 0 ], [ 10, 2, 0 ] ] );
 		expect( route.distanceMeters ).toBeCloseTo( 1 + Math.hypot( 5, 2 ) + 5 );
 
-	} );
-
-	it( 'reroutes deterministically from a changed position', () => {
-
-		const router = new ObjectiveRouter( network() );
-		const first = router.route( { from: [ 0, 0, 0 ], destination: { kind: 'parcel', id: 'p9' } } );
 		const rerouted = router.route( { from: [ 10, 2, 1 ], destination: { kind: 'parcel', id: 'p9' } } );
-
-		expect( first.edgeIds ).toEqual( [ 'short', 'access' ] );
 		expect( rerouted.edgeIds ).toEqual( [] );
 		expect( rerouted.path3 ).toEqual( [ [ 10, 2, 1 ], [ 10, 2, 0 ] ] );
 
-	} );
-
-	it( 'supports exact station and stop destinations', () => {
-
-		const router = new ObjectiveRouter( network() );
 		expect( router.route( { from: [ 0, 0, 0 ], destination: { kind: 'station', id: 'rail-a' } } ).nodeIds.at( - 1 ) ).toBe( 'station' );
 		expect( router.route( { from: [ 0, 0, 0 ], destination: { kind: 'stop', id: 'bus-a' } } ).nodeIds.at( - 1 ) ).toBe( 'stop' );
-
-	} );
-
-	it( 'terminates through zero-length graph joins without predecessor cycles', () => {
-
-		const graph = network();
-		graph.nodes.push( node( 'zero-a', 5, 2, 0, 'corner' ), node( 'zero-b', 5, 2, 0, 'corner' ) );
-		graph.edges.push(
-			edge( 'zero-in', 'b', 'zero-a', [ [ 5, 2, 0 ], [ 5, 2, 0 ] ] ),
-			edge( 'zero-join', 'zero-a', 'zero-b', [ [ 5, 2, 0 ], [ 5, 2, 0 ] ] )
-		);
-
-		const route = new ObjectiveRouter( graph ).route( {
-			from: [ 5, 2, 0 ], destination: { kind: 'parcel', id: 'p9' }
-		} );
-
-		expect( route.nodeIds.at( - 1 ) ).toBe( 'entry-p9' );
-		expect( route.nodeIds.length ).toBeLessThanOrEqual( graph.nodes.length );
 
 	} );
 
@@ -60,15 +29,18 @@ describe( 'ObjectiveRouter', () => {
 		graph.nodes.push( node( 'aaa-isolated', 0, 0, 2, 'station', 'rail-a' ), node( 'zzz-near', 0, 0, 4, 'station', 'rail-a' ) );
 		graph.edges.push( edge( 'near-access', 'a', 'zzz-near', [ [ 0, 0, 0 ], [ 0, 0, 4 ] ] ) );
 		const route = new ObjectiveRouter( graph ).route( { from: [ 0, 0, 0 ], destination: { kind: 'station', id: 'rail-a' } } );
+
 		expect( route.nodeIds ).toEqual( [ 'a', 'zzz-near' ] );
 		expect( route.distanceMeters ).toBe( 4 );
 
 	} );
 
-	it( 'fails closed for invalid, missing, and disconnected data', () => {
+	it( 'fails closed for off-contract, invalid, missing, and disconnected data', () => {
 
 		expect( () => new ObjectiveRouter( { nodes: [], edges: [ { id: 'bad' } ] } ) ).toThrowError( ObjectiveRouteError );
 		const router = new ObjectiveRouter( network() );
+		expect( () => router.route( { from: [ 0, 0 ], destination: { kind: 'parcel', id: 'p9' } } ) )
+			.toThrowError( expect.objectContaining( { code: 'E_OBJECTIVE_ROUTE_INPUT' } ) );
 		expect( () => router.route( { from: [ 0, 0, 0 ], destination: { kind: 'parcel', id: 'missing' } } ) )
 			.toThrowError( /no parcel destination missing/ );
 		expect( () => router.route( { from: [ 0, 0, 0 ], destination: { kind: 'parcel', id: 'p-island' } } ) )

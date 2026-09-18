@@ -8,50 +8,48 @@ it( 'catches the real capsule far outside the city with a matching world-tiled s
 
 	const { floor, physics, camera, material } = await fixture();
 	expect( floor.elevation ).toBe( - 2 );
-	for ( const [ x, z ] of [ [ 100000, - 100000 ], [ - 80000, 90000 ] ] ) {
+	const [ x, z ] = [ 100000, - 100000 ];
+	const body = new PlayerBody( physics, new THREE.Vector3( x, floor.elevation + 4, z ) );
+	for ( let i = 0; i < 180; i ++ ) {
 
-		const body = new PlayerBody( physics, new THREE.Vector3( x, floor.elevation + 4, z ) );
-		for ( let i = 0; i < 180; i ++ ) {
-
-			physics.step( 1 / 60 );
-			body.move( new THREE.Vector3(), 1 / 60 );
-
-		}
-		expect( body.feet.y ).toBeCloseTo( floor.elevation, 1 );
-		expect( body.grounded ).toBe( true );
-		camera.position.copy( body.eye );
-		camera.far = 1500;
-		camera.aspect = 2.3;
-		camera.zoom = 0.7;
-		camera.rotation.set( - 0.4, 0.7, 0 );
-		camera.updateProjectionMatrix();
-		camera.updateMatrixWorld( true );
-		floor.update( camera );
-		floor.mesh.updateMatrixWorld( true );
-		const bounds = new THREE.Box3().setFromObject( floor.mesh );
-		expect( bounds.min.x ).toBeLessThan( x - camera.far );
-		expect( bounds.max.z ).toBeGreaterThan( z + camera.far );
-		expect( bounds.min.y ).toBeCloseTo( floor.elevation );
-		for ( const x of [ - 1, 1 ] ) for ( const y of [ - 1, 1 ] ) {
-
-			const corner = new THREE.Vector3( x, y, 1 ).unproject( camera );
-			expect( corner.x ).toBeGreaterThan( bounds.min.x );
-			expect( corner.x ).toBeLessThan( bounds.max.x );
-			expect( corner.z ).toBeGreaterThan( bounds.min.z );
-			expect( corner.z ).toBeLessThan( bounds.max.z );
-
-		}
-		const position = floor.mesh.geometry.getAttribute( 'position' );
-		const uv = floor.mesh.geometry.getAttribute( 'uv' );
-		for ( let i = 0; i < position.count; i ++ ) {
-
-			const world = new THREE.Vector3().fromBufferAttribute( position, i ).applyMatrix4( floor.mesh.matrixWorld );
-			expect( uv.getX( i ) ).toBeCloseTo( world.x, 1 );
-			expect( uv.getY( i ) ).toBeCloseTo( world.z, 1 );
-
-		}
+		physics.step( 1 / 60 );
+		body.move( new THREE.Vector3(), 1 / 60 );
 
 	}
+	expect( body.feet.y ).toBeCloseTo( floor.elevation, 1 );
+	expect( body.grounded ).toBe( true );
+	camera.position.copy( body.eye );
+	camera.far = 1500;
+	camera.aspect = 2.3;
+	camera.zoom = 0.7;
+	camera.rotation.set( - 0.4, 0.7, 0 );
+	camera.updateProjectionMatrix();
+	camera.updateMatrixWorld( true );
+	floor.update( camera );
+	floor.mesh.updateMatrixWorld( true );
+	const bounds = new THREE.Box3().setFromObject( floor.mesh );
+	expect( bounds.min.x ).toBeLessThan( x - camera.far );
+	expect( bounds.max.z ).toBeGreaterThan( z + camera.far );
+	expect( bounds.min.y ).toBeCloseTo( floor.elevation );
+	for ( const x of [ - 1, 1 ] ) for ( const y of [ - 1, 1 ] ) {
+
+		const corner = new THREE.Vector3( x, y, 1 ).unproject( camera );
+		expect( corner.x ).toBeGreaterThan( bounds.min.x );
+		expect( corner.x ).toBeLessThan( bounds.max.x );
+		expect( corner.z ).toBeGreaterThan( bounds.min.z );
+		expect( corner.z ).toBeLessThan( bounds.max.z );
+
+	}
+	const position = floor.mesh.geometry.getAttribute( 'position' );
+	const uv = floor.mesh.geometry.getAttribute( 'uv' );
+	for ( let i = 0; i < position.count; i ++ ) {
+
+		const world = new THREE.Vector3().fromBufferAttribute( position, i ).applyMatrix4( floor.mesh.matrixWorld );
+		expect( uv.getX( i ) ).toBeCloseTo( world.x, 1 );
+		expect( uv.getY( i ) ).toBeCloseTo( world.z, 1 );
+
+	}
+
 	const geometryDispose = vi.spyOn( floor.mesh.geometry, 'dispose' );
 	const materialDispose = vi.spyOn( material, 'dispose' );
 	const handle = floor.handle.collider.handle;

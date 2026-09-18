@@ -31,29 +31,22 @@ describe( 'ChatPanel', () => {
 
 	} );
 
-	it( 'setNpc names who you are talking to', () => {
+	it( 'names who you are talking to, puts each message on its side, and sends the trimmed line but never a blank one', async () => {
 
+		const user = userEvent.setup();
 		panel.setNpc( { name: 'Ada Vance', role: 'clerk' } );
 		expect( screen.getByRole( 'heading', { name: 'Ada Vance · clerk' } ) ).toBeTruthy();
 
-	} );
+		panel.addMessage( { from: 'npc', name: 'Ada', text: 'Down the steps.' } );
+		panel.addMessage( { from: 'player', text: 'Got it.' } );
+		expect( screen.getByText( 'Down the steps.' ).closest( '.chat-line' ).classList.contains( 'is-npc' ) ).toBe( true );
+		expect( screen.getByText( 'Got it.' ).closest( '.chat-line' ).classList.contains( 'is-player' ) ).toBe( true );
+		expect( screen.getByText( 'you' ) ).toBeTruthy();
 
-	it( 'the Esc button and Escape in the input both close', async () => {
+		panel.setTranscript( [] );
+		expect( panel.transcript.children ).toHaveLength( 0 );
 
-		const user = userEvent.setup();
-
-		await user.click( screen.getByRole( 'button', { name: 'close' } ) );
-		await user.type( screen.getByRole( 'textbox' ), '{Escape}' );
-
-		expect( onClose ).toHaveBeenCalledTimes( 2 );
-
-	} );
-
-	it( 'send and Enter deliver the trimmed text and clear the line; blank sends nothing', async () => {
-
-		const user = userEvent.setup();
 		const input = screen.getByRole( 'textbox', { name: 'say something' } );
-
 		await user.type( input, '  where is the quay?  ' );
 		await user.click( screen.getByRole( 'button', { name: 'send' } ) );
 		await user.type( input, 'thanks{Enter}' );
@@ -64,29 +57,19 @@ describe( 'ChatPanel', () => {
 
 	} );
 
-	it( 'messages land in the transcript on their side', () => {
-
-		panel.addMessage( { from: 'npc', name: 'Ada', text: 'Down the steps.' } );
-		panel.addMessage( { from: 'player', text: 'Got it.' } );
-
-		expect( screen.getByText( 'Down the steps.' ).closest( '.chat-line' ).classList.contains( 'is-npc' ) ).toBe( true );
-		expect( screen.getByText( 'Got it.' ).closest( '.chat-line' ).classList.contains( 'is-player' ) ).toBe( true );
-		expect( screen.getByText( 'you' ) ).toBeTruthy();
-
-		panel.setTranscript( [] );
-		expect( panel.transcript.children ).toHaveLength( 0 );
-
-	} );
-
-	it( 'show opens on a simulation conversation with the profile, and closes on null', () => {
+	it( 'show opens a simulation conversation with its profile, and the Esc button, Escape or null close it', async () => {
 
 		panel.show( CONVERSATION );
-
 		expect( panel.element.hidden ).toBe( false );
 		expect( screen.getByRole( 'heading', { name: 'Ada Vance · office worker' } ) ).toBeTruthy();
 		expect( screen.getByText( 'p40' ) ).toBeTruthy();
 		expect( screen.getByText( /working · indoors · parcel p40 +\(paused for you\)/ ) ).toBeTruthy();
 		expect( screen.getByText( 'MonTueWedThuFri 09:00-17:00 working @ parcel p40' ) ).toBeTruthy();
+
+		const user = userEvent.setup();
+		await user.click( screen.getByRole( 'button', { name: 'close' } ) );
+		await user.type( screen.getByRole( 'textbox' ), '{Escape}' );
+		expect( onClose ).toHaveBeenCalledTimes( 2 );
 
 		panel.show( { instance: null } );
 		expect( screen.getByRole( 'heading', { name: 'Someone passing by' } ) ).toBeTruthy();

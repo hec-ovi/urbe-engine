@@ -2,64 +2,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { QuestActionError } from './QuestActionError.js';
 import { QuestActions } from './QuestActions.js';
 import { QuestSession } from './QuestSession.js';
+import { npc, oneStepQuest, quest, role, simulation, step } from './quest.test-fixtures.js';
 
-const people = {
-	n_listener_a: npc( 'n_listener_a', 'listener_a', 'Aya', 'p_listen' ),
-	n_listener_b: npc( 'n_listener_b', 'listener_b', 'Bo', 'p_listen' ),
-	n_owner: npc( 'n_owner', 'owner', 'Cai', 'p_steal' ),
-	n_giver: npc( 'n_giver', 'giver', 'Dee', 'p_work' )
-};
-
-function npc( npcId, type, given, parcelId ) {
-
-	return {
-		npcId, type, name: { given, family: 'Vale' },
-		home: { parcelId, unit: 1 }, family: [], job: { parcelId, role: type },
-		routine: [ { days: [ 0, 1, 2, 3, 4, 5, 6 ], startMin: 0, endMin: 1440, activity: 'working', place: { kind: 'parcel', id: parcelId } } ],
-		flags: { dead: false }
-	};
-
-}
-
-function simulation() {
-
-	const flags = [];
-	return {
-		flags,
-		getNPC: ( id ) => {
-
-			if ( ! people[ id ] ) throw new Error( `unknown ${id}` );
-			return people[ id ];
-
-		},
-		findNPCs: ( query ) => Object.values( people ).filter( ( person ) => person.type === query.type ),
-		getNPCVendor: ( query ) => Object.values( people ).find( ( person ) => person.type === ( query.npcType ?? query.type ) ) ?? null,
-		reserveNPC: ( spec ) => Object.values( people ).find( ( person ) => person.type === ( spec.npcType ?? spec.type ) ),
-		behaviorAt: ( id ) => ( {
-			mode: 'interior', activity: 'working', place: { kind: 'parcel', id: people[ id ].job.parcelId }, interrupted: false
-		} ),
-		applyFlag: ( id, op ) => flags.push( { id, op } ),
-		interrupt: () => {}, resume: () => {}
-	};
-
-}
-
-const pickupDelivery = {
-	id: 'q_courier', title: 'Paper trail', premise: 'Move the paper.', roles: [ role( 'giver', 'giver' ) ],
+const pickupDelivery = quest( 'q_courier', {
+	roles: [ role( 'giver', 'giver' ) ],
 	items: [ { itemId: 'shared_document', name: 'Stamped manifest', description: 'A signed cargo manifest.', kind: 'document', atParcelId: 'p_pickup' } ],
-	facts: [], acts: [ { actId: 'act', title: 'Transfer', summary: 'Move the evidence.' } ],
 	steps: [
 		step( 'take_doc', { kind: 'pickup', itemId: 'shared_document' }, {
-			gives: [ 'shared_document' ], hint: 'Take the stamped manifest.', wantedByRoleId: 'giver',
+			gives: [ 'shared_document' ], hint: 'Take the stamped manifest.',
 			next: [ { toStepId: 'deliver_doc', when: [] } ]
 		} ),
 		step( 'deliver_doc', { kind: 'deliver', itemId: 'shared_document', place: { parcelId: 'p_drop' } }, {
-			needs: [ 'shared_document' ], hint: 'Deliver the stamped manifest.', wantedByRoleId: 'giver', endingId: 'done'
+			needs: [ 'shared_document' ], hint: 'Deliver the stamped manifest.', endingId: 'done'
 		} )
-	],
-	endings: [ { endingId: 'done', title: 'Delivered', epilogue: 'The manifest changed hands.' } ],
-	flags: [], entryStepIds: [ 'take_doc' ]
-};
+	]
+} );
 
 const definitions = [
 	pickupDelivery,
@@ -78,10 +35,9 @@ const definitions = [
 
 describe( 'QuestActions target contract', () => {
 
-	it( 'projects active mechanics with stable identities, cast actors, symbolic bindings, and item metadata', () => {
+	it( 'projects active steps with stable identities, cast actors, symbolic bindings, and item metadata', () => {
 
-		const actions = setup().actions;
-		const targets = actions.targets( { timeMin: 600 } );
+		const targets = setup().actions.targets( { timeMin: 600 } );
 
 		expect( targets ).toHaveLength( 5 );
 		expect( target( targets, 'q_courier' ) ).toMatchObject( {
@@ -105,54 +61,6 @@ describe( 'QuestActions target contract', () => {
 
 	} );
 
-	it( 'selects the first open objective deterministically for map guidance', () => {
-
-		const { actions } = setup();
-		expect( actions.objective( { timeMin: 600 } ) ).toEqual( {
-			targetKey: 'quest:q_courier:take_doc', questId: 'q_courier', stepId: 'take_doc', kind: 'pickup',
-			title: 'Paper trail', text: 'Take the stamped manifest.', place: { kind: 'parcel', id: 'p_pickup' },
-			guidance: {
-				questId: 'q_courier', stepId: 'take_doc', place: { kind: 'parcel', id: 'p_pickup' },
-				destination: { kind: 'parcel', id: 'p_pickup' }
-			}
-		} );
-
-	} );
-
-	it.each( [ [ 'station', 'central' ], [ 'stop', 'night-bus' ] ] )(
-		'publishes the quests runtime %s destination without reducing it to a parcel', ( kind, id ) => {
-
-			const place = kind === 'station' ? { stationId: id } : { stopId: id };
-			const session = QuestSession.create( [ oneStepQuest( `q_${kind}`, { kind: 'goto', place } ) ], simulation(), 600 );
-			const objective = new QuestActions( session ).objective( { timeMin: 600 } );
-			expect( objective.place ).toEqual( { kind, id } );
-			expect( objective.guidance ).toEqual( {
-				questId: `q_${kind}`, stepId: 'step', place: { kind, id }, destination: { kind, id }
-			} );
-
-		}
-	);
-
-	it( 'preserves a closed guidance reason when the active objective is an area', () => {
-
-		const session = QuestSession.create( [ oneStepQuest(
-			'q_area', { kind: 'observe', districtId: 'd_glass' },
-			{ gives: information( 'area-notes', 'Area notes' ) }
-		) ], simulation(), 600 );
-		expect( new QuestActions( session ).objective( { timeMin: 600 } ).guidance ).toEqual( {
-			questId: 'q_area', stepId: 'step', place: { kind: 'district', id: 'd_glass' }, reason: 'district-area'
-		} );
-
-	} );
-
-	it( 'validates every public input before reading quest state', () => {
-
-		const actions = setup().actions;
-		expect( () => actions.targets( { timeMin: -1 } ) ).toThrowError( QuestActionError );
-		expect( () => actions.perform( { targetKey: '', action: 'take', timeMin: 1, playerPlaces: [] } ) ).toThrowError( /interaction-request/ );
-
-	} );
-
 	it( 'projects every measured mechanic with exact authored target and resolved cast identities', () => {
 
 		const targets = [
@@ -164,27 +72,14 @@ describe( 'QuestActions target contract', () => {
 			{ kind: 'sabotage', targetId: 'relay', place: { parcelId: 'p_work' }, completionFlag: 'done' },
 			{ kind: 'transportation', journeyId: 'ride', mode: 'public-transit', from: { parcelId: 'p_work' }, to: { parcelId: 'p_drop' }, passengerRoleIds: [ 'actor' ], cargoItemIds: [], completionFlag: 'done' }
 		];
-		const definitions = targets.map( ( targetValue, index ) => {
+		const mechanicQuests = targets.map( ( value, index ) => oneStepQuest( `q_mechanic_${index}`, value, {
+			roles: [ role( 'actor', 'giver' ) ],
+			items: value.kind === 'access' ? [ { itemId: 'code', name: 'Code', description: 'Access code.', kind: 'information' } ] : [],
+			needs: value.kind === 'access' ? [ value.credentialItemId ] : []
+		} ) );
+		const projected = new QuestActions( QuestSession.create( mechanicQuests, people(), 600 ) ).mechanics( { timeMin: 600 } );
 
-			const value = oneStepQuest( `q_mechanic_${index}`, targetValue, {
-				roles: targetValue.roleId || targetValue.passengerRoleIds ? [ role( 'actor', 'giver' ) ] : undefined,
-				items: targetValue.kind === 'access'
-					? [ { itemId: 'code', name: 'Code', description: 'Access code.', kind: 'information' } ]
-					: []
-			} );
-			if ( targetValue.completionFlag ) {
-
-				value.flags = [ targetValue.completionFlag ];
-				value.steps[ 0 ].effects = [ { kind: 'setFlag', flag: targetValue.completionFlag } ];
-
-			}
-			if ( targetValue.kind === 'access' ) value.steps[ 0 ].needs = [ targetValue.credentialItemId ];
-			return value;
-
-		} );
-		const projected = new QuestActions( QuestSession.create( definitions, simulation(), 600 ) ).mechanics( { timeMin: 600 } );
-
-		expect( projected.map( ( target ) => target.kind ) ).toEqual( targets.map( ( target ) => target.kind ) );
+		expect( projected.map( ( value ) => value.kind ) ).toEqual( targets.map( ( value ) => value.kind ) );
 		expect( projected[ 0 ] ).toMatchObject( {
 			targetKey: 'quest:q_mechanic_0:step', actorIds: [ 'n_giver' ], target: targets[ 0 ],
 			place: { kind: 'parcel', id: 'p_work' }, availability: { available: true }
@@ -195,126 +90,134 @@ describe( 'QuestActions target contract', () => {
 
 	} );
 
+	it( 'selects the first open objective and publishes its exact guidance destination or closed reason', () => {
+
+		expect( setup().actions.objective( { timeMin: 600 } ) ).toEqual( {
+			targetKey: 'quest:q_courier:take_doc', questId: 'q_courier', stepId: 'take_doc', kind: 'pickup',
+			title: 'q_courier', text: 'Take the stamped manifest.', place: { kind: 'parcel', id: 'p_pickup' },
+			guidance: {
+				questId: 'q_courier', stepId: 'take_doc', place: { kind: 'parcel', id: 'p_pickup' },
+				destination: { kind: 'parcel', id: 'p_pickup' }
+			}
+		} );
+
+		for ( const [ kind, id, place ] of [
+			[ 'station', 'central', { stationId: 'central' } ], [ 'stop', 'night-bus', { stopId: 'night-bus' } ]
+		] ) {
+
+			const session = QuestSession.create( [ oneStepQuest( `q_${kind}`, { kind: 'goto', place } ) ], people(), 600 );
+			const objective = new QuestActions( session ).objective( { timeMin: 600 } );
+			expect( objective.place ).toEqual( { kind, id } );
+			expect( objective.guidance ).toEqual( { questId: `q_${kind}`, stepId: 'step', place: { kind, id }, destination: { kind, id } } );
+
+		}
+
+		const area = QuestSession.create( [ oneStepQuest(
+			'q_area', { kind: 'observe', districtId: 'd_glass' }, { gives: information( 'area-notes', 'Area notes' ) }
+		) ], people(), 600 );
+		expect( new QuestActions( area ).objective( { timeMin: 600 } ).guidance ).toEqual( {
+			questId: 'q_area', stepId: 'step', place: { kind: 'district', id: 'd_glass' }, reason: 'district-area'
+		} );
+
+	} );
+
 } );
 
 describe( 'QuestActions interaction state', () => {
 
-	it( 'keeps a pickup in the world through place, visibility, occlusion, and reach failures', () => {
+	it( 'reads in place, then maps every player action to the runtime and moves inventory once', () => {
 
 		const { actions, session } = setup();
+		const pickup = { targetKey: 'quest:q_courier:take_doc', timeMin: 600, playerPlaces: at( 'p_pickup' ), focus: focus() };
+
+		expect( actions.perform( { ...pickup, action: 'read' } ) ).toEqual( {
+			ok: true, targetKey: pickup.targetKey, action: 'read', progressed: false,
+			message: 'Read Stamped manifest.', readText: 'A signed cargo manifest.', completed: [], inventory: [], worldChanges: []
+		} );
+
+		expect( actions.perform( { ...pickup, action: 'take' } ) ).toMatchObject( {
+			ok: true, progressed: true,
+			completed: [ { questId: 'q_courier', stepIds: [ 'take_doc' ] } ],
+			inventory: [ { id: 'shared_document', name: 'Stamped manifest', quantity: 1 } ],
+			worldChanges: [ { targetKey: pickup.targetKey, state: 'collected' } ]
+		} );
+		expect( actions.perform( { ...pickup, action: 'take' } ) ).toMatchObject( {
+			ok: false, code: 'unknown_target', progressed: false,
+			inventory: [ { id: 'shared_document', quantity: 1 } ], worldChanges: []
+		} );
+
+		expect( actions.perform( areaRequest( 'q_observe', 'step', 'inspect', { kind: 'district', id: 'd_glass' } ) ) )
+			.toMatchObject( { ok: true, completed: [ { questId: 'q_observe', stepIds: [ 'step' ], endingId: 'done' } ] } );
+		expect( actions.perform( {
+			...areaRequest( 'q_listen', 'step', 'listen', { kind: 'parcel', id: 'p_listen' } ),
+			focus: focus( { visible: false, distanceMeters: 7.99 } )
+		} ) ).toMatchObject( { ok: true, completed: [ { questId: 'q_listen', stepIds: [ 'step' ] } ] } );
+		expect( actions.perform( {
+			...areaRequest( 'q_steal', 'step', 'steal', { kind: 'parcel', id: 'p_steal' } ), focus: focus( { distanceMeters: 2 } )
+		} ) ).toMatchObject( {
+			ok: true, inventory: expect.arrayContaining( [ { id: 'owned_chip', name: 'Access chip', quantity: 1, state: expect.any( Object ) } ] ),
+			worldChanges: [ { targetKey: 'quest:q_steal:step', state: 'stolen' } ]
+		} );
+		expect( actions.perform( areaRequest( 'q_work', 'step', 'work', { kind: 'parcel', id: 'p_work' } ) ) )
+			.toMatchObject( { ok: true, completed: [ { questId: 'q_work', stepIds: [ 'step' ] } ] } );
+
+		const delivered = actions.perform( areaRequest( 'q_courier', 'deliver_doc', 'deliver', { kind: 'parcel', id: 'p_drop' } ) );
+		expect( delivered ).toMatchObject( {
+			ok: true, completed: [ { questId: 'q_courier', stepIds: [ 'deliver_doc' ], endingId: 'done' } ],
+			worldChanges: [ { targetKey: 'quest:q_courier:deliver_doc', state: 'delivered' } ]
+		} );
+		expect( delivered.inventory.find( ( item ) => item.id === 'shared_document' ) ).toBeUndefined();
+		expect( session.persistenceView().find( ( value ) => value.id === 'q_courier' ).state ).toBe( 'completed' );
+
+	} );
+
+	it( 'keeps a pickup in the world through every closed failure and never advances another questline', () => {
+
+		const duplicate = { ...pickupDelivery, id: 'q_duplicate', steps: [ { ...pickupDelivery.steps[ 0 ], next: [], endingId: 'done' } ] };
+		const { actions, session } = setup( [ pickupDelivery, duplicate ] );
 		const base = { targetKey: 'quest:q_courier:take_doc', action: 'take', timeMin: 600 };
-		const cases = [
+
+		for ( const [ request, code ] of [
 			[ { ...base, playerPlaces: [ { kind: 'parcel', id: 'elsewhere' } ], focus: focus() }, 'wrong_place' ],
 			[ { ...base, playerPlaces: at( 'p_pickup' ), focus: focus( { visible: false } ) }, 'not_visible' ],
 			[ { ...base, playerPlaces: at( 'p_pickup' ), focus: focus( { unobstructed: false } ) }, 'occluded' ],
 			[ { ...base, playerPlaces: at( 'p_pickup' ), focus: focus( { distanceMeters: 2.51 } ) }, 'out_of_reach' ]
-		];
-
-		for ( const [ request, code ] of cases ) {
+		] ) {
 
 			expect( actions.perform( request ) ).toMatchObject( { ok: false, code, progressed: false, inventory: [], worldChanges: [] } );
 
 		}
 		expect( session.inventoryView() ).toEqual( [] );
-		expect( actions.targets( { timeMin: 600 } ).some( ( each ) => each.targetKey === base.targetKey ) ).toBe( true );
 
-	} );
+		actions.perform( { ...base, playerPlaces: at( 'p_pickup' ), focus: focus() } );
+		const keys = actions.targets( { timeMin: 600 } ).map( ( each ) => each.targetKey );
+		expect( keys ).toContain( 'quest:q_duplicate:take_doc' );
+		expect( session.persistenceView().find( ( value ) => value.id === 'q_duplicate' ).completedSteps ).toEqual( [] );
 
-	it( 'reads without progress, then transfers one real item and prevents duplicate pickup', () => {
-
-		const { actions } = setup();
-		const request = {
-			targetKey: 'quest:q_courier:take_doc', timeMin: 600, playerPlaces: at( 'p_pickup' ), focus: focus()
-		};
-
-		expect( actions.perform( { ...request, action: 'read' } ) ).toEqual( {
-			ok: true, targetKey: request.targetKey, action: 'read', progressed: false,
-			message: 'Read Stamped manifest.', readText: 'A signed cargo manifest.', completed: [], inventory: [], worldChanges: []
-		} );
-
-		const taken = actions.perform( { ...request, action: 'take' } );
-		expect( taken ).toMatchObject( {
-			ok: true, progressed: true,
-			completed: [ {
-				questId: 'q_courier', stepIds: [ 'take_doc' ],
-				presentation: { title: 'Paper trail', steps: [ 'Take the stamped manifest. completed.' ] }
-			} ],
-			inventory: [ { id: 'shared_document', name: 'Stamped manifest', quantity: 1 } ],
-			worldChanges: [ { targetKey: request.targetKey, state: 'collected' } ]
-		} );
-		expect( actions.perform( { ...request, action: 'take' } ) ).toMatchObject( {
-			ok: false, code: 'unknown_target', progressed: false,
-			inventory: [ { id: 'shared_document', quantity: 1 } ], worldChanges: []
-		} );
-
-	} );
-
-	it( 'maps inspect, listen, steal, work, and delivery to the runtime and updates inventory', () => {
-
-		const { actions } = setup();
-		const inspect = actions.perform( areaRequest( 'q_observe', 'step', 'inspect', { kind: 'district', id: 'd_glass' } ) );
-		expect( inspect ).toMatchObject( { ok: true, completed: [ { questId: 'q_observe', stepIds: [ 'step' ], endingId: 'done' } ] } );
-
-		const listen = actions.perform( {
-			...areaRequest( 'q_listen', 'step', 'listen', { kind: 'parcel', id: 'p_listen' } ),
-			focus: focus( { visible: false, distanceMeters: 7.99 } )
-		} );
-		expect( listen ).toMatchObject( { ok: true, completed: [ { questId: 'q_listen', stepIds: [ 'step' ] } ] } );
-
-		const steal = actions.perform( {
-			...areaRequest( 'q_steal', 'step', 'steal', { kind: 'parcel', id: 'p_steal' } ), focus: focus( { distanceMeters: 2 } )
-		} );
-		expect( steal ).toMatchObject( {
-			ok: true, inventory: expect.arrayContaining( [ { id: 'owned_chip', name: 'Access chip', quantity: 1, state: expect.any( Object ) } ] ),
-			worldChanges: [ { targetKey: 'quest:q_steal:step', state: 'stolen' } ]
-		} );
-
-		const work = actions.perform( areaRequest( 'q_work', 'step', 'work', { kind: 'parcel', id: 'p_work' } ) );
-		expect( work ).toMatchObject( { ok: true, completed: [ { questId: 'q_work', stepIds: [ 'step' ] } ] } );
-
-		actions.perform( {
-			targetKey: 'quest:q_courier:take_doc', action: 'take', timeMin: 600, playerPlaces: at( 'p_pickup' ), focus: focus()
-		} );
-		const delivered = actions.perform( areaRequest( 'q_courier', 'deliver_doc', 'deliver', { kind: 'parcel', id: 'p_drop' } ) );
-		expect( delivered ).toMatchObject( {
-			ok: true, completed: [ {
-				questId: 'q_courier', stepIds: [ 'deliver_doc' ], endingId: 'done',
-				presentation: { ending: { title: 'Delivered', text: 'The manifest changed hands.', outcome: 'done' } }
-			} ],
-			worldChanges: [ { targetKey: 'quest:q_courier:deliver_doc', state: 'delivered' } ]
-		} );
-		expect( delivered.inventory.find( ( item ) => item.id === 'shared_document' ) ).toBeUndefined();
-
-	} );
-
-	it( 'advances only the selected quest when another active quest uses the same item id', () => {
-
-		const duplicate = { ...pickupDelivery, id: 'q_duplicate', title: 'Duplicate', steps: [ { ...pickupDelivery.steps[ 0 ], next: [], endingId: 'done' } ] };
-		const sim = simulation();
-		const warning = vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
-		const session = QuestSession.create( [ pickupDelivery, duplicate ], sim, 600 );
-		warning.mockRestore();
-		const actions = new QuestActions( session );
-
-		actions.perform( {
-			targetKey: 'quest:q_courier:take_doc', action: 'take', timeMin: 600, playerPlaces: at( 'p_pickup' ), focus: focus()
-		} );
-
-		const activeKeys = actions.targets( { timeMin: 600 } ).map( ( each ) => each.targetKey );
-		expect( activeKeys ).toContain( 'quest:q_duplicate:take_doc' );
-		expect( session.persistenceView().find( ( quest ) => quest.id === 'q_duplicate' ).completedSteps ).toEqual( [] );
+		expect( () => actions.targets( { timeMin: -1 } ) ).toThrowError( QuestActionError );
+		expect( () => actions.perform( { targetKey: '', action: 'take', timeMin: 1, playerPlaces: [] } ) ).toThrowError( /interaction-request/ );
 
 	} );
 
 } );
 
-function setup() {
+function people() {
 
-	const sim = simulation();
+	return simulation( new Map( [
+		[ 'n_listener_a', npc( 'n_listener_a', 'listener_a', 'p_listen' ) ],
+		[ 'n_listener_b', npc( 'n_listener_b', 'listener_b', 'p_listen' ) ],
+		[ 'n_owner', npc( 'n_owner', 'owner', 'p_steal' ) ],
+		[ 'n_giver', npc( 'n_giver', 'giver', 'p_work' ) ]
+	] ) );
+
+}
+
+function setup( quests = definitions ) {
+
 	const warning = vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
-	const session = QuestSession.create( definitions, sim, 600 );
+	const session = QuestSession.create( quests, people(), 600 );
 	warning.mockRestore();
-	return { sim, session, actions: new QuestActions( session ) };
+	return { session, actions: new QuestActions( session ) };
 
 }
 
@@ -342,46 +245,8 @@ function areaRequest( questId, stepId, action, place ) {
 
 }
 
-function role( roleId, npcType ) {
-
-	return { roleId, npcType, persona: `${roleId} is watchful.` };
-
-}
-
 function information( itemId, name ) {
 
 	return [ { itemId, name, description: `${name} recorded in memory.`, kind: 'information' } ];
-
-}
-
-function oneStepQuest( id, targetValue, options = {} ) {
-
-	const items = options.items ?? options.gives ?? [];
-	const roles = options.roles ?? [ role( 'giver', 'giver' ) ];
-	const gives = Array.isArray( options.gives ) && typeof options.gives[ 0 ] === 'string'
-		? options.gives
-		: ( options.gives ?? [] ).map( ( item ) => item.itemId );
-	return {
-		id, title: id, premise: `${id} premise.`, roles, items, facts: [],
-		acts: [ { actId: 'act', title: 'Act', summary: 'Complete the objective.' } ],
-		steps: [ step( 'step', targetValue, { gives, hint: options.hint, endingId: 'done', wantedByRoleId: roles[ 0 ].roleId } ) ],
-		endings: [ { endingId: 'done', title: 'Done', epilogue: `${id} complete.` } ], flags: [], entryStepIds: [ 'step' ]
-	};
-
-}
-
-function step( stepId, targetValue, options = {} ) {
-
-	return {
-		stepId, actId: 'act',
-		narrative: {
-			description: `${options.hint ?? stepId} completed.`,
-			playerHint: options.hint ?? `Complete ${stepId}.`,
-			stake: 'The objective remains unresolved otherwise.'
-		},
-		...( options.wantedByRoleId ? { wantedByRoleId: options.wantedByRoleId } : {} ),
-		target: targetValue, gives: options.gives ?? [], needs: options.needs ?? [], conditions: [], effects: [],
-		next: options.next ?? [], branching: 'parallel', ...( options.endingId ? { endingId: options.endingId } : {} )
-	};
 
 }

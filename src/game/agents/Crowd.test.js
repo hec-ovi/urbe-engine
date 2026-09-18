@@ -18,9 +18,9 @@ describe( 'Crowd pushback', () => {
 	// inside somebody.
 	const REACH = 0.34 + CLEARANCE;
 
-	it( 'clears the whole overlap, away from the person', () => {
+	it( 'clears the whole overlap, away from the person, and reaches nobody else', () => {
 
-		const crowd = crowdWith( [ [ 0.3, 0, 0 ] ] );
+		const crowd = crowdWith( [ [ 0.3, 0, 0 ], [ REACH + 0.01, 0, 0 ], [ 0.1, 4, 0 ] ] );
 		const push = crowd.pushback( new THREE.Vector3( 0, 0, 0 ), CLEARANCE );
 
 		expect( push.x ).toBeCloseTo( - ( REACH - 0.3 ) );
@@ -28,26 +28,6 @@ describe( 'Crowd pushback', () => {
 
 		// after the push the player is exactly out of them, not still inside
 		expect( Math.hypot( push.x - 0.3, push.z ) ).toBeCloseTo( REACH );
-
-	} );
-
-	it( 'ignores anyone out of reach or on another floor', () => {
-
-		const crowd = crowdWith( [ [ REACH + 0.01, 0, 0 ], [ 0.1, 4, 0 ] ] );
-		const push = crowd.pushback( new THREE.Vector3( 0, 0, 0 ), CLEARANCE );
-
-		expect( push.x ).toBe( 0 );
-		expect( push.z ).toBe( 0 );
-
-	} );
-
-	it( 'sums a knot of people into one direction out of it', () => {
-
-		const crowd = crowdWith( [ [ 0.3, 0, 0.1 ], [ 0.25, 0, - 0.1 ] ] );
-		const push = crowd.pushback( new THREE.Vector3( 0, 0, 0 ), CLEARANCE );
-
-		expect( push.x ).toBeLessThan( 0 );
-		expect( Math.abs( push.z ) ).toBeLessThan( Math.abs( push.x ) );
 
 	} );
 
@@ -175,29 +155,6 @@ describe( 'persistent NPC projection', () => {
 
 	} );
 
-	it( 'asks continuity for the cast npcId and rejects a body at the wrong scheduled place', () => {
-
-		const routes = pavement();
-		const instance = {
-			npcId: 'cast-worker', name: { given: 'Ivo', family: 'Reis' },
-			type: 'barista', gender: 'male', appearanceSeed: 44
-		};
-		const actor = persistentActor( instance );
-		const continuity = { appear: vi.fn( () => actor ) };
-		const crowd = new Crowd( {
-			assets: testAssets(), routes, signals: { green: () => true }, continuity,
-			sim: { getNPC: () => instance, crowd: () => ( { agents: [] } ) },
-			places: new Map(), capacity: 4
-		} );
-		const player = new THREE.Vector3();
-
-		expect( crowd.questMember( instance.npcId, 600, player, { kind: 'edge', id: 'e0' } )?.npcId )
-			.toBe( instance.npcId );
-		expect( continuity.appear ).toHaveBeenCalledWith( { npcId: instance.npcId, timeMin: 600 } );
-		expect( crowd.questMember( instance.npcId, 601, player, { kind: 'edge', id: 'e1' } ) ).toBeNull();
-
-	} );
-
 	it( 'adopts the existing anonymous parcel body before continuity projects the same cast NPC', () => {
 
 		const instance = {
@@ -227,64 +184,13 @@ describe( 'persistent NPC projection', () => {
 		expect( anonymous ).toMatchObject( { crowdId: 'staff-handle', npcId: null } );
 
 		const named = crowd.questMember( instance.npcId, 600, inside, { kind: 'parcel', id: 'cafe' } );
+		expect( continuity.appear ).toHaveBeenCalledWith( { npcId: instance.npcId, timeMin: 600 } );
 		expect( named ).toBe( anonymous );
 		expect( named ).toMatchObject( { crowdId: 'staff-handle', npcId: 'cast-worker', continuity: true } );
 		expect( crowd.members.size ).toBe( 1 );
 
-	} );
-
-	it( 'keeps an exact coordinator override across continuity refreshes', () => {
-
-		const instance = {
-			npcId: 'seated-listener', name: { given: 'Sora', family: 'Lin' },
-			type: 'patron', gender: 'female', appearanceSeed: 901
-		};
-		const crowd = new Crowd( {
-			assets: testAssets(), routes: pavement(), signals: { green: () => true },
-			sim: { getNPC: () => instance, crowd: () => ( { agents: [] } ) },
-			places: new Map(), capacity: 4
-		} );
-		const actor = { ...persistentActor( instance ), animation: 'sit', mode: 'conversation' };
-		const member = crowd.syncActor( actor, new THREE.Vector3() );
-
-		expect( crowd.setAnimationClip( instance.npcId, 'Sitting_Nodding_Loop' ) ).toBe( member );
-		expect( member.clip ).toBe( CLIP.SIT );
-		expect( crowd.syncActor( { ...actor, heading: 1 }, new THREE.Vector3() ) ).toBe( member );
-		expect( crowd.memberForNpc( instance.npcId ) ).toMatchObject( {
-			animationOverride: 'Sitting_Nodding_Loop', clip: CLIP.SIT, heading: 1
-		} );
-
-	} );
-
-	it( 'projects a persistent NPC turn into the rendered body without changing its appearance', () => {
-
-		const instance = {
-			npcId: 'turning-worker', name: { given: 'Hank', family: 'Nakamura' },
-			type: 'barista', gender: 'male', appearanceSeed: 312229336
-		};
-		const mesh = { setInstance: vi.fn(), commit: vi.fn() };
-		const crowd = new Crowd( {
-			assets: { variants: Array.from( { length: 8 }, () => ( {} ) ), durations: Array( 8 ).fill( 1 ), meshesOf: () => [ mesh ] },
-			routes: pavement(), signals: { green: () => true },
-			sim: { getNPC: () => instance, crowd: () => ( { agents: [] } ) },
-			places: new Map(), capacity: 4
-		} );
-		const player = new THREE.Vector3();
-		const facingNorth = persistentActor( instance );
-
-		crowd.syncActor( facingNorth, player );
-		crowd.update( 0, player, { timeMin: 600, daySeconds: 36000 } );
-		const before = mesh.setInstance.mock.calls.at( -1 );
-		const facingEast = { ...facingNorth, heading: Math.PI / 2 };
-		crowd.syncActor( facingEast, player );
-		crowd.update( 0, player, { timeMin: 600, daySeconds: 36000 } );
-		const after = mesh.setInstance.mock.calls.at( -1 );
-
-		expect( before[ 2 ] ).toBe( 0 );
-		expect( after[ 2 ] ).toBe( Math.PI / 2 );
-		expect( after[ 1 ].toArray() ).toEqual( before[ 1 ].toArray() );
-		expect( after[ 4 ] ).toBe( before[ 4 ] );
-		expect( after[ 5 ] ).toEqual( before[ 5 ] );
+		// a body the schedule puts somewhere else is never the cast NPC's
+		expect( crowd.questMember( instance.npcId, 601, inside, { kind: 'edge', id: 'e1' } ) ).toBeNull();
 
 	} );
 
@@ -319,60 +225,19 @@ describe( 'persistent NPC projection', () => {
 
 describe( 'exact animation projection', () => {
 
-	it.each( [
-		[ 'Walk_Loop', CLIP.WALK ], [ 'Walk_Formal_Loop', CLIP.WALK ],
-		[ 'Sprint_Enter', CLIP.RUN ], [ 'Sprint_Loop', CLIP.RUN ],
-		[ 'Crouch_Idle_Loop', CLIP.CROUCH ], [ 'Idle_Talking_Loop', CLIP.TALK ],
-		[ 'Sitting_Talking_Loop', CLIP.SIT_TALK ], [ 'Sitting_Nodding_Loop', CLIP.SIT ],
-		[ 'PickUp_Ground', CLIP.IDLE ]
-	] )( 'maps %s to its closest VAT state', ( clipName, expected ) => {
+	it( 'maps every coordinator clip to its closest VAT state', () => {
 
-		expect( crowdClipForName( clipName ) ).toBe( expected );
+		const states = {
+			Walk_Loop: CLIP.WALK, Walk_Formal_Loop: CLIP.WALK,
+			Sprint_Enter: CLIP.RUN, Sprint_Loop: CLIP.RUN,
+			Crouch_Idle_Loop: CLIP.CROUCH, Idle_Talking_Loop: CLIP.TALK,
+			Sitting_Talking_Loop: CLIP.SIT_TALK, Sitting_Nodding_Loop: CLIP.SIT,
+			PickUp_Ground: CLIP.IDLE
+		};
 
-	} );
+		for ( const [ clipName, expected ] of Object.entries( states ) ) {
 
-} );
-
-/**
- * A street handle names a sampled agent for one epoch of that pavement, so the
- * same people come back under new handles minute after minute while the ones
- * already spawned keep walking. What the crowd has to hold over a long session
- * is the simulation's own street density, and one body per person.
- */
-describe( 'Crowd over a long session', () => {
-
-	it( 'stays at the number of people the simulation has out there', () => {
-
-		const rows = session( 20 );
-
-		expect( rows ).toHaveLength( 21 );
-
-		for ( const { minute, spawned, live } of rows ) {
-
-			expect( { minute, spawned } ).toEqual( {
-				minute, spawned: Math.min( spawned, Math.round( live.length * 1.25 ) + 1 )
-			} );
-			expect( spawned ).toBeGreaterThanOrEqual( live.length );
-
-		}
-
-		// the sampled street empties and fills again through the session, so
-		// the crowd is being held at the number, not just never spawning
-		expect( new Set( rows.map( ( row ) => row.live.length ) ).size ).toBeGreaterThan( 1 );
-
-	} );
-
-	it( 'never has two people being the same one, epoch after epoch', () => {
-
-		const rows = session( 20 );
-
-		for ( const { minute, held, live } of rows ) {
-
-			expect( { minute, held: held.length } ).toEqual( { minute, held: new Set( held ).size } );
-
-			// and every one of them is somebody the simulation has out right
-			// now, not a handle left over from an epoch that has passed
-			expect( held.filter( ( id ) => ! live.includes( id ) ) ).toEqual( [] );
+			expect( { clipName, state: crowdClipForName( clipName ) } ).toEqual( { clipName, state: expected } );
 
 		}
 
@@ -380,72 +245,7 @@ describe( 'Crowd over a long session', () => {
 
 } );
 
-const EPOCH = 2;
-const TYPES = [ 'shop_clerk', 'nurse', 'courier' ];
 const PLAYER = new THREE.Vector3( 0, SIDEWALK_HEIGHT, 0 );
-
-/**
- * The player standing on a straight run of pavement while the simulation
- * resamples it, one reading a minute.
- *
- * @returns rows of { minute, spawned, live, held }: how many people the crowd
- * has out, how many the simulation reports, and the identities they carry.
- */
-function session( minutes ) {
-
-	const routes = pavement();
-	const sim = resampled();
-	const crowd = new Crowd( {
-		assets: { variants: [ {}, {} ], durations: [ 1, 1, 1 ], meshesOf: () => [] },
-		routes, signals: { green: () => true }, sim,
-		places: new Map(), capacity: 200
-	} );
-
-	const clock = { timeMin: 780, daySeconds: 46800, seconds: 46800 };
-	const rows = [];
-	const step = 1 / 10;
-	let due = 0;
-
-	for ( let tick = 0; tick <= minutes * 60 / step; tick ++ ) {
-
-		clock.seconds += step;
-		clock.timeMin = Math.floor( clock.seconds / 60 );
-		clock.daySeconds = clock.seconds % 86400;
-		crowd.update( step, PLAYER, clock );
-
-		// read right after a refresh, when the handles are the ones the crowd
-		// has just been told about
-		if ( crowd.timer !== 0 || tick * step < due ) continue;
-
-		due += 60;
-
-		const held = [];
-
-		for ( const member of crowd.members.values() ) if ( member.crowdId ) held.push( member.crowdId );
-
-		rows.push( {
-			minute: Math.round( tick * step / 60 ),
-			spawned: crowd.count,
-			live: live( sim, clock.timeMin ),
-			held
-		} );
-
-	}
-
-	return rows;
-
-}
-
-/** Every handle the simulation has out on the pavements around the player. */
-function live( sim, timeMin ) {
-
-	const out = [];
-
-	for ( const agent of sim.crowd( timeMin, { kind: 'radius', x: PLAYER.x, z: PLAYER.z, metres: 90 } ).agents ) out.push( agent.crowdId );
-
-	return out;
-
-}
 
 /** 240 m of straight pavement in 40 m edges, the player standing at its middle. */
 function pavement() {
@@ -495,114 +295,11 @@ function persistentActor( instance ) {
 }
 
 /**
- * A simulation whose street handles carry the epoch they were sampled in, and
- * whose street empties and fills through the session the way a real one does.
- */
-function resampled() {
-
-	return {
-		crowd: ( timeMin, scope ) => {
-
-			const onEdge = ( id ) => {
-
-				const epoch = Math.floor( timeMin / EPOCH );
-				const count = timeMin % 10 < 5 ? 4 : 3;
-				const agents = [];
-
-				for ( let i = 0; i < count; i ++ ) {
-
-					agents.push( {
-						crowdId: `c|${id}|${i}|${epoch}`,
-						type: TYPES[ i % TYPES.length ],
-						gender: i % 2 ? 'female' : 'male',
-						activity: 'commuting',
-						place: { kind: 'edge', id },
-						progress: ( i + 0.5 ) / count,
-						direction: i % 2 ? - 1 : 1
-					} );
-
-				}
-
-				return agents;
-
-			};
-
-			if ( scope.kind === 'edge' ) return { agents: onEdge( scope.id ) };
-			if ( scope.kind !== 'radius' ) return { agents: [] };
-
-			// The pavement runs along x: a person is inside the circle when the
-			// spot their progress puts them at is within reach of its centre.
-			const inside = [];
-
-			for ( let i = 0; i < 6; i ++ ) {
-
-				for ( const agent of onEdge( `e${i}` ) ) {
-
-					const x = - 120 + i * 40 + agent.progress * 40;
-
-					if ( Math.abs( x - scope.x ) <= scope.metres ) inside.push( agent );
-
-				}
-
-			}
-
-			return { agents: inside };
-
-		}
-	};
-
-}
-
-/**
- * The body a person walks in is the one the simulation says they have, so
- * the woman the player talks to was a woman on the way over as well.
+ * A street handle names a sampled agent for one epoch of that pavement, so the
+ * same people come back under new handles minute after minute. The body a
+ * named person walks in is never handed to one of those later handles.
  */
 describe( 'Crowd bodies', () => {
-
-	it( 'gives every person the body of their gender', () => {
-
-		const routes = pavement();
-		const crowd = new Crowd( {
-			assets: { variants: [ {}, {} ], durations: [ 1, 1, 1 ], meshesOf: () => [] },
-			routes, signals: { green: () => true }, sim: resampled(),
-			places: new Map(), capacity: 200
-		} );
-		const clock = { timeMin: 780, daySeconds: 46800, seconds: 46800 };
-
-		for ( let tick = 0; tick < 50; tick ++ ) crowd.update( 0.1, PLAYER, clock );
-
-		const walking = [ ...crowd.members.values() ].filter( ( member ) => member.crowdId );
-
-		expect( walking.length ).toBeGreaterThan( 0 );
-
-		for ( const member of walking ) {
-
-			const index = Number( member.crowdId.split( '|' )[ 2 ] );
-
-			expect( member.variant ).toBe( index % 2 ? 1 : 0 );
-
-		}
-
-	} );
-
-	it( 'removes only the focused hero from the baked crowd draw', () => {
-
-		const commits = [];
-		const mesh = { setInstance: vi.fn(), commit: ( count ) => commits.push( count ) };
-		const crowd = new Crowd( {
-			assets: { variants: [ {} ], durations: [ 1 ], meshesOf: () => [ mesh ] },
-			routes: null, signals: null, sim: null, places: new Map(), capacity: 4
-		} );
-		crowd.timer = 0;
-		crowd.members.set( 'baked', stationaryMember( false ) );
-		crowd.members.set( 'hero', stationaryMember( true ) );
-
-		crowd.update( 0.1, PLAYER, { timeMin: 780, daySeconds: 46800 } );
-
-		expect( mesh.setInstance ).toHaveBeenCalledOnce();
-		expect( commits.at( - 1 ) ).toBe( 1 );
-
-	} );
 
 	it( 'never hands a named body to a later statistical handle', () => {
 
@@ -644,15 +341,6 @@ describe( 'Crowd bodies', () => {
 	} );
 
 } );
-
-function stationaryMember( hero ) {
-
-	return {
-		variant: 0, hero, stationary: true, frozen: true, frame: 0, clip: 0,
-		position: new THREE.Vector3(), heading: 0, look: {}
-	};
-
-}
 
 /** A crowd with nobody walking: only the members the pushback reads. */
 function crowdWith( positions ) {

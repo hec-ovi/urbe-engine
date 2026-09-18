@@ -10,35 +10,19 @@ import { RenderWork } from './RenderWork.js';
  */
 describe( 'RenderWork', () => {
 
-	const info = ( programs, textures ) => ( { memory: { programs, textures } } );
+	it( 'names the programs linked and maps uploaded, and stays quiet about a frame that built nothing', () => {
 
-	it( 'says nothing about a frame that built nothing', () => {
-
-		const memory = info( 40, 120 );
-
-		expect( new RenderWork( memory ).since() ).toBe( null );
-
-	} );
-
-	it( 'names the programs linked and the maps uploaded', () => {
-
-		const memory = info( 40, 120 );
+		const memory = { memory: { programs: 40, textures: 120 } };
 		const work = new RenderWork( memory );
+
+		expect( work.since() ).toBe( null );
 
 		memory.memory.programs = 43;
 		memory.memory.textures = 132;
-
 		expect( work.since() ).toBe( '3 shaders linked, 12 textures uploaded' );
 		expect( work.since() ).toBe( null );
 
-	} );
-
-	it( 'counts one of a thing in the singular and reports a release as nothing', () => {
-
-		const memory = info( 40, 120 );
-		const work = new RenderWork( memory );
-
-		memory.memory.programs = 41;
+		memory.memory.programs = 44;
 		expect( work.since() ).toBe( '1 shader linked' );
 
 		memory.memory.textures = 60;

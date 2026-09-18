@@ -3,7 +3,7 @@ import { HttpLauncherApi } from './HttpLauncherApi.js';
 
 describe( 'HttpLauncherApi', () => {
 
-	it( 'invokes a browser fetch function with its required global receiver', async () => {
+	it( 'posts one method envelope with the global receiver a browser fetch needs, and surfaces a rejection message', async () => {
 
 		const fetcher = vi.fn( function( url, options ) {
 
@@ -15,19 +15,13 @@ describe( 'HttpLauncherApi', () => {
 			} ) );
 
 		} );
-
 		await expect( new HttpLauncherApi( fetcher ).catalog() ).resolves.toEqual( { games: [], cities: [] } );
 		expect( fetcher ).toHaveBeenCalledOnce();
 
-	} );
-
-	it( 'surfaces the server message for a rejected operation', async () => {
-
-		const fetcher = () => Promise.resolve( new Response( JSON.stringify( { message: 'city is incomplete' } ), {
+		const refused = () => Promise.resolve( new Response( JSON.stringify( { message: 'city is incomplete' } ), {
 			status: 409, headers: { 'Content-Type': 'application/json' }
 		} ) );
-
-		await expect( new HttpLauncherApi( fetcher ).createGame( {} ) ).rejects.toThrow( 'city is incomplete' );
+		await expect( new HttpLauncherApi( refused ).createGame( {} ) ).rejects.toThrow( 'city is incomplete' );
 
 	} );
 

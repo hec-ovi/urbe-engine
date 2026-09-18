@@ -57,9 +57,14 @@ describe( 'station destination terminals', () => {
 
 	} );
 
-	it( 'rechecks live feet and rejects wrong floors, departed terminals and cancelled selections', () => {
+	it( 'rejects wrong floors, cancelled selections and malformed routes without moving the player', () => {
 
-		const { gameplay, controller, origin } = harness();
+		const invalid = stationRoute( stationCity() );
+		invalid.stops[ 1 ].stopId = 'unpublished';
+		expect( new StationTravel( stationCity(), [ invalid ] ).choices( new StationAccess( stationCity() ).entrances[ 0 ].arrival ) )
+			.toEqual( [] );
+
+		const { gameplay, controller, origin, route } = harness();
 		const choose = () => { gameplay.update( { daySeconds: 1005 } ); return gameplay.activate().destinations[ 0 ]; };
 		let choice = choose();
 		controller.body.feet.y += 2;
@@ -79,18 +84,10 @@ describe( 'station destination terminals', () => {
 		expect( blocked.prompt ).toBeNull();
 		expect( gameplay.activate() ).toBeNull();
 
-	} );
-
-	it( 'fails closed for malformed routes on admission and after a destination is offered', () => {
-
-		const atlas = stationCity(), invalid = stationRoute( atlas );
-		invalid.stops[ 1 ].stopId = 'unpublished';
-		expect( new StationTravel( atlas, [ invalid ] ).choices( new StationAccess( atlas ).entrances[ 0 ].arrival ) ).toEqual( [] );
-		const { gameplay, controller, route, origin } = harness();
 		gameplay.update( { daySeconds: 1005 } );
-		const choice = gameplay.activate().destinations[ 0 ];
+		const stale = gameplay.activate().destinations[ 0 ];
 		route.shape = [ route.shape[ 0 ] ];
-		expect( gameplay.selectDestination( choice ).result.ok ).toBe( false );
+		expect( gameplay.selectDestination( stale ).result.ok ).toBe( false );
 		expect( controller.moves ).toBe( 0 );
 		expect( controller.body.feet.toArray() ).toEqual( origin.arrival );
 		expect( gameplay.state.status ).toBe( 'waiting' );

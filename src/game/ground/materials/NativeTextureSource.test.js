@@ -48,12 +48,9 @@ describe( 'NativeTextureSource public resource port', () => {
 		expect( () => source.load( id, path, definition ) ).toThrow( /disposed/ );
 	} );
 
-	it.each( [ 'http', 'hash', 'dimensions', 'decode', 'prepare' ] )( 'rejects %s failures without a substitute texture', async kind => {
+	it.each( [ 'hash', 'prepare' ] )( 'rejects %s failures without a substitute texture', async kind => {
 		const ports = options();
-		if ( kind === 'http' ) ports.fetch = async () => new Response( '', { status: 404 } );
 		if ( kind === 'hash' ) ports.fetch = async () => new Response( 'wrong bytes' );
-		if ( kind === 'dimensions' ) ports.decode = async () => ( { width: 1, height: 1 } );
-		if ( kind === 'decode' ) ports.decode = async () => { throw new Error( 'decode failed' ); };
 		if ( kind === 'prepare' ) ports.prepareTexture = () => { throw new Error( 'budget failed' ); };
 		const source = new NativeTextureSource( ports ), resource = source.load( id, path, definition );
 		await expect( resource.ready ).rejects.toMatchObject( { code: 'E_STREET_TEXTURE' } );

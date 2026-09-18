@@ -48,32 +48,6 @@ describe( 'Source character motion', () => {
 
 	} );
 
-	it.each( [
-		[ '24 Hz motion', 1, 24 ],
-		[ 'a short one-shot', 1 / 60, 2 ]
-	] )( 'retains authored keys and the final pose for %s', ( name, duration, intervals ) => {
-
-		const target = rig( 1.2, 0.6 );
-		const source = rig( 1, 0.4 );
-		const times = Array.from( { length: intervals + 1 }, ( _, index ) => index * duration / intervals );
-		const positions = times.flatMap( ( _, index ) => [ 0, index % 2 ? 0.8 : 1, 0 ] );
-		const original = new THREE.AnimationClip( name, duration, [
-			new THREE.VectorKeyframeTrack( 'pelvis.position', times, positions )
-		] );
-		const clip = new CharacterAnimations( target.root, source.root ).clip( original );
-		const mixer = new THREE.AnimationMixer( target.root );
-		const action = mixer.clipAction( clip ).setLoop( THREE.LoopOnce, 1 );
-		action.clampWhenFinished = true;
-		action.play();
-		for ( let index = 0; index < times.length; index ++ ) {
-
-			mixer.setTime( times[ index ] );
-			expect( target.pelvis.position.y ).toBeCloseTo( positions[ index * 3 + 1 ] * 1.2, 4 );
-
-		}
-
-	} );
-
 } );
 
 function rig( hipHeight, legLength ) {

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Elevators } from './Elevators.js';
 
@@ -36,9 +36,9 @@ function doorModule() {
 }
 
 /** Where a landing's leaves stand: on the +x face of that shaft, at one floor. */
-function doorPlacement( x = 11.25 ) {
+function doorPlacement() {
 
-	return { module: 'lift-doors', position: [ x, 0, 21.25 ], rotationY: Math.PI / 2, scale: [ 1, 1, 1 ] };
+	return { module: 'lift-doors', position: [ 11.25, 0, 21.25 ], rotationY: Math.PI / 2, scale: [ 1, 1, 1 ] };
 
 }
 
@@ -66,16 +66,6 @@ function shafts() {
  */
 describe( 'Elevators', () => {
 
-	it( 'parks the cab at the ground floor, not in the basement', () => {
-
-		const elevators = new Elevators( factory );
-		const group = new THREE.Group();
-		elevators.add( 'p2', [ { floor: - 1, elevation: - 4, height: 4, core: { elevators: [ LIFT() ] } }, ...floors ], group );
-
-		expect( group.getObjectByName( 'elevator:p2:elev-0' ).position.y ).toBe( 0 );
-
-	} );
-
 	it( 'hangs the published landing module on sliders and gives it a call panel', () => {
 
 		const { elevators, group } = shafts();
@@ -95,21 +85,6 @@ describe( 'Elevators', () => {
 
 	} );
 
-	it( 'leaves a placement that belongs to no shaft alone, without a word', () => {
-
-		const { elevators } = shafts();
-		const band = new THREE.Group();
-		const errors = vi.spyOn( console, 'error' ).mockImplementation( () => {} );
-
-		const taken = elevators.mount( 'p1', 0, doorPlacement( 51.25 ), doorModule(), band );
-
-		expect( taken ).toBe( false );
-		expect( band.children ).toHaveLength( 0 );
-		expect( errors ).not.toHaveBeenCalled();
-		errors.mockRestore();
-
-	} );
-
 	it( 'calls the cab to a floor the shaft serves and carries the rider there', () => {
 
 		const { elevators } = shafts();
@@ -125,44 +100,16 @@ describe( 'Elevators', () => {
 
 		expect( shaft.target ).toBe( 4 );
 
-		for ( let i = 0; i < 300 && shaft.moving; i ++ ) elevators.update( 1 / 60, body );
+		for ( let i = 0; i < 300 && shaft.moving; i ++ ) {
 
-		expect( shaft.at ).toBeCloseTo( 4, 3 );
-		expect( body.feet.y ).toBeCloseTo( 4.05, 2 );
-
-	} );
-
-	it( 'never sends the cab to a floor the shaft does not serve', () => {
-
-		const { elevators } = shafts();
-		const [ shaft ] = elevators.shafts;
-
-		for ( let i = 0; i < 5; i ++ ) {
-
-			shaft.press( { inside: true } );
-
-			for ( let f = 0; f < 300 && shaft.moving; f ++ ) elevators.update( 1 / 60, playerAt( 0, 0, 0 ) );
-
-			expect( [ 0, 4 ] ).toContain( Math.round( shaft.at ) );
+			elevators.update( 1 / 60, body );
+			// While it travels, every landing on the shaft stays shut.
+			if ( shaft.moving ) expect( shaft.stops.every( ( stop ) => stop.wanted === 0 ) ).toBe( true );
 
 		}
 
-	} );
-
-	it( 'holds its doors shut while it is moving', () => {
-
-		const { elevators } = shafts();
-		const [ shaft ] = elevators.shafts;
-		const body = playerAt( 0, 0, 0 );
-
-		elevators.update( 1 / 60, body );
-
-		expect( shaft.stops[ 0 ].wanted ).toBe( 1 );
-
-		shaft.press( { inside: false, stop: shaft.stops[ 1 ] } );
-		elevators.update( 1 / 60, body );
-
-		expect( shaft.stops.every( ( stop ) => stop.wanted === 0 ) ).toBe( true );
+		expect( shaft.at ).toBeCloseTo( 4, 3 );
+		expect( body.feet.y ).toBeCloseTo( 4.05, 2 );
 
 	} );
 

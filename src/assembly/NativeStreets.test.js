@@ -59,6 +59,7 @@ it( 'publishes the street kit, its placements and its pieces bound to the staged
 	expect( JSON.parse( blueprintBytes ) ).toEqual( atlas );
 	expect( readdirSync( directory ).some( name => name.startsWith( '.world-archive-' ) ) ).toBe( false );
 
+	// a build that fails leaves the world exactly as it stood
 	const documents = [ 'blueprint.json', 'manifest.json', 'streets/manifest.json', 'streets/placements.json' ];
 	const before = documents.map( name => readFileSync( join( directory, name ) ) );
 	await expect( new OutDir( directory ).publishManifest( atlas, [], [], { streets: { nativeMaterials: join( directory, 'missing.json' ) } } ) ).rejects.toMatchObject( { code: 'E_STREETS_BUILD' } );
@@ -67,17 +68,14 @@ it( 'publishes the street kit, its placements and its pieces bound to the staged
 
 }, 120_000 );
 
-it( 'rejects archive-native publication before creating staging artifacts', async () => {
+it( 'adopts an ahead-of-time streets build, refuses one bound to other bytes and refuses archive publication', async () => {
 
-	directory = mkdtempSync( join( tmpdir(), 'assembly-streets-archive-' ) );
+	directory = mkdtempSync( join( tmpdir(), 'assembly-streets-ahead-' ) );
+
+	// native streets need ordinary blueprint JSON: nothing is staged before it is refused
 	await expect( new OutDir( directory ).publishManifest( atlas, [], [], { encoding: 'archive', streets: true } ) ).rejects.toMatchObject( { code: 'E_STREETS_ARCHIVE_UNSUPPORTED' } );
 	expect( readdirSync( directory ) ).toEqual( [] );
 
-} );
-
-it( 'adopts an ahead-of-time streets build and refuses one bound to other bytes', async () => {
-
-	directory = mkdtempSync( join( tmpdir(), 'assembly-streets-ahead-' ) );
 	const ahead = new StreetsAhead( directory, atlas );
 	const prepared = await ahead.prepared();
 

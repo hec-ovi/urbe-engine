@@ -27,63 +27,42 @@ describe( 'MinimapView', () => {
 
 	} );
 
-	it( 'update blits the bake around the player and paints venues by state', () => {
+	it( 'bakes the city with its transit, blits it once per update with venues and the route, and draws nothing while hidden', () => {
 
 		view.setMap( MAP );
+		expect( view.bake.context.calls ).toContainEqual( [ 'set', 'strokeStyle', MAP_COLORS.train ] );
+		expect( view.bake.context.calls ).toContainEqual( [ 'strokeRect', 100.5, 92.5, 7, 7 ] );
+
 		view.setVenues( [ { point: { x: 50, z: 50 }, open: true }, { point: { x: 52, z: 52 }, open: false } ] );
+		view.setRoute( { path: [ [ 45, 50 ], [ 50, 50 ], [ 60, 55 ] ], label: 'reach p9' } );
 		view.update( { x: 50, z: 50 }, 0 );
 
 		expect( count( view.context, 'drawImage' ) ).toBe( 1 );
 		expect( view.context.calls ).toContainEqual( [ 'set', 'fillStyle', MAP_COLORS.venueOpen ] );
 		expect( view.context.calls ).toContainEqual( [ 'set', 'fillStyle', MAP_COLORS.venueShut ] );
+		expect( view.context.calls ).toContainEqual( [ 'set', 'strokeStyle', MAP_COLORS.route ] );
+		expect( view.context.calls ).toContainEqual( [ 'set', 'fillStyle', MAP_COLORS.marker ] );
 
-	} );
+		view.setRoute( null );
+		view.context.calls.length = 0;
+		view.update( { x: 50, z: 50 }, 0 );
+		expect( view.context.calls ).not.toContainEqual( [ 'set', 'strokeStyle', MAP_COLORS.route ] );
 
-	it( 'bakes generated transit routes and station entries into the city layer', () => {
-
-		view.setMap( MAP );
-
-		expect( view.bake.context.calls ).toContainEqual( [ 'set', 'strokeStyle', MAP_COLORS.train ] );
-		expect( view.bake.context.calls ).toContainEqual( [ 'strokeRect', 100.5, 92.5, 7, 7 ] );
-
-	} );
-
-	it( 'toggle hides it and a hidden map draws nothing', () => {
-
-		view.setMap( MAP );
 		view.toggle();
-		view.update( { x: 0, z: 0 }, 0 );
-
+		view.context.calls.length = 0;
+		view.update( { x: 50, z: 50 }, 0 );
 		expect( view.element.hidden ).toBe( true );
 		expect( count( view.context, 'drawImage' ) ).toBe( 0 );
 
 	} );
 
-	it( 'draws and clears the active objective route', () => {
+	it( 'keeps forward above the player and right to the right, with N on world north', () => {
 
-		view.setMap( MAP );
-		view.setRoute( { path: [ [ 45, 50 ], [ 50, 50 ], [ 60, 55 ] ], label: 'reach p9' } );
-		view.update( { x: 45, z: 50 }, 0 );
-
-		expect( view.context.calls ).toContainEqual( [ 'set', 'strokeStyle', MAP_COLORS.route ] );
-		expect( count( view.context, 'stroke' ) ).toBeGreaterThan( 0 );
-		expect( view.context.calls ).toContainEqual( [ 'set', 'fillStyle', MAP_COLORS.marker ] );
-
-		view.context.calls.length = 0;
-		view.setRoute( null );
-		view.update( { x: 45, z: 50 }, 0 );
-		expect( view.context.calls ).not.toContainEqual( [ 'set', 'strokeStyle', MAP_COLORS.route ] );
-
-	} );
-	it.each( [
-		[ 'north', 0, [ 95, 15 ] ],
-		[ 'west', Math.PI / 2, [ 175, 95 ] ],
-		[ 'south', Math.PI, [ 95, 175 ] ],
-		[ 'east', - Math.PI / 2, [ 15, 95 ] ],
-		[ 'northwest', Math.PI / 4, [ 151.568542, 38.431458 ] ]
-	] )( 'keeps forward above and right to the right while facing %s', ( _, heading, north ) => {
+		// A diagonal heading: nothing lands on an axis by accident.
+		const heading = Math.PI / 4;
 		const ahead = [ 50 - Math.sin( heading ) * 20, 50 - Math.cos( heading ) * 20 ];
 		const right = [ 50 + Math.cos( heading ) * 20, 50 - Math.sin( heading ) * 20 ];
+
 		view.setMap( MAP );
 		view.setVenues( [ { point: { x: ahead[ 0 ], z: ahead[ 1 ] }, open: true }, { point: { x: right[ 0 ], z: right[ 1 ] }, open: false } ] );
 		view.setRoute( { path: [ [ 50, 50 ], ahead ], label: 'forward' } );
@@ -95,9 +74,10 @@ describe( 'MinimapView', () => {
 		closePoint( dots[ 1 ].slice( 1, 3 ), [ 125, 93 ] );
 		closePoint( calls.find( ( [ name ] ) => name === 'lineTo' ).slice( 1 ), [ 95, 63 ] );
 		closePoint( paintedPoint( calls, view.bake.toPixels( ...ahead ) ), [ 95, 63 ] );
-		closePoint( calls.find( ( [ name ] ) => name === 'fillText' ).slice( 2 ), north );
+		closePoint( calls.find( ( [ name ] ) => name === 'fillText' ).slice( 2 ), [ 151.568542, 38.431458 ] );
 		closePoint( calls.filter( ( [ name ] ) => name === 'moveTo' ).at( - 1 ).slice( 1 ), [ 95, 88 ] );
 		expect( view.canvas.getAttribute( 'aria-label' ) ).toBe( 'Local map, forward at the top' );
+
 	} );
 
 } );

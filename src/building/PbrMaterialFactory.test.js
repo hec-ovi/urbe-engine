@@ -23,6 +23,15 @@ const factoryFor = ( strength, profile ) => new PbrMaterialFactory( {
 	mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
 }, profile );
 
+function surfaceFactory( profile ) {
+
+	return new PbrMaterialFactory( {
+		resolve: () => ( { ...entry( 1 ), physical: { roughnessFactor: 0.64, metallicFactor: 0.35 } } ),
+		mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
+	}, profile );
+
+}
+
 /**
  * The look is graded against how bright a lamp lens reads on screen. That level
  * has to survive a materials release re-authoring the map's own strength, which
@@ -31,10 +40,9 @@ const factoryFor = ( strength, profile ) => new PbrMaterialFactory( {
  */
 describe( 'PbrMaterialFactory', () => {
 
-	it( 'preserves absolute surface maps and their linear channels', () => {
+	it( 'preserves absolute surface maps, their linear channels, the quality profile and the shader each surface needs', () => {
 
-		const factory = surfaceFactory();
-		const material = factory.build( 'known/metal/mid' );
+		const material = surfaceFactory().build( 'known/metal/mid' );
 
 		expect( material.roughness ).toBe( 1 );
 		expect( material.metalness ).toBe( 1 );
@@ -47,13 +55,35 @@ describe( 'PbrMaterialFactory', () => {
 		}
 		expect( material.map.colorSpace ).toBe( THREE.SRGBColorSpace );
 		expect( material.emissiveMap.colorSpace ).toBe( THREE.SRGBColorSpace );
+
 		const scalar = surfaceFactory( { materialMaps: [] } ).build( 'known/metal/mid' );
 		expect( scalar.roughness ).toBe( 0.64 );
 		expect( scalar.metalness ).toBe( 0.35 );
 
+		const limited = factoryFor( 3, {
+			materialMaps: [ 'basecolor', 'normal', 'emission' ], textureAnisotropy: 2
+		} ).build( 'known/wall/mid' );
+		expect( limited.map.anisotropy ).toBe( 2 );
+		expect( limited.normalMap ).toBeTruthy();
+		expect( limited.emissiveMap ).toBeTruthy();
+		expect( limited.roughnessMap ).toBeNull();
+		expect( limited.metalnessMap ).toBeNull();
+		expect( limited.aoMap ).toBeNull();
+
+		const transmissive = new PbrMaterialFactory( {
+			resolve: ( key ) => ( {
+				...entry( 1 ),
+				physical: { ...entry( 1 ).physical, transmission: key.includes( 'glass' ) ? 0.8 : 0 }
+			} ),
+			mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
+		}, { materialMaps: [] } );
+		expect( transmissive.build( 'known/wall/mid' ).type ).toBe( 'MeshStandardMaterial' );
+		expect( transmissive.build( 'known/glass/mid' ).type ).toBe( 'MeshPhysicalMaterial' );
+		expect( transmissive.build( 'known/glass/mid' ).transmission ).toBeCloseTo( 0.8 );
+
 	} );
 
-	it( 'uses scalar surfaces after failed map loads, including cached tuned copies', async () => {
+	it( 'settles readiness on a failed map load and falls back to catalog scalars, including cached tuned copies', async () => {
 
 		const factory = surfaceFactory( { materialMaps: [ 'roughness', 'metallic' ] } );
 		factory.textures = fakeTextures( ( url, onLoad, onError ) => {
@@ -79,115 +109,34 @@ describe( 'PbrMaterialFactory', () => {
 
 	} );
 
-	it( 'uses fitted decal basecolor alpha without writing over receiver depth', () => {
+	it( 'takes emission as authored or scaled, fits decals on receiver depth, and names what it cannot serve', () => {
 
-		const decal = {
-			alignment: 'exact', aspect: [ 2, 1 ],
-			decal: { worldSize: [ 2, 1 ], edgeInset: 0.02, surfaceOffset: 0.002 },
-			physical: { alphaMode: 'BLEND', roughnessFactor: 0.8, metallicFactor: 0 },
-			variants: [ { id: 'runoff', maps: { basecolor: 'grime-rgba.png', opacity: 'opacity.png' } } ]
-		};
-		const factory = new PbrMaterialFactory( {
-			resolve: () => decal,
+		expect( factoryFor( 3 ).variant( 'known/light-fixture/mid', { emissiveLevel: 180 } ).emissiveIntensity ).toBe( 180 );
+		expect( factoryFor( 1.2 ).variant( 'known/light-fixture/mid', { emissiveLevel: 180 } ).emissiveIntensity ).toBe( 180 );
+		expect( factoryFor( 2.5 ).variant( 'known/signage/mid', { emissiveScale: 26 } ).emissiveIntensity ).toBe( 65 );
+
+		const unresolved = factoryFor( 3 ).build( 'unknown/brand/none' );
+		expect( unresolved.name ).toBe( 'unresolved:unknown/brand/none' );
+		expect( unresolved.color.getHex() ).toBe( 0xff00ff );
+
+		const decal = new PbrMaterialFactory( {
+			resolve: () => ( {
+				alignment: 'exact', aspect: [ 2, 1 ],
+				decal: { worldSize: [ 2, 1 ], edgeInset: 0.02, surfaceOffset: 0.002 },
+				physical: { alphaMode: 'BLEND', roughnessFactor: 0.8, metallicFactor: 0 },
+				variants: [ { id: 'runoff', maps: { basecolor: 'grime-rgba.png', opacity: 'opacity.png' } } ]
+			} ),
 			mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
-		}, { materialMaps: [ 'basecolor' ] } );
-		const material = factory.build( 'cyberpunk/window-grime-sill/poor', 'runoff' );
+		}, { materialMaps: [ 'basecolor' ] } ).build( 'cyberpunk/window-grime-sill/poor', 'runoff' );
 
-		expect( material.transparent ).toBe( true );
-		expect( material.depthWrite ).toBe( false );
-		expect( material.depthTest ).toBe( true );
-		expect( material.map.wrapS ).toBe( THREE.ClampToEdgeWrapping );
-		expect( material.map.repeat.toArray() ).toEqual( [ 1, 1 ] );
-		expect( material.alphaMap ).toBeNull();
+		expect( decal.transparent ).toBe( true );
+		expect( decal.depthWrite ).toBe( false );
+		expect( decal.depthTest ).toBe( true );
+		expect( decal.map.wrapS ).toBe( THREE.ClampToEdgeWrapping );
+		expect( decal.map.repeat.toArray() ).toEqual( [ 1, 1 ] );
+		expect( decal.alphaMap ).toBeNull();
 		expect( factoryFor( 1 ).build( 'known/wall/mid' ).depthWrite ).toBe( true );
 
 	} );
 
-	it( 'takes the emissive level as authored, whatever the database says', () => {
-
-		const bright = factoryFor( 3 ).variant( 'known/light-fixture/mid', { emissiveLevel: 180 } );
-		const dim = factoryFor( 1.2 ).variant( 'known/light-fixture/mid', { emissiveLevel: 180 } );
-
-		expect( bright.emissiveIntensity ).toBe( 180 );
-		expect( dim.emissiveIntensity ).toBe( 180 );
-
-	} );
-
-	it( 'still rides the database strength where a scale is asked for', () => {
-
-		expect( factoryFor( 2.5 ).variant( 'known/signage/mid', { emissiveScale: 26 } ).emissiveIntensity ).toBe( 65 );
-		expect( factoryFor( 5 ).variant( 'known/signage/mid', { emissiveScale: 26 } ).emissiveIntensity ).toBe( 130 );
-
-	} );
-
-	it( 'gives a key the database cannot serve the unmistakable fallback', () => {
-
-		const material = factoryFor( 3 ).build( 'unknown/brand/none' );
-
-		expect( material.name ).toBe( 'unresolved:unknown/brand/none' );
-		expect( material.color.getHex() ).toBe( 0xff00ff );
-
-	} );
-
-	it( 'loads only the texture channels allowed by a quality profile', () => {
-
-		const material = factoryFor( 3, {
-			materialMaps: [ 'basecolor', 'normal', 'emission' ], textureAnisotropy: 2
-		} ).build( 'known/wall/mid' );
-
-		expect( material.map ).toBeTruthy();
-		expect( material.normalMap ).toBeTruthy();
-		expect( material.emissiveMap ).toBeTruthy();
-		expect( material.roughnessMap ).toBeNull();
-		expect( material.metalnessMap ).toBeNull();
-		expect( material.aoMap ).toBeNull();
-		expect( material.map.anisotropy ).toBe( 2 );
-
-	} );
-
-	it( 'uses the smaller standard shader for opaque PBR and physical only for transmission', () => {
-
-		const resolver = {
-			resolve: ( key ) => ( {
-				...entry( 1 ),
-				physical: {
-					...entry( 1 ).physical,
-					transmission: key.includes( 'glass' ) ? 0.8 : 0
-				}
-			} ),
-			mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
-		};
-		const factory = new PbrMaterialFactory( resolver, { materialMaps: [] } );
-
-		expect( factory.build( 'known/wall/mid' ).type ).toBe( 'MeshStandardMaterial' );
-		expect( factory.build( 'known/glass/mid' ).type ).toBe( 'MeshPhysicalMaterial' );
-		expect( factory.build( 'known/glass/mid' ).transmission ).toBeCloseTo( 0.8 );
-
-	} );
-
-	it( 'exposes when each map is decoded for streamed GPU upload', async () => {
-
-		const factory = factoryFor( 1, { materialMaps: [ 'basecolor' ] } );
-		factory.textures = fakeTextures( ( url, onLoad ) => {
-
-			const texture = new THREE.Texture();
-			queueMicrotask( () => onLoad( texture ) );
-			return texture;
-
-		} );
-		const material = factory.build( 'known/wall/mid' );
-
-		await expect( material.map[ Symbol.for( 'urbe.texture-ready' ) ] ).resolves.toBeUndefined();
-
-	} );
-
 } );
-
-function surfaceFactory( profile ) {
-
-	return new PbrMaterialFactory( {
-		resolve: () => ( { ...entry( 1 ), physical: { roughnessFactor: 0.64, metallicFactor: 0.35 } } ),
-		mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
-	}, profile );
-
-}

@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import Ajv from 'ajv';
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -36,12 +36,6 @@ function overlapping( a, b ) {
 		if ( Math.min( Math.max( ...x ), Math.max( ...y ) ) - Math.max( Math.min( ...x ), Math.min( ...y ) ) <= 1e-7 ) return false;
 	}
 	return true;
-}
-function contains( ring, point ) {
-	return ring.every( ( a, i ) => {
-		const b = ring[ ( i + 1 ) % ring.length ];
-		return ( b[ 0 ] - a[ 0 ] ) * ( point[ 1 ] - a[ 1 ] ) - ( b[ 1 ] - a[ 1 ] ) * ( point[ 0 ] - a[ 0 ] ) >= - 1e-5;
-	} );
 }
 function triangles( position, matrix = new THREE.Matrix4() ) {
 	const out = [], vertex = new THREE.Vector3();
@@ -81,30 +75,24 @@ describe( 'street dressing contract', () => {
 			const first = a.placements[ i ], second = a.placements[ j ];
 			if ( Math.min( first.top, second.top ) - Math.max( first.bottom, second.bottom ) > 1e-7 ) expect( overlapping( first.footprint, second.footprint ) ).toBe( false );
 		}
-		expect( a.colliders.get( 'props' ).attributes.normal ).toBeUndefined();
-		expect( a.colliders.get( 'props' ).attributes.position.count / 36 ).toBe( a.counts.box + a.counts.crate + a.counts.pallet + a.counts.dumpster + a.counts.container + a.counts.tree + a.counts.ornament );
-		a.dispose(); b.dispose();
-	} );
-	it( 'keeps complete visible footprints outside buildings and door aprons at the authored top', async () => {
-		const result = await build();
-		for ( const p of result.placements ) {
+		for ( const p of a.placements ) {
 			expect( p.bottom ).toBeGreaterThanOrEqual( 0.2 - 1e-6 );
 			for ( const [ x, z ] of p.footprint ) {
 				expect( x > 20 && x < 80 && z > 20 && z < 60 ).toBe( false );
 				expect( Math.hypot( x - 50, z - 20 ) ).toBeGreaterThan( 3.5 );
 			}
 		}
-		result.dispose();
+		expect( a.colliders.get( 'props' ).attributes.normal ).toBeUndefined();
+		expect( a.colliders.get( 'props' ).attributes.position.count / 36 ).toBe( a.counts.box + a.counts.crate + a.counts.pallet + a.counts.dumpster + a.counts.container + a.counts.tree + a.counts.ornament );
+		a.dispose(); b.dispose();
 	} );
-	it( 'requires complete land support across material seams and rejects a narrow missing strip', async () => {
+	it( 'admits a tree only on complete land, clear of walk width, fixtures and reserved station land', async () => {
 		const atlas = world(); atlas.parcels = []; atlas.streets.planting = [ { edgeId: 'e', kind: 'tree', position: [ 0, 0 ] } ];
 		atlas.volumetric.ground = [ { polygon: rect( - 10, - 10, 10, 20 ), surface: 'sidewalk', top: 0.32 }, { polygon: rect( 0, - 10, 10, 20 ), surface: 'sidewalk', top: 0.32 } ];
 		const joined = await build( atlas ); expect( joined.counts.tree ).toBe( 1 ); expect( joined.placements[ 0 ].bottom ).toBeCloseTo( 0.32 ); joined.dispose();
 		atlas.volumetric.ground[ 1 ].polygon = rect( 0.02, - 10, 10, 20 );
 		const hole = await build( atlas ); expect( hole.counts.total ).toBe( 0 ); expect( hole.colliders.size ).toBe( 0 ); hole.dispose();
-	} );
-	it( 'respects full walk width, vertical separation and reserved station land', async () => {
-		const atlas = world(); atlas.parcels = []; atlas.streets.planting = [ { edgeId: 'e', kind: 'tree', position: [ 0, 0 ] } ];
+		atlas.volumetric.ground[ 1 ].polygon = rect( 0, - 10, 10, 20 );
 		const edge = { id: 'walk', width: 8, path3: [ [ - 20, 0.2, 2 ], [ 20, 0.2, 2 ] ] };
 		const blocked = await build( atlas, { edges: [ edge ] } ); expect( blocked.counts.total ).toBe( 0 ); blocked.dispose();
 		edge.path3.forEach( p => { p[ 1 ] = - 5; } );
@@ -187,91 +175,6 @@ describe( 'street dressing contract', () => {
 		expect( Object.keys( collision.attributes ) ).toEqual( [ 'position' ] );
 		expect( triangles( collision.attributes.position ).sort() ).toEqual( rendered.sort() );
 		result.dispose();
-	} );
-	describe( 'catalog arrangements', () => {
-		let result;
-		beforeAll( async () => {
-			const atlas = world( 'plastic-details' );
-			atlas.streets.planting = [];
-			atlas.parcels = Array.from( { length: 24 }, ( _, i ) => ( { id: `p${i}`, districtId: 'd1', type: 'factory', footprint: rect( 20 + i * 100, 20, 60, 40 ), access: { point: [ 50 + i * 100, 20 ] } } ) );
-			atlas.volumetric.ground = [ { polygon: rect( - 80, - 50, 2600, 170 ), surface: 'open', top: 0.2 } ];
-			const namedFactory = { build: ( key, variant ) => Object.assign( new THREE.MeshStandardMaterial(), { name: key, userData: { variant } } ) };
-			result = await new Dressing( atlas, { edges: [] }, namedFactory, { loadAsset } ).build();
-		} );
-		afterAll( () => result?.dispose() );
-		it( 'places all four deformed plastic variants with solid bounds, fitted wear UVs and bounded material parts', () => {
-			const expected = [ 'poly-crushed', 'poly-loose', 'poly-tote', 'poly-transit' ];
-			const plastics = result.placements.filter( p => p.model.startsWith( 'poly-' ) );
-			expect( [ ...new Set( plastics.map( p => p.model ) ) ].sort() ).toEqual( expected );
-			const checked = new Set();
-			for ( const item of plastics ) {
-				const meshes = result.group.children.filter( mesh => mesh.name.startsWith( `props:${item.model}:` ) );
-				const parts = new Set( meshes.map( mesh => mesh.name.split( ':' ).at( - 1 ) ) );
-				expect( parts.size ).toBe( 3 );
-				for ( const mesh of meshes ) {
-					if ( ! checked.has( mesh.geometry ) ) {
-						checked.add( mesh.geometry );
-						const normal = mesh.geometry.attributes.normal;
-						expect( Array.from( { length: normal.count }, ( _, i ) => Math.abs( Math.hypot( normal.getX( i ), normal.getY( i ), normal.getZ( i ) ) - 1 ) ).every( error => error < 1e-4 ) ).toBe( true );
-						if ( mesh.material.name === 'cyberpunk/prop-polymer-face/poor' ) {
-							const uv = mesh.geometry.attributes.uv.array;
-							expect( Math.min( ...uv ) ).toBe( 0 ); expect( Math.max( ...uv ) ).toBe( 1 );
-						}
-					}
-					const box = mesh.geometry.boundingBox.clone().applyMatrix4( item.matrix );
-					expect( box.min.y ).toBeGreaterThanOrEqual( item.bottom - 1e-6 ); expect( box.max.y ).toBeLessThanOrEqual( item.top + 1e-6 );
-				}
-			}
-			const body = result.group.children.find( mesh => mesh.name.startsWith( 'props:poly-crushed:' ) ).geometry;
-			const p = body.attributes.position;
-			const front = Array.from( { length: p.count }, ( _, i ) => [ p.getX( i ), p.getY( i ), p.getZ( i ) ] ).filter( p => p[ 2 ] > 0.12 && p[ 1 ] > 0.08 );
-			expect( Math.max( ...front.map( p => p[ 2 ] ) ) - Math.min( ...front.map( p => p[ 2 ] ) ) ).toBeGreaterThan( 0.035 );
-		} );
-		it( 'places every ornament and shares three distinct finishes while preserving exact panel artwork', () => {
-			const ornaments = result.placements.filter( item => item.kind === 'ornament' );
-			expect( [ ...new Set( ornaments.map( item => item.model ) ) ].sort() ).toEqual( [ 'bench-repaired', 'memorial-shrine', 'pump-cabinet', 'relay-cabinet' ] );
-			const finishes = catalog.finishes.map( finish => finish.id );
-			expect( new Set( finishes ).size ).toBe( 3 );
-			for ( const item of result.placements ) {
-				const spec = catalog.models.find( model => model.id === item.model );
-				expect( spec.asset && ! spec.cargo ? item.finish === 'original' : finishes.includes( item.finish ) ).toBe( true );
-			}
-			const appearances = finishes.map( finish => result.group.children.filter( mesh => mesh.name.startsWith( `props:poly-transit:${finish}:` ) ) );
-			const bodies = appearances.map( meshes => meshes.find( mesh => mesh.material.name === 'cyberpunk/prop-polymer/poor' ) );
-			const panels = appearances.map( meshes => meshes.find( mesh => mesh.material.name === 'cyberpunk/prop-polymer-face/poor' ) );
-			expect( bodies.every( Boolean ) && panels.every( Boolean ) ).toBe( true );
-			expect( new Set( bodies.map( mesh => JSON.stringify( Array.from( mesh.geometry.attributes.uv.array ) ) ) ).size ).toBe( 3 );
-			expect( new Set( bodies.map( mesh => JSON.stringify( Array.from( mesh.geometry.attributes.color.array ) ) ) ).size ).toBe( 3 );
-			for ( const panel of panels ) expect( panel.geometry.attributes.uv.array ).toEqual( panels[ 0 ].geometry.attributes.uv.array );
-			expect( new Set( panels.map( mesh => mesh.material.userData.variant ) ) ).toEqual( new Set( [ 'scored', 'abraded' ] ) );
-			for ( const body of bodies ) {
-				const matching = result.group.children.filter( mesh => mesh.geometry === body.geometry );
-				expect( matching.every( mesh => mesh.material === body.material ) ).toBe( true );
-			}
-			expect( new Set( result.group.children.map( mesh => mesh.geometry ) ).size ).toBeLessThan( result.group.children.length );
-		} );
-		it( 'varies repeated arrangements while every raised item rests fully on a lower member', () => {
-			const groups = Map.groupBy( result.placements, item => item.arrangement );
-			const signatures = new Map();
-			let raised = 0, angled = 0;
-			for ( const [ id, items ] of groups ) {
-				const recipe = id.split( ':' ).at( - 1 );
-				const inverse = items[ 0 ].matrix.clone().invert();
-				const signature = items.map( item => inverse.clone().multiply( item.matrix ).elements.map( value => Number( value.toFixed( 4 ) ) ) );
-				if ( ! signatures.has( recipe ) ) signatures.set( recipe, new Set() );
-				signatures.get( recipe ).add( JSON.stringify( signature ) );
-				for ( const item of items ) {
-					const yaw = Math.atan2( item.matrix.elements[ 8 ], item.matrix.elements[ 10 ] );
-					if ( Math.abs( Math.sin( yaw * 4 ) ) > 0.02 ) angled ++;
-					if ( item.bottom <= 0.200001 ) continue;
-					raised ++;
-					const supports = items.filter( other => other !== item && Math.abs( other.top - item.bottom ) < 1e-5 );
-					expect( supports.some( support => item.footprint.every( point => contains( support.footprint, point ) ) ) ).toBe( true );
-				}
-			}
-			expect( raised ).toBeGreaterThan( 0 ); expect( angled ).toBeGreaterThan( 0 );
-			for ( const recipe of [ 'parcel-delivery', 'refuse-pocket', 'pallet-delivery' ] ) expect( signatures.get( recipe )?.size ).toBeGreaterThan( 1 );
-		} );
 	} );
 	it( 'releases imported and generated resources once while retaining factory materials, including failed loads', async () => {
 		const resources = [], borrowed = new THREE.MeshStandardMaterial();

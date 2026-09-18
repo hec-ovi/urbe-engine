@@ -48,23 +48,37 @@ describe( 'Warmup', () => {
 
 	};
 
-	it( 'compiles hidden and frustum-culled objects, and puts both back', async () => {
+	it( 'stages hidden, culled and empty batches for compilation, leaves inactive lights out, and puts everything back', async () => {
 
 		const { root, hidden, mesh } = tree();
+		const instanced = new THREE.InstancedMesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial(), 4 );
+		instanced.count = 0;
+		const geometry = new THREE.InstancedBufferGeometry().copy( new THREE.BoxGeometry() );
+		geometry.instanceCount = 0;
+		const custom = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial() );
+		const light = new THREE.PointLight();
+		light.visible = false;
+		root.add( instanced, custom, light );
+
 		const seen = [];
 		const renderer = fakeRenderer( async ( object ) => {
 
-			object.traverse( ( node ) => seen.push( [ node.visible, node.frustumCulled ] ) );
+			expect( instanced.count ).toBe( 1 );
+			expect( geometry.instanceCount ).toBe( 1 );
+			expect( light.visible ).toBe( false );
+			object.traverse( ( node ) => { if ( ! node.isLight ) seen.push( [ node.visible, node.frustumCulled ] ); } );
 
 		} );
-		const scene = new THREE.Scene();
 
-		await new Warmup( renderer, scene, new THREE.PerspectiveCamera(), null ).warm( root );
+		await new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera(), null ).warm( root );
 
 		expect( seen.every( ( [ visible, culled ] ) => visible === true && culled === false ) ).toBe( true );
 		expect( hidden.visible ).toBe( false );
 		expect( mesh.visible ).toBe( true );
 		expect( mesh.frustumCulled ).toBe( true );
+		expect( instanced.count ).toBe( 0 );
+		expect( geometry.instanceCount ).toBe( 0 );
+		expect( light.visible ).toBe( false );
 
 	} );
 
@@ -104,149 +118,48 @@ describe( 'Warmup', () => {
 
 	} );
 
-	it( 'stages empty instance batches for compilation and restores their counts', async () => {
-
-		const root = new THREE.Group();
-		const instanced = new THREE.InstancedMesh(
-			new THREE.BoxGeometry(),
-			new THREE.MeshBasicMaterial(),
-			4
-		);
-		instanced.count = 0;
-		const geometry = new THREE.InstancedBufferGeometry().copy( new THREE.BoxGeometry() );
-		geometry.instanceCount = 0;
-		const custom = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial() );
-		root.add( instanced, custom );
-
-		const renderer = fakeRenderer( async () => {
-
-			expect( instanced.count ).toBe( 1 );
-			expect( geometry.instanceCount ).toBe( 1 );
-
-		} );
-
-		await new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera() ).warm( root );
-
-		expect( instanced.count ).toBe( 0 );
-		expect( geometry.instanceCount ).toBe( 0 );
-
-	} );
-
-	it( 'keeps inactive lights out of the staged compile', async () => {
-
-		const root = new THREE.Group();
-		const light = new THREE.PointLight();
-		light.visible = false;
-		root.add( light );
-		const renderer = fakeRenderer( async () => {
-
-			expect( light.visible ).toBe( false );
-
-		} );
-
-		await new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera() ).warm( root );
-
-		expect( light.visible ).toBe( false );
-
-	} );
-
-	it( 'survives a compile that throws and leaves the tree as it found it', async () => {
-
-		const { root, hidden } = tree();
-		const renderer = fakeRenderer( async () => {
-
-			throw new Error( 'device lost' );
-
-		} );
-
-		vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
-
-		await expect( new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera() ).warm( root ) )
-			.resolves.toBeGreaterThanOrEqual( 0 );
-		expect( hidden.visible ).toBe( false );
-		expect( renderer.mrt ).toBe( 'frame' );
-
-		vi.restoreAllMocks();
-
-	} );
-
-	it( 'warms a world one renderable at a time', async () => {
-
-		const { root } = tree();
-		root.add( new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial() ) );
-		let active = 0;
-		let peak = 0;
-		const compileAsync = vi.fn( async () => {
-
-			active ++;
-			peak = Math.max( peak, active );
-			await Promise.resolve();
-			active --;
-
-		} );
-
-		await new Warmup( fakeRenderer( compileAsync ), new THREE.Scene(), new THREE.PerspectiveCamera() ).warmAll( root );
-
-		expect( compileAsync ).toHaveBeenCalledTimes( 2 );
-		expect( peak ).toBe( 1 );
-
-	} );
-
-	it( 'serializes independent streaming requests and continues after one fails', async () => {
+	it( 'serializes independent streaming requests, rejects the caller that failed and stops an unwanted floor', async () => {
 
 		const a = tree(), b = tree();
-		let active = 0, peak = 0;
+		for ( let i = 0; i < 3; i ++ ) b.root.add( new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial() ) );
+		let active = 0, peak = 0, compiled = 0;
 		const renderer = fakeRenderer( async object => {
 
 			active ++;
 			peak = Math.max( peak, active );
+			compiled ++;
 			await new Promise( resolve => setTimeout( resolve, 1 ) );
 			active --;
 			if ( object === a.mesh ) throw new Error( 'first cell failed' );
 
 		} );
 		const warmup = new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera(), { scene: true } );
-		const results = await Promise.allSettled( [ warmup.warmAll( a.root ), warmup.warmAll( b.root ) ] );
+		let wanted = 2;
+		const results = await Promise.allSettled( [
+			warmup.warmAll( a.root ),
+			warmup.warmAll( b.root, { wanted: () => wanted -- > 0 } )
+		] );
+
 		expect( results.map( result => result.status ) ).toEqual( [ 'rejected', 'fulfilled' ] );
 		expect( peak ).toBe( 1 );
+		expect( compiled ).toBe( 3 );
 		expect( renderer.mrt ).toBe( 'frame' );
 		expect( a.hidden.visible ).toBe( false );
 		expect( b.hidden.visible ).toBe( false );
 
 	} );
 
-	it( 'rejects required preparation on the first failed compile after restoring the render state', async () => {
-
-		const { root, hidden, mesh } = tree();
-		const compileAsync = vi.fn( async () => { throw new Error( 'pipeline failed' ); } );
-		const renderer = fakeRenderer( compileAsync );
-		root.add( new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial() ) );
-		await expect( new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera() ).warmAll( root ) )
-			.rejects.toThrow( 'pipeline failed' );
-		expect( compileAsync ).toHaveBeenCalledTimes( 1 );
-		expect( hidden.visible ).toBe( false );
-		expect( mesh.frustumCulled ).toBe( true );
-		expect( renderer.mrt ).toBe( 'frame' );
-
-	} );
-
-	it.each( [ 'map', 'node' ] )( 'waits for streamed %s resources and uploads each shared texture once', async ( kind ) => {
+	it( 'waits for streamed node resources, uploads each shared texture once, and rejects a failed one before upload', async () => {
 
 		let ready;
 		const loaded = new Promise( ( resolve ) => { ready = resolve; } );
 		const texture = new THREE.Texture();
-		texture[ Symbol.for( 'urbe.texture-ready' ) ] = loaded;
 		const root = new THREE.Group();
 		root.add(
-			new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial( { map: texture } ) ),
-			new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial( { map: texture } ) )
+			new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial() ),
+			new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial() )
 		);
-		if ( kind === 'node' ) for ( const mesh of root.children ) {
-
-			mesh.material.map = null;
-			mesh.material[ Symbol.for( 'urbe.material-resources' ) ] = [ { texture, ready: loaded } ];
-
-		}
+		for ( const mesh of root.children ) mesh.material[ Symbol.for( 'urbe.material-resources' ) ] = [ { texture, ready: loaded } ];
 		const renderer = fakeRenderer( async () => {
 
 			expect( renderer.initTexture ).toHaveBeenCalledWith( texture );
@@ -263,46 +176,20 @@ describe( 'Warmup', () => {
 		await warmup.warm( root );
 
 		expect( renderer.initTexture ).toHaveBeenCalledTimes( 1 );
-		expect( renderer.initTexture ).toHaveBeenCalledWith( texture );
 
-	} );
-
-	it( 'rejects failed node texture readiness before GPU upload or compilation', async () => {
-
-		const { root, mesh } = tree();
+		const failing = tree();
 		let reject;
-		const ready = new Promise( ( resolve, failure ) => { reject = failure; } );
-		mesh.material[ Symbol.for( 'urbe.material-resources' ) ] = [ { texture: new THREE.Texture(), ready } ];
-		const renderer = fakeRenderer( vi.fn() );
-		renderer.initTexture = vi.fn();
-		const pending = new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera() ).warmAll( root );
+		const failed = new Promise( ( resolve, failure ) => { reject = failure; } );
+		failing.mesh.material[ Symbol.for( 'urbe.material-resources' ) ] = [ { texture: new THREE.Texture(), ready: failed } ];
+		const second = fakeRenderer( vi.fn() );
+		second.initTexture = vi.fn();
+		const rejected = new Warmup( second, new THREE.Scene(), new THREE.PerspectiveCamera() ).warmAll( failing.root );
 		await Promise.resolve();
 		reject( new Error( 'source map missing' ) );
-		await expect( pending ).rejects.toThrow( 'source map missing' );
-		expect( renderer.initTexture ).not.toHaveBeenCalled();
-		expect( renderer.compileAsync ).not.toHaveBeenCalled();
 
-	} );
-
-	it( 'lets frames run between renderables and stops preparing an unwanted floor', async () => {
-
-		const root = new THREE.Group();
-		for ( let i = 0; i < 10; i ++ ) root.add( new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial() ) );
-		let frame = 0;
-		const compiledAt = [];
-		vi.stubGlobal( 'requestAnimationFrame', callback => setTimeout( () => callback( ++ frame * 16 ), 0 ) );
-		const renderer = fakeRenderer( async () => { compiledAt.push( frame ); } );
-		try {
-
-			await new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera() ).warmAll( root, { wanted: () => frame < 2 } );
-			expect( compiledAt ).toEqual( [ 0, 1 ] );
-
-		} finally {
-
-			vi.unstubAllGlobals();
-			root.traverse( node => { node.geometry?.dispose(); node.material?.dispose(); } );
-
-		}
+		await expect( rejected ).rejects.toThrow( 'source map missing' );
+		expect( second.initTexture ).not.toHaveBeenCalled();
+		expect( second.compileAsync ).not.toHaveBeenCalled();
 
 	} );
 

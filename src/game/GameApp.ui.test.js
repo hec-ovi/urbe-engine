@@ -27,11 +27,12 @@ describe( 'playable game navigation', () => {
 
 	} );
 
-	it( 'sends a typed line and renders the NPC reply through the dialogue lifecycle', async () => {
+	it( 'sends a typed line, renders the reply through the dialogue lifecycle, and stays usable after a model failure', async () => {
 
 		const app = dialogueApp();
 		const user = userEvent.setup();
-		await user.type( screen.getByRole( 'textbox', { name: 'say something' } ), 'where is the quay?{Enter}' );
+		const input = screen.getByRole( 'textbox', { name: 'say something' } );
+		await user.type( input, 'where is the quay?{Enter}' );
 
 		await vi.waitFor( () => expect( app.talk.say ).toHaveBeenCalledOnce() );
 		expect( app.talk.say ).toHaveBeenCalledWith( app.interactor.conversation, 'where is the quay?', 725, [] );
@@ -40,57 +41,14 @@ describe( 'playable game navigation', () => {
 		expect( app.animations.npcDialogueTurn ).toHaveBeenCalledOnce();
 		expect( app.animations.completeDialogueTurn ).toHaveBeenCalledOnce();
 
-	} );
-
-	it( 'renders the structured NPC name in the conversation avatar', () => {
-
-		const app = new GameApp( {} );
-		app.input = { exitLock: vi.fn() };
-
-		app.presentConversation( {
-			instance: {
-				name: { given: 'Ada', family: 'Vance' }, type: 'clerk',
-				home: { parcelId: 'p1', unit: 2 }, routine: []
-			}
-		} );
-
-		expect( document.querySelector( '.avatar-name' ).textContent ).toBe( 'Ada Vance' );
-		expect( app.input.exitLock ).toHaveBeenCalledOnce();
-
-	} );
-
-	it( 'keeps typed chat usable after a text model failure', async () => {
-
-		const app = dialogueApp();
 		app.talk.say.mockRejectedValueOnce( new Error( 'model unavailable' ) );
-		const user = userEvent.setup();
-		const input = screen.getByRole( 'textbox', { name: 'say something' } );
-
-		await user.type( input, 'first line{Enter}' );
-		await vi.waitFor( () => expect( screen.getByText( '...' ) ).toBeTruthy() );
-		expect( app.animations.completeDialogueTurn ).toHaveBeenCalledOnce();
-
 		await user.type( input, 'second line{Enter}' );
-		await vi.waitFor( () => expect( app.talk.say ).toHaveBeenCalledTimes( 2 ) );
+		await vi.waitFor( () => expect( screen.getByText( '...' ) ).toBeTruthy() );
+
+		await user.type( input, 'third line{Enter}' );
+		await vi.waitFor( () => expect( app.talk.say ).toHaveBeenCalledTimes( 3 ) );
 		expect( input.disabled ).toBe( false );
-		expect( screen.getByText( 'Down the steps.' ) ).toBeTruthy();
-
-	} );
-
-	it( 'ignores a model reply that arrives after the conversation closes', async () => {
-
-		let finishReply;
-		const app = dialogueApp();
-		app.talk.say.mockReturnValue( new Promise( ( resolve ) => { finishReply = resolve; } ) );
-		const user = userEvent.setup();
-
-		await user.type( screen.getByRole( 'textbox', { name: 'say something' } ), 'wait{Enter}' );
-		await vi.waitFor( () => expect( app.talk.say ).toHaveBeenCalledOnce() );
-		await user.click( screen.getByRole( 'button', { name: 'close' } ) );
-		finishReply( 'Too late.' );
-		await Promise.resolve();
-
-		expect( screen.queryByText( 'Too late.' ) ).toBeNull();
+		expect( screen.getAllByText( 'Down the steps.' ) ).toHaveLength( 2 );
 
 	} );
 

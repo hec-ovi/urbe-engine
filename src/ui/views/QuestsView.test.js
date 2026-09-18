@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
 import { QuestsView } from './QuestsView.js';
@@ -12,25 +12,13 @@ const QUESTS = [
 /** The quest log: empty wording, the list, and the picked quest's steps. */
 describe( 'QuestsView', () => {
 
-	let view;
+	it( 'says no quest yet, then lists quests, opens the first and marks steps done', async () => {
 
-	beforeEach( () => {
-
-		view = new QuestsView( { onClose: vi.fn() } );
+		const view = new QuestsView( { onClose: vi.fn() } );
 		document.body.replaceChildren( view.element );
-
-	} );
-
-	it( 'says no quest yet before any arrives', () => {
-
 		expect( screen.getByText( 'no quest yet' ) ).toBeTruthy();
 
-	} );
-
-	it( 'setQuests lists them, opens the first, and marks steps done', async () => {
-
 		view.setQuests( QUESTS );
-
 		expect( screen.getByRole( 'heading', { name: 'Salt Wharf' } ) ).toBeTruthy();
 		expect( screen.getByText( 'Talk to Ada' ).closest( 'li' ).classList.contains( 'is-done' ) ).toBe( true );
 		expect( screen.getByText( 'Check the quay' ).closest( 'li' ).classList.contains( 'is-done' ) ).toBe( false );

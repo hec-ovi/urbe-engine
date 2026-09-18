@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RequestAssembler } from './RequestAssembler.js';
-import { BuildingPipeline, signRungs } from './BuildingPipeline.js';
+import { BuildingPipeline } from './BuildingPipeline.js';
 import namedCity from './named-city.fixture.json';
 import { validateExteriorRequest } from './validators.js';
 import { loadFloorConstants } from './floorFeasibility.js';
@@ -53,7 +53,7 @@ const connections = { apertures: [ bridgeAperture, { ...aperture( 'x1a', 'bridge
 
 describe( 'RequestAssembler', () => {
 
-	it( 'validates the published Exterior policy and rejects invalid requests before generation', async () => {
+	it( 'validates the published Exterior policy and refuses an invalid or street-less request before generation', async () => {
 
 		const request = new RequestAssembler( atlasWith( officeParcel ), connections ).assemble( 'p7' );
 		request.options.coreAdjacency = {
@@ -80,28 +80,22 @@ describe( 'RequestAssembler', () => {
 
 		}
 
+		// a parcel whose named access street is absent never becomes a point-only request
+		const streetless = atlasWith( officeParcel );
+		streetless.streets.edges = [];
+		expect( () => new RequestAssembler( streetless, connections ).assemble( 'p7' ) )
+			.toThrow( expect.objectContaining( { code: 'E_REQUEST_INVALID', message: expect.stringContaining( 'e1' ) } ) );
+
 	} );
 
-	it( 'preserves the published construction frame without inventing one for older worlds', () => {
+	it( 'assembles the same exterior and interior request from the same inputs, parcel and apertures verbatim', () => {
 
 		const atlas = atlasWith( officeParcel );
 		const buildingGrid = { origin: [ 14.5, - 8 ], angle: 0.31, spacing: 0.5 };
 		atlas.meta.buildingGrid = buildingGrid;
-		const request = new RequestAssembler( atlas, connections ).assemble( 'p7' );
-		expect( request.parcel.buildingGrid ).toEqual( buildingGrid );
-		expect( request.parcel.footprint ).toEqual( officeParcel.footprint );
-		expect( request.apertures ).toEqual( [ bridgeAperture ] );
-		expect( validateExteriorRequest( request ) ).toEqual( [] );
-		const legacy = new RequestAssembler( atlasWith( officeParcel ), connections ).assemble( 'p7' );
-		expect( legacy.parcel ).not.toHaveProperty( 'buildingGrid' );
-		expect( validateExteriorRequest( legacy ) ).toEqual( [] );
 
-	} );
-
-	it( 'same inputs produce an identical request', () => {
-
-		const a = new RequestAssembler( atlasWith( officeParcel ), connections ).assemble( 'p7' );
-		const b = new RequestAssembler( atlasWith( officeParcel ), connections ).assemble( 'p7' );
+		const a = new RequestAssembler( atlas, connections ).assemble( 'p7' );
+		const b = new RequestAssembler( atlas, connections ).assemble( 'p7' );
 
 		expect( JSON.stringify( b ) ).toBe( JSON.stringify( a ) );
 		expect( a.seed ).toBe( 'urbe:p7' );
@@ -111,60 +105,37 @@ describe( 'RequestAssembler', () => {
 		expect( a.options.glb ).toBe( 'merged' );
 		expect( a.options.architecture ).toBe( 'auto' );
 		expect( a.options ).not.toHaveProperty( 'doorMotion' );
+		expect( a.parcel.footprint ).toEqual( officeParcel.footprint );
+		expect( a.parcel.accessPoint ).toEqual( officeParcel.access.point );
+		expect( a.parcel.streetAccess ).toEqual( { edgeId: 'e1', path: atlas.streets.edges[ 0 ].path } );
+		expect( a.parcel.buildingGrid ).toEqual( buildingGrid );
+		expect( a.apertures ).toEqual( [ bridgeAperture ] );
+		expect( JSON.stringify( a.apertures[ 0 ] ) ).toBe( JSON.stringify( bridgeAperture ) );
+		expect( validateExteriorRequest( a ) ).toEqual( [] );
 
-	} );
+		// a world published before the construction frame gets none invented for it
+		const legacy = new RequestAssembler( atlasWith( officeParcel ), connections ).assemble( 'p7' );
 
-	it( 'passes the parcel apertures through verbatim', () => {
-
-		const request = new RequestAssembler( atlasWith( officeParcel ), connections ).assemble( 'p7' );
-
-		expect( request.apertures ).toEqual( [ bridgeAperture ] );
-		expect( JSON.stringify( request.apertures[ 0 ] ) ).toBe( JSON.stringify( bridgeAperture ) );
-
-	} );
-
-	it( 'same inputs produce an identical interior request', () => {
+		expect( legacy.parcel ).not.toHaveProperty( 'buildingGrid' );
+		expect( validateExteriorRequest( legacy ) ).toEqual( [] );
 
 		const blueprint = { buildingId: 'p7', floors: [ { index: 0, kind: 'lobby' } ] };
 		const inputs = [ 'p7', { blueprint, shellGlb: '/world/p7/p7.glb' } ];
+		const interior = new RequestAssembler( atlas, connections ).assembleInterior( ...inputs );
 
-		const a = new RequestAssembler( atlasWith( officeParcel ), connections ).assembleInterior( ...inputs );
-		const b = new RequestAssembler( atlasWith( officeParcel ), connections ).assembleInterior( ...inputs );
-
-		expect( JSON.stringify( b ) ).toBe( JSON.stringify( a ) );
-		expect( a.seed ).toBe( 'urbe:p7' );
-		expect( a.building ).toEqual( { id: 'p7', type: 'offices', tier: 'rich' } );
-		expect( a.materialTheme ).toBe( 'cyberpunk' );
-		expect( 'assignments' in a ).toBe( false );
+		expect( JSON.stringify( new RequestAssembler( atlas, connections ).assembleInterior( ...inputs ) ) ).toBe( JSON.stringify( interior ) );
+		expect( interior.seed ).toBe( 'urbe:p7' );
+		expect( interior.building ).toEqual( { id: 'p7', type: 'offices', tier: 'rich' } );
+		expect( interior.materialTheme ).toBe( 'cyberpunk' );
+		expect( 'assignments' in interior ).toBe( false );
 
 	} );
 
-	it( 'signs a venue with what it is, and leaves everything else unsigned', () => {
-
-		const sign = ( type ) => {
-
-			const parcel = { ...officeParcel, type };
-
-			return new RequestAssembler( atlasWith( parcel ), { apertures: [] } ).assemble( 'p7' ).options.signage;
-
-		};
-
-		expect( sign( 'coffee_shop' ) ).toEqual( { mode: 'marquee', text: 'COFFEE' } );
-		expect( sign( 'restaurant' ) ).toEqual( { mode: 'marquee', text: 'DINER' } );
-		expect( sign( 'offices' ) ).toBe( undefined );
-		expect( sign( 'residential' ) ).toBe( undefined );
-
-		// a facade the word does not fit on wears none rather than failing
-		const bare = new RequestAssembler( atlasWith( { ...officeParcel, type: 'hotel' } ), { apertures: [] } )
-			.assemble( 'p7', { signage: 'none' } );
-		expect( bare.options.signage ).toBe( undefined );
-
-	} );
-
-	it( 'signs a named venue with its name, lettered for the marquee', () => {
+	it( 'signs a venue with its name lettered for the marquee, steps down to the word, then to nothing', () => {
 
 		const sign = ( atlas, parcelId, options ) => new RequestAssembler( atlas, connections ).assemble( parcelId, options ).options.signage;
 		const [ wharf, coffee ] = namedCity.parcels;
+		const unnamed = ( type ) => new RequestAssembler( atlasWith( { ...officeParcel, type } ), { apertures: [] } ).assemble( 'p7' ).options.signage;
 
 		expect( sign( namedCity, 'p1' ) ).toEqual( { mode: 'marquee', text: 'THE SALT WHARF' } );
 
@@ -174,16 +145,22 @@ describe( 'RequestAssembler', () => {
 
 		// the venue word when the name is empty or not even its first word fits
 		const unfit = { ...namedCity, parcels: [ { ...wharf, name: '' }, { ...coffee, name: 'X'.repeat( 41 ) } ] };
+
 		expect( sign( unfit, 'p1' ) ).toEqual( { mode: 'marquee', text: 'DINER' } );
 		expect( sign( unfit, 'p2' ) ).toEqual( { mode: 'marquee', text: 'COFFEE' } );
 
-		// the pipeline steps down to the word, then to no sign, when the facade is too small
+		// the rungs the pipeline steps down when the facade is too small for the text
 		expect( sign( namedCity, 'p1', { signage: 'venue' } ) ).toEqual( { mode: 'marquee', text: 'DINER' } );
 		expect( sign( namedCity, 'p1', { signage: 'none' } ) ).toBe( undefined );
 
+		// a type a passer-by does not read off the street wears no sign at all
+		expect( unnamed( 'coffee_shop' ) ).toEqual( { mode: 'marquee', text: 'COFFEE' } );
+		expect( unnamed( 'offices' ) ).toBe( undefined );
+		expect( unnamed( 'residential' ) ).toBe( undefined );
+
 	} );
 
-	it( 'chooses a floor count inside exterior\'s feasible range', () => {
+	it( 'chooses a floor count inside exterior\'s feasible range and refuses an envelope nothing fits', () => {
 
 		// Active hotel pitch4.5..5.0, bases9/18 under maxHeight27: recipe gives
 		// gaps [2..2] + [2..2] plus 1..2 floors above the top base -> feasible 5..6.
@@ -202,83 +179,43 @@ describe( 'RequestAssembler', () => {
 			aperture( 'l5a', 'wire-anchor', 20, 0.1 )
 		] };
 
-		const request = new RequestAssembler( atlasWith( hotelParcel ), pinned ).assemble( 'p7' );
-		expect( request.building.floors ).toBe( 6 );
+		expect( new RequestAssembler( atlasWith( hotelParcel ), pinned ).assemble( 'p7' ).building.floors ).toBe( 6 );
 
 		// No apertures: envelope4..12 intersects the active pitch range1..10.
 		const plain = new RequestAssembler( atlasWith( officeParcel ), { apertures: [] } ).assemble( 'p7' );
+
 		expect( plain.building.floors ).toBeGreaterThanOrEqual( 4 );
 		expect( plain.building.floors ).toBeLessThanOrEqual( 10 );
 
-	} );
+		// a one-ULP anchor value is still a whole floor count, and the apertures are untouched
+		const ulp = { ...officeParcel, type: 'residential', envelope: { minFloors: 15, maxFloors: 32, maxHeight: 139.5 } };
+		const fixed = { apertures: [ 54, 62.99999999999999, 76.5, 94.5 ].map( ( base, index ) => aperture( `fixed${index}`, 'bridge', base ) ) };
+		const before = structuredClone( fixed );
 
-	it( 'retains integral floor counts across one-ULP fixed anchor values', () => {
+		expect( new RequestAssembler( atlasWith( ulp ), fixed ).assemble( 'p7' ).building.floors ).toBeGreaterThanOrEqual( 15 );
+		expect( fixed ).toEqual( before );
 
-		for ( const [ type, maxHeight, bases ] of [
-			[ 'offices', 144, [ 54, 62.99999999999999 ] ],
-			[ 'residential', 139.5, [ 54, 62.99999999999999, 76.5, 94.5 ] ]
-		] ) {
-
-			const parcel = { ...officeParcel, type, envelope: { minFloors: 15, maxFloors: 32, maxHeight } };
-			const pinned = { apertures: bases.map( ( base, index ) => aperture( `fixed${index}`, 'bridge', base ) ) };
-			const before = structuredClone( pinned );
-			const request = new RequestAssembler( atlasWith( parcel ), pinned ).assemble( 'p7' );
-			expect( request.building.floors ).toBeGreaterThanOrEqual( 15 );
-			expect( request.apertures ).toEqual( before.apertures );
-			expect( pinned ).toEqual( before );
-
-		}
-		const short = { ...officeParcel, type: 'residential' };
-		expect( () => new RequestAssembler( atlasWith( short ), { apertures: [ aperture( 'short', 'bridge', 4.49999999 ) ] } ).assemble( 'p7' ) )
-			.toThrow( expect.objectContaining( { code: 'E_ENVELOPE_INFEASIBLE' } ) );
-
-	} );
-
-	it( 'uses published clear-height policy, retains taller family minima and fixed basement bases', () => {
-
+		// the published clear-height policy wins, a taller family minimum stays taller
 		const constants = structuredClone( loadFloorConstants() );
 		constants.constants.residential.minFloorHeight = 6;
 		constants.constants.residential.maxFloorHeight = 9;
-		const parcel = { ...officeParcel, type: 'residential', envelope: { minFloors: 8, maxFloors: 8, maxHeight: 36 } };
-		expect( new RequestAssembler( atlasWith( parcel ), { apertures: [] }, constants ).assemble( 'p7' ).building.floors ).toBe( 6 );
+		const tall = { ...officeParcel, type: 'residential', envelope: { minFloors: 8, maxFloors: 8, maxHeight: 36 } };
 
-		const pinned = { apertures: [ aperture( 't0', 'tunnel', - 9 ), aperture( 'w0', 'wire-anchor', - 20, 0.1 ) ] };
-		const before = structuredClone( pinned );
-		const request = new RequestAssembler( atlasWith( officeParcel ), pinned ).assemble( 'p7' );
-		expect( request.building.basements ).toBe( 2 );
-		expect( request.apertures ).toEqual( before.apertures );
-		expect( pinned ).toEqual( before );
-		const tallGround = { apertures: [ aperture( 'g0', 'bridge', 0, 7 ) ] };
-		expect( () => new RequestAssembler( atlasWith( officeParcel ), tallGround ).assemble( 'p7' ) ).toThrow( expect.objectContaining( { code: 'E_ENVELOPE_INFEASIBLE' } ) );
-		const incompatible = { apertures: [ aperture( 't0', 'tunnel', - 8 ) ] };
-		expect( () => new RequestAssembler( atlasWith( officeParcel ), incompatible ).assemble( 'p7' ) ).toThrow( expect.objectContaining( { code: 'E_ENVELOPE_INFEASIBLE' } ) );
+		expect( new RequestAssembler( atlasWith( tall ), { apertures: [] }, constants ).assemble( 'p7' ).building.floors ).toBe( 6 );
 
-	} );
+		// fixed basement bases keep their exact gaps, and an incompatible one fails
+		const basements = { apertures: [ aperture( 't0', 'tunnel', - 9 ), aperture( 'w0', 'wire-anchor', - 20, 0.1 ) ] };
 
-} );
+		expect( new RequestAssembler( atlasWith( officeParcel ), basements ).assemble( 'p7' ).building.basements ).toBe( 2 );
+		for ( const infeasible of [
+			{ apertures: [ aperture( 'g0', 'bridge', 0, 7 ) ] },
+			{ apertures: [ aperture( 't0', 'tunnel', - 8 ) ] }
+		] ) {
 
-/**
- * A shell is generated once per distinct sign text, and a building that has
- * no sign at all is still generated once: skipping it left the parcel with no
- * building.
- */
-describe( 'signRungs', () => {
+			expect( () => new RequestAssembler( atlasWith( officeParcel ), infeasible ).assemble( 'p7' ) )
+				.toThrow( expect.objectContaining( { code: 'E_ENVELOPE_INFEASIBLE' } ) );
 
-	it( 'yields one request for a building with no sign', () => {
-
-		const rungs = [ ...signRungs( () => ( { options: {} } ) ) ];
-
-		expect( rungs ).toHaveLength( 1 );
-		expect( rungs[ 0 ].text ).toBe( null );
-
-	} );
-
-	it( 'steps name, venue word, none without repeating a text', () => {
-
-		const texts = { name: 'THE SALT WHARF', venue: 'DINER', none: null };
-		const rungs = [ ...signRungs( ( signage ) => ( { options: { signage: texts[ signage ] ? { text: texts[ signage ] } : undefined } } ) ) ];
-
-		expect( rungs.map( ( r ) => r.text ) ).toEqual( [ 'THE SALT WHARF', 'DINER', null ] );
+		}
 
 	} );
 

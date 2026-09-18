@@ -8,47 +8,31 @@ const assembly = new SceneAssembler().assemble( interior );
 
 describe( 'InvestigationRuntime', () => {
 
-	it( 'unlocks authored evidence in prerequisite order and persists each result', () => {
+	it( 'unlocks authored evidence in order, then collects the portable clue exactly once', () => {
 
 		const runtime = new InvestigationRuntime( assembly );
 		const initial = structuredClone( assembly.initialState );
 
 		expect( availability( runtime, initial ) ).toEqual( {
-			'body-position': true,
-			'blood-direction': false,
-			'access-card': false
+			'body-position': true, 'blood-direction': false, 'access-card': false
 		} );
-
 		const blocked = runtime.perform( request( 'access-card', 'inspect', initial ) );
 		expect( blocked ).toMatchObject( { ok: false, code: 'prerequisite', events: [], worldChanges: [] } );
 		expect( blocked.state ).toEqual( initial );
 
 		const body = runtime.perform( request( 'body-position', 'inspect', initial ) );
-		expect( body ).toMatchObject( {
-			ok: true,
-			events: [ { transitionId: 'unlock-blood-reading', kind: 'objective-unlock', key: 'inspect-blood-direction', value: true } ]
-		} );
-		expect( initial ).toEqual( assembly.initialState );
-		expect( availability( runtime, body.state )[ 'blood-direction' ] ).toBe( true );
-
-		const restored = JSON.parse( JSON.stringify( body.state ) );
-		const blood = new InvestigationRuntime( assembly ).perform( request( 'blood-direction', 'inspect', restored ) );
-		expect( blood.events ).toEqual( [ {
-			transitionId: 'unlock-card-reading', kind: 'dialogue-unlock', key: 'ask-about-access-card', value: true
+		expect( body.events ).toEqual( [ {
+			transitionId: 'unlock-blood-reading', kind: 'objective-unlock', key: 'inspect-blood-direction', value: true
 		} ] );
+		expect( initial ).toEqual( assembly.initialState );
+
+		const blood = runtime.perform( request( 'blood-direction', 'inspect', JSON.parse( JSON.stringify( body.state ) ) ) );
 		expect( availability( runtime, blood.state )[ 'access-card' ] ).toBe( true );
 
-	} );
+		expect( runtime.perform( request( 'access-card', 'take', blood.state ) ) )
+			.toMatchObject( { ok: false, code: 'inspect-first', events: [], worldChanges: [] } );
 
-	it( 'requires inspection before collecting portable evidence and removes its exact visual once', () => {
-
-		const runtime = new InvestigationRuntime( assembly );
-		let state = progressToCard( runtime );
-
-		const early = runtime.perform( request( 'access-card', 'take', state ) );
-		expect( early ).toMatchObject( { ok: false, code: 'inspect-first', events: [], worldChanges: [] } );
-
-		const inspected = runtime.perform( request( 'access-card', 'inspect', state ) );
+		const inspected = runtime.perform( request( 'access-card', 'inspect', blood.state ) );
 		expect( inspected.events ).toEqual( [ {
 			transitionId: 'record-card-owner', kind: 'quest-signal', key: 'access-card-owner-known', value: true
 		} ] );
@@ -61,7 +45,6 @@ describe( 'InvestigationRuntime', () => {
 				transitionId: 'branch-restricted-level', kind: 'ending-candidate', key: 'follow-restricted-level-lead', value: true
 			} ]
 		} );
-		expect( collected.state.evidence.find( ( item ) => item.evidenceId === 'access-card' ).status ).toBe( 'collected' );
 
 		const repeated = runtime.perform( request( 'access-card', 'take', collected.state ) );
 		expect( repeated ).toMatchObject( { ok: false, code: 'already-resolved', events: [], worldChanges: [] } );
@@ -98,13 +81,6 @@ describe( 'InvestigationRuntime', () => {
 	} );
 
 } );
-
-function progressToCard( runtime ) {
-
-	const body = runtime.perform( request( 'body-position', 'inspect', assembly.initialState ) );
-	return runtime.perform( request( 'blood-direction', 'inspect', body.state ) ).state;
-
-}
 
 function availability( runtime, state ) {
 

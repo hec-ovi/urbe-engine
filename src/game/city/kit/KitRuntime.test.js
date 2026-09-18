@@ -114,7 +114,7 @@ function live( pieces ) {
 
 describe( 'the city draws every kit building from shared pieces', () => {
 
-	it( 'loads each piece file once and keeps one draw per piece surface however many buildings stand', async () => {
+	it( 'loads each piece once, keeps one draw per surface, and appends and drops exactly a cell\'s copies', async () => {
 
 		const { kit, pieces, reads } = await openKit();
 		await pieces.ready;
@@ -125,50 +125,32 @@ describe( 'the city draws every kit building from shared pieces', () => {
 
 		// Six families, nine pieces each: 198 shared surfaces plus the six
 		// entrance leaf pairs that a closed building draws with its piece.
-		const draws = pieces.drawCount;
-		expect( draws ).toBe( 204 );
+		expect( pieces.drawCount ).toBe( 204 );
 
 		const loader = new KitCellLoader( { pieces, factory, readJson: serving() } );
-		const first = await shown( loader, [ source( 'p1', false ) ] );
-		const second = await shown( loader, [ source( 'p2', false ), source( 'p3', false ) ] );
-
-		expect( pieces.drawCount ).toBe( draws );
-		expect( live( pieces ) ).toBeGreaterThan( 0 );
-
-		first.disposeModelInstances();
-		second.disposeModelInstances();
-		expect( live( pieces ) ).toBe( 0 );
-
-	} );
-
-	it( 'appends a cell\'s instances on admission and takes exactly those back out on a drop', async () => {
-
-		const { pieces } = await openKit();
-		const loader = new KitCellLoader( { pieces, factory, readJson: serving() } );
-
 		const hidden = await loader.load( new Map( [ source( 'p1', false ) ] ) );
+
 		// Nothing of a cell reaches the shared draws while the skyline still
 		// carries its impostors.
 		expect( live( pieces ) ).toBe( 0 );
 
 		hidden.group.visible = true;
-		const resident = hidden;
 		const one = live( pieces );
-		const copies = building().plan.placements.length;
-		expect( one ).toBe( copies + 1 );
+		expect( one ).toBe( building().plan.placements.length + 1 );
 
 		const other = await shown( loader, [ source( 'p2', false ) ] );
 		expect( live( pieces ) ).toBe( one * 2 );
+		expect( pieces.drawCount ).toBe( 204 );
 
 		other.disposeModelInstances();
 		expect( live( pieces ) ).toBe( one );
 
-		resident.disposeModelInstances();
+		hidden.disposeModelInstances();
 		expect( live( pieces ) ).toBe( 0 );
 
 	} );
 
-	it( 'gives every building a cuboid compound and no triangles at all', async () => {
+	it( 'gives every building a cuboid compound, no triangles, and a hole wherever the interior reserves one', async () => {
 
 		const { pieces } = await openKit();
 		const loader = new KitCellLoader( { pieces, factory, readJson: serving() } );
@@ -186,50 +168,16 @@ describe( 'the city draws every kit building from shared pieces', () => {
 		expect( roof.halfExtents[ 0 ] ).toBeCloseTo( 12 );
 		expect( roof.halfExtents[ 2 ] ).toBeCloseTo( 16 );
 
+		// A parcel that swings its own door keeps one cuboid fewer.
 		const open = await loader.load( new Map( [ source( 'p2', true ) ] ) );
 		expect( open.boxColliders ).toHaveLength( 7 );
 
-	} );
-
-	it( 'keeps one instance buffer per piece and uploads only the slots a cell touched', async () => {
-
-		const { pieces } = await openKit();
-		await pieces.ready;
-		const loader = new KitCellLoader( { pieces, factory, readJson: serving() } );
-		const first = await shown( loader, [ source( 'p1', false ) ] );
-		const draw = [ ...pieces.pieces.values() ].map( ( piece ) => piece.draw )
-			.find( ( one ) => one.count > 0 && one.meshes.length > 1 );
-
-		expect( new Set( draw.meshes.map( ( mesh ) => mesh.instanceMatrix ) ).size ).toBe( 1 );
-		expect( new Set( draw.meshes.map( ( mesh ) => mesh.instanceColor ) ).size ).toBe( 1 );
-
-		const standing = draw.count;
-		draw.matrices.clearUpdateRanges();
-		const second = await shown( loader, [ source( 'p2', false ) ] );
-		const uploaded = draw.matrices.updateRanges.reduce( ( total, range ) => total + range.count, 0 );
-
-		// The second cell's copies, not the first cell's and not the capacity.
-		expect( draw.count ).toBe( standing * 2 );
-		expect( uploaded ).toBeGreaterThan( 0 );
-		expect( uploaded ).toBeLessThanOrEqual( standing * 16 );
-		expect( uploaded ).toBeLessThan( draw.matrices.array.length );
-		expect( draw.meshes.every( ( mesh ) => mesh.count === draw.count ) ).toBe( true );
-
-		first.disposeModelInstances();
-		second.disposeModelInstances();
-
-	} );
-
-	it( 'cuts the walls and the roof cap wherever the interior reserves an opening', async () => {
-
-		const { pieces } = await openKit();
 		const flat = building( { frame: { position: [ 0, 0, 0 ], rotationY: 0 } } );
-		const loader = new KitCellLoader( { pieces, factory, readJson: serving( flat ) } );
-
-		const plain = await loader.load( new Map( [ source( 'p1', false ) ] ) );
-		const cut = await loader.load( new Map( [ source( 'p2', false, reserving() ) ] ) );
+		const flatLoader = new KitCellLoader( { pieces, factory, readJson: serving( flat ) } );
+		const plain = await flatLoader.load( new Map( [ source( 'p1', false ) ] ) );
+		const cut = await flatLoader.load( new Map( [ source( 'p2', false, reserving() ) ] ) );
 		// Inside the roof cap, whose top is where the plan's last band ends.
-		const roof = flat.plan.bands.at( - 1 ).base + flat.plan.bands.at( - 1 ).height - 0.2;
+		const top = flat.plan.bands.at( - 1 ).base + flat.plan.bands.at( - 1 ).height - 0.2;
 
 		expect( cut.boxColliders.length ).toBeGreaterThan( plain.boxColliders.length );
 
@@ -237,13 +185,13 @@ describe( 'the city draws every kit building from shared pieces', () => {
 		// beside each of them still stand.
 		expect( solidAt( cut.boxColliders, 23.75, 1.2, 11 ) ).toBe( false );
 		expect( solidAt( cut.boxColliders, 23.75, 1.2, 20 ) ).toBe( true );
-		expect( solidAt( cut.boxColliders, 12, roof, 16 ) ).toBe( false );
-		expect( solidAt( cut.boxColliders, 4, roof, 4 ) ).toBe( true );
+		expect( solidAt( cut.boxColliders, 12, top, 16 ) ).toBe( false );
+		expect( solidAt( cut.boxColliders, 4, top, 4 ) ).toBe( true );
 
 		// Without the blueprint the same building is sealed everywhere but its
 		// entrance.
 		expect( solidAt( plain.boxColliders, 23.75, 1.2, 11 ) ).toBe( true );
-		expect( solidAt( plain.boxColliders, 12, roof, 16 ) ).toBe( true );
+		expect( solidAt( plain.boxColliders, 12, top, 16 ) ).toBe( true );
 
 	} );
 

@@ -12,25 +12,13 @@ const ENTRIES = [
 /** What the player has learned, grouped, one entry open at a time. */
 describe( 'CodexView', () => {
 
-	let view;
+	it( 'says nothing is recorded, then groups entries by category and opens the one picked', async () => {
 
-	beforeEach( () => {
-
-		view = new CodexView( { onClose: vi.fn() } );
+		const view = new CodexView( { onClose: vi.fn() } );
 		document.body.replaceChildren( view.element );
-
-	} );
-
-	it( 'says nothing is recorded before any entry', () => {
-
 		expect( screen.getByText( 'nothing recorded yet' ) ).toBeTruthy();
 
-	} );
-
-	it( 'setEntries groups by category and a click opens the entry', async () => {
-
 		view.setEntries( ENTRIES );
-
 		expect( screen.getByRole( 'heading', { name: 'people' } ) ).toBeTruthy();
 		expect( screen.getByRole( 'heading', { name: 'places' } ) ).toBeTruthy();
 		expect( screen.getByText( 'Runs the quay office.' ) ).toBeTruthy();

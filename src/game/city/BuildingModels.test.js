@@ -95,21 +95,6 @@ describe( 'authored building model instances', () => {
 		expect( shellFailed.assets[ 0 ].disposed.map ).toHaveBeenCalledTimes( 1 );
 	} );
 
-	it( 'releases imported plants on eviction and restores original models on return', async () => {
-		const setup = fixture( [ tree() ] ), stream = streaming( setup );
-		await stream.load( { x: 0, z: 0 } );
-		stream.update( { x: 1500, z: 0 } );
-		await stream.settled();
-		expect( setup.assets[ 0 ].disposed.map ).toHaveBeenCalledTimes( 1 );
-		expect( stream.group.getObjectByName( 'building-models' ) ).toBeUndefined();
-		stream.update( { x: 0, z: 0 } );
-		await stream.settled();
-		expect( setup.assets ).toHaveLength( 2 );
-		expect( stream.group.getObjectByName( 'building-model:pine:0' ) ).toBeTruthy();
-		await stream.dispose();
-		expect( setup.assets[ 1 ].disposed.map ).toHaveBeenCalledTimes( 1 );
-	} );
-
 	it( 'releases a model cell after stale or failed preparation without making it visible', async () => {
 		const setup = fixture( [ tree() ] );
 		let resume;

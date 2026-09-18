@@ -44,7 +44,7 @@ const behavior = { mode: 'interior', activity: 'working', place: { kind: 'parcel
 
 describe( 'TalkService', () => {
 
-	it( 'answers from the NPC layers and remembers the exchange for the next line', async () => {
+	it( 'answers from the NPC layers, remembers the exchange, and refuses the dead and paths outside the served worlds', async () => {
 
 		const seen = [];
 		const llm = { async complete( request ) { seen.push( request ); return ' Ask at the bar. '; } };
@@ -64,11 +64,6 @@ describe( 'TalkService', () => {
 		expect( seen[ 2 ].system ).toContain( 'Without it the debt lands on her.' );
 		expect( seen[ 2 ].system ).toContain( 'Tired, watchful.' );
 
-	} );
-
-	it( 'refuses the dead and paths outside the served worlds', async () => {
-
-		const service = new TalkService( { async complete() { return ''; } }, await worldDir() );
 		await expect( service.reply( { out: '/out/w', npc: { ...npc, flags: { dead: true } }, behavior, line: 'Hey', timeMin: 0 } ) ).rejects.toThrow( /is dead/ );
 		await expect( service.reply( { out: '/../etc', npc, behavior, line: 'Hey', timeMin: 0 } ) ).rejects.toThrow( /outside/ );
 		await expect( service.reply( { out: '/out/../src', npc, behavior, line: 'Hey', timeMin: 0 } ) ).rejects.toThrow( /outside/ );

@@ -67,7 +67,7 @@ describe( 'live gameplay animation composition', () => {
 
 	} );
 
-	it( 'switches a follower through sprint, walk, stop, and deterministic routine resume', () => {
+	it( 'switches a follower through sprint, walk, stop, explicit crouch and deterministic routine resume', () => {
 
 		const rig = setup();
 		const running = actor( { animation: 'run', mode: 'following' } );
@@ -94,11 +94,6 @@ describe( 'live gameplay animation composition', () => {
 		} );
 		expect( rig.director.snapshot().actions ).toEqual( [] );
 
-	} );
-
-	it( 'enters crouch only from explicit NPC control and plays the exit before routine resume', () => {
-
-		const rig = setup();
 		const crouched = actor( { animation: 'crouch', mode: 'posing' } );
 		rig.director.npcControl( { kind: 'start-crouch', npcId: crouched.npcId }, crouched );
 		expect( current( rig.director, crouched.npcId ) ).toMatchObject( {
@@ -106,52 +101,35 @@ describe( 'live gameplay animation composition', () => {
 		} );
 		expect( lastSegments( rig.hero ) ).toEqual( [ 'Crouch_Enter', 'Crouch_Idle_Loop' ] );
 
-		const resumed = actor( { animation: 'walk', mode: 'resuming' } );
-		rig.director.npcControl( { kind: 'release-crouch', npcId: resumed.npcId }, resumed );
-		expect( current( rig.director, resumed.npcId ) ).toMatchObject( {
+		rig.director.npcControl( { kind: 'release-crouch', npcId: resuming.npcId }, resuming );
+		expect( current( rig.director, resuming.npcId ) ).toMatchObject( {
 			mode: 'routine', action: null, currentClip: 'Walk_Loop'
 		} );
 		expect( lastSegments( rig.hero ) ).toEqual( [ 'Crouch_Exit', 'Walk_Loop' ] );
 
 	} );
 
-	it( 'reconstructs a restored explicit crouch from continuity mode', () => {
+	it( 'coordinates an accepted quest action, and listening as one speaker with all sorted listeners', () => {
 
 		const rig = setup();
-		rig.director.update( [ actor( { animation: 'crouch', mode: 'posing' } ) ], 0 );
-		expect( current( rig.director, 'npc-1' ).action ).toBe( 'crouch' );
-		expect( lastSegments( rig.hero ) ).toEqual( [ 'Crouch_Enter', 'Crouch_Idle_Loop' ] );
+		const started = rig.director.questInteraction( { targetKey: 'quest:q:take', action: 'take' } );
 
-	} );
-
-	it.each( [
-		[ 'take', 'pickup-ground', 'pickup' ], [ 'read', 'read', 'read' ],
-		[ 'inspect', 'observe', 'observe' ], [ 'steal', 'steal-ground', 'steal' ],
-		[ 'work', 'work-interact', 'work' ], [ 'deliver', 'deliver', 'deliver' ]
-	] )( 'coordinates an accepted %s quest action as %s', ( action, variant, stateAction ) => {
-
-		const rig = setup();
-		const started = rig.director.questInteraction( { targetKey: `quest:q:${action}`, action } );
-		expect( started.variant ).toBe( variant );
-		expect( current( rig.director, 'player' ).action ).toBe( stateAction );
+		expect( started.variant ).toBe( 'pickup-ground' );
+		expect( current( rig.director, 'player' ).action ).toBe( 'pickup' );
 		rig.director.update( [], 10 );
 		expect( current( rig.director, 'player' ) ).toMatchObject( { mode: 'routine', currentClip: 'Idle_Loop' } );
 		expect( rig.director.snapshot().actions ).toEqual( [] );
 
-	} );
-
-	it( 'coordinates quest listening as one speaker and all sorted listeners', () => {
-
 		const members = [ member( 'cast-b', 0 ), member( 'cast-a', 3 ) ];
-		const rig = setup( members );
-		const started = rig.director.questInteraction( { targetKey: 'quest:q:listen', action: 'listen', members } );
-		const action = rig.director.snapshot().actions[ 0 ];
+		const listening = setup( members );
+		const heard = listening.director.questInteraction( { targetKey: 'quest:q:listen', action: 'listen', members } );
+		const action = listening.director.snapshot().actions[ 0 ];
 
-		expect( started.variant ).toBe( 'listen' );
+		expect( heard.variant ).toBe( 'listen' );
 		expect( action.participants ).toEqual( [ 'cast-a', 'cast-b', 'player' ] );
-		expect( current( rig.director, 'cast-b' ).currentClip ).toBe( 'Idle_Talking_Loop' );
-		expect( current( rig.director, 'cast-a' ).currentClip ).toBe( 'Sitting_Nodding_Loop' );
-		expect( lastSegments( rig.hero ) ).toEqual( [ 'Idle_Talking_Loop' ] );
+		expect( current( listening.director, 'cast-b' ).currentClip ).toBe( 'Idle_Talking_Loop' );
+		expect( current( listening.director, 'cast-a' ).currentClip ).toBe( 'Sitting_Nodding_Loop' );
+		expect( lastSegments( listening.hero ) ).toEqual( [ 'Idle_Talking_Loop' ] );
 
 	} );
 

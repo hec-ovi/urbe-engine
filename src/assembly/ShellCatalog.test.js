@@ -29,20 +29,7 @@ function sources( ids ) {
 
 describe( 'completed-shell streaming catalog', () => {
 
-	it( 'retains authored upper outlines for tapered bands', async () => {
-		sources( [ 'p0' ] );
-		const blueprint = structuredClone( blueprints.p0 );
-		const floor = blueprint.floors.at( -1 );
-		const center = floor.outline.reduce( ( sum, p ) => [ sum[0] + p[0] / floor.outline.length, sum[1] + p[1] / floor.outline.length ], [0,0] );
-		floor.topOutline = floor.outline.map( p => [ center[0] + (p[0] - center[0]) * 0.9, center[1] + (p[1] - center[1]) * 0.9 ] );
-		blueprint.roof.outline = floor.topOutline;
-		writeFileSync( join( root, 'p0/p0.blueprint.json' ), JSON.stringify( blueprint ) );
-		const { catalog } = await collectShellArtifacts( root, [ 'p0' ], { seed: atlas.meta.seed } );
-		expect( validateShellCatalog( catalog ) ).toEqual( [] );
-		expect( catalog.buildings[0].bands.at(-1).topOutline ).toEqual( floor.topOutline );
-	} );
-
-	it( 'projects authored storeys, setbacks, roof and concrete bindings without retaining full blueprints', async () => {
+	it( 'projects authored storeys, setbacks, roof and concrete bindings, then publishes them beside the world', async () => {
 
 		const ids = [ 'p0', 'tower', 'p1' ];
 		for ( const id of ids ) expect( validateExteriorBlueprint( blueprints[ id ] ) ).toEqual( [] );
@@ -79,66 +66,59 @@ describe( 'completed-shell streaming catalog', () => {
 		expect( rooftopRequest ).toEqual( rooftopSpanRequest( atlas, ids.map( id => ( { buildingId: id, blueprint: blueprints[ id ] } ) ) ) );
 		expect( JSON.stringify( { catalog, rooftopRequest } ) ).not.toMatch( /"(?:openings|facadeServices|materialVariants|blueprint)"/ );
 
-	} );
-
-	it( 'uses explicit portable roof identity and rejects a conflicting named variant', async () => {
-
-		sources( [ 'p0' ] );
-		const blueprint = structuredClone( blueprints.p0 );
-		const key = 'cyberpunk/exterior-weathered-concrete/mid';
-		blueprint.materials = blueprint.materials.filter( value => value.split( '/' )[ 1 ] !== 'roof' );
-		blueprint.materials.push( key );
-		blueprint.materialVariants[ key ] = 'native';
-		blueprint.roof.material = { key, variantId: 'native' };
-		const file = join( root, 'p0/p0.blueprint.json' );
-		writeFileSync( file, JSON.stringify( blueprint ) );
-		const result = await collectShellArtifacts( root, [ 'p0' ], { seed: atlas.meta.seed } );
-		expect( result.catalog.buildings[ 0 ].roof.material ).toEqual( blueprint.roof.material );
-		blueprint.roof.material.variantId = 'unpublished';
-		writeFileSync( file, JSON.stringify( blueprint ) );
-		await expect( collectShellArtifacts( root, [ 'p0' ], { seed: atlas.meta.seed } ) ).rejects.toMatchObject( { code: 'E_SHELL_CATALOG' } );
-
-	} );
-
-	it.each( [ 'json', 'archive' ] )( 'publishes a checked catalog alongside %s source documents and retains full shell files', async ( encoding ) => {
-
-		const ids = [ 'p0', 'p1' ];
-		const { catalog } = await collectShellArtifacts( sources( ids ), ids, { seed: atlas.meta.seed } );
-		const manifest = await new OutDir( root ).publishManifest( atlas, ids, [], { catalog, encoding, archiveOptions: { maxRecords: 1 } } );
+		// the world names the catalog by its exact index bytes and keeps every full shell file
+		const manifest = await new OutDir( root ).publishManifest( atlas, ids, [], { catalog } );
 		const indexBytes = readFileSync( join( root, 'shells/index.json' ) );
 		expect( manifest.shellCatalog ).toEqual( {
 			file: 'shells/index.json', encoding: 'archive', sha256: createHash( 'sha256' ).update( indexBytes ).digest( 'hex' )
 		} );
 		expect( validateWorldManifest( manifest ) ).toEqual( [] );
 		expect( await readWorldArchive( join( root, 'shells' ) ) ).toEqual( catalog );
-		const archive = await openWorldArchive( join( root, 'shells' ) );
-		expect( await archive.readCollection( '/buildings', { start: 1, end: 2 } ) ).toEqual( [ catalog.buildings[ 1 ] ] );
-		for ( const id of ids ) {
+		expect( await ( await openWorldArchive( join( root, 'shells' ) ) ).readCollection( '/buildings', { start: 1, end: 2 } ) ).toEqual( [ catalog.buildings[ 1 ] ] );
+		for ( const id of ids ) expect( readFileSync( join( root, id, `${id}.glb` ), 'utf8' ) ).toBe( 'fixture-shell' );
+		expect( JSON.parse( readFileSync( join( root, 'p0/p0.blueprint.json' ) ) ) ).toEqual( blueprints.p0 );
 
-			expect( JSON.parse( readFileSync( join( root, id, `${id}.blueprint.json` ) ) ) ).toEqual( blueprints[ id ] );
-			expect( readFileSync( join( root, id, `${id}.glb` ), 'utf8' ) ).toBe( 'fixture-shell' );
-
-		}
-
-	} );
-
-	it( 'rejects malformed source shells and catalogs from a different seed or shell set', async () => {
-
-		const ids = [ 'p0', 'p1' ];
-		const { catalog } = await collectShellArtifacts( sources( ids ), ids, { seed: atlas.meta.seed } );
-		writeFileSync( join( root, 'p1/p1.blueprint.json' ), '{}' );
-		await expect( collectShellArtifacts( root, ids, { seed: atlas.meta.seed } ) ).rejects.toMatchObject( { code: 'E_SHELL_CATALOG' } );
+		// a catalog from another seed or another shell set never reaches a manifest
 		const out = new OutDir( root );
 		for ( const invalid of [ { ...catalog, seed: 'other' }, { ...catalog, buildings: catalog.buildings.slice( 1 ) } ] ) {
 
 			await expect( out.publishManifest( atlas, ids, [], { catalog: invalid } ) ).rejects.toMatchObject( { code: 'E_SHELL_CATALOG' } );
 
 		}
-		expect( validateWorldManifest( {
-			contractVersion: '1.0.0', seed: atlas.meta.seed, atlasVersion: atlas.meta.version,
-			named: false, namingTheme: null, parcels: [], interiors: [], floors: {},
-			shellCatalog: { file: '../shells/index.json', encoding: 'archive', sha256: '0'.repeat( 64 ) }
-		} ).length ).toBeGreaterThan( 0 );
+		expect( validateWorldManifest( { ...manifest, shellCatalog: { ...manifest.shellCatalog, file: '../shells/index.json' } } ).length ).toBeGreaterThan( 0 );
+
+	} );
+
+	it( 'retains tapered upper outlines and explicit roof identity, and refuses a shell it cannot read', async () => {
+
+		sources( [ 'p0' ] );
+		const file = join( root, 'p0/p0.blueprint.json' );
+		const tapered = structuredClone( blueprints.p0 );
+		const floor = tapered.floors.at( - 1 );
+		const center = floor.outline.reduce( ( sum, p ) => [ sum[ 0 ] + p[ 0 ] / floor.outline.length, sum[ 1 ] + p[ 1 ] / floor.outline.length ], [ 0, 0 ] );
+		floor.topOutline = floor.outline.map( p => [ center[ 0 ] + ( p[ 0 ] - center[ 0 ] ) * 0.9, center[ 1 ] + ( p[ 1 ] - center[ 1 ] ) * 0.9 ] );
+		tapered.roof.outline = floor.topOutline;
+		writeFileSync( file, JSON.stringify( tapered ) );
+		const { catalog } = await collectShellArtifacts( root, [ 'p0' ], { seed: atlas.meta.seed } );
+		expect( validateShellCatalog( catalog ) ).toEqual( [] );
+		expect( catalog.buildings[ 0 ].bands.at( - 1 ).topOutline ).toEqual( floor.topOutline );
+
+		// an explicit roof material is kept as it stands, and one no table publishes is refused
+		const blueprint = structuredClone( blueprints.p0 );
+		const key = 'cyberpunk/exterior-weathered-concrete/mid';
+		blueprint.materials = blueprint.materials.filter( value => value.split( '/' )[ 1 ] !== 'roof' );
+		blueprint.materials.push( key );
+		blueprint.materialVariants[ key ] = 'native';
+		blueprint.roof.material = { key, variantId: 'native' };
+		writeFileSync( file, JSON.stringify( blueprint ) );
+		expect( ( await collectShellArtifacts( root, [ 'p0' ], { seed: atlas.meta.seed } ) ).catalog.buildings[ 0 ].roof.material ).toEqual( blueprint.roof.material );
+
+		blueprint.roof.material.variantId = 'unpublished';
+		writeFileSync( file, JSON.stringify( blueprint ) );
+		await expect( collectShellArtifacts( root, [ 'p0' ], { seed: atlas.meta.seed } ) ).rejects.toMatchObject( { code: 'E_SHELL_CATALOG' } );
+
+		writeFileSync( file, '{}' );
+		await expect( collectShellArtifacts( root, [ 'p0' ], { seed: atlas.meta.seed } ) ).rejects.toMatchObject( { code: 'E_SHELL_CATALOG' } );
 
 	} );
 

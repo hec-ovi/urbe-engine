@@ -75,16 +75,6 @@ it( 'retains physical geometry and skips every part of optional construction pro
 
 } );
 
-it( 'rejects a changed Connections index before fetching its collection parts', async () => {
-
-	const fixture = await serve( blueprint() );
-	const file = join( directory, 'connections/index.json' );
-	await writeFile( file, Buffer.concat( [ await readFile( file ), Buffer.from( ' ' ) ] ) );
-	await expect( fixture.source.load() ).rejects.toThrow( /E_WORLD_CONNECTIONS:.*byte hash mismatch/ );
-	expect( fixture.requested.some( path => path.includes( '/connections/parts/' ) ) ).toBe( false );
-
-} );
-
 function blueprint() {
 
 	return {

@@ -13,8 +13,8 @@ const polygon = [
 	[ 140.64571019662478, 270.1666826759724 ], [ 140.4685632118244, 269.8647689236432 ], [ 140.34600761758333, 269.6558959396184 ]
 ];
 
-it.each( [ false, true ] )( 'covers the actual encoded owner with complete edge stations (fitted=%s)', fitted => {
-	const atlas = fixture( polygon, fitted );
+it( 'covers the actual encoded owner with complete edge stations', () => {
+	const atlas = fixture( polygon, false );
 	const snapshot = structuredClone( atlas );
 	const material = new THREE.MeshStandardMaterial();
 	const { group, colliderGeometry } = new GroundBuilder( atlas, { build: () => material } ).build();
@@ -25,10 +25,9 @@ it.each( [ false, true ] )( 'covers the actual encoded owner with complete edge 
 	material.dispose();
 } );
 
-it.each( [ false, true ] )( 'retains collinear canonical stations as incident boundary edges (reversed=%s)', reversed => {
+it( 'retains collinear canonical stations as incident boundary edges', () => {
 	const ring = [ [ 200, 100 ], [ 201, 100 ], [ 202, 100 ], [ 203, 100 ], [ 203, 101 ],
 		[ 203, 102 ], [ 202, 102 ], [ 201, 102 ], [ 200, 102 ], [ 200, 101 ] ];
-	if ( reversed ) ring.reverse();
 	const material = new THREE.MeshStandardMaterial();
 	const { group, colliderGeometry } = new GroundBuilder( fixture( ring, true ), { build: () => material } ).build();
 	coverage( group.children[ 0 ].geometry, ring );

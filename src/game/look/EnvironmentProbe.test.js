@@ -44,34 +44,27 @@ function probe() {
 
 describe( 'EnvironmentProbe', () => {
 
-	it( 'bakes the loading probe in one go, with the excluded groups hidden only while rendering', () => {
+	it( 'bakes the loading probe in one go, then rebakes one face per frame once the player moved and stands still', () => {
 
 		const { p, r, scene, crowd, convolved } = probe();
 
 		r.seen.mrt = { emissive: true };
-		p.bake( new THREE.Vector3( 0, 1, 0 ) );
+		p.bake( new THREE.Vector3( 0, 1, 0 ), - Infinity );
 		expect( r.seen.mrt ).toEqual( { emissive: true } );
 
 		expect( r.seen.renders ).toBe( 6 );
+		// the excluded groups are hidden only while the faces render
 		expect( r.seen.hidden ).toEqual( [ false, false, false, false, false, false ] );
 		expect( crowd.visible ).toBe( true );
 		expect( r.seen.target ).toBeNull();
 		expect( scene.environment ).toBe( convolved[ 0 ].texture );
 
-	} );
-
-	it( 'rebakes one face per frame once the player has moved far enough and stands still', () => {
-
-		const { p, r, scene, convolved } = probe();
-		p.bake( new THREE.Vector3( 0, 1, 0 ), - Infinity );
 		const far = new THREE.Vector3( 30, 1, 0 );
-
 		p.update( far, false );
 		expect( p.baking ).toBe( false );
 
 		p.update( far, true );
 		expect( p.baking ).toBe( true );
-		expect( r.seen.renders ).toBe( 6 );
 
 		for ( let i = 0; i < 5; i ++ ) p.update( far, false );
 		expect( r.seen.renders ).toBe( 11 );

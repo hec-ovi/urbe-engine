@@ -34,6 +34,11 @@ describe( 'live quest target projection', () => {
 		gameplay.perform( perform( candidate ) );
 		expect( gameplay.group.children ).toHaveLength( 0 );
 
+		// No exact mission item binding, no advertised pickup.
+		const unbound = setup( fakeActions( target ), { missionItems: { get: () => null } } );
+		expect( unbound.candidates( frame( pointLook( 0, 0.2, - 2 ) ) ) ).toEqual( [] );
+		expect( unbound.staticMarks.has( target.targetKey ) ).toBe( false );
+
 	} );
 
 	it( 'renders and collides the exact bound assembly without letting it occlude its own interaction', async () => {
@@ -68,77 +73,43 @@ describe( 'live quest target projection', () => {
 
 	} );
 
-	it( 'does not advertise a pickup that has no exact mission item binding', () => {
+	it( 'routes an area prompt through QuestActions at the player place', () => {
 
-		const target = questTarget( 'pickup', [ action( 'take', 'Take' ) ] );
-		const gameplay = setup( fakeActions( target ), { missionItems: { get: () => null } } );
-
-		expect( gameplay.candidates( frame( pointLook( 0, 0.2, - 2 ) ) ) ).toEqual( [] );
-		expect( gameplay.staticMarks.has( target.targetKey ) ).toBe( false );
-
-	} );
-
-	it.each( [
-		[ 'observe', 'inspect', { kind: 'district', id: 'd0' } ],
-		[ 'work', 'work', PARCEL ],
-		[ 'deliver', 'deliver', PARCEL ]
-	] )( 'routes the %s area prompt through QuestActions as %s', ( kind, actionId, place ) => {
-
-		const target = questTarget( kind, [ action( actionId, actionId ) ], place );
+		const place = { kind: 'district', id: 'd0' };
+		const target = questTarget( 'observe', [ action( 'inspect', 'inspect' ) ], place );
 		const actions = fakeActions( target );
 		const gameplay = setup( actions );
-		const state = frame( new THREE.Vector3( 0, 0, - 1 ), [ place ] );
-		const candidate = gameplay.candidates( state )[ 0 ];
+		const candidate = gameplay.candidates( frame( new THREE.Vector3( 0, 0, - 1 ), [ place ] ) )[ 0 ];
 
 		expect( candidate.kind ).toBe( 'quest' );
 		gameplay.perform( perform( candidate ) );
-		expect( actions.perform ).toHaveBeenCalledWith( expect.objectContaining( { action: actionId, playerPlaces: [ place ] } ) );
+		expect( actions.perform ).toHaveBeenCalledWith( expect.objectContaining( { action: 'inspect', playerPlaces: [ place ] } ) );
 
 	} );
 
-	it( 'animates only an accepted action and retains exact listen participants', () => {
+	it( 'requires the exact cast actors and an unobstructed focus, and animates only an accepted action', () => {
 
 		const members = [
 			{ npcId: 'cast-a', position: new THREE.Vector3( - 0.3, 0, - 2 ) },
 			{ npcId: 'cast-b', position: new THREE.Vector3( 0.3, 0, - 2 ) }
 		];
-		const target = { ...questTarget( 'listen', [ action( 'listen', 'Listen' ) ] ), actorIds: members.map( ( member ) => member.npcId ) };
+		const actorIds = members.map( ( member ) => member.npcId );
+		const target = { ...questTarget( 'listen', [ action( 'listen', 'Listen' ) ] ), actorIds };
 		const actions = fakeActions( target );
 		const animations = { questInteraction: vi.fn() };
-		const gameplay = setup( actions, {
-			animations,
-			crowd: { questMember: vi.fn( ( npcId ) => members.find( ( member ) => member.npcId === npcId ) ) }
-		} );
-		const candidate = gameplay.candidates( frame( pointLook( 0, 1.3, - 2 ) ) )[ 0 ];
-
-		gameplay.perform( perform( candidate ) );
-		expect( animations.questInteraction ).toHaveBeenCalledWith( {
-			targetKey: target.targetKey, action: 'listen', members
-		} );
-
-		actions.perform.mockReturnValueOnce( { ...result( 'listen' ), ok: false } );
-		gameplay.perform( perform( candidate ) );
-		expect( animations.questInteraction ).toHaveBeenCalledOnce();
-
-	} );
-
-	it.each( [
-		[ 'steal', [ 'cast-guard' ], [ new THREE.Vector3( 0, 0, - 1 ) ] ],
-		[ 'listen', [ 'cast-a', 'cast-b' ], [ new THREE.Vector3( - 0.3, 0, - 2 ), new THREE.Vector3( 0.3, 0, - 2 ) ] ]
-	] )( 'requires the exact cast actors and an unobstructed focus for %s', ( kind, actorIds, positions ) => {
-
-		const target = { ...questTarget( kind, [ action( kind, kind ) ] ), actorIds };
-		const actions = fakeActions( target );
-		const crowd = {
-			questMember: vi.fn( ( npcId ) => ( { npcId, position: positions[ actorIds.indexOf( npcId ) ] } ) )
-		};
-		const gameplay = setup( actions, { crowd } );
-		const look = pointLook( 0, 1.3, kind === 'steal' ? - 1 : - 2 );
+		const crowd = { questMember: vi.fn( ( npcId ) => members.find( ( member ) => member.npcId === npcId ) ) };
+		const gameplay = setup( actions, { animations, crowd } );
+		const look = pointLook( 0, 1.3, - 2 );
 		const candidate = gameplay.candidates( frame( look ) )[ 0 ];
 
 		expect( crowd.questMember.mock.calls.map( ( call ) => call[ 0 ] ) ).toEqual( actorIds );
 		gameplay.perform( perform( candidate ) );
-		expect( actions.perform ).toHaveBeenCalledWith( expect.objectContaining( { action: kind, focus: expect.any( Object ) } ) );
+		expect( actions.perform ).toHaveBeenCalledWith( expect.objectContaining( { action: 'listen', focus: expect.any( Object ) } ) );
+		expect( animations.questInteraction ).toHaveBeenCalledWith( { targetKey: target.targetKey, action: 'listen', members } );
+
+		actions.perform.mockReturnValueOnce( { ...result( 'listen' ), ok: false } );
+		gameplay.perform( perform( candidate ) );
+		expect( animations.questInteraction ).toHaveBeenCalledOnce();
 
 		const blocked = setup( fakeActions( target ), { crowd, blocked: true } );
 		expect( blocked.candidates( frame( look ) ) ).toEqual( [] );
@@ -165,22 +136,25 @@ describe( 'live quest target projection', () => {
 
 describe( 'explicit quest NPC control', () => {
 
-	it( 'starts and releases only the selected actual cast npcId', () => {
+	it( 'starts and releases follow and crouch only for the selected actual cast npcId', () => {
 
-		const actor = ( mode ) => ( {
+		const state = { pose: null, follow: null };
+		const actor = ( mode, animation = 'walk' ) => ( {
 			npcId: 'cast-a', name: { given: 'Ana', family: 'Silva' }, type: 'courier', gender: 'female', appearanceSeed: 8,
-			place: { kind: 'edge', id: 'e1' }, position: [ 1, 0, 2 ], heading: 0, animation: 'walk', mode,
+			place: { kind: 'edge', id: 'e1' }, position: [ 1, 0, 2 ], heading: 0, animation, mode,
 			schedule: { activity: 'commuting', progress: 0.2, nextDestination: { kind: 'parcel', id: 'p9' } }, visible: true
 		} );
 		const continuity = {
-			startFollow: vi.fn( () => actor( 'following' ) ),
-			stopFollow: vi.fn( () => actor( 'resuming' ) ),
-			serialize: vi.fn( () => ( { follow: { npcId: 'cast-a', mode: 'following' } } ) )
+			startFollow: vi.fn( () => { state.follow = { npcId: 'cast-a', mode: 'following' }; return actor( 'following' ); } ),
+			stopFollow: vi.fn( () => { state.follow = null; return actor( 'resuming' ); } ),
+			startCrouch: vi.fn( ( request ) => { state.pose = { npcId: request.npcId, kind: 'crouch' }; return actor( 'posing', 'crouch' ); } ),
+			releaseCrouch: vi.fn( () => { state.pose = null; return actor( 'resuming' ); } ),
+			serialize: vi.fn( () => structuredClone( state ) )
 		};
 		const crowd = { questMember: () => null, syncActor: vi.fn() };
-		const session = { hasCastNpc: ( npcId ) => npcId === 'cast-a' };
+		const animations = { npcControl: vi.fn() };
 		const gameplay = setup( fakeActions( questTarget( 'observe', [ action( 'inspect', 'Inspect' ) ] ) ), {
-			crowd, session, continuity
+			crowd, animations, continuity, session: { hasCastNpc: ( npcId ) => npcId === 'cast-a' }
 		} );
 		const request = { kind: 'start-follow', npcId: 'cast-a', timeMin: 600, playerPosition: { x: 3, y: 0, z: 4 } };
 
@@ -192,54 +166,17 @@ describe( 'explicit quest NPC control', () => {
 			.toEqual( { ok: true, kind: 'release-follow', npcId: 'cast-a', mode: 'resuming' } );
 		expect( continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: 600 } );
 
-	} );
-
-	it( 'starts and releases crouch only for the selected cast NPC', () => {
-
-		const state = { pose: null };
-		const actor = ( mode, animation ) => ( {
-			npcId: 'cast-a', name: { given: 'Ana', family: 'Silva' }, type: 'courier', gender: 'female', appearanceSeed: 8,
-			place: { kind: 'edge', id: 'e1' }, position: [ 1, 0, 2 ], heading: 0, animation, mode,
-			schedule: { activity: 'commuting', progress: 0.2, nextDestination: { kind: 'parcel', id: 'p9' } }, visible: true
-		} );
-		const continuity = {
-			startCrouch: vi.fn( ( request ) => {
-
-				state.pose = { npcId: request.npcId, kind: 'crouch' };
-				return actor( 'posing', 'crouch' );
-
-			} ),
-			releaseCrouch: vi.fn( () => {
-
-				state.pose = null;
-				return actor( 'resuming', 'walk' );
-
-			} ),
-			serialize: vi.fn( () => state )
-		};
-		const crowd = { questMember: () => null, syncActor: vi.fn() };
-		const animations = { npcControl: vi.fn() };
-		const gameplay = setup( fakeActions( questTarget( 'observe', [ action( 'inspect', 'Inspect' ) ] ) ), {
-			crowd, animations, continuity, session: { hasCastNpc: ( npcId ) => npcId === 'cast-a' }
-		} );
-		const request = { kind: 'start-crouch', npcId: 'cast-a', timeMin: 600, playerPosition: { x: 3, y: 0, z: 4 } };
-
-		expect( gameplay.control( request ) ).toEqual( {
-			ok: true, kind: 'start-crouch', npcId: 'cast-a', mode: 'posing'
-		} );
+		const crouch = { ...request, kind: 'start-crouch' };
+		expect( gameplay.control( crouch ) ).toEqual( { ok: true, kind: 'start-crouch', npcId: 'cast-a', mode: 'posing' } );
 		expect( continuity.startCrouch ).toHaveBeenCalledWith( { npcId: 'cast-a', timeMin: 600 } );
-		expect( animations.npcControl ).toHaveBeenLastCalledWith( request, expect.objectContaining( { animation: 'crouch' } ) );
+		expect( animations.npcControl ).toHaveBeenLastCalledWith( crouch, expect.objectContaining( { animation: 'crouch' } ) );
 
 		const release = { ...request, kind: 'release-crouch' };
-		expect( gameplay.control( release ) ).toEqual( {
-			ok: true, kind: 'release-crouch', npcId: 'cast-a', mode: 'resuming'
-		} );
+		expect( gameplay.control( release ) ).toEqual( { ok: true, kind: 'release-crouch', npcId: 'cast-a', mode: 'resuming' } );
 		expect( continuity.releaseCrouch ).toHaveBeenCalledWith( { npcId: 'cast-a', timeMin: 600 } );
 		expect( animations.npcControl ).toHaveBeenLastCalledWith( release, expect.objectContaining( { animation: 'walk' } ) );
 
-		expect( gameplay.control( { ...request, npcId: 'stranger' } ) ).toMatchObject( {
-			ok: false, error: 'not_cast'
-		} );
+		expect( gameplay.control( { ...crouch, npcId: 'stranger' } ) ).toMatchObject( { ok: false, error: 'not_cast' } );
 
 	} );
 

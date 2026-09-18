@@ -3,43 +3,11 @@ import * as THREE from 'three/webgpu';
 import { transitVehiclesAt } from '../../../../connections/src/index.ts';
 import { Transit } from './Transit.js';
 
-/**
- * The transit contract makes four promises a player or a frame budget would
- * catch breaking: buses stand where the timetable says and nowhere else when
- * nothing is in service, a city with no bus stops pays nothing for them, a
- * city with many pays one draw per material, and every entrance publishes the
- * light its sign really emits.
- */
 describe( 'Transit', () => {
 
 	const small = city();
 
-	it( 'puts a bus where the transit library says it is', () => {
-
-		const route = busRoute();
-		const transit = new Transit( {
-			atlas: small, networks: { transit: { routes: [ route ] } }, factory: stubFactory()
-		} );
-
-		const t = route.service[ 0 ].start + 60;
-		const player = new THREE.Vector3( 0, 0, 50 );
-
-		transit.update( player, t );
-
-		const [ vehicle ] = transitVehiclesAt( [ route ], t );
-		const body = transit.group.getObjectByName( 'bus:body' );
-		const placed = new THREE.Vector3().setFromMatrixPosition( readInstance( body, 0 ) );
-
-		expect( transit.count ).toBe( 1 );
-		expect( placed.toArray() ).toEqual( vehicle.position );
-		// The shape is the +z axis, so being on it is the whole route check.
-		expect( placed.x ).toBeCloseTo( 0, 6 );
-		expect( placed.z ).toBeGreaterThan( 0 );
-		expect( placed.z ).toBeLessThan( route.stops[ 1 ].shapeDist );
-
-	} );
-
-	it( 'places one bounded material-backed vehicle for every transit mode', () => {
+	it( 'places every mode exactly where the transit library says, bounded, and nothing outside service', () => {
 
 		const routes = [
 			busRoute(),
@@ -48,10 +16,7 @@ describe( 'Transit', () => {
 		];
 		const built = [];
 		const transit = new Transit( {
-			atlas: small,
-			networks: { transit: { routes } },
-			factory: stubFactory( built ),
-			capacity: 1
+			atlas: small, networks: { transit: { routes } }, factory: stubFactory( built ), capacity: 1
 		} );
 		const time = 30060;
 		transit.update( new THREE.Vector3( 60, 0, 50 ), time );
@@ -75,55 +40,34 @@ describe( 'Transit', () => {
 			'cyberpunk/metal/mid', 'cyberpunk/glass/mid', 'cyberpunk/rubber/mid'
 		] );
 
-	} );
-
-	it( 'runs no bus outside every service period', () => {
-
-		const route = busRoute();
-		const transit = new Transit( {
-			atlas: small, networks: { transit: { routes: [ route ] } }, factory: stubFactory()
-		} );
-
-		transit.update( new THREE.Vector3(), route.service[ 0 ].end + 600 );
-
-		const body = transit.group.getObjectByName( 'bus:body' );
-
-		expect( transitVehiclesAt( [ route ], route.service[ 0 ].end + 600 ) ).toEqual( [] );
+		const closed = routes[ 0 ].service[ 0 ].end + 600;
+		transit.update( new THREE.Vector3(), closed );
+		expect( transitVehiclesAt( routes, closed ) ).toEqual( [] );
 		expect( transit.count ).toBe( 0 );
-		expect( body.count ).toBe( 0 );
-		expect( body.visible ).toBe( false );
+		expect( transit.group.getObjectByName( 'bus:body' ).count ).toBe( 0 );
+		expect( transit.group.getObjectByName( 'bus:body' ).visible ).toBe( false );
 
 	} );
 
-	it( 'builds nothing for a city with no bus stops', () => {
+	it( 'builds nothing for a city with no bus stops and one instance set per material for a full one', () => {
 
-		const bare = city( { busStops: [] } );
-		const transit = new Transit( { atlas: bare, networks: null, factory: stubFactory() } );
-
-		expect( bare.transit.busStops ).toEqual( [] );
-		expect( transit.group.getObjectByName( 'bus-shelters' ).children ).toEqual( [] );
-		expect( transit.group.getObjectByName( 'buses' ).children ).toEqual( [] );
-		expect( transit.colliders.get( 'transit:shelters' ) ).toBe( null );
-
-	} );
-
-	it( 'draws a whole city of bus stops as one instance set per material', () => {
+		const bare = new Transit( { atlas: city( { busStops: [] } ), networks: null, factory: stubFactory() } );
+		expect( bare.group.getObjectByName( 'bus-shelters' ).children ).toEqual( [] );
+		expect( bare.group.getObjectByName( 'buses' ).children ).toEqual( [] );
+		expect( bare.colliders.get( 'transit:shelters' ) ).toBe( null );
 
 		const many = city( { busStops: busStops( 24 ) } );
 		const transit = new Transit( { atlas: many, networks: null, factory: stubFactory() } );
 		const meshes = transit.group.getObjectByName( 'bus-shelters' ).children;
 		const stops = many.transit.busStops.length;
 
-		expect( stops ).toBe( 24 );
 		expect( meshes.length ).toBe( 3 );
-
 		for ( const mesh of meshes ) {
 
 			expect( mesh.isInstancedMesh ).toBe( true );
 			expect( mesh.count ).toBe( stops );
 
 		}
-
 		// One fixture per stop, each on its own shelter rather than stacked.
 		expect( transit.glows.filter( ( glow ) => glow.lumens === 180 ).length ).toBe( stops );
 
@@ -157,12 +101,7 @@ describe( 'Transit', () => {
 
 } );
 
-/**
- * A blueprint in the shape atlas publishes, holding only what transit reads:
- * one street to hang stops on, and whatever transit data the case is about.
- * Built here rather than read from a sample so a regenerated sibling city
- * cannot decide what this box's contract test proves.
- */
+/** The atlas shape transit reads: one street to hang stops on, plus the transit data the case is about. */
 function city( transit = {} ) {
 
 	return {
@@ -187,7 +126,7 @@ function station( id, x ) {
 
 }
 
-/** `count` stops spread along the one street, each far enough off it to face the kerb. */
+/** `count` stops along the one street, each far enough off it to face the kerb. */
 function busStops( count ) {
 
 	return Array.from( { length: count }, ( _, i ) => ( {
@@ -197,10 +136,7 @@ function busStops( count ) {
 
 }
 
-/**
- * A bus route in the shape connections publishes: a straight 100 m shape, two
- * stops, a trip template over it and one morning service period.
- */
+/** The connections route shape: a straight 100 m line, two stops, a trip template and one morning service period. */
 function busRoute() {
 
 	return {
@@ -236,7 +172,6 @@ function readInstance( mesh, index ) {
 
 	const matrix = new THREE.Matrix4();
 	mesh.getMatrixAt( index, matrix );
-
 	return matrix;
 
 }

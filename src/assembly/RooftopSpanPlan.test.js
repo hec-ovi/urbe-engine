@@ -11,25 +11,14 @@ const IDS = [ 'p135', 'p136', 'p71', 'p76', 'p111' ];
 
 describe( 'rooftop span assembly boundary', () => {
 
-	it( 'derives Connections complete fitting scene from final Exterior blueprints', () => {
+	it( 'derives the complete fitting scene from final Exterior blueprints and preserves its canonical geometry', async () => {
 
-		const buildings = IDS.map( ( buildingId ) => ( {
-			buildingId,
-			blueprint: BLUEPRINTS[ buildingId ]
-		} ) );
-		const request = rooftopSpanRequest(
-			{ meta: { seed: 'urbe' } },
-			buildings,
-			{ seed: FIXTURE.seed, params: FIXTURE.params }
-		);
+		const buildings = IDS.map( ( buildingId ) => ( { buildingId, blueprint: BLUEPRINTS[ buildingId ] } ) );
+		const request = rooftopSpanRequest( { meta: { seed: 'urbe' } }, buildings, { seed: FIXTURE.seed, params: FIXTURE.params } );
 
 		expect( request ).toEqual( FIXTURE );
 
-	} );
-
-	it( 'preserves canonical rooftop geometry and the source package version', async () => {
-
-		const result = await runRooftopSpans( FIXTURE );
+		const result = await runRooftopSpans( request );
 		const pairs = result.spans.map( ( span ) => [ span.a.buildingId, span.b.buildingId ] );
 		const { generatorVersion, ...meta } = result.meta;
 

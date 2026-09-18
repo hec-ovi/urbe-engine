@@ -4,7 +4,13 @@ import { LookPipeline } from './LookPipeline.js';
 
 afterEach( () => vi.restoreAllMocks() );
 
-it.each( [ 0, 0.35 ] )( 'draws the world into its prepared context before composition (bloom %s)', strength => {
+it( 'draws the world into its prepared context before composition, with and without bloom', () => {
+
+	for ( const strength of [ 0, 0.35 ] ) draws( strength );
+
+} );
+
+function draws( strength ) {
 
 	const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera();
 	let target = null, mrt = null;
@@ -48,4 +54,4 @@ it.each( [ 0, 0.35 ] )( 'draws the world into its prepared context before compos
 	expect( look.renderTarget.textures ).toHaveLength( strength ? 2 : 1 );
 	look.renderTarget.dispose(); look.pipeline.dispose();
 
-} );
+}

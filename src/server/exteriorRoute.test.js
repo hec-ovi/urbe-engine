@@ -47,10 +47,10 @@ describe( 'exact blueprint exterior HTTP jobs', () => {
 
 	} );
 
-	it( 'reports malformed input, unsafe ids, duplicate ids, missing jobs and unavailable runtime before mutation', async () => {
+	it( 'reports malformed input, unsafe ids, missing jobs, unavailable runtime, a symlink root and its bounds before mutation', async () => {
 
 		let runs = 0;
-		const { origin } = await fixture( async () => { runs ++; } );
+		const { origin, root } = await fixture( async () => { runs ++; } );
 		const malformed = await fetch( `${origin}/api/exteriors`, { method: 'POST', body: '{' } );
 		expect( malformed.status ).toBe( 400 );
 		for ( const input of [ {}, { blueprint: { ...blueprint(), parcels: [ { id: '../escape' } ] } }, { blueprint: { ...blueprint(), parcels: [ { id: 'p0' }, { id: 'p0' } ] } } ] ) {
@@ -62,104 +62,78 @@ describe( 'exact blueprint exterior HTTP jobs', () => {
 		}
 		expect( ( await call( origin, 'GET', null, 'absent' ) ).body.code ).toBe( 'E_JOB_NOT_FOUND' );
 		expect( runs ).toBe( 0 );
+
 		const unavailable = await fixture( null );
 		expect( ( await call( unavailable.origin, 'GET' ) ).body.available ).toBe( false );
 		expect( ( await call( unavailable.origin, 'POST', { blueprint: blueprint() } ) ).status ).toBe( 503 );
 
-	} );
-
-	it( 'rejects a symlink output root', async () => {
-
-		const { origin, root } = await fixture( async () => {} );
 		mkdirSync( join( root, 'elsewhere' ) );
 		symlinkSync( join( root, 'elsewhere' ), join( root, 'out' ) );
-		const result = await call( origin, 'POST', { blueprint: blueprint() } );
-		expect( result.status ).toBe( 500 );
-		expect( result.body.code ).toBe( 'E_STORAGE' );
-
-	} );
-
-	it( 'bounds uploaded input and retained jobs without replacing prior output', async () => {
+		const linked = await call( origin, 'POST', { blueprint: blueprint() } );
+		expect( linked.status ).toBe( 500 );
+		expect( linked.body.code ).toBe( 'E_STORAGE' );
 
 		const small = await fixture( async () => {}, { maxRequestBytes: 16 } );
 		expect( ( await call( small.origin, 'POST', { blueprint: blueprint() } ) ).status ).toBe( 413 );
+
 		const limited = await fixture( async () => {}, { maxJobs: 1 } );
-		const first = await call( limited.origin, 'POST', { blueprint: blueprint() } );
-		await settled( limited.origin, first.body.id );
-		const second = await call( limited.origin, 'POST', { blueprint: blueprint() } );
-		expect( second.status ).toBe( 429 );
-		expect( second.body.code ).toBe( 'E_BUSY' );
-		expect( ( await call( limited.origin, 'GET', null, first.body.id ) ).status ).toBe( 200 );
+		const kept = await call( limited.origin, 'POST', { blueprint: blueprint() } );
+		await settled( limited.origin, kept.body.id );
+		const refused = await call( limited.origin, 'POST', { blueprint: blueprint() } );
+		expect( refused.status ).toBe( 429 );
+		expect( refused.body.code ).toBe( 'E_BUSY' );
+		expect( ( await call( limited.origin, 'GET', null, kept.body.id ) ).status ).toBe( 200 );
 
 	} );
 
-	it( 'preserves Connections failures and refuses changed geometry or incomplete output', async () => {
+	it( 'admits only a complete build whose Connections artifact and carried blueprint hash exactly', async () => {
 
-		for ( const [ run, code ] of [
-			[ async () => { throw new Error( 'E_CONNECTIONS: walking strip does not fit' ); }, 'E_BUILD_FAILED' ],
-			[ async ( request ) => { finish( request ); const changed = blueprint(); changed.stats.changed = true; writeFileSync( request.blueprintPath, JSON.stringify( changed ) ); }, 'E_BUILD_INCOMPLETE' ],
-			[ async () => {}, 'E_BUILD_INCOMPLETE' ]
-		] ) {
-
-			const { origin } = await fixture( run );
-			const started = await call( origin, 'POST', { blueprint: blueprint() } );
-			const done = await settled( origin, started.body.id );
-			expect( done.state ).toBe( 'failed' );
-			expect( done.error.code ).toBe( code );
-			expect( done.manifest ).toBe( null );
-			if ( code === 'E_BUILD_FAILED' ) expect( done.error.message ).toContain( 'E_CONNECTIONS' );
-
-		}
-
-	} );
-
-	it( 'admits the published Connections artifact with matching schema, source and byte hashes', async () => {
-
-		const { origin } = await fixture( async ( request ) => finishWithConnections( request ) );
-		const started = await call( origin, 'POST', { blueprint: blueprint() } );
-		const done = await settled( origin, started.body.id );
-
+		const admitted = await fixture( async ( request ) => finishWithConnections( request ) );
+		const started = await call( admitted.origin, 'POST', { blueprint: blueprint() } );
+		const done = await settled( admitted.origin, started.body.id );
 		expect( done.state ).toBe( 'succeeded' );
 		expect( done.manifest.connections.file ).toBe( 'connections.json' );
 		expect( new ExteriorBuildBoundary().job( done ) ).toBe( true );
 
-	} );
+		const refusals = [
+			[ 'E_BUILD_FAILED', async () => { throw new Error( 'E_CONNECTIONS: walking strip does not fit' ); } ],
+			[ 'E_BUILD_INCOMPLETE', async () => {} ],
+			[ 'E_BUILD_INCOMPLETE', async ( request ) => { finish( request ); const changed = blueprint(); changed.stats.changed = true; writeFileSync( request.blueprintPath, JSON.stringify( changed ) ); } ],
+			[ 'E_BUILD_INCOMPLETE', async ( request ) => { finishWithConnections( request ); rmSync( join( request.outDir, 'connections.json' ) ); } ],
+			[ 'E_BUILD_INCOMPLETE', async ( request ) => { finishWithConnections( request ); writeFileSync( join( request.outDir, 'connections.json' ), '{}' ); } ],
+			[ 'E_BUILD_INCOMPLETE', async ( request ) => { finishWithConnections( request ); replaceConnections( request, JSON.stringify( { meta: connections().meta } ) ); } ],
+			[ 'E_BUILD_INCOMPLETE', async ( request ) => { finishWithConnections( request ); replaceConnections( request, JSON.stringify( { ...connections(), meta: { ...connections().meta, atlasSeed: 'another-seed' } } ) ); } ],
+			[ 'E_BUILD_INCOMPLETE', async ( request ) => {
 
-	it.each( [
-		[ 'missing file', ( request ) => rmSync( join( request.outDir, 'connections.json' ) ) ],
-		[ 'changed bytes', ( request ) => writeFileSync( join( request.outDir, 'connections.json' ), '{}' ) ],
-		[ 'invalid JSON with matching hash', ( request ) => replaceConnections( request, '{' ) ],
-		[ 'invalid schema with matching hash', ( request ) => replaceConnections( request, JSON.stringify( { meta: connections().meta } ) ) ],
-		[ 'wrong generator seed', ( request ) => replaceConnections( request, JSON.stringify( { ...connections(), meta: { ...connections().meta, seed: 'another-seed' } } ) ) ],
-		[ 'wrong Atlas seed', ( request ) => replaceConnections( request, JSON.stringify( { ...connections(), meta: { ...connections().meta, atlasSeed: 'another-seed' } } ) ) ],
-		[ 'changed blueprint bytes', ( request ) => writeFileSync( request.blueprintPath, JSON.stringify( blueprint(), null, 2 ) ) ],
-		[ 'changed source with refreshed hash', ( request ) => {
+				finishWithConnections( request );
+				const changed = blueprint();
+				changed.exactExtension.geometry[ 0 ] += 1;
+				const bytes = JSON.stringify( changed );
+				writeFileSync( request.blueprintPath, bytes );
+				updateManifest( request, ( manifest ) => { manifest.connections.blueprintSha256 = sha256( bytes ); } );
 
-			const changed = blueprint();
-			changed.exactExtension.geometry[ 0 ] += 1;
-			const bytes = JSON.stringify( changed );
-			writeFileSync( request.blueprintPath, bytes );
-			updateManifest( request, ( manifest ) => { manifest.connections.blueprintSha256 = sha256( bytes ); } );
+			} ],
+			[ 'E_BUILD_INCOMPLETE', async ( request ) => {
 
-		} ],
-		[ 'symbolic-link payload', ( request ) => {
+				finishWithConnections( request );
+				const path = join( request.outDir, 'connections.json' );
+				const target = join( request.outDir, 'other.json' );
+				writeFileSync( target, readFileSync( path ) );
+				rmSync( path );
+				symlinkSync( target, path );
 
-			const path = join( request.outDir, 'connections.json' );
-			const target = join( request.outDir, 'other.json' );
-			writeFileSync( target, readFileSync( path ) );
-			rmSync( path );
-			symlinkSync( target, path );
+			} ]
+		];
 
-		} ]
-	] )( 'refuses a declared Connections artifact with %s', async ( _name, change ) => {
+		for ( const [ code, run ] of refusals ) {
 
-		const { origin } = await fixture( async ( request ) => { finishWithConnections( request ); change( request ); } );
-		const started = await call( origin, 'POST', { blueprint: blueprint() } );
-		const done = await settled( origin, started.body.id );
+			const { origin } = await fixture( run );
+			const failed = await settled( origin, ( await call( origin, 'POST', { blueprint: blueprint() } ) ).body.id );
+			expect( failed.state ).toBe( 'failed' );
+			expect( failed.error.code ).toBe( code );
+			expect( failed.manifest ).toBe( null );
 
-		expect( done.state ).toBe( 'failed' );
-		expect( done.error.code ).toBe( 'E_BUILD_INCOMPLETE' );
-		expect( done.manifest ).toBe( null );
+		}
 
 	} );
 

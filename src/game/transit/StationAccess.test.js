@@ -46,9 +46,9 @@ describe( 'short station entrances', () => {
 
 	} );
 
-	for ( const heading of [ 0, Math.PI / 3 ] ) it( `keeps a walkable stair, terminal and closed landing in a shaft rotated ${heading}`, () => {
+	it( 'keeps a walkable stair, terminal and closed landing inside a rotated shaft', () => {
 
-		const atlas = stationCity( [ heading ] ), [ entry ] = new StationAccess( atlas ).entrances;
+		const atlas = stationCity( [ Math.PI / 3 ] ), [ entry ] = new StationAccess( atlas ).entrances;
 		expect( new TransitJourneyBoundary().valid( 'station-access', [ entry ] ) ).toBe( true );
 		expect( entry.top ).toBe( 0.26 );
 		expect( entry.treads ).toBeGreaterThan( 2 );

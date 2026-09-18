@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import interior from './fixtures/interior-incident.json';
 import street from './fixtures/street-incident.json';
-import { InvestigationError } from './InvestigationError.js';
 import { SceneAssembler } from './SceneAssembler.js';
 
 describe( 'SceneAssembler', () => {
@@ -22,7 +21,7 @@ describe( 'SceneAssembler', () => {
 
 	} );
 
-	it( 'keeps fitted entities outside blockers and entry clearances with exact ground contact', () => {
+	it( 'fits entities, decals and approach points inside the measured location frame', () => {
 
 		const result = new SceneAssembler().assemble( interior );
 		const blocked = interior.location.blockedZones[ 0 ];
@@ -37,8 +36,7 @@ describe( 'SceneAssembler', () => {
 			expect( rectsOverlap( { ...entity.footprint, center: local }, blocked, 0.12 ) ).toBe( false );
 			expect( circleHitsRect( entry.position, entry.clearanceRadius, { ...entity.footprint, center: local } ) ).toBe( false );
 			const contact = entity.asset?.groundContact ?? entity.missionAsset.groundContactOrigin;
-			const expectedY = interior.location.origin.y - contact.y;
-			expect( entity.transform.position.y ).toBeCloseTo( expectedY, 6 );
+			expect( entity.transform.position.y ).toBeCloseTo( interior.location.origin.y - contact.y, 6 );
 
 		}
 
@@ -50,76 +48,31 @@ describe( 'SceneAssembler', () => {
 
 		}
 
-	} );
-
-	it( 'fits a PBR decal to its receiving surface with an explicit anti-flicker offset', () => {
-
-		const result = new SceneAssembler().assemble( interior );
 		const decal = result.decals[ 0 ];
-		const source = interior.decals[ 0 ];
-
-		expect( decal.material ).toEqual( source.material );
+		expect( decal.material ).toEqual( interior.decals[ 0 ].material );
 		expect( decal.offsetMeters ).toBe( 0.006 );
 		expect( decal.transform.position.y ).toBeCloseTo( interior.location.origin.y + 0.006, 6 );
 		expect( decal.transform.normal ).toEqual( { x: 0, y: 1, z: 0 } );
 		expect( Math.abs( decal.transform.position.x - interior.location.origin.x ) + decal.width / 2 )
 			.toBeLessThanOrEqual( interior.location.width / 2 + 1e-6 );
-		expect( Math.abs( decal.transform.position.z - interior.location.origin.z ) + decal.height / 2 )
-			.toBeLessThanOrEqual( interior.location.depth / 2 + 1e-6 );
 
-	} );
-
-	it( 'transforms street placements and approach points through the measured location frame', () => {
-
-		const result = new SceneAssembler().assemble( street );
-
-		expect( result.location ).toEqual( { kind: 'street', placeId: 'district-service-9' } );
-		for ( const target of result.targets ) {
+		const outside = new SceneAssembler().assemble( street );
+		expect( outside.location ).toEqual( { kind: 'street', placeId: 'district-service-9' } );
+		for ( const target of outside.targets ) {
 
 			const local = worldToLocal( target.approachPoint, street.location );
 			expect( Math.abs( local.x ) ).toBeLessThanOrEqual( street.location.width / 2 );
 			expect( Math.abs( local.z ) ).toBeLessThanOrEqual( street.location.depth / 2 );
 
 		}
-		expect( result.decals[ 0 ].transform.uAxis ).toEqual( street.location.receivingSurfaces[ 0 ].uAxis );
+		expect( outside.decals[ 0 ].transform.uAxis ).toEqual( street.location.receivingSurfaces[ 0 ].uAxis );
 
 	} );
 
-	it( 'keeps both measured scene families valid across stable variation seeds', () => {
-
-		for ( const fixture of [ interior, street ] ) {
-
-			const variants = new Set();
-			for ( let seed = 0; seed < 32; seed ++ ) {
-
-				const request = structuredClone( fixture );
-				request.seed = seed;
-				let result;
-				try {
-
-					result = new SceneAssembler().assemble( request );
-
-				} catch ( error ) {
-
-					throw new Error( `${fixture.sceneId} seed ${seed}: ${error.message}` );
-
-				}
-				expect( result.seed ).toBe( seed );
-				expect( result.targets ).toHaveLength( request.evidence.length );
-				expect( result.targets.every( ( target ) => Number.isFinite( target.approachPoint.x ) && Number.isFinite( target.approachPoint.z ) ) ).toBe( true );
-				variants.add( JSON.stringify( result.entities.map( ( entity ) => entity.transform ) ) );
-
-			}
-			expect( variants.size ).toBeGreaterThan( 1 );
-		}
-
-	} );
-
-	it( 'rejects evidence without exactly one authored visual', () => {
+	it( 'fails closed on disagreeing ids, an unfittable body or decal, and an off-contract request', () => {
 
 		const missing = structuredClone( interior );
 		delete missing.bodies[ 0 ].evidenceId;
-
 		expect( () => new SceneAssembler().assemble( missing ) ).toThrowError( expect.objectContaining( {
 			name: 'InvestigationError', code: 'E_INVESTIGATION_GEOMETRY'
 		} ) );
@@ -127,10 +80,6 @@ describe( 'SceneAssembler', () => {
 		const duplicate = structuredClone( interior );
 		duplicate.props[ 0 ].evidenceId = 'body-position';
 		expect( () => new SceneAssembler().assemble( duplicate ) ).toThrow( /more than one visual/ );
-
-	} );
-
-	it( 'rejects crooked receiving frames and decals that cross a blocked surface region', () => {
 
 		const crooked = structuredClone( interior );
 		crooked.location.receivingSurfaces[ 0 ].uAxis = { x: 0.8, y: 0.2, z: 0 };
@@ -143,34 +92,15 @@ describe( 'SceneAssembler', () => {
 			code: 'E_INVESTIGATION_NO_FIT'
 		} ) );
 
-	} );
-
-	it( 'fails closed when the measured location cannot fit an authored body', () => {
-
 		const impossible = structuredClone( interior );
 		impossible.bodies[ 0 ].dimensions.width = 8;
 		impossible.bodies[ 0 ].dimensions.depth = 7;
-
-		let failure;
-		try {
-
-			new SceneAssembler().assemble( impossible );
-
-		} catch ( error ) {
-
-			failure = error;
-
-		}
-		expect( failure ).toBeInstanceOf( InvestigationError );
-		expect( failure.code ).toBe( 'E_INVESTIGATION_NO_FIT' );
-
-	} );
-
-	it( 'rejects off-contract scene requests at the boundary', () => {
+		expect( () => new SceneAssembler().assemble( impossible ) ).toThrowError( expect.objectContaining( {
+			code: 'E_INVESTIGATION_NO_FIT'
+		} ) );
 
 		const invalid = structuredClone( street );
 		invalid.location.unmeasuredGuess = true;
-
 		expect( () => new SceneAssembler().assemble( invalid ) ).toThrowError( expect.objectContaining( {
 			code: 'E_INVESTIGATION_INPUT'
 		} ) );

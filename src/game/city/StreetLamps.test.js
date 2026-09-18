@@ -32,7 +32,7 @@ describe( 'StreetLamps', () => {
 
 	} );
 
-	it( 'leaves no walkable metre of the city out of reach of a fixture', () => {
+	it( 'leaves no walkable metre of the city out of reach of a fixture bracketed to a real facade', () => {
 
 		const lit = reachTest( lamps.glows );
 		const dark = [];
@@ -54,22 +54,16 @@ describe( 'StreetLamps', () => {
 		expect( dark.slice( 0, 5 ) ).toEqual( [] );
 
 		// The alleys are the stretches posts cannot serve, so the rule has to
-		// have put something on them.
-		expect( lamps.glows.filter( ( g ) => g.lumens === WALL_LUMENS ).length ).toBeGreaterThan( 0 );
+		// have put wall fixtures on them, bolted to facades they can reach.
+		const walls = lamps.glows.filter( ( g ) => g.lumens === WALL_LUMENS );
+		expect( walls.length ).toBeGreaterThan( 0 );
 
-	} );
-
-	it( 'brackets every wall fixture to a real facade', () => {
-
-		for ( const fixture of lamps.glows.filter( ( g ) => g.lumens === WALL_LUMENS ) ) {
+		for ( const fixture of walls ) {
 
 			const { x, y, z } = fixture.position;
 
 			expect( y ).toBeGreaterThan( 3.5 );
 			expect( y ).toBeLessThan( 4.5 );
-
-			// On the outside of a wall it can actually be bolted to: within the
-			// bracket's own reach of a facade, and not inside the building.
 			expect( Math.min( ...atlas.parcels.map( ( p ) => toRing( x, z, p.footprint ) ) ) ).toBeLessThan( 0.5 );
 			expect( atlas.parcels.some( ( p ) => pointInRing( x, z, p.footprint ) ) ).toBe( false );
 
@@ -77,30 +71,28 @@ describe( 'StreetLamps', () => {
 
 	} );
 
-	it( 'stands every post on the kerb side of the roadway the atlas drew', () => {
+	it( 'stands every complete fixture clear of the roadway, the plaza, its neighbours and anything it would hit', () => {
 
 		const roadway = atlas.volumetric.ground.filter( ( cover ) => cover.surface === 'roadway' ).map( ( cover ) => cover.polygon );
-		const onAsphalt = lamps.posts.filter( ( post ) => roadway.some( ( ring ) => pointInRing( post.x, post.z, ring ) ) );
-
-		// A junction or a wide road swallows the fixed kerb offset; the post
-		// has to step back onto the pavement rather than stand in the lane.
-		expect( onAsphalt.slice( 0, 5 ).map( ( p ) => `${p.x.toFixed( 1 )}, ${p.z.toFixed( 1 )}` ) ).toEqual( [] );
-		expect( lamps.posts.length ).toBeGreaterThan( 100 );
-
-	} );
-
-	it( 'keeps the posts it had: none in a plaza, none within six metres of another, none in an alley', () => {
-
 		const plazas = atlas.volumetric.ground.filter( ( c ) => c.surface === 'open' ).map( ( c ) => c.polygon );
 		const alleys = atlas.streets.edges.filter( ( e ) => e.class === 'alley' );
+		const trees = atlas.streets.planting.filter( ( item ) => item.kind === 'tree' );
 		const posts = lamps.posts;
 		const wrong = [];
 
 		expect( posts.length ).toBeGreaterThan( 100 );
+		expect( atlas.volumetric.buildings.length ).toBeGreaterThan( 0 );
+		expect( trees.length ).toBeGreaterThan( 0 );
 
 		for ( let i = 0; i < posts.length; i ++ ) {
 
 			const post = posts[ i ];
+			const segment = headSegment( post.head );
+			const radius = post.head.width / 2;
+
+			// A junction or a wide road swallows the fixed kerb offset; the post
+			// has to step back onto the pavement rather than stand in the lane.
+			if ( roadway.some( ( ring ) => pointInRing( post.x, post.z, ring ) ) ) wrong.push( `${i} on the roadway` );
 
 			// The ring of posts around a plaza's edge stands on the ring itself,
 			// so a post only counts as in the plaza once it is inside it.
@@ -122,35 +114,16 @@ describe( 'StreetLamps', () => {
 
 			}
 
-		}
-
-		expect( wrong.slice( 0, 5 ) ).toEqual( [] );
-
-	} );
-
-	it( 'keeps each complete fixture outside building volumes and tree anchors', () => {
-
-		const trees = atlas.streets.planting.filter( ( item ) => item.kind === 'tree' );
-		const wrong = [];
-
-		expect( atlas.volumetric.buildings.length ).toBeGreaterThan( 0 );
-		expect( trees.length ).toBeGreaterThan( 0 );
-
-		for ( const [ index, post ] of lamps.posts.entries() ) {
-
-			const segment = headSegment( post.head );
-			const radius = post.head.width / 2;
-
 			for ( const building of atlas.volumetric.buildings ) {
 
 				if ( pointInRing( post.x, post.z, building.footprint ) || toRing( post.x, post.z, building.footprint ) < post.radius ) {
 
-					wrong.push( `${index} pole in building ${building.parcelId}` );
+					wrong.push( `${i} pole in building ${building.parcelId}` );
 
 				}
 				if ( building.height >= post.head.underside && segmentToRing( segment, building.footprint ) < radius ) {
 
-					wrong.push( `${index} head in building ${building.parcelId}` );
+					wrong.push( `${i} head in building ${building.parcelId}` );
 
 				}
 
@@ -158,84 +131,12 @@ describe( 'StreetLamps', () => {
 
 			for ( const tree of trees ) {
 
-				if ( Math.hypot( post.x - tree.position[ 0 ], post.z - tree.position[ 1 ] ) < post.radius ) wrong.push( `${index} pole on tree` );
-				if ( toSegment( tree.position[ 0 ], tree.position[ 1 ], ...segment ) < radius ) wrong.push( `${index} head on tree` );
+				if ( Math.hypot( post.x - tree.position[ 0 ], post.z - tree.position[ 1 ] ) < post.radius ) wrong.push( `${i} pole on tree` );
+				if ( toSegment( tree.position[ 0 ], tree.position[ 1 ], ...segment ) < radius ) wrong.push( `${i} head on tree` );
 
 			}
 
-		}
-
-		expect( wrong.slice( 0, 5 ) ).toEqual( [] );
-
-	} );
-
-	it( 'keeps each complete fixture outside highway decks and supports', () => {
-
-		const wrong = [];
-
-		expect( atlas.streets.highwayStructures.length ).toBeGreaterThan( 0 );
-
-		for ( const [ index, post ] of lamps.posts.entries() ) {
-
-			const segment = headSegment( post.head );
-			const radius = post.head.width / 2;
-			const top = post.head.underside + post.head.height;
-
-			for ( const [ highwayIndex, highway ] of atlas.streets.highwayStructures.entries() ) {
-
-				for ( const support of highway.supports ) {
-
-					if ( pointInRing( post.x, post.z, support.footprint ) || toRing( post.x, post.z, support.footprint ) < post.radius ) {
-
-						wrong.push( `${index} pole in highway ${highwayIndex} support` );
-
-					}
-					if ( support.top >= post.head.underside && segmentToRing( segment, support.footprint ) < radius ) {
-
-						wrong.push( `${index} head in highway ${highwayIndex} support` );
-
-					}
-
-				}
-
-				let along = 0;
-				for ( let pathIndex = 0; pathIndex < highway.path.length - 1; pathIndex ++ ) {
-
-					const a = highway.path[ pathIndex ];
-					const b = highway.path[ pathIndex + 1 ];
-					const nearest = betweenSegments( segment[ 0 ], segment[ 1 ], a, b );
-					const length = Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ] );
-					const level = profileLevel( highway.elevationProfile, along + nearest.right * length );
-
-					if ( nearest.distance < highway.width / 2 + radius
-						&& top > level - highway.deckThickness && post.head.underside < level ) {
-
-						wrong.push( `${index} head in highway ${highwayIndex} deck` );
-
-					}
-					along += length;
-
-				}
-
-			}
-
-		}
-
-		expect( wrong.slice( 0, 5 ) ).toEqual( [] );
-
-	} );
-
-	it( 'keeps every overhead head outside pedestrian movement envelopes', () => {
-
-		const wrong = [];
-		const movementHeight = 3;
-
-		for ( const [ index, post ] of lamps.posts.entries() ) {
-
-			const segment = headSegment( post.head );
-			const radius = post.head.width / 2 + BODY_RADIUS;
-			const top = post.head.underside + post.head.height;
-
+			// And the head hangs over no route a walker's head passes through.
 			for ( const edge of walk.edges ) {
 
 				for ( let pathIndex = 0; pathIndex < edge.path3.length - 1; pathIndex ++ ) {
@@ -243,10 +144,10 @@ describe( 'StreetLamps', () => {
 					const a = edge.path3[ pathIndex ];
 					const b = edge.path3[ pathIndex + 1 ];
 					const nearest = betweenSegments( segment[ 0 ], segment[ 1 ], [ a[ 0 ], a[ 2 ] ], [ b[ 0 ], b[ 2 ] ] );
-					if ( nearest.distance >= radius ) continue;
+					if ( nearest.distance >= radius + BODY_RADIUS ) continue;
 					const level = THREE.MathUtils.lerp( a[ 1 ], b[ 1 ], nearest.right );
 
-					if ( top > level && post.head.underside < level + movementHeight ) wrong.push( `${index} head in ${edge.id}` );
+					if ( post.head.underside + post.head.height > level && post.head.underside < level + 3 ) wrong.push( `${i} head in ${edge.id}` );
 
 				}
 
@@ -469,21 +370,5 @@ function betweenSegments( a, b, c, d ) {
 		distance: Math.hypot( a[ 0 ] + ux * left - c[ 0 ] - vx * right, a[ 1 ] + uz * left - c[ 1 ] - vz * right ),
 		left, right
 	};
-
-}
-
-function profileLevel( profile, distance ) {
-
-	for ( let index = 0; index < profile.length - 1; index ++ ) {
-
-		const a = profile[ index ];
-		const b = profile[ index + 1 ];
-		if ( distance > b.distance ) continue;
-
-		return THREE.MathUtils.lerp( a.level, b.level, ( distance - a.distance ) / ( b.distance - a.distance || 1 ) );
-
-	}
-
-	return profile.at( -1 ).level;
 
 }

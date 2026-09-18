@@ -55,7 +55,10 @@ describe( 'LauncherApp', () => {
 
 	} );
 
-	it( 'mounts the real menu before loading its validated catalog', async () => {
+	it( 'mounts one validated menu, only once, and refuses an incomplete API before mounting', async () => {
+
+		expect( () => new LauncherApp( { mount: document.body, api: { catalog: vi.fn() } } ) ).toThrow( 'continueGame' );
+		expect( document.body.children ).toHaveLength( 0 );
 
 		let release;
 		const catalog = new Promise( ( resolve ) => { release = resolve; } );
@@ -67,25 +70,29 @@ describe( 'LauncherApp', () => {
 		await starting;
 		expect( screen.getByRole( 'heading', { name: 'Salt Wharf' } ) ).toBeTruthy();
 
-	} );
-
-	it( 'mounts only once when start is called repeatedly', async () => {
-
-		const made = make();
-		await made.app.start();
 		await made.app.start();
 		expect( made.api.catalog ).toHaveBeenCalledOnce();
 		expect( document.querySelectorAll( '.main-menu' ) ).toHaveLength( 1 );
 
 	} );
 
-	it( 'continues through the API and navigates only after a valid play URL', async () => {
+	it( 'navigates only after a valid play URL and fails closed on an invalid one', async () => {
 
 		const made = make( api( { catalog: vi.fn().mockResolvedValue( { games: [ game ], cities: [] } ) } ) );
 		await made.app.start();
 		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Continue game' } ) );
 		await waitFor( () => expect( made.navigate ).toHaveBeenCalledWith( '/?mode=game&out=/out/rain' ) );
 		expect( made.api.continueGame ).toHaveBeenCalledWith( 'rain-game' );
+
+		document.body.replaceChildren();
+		const closed = make( api( {
+			catalog: vi.fn().mockResolvedValue( { games: [ game ], cities: [] } ),
+			continueGame: vi.fn().mockResolvedValue( { playUrl: '' } )
+		} ) );
+		await closed.app.start();
+		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Continue game' } ) );
+		await waitFor( () => expect( screen.getByRole( 'alert' ).textContent ).toContain( 'playUrl' ) );
+		expect( closed.navigate ).not.toHaveBeenCalled();
 
 	} );
 
@@ -120,22 +127,7 @@ describe( 'LauncherApp', () => {
 
 	} );
 
-	it( 'opens a template city without calling interior or quest generation', async () => {
-
-		const made = make();
-		await made.app.start();
-		const user = userEvent.setup();
-		await user.click( screen.getByRole( 'button', { name: 'New game' } ) );
-		await user.click( screen.getByRole( 'button', { name: 'Next' } ) );
-		await user.click( await screen.findByRole( 'button', { name: 'Play without quests' } ) );
-		await waitFor( () => expect( made.navigate ).toHaveBeenCalledWith( '/?mode=game&out=/out/rain' ) );
-		expect( made.api.createGame ).toHaveBeenCalledWith( { cityId: city.id, interiorIds: [], questId: null } );
-		expect( made.api.generateInstances ).not.toHaveBeenCalled();
-		expect( made.api.generateQuests ).not.toHaveBeenCalled();
-
-	} );
-
-	it( 'refreshes the catalog after game creation when the result omits it', async () => {
+	it( 'opens a template city without quests and refreshes the catalog the result omitted', async () => {
 
 		const apiValue = api( {
 			catalog: vi.fn()
@@ -145,17 +137,19 @@ describe( 'LauncherApp', () => {
 		} );
 		const made = make( apiValue );
 		await made.app.start();
-		made.app.view.createNew();
-		made.app.view.setCreationState( {
-			city, instances: { ids: [ 'p11' ], count: 1 }, quests: { id: 'rain-quests', mainSteps: 8, sideJobs: 3 }
-		} );
-		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Play' } ) );
+		const user = userEvent.setup();
+		await user.click( screen.getByRole( 'button', { name: 'New game' } ) );
+		await user.click( screen.getByRole( 'button', { name: 'Next' } ) );
+		await user.click( await screen.findByRole( 'button', { name: 'Play without quests' } ) );
 		await waitFor( () => expect( made.navigate ).toHaveBeenCalledWith( '/?mode=game&out=/out/rain' ) );
+		expect( apiValue.createGame ).toHaveBeenCalledWith( { cityId: city.id, interiorIds: [], questId: null } );
+		expect( apiValue.generateInstances ).not.toHaveBeenCalled();
+		expect( apiValue.generateQuests ).not.toHaveBeenCalled();
 		expect( apiValue.catalog ).toHaveBeenCalledTimes( 2 );
 
 	} );
 
-	it( 'locks a running generation stage and clears busy when it resolves', async () => {
+	it( 'locks a running generation stage and clears busy whether it resolves or fails', async () => {
 
 		let release;
 		const generated = new Promise( ( resolve ) => { release = resolve; } );
@@ -169,13 +163,9 @@ describe( 'LauncherApp', () => {
 		release( { city } );
 		await screen.findByRole( 'heading', { name: 'Playable interiors' } );
 
-	} );
-
-	it( 'shows generation failures in the wizard and clears the busy state', async () => {
-
-		const made = make( api( { generateCity: vi.fn().mockRejectedValue( new Error( 'atlas refused the seed' ) ) } ) );
-		await made.app.start();
-		const user = userEvent.setup();
+		document.body.replaceChildren();
+		const failing = make( api( { generateCity: vi.fn().mockRejectedValue( new Error( 'atlas refused the seed' ) ) } ) );
+		await failing.app.start();
 		await user.click( screen.getByRole( 'button', { name: 'New game' } ) );
 		await user.click( screen.getByRole( 'button', { name: 'Next' } ) );
 		await waitFor( () => expect( screen.getByRole( 'alert' ).textContent ).toContain( 'atlas refused the seed' ) );
@@ -183,58 +173,27 @@ describe( 'LauncherApp', () => {
 
 	} );
 
-	it( 'parses a local game file before import and renders the returned catalog', async () => {
-
-		const made = make();
-		await made.app.start();
-		const file = new File( [ JSON.stringify( { contractVersion: '1.0.0', game: 'rain' } ) ], 'rain.urbegame.json', { type: 'application/json' } );
-		await userEvent.setup().upload( made.app.view.file, file );
-		await waitFor( () => expect( made.api.importGame ).toHaveBeenCalledWith( { contractVersion: '1.0.0', game: 'rain' } ) );
-		expect( screen.getByRole( 'heading', { name: 'Salt Wharf' } ) ).toBeTruthy();
-
-	} );
-
-	it( 'rejects malformed local JSON before it reaches the API', async () => {
-
-		const made = make();
-		await made.app.start();
-		const file = new File( [ '{broken' ], 'broken.json', { type: 'application/json' } );
-		await userEvent.setup().upload( made.app.view.file, file );
-		await waitFor( () => expect( screen.getByRole( 'alert' ).textContent ).toContain( 'Could not load the game file' ) );
-		expect( made.api.importGame ).not.toHaveBeenCalled();
-
-	} );
-
-	it( 'downloads game and city documents with stable filenames', async () => {
+	it( 'parses a local game file before import, rejects malformed JSON and downloads stable filenames', async () => {
 
 		const made = make( api( { catalog: vi.fn().mockResolvedValue( { games: [ game ], cities: [ city ] } ) } ) );
 		await made.app.start();
 		const user = userEvent.setup();
+
 		await user.click( screen.getByRole( 'button', { name: 'Save copy' } ) );
 		await waitFor( () => expect( made.download ).toHaveBeenCalledWith( 'rain-game.urbegame.json', { kind: 'game' } ) );
 		await user.click( screen.getByRole( 'button', { name: 'Cities' } ) );
 		await user.click( screen.getByRole( 'button', { name: 'Export city' } ) );
 		await waitFor( () => expect( made.download ).toHaveBeenCalledWith( 'rain-city.urbecity.json', { kind: 'city' } ) );
 
-	} );
+		await user.upload( made.app.view.file, new File( [ '{broken' ], 'broken.json', { type: 'application/json' } ) );
+		await waitFor( () => expect( screen.getByRole( 'alert' ).textContent ).toContain( 'Could not load the game file' ) );
+		expect( made.api.importGame ).not.toHaveBeenCalled();
 
-	it( 'fails closed on an invalid continue response', async () => {
-
-		const made = make( api( {
-			catalog: vi.fn().mockResolvedValue( { games: [ game ], cities: [] } ),
-			continueGame: vi.fn().mockResolvedValue( { playUrl: '' } )
-		} ) );
-		await made.app.start();
-		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Continue game' } ) );
-		await waitFor( () => expect( screen.getByRole( 'alert' ).textContent ).toContain( 'playUrl' ) );
-		expect( made.navigate ).not.toHaveBeenCalled();
-
-	} );
-
-	it( 'rejects an incomplete API before mounting', () => {
-
-		expect( () => new LauncherApp( { mount: document.body, api: { catalog: vi.fn() } } ) ).toThrow( 'continueGame' );
-		expect( document.body.children ).toHaveLength( 0 );
+		await user.upload( made.app.view.file, new File(
+			[ JSON.stringify( { contractVersion: '1.0.0', game: 'rain' } ) ], 'rain.urbegame.json', { type: 'application/json' }
+		) );
+		await waitFor( () => expect( made.api.importGame ).toHaveBeenCalledWith( { contractVersion: '1.0.0', game: 'rain' } ) );
+		expect( screen.getByRole( 'heading', { name: 'Salt Wharf' } ) ).toBeTruthy();
 
 	} );
 

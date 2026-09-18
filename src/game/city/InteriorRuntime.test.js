@@ -137,7 +137,7 @@ const standing = ( draws ) => [ ...draws.values() ].reduce( ( total, one ) => to
 
 describe( 'the city draws every furnished floor from shared modules', () => {
 
-	it( 'loads each module file once and keeps one draw per module surface', async () => {
+	it( 'loads each module once, keeps one draw per surface, and cuts every part out of the published bounds', async () => {
 
 		const { catalog, modules, reads } = await openModules();
 
@@ -149,6 +149,47 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		const slots = catalog.modules.reduce( ( total, module ) => total + module.materialSlots.length, 0 );
 		expect( modules.drawCount ).toBe( slots );
 		expect( modules.drawCount ).toBe( 27 );
+
+		for ( const record of catalog.modules ) {
+
+			const published = modules.boundsOf( record.id );
+			const low = published.origin.map( ( value ) => - value );
+			const high = published.size.map( ( value, axis ) => value - published.origin[ axis ] );
+
+			for ( const part of partsOf( record.id, published ) ) for ( let axis = 0; axis < 3; axis ++ ) {
+
+				expect( part[ axis ], `${record.id} axis ${axis}` ).toBeGreaterThanOrEqual( low[ axis ] - 1e-6 );
+				expect( part[ axis + 3 ], `${record.id} axis ${axis}` ).toBeLessThanOrEqual( high[ axis ] + 1e-6 );
+
+			}
+
+		}
+
+		// Thirteen treads, one cuboid each, each one rising over the last.
+		const treads = partsOf( 'stair-flight-13', modules.boundsOf( 'stair-flight-13' ) );
+		expect( treads ).toHaveLength( 13 );
+		expect( treads.map( ( part ) => part[ 4 ] ) ).toEqual( [ ...treads ].map( ( part ) => part[ 4 ] ).sort( ( a, b ) => a - b ) );
+
+		// A door frame is two jambs and a lintel: the doorway between them is a
+		// real hole, not a sealed bounding box.
+		const frame = partsOf( 'door-frame', modules.boundsOf( 'door-frame' ) );
+		expect( frame ).toHaveLength( 3 );
+		expect( frame.some( ( part ) => part[ 0 ] <= 0 && part[ 3 ] >= 0 && part[ 1 ] < 1 ) ).toBe( false );
+
+		// A re-authored module carries its parts: a wider, taller doorway keeps
+		// its jambs on the published edges and its lintel under the published top.
+		const wider = partsOf( 'door-frame', { size: [ 2.36, 3, 0.14 ], origin: [ 1.18, 0, 0.07 ] } );
+		expect( wider.map( ( part ) => [ metres( part[ 0 ] ), metres( part[ 3 ] ) ] ) )
+			.toEqual( [ [ - 1.18, - 1.1 ], [ 1.1, 1.18 ], [ - 1.18, 1.18 ] ] );
+		expect( wider[ 2 ][ 1 ] ).toBeCloseTo( 2.92, 6 );
+
+		// A flight's treads divide the published depth, whatever it is.
+		const deeper = partsOf( 'stair-flight-13', { size: [ 1.45, 3.19, 5.2 ], origin: [ 0, - 0.02, 0 ] } );
+		expect( deeper[ 1 ][ 2 ] ).toBeCloseTo( 0.4, 6 );
+
+		// And a module too small for its own members is a desync, not a collider.
+		expect( () => partsOf( 'door-frame', { size: [ 0.1, 2.58, 0.14 ], origin: [ 0.05, 0, 0.07 ] } ) )
+			.toThrow( /E_INTERIOR_MODULE/ );
 
 		modules.dispose();
 
@@ -170,92 +211,17 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		const at = new THREE.Vector3().setFromMatrixPosition( matrixOf( model, band, wall ) );
 		expect( at.y ).toBeCloseTo( wall.position[ 1 ] + 4.5, 6 );
 
+		// Every middle floor reads the one middle table and differs only by height.
+		const middles = [ 1, 2, 3 ].map( ( floor ) => bandOf( model, floor ).record );
+		expect( middles.map( ( record ) => record.layout ) ).toEqual( [ 'middle', 'middle', 'middle' ] );
+		expect( new Set( middles.map( ( record ) => record.placements ) ).size ).toBe( 1 );
+		expect( middles.map( ( record ) => record.elevation ) ).toEqual( [ 4.5, 9, 13.5 ] );
+
 		// Walking far enough away drops the building and every copy with it.
 		model.update( { x: 400, y: 0, z: 400 } );
 		expect( standing( model.modules.modules ) ).toBe( 0 );
 		expect( standing( model.props.props ) ).toBe( 0 );
 		expect( model.rooms ).toHaveLength( 0 );
-
-	} );
-
-	it( 'makes every module a cuboid and a stair flight the run of steps it is', async () => {
-
-		const model = await stream( { props: false } );
-
-		await settle( model, feetOn( 0 ) );
-
-		const { boxes } = model.solid.get( 'p1:0' );
-		expect( boxes.length ).toBeGreaterThan( 0 );
-		expect( boxes.every( ( box ) => box.center.length === 3 && box.halfExtents.length === 3
-			&& box.center.every( Number.isFinite ) && box.halfExtents.every( ( half ) => half > 0 )
-			&& Number.isFinite( box.rotationY ) ) ).toBe( true );
-
-		// Thirteen treads, one cuboid each, each one rising over the last.
-		const treads = partsOf( 'stair-flight-13', model.modules.boundsOf( 'stair-flight-13' ) );
-		expect( treads ).toHaveLength( 13 );
-		expect( treads.map( ( part ) => part[ 4 ] ) ).toEqual( [ ...treads ].map( ( part ) => part[ 4 ] ).sort( ( a, b ) => a - b ) );
-
-		// A door frame is two jambs and a lintel: the doorway between them is a
-		// real hole, not a sealed bounding box.
-		const frame = partsOf( 'door-frame', model.modules.boundsOf( 'door-frame' ) );
-		expect( frame ).toHaveLength( 3 );
-		expect( frame.some( ( part ) => part[ 0 ] <= 0 && part[ 3 ] >= 0 && part[ 1 ] < 1 ) ).toBe( false );
-
-	} );
-
-	it( 'cuts every module\'s parts out of the bounds the catalog publishes', async () => {
-
-		const { catalog, modules } = await openModules();
-
-		for ( const record of catalog.modules ) {
-
-			const published = modules.boundsOf( record.id );
-			const low = published.origin.map( ( value ) => - value );
-			const high = published.size.map( ( value, axis ) => value - published.origin[ axis ] );
-
-			for ( const part of partsOf( record.id, published ) ) for ( let axis = 0; axis < 3; axis ++ ) {
-
-				expect( part[ axis ], `${record.id} axis ${axis}` ).toBeGreaterThanOrEqual( low[ axis ] - 1e-6 );
-				expect( part[ axis + 3 ], `${record.id} axis ${axis}` ).toBeLessThanOrEqual( high[ axis ] + 1e-6 );
-
-			}
-
-		}
-
-		// A re-authored module carries its parts: a wider, taller doorway keeps
-		// its jambs on the published edges and its lintel under the published top.
-		const wider = partsOf( 'door-frame', { size: [ 2.36, 3, 0.14 ], origin: [ 1.18, 0, 0.07 ] } );
-		expect( wider.map( ( part ) => [ metres( part[ 0 ] ), metres( part[ 3 ] ) ] ) )
-			.toEqual( [ [ - 1.18, - 1.1 ], [ 1.1, 1.18 ], [ - 1.18, 1.18 ] ] );
-		expect( wider[ 2 ][ 1 ] ).toBeCloseTo( 2.92, 6 );
-
-		// A flight's treads divide the published depth, whatever it is.
-		const deeper = partsOf( 'stair-flight-13', { size: [ 1.45, 3.19, 5.2 ], origin: [ 0, - 0.02, 0 ] } );
-		expect( deeper[ 1 ][ 2 ] ).toBeCloseTo( 0.4, 6 );
-
-		// And a module too small for its own members is a desync, not a collider.
-		expect( () => partsOf( 'door-frame', { size: [ 0.1, 2.58, 0.14 ], origin: [ 0.05, 0, 0.07 ] } ) )
-			.toThrow( /E_INTERIOR_MODULE/ );
-
-		modules.dispose();
-
-	} );
-
-	it( 'gives every middle floor the one middle layout at its own elevation', async () => {
-
-		const model = await stream( { props: false } );
-
-		await settle( model, feetOn( 2 ) );
-
-		const middles = [ 1, 2, 3 ].map( ( floor ) => bandOf( model, floor ).record );
-		expect( middles.map( ( record ) => record.layout ) ).toEqual( [ 'middle', 'middle', 'middle' ] );
-		// One table, read once, standing at three heights.
-		expect( new Set( middles.map( ( record ) => record.placements ) ).size ).toBe( 1 );
-		expect( middles.map( ( record ) => record.elevation ) ).toEqual( [ 4.5, 9, 13.5 ] );
-
-		const solid = [ 1, 2, 3 ].map( ( floor ) => model.solid.get( `p1:${floor}` )?.boxes ).filter( Boolean );
-		expect( solid.length ).toBeGreaterThan( 1 );
-		expect( new Set( solid.map( ( boxes ) => boxes.length ) ).size ).toBe( 1 );
 
 	} );
 
@@ -311,7 +277,7 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 	} );
 
-	it( 'keeps the floors around the player standing, solid, and nothing else', async () => {
+	it( 'keeps the floors around the player standing, solid as cuboids, and nothing else', async () => {
 
 		const elevators = new Elevators( factory );
 		const model = await stream( { props: false, elevators } );
@@ -321,6 +287,14 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		expect( [ ...model.solid.keys() ].sort() ).toEqual( [ 'p1:0', 'p1:1' ] );
 		expect( bandOf( model, 0 ).group.visible ).toBe( true );
 		expect( bandOf( model, 4 ).handles ).toBe( null );
+
+		// Every solid part is a cuboid, never a trimesh.
+		const { boxes } = model.solid.get( 'p1:0' );
+		expect( boxes.length ).toBeGreaterThan( 0 );
+		expect( boxes.every( ( box ) => box.center.length === 3 && box.halfExtents.length === 3
+			&& box.center.every( Number.isFinite ) && box.halfExtents.every( ( half ) => half > 0 )
+			&& Number.isFinite( box.rotationY ) ) ).toBe( true );
+
 		// The lift is registered from the floor records, so its car and the
 		// landing the player stands at exist as soon as the floor does.
 		expect( elevators.shafts ).toHaveLength( 1 );

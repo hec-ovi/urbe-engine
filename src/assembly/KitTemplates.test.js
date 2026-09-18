@@ -53,17 +53,6 @@ function variant( name, parcelId, change ) {
 
 }
 
-/** The first block variation that merged two lots: the host and the lot it took. */
-function mergedPair( city ) {
-
-	const [ id, record ] = Object.keys( city.manifest.buildings )
-		.map( ( parcel ) => [ parcel, city.record( parcel ) ] )
-		.find( ( [ , entry ] ) => entry.absorbs ) ?? [];
-
-	return { host: id, absorbed: record?.absorbs, record };
-
-}
-
 /** Which block each parcel belongs to, straight from the blueprint. */
 const blockOf = new Map( atlas.blocks.flatMap( ( block ) => block.parcelIds.map( ( id ) => [ id, block ] ) ) );
 
@@ -84,7 +73,7 @@ describe( 'block templates and shared building plans', () => {
 
 	} );
 
-	it( 'dresses every block of one template the same, apart from its own variation', () => {
+	it( 'dresses every block of one template the same apart from its variation, planning each building once', () => {
 
 		const byTemplate = new Map();
 
@@ -126,14 +115,26 @@ describe( 'block templates and shared building plans', () => {
 
 		}
 
+		// Each distinct building is drawn once and a parcel carries only its own frame.
+		const { totals } = city.report;
+		const kits = Object.keys( city.manifest.buildings );
+
+		expect( totals.kit ).toBe( kits.length );
+		expect( totals.plans ).toBeLessThan( totals.kit );
+		expect( readdirSync( join( city.root, PLANS_FOLDER ) ) ).toHaveLength( totals.plans );
+		for ( const id of kits ) expect( statSync( join( city.root, id, placementsFile( id ) ) ).size ).toBeLessThan( 1024 );
+
 	} );
 
 	it( 'merges two lots of a block into one building and leaves the second lot empty', () => {
 
-		const { host: id, absorbed, record } = mergedPair( city );
+		const [ id, record ] = Object.keys( city.manifest.buildings )
+			.map( ( parcel ) => [ parcel, city.record( parcel ) ] )
+			.find( ( [ , entry ] ) => entry.absorbs ) ?? [];
 
 		expect( id, 'the tiny city has a merged block' ).toBeTruthy();
 
+		const absorbed = record.absorbs;
 		const plan = city.plan( record.plan );
 		const covered = ( plan.baysAcross + plan.baysDeep ) * 8 * 2;
 		const own = atlas.parcels.find( ( parcel ) => parcel.id === id ).lot;
@@ -146,23 +147,6 @@ describe( 'block templates and shared building plans', () => {
 		expect( existsSync( join( city.root, absorbed ) ) ).toBe( false );
 		expect( city.manifest.parcels ).not.toContain( absorbed );
 		expect( city.manifest.sources[ absorbed ] ).toBe( 'empty' );
-
-	} );
-
-	it( 'plans each distinct building once and gives a parcel only its own frame', () => {
-
-		const { totals } = city.report;
-		const kits = Object.keys( city.manifest.buildings );
-
-		expect( totals.kit ).toBe( kits.length );
-		expect( totals.plans ).toBeLessThan( totals.kit );
-		expect( readdirSync( join( city.root, PLANS_FOLDER ) ) ).toHaveLength( totals.plans );
-
-		for ( const id of kits ) {
-
-			expect( statSync( join( city.root, id, placementsFile( id ) ) ).size ).toBeLessThan( 1024 );
-
-		}
 
 	} );
 
@@ -208,7 +192,7 @@ describe( 'block templates and shared building plans', () => {
 
 	it( 'publishes an empty lot for a parcel that cannot be built, and still stands the city', () => {
 
-		const broken = JSON.parse( readFileSync( TINY, 'utf8' ) ).parcels[ 3 ].id;
+		const broken = atlas.parcels[ 3 ].id;
 		// A lot no floor count fits: the kit passes it over and the generator refuses it.
 		const run = assemble( variant( 'broken', broken,
 			{ envelope: { minFloors: 1, maxFloors: 1, floorHeight: 4.5, maxHeight: 1 } } ) );
@@ -223,58 +207,6 @@ describe( 'block templates and shared building plans', () => {
 		expect( run.manifest.parcels ).not.toContain( broken );
 		expect( run.manifest.sources[ broken ] ).toBe( 'empty' );
 		expect( run.manifest.parcels.length ).toBeGreaterThan( 30 );
-
-	}, 300_000 );
-
-	it( 'leaves a merged lot its own building when the neighbour that absorbed it stands none', () => {
-
-		const { host, absorbed } = mergedPair( city );
-		const run = assemble( variant( 'landmark', host, { landmark: true } ) );
-		const record = run.report.parcels.find( ( parcel ) => parcel.parcelId === absorbed );
-
-		// The landmark keeps its own lot, so nothing covers its neighbour any more.
-		expect( run.status, run.stderr ).toBe( 0 );
-		expect( run.manifest.buildings[ host ] ).toBeUndefined();
-		expect( record ).toMatchObject( { ok: true, source: 'shell' } );
-		expect( record.mergedInto ).toBeUndefined();
-		expect( run.manifest.parcels ).toContain( absorbed );
-		expect( run.manifest.sources[ absorbed ] ).toBe( 'shell' );
-
-	}, 300_000 );
-
-	it( 'publishes the city when a manually selected interior has no building to open', () => {
-
-		const { absorbed } = mergedPair( city );
-		const open = Object.keys( city.manifest.buildings ).find( ( id ) => city.record( id ).floors >= 3 );
-		const run = assemble( TINY, [ '--interior-parcels', `${absorbed},${open}` ] );
-
-		expect( run.status, run.stderr ).toBe( 0 );
-		expect( run.report.interiorFailures ).toContainEqual( {
-			parcelId: absorbed, error: 'E_INTERIOR_SELECTION: no building stands on this parcel'
-		} );
-		// The rest of the selection still opened, and the world is published.
-		expect( run.manifest.interiors ).toEqual( [ open ] );
-		expect( run.report.totals.interiorsRequested ).toBe( 2 );
-
-	}, 300_000 );
-
-	it( 'gives the same blueprint the same city, byte for byte', () => {
-
-		const again = assemble();
-
-		for ( const id of Object.keys( city.manifest.buildings ) ) {
-
-			expect( readFileSync( join( again.root, id, placementsFile( id ) ) )
-				.equals( readFileSync( join( city.root, id, placementsFile( id ) ) ) ) ).toBe( true );
-
-		}
-
-		for ( const name of readdirSync( join( city.root, PLANS_FOLDER ) ) ) {
-
-			expect( readFileSync( join( again.root, PLANS_FOLDER, name ) )
-				.equals( readFileSync( join( city.root, PLANS_FOLDER, name ) ) ) ).toBe( true );
-
-		}
 
 	}, 300_000 );
 

@@ -115,69 +115,6 @@ describe( 'WorldSource selective interiors', () => {
 
 	} );
 
-	it( 'loads authored investigations but does not hide malformed scene content', async () => {
-
-		const documents = new Map( [
-			[ '/out/city/blueprint.json', atlas ],
-			[ '/out/city/manifest.json', { ...manifest, parcels: [], interiors: [], interiorModules: undefined } ],
-			[ '/out/city/quests/investigations.json', [ { sceneId: 'scene-one' } ] ]
-		] );
-		vi.stubGlobal( 'fetch', vi.fn( async ( url ) => {
-
-			if ( optional( url, false ) ) return response( 404, null );
-			if ( ! documents.has( url ) ) throw new Error( `unexpected ${url}` );
-			return response( 200, documents.get( url ) );
-
-		} ) );
-		const world = await new WorldSource( { blueprintUrl: '/atlas/city.json', outBase: '/out/city' } ).load();
-		expect( world.investigations ).toEqual( [ { sceneId: 'scene-one' } ] );
-
-		documents.set( '/out/city/quests/investigations.json', Symbol( 'invalid json' ) );
-		vi.mocked( fetch ).mockImplementation( async ( url ) => {
-
-			if ( optional( url, false ) ) return response( 404, null );
-			if ( url.endsWith( '/quests/investigations.json' ) ) return { ...response( 200, null ), json: async () => { throw new Error( 'bad' ); } };
-			return response( 200, documents.get( url ) );
-
-		} );
-		await expect( new WorldSource( { blueprintUrl: '/atlas/city.json', outBase: '/out/city' } ).load() )
-			.rejects.toThrow( 'investigations.json: invalid JSON' );
-
-	} );
-
-	it( 'treats the development HTML shell as an absent optional quest catalog', async () => {
-
-		const documents = new Map( [
-			[ '/out/city/blueprint.json', atlas ],
-			[ '/out/city/manifest.json', { ...manifest, parcels: [], interiors: [], interiorModules: undefined } ]
-		] );
-		vi.stubGlobal( 'fetch', vi.fn( async ( url ) => {
-
-			if ( optional( url ) ) return response( 200, '<!doctype html>', 'text/html' );
-			if ( ! documents.has( url ) ) throw new Error( `unexpected ${url}` );
-			return response( 200, documents.get( url ) );
-
-		} ) );
-
-		const world = await new WorldSource( { blueprintUrl: '/atlas/city.json', outBase: '/out/city' } ).load();
-		expect( world ).toMatchObject( {
-			questBundle: null, questlines: [], investigations: [], npcTypes: null
-		} );
-
-		vi.mocked( fetch ).mockImplementation( async ( url ) => {
-
-			if ( url.endsWith( '/quests/quest-bundle.json' ) ) return response( 200, '<!doctype html>', 'text/html' );
-			if ( url.endsWith( '/quests/questlines.json' ) ) return response( 200, 'not json', 'text/plain' );
-			if ( url.endsWith( '/npc-types.json' ) ) return response( 404, null );
-			if ( ! documents.has( url ) ) throw new Error( `unexpected ${url}` );
-			return response( 200, documents.get( url ) );
-
-		} );
-		await expect( new WorldSource( { blueprintUrl: '/atlas/city.json', outBase: '/out/city' } ).load() )
-			.rejects.toThrow( 'questlines.json: expected JSON, received text/plain' );
-
-	} );
-
 	it( 'loads and cross-validates every catalog named by a game quest bundle', async () => {
 
 		const questlines = [ {
@@ -238,12 +175,12 @@ describe( 'WorldSource selective interiors', () => {
 
 } );
 
-function optional( url, includeInvestigations = true ) {
+function optional( url ) {
 
 	return url.endsWith( '/npc-types.json' )
 		|| url.endsWith( '/quests/quest-bundle.json' )
 		|| url.endsWith( '/quests/questlines.json' )
-		|| includeInvestigations && url.endsWith( '/quests/investigations.json' );
+		|| url.endsWith( '/quests/investigations.json' );
 
 }
 

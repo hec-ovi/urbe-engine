@@ -8,7 +8,7 @@ import { hitchReportPlugin } from './hitchReportPlugin.js';
 
 const snapshot = () => ( { game: 'review', stats: { gpuMs: 7 }, memory: { textures: 4 }, position: [ 1, 2, 3 ] } );
 
-it( 'sends bounded gap reports once per second and collects scene counters only then', () => {
+it( 'sends bounded gap reports once per second, collects scene counters only then, and survives a failed send', () => {
 
 	const send = vi.fn(), collect = vi.fn( snapshot );
 	const reports = new FrameReports( send, collect );
@@ -22,6 +22,12 @@ it( 'sends bounded gap reports once per second and collects scene counters only 
 	expect( report.hitches[ 0 ].notes ).toEqual( [ 'render 55 ms' ] );
 	reports.frame( 2000, 16, [] );
 	expect( send.mock.calls[ 1 ][ 0 ].hitches ).toEqual( [] );
+
+	const warning = vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
+	const failing = new FrameReports( () => { throw new Error( 'closed' ); }, snapshot );
+	expect( () => failing.frame( 1000, 60, [] ) ).not.toThrow();
+	expect( warning ).toHaveBeenCalledWith( 'performance report: closed' );
+	warning.mockRestore();
 
 } );
 
@@ -45,18 +51,5 @@ it( 'writes schema-valid development events to local storage and discards malfor
 		} );
 
 	} finally { await rm( directory, { recursive: true, force: true } ); }
-
-} );
-
-it( 'keeps gameplay running when reporting fails', () => {
-
-	const warning = vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
-	try {
-
-		const reports = new FrameReports( () => { throw new Error( 'closed' ); }, snapshot );
-		expect( () => reports.frame( 1000, 60, [] ) ).not.toThrow();
-		expect( warning ).toHaveBeenCalledWith( 'performance report: closed' );
-
-	} finally { warning.mockRestore(); }
 
 } );

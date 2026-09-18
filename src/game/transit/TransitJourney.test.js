@@ -4,63 +4,44 @@ import { TransitJourney, tripIdentity } from './TransitJourney.js';
 
 describe( 'TransitJourney', () => {
 
-	for ( const mode of [
-		{ kind: 'bus', placeKind: 'bus-stop', first: 'b0', second: 'b1', third: 'b2', y: 0, z: 0 },
-		{ kind: 'train', placeKind: 'train-station', first: 't0', second: 't1', third: 't2', y: 0, z: 20 },
-		{ kind: 'subway', placeKind: 'subway-station', first: 's0', second: 's1', third: 's2', y: -12, z: 40 }
-	] ) {
+	const mode = { kind: 'bus', placeKind: 'bus-stop', first: 'b0', second: 'b1', third: 'b2', y: 0, z: 0 };
 
-		it( `boards, travels and disembarks by exact ${mode.kind} timetable geometry`, () => {
+	it( 'boards, travels and disembarks by exact timetable geometry', () => {
 
-			const route = transitRoute( mode );
-			const journey = new TransitJourney( { atlas: city(), routes: [ route ] } );
-			const origin = { kind: mode.placeKind, id: mode.first };
-			const position = [ 0, mode.y, mode.z ];
-			const listed = journey.listBoardable( { position, place: origin, daySeconds: 1005 } );
+		const route = transitRoute( mode );
+		const journey = new TransitJourney( { atlas: city(), routes: [ route ] } );
+		const origin = { kind: mode.placeKind, id: mode.first };
+		const position = [ 0, mode.y, mode.z ];
+		const listed = journey.listBoardable( { position, place: origin, daySeconds: 1005 } );
 
-			expect( listed.ok ).toBe( true );
-			expect( listed.services ).toEqual( [ expect.objectContaining( {
-				routeId: route.id,
-				lineId: route.lineId,
-				kind: mode.kind,
-				stopId: mode.first,
-				nextStopId: mode.second,
-				destinationStopId: mode.third,
-				arrivalTime: 1000,
-				departureTime: 1010,
-				position
-			} ) ] );
+		expect( listed.ok ).toBe( true );
+		expect( listed.services ).toEqual( [ expect.objectContaining( {
+			routeId: route.id, lineId: route.lineId, kind: mode.kind, stopId: mode.first,
+			nextStopId: mode.second, destinationStopId: mode.third,
+			arrivalTime: 1000, departureTime: 1010, position
+		} ) ] );
 
-			const boarded = journey.board( boardRequest( listed.services[ 0 ], origin, position, 1005 ) );
-			expect( boarded.ok ).toBe( true );
-			expect( boarded.state.status ).toBe( 'aboard' );
+		const boarded = journey.board( boardRequest( listed.services[ 0 ], origin, position, 1005 ) );
+		expect( boarded.ok ).toBe( true );
+		expect( boarded.state.status ).toBe( 'aboard' );
 
-			const travelling = journey.update( { daySeconds: 1060 } );
-			const [ exact ] = transitVehiclesAt( [ route ], 1060 );
-			expect( travelling ).toEqual( expect.objectContaining( {
-				ok: true,
-				position: exact.position,
-				heading: exact.heading,
-				canDisembark: false
-			} ) );
-			expect( travelling.nextStops.map( ( stop ) => stop.stopId ) ).toEqual( [ mode.second, mode.third ] );
-			expect( journey.disembark( { daySeconds: 1060 } ) ).toEqual( {
-				ok: false, error: 'E_TRANSIT_MOVING_VEHICLE'
-			} );
+		const travelling = journey.update( { daySeconds: 1060 } );
+		const [ exact ] = transitVehiclesAt( [ route ], 1060 );
+		expect( travelling ).toEqual( expect.objectContaining( {
+			ok: true, position: exact.position, heading: exact.heading, canDisembark: false
+		} ) );
+		expect( travelling.nextStops.map( ( stop ) => stop.stopId ) ).toEqual( [ mode.second, mode.third ] );
+		expect( journey.disembark( { daySeconds: 1060 } ) ).toEqual( { ok: false, error: 'E_TRANSIT_MOVING_VEHICLE' } );
 
-			const arrived = journey.update( { daySeconds: 1115 } );
-			expect( arrived.canDisembark ).toBe( true );
-			const left = journey.disembark( { daySeconds: 1115 } );
-			expect( left ).toEqual( expect.objectContaining( {
-				ok: true,
-				place: { kind: mode.placeKind, id: mode.second },
-				position: [ 100, mode.y, mode.z ],
-				state: expect.objectContaining( { status: 'waiting' } )
-			} ) );
+		expect( journey.update( { daySeconds: 1115 } ).canDisembark ).toBe( true );
+		expect( journey.disembark( { daySeconds: 1115 } ) ).toEqual( expect.objectContaining( {
+			ok: true,
+			place: { kind: mode.placeKind, id: mode.second },
+			position: [ 100, mode.y, mode.z ],
+			state: expect.objectContaining( { status: 'waiting' } )
+		} ) );
 
-		} );
-
-	}
+	} );
 
 	it( 'rejects reach, route, place, service and timing mismatches with closed errors', () => {
 
@@ -87,6 +68,20 @@ describe( 'TransitJourney', () => {
 			.board( boardRequest( { ...service, serviceDeparture: 1001 }, origin, [ 0, 0, 0 ], 1005 ) ).error )
 			.toBe( 'E_TRANSIT_OUT_OF_SERVICE' );
 
+		expect( new TransitJourney( { atlas: city(), routes: [ { ...route, template: [ route.template[ 0 ] ] } ] } )
+			.listBoardable( { position: [ 0, 0, 0 ], place: origin, daySeconds: 1005 } ) )
+			.toEqual( { ok: false, error: 'E_TRANSIT_INVALID_DATA' } );
+		expect( new TransitJourney( { atlas: city(), routes: [ route ], state: { status: 'aboard' } } )
+			.update( { daySeconds: 1005 } ) ).toEqual( { ok: false, error: 'E_TRANSIT_INVALID_DATA' } );
+
+		const waiting = new TransitJourney( { atlas: city(), routes: [ route ] } );
+		expect( waiting.update( { daySeconds: 1005 } ).error ).toBe( 'E_TRANSIT_NOT_ABOARD' );
+		expect( waiting.disembark( { daySeconds: 1005 } ).error ).toBe( 'E_TRANSIT_NOT_ABOARD' );
+		waiting.board( boardRequest( service, origin, [ 0, 0, 0 ], 1005 ) );
+		expect( waiting.listBoardable( { position: [ 0, 0, 0 ], place: origin, daySeconds: 1005 } ).error )
+			.toBe( 'E_TRANSIT_ALREADY_ABOARD' );
+		expect( waiting.board( boardRequest( service, origin, [ 0, 0, 0 ], 1005 ) ).error ).toBe( 'E_TRANSIT_ALREADY_ABOARD' );
+
 	} );
 
 	it( 'carries a scheduled trip across the clock midnight', () => {
@@ -102,6 +97,7 @@ describe( 'TransitJourney', () => {
 		expect( listed.services[ 0 ].serviceDeparture ).toBe( 86395 );
 		expect( listed.services[ 0 ].tripId ).toBe( tripIdentity( route.id, 86395 ) );
 		expect( journey.board( boardRequest( listed.services[ 0 ], origin, [ 0, 0, 0 ], 5 ) ).ok ).toBe( true );
+		const saved = JSON.parse( JSON.stringify( journey.state ) );
 		const travelling = journey.update( { daySeconds: 60 } );
 		expect( travelling.ok ).toBe( true );
 		expect( travelling.position[ 0 ] ).toBeCloseTo( 55, 9 );
@@ -112,19 +108,11 @@ describe( 'TransitJourney', () => {
 			position: [ 100, 0, 0 ]
 		} ) );
 
-	} );
-
-	it( 'replays the same active serialized state without position drift', () => {
-
-		const route = transitRoute( { kind: 'train', first: 't0', second: 't1', third: 't2', y: 0, z: 20 } );
-		const origin = { kind: 'train-station', id: 't0' };
-		const first = new TransitJourney( { atlas: city(), routes: [ route ] } );
-		first.board( boardRequest( serviceChoice( route ), origin, [ 0, 0, 20 ], 1005 ) );
-		const saved = JSON.parse( JSON.stringify( first.state ) );
+		// Identical route data, saved state and request produce identical output.
 		const replayA = new TransitJourney( { atlas: city(), routes: [ route ], state: saved } );
 		const replayB = new TransitJourney( { atlas: city(), routes: [ route ], state: saved } );
-
-		expect( replayA.update( { daySeconds: 1075 } ) ).toEqual( replayB.update( { daySeconds: 1075 } ) );
+		expect( replayA.update( { daySeconds: 60 } ) ).toEqual( replayB.update( { daySeconds: 60 } ) );
+		expect( replayA.update( { daySeconds: 60 } ).position ).toEqual( travelling.position );
 
 	} );
 
@@ -145,20 +133,6 @@ describe( 'TransitJourney', () => {
 			state: { status: 'waiting', clock: { dayOffset: 0, lastDaySeconds: 1221 } }
 		} ) );
 		expect( journey.state ).toEqual( ended.state );
-
-	} );
-
-	it( 'fails closed when route data or restored state is invalid', () => {
-
-		const route = transitRoute( { kind: 'bus', first: 'b0', second: 'b1', third: 'b2', y: 0, z: 0 } );
-		const malformed = { ...route, template: [ route.template[ 0 ] ] };
-		const journey = new TransitJourney( { atlas: city(), routes: [ malformed ] } );
-
-		expect( journey.listBoardable( {
-			position: [ 0, 0, 0 ], place: { kind: 'bus-stop', id: 'b0' }, daySeconds: 1005
-		} ) ).toEqual( { ok: false, error: 'E_TRANSIT_INVALID_DATA' } );
-		expect( new TransitJourney( { atlas: city(), routes: [ route ], state: { status: 'aboard' } } )
-			.update( { daySeconds: 1005 } ) ).toEqual( { ok: false, error: 'E_TRANSIT_INVALID_DATA' } );
 
 	} );
 

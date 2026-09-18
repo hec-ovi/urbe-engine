@@ -8,7 +8,7 @@ describe( 'game URL configuration', () => {
 
 	afterEach( () => window.history.replaceState( {}, '', '/' ) );
 
-	it( 'binds a catalog game to its own generated directory', () => {
+	it( 'binds a catalog game to its own generated directory and keeps an explicit preview directory', () => {
 
 		window.history.replaceState( {}, '', '/?mode=game&game=night-shift&out=/out/wrong' );
 		expect( GameConfig.fromUrl() ).toMatchObject( {
@@ -16,19 +16,17 @@ describe( 'game URL configuration', () => {
 			outBase: '/out/games/night-shift'
 		} );
 
-	} );
-
-	it( 'preserves explicit city preview directories when there is no saved game', () => {
-
 		window.history.replaceState( {}, '', '/?mode=game&out=/out/cities/small' );
 		expect( GameConfig.fromUrl() ).toMatchObject( { gameId: null, outBase: '/out/cities/small' } );
 
 	} );
 
-	it( 'keeps one night lighting setting while the simulation clock advances', () => {
+	it( 'keeps one night lighting setting while the clock advances, and bounds requested population windows', () => {
 
-		window.history.replaceState( {}, '', '/?mode=game&hour=12' );
+		window.history.replaceState( {}, '', '/?mode=game&hour=12&crowd=500&cars=500&crowdRadius=500&carRadius=500' );
 		const config = GameConfig.fromUrl();
+		expect( config ).toMatchObject( { maxCrowd: 500, maxCars: 500, crowdRadius: 500, carRadius: 500 } );
+
 		const clock = new GameClock( { startHour: config.startHour, scale: config.timeScale } );
 		expect( clock.timeMin ).toBe( 720 );
 		expect( dayCycle( config.lightingHour ) ).toMatchObject( {
@@ -38,17 +36,7 @@ describe( 'game URL configuration', () => {
 		expect( clock.timeMin ).toBe( 2880 );
 		expect( config.lightingHour ).toBe( 21 );
 
-	} );
-
-	it( 'retains the requested 500-person and 500-car performance load', () => {
-
-		window.history.replaceState( {}, '', '/?mode=game&crowd=500&cars=500&crowdRadius=500&carRadius=500' );
-		expect( GameConfig.fromUrl() ).toMatchObject( { maxCrowd: 500, maxCars: 500, crowdRadius: 500, carRadius: 500 } );
-
-	} );
-
-	it( 'keeps ordinary population windows and bounds explicit radii and capacities', () => {
-
+		window.history.replaceState( {}, '', '/' );
 		expect( GameConfig.fromUrl() ).toMatchObject( {
 			maxCrowd: 0, maxCars: 0, crowdRadius: 90, carRadius: 110
 		} );

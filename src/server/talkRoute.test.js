@@ -26,7 +26,7 @@ describe( 'NPC dialogue HTTP boundary', () => {
 
 	} );
 
-	it( 'rejects malformed, unknown and invalid request values before dialogue inference', async () => {
+	it( 'refuses malformed or invalid requests before inference and reports service failures as a bad gateway', async () => {
 
 		const service = { reply: vi.fn() };
 		const origin = await serve( service );
@@ -37,42 +37,32 @@ describe( 'NPC dialogue HTTP boundary', () => {
 			JSON.stringify( { ...talkRequest(), out: '/out/../src' } )
 		] ) {
 
-			const response = await fetch( `${origin}/api/talk`, {
-				method: 'POST', headers: { 'Content-Type': 'application/json' }, body
-			} );
+			const response = await post( origin, body );
 			expect( response.status ).toBe( 400 );
-			expect( await response.json() ).toEqual( { error: expect.any( String ) } );
+			expect( response.body ).toEqual( { error: expect.any( String ) } );
 
 		}
 		expect( service.reply ).not.toHaveBeenCalled();
 
+		for ( const failure of [ new Error( 'text model unavailable' ), new SyntaxError( 'model or world response is malformed' ) ] ) {
+
+			const failing = await serve( { reply: vi.fn( async () => { throw failure; } ) } );
+			const response = await post( failing, JSON.stringify( talkRequest() ) );
+			expect( response.status ).toBe( 502 );
+			expect( response.body ).toEqual( { error: failure.message } );
+
+		}
+
 	} );
 
-	it( 'returns the closed service failure shape', async () => {
+	async function post( origin, body ) {
 
-		const origin = await serve( { reply: vi.fn( async () => { throw new Error( 'text model unavailable' ); } ) } );
 		const response = await fetch( `${origin}/api/talk`, {
-			method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( talkRequest() )
+			method: 'POST', headers: { 'Content-Type': 'application/json' }, body
 		} );
-		expect( response.status ).toBe( 502 );
-		expect( await response.json() ).toEqual( { error: 'text model unavailable' } );
+		return { status: response.status, body: await response.json() };
 
-	} );
-
-	it( 'maps malformed downstream JSON to a bad gateway response', async () => {
-
-		const origin = await serve( { reply: vi.fn( async () => {
-
-			throw new SyntaxError( 'model or world response is malformed' );
-
-		} ) } );
-		const response = await fetch( `${origin}/api/talk`, {
-			method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( talkRequest() )
-		} );
-		expect( response.status ).toBe( 502 );
-		expect( await response.json() ).toEqual( { error: 'model or world response is malformed' } );
-
-	} );
+	}
 
 	async function serve( service ) {
 

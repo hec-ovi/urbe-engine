@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { AnimationCoordinator, AnimationCoordinationError, REQUIRED_CLIPS } from '../index.js';
+import { AnimationCoordinator, REQUIRED_CLIPS } from '../index.js';
 
 const configUrl = new URL( '../fixtures/pro-coordinator-config.json', import.meta.url );
 const lifecycleUrl = new URL( '../fixtures/dialogue-lifecycle.json', import.meta.url );
@@ -26,9 +26,15 @@ function questCommand( variant, actionId = `action:${variant}` ) {
 
 describe( 'AnimationCoordinator', () => {
 
-	it( 'audits every required quest clip before accepting a catalog', async () => {
+	it( 'reports the installed Pro library and refuses a catalog missing one of its clips', async () => {
 
 		const config = await fixture( configUrl );
+		const report = new AnimationCoordinator( config ).requirements();
+
+		expect( report.assetId ).toBe( 'quaternius-universal-animation-library-pro' );
+		expect( report.edition ).toBe( 'Pro' );
+		expect( report.requiredClips ).toEqual( REQUIRED_CLIPS );
+
 		config.catalog.availableClips = config.catalog.availableClips.filter( ( name ) => name !== 'Idle_Paper' );
 
 		expect( () => new AnimationCoordinator( config ) ).toThrowError( expect.objectContaining( {
@@ -39,50 +45,46 @@ describe( 'AnimationCoordinator', () => {
 
 	} );
 
-	it( 'reports the selected names from the installed Pro library', async () => {
+	it( 'resolves every quest action variant to a real clip state', async () => {
 
-		const coordinator = new AnimationCoordinator( await fixture( configUrl ) );
-		const report = coordinator.requirements();
+		const config = await fixture( configUrl );
+		const plans = [
+			[ 'idle', 'idle', 'Idle_Loop', 'explicit' ],
+			[ 'sit', 'sit', 'Sitting_Idle_Loop', 'explicit' ],
+			[ 'pickup-ground', 'pickup', 'PickUp_Kneeling', 'clip-end' ],
+			[ 'pickup-table', 'pickup', 'PickUp_Table', 'clip-end' ],
+			[ 'read', 'read', 'Idle_Paper', 'clip-end' ],
+			[ 'observe', 'observe', 'Idle_LookAround_Loop', 'explicit' ],
+			[ 'steal-ground', 'steal', 'PickUp_Kneeling', 'clip-end' ],
+			[ 'steal-table', 'steal', 'PickUp_Table', 'clip-end' ],
+			[ 'work-counter', 'work', 'Counter_Idle_Loop', 'explicit' ],
+			[ 'work-repair', 'work', 'Fixing_Kneeling', 'clip-end' ],
+			[ 'work-interact', 'work', 'Interact', 'clip-end' ],
+			[ 'deliver', 'deliver', 'Counter_Give', 'clip-end' ],
+			[ 'follow-walk', 'follow-walk', 'Walk_Loop', 'explicit' ],
+			[ 'follow-sprint', 'follow-sprint', 'Sprint_Loop', 'explicit' ],
+			[ 'crouch-idle', 'crouch', 'Crouch_Idle_Loop', 'explicit' ],
+			[ 'crouch-forward', 'crouch', 'Crouch_Fwd_Loop', 'explicit' ]
+		];
 
-		expect( report.assetId ).toBe( 'quaternius-universal-animation-library-pro' );
-		expect( report.edition ).toBe( 'Pro' );
-		expect( report.requiredClips ).toEqual( REQUIRED_CLIPS );
-		expect( report.requiredClips ).toHaveLength( 25 );
+		for ( const [ variant, action, terminalClip, completion ] of plans ) {
 
-	} );
+			const coordinator = new AnimationCoordinator( config );
+			const result = coordinator.dispatch( questCommand( variant ) );
+			const actor = result.state.actors.find( ( candidate ) => candidate.actorId === 'npc-mara' );
 
-	it.each( [
-		[ 'idle', 'idle', 'Idle_Loop', 'explicit' ],
-		[ 'sit', 'sit', 'Sitting_Idle_Loop', 'explicit' ],
-		[ 'pickup-ground', 'pickup', 'PickUp_Kneeling', 'clip-end' ],
-		[ 'pickup-table', 'pickup', 'PickUp_Table', 'clip-end' ],
-		[ 'read', 'read', 'Idle_Paper', 'clip-end' ],
-		[ 'observe', 'observe', 'Idle_LookAround_Loop', 'explicit' ],
-		[ 'steal-ground', 'steal', 'PickUp_Kneeling', 'clip-end' ],
-		[ 'steal-table', 'steal', 'PickUp_Table', 'clip-end' ],
-		[ 'work-counter', 'work', 'Counter_Idle_Loop', 'explicit' ],
-		[ 'work-repair', 'work', 'Fixing_Kneeling', 'clip-end' ],
-		[ 'work-interact', 'work', 'Interact', 'clip-end' ],
-		[ 'deliver', 'deliver', 'Counter_Give', 'clip-end' ],
-		[ 'follow-walk', 'follow-walk', 'Walk_Loop', 'explicit' ],
-		[ 'follow-sprint', 'follow-sprint', 'Sprint_Loop', 'explicit' ],
-		[ 'crouch-idle', 'crouch', 'Crouch_Idle_Loop', 'explicit' ],
-		[ 'crouch-forward', 'crouch', 'Crouch_Fwd_Loop', 'explicit' ]
-	] )( 'maps %s to real clip state', async ( variant, action, terminalClip, completion ) => {
+			expect( { variant, ...actor } ).toMatchObject( {
+				variant,
+				mode: 'quest',
+				action,
+				completion,
+				currentClip: terminalClip,
+				resumePending: true
+			} );
+			expect( result.transitions[ 0 ].terminalClip ).toBe( terminalClip );
+			expect( result.events[ 0 ].type ).toBe( 'quest-action-started' );
 
-		const coordinator = new AnimationCoordinator( await fixture( configUrl ) );
-		const result = coordinator.dispatch( questCommand( variant ) );
-		const actor = result.state.actors.find( ( candidate ) => candidate.actorId === 'npc-mara' );
-
-		expect( actor ).toMatchObject( {
-			mode: 'quest',
-			action,
-			completion,
-			currentClip: terminalClip,
-			resumePending: true
-		} );
-		expect( result.transitions[ 0 ].terminalClip ).toBe( terminalClip );
-		expect( result.events[ 0 ].type ).toBe( 'quest-action-started' );
+		}
 
 	} );
 
@@ -243,18 +245,10 @@ describe( 'AnimationCoordinator', () => {
 		} );
 		expect( resumed.state.actions ).toEqual( [] );
 
-	} );
-
-	it( 'rejects a restored action whose actor state cannot resume', async () => {
-
-		const config = await fixture( configUrl );
-		const first = new AnimationCoordinator( config );
-		first.dispatch( questCommand( 'observe', 'observe:restore-check' ) );
 		const invalid = first.snapshot();
 		invalid.actors.find( ( actor ) => actor.actorId === 'npc-mara' ).resumePending = false;
 
-		const restored = new AnimationCoordinator( config );
-		expect( () => restored.restore( invalid ) ).toThrowError( expect.objectContaining( {
+		expect( () => new AnimationCoordinator( config ).restore( invalid ) ).toThrowError( expect.objectContaining( {
 			code: 'E_ANIMATION_STATE'
 		} ) );
 
@@ -268,6 +262,14 @@ describe( 'AnimationCoordinator', () => {
 			code: 'E_ANIMATION_INPUT'
 		} ) );
 
+		expect( () => coordinator.dispatch( {
+			...questCommand( 'idle', 'idle:ghost' ), actorId: 'npc-not-registered'
+		} ) ).toThrowError( expect.objectContaining( { code: 'E_ANIMATION_ACTOR' } ) );
+
+		expect( () => coordinator.dispatch( {
+			version: '1', commandId: 'command:complete-unknown', kind: 'complete', actionId: 'never:started'
+		} ) ).toThrowError( expect.objectContaining( { code: 'E_ANIMATION_ACTION' } ) );
+
 		coordinator.dispatch( questCommand( 'read', 'read:document' ) );
 		expect( () => coordinator.dispatch( questCommand( 'idle', 'idle:overlap' ) ) ).toThrowError( expect.objectContaining( {
 			code: 'E_ANIMATION_CONFLICT'
@@ -279,14 +281,6 @@ describe( 'AnimationCoordinator', () => {
 			kind: 'resume-routine',
 			actionId: 'read:document'
 		} ) ).toThrowError( expect.objectContaining( { code: 'E_ANIMATION_STATE' } ) );
-
-	} );
-
-	it( 'throws the public error type', () => {
-
-		const error = new AnimationCoordinationError( 'E_ANIMATION_ACTION', 'missing' );
-		expect( error ).toBeInstanceOf( Error );
-		expect( error.code ).toBe( 'E_ANIMATION_ACTION' );
 
 	} );
 

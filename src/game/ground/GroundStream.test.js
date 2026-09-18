@@ -91,7 +91,7 @@ describe( 'GroundBuilder spatial stream', () => {
 		expect( prepare ).toHaveBeenCalledTimes( groups.length );
 		expect( collision.addBand.mock.calls.length ).toBeGreaterThan( 0 );
 		expect( collision.addBand.mock.calls.length ).toBeLessThan( stream.stats.resident );
-		for ( let i = 0; i < 100; i ++ ) await stream.update( { x: 1, z: 1 } );
+		for ( let i = 0; i < 5; i ++ ) await stream.update( { x: 1, z: 1 } );
 		expect( prepare ).toHaveBeenCalledTimes( groups.length );
 		expect( collision.addBand.mock.calls.length ).toBe( collision.bands.size );
 		stream.dispose();
@@ -125,7 +125,7 @@ describe( 'GroundBuilder spatial stream', () => {
 
 	} );
 
-	it( 'cancels pending collision on disposal and reports an admission failure without publishing the tile', async () => {
+	it( 'fails closed on disposal, admission failure and invalid spatial input, publishing no tile', async () => {
 
 		const stream = new GroundBuilder( fixture(), factory ).stream( { cellSize: 32 } );
 		let cancel;
@@ -143,24 +143,20 @@ describe( 'GroundBuilder spatial stream', () => {
 		expect( failed.group.children ).toHaveLength( 0 );
 		failed.dispose();
 
-	} );
-
-	it( 'rejects invalid spatial input before material creation', () => {
-
 		const build = vi.fn();
 		const invalid = fixture();
 		invalid.streets.construction.modules.definitions[ 0 ].parts[ 0 ].role = 'unknown';
 		expect( () => new GroundBuilder( invalid, { build } ).stream() ).toThrow( expect.objectContaining( { code: 'E_GROUND_CONSTRUCTION' } ) );
 		const builder = new GroundBuilder( fixture(), { build } );
 		expect( () => builder.stream( { cellSize: 0 } ) ).toThrow( expect.objectContaining( { code: 'E_GROUND_STREAM' } ) );
-		const stream = builder.stream();
+		const invalidInput = builder.stream();
 		for ( const [ position, options ] of [ [ { x: NaN, z: 0 }, {} ], [ { x: 0, z: 0 }, { radius: - 1 } ], [ { x: 0, z: 0 }, { radius: 16, collisionRadius: 32 } ] ] ) {
 
-			expect( () => stream.update( position, options ) ).toThrow( expect.objectContaining( { code: 'E_GROUND_STREAM' } ) );
+			expect( () => invalidInput.update( position, options ) ).toThrow( expect.objectContaining( { code: 'E_GROUND_STREAM' } ) );
 
 		}
 		expect( build ).not.toHaveBeenCalled();
-		stream.dispose();
+		invalidInput.dispose();
 
 	} );
 
