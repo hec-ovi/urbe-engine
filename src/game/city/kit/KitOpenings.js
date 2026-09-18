@@ -3,17 +3,20 @@ import { openingRect } from '../Openings.js';
 
 /** Openings a person passes through. Glazing stays solid. */
 const PASSABLE = new Set( [ 'door', 'balconyDoor', 'openFront', 'aperture' ] );
-/** How far off a lot edge an opening may sit and still belong to that wall. */
-const EDGE_TOLERANCE = 1.5;
+/** How squarely an opening has to face a lot wall before it is that wall's hole. */
+const FACING = - 0.5;
 
 /**
- * Where a kit building has to be open, beyond its street entrance.
+ * Where a kit building has to be open.
  *
- * The placement table carries one door. Everything else an interior reserves,
- * a roof stair, a Juliet balcony, a side door, lives in the building
- * blueprint, which is the same document the generated shells cut their
- * geometry from. So the colliders read their holes there and a kit parcel is
- * as open as the interior behind it expects.
+ * Every opening a person passes through, the street entrance among them, is in
+ * the building blueprint, which is the same document the generated shells cut
+ * their geometry from. So the colliders read their holes there and a kit parcel
+ * is as open as the building behind it is.
+ *
+ * A facade stands behind its lot line, by a metre on some families and by three
+ * and a half on others, so an opening is matched to the lot wall it faces rather
+ * than to the one it touches.
  *
  * @param placement KitPlacement
  * @param blueprint the parcel's blueprint document, or null
@@ -45,26 +48,33 @@ export function interiorOpenings( placement, blueprint ) {
 
 }
 
-/** Which lot edge this opening pierces, and the span it takes out of it. */
+/** Which lot wall this opening looks out through, and the span it takes out of it. */
 function wallCut( placement, rect, toLot ) {
 
 	const start = _start.copy( rect.start ).applyMatrix4( toLot );
 	const end = _end.copy( rect.end ).applyMatrix4( toLot );
+	const normal = _normal.copy( rect.normal ).transformDirection( toLot );
+
+	let chosen = null;
 
 	for ( let face = 0; face < 4; face ++ ) {
 
 		const edge = placement.edge( face );
-		if ( Math.abs( offset( edge, start ) ) > EDGE_TOLERANCE || Math.abs( offset( edge, end ) ) > EDGE_TOLERANCE ) continue;
+		// The wall an opening faces is the one whose inward side it looks away from.
+		const facing = edge.inward[ 0 ] * normal.x + edge.inward[ 1 ] * normal.z;
+
+		if ( facing > FACING || ( chosen && facing > chosen.facing ) ) continue;
 
 		const from = Math.max( 0, Math.min( along( edge, start ), along( edge, end ) ) );
 		const to = Math.min( edge.length, Math.max( along( edge, start ), along( edge, end ) ) );
+
 		if ( to - from < 1e-3 ) continue;
 
-		return { face, from, to, bottom: rect.y0, top: rect.y1 };
+		chosen = { face, from, to, bottom: rect.y0, top: rect.y1, facing };
 
 	}
 
-	return null;
+	return chosen;
 
 }
 
@@ -107,15 +117,9 @@ function along( edge, point ) {
 
 }
 
-/** And how far inward of it. */
-function offset( edge, point ) {
-
-	return ( point.x - edge.start[ 0 ] ) * edge.inward[ 0 ] + ( point.z - edge.start[ 1 ] ) * edge.inward[ 1 ];
-
-}
-
 const _toLot = new THREE.Matrix4();
 const _start = new THREE.Vector3();
 const _end = new THREE.Vector3();
+const _normal = new THREE.Vector3();
 const _across = new THREE.Vector3();
 const _corner = new THREE.Vector3();

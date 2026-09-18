@@ -1,7 +1,5 @@
-import * as THREE from 'three/webgpu';
-
 /**
- * One cell's copies of the shared kit batches, appended only while the stream
+ * One cell's copies of the shared plan batches, appended only while the stream
  * shows the cell.
  *
  * The batches belong to the whole city, so a cell cannot hide its buildings by
@@ -61,19 +59,11 @@ export class KitCellInstances {
 
 		// The batches grow once for everything this cell places, so appending
 		// its copies never reallocates part way through.
-		this.pieces.reserve( this.buildings.flatMap( ( { placement } ) => placement.placements.map( ( piece ) => piece.piece ) ) );
+		this.pieces.reserve( this.buildings.map( ( { placement } ) => placement.plan ) );
 
 		for ( const { placement, colour, swinging } of this.buildings ) {
 
-			const entrance = placement.door?.placement ?? - 1;
-
-			for ( const [ index, piece ] of placement.placements.entries() ) {
-
-				handles.push( this.pieces.admit( piece.piece, placement.matrixOf( piece, _matrix ), colour, {
-					swinging: swinging && index === entrance
-				} ) );
-
-			}
+			handles.push( this.pieces.admit( placement.plan, placement.toWorld, colour, { swinging } ) );
 
 		}
 
@@ -89,5 +79,3 @@ export class KitCellInstances {
 	}
 
 }
-
-const _matrix = new THREE.Matrix4();

@@ -1,16 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RequestAssembler } from '../RequestAssembler.js';
+import { ExteriorWorkers } from '../ExteriorWorkers.js';
 import { validateExteriorBlueprint } from '../validators.js';
+import { sharedRoot } from '../SharedResources.js';
 import {
-	KitAssembler, KitManifest, blueprintFile, parcelBlueprint, placementsFile, planBlueprintFile, planFile, planPath,
-	schemaMessage, validateKitPlacements, validateKitPlan, PLANS_FOLDER
+	KitAssembler, PlanLibrary, blueprintFile, fittingFamilies, parcelBlueprint, placementsFile,
+	planBlueprintFile, planGlbFile, PLAN_INDEX_FILE, schemaMessage, validateKitPlacements, validatePlanIndex
 } from './index.js';
 
 const atlas = JSON.parse( readFileSync( fileURLToPath( new URL( '../kit-city.fixture.json', import.meta.url ) ), 'utf8' ) );
+const roots = [];
 
 /** The error code a call reports, so a test names the contract's code exactly. */
 function failure( run ) {
@@ -28,130 +31,136 @@ function failure( run ) {
 
 }
 
-function assembler() {
+function scratch() {
 
-	const kit = KitManifest.load();
-
-	return new KitAssembler( atlas, new RequestAssembler( atlas, { apertures: [] } ), kit );
-
-}
-
-/** Builds one parcel into a fresh root, over whatever the caller left standing there. */
-function build( parcelId, stale = {} ) {
-
-	const kitAssembler = assembler();
 	const root = mkdtempSync( join( tmpdir(), 'urbe-kit-' ) );
-	const parcelDir = join( root, parcelId );
 
-	mkdirSync( parcelDir, { recursive: true } );
-	for ( const [ name, content ] of Object.entries( stale ) ) writeFileSync( join( parcelDir, name ), content );
+	roots.push( root );
 
-	const record = kitAssembler.build( parcelId, parcelDir );
-
-	kitAssembler.plans.publish( root );
-
-	const planBlueprint = join( root, PLANS_FOLDER, planBlueprintFile( record.plan ) );
-
-	return {
-		root,
-		record,
-		plan: JSON.parse( readFileSync( join( root, planPath( record.plan ) ), 'utf8' ) ),
-		planBlueprint: () => readFileSync( planBlueprint ),
-		// What a consumer reads for this parcel, composed from what stands on disk.
-		blueprint: () => parcelBlueprint( JSON.parse( readFileSync( planBlueprint, 'utf8' ) ), record ),
-		read: ( name ) => readFileSync( join( parcelDir, name ) ),
-		has: ( name ) => existsSync( join( parcelDir, name ) )
-	};
+	return root;
 
 }
 
 describe( 'kit assembly', () => {
 
-	it( 'builds ordinary parcels from the kit, leaves landmarks to the generator and needs a published kit', () => {
+	let workers = null;
+	let plans = null;
+	let kit = null;
 
-		const kitAssembler = assembler();
-		const empty = mkdtempSync( join( tmpdir(), 'urbe-kit-none-' ) );
+	beforeAll( async () => {
 
-		try {
+		workers = new ExteriorWorkers( 2 );
+		plans = new PlanLibrary( { workers } );
+		kit = new KitAssembler( atlas, new RequestAssembler( atlas, { apertures: [] } ), plans );
+		kit.candidate( 'p1' );
+		kit.candidate( 'p2' );
+		await plans.draw();
 
-			expect( kitAssembler.candidate( 'p0' ) ).toBe( null );
-			expect( kitAssembler.candidate( 'p1' ).family ).toEqual( expect.any( String ) );
-			expect( failure( () => kitAssembler.build( 'p0', tmpdir() ) ) ).toBe( 'E_KIT_FIT' );
-			expect( failure( () => KitManifest.load( empty ) ) ).toBe( 'E_KIT_MANIFEST' );
-			expect( KitManifest.find( empty ) ).toBe( null );
+	}, 300_000 );
 
-		} finally { rmSync( empty, { recursive: true, force: true } ); }
+	afterAll( async () => {
+
+		await workers.close();
+		for ( const root of roots ) rmSync( root, { recursive: true, force: true } );
+		roots.length = 0;
 
 	} );
 
-	it( 'writes a valid record and a plan that carries the blueprint, over any shell that stood there, the same bytes every time', () => {
+	it( 'stands ordinary parcels on a shared plan and leaves landmarks to the generator', () => {
+
+		expect( kit.candidate( 'p0' ) ).toBe( null );
+		expect( kit.reasons.get( 'p0' ) ).toBe( 'landmark' );
+		expect( failure( () => kit.build( 'p0', tmpdir() ) ) ).toBe( 'E_KIT_FIT' );
+		// Both parcels are mid tier, so neither wears an approved family.
+		expect( kit.candidate( 'p1' ).plan.family ).toBe( null );
+
+	} );
+
+	it( 'writes a record of the frame alone, over any shell that stood there, the same bytes every time', () => {
+
+		const build = ( parcelId, stale = {} ) => {
+
+			const root = scratch();
+			const parcelDir = join( root, parcelId );
+
+			mkdirSync( parcelDir, { recursive: true } );
+			for ( const [ name, content ] of Object.entries( stale ) ) writeFileSync( join( parcelDir, name ), content );
+
+			return { record: kit.build( parcelId, parcelDir ), parcelDir };
+
+		};
 
 		const first = build( 'p1', { 'p1.glb': 'stale geometry', 'p1.request.json': '{}', 'p1.blueprint.json': '{}' } );
 		const second = build( 'p1' );
-		const bays = build( 'p2' );
+		const wide = build( 'p2' );
+		const bytes = ( built ) => readFileSync( join( built.parcelDir, placementsFile( built.record.parcel ) ) );
+		const blueprint = parcelBlueprint( plans.blueprint( first.record.plan ), first.record );
 
-		try {
+		expect( schemaMessage( validateKitPlacements( first.record ) ) ).toBe( '' );
+		expect( schemaMessage( validateExteriorBlueprint( blueprint ) ) ).toBe( '' );
+		expect( blueprint.buildingId ).toBe( 'p1' );
+		expect( first.record.signText ).toBe( 'CAFE DEL SUR' );
 
-			const document = JSON.parse( first.read( placementsFile( 'p1' ) ).toString( 'utf8' ) );
-			const blueprint = first.blueprint();
+		// The folder holds one building: the geometry and the blueprint of the
+		// shell it replaced are gone, and the parcel is its frame alone.
+		for ( const name of [ 'p1.glb', 'p1.request.json', blueprintFile( 'p1' ) ] ) {
 
-			expect( schemaMessage( validateKitPlacements( document ) ) ).toBe( '' );
-			expect( schemaMessage( validateKitPlan( first.plan ) ) ).toBe( '' );
-			expect( schemaMessage( validateExteriorBlueprint( blueprint ) ) ).toBe( '' );
-			expect( document ).toEqual( JSON.parse( JSON.stringify( first.record ) ) );
-			expect( blueprint.buildingId ).toBe( 'p1' );
-			expect( document.signText ).toBe( 'CAFE DEL SUR' );
-			expect( first.plan.id ).toBe( document.plan );
-			expect( first.plan.doors ).toHaveLength( 1 );
-
-			// the folder holds one building: the geometry and the blueprint of the
-			// shell it replaced are gone, and the parcel is its frame alone
-			expect( first.has( 'p1.glb' ) ).toBe( false );
-			expect( first.has( 'p1.request.json' ) ).toBe( false );
-			expect( first.has( blueprintFile( 'p1' ) ) ).toBe( false );
-
-			expect( second.read( placementsFile( 'p1' ) ).equals( first.read( placementsFile( 'p1' ) ) ) ).toBe( true );
-			expect( second.planBlueprint().equals( first.planBlueprint() ) ).toBe( true );
-
-			// an edge of 8N metres is N pieces per face, and a storey places them all
-			expect( [ bays.plan.baysAcross, bays.plan.baysDeep ].sort() ).toEqual( [ 5, 7 ] );
-			expect( bays.plan.placements ).toHaveLength( bays.record.floors * 2 * ( 5 + 7 ) );
-			expect( bays.record.bounds.max[ 0 ] - bays.record.bounds.min[ 0 ] ).toBeCloseTo( 40, 6 );
-			expect( bays.record.bounds.max[ 2 ] - bays.record.bounds.min[ 2 ] ).toBeCloseTo( 56, 6 );
-
-		} finally {
-
-			for ( const { root } of [ first, second, bays ] ) rmSync( root, { recursive: true, force: true } );
+			expect( existsSync( join( first.parcelDir, name ) ) ).toBe( false );
 
 		}
+		expect( bytes( first ).byteLength ).toBeLessThan( 1024 );
+		expect( bytes( second ).equals( bytes( first ) ) ).toBe( true );
+
+		// A 40 by 56 m lot is five bays by seven, and its massing stands on them.
+		expect( [ wide.record.plan ] ).toEqual( [ 'plain-5x7x4f' ] );
+		expect( wide.record.bounds.max[ 0 ] - wide.record.bounds.min[ 0 ] ).toBeLessThanOrEqual( 40 );
+		expect( wide.record.bounds.max[ 2 ] - wide.record.bounds.min[ 2 ] ).toBeLessThanOrEqual( 56 );
 
 	} );
 
-	it( 'publishes the plans its buildings compose from and refuses one the world lost', () => {
+	it( 'generates a plan once and lets every parcel of it stand on that one shell', () => {
 
-		const kitAssembler = assembler();
-		const root = mkdtempSync( join( tmpdir(), 'urbe-kit-plans-' ) );
-		const directory = join( root, PLANS_FOLDER );
+		for ( const id of plans.plans.keys() ) {
 
-		try {
+			expect( existsSync( join( plans.folder( id ), planGlbFile( id ) ) ) ).toBe( true );
+			expect( existsSync( join( plans.folder( id ), planBlueprintFile( id ) ) ) ).toBe( true );
 
-			const record = kitAssembler.build( 'p1', join( root, 'p1' ) );
-			// A building an earlier run left a blueprint of its own beside: its plan
-			// stands here and this run neither drew it nor has to publish it again.
-			const standing = 'white-grid-3x3x4f';
+		}
 
-			mkdirSync( directory, { recursive: true } );
-			writeFileSync( join( directory, planFile( standing ) ), '{}' );
+		// A second run over the same buildings draws nothing at all.
+		expect( plans.draw() ).resolves.toMatchObject( { drawn: 0 } );
 
-			const used = new Set( [ record.plan, standing ] );
+	} );
 
-			expect( kitAssembler.plans.publish( root, used, new Set( [ record.plan ] ) ) ).toEqual( [ ...used ].sort() );
-			expect( existsSync( join( directory, planBlueprintFile( record.plan ) ) ) ).toBe( true );
-			expect( existsSync( join( directory, planBlueprintFile( standing ) ) ) ).toBe( false );
-			// Asked to compose that building too, the world is short a document.
-			expect( failure( () => kitAssembler.plans.publish( root, used ) ) ).toBe( 'E_KIT_PLACEMENTS' );
+	it( 'publishes an index of the plans its buildings stand on and refuses one the store lost', () => {
 
-		} finally { rmSync( root, { recursive: true, force: true } ); }
+		const used = [ ...plans.plans.keys() ];
+		const reference = plans.publish( used );
+		const index = JSON.parse( readFileSync( join( sharedRoot(), reference.shared, PLAN_INDEX_FILE ), 'utf8' ) );
+
+		expect( reference.file ).toBe( PLAN_INDEX_FILE );
+		expect( schemaMessage( validatePlanIndex( index ) ) ).toBe( '' );
+		expect( index.plans.map( ( plan ) => plan.id ) ).toEqual( [ ...used ].sort() );
+		expect( failure( () => plans.publish( [ ...used, 'white-grid-3x3x4f' ] ) ) ).toBe( 'E_KIT_PLANS' );
+
+	} );
+
+	it( 'keeps corporate sectors off small or short lots and every luxury family off mid and poor streets', () => {
+
+		const bays = ( across, deep ) => ( { across, deep } );
+
+		expect( fittingFamilies( bays( 5, 5 ), 12, { type: 'corpo', tier: 'high_rich' } ) ).toContain( 'corporate-sectors' );
+		expect( fittingFamilies( bays( 4, 5 ), 12, { type: 'corpo', tier: 'high_rich' } ) ).not.toContain( 'corporate-sectors' );
+		expect( fittingFamilies( bays( 5, 5 ), 11, { type: 'corpo', tier: 'high_rich' } ) ).not.toContain( 'corporate-sectors' );
+		expect( fittingFamilies( bays( 5, 5 ), 12, { type: 'residential', tier: 'rich' } ) ).not.toContain( 'corporate-sectors' );
+
+		for ( const tier of [ 'mid', 'poor' ] ) {
+
+			expect( fittingFamilies( bays( 7, 7 ), 20, { type: 'residential', tier } ) ).toEqual( [] );
+
+		}
+		expect( fittingFamilies( bays( 7, 7 ), 20, { type: 'residential', tier: 'rich' } ) )
+			.toEqual( [ 'balcony-grid', 'faceted-bays', 'mirror-frame', 'mirror-shutters', 'white-grid' ] );
 
 	} );
 

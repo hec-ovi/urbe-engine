@@ -19,15 +19,22 @@ function fixture( encoding = 'json-file-bytes' ) {
 	};
 	const blueprint = { data: atlas, bytes: encode( JSON.stringify( atlas, null, 2 ) + '\n' ).buffer };
 	const asset = encode( 'producer-owned opaque asset bytes' );
+	const glyphs = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.,\'!?:/&+ ';
 	const manifest = {
-		meta: { version: '0.3.0', generatorVersion: '0.7.0', architectureVersion: '0.26.0', reservationVersion: '2.1.0',
+		meta: { version: '0.5.0', generatorVersion: '0.9.0', architectureVersion: '0.26.0', reservationVersion: '2.1.0',
 			designVersion: 'native-1.0.0', units: 'meters', seed: 1, blueprintEncoding: encoding,
 			blueprintHash: encoding === 'json-file-bytes' ? hash( new Uint8Array( blueprint.bytes ) ) : jsonHash( atlas ), nativeCatalogHash: jsonHash( binding ) },
-		kit: { version: '1.0.0', units: 'meters', module: 8, pieces: [ { id: 'p0', file: 'pieces/p0.glb', kind: 'segment',
-			sha256: hash( asset ), bytes: asset.byteLength, bounds: { min: [ 0, 0, 0 ], max: [ 4, 1, 4 ] },
-			surfaces: [ 'joint' ], hasCollision: true, triangles: 1 } ] },
-		placements: { version: '1.0.0', cellSize: 128, placements: [
-			{ piece: 'p0', position: [ 0, 0, 0 ], rotationY: 0, cell: [ 0, 0 ], ownerId: 'a', ownerIds: [ 'a' ] } ] },
+		kit: { version: '1.2.0', units: 'meters', module: 8, glyphs,
+			scanAtlas: [ 'asphalt-damage', 'asphalt-fracture', 'asphalt-repair', 'oil-patch' ],
+			pieces: [ { id: 'p0', file: 'pieces/p0.glb', kind: 'segment',
+				sha256: hash( asset ), bytes: asset.byteLength, bounds: { min: [ 0, 0, 0 ], max: [ 4, 1, 4 ] },
+				surfaces: [ 'joint' ], hasCollision: true, triangles: 1 } ] },
+		placements: { version: '1.2.0', cellSize: 128, placements: [
+			{ piece: 'p0', position: [ 0, 0, 0 ], rotationY: 0, cell: [ 0, 0 ], ownerId: 'a', ownerIds: [ 'a' ],
+				wear: 0.5, tint: [ 1, 0.5, 0.25 ], text: [ 20, 17, 1, 4 ] } ] },
+		report: { overhangs: { accepted: [ { placement: 0, piece: 'p0', boundaryArea: 0.5, fringeArea: 1.5 } ],
+			boundaryArea: 0.5, fringeArea: 1.5, overlapArea: 0 } },
+		wear: { application: 'instance' },
 		files: { kit: 'streets/kit.json', placements: 'streets/placements.json' },
 		ground: { owners: [ { id: 'g0', ownerId: 'a', sourceIndex: 0 } ], replacements: { groundIndices: [ 0 ], moduleOwnerIds: [ 'a' ] },
 			cover: { missingArea: 0, outsideArea: 0 } },
@@ -74,11 +81,14 @@ describe( 'saved native street source', () => {
 		expect( data.fetch ).not.toHaveBeenCalled();
 	} );
 
-	it.each( [ 'catalog', 'ownership', 'asset-path' ] )( 'rejects inconsistent %s metadata even when its outer byte hash is updated', async kind => {
+	it.each( [ 'catalog', 'ownership', 'asset-path', 'shader-value', 'overhang' ] )( 'rejects inconsistent %s metadata even when its outer byte hash is updated', async kind => {
 		const data = fixture();
 		if ( kind === 'catalog' ) data.manifest.meta.nativeCatalogHash = '0'.repeat( 64 );
 		if ( kind === 'ownership' ) data.manifest.delegated.remainingGroundIndices = [ 0 ];
 		if ( kind === 'asset-path' ) data.manifest.kit.pieces[ 0 ].file = '../outside.glb';
+		// A glyph the kit cannot letter and an overhang on a placement that does not exist.
+		if ( kind === 'shader-value' ) data.manifest.placements.placements[ 0 ].text = [ 999 ];
+		if ( kind === 'overhang' ) data.manifest.report.overhangs.accepted[ 0 ].placement = 7;
 		data.reference.sha256 = jsonHash( data.manifest );
 		await expect( openNativeStreetSource( data.options ) ).rejects.toMatchObject( { code: 'E_WORLD_STREETS' } );
 		expect( data.fetch ).toHaveBeenCalledOnce();

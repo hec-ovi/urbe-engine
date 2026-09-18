@@ -22,7 +22,7 @@ export class NativeStreetStream {
 
 		const { kit, placements } = source.manifest;
 		this.cells = new StreetCells( kit, placements.placements );
-		this.pieces = new StreetPieces( { kit, source, materials } );
+		this.pieces = new StreetPieces( { kit, placements: placements.placements, source, materials } );
 		this.placements = placements.placements.length;
 		this.group = new Group();
 		this.group.name = 'native-streets';

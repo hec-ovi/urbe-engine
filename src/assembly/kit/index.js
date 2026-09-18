@@ -1,9 +1,8 @@
-// The kit path: what assembly needs to build ordinary buildings from pieces.
+// The kit path: what assembly needs to stand ordinary buildings on shared plans.
 
-export { KitManifest } from './KitManifest.js';
 export { KitAssembler } from './KitAssembler.js';
 export { PlanLibrary } from './PlanLibrary.js';
-export { BlockTemplates } from './BlockTemplates.js';
-export { blueprintFile, generatedFiles, placementsFile, planBlueprintFile, planFile, planPath, PLANS_FOLDER } from './KitFiles.js';
-export { packPlanBlueprint, parcelBlueprint } from './PlanBlueprint.js';
-export { schemaMessage, validateKitPlacements, validateKitPlan } from './KitSchemas.js';
+export { fittingFamilies } from './Families.js';
+export { blueprintFile, placementsFile, planBlueprintFile, planGlbFile, PLAN_INDEX_FILE } from './KitFiles.js';
+export { parcelBlueprint } from './PlanBlueprint.js';
+export { schemaMessage, validateKitPlacements, validatePlanIndex } from './KitSchemas.js';

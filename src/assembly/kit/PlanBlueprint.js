@@ -2,201 +2,56 @@
  * One plan's blueprint, and the parcel blueprints it stands for.
  *
  * Every parcel of a plan is the same building in a different place, so its
- * blueprint is the same document moved and turned. The city publishes that
- * document once, in the plan's own frame with its origin at zero and face 0
- * along +X, and a parcel composes its own when a consumer asks for one.
+ * blueprint is the same document moved and turned. Exterior draws that document
+ * once, in the plan's own frame with its origin at zero and face 0 along +X, and
+ * a parcel composes its own when a consumer asks for one.
  *
- * A plan starts at its entrance corner with face 0 along +X; a parcel's lot
- * starts at its own first corner, so the record says which lot face the
- * entrance stands in and the composition renumbers rings and edges onto it.
+ * The composition is that frame and nothing else: every point is moved and
+ * turned, and every edge keeps the number the plan gave it, so a consumer reads
+ * an outline and an opening's edge against each other exactly as it does for a
+ * generated shell.
  *
- * Two things inside a blueprint repeat as hard as the buildings do: a tower's
- * storeys are one plate over and over, and its facade grids are one grid per
- * storey and face. The plan writes each distinct plate and grid once and every
- * floor names the one it uses, which is what keeps a city's building data in
- * megabytes instead of tens of them.
- *
- * What the plan cannot say is what the parcel is used for: its floor kinds and
- * its exterior style follow the parcel's own type and tier, so they ride on the
- * placement record and are put back on the way out.
+ * A floor's room envelope and its construction lattice move with it: the plan
+ * fitted them on its own lot, and a copy stands that same lot somewhere else.
  */
-
-/** An opening the floor's own pieces named, numbered from the plan's placements. */
-const PLACED = /^place:(\d+)\/(.*)$/;
-
-/**
- * The plan's blueprint as it is published: floors and facade grids written
- * once, and the per parcel fields left out.
- * @param blueprint Exterior's blueprint for the plan, in the plan's own frame
- */
-export function packPlanBlueprint( blueprint ) {
-
-	const { buildingId, floors, facade, ...rest } = blueprint;
-	const { exteriorStyle, grids, ...facadeRest } = facade;
-	const plates = distinct( floors, floorPlate );
-	const gridPlates = distinct( grids, gridPlate );
-
-	return {
-		...rest,
-		plates: plates.parts,
-		floors: floors.map( ( floor, at ) => ( {
-			index: floor.index,
-			elevation: floor.elevation,
-			plate: plates.of[ at ],
-			// Opening ids carry the placement they came from; a plate is shared
-			// by every storey of its band, so it counts from its own floor.
-			placementBase: placementBase( floor )
-		} ) ),
-		facade: {
-			...facadeRest,
-			gridPlates: gridPlates.parts,
-			grids: grids.map( ( grid, at ) => ( { floor: grid.floor, plate: gridPlates.of[ at ] } ) )
-		}
-	};
-
-}
 
 /**
  * One parcel's blueprint: the plan's document in the frame that parcel stands
- * in. It is the same document Exterior draws for the parcel itself, to the
- * millimetre, with the parcel's own building id, floor kinds and style, and
- * without a room envelope: that rectangle is fitted on the construction
- * lattice under the lot, which a shared plan cannot say, so it is left out
- * rather than approximated.
- * @param plan the packed plan blueprint
+ * in, under this parcel's own building id.
+ * @param plan Exterior's blueprint for the plan, in the plan's own frame
  * @param record the parcel's placement record
  */
 export function parcelBlueprint( plan, record ) {
 
 	const frame = new PlanFrame( record );
-	const { plates, floors, facade, ...rest } = plan;
-	const { gridPlates, grids, ...facadeRest } = facade;
+	const { buildingId, floors, ...rest } = plan;
 
 	return {
 		...rest,
 		buildingId: record.parcel,
 		bounds: { ...rest.bounds, footprint: frame.ring( rest.bounds.footprint ) },
-		floors: floors.map( ( floor, at ) => composeFloor( plates[ floor.plate ], floor, record.floorKinds[ at ], frame ) ),
+		floors: floors.map( ( floor ) => composeFloor( floor, frame ) ),
 		anchors: ( rest.anchors ?? [] ).map( ( anchor ) => ( {
 			...anchor, position: frame.point3( anchor.position ), normal: frame.direction( anchor.normal )
 		} ) ),
 		signage: ( rest.signage ?? [] ).map( ( sign ) => facing( sign, frame ) ),
 		screens: ( rest.screens ?? [] ).map( ( screen ) => facing( screen, frame ) ),
-		lights: ( rest.lights ?? [] ).map( ( light ) => ( {
-			...facing( light, frame ), position: frame.point3( light.position )
-		} ) ),
+		lights: ( rest.lights ?? [] ).map( ( light ) => facing( light, frame ) ),
 		modelInstances: rest.modelInstances?.map( ( model ) => ( {
 			...model, position: frame.point3( model.position ), rotation: frame.turn( model.rotation )
 		} ) ),
-		facade: {
-			...facadeRest,
-			exteriorStyle: record.exteriorStyle,
-			grids: grids.map( ( grid ) => frame.onFace( { ...gridPlates[ grid.plate ], floor: grid.floor } ) )
-		},
-		facadeArtifacts: ( rest.facadeArtifacts ?? [] ).map( ( artifact ) => frame.onFace( artifact ) ),
-		fireEscape: rest.fireEscape ? frame.onFace( rest.fireEscape ) : rest.fireEscape,
 		roof: composeRoof( rest.roof, frame )
 	};
 
 }
 
-/**
- * Where a composed blueprint stops matching the one Exterior draws for the
- * parcel itself, or '' when the two are the same building. A drift here would
- * move every opening of every building that shares the plan, so assembly reads
- * it for each parcel rather than trusting the composition.
- *
- * Two things are the plan's and not the parcel's, and are compared as the
- * building rather than as the document: Exterior lays a parcel's pieces out
- * from the lot's first corner and a plan's from its entrance, so the two number
- * their openings and order their grids differently.
- */
-export function blueprintDrift( composed, planned, tolerance = 1e-6 ) {
-
-	return drift( asBuilding( composed ), asBuilding( planned ), tolerance, '' );
-
-}
-
-/**
- * A blueprint with what only labels its parts taken out of it. Exterior's own
- * document carries a room envelope and a composed one does not, so the field is
- * set aside here; everything a consumer reads is compared.
- */
-function asBuilding( blueprint ) {
-
-	return {
-		...blueprint,
-		floors: blueprint.floors.map( ( { openings, roomEnvelope, ...floor } ) => ( {
-			...floor,
-			openings: [ ...openings.map( named ) ].sort( byPlace )
-		} ) ),
-		facade: { ...blueprint.facade, grids: [ ...blueprint.facade.grids ].sort( byFace ) }
-	};
-
-}
-
-/** One opening under the name its own piece gave it, not its placement's. */
-function named( opening ) {
-
-	const found = PLACED.exec( opening.id );
-
-	return found ? { ...opening, id: found[ 2 ] } : opening;
-
-}
-
-const byPlace = ( a, b ) => a.edge - b.edge || a.offset - b.offset || a.sill - b.sill || a.id.localeCompare( b.id );
-const byFace = ( a, b ) => a.floor - b.floor || a.edge - b.edge;
-
-function drift( composed, planned, tolerance, path ) {
-
-	if ( typeof composed === 'number' && typeof planned === 'number' ) {
-
-		return Math.abs( composed - planned ) <= tolerance ? '' : `${path}: ${composed} is not ${planned}`;
-
-	}
-	if ( Array.isArray( composed ) || Array.isArray( planned ) ) {
-
-		if ( ! Array.isArray( composed ) || ! Array.isArray( planned ) ) return `${path}: one side is not a list`;
-		if ( composed.length !== planned.length ) return `${path}: ${composed.length} entries, not ${planned.length}`;
-
-		for ( let at = 0; at < composed.length; at ++ ) {
-
-			const found = drift( composed[ at ], planned[ at ], tolerance, `${path}/${at}` );
-			if ( found ) return found;
-
-		}
-
-		return '';
-
-	}
-	if ( composed && planned && typeof composed === 'object' && typeof planned === 'object' ) {
-
-		const keys = new Set( [ ...Object.keys( composed ), ...Object.keys( planned ) ]
-			.filter( ( key ) => composed[ key ] !== undefined || planned[ key ] !== undefined ) );
-
-		for ( const key of keys ) {
-
-			const found = drift( composed[ key ], planned[ key ], tolerance, `${path}/${key}` );
-			if ( found ) return found;
-
-		}
-
-		return '';
-
-	}
-
-	return composed === planned ? '' : `${path}: ${JSON.stringify( composed )} is not ${JSON.stringify( planned )}`;
-
-}
-
 /** Where a plan's origin stands and how far it is turned. */
-class PlanFrame {
+export class PlanFrame {
 
-	constructor( { origin, rotationY, face } ) {
+	constructor( { origin, rotationY } ) {
 
 		this.origin = origin;
 		this.rotationY = rotationY;
-		this.face = face;
 		this.cos = Math.cos( rotationY );
 		this.sin = Math.sin( rotationY );
 
@@ -224,23 +79,25 @@ class PlanFrame {
 
 	}
 
-	/** A lot ring: turned, and started at the corner the entrance face runs from. */
+	/** A ring of the plan's own ground plane, in world metres. */
 	ring( points ) {
 
-		return points.map( ( _, at ) => this.point( points[ ( at - this.face + points.length ) % points.length ] ) );
-
-	}
-
-	/** Anything the plan hung on one of its faces, renumbered onto the lot's. */
-	onFace( mounted ) {
-
-		return { ...mounted, edge: ( mounted.edge + this.face ) % 4 };
+		return points.map( ( point ) => this.point( point ) );
 
 	}
 
 	turn( radians ) {
 
 		return radians + this.rotationY;
+
+	}
+
+	/** A heading measured as atan2(z, x), turned with everything else. */
+	heading( radians ) {
+
+		const [ x, z ] = this.direction( [ Math.cos( radians ), Math.sin( radians ) ] );
+
+		return Math.atan2( z, x );
 
 	}
 
@@ -252,76 +109,34 @@ class PlanFrame {
 
 }
 
-/**
- * One repeated part written once.
- * @returns `parts`, the distinct shapes in first use order, and `of`, which of
- * them each input is
- */
-function distinct( inputs, shape ) {
+/** One storey of the plan, standing where this parcel stands. */
+function composeFloor( floor, frame ) {
 
-	const seen = new Map();
-	const parts = [];
-	const of = [];
-
-	for ( const input of inputs ) {
-
-		const part = shape( input );
-		const key = JSON.stringify( part );
-		let at = seen.get( key );
-
-		if ( at === undefined ) {
-
-			at = parts.push( part ) - 1;
-			seen.set( key, at );
-
-		}
-
-		of.push( at );
-
-	}
-
-	return { parts, of };
-
-}
-
-/**
- * One storey as its band draws it: no floor of its own, no elevation, no use.
- * The room envelope stays out: Exterior fits it on the construction lattice
- * where the lot sits, so it belongs to the parcel and not to the plan.
- */
-function floorPlate( floor ) {
-
-	const { index, elevation, kind, openings, roomEnvelope, ...rest } = floor;
-	const base = placementBase( floor );
+	const { outline, roomEnvelope, ...rest } = floor;
 
 	return {
 		...rest,
-		openings: openings.map( ( opening ) => ( { ...opening, id: rebase( opening.id, - base ) } ) )
-	};
-
-}
-
-function composeFloor( plate, floor, kind, frame ) {
-
-	const { openings, outline, ...rest } = plate;
-
-	return {
-		...rest,
-		index: floor.index,
-		kind,
-		elevation: floor.elevation,
 		outline: frame.ring( outline ),
-		openings: openings.map( ( opening ) => frame.onFace( { ...opening, id: rebase( opening.id, floor.placementBase ) } ) )
+		...( roomEnvelope ? { roomEnvelope: composeEnvelope( roomEnvelope, frame ) } : {} )
 	};
 
 }
 
-/** One facade grid without the storey it was measured on. */
-function gridPlate( grid ) {
+/** The rectangle interior partitions inside, and the lattice it was fitted on. */
+function composeEnvelope( envelope, frame ) {
 
-	const { floor, ...rest } = grid;
-
-	return rest;
+	return {
+		...envelope,
+		corners: frame.ring( envelope.corners ),
+		origin: frame.point( envelope.origin ),
+		axisU: frame.direction( envelope.axisU ),
+		axisV: frame.direction( envelope.axisV ),
+		grid: {
+			...envelope.grid,
+			origin: frame.point( envelope.grid.origin ),
+			angle: frame.heading( envelope.grid.angle )
+		}
+	};
 
 }
 
@@ -345,27 +160,18 @@ function composeRoof( roof, frame ) {
 
 }
 
-/** A sign, a screen or a lamp mounted flat on one face. */
+/**
+ * A sign, a screen or a lamp mounted on one face, with whichever of its point
+ * and its normal it publishes moved into this parcel's frame.
+ */
 function facing( field, frame ) {
 
-	return { ...frame.onFace( field ), center: frame.point3( field.center ), normal: frame.direction( field.normal ) };
+	const moved = { ...field };
 
-}
+	if ( field.center ) moved.center = frame.point3( field.center );
+	if ( field.position ) moved.position = frame.point3( field.position );
+	if ( field.normal ) moved.normal = frame.direction( field.normal );
 
-/** The lowest placement any of this floor's openings came from. */
-function placementBase( floor ) {
-
-	const placed = floor.openings.map( ( opening ) => PLACED.exec( opening.id ) )
-		.filter( Boolean ).map( ( found ) => Number( found[ 1 ] ) );
-
-	return placed.length ? Math.min( ...placed ) : 0;
-
-}
-
-function rebase( id, by ) {
-
-	const found = PLACED.exec( id );
-
-	return found ? `place:${Number( found[ 1 ] ) + by}/${found[ 2 ]}` : id;
+	return moved;
 
 }

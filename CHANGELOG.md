@@ -1,5 +1,7 @@
 # Changelog
 
+0.24.0: kit buildings are the approved family shells generated once per plan and instanced with their eligibility, and streets draw the shared 0.9.0 catalogue with per-instance tint, wear, scans and text.
+
 0.23.0: every piece runtime draws one batch per material, and kit buildings share one blueprint per plan.
 
 0.22.1: tests cover the contract surface once each, 420 cases in eleven seconds, and compressed maps fill their texture in place.

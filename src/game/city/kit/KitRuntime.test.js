@@ -1,13 +1,23 @@
 import { readFile } from 'node:fs/promises';
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { planAssembly } from '../../../../../exterior/src/index.ts';
+import { ExteriorWorkers } from '../../../assembly/ExteriorWorkers.js';
+import { sharedRoot } from '../../../assembly/SharedResources.js';
+import { PlanLibrary } from '../../../assembly/kit/PlanLibrary.js';
+import { parcelBlueprint } from '../../../assembly/kit/PlanBlueprint.js';
+import { PLAN_INDEX_FILE } from '../../../assembly/kit/KitFiles.js';
+import { openingRect } from '../Openings.js';
 import { Interactor } from '../../player/Interactor.js';
 import { releaseShell } from '../streaming/ReleaseShell.js';
 import { KitPieces } from './KitPieces.js';
 import { KitCellLoader } from './KitCells.js';
 
-const KIT_DIR = new URL( '../../../../../exterior/out/kit', import.meta.url ).pathname;
+/** One approved family on a 24 by 32 m lot: an entrance, balcony doors and a roof. */
+const FAMILY = 'mirror-frame';
+const BAYS = { across: 3, deep: 4 };
+const FLOORS = 5;
 
 const factory = {
 	resolver: { resolve: () => null },
@@ -15,84 +25,66 @@ const factory = {
 	variant: () => new THREE.MeshStandardMaterial()
 };
 
-/** The published kit, read exactly as the runtime reads it from a world. */
-async function openKit( { mutate = ( kit ) => kit } = {} ) {
+let workers = null;
+let index = null;
+let planBlueprint = null;
 
-	const kit = mutate( JSON.parse( await readFile( `${KIT_DIR}/kit.json`, 'utf8' ) ) );
+/** The world's plan index, read exactly as the runtime reads it from a world. */
+function openWorld( { mutate = ( document ) => document } = {} ) {
+
 	const reads = [];
-	const pieces = new KitPieces( { kit, baseUrl: KIT_DIR, factory, readBinary: async ( url ) => {
+	const kit = mutate( JSON.parse( JSON.stringify( index ) ) );
+	const pieces = new KitPieces( {
+		kit, baseUrl: sharedRoot(), factory,
+		readJson: async ( url ) => JSON.parse( await readFile( url, 'utf8' ) ),
+		readBinary: async ( url ) => {
 
-		reads.push( url );
-		const bytes = await readFile( url );
+			reads.push( url );
+			const bytes = await readFile( url );
 
-		return bytes.buffer.slice( bytes.byteOffset, bytes.byteOffset + bytes.byteLength );
+			return bytes.buffer.slice( bytes.byteOffset, bytes.byteOffset + bytes.byteLength );
 
-	} } );
+		}
+	} );
 
 	return { kit, pieces, reads };
 
 }
 
-/**
- * One building in the shape kit assembly writes it: the plan, drawn once at the
- * origin with face 0 along +X, and the parcel record that stands it somewhere.
- */
-function building( { parcel = 'p1', family = 'mirror-frame', width = 24, depth = 32, floors = 5, frame } = {} ) {
+/** One parcel standing from the shared plan, in the shape assembly writes it. */
+function building( parcel, { origin = [ 100, 0, 50 ], rotationY = Math.PI / 2 } = {} ) {
 
-	const at = frame ?? { position: [ 100, 0, 50 ], rotationY: Math.PI / 2 };
-	const { blueprint, ...drawn } = planAssembly( {
-		family, buildingId: parcel, seed: 'kit', theme: 'cyberpunk',
-		parcel: { footprint: [ [ 0, 0 ], [ width, 0 ], [ width, depth ], [ 0, depth ] ], accessPoint: [ width / 2, 0 ], maxHeight: 200 },
-		building: { type: 'offices', tier: 'mid', floors },
-		entranceEdge: 0
-	} );
-	const pieces = [ ...new Set( drawn.placements.map( ( piece ) => piece.piece ) ) ];
-	const id = `${family}-${width / 8}x${depth / 8}x${floors}f`;
-	const lot = worldRing( at, width, depth );
+	const lot = [ [ 0, 0 ], [ 24, 0 ], [ 24, 32 ], [ 0, 32 ] ].map( ( [ u, v ] ) => [
+		origin[ 0 ] + u * Math.cos( rotationY ) + v * Math.sin( rotationY ),
+		origin[ 2 ] - u * Math.sin( rotationY ) + v * Math.cos( rotationY )
+	] );
 
 	return {
-		plan: {
-			id, family: drawn.family, baysAcross: width / 8, baysDeep: depth / 8, floors,
-			bands: drawn.bands,
-			pieces,
-			placements: drawn.placements.map( ( { piece, face, position, rotationY } ) => ( {
-				piece: pieces.indexOf( piece ), face, position, rotationY
-			} ) ),
-			signAnchors: drawn.signAnchors, doors: drawn.doors
+		parcel, plan: index.plans[ 0 ].id, origin, rotationY, lot,
+		bounds: {
+			min: [ Math.min( ...lot.map( ( c ) => c[ 0 ] ) ), 0, Math.min( ...lot.map( ( c ) => c[ 1 ] ) ) ],
+			max: [ Math.max( ...lot.map( ( c ) => c[ 0 ] ) ), planBlueprint.bounds.height, Math.max( ...lot.map( ( c ) => c[ 1 ] ) ) ]
 		},
-		record: {
-			parcel, plan: id, origin: at.position, rotationY: at.rotationY, lot,
-			bounds: {
-				min: [ Math.min( ...lot.map( c => c[ 0 ] ) ), at.position[ 1 ], Math.min( ...lot.map( c => c[ 1 ] ) ) ],
-				max: [ Math.max( ...lot.map( c => c[ 0 ] ) ), at.position[ 1 ] + floors * 4.5, Math.max( ...lot.map( c => c[ 1 ] ) ) ]
-			},
-			signText: null, family, floors, tint: parcel
-		}
+		signText: null, family: FAMILY, floors: FLOORS, tint: parcel
 	};
 
 }
 
-/** Serves a world of one building: every parcel stands from the same plan. */
-function serving( one = building() ) {
+/** What BuildingSource hands the loader for one kit parcel. */
+function source( record, hasInterior ) {
 
-	return async ( url ) => url.endsWith( `${one.plan.id}.json` ) ? one.plan : { ...one.record, parcel: url.slice( 1, url.indexOf( '.' ) ) };
-
-}
-
-/** The lot rectangle placed by a position and a quarter-turn rotation, first edge along the rotated X axis. */
-function worldRing( { position, rotationY }, width, depth ) {
-
-	const c = Math.cos( rotationY ), s = Math.sin( rotationY );
-	return [ [ 0, 0 ], [ width, 0 ], [ width, depth ], [ 0, depth ] ].map( ( [ u, v ] ) => [
-		Math.round( ( position[ 0 ] + u * c + v * s ) * 1e6 ) / 1e6,
-		Math.round( ( position[ 2 ] - u * s + v * c ) * 1e6 ) / 1e6
-	] );
+	return [ record.parcel, {
+		parcelId: record.parcel, source: 'kit', placementsUrl: `/${record.parcel}.placements.json`,
+		hasInterior, blueprint: parcelBlueprint( planBlueprint, record )
+	} ];
 
 }
 
-function source( parcelId, hasInterior, blueprint = null ) {
+function serving( records ) {
 
-	return [ parcelId, { parcelId, source: 'kit', placementsUrl: `/${parcelId}.placements.json`, hasInterior, blueprint } ];
+	const byUrl = new Map( records.map( ( record ) => [ `/${record.parcel}.placements.json`, record ] ) );
+
+	return async ( url ) => byUrl.get( url );
 
 }
 
@@ -113,15 +105,15 @@ function live( pieces ) {
 
 }
 
-/** Every material the kit's pieces and their leaves wear between them. */
+/** Every material the plans and their entrance leaves wear between them. */
 function materialsOf( pieces ) {
 
 	const buckets = new Set();
 
-	for ( const piece of pieces.pieces.values() ) {
+	for ( const plan of pieces.plans.values() ) {
 
-		for ( const { bucket } of piece.surfaces ) buckets.add( bucket );
-		for ( const leaf of piece.leaves ) for ( const { bucket } of leaf.surfaces ) buckets.add( bucket );
+		for ( const { bucket } of plan.surfaces ) buckets.add( bucket );
+		for ( const leaf of plan.leaves ) for ( const { bucket } of leaf.surfaces ) buckets.add( bucket );
 
 	}
 
@@ -129,22 +121,41 @@ function materialsOf( pieces ) {
 
 }
 
-describe( 'the city draws every kit building from shared pieces', () => {
+describe( 'the city draws every building from its shared plan', () => {
 
-	it( 'loads each piece once, keeps one batch per material, and appends and drops exactly a cell\'s copies', async () => {
+	beforeAll( async () => {
 
-		const { kit, pieces, reads } = await openKit();
+		workers = new ExteriorWorkers( 1 );
+
+		const library = new PlanLibrary( { workers } );
+
+		library.want( FAMILY, BAYS, FLOORS );
+		await library.draw();
+		const reference = library.publish();
+
+		index = JSON.parse( readFileSync( join( sharedRoot(), reference.shared, PLAN_INDEX_FILE ), 'utf8' ) );
+		planBlueprint = library.blueprint( index.plans[ 0 ].id );
+
+	}, 300_000 );
+
+	afterAll( async () => {
+
+		await workers.close();
+
+	} );
+
+	it( 'loads each plan once, keeps one batch per material, and appends and drops exactly a cell\'s copies', async () => {
+
+		const { pieces, reads } = openWorld();
 		await pieces.ready;
 
-		const files = kit.families.flatMap( ( family ) => family.pieces.map( ( piece ) => piece.file ) );
-		expect( reads ).toHaveLength( files.length );
-		expect( new Set( reads ).size ).toBe( files.length );
+		expect( reads ).toHaveLength( 1 );
+		expect( reads[ 0 ].endsWith( index.plans[ 0 ].glb ) ).toBe( true );
 
-		// Six families, nine pieces each: 198 shared surfaces plus the six
-		// entrance leaf pairs a closed building draws with its piece, wearing
-		// fifteen materials between them. One batch each, for the whole city.
+		// One batch per material the plans wear, for the whole city, whatever is
+		// standing in it.
 		const materials = materialsOf( pieces );
-		expect( materials.size ).toBe( 15 );
+		expect( materials.size ).toBeGreaterThan( 1 );
 		expect( pieces.batchCount ).toBe( materials.size );
 		expect( [ ...pieces.batches.batches.keys() ].sort() ).toEqual( [ ...materials ].sort() );
 
@@ -153,8 +164,10 @@ describe( 'the city draws every kit building from shared pieces', () => {
 		expect( meshes.every( ( mesh ) => mesh.isBatchedMesh && mesh.castShadow && mesh.receiveShadow ) ).toBe( true );
 		expect( meshes.every( ( mesh ) => mesh.perObjectFrustumCulled && ! mesh.frustumCulled ) ).toBe( true );
 
-		const loader = new KitCellLoader( { pieces, factory, readJson: serving() } );
-		const hidden = await loader.load( new Map( [ source( 'p1', false ) ] ) );
+		const first = building( 'p1' );
+		const second = building( 'p2', { origin: [ 300, 0, 400 ], rotationY: 0 } );
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving( [ first, second ] ) } );
+		const hidden = await loader.load( new Map( [ source( first, false ) ] ) );
 
 		// Nothing of a cell reaches the shared draws while the skyline still
 		// carries its impostors.
@@ -162,9 +175,10 @@ describe( 'the city draws every kit building from shared pieces', () => {
 
 		hidden.group.visible = true;
 		const one = live( pieces );
-		expect( one ).toBe( building().plan.placements.length + 1 );
+		expect( one ).toBeGreaterThan( 0 );
 
-		const other = await shown( loader, [ source( 'p2', false ) ] );
+		// A second parcel of the same plan costs the same copies and no new batch.
+		const other = await shown( loader, [ source( second, false ) ] );
 		expect( live( pieces ) ).toBe( one * 2 );
 		expect( pieces.batchCount ).toBe( materials.size );
 
@@ -178,20 +192,20 @@ describe( 'the city draws every kit building from shared pieces', () => {
 
 	it( 'appends a copy as one instance per surface, with its geometry, matrix and tint, and grows past its first capacity', async () => {
 
-		const { pieces } = await openKit();
+		const { pieces } = openWorld();
 		await pieces.ready;
 
-		const pieceId = [ ...pieces.pieces.keys() ].find( ( id ) => pieces.leaves( id ).length );
-		const piece = pieces.pieces.get( pieceId );
+		const planId = index.plans[ 0 ].id;
+		const plan = pieces.plans.get( planId );
 		const colour = new THREE.Color( 0.25, 0.5, 0.75 );
 		const matrix = new THREE.Matrix4().makeRotationY( Math.PI / 2 ).setPosition( 12, 4.5, - 7 );
-		const handle = pieces.admit( pieceId, matrix, colour );
+		const handle = pieces.admit( planId, matrix, colour );
 
 		// One instance per surface, each in the batch its material owns, each
 		// pointing at the geometry that surface was registered as.
 		expect( handle.parts.map( ( part ) => part.batch.name ) )
-			.toEqual( piece.surfaces.map( ( surface ) => `kit-pieces:${surface.bucket}` ) );
-		expect( handle.leaf.parts ).toHaveLength( piece.leaves.flatMap( ( leaf ) => leaf.surfaces ).length );
+			.toEqual( plan.surfaces.map( ( surface ) => `kit-plans:${surface.bucket}` ) );
+		expect( handle.leaf.parts ).toHaveLength( plan.leaves.flatMap( ( leaf ) => leaf.surfaces ).length );
 
 		for ( const [ index, { batch, geometryId } ] of [ ...handle.parts, ...handle.leaf.parts ].entries() ) {
 
@@ -208,7 +222,7 @@ describe( 'the city draws every kit building from shared pieces', () => {
 		const batch = handle.parts[ 0 ].batch;
 		const first = batch.capacity;
 		const held = [];
-		for ( let i = 0; i < first * 2; i ++ ) held.push( pieces.admit( pieceId, matrix, colour ) );
+		for ( let i = 0; i < first * 2; i ++ ) held.push( pieces.admit( planId, matrix, colour ) );
 
 		expect( batch.capacity ).toBeGreaterThan( first );
 		expect( batch.count ).toBe( held.length + 1 );
@@ -221,71 +235,61 @@ describe( 'the city draws every kit building from shared pieces', () => {
 
 	} );
 
-	it( 'gives every building a cuboid compound, no triangles, and a hole wherever the interior reserves one', async () => {
+	it( 'gives every building a cuboid compound with a hole wherever its blueprint is open', async () => {
 
-		const { pieces } = await openKit();
-		const loader = new KitCellLoader( { pieces, factory, readJson: serving() } );
-		const closed = await loader.load( new Map( [ source( 'p1', false ) ] ) );
+		const { pieces } = openWorld();
+		const flat = building( 'p1', { origin: [ 0, 0, 0 ], rotationY: 0 } );
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving( [ flat ] ) } );
+		const closed = await loader.load( new Map( [ source( flat, false ) ] ) );
 
-		// Three plain walls, the entrance wall as two jambs and a lintel, the
-		// roof cap, and the leaf nothing is going to move.
-		expect( closed.boxColliders ).toHaveLength( 8 );
 		expect( closed.shellColliders.size ).toBe( 0 );
 		expect( closed.boxColliders.every( ( box ) => box.center.length === 3
 			&& box.halfExtents.length === 3 && box.halfExtents.every( ( half ) => half > 0 )
 			&& Number.isFinite( box.rotationY ) ) ).toBe( true );
 
-		const roof = closed.boxColliders.at( - 2 );
-		expect( roof.halfExtents[ 0 ] ).toBeCloseTo( 12 );
-		expect( roof.halfExtents[ 2 ] ).toBeCloseTo( 16 );
+		// The roof reads solid from above, and the stair head comes through it.
+		const top = flat.bounds.max[ 1 ];
+		const { bulkhead } = parcelBlueprint( planBlueprint, flat ).roof;
+		expect( solidAt( closed.boxColliders, 2, top - 0.2, 2 ) ).toBe( true );
+		expect( solidAt( closed.boxColliders, bulkhead.center[ 0 ], top - 0.2, bulkhead.center[ 1 ] ) ).toBe( false );
 
-		// A parcel that swings its own door keeps one cuboid fewer.
-		const open = await loader.load( new Map( [ source( 'p2', true ) ] ) );
-		expect( open.boxColliders ).toHaveLength( 7 );
+		// A closed building fills its own doorway with the leaf it never opens.
+		const door = doorOf( flat );
+		const at = ( boxes ) => solidAt( boxes, door.center.x, door.center.y + 1, door.center.z );
 
-		const flat = building( { frame: { position: [ 0, 0, 0 ], rotationY: 0 } } );
-		const flatLoader = new KitCellLoader( { pieces, factory, readJson: serving( flat ) } );
-		const plain = await flatLoader.load( new Map( [ source( 'p1', false ) ] ) );
-		const cut = await flatLoader.load( new Map( [ source( 'p2', false, reserving() ) ] ) );
-		// Inside the roof cap, whose top is where the plan's last band ends.
-		const top = flat.plan.bands.at( - 1 ).base + flat.plan.bands.at( - 1 ).height - 0.2;
+		expect( at( closed.boxColliders ) ).toBe( true );
 
-		expect( cut.boxColliders.length ).toBeGreaterThan( plain.boxColliders.length );
+		// A parcel that swings its own door loses that cuboid, and the doorway is
+		// a real hole through the lot wall while the wall beside it stands.
+		const open = await loader.load( new Map( [ source( flat, true ) ] ) );
 
-		// The side doorway and the stair head are holes; the wall and the roof
-		// beside each of them still stand.
-		expect( solidAt( cut.boxColliders, 23.75, 1.2, 11 ) ).toBe( false );
-		expect( solidAt( cut.boxColliders, 23.75, 1.2, 20 ) ).toBe( true );
-		expect( solidAt( cut.boxColliders, 12, top, 16 ) ).toBe( false );
-		expect( solidAt( cut.boxColliders, 4, top, 4 ) ).toBe( true );
-
-		// Without the blueprint the same building is sealed everywhere but its
-		// entrance.
-		expect( solidAt( plain.boxColliders, 23.75, 1.2, 11 ) ).toBe( true );
-		expect( solidAt( plain.boxColliders, 12, top, 16 ) ).toBe( true );
+		expect( open.boxColliders.length ).toBe( closed.boxColliders.length - 1 );
+		expect( at( open.boxColliders ) ).toBe( false );
+		expect( solidAt( open.boxColliders, 0.25, 1, 16 ) ).toBe( true );
 
 	} );
 
-	it( 'publishes the entrance from the placement table and swings its leaves', async () => {
+	it( 'publishes the entrance from the plan and swings its leaves', async () => {
 
-		const { pieces } = await openKit();
-		const loader = new KitCellLoader( { pieces, factory, readJson: serving() } );
-		const cell = await shown( loader, [ source( 'p1', true ) ] );
+		const { pieces } = openWorld();
+		const record = building( 'p1' );
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving( [ record ] ) } );
+		const cell = await shown( loader, [ source( record, true ) ] );
 
 		expect( cell.entrances ).toEqual( cell.doors );
 		expect( cell.doors ).toHaveLength( 1 );
 
 		const door = cell.doors[ 0 ];
+		const planned = doorOf( record );
+
 		expect( door.parcelId ).toBe( 'p1' );
-		expect( door.pivots ).toHaveLength( 2 );
-		expect( door.pivots.map( ( leaf ) => leaf.sign ).sort() ).toEqual( [ - 1, 1 ] );
-		// The lot stands at [100,0,50] turned a quarter, so its entrance face
-		// runs -Z from the corner and looks out along -X, away from the lot.
-		expect( door.center.toArray().map( ( value ) => Math.round( value ) || 0 ) ).toEqual( [ 100, 0, 34 ] );
-		expect( door.normal.toArray().map( ( value ) => Math.round( value ) || 0 ) ).toEqual( [ - 1, 0, 0 ] );
-		expect( door.outside.x ).toBeLessThan( 100 );
-		expect( door.inside.x ).toBeGreaterThan( 100 );
+		expect( door.pivots.length ).toBeGreaterThan( 0 );
+		// The door stands where the plan's own blueprint puts it in this frame.
+		expect( door.center.distanceTo( planned.center ) ).toBeLessThan( 1e-6 );
 		expect( door.hinge.distanceTo( door.center ) ).toBeCloseTo( door.width / 2 );
+		// Outside is out of the building and inside is into it.
+		expect( door.outside.clone().sub( door.center ).dot( door.normal ) ).toBeGreaterThan( 0 );
+		expect( door.inside.clone().sub( door.center ).dot( door.normal ) ).toBeLessThan( 0 );
 
 		door.wanted = 1;
 		interactorFor( cell.doors ).update( 0.5, null );
@@ -296,53 +300,44 @@ describe( 'the city draws every kit building from shared pieces', () => {
 
 	} );
 
-	it( 'refuses a placement naming a piece the kit does not publish', async () => {
+	it( 'refuses a record naming a plan this world does not publish', async () => {
 
-		const { pieces } = await openKit();
-		const stray = building();
-		stray.plan.pieces.push( 'garden-taper/middle/bay' );
-		stray.plan.placements[ 2 ] = { ...stray.plan.placements[ 2 ], piece: stray.plan.pieces.length - 1 };
-		const loader = new KitCellLoader( { pieces, factory, readJson: serving( stray ) } );
+		const { pieces } = openWorld();
+		const stray = { ...building( 'p1' ), plan: 'garden-taper-3x3x9f' };
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving( [ stray ] ) } );
 
-		await expect( loader.load( new Map( [ source( 'p1', false ) ] ) ) )
-			.rejects.toThrow( /E_KIT_PLACEMENT: p1 places garden-taper\/middle\/bay/ );
+		await expect( loader.load( new Map( [ source( stray, false ) ] ) ) )
+			.rejects.toThrow( /E_KIT_PLACEMENT: p1 stands from garden-taper-3x3x9f/ );
 		expect( live( pieces ) ).toBe( 0 );
 
 	} );
 
-	it( 'refuses a piece file whose bytes differ from the kit manifest', async () => {
+	it( 'refuses a plan file whose bytes differ from the index', async () => {
 
-		const { pieces } = await openKit( { mutate: ( kit ) => {
+		const { pieces } = openWorld( { mutate: ( document ) => {
 
-			kit.families[ 0 ].pieces[ 0 ].bytes += 1;
+			document.plans[ 0 ].bytes += 1;
 
-			return kit;
+			return document;
 
 		} } );
 
-		await expect( pieces.ready ).rejects.toThrow( /E_KIT_PIECES: .*ground-corner\.glb/ );
+		await expect( pieces.ready ).rejects.toThrow( /E_KIT_PIECES: .*\.glb/ );
 
 	} );
 
 } );
 
-/** A blueprint reserving a side door and a stair head through the roof. */
-function reserving() {
+/** Where the street entrance of one parcel stands, from its composed blueprint. */
+function doorOf( record ) {
+
+	const ground = parcelBlueprint( planBlueprint, record ).floors.find( ( floor ) => floor.index === 0 );
+	const opening = ground.openings.find( ( entry ) => entry.doorRole === 'main' );
+	const rect = openingRect( ground, opening );
 
 	return {
-		floors: [ {
-			index: 0, elevation: 0, outline: [ [ 0, 0 ], [ 24, 0 ], [ 24, 32 ], [ 0, 32 ] ],
-			openings: [
-				{ id: 'entry', kind: 'door', edge: 0, offset: 14.4, width: 3.2, height: 3.2, sill: 0 },
-				{ id: 'side', kind: 'door', edge: 1, offset: 10, width: 2, height: 2.4, sill: 0 },
-				{ id: 'glass', kind: 'window', edge: 3, offset: 4, width: 6, height: 2, sill: 1 }
-			]
-		} ],
-		roof: {
-			elevation: 23.23,
-			bulkhead: { center: [ 12, 16 ], axis: [ 1, 0 ], width: 4, depth: 3, housingHeight: 2.6,
-				doorNormal: [ 0, 1 ], doorWidth: 1, doorHeight: 2.1 }
-		}
+		center: rect.start.clone().add( rect.end ).multiplyScalar( 0.5 ).setY( rect.y0 ),
+		width: rect.width
 	};
 
 }

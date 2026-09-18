@@ -1,68 +1,43 @@
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { positionsOnly } from '../BuildingsLoader.js';
-import { DoorMotion } from '../DoorMotion.js';
-import { placementError } from './KitPieces.js';
-
-/** What a fitted entrance casing projects past its wall plane. */
-const SURFACE_DEPTH = 0.08;
-/** How far outside and inside the doorway the interaction stands. */
-const OUTSIDE = 1.4;
-const INSIDE = 1.8;
+import { doorFrames } from '../DoorGeometry.js';
 
 /**
- * The one entrance of a kit building, in the shape the game already knows.
+ * The street entrance of a kit building, in the shape the game already knows.
  *
- * A closed building draws its leaves with the rest of the entrance bay and
- * never opens them. A building with an interior behind it gets the leaves as
- * its own pivots instead, rebased on their hinges and posed with the piece, so
- * the interaction, the swing and the moving collider are the same code that
- * runs for an original shell.
- *
- * @param placement KitPlacement
- * @param pieces KitPieces, for the entrance bay's addressable leaves
- * @returns a door frame with pivots, or null when the building has no entrance
+ * The frame itself is the one `DoorGeometry` builds from the blueprint, which
+ * for a kit parcel is its plan's document composed into its own frame, so the
+ * interaction, the swing and the moving collider read exactly what an original
+ * shell's do. What differs is the leaves: they belong to the shared plan, so a
+ * parcel with an interior behind the door poses its own copies on their hinges
+ * and a closed parcel draws them with the rest of the shell.
  */
-export function kitDoor( placement, pieces ) {
 
-	const record = placement.door;
-	if ( ! record ) return null;
+/** This building's street entrance, or null when it has none that can move. */
+export function mainDoor( blueprint ) {
 
-	const host = placement.placements[ record.placement ];
-	const rotationY = placement.rotationY + ( host?.rotationY ?? 0 );
-	const matrix = placement.matrixOf( host ?? { position: [ 0, 0, 0 ], rotationY: 0 } );
-	const sill = record.position.clone().setY( placement.base + record.local.y );
-	const door = {
-		id: record.id,
-		parcelId: placement.parcelId,
-		floor: 0,
-		kind: 'door',
-		role: 'main',
-		motion: new DoorMotion(),
-		hinge: sill.clone().addScaledVector( record.along, - record.width / 2 ),
-		along: record.along.clone(),
-		normal: record.facing.clone(),
-		width: record.width,
-		height: record.height,
-		surfaceDepth: SURFACE_DEPTH,
-		center: sill.clone(),
-		outside: sill.clone().addScaledVector( record.facing, OUTSIDE ),
-		inside: sill.clone().addScaledVector( record.facing, - INSIDE ),
-		open: 0,
-		wanted: 0,
-		pivots: []
-	};
+	return doorFrames( blueprint ).find( ( door ) => door.role === 'main' && door.motion.supported ) ?? null;
 
-	for ( const leaf of pieces.leaves( record.piece ) ) door.pivots.push( pivotFor( door, leaf, matrix, rotationY ) );
+}
 
-	if ( door.pivots.length !== record.leaves ) {
+/**
+ * Gives the entrance its own moving leaves, posed from the plan's.
+ * @param pieces KitPieces, which holds each plan's addressable leaves
+ * @returns whether the door can swing, which needs at least one leaf
+ */
+export function swingLeaves( door, placement, pieces ) {
 
-		throw placementError( `${placement.parcelId}: ${record.piece} has ${door.pivots.length} leaves, the table publishes ${record.leaves}` );
+	for ( const leaf of pieces.leaves( placement.plan ) ) {
+
+		door.pivots.push( pivotFor( door, leaf, placement.toWorld, placement.rotationY ) );
 
 	}
+	if ( ! door.pivots.length ) return false;
+
 	door.motion.validateLeaves( door.pivots );
 
-	return door;
+	return true;
 
 }
 

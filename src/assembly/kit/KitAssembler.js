@@ -5,47 +5,49 @@ import { writeJsonFile } from '../JsonFile.js';
 import { lotBays } from './BayCount.js';
 import { lotRectangle } from './LotRectangle.js';
 import { chooseFamily } from './FamilyChoice.js';
+import { MIN_FLOORS, fittingFamilies } from './Families.js';
 import { BlockTemplates } from './BlockTemplates.js';
 import { TemplateDressing } from './TemplateDressing.js';
-import { PlanLibrary, placesAs } from './PlanLibrary.js';
-import { blueprintDrift, parcelBlueprint } from './PlanBlueprint.js';
-import { planFrom } from './KitPlanning.js';
+import { PlanFrame } from './PlanBlueprint.js';
 import { schemaMessage, validateKitPlacements } from './KitSchemas.js';
 import { blueprintFile, generatedFiles, placementsFile } from './KitFiles.js';
 
 const QUARTER = Math.PI / 2;
+/** What a storey costs in height, which is what caps a lot's floor count. */
+const PITCH = 4.5;
 
 /**
- * One parcel, one placement record. Ordinary buildings are assembled from the
- * published piece kit instead of generated, so a city ships a few hundred
- * shared pieces, one plan per distinct building and a frame per parcel.
+ * One parcel, one placement record.
+ *
+ * An ordinary building is not generated per parcel: it is the plan it stands
+ * from, generated once for the whole city, plus the frame it stands in. So this
+ * decides what each parcel is (which family, how many floors, which lot face
+ * its entrance takes), registers that plan, and once the plans are drawn writes
+ * a record of well under a kilobyte.
  *
  * A block Atlas tiled from a template is dressed by the template, so the city
  * repeats a handful of block designs with one variation each. A block Atlas
  * tiled on its own keeps the per-parcel choice.
- *
- * Exterior plans the parcel's own building so the record can be checked against
- * it: the pieces have to stand where the plan puts them, and the blueprint the
- * plan composes for this frame has to be the one Exterior drew here.
  */
 export class KitAssembler {
 
 	/**
 	 * @param atlas CityBlueprint per ../../../../atlas/CONTRACT.md
 	 * @param assembler the RequestAssembler both paths take their shared request fields from
-	 * @param kit a loaded KitManifest
+	 * @param plans the PlanLibrary this city's buildings are drawn into
 	 */
-	constructor( atlas, assembler, kit ) {
+	constructor( atlas, assembler, plans ) {
 
 		this.reasons = new Map();
+		/** parcelId -> what it builds, decided once */
+		this.chosen = new Map();
 
 		this.worldSeed = atlas.meta.seed;
 		this.parcels = new Map( atlas.parcels.map( ( parcel ) => [ parcel.id, parcel ] ) );
 		this.assembler = assembler;
-		this.kit = kit;
+		this.plans = plans;
 		this.templates = new BlockTemplates( atlas );
-		this.dressing = new TemplateDressing( atlas, this.templates, kit );
-		this.plans = new PlanLibrary( kit, atlas.meta.buildingGrid ?? null );
+		this.dressing = new TemplateDressing( atlas, this.templates );
 
 	}
 
@@ -61,13 +63,24 @@ export class KitAssembler {
 	}
 
 	/**
-	 * The kit building this parcel gets, or null when it keeps the generator:
-	 * a landmark, a lot that is not a rectangle of whole bays, a lot a merge
-	 * took over, or no family that fits it. Kit buildings have no basement, and
-	 * link openings are not carved into pieces yet. `reasons` says why a parcel
+	 * The kit building this parcel gets, or null when it keeps the generator: a
+	 * landmark, a lot that is not a rectangle of whole bays, a lot a merge took
+	 * over, or an envelope no shared building fits. `reasons` says why a parcel
 	 * was skipped.
 	 */
 	candidate( parcelId ) {
+
+		if ( this.chosen.has( parcelId ) ) return this.chosen.get( parcelId );
+
+		const decided = this.#decide( parcelId );
+
+		this.chosen.set( parcelId, decided );
+
+		return decided;
+
+	}
+
+	#decide( parcelId ) {
 
 		const parcel = this.parcels.get( parcelId );
 
@@ -82,7 +95,7 @@ export class KitAssembler {
 
 		if ( ! rectangle ) return this.#skip( parcelId, 'lot is not a rectangle' );
 
-		const bays = lotBays( rectangle.width, rectangle.depth, this.kit.module );
+		const bays = lotBays( rectangle.width, rectangle.depth );
 
 		if ( ! bays ) return this.#skip( parcelId, 'lot is not whole bays' );
 
@@ -99,38 +112,23 @@ export class KitAssembler {
 
 		}
 
-		const dressing = dressed ?? this.#perParcel( parcelId, parcel, bays, request.building.floors );
+		const floors = dressed?.floors ?? this.#floors( parcel, request.building.floors );
 
-		if ( ! dressing ) return this.#skip( parcelId, 'no family fits the floors' );
+		if ( ! floors ) return this.#skip( parcelId, 'envelope is shorter than a shared building' );
 		this.reasons.delete( parcelId );
+
+		const face = this.#entranceFace( rectangle.footprint, parcel.access.point );
+		const oriented = face % 2 === 0 ? bays : { across: bays.deep, deep: bays.across };
+		const family = dressed
+			? dressed.family
+			: chooseFamily( fittingFamilies( oriented, floors, parcel ), this.worldSeed, parcelId );
 
 		return {
 			parcelId,
-			family: dressing.family,
-			floors: dressing.floors,
-			bays,
-			footprint: rectangle.footprint,
 			signText: request.options.signage?.text ?? null,
 			absorbs: dressed?.absorbs ?? null,
-			templated: Boolean( dressed ),
-			request: {
-				family: dressing.family,
-				buildingId: request.buildingId,
-				// The published pieces were built with the kit's own seed, so the
-				// blueprint names exactly the files the game loads.
-				seed: this.kit.seed,
-				theme: request.theme,
-				parcel: {
-					...request.parcel,
-					footprint: rectangle.footprint,
-					maxHeight: this.plans.height( dressing.family, dressing.floors )
-				},
-				building: {
-					type: request.building.type,
-					tier: request.building.tier,
-					floors: dressing.floors
-				}
-			}
+			plan: this.plans.want( family, oriented, floors ),
+			frame: this.#frame( rectangle.footprint, face )
 		};
 
 	}
@@ -138,39 +136,22 @@ export class KitAssembler {
 	/**
 	 * Writes this parcel's placement record and drops whatever a generated shell
 	 * left here before, so the folder holds one building and the world ships no
-	 * dead geometry. The blueprint stays with the plan: this parcel's is the
-	 * plan's document in the frame below, which is checked here against the one
-	 * Exterior draws for the parcel itself.
+	 * dead geometry. Its blueprint stays with the plan: this parcel's is that
+	 * document in the frame below.
 	 * @returns the placement record
-	 * @throws AssemblyError E_KIT_FIT | E_KIT_PLACEMENTS
+	 * @throws AssemblyError E_KIT_FIT | E_KIT_PLANS
 	 */
 	build( parcelId, parcelDir ) {
 
 		const chosen = this.candidate( parcelId );
 
-		if ( ! chosen ) throw new AssemblyError( 'E_KIT_FIT', `${parcelId}: ${this.reasons.get( parcelId ) ?? 'no kit family fits this parcel'}` );
+		if ( ! chosen ) throw new AssemblyError( 'E_KIT_FIT', `${parcelId}: ${this.reasons.get( parcelId ) ?? 'no shared building fits this parcel'}` );
 
-		// Exterior plans this exact parcel: the blueprint everything downstream
-		// reads, and the pieces the plan the record names has to stand as.
-		const { blueprint, ...planned } = planFrom( chosen.request,
-			{ id: parcelId, bays: chosen.bays, floors: chosen.floors } );
-		const frame = this.#frame( chosen, planned );
-		const plan = this.plans.plan( chosen.family, frame.bays, chosen.floors );
+		const blueprint = this.plans.blueprint( chosen.plan.id );
 
-		if ( ! placesAs( plan, frame, planned ) ) {
+		if ( ! blueprint ) throw new AssemblyError( 'E_KIT_PLANS', `${parcelId}: plan ${chosen.plan.id} was not drawn` );
 
-			throw new AssemblyError( 'E_KIT_PLACEMENTS', `${parcelId}: plan ${plan.id} does not stand where this parcel was planned` );
-
-		}
-
-		const document = this.#document( chosen, plan, frame, blueprint );
-		const drift = blueprintDrift( parcelBlueprint( this.plans.blueprint( plan.id ), document ), blueprint );
-
-		if ( drift ) {
-
-			throw new AssemblyError( 'E_KIT_PLACEMENTS', `${parcelId}: plan ${plan.id} composes a different building at ${drift}` );
-
-		}
+		const document = this.#document( chosen, blueprint );
 
 		mkdirSync( parcelDir, { recursive: true } );
 		for ( const name of generatedFiles( parcelId ) ) rmSync( join( parcelDir, name ), { force: true } );
@@ -188,31 +169,35 @@ export class KitAssembler {
 
 	}
 
-	/** What a parcel on an untiled block wears: its own family and its own floors. */
-	#perParcel( parcelId, parcel, bays, wanted ) {
+	/** How tall this parcel stands: what its request asked for, inside its envelope. */
+	#floors( parcel, wanted ) {
 
-		const fitting = this.kit.ids()
-			.filter( ( id ) => this.kit.fitsLot( id, bays ) && this.#floors( id, parcel, wanted ) );
-		const family = chooseFamily( fitting, this.worldSeed, parcelId );
+		const max = Math.min( parcel.envelope.maxFloors, Math.floor( parcel.envelope.maxHeight / PITCH ) );
 
-		return family ? { family, floors: this.#floors( family, parcel, wanted ) } : null;
+		return max >= MIN_FLOORS ? Math.min( Math.max( wanted, MIN_FLOORS ), max ) : null;
 
 	}
 
-	/**
-	 * The floor count a family can stand on this parcel, or null when none can.
-	 * The floor minimum is the published family's own; the kit states how short
-	 * its bands can stand and the parcel envelope states how tall.
-	 */
-	#floors( family, parcel, wanted ) {
+	/** Which lot face the street reaches: the edge the access point stands nearest. */
+	#entranceFace( footprint, access ) {
 
-		const range = this.kit.fitsFloors( family, parcel.envelope.maxHeight );
+		let nearest = 0;
+		let best = Infinity;
 
-		if ( ! range ) return null;
+		for ( let face = 0; face < 4; face ++ ) {
 
-		const max = Math.min( range.max, parcel.envelope.maxFloors );
+			const distance = toSegment( access, footprint[ face ], footprint[ ( face + 1 ) % 4 ] );
 
-		return max >= range.min ? Math.min( Math.max( wanted, range.min ), max ) : null;
+			if ( distance < best ) {
+
+				best = distance;
+				nearest = face;
+
+			}
+
+		}
+
+		return nearest;
 
 	}
 
@@ -221,27 +206,23 @@ export class KitAssembler {
 	 * from, and its face 0 is that face, so one plan serves every parcel of the
 	 * same building whichever street it fronts.
 	 */
-	#frame( { footprint, bays }, planned ) {
+	#frame( footprint, face ) {
 
-		const face = entranceFace( planned );
 		const from = footprint[ face ];
 		const to = footprint[ ( face + 1 ) % 4 ];
 		const turn = Math.atan2( - ( to[ 1 ] - from[ 1 ] ), to[ 0 ] - from[ 0 ] ) / QUARTER;
 
 		return {
-			face,
 			origin: [ from[ 0 ], 0, from[ 1 ] ],
 			// Lot edges turn by exact quarters; keep the frame exact too.
-			rotationY: Math.round( turn ) * QUARTER,
-			bays: face % 2 === 0 ? bays : { across: bays.deep, deep: bays.across }
+			rotationY: Math.round( turn ) * QUARTER
 		};
 
 	}
 
-	#document( { parcelId, family, floors, signText, absorbs }, plan, frame, blueprint ) {
+	#document( { parcelId, signText, absorbs, plan, frame }, blueprint ) {
 
-
-		const ring = blueprint.bounds.footprint;
+		const ring = new PlanFrame( frame ).ring( blueprint.bounds.footprint );
 		const xs = ring.map( ( point ) => point[ 0 ] );
 		const zs = ring.map( ( point ) => point[ 1 ] );
 		const document = {
@@ -249,19 +230,14 @@ export class KitAssembler {
 			plan: plan.id,
 			origin: frame.origin,
 			rotationY: frame.rotationY,
-			face: frame.face,
 			lot: this.parcels.get( parcelId ).lot,
 			bounds: {
 				min: [ Math.min( ...xs ), 0, Math.min( ...zs ) ],
 				max: [ Math.max( ...xs ), blueprint.bounds.height, Math.max( ...zs ) ]
 			},
 			signText,
-			family,
-			floors,
-			// What the parcel is used for, which its own type and tier decide and
-			// the shared plan cannot say.
-			floorKinds: blueprint.floors.map( ( floor ) => floor.kind ),
-			exteriorStyle: blueprint.facade.exteriorStyle,
+			family: plan.family,
+			floors: plan.floors,
 			tint: parcelId,
 			...( absorbs ? { absorbs } : {} )
 		};
@@ -279,11 +255,16 @@ export class KitAssembler {
 
 }
 
-/** Which lot face the entrance bay sits in; Exterior picks it from the street access. */
-function entranceFace( planned ) {
+/** How far a point stands from one lot edge. */
+function toSegment( point, from, to ) {
 
-	const entrance = planned.placements.find( ( piece ) => piece.piece.endsWith( '/entrance-bay' ) );
+	const dx = to[ 0 ] - from[ 0 ];
+	const dz = to[ 1 ] - from[ 1 ];
+	const length = dx * dx + dz * dz;
+	const along = length > 0
+		? Math.max( 0, Math.min( 1, ( ( point[ 0 ] - from[ 0 ] ) * dx + ( point[ 1 ] - from[ 1 ] ) * dz ) / length ) )
+		: 0;
 
-	return entrance?.face ?? planned.placements[ planned.doors?.[ 0 ]?.placement ]?.face ?? 0;
+	return Math.hypot( point[ 0 ] - ( from[ 0 ] + dx * along ), point[ 1 ] - ( from[ 1 ] + dz * along ) );
 
 }

@@ -1,20 +1,18 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { KitPlacement } from '../game/city/kit/KitPlacement.js';
 import { openingRect } from '../game/city/Openings.js';
-import { RequestAssembler } from './RequestAssembler.js';
-import { planFrom } from './kit/KitPlanning.js';
-import {
-	blueprintFile, KitAssembler, KitManifest, parcelBlueprint, placementsFile, planBlueprintFile, planPath, PLANS_FOLDER
-} from './kit/index.js';
+import { sharedRoot } from './SharedResources.js';
+import { blueprintFile, fittingFamilies, parcelBlueprint, placementsFile, PLAN_INDEX_FILE } from './kit/index.js';
 
 const ENGINE_ROOT = resolve( dirname( fileURLToPath( import.meta.url ) ), '../..' );
 const TINY = fileURLToPath( new URL( '../../../atlas/samples/city-urbe-tiny.json', import.meta.url ) );
 const atlas = JSON.parse( readFileSync( TINY, 'utf8' ) );
+/** Every point of a composed building has to land where the plan puts it. */
+const MILLIMETRE = 0.001;
 
 const roots = [];
 
@@ -27,6 +25,11 @@ function assemble( blueprint = TINY, options = [ '--interiors', '0' ] ) {
 
 	const run = spawnSync( process.execPath, [ '--import', 'tsx', 'src/assembly/city-cli.js',
 		'--blueprint', blueprint, '--out', root, ...options ], { cwd: ENGINE_ROOT, encoding: 'utf8' } );
+	const manifest = JSON.parse( readFileSync( join( root, 'manifest.json' ), 'utf8' ) );
+	const index = JSON.parse( readFileSync( join( sharedRoot(), manifest.kit.shared, PLAN_INDEX_FILE ), 'utf8' ) );
+	const plans = new Map( index.plans.map( ( plan ) => [ plan.id, plan ] ) );
+	const record = ( id ) => JSON.parse( readFileSync( join( root, id, placementsFile( id ) ), 'utf8' ) );
+	const planBlueprint = ( id ) => JSON.parse( readFileSync( join( sharedRoot(), plans.get( id ).blueprint ), 'utf8' ) );
 
 	return {
 		root,
@@ -34,18 +37,12 @@ function assemble( blueprint = TINY, options = [ '--interiors', '0' ] ) {
 		stdout: run.stdout,
 		stderr: run.stderr,
 		report: JSON.parse( readFileSync( join( root, 'qa-report.json' ), 'utf8' ) ),
-		manifest: JSON.parse( readFileSync( join( root, 'manifest.json' ), 'utf8' ) ),
-		record: ( id ) => JSON.parse( readFileSync( join( root, id, placementsFile( id ) ), 'utf8' ) ),
-		plan: ( id ) => JSON.parse( readFileSync( join( root, planPath( id ) ), 'utf8' ) ),
+		manifest,
+		plans,
+		record,
+		planBlueprint,
 		// What a consumer gets for one parcel: its plan's blueprint in its frame.
-		blueprint: ( id ) => {
-
-			const record = JSON.parse( readFileSync( join( root, id, placementsFile( id ) ), 'utf8' ) );
-
-			return parcelBlueprint( JSON.parse( readFileSync(
-				join( root, PLANS_FOLDER, planBlueprintFile( record.plan ) ), 'utf8' ) ), record );
-
-		}
+		blueprint: ( id ) => parcelBlueprint( planBlueprint( record( id ).plan ), record( id ) )
 	};
 
 }
@@ -77,7 +74,7 @@ describe( 'block templates and shared building plans', () => {
 
 		city = assemble();
 
-	}, 300_000 );
+	}, 600_000 );
 
 	afterAll( () => {
 
@@ -86,7 +83,7 @@ describe( 'block templates and shared building plans', () => {
 
 	} );
 
-	it( 'dresses every block of one template the same apart from its variation, planning each building once', () => {
+	it( 'dresses every block of one template the same apart from its variation, generating each building once', () => {
 
 		const byTemplate = new Map();
 
@@ -128,19 +125,65 @@ describe( 'block templates and shared building plans', () => {
 
 		}
 
-		// Each distinct building is drawn once and a parcel carries only its own frame.
+	} );
+
+	it( 'generates each distinct building once and stands every parcel of it on that one shell', () => {
+
 		const { totals } = city.report;
 		const kits = Object.keys( city.manifest.buildings );
+		const standing = new Map();
+
+		for ( const id of kits ) {
+
+			const record = city.record( id );
+
+			standing.set( record.plan, ( standing.get( record.plan ) ?? 0 ) + 1 );
+			// A parcel is its frame alone: a city's building data grows with its
+			// distinct buildings, not with its lots.
+			expect( statSync( join( city.root, id, placementsFile( id ) ) ).size ).toBeLessThan( 1024 );
+			expect( existsSync( join( city.root, id, blueprintFile( id ) ) ) ).toBe( false );
+			expect( existsSync( join( city.root, id, `${id}.glb` ) ) ).toBe( false );
+
+		}
 
 		expect( totals.kit ).toBe( kits.length );
 		expect( totals.plans ).toBeLessThan( totals.kit );
-		// One plan document and one plan blueprint each, and a parcel is its frame
-		// alone: a city's building data grows with its buildings, not its lots.
-		expect( readdirSync( join( city.root, PLANS_FOLDER ) ) ).toHaveLength( totals.plans * 2 );
-		for ( const id of kits ) {
+		expect( standing.size ).toBe( totals.plans );
+		// At least one building really is repeated, and every plan named has one
+		// shell and one blueprint in the shared store.
+		expect( Math.max( ...standing.values() ) ).toBeGreaterThan( 1 );
+		for ( const id of standing.keys() ) {
 
-			expect( statSync( join( city.root, id, placementsFile( id ) ) ).size ).toBeLessThan( 1024 );
-			expect( existsSync( join( city.root, id, blueprintFile( id ) ) ) ).toBe( false );
+			const plan = city.plans.get( id );
+
+			expect( statSync( join( sharedRoot(), plan.glb ) ).size ).toBe( plan.bytes );
+			expect( existsSync( join( sharedRoot(), plan.blueprint ) ) ).toBe( true );
+
+		}
+
+	} );
+
+	it( 'stands every family it registered on a building that family fits', () => {
+
+		const parcelsById = new Map( atlas.parcels.map( ( parcel ) => [ parcel.id, parcel ] ) );
+		const dressed = Object.keys( city.manifest.buildings ).map( ( id ) => city.record( id ) );
+
+		expect( dressed.some( ( record ) => record.family ) ).toBe( true );
+
+		for ( const record of dressed ) {
+
+			if ( ! record.family ) continue;
+
+			const plan = city.plans.get( record.plan );
+			const bays = { across: plan.baysAcross, deep: plan.baysDeep };
+			// A building covers its own lot and any lot its block's merge gave it,
+			// so every use standing under it has to accept the family it wears.
+			for ( const id of [ record.parcel, record.absorbs ].filter( Boolean ) ) {
+
+				expect( fittingFamilies( bays, record.floors, parcelsById.get( id ) ), `${record.parcel} ${record.plan}` )
+					.toContain( record.family );
+
+			}
 
 		}
 
@@ -155,7 +198,7 @@ describe( 'block templates and shared building plans', () => {
 		expect( id, 'the tiny city has a merged block' ).toBeTruthy();
 
 		const absorbed = record.absorbs;
-		const plan = city.plan( record.plan );
+		const plan = city.plans.get( record.plan );
 		const covered = ( plan.baysAcross + plan.baysDeep ) * 8 * 2;
 		const own = atlas.parcels.find( ( parcel ) => parcel.id === id ).lot;
 		const perimeter = ( ring ) => Math.max( ...ring.map( ( p ) => p[ 0 ] ) ) - Math.min( ...ring.map( ( p ) => p[ 0 ] ) )
@@ -170,49 +213,8 @@ describe( 'block templates and shared building plans', () => {
 
 	} );
 
-	it( 'places the plan where Exterior planned the same building on the parcel', () => {
+	it( 'composes every door and window of a shared building exactly where its frame puts it', () => {
 
-		const id = Object.keys( city.manifest.buildings ).find( ( parcel ) => city.plan( city.record( parcel ).plan ).signAnchors.length );
-		const record = city.record( id );
-		const plan = city.plan( record.plan );
-		const blueprint = city.blueprint( id );
-		const placement = new KitPlacement( id, record, plan, { bay: 8 } );
-		const anchors = plan.signAnchors.map( ( anchor ) => placement.point( ...anchor.position ).toArray() );
-		const published = [ ...blueprint.signage, ...blueprint.screens ].map( ( field ) => field.center );
-
-		// The blueprint carries the same anchors in world metres, written from the
-		// plan Exterior drew on the parcel itself.
-		expect( anchors ).toHaveLength( published.length );
-		for ( const [ index, anchor ] of anchors.entries() ) {
-
-			for ( const axis of [ 0, 1, 2 ] ) expect( anchor[ axis ] ).toBeCloseTo( published[ index ][ axis ], 6 );
-
-		}
-
-		// And every piece copy stands inside the ground the blueprint publishes.
-		const ring = blueprint.bounds.footprint;
-		const box = {
-			x: [ Math.min( ...ring.map( ( p ) => p[ 0 ] ) ), Math.max( ...ring.map( ( p ) => p[ 0 ] ) ) ],
-			z: [ Math.min( ...ring.map( ( p ) => p[ 1 ] ) ), Math.max( ...ring.map( ( p ) => p[ 1 ] ) ) ]
-		};
-
-		for ( const piece of placement.placements ) {
-
-			const world = placement.matrixOf( piece );
-			const [ x, , z ] = [ world.elements[ 12 ], world.elements[ 13 ], world.elements[ 14 ] ];
-
-			expect( x ).toBeGreaterThanOrEqual( box.x[ 0 ] - 1e-6 );
-			expect( x ).toBeLessThanOrEqual( box.x[ 1 ] + 1e-6 );
-			expect( z ).toBeGreaterThanOrEqual( box.z[ 0 ] - 1e-6 );
-			expect( z ).toBeLessThanOrEqual( box.z[ 1 ] + 1e-6 );
-
-		}
-
-	} );
-
-	it( 'composes a parcel blueprint from its plan, exactly where Exterior draws it on the parcel', () => {
-
-		const kitAssembler = new KitAssembler( atlas, new RequestAssembler( atlas, { apertures: [] } ), KitManifest.load() );
 		const records = Object.keys( city.manifest.buildings ).map( ( id ) => city.record( id ) );
 		const shared = records.filter( ( record ) => record.plan === commonest( records.map( ( entry ) => entry.plan ) ) );
 		// Two parcels of one building in different places, and one of every way a
@@ -226,21 +228,24 @@ describe( 'block templates and shared building plans', () => {
 		for ( const record of [ ...shared.slice( 0, 2 ), ...turned ] ) {
 
 			const id = record.parcel;
-			const chosen = kitAssembler.candidate( id );
-			const { blueprint } = planFrom( chosen.request, { id, bays: chosen.bays, floors: chosen.floors } );
 			const composed = city.blueprint( id );
+			const plan = city.planBlueprint( record.plan );
+			const placed = openings( composed );
+			// The same openings the plan draws, moved into this parcel's frame.
+			const drawn = openings( plan ).map( ( entry ) => ( { ...entry, corner: placedAt( entry.corner, record ) } ) );
 
 			expect( composed.buildingId ).toBe( id );
-			expect( composed.floors.map( ( floor ) => floor.kind ) ).toEqual( blueprint.floors.map( ( floor ) => floor.kind ) );
-			for ( const kind of [ null, 'door' ] ) {
+			expect( composed.floors.map( ( floor ) => floor.kind ) ).toEqual( plan.floors.map( ( floor ) => floor.kind ) );
+			expect( placed.map( ( entry ) => entry.id ) ).toEqual( drawn.map( ( entry ) => entry.id ) );
+			expect( placed.some( ( entry ) => entry.kind === 'door' ) ).toBe( true );
+			expect( placed.some( ( entry ) => entry.kind === 'window' ) ).toBe( true );
 
-				const placed = openings( composed, kind );
-				const drawn = openings( blueprint, kind );
+			for ( const [ at, entry ] of placed.entries() ) {
 
-				expect( placed.length, `${id} ${kind ?? 'openings'}` ).toBe( drawn.length );
-				for ( const [ at, corner ] of placed.entries() ) {
+				for ( const axis of entry.corner.keys() ) {
 
-					for ( const axis of corner.keys() ) expect( corner[ axis ] ).toBeCloseTo( drawn[ at ][ axis ], 3 );
+					expect( Math.abs( entry.corner[ axis ] - drawn[ at ].corner[ axis ] ), `${id} ${entry.id} axis ${axis}` )
+						.toBeLessThanOrEqual( MILLIMETRE );
 
 				}
 
@@ -253,7 +258,7 @@ describe( 'block templates and shared building plans', () => {
 	it( 'publishes an empty lot for a parcel that cannot be built, and still stands the city', () => {
 
 		const broken = atlas.parcels[ 3 ].id;
-		// A lot no floor count fits: the kit passes it over and the generator refuses it.
+		// A lot no floor count fits: the plan passes it over and the generator refuses it.
 		const run = assemble( variant( 'broken', broken,
 			{ envelope: { minFloors: 1, maxFloors: 1, floorHeight: 4.5, maxHeight: 1 } } ) );
 		const record = run.report.parcels.find( ( parcel ) => parcel.parcelId === broken );
@@ -268,25 +273,37 @@ describe( 'block templates and shared building plans', () => {
 		expect( run.manifest.sources[ broken ] ).toBe( 'empty' );
 		expect( run.manifest.parcels.length ).toBeGreaterThan( 30 );
 
-	}, 300_000 );
+	}, 600_000 );
 
 } );
 
-/** Every opening of a building, as the world rectangle it cuts, in a stable order. */
-function openings( blueprint, kind ) {
+/** Every opening of a building, as the rectangle it cuts, in document order. */
+function openings( blueprint ) {
 
-	return blueprint.floors
-		.flatMap( ( floor ) => ( floor.openings ?? [] )
-			.filter( ( opening ) => ! kind || opening.kind === kind )
-			.map( ( opening ) => {
+	return blueprint.floors.flatMap( ( floor ) => ( floor.openings ?? [] ).map( ( opening ) => {
 
-				const rect = openingRect( floor, opening );
+		const rect = openingRect( floor, opening );
 
-				return [ rect.start.x, rect.start.z, rect.end.x, rect.end.z, rect.y0, rect.y1 ];
+		return {
+			id: `${floor.index}/${opening.id}`,
+			kind: opening.kind,
+			corner: [ rect.start.x, rect.start.z, rect.end.x, rect.end.z, rect.y0, rect.y1 ]
+		};
 
-			} ) )
-		.sort( ( a, b ) => a.findIndex( ( value, axis ) => value !== b[ axis ] ) < 0 ? 0
-			: a[ a.findIndex( ( value, axis ) => value !== b[ axis ] ) ] - b[ a.findIndex( ( value, axis ) => value !== b[ axis ] ) ] );
+	} ) );
+
+}
+
+/** One plan-frame opening rectangle in the frame one parcel stands in. */
+function placedAt( [ startX, startZ, endX, endZ, y0, y1 ], { origin, rotationY } ) {
+
+	const cos = Math.cos( rotationY );
+	const sin = Math.sin( rotationY );
+	const at = ( x, z ) => [ origin[ 0 ] + x * cos + z * sin, origin[ 2 ] - x * sin + z * cos ];
+	const [ worldStartX, worldStartZ ] = at( startX, startZ );
+	const [ worldEndX, worldEndZ ] = at( endX, endZ );
+
+	return [ worldStartX, worldStartZ, worldEndX, worldEndZ, origin[ 1 ] + y0, origin[ 1 ] + y1 ];
 
 }
 

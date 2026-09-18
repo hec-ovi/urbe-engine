@@ -1,12 +1,13 @@
 import { fnv1a, pickInt } from '../hash.js';
 import { lotBays } from './BayCount.js';
 import { chooseFamily } from './FamilyChoice.js';
+import { MIN_FLOORS, fittingFamilies } from './Families.js';
 import { slotKey } from './BlockTemplates.js';
 
 /** Atlas publishes block and lot metres on a millimetre grid. */
 const TOLERANCE = 0.001;
-/** Interior fills a ground, a middle and a crown layout, so the kit starts at three. */
-const MIN_FLOORS = 3;
+/** What a storey costs in height, which is what caps a slot's floor count. */
+const PITCH = 4.5;
 
 /**
  * What every lot of a block template wears.
@@ -16,7 +17,8 @@ const MIN_FLOORS = 3;
  * once, so the city repeats a handful of tilings and two blocks of one template
  * read as the same block. The slot's floor ceiling is the median of the floor
  * counts its parcels' own envelopes allow, so a slot follows the skyline of the
- * zone it belongs to without one clipped parcel flattening every instance.
+ * zone it belongs to without one clipped parcel flattening every instance. A
+ * family has to suit every parcel of the slot, so the slot's own uses decide it.
  *
  * One variation per block instance keeps the repetition from reading as a copy:
  * a stable hash of the block id either moves one slot's floor count by one, or
@@ -25,15 +27,11 @@ const MIN_FLOORS = 3;
  */
 export class TemplateDressing {
 
-	/**
-	 * @param templates a BlockTemplates index of the same blueprint
-	 * @param kit a loaded KitManifest
-	 */
-	constructor( atlas, templates, kit ) {
+	/** @param templates a BlockTemplates index of the same blueprint */
+	constructor( atlas, templates ) {
 
 		this.worldSeed = atlas.meta.seed;
 		this.templates = templates;
-		this.kit = kit;
 		this.parcels = new Map( atlas.parcels.map( ( parcel ) => [ parcel.id, parcel ] ) );
 		this.slots = new Map();
 		/** parcelId -> what it builds, or what absorbed it */
@@ -65,7 +63,7 @@ export class TemplateDressing {
 		if ( held !== undefined ) return held;
 
 		const lot = this.templates.templates.get( templateId ).lots[ index ];
-		const choice = this.#choose( key, lot.width, lot.depth );
+		const choice = this.#choose( key, lot.width, lot.depth, this.#ceiling( key ), this.#use( key ) );
 
 		this.slots.set( key, choice );
 
@@ -73,36 +71,54 @@ export class TemplateDressing {
 
 	}
 
-	#choose( key, width, depth, ceiling = this.#ceiling( key ) ) {
+	/**
+	 * One slot's family and floors. The family has to suit every parcel standing
+	 * in the slot, so a mixed block never puts a luxury facade on a mid street.
+	 */
+	#choose( key, width, depth, ceiling, use ) {
 
-		const bays = lotBays( width, depth, this.kit.module );
+		const bays = lotBays( width, depth );
 
 		if ( ! bays ) return null;
 
-		const fitting = this.kit.ids().filter( ( id ) => this.kit.fitsLot( id, bays ) );
-		const family = chooseFamily( fitting, this.worldSeed, key );
+		const max = Math.max( MIN_FLOORS, ceiling );
+		const floors = pickInt( `${this.worldSeed}:kit-floors:${key}`, MIN_FLOORS, max );
+		const fitting = use.length
+			? use.map( ( parcel ) => fittingFamilies( bays, floors, parcel ) )
+				.reduce( ( kept, fits ) => kept.filter( ( id ) => fits.includes( id ) ) )
+			: [];
 
-		if ( ! family ) return null;
-
-		const { floors: range } = this.kit.family( family ).fits;
-		const max = Math.max( MIN_FLOORS, Math.min( ceiling, range.maximum ?? Infinity ) );
-
-		return { family, bays, floors: pickInt( `${this.worldSeed}:kit-floors:${key}`, MIN_FLOORS, max ), ceiling: max };
+		return { family: chooseFamily( fitting, this.worldSeed, key ), bays, floors, ceiling: max };
 
 	}
 
 	/**
 	 * How tall this slot stands: the median of the floor counts the envelopes of
-	 * its own parcels allow, never below the kit's three.
+	 * its own parcels allow, never below two.
 	 */
 	#ceiling( key ) {
 
-		const [ templateId, index ] = key.split( '#' );
-		const allowed = this.templates.parcelsIn( templateId, Number( index ) )
-			.map( ( id ) => this.parcels.get( id )?.envelope?.maxFloors ?? MIN_FLOORS )
+		const allowed = this.#parcelsIn( key )
+			.map( ( parcel ) => Math.min( parcel.envelope.maxFloors, Math.floor( parcel.envelope.maxHeight / PITCH ) ) )
 			.sort( ( a, b ) => a - b );
 
 		return Math.max( MIN_FLOORS, allowed[ Math.floor( ( allowed.length - 1 ) / 2 ) ] ?? MIN_FLOORS );
+
+	}
+
+	/** What the parcels of one slot are used for, which is what a family accepts. */
+	#use( key ) {
+
+		return this.#parcelsIn( key ).map( ( parcel ) => ( { type: parcel.type, tier: parcel.tier } ) );
+
+	}
+
+	#parcelsIn( key ) {
+
+		const [ templateId, index ] = key.split( '#' );
+
+		return this.templates.parcelsIn( templateId, Number( index ) )
+			.map( ( id ) => this.parcels.get( id ) ).filter( Boolean );
 
 	}
 
@@ -145,6 +161,20 @@ export class TemplateDressing {
 	}
 
 	/**
+	 * Whether the slot still wears the family it was dressed with once the block
+	 * variation has moved its floor count, so a move never leaves a family on a
+	 * building it no longer fits.
+	 */
+	#holds( choice, floors, key ) {
+
+		if ( floors < MIN_FLOORS ) return false;
+		if ( ! choice.family ) return true;
+
+		return this.#use( key ).every( ( parcel ) => fittingFamilies( choice.bays, floors, parcel ).includes( choice.family ) );
+
+	}
+
+	/**
 	 * Everything this block could do differently, in one stable order: the
 	 * mergeable lot pairs, then the slots whose floor count can move.
 	 */
@@ -161,7 +191,8 @@ export class TemplateDressing {
 
 				const lot = joined( template.lots[ first ], template.lots[ second ] );
 				const merged = lot && this.#choose( `${slotKey( templateId, first )}+${second}`, lot.width, lot.depth,
-					this.slot( templateId, first )?.ceiling ?? MIN_FLOORS );
+					this.slot( templateId, first )?.ceiling ?? MIN_FLOORS,
+					[ ...this.#use( slotKey( templateId, first ) ), ...this.#use( slotKey( templateId, second ) ) ] );
 
 				if ( merged ) merges.push( { kind: 'merge', slots: [ first, second ], lot, ...merged } );
 
@@ -171,11 +202,14 @@ export class TemplateDressing {
 
 		const moves = present.flatMap( ( index ) => {
 
+			const key = slotKey( templateId, index );
 			const choice = this.slot( templateId, index );
 
 			if ( ! choice || choice.ceiling <= MIN_FLOORS ) return [];
 
-			return [ { kind: 'floors', slot: index, floors: choice.floors < choice.ceiling ? choice.floors + 1 : choice.floors - 1 } ];
+			const floors = choice.floors < choice.ceiling ? choice.floors + 1 : choice.floors - 1;
+
+			return this.#holds( choice, floors, key ) ? [ { kind: 'floors', slot: index, floors } ] : [];
 
 		} );
 

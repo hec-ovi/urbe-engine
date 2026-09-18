@@ -1,5 +1,6 @@
 import Ajv from 'ajv/dist/2020.js';
 import { ClampToEdgeWrapping, MeshPhysicalNodeMaterial, MeshStandardNodeMaterial, NoColorSpace, RepeatWrapping, SRGBColorSpace } from 'three/webgpu';
+import { vec3 } from 'three/tsl';
 import schema from '../../../../../materials/schema/street-native.schema.json' with { type: 'json' };
 import { NativeSamples } from './NativeSamples.js';
 import { EFFECTS } from './NativeEffects.js';
@@ -8,6 +9,7 @@ import { fail } from './NativeMaterialError.js';
 
 const validate = new Ajv( { strict: true } ).compile( schema );
 const WRAPS = { repeat: RepeatWrapping, clamp: ClampToEdgeWrapping };
+const OPTIONS = [ 'roadRoughness', 'instances', 'scanCells' ];
 export const MATERIAL_RESOURCES = Symbol.for( 'urbe.material-resources' );
 
 /** Material-only consumer; the supplied texture port owns image loading and lifetime. */
@@ -26,6 +28,8 @@ export class NativeStreetMaterials {
 		this.loadTexture = loadTexture;
 		this.textureCache = new Map();
 		this.cache = new Map();
+		this.instanceKeys = new WeakMap();
+		this.instanceCount = 0;
 		this.records = new WeakMap();
 		this.disposed = false;
 	}
@@ -34,22 +38,30 @@ export class NativeStreetMaterials {
 		this.#active();
 		if ( typeof surfaceId !== 'string' || ! Object.hasOwn( this.binding.surfaces, surfaceId ) ) fail( `Unknown street surface: ${surfaceId}` );
 		const surface = this.binding.surfaces[ surfaceId ];
-		if ( ! options || typeof options !== 'object' || Array.isArray( options ) || Object.keys( options ).some( key => key !== 'roadRoughness' ) ) fail( 'Invalid street material options' );
+		if ( ! options || typeof options !== 'object' || Array.isArray( options ) || Object.keys( options ).some( key => ! OPTIONS.includes( key ) ) ) fail( 'Invalid street material options' );
 		if ( options.roadRoughness !== undefined && ( surface.effect !== 'asphalt' || ! Number.isFinite( options.roadRoughness ) || options.roadRoughness < 0 || options.roadRoughness > 1 ) ) fail( 'Invalid road roughness override' );
-		const key = `${surfaceId}:${options.roadRoughness ?? ''}`;
+		if ( options.instances !== undefined && ( ! options.instances?.tint || ! options.instances.wear ) ) fail( 'Invalid street instance values' );
+		if ( options.scanCells !== undefined && ( ! Array.isArray( options.scanCells ) || ! options.instances?.scan
+			|| options.scanCells.some( id => ! this.binding.surfaces[ id ]?.maps?.basecolor ) ) ) fail( 'Invalid street scan atlas' );
+		const key = `${surfaceId}:${options.roadRoughness ?? ''}:${this.#instanceKey( options.instances )}`;
 		if ( this.cache.has( key ) ) return this.cache.get( key );
 		const resources = new Map();
 		const samples = new NativeSamples( surface, this.binding.sampling.asphalt, id => {
 			const resource = this.#texture( id );
 			resources.set( id, resource );
 			return resource.texture;
-		} );
+		}, { instances: options.instances, scanCells: options.scanCells?.map( id => this.binding.surfaces[ id ] ) } );
 		const nodes = EFFECTS[ surface.effect ]( samples, surface.parameters, options );
 		const Material = surface.parameters.clearcoat ? MeshPhysicalNodeMaterial : MeshStandardNodeMaterial;
 		const material = new Material( { name: `street-native:${surfaceId}`, metalness: 0 } );
 		Object.assign( material, nodes );
+		// Every copy of a surface draws in one batch, so what one placement
+		// asks for itself rides on its own row: its tint multiplies whatever
+		// the effect paints, and its wear, scan and text reach the effect.
+		if ( options.instances ) material.colorNode = vec3( nodes.colorNode ).mul( options.instances.tint );
 		if ( surface.parameters.clearcoat ) material.clearcoat = surface.parameters.clearcoat;
-		if ( [ 'road-paint', 'decal' ].includes( surface.effect ) ) {
+		// A street surface is transparent exactly where its effect paints an opacity.
+		if ( nodes.opacityNode ) {
 			material.transparent = true;
 			material.depthWrite = false;
 		}
@@ -89,6 +101,13 @@ export class NativeStreetMaterials {
 		if ( texture.colorSpace !== colorSpace || texture.wrapS !== WRAPS[ definition.wrap[ 0 ] ] || texture.wrapT !== WRAPS[ definition.wrap[ 1 ] ] || texture.flipY !== true ) fail( `Street texture sampling disagrees with catalog: ${id}` );
 		this.textureCache.set( id, resource );
 		return resource;
+	}
+
+	/** A material is the batch's, so two tables of copies never share one. */
+	#instanceKey( instances ) {
+		if ( ! instances ) return '';
+		if ( ! this.instanceKeys.has( instances ) ) this.instanceKeys.set( instances, `copies-${ ++ this.instanceCount }` );
+		return this.instanceKeys.get( instances );
 	}
 
 	#record( material ) {

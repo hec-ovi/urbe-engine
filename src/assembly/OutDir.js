@@ -128,17 +128,6 @@ export class OutDir {
 
 	}
 
-	/**
-	 * The kit parcels that still carry a blueprint of their own, from a run
-	 * before the document moved to the plan. They keep reading that file; only
-	 * the rest are composed from their plan's.
-	 */
-	ownBlueprints( parcelIds ) {
-
-		return parcelIds.filter( ( id ) => existsSync( join( this.dir, id, blueprintFile( id ) ) ) );
-
-	}
-
 	/** Which building plan each standing kit parcel names. @returns Map<parcelId, plan id> */
 	kitPlans( parcelIds ) {
 

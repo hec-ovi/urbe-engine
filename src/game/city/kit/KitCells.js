@@ -5,63 +5,38 @@ import { KitPlacement } from './KitPlacement.js';
 import { KitCellInstances } from './KitCellInstances.js';
 import { buildingBoxes } from './KitColliders.js';
 import { interiorOpenings } from './KitOpenings.js';
-import { kitDoor } from './KitDoors.js';
+import { mainDoor, swingLeaves } from './KitDoors.js';
 import { placementError } from './KitPieces.js';
 import { tintFor } from './KitTint.js';
 
-/** Placement tables are pure reads, so a cell asks for all of them at once. */
+/** Placement records are pure reads, so a cell asks for all of them at once. */
 const READ_CONCURRENCY = 8;
 
 /**
- * The shell stream's loader port for a city built from kit pieces.
+ * The shell stream's loader port for a city built from shared building plans.
  *
  * It answers with the same result an original shell cell has, so the stream,
  * the neon, the lit windows and the physics ports cannot tell the two apart:
  * a group, the doors, the entrances, the collider sources, the source centres
  * and a triangle count. What differs is where the work lands. Nothing is
- * merged and nothing is cooked: showing a cell appends one matrix per piece
- * copy to draws the city already owns, and dropping it takes those matrices
- * back out. Landmark parcels in the same cell still load their own shell
- * through the original loader.
+ * merged and nothing is cooked: showing a cell appends one matrix per building
+ * to draws the city already owns, and dropping it takes those matrices back
+ * out. Landmark parcels in the same cell still load their own shell through the
+ * original loader.
  */
 export class KitCellLoader {
 
 	/**
 	 * @param pieces KitPieces
-	 * @param plansUrl where the city's building plans stand, `<world>/kit/plans`
 	 * @param readJson reads one URL into a parsed document
 	 * @param shells the original loader, for landmark parcels
 	 */
-	constructor( { pieces, factory, plansUrl = 'kit/plans', readJson = readPlacements, shells = new BuildingsLoader( factory ) } ) {
+	constructor( { pieces, factory, readJson = readPlacements, shells = new BuildingsLoader( factory ) } ) {
 
 		this.pieces = pieces;
 		this.factory = factory;
-		this.plansUrl = plansUrl;
 		this.readJson = readJson;
 		this.shells = shells;
-		// A city has a few dozen plans and thousands of buildings, so each plan
-		// is read once and every cell that wants it waits on that same read.
-		this.plans = new Map();
-
-	}
-
-	/** One building plan, read once per city. */
-	plan( id ) {
-
-		const held = this.plans.get( id );
-
-		if ( held ) return held;
-
-		const reading = this.readJson( `${this.plansUrl}/${id}.json` ).catch( ( error ) => {
-
-			this.plans.delete( id );
-			throw error;
-
-		} );
-
-		this.plans.set( id, reading );
-
-		return reading;
 
 	}
 
@@ -84,28 +59,37 @@ export class KitCellLoader {
 		try {
 
 			const records = await mapConcurrent( kit, READ_CONCURRENCY, ( source ) => this.readJson( source.placementsUrl ) );
-			const plans = new Map( await Promise.all( [ ...new Set( records.map( ( record ) => record.plan ) ) ]
-				.map( async ( id ) => [ id, await this.plan( id ) ] ) ) );
 
 			for ( const [ index, source ] of kit.entries() ) {
 
 				const record = records[ index ];
-				const placement = new KitPlacement( source.parcelId, record, plans.get( record.plan ), this.pieces.kit.module );
-				const door = source.hasInterior ? kitDoor( placement, this.pieces ) : null;
 
-				triangles += this.#counted( placement );
+				if ( ! this.pieces.has( record.plan ) ) {
+
+					throw placementError( `${source.parcelId} stands from ${record.plan}, which this world does not publish` );
+
+				}
+
+				const placement = new KitPlacement( source.parcelId, record, this.pieces.plans.get( record.plan ) );
+				// A kit parcel's blueprint is its plan's, composed into this frame,
+				// so its doors and its holes are read exactly where a shell's are.
+				const blueprint = source.blueprint ?? null;
+				const door = blueprint ? mainDoor( blueprint ) : null;
+				const swinging = Boolean( source.hasInterior && door && swingLeaves( door, placement, this.pieces ) );
+
+				triangles += this.pieces.trianglesOf( record.plan );
 				boxColliders.push( ...buildingBoxes( placement, {
-					swinging: Boolean( door ),
-					openings: interiorOpenings( placement, source.blueprint ?? null )
+					openings: interiorOpenings( placement, blueprint ),
+					leaf: swinging ? null : door
 				} ) );
 				base.centers.set( source.parcelId, placement.center );
 				standing.push( {
 					placement,
 					colour: tintFor( placement.family, placement.tint, new THREE.Color() ),
-					swinging: Boolean( door )
+					swinging
 				} );
 
-				if ( ! door ) continue;
+				if ( ! swinging ) continue;
 
 				for ( const leaf of door.pivots ) group.add( leaf.pivot );
 				base.doors.push( door );
@@ -136,26 +120,6 @@ export class KitCellLoader {
 
 			}
 		};
-
-	}
-
-	/** Checks this building against the kit. @returns what one copy costs to draw. */
-	#counted( placement ) {
-
-		let triangles = 0;
-
-		for ( const piece of placement.placements ) {
-
-			if ( ! this.pieces.has( piece.piece ) ) {
-
-				throw placementError( `${placement.parcelId} places ${piece.piece}, which this kit does not publish` );
-
-			}
-			triangles += this.pieces.trianglesOf( piece.piece );
-
-		}
-
-		return triangles;
 
 	}
 

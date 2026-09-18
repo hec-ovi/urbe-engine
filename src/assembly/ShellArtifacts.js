@@ -4,11 +4,11 @@ import { RooftopSpanPlan } from './RooftopSpanPlan.js';
 import { AssemblyError } from './RequestAssembler.js';
 
 /** Keeps only compact projections while reading one standing building at a time. */
-export async function collectShellArtifacts( directory, parcelIds, { seed } ) {
+export async function collectShellArtifacts( directory, parcelIds, { seed, plans } ) {
 
 	const catalog = new ShellCatalog( seed );
 	const rooftops = new RooftopSpanPlan( { meta: { seed } } );
-	const blueprints = new BuildingBlueprints( directory );
+	const blueprints = new BuildingBlueprints( directory, plans );
 	for ( const id of parcelIds ) {
 
 		try {

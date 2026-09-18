@@ -1,65 +1,48 @@
 import * as THREE from 'three/webgpu';
 import { placementError } from './KitPieces.js';
 
+/** The bay every lot edge is a whole number of (../../../assembly/kit/CONTRACT.md). */
+const BAY = 8;
+
 /**
- * One building standing in the world: the plan it is made of, and the frame it
- * stands in.
+ * One building standing in the world: the plan it is a copy of, and the frame
+ * it stands in.
  *
- * A city is a few dozen distinct buildings placed thousands of times, so kit
- * assembly writes each one's pieces once, at the origin with face 0 along +X,
- * and gives a parcel only `<parcel>.placements.json`: the plan's id, where its
- * origin stands and how far it is turned. The world matrix of a piece copy is
- * that frame times the plan's own placement.
+ * A city is a hundred or so distinct buildings placed hundreds of times, so kit
+ * assembly generates each one once, at the origin with face 0 along +X, and
+ * gives a parcel only `<parcel>.placements.json`: the plan's id, where its
+ * origin stands and how far it is turned. That frame is the world matrix of the
+ * copy, and the frame every opening of its blueprint is composed in.
  */
 export class KitPlacement {
 
 	/**
 	 * @param record the parcel's `<parcel>.placements.json`
-	 * @param plan the `kit/plans/<plan>.json` it names
+	 * @param plan the plan index entry it names
 	 */
-	constructor( parcelId, record, plan, { bay = 8 } = {} ) {
+	constructor( parcelId, record, plan ) {
 
 		const origin = record.origin ?? [ 0, 0, 0 ];
 
 		this.parcelId = parcelId;
-		this.plan = plan.id;
-		this.family = plan.family;
-		// The plan names each piece file once; a copy carries its index.
-		this.placements = ( plan.placements ?? [] ).map( ( copy ) => ( {
-			piece: plan.pieces[ copy.piece ],
-			face: copy.face,
-			position: copy.position,
-			rotationY: copy.rotationY
-		} ) );
+		this.plan = plan?.id ?? record.plan;
+		this.family = record.family ?? null;
 		this.rotationY = record.rotationY ?? 0;
 		/** What this building's instance colour is hashed from. */
 		this.tint = record.tint ?? parcelId;
-		this.lot = { width: ( plan.baysAcross ?? 0 ) * bay, depth: ( plan.baysDeep ?? 0 ) * bay };
-		this.height = Math.max( 0, ...( plan.bands ?? [] ).map( ( band ) => band.base + band.height ) );
+		this.lot = { width: ( plan?.baysAcross ?? 0 ) * BAY, depth: ( plan?.baysDeep ?? 0 ) * BAY };
+		this.height = ( record.bounds?.max?.[ 1 ] ?? 0 ) - origin[ 1 ];
 		this.toWorld = new THREE.Matrix4()
 			.makeTranslation( origin[ 0 ], origin[ 1 ], origin[ 2 ] )
 			.multiply( new THREE.Matrix4().makeRotationY( this.rotationY ) );
 		this.base = origin[ 1 ];
 		this.center = this.point( this.lot.width / 2, 0, this.lot.depth / 2 );
-		this.door = readDoor( plan, this );
 
-		if ( ! this.placements.length ) throw placementError( `${parcelId} places no pieces` );
-		if ( this.placements.some( ( copy ) => ! copy.piece ) ) throw placementError( `${parcelId} names a piece its plan does not list` );
 		if ( ! ( this.lot.width > 0 ) || ! ( this.lot.depth > 0 ) || ! ( this.height > 0 ) ) {
 
 			throw placementError( `${parcelId} has no lot extent or envelope height` );
 
 		}
-
-	}
-
-	/** The world matrix of one piece copy: this building's frame times the plan's. */
-	matrixOf( placement, target = new THREE.Matrix4() ) {
-
-		target.makeRotationY( placement.rotationY );
-		target.setPosition( placement.position[ 0 ], placement.position[ 1 ], placement.position[ 2 ] );
-
-		return target.premultiply( this.toWorld );
 
 	}
 
@@ -94,33 +77,5 @@ export class KitPlacement {
 		return target.set( u, y, v ).applyMatrix4( this.toWorld );
 
 	}
-
-}
-
-/** The one entrance, with the lot edge it sits in. The plan speaks its own metres. */
-function readDoor( plan, placement ) {
-
-	const record = plan.doors?.[ 0 ];
-	if ( ! record ) return null;
-
-	const host = placement.placements[ record.placement ];
-	const local = new THREE.Vector3( ...record.position );
-	const facing = new THREE.Vector3( ...record.facing ).setY( 0 ).normalize().transformDirection( placement.toWorld );
-
-	return {
-		id: record.id,
-		width: record.width,
-		height: record.height,
-		leaves: record.leaves,
-		local,
-		face: host?.face ?? 0,
-		piece: host?.piece ?? null,
-		placement: record.placement,
-		position: local.clone().applyMatrix4( placement.toWorld ),
-		facing,
-		// Along the opening, left to right seen from outside: the axis the two
-		// leaves hinge from and the axis a wall is split along.
-		along: new THREE.Vector3( - facing.z, 0, facing.x )
-	};
 
 }

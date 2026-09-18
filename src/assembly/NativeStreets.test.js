@@ -1,5 +1,5 @@
-import { afterEach, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { afterAll, afterEach, beforeAll, expect, it } from 'vitest';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import atlas from './native-city.fixture.json';
@@ -8,7 +8,11 @@ import { sha256 } from './JsonFile.js';
 import { StreetsAhead } from './StreetsAhead.js';
 import { sharedPath, sharedRoot } from './SharedResources.js';
 
-let directory;
+let directory, store;
+// The shared store is the machine's, and this file proves what stands in it.
+const previous = process.env.URBE_SHARED_DIR;
+beforeAll( () => { store = mkdtempSync( join( tmpdir(), 'assembly-shared-' ) ); process.env.URBE_SHARED_DIR = store; } );
+afterAll( () => { rmSync( store, { recursive: true, force: true } ); if ( previous === undefined ) delete process.env.URBE_SHARED_DIR; else process.env.URBE_SHARED_DIR = previous; } );
 afterEach( () => { if ( directory ) rmSync( directory, { recursive: true, force: true } ); } );
 
 /**
@@ -53,9 +57,13 @@ it( 'publishes the street kit, its placements and its pieces bound to the staged
 		sharedKit: sharedPath( 'streets-kit', digests.kitSha256 )
 	} );
 	expect( streets.meta ).toMatchObject( {
-		version: '0.3.0', architectureVersion: atlas.meta.version,
+		version: '0.5.0', architectureVersion: atlas.meta.version,
 		blueprintEncoding: 'json-file-bytes', blueprintHash: manifest.streets.blueprintSha256
 	} );
+	expect( streets.kit.version ).toBe( '1.2.0' );
+	expect( streets.placements.version ).toBe( '1.2.0' );
+	// The kit and its pieces stand in the store; the world keeps what is its own.
+	expect( readdirSync( join( directory, 'streets' ) ).sort() ).toEqual( [ 'manifest.json', 'placements.json' ] );
 	expect( JSON.parse( blueprintBytes ) ).toEqual( atlas );
 	expect( readdirSync( directory ).some( name => name.startsWith( '.world-archive-' ) ) ).toBe( false );
 
@@ -67,6 +75,30 @@ it( 'publishes the street kit, its placements and its pieces bound to the staged
 	expect( readdirSync( directory ).some( name => name.startsWith( '.world-archive-' ) ) ).toBe( false );
 
 }, 120_000 );
+
+it( 'stores the one street kit every city of this design shares', async () => {
+
+	directory = mkdtempSync( join( tmpdir(), 'assembly-streets-shared-' ) );
+	const cities = [];
+	for ( const seed of [ 11, 22 ] ) {
+
+		const root = join( directory, `city-${seed}` );
+		mkdirSync( root );
+		cities.push( await new OutDir( root ).publishManifest( atlas, [], [], { streets: { seed } } ) );
+
+	}
+
+	// The catalogue is the same 187 pieces whatever city stands on it, so both
+	// worlds name one folder of the store and it holds one entry.
+	const [ first, second ] = cities.map( manifest => manifest.streets );
+	expect( second.sharedKit ).toBe( first.sharedKit );
+	expect( second.sha256 ).not.toBe( first.sha256 );
+	expect( readdirSync( join( store, 'streets-kit' ) ) ).toEqual( [ first.sharedKit.split( '/' )[ 1 ] ] );
+	const kit = JSON.parse( readFileSync( join( sharedRoot(), first.sharedKit, 'kit.json' ), 'utf8' ) );
+	expect( kit.pieces ).toHaveLength( 187 );
+	for ( const city of cities ) expect( city.streets.kitSha256 ).toBe( first.kitSha256 );
+
+}, 180_000 );
 
 it( 'adopts an ahead-of-time streets build, refuses one bound to other bytes and refuses archive publication', async () => {
 

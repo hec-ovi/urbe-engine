@@ -15,7 +15,10 @@ The manifest carries the piece kit and the placement table it was published with
 - The original blueprint bytes match Assembly's reference before the street manifest loads. The street manifest bytes match its reference. Its source hash follows `blueprintEncoding`: original JSON file bytes or UTF-8 `JSON.stringify` of the parsed blueprint.
 - Native catalog and delegated highway/station hashes use UTF-8 `JSON.stringify`, preserving property/array order, with no whitespace or newline. Hashes are checked before freezing the parsed snapshot.
 - Replacement and retained ground indices partition the complete original ground exactly. Every replacement has one declared owner. Replaced module planning covers require their module owner in the replacement list.
-- Asset paths remain inside the bundle. Kit pieces have unique ids and files, finite local bounds, positive byte and triangle counts, complete hash metadata and only surfaces the catalog binds. Every placement names a kit piece, a finite position and yaw, its own cell, its owners and, where it carries one, a positive scale. Features retain their declared bounds and footprints independently of asset residency.
+- Asset paths remain inside the bundle. Kit pieces have unique ids and files, finite local bounds, positive byte and triangle counts, complete hash metadata and only surfaces the catalog binds. The kit names four scan cells the catalog binds and the glyph charset its text indexes. Every placement names a kit piece, a finite position and yaw, its own cell, its owners and, where it carries one, a positive scale.
+- A placement's shader values stay in the range its material can read: `wear` and each `tint` channel in 0 to 1, `scan` a finite offset with a positive scale, and every `text` index a glyph the kit publishes. Wear reaches the shader per placement, so a bundle that bakes it into its vertices instead is refused.
+- Coverage stays exact: the constructed surface leaves nothing of the retained reservations missing and nothing outside them. Overhangs are drawn and collidable as they stand, so `report.overhangs` is read for its own consistency alone: each accepted entry names a placement in the table, a piece in the kit and its own boundary and fringe areas.
+- Features retain their declared bounds and footprints independently of asset residency.
 - Disposal aborts reads and prevents further requests. Network and identity failures never select older geometry or a different catalog.
 
 ## Errors
@@ -24,4 +27,4 @@ The manifest carries the piece kit and the placement table it was published with
 
 ## Dependencies
 
-Streets native request/result contract, manifest 0.3.0 with kit and placements 1.0.0; Atlas blueprint 0.26.0 with planning reservations 2.1.0; browser fetch and Web Crypto. This box creates no renderer or geometry.
+Streets native request/result contract, manifest 0.5.0 with kit and placements 1.2.0; Atlas blueprint 0.26.0 with planning reservations 2.1.0; browser fetch and Web Crypto. This box creates no renderer or geometry.

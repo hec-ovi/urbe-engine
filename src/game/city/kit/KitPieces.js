@@ -2,44 +2,47 @@ import { cityGltfLoader } from '../../data/CityGltfLoader.js';
 import { documentHash } from '../../data/WorldDocument.js';
 import { mapConcurrent } from '../BuildingsLoader.js';
 import { MaterialBatches } from './MaterialBatches.js';
-import { readPiece } from './KitGeometry.js';
+import { readShell } from './KitGeometry.js';
 
 const LOAD_CONCURRENCY = 8;
-/** The addressable leaves of a piece, drawn with it unless the building swings them. */
-const LEAVES = ( pieceId ) => `${pieceId}/leaves`;
+/** The entrance leaves of a plan, drawn with it unless the parcel swings them. */
+const LEAVES = ( planId ) => `${planId}/leaves`;
 
 /**
- * The city's whole facade vocabulary, loaded once.
+ * Every distinct building the city has, loaded once.
  *
- * Every family's nine pieces are read from `kit.json` and decoded through the
- * shared city GLTF loader, their materials resolved through the same PBR
- * factory the original shells use. What comes out is one batch per material the
- * kit wears, holding every piece primitive that wears it: admitting a cell
- * appends copies to batches that already exist, so the draw count follows the
- * kit's materials, not the number of pieces and not the number of buildings
- * standing.
+ * A plan is one Exterior shell generated on a canonical lot, and a city of
+ * hundreds of buildings is a hundred or so of them. Each plan's GLB is read
+ * through the shared city GLTF loader, its materials resolved through the same
+ * PBR factory the original shells use, and its geometry fed into one batch per
+ * material. Admitting a parcel appends one copy per surface to batches that
+ * already exist, so the draw count follows the materials the plans wear and not
+ * the number of buildings standing.
  *
- * A piece file that is missing, refuses to decode or does not match the length
- * and hash `kit.json` publishes for it fails the whole kit with
- * `E_KIT_PIECES`: a city drawn from half a vocabulary is worse than one that
- * says why it cannot start.
+ * A plan file that is missing, refuses to decode or does not match the length
+ * and hash the index publishes for it fails the whole set with `E_KIT_PIECES`:
+ * a city drawn from half its buildings is worse than one that says why it
+ * cannot start.
  */
 export class KitPieces {
 
 	/**
-	 * @param kit the validated `kit.json` document
-	 * @param baseUrl the directory it was read from, which its file paths are relative to
+	 * @param kit the world's plan index document
+	 * @param baseUrl the shared store root its file paths are relative to
 	 * @param readBinary reads one URL into an ArrayBuffer
+	 * @param readJson reads one URL into a parsed document
 	 */
-	constructor( { kit, baseUrl, factory, loader = cityGltfLoader(), readBinary = fetchBinary } ) {
+	constructor( { kit, baseUrl, factory, loader = cityGltfLoader(), readBinary = fetchBinary, readJson = fetchJson } ) {
 
 		this.kit = kit;
 		this.baseUrl = String( baseUrl ).replace( /\/+$/, '' );
 		this.factory = factory;
 		this.loader = loader;
 		this.readBinary = readBinary;
-		this.pieces = new Map();
-		this.batches = new MaterialBatches( 'kit-pieces' );
+		this.readJson = readJson;
+		/** plan id -> its id, lot bays, surfaces and leaves */
+		this.plans = new Map();
+		this.batches = new MaterialBatches( 'kit-plans' );
 		this.group = this.batches.group;
 		this.ready = this.#load();
 
@@ -52,46 +55,46 @@ export class KitPieces {
 
 	}
 
-	has( pieceId ) {
+	has( planId ) {
 
-		return this.pieces.has( pieceId );
-
-	}
-
-	/** What one copy of this piece costs to draw. */
-	trianglesOf( pieceId ) {
-
-		return this.pieces.get( pieceId )?.triangles ?? 0;
+		return this.plans.has( planId );
 
 	}
 
-	/** The piece's addressable leaves, for a building that swings its own door. */
-	leaves( pieceId ) {
+	/** What one copy of this building costs to draw. */
+	trianglesOf( planId ) {
 
-		return this.pieces.get( pieceId )?.leaves ?? [];
+		return this.plans.get( planId )?.triangles ?? 0;
+
+	}
+
+	/** The entrance's addressable leaves, for a parcel that swings its own door. */
+	leaves( planId ) {
+
+		return this.plans.get( planId )?.leaves ?? [];
 
 	}
 
 	/** Room for the copies a cell is about to place, one reallocation per batch. */
-	reserve( pieceIds ) {
+	reserve( planIds ) {
 
-		this.batches.reserve( pieceIds.flatMap( ( id ) => this.pieces.get( id )?.leaves.length ? [ id, LEAVES( id ) ] : [ id ] ) );
+		this.batches.reserve( planIds.flatMap( ( id ) => this.plans.get( id )?.leaves.length ? [ id, LEAVES( id ) ] : [ id ] ) );
 
 	}
 
 	/**
-	 * Draws one more copy of a piece.
-	 * @param swinging true when this building owns its leaves as moving pivots,
-	 *   so the shared copies of them stay out of the batches
+	 * Draws one more copy of a plan.
+	 * @param swinging true when this parcel owns its entrance leaves as moving
+	 *   pivots, so the shared copies of them stay out of the batches
 	 * @returns one handle per copy, to hand back to `release`
 	 */
-	admit( pieceId, matrix, color, { swinging = false } = {} ) {
+	admit( planId, matrix, color, { swinging = false } = {} ) {
 
-		const piece = this.pieces.get( pieceId );
-		if ( ! piece ) throw placementError( `no piece ${pieceId} in this kit` );
+		const plan = this.plans.get( planId );
+		if ( ! plan ) throw placementError( `no plan ${planId} in this world` );
 
-		const handle = this.batches.admit( pieceId, matrix, color );
-		if ( ! swinging && piece.leaves.length ) handle.leaf = this.batches.admit( LEAVES( pieceId ), matrix, color );
+		const handle = this.batches.admit( planId, matrix, color );
+		if ( ! swinging && plan.leaves.length ) handle.leaf = this.batches.admit( LEAVES( planId ), matrix, color );
 
 		return handle;
 
@@ -107,27 +110,26 @@ export class KitPieces {
 	dispose() {
 
 		this.batches.dispose();
-		for ( const piece of this.pieces.values() ) {
+		for ( const plan of this.plans.values() ) {
 
-			for ( const { geometry } of piece.surfaces ) geometry.dispose();
-			for ( const leaf of piece.leaves ) for ( const { geometry } of leaf.surfaces ) geometry.dispose();
+			for ( const { geometry } of plan.surfaces ) geometry.dispose();
+			for ( const leaf of plan.leaves ) for ( const { geometry } of leaf.surfaces ) geometry.dispose();
 
 		}
-		this.pieces.clear();
+		this.plans.clear();
 
 	}
 
 	async #load() {
 
-		const records = this.kit.families.flatMap( ( family ) => family.pieces );
-		const loaded = await mapConcurrent( records, LOAD_CONCURRENCY, ( piece ) => this.#piece( piece ) );
+		const loaded = await mapConcurrent( this.kit.plans, LOAD_CONCURRENCY, ( plan ) => this.#plan( plan ) );
 		const entries = [];
 
-		for ( const piece of loaded ) {
+		for ( const plan of loaded ) {
 
-			this.pieces.set( piece.id, piece );
-			entries.push( { id: piece.id, surfaces: piece.surfaces } );
-			if ( piece.leaves.length ) entries.push( { id: LEAVES( piece.id ), surfaces: piece.leaves.flatMap( ( leaf ) => leaf.surfaces ) } );
+			this.plans.set( plan.id, plan );
+			entries.push( { id: plan.id, surfaces: plan.surfaces } );
+			if ( plan.leaves.length ) entries.push( { id: LEAVES( plan.id ), surfaces: plan.leaves.flatMap( ( leaf ) => leaf.surfaces ) } );
 
 		}
 		this.batches.build( entries, { castShadow: true } );
@@ -136,20 +138,22 @@ export class KitPieces {
 
 	}
 
-	async #piece( piece ) {
+	async #plan( entry ) {
 
-		const url = `${this.baseUrl}/${piece.file}`;
+		const url = `${this.baseUrl}/${entry.glb}`;
+		let blueprint;
 		let scene;
 
 		try {
 
+			blueprint = await this.readJson( `${this.baseUrl}/${entry.blueprint}` );
 			const bytes = await this.readBinary( url );
-			if ( Number.isInteger( piece.bytes ) && bytes.byteLength !== piece.bytes ) {
+			if ( Number.isInteger( entry.bytes ) && bytes.byteLength !== entry.bytes ) {
 
-				throw new Error( `${bytes.byteLength} bytes, the kit publishes ${piece.bytes}` );
+				throw new Error( `${bytes.byteLength} bytes, the index publishes ${entry.bytes}` );
 
 			}
-			if ( piece.sha256 && await documentHash( bytes ) !== piece.sha256 ) throw new Error( 'byte hash mismatch' );
+			if ( entry.sha256 && await documentHash( bytes ) !== entry.sha256 ) throw new Error( 'byte hash mismatch' );
 			( { scene } = await this.loader.parseAsync( bytes, `${this.baseUrl}/` ) );
 
 		} catch ( cause ) {
@@ -158,9 +162,14 @@ export class KitPieces {
 
 		}
 
-		const { surfaces, leaves } = readPiece( scene, this.factory );
+		const { surfaces, leaves } = readShell( scene, this.factory, blueprint );
 
-		return { id: piece.id, triangles: piece.triangles ?? 0, surfaces, leaves };
+		return {
+			id: entry.id, baysAcross: entry.baysAcross, baysDeep: entry.baysDeep,
+			surfaces, leaves,
+			triangles: surfaces.reduce( ( sum, { geometry } ) => sum + triangles( geometry ), 0 )
+				+ leaves.reduce( ( sum, leaf ) => sum + leaf.surfaces.reduce( ( part, { geometry } ) => part + triangles( geometry ), 0 ), 0 )
+		};
 
 	}
 
@@ -172,11 +181,29 @@ export function placementError( message ) {
 
 }
 
+function triangles( geometry ) {
+
+	return ( geometry.getIndex()?.count ?? geometry.getAttribute( 'position' ).count ) / 3;
+
+}
+
 async function fetchBinary( url ) {
+
+	return ( await ok( url ) ).arrayBuffer();
+
+}
+
+async function fetchJson( url ) {
+
+	return ( await ok( url ) ).json();
+
+}
+
+async function ok( url ) {
 
 	const response = await fetch( url );
 	if ( ! response.ok ) throw new Error( `HTTP ${response.status}` );
 
-	return response.arrayBuffer();
+	return response;
 
 }

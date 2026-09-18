@@ -2,29 +2,36 @@ import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { bake } from '../GeometryBake.js';
 import { bucketFor, splitBucket } from '../Variety.js';
-import { shellMaterial, shellVariant } from '../ShellSurface.js';
+import { doorFrames, doorLeafFrame } from '../DoorGeometry.js';
+import { ScenicSurface } from '../ScenicSurface.js';
+import { isSceneryNode, shellMaterial, shellScenery, shellVariant } from '../ShellSurface.js';
 
-// The GLB names a leaf `door:<id>/leaf:<n>`; GLTFLoader strips the reserved
-// characters, so what arrives is `door<id>leaf<n>`.
-const LEAF = /^door(.+?)leaf(\d+)$/;
+// A merged GLB names its surfaces `merged:<key>`; GLTFLoader strips the
+// reserved characters, so the leading word is what survives to match on.
+const EXTERIOR = 'merged';
 
 /**
- * One piece GLB read into what the city draws it with.
+ * One plan's shell GLB read into what the city draws it with.
  *
- * `surfaces` are the shared parts: every copy of this piece in the city draws
+ * `surfaces` are the whole building: every copy of this plan in the city draws
  * them from the same geometry, so they merge by material binding once here and
- * never again. `leaves` are the addressable door leaves, kept apart because a
- * building with a real interior swings its own pair while every closed
- * building draws them with the rest of the piece.
+ * never again. `leaves` are the street entrance's addressable leaves, kept
+ * apart because a parcel with a real interior swings its own pair while every
+ * closed parcel draws them with the rest of the shell.
  *
- * All geometry is piece-local, the frame kit.json publishes: run start or
- * corner junction on the walking surface, +X along the first run, +Z inward.
- * A leaf also carries its hinge, which is what a swinging copy is rebased on.
+ * All geometry is plan-local, the frame the plan was generated in: origin at
+ * the entrance-face corner, face 0 along +X, walking surface at Y=0. A leaf also
+ * carries its closed-pose origin, which is what a swinging copy is rebased on.
+ *
+ * @param blueprint the plan's own blueprint, which names its doors
  */
-export function readPiece( scene, factory ) {
+export function readShell( scene, factory, blueprint ) {
 
 	scene.updateMatrixWorld( true );
 
+	const scenic = new ScenicSurface( blueprint );
+	const frames = doorFrames( blueprint );
+	const main = frames.find( ( frame ) => frame.role === 'main' && frame.motion.supported ) ?? null;
 	const shell = new Map();
 	const leaves = new Map();
 
@@ -35,25 +42,36 @@ export function readPiece( scene, factory ) {
 		const key = node.material?.name ?? '';
 		const bucket = bucketFor(
 			key,
-			shellVariant( factory, { key, authored: node.material?.userData?.materialVariant } ),
+			shellVariant( factory, { key, authored: node.material?.userData?.materialVariant, blueprint } ),
 			node.material?.side === THREE.DoubleSide
 		);
-		const leaf = LEAF.exec( node.name ?? '' );
+		const leaf = doorLeafFrame( node, frames );
 
-		if ( ! leaf ) {
+		if ( isSceneryNode( node ) ) {
 
-			push( shell, bucket, bake( node ) );
+			// A shared shell is drawn as a closed building, so the fake rooms
+			// behind its glass stand with the room's own light baked in.
+			const geometry = shellScenery( node, factory, { key, hasInterior: false, scenic } );
+			if ( geometry ) push( shell, bucket, geometry );
 			return;
 
 		}
 
-		const index = Number( leaf[ 2 ] );
-		if ( ! leaves.has( index ) ) {
+		if ( leaf && main && leaf.owner === main ) {
 
-			leaves.set( index, { index, origin: node.getWorldPosition( new THREE.Vector3() ), parts: new Map() } );
+			if ( ! leaves.has( leaf.index ) ) {
+
+				leaves.set( leaf.index, { index: leaf.index, origin: leaf.node.getWorldPosition( new THREE.Vector3() ), parts: new Map() } );
+
+			}
+			push( leaves.get( leaf.index ).parts, bucket, bake( node ) );
+			return;
 
 		}
-		push( leaves.get( index ).parts, bucket, bake( node ) );
+
+		// Everything else the shell publishes: its facades, its slabs, its roof
+		// and the leaves of every door this path does not move.
+		if ( leaf || node.name?.startsWith( EXTERIOR ) ) push( shell, bucket, bake( node ) );
 
 	} );
 

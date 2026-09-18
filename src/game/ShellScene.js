@@ -23,7 +23,7 @@ export class ShellScene {
 		this.stream = new ShellStream( {
 			catalog, factory, buildings, loadBuildings,
 			...( this.pieces ? {
-				loader: new KitCellLoader( { pieces: this.pieces, factory, plansUrl: kit?.plansUrl } ),
+				loader: new KitCellLoader( { pieces: this.pieces, factory } ),
 				loadRadius: KIT_LOAD_RADIUS,
 				dropRadius: KIT_DROP_RADIUS
 			} : {} ),

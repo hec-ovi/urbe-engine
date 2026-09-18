@@ -2,21 +2,23 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AssemblyError } from './RequestAssembler.js';
-import { blueprintFile, parcelBlueprint, placementsFile, planBlueprintFile, PLANS_FOLDER } from './kit/index.js';
+import { blueprintFile, parcelBlueprint, placementsFile } from './kit/index.js';
 
 /**
  * The blueprint of any building standing in an out dir.
  *
  * A generated shell publishes its own document beside its GLB. A kit parcel
  * carries only the plan it stands from and the frame it stands in, so its
- * document is composed from the plan's, which is read once however many
- * parcels of the city stand on it.
+ * document is composed from the plan's, which is read once from the shared
+ * store however many parcels of the city stand on it.
  */
 export class BuildingBlueprints {
 
-	constructor( dir ) {
+	/** @param library the PlanLibrary that says where a plan's blueprint stands */
+	constructor( dir, library ) {
 
 		this.dir = dir;
+		this.library = library;
 		this.plans = new Map();
 
 	}
@@ -44,9 +46,11 @@ export class BuildingBlueprints {
 
 		if ( held ) return held;
 
-		// A city has a few dozen plans and hundreds of buildings, so each plan is
-		// read once and every parcel of it waits on that read.
-		const plan = read( join( this.dir, PLANS_FOLDER, planBlueprintFile( id ) ) );
+		// A city has a hundred or so plans and hundreds of buildings, so each plan
+		// is held once and every parcel of it waits on that one read. A plan the
+		// library drew this run is already parsed; one read off an earlier run's
+		// store is read here.
+		const plan = this.library.blueprint( id ) ?? read( this.library.blueprintPath( id ) );
 
 		this.plans.set( id, plan );
 

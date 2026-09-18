@@ -4,6 +4,7 @@ import { plain } from '../../city/GeometryBake.js';
 import { compact } from '../../city/kit/BatchGeometry.js';
 import { MaterialBatches } from '../../city/kit/MaterialBatches.js';
 import { byteHash } from '../native/NativeStreetChecks.js';
+import { StreetInstances } from './StreetInstances.js';
 import { streetPieceBoxes } from './StreetPieceBoxes.js';
 
 const LOAD_CONCURRENCY = 8;
@@ -32,15 +33,17 @@ export class StreetPieces {
 
 	/**
 	 * @param kit the manifest's `kit`, already identity-checked with it
+	 * @param placements the manifest's placement table, for the values its copies carry
 	 * @param source the verified street source, for piece bytes
 	 * @param materials the native street material factory
 	 */
-	constructor( { kit, source, materials, loader = cityGltfLoader() } ) {
+	constructor( { kit, placements, source, materials, loader = cityGltfLoader() } ) {
 
 		this.kit = kit;
 		this.source = source;
 		this.materials = materials;
 		this.loader = loader;
+		this.instances = new StreetInstances( kit, placements, source.manifest.materials.binding );
 		this.pieces = new Map();
 		this.abort = new AbortController();
 		this.batches = new MaterialBatches( 'street-pieces' );
@@ -74,6 +77,7 @@ export class StreetPieces {
 	reserve( pieceIds ) {
 
 		this.batches.reserve( pieceIds );
+		this.instances.follow();
 
 	}
 
@@ -85,7 +89,9 @@ export class StreetPieces {
 
 		if ( ! this.pieces.has( placement.piece ) ) throw streamError( `no piece ${placement.piece} in this kit` );
 
-		handles.push( this.batches.admit( placement.piece, world ) );
+		const handle = this.batches.admit( placement.piece, world );
+		this.instances.write( handle, placement );
+		handles.push( handle );
 
 	}
 
@@ -98,6 +104,7 @@ export class StreetPieces {
 	dispose() {
 
 		this.abort.abort();
+		this.instances.dispose();
 		this.batches.dispose();
 		for ( const piece of this.pieces.values() ) for ( const { geometry } of piece.surfaces ) geometry.dispose();
 		this.pieces.clear();
@@ -110,6 +117,7 @@ export class StreetPieces {
 
 		for ( const piece of loaded ) this.pieces.set( piece.id, piece );
 		this.batches.build( loaded );
+		this.instances.bind( this.batches.batches );
 
 		// A batch draws its own buffers, not the ones each primitive was checked
 		// on: a bucket whose primitives disagree on an attribute settles it by
@@ -147,7 +155,7 @@ export class StreetPieces {
 
 				}
 				originals.add( mesh.material );
-				const material = this.materials.build( surfaceId );
+				const material = this.materials.build( surfaceId, this.instances.options( surfaceId ) );
 				this.materials.assertGeometry( material, mesh.geometry );
 				for ( const resource of this.materials.resources( material ) ) resources.add( resource.ready );
 

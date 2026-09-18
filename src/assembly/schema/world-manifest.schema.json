@@ -43,7 +43,7 @@
     },
     "kit": {
       "type": "object", "additionalProperties": false, "required": [ "file", "sha256" ],
-      "description": "The piece kit this world was built from, in the shared store, present when any parcel was assembled from it.",
+      "description": "The index of the building plans this world stands on, in the shared store beside the shells it names, present when any parcel stands from one.",
       "properties": {
         "file": { "const": "kit.json" },
         "sha256": { "$ref": "#/$defs/sha256" },
@@ -70,13 +70,13 @@
     },
     "sources": {
       "type": "object",
-      "description": "How each parcel is drawn: its own GLB, the kit pieces, or nothing at all.",
+      "description": "How each parcel is drawn: its own GLB, a shared building plan, or nothing at all.",
       "propertyNames": { "$ref": "#/$defs/parcelId" },
       "additionalProperties": { "enum": [ "kit", "shell", "empty" ] }
     },
     "buildings": {
       "type": "object",
-      "description": "What each kit parcel stands from: the Atlas block template and lot slot it was dressed by, and the building plan its pieces come from.",
+      "description": "What each kit parcel stands from: the Atlas block template and lot slot it was dressed by, and the building plan it is a copy of.",
       "propertyNames": { "$ref": "#/$defs/parcelId" },
       "additionalProperties": {
         "type": "object", "additionalProperties": false, "required": [ "template", "slot", "plan" ],
@@ -86,11 +86,7 @@
             "description": "meta.blockTemplates id, or null for a block Atlas tiled on its own."
           },
           "slot": { "type": [ "integer", "null" ], "minimum": 0 },
-          "plan": { "type": "string", "minLength": 1, "description": "kit/plans/<plan>.json" },
-          "blueprint": {
-            "enum": [ "plan", "parcel" ],
-            "description": "Where this building's blueprint is read from: composed from kit/plans/<plan>.blueprint.json, or the parcel's own <parcel>.blueprint.json, which is also what a world written before the document moved to the plan holds. Absent means the parcel's own."
-          }
+          "plan": { "type": "string", "minLength": 1, "description": "The plan id the world's plan index resolves. Its blueprint is where this building's own is composed from." }
         }
       }
     },

@@ -1,4 +1,4 @@
-import type { BufferGeometry, Material, Texture } from 'three/webgpu';
+import type { BufferGeometry, Material, Node, Texture } from 'three/webgpu';
 
 export interface NativeTextureDefinition {
 	path: string;
@@ -14,7 +14,19 @@ export interface NativeTextureResource {
 }
 /** Receives a validated theme-relative path and its complete published definition. */
 export type NativeTexturePort = (id: string, themePath: string, definition: NativeTextureDefinition) => NativeTextureResource;
-export interface NativeMaterialOptions { roadRoughness?: number }
+/** What one copy asks for itself, as nodes the caller's own per instance table answers with. */
+export interface NativeInstanceValues {
+	tint: Node;
+	wear: Node;
+	scan?: { offset: Node; scale: Node };
+	text?: { count: Node; glyph: (index: Node) => Node };
+}
+export interface NativeMaterialOptions {
+	roadRoughness?: number;
+	instances?: NativeInstanceValues;
+	/** The four surfaces whose maps the scan quad picks between; needs `instances.scan`. */
+	scanCells?: string[];
+}
 export interface NativeTextureSourceOptions {
 	baseUrl?: string;
 	fetch?: typeof globalThis.fetch;

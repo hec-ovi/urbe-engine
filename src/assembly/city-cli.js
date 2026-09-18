@@ -12,7 +12,7 @@ import { interiorPlan, parseCityArgs } from './CityPlan.js';
 import { collectShellArtifacts } from './ShellArtifacts.js';
 import { ConnectionsArtifact } from './ConnectionsArtifact.js';
 import { loadBlueprint } from './BlueprintInput.js';
-import { KitAssembler, KitManifest } from './kit/index.js';
+import { KitAssembler, PlanLibrary } from './kit/index.js';
 import { BuildingBlueprints } from './BuildingBlueprints.js';
 import { InteriorModules } from './InteriorModules.js';
 
@@ -54,11 +54,12 @@ const parcelIds = atlas.parcels.map( ( p ) => p.id );
 const stale = out.prune( atlas.parcels );
 const wanted = args.reuseShells ? [] : parcelIds.filter( ( id ) => ! args.parcels || args.parcels.includes( id ) );
 const assembler = new RequestAssembler( atlas, connections );
-// Without Exterior's published pieces every parcel is generated, so a machine
-// that has not built the kit still assembles a city it can play. A kit that is
-// there but broken still ends the run.
-const kit = KitManifest.find();
-const kitAssembler = kit ? new KitAssembler( atlas, assembler, kit ) : null;
+const exterior = new ExteriorWorkers( Math.max( 1, args.workers ) );
+// A city is a hundred or so distinct buildings placed hundreds of times, so
+// each one is generated once into the shared store and every parcel of it
+// carries the frame it stands in.
+const planLibrary = new PlanLibrary( { workers: exterior } );
+const kitAssembler = new KitAssembler( atlas, assembler, planLibrary );
 
 const questlinesPath = join( outDir, 'quests', 'questlines.json' );
 const questlines = existsSync( questlinesPath ) ? JSON.parse( readFileSync( questlinesPath, 'utf8' ) ) : [];
@@ -76,21 +77,54 @@ if ( planned.unknown.length ) {
 // block's merge took over stands empty: its neighbour's building covers it.
 // Only a neighbour the kit really takes gives it up, so a host the kit passes
 // over, a landmark among them, leaves this lot its own building.
-const merged = new Map( wanted.map( ( id ) => [ id, kitAssembler?.absorbedBy( id ) ?? null ] )
+const merged = new Map( wanted.map( ( id ) => [ id, kitAssembler.absorbedBy( id ) ?? null ] )
 	.filter( ( [ , host ] ) => host && kitAssembler.candidate( host ) ) );
 const selected = new Set( wanted );
-const kitQueue = new Set( wanted.filter( ( id ) => ! merged.has( id ) && kitAssembler?.candidate( id ) ) );
+const kitQueue = new Set( wanted.filter( ( id ) => ! merged.has( id ) && kitAssembler.candidate( id ) ) );
 const queue = wanted.filter( ( id ) => ! kitQueue.has( id ) && ! merged.has( id ) );
-const workers = Math.max( 1, Math.min( args.workers, queue.length || 1 ) );
+const workers = Math.max( 1, args.workers );
 const streets = new StreetsAhead( outDir, atlas );
-const exterior = new ExteriorWorkers( workers );
 const pipeline = new BuildingPipeline( assembler, { exterior } );
+
+if ( stale.length ) console.log( `dropped ${stale.length} folders this blueprint no longer has: ${stale.join( ', ' )}` );
+
+// Every distinct building first: a parcel cannot be written before the plan it
+// stands from has a shell and a blueprint in the store.
+const library = args.reuseShells || ! kitQueue.size
+	? { drawn: 0, reused: 0, failed: 0, ms: 0 }
+	: await planLibrary.draw();
+
+for ( const id of [ ...kitQueue ] ) {
+
+	const plan = kitAssembler.candidate( id ).plan.id;
+
+	// A building Exterior could not draw sends its parcels back to the
+	// generator, which builds each of them on its own lot.
+	if ( planLibrary.blueprint( plan ) ) continue;
+
+	kitQueue.delete( id );
+	queue.push( id );
+	kitAssembler.reasons.set( id, `plan ${plan}: ${planLibrary.failures.get( plan ) ?? 'was not drawn'}` );
+
+	// This host now stands on its own lot only, so the lot its merge was going
+	// to cover takes its own building back instead of shipping nothing.
+	for ( const [ absorbed, host ] of merged ) {
+
+		if ( host !== id ) continue;
+
+		merged.delete( absorbed );
+		queue.push( absorbed );
+		kitAssembler.reasons.set( absorbed, `${id} stands no shared building over this lot` );
+
+	}
+
+}
 
 console.log( args.reuseShells
 	? `city ${atlas.meta.seed}: reusing ${parcelIds.length} shells`
-	: `city ${atlas.meta.seed}: ${kitQueue.size} kit, ${queue.length} generated, ${workers} workers${exterior.governor.target ? `, held under ${exterior.governor.target} C` : ''}` );
-if ( ! kit ) console.log( "no piece kit found: every building is generated (run Exterior's kit CLI to ship pieces instead)" );
-if ( stale.length ) console.log( `dropped ${stale.length} folders this blueprint no longer has: ${stale.join( ', ' )}` );
+	: `city ${atlas.meta.seed}: ${kitQueue.size} kit from ${planLibrary.size} plans `
+		+ `(${library.drawn} drawn, ${library.reused} reused, ${library.failed} refused, ${( library.ms / 1000 ).toFixed( 1 )} s), `
+		+ `${queue.length} generated, ${workers} workers${exterior.governor.target ? `, held under ${exterior.governor.target} C` : ''}` );
 
 const results = [];
 const parcelsById = new Map( atlas.parcels.map( ( parcel ) => [ parcel.id, parcel ] ) );
@@ -177,7 +211,7 @@ async function buildKitParcels() {
 				parcelId: id,
 				ok: true,
 				source: 'kit',
-				family: table.family,
+				family: table.family ?? null,
 				floors: table.floors,
 				basements: 0,
 				interior: 'closed',
@@ -244,18 +278,13 @@ if ( orphaned.size ) {
 
 const shells = out.shells( parcelIds );
 // A kit building's blueprint is its plan's, turned into the frame the parcel
-// stands in, so the plans are published before anything reads a blueprint.
+// stands in, so the plans are bound before anything reads a blueprint.
 const kitParcels = out.kits( shells );
-if ( kitParcels.length && ! kit ) throw new AssemblyError( 'E_KIT_MANIFEST', `${kitParcels.length} buildings stand from pieces but no kit is published` );
 const kitPlans = kitParcels.length ? out.kitPlans( kitParcels ) : new Map();
-// A parcel an earlier run left a blueprint of its own keeps reading that file,
-// so a run over part of a city publishes only the plans its parcels compose from.
-const ownBlueprint = new Set( out.ownBlueprints( kitParcels ) );
-const composedPlans = new Set( [ ...kitPlans ].filter( ( [ id ] ) => ! ownBlueprint.has( id ) ).map( ( [ , plan ] ) => plan ) );
-const plans = kitParcels.length
-	? kitAssembler.plans.publish( outDir, new Set( kitPlans.values() ), composedPlans )
-	: [];
-const blueprints = new BuildingBlueprints( outDir );
+const plans = [ ...new Set( kitPlans.values() ) ].sort();
+const kitReference = plans.length ? planLibrary.publish( plans ) : null;
+const planBytes = plans.length ? planLibrary.bytes( plans ) : 0;
+const blueprints = new BuildingBlueprints( outDir, planLibrary );
 
 /** How each parcel is drawn, read from what its own folder holds. */
 function classify( ids ) {
@@ -363,17 +392,14 @@ for ( const id of candidates ) {
 // name the same source for every parcel.
 const { sources } = classify( shells );
 const generated = shells.filter( ( id ) => sources[ id ] === 'shell' );
-// One copy of the pieces in the shared store, which the world binds by hash.
-const kitReference = kitParcels.length ? kit.publish() : null;
-// What each standing building is: the block template that dressed it, the plan
-// it stands from, and where its blueprint is read from.
+// What each standing building is: the block template that dressed it and the
+// plan it stands from, whose blueprint is where its own is composed from.
 const buildings = Object.fromEntries( [ ...kitPlans ].map( ( [ id, plan ] ) => [ id, {
 	template: kitAssembler.templates.slotOf.get( id )?.templateId ?? null,
 	slot: kitAssembler.templates.slotOf.get( id )?.slot ?? null,
-	plan,
-	blueprint: ownBlueprint.has( id ) ? 'parcel' : 'plan'
+	plan
 } ] ) );
-if ( kitReference ) console.log( `${kitParcels.length} buildings stand from ${plans.length} plans of ${kit.ids().length} shared families` );
+if ( kitReference ) console.log( `${kitParcels.length} buildings stand from ${plans.length} shared plans, ${( planBytes / 1e6 ).toFixed( 1 )} MB` );
 const interiorResources = readyInteriors.length ? modules.references : null;
 if ( interiorResources ) console.log( `${readyInteriors.length} furnished buildings share one interior module and furniture set` );
 for ( const result of results ) {
@@ -395,6 +421,8 @@ const totals = {
 	generated: generated.length,
 	empty: empty.length,
 	plans: plans.length,
+	planBytes,
+	planMs: library.ms,
 	interiorsRequested: interiorTarget,
 	interiorsReady: readyInteriors.length,
 	interiorsFailed: interiorFailures.length,
@@ -413,7 +441,7 @@ writeFileSync( join( outDir, 'qa-report.json' ), JSON.stringify( {
 
 await exterior.close();
 console.log( `reading ${shells.length} shell blueprints` );
-const { catalog, rooftopRequest } = await collectShellArtifacts( outDir, shells, { seed: atlas.meta.seed } );
+const { catalog, rooftopRequest } = await collectShellArtifacts( outDir, shells, { seed: atlas.meta.seed, plans: planLibrary } );
 const rooftopSpans = await runRooftopSpans( rooftopRequest );
 if ( out.carryTypes( source.path ) ) console.log( 'typed NPC set carried in beside the blueprint' );
 const streetsPrepared = await streets.prepared();
@@ -425,7 +453,7 @@ const manifest = await out.publishManifest( atlas, shells, readyInteriors, {
 } );
 streets.dispose();
 
-console.log( `\n${totals.passed}/${totals.parcels} buildings passed (${totals.kit} kit from ${totals.plans} plans, ${totals.generated} generated), ${totals.empty} empty lots; ${totals.interiorsReady}/${totals.interiorsRequested} interiors ready; ${( totals.wallMs / 1000 ).toFixed( 1 )} s, ${( totals.bytes / 1e6 ).toFixed( 1 )} MB` );
+console.log( `\n${totals.passed}/${totals.parcels} buildings passed (${totals.kit} kit from ${totals.plans} plans, ${totals.generated} generated), ${totals.empty} empty lots; ${totals.interiorsReady}/${totals.interiorsRequested} interiors ready; ${( totals.wallMs / 1000 ).toFixed( 1 )} s, ${( totals.bytes / 1e6 ).toFixed( 1 )} MB in the world and ${( totals.planBytes / 1e6 ).toFixed( 1 )} MB of shared plans` );
 for ( const r of failed ) console.log( `  ${r.parcelId}  ${r.error}` );
 for ( const r of interiorFailures ) console.log( `  ${r.parcelId} interior kept closed  ${r.error}` );
 if ( exterior.governor.summary() ) console.log( `heat: ${exterior.governor.summary()}` );

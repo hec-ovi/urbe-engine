@@ -1,4 +1,3 @@
-import { planBlueprintFile } from '../../assembly/kit/KitFiles.js';
 import { parcelBlueprint } from '../../assembly/kit/PlanBlueprint.js';
 
 /**
@@ -7,13 +6,13 @@ import { parcelBlueprint } from '../../assembly/kit/PlanBlueprint.js';
  * and a furnished one carries the three placement layouts its floors reuse.
  *
  * A kit parcel's blueprint belongs to the plan it stands from, so it is read
- * once for the whole city and composed into each parcel's frame here. A world
- * whose manifest does not say so keeps a blueprint beside each parcel and is
- * read that way. Every consumer downstream gets the same document.
+ * once for the whole city and composed into each parcel's frame here. Every
+ * consumer downstream gets the same document.
  */
 export class BuildingSource {
 
-	constructor( { manifest, outBase, plansUrl, readJson } ) {
+	/** @param planUrls plan id -> where that plan's blueprint stands */
+	constructor( { manifest, outBase, planUrls = new Map(), readJson } ) {
 
 		this.ids = new Set( manifest.parcels );
 		this.interiors = new Set( manifest.interiors );
@@ -23,7 +22,7 @@ export class BuildingSource {
 		// What each kit parcel stands from, and where its blueprint is read.
 		this.buildings = manifest.buildings ?? {};
 		this.outBase = outBase;
-		this.plansUrl = plansUrl;
+		this.planUrls = planUrls;
 		this.readJson = readJson;
 		this.plans = new Map();
 		this.active = 0;
@@ -48,7 +47,7 @@ export class BuildingSource {
 
 		const base = `${this.outBase}/${parcelId}`;
 		const source = this.sources[ parcelId ] === 'kit' ? 'kit' : 'shell';
-		const blueprint = source === 'kit' && this.buildings[ parcelId ]?.blueprint === 'plan'
+		const blueprint = source === 'kit'
 			? await this.#kitBlueprint( parcelId, `${base}/${parcelId}.placements.json` )
 			: await this.#json( `${base}/${parcelId}.blueprint.json` );
 		const hasInterior = this.interiors.has( parcelId );
@@ -73,7 +72,11 @@ export class BuildingSource {
 
 		if ( ! plan ) {
 
-			plan = this.#json( `${this.plansUrl}/${planBlueprintFile( record.plan )}` );
+			const url = this.planUrls.get( record.plan );
+
+			if ( ! url ) throw inputError( `${parcelId} stands from plan ${record.plan}, which this world does not publish` );
+
+			plan = this.#json( url );
 			this.plans.set( record.plan, plan );
 
 		}

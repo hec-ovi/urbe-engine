@@ -13,8 +13,6 @@ const MANIFEST_FILE = 'manifest.json';
 const NPC_TYPES_FILE = 'npc-types.json';
 const BLUEPRINT_FILE = 'blueprint.json';
 const QUESTLINES_FILE = 'quests/questlines.json';
-/** Where kit assembly writes this city's building plans (../assembly/kit/CONTRACT.md). */
-const PLANS_FOLDER = 'kit/plans';
 /** The store every world reads its shared resources from (../assembly/SharedResources.js). */
 const SHARED_BASE = '/out/shared';
 const QUEST_BUNDLE_FILE = 'quests/quest-bundle.json';
@@ -105,7 +103,7 @@ export class WorldSource {
 		const interiorModules = await this.#resource( manifest.interiorModules );
 		const interiorProps = await this.#resource( manifest.interiorProps );
 		const sources = new BuildingSource( {
-			manifest, outBase: this.outBase, plansUrl: `${this.outBase}/${PLANS_FOLDER}`, readJson: url => this.#json( url )
+			manifest, outBase: this.outBase, planUrls: kit?.planUrls ?? new Map(), readJson: url => this.#json( url )
 		} );
 		const loadBuildings = ids => sources.load( ids );
 		const buildings = await loadBuildings( initialBuildingIds( shellCatalog, manifest, game ) );
@@ -134,24 +132,22 @@ export class WorldSource {
 	}
 
 	/**
-	 * The Exterior piece kit this world was built from and the building plans
-	 * beside it. `baseUrl` is what its piece files are relative to; `plansUrl` is
-	 * where `<parcel>.placements.json` resolves its plan id, which is always in
-	 * the world's own folder because the plans are this city's buildings.
-	 * @returns { document, baseUrl, plansUrl } or null for a world of generated shells
+	 * The distinct buildings this world stands on. The index names each plan's
+	 * shell and blueprint relative to the shared store, where every city built
+	 * from the same Exterior reads the same copy.
+	 * @returns { document, baseUrl, planUrls } or null for a world of generated shells
 	 */
 	async #kit( manifest ) {
 
 		if ( ! manifest.kit ) return null;
 
-		const file = manifest.kit.file;
 		const base = this.#baseOf( manifest.kit );
-		const { data } = await this.#document( `${base}/${file}`, manifest.kit );
+		const { data } = await this.#document( `${base}/${manifest.kit.file}`, manifest.kit );
 
 		return {
 			document: data,
-			baseUrl: `${base}/${file.slice( 0, file.lastIndexOf( '/' ) + 1 )}`.replace( /\/+$/, '' ),
-			plansUrl: `${this.outBase}/${PLANS_FOLDER}`
+			baseUrl: this.sharedBase,
+			planUrls: new Map( data.plans.map( ( plan ) => [ plan.id, `${this.sharedBase}/${plan.blueprint}` ] ) )
 		};
 
 	}

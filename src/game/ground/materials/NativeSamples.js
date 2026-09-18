@@ -1,15 +1,23 @@
-import { attribute, dFdx, dFdy, floor, fract, mix, mx_noise_float, positionWorld, sin, smoothstep, texture, uv, vec2 } from 'three/tsl';
+import { attribute, clamp, dFdx, dFdy, floor, fract, mix, mx_noise_float, positionWorld, sin, smoothstep, texture, uv, vec2 } from 'three/tsl';
 
-/** Authored UVs and a shared world-space asphalt sampling frame. */
+/** Authored UVs, a shared world-space asphalt sampling frame, and what each copy asks for itself. */
 export class NativeSamples {
-	constructor( surface, asphalt, getTexture ) {
+	constructor( surface, asphalt, getTexture, { instances = null, scanCells = null } = {} ) {
 		this.surface = surface;
 		this.asphalt = asphalt;
 		this.getTexture = getTexture;
 		this.uv = surface.uv.mode === 'world-xz' ? positionWorld.xz.div( vec2( ...surface.uv.scale ) )
 			: surface.uv.mode === 'metres' ? uv().div( vec2( ...surface.uv.scale ) ) : uv();
-		this.wear = attribute( '_street_wear', 'float' );
 		this.height = attribute( '_street_height', 'float' );
+		// The pieces bake a neutral wear field and each placement carries the
+		// amount sampled where it stands, so the two add up on the surface.
+		const baked = attribute( '_street_wear', 'float' );
+		this.wear = instances ? clamp( baked.add( instances.wear ), 0, 1 ) : baked;
+		this.text = instances?.text ?? null;
+		this.scan = instances?.scan && scanCells ? {
+			uv: this.uv.mul( instances.scan.scale ).add( instances.scan.offset ),
+			cells: scanCells.map( cell => coordinates => texture( this.getTexture( cell.maps.basecolor ), coordinates ) )
+		} : null;
 	}
 	map( slot, coordinates = this.uv ) {
 		return texture( this.getTexture( this.surface.maps[ slot ] ), coordinates );

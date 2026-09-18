@@ -3,12 +3,11 @@
  *
  * Rapier documents the cuboid as the building and room shape: it has an
  * inside, it needs no cooking, and a compound of them is one broad-phase entry
- * however many parts it holds. So a kit building is its footprint walls by
- * envelope height, pierced wherever the entrance and the interior behind it
- * are open so a doorway is a real hole rather than a trimesh with a gap in it,
- * a cap over the roof so anything walking a rooftop span stays on it, cut
- * where a stair head comes through, and the door leaf itself when nothing else
- * is going to move it.
+ * however many parts it holds. So a kit building is its lot walls by envelope
+ * height, pierced wherever its blueprint is open so a doorway is a real hole
+ * rather than a trimesh with a gap in it, a cap over the roof so anything
+ * walking a rooftop span stays on it, cut where a stair head comes through,
+ * and the entrance leaf itself when nothing else is going to move it.
  *
  * None of these cost a triangle.
  */
@@ -17,32 +16,22 @@
 const WALL = 0.5;
 /** And how thick the roof reads from above. */
 const CAP = 0.4;
-/** A closed building's leaf fills its own opening. */
+/** A closed building's entrance leaf fills its own opening. */
 const LEAF = 0.12;
 
 /**
  * @param placement KitPlacement
- * @param swinging true when this building's leaves move on their own bodies
- * @param openings the interior's own holes, from KitOpenings
+ * @param openings every hole this building's blueprint reserves, from KitOpenings
+ * @param leaf the entrance door frame when nothing is going to move it, else null
  * @returns [{ center: [x,y,z], halfExtents: [hx,hy,hz], rotationY }]
  */
-export function buildingBoxes( placement, { swinging = false, openings = null } = {} ) {
+export function buildingBoxes( placement, { openings = null, leaf = null } = {} ) {
 
 	const boxes = [];
-	const { door, height, base } = placement;
+	const { height, base } = placement;
 	const top = base + height;
 	const holes = [ [], [], [], [] ];
 
-	if ( door ) {
-
-		const centre = doorAlong( placement, placement.edge( door.face ), door );
-		const sill = base + door.local.y;
-		holes[ door.face ].push( {
-			from: centre - door.width / 2, to: centre + door.width / 2,
-			bottom: sill, top: sill + door.height
-		} );
-
-	}
 	for ( const cut of openings?.walls ?? [] ) holes[ cut.face ]?.push( cut );
 
 	for ( let face = 0; face < 4; face ++ ) {
@@ -53,12 +42,12 @@ export function buildingBoxes( placement, { swinging = false, openings = null } 
 
 	boxes.push( ...cap( placement, top, openings?.roof ?? [] ) );
 
-	if ( door && ! swinging ) {
+	if ( leaf ) {
 
 		boxes.push( {
-			center: [ door.position.x, base + door.local.y + door.height / 2, door.position.z ],
-			halfExtents: [ door.width / 2, door.height / 2, LEAF / 2 ],
-			rotationY: placement.edge( door.face ).rotationY
+			center: [ leaf.center.x, leaf.center.y + leaf.height / 2, leaf.center.z ],
+			halfExtents: [ leaf.width / 2, leaf.height / 2, LEAF / 2 ],
+			rotationY: Math.atan2( - leaf.along.z, leaf.along.x )
 		} );
 
 	}
@@ -170,12 +159,5 @@ function wall( placement, edge, from, to, bottom, top ) {
 		halfExtents: [ ( to - from ) / 2, ( top - bottom ) / 2, WALL / 2 ],
 		rotationY: edge.rotationY
 	};
-
-}
-
-/** How far along its own edge the entrance sits, in the lot frame. */
-function doorAlong( placement, edge, door ) {
-
-	return ( door.local.x - edge.start[ 0 ] ) * edge.direction[ 0 ] + ( door.local.z - edge.start[ 1 ] ) * edge.direction[ 1 ];
 
 }

@@ -1,35 +1,27 @@
+import { BAY } from './Families.js';
+
 /** Atlas publishes lot metres on a millimetre grid, so an edge snaps to its bay count. */
 const TOLERANCE = 0.001;
 
 /**
  * Bays along one lot edge, or null when the edge is not a whole number of them.
- *
- * An edge of 8N metres carries two 4 m corner arms and N-1 straight bays, so
- * each face places N pieces: the corner at its start and the bays after it.
- * N is the count Exterior's `baysAcross` returns and the count its family
- * `fits.bays` range is stated in.
+ * A plan is named after its bay counts, so two lots of the same size stand the
+ * same building and a lot off the module keeps the generator.
  */
-export function bayCount( metres, module ) {
+export function bayCount( metres ) {
 
-	const bays = Math.round( metres / module.bay );
+	const bays = Math.round( metres / BAY );
 
-	return Math.abs( metres - bays * module.bay ) <= TOLERANCE && bays >= 2 ? bays : null;
+	return Math.abs( metres - bays * BAY ) <= TOLERANCE && bays >= 2 ? bays : null;
 
 }
 
 /** Bays across and deep, or null when either edge is off the module. */
-export function lotBays( width, depth, module ) {
+export function lotBays( width, depth ) {
 
-	const across = bayCount( width, module );
-	const deep = bayCount( depth, module );
+	const across = bayCount( width );
+	const deep = bayCount( depth );
 
 	return across && deep ? { across, deep } : null;
-
-}
-
-/** Pieces one storey places: the corner and the straight bays of all four faces. */
-export function piecesPerFloor( { across, deep } ) {
-
-	return 2 * ( across + deep );
 
 }
