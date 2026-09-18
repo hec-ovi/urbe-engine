@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "assemble": "tsx src/assembly/cli.js",
     "assemble-city": "tsx src/assembly/city-cli.js",
+    "gc": "tsx src/assembly/gc-cli.js",
     "simulate": "tsx src/assembly/simulate-cli.js",
     "carry-quests": "tsx src/assembly/quests-cli.js",
     "install-character-assets": "node scripts/install-character-assets.mjs",

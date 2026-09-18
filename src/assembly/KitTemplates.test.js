@@ -24,7 +24,7 @@ function assemble( blueprint = TINY, options = [ '--interiors', '0' ] ) {
 	roots.push( root );
 
 	const run = spawnSync( process.execPath, [ '--import', 'tsx', 'src/assembly/city-cli.js',
-		'--blueprint', blueprint, '--out', root, ...options ], { cwd: ENGINE_ROOT, encoding: 'utf8' } );
+		'--blueprint', blueprint, '--out', root, '--keep-shared', ...options ], { cwd: ENGINE_ROOT, encoding: 'utf8' } );
 	const manifest = JSON.parse( readFileSync( join( root, 'manifest.json' ), 'utf8' ) );
 	const index = JSON.parse( readFileSync( join( sharedRoot(), manifest.kit.shared, PLAN_INDEX_FILE ), 'utf8' ) );
 	const plans = new Map( index.plans.map( ( plan ) => [ plan.id, plan ] ) );

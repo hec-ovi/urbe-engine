@@ -1,6 +1,6 @@
 /** Assembles source-bound city artifacts and optional selected interiors through producer APIs. */
 
-import { existsSync, readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { RequestAssembler, AssemblyError } from './RequestAssembler.js';
 import { runConnections, runRooftopSpans } from './connectionsRunner.js';
@@ -15,28 +15,13 @@ import { loadBlueprint } from './BlueprintInput.js';
 import { KitAssembler, PlanLibrary } from './kit/index.js';
 import { BuildingBlueprints } from './BuildingBlueprints.js';
 import { InteriorModules } from './InteriorModules.js';
-
-function dirBytes( dir ) {
-
-	let total = 0;
-
-	for ( const name of readdirSync( dir ) ) {
-
-		const path = join( dir, name );
-		const stat = statSync( path );
-		total += stat.isDirectory() ? dirBytes( path ) : stat.size;
-
-	}
-
-	return total;
-
-}
+import { collect, dirBytes, OUT_DIR, sweepLine } from './SharedResources.js';
 
 const args = parseCityArgs( process.argv.slice( 2 ) );
 
 if ( ! args ) {
 
-	console.error( 'usage: npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--interiors N] [--parcel <id,id,...>] [--reuse-shells true] [--interior-parcels <id,id,...>]' );
+	console.error( 'usage: npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--interiors N] [--parcel <id,id,...>] [--reuse-shells true] [--interior-parcels <id,id,...>] [--keep-shared]' );
 	process.exit( 2 );
 
 }
@@ -460,6 +445,10 @@ if ( exterior.governor.summary() ) console.log( `heat: ${exterior.governor.summa
 console.log( `qa report: ${join( outDir, 'qa-report.json' )}` );
 const naming = manifest.named ? `, named${manifest.namingTheme ? `: ${manifest.namingTheme}` : ''}` : '';
 console.log( `manifest: ${join( outDir, MANIFEST_FILE )} (${manifest.parcels.length} buildings, ${kitParcels.length} from the kit, ${manifest.interiors.length} interiors, ${manifest.rooftopSpans.spans.length} rooftop spans, atlas ${manifest.atlasVersion}${naming})` );
+
+// The batch stands: every set this world names is bound by the manifest, so
+// what the store holds beyond the worlds on disk is last night's rebuilds.
+if ( ! args.keepShared ) console.log( sweepLine( collect( OUT_DIR, [ outDir ] ) ) );
 
 // The manifest is published: the city stands, whatever single lots it is missing.
 process.exit( 0 );
