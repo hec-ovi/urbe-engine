@@ -11,6 +11,7 @@ import { dressedColorNode } from './BodyMesh.js';
 import { garments } from './Garments.js';
 import { FRAMES } from './VatBaker.js';
 import { CharacterAnimations } from './CharacterAnimations.js';
+import { streetBodies } from './StreetBodies.js';
 import { Ragdoll } from '../physics/Ragdoll.js';
 
 const TALK = 'Idle_Talking_Loop';
@@ -33,9 +34,10 @@ export class HeroCharacter {
 
 	}
 
-	constructor( { animation, warmup = null, loadModel = defaultLoad } ) {
+	constructor( { animation, warmup = null, loadModel = defaultLoad, street = streetBodies } ) {
 
 		this.animation = animation;
+		this.street = street;
 		this.warmup = warmup;
 		this.loadModel = loadModel;
 		this.models = new Map();
@@ -120,6 +122,7 @@ export class HeroCharacter {
 			this.group.add( root );
 			person.hero = true;
 			this.fallen = { person, root, ragdoll, descriptor, key: modelKey( descriptor ) };
+			this.street.take( person.id );
 			this.#keepOnly( this.active?.key, this.fallen.key );
 			return true;
 
@@ -148,13 +151,33 @@ export class HeroCharacter {
 
 	update( delta ) {
 
-		if ( this.fallen ) this.fallen.ragdoll.update( delta );
+		if ( this.fallen ) this.#fall( delta );
 		if ( ! this.active ) return;
 
 		const { person, root, mixer } = this.active;
 		root.position.copy( person.position );
 		root.rotation.y = person.heading;
 		mixer.update( delta );
+
+	}
+
+	/**
+	 * Drives the dynamic body and keeps the crowd's own record of this person
+	 * on it, so the world knows where they are lying. The fall ends when the
+	 * body has stopped moving or its time is up, and the crowd takes them back.
+	 */
+	#fall( delta ) {
+
+		const { person, ragdoll } = this.fallen;
+
+		ragdoll.update( delta );
+		const at = ragdoll.position;
+		person.position.set( at.x, person.position.y, at.z );
+
+		if ( ! ragdoll.settled ) return;
+
+		this.street.rest( person.id );
+		this.clearFall();
 
 	}
 

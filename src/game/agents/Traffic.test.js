@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
+import { StreetBodies } from './StreetBodies.js';
 import { Traffic } from './Traffic.js';
 
 /**
@@ -118,6 +119,67 @@ describe( 'Traffic', () => {
 			signals: { green: () => true },
 			capacity: 1
 		} ) ).toThrow( /E_MOVEMENT_PATH3: road lane A\.path3/ );
+
+	} );
+
+	it( 'brakes for somebody in its lane and hits only one who steps in too late', () => {
+
+		const street = new StreetBodies();
+		const traffic = new Traffic( {
+			networks: corner( 120 ),
+			models: stubModels(),
+			signals: { green: () => true },
+			capacity: 1,
+			seed: 'crossing',
+			street
+		} );
+		const away = new THREE.Vector3( 10, 0, 40 );
+
+		traffic.update( 0.05, away, 0 );
+		const car = traffic.cars[ 0 ];
+
+		// up to speed with open road ahead
+		for ( let step = 0; step < 200 && ( car.via || car.lane.length - car.distance < 40 ); step ++ ) traffic.update( 0.05, away, 0 );
+
+		const forward = new THREE.Vector3( Math.sin( car.heading ), 0, Math.cos( car.heading ) );
+		const walker = { position: car.position.clone().addScaledVector( forward, 4.6 / 2 + 7 ).setY( car.position.y + 0.15 ) };
+		let closest = Infinity;
+
+		for ( let step = 0; step < 100; step ++ ) {
+
+			street.open();
+			street.place( walker );
+			traffic.update( 0.05, away, 0 );
+			closest = Math.min( closest, walker.position.clone().sub( car.position ).dot( forward ) - 4.6 / 2 );
+
+		}
+
+		expect( car.speed ).toBeLessThan( 0.05 );
+		expect( closest ).toBeGreaterThan( 0.5 );
+
+		// with the road clear again it gets going
+		for ( let step = 0; step < 200 && car.speed < 8; step ++ ) {
+
+			street.open();
+			traffic.update( 0.05, away, 0 );
+
+		}
+
+		expect( car.speed ).toBeGreaterThan( 8 );
+
+		// and somebody stepping off the kerb a metre in front is hit: at that
+		// speed there is no braking room left
+		const late = { position: car.position.clone().addScaledVector( forward, 4.6 / 2 + 1 ).setY( car.position.y + 0.15 ) };
+
+		for ( let step = 0; step < 20; step ++ ) {
+
+			street.open();
+			street.place( late );
+			traffic.update( 0.05, away, 0 );
+
+		}
+
+		expect( late.position.clone().sub( car.position ).dot( forward ) - 4.6 / 2 ).toBeLessThan( 0 );
 
 	} );
 

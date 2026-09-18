@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Crowd, crowdClipForName } from './Crowd.js';
 import { CLIP } from './CharacterAssets.js';
+import { StreetBodies } from './StreetBodies.js';
 import { WalkRoutes } from './WalkRoutes.js';
 import { SIDEWALK_HEIGHT } from '../ground/GroundBuilder.js';
 
@@ -65,10 +66,14 @@ describe( 'Crowd route elevation', () => {
 		const positions = Object.fromEntries( [ ...crowd.members.values() ]
 			.map( walker => [ walker.crowdId, walker.position ] ) );
 		const lowerLanding = - 10 + 0.02;
-		expect( positions.mouth.toArray() ).toEqual( [ 0, SIDEWALK_HEIGHT, 0 ] );
-		expect( positions.switchback.x ).toBeCloseTo( 5 );
+		// Each of them keeps to their own side of the stair, inside its width.
+		const side = 1.2 / 2;
+		expect( positions.mouth.y ).toBe( SIDEWALK_HEIGHT );
+		expect( Math.hypot( positions.mouth.x, positions.mouth.z ) ).toBeLessThan( side );
+		expect( positions.switchback.x ).toBeCloseTo( 5, 1 );
 		expect( positions.switchback.y ).toBeCloseTo( ( SIDEWALK_HEIGHT + lowerLanding ) / 2 );
-		expect( positions[ 'lower-landing' ].toArray() ).toEqual( [ 0, lowerLanding, 0 ] );
+		expect( positions[ 'lower-landing' ].y ).toBeCloseTo( lowerLanding );
+		expect( Math.hypot( positions[ 'lower-landing' ].x, positions[ 'lower-landing' ].z ) ).toBeLessThan( side );
 
 	} );
 
@@ -391,3 +396,158 @@ describe( 'Crowd inside a building', () => {
 	} );
 
 } );
+
+/**
+ * A crowd slice is counts and candidates: the simulation reports a group on
+ * one walk edge at one progress, so five people come back on one spot, at one
+ * speed, on one footfall. Placed as reported that is one body with four
+ * shadows, and it is what the street actually looked like.
+ */
+describe( 'Crowd on a lane', () => {
+
+	const clock = { timeMin: 510, daySeconds: 30600 };
+
+	it( 'spreads one reported group along its pavement and onto the next segment', () => {
+
+		const crowd = crowdOn( corner(), group( 9 ) );
+
+		crowd.update( 0.001, PLAYER, clock );
+		const walkers = [ ...crowd.members.values() ];
+		const reported = walkers.filter( ( walker ) => walker.edge.id === 'short' );
+
+		expect( walkers.length ).toBe( 9 );
+		// strung out along the pavement they were reported on, at arm's length
+		for ( const walker of reported ) {
+
+			for ( const other of reported ) {
+
+				if ( other !== walker ) expect( Math.abs( other.distance - walker.distance ) ).toBeGreaterThan( 1.19 );
+
+			}
+
+		}
+
+		// six metres holds six of them; the rest carry on to the next segment
+		expect( walkers.length - reported.length ).toBeGreaterThan( 0 );
+
+		// and nowhere in the world are any two of them standing in one spot
+		for ( const walker of walkers ) {
+
+			for ( const other of walkers ) {
+
+				if ( other !== walker ) expect( gap( walker, other ) ).toBeGreaterThanOrEqual( 0.6 );
+
+			}
+
+		}
+
+	} );
+
+	it( 'gives every one of them their own pace and their own footfall', () => {
+
+		const crowd = crowdOn( corner(), group( 9 ) );
+
+		crowd.update( 0.001, PLAYER, clock );
+		const walkers = [ ...crowd.members.values() ];
+
+		expect( walkers.every( ( walker ) => walker.speed >= 0.9 && walker.speed <= 1.3 ) ).toBe( true );
+		expect( new Set( walkers.map( ( walker ) => walker.speed ) ).size ).toBe( 9 );
+		expect( new Set( walkers.map( ( walker ) => walker.frame ) ).size ).toBe( 9 );
+
+	} );
+
+	it( 'keeps them out of each other while they walk and around the corner', () => {
+
+		const crowd = crowdOn( corner(), group( 9 ) );
+		let closest = Infinity;
+
+		for ( let step = 0; step < 900; step ++ ) {
+
+			crowd.update( 1 / 60, PLAYER, clock );
+			const walkers = [ ...crowd.members.values() ];
+
+			for ( let i = 0; i < walkers.length; i ++ ) {
+
+				for ( let j = i + 1; j < walkers.length; j ++ ) closest = Math.min( closest, gap( walkers[ i ], walkers[ j ] ) );
+
+			}
+
+		}
+
+		// 15 s of walking, every one of them over the same corner node
+		expect( closest ).toBeGreaterThan( 0.3 );
+
+	} );
+
+	it( 'stands a settled body back up, and takes out one the simulation has buried', () => {
+
+		const street = new StreetBodies();
+		const buried = { npcId: 'run-over', type: 'courier', gender: 'female', appearanceSeed: 5, flags: { dead: true } };
+		const crowd = crowdOn( corner(), group( 2 ), { street, sim: { getNPC: () => buried } } );
+
+		crowd.update( 0.001, PLAYER, clock );
+		const [ up, gone ] = [ ...crowd.members.values() ];
+
+		// the rig takes one, slides them down the road and reports them at rest
+		expect( crowd.beginRagdoll( up.id ) ).toBe( up );
+		street.take( up.id );
+		up.position.set( 14, 0, 0 );
+		street.rest( up.id );
+		crowd.update( 1 / 60, PLAYER, clock );
+
+		expect( up ).toMatchObject( { fallen: false, frozen: false, clip: CLIP.WALK } );
+		expect( crowd.members.get( up.id ) ).toBe( up );
+		expect( up.position.distanceTo( new THREE.Vector3( 14, SIDEWALK_HEIGHT, 0 ) ) ).toBeLessThan( 1 );
+
+		// and one nobody is left to stand up: out of the world, back to the count
+		crowd.identify( gone, buried );
+		crowd.beginRagdoll( gone.id );
+		for ( let step = 0; step < 400; step ++ ) crowd.update( 1 / 60, PLAYER, clock );
+
+		expect( crowd.members.has( gone.id ) ).toBe( false );
+		expect( street.has( gone.id ) ).toBe( false );
+
+	} );
+
+} );
+
+/** The distance between two people on the ground. */
+function gap( walker, other ) {
+
+	return Math.hypot( walker.position.x - other.position.x, walker.position.z - other.position.z );
+
+}
+
+/** One pavement joined to the next, the short one too short for a crowd. */
+function corner() {
+
+	return new WalkRoutes( { walk: {
+		nodes: [ 0, 6, 46 ].map( ( x, index ) => ( { id: `c${index}`, x, y: 0, z: 0, kind: 'sidewalk' } ) ),
+		edges: [
+			{ id: 'short', from: 'c0', to: 'c1', kind: 'sidewalk', width: 2, path3: [ [ 0, 0, 0 ], [ 6, 0, 0 ] ] },
+			{ id: 'long', from: 'c1', to: 'c2', kind: 'sidewalk', width: 2, path3: [ [ 6, 0, 0 ], [ 46, 0, 0 ] ] }
+		]
+	} } );
+
+}
+
+/** One group as the simulation reports it: one edge, one spot, one moment. */
+function group( count ) {
+
+	return Array.from( { length: count }, ( _, index ) => ( {
+		crowdId: `trip:${index}`, type: 'commuter', gender: index % 2 ? 'male' : 'female',
+		appearanceSeed: 1000 + index * 7, activity: 'commuting',
+		place: { kind: 'edge', id: 'short' }, progress: 0.5, direction: 1
+	} ) );
+
+}
+
+function crowdOn( routes, agents, options = {} ) {
+
+	return new Crowd( {
+		assets: testAssets(), routes, signals: { green: () => true },
+		sim: { crowd: () => ( { agents } ), ...options.sim },
+		places: new Map(), capacity: agents.length, street: options.street ?? new StreetBodies()
+	} );
+
+}

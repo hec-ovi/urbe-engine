@@ -2,6 +2,9 @@ import * as THREE from 'three/webgpu';
 import { RagdollBoundary } from './RagdollBoundary.js';
 import { RagdollError } from './RagdollError.js';
 
+/** Longest a knocked-down body lies in the road before its fall is over. */
+export const FALL_SETTLE_SECONDS = 6;
+
 const Y_AXIS = new THREE.Vector3( 0, 1, 0 );
 const RAGDOLL_GROUP = 0x0004;
 const RAGDOLL_FILTER = 0xffff & ~ RAGDOLL_GROUP;
@@ -113,6 +116,20 @@ export class Ragdoll {
 	get sleeping() {
 
 		return this.parts.size > 0 && [ ...this.parts.values() ].every( ( state ) => state.body.isSleeping() );
+
+	}
+
+	/** Where the body lies: the pelvis, in world coordinates. */
+	get position() {
+
+		return vector( this.parts.get( 'pelvis' ).body.translation() );
+
+	}
+
+	/** The fall is over: the body has stopped moving, or its time is up. */
+	get settled() {
+
+		return this.sleeping || this.elapsedSeconds >= FALL_SETTLE_SECONDS;
 
 	}
 

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { HeroCharacter } from './HeroCharacter.js';
+import { StreetBodies } from './StreetBodies.js';
 import { Physics } from '../physics/index.js';
 
 describe( 'focused character', () => {
@@ -78,16 +79,19 @@ describe( 'focused character', () => {
 				0, 0, 0, 1, ...headTurn.toArray(), 0, 0, 0, 1
 			] )
 		] );
+		const street = new StreetBodies();
 		const hero = new HeroCharacter( {
 			animation: { scene: humanoidRig(), animations: [ clip ] },
-			loadModel: () => ( { scene: source } )
+			loadModel: () => ( { scene: source } ),
+			street
 		} );
 		const physics = await Physics.create();
 		physics.addTrimesh( new THREE.BoxGeometry( 20, 0.1, 20 ).translate( 0, - 0.05, 0 ) );
 		const person = {
-			npcId: 'npc-impact', gender: 'female', appearanceSeed: 7,
+			id: 'p1', npcId: 'npc-impact', gender: 'female', appearanceSeed: 7,
 			clip: 0, frame: 16, hero: false, position: new THREE.Vector3(), heading: 0
 		};
+		street.enter( person );
 
 		expect( await hero.fall( person, physics, {
 			point: { x: 0, y: 1.4, z: 0 }, impulse: { x: 18, y: 2, z: 0 }
@@ -99,8 +103,15 @@ describe( 'focused character', () => {
 
 		physics.step( 1 / 60 );
 		hero.update( 1 / 60 );
-		expect( hero.clearFall() ).toMatchObject( { npcId: 'npc-impact', hero: false } );
+		expect( person.position.x ).toBeGreaterThan( 0 );
+		expect( hero.fallen ).toBeTruthy();
+
+		// the fall ends by itself: the body stops moving, or its time is up
+		hero.update( 6 );
+		expect( hero.fallen ).toBeNull();
+		expect( person.hero ).toBe( false );
 		expect( hero.group.children ).toEqual( [] );
+		expect( street.done().map( ( record ) => record.member ) ).toEqual( [ person ] );
 
 	} );
 

@@ -6,6 +6,7 @@ Status: the public continuity and follow API is wired into the live GameApp, Cro
 
 ## Inputs
 
+- Street bodies: the crowd, the traffic and the fallen rig share one `street` registry of the bodies on the road this frame. Each takes its own for a test.
 - Crowd and traffic population options: [schema/population-window.schema.json](schema/population-window.schema.json). Capacity bounds resident bodies. `spawnRadius` defaults to 90 m for Crowd and 110 m for Traffic; offscreen removal adds 25 m and 30 m respectively. Crowd consumes real simulation handles within the chosen circle; Traffic fills free positions on Connections lanes over successive refreshes. A larger capacity does not invent population or road space.
 - Movement network: [schema/movement-network.schema.json](schema/movement-network.schema.json). `WalkRoutes` indexes `connections.networks.walk`; every movement edge must carry authoritative `path3`. Scheduled transit materialization also consumes the matching Connections route's ordered stops, timetable, service window and 3D shape.
 - Place anchors: [schema/places.schema.json](schema/places.schema.json). Optional loaded parcel and public transport stop positions plus interior anchor ids, positions and headings. Rail station ids use the simulation's `stop` place kind at the published platform level.
@@ -71,6 +72,9 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - Source geometry, skin weights, UVs and authored normals remain intact. Baked normals interpolate across each triangle on WebGPU and WebGL.
 - Pro clips transfer rotations and scaled pelvis motion onto the body's original bone lengths. Crowd, focused dialogue and impact poses use the same transferred clips and the same body and hairstyle.
 - Scheduled and follow movement samples only Connections `path3`; flat compatibility paths never position a body.
+- Walkers of one reported group stand at least 1.2 m apart along their lane, keep their own side of it through turns, and come no nearer than 0.6 m to another body, at spawn and walking. A group its segment cannot hold carries on to the next one. Each walks at its own pace between 0.9 and 1.3 m/s, on its own footfall.
+- A car eases down for anybody in its lane within 8 m, standing, walking or lying, and holds 1.5 m short. Only somebody who steps in inside its braking distance is hit.
+- A fall ends when the body stops moving, or after six seconds. The person then stands up and walks on from where they came to rest, or, where the simulation has buried them, leaves the crowd and is one of that pavement's numbers again.
 - Sampled crowd walkers add Ground's `SIDEWALK_HEIGHT` to sidewalk and access grade. Station stairs blend this offset by authored height to 0.02 m clearance at the lower landing; passages, platforms, crossings and links retain that clearance. The blend is independent of travel direction. Explicit continuity positions are used as published.
 - Scheduled passenger transit uses the routine's exact route, board stop, alight stop and progress. Ordered duplicate stops select the shortest forward portion of the route shape, so return legs keep their direction and heading.
 - Follow speed is bounded and its stopping distance is deterministic. Explicit stop does not teleport the visible actor to its schedule.

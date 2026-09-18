@@ -20,6 +20,7 @@ Purpose: resolves world and player collision, measures vehicle contacts, and tur
 
 - Measured impacts: [schema/impact-events.schema.json](schema/impact-events.schema.json). `ImpactWorld.drain()` returns stable person and vehicle ids, capped contact speed, fatal classification, Rapier contact point and impulse. One person is reported once until released.
 - Ragdoll summary: [schema/ragdoll-summary.schema.json](schema/ragdoll-summary.schema.json). The accepted Source rig becomes 15 dynamic bodies and 14 spherical joints with 70 kg total mass.
+- Fall state: `Ragdoll.position` is where the body lies, and `Ragdoll.settled` reports the fall over once every part sleeps or six seconds have passed.
 - Player body position and grounded state are live Three.js values consumed by the game controller.
 - Door collision bodies remain aligned with the rendered leaves while closed, moving and open.
 - Floor readiness, cancellation and resident count follow the [band schema](schema/band-admission.d.ts). `addBand` resolves after every piece is solid; `dropBand` releases ready and pending pieces. Repeated admission of the same resident or pending id reuses its result.

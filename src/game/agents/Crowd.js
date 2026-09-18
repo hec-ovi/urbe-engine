@@ -3,8 +3,12 @@ import { SIDEWALK_HEIGHT } from '../ground/GroundBuilder.js';
 import { CLIP, bodyFor, clipForNpcAnimation } from './CharacterAssets.js';
 import { FRAMES } from './VatBaker.js';
 import { look } from './Appearance.js';
+import { spreadOnLanes, LANE_SPACING } from './LaneSpread.js';
+import { streetBodies } from './StreetBodies.js';
 
-const WALK_SPEED = 1.4;
+/** How fast people walk. Everyone has their own pace inside this range. */
+const WALK_SLOWEST = 0.9;
+const WALK_FASTEST = 1.3;
 const SPAWN_RADIUS = 90;
 const DESPAWN_MARGIN = 25;
 /** How far off somebody the simulation no longer reports may leave the world:
@@ -18,6 +22,14 @@ const EDGE_AGENTS = 16;
 const PARCEL_AGENTS = 8;
 /** The space one person stands in, measured for the pushback only. */
 const PERSON_RADIUS = 0.34;
+/** Nobody is ever nearer anybody than this, at spawn or walking. */
+const PERSONAL_SPACE = 0.6;
+/** How fast a walker gives way to somebody in their space, metres a second. */
+const GIVE_WAY = 1.5;
+/** The furthest from the middle of a pavement a walker keeps to one side. */
+const LANE_HALF = 0.6;
+/** Places along a lane a body looks for room at spawn before taking its spot. */
+const SPAWN_TRIES = 6;
 /** Above or below this, the two are on different floors and never touch. */
 const PERSON_HEIGHT = 2;
 /** How far around a walker talk looks for the street they belong to. */
@@ -47,9 +59,10 @@ const STREET_REACH = 25;
  */
 export class Crowd {
 
-	constructor( { assets, routes, signals, sim, places, capacity, spawnRadius = SPAWN_RADIUS, stress = 0, continuity = null } ) {
+	constructor( { assets, routes, signals, sim, places, capacity, spawnRadius = SPAWN_RADIUS, stress = 0, continuity = null, street = streetBodies } ) {
 
 		this.assets = assets;
+		this.street = street;
 		this.routes = routes;
 		this.signals = signals;
 		this.sim = sim;
@@ -189,6 +202,7 @@ export class Crowd {
 		member.frozenBeforeImpact = member.frozen;
 		member.frozen = true;
 		member.fallen = true;
+		this.street.enter( member );
 		return member;
 
 	}
@@ -198,6 +212,7 @@ export class Crowd {
 
 		const member = this.members.get( id );
 		if ( ! member?.fallen ) return null;
+		this.street.leave( id );
 		member.fallen = false;
 		member.frozen = Boolean( member.frozenBeforeImpact );
 		delete member.frozenBeforeImpact;
@@ -207,6 +222,7 @@ export class Crowd {
 
 	update( delta, player, clock ) {
 
+		this.#settle( delta );
 		this.timer += delta;
 
 		if ( this.timer >= REFRESH_INTERVAL ) {
@@ -222,7 +238,138 @@ export class Crowd {
 
 		}
 
+		this.#publish();
+		this.#separate( delta );
 		this.#write();
+
+	}
+
+	/** Everyone whose fall is over, taken back from the ground. */
+	#settle( delta ) {
+
+		this.street.advance( delta );
+
+		for ( const record of this.street.done() ) {
+
+			if ( this.members.get( record.member.id ) === record.member ) this.#rise( record.member );
+
+		}
+
+	}
+
+	/**
+	 * The end of a fall. The simulation decides who gets up: somebody it still
+	 * has walks on from where they came to rest, and anybody it does not is out
+	 * of the world and back to being one of that pavement's numbers.
+	 */
+	#rise( member ) {
+
+		this.street.leave( member.id );
+		member.fallen = false;
+		member.frozen = Boolean( member.frozenBeforeImpact );
+		delete member.frozenBeforeImpact;
+
+		if ( ! this.#alive( member ) ) {
+
+			this.members.delete( member.id );
+			return null;
+
+		}
+
+		// A persistent identity is put back by its own schedule.
+		if ( member.continuity || member.quest ) return member;
+
+		const spot = this.routes.project( member.position.toArray() );
+
+		if ( ! spot ) {
+
+			this.members.delete( member.id );
+			return null;
+
+		}
+
+		member.edge = spot.edge;
+		member.distance = spot.distance;
+		member.direction = 1;
+		member.offset = 0;
+		member.stationary = false;
+		member.waiting = false;
+		member.pendingSignal = null;
+		member.clip = CLIP.WALK;
+		this.#stand( member );
+
+		return member;
+
+	}
+
+	/** Whether the simulation still has this person. An anonymous walker is
+	 *  only ever one of its numbers, and it never buries one. */
+	#alive( member ) {
+
+		if ( ! member.npcId ) return true;
+
+		try {
+
+			return ! this.sim.getNPC( member.npcId )?.flags?.dead;
+
+		} catch {
+
+			return false;
+
+		}
+
+	}
+
+	/** The street as everyone else reads it this frame. */
+	#publish() {
+
+		this.street.open();
+
+		for ( const member of this.members.values() ) this.street.place( member );
+
+	}
+
+	/**
+	 * Nobody walks through anybody. Walkers are not physical bodies, so a
+	 * walker inside somebody else's space gives way itself: across the pavement
+	 * as far as its width allows, and along it for the rest, at a pace that
+	 * reads as stepping aside rather than sliding.
+	 */
+	#separate( delta ) {
+
+		const step = GIVE_WAY * delta;
+
+		for ( const member of this.members.values() ) {
+
+			if ( member.stationary || member.frozen || ! member.edge ) continue;
+
+			let along = 0;
+			let across = 0;
+
+			this.street.forEachNear( member.position, PERSONAL_SPACE, ( other, distance ) => {
+
+				if ( other === member ) return;
+
+				const room = ( PERSONAL_SPACE - distance ) / 2;
+				const away = distance > 1e-4
+					? [ ( member.position.x - other.position.x ) / distance, ( member.position.z - other.position.z ) / distance ]
+					: [ Math.cos( member.heading ), - Math.sin( member.heading ) ];
+
+				along += ( away[ 0 ] * Math.sin( member.heading ) + away[ 1 ] * Math.cos( member.heading ) ) * room;
+				across += ( away[ 0 ] * Math.cos( member.heading ) - away[ 1 ] * Math.sin( member.heading ) ) * room;
+
+			} );
+
+			if ( ! along && ! across ) continue;
+
+			const side = laneRoom( member.edge );
+			const give = ( amount ) => THREE.MathUtils.clamp( amount, - step, step );
+
+			member.distance = THREE.MathUtils.clamp( member.distance + give( along ), 0, member.edge.length );
+			member.offset = THREE.MathUtils.clamp( member.offset + give( across ), - side, side );
+			this.#stand( member );
+
+		}
 
 	}
 
@@ -478,7 +625,7 @@ export class Crowd {
 
 		this.#drop( player );
 
-		const street = this.#streetAgents( timeMin, player );
+		const street = spreadOnLanes( this.#streetAgents( timeMin, player ), this.routes );
 		this.sampled = street.length;
 
 		this.#fit( street, this.#walking(), ( entry ) => this.#place( entry ) );
@@ -691,21 +838,84 @@ export class Crowd {
 	}
 
 	/** @returns the new person, or null where the crowd is already full. */
-	#place( { agent, edge, direction, distance }, seed = agent.appearanceSeed ?? hash( agent.crowdId ) ) {
+	#place( { agent, edge, direction, distance, slot }, seed = agent.appearanceSeed ?? hash( agent.crowdId ) ) {
 
 		if ( this.members.size >= this.capacity ) return null;
 
-		return this.#add( {
+		const rng = mulberry( seed );
+		const spot = this.#freeSpot(
+			edge, Math.min( distance, edge.length ), direction, laneOffset( slot ?? seed, edge )
+		);
+		const member = this.#add( {
 			...this.#base( agent, seed ),
 			stationary: false,
 			edge,
 			direction,
-			distance: Math.min( distance, edge.length ),
+			distance: spot.distance,
+			offset: spot.offset,
+			speed: WALK_SLOWEST + rng() * ( WALK_FASTEST - WALK_SLOWEST ),
+			// Nobody starts on the same footfall as the person beside them.
+			frame: rng() * FRAMES,
 			clip: CLIP.WALK,
 			position: new THREE.Vector3(),
 			heading: 0,
-			rng: mulberry( seed )
+			rng
 		} );
+		this.#stand( member );
+
+		return member;
+
+	}
+
+	/**
+	 * Where a new body stands on its lane: the spot the simulation reported, or
+	 * the nearest step along the lane, on whichever side of it, that nobody is
+	 * standing in. Corners are where two lanes meet on one point, so the side
+	 * matters as much as the step. Where the whole stretch is taken it takes
+	 * the roomiest spot on it.
+	 */
+	#freeSpot( edge, distance, direction, offset ) {
+
+		let best = null;
+
+		for ( let step = 0; step <= SPAWN_TRIES; step ++ ) {
+
+			for ( const shift of step ? [ step * LANE_SPACING, - step * LANE_SPACING ] : [ 0 ] ) {
+
+				const along = THREE.MathUtils.clamp( distance + shift, 0, edge.length );
+				const spot = this.routes.pointAt( edge, along, direction );
+
+				for ( const side of [ offset, - offset, 0 ] ) {
+
+					const gap = this.#roomAt( standing( edge, spot, side ) );
+
+					if ( gap >= PERSONAL_SPACE ) return { distance: along, offset: side };
+					if ( ! best || gap > best.gap ) best = { distance: along, offset: side, gap };
+
+				}
+
+			}
+
+		}
+
+		return { distance: best.distance, offset: best.offset };
+
+	}
+
+	/** How near the closest person already standing at a spot is. */
+	#roomAt( at, self = null ) {
+
+		let nearest = Infinity;
+
+		for ( const member of this.members.values() ) {
+
+			if ( member === self ) continue;
+			if ( Math.abs( member.position.y - at.y ) > PERSON_HEIGHT ) continue;
+			nearest = Math.min( nearest, Math.hypot( member.position.x - at.x, member.position.z - at.z ) );
+
+		}
+
+		return nearest;
 
 	}
 
@@ -875,19 +1085,13 @@ export class Crowd {
 
 				member.waiting = false;
 				member.clip = CLIP.WALK;
-				member.distance += WALK_SPEED * delta;
+				member.distance += member.speed * delta;
 
 				if ( member.distance >= member.edge.length ) this.#step( member, daySeconds );
 
 			}
 
-			const spot = this.routes.pointAt(
-				member.edge,
-				Math.min( member.distance, member.edge.length ),
-				member.direction
-			);
-			member.position.set( spot.x, walkY( member.edge, spot ), spot.z );
-			member.heading = spot.heading;
+			this.#stand( member );
 
 		}
 
@@ -906,6 +1110,7 @@ export class Crowd {
 
 			member.direction *= - 1;
 			member.distance = 0;
+			member.offset = this.#turnSide( member, member.edge, member.direction );
 
 			return;
 
@@ -925,6 +1130,51 @@ export class Crowd {
 		member.direction = next.direction;
 		member.distance = 0;
 		member.waiting = false;
+		member.offset = this.#turnSide( member, next.edge, next.direction );
+
+	}
+
+	/**
+	 * Which side of the next stretch a walker carries their line onto. Their
+	 * own where it is free, so people hold their line around a corner, and the
+	 * nearest free one where somebody is already standing on the node: a corner
+	 * is one point two pavements share, and a group taking it never meets there.
+	 */
+	#turnSide( member, edge, direction ) {
+
+		const room = laneRoom( edge );
+		const own = THREE.MathUtils.clamp( member.offset, - room, room );
+		const spot = this.routes.pointAt( edge, 0, direction );
+		let best = null;
+
+		for ( const side of [ own, - own, 0, room, - room ] ) {
+
+			const gap = this.#roomAt( standing( edge, spot, side ), member );
+
+			if ( gap >= PERSONAL_SPACE ) return side;
+			if ( ! best || gap > best.gap ) best = { side, gap };
+
+		}
+
+		return best.side;
+
+	}
+
+	/**
+	 * Where a walker stands: their lane at their distance along it, out to the
+	 * side of it they keep.
+	 */
+	#stand( member ) {
+
+		const spot = this.routes.pointAt(
+			member.edge,
+			Math.min( member.distance, member.edge.length ),
+			member.direction
+		);
+		const at = standing( member.edge, spot, member.offset );
+
+		member.position.set( at.x, at.y, at.z );
+		member.heading = spot.heading;
 
 	}
 
@@ -995,6 +1245,32 @@ function memberAt( member, place ) {
 function angleTo( from, to ) {
 
 	return Math.atan2( to.x - from.x, to.z - from.z );
+
+}
+
+/** How far off the middle of a pavement a walker may keep, by its width. A
+ *  stretch that publishes no width is walked down the middle. */
+function laneRoom( edge ) {
+
+	return edge.width > 0 ? Math.max( 0, Math.min( LANE_HALF, edge.width / 2 - PERSON_RADIUS ) ) : 0;
+
+}
+
+/** The world spot a walker stands on: their lane's point, out to their side. */
+function standing( edge, spot, offset ) {
+
+	return {
+		x: spot.x + Math.cos( spot.heading ) * offset,
+		y: walkY( edge, spot ),
+		z: spot.z - Math.sin( spot.heading ) * offset
+	};
+
+}
+
+/** Which side of the pavement one walker keeps: three abreast at the widest. */
+function laneOffset( slot, edge ) {
+
+	return ( ( Math.abs( Math.round( slot ) ) % 3 ) - 1 ) * laneRoom( edge );
 
 }
 

@@ -66,6 +66,27 @@ export class WalkRoutes {
 
 	}
 
+	/** The segments of pavement that carry on from this one, at either end. */
+	neighbours( edge ) {
+
+		const found = [];
+
+		for ( const nodeId of [ edge.from, edge.to ] ) {
+
+			for ( const id of this.adjacency.get( nodeId ) ?? [] ) {
+
+				const next = this.edges.get( id );
+
+				if ( id !== edge.id && next && ! found.includes( next ) ) found.push( next );
+
+			}
+
+		}
+
+		return found;
+
+	}
+
 	/** The node an agent reaches at the end of an edge in its direction. */
 	exitNode( edge, direction ) {
 
@@ -236,6 +257,7 @@ function measureEdge( edge ) {
 		from: edge.from,
 		to: edge.to,
 		kind: edge.kind,
+		width: edge.width ?? 0,
 		signal: edge.signal ?? null,
 		...measure( edge.path3, `walk edge ${edge.id}.path3` )
 	};

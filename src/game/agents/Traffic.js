@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { Rng } from '../../city/Rng.js';
 import { measure, sample } from './Polyline.js';
+import { streetBodies } from './StreetBodies.js';
 
 const SPAWN_RADIUS = 110;
 const DESPAWN_MARGIN = 30;
@@ -18,6 +19,10 @@ const CAR_WIDTH = 1.9;
 /** A car eases down when the player stands in its lane this far ahead of its nose, and holds this short of them. */
 const YIELD_AHEAD = 10;
 const YIELD_STOP = 1.5;
+/** How far up its lane a car brakes for somebody on foot, and the room it
+ *  keeps beside them. Step in nearer than its braking distance and it hits. */
+const PERSON_AHEAD = 8;
+const PERSON_CLEARANCE = 0.5;
 
 /**
  * Cars on the connections lane graph. A car drives its lane at that lane's
@@ -33,10 +38,11 @@ const YIELD_STOP = 1.5;
 export class Traffic {
 
 	/** @param seed the world's seed; any string or number, one traffic stream per world. */
-	constructor( { networks, models, signals, capacity, spawnRadius = SPAWN_RADIUS, seed = 1 } ) {
+	constructor( { networks, models, signals, capacity, spawnRadius = SPAWN_RADIUS, seed = 1, street = streetBodies } ) {
 
 		this.push = new THREE.Vector3();
 
+		this.street = street;
 		this.models = models;
 		this.signals = signals;
 		this.capacity = capacity;
@@ -187,8 +193,8 @@ export class Traffic {
 		if ( gap < MIN_GAP ) target = 0;
 		else if ( gap < MIN_GAP * 2 ) target = Math.min( target, limit * ( gap - MIN_GAP ) / MIN_GAP );
 
-		// Somebody standing in the lane ahead: ease down to them and hold short.
-		const ahead = this.#ahead( car, player );
+		// Somebody in the lane ahead: ease down to them and hold short.
+		const ahead = this.#personAhead( car, player );
 
 		if ( ahead !== null ) target = ahead < YIELD_STOP ? 0 : Math.min( target, limit * ( ahead - YIELD_STOP ) / YIELD_AHEAD );
 
@@ -205,18 +211,39 @@ export class Traffic {
 	}
 
 	/**
-	 * How far ahead of this car's nose the player stands inside its lane
-	 * corridor, or null when they are not in its way.
+	 * How far ahead of this car's nose the nearest person in its lane is: the
+	 * player, or anybody the crowd has walking, standing or lying there. Null
+	 * when nobody is in its way.
 	 */
-	#ahead( car, player ) {
+	#personAhead( car, player ) {
 
-		if ( Math.abs( player.y - car.position.y ) > 2 ) return null;
+		let nearest = this.#ahead( car, player, PLAYER_CLEARANCE, YIELD_AHEAD );
 
-		const local = toCar( car, player );
+		this.street.forEachNear( car.position, PERSON_AHEAD + CAR_LENGTH, ( body ) => {
+
+			const gap = this.#ahead( car, body.position, PERSON_CLEARANCE, PERSON_AHEAD );
+
+			if ( gap !== null && ( nearest === null || gap < nearest ) ) nearest = gap;
+
+		} );
+
+		return nearest;
+
+	}
+
+	/**
+	 * How far ahead of this car's nose a point stands inside its lane
+	 * corridor, or null when it is not in its way.
+	 */
+	#ahead( car, point, clearance, reach ) {
+
+		if ( Math.abs( point.y - car.position.y ) > 2 ) return null;
+
+		const local = toCar( car, point );
 		const ahead = local.along - CAR_LENGTH / 2;
 
-		if ( ahead < 0 || ahead > YIELD_AHEAD + YIELD_STOP ) return null;
-		if ( Math.abs( local.lateral ) > CAR_WIDTH / 2 + PLAYER_CLEARANCE ) return null;
+		if ( ahead < 0 || ahead > reach + YIELD_STOP ) return null;
+		if ( Math.abs( local.lateral ) > CAR_WIDTH / 2 + clearance ) return null;
 
 		return ahead;
 
