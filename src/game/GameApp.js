@@ -461,12 +461,14 @@ export class GameApp {
 			this.stream, this.renderer, this.scene, this.camera, this.look.pipeline.mrt, this.look.pipeline.renderTarget
 		);
 		if ( this.shellScene ) this.shellScene.warmup = this.floorWarmup;
-		if ( this.groundStream ) await this.groundStream.update( spawn.point, {
-			prepare: ( group, options ) => this.floorWarmup.warmAll( group, options )
+		// Every preparation pass says how far it has got: a loading screen that
+		// stops moving is indistinguishable from one that has stopped.
+		const preparing = ( what ) => ( group, options ) => this.floorWarmup.warmAll( group, {
+			...options,
+			onProgress: ( done, total ) => this.view.step( `preparing ${what} ${done} / ${total}` )
 		} );
-		await this.propsStream.update( spawn.point, {
-			prepare: ( group, options ) => this.floorWarmup.warmAll( group, options )
-		} );
+		if ( this.groundStream ) await this.groundStream.update( spawn.point, { prepare: preparing( 'the ground' ) } );
+		await this.propsStream.update( spawn.point, { prepare: preparing( 'street props' ) } );
 		this.view.step( 'baking the environment' );
 		this.probe?.bake( spawn.point );
 		await this.floorWarmup.warmAll( this.scene, {
