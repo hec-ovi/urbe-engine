@@ -1,4 +1,5 @@
 import { ColorManagement, NoToneMapping } from 'three/webgpu';
+import { frameYield } from '../../app/FrameYield.js';
 
 /**
  * Builds WebGPU pipelines and maps before a frame first draws them.
@@ -171,17 +172,6 @@ function restore( shown ) {
 		if ( instanceCount !== undefined ) node.geometry.instanceCount = instanceCount;
 
 	}
-
-}
-
-function frameYield() {
-
-	return new Promise( ( resolve ) => {
-
-		if ( globalThis.requestAnimationFrame ) requestAnimationFrame( resolve );
-		else setTimeout( resolve, 0 );
-
-	} );
 
 }
 

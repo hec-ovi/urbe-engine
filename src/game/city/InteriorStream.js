@@ -3,6 +3,7 @@ import { assembleRooms, geometryOf, outlinesOf, plain, reflectanceOf } from './I
 import { Haze } from '../light/Haze.js';
 import { luminance } from '../light/Color.js';
 import { closeMaterialImages, InteriorMaterials } from './InteriorMaterials.js';
+import { frameYield } from '../../app/FrameYield.js';
 
 /** A building's floors are worth fetching this close to its footprint. */
 const LOAD_RADIUS = 70;
@@ -702,7 +703,7 @@ class FrameBudget {
 		if ( ! this.spent ) return;
 
 		this.rested += performance.now() - this.since;
-		await nextFrame();
+		await frameYield();
 		this.since = performance.now();
 		this.frames ++;
 
@@ -710,16 +711,7 @@ class FrameBudget {
 
 }
 
-function nextFrame() {
 
-	return new Promise( ( resolve ) => {
-
-		if ( globalThis.requestAnimationFrame ) requestAnimationFrame( resolve );
-		else setTimeout( resolve );
-
-	} );
-
-}
 
 /** Every material key a cut carries. */
 function keysOf( cut ) {

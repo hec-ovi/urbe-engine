@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { StreetLampPlan } from './StreetLampPlan.js';
 import { StreetLampInstances } from './StreetLampInstances.js';
+import { frameYield } from '../../app/FrameYield.js';
 
 /** Source plans persist; visible instances and collision belong to nearby cells. */
 export class StreetLampStream {
@@ -46,14 +47,14 @@ export class StreetLampStream {
 		let since = performance.now(), count = 0;
 		for ( const _ of this.plan.steps() ) {
 			if ( this.disposed ) return;
-			if ( ++ count % 256 === 0 && performance.now() - since >= 8 ) { await nextFrame(); since = performance.now(); }
+			if ( ++ count % 256 === 0 && performance.now() - since >= 8 ) { await frameYield(); since = performance.now(); }
 		}
 		for ( const record of this.plan.records ) {
 			if ( this.disposed ) return;
 			const x = Math.floor( record.x / this.cellSize ), z = Math.floor( record.z / this.cellSize ), key = `${x}:${z}`;
 			if ( ! this.cells.has( key ) ) this.cells.set( key, { key, x, z, records: [] } );
 			this.cells.get( key ).records.push( record );
-			if ( ++ count % 256 === 0 && performance.now() - since >= 8 ) { await nextFrame(); since = performance.now(); }
+			if ( ++ count % 256 === 0 && performance.now() - since >= 8 ) { await frameYield(); since = performance.now(); }
 		}
 		if ( ! this.disposed ) this.models = new StreetLampInstances( this.factory );
 
@@ -71,7 +72,7 @@ export class StreetLampStream {
 				if ( cell && ( ! this.settings.prepare || cell.prepared === this.settings.prepare )
 					&& ( ! this.settings.collision || ! contains( this.request.collision, cell ) || cell.collision === this.settings.collision ) ) continue;
 				await this.#admit( source );
-				await nextFrame();
+				await frameYield();
 			}
 			if ( epoch === this.epoch ) return;
 		}
@@ -185,4 +186,3 @@ export class StreetLampStream {
 }
 
 function contains( box, cell ) { return cell.x >= box.x0 && cell.x <= box.x1 && cell.z >= box.z0 && cell.z <= box.z1; }
-function nextFrame() { return new Promise( resolve => globalThis.requestAnimationFrame ? requestAnimationFrame( resolve ) : setTimeout( resolve, 0 ) ); }

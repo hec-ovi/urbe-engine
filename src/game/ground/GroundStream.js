@@ -3,7 +3,7 @@ import { GroundTiles, fail } from './GroundTiles.js';
 import { GroundMeshBuilder } from './GroundMeshBuilder.js';
 import { groundTriangles } from './GroundTriangles.js';
 import { GroundPages } from './GroundPages.js';
-import { yieldGroundFrame } from './GroundPageGeometry.js';
+import { frameYield } from '../../app/FrameYield.js';
 
 /** Serial tile admission with independent render and collision windows. */
 export class GroundStream {
@@ -85,7 +85,7 @@ export class GroundStream {
 				let tile = this.resident.get( id );
 				if ( ! tile ) {
 
-					await yieldGroundFrame();
+					await frameYield();
 					if ( this.disposed || completed !== this.revision ) break;
 					const built = new GroundMeshBuilder( this.index.project( wanted.tile ), this.factory,
 						{ ...this.index.context, moduleGeometries: this.geometries } ).build();

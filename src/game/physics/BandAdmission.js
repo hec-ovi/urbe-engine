@@ -1,3 +1,4 @@
+import { frameYield } from '../../app/FrameYield.js';
 import { triangleChunks } from './TriangleChunks.js';
 
 /** Cooks disabled pieces across frames and enables the complete band together. */
@@ -24,7 +25,7 @@ export class BandAdmission {
 				finally { geometry.dispose(); }
 				if ( ++ count === 4 || performance.now() - since >= 4 ) {
 
-					await nextFrame();
+					await frameYield();
 					if ( this.cancelled ) return false;
 					since = performance.now();
 					count = 0;
@@ -51,8 +52,4 @@ export class BandAdmission {
 
 }
 
-function nextFrame() {
 
-	return new Promise( resolve => globalThis.requestAnimationFrame ? requestAnimationFrame( resolve ) : setTimeout( resolve, 0 ) );
-
-}

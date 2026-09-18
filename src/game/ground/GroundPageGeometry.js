@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 
-export const yieldGroundFrame = () => new Promise( resolve => typeof requestAnimationFrame === 'function' ? requestAnimationFrame( resolve ) : setTimeout( resolve, 0 ) );
+import { frameYield } from '../../app/FrameYield.js';
 
 /** Exact indexed world geometry, expanded cooperatively into ordinary material meshes. */
 export async function groundPageGeometry( tiles, wanted ) {
@@ -24,7 +24,7 @@ export async function groundPageGeometry( tiles, wanted ) {
 	}
 	const group = new THREE.Group();
 	let deadline = performance.now() + 4;
-	const checkpoint = async () => { await yieldGroundFrame(); deadline = performance.now() + 4; return wanted(); };
+	const checkpoint = async () => { await frameYield(); deadline = performance.now() + 4; return wanted(); };
 	try {
 
 		for ( const bucket of materials.values() ) {
