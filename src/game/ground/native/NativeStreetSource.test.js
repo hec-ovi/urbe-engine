@@ -10,9 +10,9 @@ const jsonHash = value => hash( JSON.stringify( value ) );
 function fixture( encoding = 'json-file-bytes' ) {
 	// The loader consumes these fields; upstream boxes own the rest of Atlas validation.
 	const atlas = {
-		meta: { version: '0.22.0', seed: 'native-source' },
+		meta: { version: '0.26.0', seed: 'native-source' },
 		streets: { highwayStructures: [ { id: 'h0', authoredDetail: { untouched: true } } ], construction: {
-			reservations: { version: '1.0.0' }, modules: { definitions: [], placements: [ { blockId: 'a' }, { blockId: 'b' } ] }
+			planningReservations: { version: '2.1.0' }, modules: { definitions: [], placements: [ { blockId: 'a' }, { blockId: 'b' } ] }
 		} },
 		transit: { subwayStations: [ { id: 'station0', authoredDetail: 7 } ] },
 		volumetric: { ground: [ { moduleBlockId: 'a' }, { moduleBlockId: 'b' } ] }
@@ -20,7 +20,7 @@ function fixture( encoding = 'json-file-bytes' ) {
 	const blueprint = { data: atlas, bytes: encode( JSON.stringify( atlas, null, 2 ) + '\n' ).buffer };
 	const asset = encode( 'producer-owned opaque asset bytes' );
 	const manifest = {
-		meta: { version: '0.2.0', generatorVersion: '0.2.0', architectureVersion: '0.22.0', reservationVersion: '1.0.0',
+		meta: { version: '0.3.0', generatorVersion: '0.7.0', architectureVersion: '0.26.0', reservationVersion: '2.1.0',
 			designVersion: 'native-1.0.0', units: 'meters', seed: 1, blueprintEncoding: encoding,
 			blueprintHash: encoding === 'json-file-bytes' ? hash( new Uint8Array( blueprint.bytes ) ) : jsonHash( atlas ), nativeCatalogHash: jsonHash( binding ) },
 		pieces: [ { id: 'p0', asset: 'pieces/p0.glb', sha256: hash( asset ), bounds: { min: [ 0, 0, 0 ], max: [ 4, 1, 4 ] }, origin: [ 0, 0, 0 ],

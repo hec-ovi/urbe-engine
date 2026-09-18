@@ -4,10 +4,10 @@ import { bounds, fail, hashValue, jsonHash, pathValue, record, strings, vector }
 export async function checkStreetMetadata( manifest, blueprint, blueprintHash ) {
 	const meta = manifest?.meta, ground = manifest?.ground, delegated = manifest?.delegated;
 	const atlas = blueprint.data, original = atlas?.volumetric?.ground;
-	if ( meta?.version !== '0.2.0' || ! [ '0.22.0', '0.23.0', '0.24.0' ].includes( meta.architectureVersion ) || meta.reservationVersion !== '1.0.0'
+	if ( ! [ '0.2.0', '0.3.0' ].includes( meta?.version ) || meta.architectureVersion !== '0.26.0' || meta.reservationVersion !== '2.1.0'
 		|| meta.designVersion !== 'native-1.0.0' || meta.units !== 'meters' || typeof meta.generatorVersion !== 'string' || ! meta.generatorVersion
 		|| ! Number.isSafeInteger( meta.seed ) || ! hashValue( meta.blueprintHash ) || ! hashValue( meta.nativeCatalogHash )
-		|| atlas?.meta?.version !== meta.architectureVersion || atlas.streets?.construction?.reservations?.version !== meta.reservationVersion ) fail( 'Unsupported street source versions' );
+		|| atlas?.meta?.version !== meta.architectureVersion || atlas.streets?.construction?.planningReservations?.version !== meta.reservationVersion ) fail( 'Unsupported street source versions' );
 	if ( ! [ 'json-file-bytes', 'json-stringify-utf8' ].includes( meta.blueprintEncoding ) ) fail( 'Invalid blueprintEncoding' );
 	const sourceHash = meta.blueprintEncoding === 'json-file-bytes' ? blueprintHash : await jsonHash( atlas );
 	if ( sourceHash !== meta.blueprintHash ) fail( 'Street blueprint hash mismatch' );
