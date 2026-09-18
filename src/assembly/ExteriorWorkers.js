@@ -1,10 +1,12 @@
 import { Worker } from 'node:worker_threads';
 import { AssemblyError } from './RequestAssembler.js';
+import { ThermalGovernor } from './ThermalGovernor.js';
 
-/** Persistent producer workers amortize module startup across city shells. */
+/** Persistent producer workers amortize module startup across city shells. The governor decides how many may run at once. */
 export class ExteriorWorkers {
-	constructor( size = 4 ) {
+	constructor( size = 4, governor = new ThermalGovernor( size ) ) {
 		if ( ! Number.isInteger( size ) || size < 1 ) throw new AssemblyError( 'E_REQUEST_INVALID', 'Exterior worker count must be positive' );
+		this.governor = governor;
 		this.queue = [];
 		this.sequence = 0;
 		this.closed = false;
@@ -32,8 +34,11 @@ export class ExteriorWorkers {
 	}
 
 	dispatch() {
+		const width = this.governor.width();
+		let running = this.slots.filter( slot => slot.job ).length;
 		for ( const slot of this.slots ) {
-			if ( slot.job || ! this.queue.length ) continue;
+			if ( slot.job || ! this.queue.length || running >= width ) continue;
+			running ++;
 			const job = this.queue.shift();
 			slot.job = job;
 			slot.worker.postMessage( { id: job.id, request: job.request, outDir: job.outDir } );

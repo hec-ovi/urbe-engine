@@ -1,12 +1,29 @@
-/** Batch width follows the machine unless the caller asks for an exact count. */
+/**
+ * Batch width: a quarter of the machine unless the caller asks for an exact
+ * count. A shell generator saturates a core; opening one per core pins a
+ * 32-core machine near 100 C. The thermal governor narrows the batch further
+ * while the package runs hot.
+ */
 import { availableParallelism } from 'node:os';
 
 export const WORKERS_ENV = 'URBE_ASSEMBLY_WORKERS';
+export const MAX_TEMP_ENV = 'URBE_ASSEMBLY_MAX_TEMP';
+export const DEFAULT_MAX_TEMP = 80;
+const CORE_SHARE = 4;
 
 export function defaultWorkers( env = process.env ) {
 
 	const requested = Number( env[ WORKERS_ENV ] );
 	if ( Number.isInteger( requested ) && requested > 0 ) return requested;
-	return Math.max( 1, availableParallelism() - 1 );
+	return Math.max( 1, Math.floor( availableParallelism() / CORE_SHARE ) );
+
+}
+
+/** Degrees Celsius the batch stays under; 0 disables throttling. */
+export function maxTemperature( env = process.env ) {
+
+	if ( ! ( MAX_TEMP_ENV in env ) ) return DEFAULT_MAX_TEMP;
+	const requested = Number( env[ MAX_TEMP_ENV ] );
+	return Number.isFinite( requested ) && requested >= 0 ? requested : DEFAULT_MAX_TEMP;
 
 }

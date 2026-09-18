@@ -57,7 +57,7 @@ const pipeline = new BuildingPipeline( new RequestAssembler( atlas, connections 
 
 console.log( args.reuseShells
 	? `city ${atlas.meta.seed}: reusing ${parcelIds.length} shells`
-	: `city ${atlas.meta.seed}: ${queue.length} parcels, ${workers} workers` );
+	: `city ${atlas.meta.seed}: ${queue.length} parcels, ${workers} workers${exterior.governor.target ? `, held under ${exterior.governor.target} C` : ''}` );
 if ( stale.length ) console.log( `dropped ${stale.length} folders this blueprint no longer has: ${stale.join( ', ' )}` );
 
 const results = [];
@@ -217,6 +217,7 @@ streets.dispose();
 console.log( `\n${totals.passed}/${totals.parcels} shells passed, ${totals.failed} failed; ${totals.interiorsReady}/${totals.interiorsRequested} interiors ready; ${( totals.wallMs / 1000 ).toFixed( 1 )} s, ${( totals.bytes / 1e6 ).toFixed( 1 )} MB` );
 for ( const r of failed ) console.log( `  ${r.parcelId}  ${r.error}` );
 for ( const r of interiorFailures ) console.log( `  ${r.parcelId} interior kept closed  ${r.error}` );
+if ( exterior.governor.summary() ) console.log( `heat: ${exterior.governor.summary()}` );
 console.log( `qa report: ${join( outDir, 'qa-report.json' )}` );
 const naming = manifest.named ? `, named${manifest.namingTheme ? `: ${manifest.namingTheme}` : ''}` : '';
 console.log( `manifest: ${join( outDir, MANIFEST_FILE )} (${manifest.parcels.length} shells, ${manifest.interiors.length} interiors, ${manifest.rooftopSpans.spans.length} rooftop spans, atlas ${manifest.atlasVersion}${naming})` );
