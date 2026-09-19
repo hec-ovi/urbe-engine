@@ -6,6 +6,7 @@ import { bake } from '../GeometryBake.js';
 import { bucketFor, splitBucket } from '../Variety.js';
 import { doorFrames, doorLeafFrame } from '../DoorGeometry.js';
 import { ScenicSurface } from '../ScenicSurface.js';
+import { ShellBatches } from '../ShellBatches.js';
 import { isSceneryNode, shellMaterial, shellScenery, shellVariant } from '../ShellSurface.js';
 
 // A merged GLB names its surfaces `merged:<key>`; GLTFLoader strips the
@@ -88,20 +89,26 @@ export function readShell( scene, factory, blueprint ) {
 
 }
 
-/** One merged geometry and one factory material per material binding. */
+/**
+ * One merged geometry and one factory material per material binding, with the
+ * window scenery (the primitives carrying `scenicRadiance`) kept apart under
+ * the scenery shader, exactly as the shell loader draws a generated building.
+ */
 function merged( buckets, factory ) {
 
-	return [ ...buckets ].map( ( [ bucket, geometries ] ) => {
+	const batches = new ShellBatches();
+	for ( const [ bucket, geometries ] of buckets ) batches.add( bucket, geometries );
 
-		// A family shell mixes primitives with and without scenery attributes
-		// inside one material; conform the layout before merging.
+	return [ ...batches.values() ].map( ( { key, scenic, geometries } ) => {
+
 		const parts = geometries.length === 1 ? geometries : prepare( geometries );
 		const geometry = parts.length === 1 ? parts[ 0 ] : BufferGeometryUtils.mergeGeometries( parts, false );
-		if ( ! geometry ) throw placementError( `${bucket}: shell primitives do not merge` );
+		if ( ! geometry ) throw placementError( `${key}: shell primitives do not merge` );
 		if ( parts.length > 1 ) for ( const part of parts ) part.dispose();
 		geometry.computeBoundingBox();
+		const base = shellMaterial( factory, splitBucket( key ) );
 
-		return { bucket, geometry, material: shellMaterial( factory, splitBucket( bucket ) ) };
+		return { bucket: scenic ? `${key}|scenic` : key, geometry, material: scenic ? ScenicSurface.material( base ) : base };
 
 	} );
 
