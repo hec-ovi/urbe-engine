@@ -36,7 +36,7 @@ export class BuildingModels {
 
 					}
 					if ( ! batches.has( asset ) ) batches.set( asset, [] );
-					batches.get( asset ).push( placement );
+					batches.get( asset ).push( { parcelId, index, placement } );
 
 				}
 
@@ -45,7 +45,19 @@ export class BuildingModels {
 
 				const spec = catalog.assets.find( asset => asset.id === id );
 				if ( ! spec ) throw new Error( `E_BUILDING_MODEL: unknown Props asset ${id}` );
-				const parts = await this.imported.load( spec );
+				let parts;
+				try {
+
+					parts = await this.imported.load( spec );
+
+				} catch ( error ) {
+
+					// An asset this machine cannot serve costs the placements that
+					// wanted it, never the buildings that stand beside them.
+					for ( const { parcelId, index, placement } of placements ) this.unresolved.push( { parcelId, index, kind: placement.kind, error: error.message } );
+					continue;
+
+				}
 				const bounds = new THREE.Box3();
 				for ( const { geometry } of parts ) {
 
@@ -56,7 +68,7 @@ export class BuildingModels {
 				// Root-centered horizontal extents include an asymmetric crown.
 				const extent = [ 2 * Math.max( Math.abs( bounds.min.x ), Math.abs( bounds.max.x ) ),
 					bounds.max.y, 2 * Math.max( Math.abs( bounds.min.z ), Math.abs( bounds.max.z ) ) ];
-				const matrices = placements.map( placement => {
+				const matrices = placements.map( ( { placement } ) => {
 
 					const scale = Math.min( ...placement.size.map( ( size, axis ) => size / extent[ axis ] ) );
 					return new THREE.Matrix4().compose( new THREE.Vector3( ...placement.position ),

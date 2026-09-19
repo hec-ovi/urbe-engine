@@ -75,7 +75,7 @@ describe( 'authored building model instances', () => {
 		expect( setup.assets[ 0 ].map.source.data.close ).toHaveBeenCalledTimes( 1 );
 	} );
 
-	it( 'maps tall planting to existing pine and rejects invalid placement, mapping and transport errors', async () => {
+	it( 'maps tall planting to existing pine, rejects invalid placements and mappings, and leaves an asset that will not load out', async () => {
 		const override = fixture( [ tree( 'palm' ) ] );
 		const city = await override.loader.load( override.buildings );
 		expect( city.unresolvedModelInstances ).toEqual( [] );
@@ -85,10 +85,14 @@ describe( 'authored building model instances', () => {
 		await expect( invalid.loader.load( invalid.buildings ) ).rejects.toThrow( 'E_BUILDING_MODEL' );
 		const missing = fixture( [ tree() ], { modelAssets: { 'ornamental-tree': 'unknown' } } );
 		await expect( missing.loader.load( missing.buildings ) ).rejects.toThrow( 'E_BUILDING_MODEL' );
+		// An asset this machine cannot serve costs its own placements only; the
+		// shell and the other models still stand.
 		const failed = fixture( [ tree(), tree( 'shrub' ) ] );
 		failed.transport.loadAsync.mockImplementationOnce( failed.transport.loadAsync.getMockImplementation() ).mockRejectedValueOnce( new Error( 'missing model' ) );
-		await expect( failed.loader.load( failed.buildings ) ).rejects.toThrow( 'E_PROP_ASSET' );
-		expect( failed.assets[ 0 ].disposed.map ).toHaveBeenCalledTimes( 1 );
+		const partly = await failed.loader.load( failed.buildings );
+		expect( partly.unresolvedModelInstances ).toEqual( [ expect.objectContaining( { parcelId: 'p', index: 1, kind: 'shrub', error: expect.stringContaining( 'E_PROP_ASSET' ) } ) ] );
+		expect( partly.group.children.some( ( node ) => node.name.startsWith( 'building-model:' ) ) ).toBe( true );
+		releaseShell( partly );
 		const shellFailed = fixture( [ tree() ] );
 		shellFailed.transport.loadAsync.mockImplementationOnce( shellFailed.transport.loadAsync.getMockImplementation() ).mockRejectedValueOnce( new Error( 'shell unavailable' ) );
 		await expect( shellFailed.loader.load( shellFailed.buildings ) ).rejects.toThrow( 'shell unavailable' );
