@@ -3,7 +3,7 @@ import { openingRect } from '../Openings.js';
 
 /** Openings a person passes through. Glazing stays solid. */
 const PASSABLE = new Set( [ 'door', 'balconyDoor', 'openFront', 'aperture' ] );
-/** How squarely an opening has to face a lot wall before it is that wall's hole. */
+/** How squarely an opening has to face a wall before it is that wall's hole. */
 const FACING = - 0.5;
 
 /**
@@ -14,9 +14,9 @@ const FACING = - 0.5;
  * their geometry from. So the colliders read their holes there and a kit parcel
  * is as open as the building behind it is.
  *
- * A facade stands behind its lot line, by a metre on some families and by three
- * and a half on others, so an opening is matched to the lot wall it faces rather
- * than to the one it touches.
+ * The walls those holes are cut in follow the building's footprint, and an
+ * entrance recessed in a porch or a bay stands behind its own facade, so an
+ * opening is matched to the wall it faces rather than to the one it touches.
  *
  * @param placement KitPlacement
  * @param blueprint the parcel's blueprint document, or null
@@ -48,7 +48,7 @@ export function interiorOpenings( placement, blueprint ) {
 
 }
 
-/** Which lot wall this opening looks out through, and the span it takes out of it. */
+/** Which wall this opening looks out through, and the span it takes out of it. */
 function wallCut( placement, rect, toLot ) {
 
 	const start = _start.copy( rect.start ).applyMatrix4( toLot );
