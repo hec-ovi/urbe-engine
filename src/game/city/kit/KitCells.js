@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { FrameBudget } from '../../../app/FrameBudget.js';
+import { HitchLog } from '../../debug/HitchLog.js';
 import { readWorldDocument } from '../../data/WorldDocument.js';
 import { BuildingsLoader, mapConcurrent } from '../BuildingsLoader.js';
 import { KitPlacement, placementError } from './KitPlacement.js';
@@ -39,9 +40,10 @@ export class KitCellLoader {
 	 * @param shells the original loader, for landmark parcels
 	 * @param signs KitSigns, the city's one sign batch; null letters nothing
 	 * @param slice the frame budget building a cell is paced by
+	 * @param hitches the log each building's step is named in
 	 * @param onError receives the plans this cell could not stand
 	 */
-	constructor( { pieces, factory, signs = null, readJson = readPlacements, slice = new FrameBudget( { paced: false } ), shells = new BuildingsLoader( factory, undefined, {}, slice ), onError = console.error } ) {
+	constructor( { pieces, factory, signs = null, readJson = readPlacements, slice = new FrameBudget( { paced: false } ), hitches = new HitchLog(), shells = new BuildingsLoader( factory, undefined, {}, slice, hitches ), onError = console.error } ) {
 
 		this.pieces = pieces;
 		this.signs = signs;
@@ -49,6 +51,7 @@ export class KitCellLoader {
 		this.readJson = readJson;
 		this.shells = shells;
 		this.slice = slice;
+		this.hitches = hitches;
 		this.onError = onError;
 		/** source -> its placement record, so opening a cell and building it read it once */
 		this.records = new WeakMap();
@@ -141,28 +144,34 @@ export class KitCellLoader {
 
 				}
 
-				const placement = new KitPlacement( source.parcelId, record, this.pieces.plans.get( record.plan ) );
-				// A kit parcel's blueprint is its plan's, composed into this frame,
-				// so its doors and its holes are read exactly where a shell's are.
-				const blueprint = source.blueprint ?? null;
-				const door = blueprint ? mainDoor( blueprint ) : null;
-				const swinging = Boolean( source.hasInterior && door && swingLeaves( door, placement, this.pieces ) );
+				const { door, swinging } = this.hitches.time( 'kit building', () => {
 
-				triangles += this.pieces.trianglesOf( record.plan );
-				boxColliders.push( ...buildingBoxes( placement, {
-					openings: interiorOpenings( placement, blueprint ),
-					leaf: swinging ? null : door
-				} ) );
-				base.centers.set( source.parcelId, placement.center );
-				standing.push( {
-					placement,
-					colour: tintFor( placement.family, placement.tint, new THREE.Color() ),
-					swinging,
-					interior: Boolean( source.hasInterior ),
-					// One plan stands on many lots, so its sign field carries no
-					// word: this parcel's own is lettered on it where it stands.
-					sign: blueprint ? signField( blueprint ) : null,
-					word: record.signText
+					const placement = new KitPlacement( source.parcelId, record, this.pieces.plans.get( record.plan ) );
+					// A kit parcel's blueprint is its plan's, composed into this frame,
+					// so its doors and its holes are read exactly where a shell's are.
+					const blueprint = source.blueprint ?? null;
+					const door = blueprint ? mainDoor( blueprint ) : null;
+					const swinging = Boolean( source.hasInterior && door && swingLeaves( door, placement, this.pieces ) );
+
+					triangles += this.pieces.trianglesOf( record.plan );
+					boxColliders.push( ...buildingBoxes( placement, {
+						openings: interiorOpenings( placement, blueprint ),
+						leaf: swinging ? null : door
+					} ) );
+					base.centers.set( source.parcelId, placement.center );
+					standing.push( {
+						placement,
+						colour: tintFor( placement.family, placement.tint, new THREE.Color() ),
+						swinging,
+						interior: Boolean( source.hasInterior ),
+						// One plan stands on many lots, so its sign field carries no
+						// word: this parcel's own is lettered on it where it stands.
+						sign: blueprint ? signField( blueprint ) : null,
+						word: record.signText
+					} );
+
+					return { door, swinging };
+
 				} );
 
 				if ( ! swinging ) continue;

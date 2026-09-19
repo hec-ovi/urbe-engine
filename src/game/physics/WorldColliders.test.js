@@ -97,6 +97,18 @@ describe( 'streamed band collision admission', () => {
 		} finally { vi.unstubAllGlobals(); geometry.dispose(); physics.world.free(); }
 	} );
 
+	it( 'names each cooked piece and each cuboid compound in the hitch log', async () => {
+		const physics = await Physics.create(), steps = [];
+		const hitches = { note: ( what ) => steps.push( what ), time: ( what, work ) => { steps.push( what ); return work(); } };
+		const colliders = new WorldColliders( physics, { hitches } ), geometry = floorGeometry();
+		try {
+			expect( await colliders.addBand( 'floor', geometry ) ).toBe( true );
+			colliders.addBoxes( 'kit:0:0', [ { center: [ 0, 4, 0 ], halfExtents: [ 12, 4, 0.25 ], rotationY: 0 } ] );
+			expect( steps ).toContain( 'collision cook' );
+			expect( steps ).toContain( 'cuboids kit:0:0' );
+		} finally { geometry.dispose(); physics.world.free(); }
+	} );
+
 	it( 'holds a cell of kit buildings as one fixed body of cuboids and frees it on a drop', async () => {
 		const physics = await Physics.create(), colliders = new WorldColliders( physics );
 		const boxes = [

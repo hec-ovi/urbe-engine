@@ -51,7 +51,7 @@ let index = null;
 let blueprints = null;
 
 /** The world's plan index, read exactly as the runtime reads it from a world. */
-function openWorld( { mutate = ( document ) => document, slice, skipUnnamed = false } = {} ) {
+function openWorld( { mutate = ( document ) => document, slice, hitches, skipUnnamed = false } = {} ) {
 
 	const reads = [];
 	const blueprintReads = [];
@@ -99,7 +99,7 @@ function openWorld( { mutate = ( document ) => document, slice, skipUnnamed = fa
 	}
 
 	const pieces = new KitPieces( {
-		kit, baseUrl: sharedRoot(), factory, blueprints, slice, loader,
+		kit, baseUrl: sharedRoot(), factory, blueprints, slice, hitches, loader,
 		readBinary: async ( url ) => {
 
 			reads.push( url );
@@ -399,6 +399,30 @@ describe( 'the city draws every building from its shared plan', () => {
 		expect( pieces.has( PLANS[ 1 ] ) ).toBe( true );
 		expect( frames.length ).toBeGreaterThan( 20 );
 		vi.unstubAllGlobals();
+
+	} );
+
+	it( 'names every step of standing a cell in the hitch log, down to the plan and the batch that grew', async () => {
+
+		const steps = [];
+		const hitches = {
+			note: ( what ) => steps.push( what ),
+			time: ( what, work ) => { steps.push( what ); return work(); },
+			span: async ( what, work ) => { steps.push( what ); return work(); }
+		};
+		const slice = new FrameBudget( { paced: false } );
+		const { pieces } = openWorld( { slice, hitches } );
+		const first = building( 'p1' );
+		const loader = new KitCellLoader( { pieces, factory, slice, hitches, readJson: serving( [ first ] ) } );
+		const loading = new Map( [ source( first, false ) ] );
+
+		await loader.open( loading );
+		const cell = await shown( loader, loading );
+
+		for ( const step of [ 'plan parse', 'plan surface', 'plan merge', 'plan batches', 'kit building' ] ) expect( steps ).toContain( step );
+		expect( steps.some( ( step ) => /^kit-plans:.* rebuilt$/.test( step ) ) ).toBe( true );
+		releaseShell( cell );
+		pieces.dispose();
 
 	} );
 

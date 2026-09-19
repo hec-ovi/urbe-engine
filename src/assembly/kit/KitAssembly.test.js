@@ -86,6 +86,29 @@ function placed( parcel, plan, frame ) {
 
 }
 
+describe( 'kit entrance face', () => {
+
+	it( 'fronts the access edge, so a corner access point never puts the door in the side alley', () => {
+
+		// p2's access point moves to its north-east corner, where the north face
+		// and the east face stand equally near it; the access edge runs east of
+		// the lot, so the entrance is the east face: the plan's origin is that
+		// face's first corner and a quarter turn puts face 0 on it.
+		const city = structuredClone( atlas );
+		city.streets.edges.push( { ...city.streets.edges[ 0 ], id: 'e1', from: 'n1', to: 'n2', path: [ [ 140, 0 ], [ 140, 80 ] ] } );
+		city.parcels.find( ( parcel ) => parcel.id === 'p2' ).access = { edgeId: 'e1', point: [ 134, 10 ] };
+		const kit = new KitAssembler( city, new RequestAssembler( city, { apertures: [] } ), new PlanLibrary( { workers: null } ) );
+
+		expect( kit.candidate( 'p2' ).frame ).toEqual( { origin: [ 134, 0, 10 ], rotationY: - Math.PI / 2 } );
+
+		const fronting = new KitAssembler( atlas, new RequestAssembler( atlas, { apertures: [] } ), new PlanLibrary( { workers: null } ) );
+
+		expect( fronting.candidate( 'p2' ).frame ).toEqual( { origin: [ 94, 0, 10 ], rotationY: expect.closeTo( 0, 9 ) } );
+
+	} );
+
+} );
+
 describe( 'kit assembly', () => {
 
 	let workers = null;

@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { HitchLog } from '../../debug/HitchLog.js';
 import { BuildingsLoader } from '../BuildingsLoader.js';
 import { ShellCells } from './ShellCells.js';
 import { SkylineGeometry } from './SkylineGeometry.js';
@@ -16,9 +17,10 @@ const READS_AHEAD = 2;
 /** Serial spatial admission with original shell geometry and bounded residency. */
 export class ShellStream {
 
+	/** @param hitches the log the stream's own steps (showing a cell, dropping one, the skyline) are named in */
 	constructor( { catalog, factory, buildings, loadBuildings, cellSize = 128, loadRadius = 250,
 		dropRadius = 350, skylineRadius = 1100, prepare, added, removed, onError = console.error,
-		loader = new BuildingsLoader( factory ) } ) {
+		hitches = new HitchLog(), loader = new BuildingsLoader( factory ) } ) {
 
 		if ( ! Number.isFinite( cellSize ) || cellSize <= 0 || ! Number.isFinite( loadRadius ) || loadRadius <= 0
 			|| ! Number.isFinite( dropRadius ) || dropRadius <= loadRadius || ! Number.isFinite( skylineRadius ) || skylineRadius < dropRadius ) {
@@ -37,6 +39,7 @@ export class ShellStream {
 		this.added = added;
 		this.removed = removed;
 		this.onError = onError;
+		this.hitches = hitches;
 		this.grid = new ShellCells( catalog.buildings, cellSize );
 		this.group = new THREE.Group();
 		this.group.name = 'streamed-city';
@@ -210,24 +213,29 @@ export class ShellStream {
 
 		const retained = new Set( [ ...this.resident.values() ].filter( cell => this.#wanted( cell.spatial, this.dropRadius ) ).map( cell => cell.id ) );
 		const geometry = new SkylineGeometry( this.factory );
-		let slice = performance.now();
-		for ( const cell of this.grid.cells.values() ) {
+		const distant = [ ...this.grid.cells.values() ]
+			.filter( cell => ! retained.has( cell.id ) && this.grid.distance( cell, this.position ) <= this.skylineRadius );
+		for ( let index = 0; index < distant.length; ) {
 
 			if ( this.closed ) return;
-			if ( retained.has( cell.id ) || this.grid.distance( cell, this.position ) > this.skylineRadius ) continue;
-			for ( const record of cell.records ) geometry.add( record );
-			if ( performance.now() - slice > 4 ) { await yieldTask(); slice = performance.now(); }
+			this.hitches.time( 'skyline outline', () => {
+
+				const since = performance.now();
+				while ( index < distant.length && performance.now() - since <= 4 ) for ( const record of distant[ index ++ ].records ) geometry.add( record );
+
+			} );
+			if ( index < distant.length ) await yieldTask();
 
 		}
-		const group = await geometry.finish( yieldTask );
+		const group = await geometry.finish( yieldTask, this.hitches );
 		try { await this.prepare?.( { id: 'skyline', group, ids: [], buildings: new Map(), doors: [], shellColliders: new Map() } ); }
 		catch ( error ) { releaseShell( { group } ); this.onError( error ); return; }
 		if ( this.closed ) { releaseShell( { group } ); return; }
-		for ( const cell of this.resident.values() ) if ( ! retained.has( cell.id ) ) this.#drop( cell );
+		for ( const cell of this.resident.values() ) if ( ! retained.has( cell.id ) ) this.hitches.time( `cell ${cell.id} dropped`, () => this.#drop( cell ) );
 		if ( this.skyline ) releaseShell( { group: this.skyline } );
 		this.skyline = group;
 		this.group.add( group );
-		for ( const cell of this.resident.values() ) cell.group.visible = true;
+		for ( const cell of this.resident.values() ) if ( ! cell.group.visible ) this.hitches.time( `cell ${cell.id} shown`, () => { cell.group.visible = true; } );
 
 	}
 

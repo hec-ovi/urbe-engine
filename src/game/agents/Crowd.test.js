@@ -403,6 +403,37 @@ describe( 'Crowd inside a building', () => {
  * speed, on one footfall. Placed as reported that is one body with four
  * shadows, and it is what the street actually looked like.
  */
+describe( 'Crowd cast at a quest parcel', () => {
+
+	it( 'stands the story\'s person at the counter, else a work spot, else inside the door, and never twice', () => {
+
+		const instance = { npcId: 'npc-denna', name: { given: 'River', family: 'Nakamura' }, type: 'receptionist', gender: 'female', appearanceSeed: 7 };
+		const sim = { getNPC: () => instance, crowd: () => ( { agents: [] } ), instantiate: () => null };
+		const inside = new THREE.Vector3( 10, 0, 10 );
+		const counter = { id: 'f0-a6', position: new THREE.Vector3( 14, 0, 12 ), heading: 1 };
+		const work = { id: 'f0-a2', position: new THREE.Vector3( 9, 0, 13 ), heading: 2 };
+		const crowdIn = ( anchors ) => new Crowd( {
+			assets: testAssets(), routes: pavement(), signals: { green: () => true }, sim,
+			places: new Map( [ [ 'p17', { inside, heading: 0, anchors } ] ] ), capacity: 4
+		} );
+
+		const served = crowdIn( { counter: [ counter ], work: [ work ] } );
+		const cast = served.castMember( 'npc-denna', 1264, inside, 'p17' );
+		expect( cast ).toMatchObject( { npcId: 'npc-denna', quest: true, parcelId: 'p17', spot: 'counter:0', clip: CLIP.IDLE, heading: 1 } );
+		expect( cast.position.equals( counter.position ) ).toBe( true );
+		expect( served.castMember( 'npc-denna', 1265, inside, 'p17' ) ).toBe( cast );
+		expect( served.members.size ).toBe( 1 );
+
+		expect( crowdIn( { work: [ work ] } ).castMember( 'npc-denna', 1264, inside, 'p17' ).position.equals( work.position ) ).toBe( true );
+		const lobby = crowdIn( {} ).castMember( 'npc-denna', 1264, inside, 'p17' );
+		expect( lobby.spot ).toBe( 'lobby:0' );
+		expect( lobby.position.distanceTo( inside ) ).toBeLessThan( 3 );
+		expect( crowdIn( {} ).castMember( 'npc-denna', 1264, new THREE.Vector3( 200, 0, 0 ), 'p17' ) ).toBeNull();
+
+	} );
+
+} );
+
 describe( 'Crowd on a lane', () => {
 
 	const clock = { timeMin: 510, daySeconds: 30600 };

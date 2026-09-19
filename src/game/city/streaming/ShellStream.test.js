@@ -72,6 +72,25 @@ describe( 'ShellStream public admission', () => {
 
 	} );
 
+	it( 'names showing a cell, dropping one and rebuilding the skyline in the hitch log', async () => {
+
+		const steps = [];
+		const hitches = { note: ( what ) => steps.push( what ), time: ( what, work ) => { steps.push( what ); return work(); } };
+		const { stream } = fixture( { hitches } );
+		await stream.load( { x: 0, z: 0 } );
+
+		expect( steps ).toContain( 'skyline outline' );
+		expect( steps ).toContain( 'skyline mesh' );
+		expect( steps.filter( ( step ) => /^cell .* shown$/.test( step ) ) ).toHaveLength( 2 );
+
+		stream.update( { x: 1000, z: 0 } );
+		await stream.settled();
+
+		expect( steps.some( ( step ) => /^cell .* dropped$/.test( step ) ) ).toBe( true );
+		await stream.dispose();
+
+	} );
+
 	it( 'prepares before visibility and discards stale work without host admission', async () => {
 
 		let release;

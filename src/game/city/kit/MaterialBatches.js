@@ -18,11 +18,15 @@ import { MaterialBatch } from './MaterialBatch.js';
  */
 export class MaterialBatches {
 
-	/** @param fill whether each copy carries a fill light, for draws standing in rooms */
-	constructor( name, { fill = false } = {} ) {
+	/**
+	 * @param fill whether each copy carries a fill light, for draws standing in rooms
+	 * @param hitches the log a batch names its rebuilds in
+	 */
+	constructor( name, { fill = false, hitches = null } = {} ) {
 
 		this.name = name;
 		this.fill = fill;
+		this.hitches = hitches;
 		/** material key to MaterialBatch */
 		this.batches = new Map();
 		/** entry id to [{ batch, geometryId }] */
@@ -111,7 +115,8 @@ export class MaterialBatches {
 				vertices, indices,
 				castShadow: surfaces.every( ( surface ) => surface.castShadow ?? castShadow ),
 				instances,
-				fill: this.fill
+				fill: this.fill,
+				hitches: this.hitches
 			} );
 			this.batches.set( key, batch );
 			this.group.add( batch.mesh );

@@ -30,7 +30,7 @@ export class DebugStats {
 		const frame = stats.frameMs;
 		this.#set( 'path', `${stats.backend ?? '-'}  ${stats.tier}  ${stats.width}x${stats.height}`, stats.backend === 'webgl' );
 		this.#set( 'fps', `${( 1000 / Math.max( frame, 0.01 ) ).toFixed( 0 )} fps  ${frame.toFixed( 1 )} ms`, frame > TARGET_MS * 1.25 );
-		this.#set( 'gpu', stats.gpuMs > 0 ? `gpu ${stats.gpuMs.toFixed( 2 )} ms` : 'gpu -', false );
+		this.#set( 'gpu', stats.gpuMs === null ? 'gpu n/a' : stats.gpuMs > 0 ? `gpu ${stats.gpuMs.toFixed( 2 )} ms` : 'gpu -', false );
 		this.#set( 'draws', `${stats.drawCalls} draws`, stats.drawCalls > 320 );
 		this.#set( 'tris', `${( stats.triangles / 1000 ).toFixed( 0 )}k tris`, false );
 		this.#set( 'lights', `${stats.lights} lights`, false );

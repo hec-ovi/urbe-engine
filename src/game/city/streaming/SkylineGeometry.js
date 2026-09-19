@@ -77,20 +77,26 @@ export class SkylineGeometry {
 
 	}
 
-	async finish( yieldTask ) {
+	/** @param hitches the log each mesh built is named in */
+	async finish( yieldTask, hitches = null ) {
 
 		const group = new THREE.Group();
 		group.name = 'distant-shells';
 		for ( const { material, position, normal, uv } of this.buckets.values() ) {
 
-			const geometry = new THREE.BufferGeometry();
-			geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( position, 3 ) );
-			geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( normal, 3 ) );
-			geometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( uv, 2 ) );
-			geometry.computeBoundingSphere();
-			const mesh = new THREE.Mesh( geometry, this.factory.build( material.key, material.variantId ) );
-			mesh.receiveShadow = true;
-			group.add( mesh );
+			const build = () => {
+
+				const geometry = new THREE.BufferGeometry();
+				geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( position, 3 ) );
+				geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( normal, 3 ) );
+				geometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( uv, 2 ) );
+				geometry.computeBoundingSphere();
+				const mesh = new THREE.Mesh( geometry, this.factory.build( material.key, material.variantId ) );
+				mesh.receiveShadow = true;
+				group.add( mesh );
+
+			};
+			if ( hitches ) hitches.time( 'skyline mesh', build ); else build();
 			await yieldTask();
 
 		}

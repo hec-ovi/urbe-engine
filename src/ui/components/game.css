@@ -273,6 +273,19 @@
 	line-height: 1.45;
 }
 
+.hud-objective-place,
+.hud-objective-hours {
+	margin-top: 4px;
+	color: var(--ui-accent);
+	font-size: 10px;
+	letter-spacing: 0.06em;
+}
+
+.hud-objective-hours {
+	margin-top: 2px;
+	color: var(--ui-dim);
+}
+
 .hud-objective.is-done {
 	border-left-color: #5dad7a;
 }

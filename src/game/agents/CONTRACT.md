@@ -45,6 +45,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - `updateVisible(request)` reprojects visible schedule-controlled actors each frame and marks distant ones invisible without discarding identity or schedule state.
 - `serialize()` and `restore(save)` preserve materialized body traits, world position, schedule progress and active interruption, explicit pose, or return state.
 - `Crowd.questMember` adopts an anonymous simulation handle when it resolves to the requested cast npcId, including with continuity enabled. `Crowd.syncActor` returns null while a body is fallen, so control and passenger projection fail closed.
+- `Crowd.castMember(npcId, timeMin, player, parcelId)` is the body of one cast NPC the story wants at a parcel now, whatever its routine says: the body that npcId already owns, wherever it stands, else an anonymous body at that parcel that resolves to it, else one posted within 45 m of the player at the interior's first free counter anchor, then work anchor, then a lobby spot just inside the door. Null beyond that reach, when the crowd is full, or while the owned body is fallen.
 
 ## Errors
 
@@ -66,6 +67,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 ## Invariants
 
 - Named, focused and quest NPCs are keyed only by their actual npcId. A later statistical crowd handle cannot rename one or take its body.
+- Inside a building a person on duty stands at the interior's counter anchors (`counter_spot`) first, then its work spots, a guest sits on its seats, and the overflow stands in the lobby; a spot a cast body holds is never handed to the rota.
 - One npcId owns one rendered body. Resolving a cast worker already present at a parcel post converts that body to continuity control without adding another body.
 - A measured physics impact freezes the exact rendered identity and removes it from interaction and pushback. A rejected impact restores its prior control state. Accepted dynamic body assembly belongs to the game physics contract.
 - Appearance comes from the instance's persistent `appearanceSeed`, including after unload, save restore and reappearance.

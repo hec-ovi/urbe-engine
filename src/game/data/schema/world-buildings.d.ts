@@ -11,6 +11,8 @@ export interface WorldBuilding {
   source: 'kit' | 'shell';
   /** A kit parcel carries its placement table; a generated one carries its shell GLB. */
   placementsUrl?: string;
+  /** A kit parcel's own word, lettered on its plan's sign field; null when it reads nothing. */
+  word?: string | null;
   shellUrl?: string;
 }
 /** One city resource catalog copied beside the world, with the directory its files are relative to. */

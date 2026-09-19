@@ -20,6 +20,9 @@ const PARCEL_RADIUS = 45;
  *  holds more than a handful, and the cap is per edge, not per city. */
 const EDGE_AGENTS = 16;
 const PARCEL_AGENTS = 8;
+/** Where a person on duty stands, in order of preference, and where a guest sits. */
+const POSTS = [ 'counter', 'work' ];
+const SEATS = [ 'seat' ];
 /** The space one person stands in, measured for the pushback only. */
 const PERSON_RADIUS = 0.34;
 /** Nobody is ever nearer anybody than this, at spawn or walking. */
@@ -601,6 +604,40 @@ export class Crowd {
 
 	}
 
+	/**
+	 * The body of one cast NPC the story wants at a parcel now, whatever the
+	 * rota says: the person a talk step sends the player to stands where the
+	 * player is sent, at the interior's counter, else a work spot, else just
+	 * inside the door. A body this npcId already owns is that body, wherever
+	 * the simulation walked it, so nobody stands in two places.
+	 */
+	castMember( npcId, timeMin, player, parcelId ) {
+
+		const owned = [ ...this.members.values() ].find( ( member ) => member.npcId === npcId ) ?? null;
+		if ( owned ) return owned.fallen ? null : owned;
+
+		const place = this.places.get( parcelId );
+		if ( ! place || place.inside.distanceTo( player ) > PARCEL_RADIUS ) return null;
+
+		const npc = this.sim.getNPC( npcId );
+		const adopted = this.#adoptQuestHandle( npc, timeMin, { kind: 'parcel', id: parcelId } );
+		if ( adopted ) return adopted;
+		if ( ! this.#makeRoomForQuest( player ) ) return null;
+
+		const seed = npc.appearanceSeed ?? hash( `quest:${npcId}` );
+		const member = this.#add( {
+			...this.#base( { crowdId: `quest:${npcId}`, type: npc.type, gender: npc.gender, activity: 'working' }, seed ),
+			stationary: true,
+			quest: true,
+			parcelId,
+			...this.#anchorAt( place, this.#spotsAt( parcelId ), POSTS, seed )
+		} );
+		identify( member, npc );
+
+		return member;
+
+	}
+
 	#adoptQuestHandle( npc, timeMin, place ) {
 
 		const candidates = [ ...this.members.values() ]
@@ -793,7 +830,8 @@ export class Crowd {
 
 			}
 
-			const taken = new Set( candidates.map( ( member ) => member.spot ) );
+			// A cast body posted here by the story keeps its spot.
+			const taken = this.#spotsAt( parcelId );
 
 			this.#fit( entries, candidates, ( { agent } ) => this.#post( agent, parcelId, place, taken ) );
 
@@ -925,24 +963,49 @@ export class Crowd {
 		if ( this.members.size >= this.capacity ) return null;
 
 		const seed = agent.appearanceSeed ?? hash( agent.crowdId );
-		const kind = agent.activity === 'working' ? 'work' : 'seat';
-		const anchors = place.anchors?.[ kind ] ?? [];
-		const index = firstFree( taken, kind );
 
-		if ( index < anchors.length ) {
+		return this.#add( {
+			...this.#base( agent, seed ),
+			stationary: true,
+			parcelId,
+			...this.#anchorAt( place, taken, agent.activity === 'working' ? POSTS : SEATS, seed )
+		} );
 
-			const anchor = anchors[ index ];
+	}
+
+	/** The spots the bodies inside a building hold, the story's cast included. */
+	#spotsAt( parcelId ) {
+
+		const taken = new Set();
+
+		for ( const member of this.members.values() ) if ( member.parcelId === parcelId ) taken.add( member.spot );
+
+		return taken;
+
+	}
+
+	/**
+	 * Where a body stands inside a building: the first free anchor of the
+	 * kinds wanted, in that order, or a spot in the lobby around the door when
+	 * they are all held.
+	 */
+	#anchorAt( place, taken, kinds, seed ) {
+
+		for ( const kind of kinds ) {
+
+			const anchors = place.anchors?.[ kind ] ?? [];
+			const index = firstFree( taken, kind );
+
+			if ( index >= anchors.length ) continue;
+
 			taken.add( `${kind}:${index}` );
 
-			return this.#add( {
-				...this.#base( agent, seed ),
-				stationary: true,
-				parcelId,
+			return {
 				spot: `${kind}:${index}`,
 				clip: kind === 'seat' ? CLIP.SIT : CLIP.IDLE,
-				position: anchor.position.clone(),
-				heading: anchor.heading
-			} );
+				position: anchors[ index ].position.clone(),
+				heading: anchors[ index ].heading
+			};
 
 		}
 
@@ -951,10 +1014,7 @@ export class Crowd {
 		const angle = ( spot * 2.399 ) + ( seed % 100 ) / 100;
 		const offset = 0.9 + ( spot % 3 ) * 0.8;
 
-		return this.#add( {
-			...this.#base( agent, seed ),
-			stationary: true,
-			parcelId,
+		return {
 			spot: `lobby:${spot}`,
 			clip: CLIP.IDLE,
 			position: new THREE.Vector3(
@@ -963,7 +1023,7 @@ export class Crowd {
 				place.inside.z + Math.cos( angle ) * offset
 			),
 			heading: place.heading + Math.PI + Math.sin( angle )
-		} );
+		};
 
 	}
 

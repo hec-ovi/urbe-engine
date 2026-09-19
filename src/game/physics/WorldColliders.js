@@ -1,4 +1,5 @@
 import { BandAdmission } from './BandAdmission.js';
+import { HitchLog } from '../debug/HitchLog.js';
 
 /**
  * Installs exact static geometry, cuboid compounds and streamed floor
@@ -8,9 +9,11 @@ import { BandAdmission } from './BandAdmission.js';
  */
 export class WorldColliders {
 
-	constructor( physics ) {
+	/** @param hitches the log every cooked piece and cuboid compound is named in */
+	constructor( physics, { hitches = new HitchLog() } = {} ) {
 
 		this.physics = physics;
+		this.hitches = hitches;
 		this.live = new Map();
 		this.pending = new Map();
 		this.triangles = 0;
@@ -29,7 +32,7 @@ export class WorldColliders {
 			const [ label, geometry ] = labelled( item, index );
 			try {
 
-				const admission = new BandAdmission( this.physics, geometry );
+				const admission = new BandAdmission( this.physics, geometry, this.hitches );
 				await admission.prepare();
 				this.triangles += admission.handles.reduce( ( sum, handle ) => sum + handle.triangles, 0 );
 
@@ -81,7 +84,7 @@ export class WorldColliders {
 	addBoxes( id, boxes ) {
 
 		if ( this.live.has( id ) ) return true;
-		const handle = this.physics.addBoxes( boxes );
+		const handle = this.hitches.time( `cuboids ${id}`, () => this.physics.addBoxes( boxes ) );
 		this.live.set( id, { boxes: handle.boxes, cancel: () => this.physics.remove( handle ) } );
 		this.boxes += handle.boxes;
 		return true;
@@ -93,7 +96,7 @@ export class WorldColliders {
 
 		if ( this.live.has( id ) ) return true;
 		if ( this.pending.has( id ) ) return this.pending.get( id ).ready;
-		const admission = new BandAdmission( this.physics, geometry );
+		const admission = new BandAdmission( this.physics, geometry, this.hitches );
 		this.pending.set( id, admission );
 		admission.ready = admission.prepare().then( ready => {
 

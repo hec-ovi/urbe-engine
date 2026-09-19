@@ -2,6 +2,7 @@ import { bake } from './GeometryBake.js';
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { FrameBudget } from '../../app/FrameBudget.js';
+import { HitchLog } from '../debug/HitchLog.js';
 import { cityGltfLoader } from '../data/CityGltfLoader.js';
 import { doorFrames, doorLeafFrame } from './DoorGeometry.js';
 import { takeTriangles, centroidAt } from './Triangles.js';
@@ -45,13 +46,15 @@ export class BuildingsLoader {
 	/**
 	 * @param factory PbrMaterialFactory
 	 * @param slice the frame budget reading a shell is paced by
+	 * @param hitches the log each step of reading a shell is named in
 	 */
-	constructor( factory, loader = cityGltfLoader(), modelOptions = {}, slice = new FrameBudget( { paced: false } ) ) {
+	constructor( factory, loader = cityGltfLoader(), modelOptions = {}, slice = new FrameBudget( { paced: false } ), hitches = new HitchLog() ) {
 
 		this.factory = factory;
 		this.loader = loader;
 		this.modelOptions = modelOptions;
 		this.slice = slice;
+		this.hitches = hitches;
 
 	}
 
@@ -127,15 +130,19 @@ export class BuildingsLoader {
 
 			await this.slice.step();
 
-			const merged = BufferGeometryUtils.mergeGeometries( geometries, false );
-			geometries.forEach( ( g ) => g.dispose() );
-			triangles += merged.getAttribute( 'position' ).count / 3;
-			const baseMaterial = shellMaterial( this.factory, splitBucket( key ) );
-			const mesh = new THREE.Mesh( merged, scenic ? ScenicSurface.material( baseMaterial ) : baseMaterial );
-			mesh.name = `shell:${key}`;
-			mesh.castShadow = true;
-			mesh.receiveShadow = true;
-			group.add( mesh );
+			this.hitches.time( 'shell merge', () => {
+
+				const merged = BufferGeometryUtils.mergeGeometries( geometries, false );
+				geometries.forEach( ( g ) => g.dispose() );
+				triangles += merged.getAttribute( 'position' ).count / 3;
+				const baseMaterial = shellMaterial( this.factory, splitBucket( key ) );
+				const mesh = new THREE.Mesh( merged, scenic ? ScenicSurface.material( baseMaterial ) : baseMaterial );
+				mesh.name = `shell:${key}`;
+				mesh.castShadow = true;
+				mesh.receiveShadow = true;
+				group.add( mesh );
+
+			} );
 
 		}
 
@@ -167,74 +174,7 @@ export class BuildingsLoader {
 			// is the most expensive of them and every branch leaves the loop.
 			await this.slice.step();
 
-			const name = node.name ?? '';
-			const key = node.material?.name ?? '';
-			const leafFrame = doorLeafFrame( node, frames );
-			const surface = bucketFor(
-				key,
-				shellVariant( this.factory, { key, authored: node.material?.userData?.materialVariant, blueprint } ),
-				node.material?.side === THREE.DoubleSide
-			);
-			if ( isSceneryNode( node ) ) {
-
-				const geometry = shellScenery( node, this.factory, { key, hasInterior, scenic } );
-				if ( geometry ) push( exterior, surface, geometry );
-				continue;
-
-			}
-			if ( ( ! hasInterior && ( leafFrame || isDoorLeaf( name ) ) ) || ( leafFrame && ! leafFrame.owner.motion.supported ) ) {
-
-				const geometry = bake( node );
-				push( exterior, surface, geometry );
-				if ( isColliderMaterial( key ) ) exteriorFlat.push( positionsOnly( geometry ) );
-				continue;
-
-			}
-
-			if ( doors.length && ( leafFrame || isDoorLeaf( name ) ) ) {
-
-				const geometry = bake( node );
-				if ( leafFrame ) doorParts.get( leafFrame.owner ).push( {
-					key: surface,
-					geometry,
-					index: leafFrame.index,
-					hinge: leafFrame.node.getWorldPosition( new THREE.Vector3() )
-				} );
-				else {
-
-					push( exterior, surface, geometry );
-					if ( isColliderMaterial( key ) ) exteriorFlat.push( positionsOnly( geometry ) );
-
-				}
-
-				continue;
-
-			}
-
-			// Everything else the shell publishes, whatever the producer called
-			// it: a family signs itself with parts named after itself, and a
-			// name has never said whether a surface is part of the building.
-			const geometry = bake( node );
-
-			// Older shells merged the leaf into the door material's own mesh.
-			let rest = geometry;
-			if ( doors.length && isDoorMaterial( key ) ) for ( const door of doors ) {
-
-				if ( door.motion.kind === 'pocket' ) continue;
-
-				const [ leaf, remainder ] = splitAt( rest, door.box );
-				if ( leaf ) doorParts.get( door ).push( { key: surface, geometry: leaf, hinge: door.hinge } );
-				rest = remainder;
-				if ( ! rest ) break;
-
-			}
-
-			if ( rest ) {
-
-				push( exterior, surface, rest );
-				if ( isColliderMaterial( key ) ) exteriorFlat.push( positionsOnly( rest ) );
-
-			}
+			this.hitches.time( 'shell surface', () => this.#readNode( node, { frames, doors, doorParts, exterior, exteriorFlat, scenic, hasInterior, blueprint } ) );
 
 		}
 
@@ -254,6 +194,81 @@ export class BuildingsLoader {
 			center: centerOf( blueprint ),
 			doors: doors.filter( ( door ) => door.pivots.length )
 		};
+
+	}
+
+	/** One mesh node of a shell into the surface, leaf or scenery it stands as. */
+	#readNode( node, { frames, doors, doorParts, exterior, exteriorFlat, scenic, hasInterior, blueprint } ) {
+
+		const name = node.name ?? '';
+		const key = node.material?.name ?? '';
+		const leafFrame = doorLeafFrame( node, frames );
+		const surface = bucketFor(
+			key,
+			shellVariant( this.factory, { key, authored: node.material?.userData?.materialVariant, blueprint } ),
+			node.material?.side === THREE.DoubleSide
+		);
+		if ( isSceneryNode( node ) ) {
+
+			const geometry = shellScenery( node, this.factory, { key, hasInterior, scenic } );
+			if ( geometry ) push( exterior, surface, geometry );
+			return;
+
+		}
+		if ( ( ! hasInterior && ( leafFrame || isDoorLeaf( name ) ) ) || ( leafFrame && ! leafFrame.owner.motion.supported ) ) {
+
+			const geometry = bake( node );
+			push( exterior, surface, geometry );
+			if ( isColliderMaterial( key ) ) exteriorFlat.push( positionsOnly( geometry ) );
+			return;
+
+		}
+
+		if ( doors.length && ( leafFrame || isDoorLeaf( name ) ) ) {
+
+			const geometry = bake( node );
+			if ( leafFrame ) doorParts.get( leafFrame.owner ).push( {
+				key: surface,
+				geometry,
+				index: leafFrame.index,
+				hinge: leafFrame.node.getWorldPosition( new THREE.Vector3() )
+			} );
+			else {
+
+				push( exterior, surface, geometry );
+				if ( isColliderMaterial( key ) ) exteriorFlat.push( positionsOnly( geometry ) );
+
+			}
+
+			return;
+
+		}
+
+		// Everything else the shell publishes, whatever the producer called
+		// it: a family signs itself with parts named after itself, and a
+		// name has never said whether a surface is part of the building.
+		const geometry = bake( node );
+
+		// Older shells merged the leaf into the door material's own mesh.
+		let rest = geometry;
+		if ( doors.length && isDoorMaterial( key ) ) for ( const door of doors ) {
+
+			if ( door.motion.kind === 'pocket' ) continue;
+
+			const [ leaf, remainder ] = splitAt( rest, door.box );
+			if ( leaf ) doorParts.get( door ).push( { key: surface, geometry: leaf, hinge: door.hinge } );
+			rest = remainder;
+			if ( ! rest ) break;
+
+		}
+
+		if ( rest ) {
+
+			push( exterior, surface, rest );
+			if ( isColliderMaterial( key ) ) exteriorFlat.push( positionsOnly( rest ) );
+
+		}
+
 
 	}
 

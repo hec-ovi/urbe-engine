@@ -23,6 +23,22 @@ describe( 'ObjectiveRouter', () => {
 
 	} );
 
+	it( 'carries a parcel route from its entry node on to the door the city gave it', () => {
+
+		const router = new ObjectiveRouter( network(), { places: [ { parcelId: 'p9', door: [ 12, 2, 0 ] } ] } );
+		const route = router.route( { from: [ 10, 2, 1 ], destination: { kind: 'parcel', id: 'p9' } } );
+
+		expect( route.nodeIds ).toEqual( [ 'entry-p9' ] );
+		expect( route.path3 ).toEqual( [ [ 10, 2, 1 ], [ 10, 2, 0 ], [ 12, 2, 0 ] ] );
+		expect( route.distanceMeters ).toBe( 3 );
+
+		// A parcel with no door, and every station and stop, still ends at its node.
+		expect( router.route( { from: [ 0, 0, 0 ], destination: { kind: 'stop', id: 'bus-a' } } ).path3.at( - 1 ) ).toEqual( [ 0, 0, 3 ] );
+		expect( () => new ObjectiveRouter( network(), { places: [ { parcelId: 'p9', door: [ 12, 2 ] } ] } ) )
+			.toThrowError( expect.objectContaining( { code: 'E_OBJECTIVE_ROUTE_INPUT' } ) );
+
+	} );
+
 	it( 'chooses the cheapest reachable entrance when a station has several destinations', () => {
 
 		const graph = network();

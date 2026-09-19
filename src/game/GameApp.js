@@ -53,6 +53,7 @@ import { RenderWork } from './debug/RenderWork.js';
 import { FrameReports } from './debug/FrameReports.js';
 import { Warmup } from './look/Warmup.js';
 import { Physics, WorldColliders, DoorColliders, PlayerBody, BODY_RADIUS, ImpactWorld } from './physics/index.js';
+import { FrameBudget } from '../app/FrameBudget.js';
 import { Input } from './player/Input.js';
 import { PlayerController } from './player/PlayerController.js';
 import { Interactor } from './player/Interactor.js';
@@ -170,6 +171,11 @@ export class GameApp {
 			( text ) => this.view.step( text ), { log: import.meta.env.DEV }
 		);
 		progress.plan( LOAD_STEPS ).step( 'reading the world' );
+		// Every lump of work the load or the city does is named here, and one
+		// budget paces all of it: unpaced while there is no frame to protect,
+		// a few milliseconds a frame once the city is drawn.
+		this.hitches = new HitchLog();
+		const slice = new FrameBudget( { paced: false } );
 		// What a first frame needs that the world's own documents do not decide
 		// starts here and is awaited where it is used: the renderer, the material
 		// theme, the physics engine, the characters and the cars all fetch while
@@ -220,9 +226,13 @@ export class GameApp {
 
 		this.scene = new THREE.Scene();
 		this.camera = new THREE.PerspectiveCamera( LOOK.fov, window.innerWidth / window.innerHeight, NEAR_PLANE, FAR_PLANE );
-		// The crowd's own files need the backend and nothing else, and its bake
-		// is the first thing the frame loop does, not the last the load does.
-		const characters = progress.timed( 'characters', CharacterAssets.load( config.maxCrowd, backend === 'webgpu', { bake: false } ) );
+		// The crowd's own files need the backend and nothing else. Its bake is
+		// seconds of vertex work, so it runs under the load's budget beside the
+		// rest of the load and counts its parts on the loading view.
+		const baking = progress.pass( 'baking the crowd' );
+		const characters = progress.timed( 'characters', CharacterAssets.load( config.maxCrowd, backend === 'webgpu', {
+			slice, onProgress: ( done, total ) => baking.at( done, total )
+		} ) );
 
 		progress.step( 'resolving materials' );
 		await theme;
@@ -236,7 +246,7 @@ export class GameApp {
 		} );
 		this.rooms = new RoomLights( factory, this.tier );
 		this.physics = await starting;
-		this.colliders = new WorldColliders( this.physics );
+		this.colliders = new WorldColliders( this.physics, { hitches: this.hitches } );
 
 		progress.step( 'laying the ground' );
 		this.nativeStreets = nativeStreets;
@@ -248,7 +258,7 @@ export class GameApp {
 
 		progress.step( `loading ${buildings.size} buildings` );
 		if ( spatial ) this.shellScene = new ShellScene( {
-			atlas, catalog: shellCatalog, factory, buildings, loadBuildings, kit,
+			atlas, catalog: shellCatalog, factory, buildings, loadBuildings, kit, slice, hitches: this.hitches,
 			physics: this.physics, colliders: this.colliders,
 			interiors: ! config.off.has( 'interiors' ), haze: this.tier.haze ? OUTDOOR_HAZE : null
 		} );
@@ -267,18 +277,16 @@ export class GameApp {
 		// The room modules and the furniture are the city's, not any building's:
 		// loaded once, drawn once per surface however many floors are standing.
 		this.interiorModules = interiorModules
-			? new InteriorModules( { catalog: interiorModules.document, baseUrl: interiorModules.baseUrl, factory } )
+			? new InteriorModules( { catalog: interiorModules.document, baseUrl: interiorModules.baseUrl, factory, roomLights: this.rooms } )
 			: null;
 		this.interiorProps = interiorProps
-			? new InteriorProps( { catalog: interiorProps.document, baseUrl: interiorProps.baseUrl } )
+			? new InteriorProps( { catalog: interiorProps.document, baseUrl: interiorProps.baseUrl, roomLights: this.rooms } )
 			: null;
 		const [ city ] = await Promise.all( [ standing, laying, progress.timed( 'room catalogs', this.interiorModules?.ready ) ] );
 		this.hydrology = await water;
 		this.scene.add( city.group );
 
 		this.elevators = new Elevators( factory );
-		this.hitches = new HitchLog();
-		this.work = new RenderWork( this.renderer.info );
 		this.stream = new InteriorStream( {
 			modules: this.interiorModules, props: this.interiorProps, roomLights: this.rooms, elevators: this.elevators,
 			haze: this.tier.haze ? INDOOR_HAZE : null, hitches: this.hitches
@@ -310,18 +318,18 @@ export class GameApp {
 		const stableFixtures = ( this.shellScene?.pinnedGlows ?? neon.glows ).concat( lamps.glows, this.transit.glows );
 		const fixtures = stableFixtures.concat( this.shellScene?.streamedGlows ?? [] );
 		this.lights = new CityLights( fixtures, this.lighting.capacity, { streamed: Boolean( spatial ) } );
-		if ( this.shellScene ) this.shellScene.onFixturesChanged = () => {
+		if ( this.shellScene ) this.shellScene.onFixturesChanged = () => this.hitches.time( 'fixtures', () => {
 
 			fixtures.length = 0;
 			for ( const fixture of stableFixtures ) fixtures.push( fixture );
 			for ( const fixture of this.shellScene.streamedGlows ) fixtures.push( fixture );
 			this.lights.setFixtures( fixtures );
 
-		};
+		} );
 		this.scene.add( this.lights.group );
 		this.roomView = new RoomView( this.stream.rooms, ROOM_VISIBLE_RADIUS );
 		// Entrance fixtures and prompts identify buildings with playable interiors.
-		this.venues = new Venues( { atlas, buildings, doors: city.entrances, fixtures, factory } );
+		this.venues = new Venues( { atlas, buildings, doors: city.entrances, fixtures, factory, signs: this.shellScene?.signs ?? null } );
 		this.scene.add( this.venues.build( city.entrances ) );
 		this.#hangHaze( spatial ? [ ...lamps.glows, ...this.transit.glows ] : fixtures );
 
@@ -383,7 +391,8 @@ export class GameApp {
 			questlines,
 			this.sim,
 			this.clock.timeMin,
-			game ? [ ...game.quests, ...game.sideJobs ] : []
+			game ? [ ...game.quests, ...game.sideJobs ] : [],
+			{ world: atlas, types: npcTypes }
 		);
 		this.savedInventory = game?.player.inventory ?? [];
 		this.questItemIds = questlines.flatMap( ( questline ) => questline.items.map( ( item ) => item.itemId ) );
@@ -500,7 +509,9 @@ export class GameApp {
 		} );
 		this.scene.add( this.investigations.group );
 		this.probe?.exclude( this.investigations.group );
-		this.objectiveGuide = new ObjectiveGuide( new ObjectiveRouter( stationAccess.walk( connections.networks.walk ) ) );
+		this.objectiveGuide = new ObjectiveGuide( new ObjectiveRouter( stationAccess.walk( connections.networks.walk ), {
+			places: routePlaces( city.entrances )
+		} ) );
 		this.#refreshCurrentObjective();
 
 		// Construct the scene pass before a WebGPU probe bake so its final
@@ -510,14 +521,13 @@ export class GameApp {
 		this.floorWarmup = prepareInteriorStreaming(
 			this.stream, this.renderer, this.scene, this.camera, this.look.pipeline.mrt, this.look.pipeline.renderTarget
 		);
-		if ( this.shellScene ) {
-
-			this.shellScene.warmup = this.floorWarmup;
-			// The city is about to be drawn, so admitting a cell from here on
-			// gives the frame its turn instead of holding it.
-			this.shellScene.slice.pace();
-
-		}
+		if ( this.shellScene ) this.shellScene.warmup = this.floorWarmup;
+		// A focused character's model is prepared through the same queue when a
+		// conversation asks for it, not on the frame that first draws it.
+		this.hero.warmup = this.floorWarmup;
+		// The city is about to be drawn, so admitting a cell from here on gives
+		// the frame its turn instead of holding it.
+		slice.pace();
 		// Every pass counts into the load's own tally, and warms the programs it
 		// is the first to need: one the ground already built costs the street
 		// props nothing, and the city pass ends up with what neither had.
@@ -532,14 +542,10 @@ export class GameApp {
 		await this.propsStream.update( spawn.point, { prepare: preparing( 'street props' ) } );
 		const surfaces = progress.pass( 'preparing city surfaces' );
 		await this.floorWarmup.warmAll( this.scene, { onProgress: ( done, total ) => surfaces.at( done, total ) } );
-		// The two pieces of load work a first frame does not need: the probe
-		// renders the whole city six times over, and the crowd's bake builds
-		// its vertex animation buffers. Both run on the frame loop instead,
-		// before the first frame that reads them.
-		this.deferred = [
-			[ 'baking the crowd', () => assets.bake() ],
-			...( this.probe ? [ [ 'baking the environment', () => this.probe.bake( spawn.point ) ] ] : [] )
-		];
+		// The one piece of load work a first frame does not need: the probe
+		// renders the whole city six times over, so it runs on the frame loop
+		// instead, before the first frame that reads it.
+		this.deferred = this.probe ? [ [ 'baking the environment', () => this.probe.bake( spawn.point ) ] ] : [];
 
 		this.interactor = new Interactor( {
 			crowd: this.crowd, doors: city.doors, sim: this.sim,
@@ -571,12 +577,19 @@ export class GameApp {
 			`/materials/${THEME}`,
 			'/models/quaternius'
 		] );
+		// The first frame is a whole tick, run here under the loading view: what
+		// the first update of the crowd, the lights, the rooms and the streams
+		// brings to the renderer is built now, and a second pass pins whatever
+		// program that frame was the first to ask for.
 		progress.step( 'preparing the first frame' );
-		this.look.render();
+		this.playStartedAt = performance.now();
+		this.tick( 0 );
+		const pinning = progress.pass( 'pinning the programs' );
+		await this.floorWarmup.warmAll( this.scene, { onProgress: ( done, total ) => pinning.at( done, total ) } );
+		this.hitches.notes.length = 0;
 		this.view.setPaused( true );
 		this.view.ready();
 		progress.finish();
-		this.playStartedAt = performance.now();
 
 		this.renderer.domElement.addEventListener( 'click', () => this.input.requestLock() );
 		window.addEventListener( 'resize', () => this.#resize() );
@@ -593,6 +606,8 @@ export class GameApp {
 		);
 
 		this.baseTriangles = city.triangles + links.triangles + ( this.hydrology.summary?.triangles ?? 0 );
+		// From here every program and map the renderer builds is the frame's own.
+		this.work = new RenderWork( this.renderer.info );
 		this.last = performance.now();
 		this.renderer.setAnimationLoop( () => this.#frame() );
 
@@ -618,15 +633,6 @@ export class GameApp {
 
 	#frame() {
 
-		// Load work the first frame did not need, one piece per frame, before
-		// anything this frame draws can ask for it.
-		if ( this.deferred?.length ) {
-
-			const [ what, run ] = this.deferred.shift();
-			this.hitches.time( what, run );
-
-		}
-
 		const now = performance.now();
 		// What the renderer built for itself last frame, before the gap that
 		// carried it is printed: a link and an upload are blocking work the
@@ -635,6 +641,15 @@ export class GameApp {
 		if ( built ) this.hitches.note( built );
 		this.frameReports?.frame( now, now - this.last, this.hitches.notes );
 		this.hitches.frame( now - this.last );
+		// Load work the first frame did not need, one piece per frame, before
+		// anything this frame draws can ask for it; its cost is a note of the
+		// gap that carries it, like the tick's own.
+		if ( this.deferred?.length ) {
+
+			const [ what, run ] = this.deferred.shift();
+			this.hitches.time( what, run );
+
+		}
 		this.tick( Math.min( 0.05, ( now - this.last ) / 1000 ) );
 		this.last = now;
 		this.#measure( performance.now() - now );
@@ -1020,9 +1035,22 @@ export class GameApp {
 
 	}
 
+	/** The objective's parcel is marked on the maps and named on the HUD, with the walk there while a route stands. */
 	#refreshCurrentObjective() {
 
-		this.view.setObjective( currentObjectiveView( this.questGameplay, this.quests, this.clock.timeMin ) );
+		const objective = this.questGameplay.objective( this.clock.timeMin );
+		const parcelId = objective?.place?.kind === 'parcel' ? objective.place.id : null;
+
+		if ( this.venues.setObjective( parcelId ? { parcelId, name: objective.venue } : null ) ) {
+
+			this.view.minimap.setVenues( this.venues.marks );
+			this.view.map.setVenues( this.venues.marks );
+
+		}
+
+		this.view.setObjective( currentObjectiveView( objective, this.quests, {
+			venues: this.venues, route: this.objectiveGuide?.route ?? null
+		} ) );
 
 	}
 
@@ -1032,6 +1060,7 @@ export class GameApp {
 		const feet = this.body.feet;
 		const objective = this.questGameplay.objective( this.clock.timeMin );
 		const destination = objective?.guidance?.destination ?? null;
+		let route = null;
 
 		try {
 
@@ -1042,20 +1071,20 @@ export class GameApp {
 				...( force ? { force: true } : {} )
 			} );
 			if ( ! result.changed ) return;
-			const route = result.route ? {
+			route = result.route ? {
 				path: result.route.path3.map( ( point ) => [ point[ 0 ], point[ 2 ] ] ),
 				label: objective.text
 			} : null;
-			this.view.minimap.setRoute( route );
-			this.view.map.setRoute( route );
 
 		} catch ( error ) {
 
 			console.warn( 'objective route:', error.message );
-			this.view.minimap.setRoute( null );
-			this.view.map.setRoute( null );
 
 		}
+
+		this.view.minimap.setRoute( route );
+		this.view.map.setRoute( route );
+		this.#refreshCurrentObjective();
 
 	}
 
@@ -1231,7 +1260,8 @@ export class GameApp {
 		this.stats.frameMs = this.stats.frameMs * 0.9 + frameMs * 0.1;
 		this.stats.drawCalls = info.render.drawCalls;
 		this.stats.triangles = info.render.triangles || this.baseTriangles;
-		this.stats.gpuMs = ( info.render.timestamp ?? 0 ) + ( info.compute.timestamp ?? 0 );
+		// GPU time is a WebGPU query; on WebGL2 the queries stay closed and the HUD says so.
+		this.stats.gpuMs = this.stats.backend === 'webgpu' ? ( info.render.timestamp ?? 0 ) + ( info.compute.timestamp ?? 0 ) : null;
 		this.stats.crowd = this.crowd.count;
 		this.stats.cars = this.traffic.count;
 		this.stats.interiors = this.stream.liveInteriors;
@@ -1245,6 +1275,7 @@ export class GameApp {
 		this.#materials();
 		this.view.stats.update( this.stats );
 
+		if ( this.stats.backend !== 'webgpu' ) return;
 		this.renderer.resolveTimestampsAsync?.( 'render' ).catch( () => {} );
 		this.renderer.resolveTimestampsAsync?.( 'compute' ).catch( () => {} );
 
@@ -1353,6 +1384,13 @@ function roofElevations( shellCatalog, buildings ) {
 	return new Map( shellCatalog
 		? shellCatalog.buildings.map( ( record ) => [ record.id, record.roof.elevation ] )
 		: [ ...buildings ].map( ( [ id, source ] ) => [ id, source.blueprint.bounds.height ] ) );
+
+}
+
+/** Where an objective route ends: on the doorstep of the parcel it points at. */
+function routePlaces( doors ) {
+
+	return doors.map( ( door ) => ( { parcelId: door.parcelId, door: door.outside.toArray() } ) );
 
 }
 
@@ -1533,18 +1571,42 @@ export function playableInteractionOwner( interactor, transitFrame ) {
 
 }
 
-/** Current quest projection for the persistent objective widget. */
-export function currentObjectiveView( gameplay, session, timeMin ) {
+/**
+ * Current quest projection for the persistent objective widget.
+ * @param active the active objective, or null
+ * @param venues what the city calls each parcel
+ * @param route the objective route standing now, or null
+ */
+export function currentObjectiveView( active, session, { venues = null, route = null } = {} ) {
 
-	const active = gameplay?.objective( timeMin );
-	if ( active ) return { title: active.title, objective: active.text, state: 'active' };
+	if ( active ) return { title: active.title, objective: active.text, state: 'active', place: objectivePlace( active, venues, route ) };
 	const completed = [ ...( session?.view() ?? [] ) ].reverse().find( ( quest ) => quest.state === 'done' );
 	if ( ! completed ) return null;
 	const lastStep = [ ...completed.steps ].reverse().find( ( step ) => step.done );
 	return {
 		title: completed.title,
 		objective: lastStep?.text ?? completed.text,
-		state: 'done'
+		state: 'done',
+		place: null
+	};
+
+}
+
+/**
+ * The venue line under the objective: the questline's name for the place, else
+ * the city's, the walk there, and the hour it opens while it is closed.
+ */
+function objectivePlace( active, venues, route ) {
+
+	if ( active.place?.kind !== 'parcel' ) return null;
+	const name = active.venue ?? venues?.nameOf( active.place.id ) ?? null;
+	if ( ! name ) return null;
+	const routed = route?.destination.kind === 'parcel' && route.destination.id === active.place.id;
+	const closed = active.availability.reason === 'outside_window' && active.window;
+	return {
+		name,
+		...( routed ? { distanceMeters: Math.round( route.distanceMeters ) } : {} ),
+		...( closed ? { window: { label: active.window.label, startMin: active.window.startMin, endMin: active.window.endMin } } : {} )
 	};
 
 }

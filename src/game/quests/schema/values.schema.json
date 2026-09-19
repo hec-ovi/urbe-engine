@@ -32,6 +32,7 @@
         "role_dead",
         "not_present",
         "off_duty",
+        "outside_window",
         "missing_item",
         "condition",
         "target_missing"

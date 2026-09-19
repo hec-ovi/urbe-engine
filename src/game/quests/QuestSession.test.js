@@ -39,6 +39,31 @@ describe( 'QuestSession', () => {
 
 	} );
 
+	it( 'stamps a carried questline\'s places from the world and casts one person per character across the set', () => {
+
+		const carried = ( id, roleId ) => {
+
+			const definition = quest( id, {
+				roles: [ role( roleId, 'barista' ) ],
+				steps: [ step( 's_go', { kind: 'goto', place: { parcelId: 'p1' } }, { hint: 'Go to the cafe.', endingId: 'done', wantedByRoleId: roleId } ) ]
+			} );
+			delete definition.steps[ 0 ].target.place.name;
+			return definition;
+
+		};
+		const world = { meta: { seed: 's' }, districts: [ { id: 'd0', name: 'Old Town' } ], parcels: [ { id: 'p1', districtId: 'd0', type: 'coffee_shop', tier: 'mid' } ] };
+		const types = {
+			meta: { theme: 't', worldSeed: 's', createdAt: 'now' }, namePool: { given: [], family: [] },
+			types: [ { type: 'barista', label: 'Barista', category: 'vendor', boilerplate: 'Pulls shots.', grounding: {}, weight: 1 } ]
+		};
+		const people = simulation( new Map( [ [ 'n1', npc( 'n1', 'barista', 'p1' ) ], [ 'n2', npc( 'n2', 'barista', 'p1' ) ] ] ) );
+		const session = QuestSession.create( [ carried( 'q1', 'first' ), carried( 'q2', 'second' ) ], people, 600, [], { world, types } );
+
+		expect( session.entries.map( ( { definition } ) => definition.steps[ 0 ].target.place ) ).toEqual( [ { parcelId: 'p1', name: 'coffee shop' }, { parcelId: 'p1', name: 'coffee shop' } ] );
+		expect( session.entries.map( ( { runtime } ) => Object.values( runtime.cast )[ 0 ] ) ).toEqual( [ 'n1', 'n2' ] );
+
+	} );
+
 } );
 
 function sim() {

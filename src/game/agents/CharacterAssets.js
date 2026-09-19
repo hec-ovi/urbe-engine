@@ -43,12 +43,16 @@ const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAA
 export class CharacterAssets {
 
 	/**
+	 * Reads and checks the packs, then bakes the crowd's vertex animation and
+	 * builds its draws. The bake is seconds of vertex work, so it runs a frame
+	 * row at a time under the load's budget and counts its parts as it goes.
+	 *
 	 * @param capacity maximum simultaneous crowd members
 	 * @param storageCapable true on the WebGPU backend (see PoseBuffer)
-	 * @param bake false to read and check the packs now and bake on `bake()`,
-	 *   which is vertex work and buffer building the first frame does not need
+	 * @param slice the frame budget the bake asks between rows
+	 * @param onProgress receives (done, total) over the bake's parts
 	 */
-	static async load( capacity, storageCapable, { bake = true } = {} ) {
+	static async load( capacity, storageCapable, { slice = null, onProgress = () => {} } = {} ) {
 
 		const manager = new THREE.LoadingManager();
 		manager.setURLModifier( ( url ) => ( url.endsWith( '.png' ) ? BLANK : url ) );
@@ -85,72 +89,57 @@ export class CharacterAssets {
 
 		}
 
-		const variantsOf = () => {
+		// Two bakes per model, the body's three surfaces and the hair, are the
+		// parts the load counts.
+		const total = CROWD_MODELS.length * 2;
+		let done = 0;
+		const variants = [];
 
-			const variants = [];
+		for ( let i = 0; i < CROWD_MODELS.length; i ++ ) {
 
-			for ( let i = 0; i < CROWD_MODELS.length; i ++ ) {
+			const root = models[ i ].scene;
+			const hairRoot = hairs[ i ].scene;
+			const { body, eyes, eyebrows } = characterParts( root );
+			const hair = largestSkinnedMesh( hairRoot );
+			// Read off the skeleton before baking: the pose buffers have no
+			// bones left to ask.
+			const bodyCloth = garments( body );
+			const motions = new CharacterAnimations( root, animationGltf.scene );
+			const bodyClips = clips.map( ( clip ) => motions.clip( clip ) );
+			const [ bakedBody, bakedEyes, bakedEyebrows ] = await VatBaker.bake( root, [ body, eyes, eyebrows ], bodyClips, slice );
+			onProgress( ++ done, total );
+			const [ bakedHair ] = await VatBaker.bake( hairRoot, [ hair ], bodyClips, slice );
+			onProgress( ++ done, total );
+			const baked = mergeBaked( [ bakedBody, bakedEyes ] );
+			const bakedHeadHair = mergeBaked( [ bakedHair, bakedEyebrows ] );
+			const cloth = crowdCloth( bodyCloth, bakedEyes.vertexCount );
 
-				const root = models[ i ].scene;
-				const hairRoot = hairs[ i ].scene;
-				const { body, eyes, eyebrows } = characterParts( root );
-				const hair = largestSkinnedMesh( hairRoot );
-				// Read off the skeleton before baking: the pose buffers have no
-				// bones left to ask.
-				const bodyCloth = garments( body );
-				const motions = new CharacterAnimations( root, animationGltf.scene );
-				const bodyClips = clips.map( ( clip ) => motions.clip( clip ) );
-				const [ bakedBody, bakedEyes, bakedEyebrows ] = VatBaker.bake( root, [ body, eyes, eyebrows ], bodyClips );
-				const [ bakedHair ] = VatBaker.bake( hairRoot, [ hair ], bodyClips );
-				const baked = mergeBaked( [ bakedBody, bakedEyes ] );
-				const bakedHeadHair = mergeBaked( [ bakedHair, bakedEyebrows ] );
-				const cloth = crowdCloth( bodyCloth, bakedEyes.vertexCount );
+			if ( slice ) await slice.step();
+			variants.push( {
+				id: CROWD_MODELS[ i ].id,
+				body: new BodyMesh( baked, capacity, storageCapable, { map: skins[ i ], eyeMap, cloth } ),
+				hair: new HairMesh( bakedHeadHair, capacity, storageCapable, { map: hairMaps[ i ] } )
+			} );
 
-				variants.push( {
-					id: CROWD_MODELS[ i ].id,
-					body: new BodyMesh( baked, capacity, storageCapable, { map: skins[ i ], eyeMap, cloth } ),
-					hair: new HairMesh( bakedHeadHair, capacity, storageCapable, { map: hairMaps[ i ] } )
-				} );
+		}
 
-			}
-
-			return variants;
-
-		};
-
-		const assets = new CharacterAssets(
-			variantsOf,
+		return new CharacterAssets(
+			variants,
 			clips.map( ( clip ) => clip.duration ),
 			animationGltf,
 			animationCatalog( animationGltf, manifest )
 		);
 
-		return bake ? assets.bake() : assets;
-
 	}
 
-	constructor( variantsOf, durations, animation, catalog ) {
+	constructor( variants, durations, animation, catalog ) {
 
-		this.variants = [];
-		this.pending = variantsOf;
+		this.variants = variants;
 		this.durations = durations;
 		this.animation = animation;
 		this.animationCatalog = catalog;
 		this.group = new THREE.Group();
 		this.group.name = 'crowd';
-
-	}
-
-	/**
-	 * Bakes the crowd's vertex animation and builds its draws. Runs once,
-	 * whenever the host asks; the group is the same one either way.
-	 */
-	bake() {
-
-		if ( ! this.pending ) return this;
-		const variants = this.pending();
-		this.pending = null;
-		this.variants = variants;
 
 		for ( const variant of variants ) {
 
@@ -158,8 +147,6 @@ export class CharacterAssets {
 			this.group.add( variant.hair.mesh );
 
 		}
-
-		return this;
 
 	}
 

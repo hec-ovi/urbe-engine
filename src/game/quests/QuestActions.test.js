@@ -95,11 +95,20 @@ describe( 'QuestActions target contract', () => {
 		expect( setup().actions.objective( { timeMin: 600 } ) ).toEqual( {
 			targetKey: 'quest:q_courier:take_doc', questId: 'q_courier', stepId: 'take_doc', kind: 'pickup',
 			title: 'q_courier', text: 'Take the stamped manifest.', place: { kind: 'parcel', id: 'p_pickup' },
+			actorIds: [], venue: null, window: null, availability: { available: true },
 			guidance: {
 				questId: 'q_courier', stepId: 'take_doc', place: { kind: 'parcel', id: 'p_pickup' },
 				destination: { kind: 'parcel', id: 'p_pickup' }
 			}
 		} );
+
+		// A place the questline names is the venue the HUD and the sign read, and
+		// the hour its step names is carried with whether it is open now.
+		const window = { label: 'during the slow hour', days: [ 0, 1, 2, 3, 4, 5, 6 ], startMin: 1080, endMin: 1380 };
+		const named = oneStepQuest( 'q_named', { kind: 'goto', place: { parcelId: 'p_pickup', name: 'Oxide Filter' } }, { hint: 'Go there during the slow hour.' } );
+		named.steps[ 0 ].window = window;
+		const objective = new QuestActions( QuestSession.create( [ named ], people(), 600 ) ).objective( { timeMin: 600 } );
+		expect( objective ).toMatchObject( { kind: 'goto', venue: 'Oxide Filter', actorIds: [], window, availability: { available: false, reason: 'outside_window' } } );
 
 		for ( const [ kind, id, place ] of [
 			[ 'station', 'central', { stationId: 'central' } ], [ 'stop', 'night-bus', { stopId: 'night-bus' } ]

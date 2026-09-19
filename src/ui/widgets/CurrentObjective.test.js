@@ -22,6 +22,16 @@ describe( 'CurrentObjective', () => {
 		await userEvent.setup().keyboard( '{Enter}' );
 		expect( onOpen ).toHaveBeenCalledOnce();
 
+		objective.setObjective( { title: 'Salt Wharf', objective: 'Check the freight ledger', state: 'active', place: { name: 'Oxide Filter', distanceMeters: 120 } } );
+		expect( screen.getByText( 'Oxide Filter, 120 m' ) ).toBeTruthy();
+		expect( screen.getByRole( 'button', { name: 'Open current quest: Salt Wharf, Check the freight ledger, Oxide Filter, 120 m' } ) ).toBeTruthy();
+		objective.setObjective( { title: 'Salt Wharf', objective: 'Check the freight ledger', state: 'active', place: { name: 'restaurant' } } );
+		expect( screen.getByText( 'restaurant' ) ).toBeTruthy();
+		expect( objective.hours.hidden ).toBe( true );
+		objective.setObjective( { title: 'Salt Wharf', objective: 'Check the freight ledger', state: 'active',
+			place: { name: 'Oxide Filter', window: { label: 'during the slow hour', startMin: 1080, endMin: 1380 } } } );
+		expect( screen.getByText( 'Opens during the slow hour, 18:00 to 23:00' ) ).toBeTruthy();
+
 		objective.setObjective( { title: 'Late shift', objective: 'Serve until close', state: 'done' } );
 		expect( screen.getByText( 'Objective complete' ) ).toBeTruthy();
 		expect( objective.element.classList.contains( 'is-done' ) ).toBe( true );

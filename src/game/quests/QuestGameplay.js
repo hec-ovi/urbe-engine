@@ -8,6 +8,9 @@ const AREA_REACH = 3.2;
 const MIN_AIM = 0.76;
 const CHEST = 1.3;
 const FIXED_KINDS = new Set( [ 'rescue', 'access', 'hacking', 'sabotage' ] );
+/** Steps that send the player somewhere and read as nothing there without a mark. */
+const PLACE_KINDS = new Set( [ 'goto', 'talk' ] );
+const MARKED_KINDS = new Set( [ 'pickup', 'work', 'deliver', ...PLACE_KINDS, ...FIXED_KINDS ] );
 const ESCORT_REACH = 3.2;
 
 /**
@@ -135,10 +138,12 @@ export class QuestGameplay {
 		const look = vector3( frame.look );
 		const targets = this.actions.targets( { timeMin } );
 		const mechanics = this.#mechanicTargets( timeMin ).map( ( target ) => this.#presentMechanic( target ) );
+		const objective = this.actions.objective( { timeMin } );
 		this.#advanceEscort( mechanics, { timeMin, playerPlaces, feet } );
 		this.#advanceTransit( mechanics, { timeMin, playerPlaces, feet } );
 		this.#materializePassiveCast( mechanics, { timeMin, playerPlaces, feet } );
-		this.#sync( [ ...targets, ...mechanics ] );
+		this.#materializeObjectiveCast( objective, { timeMin, feet } );
+		this.#sync( [ ...targets, ...mechanics, ...( objective && PLACE_KINDS.has( objective.kind ) ? [ objective ] : [] ) ] );
 		const candidates = [];
 		this.liveInteractions.clear();
 
@@ -540,6 +545,19 @@ export class QuestGameplay {
 
 	}
 
+	/**
+	 * The person a talk step sends the player to stands at that parcel while
+	 * the step is active and its hour is open, whatever the rota says: the
+	 * place the objective names is otherwise an empty room at the wrong hour.
+	 */
+	#materializeObjectiveCast( objective, { timeMin, feet } ) {
+
+		if ( objective?.kind !== 'talk' || objective.place?.kind !== 'parcel' ) return;
+		if ( objective.availability.reason === 'outside_window' ) return;
+		for ( const npcId of objective.actorIds ) this.crowd.castMember( npcId, timeMin, feet, objective.place.id );
+
+	}
+
 	#advanceEscort( targets, { timeMin, playerPlaces, feet } ) {
 
 		if ( ! this.escort ) return;
@@ -832,7 +850,7 @@ export class QuestGameplay {
 
 		for ( const target of targets ) {
 
-			if ( ! [ 'pickup', 'work', 'deliver', ...FIXED_KINDS ].includes( target.kind ) || target.place?.kind !== 'parcel' ) continue;
+			if ( ! MARKED_KINDS.has( target.kind ) || target.place?.kind !== 'parcel' ) continue;
 			active.add( target.targetKey );
 			if ( this.staticMarks.has( target.targetKey ) || this.changedTargets.has( target.targetKey ) ) continue;
 			const anchor = this.anchors.get( target.place.id );

@@ -217,8 +217,8 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 		await warmup.warmAll( modules.group, { onProgress: ( done, total ) => progress.push( [ done, total ] ) } );
 
-		// Twenty-seven module surfaces, six compiles.
-		expect( compiled ).toHaveLength( modules.batchCount );
+		// Twenty-seven module surfaces, six compiles, each pinned behind its keeper.
+		expect( compiled.filter( ( object ) => ! object.name.startsWith( 'keeper:' ) ) ).toHaveLength( modules.batchCount );
 		expect( progress.at( - 1 ) ).toEqual( [ modules.batchCount, modules.batchCount ] );
 		modules.dispose();
 

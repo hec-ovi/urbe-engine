@@ -1,4 +1,4 @@
-import { CastResolver, QuestlineRuntime } from '../../../../quests/dist/runtime.js';
+import { CastResolver, QuestlineRuntime, StepStamp, StoryVenues } from '../../../../quests/dist/runtime.js';
 
 /**
  * The questlines of a world, running against the game's own simulation
@@ -21,15 +21,26 @@ export class QuestSession {
 	 * @param sim the SimulationPort the runtime reads (SimBridge)
 	 * @param timeMin when the cast is resolved: whoever is on duty around now
 	 * @param persisted optional game-descriptor quest progress or compact snapshot() entries
+	 * @param world the city the stories stand in (the Atlas blueprint, named or
+	 * not): every authored place is stamped with its venue's name and a step
+	 * whose text names an hour with the window the runtime gates on, so a
+	 * questline written before places were named still plays
+	 * @param types the Naming NPC types; with the world, casting looks past a
+	 * pinned venue to every building that publishes the character's post
 	 */
-	static create( definitions, sim, timeMin, persisted = [] ) {
+	static create( definitions, sim, timeMin, persisted = [], { world = null, types = null } = {} ) {
 
 		const entries = [];
-		const resolver = new CastResolver( sim );
+		const stamp = world ? new StepStamp( world ) : null;
+		const resolver = world && types ? new CastResolver( sim, new StoryVenues( world, types ) ) : new CastResolver( sim );
+		// One person plays one character across the whole set, restored casts included.
+		const taken = new Set();
+		const characters = new Map();
 		const saved = new Map( persisted.map( ( entry ) => [ entry.id, entry ] ) );
 
-		for ( const definition of definitions ) {
+		for ( const carried of definitions ) {
 
+			const definition = stamp ? stamp.definition( carried ) : carried;
 			const previous = saved.get( definition.id );
 
 			if ( previous ) {
@@ -43,6 +54,7 @@ export class QuestSession {
 							definition,
 							runtime: QuestlineRuntime.restore( definition, snapshot.cast, sim, snapshot.state )
 						} );
+						for ( const npcId of Object.values( snapshot.cast ) ) taken.add( npcId );
 						continue;
 
 					}
@@ -57,7 +69,7 @@ export class QuestSession {
 
 			try {
 
-				const cast = resolver.resolve( definition, timeMin );
+				const cast = resolver.resolve( definition, timeMin, { taken, characters } );
 				entries.push( { definition, runtime: new QuestlineRuntime( definition, cast, sim ) } );
 
 			} catch ( error ) {

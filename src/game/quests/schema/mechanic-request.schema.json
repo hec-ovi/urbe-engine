@@ -61,10 +61,10 @@
   "$defs": {
     "runtimePlace": {
       "oneOf": [
-        { "type": "object", "additionalProperties": false, "required": ["parcelId"], "properties": { "parcelId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" } } },
-        { "type": "object", "additionalProperties": false, "required": ["districtId"], "properties": { "districtId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" } } },
-        { "type": "object", "additionalProperties": false, "required": ["stationId"], "properties": { "stationId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" } } },
-        { "type": "object", "additionalProperties": false, "required": ["stopId"], "properties": { "stopId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" } } }
+        { "type": "object", "additionalProperties": false, "required": ["parcelId"], "properties": { "parcelId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }, "name": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" } } },
+        { "type": "object", "additionalProperties": false, "required": ["districtId"], "properties": { "districtId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }, "name": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" } } },
+        { "type": "object", "additionalProperties": false, "required": ["stationId"], "properties": { "stationId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }, "name": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" } } },
+        { "type": "object", "additionalProperties": false, "required": ["stopId"], "properties": { "stopId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }, "name": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/text" } } }
       ]
     }
   }

@@ -50,13 +50,14 @@ export async function readPlanFile( entry, { baseUrl, readBinary, blueprints } )
  * time under the frame budget. A file that refuses to decode is `E_KIT_PIECES`
  * like one that never arrived.
  */
-export async function decodePlan( entry, { bytes, blueprint }, { baseUrl, factory, loader, slice } ) {
+export async function decodePlan( entry, { bytes, blueprint }, { baseUrl, factory, loader, slice, hitches } ) {
 
 	let scene;
 
 	try {
 
-		( { scene } = await loader.parseAsync( bytes, `${baseUrl}/` ) );
+		// The bytes are in hand, so the parse is all thread and its span is its cost.
+		( { scene } = await hitches.span( 'plan parse', () => loader.parseAsync( bytes, `${baseUrl}/` ) ) );
 
 	} catch ( cause ) {
 
@@ -64,7 +65,7 @@ export async function decodePlan( entry, { bytes, blueprint }, { baseUrl, factor
 
 	}
 
-	const shell = await readShell( scene, factory, blueprint, slice );
+	const shell = await readShell( scene, factory, blueprint, slice, hitches );
 	// The fake rooms behind the glass are their own entry: a parcel that opens a
 	// real interior draws the plan without them.
 	const surfaces = shell.surfaces.filter( ( { bucket } ) => ! SCENIC.test( bucket ) );

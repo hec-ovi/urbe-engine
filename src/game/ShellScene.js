@@ -1,4 +1,5 @@
 import { FrameBudget } from '../app/FrameBudget.js';
+import { HitchLog } from './debug/HitchLog.js';
 import { BuildingsLoader } from './city/BuildingsLoader.js';
 import { ShellStream } from './city/streaming/ShellStream.js';
 import { KitPieces } from './city/kit/KitPieces.js';
@@ -13,29 +14,39 @@ import { Haze } from './light/Haze.js';
 const KIT_LOAD_RADIUS = 384;
 const KIT_DROP_RADIUS = 640;
 
-/** Binds shell admission to the game's render, fixture and physics ports. */
+/**
+ * Binds shell admission to the game's render, fixture and physics ports.
+ *
+ * Every step of admitting a cell that holds the thread is named in the hitch
+ * log, down through the loader, the plans and the collision cook, so a frame
+ * that stalls while a cell stands says which step it was.
+ */
 export class ShellScene {
 
-	constructor( { atlas, catalog, factory, buildings, loadBuildings, physics, colliders, interiors, haze, kit = null } ) {
+	/**
+	 * @param slice the frame budget admitting a cell is paced by; one for the
+	 *   whole of it, so decoding a plan and building a building give the frame
+	 *   its turn through the same slice. It starts unpaced, because a load has
+	 *   no frame to protect and the cells around the spawn have to stand
+	 *   before play begins.
+	 * @param hitches the log every admission step is named in
+	 */
+	constructor( { atlas, catalog, factory, buildings, loadBuildings, physics, colliders, interiors, haze, kit = null,
+		slice = new FrameBudget( { paced: false } ), hitches = new HitchLog() } ) {
 
 		this.atlas = atlas;
 		this.parcels = new Map( atlas.parcels.map( parcel => [ parcel.id, parcel ] ) );
-		Object.assign( this, { factory, physics, colliders, interiors, haze } );
+		Object.assign( this, { factory, physics, colliders, interiors, haze, slice, hitches } );
 		this.cells = new Map();
-		// One budget for the whole of admitting a cell: decoding a plan and
-		// building a building give the frame its turn through the same slice.
-		// It starts unpaced, because a load has no frame to protect and the
-		// cells around the spawn have to stand before play begins.
-		this.slice = new FrameBudget( { paced: false } );
-		this.pieces = kit ? new KitPieces( { kit: kit.document, baseUrl: kit.baseUrl, blueprints: kit.blueprints, factory, slice: this.slice } ) : null;
+		this.pieces = kit ? new KitPieces( { kit: kit.document, baseUrl: kit.baseUrl, blueprints: kit.blueprints, factory, slice, hitches } ) : null;
 		// One plan stands on many lots with no word of its own, so the words the
 		// city reads are lettered here, per parcel, in one batch.
 		this.signs = kit ? new KitSigns( { factory } ) : null;
 		this.stream = new ShellStream( {
-			catalog, factory, buildings, loadBuildings,
+			catalog, factory, buildings, loadBuildings, hitches,
 			loader: this.pieces
-				? new KitCellLoader( { pieces: this.pieces, factory, signs: this.signs, slice: this.slice } )
-				: new BuildingsLoader( factory, undefined, {}, this.slice ),
+				? new KitCellLoader( { pieces: this.pieces, factory, signs: this.signs, slice, hitches } )
+				: new BuildingsLoader( factory, undefined, {}, slice, hitches ),
 			...( this.pieces ? { loadRadius: KIT_LOAD_RADIUS, dropRadius: KIT_DROP_RADIUS } : {} ),
 			prepare: cell => this.#prepare( cell ),
 			added: cell => { this.cells.set( cell.id, cell ); this.onFixturesChanged?.(); },
@@ -66,14 +77,14 @@ export class ShellScene {
 		if ( cell.ids.length ) {
 
 			const atlas = { ...this.atlas, parcels: cell.ids.map( id => this.parcels.get( id ) ) };
-			const neon = new Neon( atlas, cell.buildings, this.factory ).build();
+			const neon = this.hitches.time( 'cell neon', () => new Neon( atlas, cell.buildings, this.factory ).build() );
 			cell.glows = neon.glows;
 			cell.pinned = [ ...cell.buildings.values() ].some( building => building.hasInterior );
 			cell.windows = new LitWindows( atlas, cell.buildings, this.factory );
-			cell.group.add( neon.group, cell.windows.build( { enabled: this.interiors } ) );
+			cell.group.add( neon.group, this.hitches.time( 'cell windows', () => cell.windows.build( { enabled: this.interiors } ) ) );
 			if ( this.haze ) {
 
-				cell.haze = Haze.build( neon.glows, this.haze );
+				cell.haze = this.hitches.time( 'cell haze', () => Haze.build( neon.glows, this.haze ) );
 				if ( cell.haze ) cell.group.add( cell.haze );
 
 			}
@@ -94,11 +105,17 @@ export class ShellScene {
 
 		}
 		cell.shellColliders.clear();
-		new DoorColliders( this.physics, cell.doors );
+		this.hitches.time( 'cell doors', () => new DoorColliders( this.physics, cell.doors ) );
 
 	}
 
 	#remove( cell ) {
+
+		this.hitches.time( `cell ${cell.id} released`, () => this.#release( cell ) );
+
+	}
+
+	#release( cell ) {
 
 		this.colliders.dropBand( `kit:${cell.id}` );
 		for ( const id of cell.ids ) this.colliders.dropBand( `shell:${id}` );

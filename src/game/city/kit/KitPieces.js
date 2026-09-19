@@ -1,4 +1,5 @@
 import { FrameBudget } from '../../../app/FrameBudget.js';
+import { HitchLog } from '../../debug/HitchLog.js';
 import { cityGltfLoader } from '../../data/CityGltfLoader.js';
 import { ReadBudget } from '../../data/ReadBudget.js';
 import { MaterialBatches } from './MaterialBatches.js';
@@ -39,9 +40,10 @@ export class KitPieces {
 	 * @param baseUrl the shared store root its file paths are relative to
 	 * @param blueprints the city's [plan blueprints](../../data/PlanBlueprints.js)
 	 * @param slice the frame budget decoding a plan is paced by
+	 * @param hitches the log each step of standing a plan is named in
 	 * @param readBinary reads one URL into an ArrayBuffer
 	 */
-	constructor( { kit, baseUrl, factory, blueprints, slice = new FrameBudget( { paced: false } ), loader = cityGltfLoader(), readBinary = fetchBinary } ) {
+	constructor( { kit, baseUrl, factory, blueprints, slice = new FrameBudget( { paced: false } ), hitches = new HitchLog(), loader = cityGltfLoader(), readBinary = fetchBinary } ) {
 
 		/** plan id -> what the index publishes for it */
 		this.index = new Map( kit.plans.map( ( plan ) => [ plan.id, plan ] ) );
@@ -50,6 +52,7 @@ export class KitPieces {
 		this.loader = loader;
 		this.blueprints = blueprints;
 		this.slice = slice;
+		this.hitches = hitches;
 		this.readBinary = readBinary;
 		/** plan id -> its id, lot bays, surfaces, scenery and leaves, once it stands */
 		this.plans = new Map();
@@ -62,7 +65,7 @@ export class KitPieces {
 		// Cells read ahead of the one being built, so the plans asked for first
 		// are the ones read first.
 		this.budget = new ReadBudget( LOAD_CONCURRENCY );
-		this.batches = new MaterialBatches( 'kit-plans' );
+		this.batches = new MaterialBatches( 'kit-plans', { hitches } );
 		this.group = this.batches.group;
 
 	}
@@ -249,7 +252,7 @@ export class KitPieces {
 
 			if ( plan.leaves.length ) entries.push( { id: LEAVES( plan.id ), surfaces: plan.leaves.flatMap( ( leaf ) => leaf.surfaces ) } );
 			if ( plan.scenery.length ) entries.push( { id: SCENERY( plan.id ), surfaces: plan.scenery } );
-			this.batches.add( entries, { castShadow: true } );
+			this.hitches.time( 'plan batches', () => this.batches.add( entries, { castShadow: true } ) );
 			this.plans.set( planId, plan );
 
 		} catch ( error ) {

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:objective-routes:route-places",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["parcelId", "door"],
+    "properties": {
+      "parcelId": { "type": "string", "minLength": 1 },
+      "door": { "$ref": "urn:urbe:engine:objective-routes:route-request#/properties/from" }
+    },
+    "additionalProperties": false
+  }
+}

@@ -52,4 +52,19 @@ describe( 'HitchLog', () => {
 
 	} );
 
+	it( 'records the wall time of an awaited step that cannot be cut, when material', async () => {
+
+		const log = new HitchLog();
+		const clock = vi.spyOn( performance, 'now' )
+			.mockReturnValueOnce( 100 ).mockReturnValueOnce( 118 )
+			.mockReturnValueOnce( 120 ).mockReturnValueOnce( 121 );
+
+		expect( await log.span( 'plan parse', async () => 'parsed' ) ).toBe( 'parsed' );
+		await log.span( 'plan parse', async () => {} );
+
+		expect( log.notes ).toEqual( [ 'plan parse 18 ms' ] );
+		clock.mockRestore();
+
+	} );
+
 } );

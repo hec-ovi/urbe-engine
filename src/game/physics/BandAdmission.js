@@ -1,13 +1,16 @@
 import { frameYield } from '../../app/FrameYield.js';
+import { HitchLog } from '../debug/HitchLog.js';
 import { triangleChunks } from './TriangleChunks.js';
 
 /** Cooks disabled pieces across frames and enables the complete band together. */
 export class BandAdmission {
 
-	constructor( physics, source ) {
+	/** @param hitches the log each cooked piece is named in */
+	constructor( physics, source, hitches = new HitchLog() ) {
 
 		this.physics = physics;
 		this.source = source;
+		this.hitches = hitches;
 		this.handles = [];
 		this.cancelled = false;
 
@@ -21,7 +24,7 @@ export class BandAdmission {
 			for ( const geometry of triangleChunks( this.source ) ) {
 
 				if ( this.cancelled ) { geometry.dispose(); return false; }
-				try { this.handles.push( this.physics.addTrimesh( geometry, { enabled: false } ) ); }
+				try { this.handles.push( this.hitches.time( 'collision cook', () => this.physics.addTrimesh( geometry, { enabled: false } ) ) ); }
 				finally { geometry.dispose(); }
 				if ( ++ count === 4 || performance.now() - since >= 4 ) {
 

@@ -28,12 +28,8 @@ export class PoseBuffer {
 
 		} else {
 
-			const half = new Uint16Array( data.length );
-
-			for ( let i = 0; i < data.length; i ++ ) half[ i ] = THREE.DataUtils.toHalfFloat( data[ i ] );
-
 			this.texture = new THREE.DataTexture(
-				half, vertexCount, rows, THREE.RGBAFormat, THREE.HalfFloatType
+				halfFloats( data ), vertexCount, rows, THREE.RGBAFormat, THREE.HalfFloatType
 			);
 			this.texture.minFilter = THREE.NearestFilter;
 			this.texture.magFilter = THREE.NearestFilter;
@@ -56,5 +52,22 @@ export class PoseBuffer {
 			: textureLoad( this.texture, ivec2( vertex, row ) ).xyz;
 
 	}
+
+}
+
+/**
+ * The buffer as half floats, which is what the texture path reads. A body is
+ * tens of millions of values, so the engine's own conversion is used where it
+ * exists and the per-value one is the fallback.
+ */
+export function halfFloats( data ) {
+
+	if ( typeof Float16Array === 'function' ) return new Uint16Array( new Float16Array( data ).buffer );
+
+	const half = new Uint16Array( data.length );
+
+	for ( let i = 0; i < data.length; i ++ ) half[ i ] = THREE.DataUtils.toHalfFloat( data[ i ] );
+
+	return half;
 
 }

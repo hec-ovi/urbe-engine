@@ -48,9 +48,8 @@ export class BuildingSource {
 
 		const base = `${this.outBase}/${parcelId}`;
 		const source = this.sources[ parcelId ] === 'kit' ? 'kit' : 'shell';
-		const blueprint = source === 'kit'
-			? await this.#kitBlueprint( parcelId, `${base}/${parcelId}.placements.json` )
-			: await this.#json( `${base}/${parcelId}.blueprint.json` );
+		const kit = source === 'kit' ? await this.#kit( parcelId, `${base}/${parcelId}.placements.json` ) : null;
+		const blueprint = kit ? kit.blueprint : await this.#json( `${base}/${parcelId}.blueprint.json` );
 		const hasInterior = this.interiors.has( parcelId );
 		const [ npc, interior ] = hasInterior
 			? await Promise.all( [ this.#json( `${base}/interior/npc.json` ), this.#interior( base ) ] )
@@ -58,15 +57,18 @@ export class BuildingSource {
 
 		return {
 			parcelId, blueprint, npc, interior, hasInterior, source,
-			...( source === 'kit'
-				? { placementsUrl: `${base}/${parcelId}.placements.json` }
+			...( kit
+				? { placementsUrl: `${base}/${parcelId}.placements.json`, word: kit.word }
 				: { shellUrl: `${base}/${parcelId}.glb` } )
 		};
 
 	}
 
-	/** This parcel's blueprint: its plan's document, in the frame it stands in. */
-	async #kitBlueprint( parcelId, placementsUrl ) {
+	/**
+	 * A kit parcel's blueprint, its plan's document in the frame it stands in,
+	 * and the word its record letters on the plan's sign field.
+	 */
+	async #kit( parcelId, placementsUrl ) {
 
 		const record = await this.#json( placementsUrl );
 
@@ -78,7 +80,7 @@ export class BuildingSource {
 
 		try {
 
-			return parcelBlueprint( await this.plans.of( record.plan ), record );
+			return { blueprint: parcelBlueprint( await this.plans.of( record.plan ), record ), word: record.signText ?? null };
 
 		} catch ( error ) {
 

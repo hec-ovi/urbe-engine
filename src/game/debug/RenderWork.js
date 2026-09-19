@@ -1,25 +1,58 @@
+/** Names listed on one line before the rest are counted. */
+const NAMED = 6;
+
 /**
  * What the renderer built for itself in the frame that just ended.
  *
- * A material draws for the first time and the backend links its program right
- * there, on the frame that wanted it; a map reaches a shader for the first time
- * and the whole mip chain uploads the same way. On WebGL2 both are blocking
- * calls, and either can be the whole of a freeze that the world's own notes
- * cannot explain, because the world did nothing: it just looked at something
- * new. The renderer counts its live programs and textures, so the difference
- * across a frame names that work exactly.
+ * A material draws for the first time and the backend compiles its program
+ * right there, on the frame that wanted it; a map reaches a shader for the
+ * first time and the whole mip chain uploads the same way. On WebGL2 both are
+ * blocking calls, and either can be the whole of a freeze that the world's own
+ * notes cannot explain, because the world did nothing: it just looked at
+ * something new.
  *
- * Only growth is reported. Dropping a floor disposes textures and programs, and
- * a negative difference is a release, not a cost.
+ * The renderer's own accounting is what says so. Every program and texture it
+ * creates or destroys passes through `info`, so those calls are what is counted
+ * here, by name, rather than the net change in the counters: a program dropped
+ * and linked again in the same frame is a stall the counters would never show.
  */
 export class RenderWork {
 
-	/** @param info `renderer.info`, whose `memory` counters this reads */
+	/** @param info `renderer.info`, whose create and destroy calls this listens to */
 	constructor( info ) {
 
-		this.info = info;
-		this.programs = info?.memory?.programs ?? 0;
-		this.textures = info?.memory?.textures ?? 0;
+		this.linked = new Map();
+		this.released = 0;
+		this.uploaded = 0;
+		this.uploadedBytes = 0;
+		this.freed = 0;
+		const listen = ( method, after ) => {
+
+			const original = info?.[ method ];
+			if ( typeof original !== 'function' ) return;
+			info[ method ] = ( item ) => {
+
+				original.call( info, item );
+				after( item );
+
+			};
+
+		};
+
+		listen( 'createProgram', ( program ) => {
+
+			const name = `${program.name || 'unnamed'} ${program.stage}`;
+			this.linked.set( name, ( this.linked.get( name ) ?? 0 ) + 1 );
+
+		} );
+		listen( 'destroyProgram', () => this.released ++ );
+		listen( 'createTexture', ( texture ) => {
+
+			this.uploaded ++;
+			this.uploadedBytes += info.memoryMap?.get( texture ) ?? 0;
+
+		} );
+		listen( 'destroyTexture', () => this.freed ++ );
 
 	}
 
@@ -29,20 +62,31 @@ export class RenderWork {
 	 */
 	since() {
 
-		const memory = this.info?.memory;
-
-		if ( ! memory ) return null;
-
-		const programs = memory.programs - this.programs;
-		const textures = memory.textures - this.textures;
-
-		this.programs = memory.programs;
-		this.textures = memory.textures;
-
 		const built = [];
+		let programs = 0;
+		for ( const count of this.linked.values() ) programs += count;
 
-		if ( programs > 0 ) built.push( `${programs} shader${programs === 1 ? '' : 's'} linked` );
-		if ( textures > 0 ) built.push( `${textures} texture${textures === 1 ? '' : 's'} uploaded` );
+		if ( programs > 0 ) {
+
+			const names = [ ...this.linked ].sort( ( a, b ) => b[ 1 ] - a[ 1 ] );
+			const shown = names.slice( 0, NAMED ).map( ( [ name, count ] ) => ( count > 1 ? `${name} x${count}` : name ) );
+			if ( names.length > NAMED ) shown.push( `${names.length - NAMED} more` );
+			built.push( `${programs} shader${programs === 1 ? '' : 's'} linked (${shown.join( ', ' )})` );
+
+		}
+		if ( this.released > 0 ) built.push( `${this.released} shader${this.released === 1 ? '' : 's'} released` );
+		if ( this.uploaded > 0 ) {
+
+			const size = this.uploadedBytes >= 1 << 20 ? ` (${( this.uploadedBytes / ( 1 << 20 ) ).toFixed( 0 )} MB)` : '';
+			built.push( `${this.uploaded} texture${this.uploaded === 1 ? '' : 's'} uploaded${size}` );
+
+		}
+
+		this.linked.clear();
+		this.released = 0;
+		this.uploaded = 0;
+		this.uploadedBytes = 0;
+		this.freed = 0;
 
 		return built.length ? built.join( ', ' ) : null;
 

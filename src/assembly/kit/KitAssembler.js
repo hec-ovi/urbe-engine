@@ -43,6 +43,8 @@ export class KitAssembler {
 
 		this.worldSeed = atlas.meta.seed;
 		this.parcels = new Map( atlas.parcels.map( ( parcel ) => [ parcel.id, parcel ] ) );
+		/** edge id -> street centreline, the run a lot's entrance face fronts */
+		this.streets = new Map( atlas.streets.edges.map( ( edge ) => [ edge.id, edge.path ] ) );
 		this.assembler = assembler;
 		this.plans = plans;
 		this.templates = new BlockTemplates( atlas );
@@ -119,7 +121,7 @@ export class KitAssembler {
 		if ( ! floors ) return this.#skip( parcelId, 'envelope is shorter than a shared building' );
 		this.reasons.delete( parcelId );
 
-		const face = this.#entranceFace( rectangle.footprint, parcel.access.point );
+		const face = this.#entranceFace( rectangle.footprint, parcel.access );
 		const oriented = face % 2 === 0 ? bays : { across: bays.deep, deep: bays.across };
 		const fitting = covered.map( ( standing ) => fittingFamilies( oriented, floors, standing ) )
 			.reduce( ( kept, fits ) => kept.filter( ( id ) => fits.includes( id ) ) );
@@ -207,15 +209,24 @@ export class KitAssembler {
 
 	}
 
-	/** Which lot face the street reaches: the edge the access point stands nearest. */
+	/**
+	 * Which lot face fronts the street: the face whose middle stands nearest the
+	 * access edge's centreline. The access point alone cannot say: Atlas puts it
+	 * on a corner of a corner lot, equally near the front and the side, and a
+	 * door decided by that tie opens into the alley.
+	 */
 	#entranceFace( footprint, access ) {
 
+		const street = this.streets.get( access.edgeId ) ?? [ access.point ];
 		let nearest = 0;
 		let best = Infinity;
 
 		for ( let face = 0; face < 4; face ++ ) {
 
-			const distance = toSegment( access, footprint[ face ], footprint[ ( face + 1 ) % 4 ] );
+			const from = footprint[ face ];
+			const to = footprint[ ( face + 1 ) % 4 ];
+			const middle = [ ( from[ 0 ] + to[ 0 ] ) / 2, ( from[ 1 ] + to[ 1 ] ) / 2 ];
+			const distance = toPolyline( middle, street );
 
 			if ( distance < best ) {
 
@@ -284,7 +295,22 @@ export class KitAssembler {
 
 }
 
-/** How far a point stands from one lot edge. */
+/** How far a point stands from a street's centreline; a single point is a run of no length. */
+function toPolyline( point, path ) {
+
+	let best = Infinity;
+
+	for ( let index = 0; index < Math.max( 1, path.length - 1 ); index ++ ) {
+
+		best = Math.min( best, toSegment( point, path[ index ], path[ Math.min( index + 1, path.length - 1 ) ] ) );
+
+	}
+
+	return best;
+
+}
+
+/** How far a point stands from one segment. */
 function toSegment( point, from, to ) {
 
 	const dx = to[ 0 ] - from[ 0 ];

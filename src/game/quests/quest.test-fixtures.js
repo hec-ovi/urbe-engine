@@ -55,9 +55,23 @@ export function step( stepId, target, options = {} ) {
 			stake: 'The objective remains unresolved otherwise.'
 		},
 		...( options.wantedByRoleId === null ? {} : { wantedByRoleId: options.wantedByRoleId ?? target.roleId ?? 'giver' } ),
-		target, gives: options.gives ?? [], needs: options.needs ?? [], conditions: [],
+		target: named( target ), gives: options.gives ?? [], needs: options.needs ?? [], conditions: [],
 		effects: options.effects ?? ( target.completionFlag ? [ { kind: 'setFlag', flag: target.completionFlag } ] : [] ),
 		next: options.next ?? [], branching: 'parallel', ...( options.endingId ? { endingId: options.endingId } : {} )
+	};
+
+}
+
+/** An authored place is its world identity plus a name; a test that gives none is named after its id. */
+function named( target ) {
+
+	const place = ( value ) => value && ! value.name ? { ...value, name: Object.values( value )[ 0 ] } : value;
+
+	return {
+		...target,
+		...( target.place ? { place: place( target.place ) } : {} ),
+		...( target.from ? { from: place( target.from ) } : {} ),
+		...( target.to ? { to: place( target.to ) } : {} )
 	};
 
 }

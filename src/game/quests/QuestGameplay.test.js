@@ -73,6 +73,39 @@ describe( 'live quest target projection', () => {
 
 	} );
 
+	it( 'rings the parcel a goto or talk objective points at and stands the talk cast there while the step is active', () => {
+
+		const objective = ( kind, actorIds = [], availability = { available: true } ) => ( {
+			targetKey: `quest:q:${kind}`, questId: 'q', stepId: kind, kind, title: 'q', text: 'Go there',
+			place: PARCEL, actorIds, venue: null, window: null, availability,
+			guidance: { questId: 'q', stepId: kind, place: PARCEL, destination: PARCEL }
+		} );
+		const actions = { targets: () => [], objective: vi.fn( () => objective( 'goto' ) ), perform: vi.fn() };
+		const crowd = { questMember: () => null, castMember: vi.fn( () => null ) };
+		const gameplay = setup( actions, { crowd } );
+
+		gameplay.candidates( frame( pointLook( 0, 0.2, - 2 ) ) );
+		const ring = gameplay.staticMarks.get( 'quest:q:goto' );
+		expect( ring.position.toArray() ).toEqual( [ 0, 0.03, - 2 ] );
+		expect( crowd.castMember ).not.toHaveBeenCalled();
+
+		// Outside the hour the step names the place is marked but nobody is stood there yet.
+		actions.objective.mockReturnValue( objective( 'talk', [ 'npc-denna' ], { available: false, reason: 'outside_window' } ) );
+		gameplay.candidates( frame( pointLook( 0, 0.2, - 2 ) ) );
+		expect( gameplay.staticMarks.has( 'quest:q:goto' ) ).toBe( false );
+		expect( gameplay.staticMarks.get( 'quest:q:talk' ).userData ).toEqual( { targetKey: 'quest:q:talk', kind: 'talk' } );
+		expect( crowd.castMember ).not.toHaveBeenCalled();
+
+		actions.objective.mockReturnValue( objective( 'talk', [ 'npc-denna' ], { available: false, reason: 'off_duty' } ) );
+		gameplay.candidates( frame( pointLook( 0, 0.2, - 2 ) ) );
+		expect( crowd.castMember ).toHaveBeenCalledWith( 'npc-denna', 600, expect.objectContaining( { x: 0, z: 0 } ), 'p9' );
+
+		actions.objective.mockReturnValue( null );
+		gameplay.candidates( frame( pointLook( 0, 0.2, - 2 ) ) );
+		expect( gameplay.group.children ).toHaveLength( 0 );
+
+	} );
+
 	it( 'routes an area prompt through QuestActions at the player place', () => {
 
 		const place = { kind: 'district', id: 'd0' };

@@ -2,17 +2,20 @@ import * as THREE from 'three/webgpu';
 
 /**
  * The ground-floor anchors an interior publishes (../../../../interior/CONTRACT.md
- * npc.json), as the crowd takes them: where a person on duty stands and where
- * a guest sits, in world space at the lobby floor height. facingDeg counts from
+ * npc.json), as the crowd takes them: the counter a person on duty serves at,
+ * the work spots behind it, and the seats a guest sits on, in world space at
+ * the lobby floor height. facingDeg counts from
  * +x toward +z; a body heading is the yaw whose forward is (sin, cos).
  */
+const ANCHOR_KINDS = { counter_spot: 'counter', work_spot: 'work', seat: 'seat' };
+
 export function groundAnchors( npc, y ) {
 
-	const anchors = { work: [], seat: [] };
+	const anchors = { counter: [], work: [], seat: [] };
 
 	for ( const anchor of npc?.anchors ?? [] ) {
 
-		const list = anchor.kind === 'work_spot' ? anchors.work : anchor.kind === 'seat' ? anchors.seat : null;
+		const list = anchors[ ANCHOR_KINDS[ anchor.kind ] ] ?? null;
 		if ( ! list || anchor.floor !== 0 ) continue;
 
 		const facing = THREE.MathUtils.degToRad( anchor.facingDeg );

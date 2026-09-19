@@ -5,7 +5,7 @@ import { FRAMES, VatBaker } from './VatBaker.js';
 
 describe( 'Source character motion', () => {
 
-	it( 'keeps body proportions and source assets while transferring the full motion into baked and live poses', () => {
+	it( 'keeps body proportions and source assets while transferring the full motion into baked and live poses', async () => {
 
 		const target = rig( 1.2, 0.6 );
 		const source = rig( 1, 0.4 );
@@ -28,7 +28,7 @@ describe( 'Source character motion', () => {
 		expect( target.calf.position.y ).toBe( - 0.6 );
 		expect( target.pelvis.position.y ).toBe( 1.2 );
 
-		const [ baked ] = VatBaker.bake( target.root, [ target.mesh ], [ clip ] );
+		const [ baked ] = await VatBaker.bake( target.root, [ target.mesh ], [ clip ] );
 		const mixer = new THREE.AnimationMixer( target.root );
 		mixer.clipAction( clip ).play();
 		const vertex = new THREE.Vector3();

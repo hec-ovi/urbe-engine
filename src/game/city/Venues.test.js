@@ -1,12 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Venues } from './Venues.js';
 
 const atlas = {
 	parcels: [
-		{ id: 'p0', type: 'coffee_shop' },
-		{ id: 'p1', type: 'residential' },
-		{ id: 'p2', type: 'commerce' }
+		{ id: 'p0', type: 'coffee_shop', access: { point: [ 0, 6 ] } },
+		{ id: 'p1', type: 'residential', access: { point: [ 20, 6 ] } },
+		{ id: 'p2', type: 'commerce', access: { point: [ 40, 6 ] } }
 	]
 };
 
@@ -73,6 +73,37 @@ describe( 'Venues', () => {
 		// p1 is a home, p2 has a door in no building the world built.
 		expect( marks.map( ( entry ) => entry.parcelId ) ).toEqual( [ 'p0' ] );
 		expect( doors[ 0 ].name ).toBe( 'COFFEE' );
+
+	} );
+
+	it( 'marks the objective parcel whatever its type, names it, and letters the story\'s name on a free sign field', () => {
+
+		const doors = [ door( 'p0' ), door( 'p1' ) ];
+		const field = { center: [ 20, 3, 0 ], normal: [ 0, 1 ], width: 4, height: 0.5, cellSize: 0.4 };
+		const signs = { admit: vi.fn( () => ( { slots: [ 0 ] } ) ), release: vi.fn() };
+		const buildings = new Map( [
+			[ 'p0', { blueprint: { signage: [ { text: 'COFFEE' } ] } } ],
+			[ 'p1', { blueprint: { signage: [ field ] }, word: null } ]
+		] );
+		const model = new Venues( { atlas, buildings, doors, fixtures, factory, signs } );
+
+		expect( model.marks.map( ( entry ) => entry.parcelId ) ).toEqual( [ 'p0' ] );
+		expect( model.nameOf( 'p0' ) ).toBe( 'COFFEE' );
+		expect( model.nameOf( 'p1' ) ).toBe( 'apartment block' );
+
+		expect( model.setObjective( { parcelId: 'p1', name: 'Oxide Filter' } ) ).toBe( true );
+		expect( model.setObjective( { parcelId: 'p1', name: 'Oxide Filter' } ) ).toBe( false );
+		expect( model.marks.map( ( entry ) => entry.parcelId ) ).toEqual( [ 'p0', 'p1' ] );
+		expect( signs.admit ).toHaveBeenCalledWith( field, 'OXIDE FILTER' );
+
+		// A parcel the world built nothing on is marked at its access point; the letters come off the last one.
+		expect( model.setObjective( { parcelId: 'p2', name: null } ) ).toBe( true );
+		expect( signs.release ).toHaveBeenCalledWith( { slots: [ 0 ] } );
+		expect( model.marks.at( - 1 ) ).toMatchObject( { parcelId: 'p2', point: expect.objectContaining( { x: 40, z: 6 } ), open: true } );
+		expect( model.nameOf( 'p2' ) ).toBe( 'shop' );
+
+		model.setObjective( null );
+		expect( model.marks.map( ( entry ) => entry.parcelId ) ).toEqual( [ 'p0' ] );
 
 	} );
 

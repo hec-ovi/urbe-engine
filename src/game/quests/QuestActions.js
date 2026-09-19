@@ -112,6 +112,10 @@ export class QuestActions {
 				title: definition.title,
 				text: step.narrative.playerHint,
 				place: runtime.stepPlace( step.stepId, query.timeMin ) ?? null,
+				actorIds: actorRoleIds( step.target ).map( ( roleId ) => runtime.cast[ roleId ] ).filter( Boolean ),
+				venue: step.target.place?.name ?? null,
+				window: step.window ?? null,
+				availability: runtime.stepAvailability( step.stepId, query.timeMin ),
 				guidance: runtime.stepGuidance( step.stepId, query.timeMin )
 			} );
 
@@ -219,7 +223,7 @@ function actorRoleIds( target ) {
 
 	if ( target.kind === 'listen' ) return target.roleIds;
 	if ( target.kind === 'steal' ) return [ target.fromRoleId ];
-	if ( [ 'assassinate', 'rescue', 'escort' ].includes( target.kind ) ) return [ target.roleId ];
+	if ( [ 'talk', 'assassinate', 'rescue', 'escort' ].includes( target.kind ) ) return [ target.roleId ];
 	if ( target.kind === 'transportation' ) return target.passengerRoleIds;
 	return [];
 
@@ -333,6 +337,7 @@ function unavailableMessage( reason ) {
 		role_dead: 'The person required by this objective is dead.',
 		not_present: 'The person required by this objective is not available.',
 		off_duty: 'The person required by this objective is not at the target location now.',
+		outside_window: 'This objective is open at another hour.',
 		missing_item: 'The required item is not in your inventory.',
 		condition: 'The quest conditions for this action are not met.',
 		target_missing: 'The quest target has no valid world location.'

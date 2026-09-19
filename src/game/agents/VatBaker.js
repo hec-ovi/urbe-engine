@@ -9,8 +9,9 @@ export const FRAMES = 32;
  * row offset.
  *
  * This is what lets the whole crowd render as a single instanced draw with no
- * skeletons and no per-character CPU work at all. Baking happens once at load
- * and costs a few tens of milliseconds.
+ * skeletons and no per-character CPU work at all. Baking happens once at load;
+ * it is seconds of vertex work for a body, so it runs a frame row at a time
+ * and asks the frame budget between rows.
  */
 export class VatBaker {
 
@@ -18,8 +19,9 @@ export class VatBaker {
 	 * @param root the loaded character scene (holds the skeleton)
 	 * @param meshes SkinnedMesh list to bake, all sharing that skeleton
 	 * @param clips AnimationClip list, baked in order
+	 * @param slice the frame budget a row asks between rows, or null to run whole
 	 */
-	static bake( root, meshes, clips ) {
+	static async bake( root, meshes, clips, slice = null ) {
 
 		const mixer = new THREE.AnimationMixer( root );
 		const actions = clips.map( ( clip ) => mixer.clipAction( clip ) );
@@ -55,6 +57,8 @@ export class VatBaker {
 				root.updateMatrixWorld( true );
 
 				const row = c * FRAMES + f;
+
+				if ( slice ) await slice.step();
 
 				for ( const target of targets ) {
 

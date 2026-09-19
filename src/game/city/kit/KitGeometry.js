@@ -8,6 +8,7 @@ import { doorFrames, doorLeafFrame } from '../DoorGeometry.js';
 import { ScenicSurface } from '../ScenicSurface.js';
 import { ShellBatches } from '../ShellBatches.js';
 import { isSceneryNode, shellMaterial, shellScenery, shellVariant } from '../ShellSurface.js';
+import { HitchLog } from '../../debug/HitchLog.js';
 
 /**
  * One plan's shell GLB read into what the city draws it with.
@@ -32,8 +33,9 @@ import { isSceneryNode, shellMaterial, shellScenery, shellVariant } from '../She
  *
  * @param blueprint the plan's own blueprint, which names its doors
  * @param slice the frame budget this work is paced by
+ * @param hitches the log each step is named in
  */
-export async function readShell( scene, factory, blueprint, slice ) {
+export async function readShell( scene, factory, blueprint, slice, hitches = new HitchLog() ) {
 
 	scene.updateMatrixWorld( true );
 
@@ -54,50 +56,54 @@ export async function readShell( scene, factory, blueprint, slice ) {
 
 		await slice.step();
 
-		const key = node.material?.name ?? '';
-		const bucket = bucketFor(
-			key,
-			shellVariant( factory, { key, authored: node.material?.userData?.materialVariant, blueprint } ),
-			node.material?.side === THREE.DoubleSide
-		);
-		const leaf = doorLeafFrame( node, frames );
+		hitches.time( 'plan surface', () => {
 
-		if ( isSceneryNode( node ) ) {
+			const key = node.material?.name ?? '';
+			const bucket = bucketFor(
+				key,
+				shellVariant( factory, { key, authored: node.material?.userData?.materialVariant, blueprint } ),
+				node.material?.side === THREE.DoubleSide
+			);
+			const leaf = doorLeafFrame( node, frames );
 
-			// A shared shell is drawn as a closed building, so the fake rooms
-			// behind its glass stand with the room's own light baked in.
-			const geometry = shellScenery( node, factory, { key, hasInterior: false, scenic } );
-			if ( geometry ) push( shell, bucket, geometry );
-			continue;
+			if ( isSceneryNode( node ) ) {
 
-		}
-
-		if ( leaf && main && leaf.owner === main ) {
-
-			if ( ! leaves.has( leaf.index ) ) {
-
-				leaves.set( leaf.index, { index: leaf.index, origin: leaf.node.getWorldPosition( new THREE.Vector3() ), parts: new Map() } );
+				// A shared shell is drawn as a closed building, so the fake rooms
+				// behind its glass stand with the room's own light baked in.
+				const geometry = shellScenery( node, factory, { key, hasInterior: false, scenic } );
+				if ( geometry ) push( shell, bucket, geometry );
+				return;
 
 			}
-			push( leaves.get( leaf.index ).parts, bucket, bake( node ) );
-			continue;
 
-		}
+			if ( leaf && main && leaf.owner === main ) {
 
-		// Everything else the plan publishes: its facades, its slabs, its roof,
-		// the parts its family signs itself with, and the leaves of every door
-		// this path does not move. What a node is called never decides whether
-		// it is drawn; its material decides which batch it lands in.
-		push( shell, bucket, bake( node ) );
+				if ( ! leaves.has( leaf.index ) ) {
+
+					leaves.set( leaf.index, { index: leaf.index, origin: leaf.node.getWorldPosition( new THREE.Vector3() ), parts: new Map() } );
+
+				}
+				push( leaves.get( leaf.index ).parts, bucket, bake( node ) );
+				return;
+
+			}
+
+			// Everything else the plan publishes: its facades, its slabs, its roof,
+			// the parts its family signs itself with, and the leaves of every door
+			// this path does not move. What a node is called never decides whether
+			// it is drawn; its material decides which batch it lands in.
+			push( shell, bucket, bake( node ) );
+
+		} );
 
 	}
 
-	const surfaces = await merged( shell, factory, slice );
+	const surfaces = await merged( shell, factory, slice, hitches );
 	const addressable = [];
 
 	for ( const leaf of [ ...leaves.values() ].sort( ( a, b ) => a.index - b.index ) ) {
 
-		addressable.push( { index: leaf.index, origin: leaf.origin, surfaces: await merged( leaf.parts, factory, slice ) } );
+		addressable.push( { index: leaf.index, origin: leaf.origin, surfaces: await merged( leaf.parts, factory, slice, hitches ) } );
 
 	}
 
@@ -110,7 +116,7 @@ export async function readShell( scene, factory, blueprint, slice ) {
  * window scenery (the primitives carrying `scenicRadiance`) kept apart under
  * the scenery shader, exactly as the shell loader draws a generated building.
  */
-async function merged( buckets, factory, slice ) {
+async function merged( buckets, factory, slice, hitches ) {
 
 	const batches = new ShellBatches();
 	for ( const [ bucket, geometries ] of buckets ) batches.add( bucket, geometries );
@@ -121,14 +127,18 @@ async function merged( buckets, factory, slice ) {
 
 		await slice.step();
 
-		const parts = geometries.length === 1 ? geometries : prepare( geometries );
-		const geometry = parts.length === 1 ? parts[ 0 ] : BufferGeometryUtils.mergeGeometries( parts, false );
-		if ( ! geometry ) throw placementError( `${key}: shell primitives do not merge` );
-		if ( parts.length > 1 ) for ( const part of parts ) part.dispose();
-		geometry.computeBoundingBox();
-		const base = shellMaterial( factory, splitBucket( key ) );
+		hitches.time( 'plan merge', () => {
 
-		surfaces.push( { bucket: scenic ? `${key}|scenic` : key, geometry, material: scenic ? ScenicSurface.material( base ) : base } );
+			const parts = geometries.length === 1 ? geometries : prepare( geometries );
+			const geometry = parts.length === 1 ? parts[ 0 ] : BufferGeometryUtils.mergeGeometries( parts, false );
+			if ( ! geometry ) throw placementError( `${key}: shell primitives do not merge` );
+			if ( parts.length > 1 ) for ( const part of parts ) part.dispose();
+			geometry.computeBoundingBox();
+			const base = shellMaterial( factory, splitBucket( key ) );
+
+			surfaces.push( { bucket: scenic ? `${key}|scenic` : key, geometry, material: scenic ? ScenicSurface.material( base ) : base } );
+
+		} );
 
 	}
 

@@ -4,13 +4,23 @@ import { ObjectiveRouteError } from './ObjectiveRouteError.js';
 const DESTINATION_NODE_KIND = { parcel: 'entry', station: 'station', stop: 'stop' };
 const EPSILON = 1e-9;
 
-/** Shortest quest route over Connections' authoritative three-dimensional walk graph. */
+/**
+ * Shortest quest route over Connections' authoritative three-dimensional walk
+ * graph, carried on to the parcel's door: the graph ends at the parcel's entry
+ * node, which Atlas puts on the sidewalk of its access edge and not always at
+ * its frontage, so a route that stopped there could point at an empty pavement.
+ */
 export class ObjectiveRouter {
 
-	constructor( network, boundary = new ObjectiveRouteBoundary() ) {
+	/**
+	 * @param places the doors of the city, per parcel; a parcel without one
+	 * ends its route at its entry node
+	 */
+	constructor( network, { places = [], boundary = new ObjectiveRouteBoundary() } = {} ) {
 
 		this.boundary = boundary;
 		this.network = this.boundary.input( 'walk-network', network );
+		this.doors = new Map( this.boundary.input( 'route-places', places ).map( ( place ) => [ place.parcelId, place.door ] ) );
 		this.nodes = new Map( network.nodes.map( ( node ) => [ node.id, node ] ) );
 		this.edges = new Map();
 		this.adjacency = new Map( network.nodes.map( ( node ) => [ node.id, [] ] ) );
@@ -65,13 +75,16 @@ export class ObjectiveRouter {
 		const lead = [ request.from, pointOf( start ) ];
 		const path3 = appendPath( [], lead );
 		for ( const leg of route.legs ) appendPath( path3, leg.direction === 1 ? leg.edge.path3 : [ ...leg.edge.path3 ].reverse() );
+		const door = request.destination.kind === 'parcel' ? this.doors.get( request.destination.id ) : undefined;
+		const doorstep = door ? [ path3.at( - 1 ), door ] : [];
+		appendPath( path3, doorstep );
 
 		return this.boundary.output( 'route-result', {
 			destination: request.destination,
 			nodeIds: [ start.id, ...route.legs.map( ( leg ) => leg.to ) ],
 			edgeIds: route.legs.map( ( leg ) => leg.edge.id ),
 			path3,
-			distanceMeters: pathLength( lead ) + route.distance
+			distanceMeters: pathLength( lead ) + route.distance + pathLength( doorstep )
 		} );
 
 	}

@@ -28,10 +28,11 @@ export class MaterialBatch {
 	 * @param instances copies to make room for before the first cell stands
 	 * @param fill whether each copy carries a fill light (FillChannel)
 	 */
-	constructor( name, material, { vertices, indices = 0, instances = FIRST_CAPACITY, castShadow = false, fill = false } ) {
+	constructor( name, material, { vertices, indices = 0, instances = FIRST_CAPACITY, castShadow = false, fill = false, hitches = null } ) {
 
 		this.name = name;
 		this.material = material;
+		this.hitches = hitches;
 		this.count = 0;
 		/** What the geometry buffers hold room for, and what is written into them. */
 		this.vertexCapacity = Math.max( 1, vertices );
@@ -121,9 +122,14 @@ export class MaterialBatch {
 
 	}
 
-	/** Drops the draws built against buffers this batch has replaced. */
+	/**
+	 * Drops the draws built against buffers this batch has replaced. The next
+	 * frame that draws the batch builds its graph again, which is the cost the
+	 * note names; its program stays compiled behind the warm-up's keeper.
+	 */
 	rebuild() {
 
+		this.hitches?.note( `${this.name} rebuilt` );
 		this.material.dispose();
 
 	}

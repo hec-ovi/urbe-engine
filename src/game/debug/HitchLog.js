@@ -1,5 +1,7 @@
 /** A frame-to-frame gap this long is felt as a freeze while walking. */
 const HITCH_MS = 40;
+/** Below this a step is normal frame work and is not written down. */
+const MATERIAL_MS = 4;
 
 /**
  * Names the freezes. Every subsystem that does a lump of work in one go notes
@@ -30,10 +32,28 @@ export class HitchLog {
 	}
 
 	/** Runs synchronous frame work and records it only when its own cost is material. */
-	time( what, work, threshold = 4 ) {
+	time( what, work, threshold = MATERIAL_MS ) {
 
 		const started = performance.now();
 		const result = work();
+		const elapsed = performance.now() - started;
+
+		if ( elapsed >= threshold ) this.note( what, elapsed );
+
+		return result;
+
+	}
+
+	/**
+	 * Awaits a step that cannot be cut and records the wall time it took, when
+	 * material. A step that waits on something idle in between reads longer
+	 * than the thread it held, so this is for work that is all thread: a file
+	 * already in memory being decoded, not one being fetched.
+	 */
+	async span( what, work, threshold = MATERIAL_MS ) {
+
+		const started = performance.now();
+		const result = await work();
 		const elapsed = performance.now() - started;
 
 		if ( elapsed >= threshold ) this.note( what, elapsed );

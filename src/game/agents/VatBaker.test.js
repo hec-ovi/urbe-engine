@@ -4,7 +4,7 @@ import { FRAMES, VatBaker } from './VatBaker.js';
 
 describe( 'VAT surface normals', () => {
 
-	it( 'skins the authored normals instead of deriving faceted triangle normals', () => {
+	it( 'skins the authored normals instead of deriving faceted triangle normals, one row per ask of the frame budget', async () => {
 
 		const geometry = new THREE.BufferGeometry();
 		geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [
@@ -27,7 +27,11 @@ describe( 'VAT surface normals', () => {
 
 		const root = new THREE.Group();
 		root.add( mesh );
-		const [ baked ] = VatBaker.bake( root, [ mesh ], [ new THREE.AnimationClip( 'idle', 1, [] ) ] );
+		let asked = 0;
+		const slice = { step: async () => { asked ++; } };
+		const [ baked ] = await VatBaker.bake( root, [ mesh ], [ new THREE.AnimationClip( 'idle', 1, [] ) ], slice );
+
+		expect( asked ).toBe( FRAMES );
 
 		for ( let row = 0; row < FRAMES; row ++ ) {
 

@@ -122,12 +122,13 @@ describe( 'Warmup', () => {
 
 		const a = tree(), b = tree();
 		for ( let i = 0; i < 3; i ++ ) b.root.add( new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial() ) );
-		let active = 0, peak = 0, compiled = 0;
+		let active = 0, peak = 0;
+		const compiled = [];
 		const renderer = fakeRenderer( async object => {
 
 			active ++;
 			peak = Math.max( peak, active );
-			compiled ++;
+			compiled.push( object );
 			await new Promise( resolve => setTimeout( resolve, 1 ) );
 			active --;
 			if ( object === a.mesh ) throw new Error( 'first cell failed' );
@@ -142,39 +143,63 @@ describe( 'Warmup', () => {
 
 		expect( results.map( result => result.status ) ).toEqual( [ 'rejected', 'fulfilled' ] );
 		expect( peak ).toBe( 1 );
-		expect( compiled ).toBe( 3 );
+		// The failed cell, the two wanted programs of the other, and a keeper for each of those two.
+		expect( compiled.filter( object => ! object.name.startsWith( 'keeper:' ) ) ).toHaveLength( 3 );
+		expect( compiled.filter( object => object.name.startsWith( 'keeper:' ) ) ).toHaveLength( 2 );
 		expect( renderer.mrt ).toBe( 'frame' );
 		expect( a.hidden.visible ).toBe( false );
 		expect( b.hidden.visible ).toBe( false );
 
 	} );
 
-	it( 'builds one program per material and vertex layout, counts those, and never builds one twice', async () => {
+	it( 'prepares one graph per material and vertex layout, one per instanced or batched draw, and pins each program behind a keeper the world cannot dispose', async () => {
 
 		const material = new THREE.MeshStandardMaterial();
 		const other = new THREE.MeshStandardMaterial();
+		const box = new THREE.BoxGeometry();
 		const batch = new THREE.Group();
-		// Six draws wearing three programs: one material over two vertex
-		// layouts, which is what a batch and its instanced copies are, and one
-		// material standing in three separate draws.
-		for ( let i = 0; i < 3; i ++ ) batch.add( new THREE.Mesh( new THREE.BoxGeometry(), material ) );
-		batch.add( new THREE.InstancedMesh( new THREE.BoxGeometry(), material, 2 ) );
-		batch.add( new THREE.Mesh( new THREE.BoxGeometry(), other ), new THREE.Mesh( new THREE.BoxGeometry(), other ) );
+		// Nine draws asking for five graphs: one material standing in three plain
+		// draws, the same material on two instanced draws (the renderer binds
+		// each one's own buffers, so each is its own graph), a coloured batch of
+		// it, and another material in two separate draws.
+		for ( let i = 0; i < 3; i ++ ) batch.add( new THREE.Mesh( box, material ) );
+		batch.add( new THREE.InstancedMesh( box, material, 2 ), new THREE.InstancedMesh( box, material, 2 ) );
+		const batched = new THREE.BatchedMesh( 4, 3 * 24, 3 * 36, material );
+		batched.setColorAt( batched.addInstance( batched.addGeometry( box ) ), new THREE.Color( 1, 0, 0 ) );
+		batch.add( batched );
+		batch.add( new THREE.Mesh( box, other ), new THREE.Mesh( box, other ) );
 
 		const compiled = [];
 		const warmup = new Warmup( fakeRenderer( async ( object ) => compiled.push( object ) ), new THREE.Scene(), new THREE.PerspectiveCamera(), null );
 		const counted = [];
 		await warmup.warmAll( batch, { onProgress: ( done, total ) => counted.push( [ done, total ] ) } );
 
-		expect( compiled ).toHaveLength( 3 );
-		expect( counted ).toEqual( [ [ 1, 3 ], [ 2, 3 ], [ 3, 3 ] ] );
+		const world = compiled.filter( object => ! object.name.startsWith( 'keeper:' ) );
+		const keepers = compiled.filter( object => object.name.startsWith( 'keeper:' ) );
+		expect( world ).toHaveLength( 5 );
+		expect( counted ).toEqual( [ [ 1, 5 ], [ 2, 5 ], [ 3, 5 ], [ 4, 5 ], [ 5, 5 ] ] );
+		// One keeper per distinct code: the plain, instanced and batched forms of
+		// one material, and the other material.
+		expect( keepers ).toHaveLength( 4 );
+		const keptBatch = keepers.find( object => object.isBatchedMesh );
+		expect( keptBatch._colorsTexture ).not.toBeNull();
+		expect( Object.keys( keptBatch.geometry.attributes ).sort() ).toEqual( Object.keys( batched.geometry.attributes ).sort() );
+		expect( keepers.find( object => object.isInstancedMesh ).geometry ).toBe( box );
+		for ( const keeper of keepers ) expect( [ material, other ] ).not.toContain( keeper.material );
 
 		// The city pass finds the same materials standing somewhere else.
 		const elsewhere = new THREE.Group();
-		elsewhere.add( new THREE.Mesh( new THREE.BoxGeometry(), material ), new THREE.Mesh( new THREE.BoxGeometry(), other ) );
+		elsewhere.add( new THREE.Mesh( box, material ), new THREE.Mesh( box, other ) );
 		await warmup.warmAll( elsewhere );
 
-		expect( compiled ).toHaveLength( 3 );
+		expect( compiled ).toHaveLength( 9 );
+
+		// A batch that grows disposes its material; the keeper's copy is untouched.
+		const disposed = vi.fn();
+		for ( const keeper of keepers ) keeper.material.addEventListener( 'dispose', disposed );
+		material.dispose();
+
+		expect( disposed ).not.toHaveBeenCalled();
 
 	} );
 

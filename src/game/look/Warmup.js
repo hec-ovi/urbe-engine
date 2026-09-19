@@ -1,18 +1,22 @@
 import { ColorManagement, NoToneMapping } from 'three/webgpu';
 import { frameYield } from '../../app/FrameYield.js';
+import { programKey } from './ProgramKey.js';
+import { ProgramKeepers } from './ProgramKeepers.js';
 
 /**
- * Builds WebGPU pipelines and maps before a frame first draws them.
+ * Builds pipelines and maps before a frame first draws them.
  *
  * Hidden or off-camera objects are staged for compilation and restored exactly.
  * The compile uses the render pipeline's multiple render target because that
  * decides which fragment program the visible frame requests.
  *
- * What the backend builds is a program: one material drawn with one vertex
- * layout. The city draws the same few dozen materials over thousands of
- * batches, cells and pages, so one renderable warms every copy of its program
- * and the rest cost nothing. Programs already built stay built for the life of
- * this warm-up, whichever pass asked for them.
+ * What the renderer builds is a graph per material and vertex layout, and per
+ * object where the draw is instanced or batched, because the graph binds that
+ * object's own textures (ProgramKey.js). One renderable of each is prepared
+ * here, the way the renderer would on its first draw, and a keeper wearing a
+ * copy of its material holds the compiled program for the life of this warm-up
+ * (ProgramKeepers.js), so a batch that grows or a floor that leaves never
+ * costs the frame a link again.
  */
 export class Warmup {
 
@@ -29,6 +33,7 @@ export class Warmup {
 		this.renderTarget = renderTarget;
 		this.uploaded = new WeakSet();
 		this.warmed = new Set();
+		this.keepers = new ProgramKeepers();
 		this.preparing = Promise.resolve();
 
 	}
@@ -44,6 +49,12 @@ export class Warmup {
 		try {
 
 			await this.#prepare( object );
+			for ( const [ node, key ] of this.programsOf( object ) ) {
+
+				this.warmed.add( key );
+				await this.#keep( node );
+
+			}
 
 		} catch ( error ) {
 
@@ -51,6 +62,23 @@ export class Warmup {
 
 		}
 		return performance.now() - started;
+
+	}
+
+	/** Pins the program this renderable was just built with; a keeper that fails is a warning, never a lost floor. */
+	async #keep( node ) {
+
+		const keeper = this.keepers.keep( node );
+		if ( ! keeper ) return;
+		try {
+
+			await this.#prepare( keeper );
+
+		} catch ( error ) {
+
+			console.warn( `warmup: keeper for ${node.name || node.type}: ${error?.message ?? error}` );
+
+		}
 
 	}
 
@@ -115,6 +143,9 @@ export class Warmup {
 			await Promise.all( ready );
 			this.renderer.initTexture?.( texture );
 			this.uploaded.add( texture );
+			// A map a dropped floor disposes is uploaded again the next time a
+			// floor wears it, not on the frame that first draws it.
+			texture.addEventListener?.( 'dispose', () => this.uploaded.delete( texture ) );
 			await frameYield();
 
 		}
@@ -123,7 +154,8 @@ export class Warmup {
 
 	/**
 	 * Warms one representative of every program this object still needs, one at
-	 * a time so the backend never receives an unbounded set in one request.
+	 * a time so the backend never receives an unbounded set in one request, and
+	 * pins each one behind a keeper.
 	 *
 	 * @returns milliseconds the pass took; `onProgress` counts programs, not
 	 * renderables, so the work reported is the work left to do
@@ -140,6 +172,7 @@ export class Warmup {
 			const [ node, key ] = wantedPrograms[ index ];
 			await this.#prepare( node );
 			this.warmed.add( key );
+			await this.#keep( node );
 			onProgress( index + 1, wantedPrograms.length );
 			if ( index + 1 < wantedPrograms.length ) await frameYield();
 
@@ -168,25 +201,6 @@ export class Warmup {
 		return wantedPrograms;
 
 	}
-
-}
-
-/**
- * What the backend builds one of: the material, and the vertex layout it is
- * drawn with. Two renderables that agree on both request the same program,
- * whichever batch, cell or page they belong to.
- */
-function programKey( node ) {
-
-	const materials = Array.isArray( node.material ) ? node.material : [ node.material ];
-	const attributes = Object.keys( node.geometry?.attributes ?? {} ).sort().join( ',' );
-	const morphs = Object.keys( node.geometry?.morphAttributes ?? {} ).sort().join( ',' );
-	const kind = [
-		node.isInstancedMesh, node.isBatchedMesh, node.isSkinnedMesh, node.isPoints, node.isLine,
-		node.instanceColor, node.geometry?.isInstancedBufferGeometry
-	].map( ( flag ) => ( flag ? 1 : 0 ) ).join( '' );
-
-	return `${materials.map( ( material ) => material?.uuid ?? 'none' ).join( '+' )}|${kind}|${attributes}|${morphs}`;
 
 }
 
