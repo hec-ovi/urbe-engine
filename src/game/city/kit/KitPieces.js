@@ -1,31 +1,33 @@
 import { cityGltfLoader } from '../../data/CityGltfLoader.js';
-import { documentHash } from '../../data/WorldDocument.js';
 import { mapConcurrent } from '../BuildingsLoader.js';
 import { MaterialBatches } from './MaterialBatches.js';
-import { readShell } from './KitGeometry.js';
+import { pieceError, readPlan } from './PlanFile.js';
 
 const LOAD_CONCURRENCY = 8;
 /** The entrance leaves of a plan, drawn with it unless the parcel swings them. */
 const LEAVES = ( planId ) => `${planId}/leaves`;
 /** The fake rooms behind a plan's glass, drawn unless the parcel opens a real interior. */
 const SCENERY = ( planId ) => `${planId}/scenery`;
-const SCENIC = /\|scenic$/;
 
 /**
- * Every distinct building the city has, loaded once.
+ * The distinct buildings this city stands on, read as it needs them.
  *
  * A plan is one Exterior shell generated on a canonical lot, and a city of
- * hundreds of buildings is a hundred or so of them. Each plan's GLB is read
- * through the shared city GLTF loader, its materials resolved through the same
- * PBR factory the original shells use, and its geometry fed into one batch per
- * material. Admitting a parcel appends one copy per surface to batches that
- * already exist, so the draw count follows the materials the plans wear and not
- * the number of buildings standing.
+ * hundreds of buildings is a hundred or so of them: several hundred megabytes
+ * of GLB for a kilometre of city and more for three. None of it is read to
+ * start playing. The index alone says which plans the world publishes, and a
+ * plan's files are read, checked, decoded and merged into the draws the first
+ * time a cell that stands on it asks for it, through `want`.
  *
- * A plan file that is missing, refuses to decode or does not match the length
- * and hash the index publishes for it fails the whole set with `E_KIT_PIECES`:
- * a city drawn from half its buildings is worse than one that says why it
- * cannot start.
+ * Merging means one batch per material for the whole city: each plan's
+ * primitives go into the batch its material owns, which grows to take them, so
+ * the draw count follows the materials the plans wear and never the number of
+ * plans read or buildings standing.
+ *
+ * A plan whose files are missing or corrupt never stands. It is recorded with
+ * its `E_KIT_PIECES` cause and the parcels that are copies of it stay empty
+ * lots, because one building the city cannot draw is not a reason to refuse the
+ * rest of it.
  */
 export class KitPieces {
 
@@ -37,17 +39,21 @@ export class KitPieces {
 	 */
 	constructor( { kit, baseUrl, factory, loader = cityGltfLoader(), readBinary = fetchBinary, readJson = fetchJson } ) {
 
-		this.kit = kit;
+		/** plan id -> what the index publishes for it */
+		this.index = new Map( kit.plans.map( ( plan ) => [ plan.id, plan ] ) );
 		this.baseUrl = String( baseUrl ).replace( /\/+$/, '' );
 		this.factory = factory;
 		this.loader = loader;
 		this.readBinary = readBinary;
 		this.readJson = readJson;
-		/** plan id -> its id, lot bays, surfaces and leaves */
+		/** plan id -> its id, lot bays, surfaces, scenery and leaves, once it stands */
 		this.plans = new Map();
+		/** plan id -> the read still in flight, so a plan is read once for the city */
+		this.reading = new Map();
+		/** plan id -> why it will never stand */
+		this.failures = new Map();
 		this.batches = new MaterialBatches( 'kit-plans' );
 		this.group = this.batches.group;
-		this.ready = this.#load();
 
 	}
 
@@ -58,9 +64,39 @@ export class KitPieces {
 
 	}
 
+	/** Whether this world's index names the plan at all. */
+	published( planId ) {
+
+		return this.index.has( planId );
+
+	}
+
+	/** Whether the plan is standing, which is what a copy of it needs. */
 	has( planId ) {
 
 		return this.plans.has( planId );
+
+	}
+
+	/** Why a published plan will never stand, or null while it still can. */
+	failure( planId ) {
+
+		return this.failures.get( planId ) ?? null;
+
+	}
+
+	/**
+	 * Stands every plan these ids name, reading the ones this city has not read
+	 * yet and waiting on the ones another cell is already reading.
+	 *
+	 * @returns when each of them is either standing or recorded as failed
+	 */
+	want( planIds ) {
+
+		const wanted = [ ...new Set( planIds ) ]
+			.filter( ( id ) => this.index.has( id ) && ! this.plans.has( id ) && ! this.failures.has( id ) );
+
+		return mapConcurrent( wanted, LOAD_CONCURRENCY, ( id ) => this.#stand( id ) );
 
 	}
 
@@ -102,7 +138,7 @@ export class KitPieces {
 	admit( planId, matrix, color, { swinging = false, interior = false } = {} ) {
 
 		const plan = this.plans.get( planId );
-		if ( ! plan ) throw placementError( `no plan ${planId} in this world` );
+		if ( ! plan ) throw this.failures.get( planId ) ?? pieceError( planId, 'the city has not read it' );
 
 		const handle = this.batches.admit( planId, matrix, color );
 		if ( ! swinging && plan.leaves.length ) handle.leaf = this.batches.admit( LEAVES( planId ), matrix, color );
@@ -133,76 +169,41 @@ export class KitPieces {
 
 	}
 
-	async #load() {
+	/** One plan, read once however many cells ask for it at the same time. */
+	#stand( planId ) {
 
-		const loaded = await mapConcurrent( this.kit.plans, LOAD_CONCURRENCY, ( plan ) => this.#plan( plan ) );
-		const entries = [];
+		let reading = this.reading.get( planId );
 
-		for ( const plan of loaded ) {
+		if ( ! reading ) {
 
-			this.plans.set( plan.id, plan );
-			entries.push( { id: plan.id, surfaces: plan.surfaces } );
-			if ( plan.leaves.length ) entries.push( { id: LEAVES( plan.id ), surfaces: plan.leaves.flatMap( ( leaf ) => leaf.surfaces ) } );
-			if ( plan.scenery.length ) entries.push( { id: SCENERY( plan.id ), surfaces: plan.scenery } );
+			reading = this.#read( planId ).finally( () => this.reading.delete( planId ) );
+			this.reading.set( planId, reading );
 
 		}
-		this.batches.build( entries, { castShadow: true } );
 
-		return this;
+		return reading;
 
 	}
 
-	async #plan( entry ) {
-
-		const url = `${this.baseUrl}/${entry.glb}`;
-		let blueprint;
-		let scene;
+	async #read( planId ) {
 
 		try {
 
-			blueprint = await this.readJson( `${this.baseUrl}/${entry.blueprint}` );
-			const bytes = await this.readBinary( url );
-			if ( Number.isInteger( entry.bytes ) && bytes.byteLength !== entry.bytes ) {
+			const plan = await readPlan( this.index.get( planId ), this );
+			const entries = [ { id: plan.id, surfaces: plan.surfaces } ];
 
-				throw new Error( `${bytes.byteLength} bytes, the index publishes ${entry.bytes}` );
+			if ( plan.leaves.length ) entries.push( { id: LEAVES( plan.id ), surfaces: plan.leaves.flatMap( ( leaf ) => leaf.surfaces ) } );
+			if ( plan.scenery.length ) entries.push( { id: SCENERY( plan.id ), surfaces: plan.scenery } );
+			this.batches.add( entries, { castShadow: true } );
+			this.plans.set( planId, plan );
 
-			}
-			if ( entry.sha256 && await documentHash( bytes ) !== entry.sha256 ) throw new Error( 'byte hash mismatch' );
-			( { scene } = await this.loader.parseAsync( bytes, `${this.baseUrl}/` ) );
+		} catch ( error ) {
 
-		} catch ( cause ) {
-
-			throw Object.assign( new Error( `E_KIT_PIECES: ${url}: ${cause.message ?? cause}` ), { code: 'E_KIT_PIECES', cause } );
+			this.failures.set( planId, error.code === 'E_KIT_PIECES' ? error : pieceError( planId, error ) );
 
 		}
 
-		const shell = readShell( scene, this.factory, blueprint );
-		// The fake rooms behind the glass are their own entry: a parcel that
-		// opens a real interior draws the plan without them.
-		const surfaces = shell.surfaces.filter( ( { bucket } ) => ! SCENIC.test( bucket ) );
-		const scenery = shell.surfaces.filter( ( { bucket } ) => SCENIC.test( bucket ) );
-		const { leaves } = shell;
-
-		return {
-			id: entry.id, baysAcross: entry.baysAcross, baysDeep: entry.baysDeep,
-			surfaces, scenery, leaves,
-			triangles: [ ...surfaces, ...scenery ].reduce( ( sum, { geometry } ) => sum + triangles( geometry ), 0 )
-				+ leaves.reduce( ( sum, leaf ) => sum + leaf.surfaces.reduce( ( part, { geometry } ) => part + triangles( geometry ), 0 ), 0 )
-		};
-
 	}
-
-}
-
-export function placementError( message ) {
-
-	return Object.assign( new Error( `E_KIT_PLACEMENT: ${message}` ), { code: 'E_KIT_PLACEMENT' } );
-
-}
-
-function triangles( geometry ) {
-
-	return ( geometry.getIndex()?.count ?? geometry.getAttribute( 'position' ).count ) / 3;
 
 }
 

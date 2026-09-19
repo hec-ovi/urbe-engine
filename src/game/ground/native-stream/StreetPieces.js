@@ -116,7 +116,7 @@ export class StreetPieces {
 		const loaded = await mapConcurrent( this.kit.pieces, LOAD_CONCURRENCY, entry => this.#piece( entry ) );
 
 		for ( const piece of loaded ) this.pieces.set( piece.id, piece );
-		this.batches.build( loaded );
+		this.batches.add( loaded );
 		this.instances.bind( this.batches.batches );
 
 		// A batch draws its own buffers, not the ones each primitive was checked

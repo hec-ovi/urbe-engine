@@ -1,10 +1,12 @@
 # Changelog
 
+0.25.0: building plans load on demand, read, checked and merged into the material batches the first time a cell stands on them, so the load is bounded by the window around the player and never by the plan set; a plan that cannot be read leaves its parcels as empty lots.
+
 0.24.3: a reuse run binds a world's plans at the Exterior version that drew them, and automatic interior selection hands the assembler a count so a building Interior cannot furnish is skipped for the next candidate.
 
 0.24.2: a kit parcel that opens a real interior draws its plan without the window scenery, the fake rooms being their own batch entry beside the entrance leaves.
 
-0.24.1: the load reads world documents, plans, street pieces, room catalogs, characters and cars together, warms one program per material and layout, and shows one counter for the whole load.
+0.24.1: the load reads world documents, street pieces, room catalogs, characters and cars together, warms one program per material and layout, and shows one counter for the whole load.
 
 0.24.0: kit buildings are the approved family shells generated once per plan and instanced with their eligibility, and streets draw the shared 0.9.0 catalogue with per-instance tint, wear, scans and text.
 

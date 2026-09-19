@@ -352,9 +352,9 @@ describe( 'saved street kit runtime', () => {
 
 		const stripped = bundle();
 		const streetPieces = new NativeStreetStream( stripped.source, stripped.materials ).pieces;
-		const build = streetPieces.batches.build.bind( streetPieces.batches );
-		streetPieces.batches.build = entries => {
-			const built = build( entries );
+		const add = streetPieces.batches.add.bind( streetPieces.batches );
+		streetPieces.batches.add = entries => {
+			const built = add( entries );
 			for ( const batch of built.batches.values() ) batch.mesh.geometry.deleteAttribute( 'uv' );
 			return built;
 		};

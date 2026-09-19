@@ -29,9 +29,14 @@ export class MaterialBatch {
 		this.name = name;
 		this.material = material;
 		this.count = 0;
+		/** What the geometry buffers hold room for, and what is written into them. */
+		this.vertexCapacity = Math.max( 1, vertices );
+		this.indexCapacity = indices;
+		this.vertices = 0;
+		this.indices = 0;
 		/** True once a copy has carried a colour, which the shader only reads from then on. */
 		this.coloured = false;
-		this.mesh = new BatchedMesh( Math.max( 1, instances ), vertices, indices, material );
+		this.mesh = new BatchedMesh( Math.max( 1, instances ), this.vertexCapacity, this.indexCapacity, material );
 		this.mesh.name = name;
 		this.mesh.perObjectFrustumCulled = true;
 		this.mesh.sortObjects = Boolean( material.transparent );
@@ -50,10 +55,21 @@ export class MaterialBatch {
 
 	}
 
-	/** One primitive, held once for the whole city. @returns its geometry id */
-	addGeometry( geometry ) {
+	/**
+	 * The one attribute layout this batch draws from, fixed by the geometry that
+	 * filled it first: a batch has one buffer per attribute and is indexed or
+	 * not as a whole, so everything written into it later has to match.
+	 */
+	get layout() {
 
-		return this.mesh.addGeometry( geometry );
+		const geometry = this.mesh.geometry;
+
+		return {
+			indexed: Boolean( geometry.getIndex() ),
+			attributes: new Map( Object.entries( geometry.attributes ).map( ( [ name, attribute ] ) => [ name, {
+				itemSize: attribute.itemSize, type: attribute.array.constructor, normalized: attribute.normalized
+			} ] ) )
+		};
 
 	}
 
@@ -77,10 +93,42 @@ export class MaterialBatch {
 
 	}
 
+	/**
+	 * Room for this much more geometry, in one reallocation.
+	 *
+	 * A city reads a building plan the first time one of its copies is admitted,
+	 * so a batch keeps taking new primitives for as long as the city is played.
+	 * Doubling makes that a handful of reallocations over the whole city instead
+	 * of one per plan, and each one copies the vertices already written into the
+	 * new buffers at the same offsets, so the geometry ids stay what they were.
+	 */
+	reserveGeometry( vertices, indices ) {
+
+		const wantedVertices = this.vertices + vertices;
+		const wantedIndices = this.indices + indices;
+		if ( wantedVertices <= this.vertexCapacity && wantedIndices <= this.indexCapacity ) return;
+
+		if ( wantedVertices > this.vertexCapacity ) this.vertexCapacity = Math.max( wantedVertices, this.vertexCapacity * 2 );
+		if ( wantedIndices > this.indexCapacity ) this.indexCapacity = Math.max( wantedIndices, this.indexCapacity * 2 );
+		this.mesh.setGeometrySize( this.vertexCapacity, this.indexCapacity );
+		this.rebuild();
+
+	}
+
 	/** Drops the draws built against buffers this batch has replaced. */
 	rebuild() {
 
 		this.material.dispose();
+
+	}
+
+	/** One primitive, held once for the whole city. @returns its geometry id */
+	addGeometry( geometry ) {
+
+		this.vertices += geometry.getAttribute( 'position' ).count;
+		this.indices += geometry.getIndex()?.count ?? 0;
+
+		return this.mesh.addGeometry( geometry );
 
 	}
 

@@ -1,5 +1,4 @@
 import * as THREE from 'three/webgpu';
-import { placementError } from './KitPieces.js';
 
 /** The bay every lot edge is a whole number of (../../../assembly/kit/CONTRACT.md). */
 const BAY = 8;
@@ -77,5 +76,12 @@ export class KitPlacement {
 		return target.set( u, y, v ).applyMatrix4( this.toWorld );
 
 	}
+
+}
+
+/** A building the city cannot place, which fails the cell it stands in. */
+export function placementError( message ) {
+
+	return Object.assign( new Error( `E_KIT_PLACEMENT: ${message}` ), { code: 'E_KIT_PLACEMENT' } );
 
 }

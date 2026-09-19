@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { ExteriorWorkers } from '../../../assembly/ExteriorWorkers.js';
 import { sharedRoot } from '../../../assembly/SharedResources.js';
@@ -17,7 +17,9 @@ import { KitCellLoader } from './KitCells.js';
 /** One approved family on a 24 by 32 m lot: an entrance, balcony doors and a roof. */
 const FAMILY = 'mirror-frame';
 const BAYS = { across: 3, deep: 4 };
-const FLOORS = 5;
+/** Two plans of it, so a city can read one and come back for the other. */
+const FLOORS = [ 5, 10 ];
+const PLANS = FLOORS.map( ( floors ) => `${FAMILY}-${BAYS.across}x${BAYS.deep}x${floors}f` );
 
 const factory = {
 	resolver: { resolve: () => null },
@@ -27,7 +29,8 @@ const factory = {
 
 let workers = null;
 let index = null;
-let planBlueprint = null;
+/** plan id -> the plan's own blueprint, which a parcel's is composed from */
+let blueprints = null;
 
 /** The world's plan index, read exactly as the runtime reads it from a world. */
 function openWorld( { mutate = ( document ) => document } = {} ) {
@@ -51,8 +54,8 @@ function openWorld( { mutate = ( document ) => document } = {} ) {
 
 }
 
-/** One parcel standing from the shared plan, in the shape assembly writes it. */
-function building( parcel, { origin = [ 100, 0, 50 ], rotationY = Math.PI / 2 } = {} ) {
+/** One parcel standing from a shared plan, in the shape assembly writes it. */
+function building( parcel, { origin = [ 100, 0, 50 ], rotationY = Math.PI / 2, plan = PLANS[ 0 ] } = {} ) {
 
 	const lot = [ [ 0, 0 ], [ 24, 0 ], [ 24, 32 ], [ 0, 32 ] ].map( ( [ u, v ] ) => [
 		origin[ 0 ] + u * Math.cos( rotationY ) + v * Math.sin( rotationY ),
@@ -60,12 +63,12 @@ function building( parcel, { origin = [ 100, 0, 50 ], rotationY = Math.PI / 2 } 
 	] );
 
 	return {
-		parcel, plan: index.plans[ 0 ].id, origin, rotationY, lot,
+		parcel, plan, origin, rotationY, lot,
 		bounds: {
 			min: [ Math.min( ...lot.map( ( c ) => c[ 0 ] ) ), 0, Math.min( ...lot.map( ( c ) => c[ 1 ] ) ) ],
-			max: [ Math.max( ...lot.map( ( c ) => c[ 0 ] ) ), planBlueprint.bounds.height, Math.max( ...lot.map( ( c ) => c[ 1 ] ) ) ]
+			max: [ Math.max( ...lot.map( ( c ) => c[ 0 ] ) ), blueprints.get( plan ).bounds.height, Math.max( ...lot.map( ( c ) => c[ 1 ] ) ) ]
 		},
-		signText: null, family: FAMILY, floors: FLOORS, tint: parcel
+		signText: null, family: FAMILY, floors: blueprints.get( plan ).floors.length, tint: parcel
 	};
 
 }
@@ -75,7 +78,7 @@ function source( record, hasInterior ) {
 
 	return [ record.parcel, {
 		parcelId: record.parcel, source: 'kit', placementsUrl: `/${record.parcel}.placements.json`,
-		hasInterior, blueprint: parcelBlueprint( planBlueprint, record )
+		hasInterior, blueprint: parcelBlueprint( blueprints.get( record.plan ), record )
 	} ];
 
 }
@@ -105,6 +108,15 @@ function live( pieces ) {
 
 }
 
+/** What one building of a plan appends: its shell, its leaves and its fake rooms. */
+function copiesOf( pieces, planId ) {
+
+	const plan = pieces.plans.get( planId );
+
+	return 1 + ( plan.leaves.length ? 1 : 0 ) + ( plan.scenery.length ? 1 : 0 );
+
+}
+
 /** Every material the plans and their entrance leaves wear between them. */
 function materialsOf( pieces ) {
 
@@ -129,12 +141,12 @@ describe( 'the city draws every building from its shared plan', () => {
 
 		const library = new PlanLibrary( { workers } );
 
-		library.want( FAMILY, BAYS, FLOORS );
+		for ( const floors of FLOORS ) library.want( FAMILY, BAYS, floors );
 		await library.draw();
 		const reference = library.publish();
 
 		index = JSON.parse( readFileSync( join( sharedRoot(), reference.shared, PLAN_INDEX_FILE ), 'utf8' ) );
-		planBlueprint = library.blueprint( index.plans[ 0 ].id );
+		blueprints = new Map( PLANS.map( ( id ) => [ id, library.blueprint( id ) ] ) );
 
 	}, 300_000 );
 
@@ -144,16 +156,28 @@ describe( 'the city draws every building from its shared plan', () => {
 
 	} );
 
-	it( 'loads each plan once, keeps one batch per material, and appends and drops exactly a cell\'s copies', async () => {
+	it( 'reads a plan the first time a cell stands on it, keeps one batch per material, and appends and drops exactly a cell\'s copies', async () => {
 
 		const { pieces, reads } = openWorld();
-		await pieces.ready;
 
+		// A city that has admitted nothing has read nothing: the index alone says
+		// what it publishes.
+		expect( reads ).toHaveLength( 0 );
+		expect( pieces.published( PLANS[ 1 ] ) ).toBe( true );
+		expect( pieces.has( PLANS[ 1 ] ) ).toBe( false );
+
+		const first = building( 'p1' );
+		const second = building( 'p2', { origin: [ 300, 0, 400 ], rotationY: 0 } );
+		const tall = building( 'p3', { origin: [ 600, 0, 900 ], rotationY: 0, plan: PLANS[ 1 ] } );
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving( [ first, second, tall ] ) } );
+		const hidden = await loader.load( new Map( [ source( first, false ) ] ) );
+
+		// One plan read, and only the one this cell stands on.
 		expect( reads ).toHaveLength( 1 );
-		expect( reads[ 0 ].endsWith( index.plans[ 0 ].glb ) ).toBe( true );
+		expect( reads.some( ( url ) => url.includes( PLANS[ 1 ] ) ) ).toBe( false );
 
-		// One batch per material the plans wear, for the whole city, whatever is
-		// standing in it.
+		// One batch per material the standing plans wear, for the whole city,
+		// whatever is standing in it.
 		const materials = materialsOf( pieces );
 		expect( materials.size ).toBeGreaterThan( 1 );
 		expect( pieces.batchCount ).toBe( materials.size );
@@ -164,11 +188,6 @@ describe( 'the city draws every building from its shared plan', () => {
 		expect( meshes.every( ( mesh ) => mesh.isBatchedMesh && mesh.castShadow && mesh.receiveShadow ) ).toBe( true );
 		expect( meshes.every( ( mesh ) => mesh.perObjectFrustumCulled && ! mesh.frustumCulled ) ).toBe( true );
 
-		const first = building( 'p1' );
-		const second = building( 'p2', { origin: [ 300, 0, 400 ], rotationY: 0 } );
-		const loader = new KitCellLoader( { pieces, factory, readJson: serving( [ first, second ] ) } );
-		const hidden = await loader.load( new Map( [ source( first, false ) ] ) );
-
 		// Nothing of a cell reaches the shared draws while the skyline still
 		// carries its impostors.
 		expect( live( pieces ) ).toBe( 0 );
@@ -177,11 +196,21 @@ describe( 'the city draws every building from its shared plan', () => {
 		const one = live( pieces );
 		expect( one ).toBeGreaterThan( 0 );
 
-		// A second parcel of the same plan costs the same copies and no new batch.
+		// A second parcel of the same plan costs the same copies, no new read and
+		// no new batch.
 		const other = await shown( loader, [ source( second, false ) ] );
 		expect( live( pieces ) ).toBe( one * 2 );
+		expect( reads ).toHaveLength( 1 );
 		expect( pieces.batchCount ).toBe( materials.size );
 
+		// A cell standing on a plan nothing has needed yet reads it then, and it
+		// joins the batches its materials already own.
+		const later = await shown( loader, [ source( tall, false ) ] );
+		expect( reads ).toHaveLength( 2 );
+		expect( pieces.has( PLANS[ 1 ] ) ).toBe( true );
+		expect( pieces.batchCount ).toBe( materials.size );
+
+		later.disposeModelInstances();
 		other.disposeModelInstances();
 		expect( live( pieces ) ).toBe( one );
 
@@ -193,9 +222,9 @@ describe( 'the city draws every building from its shared plan', () => {
 	it( 'appends a copy as one instance per surface, with its geometry, matrix and tint, and grows past its first capacity', async () => {
 
 		const { pieces } = openWorld();
-		await pieces.ready;
+		const planId = PLANS[ 0 ];
+		await pieces.want( [ planId ] );
 
-		const planId = index.plans[ 0 ].id;
 		const plan = pieces.plans.get( planId );
 		const colour = new THREE.Color( 0.25, 0.5, 0.75 );
 		const matrix = new THREE.Matrix4().makeRotationY( Math.PI / 2 ).setPosition( 12, 4.5, - 7 );
@@ -249,7 +278,7 @@ describe( 'the city draws every building from its shared plan', () => {
 
 		// The roof reads solid from above, and the stair head comes through it.
 		const top = flat.bounds.max[ 1 ];
-		const { bulkhead } = parcelBlueprint( planBlueprint, flat ).roof;
+		const { bulkhead } = parcelBlueprint( blueprints.get( flat.plan ), flat ).roof;
 		expect( solidAt( closed.boxColliders, 2, top - 0.2, 2 ) ).toBe( true );
 		expect( solidAt( closed.boxColliders, bulkhead.center[ 0 ], top - 0.2, bulkhead.center[ 1 ] ) ).toBe( false );
 
@@ -325,26 +354,45 @@ describe( 'the city draws every building from its shared plan', () => {
 	it( 'refuses a record naming a plan this world does not publish', async () => {
 
 		const { pieces } = openWorld();
-		const stray = { ...building( 'p1' ), plan: 'garden-taper-3x3x9f' };
-		const loader = new KitCellLoader( { pieces, factory, readJson: serving( [ stray ] ) } );
+		const record = building( 'p1' );
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving( [ { ...record, plan: 'garden-taper-3x3x9f' } ] ) } );
 
-		await expect( loader.load( new Map( [ source( stray, false ) ] ) ) )
+		await expect( loader.load( new Map( [ source( record, false ) ] ) ) )
 			.rejects.toThrow( /E_KIT_PLACEMENT: p1 stands from garden-taper-3x3x9f/ );
 		expect( live( pieces ) ).toBe( 0 );
 
 	} );
 
-	it( 'refuses a plan file whose bytes differ from the index', async () => {
+	it( 'leaves the parcels of a plan whose bytes differ from the index as empty lots, and stands the rest of the cell', async () => {
 
 		const { pieces } = openWorld( { mutate: ( document ) => {
 
-			document.plans[ 0 ].bytes += 1;
+			for ( const plan of document.plans ) if ( plan.id === PLANS[ 1 ] ) plan.bytes += 1;
 
 			return document;
 
 		} } );
+		const good = building( 'p1' );
+		const corrupt = building( 'p2', { origin: [ 300, 0, 400 ], rotationY: 0, plan: PLANS[ 1 ] } );
+		const onError = vi.fn();
+		const loader = new KitCellLoader( { pieces, factory, onError, readJson: serving( [ good, corrupt ] ) } );
+		const cell = await shown( loader, [ source( good, false ), source( corrupt, false ) ] );
 
-		await expect( pieces.ready ).rejects.toThrow( /E_KIT_PIECES: .*\.glb/ );
+		// The city says which plan it could not read and which parcels that costs.
+		expect( onError ).toHaveBeenCalledOnce();
+		expect( onError.mock.calls[ 0 ][ 0 ] ).toMatchObject( { code: 'E_KIT_PIECES', message: /p2 stay empty lots/ } );
+		expect( pieces.failure( PLANS[ 1 ] ).message ).toMatch( /the index publishes/ );
+
+		// The good parcel stands, with its copies and its colliders; the empty lot
+		// has neither.
+		expect( pieces.has( PLANS[ 0 ] ) ).toBe( true );
+		expect( live( pieces ) ).toBe( copiesOf( pieces, PLANS[ 0 ] ) );
+		expect( cell.centers.has( 'p1' ) ).toBe( true );
+		expect( cell.centers.has( 'p2' ) ).toBe( false );
+		expect( cell.boxColliders.length ).toBeGreaterThan( 0 );
+
+		cell.disposeModelInstances();
+		expect( live( pieces ) ).toBe( 0 );
 
 	} );
 
@@ -353,7 +401,7 @@ describe( 'the city draws every building from its shared plan', () => {
 /** Where the street entrance of one parcel stands, from its composed blueprint. */
 function doorOf( record ) {
 
-	const ground = parcelBlueprint( planBlueprint, record ).floors.find( ( floor ) => floor.index === 0 );
+	const ground = parcelBlueprint( blueprints.get( record.plan ), record ).floors.find( ( floor ) => floor.index === 0 );
 	const opening = ground.openings.find( ( entry ) => entry.doorRole === 'main' );
 	const rect = openingRect( ground, opening );
 

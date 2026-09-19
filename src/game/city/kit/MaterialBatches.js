@@ -12,6 +12,9 @@ import { MaterialBatch } from './MaterialBatch.js';
  * materials the kit publishes and not the number of pieces or the amount of
  * city standing. Admitting a copy appends `(geometry id, matrix)` per primitive
  * to batches that already exist; dropping it takes those instances back out.
+ *
+ * A kit that reads its pieces as the city needs them hands them over in as many
+ * calls as it likes: the batches grow to take them and the draw count does not.
  */
 export class MaterialBatches {
 
@@ -52,14 +55,17 @@ export class MaterialBatches {
 	}
 
 	/**
-	 * Builds every batch this kit needs, over every entry at once: a batch holds
-	 * exactly the vertices and indices of the primitives that wear its material.
+	 * Takes these entries into the batch each material owns: a material this kit
+	 * has not drawn yet gets a batch holding exactly the vertices and indices of
+	 * the primitives handed over, and one it already draws grows to hold them
+	 * beside what is standing. The draw count follows the materials, so entries
+	 * arriving later never add a batch a material already has.
 	 *
 	 * @param entries [{ id, surfaces: [{ bucket, geometry, material, castShadow? }] }]
 	 * @param castShadow whether this kit's batches cast, unless a surface says otherwise
-	 * @param instances copies each batch makes room for before the first cell
+	 * @param instances copies each new batch makes room for before the first cell
 	 */
-	build( entries, { castShadow = false, instances } = {} ) {
+	add( entries, { castShadow = false, instances } = {} ) {
 
 		const byMaterial = new Map();
 
@@ -74,20 +80,38 @@ export class MaterialBatches {
 
 		}
 
+		// Every geometry is made to fit before any batch is touched, so entries
+		// that cannot be batched leave the standing city exactly as it was.
 		for ( const [ key, surfaces ] of byMaterial ) {
 
 			// A batch is filled from the geometries as they come out of here, and
 			// every owner of a surface reads it from the same record, so the
 			// prepared geometry is written back over the one that was handed in.
-			const ready = prepare( surfaces.map( ( surface ) => surface.geometry ) );
+			const ready = prepare( surfaces.map( ( surface ) => surface.geometry ), this.batches.get( key )?.layout ?? null );
 			for ( const [ index, surface ] of surfaces.entries() ) surface.geometry = ready[ index ];
 
-			this.batches.set( key, new MaterialBatch( `${this.name}:${key}`, surfaces[ 0 ].material, {
-				vertices: total( surfaces, ( geometry ) => geometry.getAttribute( 'position' ).count ),
-				indices: total( surfaces, ( geometry ) => geometry.getIndex()?.count ?? 0 ),
+		}
+
+		for ( const [ key, surfaces ] of byMaterial ) {
+
+			const vertices = total( surfaces, ( geometry ) => geometry.getAttribute( 'position' ).count );
+			const indices = total( surfaces, ( geometry ) => geometry.getIndex()?.count ?? 0 );
+			const standing = this.batches.get( key );
+
+			if ( standing ) {
+
+				standing.reserveGeometry( vertices, indices );
+				continue;
+
+			}
+
+			const batch = new MaterialBatch( `${this.name}:${key}`, surfaces[ 0 ].material, {
+				vertices, indices,
 				castShadow: surfaces.every( ( surface ) => surface.castShadow ?? castShadow ),
 				instances
-			} ) );
+			} );
+			this.batches.set( key, batch );
+			this.group.add( batch.mesh );
 
 		}
 
@@ -102,8 +126,6 @@ export class MaterialBatches {
 			} ) );
 
 		}
-
-		for ( const batch of this.batches.values() ) this.group.add( batch.mesh );
 
 		return this;
 

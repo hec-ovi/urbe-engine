@@ -34,7 +34,7 @@ describe( 'the batching class takes primitives as a loader publishes them', () =
 		const material = new THREE.MeshStandardMaterial();
 		const indexed = shared( { vertices: 3, drawn: 3 } );
 		const flat = plain( 6 );
-		const batches = new MaterialBatches( 'mixed' ).build( [
+		const batches = new MaterialBatches( 'mixed' ).add( [
 			{ id: 'a', surfaces: [ { bucket: 'stone', geometry: indexed, material } ] },
 			{ id: 'b', surfaces: [ { bucket: 'stone', geometry: flat, material } ] }
 		] );
@@ -60,7 +60,7 @@ describe( 'the batching class takes primitives as a loader publishes them', () =
 		const carried = shared( { vertices: 12, drawn: 3 } );
 		const already = shared( { vertices: 3, drawn: 6 } );
 		const surfaces = [ carried, already ].map( ( geometry ) => ( { bucket: 'stone', geometry, material } ) );
-		const batches = new MaterialBatches( 'shared' ).build( [
+		const batches = new MaterialBatches( 'shared' ).add( [
 			{ id: 'a', surfaces: [ surfaces[ 0 ] ] },
 			{ id: 'b', surfaces: [ surfaces[ 1 ] ] }
 		] );
@@ -77,11 +77,38 @@ describe( 'the batching class takes primitives as a loader publishes them', () =
 
 	} );
 
+	it( 'takes an entry handed over later into the batch its material already has, growing its buffers once', () => {
+
+		const material = new THREE.MeshStandardMaterial();
+		const batches = new MaterialBatches( 'later' )
+			.add( [ { id: 'a', surfaces: [ { bucket: 'stone', geometry: plain( 3 ), material } ] } ] );
+
+		const standing = batches.admit( 'a', new THREE.Matrix4().setPosition( 4, 0, 0 ) );
+		const batch = standing.parts[ 0 ].batch;
+		const room = batch.vertexCapacity;
+
+		batches.add( [ { id: 'b', surfaces: [ { bucket: 'stone', geometry: plain( 30 ), material } ] } ] );
+
+		// The material keeps its one draw, its buffers hold both entries, and a
+		// growth that runs out doubles rather than fitting each entry exactly.
+		expect( batches.batchCount ).toBe( 1 );
+		expect( batch.vertices ).toBe( 33 );
+		expect( batch.vertexCapacity ).toBeGreaterThanOrEqual( room * 2 );
+
+		// The copy standing through the growth still draws what it was drawing.
+		const later = batches.admit( 'b', new THREE.Matrix4().setPosition( 9, 0, 0 ) );
+		expect( batch.mesh.getMatrixAt( standing.instances[ 0 ], new THREE.Matrix4() ).elements[ 12 ] ).toBeCloseTo( 4, 5 );
+		expect( batch.mesh.getGeometryRangeAt( standing.parts[ 0 ].geometryId ).vertexCount ).toBe( 3 );
+		expect( batch.mesh.getGeometryRangeAt( later.parts[ 0 ].geometryId ).vertexCount ).toBe( 30 );
+		batches.dispose();
+
+	} );
+
 	it( 'rebuilds the draws whenever it replaces the buffers they were built from', () => {
 
 		const material = new THREE.MeshStandardMaterial();
 		const batches = new MaterialBatches( 'growing' )
-			.build( [ { id: 'a', surfaces: [ { bucket: 'stone', geometry: plain( 3 ), material } ] } ], { instances: 1 } );
+			.add( [ { id: 'a', surfaces: [ { bucket: 'stone', geometry: plain( 3 ), material } ] } ], { instances: 1 } );
 		const rebuilt = vi.fn();
 		material.addEventListener( 'dispose', rebuilt );
 

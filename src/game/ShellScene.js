@@ -70,6 +70,9 @@ export class ShellScene {
 
 		}
 		this.night?.addGroup( cell.group );
+		// A cell brings the plans it is the first to stand on, and each of those
+		// can bring a batch with a program the city has not compiled yet.
+		await this.warmup?.warmAll( this.pieces?.group );
 		await this.warmup?.warmAll( cell.group );
 		// One fixed body for the whole cell: every kit building in it is a
 		// compound of cuboids, with nothing to cook across frames.

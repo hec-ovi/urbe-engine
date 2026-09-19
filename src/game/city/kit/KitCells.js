@@ -1,12 +1,11 @@
 import * as THREE from 'three/webgpu';
 import { readWorldDocument } from '../../data/WorldDocument.js';
 import { BuildingsLoader, mapConcurrent } from '../BuildingsLoader.js';
-import { KitPlacement } from './KitPlacement.js';
+import { KitPlacement, placementError } from './KitPlacement.js';
 import { KitCellInstances } from './KitCellInstances.js';
 import { buildingBoxes } from './KitColliders.js';
 import { interiorOpenings } from './KitOpenings.js';
 import { mainDoor, swingLeaves } from './KitDoors.js';
-import { placementError } from './KitPieces.js';
 import { tintFor } from './KitTint.js';
 
 /** Placement records are pure reads, so a cell asks for all of them at once. */
@@ -23,6 +22,10 @@ const READ_CONCURRENCY = 8;
  * to draws the city already owns, and dropping it takes those matrices back
  * out. Landmark parcels in the same cell still load their own shell through the
  * original loader.
+ *
+ * A cell is also where the city reads its buildings: the plans its parcels
+ * stand on are asked for here, so only what stands near the player is ever
+ * fetched, and a cell waits on its own plans rather than on the whole set.
  */
 export class KitCellLoader {
 
@@ -30,13 +33,15 @@ export class KitCellLoader {
 	 * @param pieces KitPieces
 	 * @param readJson reads one URL into a parsed document
 	 * @param shells the original loader, for landmark parcels
+	 * @param onError receives the plans this cell could not stand
 	 */
-	constructor( { pieces, factory, readJson = readPlacements, shells = new BuildingsLoader( factory ) } ) {
+	constructor( { pieces, factory, readJson = readPlacements, shells = new BuildingsLoader( factory ), onError = console.error } ) {
 
 		this.pieces = pieces;
 		this.factory = factory;
 		this.readJson = readJson;
 		this.shells = shells;
+		this.onError = onError;
 
 	}
 
@@ -48,25 +53,36 @@ export class KitCellLoader {
 		const rest = new Map( [ ...buildings ].filter( ( [ , source ] ) => ! placed.has( source ) ) );
 		const base = rest.size ? await this.shells.load( rest ) : empty();
 
-		await this.pieces.ready;
-
 		const group = new THREE.Group();
 		group.name = 'kit-cell';
 		const standing = [];
 		const boxColliders = [];
+		const emptyLots = new Map();
 		let triangles = 0;
 
 		try {
 
 			const records = await mapConcurrent( kit, READ_CONCURRENCY, ( source ) => this.readJson( source.placementsUrl ) );
+			for ( const [ index, source ] of kit.entries() ) {
+
+				if ( this.pieces.published( records[ index ].plan ) ) continue;
+
+				throw placementError( `${source.parcelId} stands from ${records[ index ].plan}, which this world does not publish` );
+
+			}
+			// The plans this cell's buildings are copies of, read now if this is
+			// the first cell in the city to stand on them.
+			await this.pieces.want( records.map( ( record ) => record.plan ) );
 
 			for ( const [ index, source ] of kit.entries() ) {
 
 				const record = records[ index ];
 
+				// A plan the city cannot read leaves its copies as empty lots.
 				if ( ! this.pieces.has( record.plan ) ) {
 
-					throw placementError( `${source.parcelId} stands from ${record.plan}, which this world does not publish` );
+					emptyLots.set( record.plan, [ ...( emptyLots.get( record.plan ) ?? [] ), source.parcelId ] );
+					continue;
 
 				}
 
@@ -105,6 +121,8 @@ export class KitCellLoader {
 
 		}
 
+		for ( const [ plan, parcels ] of emptyLots ) this.onError( emptyLotError( plan, parcels, this.pieces.failure( plan ) ) );
+
 		if ( base.group.children.length ) group.add( base.group );
 
 		const instances = new KitCellInstances( this.pieces, standing );
@@ -123,6 +141,16 @@ export class KitCellLoader {
 		};
 
 	}
+
+}
+
+/** What a plan the city cannot read costs: these parcels, and nothing else. */
+function emptyLotError( planId, parcels, cause ) {
+
+	return Object.assign(
+		new Error( `E_KIT_PIECES: ${planId} does not stand, so ${parcels.join( ', ' )} stay empty lots: ${cause.message}` ),
+		{ code: 'E_KIT_PIECES', cause }
+	);
 
 }
 

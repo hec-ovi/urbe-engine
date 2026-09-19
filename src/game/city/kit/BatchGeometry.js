@@ -13,10 +13,17 @@ import { BufferAttribute, BufferGeometry, Float32BufferAttribute } from 'three/w
  * whole, so a bucket that mixes the two has to settle it before it is filled.
  */
 
-/** Every geometry of one batch, ready to be written into it. Returns them in order. */
-export function prepare( geometries ) {
+/**
+ * Every geometry of one batch, ready to be written into it. Returns them in order.
+ *
+ * @param layout the layout a batch already standing draws from, when these
+ *   geometries are joining it rather than filling a new one
+ */
+export function prepare( geometries, layout = null ) {
 
 	const ready = geometries.map( ( geometry ) => ( exclusive( geometry ) ? geometry : compact( geometry ) ) );
+
+	if ( layout ) return fit( ready, layout );
 
 	if ( ready.some( ( geometry ) => geometry.getIndex() ) ) {
 
@@ -25,6 +32,50 @@ export function prepare( geometries ) {
 	}
 
 	return conform( ready );
+
+}
+
+/**
+ * These geometries written into the layout a batch already holds. A batch's
+ * buffers were sized and typed by whatever filled it first and the vertices
+ * already in them stay where they are, so a geometry arriving later is made to
+ * match that layout: plain floats hold anything a producer quantizes, and the
+ * other way round would lose values, so it is refused instead.
+ */
+function fit( geometries, layout ) {
+
+	return geometries.map( ( original ) => {
+
+		let geometry = original;
+		if ( layout.indexed && ! geometry.getIndex() ) sequence( geometry );
+		if ( ! layout.indexed && geometry.getIndex() ) geometry = geometry.toNonIndexed();
+
+		for ( const name of Object.keys( geometry.attributes ) ) {
+
+			if ( ! layout.attributes.has( name ) ) throw new Error( `batch carries no attribute ${name}` );
+
+		}
+		for ( const [ name, held ] of layout.attributes ) {
+
+			const attribute = geometry.getAttribute( name );
+			if ( attribute && attribute.itemSize !== held.itemSize ) {
+
+				throw new Error( `batch attribute ${name} has itemSize ${attribute.itemSize} and ${held.itemSize}` );
+
+			}
+			if ( attribute && attribute.array.constructor === held.type && attribute.normalized === held.normalized ) continue;
+			if ( held.type !== Float32Array || held.normalized ) {
+
+				throw new Error( `batch attribute ${name} is ${held.type.name}, this geometry carries ${attribute?.array.constructor.name ?? 'none'}` );
+
+			}
+			rewrite( geometry, name, held.itemSize );
+
+		}
+
+		return geometry;
+
+	} );
 
 }
 

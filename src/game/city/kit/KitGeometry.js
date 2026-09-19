@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { prepare } from './BatchGeometry.js';
-import { placementError } from './KitPieces.js';
+import { placementError } from './KitPlacement.js';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { bake } from '../GeometryBake.js';
 import { bucketFor, splitBucket } from '../Variety.js';

@@ -135,7 +135,7 @@ export class InteriorModules {
 		const loaded = await mapConcurrent( this.catalog.modules, LOAD_CONCURRENCY, ( module ) => this.#module( module ) );
 
 		for ( const module of loaded ) this.modules.set( module.id, module );
-		this.batches.build( loaded );
+		this.batches.add( loaded );
 
 		return this;
 
