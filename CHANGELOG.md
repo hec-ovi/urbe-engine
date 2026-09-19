@@ -1,5 +1,7 @@
 # Changelog
 
+0.24.2: a kit parcel that opens a real interior draws its plan without the window scenery, the fake rooms being their own batch entry beside the entrance leaves.
+
 0.24.1: the load reads world documents, plans, street pieces, room catalogs, characters and cars together, warms one program per material and layout, and shows one counter for the whole load.
 
 0.24.0: kit buildings are the approved family shells generated once per plan and instanced with their eligibility, and streets draw the shared 0.9.0 catalogue with per-instance tint, wear, scans and text.

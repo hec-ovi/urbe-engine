@@ -7,6 +7,9 @@ import { readShell } from './KitGeometry.js';
 const LOAD_CONCURRENCY = 8;
 /** The entrance leaves of a plan, drawn with it unless the parcel swings them. */
 const LEAVES = ( planId ) => `${planId}/leaves`;
+/** The fake rooms behind a plan's glass, drawn unless the parcel opens a real interior. */
+const SCENERY = ( planId ) => `${planId}/scenery`;
+const SCENIC = /\|scenic$/;
 
 /**
  * Every distinct building the city has, loaded once.
@@ -78,7 +81,13 @@ export class KitPieces {
 	/** Room for the copies a cell is about to place, one reallocation per batch. */
 	reserve( planIds ) {
 
-		this.batches.reserve( planIds.flatMap( ( id ) => this.plans.get( id )?.leaves.length ? [ id, LEAVES( id ) ] : [ id ] ) );
+		this.batches.reserve( planIds.flatMap( ( id ) => {
+
+			const plan = this.plans.get( id );
+
+			return [ id, ...( plan?.leaves.length ? [ LEAVES( id ) ] : [] ), ...( plan?.scenery.length ? [ SCENERY( id ) ] : [] ) ];
+
+		} ) );
 
 	}
 
@@ -86,15 +95,18 @@ export class KitPieces {
 	 * Draws one more copy of a plan.
 	 * @param swinging true when this parcel owns its entrance leaves as moving
 	 *   pivots, so the shared copies of them stay out of the batches
+	 * @param interior true when this parcel opens a real interior behind its
+	 *   glass, so the plan's fake rooms stay out of the batches
 	 * @returns one handle per copy, to hand back to `release`
 	 */
-	admit( planId, matrix, color, { swinging = false } = {} ) {
+	admit( planId, matrix, color, { swinging = false, interior = false } = {} ) {
 
 		const plan = this.plans.get( planId );
 		if ( ! plan ) throw placementError( `no plan ${planId} in this world` );
 
 		const handle = this.batches.admit( planId, matrix, color );
 		if ( ! swinging && plan.leaves.length ) handle.leaf = this.batches.admit( LEAVES( planId ), matrix, color );
+		if ( ! interior && plan.scenery.length ) handle.scenery = this.batches.admit( SCENERY( planId ), matrix, color );
 
 		return handle;
 
@@ -104,6 +116,7 @@ export class KitPieces {
 
 		this.batches.release( handle );
 		if ( handle.leaf ) this.batches.release( handle.leaf );
+		if ( handle.scenery ) this.batches.release( handle.scenery );
 
 	}
 
@@ -112,7 +125,7 @@ export class KitPieces {
 		this.batches.dispose();
 		for ( const plan of this.plans.values() ) {
 
-			for ( const { geometry } of plan.surfaces ) geometry.dispose();
+			for ( const { geometry } of [ ...plan.surfaces, ...plan.scenery ] ) geometry.dispose();
 			for ( const leaf of plan.leaves ) for ( const { geometry } of leaf.surfaces ) geometry.dispose();
 
 		}
@@ -130,6 +143,7 @@ export class KitPieces {
 			this.plans.set( plan.id, plan );
 			entries.push( { id: plan.id, surfaces: plan.surfaces } );
 			if ( plan.leaves.length ) entries.push( { id: LEAVES( plan.id ), surfaces: plan.leaves.flatMap( ( leaf ) => leaf.surfaces ) } );
+			if ( plan.scenery.length ) entries.push( { id: SCENERY( plan.id ), surfaces: plan.scenery } );
 
 		}
 		this.batches.build( entries, { castShadow: true } );
@@ -162,12 +176,17 @@ export class KitPieces {
 
 		}
 
-		const { surfaces, leaves } = readShell( scene, this.factory, blueprint );
+		const shell = readShell( scene, this.factory, blueprint );
+		// The fake rooms behind the glass are their own entry: a parcel that
+		// opens a real interior draws the plan without them.
+		const surfaces = shell.surfaces.filter( ( { bucket } ) => ! SCENIC.test( bucket ) );
+		const scenery = shell.surfaces.filter( ( { bucket } ) => SCENIC.test( bucket ) );
+		const { leaves } = shell;
 
 		return {
 			id: entry.id, baysAcross: entry.baysAcross, baysDeep: entry.baysDeep,
-			surfaces, leaves,
-			triangles: surfaces.reduce( ( sum, { geometry } ) => sum + triangles( geometry ), 0 )
+			surfaces, scenery, leaves,
+			triangles: [ ...surfaces, ...scenery ].reduce( ( sum, { geometry } ) => sum + triangles( geometry ), 0 )
 				+ leaves.reduce( ( sum, leaf ) => sum + leaf.surfaces.reduce( ( part, { geometry } ) => part + triangles( geometry ), 0 ), 0 )
 		};
 

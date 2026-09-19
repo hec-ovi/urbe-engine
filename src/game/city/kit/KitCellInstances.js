@@ -13,7 +13,7 @@ export class KitCellInstances {
 
 	/**
 	 * @param pieces KitPieces
-	 * @param buildings [{ placement, colour, swinging }]
+	 * @param buildings [{ placement, colour, swinging, interior }]
 	 */
 	constructor( pieces, buildings ) {
 
@@ -61,9 +61,9 @@ export class KitCellInstances {
 		// its copies never reallocates part way through.
 		this.pieces.reserve( this.buildings.map( ( { placement } ) => placement.plan ) );
 
-		for ( const { placement, colour, swinging } of this.buildings ) {
+		for ( const { placement, colour, swinging, interior } of this.buildings ) {
 
-			handles.push( this.pieces.admit( placement.plan, placement.toWorld, colour, { swinging } ) );
+			handles.push( this.pieces.admit( placement.plan, placement.toWorld, colour, { swinging, interior } ) );
 
 		}
 

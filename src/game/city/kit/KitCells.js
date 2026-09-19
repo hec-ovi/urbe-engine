@@ -86,7 +86,8 @@ export class KitCellLoader {
 				standing.push( {
 					placement,
 					colour: tintFor( placement.family, placement.tint, new THREE.Color() ),
-					swinging
+					swinging,
+					interior: Boolean( source.hasInterior )
 				} );
 
 				if ( ! swinging ) continue;

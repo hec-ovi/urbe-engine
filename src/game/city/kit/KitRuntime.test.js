@@ -112,7 +112,7 @@ function materialsOf( pieces ) {
 
 	for ( const plan of pieces.plans.values() ) {
 
-		for ( const { bucket } of plan.surfaces ) buckets.add( bucket );
+		for ( const { bucket } of [ ...plan.surfaces, ...plan.scenery ] ) buckets.add( bucket );
 		for ( const leaf of plan.leaves ) for ( const { bucket } of leaf.surfaces ) buckets.add( bucket );
 
 	}
@@ -297,6 +297,28 @@ describe( 'the city draws every building from its shared plan', () => {
 
 		cell.disposeModelInstances();
 		releaseShell( cell );
+
+	} );
+
+	it( 'draws a parcel that opens a real interior without the plan\'s window scenery', async () => {
+
+		const { pieces } = openWorld();
+		const record = building( 'p1' );
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving( [ record ] ) } );
+		const closed = await shown( loader, [ source( record, false ) ] );
+		const plan = pieces.plans.get( record.plan );
+		expect( plan.scenery.length ).toBeGreaterThan( 0 );
+		const whole = pieces.batches.instanceCount;
+		closed.group.visible = false;
+		expect( pieces.batches.instanceCount ).toBe( 0 );
+
+		// An open parcel swings its own leaves and shows its real rooms, so
+		// neither the shared leaves nor the fake rooms stand in the batches.
+		const swung = plan.leaves.reduce( ( sum, leaf ) => sum + leaf.surfaces.length, 0 );
+		const open = await shown( loader, [ source( record, true ) ] );
+		expect( pieces.batches.instanceCount ).toBe( whole - plan.scenery.length - swung );
+		open.disposeModelInstances();
+		releaseShell( open );
 
 	} );
 
