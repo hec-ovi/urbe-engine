@@ -9,18 +9,18 @@ import { ScenicSurface } from '../ScenicSurface.js';
 import { ShellBatches } from '../ShellBatches.js';
 import { isSceneryNode, shellMaterial, shellScenery, shellVariant } from '../ShellSurface.js';
 
-// A merged GLB names its surfaces `merged:<key>`; GLTFLoader strips the
-// reserved characters, so the leading word is what survives to match on.
-const EXTERIOR = 'merged';
-
 /**
  * One plan's shell GLB read into what the city draws it with.
  *
- * `surfaces` are the whole building: every copy of this plan in the city draws
- * them from the same geometry, so they merge by material binding once here and
- * never again. `leaves` are the street entrance's addressable leaves, kept
- * apart because a parcel with a real interior swings its own pair while every
- * closed parcel draws them with the rest of the shell.
+ * `surfaces` are the whole building: every mesh node the plan publishes, merged
+ * by material binding once here and never again, because every copy of this
+ * plan in the city draws them from the same geometry. A producer names its
+ * nodes for its own reasons and a family signs itself with parts named after
+ * it, so nothing here reads a name to decide what stands.
+ *
+ * `leaves` are the street entrance's addressable leaves, kept apart because a
+ * parcel with a real interior swings its own pair while every closed parcel
+ * draws them with the rest of the shell.
  *
  * All geometry is plan-local, the frame the plan was generated in: origin at
  * the entrance-face corner, face 0 along +X, walking surface at Y=0. A leaf also
@@ -84,9 +84,11 @@ export async function readShell( scene, factory, blueprint, slice ) {
 
 		}
 
-		// Everything else the shell publishes: its facades, its slabs, its roof
-		// and the leaves of every door this path does not move.
-		if ( leaf || node.name?.startsWith( EXTERIOR ) ) push( shell, bucket, bake( node ) );
+		// Everything else the plan publishes: its facades, its slabs, its roof,
+		// the parts its family signs itself with, and the leaves of every door
+		// this path does not move. What a node is called never decides whether
+		// it is drawn; its material decides which batch it lands in.
+		push( shell, bucket, bake( node ) );
 
 	}
 

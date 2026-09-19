@@ -24,6 +24,7 @@ Draws every ordinary building from the shared plan it is a copy of: one batch pe
 ## Rules
 
 - Streaming radii for kit cells: load within 384 m, keep within 640 m, skyline beyond, matching the shell stream.
+- Every mesh node a plan publishes is drawn, bucketed by the material it wears. A node's name never decides that: a producer names its nodes for its own reasons, and a family signs itself with parts named after it, so reading names drops whatever the producer did not name the way the reader expected. The only nodes kept apart are the street entrance's leaves, because a parcel with an interior swings its own, and the window scenery, because a parcel with an interior replaces it.
 - A plan shell is drawn as a closed building: the fake rooms behind its glass stand with the room's own light baked in, because the geometry is shared and most of its copies have no interior.
 - A facade stands behind its lot line, by a metre on some families and by three and a half on others, so an opening is matched to the lot wall it faces rather than to the one it touches.
 - A batch is a three `BatchedMesh`, which serves both backends. WebGPU has no multi-draw, so it loops one indexed draw per visible copy inside the batch's single pipeline and bind group; WebGL2 uses `WEBGL_multi_draw`, or the per-draw fallback where the extension is missing. What the batch saves is the pipeline and the per-mesh render object, not the draw command.

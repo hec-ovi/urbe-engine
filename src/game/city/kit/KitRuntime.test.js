@@ -8,6 +8,8 @@ import { sharedRoot } from '../../../assembly/SharedResources.js';
 import { PlanLibrary } from '../../../assembly/kit/PlanLibrary.js';
 import { parcelBlueprint } from '../../../assembly/kit/PlanBlueprint.js';
 import { PLAN_INDEX_FILE } from '../../../assembly/kit/KitFiles.js';
+import { cityGltfLoader } from '../../data/CityGltfLoader.js';
+import { isSceneryNode } from '../ShellSurface.js';
 import { openingRect } from '../Openings.js';
 import { Interactor } from '../../player/Interactor.js';
 import { releaseShell } from '../streaming/ReleaseShell.js';
@@ -36,7 +38,7 @@ let index = null;
 let blueprints = null;
 
 /** The world's plan index, read exactly as the runtime reads it from a world. */
-function openWorld( { mutate = ( document ) => document, slice } = {} ) {
+function openWorld( { mutate = ( document ) => document, slice, skipUnnamed = false } = {} ) {
 
 	const reads = [];
 	const blueprintReads = [];
@@ -53,8 +55,38 @@ function openWorld( { mutate = ( document ) => document, slice } = {} ) {
 		},
 		budget: new ReadBudget()
 	} );
+	const removed = { triangles: 0 };
+	const loader = cityGltfLoader();
+
+	if ( skipUnnamed ) {
+
+		// A read that trusted node names kept the merged surfaces, the window
+		// scenery and the door leaves, and left everything else out.
+		const parse = loader.parseAsync.bind( loader );
+		loader.parseAsync = async ( ...args ) => {
+
+			const gltf = await parse( ...args );
+			const strays = [];
+			gltf.scene.traverse( ( node ) => {
+
+				if ( node.isMesh && ! isSceneryNode( node ) && ! /^(merged|door)/.test( node.name ) ) strays.push( node );
+
+			} );
+			for ( const node of strays ) {
+
+				removed.triangles += trianglesIn( node.geometry );
+				node.removeFromParent();
+
+			}
+
+			return gltf;
+
+		};
+
+	}
+
 	const pieces = new KitPieces( {
-		kit, baseUrl: sharedRoot(), factory, blueprints, slice,
+		kit, baseUrl: sharedRoot(), factory, blueprints, slice, loader,
 		readBinary: async ( url ) => {
 
 			reads.push( url );
@@ -65,7 +97,7 @@ function openWorld( { mutate = ( document ) => document, slice } = {} ) {
 		}
 	} );
 
-	return { kit, pieces, reads, blueprints, blueprintReads };
+	return { kit, pieces, reads, blueprints, blueprintReads, removed };
 
 }
 
@@ -120,6 +152,13 @@ async function shown( loader, sources ) {
 function live( pieces ) {
 
 	return pieces.batches.copies;
+
+}
+
+/** Every triangle a geometry draws, indexed or not. */
+function trianglesIn( geometry ) {
+
+	return ( geometry.getIndex()?.count ?? geometry.getAttribute( 'position' ).count ) / 3;
 
 }
 
@@ -231,6 +270,24 @@ describe( 'the city draws every building from its shared plan', () => {
 
 		hidden.disposeModelInstances();
 		expect( live( pieces ) ).toBe( 0 );
+
+	} );
+
+	it( 'draws every mesh node a plan publishes, whatever the producer named it', async () => {
+
+		const whole = openWorld();
+		const named = openWorld( { skipUnnamed: true } );
+
+		await whole.pieces.want( [ PLANS[ 0 ] ] );
+		await named.pieces.want( [ PLANS[ 0 ] ] );
+
+		// This plan really does publish nodes outside the merged prefix: the
+		// parts its family signs itself with, named after the family.
+		expect( named.removed.triangles ).toBeGreaterThan( 0 );
+
+		// And every one of their triangles stands in the batches.
+		expect( whole.pieces.trianglesOf( PLANS[ 0 ] ) - named.pieces.trianglesOf( PLANS[ 0 ] ) )
+			.toBe( named.removed.triangles );
 
 	} );
 

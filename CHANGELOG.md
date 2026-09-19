@@ -1,5 +1,7 @@
 # Changelog
 
+0.25.9: a kit plan draws every mesh node it publishes, bucketed by material; a node name never decides what is drawn (corporate-sectors recovers its 44,462 triangles of services, covers, cassettes, wings and screen).
+
 0.25.8: a floor draws its own window returns beside the placement record its band shares.
 
 0.25.7: cell admission runs under a frame budget while the city is drawn (no main-thread stretch over 100 ms, worst 911 ms before) and flat out while it loads; one budget paces plan decoding, shell baking, batch merges and props.
