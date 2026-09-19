@@ -1,5 +1,7 @@
 # Changelog
 
+0.26.10: a template deals its variations across its blocks (every block one variation, the template's own building the majority on every slot), and a floor step is offered only where the block's own lot stands the design at both counts.
+
 0.26.9: the environment stands from construction and bakes under the loading counter, program keepers own their own triangle, released programs are named in the hitch line, and URBE_INTERIOR_DIR runs Interior from a pinned checkout.
 
 0.26.8: the quest place reads as a place (route to the door, a mark and a HUD line with the venue name, distance and opening hours, the cast standing at the counter, entrances facing the street) and the first frame no longer stalls on WebGL2 (crowd baked in the load, programs pinned per object graph, no timer queries, named admission steps in the hitch log).

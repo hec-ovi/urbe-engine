@@ -22,10 +22,14 @@ const TOLERANCE = 0.001;
  * family does not fit takes one of its own, which is the only exception.
  *
  * One variation per block instance keeps the repetition from reading as a copy:
- * a stable hash of the block id either moves one slot's floor count by one, or
- * merges two adjacent slots of equal depth into one rectangular building, so
- * that block stands one long building where its neighbours stand two. Every
- * other slot of the block stands the template's building unchanged.
+ * a block either moves one slot's floor count by one, or merges two adjacent
+ * slots of equal depth into one rectangular building, so that block stands one
+ * long building where its neighbours stand two. Every other slot of the block
+ * stands the template's building unchanged. The variations of a template are
+ * dealt across its blocks: a stable hash of the block id picks among the ones
+ * its template's other blocks have taken the least, so two blocks of one
+ * template stand the same variation only once every one is in use, and the
+ * template's own building is what most blocks stand on every slot.
  */
 export class TemplateDressing {
 
@@ -38,6 +42,8 @@ export class TemplateDressing {
 		this.slots = new Map();
 		/** `${templateId}#${first}+${second}` -> the building a merge of those slots stands */
 		this.merges = new Map();
+		/** templateId -> variation id -> how many of its blocks took it */
+		this.taken = new Map();
 		/** parcelId -> what it builds, or what absorbed it */
 		this.dressed = new Map();
 
@@ -138,10 +144,7 @@ export class TemplateDressing {
 	#dressBlock( blockId, { templateId, corner, slots } ) {
 
 		const template = this.templates.templates.get( templateId );
-		const options = this.#variations( templateId, slots );
-		const chosen = options.length
-			? options[ fnv1a( `${this.worldSeed}:kit-variation:${blockId}` ) % options.length ]
-			: null;
+		const chosen = this.#deal( templateId, blockId, this.#variations( templateId, slots ) );
 
 		for ( const [ index, parcelId ] of slots ) {
 
@@ -179,23 +182,49 @@ export class TemplateDressing {
 	}
 
 	/**
-	 * Whether the slot still stands the family it was dressed with once the block
-	 * variation has moved its floor count, so a move never empties a slot of the
-	 * design it repeats.
+	 * The variation this block takes: the one its hash picks among those its
+	 * template's other blocks have taken the least, so every variation is in use
+	 * before any block repeats one and no two neighbours read as the same copy.
+	 * @returns the chosen option, or null when the block has none
 	 */
-	#holds( choice, floors, key ) {
+	#deal( templateId, blockId, options ) {
 
-		if ( floors < choice.range.low || floors > choice.range.high ) return false;
-		if ( ! choice.family ) return true;
+		if ( ! options.length ) return null;
 
-		return use( this.#parcelsIn( key ) )
-			.some( ( parcel ) => fittingFamilies( choice.bays, floors, parcel ).includes( choice.family ) );
+		const counts = this.taken.get( templateId ) ?? new Map();
+		const uses = ( option ) => counts.get( option.id ) ?? 0;
+		const fewest = Math.min( ...options.map( uses ) );
+		const rarest = options.filter( ( option ) => uses( option ) === fewest );
+		const chosen = rarest[ fnv1a( `${this.worldSeed}:kit-variation:${blockId}` ) % rarest.length ];
+
+		counts.set( chosen.id, fewest + 1 );
+		this.taken.set( templateId, counts );
+
+		return chosen;
 
 	}
 
 	/**
-	 * Everything this block could do differently, in one stable order: the
-	 * mergeable lot pairs, then the slots whose floor count can move.
+	 * Whether one lot stands the slot's design at a floor count: inside the
+	 * slot's band, wearing the slot's family where it has one. A move is offered
+	 * only where the block's own lot stands the design before and after it, so a
+	 * step is the template's building one floor over and never a design of its
+	 * own.
+	 */
+	#stands( choice, floors, parcel ) {
+
+		if ( floors < choice.range.low || floors > choice.range.high ) return false;
+		if ( ! choice.family ) return true;
+
+		return fittingFamilies( choice.bays, floors, parcel ).includes( choice.family );
+
+	}
+
+	/**
+	 * Everything this block could do differently, in one stable order: the lot
+	 * pairs it can merge, then the slots whose floor count it can move. Each
+	 * carries the id it is dealt under, which names the same variation on every
+	 * block of the template.
 	 */
 	#variations( templateId, slots ) {
 
@@ -214,7 +243,7 @@ export class TemplateDressing {
 				const covered = [ first, second ].map( ( index ) => this.parcels.get( slots.get( index ) ) ).filter( Boolean );
 				const merged = floorRange( covered ).fits && this.merge( templateId, first, second );
 
-				if ( merged ) merges.push( merged );
+				if ( merged ) merges.push( { id: `merge:${first}+${second}`, ...merged } );
 
 			}
 
@@ -222,14 +251,15 @@ export class TemplateDressing {
 
 		const moves = present.flatMap( ( index ) => {
 
-			const key = slotKey( templateId, index );
 			const choice = this.slot( templateId, index );
+			const parcel = this.parcels.get( slots.get( index ) );
 
-			if ( ! choice || choice.range.high <= choice.range.low ) return [];
+			if ( ! choice || ! parcel || choice.range.high <= choice.range.low ) return [];
 
 			const floors = choice.floors < choice.range.high ? choice.floors + 1 : choice.floors - 1;
+			const stands = this.#stands( choice, choice.floors, parcel ) && this.#stands( choice, floors, parcel );
 
-			return this.#holds( choice, floors, key ) ? [ { kind: 'floors', slot: index, floors } ] : [];
+			return stands ? [ { id: `floors:${index}`, kind: 'floors', slot: index, floors } ] : [];
 
 		} );
 
