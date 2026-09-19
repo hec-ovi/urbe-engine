@@ -79,7 +79,7 @@ describe( 'Venues', () => {
 	it( 'marks the objective parcel whatever its type, names it, and letters the story\'s name on a free sign field', () => {
 
 		const doors = [ door( 'p0' ), door( 'p1' ) ];
-		const field = { center: [ 20, 3, 0 ], normal: [ 0, 1 ], width: 4, height: 0.5, cellSize: 0.4 };
+		const field = { center: [ 20, 3, 0 ], normal: [ 0, 1 ], width: 6, height: 0.5, cellSize: 0.4 };
 		const signs = { admit: vi.fn( () => ( { slots: [ 0 ] } ) ), release: vi.fn() };
 		const buildings = new Map( [
 			[ 'p0', { blueprint: { signage: [ { text: 'COFFEE' } ] } } ],
