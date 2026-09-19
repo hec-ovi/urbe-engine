@@ -143,7 +143,7 @@ export class GameApp {
 			frameMs: 16.7, gpuMs: 0, drawCalls: 0, triangles: 0,
 			crowd: 0, cars: 0, interiors: 0, lights: 0,
 			backend: '-', tier: '-', width: 0, height: 0,
-			materials: 0, unresolved: 0, hitches: 0, worstMs: 0
+			materials: 0, unresolved: 0, unknownVariants: 0, hitches: 0, worstMs: 0
 		};
 
 	}
@@ -1255,10 +1255,14 @@ export class GameApp {
 	 * A key the database cannot answer renders magenta and is named here; it
 	 * never takes the load down, because a world can name a brand whose assets
 	 * are not on this machine (../materials/CONTRACT.md).
+	 *
+	 * A variant name the entry does not publish is quieter than that: the
+	 * surface draws the canonical look and nothing about the frame says so, so
+	 * it is named here too, for the release that renamed it.
 	 */
 	#materials() {
 
-		const { resolved, unresolved } = this.resolver.counts;
+		const { resolved, unresolved, unknownVariants } = this.resolver.counts;
 
 		this.stats.materials = resolved;
 
@@ -1266,6 +1270,13 @@ export class GameApp {
 
 			this.stats.unresolved = unresolved;
 			console.warn( `unresolved material keys: ${this.resolver.report().unresolved.join( ', ' )}` );
+
+		}
+
+		if ( unknownVariants > this.stats.unknownVariants ) {
+
+			this.stats.unknownVariants = unknownVariants;
+			console.warn( `material variants the catalog does not publish: ${this.resolver.report().unknownVariants.join( ', ' )}` );
 
 		}
 

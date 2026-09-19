@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { BuildingViewerApp, materialForViewerSurface } from './BuildingViewerApp.js';
 import { PbrMaterialFactory } from './PbrMaterialFactory.js';
+import { fakeResolver } from './material-resolver.test-fixtures.js';
 import { TextureSource } from './TextureSource.js';
 
 const fakeTextures = ( load ) => new TextureSource( {
@@ -38,14 +39,11 @@ describe( 'building navigation', () => {
 	it( 'resolves the published variant and preserves an authored two-sided surface', () => {
 
 		const maps = ( id ) => ( { basecolor: `${id}.png`, roughness: `${id}-r.png`, metallic: `${id}-m.png` } );
-		const factory = new PbrMaterialFactory( {
-			resolve: () => ( {
-				alignment: 'tile', tiling: { worldSize: [ 1.5, 3 ] },
-				physical: { roughnessFactor: 0.64, metallicFactor: 0 },
-				variants: [ { id: 'blind', maps: maps( 'blind' ) }, { id: 'shade', maps: maps( 'shade' ) } ]
-			} ),
-			mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
-		} );
+		const factory = new PbrMaterialFactory( fakeResolver( () => ( {
+			alignment: 'tile', tiling: { worldSize: [ 1.5, 3 ] },
+			physical: { roughnessFactor: 0.64, metallicFactor: 0 },
+			variants: [ { id: 'blind', maps: maps( 'blind' ) }, { id: 'shade', maps: maps( 'shade' ) } ]
+		} ) ) );
 		factory.textures = fakeTextures( ( url, onLoad ) => {
 
 			const texture = new THREE.Texture( { src: url } );
@@ -64,14 +62,14 @@ describe( 'building navigation', () => {
 		const result = materialForViewerSurface( factory, source, { parcel: 'p1', blueprint } );
 
 		expect( result.side ).toBe( THREE.DoubleSide );
-		expect( result.map.image.src ).toContain( '/materials/cyberpunk/shade.png' );
+		expect( result.userData.basecolorUrl ).toBe( '/materials/cyberpunk/shade.png' );
 		expect( result.map.repeat.toArray() ).toEqual( [ 1 / 1.5, 1 / 3 ] );
 		expect( result.roughness ).toBe( 1 );
 		expect( result.metalness ).toBe( 1 );
 		expect( source.roughness ).toBe( 0.64 );
 		// Nothing authored on the surface: the building's published choice wins.
-		expect( materialForViewerSurface( factory, published, { parcel: 'p1', blueprint } ).map.image.src )
-			.toContain( '/materials/cyberpunk/blind.png' );
+		expect( materialForViewerSurface( factory, published, { parcel: 'p1', blueprint } ).userData.basecolorUrl )
+			.toBe( '/materials/cyberpunk/blind.png' );
 
 	} );
 

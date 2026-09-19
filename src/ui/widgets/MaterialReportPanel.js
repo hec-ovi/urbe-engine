@@ -2,8 +2,9 @@ import { el } from '../components/dom.js';
 
 /**
  * Right panel of the building viewer: how many material keys resolved against
- * the database and the full list of unresolved ones (rendered magenta in the
- * scene). Never hides a failure.
+ * the database, the full list of unresolved ones (rendered magenta in the
+ * scene) and the variant names the catalog does not publish (drawn with the
+ * canonical variant instead). Never hides a failure.
  */
 export class MaterialReportPanel {
 
@@ -20,11 +21,12 @@ export class MaterialReportPanel {
 
 	}
 
-	update( { resolved, unresolved } ) {
+	update( { resolved, unresolved, unknownVariants } ) {
 
-		this.summary.textContent = `${resolved.length} resolved · ${unresolved.length} unresolved`;
+		this.summary.textContent = `${resolved.length} resolved · ${unresolved.length} unresolved · ${unknownVariants.length} unknown variants`;
 		this.list.replaceChildren(
-			...unresolved.map( ( key ) => el( 'li', { className: 'report-bad', textContent: key } ) )
+			...unresolved.map( ( key ) => el( 'li', { className: 'report-bad', textContent: key } ) ),
+			...unknownVariants.map( ( name ) => el( 'li', { className: 'report-bad', textContent: `${name} (canonical variant drawn)` } ) )
 		);
 
 	}

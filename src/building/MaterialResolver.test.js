@@ -32,7 +32,7 @@ describe( 'MaterialResolver', () => {
 		expect( resolver.resolve( 'cyberpunk/screen/mid' ) ).toBe( INDEX.entries[ 'cyberpunk/ad-screen/mid' ] );
 		expect( resolver.resolve( 'cyberpunk/ad-screen/mid#brand:kirin-noodles' ) ).toBe( null );
 		expect( resolver.resolve( 'nosuchtheme/wall/mid' ) ).toBe( null );
-		expect( resolver.counts ).toEqual( { resolved: 2, unresolved: 2 } );
+		expect( resolver.counts ).toEqual( { resolved: 2, unresolved: 2, unknownVariants: 0 } );
 		expect( resolver.report().unresolved ).toEqual( [
 			'cyberpunk/ad-screen/mid#brand:kirin-noodles', 'nosuchtheme/wall/mid'
 		] );

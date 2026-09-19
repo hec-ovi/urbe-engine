@@ -12,6 +12,7 @@ export class MaterialResolver {
 		this.themes = new Map();
 		this.resolved = new Set();
 		this.unresolved = new Set();
+		this.unknownVariants = new Set();
 
 	}
 
@@ -60,6 +61,23 @@ export class MaterialResolver {
 
 	}
 
+	/**
+	 * The entry variant a caller asked for, or the canonical one when the entry
+	 * does not publish that name. A shell exported against an older catalog
+	 * then draws the canonical look instead of the one it authored, so the name
+	 * it asked for goes in the report: nothing else in the run can tell that a
+	 * facade is wearing a pattern it never asked for.
+	 */
+	variantOf( entry, key, variantId ) {
+
+		const named = variantId ? entry.variants.find( ( variant ) => variant.id === variantId ) : null;
+
+		if ( variantId && ! named ) this.unknownVariants.add( `${key}#${variantId}` );
+
+		return named ?? entry.variants[ 0 ];
+
+	}
+
 	/** URL of a map file within a theme (entry map paths are theme-relative). */
 	mapUrl( theme, mapPath ) {
 
@@ -73,7 +91,11 @@ export class MaterialResolver {
 	 */
 	get counts() {
 
-		return { resolved: this.resolved.size, unresolved: this.unresolved.size };
+		return {
+			resolved: this.resolved.size,
+			unresolved: this.unresolved.size,
+			unknownVariants: this.unknownVariants.size
+		};
 
 	}
 
@@ -81,7 +103,8 @@ export class MaterialResolver {
 
 		return {
 			resolved: [ ...this.resolved ].sort(),
-			unresolved: [ ...this.unresolved ].sort()
+			unresolved: [ ...this.unresolved ].sort(),
+			unknownVariants: [ ...this.unknownVariants ].sort()
 		};
 
 	}

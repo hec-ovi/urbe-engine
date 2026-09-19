@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { PbrMaterialFactory } from './PbrMaterialFactory.js';
 import { TextureSource } from './TextureSource.js';
+import { fakeResolver } from './material-resolver.test-fixtures.js';
 
 const fakeTextures = ( load ) => new TextureSource( {
 	images: { load: ( url, onLoad, onProgress, onError ) => load( url, onLoad, onError ) },
@@ -18,17 +19,15 @@ const entry = ( emissiveStrength ) => ( {
 	} } ]
 } );
 
-const factoryFor = ( strength, profile ) => new PbrMaterialFactory( {
-	resolve: ( key ) => ( key.startsWith( 'known' ) ? entry( strength ) : null ),
-	mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
-}, profile );
+const factoryFor = ( strength, profile ) => new PbrMaterialFactory(
+	fakeResolver( ( key ) => ( key.startsWith( 'known' ) ? entry( strength ) : null ) ), profile
+);
 
 function surfaceFactory( profile ) {
 
-	return new PbrMaterialFactory( {
-		resolve: () => ( { ...entry( 1 ), physical: { roughnessFactor: 0.64, metallicFactor: 0.35 } } ),
-		mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
-	}, profile );
+	return new PbrMaterialFactory( fakeResolver(
+		() => ( { ...entry( 1 ), physical: { roughnessFactor: 0.64, metallicFactor: 0.35 } } )
+	), profile );
 
 }
 
@@ -70,13 +69,10 @@ describe( 'PbrMaterialFactory', () => {
 		expect( limited.metalnessMap ).toBeNull();
 		expect( limited.aoMap ).toBeNull();
 
-		const transmissive = new PbrMaterialFactory( {
-			resolve: ( key ) => ( {
-				...entry( 1 ),
-				physical: { ...entry( 1 ).physical, transmission: key.includes( 'glass' ) ? 0.8 : 0 }
-			} ),
-			mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
-		}, { materialMaps: [] } );
+		const transmissive = new PbrMaterialFactory( fakeResolver( ( key ) => ( {
+			...entry( 1 ),
+			physical: { ...entry( 1 ).physical, transmission: key.includes( 'glass' ) ? 0.8 : 0 }
+		} ) ), { materialMaps: [] } );
 		expect( transmissive.build( 'known/wall/mid' ).type ).toBe( 'MeshStandardMaterial' );
 		expect( transmissive.build( 'known/glass/mid' ).type ).toBe( 'MeshPhysicalMaterial' );
 		expect( transmissive.build( 'known/glass/mid' ).transmission ).toBeCloseTo( 0.8 );
@@ -85,13 +81,10 @@ describe( 'PbrMaterialFactory', () => {
 
 	it( 'repeats a variant at its own tiling when it has one, at the entry scale otherwise', () => {
 
-		const factory = new PbrMaterialFactory( {
-			resolve: () => ( { ...entry( 1 ), variants: [
-				entry( 1 ).variants[ 0 ],
-				{ id: 'blades', tiling: { worldSize: [ 0.56, 0.28 ] }, maps: { basecolor: 'b.png' } }
-			] } ),
-			mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
-		} );
+		const factory = new PbrMaterialFactory( fakeResolver( () => ( { ...entry( 1 ), variants: [
+			entry( 1 ).variants[ 0 ],
+			{ id: 'blades', tiling: { worldSize: [ 0.56, 0.28 ] }, maps: { basecolor: 'b.png' } }
+		] } ) ) );
 
 		expect( factory.build( 'known/blind/mid' ).map.repeat.toArray() ).toEqual( [ 1, 1 ] );
 		expect( factory.build( 'known/blind/mid', 'blades' ).map.repeat.toArray() ).toEqual( [ 1 / 0.56, 1 / 0.28 ] );
@@ -134,15 +127,12 @@ describe( 'PbrMaterialFactory', () => {
 		expect( unresolved.name ).toBe( 'unresolved:unknown/brand/none' );
 		expect( unresolved.color.getHex() ).toBe( 0xff00ff );
 
-		const decal = new PbrMaterialFactory( {
-			resolve: () => ( {
-				alignment: 'exact', aspect: [ 2, 1 ],
-				decal: { worldSize: [ 2, 1 ], edgeInset: 0.02, surfaceOffset: 0.002 },
-				physical: { alphaMode: 'BLEND', roughnessFactor: 0.8, metallicFactor: 0 },
-				variants: [ { id: 'runoff', maps: { basecolor: 'grime-rgba.png', opacity: 'opacity.png' } } ]
-			} ),
-			mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
-		}, { materialMaps: [ 'basecolor' ] } ).build( 'cyberpunk/window-grime-sill/poor', 'runoff' );
+		const decal = new PbrMaterialFactory( fakeResolver( () => ( {
+			alignment: 'exact', aspect: [ 2, 1 ],
+			decal: { worldSize: [ 2, 1 ], edgeInset: 0.02, surfaceOffset: 0.002 },
+			physical: { alphaMode: 'BLEND', roughnessFactor: 0.8, metallicFactor: 0 },
+			variants: [ { id: 'runoff', maps: { basecolor: 'grime-rgba.png', opacity: 'opacity.png' } } ]
+		} ) ), { materialMaps: [ 'basecolor' ] } ).build( 'cyberpunk/window-grime-sill/poor', 'runoff' );
 
 		expect( decal.transparent ).toBe( true );
 		expect( decal.depthWrite ).toBe( false );
@@ -151,6 +141,69 @@ describe( 'PbrMaterialFactory', () => {
 		expect( decal.map.repeat.toArray() ).toEqual( [ 1, 1 ] );
 		expect( decal.alphaMap ).toBeNull();
 		expect( factoryFor( 1 ).build( 'known/wall/mid' ).depthWrite ).toBe( true );
+
+	} );
+
+	/**
+	 * The catalog publishes the PNG as the master and the compressed sibling as
+	 * an option. A run that prefers the sibling and cannot decode it has a
+	 * perfectly good master sitting beside it, and dropping the map instead
+	 * leaves a facade drawing flat colour.
+	 */
+	it( 'falls back to the published master when the compressed sibling will not load', async () => {
+
+		const factory = new PbrMaterialFactory( fakeResolver( () => ( {
+			alignment: 'tile',
+			tiling: { worldSize: [ 1, 1 ] },
+			physical: { roughnessFactor: 0.64, metallicFactor: 0.35 },
+			variants: [ { id: 'native', maps: { basecolor: 'a.png' }, ktx2: { basecolor: 'a.ktx2' } } ]
+		} ) ), { materialMaps: [ 'basecolor' ] } );
+		const asked = [];
+		factory.textures = new TextureSource( {
+			images: { load: ( url, onLoad ) => {
+
+				asked.push( url );
+				queueMicrotask( () => onLoad( new THREE.Texture( { width: 4, height: 4 } ) ) );
+
+			} },
+			ktx2: {
+				load: ( url, onLoad, onProgress, onError ) => {
+
+					asked.push( url );
+					queueMicrotask( () => onError( new Error( 'no transcode target' ) ) );
+
+				},
+				detectSupport() {},
+				dispose() {}
+			}
+		} ).detect( {} );
+
+		const material = factory.build( 'known/wall/mid', 'native' );
+		await material.map[ Symbol.for( 'urbe.texture-ready' ) ];
+
+		expect( asked ).toEqual( [ '/materials/known/a.ktx2', '/materials/known/a.png' ] );
+		expect( material.map ).not.toBeNull();
+		expect( material.map.image ).toEqual( { width: 4, height: 4 } );
+
+	} );
+
+	/**
+	 * A catalog release that renames a variant leaves every shell exported
+	 * against the old name asking for something that no longer exists. The
+	 * surface draws the canonical look, which is right, and the frame says
+	 * nothing about it, which is how a facade wears the wrong pattern for a
+	 * week.
+	 */
+	it( 'draws the canonical variant for a name the catalog does not publish and names it in the report', () => {
+
+		const factory = factoryFor( 1 );
+
+		expect( factory.build( 'known/wall/mid', 'renamed' ).userData.basecolorUrl ).toBe( '/materials/known/a.png' );
+		expect( factory.resolver.counts.unknownVariants ).toBe( 1 );
+		expect( factory.resolver.report().unknownVariants ).toEqual( [ 'known/wall/mid#renamed' ] );
+
+		factory.build( 'known/wall/mid', 'lamp' );
+		expect( factory.resolver.report().unknownVariants ).toEqual( [ 'known/wall/mid#renamed' ] );
 
 	} );
 

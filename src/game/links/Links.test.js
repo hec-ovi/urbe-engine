@@ -1,13 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { PbrMaterialFactory } from '../../building/PbrMaterialFactory.js';
+import { fakeResolver } from '../../building/material-resolver.test-fixtures.js';
 import { Links, ROOFTOP_WIRE_SIDES } from './Links.js';
 
 const CONNECTIONS_FIXTURE = new URL( './links.fixture.json', import.meta.url );
 const ROOFTOP_FIXTURE = new URL( '../../../../connections/fixtures/rooftop-spans.request.json', import.meta.url );
 
 /** No theme is served under node, so every key falls back. Keys still differ. */
-const factory = new PbrMaterialFactory( { resolve: () => null, mapUrl: () => '' } );
+const factory = new PbrMaterialFactory( fakeResolver( () => null, () => '' ) );
 
 describe( 'Links', () => {
 

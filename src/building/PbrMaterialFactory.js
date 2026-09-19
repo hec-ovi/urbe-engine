@@ -154,7 +154,7 @@ export class PbrMaterialFactory {
 
 		const theme = key.split( '/' )[ 0 ];
 		const physical = entry.physical ?? {};
-		const variant = entry.variants.find( ( v ) => v.id === variantId ) ?? entry.variants[ 0 ];
+		const variant = this.resolver.variantOf( entry, key, variantId );
 		const tiled = entry.alignment === 'tile';
 		// A variant may tile at its own scale (a blade pattern lands on its pitch);
 		// the rest repeat at the entry's.
@@ -166,15 +166,20 @@ export class PbrMaterialFactory {
 		const map = ( name, srgb = false, scalarFallback ) => {
 
 			if ( ! this.materialMaps.has( name ) ) return null;
-			// The catalog publishes a compressed sibling for maps that have one.
-			const path = this.textures.choose( { image: variant.maps[ name ], ktx2: variant.ktx2?.[ name ] } );
+			// The catalog publishes a compressed sibling for maps that have one,
+			// and the PNG master stays the file it falls back to.
+			const image = variant.maps[ name ];
+			const compressed = variant.ktx2?.[ name ];
 
-			if ( ! path ) return null;
+			if ( ! image && ! compressed ) return null;
 
 			let ready;
 			const loaded = new Promise( ( resolve ) => { ready = resolve; } );
 			const texture = this.textures.load(
-				this.resolver.mapUrl( theme, path ),
+				{
+					image: image && this.resolver.mapUrl( theme, image ),
+					ktx2: compressed && this.resolver.mapUrl( theme, compressed )
+				},
 				loadedTexture => {
 
 					try {

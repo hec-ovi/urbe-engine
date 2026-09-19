@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { PbrMaterialFactory } from './PbrMaterialFactory.js';
+import { fakeResolver } from './material-resolver.test-fixtures.js';
 
 const READY = Symbol.for( 'urbe.texture-ready' );
 const PROPERTIES = [ 'map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap' ];
@@ -33,7 +34,7 @@ function fixture( profile, source = entry ) {
 		getContext( kind, options ) { this.options = options; return this.context; }
 
 	} );
-	const factory = new PbrMaterialFactory( { resolve: () => source, mapUrl: ( theme, path ) => `/${theme}/${path}` }, profile );
+	const factory = new PbrMaterialFactory( fakeResolver( () => source, ( theme, path ) => `/${theme}/${path}` ), profile );
 	return { factory, requests, canvases };
 
 }

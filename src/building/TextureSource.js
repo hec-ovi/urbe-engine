@@ -1,6 +1,10 @@
 import * as THREE from 'three/webgpu';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 
+// What a decoded file hands over. Sampling (colour space, wrapping, repeats,
+// anisotropy) belongs to whoever asked for the map, so none of it is copied.
+const DECODED = [ 'isCompressedTexture', 'image', 'mipmaps', 'format', 'type', 'internalFormat', 'minFilter', 'magFilter', 'generateMipmaps', 'premultiplyAlpha', 'unpackAlignment' ];
+
 /**
  * Loads a map by its file: `.ktx2` through the Basis transcoder, anything else
  * as an image. Compressed maps upload without decoding at a quarter of the
@@ -25,35 +29,43 @@ export class TextureSource {
 
 	}
 
-	/** The compressed path when this run can use it, else the image path. */
-	choose( { image, ktx2 } ) {
+	/**
+	 * Returns the texture at once and fills it when the file arrives, like
+	 * TextureLoader. The caller holds this placeholder from now on (a plain
+	 * texture with no image uploads as nothing, like an image still
+	 * downloading); when a file decodes, its levels move in and the texture
+	 * becomes compressed in place if that is what arrived.
+	 *
+	 * The catalog publishes the PNG as the master and the compressed sibling
+	 * beside it, to be preferred where a run can take it and fallen back on
+	 * where it cannot (../materials/CONTRACT.md). A GPU with no transcode
+	 * target, a transcoder that will not start and a compressed file that will
+	 * not decode all read the same from here, so the master is tried before the
+	 * map is given up on: otherwise a surface whose PNG is perfectly good draws
+	 * with no map at all.
+	 *
+	 * @param map `{ image, ktx2 }` URLs, either of which may be absent
+	 */
+	load( { image, ktx2 }, onLoad, onError ) {
 
-		return this.compressed && ktx2 ? ktx2 : image;
-
-	}
-
-	/** Returns the texture at once and fills it when the file arrives, like TextureLoader. */
-	load( url, onLoad, onError ) {
-
-		if ( ! url.endsWith( '.ktx2' ) ) return this.images.load( url, onLoad, undefined, onError );
-
-		// The caller holds this placeholder from now on (a plain texture with no
-		// image uploads as nothing, like an image still downloading); when the
-		// transcoder answers, its decoded levels move in and the texture becomes
-		// compressed in place.
 		const texture = new THREE.Texture();
-		this.ktx2.load( url, ( loaded ) => {
+		const adopt = ( loaded ) => {
 
-			for ( const key of [ 'isCompressedTexture', 'image', 'mipmaps', 'format', 'type', 'internalFormat', 'minFilter', 'magFilter', 'generateMipmaps', 'premultiplyAlpha', 'unpackAlignment' ] ) {
-
-				if ( loaded[ key ] !== undefined ) texture[ key ] = loaded[ key ];
-
-			}
-			texture.flipY = false;
+			for ( const key of DECODED ) if ( loaded[ key ] !== undefined ) texture[ key ] = loaded[ key ];
 			texture.needsUpdate = true;
 			onLoad( texture );
 
-		}, undefined, onError );
+		};
+		const master = ( error ) => {
+
+			if ( image ) this.images.load( image, adopt, undefined, onError );
+			else onError( error );
+
+		};
+
+		if ( this.compressed && ktx2 ) this.ktx2.load( ktx2, adopt, undefined, master );
+		else master( new Error( 'map publishes no image master' ) );
+
 		return texture;
 
 	}

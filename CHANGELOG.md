@@ -1,5 +1,7 @@
 # Changelog
 
+0.25.10: a compressed map that will not transcode falls back to its PNG master instead of leaving the surface flat, and a variant name the catalog does not publish is reported beside unresolved keys.
+
 0.25.9: a kit plan draws every mesh node it publishes, bucketed by material; a node name never decides what is drawn (corporate-sectors recovers its 44,462 triangles of services, covers, cassettes, wings and screen).
 
 0.25.8: a floor draws its own window returns beside the placement record its band shares.
