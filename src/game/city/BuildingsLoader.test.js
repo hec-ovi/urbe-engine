@@ -147,6 +147,31 @@ describe( 'building shells', () => {
 
 	} );
 
+	it( 'draws every mesh node a shell publishes, whatever the producer named it', async () => {
+
+		const key = 'cyberpunk/corporate-panel/mid';
+		const loader = { loadAsync: async () => {
+
+			const scene = new THREE.Group();
+			// One surface named the way a merged GLB names its own, and one a
+			// family signs itself with, named after the family.
+			scene.add( mesh( 'mergedpanel', key, 0 ), mesh( 'corporate40services', key, 2 ) );
+			return { scene };
+
+		} };
+		const city = await new BuildingsLoader( factory, loader ).load( new Map( [ [ 'p0', {
+			parcelId: 'p0', blueprint: boxBlueprint(), shellUrl: '/p0.glb', hasInterior: false
+		} ] ] ) );
+
+		// Both stand, in the one draw their material owns.
+		expect( city.triangles ).toBe( 2 );
+		expect( city.group.getObjectByName( `shell:${key}` ).geometry.getAttribute( 'position' ).count ).toBe( 6 );
+
+		// And a wall is a wall whatever it is called, so both hold the player up.
+		expect( city.shellColliders.get( 'p0' ).getAttribute( 'position' ).count ).toBe( 6 );
+
+	} );
+
 	it( 'takes the surface variant authored on a mesh over the one its building published', async () => {
 
 		const key = 'cyberpunk/concrete/rich';

@@ -11,14 +11,12 @@ import { isSceneryNode, shellMaterial, shellScenery, shellVariant } from './Shel
 import { BuildingModels } from './BuildingModels.js';
 import { ShellBatches } from './ShellBatches.js';
 
-// The GLB names its nodes `merged:<key>` and `interior:<key>`, but GLTFLoader
-// runs node names through PropertyBinding.sanitizeNodeName, which strips the
-// animation-path reserved characters `[].:/`. The leading word is all that
-// survives intact, so that is what the split matches on. Material names are
-// not sanitized, so the material key still arrives whole.
-const EXTERIOR = 'merged';
-// Each moving leaf is its own node, `door:<id>/leaf:N` or
-// `balcony:<id>/leaf:N`, with an authored closed-pose origin.
+// A moving leaf is the one thing a node name still answers for: each is its
+// own node, `door:<id>/leaf:N` or `balcony:<id>/leaf:N`, with an authored
+// closed-pose origin. GLTFLoader runs node names through
+// PropertyBinding.sanitizeNodeName, which strips the animation-path reserved
+// characters `[].:/`, so the leading word is all that survives to match on.
+// Material names are not sanitized, so the material key still arrives whole.
 const DOOR = 'door';
 const BALCONY = 'balcony';
 const LOAD_CONCURRENCY = 8;
@@ -213,8 +211,9 @@ export class BuildingsLoader {
 
 			}
 
-			if ( ! name.startsWith( EXTERIOR ) ) continue;
-
+			// Everything else the shell publishes, whatever the producer called
+			// it: a family signs itself with parts named after itself, and a
+			// name has never said whether a surface is part of the building.
 			const geometry = bake( node );
 
 			// Older shells merged the leaf into the door material's own mesh.
