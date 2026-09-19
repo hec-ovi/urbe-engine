@@ -8,15 +8,21 @@ import { moduleError } from './InteriorModules.js';
  * compound of cuboids: no cooking, no trimesh, and one broad-phase entry for
  * the whole floor however many walls it holds. A module that is not solid all
  * the way through says so here, because `modules.json` publishes one bounding
- * box per module and a door frame's bounding box is a sealed doorway.
+ * box per module and a door frame's bounding box is a sealed doorway. Which
+ * modules are solid at all is read off the id prefixes Interior publishes.
  *
  * Parts are in the module's own metres around its authored zero, the frame
  * `modules.json` measures `size` and `origin` in. A placement scales them,
  * turns them about +Y and puts them on the floor's elevation.
  */
 
-/** Modules the lifts own and move themselves, and decoration nothing stands on. */
-const UNCOLLIDED = new Set( [ 'lift-car', 'lift-doors', 'ceiling-led-strip', 'wall-decoration-frame' ] );
+/**
+ * Modules nothing stands on: the lifts move their own copies, and lit
+ * fixtures, exposed services and what hangs on a wall carry no collision.
+ * Everything else, wall frames and fields, slabs, ceiling bands and fields,
+ * the fitted furniture, is solid to its published bounds.
+ */
+const UNCOLLIDED = /^(lift-car|lift-doors|ceiling-spot|ceiling-cove-|ceiling-led-strip|ceiling-services|wall-screen|wall-art|wall-shelf)/;
 /** How thick Interior authors a door frame's jambs and lintel. */
 const FRAME_MEMBER = 0.08;
 /** And a window return's reveals, sill and head. */
@@ -39,7 +45,7 @@ export function floorBoxes( placements, elevation, bounds ) {
 
 	for ( const placement of placements ) {
 
-		if ( ! placement.module || UNCOLLIDED.has( placement.module ) ) continue;
+		if ( ! placement.module ) continue;
 
 		const published = bounds( placement.module );
 		if ( ! published ) continue;
@@ -57,7 +63,8 @@ export function floorBoxes( placements, elevation, bounds ) {
 }
 
 /**
- * One module's solid parts, in its own frame.
+ * One module's solid parts, in its own frame; none for a module nothing
+ * stands on.
  *
  * Every part is cut out of the bounds `modules.json` publishes, so a module
  * Interior re-authors wider, taller or deeper carries its parts with it. What
@@ -66,6 +73,8 @@ export function floorBoxes( placements, elevation, bounds ) {
  * collider: it fails the floor with a closed error.
  */
 export function partsOf( id, published ) {
+
+	if ( UNCOLLIDED.test( id ) ) return [];
 
 	const [ low, high ] = extent( id, published );
 	const parts = cut( id, low, high );
@@ -128,8 +137,8 @@ function cut( id, [ x0, y0, z0 ], [ x1, y1, z1 ] ) {
 	const treads = Number( /^stair-flight-(\d+)$/.exec( id )?.[ 1 ] );
 	if ( treads ) return stairTreads( treads, [ x0, y0, z0 ], [ x1, z1 ] );
 
-	// Everything else is solid to its published bounds: a wall segment, a slab,
-	// a ceiling tile.
+	// Everything else is solid to its published bounds: a wall piece, a slab,
+	// a ceiling field, a fitted desk.
 	return [ box( x0, y0, z0, x1, y1, z1 ) ];
 
 }

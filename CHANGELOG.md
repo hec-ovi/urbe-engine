@@ -1,5 +1,7 @@
 # Changelog
 
+0.26.12: furnished floors draw Interior's 0.32 module set, built through its library at every publish: one batch per `key#variant` slot from the factory with the module's tile-unit UVs drawn as authored, colliders by the published id prefixes (frames, fields, slabs, bands, lit joints and fitted furniture solid; spots, coves, strips, services and hung pieces not), rooms measured from every surface module at the reflectance of the slots it wears, and every cove joint at a wall's top or foot and every furniture lens reaching its room's fixtures.
+
 0.26.11: the hero character stays resident for the run (both shapes read and warmed at load, maps sized to the tier, one dressed material per shape worn again by the next person), so a fall or a conversation uploads and links nothing.
 
 0.26.10: a template deals its variations across its blocks (every block one variation, the template's own building the majority on every slot), and a floor step is offered only where the block's own lot stands the design at both counts.

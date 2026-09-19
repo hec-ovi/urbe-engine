@@ -7,8 +7,6 @@ import { validateInteriorModules } from './validators.js';
 import { INTERIOR_ENTRY } from './interiorRunner.js';
 import { share, sharedRoot } from './SharedResources.js';
 
-/** Where interior's `npm run modules -- --out out/modules` publishes the shared set. */
-export const MODULES_DIR = fileURLToPath( new URL( '../../../interior/out/modules/', import.meta.url ) );
 /** Interior's furniture catalog, with the models its `modelUri` names beside it. */
 export const PROPS_DIR = fileURLToPath( new URL( '../../../interior/src/assets/', import.meta.url ) );
 /** What the shared store calls the set every furnished building draws from. */
@@ -24,16 +22,18 @@ export const PROPS_FILE = 'catalog.json';
  * references the same pair, and the furniture with its models is 64 MB, so both
  * go into one folder in the shared store named for their own bytes and a world's
  * manifest binds those bytes. That folder is the resource base `building.json`
- * resolves `modules` and `props` against. A machine that has not published the
- * module set builds it in process.
+ * resolves `modules` and `props` against. The module set is built through
+ * interior's own library on every publish, under a second and byte-identical
+ * for identical inputs, so it is always the set the interior that furnished
+ * the buildings draws with, and the store keeps one copy per distinct set.
  */
 export class InteriorModules {
 
 	/**
-	 * @param dir the published module set; `URBE_INTERIOR_MODULES_DIR` overrides the sibling build
+	 * @param dir a prebuilt module set to publish instead of building one; `URBE_INTERIOR_MODULES_DIR` names it
 	 * @param propsDir the furniture catalog's folder; `URBE_INTERIOR_PROPS_DIR` overrides interior's
 	 */
-	constructor( dir = process.env.URBE_INTERIOR_MODULES_DIR || MODULES_DIR,
+	constructor( dir = process.env.URBE_INTERIOR_MODULES_DIR || null,
 		propsDir = process.env.URBE_INTERIOR_PROPS_DIR || PROPS_DIR ) {
 
 		this.dir = dir;
@@ -60,7 +60,7 @@ export class InteriorModules {
 
 		try {
 
-			if ( existsSync( join( this.dir, 'modules.json' ) ) ) cpSync( this.dir, staged, { recursive: true } );
+			if ( this.dir ) cpSync( this.dir, staged, { recursive: true } );
 			else await this.#build( staged );
 
 			const modules = this.#catalog( staged, MODULES_FILE );
@@ -152,7 +152,7 @@ export class InteriorModules {
 
 	}
 
-	/** The set published straight from the library, for a machine that has none on disk. */
+	/** The set published straight from the library. */
 	async #build( destination ) {
 
 		const { buildModules } = await import( INTERIOR_ENTRY );

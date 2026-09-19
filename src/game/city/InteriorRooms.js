@@ -15,10 +15,10 @@ import { kelvinColor } from '../light/Color.js';
  * which room they are standing in.
  */
 
-/** Modules that are not room surface: fixtures, furniture frames, the lift. */
-const UNMEASURED = new Set( [ 'ceiling-led-strip', 'wall-decoration-frame', 'lift-car', 'lift-doors' ] );
-/** The one module whose top face is the surface people walk on. */
-const SLAB = 'floor-tile';
+/** Modules that are not room surface: lit fixtures, what hangs on a wall, furniture, the lift. */
+const UNMEASURED = /^(lift-|ceiling-spot|ceiling-cove-|ceiling-led-strip|wall-light-line|wall-screen|wall-art|wall-shelf|fit-)/;
+/** The modules whose top face is the surface people walk on: slabs and the carpets over them. */
+const WALKED = /^floor-/;
 
 /**
  * @param floor one record from `buildingFloors`
@@ -39,10 +39,10 @@ export function roomsOf( floor, catalog ) {
 }
 
 /**
- * How much surface of which material each room holds, from the modules
+ * How much surface of what reflectance each room holds, from the modules
  * standing in it: a module's outer area at the size the placement scales it to,
- * under the catalog key it wears. That is what makes the fill light computable
- * rather than dialled.
+ * at the mean reflectance of the slots it wears. That is what makes the fill
+ * light computable rather than dialled.
  */
 function measure( floor, catalog ) {
 
@@ -50,19 +50,19 @@ function measure( floor, catalog ) {
 
 	for ( const placement of floorPlacements( floor ) ) {
 
-		if ( ! placement.module || UNMEASURED.has( placement.module ) ) continue;
+		if ( ! placement.module || UNMEASURED.test( placement.module ) ) continue;
 
 		const bounds = catalog.boundsOf( placement.module );
-		const key = catalog.slotsOf( placement.module )[ 0 ];
-		if ( ! bounds || ! key ) continue;
+		const slots = catalog.slotsOf( placement.module );
+		if ( ! bounds || ! slots.length ) continue;
 
 		const [ w, h, d ] = bounds.size.map( ( value, axis ) => value * placement.scale[ axis ] );
 		if ( ! byRoom.has( placement.room ) ) byRoom.set( placement.room, [] );
 
 		byRoom.get( placement.room ).push( {
-			key,
+			albedo: slots.reduce( ( sum, slot ) => sum + albedoOf( slot ), 0 ) / slots.length,
 			area: 2 * ( w * d + w * h + d * h ),
-			floorArea: placement.module === SLAB ? w * d : 0
+			floorArea: WALKED.test( placement.module ) ? w * d : 0
 		} );
 
 	}
@@ -95,8 +95,8 @@ export class Room {
 
 		for ( const surface of surfaces ) {
 
-			whole.add( surface.area, albedoOf( surface.key ) );
-			walked.add( surface.floorArea, albedoOf( surface.key ) );
+			whole.add( surface.area, surface.albedo );
+			walked.add( surface.floorArea, surface.albedo );
 
 		}
 
@@ -198,8 +198,11 @@ function addScaled( target, color, weight ) {
 /**
  * The fixtures of one floor, grouped by the room they were published for, in
  * the units three wants: lumens as published, kelvin resolved to a colour. A
- * published range is a useful radius; a fixture hung higher than its range
- * reaches the floor anyway, or its beam would end in mid air.
+ * published range is a useful radius; a fixture further from the surface it
+ * faces than its range reaches it anyway, or its beam would end in mid air:
+ * a downlight or the cove at a wall's foot reaches the floor, the cove at its
+ * top reaches the ceiling. A furniture lens keeps the placement id that
+ * carries it.
  */
 export function fixturesByRoom( floor ) {
 
@@ -209,14 +212,17 @@ export function fixturesByRoom( floor ) {
 
 		if ( ! byRoom.has( light.room ) ) byRoom.set( light.room, [] );
 
+		const above = light.position[ 1 ] - floor.elevation;
+
 		byRoom.get( light.room ).push( {
 			kind: light.kind,
+			...( light.furniture ? { furniture: light.furniture } : {} ),
 			position: new THREE.Vector3( light.position[ 0 ], light.position[ 1 ], light.position[ 2 ] ),
 			lumens: light.intensity,
 			color: light.color ? new THREE.Color().setRGB( ...light.color, THREE.LinearSRGBColorSpace ) : kelvinColor( light.colorTemperatureK ),
 			...( light.axis ? { axis: new THREE.Vector3().fromArray( light.axis ) } : {} ),
 			...( light.direction ? { direction: new THREE.Vector3().fromArray( light.direction ) } : {} ),
-			range: Math.max( 0.5, light.range, light.position[ 1 ] - floor.elevation ),
+			range: Math.max( 0.5, light.range, light.facing === 'up' ? floor.height - above : above ),
 			beamDeg: light.beamDeg || 100,
 			diffuse: light.diffuse ?? 0.5,
 			length: light.length || 0.6,

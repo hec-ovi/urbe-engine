@@ -5,7 +5,7 @@ Purpose: turns every fixture the world published into real light, in photometric
 ## In
 - **Exterior fixtures**: `[{ position: Vector3, lumens, color: Color, range }]`, one per emitter the world actually built (lamp lens, venue sign, entrance fixture, ad screen, transit glow). Producers are `city/StreetLamps.js`, `city/Neon.js` and `transit.glows`.
 - **Rooms**: objects carrying `{ center, area, albedo: Color, floorAlbedo: Color, flux, color, fixtures, fill: Vector4 }`. Built by `city/InteriorRooms.js` from the interior box's floor layouts; their surfaces are drawn by the shared module draws, so a room carries measurements and fixtures, not geometry. `fill` is the room's interreflected irradiance in lux and its floor reflectance, what every copy standing in the room carries; `floorFill(rooms)` is the same for a copy in no published room, the floor's rooms taken together.
-- **Room fixtures**: the published `lights` entries of a floor, as `{ kind: 'spot'|'strip'|'cove', position, lumens, color, range, beamDeg, diffuse, length, angleDeg, facing, axis?, direction? }`.
+- **Room fixtures**: the published `lights` entries of a floor, as `{ kind: 'spot'|'strip'|'cove', position, lumens, color, range, beamDeg, diffuse, length, angleDeg, facing, axis?, direction?, furniture? }`. A cove stands at a wall's top facing up or at its foot facing down as well as under the ceiling; `furniture` names the placement whose module carries the lens.
 - A quality descriptor (`look/QualityTier.js`): `roomSlots`, `roomSpots`, `roomStrips`, `clusteredLights`, `batchedLights`, `haze`.
 - The renderer, after `init()`.
 
@@ -21,7 +21,7 @@ Purpose: turns every fixture the world published into real light, in photometric
 
 ## Units
 - `lumens` is luminous flux as the interior and exterior boxes publish it. Point lights take it through `power`, rect area lights through `power` after sizing, spot lights as candela over their own cone solid angle, because `power` assumes a 120 degree cone.
-- `decay` is 2 everywhere. `distance` is the published `range`, a useful radius, raised to the fixture's height over its floor so a downlight reaches what it hangs over, and is never 0: a clustered light with a zero radius is binned nowhere and silently emits nothing.
+- `decay` is 2 everywhere. `distance` is the published `range`, a useful radius, raised to the fixture's distance from the surface it faces (the floor for a downlight or a cove at a wall's foot, the ceiling for a cove facing up) so its beam never ends in mid air, and is never 0: a clustered light with a zero radius is binned nowhere and silently emits nothing.
 - A light probe's `color * intensity` is irradiance in lux, which is what makes the room fill computable.
 
 ## Invariants

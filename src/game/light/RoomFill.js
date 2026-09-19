@@ -6,6 +6,8 @@ import { luminance } from './Color.js';
  * These are the standard interior-design figures for the surface each key
  * stands for, not measurements of the maps: what the formula needs is the
  * fraction of light a wall returns, and that is a property of the surface.
+ * A composed kind (`interior-luxury-ceiling`) is the surface its last word
+ * names.
  */
 const ALBEDO = {
 	ceiling: 0.7,
@@ -14,8 +16,9 @@ const ALBEDO = {
 	tile: 0.4,
 	concrete: 0.35,
 	metal: 0.35,
-	'floor-slab': 0.35,
+	floor: 0.35,
 	wood: 0.3,
+	timber: 0.3,
 	fabric: 0.3,
 	rubber: 0.22,
 	carpet: 0.2,
@@ -30,7 +33,9 @@ const MAX_ALBEDO = 0.8;
 /** The reflectance of one material key, from the kind in the middle of it. */
 export function albedoOf( key ) {
 
-	return ALBEDO[ key.split( '/' )[ 1 ] ] ?? DEFAULT_ALBEDO;
+	const kind = key.split( '/' )[ 1 ] ?? '';
+
+	return ALBEDO[ kind ] ?? ALBEDO[ kind.split( '-' ).pop() ] ?? DEFAULT_ALBEDO;
 
 }
 

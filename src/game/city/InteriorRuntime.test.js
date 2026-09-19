@@ -1,24 +1,27 @@
-import { floorPlacements } from './InteriorLayouts.js';
+import { buildingFloors, floorPlacements } from './InteriorLayouts.js';
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { planAssembly } from '../../../../exterior/src/index.ts';
 import { generate } from '../../../../interior/src/index.ts';
+import { InteriorModules as SharedModules } from '../../assembly/InteriorModules.js';
+import { sharedRoot } from '../../assembly/SharedResources.js';
 import { cityGltfLoader } from '../data/CityGltfLoader.js';
 import { InteriorModules } from './InteriorModules.js';
 import { InteriorProps } from './InteriorProps.js';
 import { InteriorStream } from './InteriorStream.js';
 import { partsOf } from './InteriorBoxes.js';
+import { roomsOf } from './InteriorRooms.js';
 import { Elevators } from './Elevators.js';
 import { FillChannel } from './kit/FillChannel.js';
 import { RoomLights } from '../light/RoomLights.js';
 import { Warmup } from '../look/Warmup.js';
 
-const MODULE_DIR = new URL( '../../../../interior/out/modules', import.meta.url ).pathname;
 const PROP_DIR = new URL( '../props/fixtures', import.meta.url ).pathname;
 
 const factory = {
-	build: ( key ) => new THREE.MeshStandardMaterial( { name: key } ),
+	build: ( key, variantId ) => new THREE.MeshStandardMaterial( { name: variantId ? `${key}#${variantId}` : key } ),
 	variant: ( key, tweaks ) => new THREE.MeshStandardMaterial( { name: `${key}#${tweaks.variantId ?? ''}`, emissiveIntensity: tweaks.emissiveLevel } )
 };
 /** The pool every room surface is lit through. */
@@ -32,12 +35,23 @@ async function bytesOf( url ) {
 
 }
 
-/** The published module set, read exactly as the runtime reads it from a world. */
-async function openModules() {
+/** The shared module set as the assembly publishes it into the store, which is where a world reads it from. */
+let published = null;
+function moduleDir() {
 
-	const catalog = JSON.parse( await readFile( `${MODULE_DIR}/modules.json`, 'utf8' ) );
+	published ??= new SharedModules().publish().then( ( references ) => join( sharedRoot(), references.modules.shared ) );
+
+	return published;
+
+}
+
+/** The published module set, read exactly as the runtime reads it from a world. */
+async function openModules( { materials = factory } = {} ) {
+
+	const dir = await moduleDir();
+	const catalog = JSON.parse( await readFile( `${dir}/modules.json`, 'utf8' ) );
 	const reads = [];
-	const modules = new InteriorModules( { catalog, baseUrl: MODULE_DIR, factory, roomLights, readBinary: async ( url ) => {
+	const modules = new InteriorModules( { catalog, baseUrl: dir, factory: materials, roomLights, readBinary: async ( url ) => {
 
 		reads.push( url );
 
@@ -47,7 +61,7 @@ async function openModules() {
 
 	await modules.ready;
 
-	return { catalog, modules, reads };
+	return { dir, catalog, modules, reads };
 
 }
 
@@ -147,18 +161,18 @@ const propCopies = ( model ) => [ ...model.props.props.values() ].reduce( ( tota
 
 describe( 'the city draws every furnished floor from shared modules', () => {
 
-	it( 'loads each module once, keeps one draw per surface, and cuts every part out of the published bounds', async () => {
+	it( 'loads each module once, keeps one draw per slot, and cuts every part out of the published bounds', async () => {
 
 		const { catalog, modules, reads } = await openModules();
 
 		expect( reads ).toHaveLength( catalog.modules.length );
 		expect( new Set( reads ).size ).toBe( catalog.modules.length );
 
-		// Seventeen modules wearing twenty-seven material surfaces between them,
-		// over six distinct slots: one batch each, for the whole city.
-		const slots = new Set( catalog.modules.flatMap( ( module ) => module.materialSlots ) );
-		expect( modules.batchCount ).toBe( slots.size );
-		expect( modules.batchCount ).toBe( 6 );
+		// Every slot the catalog publishes, key and variant, is one batch for the
+		// whole city, and the GLB materials name exactly those slots.
+		const slots = [ ...new Set( catalog.modules.flatMap( ( module ) => module.materialSlots ) ) ].sort();
+		expect( [ ...modules.batches.batches.keys() ].sort() ).toEqual( slots );
+		expect( modules.batchCount ).toBe( slots.length );
 
 		for ( const record of catalog.modules ) {
 
@@ -217,7 +231,7 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 		await warmup.warmAll( modules.group, { onProgress: ( done, total ) => progress.push( [ done, total ] ) } );
 
-		// Twenty-seven module surfaces, six compiles, each pinned behind its keeper.
+		// Every module surface in the city, one compile per slot, each pinned behind its keeper.
 		expect( compiled.filter( ( object ) => ! object.name.startsWith( 'keeper:' ) ) ).toHaveLength( modules.batchCount );
 		expect( progress.at( - 1 ) ).toEqual( [ modules.batchCount, modules.batchCount ] );
 		modules.dispose();
@@ -226,13 +240,15 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 	it( 'lights every module slot and furniture part through the room pool, the strip\'s diffuser at the lamp level', async () => {
 
-		const { modules } = await openModules();
+		const { catalog, modules } = await openModules();
 
 		for ( const batch of modules.batches.batches.values() ) expect( batch.material.lightsNode ).toBe( roomLights.pool.lightsNode );
-		const diffuser = modules.batches.batches.get( 'cyberpunk/light-fixture/mid' ).material;
+		const strip = catalog.modules.find( ( module ) => module.id === 'ceiling-led-strip' ).materialSlots.find( ( slot ) => slot.includes( '/light-fixture/' ) );
+		const diffuser = modules.batches.batches.get( strip ).material;
 		expect( diffuser.emissiveIntensity ).toBe( 180 );
-		expect( diffuser.name ).toBe( 'cyberpunk/light-fixture/mid#strip|room' );
-		expect( modules.batches.batches.get( 'cyberpunk/plaster/mid' ).material.emissiveIntensity ).toBe( 1 );
+		expect( diffuser.name ).toBe( `${strip}|room` );
+		const [ plain ] = catalog.modules.find( ( module ) => module.id === 'door-frame' ).materialSlots;
+		expect( modules.batches.batches.get( plain ).material.emissiveIntensity ).toBe( 1 );
 
 		const entry = { id: 'file-shelf', modelUri: 'static.glb', dimensionsMeters: [ 0.8, 0.5, 1.2 ] };
 		const props = new InteriorProps( {
@@ -268,14 +284,14 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 		// A copy stands at its placement plus the floor's own elevation, and
 		// carries the fill of the room it stands in into the batch it is drawn by.
-		const wall = floorPlacements( band.record ).find( ( one ) => one.module === 'wall-segment' );
+		const wall = floorPlacements( band.record ).find( ( one ) => one.module?.startsWith( 'wall-' ) );
 		const copy = copyOf( model, band, wall );
 		const at = new THREE.Vector3().setFromMatrixPosition( copy.matrix );
 		expect( at.y ).toBeCloseTo( wall.position[ 1 ] + 4.5, 6 );
 		const room = band.rooms.find( ( one ) => one.roomId === wall.room );
 		expect( copy.fill ).toBe( room.fill );
 		expect( room.fill.x ).toBeGreaterThan( 0 );
-		const { batch, geometryId } = model.modules.batches.entries.get( 'wall-segment' )[ 0 ];
+		const { batch, geometryId } = model.modules.batches.entries.get( wall.module )[ 0 ];
 		const instance = band.handles[ band.copies.indexOf( copy ) ].handle.instances[ 0 ];
 		expect( batch.mesh.getMatrixAt( instance, new THREE.Matrix4() ).elements[ 13 ] ).toBeCloseTo( at.y, 6 );
 		expect( texelOf( batch.mesh, instance ) ).toEqual( float32( room.fill ) );
@@ -292,6 +308,83 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		expect( model.modules.copyCount ).toBe( 0 );
 		expect( propCopies( model ) ).toBe( 0 );
 		expect( model.rooms ).toHaveLength( 0 );
+
+	} );
+
+	it( 'wears each slot as its key and variant from the factory, with the map\'s repeat taken off the module\'s tile-unit UVs', async () => {
+
+		const built = [];
+		const tiled = {
+			build: ( key, variantId ) => {
+
+				built.push( `${key}#${variantId}` );
+				const material = new THREE.MeshStandardMaterial( { name: key } );
+				material.map = new THREE.Texture();
+				material.map.repeat.set( 0.5, 0.25 );
+
+				return material;
+
+			},
+			variant: ( key, tweaks ) => tiled.build( key, tweaks.variantId )
+		};
+		const { dir, catalog, modules } = await openModules( { materials: tiled } );
+
+		expect( new Set( built ) ).toEqual( new Set( catalog.modules.flatMap( ( module ) => module.materialSlots ) ) );
+
+		// The authored UVs are tile units; the shared material repeats once per
+		// world size, so the drawn UVs are the authored ones over that repeat and
+		// the map lands exactly as often as Interior authored it.
+		const [ record ] = catalog.modules;
+		const { scene } = await cityGltfLoader().parseAsync( await bytesOf( `${dir}/${record.file}` ), '' );
+		const authored = uvExtent( meshesOf( scene ).map( ( mesh ) => mesh.geometry ) );
+		const drawn = uvExtent( modules.surfacesOf( record.id ).map( ( surface ) => surface.geometry ) );
+		expect( authored.x ).toBeGreaterThan( 0 );
+		expect( drawn.x ).toBeCloseTo( authored.x * 2, 4 );
+		expect( drawn.y ).toBeCloseTo( authored.y * 4, 4 );
+
+		modules.dispose();
+
+	} );
+
+	it( 'collides by id prefix: frames, fields, slabs, bands, lit joints and fitted furniture as their bounds, fixtures and hung pieces as nothing', () => {
+
+		const bounds = { size: [ 0.5, 0.5, 0.08 ], origin: [ 0.25, 0, 0 ] };
+
+		for ( const id of [ 'wall-panel-corner-steel', 'wall-field-ivory', 'wall-light-line-cool', 'floor-slab-marble', 'floor-carpet', 'ceiling-band-timber', 'ceiling-field-dark', 'fit-sofa' ] ) {
+
+			expect( partsOf( id, bounds ), id ).toHaveLength( 1 );
+
+		}
+		for ( const id of [ 'ceiling-spot', 'ceiling-spot-cool', 'ceiling-cove-steel', 'ceiling-led-strip', 'ceiling-services', 'wall-screen', 'wall-art', 'wall-shelf', 'lift-car', 'lift-doors' ] ) {
+
+			expect( partsOf( id, bounds ), id ).toEqual( [] );
+
+		}
+
+	} );
+
+	it( 'hands a room every light record published for it: the cove joints at a wall\'s top and foot, each reaching the surface it faces, and furniture lenses named by the placement carrying them', async () => {
+
+		const { modules } = await openModules();
+		const [ ground ] = buildingFloors( 'p1', await building() );
+		const rooms = roomsOf( ground, modules );
+		const fixtures = rooms.flatMap( ( room ) => room.fixtures );
+		const roomIds = new Set( ground.rooms.map( ( room ) => room.id ) );
+
+		expect( fixtures ).toHaveLength( ground.lights.filter( ( light ) => roomIds.has( light.room ) ).length );
+
+		const up = fixtures.find( ( fixture ) => fixture.kind === 'cove' && fixture.facing === 'up' );
+		const down = fixtures.find( ( fixture ) => fixture.kind === 'cove' && fixture.facing === 'down' );
+		expect( up.position.y ).toBeGreaterThan( down.position.y );
+		expect( up.range ).toBeGreaterThanOrEqual( ground.elevation + ground.height - up.position.y );
+		expect( down.range ).toBeGreaterThanOrEqual( down.position.y - ground.elevation );
+
+		const lens = fixtures.find( ( fixture ) => fixture.furniture );
+		const carrier = floorPlacements( ground ).find( ( one ) => one.id === lens.furniture );
+		expect( carrier.module ).toMatch( /^fit-/ );
+		expect( modules.slotsOf( carrier.module ).some( ( slot ) => slot.includes( '/light-fixture/' ) ) ).toBe( true );
+
+		modules.dispose();
 
 	} );
 
@@ -386,6 +479,37 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 	} );
 
 } );
+
+/** The furthest any vertex reaches along U and V, over these geometries. */
+function uvExtent( geometries ) {
+
+	const extent = { x: 0, y: 0 };
+
+	for ( const geometry of geometries ) {
+
+		const uv = geometry.getAttribute( 'uv' );
+
+		for ( let i = 0; i < uv.count; i ++ ) {
+
+			extent.x = Math.max( extent.x, Math.abs( uv.getX( i ) ) );
+			extent.y = Math.max( extent.y, Math.abs( uv.getY( i ) ) );
+
+		}
+
+	}
+
+	return extent;
+
+}
+
+function meshesOf( scene ) {
+
+	const meshes = [];
+	scene.traverse( ( node ) => { if ( node.isMesh ) meshes.push( node ); } );
+
+	return meshes;
+
+}
 
 /** One Y-up furniture mesh of a known size, as a loaded model arrives. */
 function boxScene( width, height, depth ) {

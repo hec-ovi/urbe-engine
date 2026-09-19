@@ -1,28 +1,30 @@
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { cityGltfLoader } from '../data/CityGltfLoader.js';
 import { mapConcurrent } from './BuildingsLoader.js';
-import { bake } from './GeometryBake.js';
+import { bake, plain } from './GeometryBake.js';
 import { shellMaterial } from './ShellSurface.js';
 import { MaterialBatches } from './kit/MaterialBatches.js';
 
 const LOAD_CONCURRENCY = 8;
-/** A catalog key is theme, kind and tier; anything else is a node name. */
+/** A catalog key is theme, kind and tier; a slot is a key and the variant it wears. */
 const KEY = /^[a-z0-9_-]+\/[a-z0-9_-]+\/[a-z0-9_-]+$/;
-/** Which diffuser a module's lit surface wears; a module not named here wears the canonical one. */
-const FIXTURE_VARIANTS = { 'ceiling-led-strip': 'strip' };
+/** The maps a slot material tiles, any of which carries the repeat it tiles at. */
+const MAPS = [ 'map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap' ];
 
 /**
  * The city's whole room vocabulary, loaded once.
  *
- * Interior publishes one shared module set for the world: a wall segment, a
- * floor and ceiling tile, a door frame, a window return, the stair flights, the
- * lift car and its doors, a ceiling strip and a picture frame. A furnished
- * floor is a table of copies of those, so what comes out here is one batch per
+ * Interior publishes one shared module set for the world, `modules.json` and
+ * the GLBs beside it: wall frame pieces, fields, slabs, ceiling bands and
+ * fields, the lit joints and spots, door frames, window returns, stair
+ * flights, the lift car and doors, and the fitted furniture. A furnished floor
+ * is a table of copies of those, so what comes out here is one batch per
  * material slot for the entire city, holding every module surface that wears
- * it: admitting a floor appends matrices to batches that already exist, and the
- * draw count follows the slots the catalog publishes rather than the modules
- * wearing them or the number of rooms standing. Every slot material is lit by
- * the room light pool, and each copy carries the fill of the room it stands in.
+ * it: admitting a floor appends matrices to batches that already exist, and
+ * the draw count follows the slots the catalog publishes rather than the
+ * modules wearing them or the number of rooms standing. Every slot material is
+ * lit by the room light pool, and each copy carries the fill of the room it
+ * stands in.
  *
  * A module file that is missing, refuses to decode or does not match the byte
  * count `modules.json` publishes fails the whole set with `E_INTERIOR_MODULE`.
@@ -80,7 +82,7 @@ export class InteriorModules {
 
 	}
 
-	/** The catalog keys one module wears. */
+	/** The slots one module wears, each a catalog key and its variant. */
 	slotsOf( id ) {
 
 		return this.modules.get( id )?.slots ?? [];
@@ -184,9 +186,10 @@ export class InteriorModules {
  * One module GLB read into what the city draws it with: its meshes baked into
  * the module's own frame and merged by material slot, one material per slot
  * built the way a shell surface is, so a lit diffuser is its own lamp, and
- * worn through the room light pool. Slot names are catalog keys, so a mesh
- * whose material name has been rewritten falls back to the slot the catalog
- * publishes at that position.
+ * worn through the room light pool. A GLB material is named by its catalog
+ * key and carries its variant in its extras, so a mesh whose material name
+ * has been rewritten falls back to the slot the catalog publishes at that
+ * position.
  */
 function readModule( scene, record, factory, roomLights ) {
 
@@ -199,30 +202,62 @@ function readModule( scene, record, factory, roomLights ) {
 
 		if ( ! node.isMesh ) return;
 
-		const name = node.material?.name ?? '';
-		const key = KEY.test( name ) ? name : record.materialSlots[ Math.min( next, record.materialSlots.length - 1 ) ];
+		const slot = slotOf( node.material ) ?? record.materialSlots[ Math.min( next, record.materialSlots.length - 1 ) ];
 
-		if ( ! slots.has( key ) ) {
+		if ( ! slots.has( slot ) ) {
 
-			slots.set( key, [] );
+			slots.set( slot, [] );
 			next ++;
 
 		}
-		slots.get( key ).push( bake( node ) );
+		slots.get( slot ).push( bake( node ) );
 
 	} );
 
-	return [ ...slots ].map( ( [ key, geometries ] ) => {
+	return [ ...slots ].map( ( [ slot, geometries ] ) => {
 
 		const geometry = geometries.length === 1 ? geometries[ 0 ] : BufferGeometryUtils.mergeGeometries( geometries, false );
 		if ( geometries.length > 1 ) for ( const part of geometries ) part.dispose();
 		geometry.computeBoundingBox();
 
-		const source = shellMaterial( factory, { key, variantId: FIXTURE_VARIANTS[ record.id ] } );
+		const [ key, variantId ] = slot.split( '#' );
+		const source = shellMaterial( factory, { key, variantId } );
+		untile( geometry, source );
 
-		return { bucket: key, geometry, source, material: roomLights.materialFor( key, source ) };
+		return { bucket: slot, geometry, source, material: roomLights.materialFor( slot, source ) };
 
 	} );
+
+}
+
+/** The slot a GLB material names: the key it is named by and the variant in its extras. */
+function slotOf( material ) {
+
+	const key = material?.name ?? '';
+	if ( ! KEY.test( key ) ) return null;
+
+	const variant = material.userData?.materialVariant;
+
+	return variant ? `${key}#${variant}` : key;
+
+}
+
+/**
+ * Module UVs are tile units: one unit per repeat of the slot's map, the way
+ * Materials publishes its tiling. The slot material is shared with every
+ * shell wearing the key, and those tile world metres, one repeat per
+ * `worldSize`, so the module's UVs are taken into that frame instead of
+ * the material being changed: one authored unit becomes one world size, and
+ * the map lands once per unit, exactly as authored.
+ */
+function untile( geometry, material ) {
+
+	const repeat = MAPS.map( ( name ) => material[ name ]?.repeat ).find( Boolean );
+	if ( ! repeat || ( repeat.x === 1 && repeat.y === 1 ) ) return;
+
+	const uv = plain( geometry, 'uv' );
+
+	for ( let i = 0; i < uv.count; i ++ ) uv.setXY( i, uv.getX( i ) / repeat.x, uv.getY( i ) / repeat.y );
 
 }
 
