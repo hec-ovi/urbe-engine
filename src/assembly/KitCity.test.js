@@ -32,7 +32,7 @@ function assembleCity( out, { modulesDir = null, options = [ '--interiors', '0' 
 	if ( modulesDir ) env.URBE_INTERIOR_MODULES_DIR = modulesDir;
 
 	const run = spawnSync( process.execPath, [ '--import', 'tsx', 'src/assembly/city-cli.js',
-		'--blueprint', BLUEPRINT, '--out', out, '--keep-shared', ...options ], { cwd: ENGINE_ROOT, encoding: 'utf8', env } );
+		'--blueprint', BLUEPRINT, '--out', out, ...options ], { cwd: ENGINE_ROOT, encoding: 'utf8', env } );
 	const reportPath = join( out, 'qa-report.json' );
 
 	return {

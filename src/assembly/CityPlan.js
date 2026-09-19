@@ -4,18 +4,13 @@ import { defaultWorkers } from './Parallelism.js';
 /** Parse the pair-based city CLI without allowing contradictory shell modes. */
 export function parseCityArgs( argv ) {
 
-	const args = { workers: defaultWorkers(), interiors: 5, parcels: null, reuseShells: false,
-		interiorParcels: null, keepShared: false };
-	// The one flag that stands alone; the rest of the line stays pairs.
-	const pairs = argv.filter( ( word ) => word !== '--keep-shared' );
+	const args = { workers: defaultWorkers(), interiors: 5, parcels: null, reuseShells: false, interiorParcels: null };
 
-	args.keepShared = pairs.length !== argv.length;
+	if ( argv.length % 2 !== 0 ) return null;
+	for ( let i = 0; i < argv.length; i += 2 ) {
 
-	if ( pairs.length % 2 !== 0 ) return null;
-	for ( let i = 0; i < pairs.length; i += 2 ) {
-
-		const key = pairs[ i ];
-		const value = pairs[ i + 1 ];
+		const key = argv[ i ];
+		const value = argv[ i + 1 ];
 
 		if ( key === '--blueprint' ) args.blueprint = value;
 		else if ( key === '--out' ) args.out = value;

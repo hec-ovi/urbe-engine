@@ -13,7 +13,7 @@ const BLUEPRINT = fileURLToPath( new URL( './native-city.fixture.json', import.m
 function cityCli( root, options ) {
 
 	return spawnSync( process.execPath, [ '--import', 'tsx', 'src/assembly/city-cli.js',
-		'--blueprint', BLUEPRINT, '--out', root, '--keep-shared', ...options ], { cwd: ENGINE_ROOT, encoding: 'utf8' } );
+		'--blueprint', BLUEPRINT, '--out', root, ...options ], { cwd: ENGINE_ROOT, encoding: 'utf8' } );
 
 }
 

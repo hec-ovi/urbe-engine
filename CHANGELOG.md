@@ -1,5 +1,7 @@
 # Changelog
 
+0.25.2: a city batch never sweeps the shared store; `npm run gc` is the one sweep, run when no batch is drawing, so batches side by side keep each other's plans.
+
 0.25.1: a material variant with its own tiling repeats at its own scale, so Materials 0.17.4 blade, comb, fixing and joint patterns land on their pitch.
 
 0.25.0: building plans load on demand, read, checked and merged into the material batches the first time a cell stands on them, so the load is bounded by the window around the player and never by the plan set; a plan that cannot be read leaves its parcels as empty lots.

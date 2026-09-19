@@ -15,13 +15,13 @@ import { loadBlueprint } from './BlueprintInput.js';
 import { KitAssembler, PlanLibrary, worldExteriorVersion } from './kit/index.js';
 import { BuildingBlueprints } from './BuildingBlueprints.js';
 import { InteriorModules } from './InteriorModules.js';
-import { collect, dirBytes, OUT_DIR, sweepLine } from './SharedResources.js';
+import { dirBytes } from './SharedResources.js';
 
 const args = parseCityArgs( process.argv.slice( 2 ) );
 
 if ( ! args ) {
 
-	console.error( 'usage: npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--interiors N] [--parcel <id,id,...>] [--reuse-shells true] [--interior-parcels <id,id,...>] [--keep-shared]' );
+	console.error( 'usage: npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--interiors N] [--parcel <id,id,...>] [--reuse-shells true] [--interior-parcels <id,id,...>]' );
 	process.exit( 2 );
 
 }
@@ -462,7 +462,6 @@ console.log( `manifest: ${join( outDir, MANIFEST_FILE )} (${manifest.parcels.len
 
 // The batch stands: every set this world names is bound by the manifest, so
 // what the store holds beyond the worlds on disk is last night's rebuilds.
-if ( ! args.keepShared ) console.log( sweepLine( collect( OUT_DIR, [ outDir ] ) ) );
 
 // The manifest is published: the city stands, whatever single lots it is missing.
 process.exit( 0 );
