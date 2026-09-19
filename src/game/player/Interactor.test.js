@@ -244,3 +244,21 @@ function continuityActor( request, mode, animation ) {
 	};
 
 }
+
+it( 'puts down an authored source that throws and keeps answering the rest of the frame', () => {
+
+	const controller = {
+		body: { feet: new THREE.Vector3() }, eye: new THREE.Vector3( 0, 1.7, 0 ), look: new THREE.Vector3( 0, 0, - 1 )
+	};
+	const broken = { candidates: vi.fn( () => { throw new Error( 'gameplay-frame does not match its schema' ); } ) };
+	const quests = { candidates: vi.fn( () => [ { kind: 'quest', aim: 1, interaction: { targetKey: 'quest:q:pickup', prompt: 'E  take drive' } } ] ) };
+	const error = vi.spyOn( console, 'error' ).mockImplementation( () => {} );
+	const interactor = new Interactor( { crowd: { within: () => [] }, doors: [], sim: {}, controller, quests, investigations: broken } );
+
+	expect( interactor.update( 1 / 60, { playerPlaces: [ { kind: 'station', id: 's1' } ] } ) ).toBe( 'E  take drive' );
+	expect( interactor.update( 1 / 60, { playerPlaces: [] } ) ).toBe( 'E  take drive' );
+	expect( broken.candidates ).toHaveBeenCalledTimes( 1 );
+	expect( error ).toHaveBeenCalledTimes( 1 );
+	error.mockRestore();
+
+} );

@@ -8,8 +8,12 @@ const DEFAULTS = {
 	startHour: LOOK.hour,
 	lightingHour: LOOK.hour,
 	timeScale: 1,
+	// Inspecting a city (`out` alone) keeps its streets empty; playing a
+	// catalog game fills them.
 	crowd: 0,
 	cars: 0,
+	playCrowd: 200,
+	playCars: 18,
 	crowdRadius: 90,
 	carRadius: 110,
 	stress: 0,
@@ -73,8 +77,8 @@ export class GameConfig {
 			startHour: int( 'hour', DEFAULTS.startHour, 0, 23 ),
 			lightingHour: DEFAULTS.lightingHour,
 			timeScale: DEFAULTS.timeScale,
-			maxCrowd: int( 'crowd', DEFAULTS.crowd, 0, 600 ),
-			maxCars: int( 'cars', DEFAULTS.cars, 0, 600 ),
+			maxCrowd: int( 'crowd', gameId ? DEFAULTS.playCrowd : DEFAULTS.crowd, 0, 600 ),
+			maxCars: int( 'cars', gameId ? DEFAULTS.playCars : DEFAULTS.cars, 0, 600 ),
 			crowdRadius: float( 'crowdRadius', DEFAULTS.crowdRadius, 1, 10000 ),
 			carRadius: float( 'carRadius', DEFAULTS.carRadius, 1, 10000 ),
 			// The simulation's researched share of the population out on the

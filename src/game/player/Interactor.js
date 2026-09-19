@@ -64,10 +64,36 @@ export class Interactor {
 			this.doors.filter( ( door ) => door.center.distanceTo( feet ) <= DOOR_RANGE ),
 			this.crowd.within( feet, TALK_RANGE ),
 			this.elevators?.panels( feet, DOOR_RANGE ) ?? [],
-			[ ...( this.quests?.candidates( questState ) ?? [] ), ...( this.investigations?.candidates( questState ) ?? [] ) ]
+			[ ...this.#candidates( 'quests', questState ), ...this.#candidates( 'investigations', questState ) ]
 		);
 
 		return this.target ? prompt( this.target ) : null;
+
+	}
+
+	/**
+	 * One authored source's targets this frame. A source that throws is
+	 * reported once and put down for the session, so a bad frame from one of
+	 * them never stops the game: the doors and the crowd still answer.
+	 */
+	#candidates( source, questState ) {
+
+		const gameplay = this[ source ];
+		if ( ! gameplay ) return [];
+
+		try {
+
+			return gameplay.candidates( questState ) ?? [];
+
+		} catch ( error ) {
+
+			this[ source ] = null;
+			const details = Array.isArray( error?.details ) ? ` (${error.details.join( '; ' )})` : '';
+			console.error( `${source} put down for this session: ${error?.message ?? error}${details}` );
+
+			return [];
+
+		}
 
 	}
 

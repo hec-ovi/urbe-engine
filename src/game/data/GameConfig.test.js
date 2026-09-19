@@ -40,6 +40,9 @@ describe( 'game URL configuration', () => {
 		expect( GameConfig.fromUrl() ).toMatchObject( {
 			maxCrowd: 0, maxCars: 0, crowdRadius: 90, carRadius: 110
 		} );
+		// Inspecting a city keeps its streets empty; a catalog game fills them.
+		window.history.replaceState( {}, '', '/?mode=game&game=canal-ward' );
+		expect( GameConfig.fromUrl() ).toMatchObject( { maxCrowd: 200, maxCars: 18 } );
 		window.history.replaceState( {}, '', '/?crowd=900&cars=900&crowdRadius=-1&carRadius=20000' );
 		expect( GameConfig.fromUrl() ).toMatchObject( {
 			maxCrowd: 600, maxCars: 600, crowdRadius: 1, carRadius: 10000

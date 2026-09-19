@@ -1,5 +1,7 @@
 # Changelog
 
+0.25.4: the investigation frame accepts transit places, an authored source that throws is put down for the session instead of stopping the game, the fixture list is rebuilt without spreading it, and a catalog game starts with 200 walkers and 18 cars while city inspection keeps empty streets.
+
 0.25.3: the shell stream reads two cells ahead and builds one at a time, a cell still reading steps aside for one whose files are here, and a plan blueprint is read once per city for every consumer.
 
 0.25.2: a city batch never sweeps the shared store; `npm run gc` is the one sweep, run when no batch is drawing, so batches side by side keep each other's plans.

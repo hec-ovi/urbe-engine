@@ -13,7 +13,7 @@
         "additionalProperties": false,
         "required": ["kind", "id"],
         "properties": {
-          "kind": { "enum": ["parcel", "district", "edge"] },
+          "kind": { "enum": ["parcel", "district", "station", "edge", "stop", "route"] },
           "id": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" }
         }
       }

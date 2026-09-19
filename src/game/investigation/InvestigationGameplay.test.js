@@ -20,6 +20,8 @@ describe( 'InvestigationGameplay live integration', () => {
 		const frame = aimedFrame();
 
 		expect( gameplay.candidates( { ...frame, playerPlaces: [ { kind: 'parcel', id: 'elsewhere' } ] } ) ).toEqual( [] );
+		// The player stands at transit places too, and a frame there is a frame.
+		expect( gameplay.candidates( { ...frame, playerPlaces: [ { kind: 'station', id: 'st-1' }, { kind: 'stop', id: 'b-2' }, { kind: 'route', id: 'r-3' } ] } ) ).toEqual( [] );
 		renderer.unobstructed.mockReturnValueOnce( false );
 		expect( gameplay.candidates( frame ) ).toEqual( [] );
 

@@ -304,13 +304,17 @@ export class GameApp {
 		);
 
 		progress.step( 'lighting the street' );
-		const stableFixtures = [ ...( this.shellScene?.pinnedGlows ?? neon.glows ), ...lamps.glows, ...this.transit.glows ];
-		const fixtures = [ ...stableFixtures, ...( this.shellScene?.streamedGlows ?? [] ) ];
+		// Tens of thousands of fixtures stand in a streamed city (every window's
+		// room lights among them), so the list is built by concatenation and
+		// refilled in place: a spread of that many arguments overflows the stack.
+		const stableFixtures = ( this.shellScene?.pinnedGlows ?? neon.glows ).concat( lamps.glows, this.transit.glows );
+		const fixtures = stableFixtures.concat( this.shellScene?.streamedGlows ?? [] );
 		this.lights = new CityLights( fixtures, this.lighting.capacity, { streamed: Boolean( spatial ) } );
 		if ( this.shellScene ) this.shellScene.onFixturesChanged = () => {
 
 			fixtures.length = 0;
-			fixtures.push( ...stableFixtures, ...this.shellScene.streamedGlows );
+			for ( const fixture of stableFixtures ) fixtures.push( fixture );
+			for ( const fixture of this.shellScene.streamedGlows ) fixtures.push( fixture );
 			this.lights.setFixtures( fixtures );
 
 		};
@@ -506,7 +510,14 @@ export class GameApp {
 		this.floorWarmup = prepareInteriorStreaming(
 			this.stream, this.renderer, this.scene, this.camera, this.look.pipeline.mrt, this.look.pipeline.renderTarget
 		);
-		if ( this.shellScene ) this.shellScene.warmup = this.floorWarmup;
+		if ( this.shellScene ) {
+
+			this.shellScene.warmup = this.floorWarmup;
+			// The city is about to be drawn, so admitting a cell from here on
+			// gives the frame its turn instead of holding it.
+			this.shellScene.slice.pace();
+
+		}
 		// Every pass counts into the load's own tally, and warms the programs it
 		// is the first to need: one the ground already built costs the street
 		// props nothing, and the city pass ends up with what neither had.
