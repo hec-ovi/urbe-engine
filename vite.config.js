@@ -94,6 +94,9 @@ export default defineConfig( ( { mode } ) => ( {
 		talkRoute( ROOT )
 	],
 	server: {
+		// Play mode owns 5175: every recorded play URL names it, and a free
+		// lower port must never move the game.
+		...( mode === 'play' ? { port: 5175, strictPort: true } : {} ),
 		forwardConsole: { unhandledErrors: true, logLevels: [ 'error', 'warn', 'info' ] },
 		// The connections library is consumed as TypeScript source from the
 		// sibling repo (../connections/CONTRACT.md is the coupling surface).
