@@ -46,6 +46,21 @@ function ring( [ x, z ], [ width, depth ] ) {
 
 }
 
+/**
+ * Four blocks of one template on one street: three lots that take a tall
+ * building and one whose envelope stops at four floors.
+ */
+function mixedHeights() {
+
+	return city( [
+		{ id: 'tall-a', type: 'offices', tier: 'rich', low: 6, high: 10, block: 'b0', at: [ 0, 0 ], size: [ 24, 32 ] },
+		{ id: 'tall-b', type: 'offices', tier: 'rich', low: 6, high: 10, block: 'b1', at: [ 200, 0 ], size: [ 24, 32 ] },
+		{ id: 'tall-c', type: 'offices', tier: 'rich', low: 7, high: 10, block: 'b2', at: [ 400, 0 ], size: [ 24, 32 ] },
+		{ id: 'squat', type: 'offices', tier: 'rich', low: 2, high: 4, block: 'b3', at: [ 600, 0 ], size: [ 24, 32 ] }
+	], { id: 'bt-mixed-heights', lots: [ { offset: [ 0, 0 ], width: 24, depth: 32 } ] } );
+
+}
+
 /** One city planned, with every parcel's building decided and no geometry drawn. */
 function plan( atlas ) {
 
@@ -121,6 +136,32 @@ describe( 'the approved families a lot may wear', () => {
 			expect( floors, parcel.id ).toBeLessThanOrEqual( parcel.envelope.maxFloors );
 
 		}
+
+	} );
+
+	it( 'stands one plan on every block of a slot, at the count the most of its lots allow', () => {
+
+		const city0 = plan( mixedHeights() );
+
+		// Three blocks of one template, three lots whose envelopes all take the
+		// slot's count: one building, drawn once.
+		expect( new Set( [ 'tall-a', 'tall-b', 'tall-c' ].map( ( id ) => city0.of( id ).id ) ).size ).toBe( 1 );
+
+	} );
+
+	it( 'drops a lot the slot count does not fit to the nearest count its own envelope allows', () => {
+
+		const city0 = plan( mixedHeights() );
+		const shared = city0.of( 'tall-a' );
+		const squat = city0.of( 'squat' );
+
+		// Its envelope stops at four floors, so it stands four and keeps the
+		// design the slot wears: the height is the only thing that moves.
+		expect( squat.floors ).toBe( 4 );
+		expect( shared.floors ).toBeGreaterThan( 4 );
+		expect( squat.family ).toBe( shared.family );
+		expect( squat.baysAcross ).toBe( shared.baysAcross );
+		expect( squat.baysDeep ).toBe( shared.baysDeep );
 
 	} );
 

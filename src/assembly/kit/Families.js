@@ -89,10 +89,11 @@ export function landmarkFamilies( sides, floors, use, { fixedFaces = false } = {
 /**
  * How tall a building standing on these parcels may be: at least every
  * envelope's minimum and at most every envelope's maximum, in whole storeys of
- * the shared pitch. Two envelopes that contradict each other leave the ceiling
- * standing, so a building is never taller than one of its lots allows, and say
- * so with `fits: false`, which is what keeps a merge off a pair of lots no one
- * building suits.
+ * the shared pitch. Envelopes that contradict each other have no count they all
+ * allow, so the band is the count the most of them accept and says so with
+ * `fits: false`, which is what keeps a merge off a pair of lots no one building
+ * suits; every lot still stands the nearest count its own envelope allows, so a
+ * building is never taller than the lot it covers.
  * @returns `{ low, high, fits }`; a high under two floors is a lot no shared
  * building fits at all.
  */
@@ -111,8 +112,47 @@ export function floorRange( parcels ) {
 	}
 
 	if ( ! Number.isFinite( high ) ) return { low, high: low, fits: true };
+	if ( high < MIN_FLOORS ) return { low: MIN_FLOORS, high, fits: false };
+	if ( low <= high ) return { low, high, fits: true };
 
-	return { low: Math.min( low, Math.max( high, MIN_FLOORS ) ), high, fits: low <= high };
+	const shared = popularFloors( parcels );
+
+	return { low: shared, high: shared, fits: false };
+
+}
+
+/**
+ * The count the most of these envelopes allow, the lowest of them when several
+ * tie. It is what a template slot whose lots want opposite heights stands: the
+ * height most of its lots take, with the rest at the nearest count of their own.
+ */
+function popularFloors( parcels ) {
+
+	const accepted = new Map();
+
+	for ( const parcel of parcels ) {
+
+		const { low, high } = floorRange( [ parcel ] );
+
+		for ( let floors = low; floors <= high; floors ++ ) accepted.set( floors, ( accepted.get( floors ) ?? 0 ) + 1 );
+
+	}
+
+	let shared = MIN_FLOORS;
+	let most = 0;
+
+	for ( const [ floors, count ] of accepted ) {
+
+		if ( count > most || ( count === most && floors < shared ) ) {
+
+			shared = floors;
+			most = count;
+
+		}
+
+	}
+
+	return shared;
 
 }
 

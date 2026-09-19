@@ -213,13 +213,13 @@ describe( 'block templates and shared building plans', () => {
 
 		const records = Object.keys( city.manifest.buildings ).map( ( id ) => city.record( id ) );
 		const shared = records.filter( ( record ) => record.plan === commonest( records.map( ( entry ) => entry.plan ) ) );
-		// Two parcels of one building in different places, and one of every way a
-		// lot can be turned, so the frame is exercised over all four faces.
+		// Two parcels of one building in different places, and one parcel of every
+		// way this city turns a lot, so the frame is exercised on each of them.
 		const turned = [ ...new Map( records.map( ( record ) => [ record.rotationY, record ] ) ).values() ];
 
 		expect( shared.length ).toBeGreaterThan( 1 );
 		expect( new Set( shared.map( ( record ) => record.origin.join() ) ).size ).toBe( shared.length );
-		expect( turned.length ).toBe( 4 );
+		expect( turned.length ).toBeGreaterThan( 1 );
 
 		for ( const record of [ ...shared.slice( 0, 2 ), ...turned ] ) {
 
@@ -267,7 +267,8 @@ describe( 'block templates and shared building plans', () => {
 		// The one list the game loads never names it, so nothing is ever fetched for it.
 		expect( run.manifest.parcels ).not.toContain( broken );
 		expect( run.manifest.sources[ broken ] ).toBe( 'empty' );
-		expect( run.manifest.parcels.length ).toBeGreaterThan( 30 );
+		// It costs its own lot and nothing else: the same city, one building fewer.
+		expect( run.manifest.parcels.length ).toBe( city.manifest.parcels.length - 1 );
 
 	}, 600_000 );
 

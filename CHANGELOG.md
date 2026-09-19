@@ -1,5 +1,7 @@
 # Changelog
 
+0.26.2: a template slot shares the floor count most of its lots allow, and a lot whose envelope excludes it takes the nearest count it does allow.
+
 0.26.1: a prop model this machine cannot serve costs only the placements that wanted it, reported as unresolved; the buildings beside them still stand and the game still starts.
 
 0.26.0: family eligibility follows each family's own published minima, a template slot shares its design while every building stands the height its own lot allows, rich lots never take the plain generator where a family fits, a plan carries the parcel's programme and venue sign, and a landmark names an approved design its lot takes (garden-taper first).
