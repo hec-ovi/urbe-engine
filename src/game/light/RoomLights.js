@@ -5,6 +5,16 @@ import { RoomFillNode } from './RoomFillNode.js';
 const RESHUFFLE_INTERVAL = 0.2;
 /** Housing depth of a published strip or cove, in metres. */
 const STRIP_WIDTH = 0.06;
+/**
+ * How far past its reach a spot's cutoff stands.
+ *
+ * Three's window term falls to zero **at** `distance`, so a downlight whose
+ * reach is its own height above the floor delivers nothing to the floor
+ * directly under it. A fixture's reach is the surface it lights, so the cutoff
+ * has to sit beyond it: at this margin the surface keeps about 95 percent of
+ * the inverse-square value, and the light still ends where the room does.
+ */
+const REACH_MARGIN = 2.5;
 const UP = new THREE.Vector3( 0, 1, 0 );
 /** Map decode promises ride on a symbol, which a material copy does not carry over. */
 const RESOURCES = Symbol.for( 'urbe.material-resources' );
@@ -226,7 +236,7 @@ function aimSpot( light, fixture ) {
 
 	light.angle = angle;
 	light.penumbra = fixture.diffuse;
-	light.distance = fixture.range;
+	light.distance = fixture.range * REACH_MARGIN;
 	light.decay = 2;
 	light.intensity = fixture.lumens / Math.max( 0.1, steradians );
 	light.target.position.copy( fixture.position ).add( fixture.direction ?? ( fixture.facing === 'up' ? UP : _down ) );

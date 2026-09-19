@@ -98,6 +98,29 @@ export class KitPlacement {
 
 	}
 
+	/**
+	 * A world rectangle in the lot frame. Buildings stand on quarter turns, so
+	 * the four corners come back as a rectangle again; any other angle gives the
+	 * rectangle that holds them, which is the safe way round for a hole.
+	 */
+	lotRect( { x0, z0, x1, z1 } ) {
+
+		const toLot = _toLot.copy( this.toWorld ).invert();
+		const us = [];
+		const vs = [];
+
+		for ( const x of [ x0, x1 ] ) for ( const z of [ z0, z1 ] ) {
+
+			const point = _corner.set( x, 0, z ).applyMatrix4( toLot );
+			us.push( point.x );
+			vs.push( point.z );
+
+		}
+
+		return { u0: Math.min( ...us ), v0: Math.min( ...vs ), u1: Math.max( ...us ), v1: Math.max( ...vs ) };
+
+	}
+
 }
 
 /** A building the city cannot place, which fails the cell it stands in. */

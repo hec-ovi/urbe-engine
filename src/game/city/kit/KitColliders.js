@@ -15,6 +15,12 @@
  * one to eight metres in front of the facade and the paving between them is
  * where the player walks.
  *
+ * The floors inside come from the interior's own modules, so a kit building
+ * carries none, with one exception: where a plan insets a storey's room
+ * envelope further than its wall is thick, the band between the two is open
+ * floor the interior does not reach and the player falls through it. That band
+ * gets a plate.
+ *
  * None of these cost a triangle.
  */
 
@@ -22,6 +28,8 @@
 const WALL = 0.5;
 /** And how thick the roof reads from above. */
 const CAP = 0.4;
+/** And a storey plate, under the walking surface it carries. */
+const PLATE = 0.2;
 /** A closed building's entrance leaf fills its own opening. */
 const LEAF = 0.12;
 
@@ -29,9 +37,11 @@ const LEAF = 0.12;
  * @param placement KitPlacement
  * @param openings every hole this building's blueprint reserves, from KitOpenings
  * @param leaf the entrance door frame when nothing is going to move it, else null
+ * @param storeys [{ elevation, rect }] in the lot frame, one per furnished
+ *   floor: the rectangle that floor's own modules fill
  * @returns [{ center: [x,y,z], halfExtents: [hx,hy,hz], rotationY }]
  */
-export function buildingBoxes( placement, { openings = null, leaf = null } = {} ) {
+export function buildingBoxes( placement, { openings = null, leaf = null, storeys = [] } = {} ) {
 
 	const boxes = [];
 	const { height, base } = placement;
@@ -48,6 +58,7 @@ export function buildingBoxes( placement, { openings = null, leaf = null } = {} 
 
 	boxes.push( ...bands( placement, base, holes ) );
 	boxes.push( ...cap( placement, top, openings?.roof ?? [] ) );
+	boxes.push( ...storeyPlates( placement, storeys ) );
 
 	if ( leaf ) {
 
@@ -167,6 +178,38 @@ function merged( holes, length, base, top ) {
 	}
 
 	return kept;
+
+}
+
+/**
+ * The open floor a furnished storey leaves around its own modules: the space
+ * inside the walls, minus the rectangle the interior fills. A storey whose
+ * envelope reaches the wall leaves nothing and gets no plate, which is every
+ * floor of most plans; the ones that inset it by a metre or two get the band.
+ */
+function storeyPlates( placement, storeys ) {
+
+	const { u0, v0, u1, v1 } = placement.footprint;
+	const inside = { u0: u0 + WALL, v0: v0 + WALL, u1: u1 - WALL, v1: v1 - WALL };
+	const boxes = [];
+
+	if ( inside.u1 - inside.u0 <= 1e-4 || inside.v1 - inside.v0 <= 1e-4 ) return boxes;
+
+	for ( const { elevation, rect } of storeys ) {
+
+		for ( const band of without( inside, rect ) ) {
+
+			boxes.push( {
+				center: placement.point( ( band.u0 + band.u1 ) / 2, elevation - PLATE / 2, ( band.v0 + band.v1 ) / 2 ).toArray(),
+				halfExtents: [ ( band.u1 - band.u0 ) / 2, PLATE / 2, ( band.v1 - band.v0 ) / 2 ],
+				rotationY: placement.rotationY
+			} );
+
+		}
+
+	}
+
+	return boxes;
 
 }
 

@@ -158,11 +158,27 @@ export class InteriorStream {
 
 	}
 
+	/**
+	 * The port the shafts stand their own cuboids through. A lift's landing
+	 * leaves and its cab floor come and go with the doors rather than with a
+	 * floor band, so they go through the same collider callbacks under ids of
+	 * their own.
+	 */
+	get liftColliders() {
+
+		return {
+			solid: ( id, boxes ) => Promise.resolve( this.onColliderBand?.( id, { boxes, positions: [] } ) ).catch( () => {} ),
+			drop: ( id ) => this.onDropBand?.( id )
+		};
+
+	}
+
 	/** A building within reach: shafts from its floor records, a band per floor. */
 	#open( entry ) {
 
 		const interior = new Interior( entry );
 
+		this.elevators?.bind?.( this.liftColliders );
 		this.elevators?.add( interior.parcelId, interior.floors, interior.group );
 		this.group.add( interior.group );
 		this.live.set( interior.parcelId, interior );

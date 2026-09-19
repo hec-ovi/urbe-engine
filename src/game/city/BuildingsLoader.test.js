@@ -62,6 +62,61 @@ describe( 'building shells', () => {
 
 	} );
 
+	it( 'keeps a furnished shell\'s storey plate as the band its own floors leave open', async () => {
+
+		const plate = () => {
+
+			const geometry = new THREE.BufferGeometry();
+			// One quad over a 10 by 10 m floor at 4 m, as two triangles.
+			geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [
+				0, 4, 0, 10, 4, 0, 10, 4, 10,
+				0, 4, 0, 10, 4, 10, 0, 4, 10
+			], 3 ) );
+			const material = new THREE.MeshBasicMaterial();
+			material.name = 'cyberpunk/floor-slab/rich';
+			const node = new THREE.Mesh( geometry, material );
+			// GLTFLoader strips the reserved characters from `floor:1/slab`.
+			node.name = 'floor1slab';
+
+			return node;
+
+		};
+		const loader = { loadAsync: async () => ( { scene: new THREE.Group().add( plate() ) } ) };
+		const interior = {
+			building: { floors: [ { index: 1, layout: 'crown', elevation: 4 } ] },
+			layouts: { crown: { floor: {
+				height: 4,
+				rooms: [ { id: 'r0', polygon: [ [ 2, 2 ], [ 8, 2 ], [ 8, 8 ], [ 2, 8 ] ] } ],
+				core: { stairs: [ { id: 'a', rect: { x: 3, z: 3, w: 2, d: 3 } } ] }
+			}, placements: [] } }
+		};
+		const entry = { parcelId: 'p0', blueprint: boxBlueprint(), shellUrl: '/p0.glb' };
+
+		const closed = await new BuildingsLoader( factory, loader ).load( new Map( [ [ 'p0', { ...entry, hasInterior: false } ] ] ) );
+		const open = await new BuildingsLoader( factory, loader ).load( new Map( [ [ 'p0', { ...entry, hasInterior: true, interior } ] ] ) );
+
+		// A closed shell keeps the whole plate, drawn and solid.
+		expect( closed.shellColliders.get( 'p0' ).getAttribute( 'position' ).count ).toBe( 6 );
+
+		// A furnished one keeps the band alone: the rectangle its own floor
+		// draws is gone from the drawing and from the collider, which is what
+		// opens the stair well the module floor publishes a cutout for.
+		const solid = open.shellColliders.get( 'p0' ).getAttribute( 'position' );
+		expect( solid.count ).toBeGreaterThan( 0 );
+
+		for ( let i = 0; i < solid.count; i ++ ) {
+
+			const inside = solid.getX( i ) > 2.01 && solid.getX( i ) < 7.99
+				&& solid.getZ( i ) > 2.01 && solid.getZ( i ) < 7.99;
+			expect( inside ).toBe( false );
+
+		}
+
+		releaseShell( closed );
+		releaseShell( open );
+
+	} );
+
 	it( 'owns every entrance, balcony and roof leaf independently by its published id', async () => {
 
 		const blueprint = movingDoorBlueprint();

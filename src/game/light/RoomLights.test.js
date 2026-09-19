@@ -65,8 +65,15 @@ describe( 'RoomLights', () => {
 		const steradians = 2 * Math.PI * ( 1 - Math.cos( THREE.MathUtils.degToRad( 100 ) / 2 ) );
 
 		expect( spot.intensity ).toBeCloseTo( 1800 / steradians, 2 );
-		expect( spot.distance ).toBe( 4 );
 		expect( spot.decay ).toBe( 2 );
+
+		// A fixture's reach is the surface it faces, and three's window term
+		// falls to zero at the cutoff, so the cutoff stands past that reach:
+		// the floor under a downlight keeps its inverse-square value instead
+		// of exactly nothing.
+		const window = ( distance ) => ( 1 - ( distance / spot.distance ) ** 4 ) ** 2;
+		expect( spot.distance ).toBeGreaterThan( 4 );
+		expect( window( 4 ) ).toBeGreaterThan( 0.9 );
 		// Unused lights in the pool go dark rather than being removed.
 		expect( lights.slots[ 0 ].spots[ 1 ].intensity ).toBe( 0 );
 		expect( lights.slots[ 1 ].spots[ 0 ].intensity ).toBe( 0 );

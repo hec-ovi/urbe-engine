@@ -8,6 +8,7 @@ import { doorFrames, doorLeafFrame } from '../DoorGeometry.js';
 import { ScenicSurface } from '../ScenicSurface.js';
 import { ShellBatches } from '../ShellBatches.js';
 import { isSceneryNode, shellMaterial, shellScenery, shellVariant } from '../ShellSurface.js';
+import { storeyIndex } from '../StoreyPlates.js';
 import { HitchLog } from '../../debug/HitchLog.js';
 
 /**
@@ -22,6 +23,10 @@ import { HitchLog } from '../../debug/HitchLog.js';
  * `leaves` are the street entrance's addressable leaves, kept apart because a
  * parcel with a real interior swings its own pair while every closed parcel
  * draws them with the rest of the shell.
+ *
+ * `plates` are the storey plates, one per floor, kept apart for the same
+ * reason: a parcel with a real interior draws its own module floors over them
+ * ([StoreyPlates.js](../StoreyPlates.js)).
  *
  * All geometry is plan-local, the frame the plan was generated in: origin at
  * the entrance-face corner, face 0 along +X, walking surface at Y=0. A leaf also
@@ -44,6 +49,7 @@ export async function readShell( scene, factory, blueprint, slice, hitches = new
 	const main = frames.find( ( frame ) => frame.role === 'main' && frame.motion.supported ) ?? null;
 	const shell = new Map();
 	const leaves = new Map();
+	const plates = new Map();
 	const meshes = [];
 
 	scene.traverse( ( node ) => {
@@ -76,6 +82,16 @@ export async function readShell( scene, factory, blueprint, slice, hitches = new
 
 			}
 
+			const storey = storeyIndex( node );
+
+			if ( storey !== null ) {
+
+				if ( ! plates.has( storey ) ) plates.set( storey, { index: storey, parts: new Map() } );
+				push( plates.get( storey ).parts, bucket, bake( node ) );
+				return;
+
+			}
+
 			if ( leaf && main && leaf.owner === main ) {
 
 				if ( ! leaves.has( leaf.index ) ) {
@@ -100,6 +116,7 @@ export async function readShell( scene, factory, blueprint, slice, hitches = new
 
 	const surfaces = await merged( shell, factory, slice, hitches );
 	const addressable = [];
+	const storeys = [];
 
 	for ( const leaf of [ ...leaves.values() ].sort( ( a, b ) => a.index - b.index ) ) {
 
@@ -107,7 +124,24 @@ export async function readShell( scene, factory, blueprint, slice, hitches = new
 
 	}
 
-	return { surfaces, leaves: addressable };
+	for ( const plate of [ ...plates.values() ].sort( ( a, b ) => a.index - b.index ) ) {
+
+		storeys.push( { index: plate.index, surfaces: await merged( plate.parts, factory, slice, hitches ) } );
+
+	}
+
+	// A closed parcel draws every plate of its plan as one copy, so they merge
+	// again across the storeys; the per-storey geometry stays for the parcels
+	// that cut their own out of it.
+	const whole = new Map();
+
+	for ( const storey of storeys ) {
+
+		for ( const { bucket, geometry } of storey.surfaces ) push( whole, bucket, geometry.clone() );
+
+	}
+
+	return { surfaces, leaves: addressable, plates: storeys, plateSurfaces: await merged( whole, factory, slice, hitches ) };
 
 }
 

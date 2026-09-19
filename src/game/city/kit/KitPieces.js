@@ -11,6 +11,8 @@ const LOAD_CONCURRENCY = 8;
 const LEAVES = ( planId ) => `${planId}/leaves`;
 /** The fake rooms behind a plan's glass, drawn unless the parcel opens a real interior. */
 const SCENERY = ( planId ) => `${planId}/scenery`;
+/** And its storey plates, which a parcel that opens one cuts its own out of. */
+const PLATES = ( planId ) => `${planId}/plates`;
 
 /**
  * The distinct buildings this city stands on, read as it needs them.
@@ -54,7 +56,7 @@ export class KitPieces {
 		this.slice = slice;
 		this.hitches = hitches;
 		this.readBinary = readBinary;
-		/** plan id -> its id, lot bays, surfaces, scenery and leaves, once it stands */
+		/** plan id -> its id, lot bays, surfaces, scenery, plates and leaves, once it stands */
 		this.plans = new Map();
 		/** plan id -> its file, read and checked, until the decode consumes it */
 		this.files = new Map();
@@ -147,6 +149,13 @@ export class KitPieces {
 
 	}
 
+	/** The storey plates, for a parcel that cuts its interior's floors out of them. */
+	plates( planId ) {
+
+		return this.plans.get( planId )?.plates ?? [];
+
+	}
+
 	/** Room for the copies a cell is about to place, one reallocation per batch. */
 	reserve( planIds ) {
 
@@ -154,7 +163,12 @@ export class KitPieces {
 
 			const plan = this.plans.get( id );
 
-			return [ id, ...( plan?.leaves.length ? [ LEAVES( id ) ] : [] ), ...( plan?.scenery.length ? [ SCENERY( id ) ] : [] ) ];
+			return [
+				id,
+				...( plan?.leaves.length ? [ LEAVES( id ) ] : [] ),
+				...( plan?.scenery.length ? [ SCENERY( id ) ] : [] ),
+				...( plan?.plateSurfaces.length ? [ PLATES( id ) ] : [] )
+			];
 
 		} ) );
 
@@ -165,7 +179,8 @@ export class KitPieces {
 	 * @param swinging true when this parcel owns its entrance leaves as moving
 	 *   pivots, so the shared copies of them stay out of the batches
 	 * @param interior true when this parcel opens a real interior behind its
-	 *   glass, so the plan's fake rooms stay out of the batches
+	 *   glass, so the plan's fake rooms and its storey plates stay out of the
+	 *   batches: the parcel draws its own cut plates instead
 	 * @returns one handle per copy, to hand back to `release`
 	 */
 	admit( planId, matrix, color, { swinging = false, interior = false } = {} ) {
@@ -176,6 +191,7 @@ export class KitPieces {
 		const handle = this.batches.admit( planId, matrix, color );
 		if ( ! swinging && plan.leaves.length ) handle.leaf = this.batches.admit( LEAVES( planId ), matrix, color );
 		if ( ! interior && plan.scenery.length ) handle.scenery = this.batches.admit( SCENERY( planId ), matrix, color );
+		if ( ! interior && plan.plateSurfaces.length ) handle.plates = this.batches.admit( PLATES( planId ), matrix, color );
 
 		return handle;
 
@@ -186,6 +202,7 @@ export class KitPieces {
 		this.batches.release( handle );
 		if ( handle.leaf ) this.batches.release( handle.leaf );
 		if ( handle.scenery ) this.batches.release( handle.scenery );
+		if ( handle.plates ) this.batches.release( handle.plates );
 
 	}
 
@@ -196,6 +213,8 @@ export class KitPieces {
 		for ( const plan of this.plans.values() ) {
 
 			for ( const { geometry } of [ ...plan.surfaces, ...plan.scenery ] ) geometry.dispose();
+			for ( const plate of plan.plates ) for ( const { geometry } of plate.surfaces ) geometry.dispose();
+			for ( const { geometry } of plan.plateSurfaces ) geometry.dispose();
 			for ( const leaf of plan.leaves ) for ( const { geometry } of leaf.surfaces ) geometry.dispose();
 
 		}
@@ -252,6 +271,7 @@ export class KitPieces {
 
 			if ( plan.leaves.length ) entries.push( { id: LEAVES( plan.id ), surfaces: plan.leaves.flatMap( ( leaf ) => leaf.surfaces ) } );
 			if ( plan.scenery.length ) entries.push( { id: SCENERY( plan.id ), surfaces: plan.scenery } );
+			if ( plan.plateSurfaces.length ) entries.push( { id: PLATES( plan.id ), surfaces: plan.plateSurfaces } );
 			this.hitches.time( 'plan batches', () => this.batches.add( entries, { castShadow: true } ) );
 			this.plans.set( planId, plan );
 

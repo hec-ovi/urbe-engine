@@ -67,15 +67,16 @@ export async function decodePlan( entry, { bytes, blueprint }, { baseUrl, factor
 
 	const shell = await readShell( scene, factory, blueprint, slice, hitches );
 	// The fake rooms behind the glass are their own entry: a parcel that opens a
-	// real interior draws the plan without them.
+	// real interior draws the plan without them. Its storey plates are the same
+	// again: that parcel cuts its own out of them.
 	const surfaces = shell.surfaces.filter( ( { bucket } ) => ! SCENIC.test( bucket ) );
 	const scenery = shell.surfaces.filter( ( { bucket } ) => SCENIC.test( bucket ) );
-	const { leaves } = shell;
+	const { leaves, plates, plateSurfaces } = shell;
 
 	return {
 		id: entry.id, baysAcross: entry.baysAcross, baysDeep: entry.baysDeep,
-		surfaces, scenery, leaves,
-		triangles: [ ...surfaces, ...scenery ].reduce( ( sum, { geometry } ) => sum + triangles( geometry ), 0 )
+		surfaces, scenery, leaves, plates, plateSurfaces,
+		triangles: [ ...surfaces, ...scenery, ...plateSurfaces ].reduce( ( sum, { geometry } ) => sum + triangles( geometry ), 0 )
 			+ leaves.reduce( ( sum, leaf ) => sum + leaf.surfaces.reduce( ( part, { geometry } ) => part + triangles( geometry ), 0 ), 0 )
 	};
 

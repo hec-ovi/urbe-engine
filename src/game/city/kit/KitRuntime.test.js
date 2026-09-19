@@ -134,12 +134,28 @@ function building( parcel, { origin = [ 100, 0, 50 ], rotationY = Math.PI / 2, p
 }
 
 /** What BuildingSource hands the loader for one kit parcel. */
-function source( record, hasInterior ) {
+function source( record, hasInterior, interior = null ) {
 
 	return [ record.parcel, {
 		parcelId: record.parcel, source: 'kit', placementsUrl: `/${record.parcel}.placements.json`,
-		hasInterior, blueprint: parcelBlueprint( blueprints.get( record.plan ), record )
+		hasInterior, interior, blueprint: parcelBlueprint( blueprints.get( record.plan ), record )
 	} ];
+
+}
+
+/**
+ * A furnished building whose floors all fill the same rectangle, as Interior
+ * publishes one: a ground layout and a crown layout every other floor shares.
+ */
+function furnished( floors, rect, height = 4.5 ) {
+
+	const polygon = [ [ rect.x0, rect.z0 ], [ rect.x1, rect.z0 ], [ rect.x1, rect.z1 ], [ rect.x0, rect.z1 ] ];
+	const layout = { floor: { height, rooms: [ { id: 'r0', kind: 'sales_floor', polygon } ], core: null }, placements: [] };
+
+	return {
+		building: { floors: floors.map( ( index ) => ( { index, layout: index ? 'crown' : 'ground', elevation: index * height } ) ) },
+		layouts: { ground: layout, crown: layout }
+	};
 
 }
 
@@ -168,6 +184,22 @@ function live( pieces ) {
 
 }
 
+/** Every vertex of a geometry, in world metres. */
+function* positionsOf( geometry ) {
+
+	const position = geometry.getAttribute( 'position' );
+
+	for ( let i = 0; i < position.count; i ++ ) yield [ position.getX( i ), position.getY( i ), position.getZ( i ) ];
+
+}
+
+/** Whether a point falls in a rectangle, grown or shrunk by a margin. */
+function inside( [ x, , z ], rect, margin ) {
+
+	return x > rect.x0 + margin && x < rect.x1 - margin && z > rect.z0 + margin && z < rect.z1 - margin;
+
+}
+
 /** Every triangle a geometry draws, indexed or not. */
 function trianglesIn( geometry ) {
 
@@ -175,12 +207,15 @@ function trianglesIn( geometry ) {
 
 }
 
-/** What one building of a plan appends: its shell, its leaves and its fake rooms. */
+/**
+ * What one building of a plan appends: its shell, its leaves, its fake rooms
+ * and its storey plates.
+ */
 function copiesOf( pieces, planId ) {
 
 	const plan = pieces.plans.get( planId );
 
-	return 1 + ( plan.leaves.length ? 1 : 0 ) + ( plan.scenery.length ? 1 : 0 );
+	return 1 + ( plan.leaves.length ? 1 : 0 ) + ( plan.scenery.length ? 1 : 0 ) + ( plan.plateSurfaces.length ? 1 : 0 );
 
 }
 
@@ -191,7 +226,7 @@ function materialsOf( pieces ) {
 
 	for ( const plan of pieces.plans.values() ) {
 
-		for ( const { bucket } of [ ...plan.surfaces, ...plan.scenery ] ) buckets.add( bucket );
+		for ( const { bucket } of [ ...plan.surfaces, ...plan.scenery, ...plan.plateSurfaces ] ) buckets.add( bucket );
 		for ( const leaf of plan.leaves ) for ( const { bucket } of leaf.surfaces ) buckets.add( bucket );
 
 	}
@@ -472,14 +507,17 @@ describe( 'the city draws every building from its shared plan', () => {
 
 		}
 
-		// A batch that runs out of room reallocates without losing a copy.
+		// A batch that runs out of room reallocates without losing a copy. One
+		// copy may put several instances in the same batch: its facade and its
+		// storey plates are separate entries wearing one material.
 		const batch = handle.parts[ 0 ].batch;
 		const first = batch.capacity;
+		const perCopy = batch.count;
 		const held = [];
 		for ( let i = 0; i < first * 2; i ++ ) held.push( pieces.admit( planId, matrix, colour ) );
 
 		expect( batch.capacity ).toBeGreaterThan( first );
-		expect( batch.count ).toBe( held.length + 1 );
+		expect( batch.count ).toBe( perCopy * ( held.length + 1 ) );
 		expect( batch.mesh.getMatrixAt( handle.instances[ 0 ], new THREE.Matrix4() ).elements )
 			.toEqual( matrix.elements.map( ( value ) => expect.closeTo( value, 4 ) ) );
 
@@ -554,7 +592,7 @@ describe( 'the city draws every building from its shared plan', () => {
 
 	} );
 
-	it( 'draws a parcel that opens a real interior without the plan\'s window scenery', async () => {
+	it( 'draws a parcel that opens a real interior without the plan\'s window scenery or its storey plates', async () => {
 
 		const { pieces } = openWorld();
 		const record = building( 'p1' );
@@ -562,17 +600,61 @@ describe( 'the city draws every building from its shared plan', () => {
 		const closed = await shown( loader, [ source( record, false ) ] );
 		const plan = pieces.plans.get( record.plan );
 		expect( plan.scenery.length ).toBeGreaterThan( 0 );
+		// The plan publishes one plate per floor, and a closed parcel draws them
+		// as one copy of the merged set.
+		expect( plan.plates.map( ( plate ) => plate.index ) ).toEqual( [ ...plan.plates.keys() ] );
+		expect( plan.plateSurfaces.length ).toBeGreaterThan( 0 );
 		const whole = pieces.batches.instanceCount;
 		closed.group.visible = false;
 		expect( pieces.batches.instanceCount ).toBe( 0 );
 
-		// An open parcel swings its own leaves and shows its real rooms, so
-		// neither the shared leaves nor the fake rooms stand in the batches.
+		// An open parcel swings its own leaves, shows its real rooms and stands
+		// its own cut plates, so none of the three stand in the shared batches.
 		const swung = plan.leaves.reduce( ( sum, leaf ) => sum + leaf.surfaces.length, 0 );
 		const open = await shown( loader, [ source( record, true ) ] );
-		expect( pieces.batches.instanceCount ).toBe( whole - plan.scenery.length - swung );
+		expect( pieces.batches.instanceCount ).toBe( whole - plan.scenery.length - plan.plateSurfaces.length - swung );
 		open.disposeModelInstances();
 		releaseShell( open );
+
+	} );
+
+	it( 'cuts a furnished parcel\'s storey plates back to the band its floors leave open', async () => {
+
+		const { pieces } = openWorld();
+		const record = building( 'p1' );
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving( [ record ] ) } );
+		// The lot is 24 by 32 and the building fills it, so a room rectangle
+		// three metres inside the outline leaves a band no interior floor
+		// reaches. The frame is turned a quarter, so the lot's U runs along -Z.
+		const inset = { x0: 103, z0: 29, x1: 129, z1: 47 };
+		const whole = { x0: 100, z0: 26, x1: 132, z1: 50 };
+		const floors = blueprints.get( record.plan ).floors.length;
+		const interior = furnished( [ ...Array( floors ).keys() ], inset );
+		interior.layouts.ground = furnished( [ 0 ], whole ).layouts.ground;
+
+		const cell = await shown( loader, [ source( record, true, interior ) ] );
+		const plates = cell.group.getObjectByName( 'kit-plates:p1' );
+
+		// The parcel stands its own plates, and nothing of them is left inside
+		// the rectangle its own floors draw.
+		expect( plates ).toBeTruthy();
+		const vertices = plates.children.flatMap( ( mesh ) => [ ...positionsOf( mesh.geometry ) ] );
+		expect( vertices.length ).toBeGreaterThan( 0 );
+		expect( vertices.some( ( point ) => inside( point, inset, 0.05 ) ) ).toBe( false );
+		// The band outside it is still drawn, which is the floor the player
+		// walks between the room and the facade.
+		expect( vertices.some( ( point ) => inside( point, whole, - 0.05 ) ) ).toBe( true );
+		// The ground floor fills its outline, so it leaves no band at all.
+		expect( vertices.some( ( point ) => Math.abs( point[ 1 ] ) < 1e-3 ) ).toBe( false );
+
+		// And that band is solid: a plate under every storey that leaves one.
+		const standing = cell.boxColliders.filter( ( box ) => Math.abs( box.halfExtents[ 1 ] - 0.1 ) < 1e-6 );
+		expect( standing.length ).toBeGreaterThan( 0 );
+		expect( standing.every( ( box ) => box.center[ 1 ] > 0 ) ).toBe( true );
+
+		cell.disposeModelInstances();
+		expect( cell.group.getObjectByName( 'kit-plates:p1' ) ).toBeFalsy();
+		releaseShell( cell );
 
 	} );
 

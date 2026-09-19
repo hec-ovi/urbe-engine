@@ -447,7 +447,7 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 		await settle( model, feetOn( 0 ) );
 
-		expect( [ ...model.solid.keys() ].sort() ).toEqual( [ 'p1:0', 'p1:1' ] );
+		expect( bands( model ) ).toEqual( [ 'p1:0', 'p1:1' ] );
 		expect( bandOf( model, 0 ).group.visible ).toBe( true );
 		expect( bandOf( model, 4 ).handles ).toBe( null );
 
@@ -465,7 +465,7 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 		await settle( model, feetOn( 3 ) );
 
-		expect( [ ...model.solid.keys() ].sort() ).toEqual( [ 'p1:2', 'p1:3', 'p1:4' ] );
+		expect( bands( model ) ).toEqual( [ 'p1:2', 'p1:3', 'p1:4' ] );
 		expect( model.dropped ).toContain( 'p1:0' );
 		// Floor 1 is two away: out of the draws, its table still read.
 		expect( bandOf( model, 1 ).handles ).toBe( null );
@@ -478,7 +478,48 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 	} );
 
+	it( 'closes the shaft: the shut landings are solid and the cab floor stands where the cab waits', async () => {
+
+		const elevators = new Elevators( factory );
+		const model = await stream( { props: false, elevators } );
+
+		await settle( model, feetOn( 0 ) );
+
+		const [ shaft ] = elevators.shafts;
+		const cab = `lift:${shaft.id}/cab`;
+		const landing = ( floor ) => `lift:${shaft.id}@${floor}`;
+
+		// The cab waits at the ground floor, so its floor is solid there and the
+		// landings built around the player are shut over the shaft.
+		expect( model.solid.get( cab ).boxes[ 0 ].center[ 1 ] ).toBeCloseTo( shaft.at - 0.075, 3 );
+		expect( model.solid.has( landing( 0 ) ) ).toBe( true );
+		expect( model.solid.get( landing( 0 ) ).boxes[ 0 ].halfExtents.every( ( half ) => half > 0 ) ).toBe( true );
+
+		// Standing at that landing opens its leaves, and only then is the
+		// doorway walked through; the cab is there to be stood on.
+		elevators.update( 2, { feet: feetOn( 0 ) } );
+		expect( model.solid.has( landing( 0 ) ) ).toBe( false );
+		expect( model.solid.has( cab ) ).toBe( true );
+
+		// Calling it away shuts that landing again and takes the cab floor with it.
+		shaft.press( { inside: false, stop: shaft.stopAt( 1 ) } );
+		elevators.update( 0.1, { feet: feetOn( 0 ), teleport: () => {} } );
+		expect( model.solid.has( landing( 0 ) ) ).toBe( true );
+		expect( model.solid.has( cab ) ).toBe( false );
+
+		model.dispose();
+		expect( model.solid.has( cab ) ).toBe( false );
+
+	} );
+
 } );
+
+/** The collider ids of the floor bands alone, in order; the lifts keep their own. */
+function bands( model ) {
+
+	return [ ...model.solid.keys() ].filter( ( id ) => ! id.startsWith( 'lift:' ) ).sort();
+
+}
 
 /** The furthest any vertex reaches along U and V, over these geometries. */
 function uvExtent( geometries ) {

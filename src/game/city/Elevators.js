@@ -19,6 +19,12 @@ const PLATE_WIDTH = 0.12;
 const PLATE_HEIGHT = 0.18;
 const PLATE_PROUD = 0.015;
 const CAB_HEIGHT = 2.4;
+/** How thick the cab floor stands, under the surface it carries. */
+const CAB_FLOOR = 0.15;
+/** And how far it keeps off the shaft walls. */
+const CAB_CLEARANCE = 0.05;
+/** A landing leaf is a few centimetres of sheet; a body needs more to stop against. */
+const LEAF_DEPTH = 0.12;
 const CAB_LIGHT_KEY = 'cyberpunk/light-fixture/mid';
 const CAB_KELVIN = 3800;
 /** Looked at directly inside a small box, so it sits above street exposure. */
@@ -38,14 +44,34 @@ const CAB_EMISSIVE = 120;
  * inside takes the next floor the shaft serves. While the cab moves it carries
  * whoever is standing in it, because the player is a character controller and
  * not something a moving collider can push.
+ *
+ * A shaft is also a hole through every floor it serves, and the published
+ * modules carry no collision of their own, so the shaft stands its own: the
+ * shut leaves of each landing close that floor's opening, and the cab floor
+ * stands wherever the cab is waiting. The cab floor goes while the cab is
+ * travelling, because then the rider is being carried rather than standing on
+ * anything, and a landing's leaves go while they are open, because that is the
+ * one moment the shaft is meant to be walked into.
  */
 export class Elevators {
 
-	constructor( factory ) {
+	/**
+	 * @param colliders `{ solid( id, boxes ), drop( id ) }`, the port the shafts
+	 *   put their own cuboids through; null leaves them drawn and not solid
+	 */
+	constructor( factory, colliders = null ) {
 
 		this.factory = factory;
+		this.colliders = colliders;
 		this.shafts = [];
 		this.byBuilding = new Map();
+
+	}
+
+	/** The port the shafts put their cuboids through, once the stream has one. */
+	bind( colliders ) {
+
+		this.colliders = colliders;
 
 	}
 
@@ -61,7 +87,7 @@ export class Elevators {
 
 			for ( const lift of floor.core?.elevators ?? [] ) {
 
-				if ( ! shafts.has( lift.id ) ) shafts.set( lift.id, new Shaft( parcelId, lift, this.factory ) );
+				if ( ! shafts.has( lift.id ) ) shafts.set( lift.id, new Shaft( parcelId, lift, this.factory, this.colliders ) );
 
 				shafts.get( lift.id ).serve( floor );
 
@@ -85,6 +111,7 @@ export class Elevators {
 
 		const list = this.byBuilding.get( parcelId ) ?? [];
 
+		for ( const shaft of list ) shaft.clear();
 		this.byBuilding.delete( parcelId );
 		this.shafts = this.shafts.filter( ( shaft ) => ! list.includes( shaft ) );
 
@@ -161,9 +188,10 @@ export class Elevators {
 /** One lift: its cab, its landings, and where the cab is right now. */
 class Shaft {
 
-	constructor( parcelId, lift, factory ) {
+	constructor( parcelId, lift, factory, colliders = null ) {
 
 		this.parcelId = parcelId;
+		this.colliders = colliders;
 		this.id = `${parcelId}:${lift.id}`;
 		// A core rect is published by its minimum corner; the shaft is its middle.
 		this.rect = lift.rect;
@@ -174,6 +202,8 @@ class Shaft {
 		this.target = 0;
 		this.cab = null;
 		this.car = null;
+		/** Where the cab floor is standing solid, or null while the cab travels. */
+		this.floorAt = null;
 
 	}
 
@@ -202,8 +232,37 @@ class Shaft {
 		group.position.set( this.centre.x, this.at, this.centre.z );
 
 		this.cab = group;
+		this.#standFloor();
 
 		return group;
+
+	}
+
+	/** The cab floor, solid where the cab is waiting. */
+	#standFloor() {
+
+		if ( this.floorAt === this.at ) return;
+
+		this.colliders?.drop( `lift:${this.id}/cab` );
+		this.floorAt = this.at;
+		this.colliders?.solid( `lift:${this.id}/cab`, [ {
+			center: [ this.centre.x, this.at - CAB_FLOOR / 2, this.centre.z ],
+			halfExtents: [
+				Math.max( 0.1, this.rect.w / 2 - CAB_CLEARANCE ),
+				CAB_FLOOR / 2,
+				Math.max( 0.1, this.rect.d / 2 - CAB_CLEARANCE )
+			],
+			rotationY: 0
+		} ] );
+
+	}
+
+	/** Nothing of this shaft stays solid once its building is let go. */
+	clear() {
+
+		this.colliders?.drop( `lift:${this.id}/cab` );
+		this.floorAt = null;
+		for ( const stop of this.stops ) stop.release();
 
 	}
 
@@ -315,7 +374,21 @@ class Shaft {
 
 		}
 
-		if ( ! this.moving ) return;
+		if ( ! this.moving ) {
+
+			this.#standFloor();
+			return;
+
+		}
+
+		// Travelling: the rider is carried, so the cab floor is not standing in
+		// the shaft while it passes the floors between.
+		if ( this.floorAt !== null ) {
+
+			this.colliders?.drop( `lift:${this.id}/cab` );
+			this.floorAt = null;
+
+		}
 
 		const step = Math.sign( this.target - this.at ) * SPEED * delta;
 		const dy = Math.abs( step ) >= Math.abs( this.target - this.at ) ? this.target - this.at : step;
@@ -346,6 +419,8 @@ class Stop {
 		this.leaves = [];
 		this.pivot = null;
 		this.panel = null;
+		/** The shut doorway, solid while the leaves are shut. */
+		this.solid = null;
 
 	}
 
@@ -386,6 +461,11 @@ class Stop {
 		const bounds = new THREE.Box3();
 		for ( const { geometry } of surfaces ) bounds.union( geometry.boundingBox ?? new THREE.Box3().setFromBufferAttribute( geometry.getAttribute( 'position' ) ) );
 		const width = bounds.max.x - bounds.min.x;
+
+		// Shut, the pair is one panel across the opening. It is a few centimetres
+		// of sheet, so the body stops against something it cannot cross in a step.
+		this.solid = doorway( placement, bounds, this.elevation );
+		this.#seal( true );
 
 		for ( const side of [ - 1, 1 ] ) {
 
@@ -431,15 +511,32 @@ class Stop {
 
 	release() {
 
+		this.#seal( false );
+		this.solid = null;
 		this.leaves = [];
 		this.pivot = null;
 		this.panel = null;
 
 	}
 
+	/** The doorway solid or open, as the leaves are. */
+	#seal( shut ) {
+
+		if ( ! this.solid ) return;
+
+		const id = `lift:${this.shaft.id}@${this.floor}`;
+
+		if ( shut ) this.shaft.colliders?.solid( id, [ this.solid ] );
+		else this.shaft.colliders?.drop( id );
+
+	}
+
 	setOpen( wanted, delta ) {
 
-		this.wanted = wanted ? 1 : 0;
+		const next = wanted ? 1 : 0;
+
+		if ( next !== this.wanted ) this.#seal( next === 0 );
+		this.wanted = next;
 
 		if ( this.open === this.wanted ) return;
 
@@ -468,6 +565,33 @@ function halfOf( geometry, side ) {
 	}
 
 	return starts;
+
+}
+
+/**
+ * The cuboid a landing's shut leaves fill, in world metres: the module's own
+ * box under its placement, given enough depth to stop a body.
+ */
+function doorway( placement, bounds, elevation ) {
+
+	const size = bounds.getSize( new THREE.Vector3() );
+	const middle = bounds.getCenter( new THREE.Vector3() ).multiply( new THREE.Vector3( ...placement.scale ) );
+
+	middle.applyAxisAngle( _up, placement.rotationY );
+
+	return {
+		center: [
+			placement.position[ 0 ] + middle.x,
+			elevation + placement.position[ 1 ] + middle.y,
+			placement.position[ 2 ] + middle.z
+		],
+		halfExtents: [
+			Math.max( 0.05, size.x * placement.scale[ 0 ] / 2 ),
+			Math.max( 0.05, size.y * placement.scale[ 1 ] / 2 ),
+			Math.max( LEAF_DEPTH, size.z * placement.scale[ 2 ] ) / 2
+		],
+		rotationY: placement.rotationY
+	};
 
 }
 

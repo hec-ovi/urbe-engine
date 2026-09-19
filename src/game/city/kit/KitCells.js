@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { FrameBudget } from '../../../app/FrameBudget.js';
 import { HitchLog } from '../../debug/HitchLog.js';
 import { readWorldDocument } from '../../data/WorldDocument.js';
@@ -7,6 +8,7 @@ import { KitPlacement, placementError } from './KitPlacement.js';
 import { KitCellInstances } from './KitCellInstances.js';
 import { signField } from './KitSigns.js';
 import { buildingBoxes } from './KitColliders.js';
+import { cutPlate, interiorStoreys } from '../StoreyPlates.js';
 import { interiorOpenings } from './KitOpenings.js';
 import { mainDoor, swingLeaves } from './KitDoors.js';
 import { tintFor } from './KitTint.js';
@@ -112,6 +114,7 @@ export class KitCellLoader {
 		const standing = [];
 		const boxColliders = [];
 		const emptyLots = new Map();
+		const cutPlates = [];
 		let triangles = 0;
 
 		try {
@@ -152,11 +155,25 @@ export class KitCellLoader {
 					const blueprint = source.blueprint ?? null;
 					const door = blueprint ? mainDoor( blueprint ) : null;
 					const swinging = Boolean( source.hasInterior && door && swingLeaves( door, placement, this.pieces ) );
+					// A furnished parcel draws its own storey plates, cut where its
+					// floors stand, so nothing is drawn twice and the wells are open.
+					const storeys = source.hasInterior ? interiorStoreys( source.parcelId, source.interior ) : new Map();
+					const plates = storeys.size || source.hasInterior
+						? this.#plates( placement, record.plan, storeys )
+						: null;
+
+					if ( plates ) {
+
+						group.add( plates.group );
+						cutPlates.push( plates );
+
+					}
 
 					triangles += this.pieces.trianglesOf( record.plan );
 					boxColliders.push( ...buildingBoxes( placement, {
 						openings: interiorOpenings( placement, blueprint ),
-						leaf: swinging ? null : door
+						leaf: swinging ? null : door,
+						storeys: [ ...storeys.values() ].map( ( { elevation, rect } ) => ( { elevation, rect: placement.lotRect( rect ) } ) )
 					} ) );
 					base.centers.set( source.parcelId, placement.center );
 					standing.push( {
@@ -203,10 +220,74 @@ export class KitCellLoader {
 			disposeModelInstances: () => {
 
 				instances.hide();
+				for ( const plates of cutPlates ) plates.dispose();
 				base.disposeModelInstances?.();
 
 			}
 		};
+
+	}
+
+	/**
+	 * One furnished parcel's storey plates: the plan's own, in world metres,
+	 * with the rectangle each floor's modules fill taken out of them. A floor
+	 * the interior does not reach, a basement under it for instance, keeps its
+	 * plate whole. One mesh per material, so a building costs one draw however
+	 * many storeys it stands.
+	 *
+	 * @param storeys Map<floorIndex, { elevation, rect }> from StoreyPlates
+	 * @returns { group, dispose } or null when the plan publishes no plates
+	 */
+	#plates( placement, planId, storeys ) {
+
+		const byMaterial = new Map();
+
+		for ( const plate of this.pieces.plates( planId ) ) {
+
+			const envelope = storeys.get( plate.index )?.rect ?? null;
+
+			for ( const { material, geometry } of plate.surfaces ) {
+
+				const world = geometry.clone().applyMatrix4( placement.toWorld );
+				const band = envelope ? cutPlate( world, envelope ) : world;
+
+				if ( band !== world ) world.dispose();
+				if ( ! band ) continue;
+				if ( ! byMaterial.has( material ) ) byMaterial.set( material, [] );
+				byMaterial.get( material ).push( band );
+
+			}
+
+		}
+
+		if ( ! byMaterial.size ) return null;
+
+		const group = new THREE.Group();
+		group.name = `kit-plates:${placement.parcelId}`;
+		const geometries = [];
+
+		for ( const [ material, parts ] of byMaterial ) {
+
+			const geometry = parts.length === 1 ? parts[ 0 ] : BufferGeometryUtils.mergeGeometries( parts, false );
+			if ( parts.length > 1 ) for ( const part of parts ) part.dispose();
+			if ( ! geometry ) continue;
+
+			const mesh = new THREE.Mesh( geometry, material );
+			mesh.name = `${group.name}:${material.name}`;
+			mesh.castShadow = true;
+			mesh.receiveShadow = true;
+			group.add( mesh );
+			geometries.push( geometry );
+
+		}
+
+		return { group, dispose: () => {
+
+			group.removeFromParent();
+			group.clear();
+			for ( const geometry of geometries ) geometry.dispose();
+
+		} };
 
 	}
 

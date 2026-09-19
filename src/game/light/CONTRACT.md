@@ -21,7 +21,7 @@ Purpose: turns every fixture the world published into real light, in photometric
 
 ## Units
 - `lumens` is luminous flux as the interior and exterior boxes publish it. Point lights take it through `power`, rect area lights through `power` after sizing, spot lights as candela over their own cone solid angle, because `power` assumes a 120 degree cone.
-- `decay` is 2 everywhere. `distance` is the published `range`, a useful radius, raised to the fixture's distance from the surface it faces (the floor for a downlight or a cove at a wall's foot, the ceiling for a cove facing up) so its beam never ends in mid air, and is never 0: a clustered light with a zero radius is binned nowhere and silently emits nothing.
+- `decay` is 2 everywhere. A fixture's `range` is a useful radius, raised to its distance from the surface it faces (the floor for a downlight or a cove at a wall's foot, the ceiling for a cove facing up) so its beam never ends in mid air, and is never 0: a clustered light with a zero radius is binned nowhere and silently emits nothing. A room spot's `distance` stands 2.5 times that reach, because Three's window term falls to zero **at** the cutoff: a downlight whose cutoff were its own height would deliver exactly nothing to the floor under it, and at this margin that floor keeps about 95 percent of its inverse-square value while the light still ends inside the room. Exterior fixtures keep `distance` at their published range, which is a reach and not a surface.
 - A light probe's `color * intensity` is irradiance in lux, which is what makes the room fill computable.
 
 ## Invariants

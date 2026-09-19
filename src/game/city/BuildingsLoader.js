@@ -9,6 +9,7 @@ import { takeTriangles, centroidAt } from './Triangles.js';
 import { bucketFor, splitBucket } from './Variety.js';
 import { ScenicSurface } from './ScenicSurface.js';
 import { isSceneryNode, shellMaterial, shellScenery, shellVariant } from './ShellSurface.js';
+import { cutPlate, interiorStoreys, storeyIndex } from './StoreyPlates.js';
 import { BuildingModels } from './BuildingModels.js';
 import { ShellBatches } from './ShellBatches.js';
 
@@ -150,7 +151,7 @@ export class BuildingsLoader {
 
 	}
 
-	async #loadOne( { parcelId, blueprint, shellUrl, hasInterior = true } ) {
+	async #loadOne( { parcelId, blueprint, shellUrl, interior = null, hasInterior = true } ) {
 
 		const gltf = await this.loader.loadAsync( shellUrl );
 		const scenic = new ScenicSurface( blueprint );
@@ -164,6 +165,9 @@ export class BuildingsLoader {
 		} ) );
 		const doorParts = new Map( doors.map( ( door ) => [ door, [] ] ) );
 		const exteriorFlat = [];
+		// What this building's own floors cover, so its storey plates keep the
+		// band around them and give up the rest.
+		const storeys = hasInterior ? interiorStoreys( parcelId, interior ) : new Map();
 
 		const meshes = [];
 		gltf.scene.traverse( ( node ) => { if ( node.isMesh ) meshes.push( node ); } );
@@ -174,7 +178,7 @@ export class BuildingsLoader {
 			// is the most expensive of them and every branch leaves the loop.
 			await this.slice.step();
 
-			this.hitches.time( 'shell surface', () => this.#readNode( node, { frames, doors, doorParts, exterior, exteriorFlat, scenic, hasInterior, blueprint } ) );
+			this.hitches.time( 'shell surface', () => this.#readNode( node, { frames, doors, doorParts, exterior, exteriorFlat, scenic, hasInterior, storeys, blueprint } ) );
 
 		}
 
@@ -197,8 +201,8 @@ export class BuildingsLoader {
 
 	}
 
-	/** One mesh node of a shell into the surface, leaf or scenery it stands as. */
-	#readNode( node, { frames, doors, doorParts, exterior, exteriorFlat, scenic, hasInterior, blueprint } ) {
+	/** One mesh node of a shell into the surface, leaf, plate or scenery it stands as. */
+	#readNode( node, { frames, doors, doorParts, exterior, exteriorFlat, scenic, hasInterior, storeys, blueprint } ) {
 
 		const name = node.name ?? '';
 		const key = node.material?.name ?? '';
@@ -212,6 +216,26 @@ export class BuildingsLoader {
 
 			const geometry = shellScenery( node, this.factory, { key, hasInterior, scenic } );
 			if ( geometry ) push( exterior, surface, geometry );
+			return;
+
+		}
+
+		const storey = storeyIndex( node );
+
+		if ( storey !== null ) {
+
+			// A furnished floor draws and stands its own slab, so the plate keeps
+			// only the band outside it: coplanar with it they flicker, and over
+			// its stair and lift wells the plate seals them both ways.
+			const whole = bake( node );
+			const envelope = storeys.get( storey )?.rect ?? null;
+			const plate = envelope ? cutPlate( whole, envelope ) : whole;
+
+			if ( plate !== whole ) whole.dispose();
+			if ( ! plate ) return;
+
+			push( exterior, surface, plate );
+			if ( isColliderMaterial( key ) ) exteriorFlat.push( positionsOnly( plate ) );
 			return;
 
 		}
