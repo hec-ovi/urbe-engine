@@ -91,7 +91,9 @@ describe( 'authored building model instances', () => {
 		failed.transport.loadAsync.mockImplementationOnce( failed.transport.loadAsync.getMockImplementation() ).mockRejectedValueOnce( new Error( 'missing model' ) );
 		const partly = await failed.loader.load( failed.buildings );
 		expect( partly.unresolvedModelInstances ).toEqual( [ expect.objectContaining( { parcelId: 'p', index: 1, kind: 'shrub', error: expect.stringContaining( 'E_PROP_ASSET' ) } ) ] );
-		expect( partly.group.children.some( ( node ) => node.name.startsWith( 'building-model:' ) ) ).toBe( true );
+		let standing = false;
+		partly.group.traverse( ( node ) => { if ( node.name.startsWith( 'building-model:' ) ) standing = true; } );
+		expect( standing ).toBe( true );
 		releaseShell( partly );
 		const shellFailed = fixture( [ tree() ] );
 		shellFailed.transport.loadAsync.mockImplementationOnce( shellFailed.transport.loadAsync.getMockImplementation() ).mockRejectedValueOnce( new Error( 'shell unavailable' ) );
