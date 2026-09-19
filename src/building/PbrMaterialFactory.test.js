@@ -83,6 +83,21 @@ describe( 'PbrMaterialFactory', () => {
 
 	} );
 
+	it( 'repeats a variant at its own tiling when it has one, at the entry scale otherwise', () => {
+
+		const factory = new PbrMaterialFactory( {
+			resolve: () => ( { ...entry( 1 ), variants: [
+				entry( 1 ).variants[ 0 ],
+				{ id: 'blades', tiling: { worldSize: [ 0.56, 0.28 ] }, maps: { basecolor: 'b.png' } }
+			] } ),
+			mapUrl: ( theme, path ) => `/materials/${theme}/${path}`
+		} );
+
+		expect( factory.build( 'known/blind/mid' ).map.repeat.toArray() ).toEqual( [ 1, 1 ] );
+		expect( factory.build( 'known/blind/mid', 'blades' ).map.repeat.toArray() ).toEqual( [ 1 / 0.56, 1 / 0.28 ] );
+
+	} );
+
 	it( 'settles readiness on a failed map load and falls back to catalog scalars, including cached tuned copies', async () => {
 
 		const factory = surfaceFactory( { materialMaps: [ 'roughness', 'metallic' ] } );

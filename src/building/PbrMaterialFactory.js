@@ -156,8 +156,11 @@ export class PbrMaterialFactory {
 		const physical = entry.physical ?? {};
 		const variant = entry.variants.find( ( v ) => v.id === variantId ) ?? entry.variants[ 0 ];
 		const tiled = entry.alignment === 'tile';
+		// A variant may tile at its own scale (a blade pattern lands on its pitch);
+		// the rest repeat at the entry's.
+		const tiling = variant.tiling ?? entry.tiling;
 		const repeat = tiled
-			? [ 1 / entry.tiling.worldSize[ 0 ], 1 / entry.tiling.worldSize[ 1 ] ]
+			? [ 1 / tiling.worldSize[ 0 ], 1 / tiling.worldSize[ 1 ] ]
 			: [ 1, 1 ];
 
 		const map = ( name, srgb = false, scalarFallback ) => {
