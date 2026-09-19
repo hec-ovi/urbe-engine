@@ -79,9 +79,9 @@ export class QuestSession {
 
 			try {
 
-				// The cast comes back with the questline as it is played: every
-				// step moved onto the parcel its own character works at, so the
-				// place the player is sent to is where that person really is.
+				// Where a step happens is settled when the questline is built,
+				// so the bundle's own parcels are the ones played; the cast
+				// only says who stands there.
 				const result = resolver.cast( definition, timeMin, { taken, characters } );
 				if ( result.blocked ) {
 
@@ -89,8 +89,7 @@ export class QuestSession {
 					continue;
 
 				}
-				const played = result.definition ?? definition;
-				entries.push( { definition: played, side, runtime: new QuestlineRuntime( played, result.cast, sim ) } );
+				entries.push( { definition, side, runtime: new QuestlineRuntime( definition, result.cast, sim ) } );
 				for ( const npcId of Object.values( result.cast ) ) taken.add( npcId );
 
 			} catch ( error ) {
