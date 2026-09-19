@@ -8,6 +8,7 @@ import { Physics } from '../physics/Physics.js';
 const FEET = new THREE.Vector3( 0, 0, 0 );
 const EYE = new THREE.Vector3( 0, 1.7, 0 );
 const PARCEL = { kind: 'parcel', id: 'p9' };
+const CHEST = 1.3;
 
 describe( 'live quest target projection', () => {
 
@@ -73,34 +74,42 @@ describe( 'live quest target projection', () => {
 
 	} );
 
-	it( 'rings the parcel a goto or talk objective points at and stands the talk cast there while the step is active', () => {
+	it( 'rings every questline\'s open place, stands an open talk cast there and marks their heads', () => {
 
-		const objective = ( kind, actorIds = [], availability = { available: true } ) => ( {
-			targetKey: `quest:q:${kind}`, questId: 'q', stepId: kind, kind, title: 'q', text: 'Go there',
-			place: PARCEL, actorIds, venue: null, window: null, availability,
-			guidance: { questId: 'q', stepId: kind, place: PARCEL, destination: PARCEL }
+		const place = ( questId, kind, actorIds = [], availability = { available: true } ) => ( {
+			targetKey: `quest:${questId}:${kind}`, questId, stepId: kind, kind, title: questId, text: 'Go there',
+			place: PARCEL, actorIds, venue: null, window: null, availability
 		} );
-		const actions = { targets: () => [], objective: vi.fn( () => objective( 'goto' ) ), perform: vi.fn() };
-		const crowd = { questMember: () => null, castMember: vi.fn( () => null ) };
+		const member = { position: new THREE.Vector3( 1, 0, - 2 ) };
+		const actions = { targets: () => [], objective: vi.fn( () => null ), places: vi.fn( () => [] ), perform: vi.fn() };
+		const crowd = { questMember: () => null, castMember: vi.fn( () => member ) };
 		const gameplay = setup( actions, { crowd } );
 
+		// A side job's goto is marked even though the main quest is the objective.
+		actions.places.mockReturnValue( [ place( 'q_main', 'goto' ), place( 'q_side', 'goto' ) ] );
 		gameplay.candidates( frame( pointLook( 0, 0.2, - 2 ) ) );
-		const ring = gameplay.staticMarks.get( 'quest:q:goto' );
-		expect( ring.position.toArray() ).toEqual( [ 0, 0.03, - 2 ] );
+		expect( gameplay.staticMarks.get( 'quest:q_main:goto' ).position.toArray() ).toEqual( [ 0, 0.03, - 2 ] );
+		expect( gameplay.staticMarks.get( 'quest:q_side:goto' ).position.toArray() ).toEqual( [ 0, 0.03, - 2 ] );
 		expect( crowd.castMember ).not.toHaveBeenCalled();
 
-		// Outside the hour the step names the place is marked but nobody is stood there yet.
-		actions.objective.mockReturnValue( objective( 'talk', [ 'npc-denna' ], { available: false, reason: 'outside_window' } ) );
+		// A step the runtime has closed keeps its mark and stands nobody there.
+		actions.places.mockReturnValue( [ place( 'q_side', 'talk', [ 'npc-denna' ], { available: false, reason: 'outside_window' } ) ] );
 		gameplay.candidates( frame( pointLook( 0, 0.2, - 2 ) ) );
-		expect( gameplay.staticMarks.has( 'quest:q:goto' ) ).toBe( false );
-		expect( gameplay.staticMarks.get( 'quest:q:talk' ).userData ).toEqual( { targetKey: 'quest:q:talk', kind: 'talk' } );
+		expect( gameplay.staticMarks.has( 'quest:q_main:goto' ) ).toBe( false );
+		expect( gameplay.staticMarks.get( 'quest:q_side:talk' ).userData ).toEqual( { targetKey: 'quest:q_side:talk', kind: 'talk' } );
 		expect( crowd.castMember ).not.toHaveBeenCalled();
+		expect( gameplay.actorMarks.has( 'quest:q_side:talk' ) ).toBe( false );
 
-		actions.objective.mockReturnValue( objective( 'talk', [ 'npc-denna' ], { available: false, reason: 'off_duty' } ) );
+		// Open, so the person stands there and wears a mark over their head.
+		actions.places.mockReturnValue( [ place( 'q_side', 'talk', [ 'npc-denna' ] ) ] );
 		gameplay.candidates( frame( pointLook( 0, 0.2, - 2 ) ) );
 		expect( crowd.castMember ).toHaveBeenCalledWith( 'npc-denna', 600, expect.objectContaining( { x: 0, z: 0 } ), 'p9' );
+		const [ mark ] = gameplay.actorMarks.get( 'quest:q_side:talk' );
+		expect( mark.position.toArray() ).toEqual( [ 1, 2.15, - 2 ] );
+		expect( mark.material.depthTest ).toBe( false );
+		expect( mark.renderOrder ).toBeGreaterThan( 1 );
 
-		actions.objective.mockReturnValue( null );
+		actions.places.mockReturnValue( [] );
 		gameplay.candidates( frame( pointLook( 0, 0.2, - 2 ) ) );
 		expect( gameplay.group.children ).toHaveLength( 0 );
 
@@ -117,6 +126,15 @@ describe( 'live quest target projection', () => {
 		expect( candidate.kind ).toBe( 'quest' );
 		gameplay.perform( perform( candidate ) );
 		expect( actions.perform ).toHaveBeenCalledWith( expect.objectContaining( { action: 'inspect', playerPlaces: [ place ] } ) );
+
+		// A marked area is scored by the crosshair, so looking at the mark beats
+		// whoever is walking past it instead of tying with them.
+		const marked = fakeActions( questTarget( 'work', [ action( 'work', 'Start work' ) ] ) );
+		const standing = setup( marked );
+		const away = standing.candidates( frame( pointLook( 0, 1.7, 2 ) ) )[ 0 ];
+		const looking = standing.candidates( frame( pointLook( 0, CHEST, - 2 ) ) )[ 0 ];
+		expect( away.aim ).toBeCloseTo( 0.76 );
+		expect( looking.aim ).toBeGreaterThan( away.aim );
 
 	} );
 
@@ -271,6 +289,7 @@ function fakeActions( target ) {
 	return {
 		targets: vi.fn( () => [ target ] ),
 		objective: vi.fn( () => null ),
+		places: vi.fn( () => [] ),
 		perform: vi.fn( ( request ) => result( request.action ) )
 	};
 

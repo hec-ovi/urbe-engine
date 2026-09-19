@@ -1,4 +1,6 @@
 import { CastResolver, QuestlineRuntime, StepStamp, StoryVenues } from '../../../../quests/dist/runtime.js';
+import { castIds } from './QuestCast.js';
+import { stepLine, stepView } from './QuestStepView.js';
 
 /**
  * The questlines of a world, running against the game's own simulation
@@ -8,11 +10,16 @@ import { CastResolver, QuestlineRuntime, StepStamp, StoryVenues } from '../../..
  */
 export class QuestSession {
 
-	/** @param entries [{ definition, runtime }] */
-	constructor( entries, sim ) {
+	/**
+	 * @param entries [{ definition, side, runtime }]
+	 * @param blocked questlines the cast could not fill, kept for the log with
+	 * their reason: a job that vanishes from the menu reads as a broken game.
+	 */
+	constructor( entries, sim, blocked = [] ) {
 
 		this.entries = entries;
 		this.sim = sim;
+		this.blocked = blocked;
 
 	}
 
@@ -31,6 +38,7 @@ export class QuestSession {
 	static create( definitions, sim, timeMin, persisted = [], { world = null, types = null } = {} ) {
 
 		const entries = [];
+		const blocked = [];
 		const stamp = world ? new StepStamp( world ) : null;
 		const resolver = world && types ? new CastResolver( sim, new StoryVenues( world, types ) ) : new CastResolver( sim );
 		// One person plays one character across the whole set, restored casts included.
@@ -38,8 +46,10 @@ export class QuestSession {
 		const characters = new Map();
 		const saved = new Map( persisted.map( ( entry ) => [ entry.id, entry ] ) );
 
-		for ( const carried of definitions ) {
+		for ( const [ index, carried ] of definitions.entries() ) {
 
+			// The main questline is written first; everything after it is a side job.
+			const side = index > 0;
 			const definition = stamp ? stamp.definition( carried ) : carried;
 			const previous = saved.get( definition.id );
 
@@ -51,7 +61,7 @@ export class QuestSession {
 					if ( snapshot ) {
 
 						entries.push( {
-							definition,
+							definition, side,
 							runtime: QuestlineRuntime.restore( definition, snapshot.cast, sim, snapshot.state )
 						} );
 						for ( const npcId of Object.values( snapshot.cast ) ) taken.add( npcId );
@@ -69,18 +79,29 @@ export class QuestSession {
 
 			try {
 
-				const cast = resolver.resolve( definition, timeMin, { taken, characters } );
-				entries.push( { definition, runtime: new QuestlineRuntime( definition, cast, sim ) } );
+				// The cast comes back with the questline as it is played: every
+				// step moved onto the parcel its own character works at, so the
+				// place the player is sent to is where that person really is.
+				const result = resolver.cast( definition, timeMin, { taken, characters } );
+				if ( result.blocked ) {
+
+					this.#block( blocked, definition, castBlockReason( result.blocked ) );
+					continue;
+
+				}
+				const played = result.definition ?? definition;
+				entries.push( { definition: played, side, runtime: new QuestlineRuntime( played, result.cast, sim ) } );
+				for ( const npcId of Object.values( result.cast ) ) taken.add( npcId );
 
 			} catch ( error ) {
 
-				console.warn( `questline ${definition.id} not cast: ${this.#message( error )}` );
+				this.#block( blocked, definition, this.#message( error ) );
 
 			}
 
 		}
 
-		return new QuestSession( entries, sim );
+		return new QuestSession( entries, sim, blocked );
 
 	}
 
@@ -96,8 +117,8 @@ export class QuestSession {
 		}
 
 		const roleIds = new Set( definition.roles.map( ( role ) => role.roleId ) );
-		const castIds = Object.keys( snapshot.cast ?? {} );
-		if ( castIds.length !== roleIds.size || castIds.some( ( id ) => ! roleIds.has( id ) ) ) {
+		const castRoleIds = Object.keys( snapshot.cast ?? {} );
+		if ( castRoleIds.length !== roleIds.size || castRoleIds.some( ( id ) => ! roleIds.has( id ) ) ) {
 
 			throw new Error( 'cast roles no longer match the definition' );
 
@@ -162,6 +183,14 @@ export class QuestSession {
 
 	}
 
+	/** A questline nobody can play stays in the log with what stopped it. */
+	static #block( blocked, definition, reason ) {
+
+		console.warn( `questline ${definition.id} not cast: ${reason}` );
+		blocked.push( { id: definition.id, title: definition.title, text: definition.premise, reason } );
+
+	}
+
 	static #message( error ) {
 
 		return error instanceof Error ? error.message : String( error );
@@ -177,6 +206,14 @@ export class QuestSession {
 	hasCastNpc( npcId ) {
 
 		return this.entries.some( ( { runtime } ) => Object.values( runtime.cast ).includes( npcId ) );
+
+	}
+
+	/** Whether an open step still wants this person where the player found them. */
+	holdsCast( npcId ) {
+
+		return this.entries.some( ( { runtime } ) => runtime.activeSteps()
+			.some( ( step ) => castIds( step.target, runtime ).includes( npcId ) ) );
 
 	}
 
@@ -218,9 +255,17 @@ export class QuestSession {
 
 			result = runtime.advance( event, timeMin );
 
-		} catch {
+		} catch ( error ) {
 
-			// No active step takes the event, or it is gated off right now.
+			// Every questline sees every event, so a step that does not take this
+			// one is the ordinary case and stays quiet. A step that would have
+			// taken it and is gated off right now is worth saying out loud.
+			if ( error?.code === 'E_UNAVAILABLE' ) {
+
+				const open = runtime.activeSteps().map( ( step ) => step.stepId ).join( ', ' );
+				console.warn( `questline ${definition.id} refused ${event.kind} at step ${open}: ${QuestSession.#message( error )}` );
+
+			}
 			return null;
 
 		}
@@ -242,21 +287,22 @@ export class QuestSession {
 	}
 
 	/** Game-descriptor progress records, including the complete restorable runtime. */
-	persistenceView() {
+	persistenceView( timeMin = 0 ) {
 
-		return this.entries.map( ( { definition, runtime } ) => {
+		return this.entries.map( ( entry ) => {
 
+			const { definition, runtime } = entry;
 			const state = runtime.serialize();
 			const status = runtime.status();
 			const objective = status === 'completed'
 				? runtime.ending()?.epilogue ?? definition.premise
-				: runtime.activeSteps().map( ( step ) => this.#hint( step, runtime ) ).join( ' / ' ) || definition.premise;
+				: runtime.activeSteps().map( ( step ) => stepLine( stepView( { step, runtime, sim: this.sim, timeMin } ) ) ).join( ' / ' ) || definition.premise;
 
 			return {
 				id: definition.id,
 				title: definition.title,
 				objective,
-				state: status === 'completed' ? 'completed' : status === 'stalled' ? 'failed' : 'active',
+				state: this.#state( entry, status, state, 'completed' ),
 				totalSteps: definition.steps.length,
 				completedSteps: [ ...state.completedStepIds ],
 				runtime: { cast: { ...runtime.cast }, state }
@@ -302,11 +348,15 @@ export class QuestSession {
 
 	}
 
-	/** The quests panel's list: every questline with its done and open steps, open ones naming who to find. */
-	view() {
+	/**
+	 * The quest log: every questline with its done and open steps. Each step is
+	 * the one projection the HUD objective reads too, so the two never disagree.
+	 */
+	view( timeMin = 0 ) {
 
-		return this.entries.map( ( { definition, runtime } ) => {
+		return this.entries.map( ( entry ) => {
 
+			const { definition, runtime } = entry;
 			const state = runtime.serialize();
 			const status = runtime.status();
 			const steps = new Map( definition.steps.map( ( step ) => [ step.stepId, step ] ) );
@@ -315,26 +365,33 @@ export class QuestSession {
 				id: definition.id,
 				title: definition.title,
 				text: status === 'completed' ? runtime.ending()?.epilogue ?? definition.premise : definition.premise,
-				state: status === 'completed' ? 'done' : status === 'stalled' ? 'failed' : 'active',
+				state: this.#state( entry, status, state, 'done' ),
 				steps: [
-					...state.completedStepIds.map( ( id ) => ( { text: steps.get( id ).narrative.playerHint, done: true } ) ),
-					...runtime.activeSteps().map( ( step ) => ( { text: this.#hint( step, runtime ), done: false } ) )
+					...state.completedStepIds.map( ( id ) => stepView( { step: steps.get( id ), runtime, done: true } ) ),
+					...runtime.activeSteps().map( ( step ) => stepView( { step, runtime, sim: this.sim, timeMin } ) )
 				]
 			};
 
-		} );
+		} ).concat( this.blocked.map( ( entry ) => ( {
+			id: entry.id, title: entry.title, text: entry.text, state: 'blocked', note: entry.reason, steps: []
+		} ) ) );
 
 	}
 
-	/** The open step's hint, with the person it is about named when the target is somebody. */
-	#hint( step, runtime ) {
+	/** A side job nobody has started yet is on offer, not under way. */
+	#state( { side }, status, state, completedWord ) {
 
-		const roleId = step.target.roleId ?? step.target.fromRoleId;
-		if ( ! roleId ) return step.narrative.playerHint;
-
-		const npc = this.sim.getNPC( runtime.cast[ roleId ] );
-		return `${step.narrative.playerHint} (${npc.name.given} ${npc.name.family})`;
+		if ( status === 'completed' ) return completedWord;
+		if ( status === 'stalled' ) return 'failed';
+		return side && state.completedStepIds.length === 0 ? 'available' : 'active';
 
 	}
+
+}
+
+/** The quests box's cast block, in one line for the log. */
+function castBlockReason( block ) {
+
+	return `role ${block.roleId} (${block.npcType}) cannot be cast: ${block.reason}`;
 
 }

@@ -605,32 +605,57 @@ export class Crowd {
 	}
 
 	/**
-	 * The body of one cast NPC the story wants at a parcel now, whatever the
-	 * rota says: the person a talk step sends the player to stands where the
-	 * player is sent, at the interior's counter, else a work spot, else just
-	 * inside the door. A body this npcId already owns is that body, wherever
-	 * the simulation walked it, so nobody stands in two places.
+	 * The body of one cast NPC the story wants at a parcel now: the person a
+	 * talk step sends the player to stands where the player is sent, at the
+	 * interior's counter, else a work spot, else just inside the door. A body
+	 * this npcId already owns counts only while it is at that parcel; one that
+	 * has walked off is put back through continuity, so the next schedule
+	 * projection keeps it there instead of taking it home.
 	 */
 	castMember( npcId, timeMin, player, parcelId ) {
 
-		const owned = [ ...this.members.values() ].find( ( member ) => member.npcId === npcId ) ?? null;
-		if ( owned ) return owned.fallen ? null : owned;
+		const at = { kind: 'parcel', id: parcelId };
+		const owned = this.memberForNpc( npcId );
+		if ( owned?.fallen ) return null;
+		if ( owned && memberAt( owned, at ) ) return owned;
 
 		const place = this.places.get( parcelId );
 		if ( ! place || place.inside.distanceTo( player ) > PARCEL_RADIUS ) return null;
 
 		const npc = this.sim.getNPC( npcId );
-		const adopted = this.#adoptQuestHandle( npc, timeMin, { kind: 'parcel', id: parcelId } );
-		if ( adopted ) return adopted;
-		if ( ! this.#makeRoomForQuest( player ) ) return null;
+		if ( ! owned ) {
+
+			const adopted = this.#adoptQuestHandle( npc, timeMin, at );
+			if ( adopted ) return adopted;
+
+		}
 
 		const seed = npc.appearanceSeed ?? hash( `quest:${npcId}` );
+		const spot = this.#anchorAt( place, this.#spotsAt( parcelId ), POSTS, seed );
+
+		if ( this.continuity ) {
+
+			try {
+
+				return this.syncActor( this.continuity.hold( {
+					npcId, timeMin, place: at, position: spot.position.toArray(), heading: spot.heading
+				} ), player );
+
+			} catch {
+
+				return null;
+
+			}
+
+		}
+
+		if ( ! this.#makeRoomForQuest( player ) ) return null;
 		const member = this.#add( {
 			...this.#base( { crowdId: `quest:${npcId}`, type: npc.type, gender: npc.gender, activity: 'working' }, seed ),
 			stationary: true,
 			quest: true,
 			parcelId,
-			...this.#anchorAt( place, this.#spotsAt( parcelId ), POSTS, seed )
+			...spot
 		} );
 		identify( member, npc );
 
@@ -638,6 +663,11 @@ export class Crowd {
 
 	}
 
+	/**
+	 * An anonymous body already standing where the quest wants its person, when
+	 * the simulation says that handle is that person. Only the match is named:
+	 * a passer-by the search walked past keeps being a passer-by.
+	 */
 	#adoptQuestHandle( npc, timeMin, place ) {
 
 		const candidates = [ ...this.members.values() ]
@@ -648,9 +678,9 @@ export class Crowd {
 		for ( const member of candidates ) {
 
 			const instance = this.sim.instantiate( member.crowdId, timeMin );
-			if ( ! instance ) continue;
+			if ( instance?.npcId !== npc.npcId ) continue;
 			identify( member, instance );
-			if ( instance.npcId === npc.npcId ) return member;
+			return member;
 
 		}
 

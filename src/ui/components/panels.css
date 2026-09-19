@@ -183,6 +183,16 @@
 	border-color: var(--ui-accent-dim);
 }
 
+.badge.is-available {
+	color: #e4c46a;
+	border-color: #6d5a2a;
+}
+
+.badge.is-blocked {
+	color: var(--ui-bad);
+	border-color: #6b3a3a;
+}
+
 .badge.is-done {
 	color: #7be0a0;
 	border-color: #2f6f47;
@@ -191,6 +201,12 @@
 .badge.is-failed {
 	color: var(--ui-bad);
 	border-color: #6b3a3a;
+}
+
+.detail-note {
+	margin: 0 0 8px;
+	font: 11px var(--ui-mono);
+	color: #e4c46a;
 }
 
 .detail-title {

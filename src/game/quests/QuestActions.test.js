@@ -130,6 +130,38 @@ describe( 'QuestActions target contract', () => {
 
 	} );
 
+	it( 'follows the questline the player picked and marks every questline\'s open place', () => {
+
+		const goto = ( id, parcelId ) => oneStepQuest( id, { kind: 'goto', place: { parcelId } }, { hint: `Go to ${parcelId}.` } );
+		const talk = oneStepQuest( 'q_side_talk', { kind: 'talk', roleId: 'giver', atParcelId: 'p_work' }, { hint: 'Hear the giver out.' } );
+		const { actions } = setup( [ goto( 'q_main', 'p_pickup' ), goto( 'q_side', 'p_drop' ), talk ] );
+
+		// No pick: the main story, which is written first.
+		expect( actions.objective( { timeMin: 600 } ) ).toMatchObject( { questId: 'q_main', place: { kind: 'parcel', id: 'p_pickup' } } );
+		expect( actions.objective( { timeMin: 600, questId: 'q_side' } ) ).toMatchObject( {
+			questId: 'q_side', text: 'Go to p_drop.', place: { kind: 'parcel', id: 'p_drop' },
+			guidance: { questId: 'q_side', stepId: 'step', place: { kind: 'parcel', id: 'p_drop' }, destination: { kind: 'parcel', id: 'p_drop' } }
+		} );
+		// A questline with nothing open falls back to the first that has.
+		expect( actions.objective( { timeMin: 600, questId: 'q_unknown' } ).questId ).toBe( 'q_main' );
+
+		// Every open place stands on its own, whichever one is being followed.
+		expect( actions.places( { timeMin: 600 } ) ).toMatchObject( [
+			{ questId: 'q_main', kind: 'goto', place: { kind: 'parcel', id: 'p_pickup' }, actorIds: [] },
+			{ questId: 'q_side', kind: 'goto', place: { kind: 'parcel', id: 'p_drop' }, actorIds: [] },
+			{ questId: 'q_side_talk', kind: 'talk', place: { kind: 'parcel', id: 'p_work' }, actorIds: [ 'n_giver' ] }
+		] );
+
+	} );
+
+	it( 'says why a closed target is closed, with the hour when its step names one', () => {
+
+		expect( QuestActions.unavailableMessage( 'off_duty' ) ).toBe( 'The person required by this objective is not at the target location now.' );
+		expect( QuestActions.unavailableMessage( 'outside_window', { label: 'the slow hour', days: [ 0 ], startMin: 1080, endMin: 1380 } ) )
+			.toBe( 'This objective is open at another hour. Open 18:00 to 23:00.' );
+
+	} );
+
 } );
 
 describe( 'QuestActions interaction state', () => {

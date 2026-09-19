@@ -16,6 +16,8 @@ import unloadRequest from './schema/unload-request.schema.json';
 import actorStateOrNull from './schema/actor-state-or-null.schema.json';
 import conversationStart from './schema/conversation-start.schema.json';
 import conversationStop from './schema/conversation-stop.schema.json';
+import holdStart from './schema/hold-start.schema.json';
+import holdRelease from './schema/hold-release.schema.json';
 import visibleUpdate from './schema/visible-update.schema.json';
 import actorStates from './schema/actor-states.schema.json';
 import { NpcContinuityError } from './NpcContinuityError.js';
@@ -23,7 +25,7 @@ import { NpcContinuityError } from './NpcContinuityError.js';
 const SCHEMAS = [
 	values, appearanceRequest, unloadRequest, followStart, leadStart, followerCarry, followUpdate, followStop,
 	crouchStart, crouchStop,
-	conversationStart, conversationStop,
+	conversationStart, conversationStop, holdStart, holdRelease,
 	visibleUpdate, actorState, actorStateOrNull, actorStates, continuitySave, places, movementNetwork
 ];
 

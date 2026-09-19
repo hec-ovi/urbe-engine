@@ -311,6 +311,59 @@ describe( 'NPC continuity integration', () => {
 
 	} );
 
+	it( 'holds a quest cast where it is put, through a conversation and a save, until it is released', () => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const counter = [ 561, 1, 251 ];
+
+		const posted = controller.hold( {
+			npcId: npc.npcId, timeMin: MON_9, place: { kind: 'parcel', id: 'p_cafe' },
+			position: counter, heading: 0.5
+		} );
+		expect( posted ).toMatchObject( { npcId: npc.npcId, position: counter, mode: 'posing', animation: 'idle' } );
+		expect( controller.heldNpcIds ).toEqual( [ npc.npcId ] );
+		expect( bridge.behaviorAt( npc.npcId, MON_9 + 1 ).interrupted ).toBe( true );
+
+		// The schedule pass leaves a held body where the story put it.
+		const [ standing ] = controller.updateVisible( {
+			timeMin: MON_9 + 30, playerPosition: counter, maxDistance: 100
+		} );
+		expect( standing.position ).toEqual( counter );
+		expect( standing.visible ).toBe( true );
+
+		// Talking to them and walking away leaves them at the same spot.
+		controller.beginConversation( {
+			npcId: npc.npcId, timeMin: MON_9 + 31, position: counter, heading: 0.5,
+			place: { kind: 'parcel', id: 'p_cafe' }, seated: false
+		} );
+		expect( controller.heldNpcIds ).toEqual( [] );
+		expect( controller.endConversation( { timeMin: MON_9 + 32, hold: true } ) ).toMatchObject( {
+			position: counter, mode: 'posing'
+		} );
+		const save = controller.serialize();
+		expect( save.holds ).toEqual( [ { npcId: npc.npcId, lastTimeMin: MON_9 + 32 } ] );
+
+		const restored = setup( restoreSimulation( simulationInput(), bridge.simulation.serialize() ) ).controller;
+		expect( restored.restore( save ).holds ).toEqual( save.holds );
+		expect( restored.updateVisible( {
+			timeMin: MON_9 + 40, playerPosition: counter, maxDistance: 100
+		} )[ 0 ].position ).toEqual( counter );
+
+		// Released, they walk out of the spot and back into their own day.
+		let returning = controller.releaseHold( { npcId: npc.npcId, timeMin: MON_9 + 33 } );
+		expect( controller.heldNpcIds ).toEqual( [] );
+		expect( returning.mode ).toBe( 'resuming' );
+		for ( let step = 0; step < 300 && returning.mode === 'resuming'; step ++ ) {
+
+			returning = controller.updateFollow( { timeMin: MON_9 + 33, deltaSeconds: 1, playerPosition: counter } );
+
+		}
+		expect( returning ).toMatchObject( { npcId: npc.npcId, mode: 'schedule' } );
+		expect( bridge.behaviorAt( npc.npcId, MON_9 + 34 ).interrupted ).toBe( false );
+
+	} );
+
 	it( 'fails closed on unknown, placeless, unavailable and malformed identities', () => {
 
 		const { bridge, controller } = setup();

@@ -4,5 +4,8 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["timeMin"],
-  "properties": { "timeMin": { "type": "number", "minimum": 0 } }
+  "properties": {
+    "timeMin": { "type": "number", "minimum": 0 },
+    "hold": { "type": "boolean" }
+  }
 }

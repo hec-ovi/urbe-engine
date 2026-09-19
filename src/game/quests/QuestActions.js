@@ -1,10 +1,15 @@
 import { QuestActionBoundary } from './QuestActionBoundary.js';
 import { questCompletion } from './QuestCompletion.js';
+import { castIds } from './QuestCast.js';
+import { unavailableMessage } from './QuestAvailability.js';
+import { stepView } from './QuestStepView.js';
 
 const INTERACTION_KINDS = new Set( [ 'pickup', 'observe', 'listen', 'steal', 'work', 'deliver' ] );
 const MECHANIC_KINDS = new Set( [
 	'assassinate', 'rescue', 'escort', 'access', 'hacking', 'sabotage', 'transportation'
 ] );
+/** Steps that send the player somewhere: they read as nothing there without a mark. */
+const PLACE_KINDS = new Set( [ 'goto', 'talk' ] );
 const PHYSICAL_REACH = { pickup: 2.5, steal: 2, listen: 8 };
 
 /**
@@ -36,7 +41,7 @@ export class QuestActions {
 				stepId: step.stepId,
 				kind: step.target.kind,
 				place,
-				actorIds: actorRoleIds( step.target ).map( ( roleId ) => runtime.cast[ roleId ] ).filter( Boolean ),
+				actorIds: castIds( step.target, runtime ),
 				target: structuredClone( step.target ),
 				availability: place ? runtimeAvailability : { available: false, reason: 'target_missing' },
 				presentation: {
@@ -71,7 +76,7 @@ export class QuestActions {
 					: { available: false, reason: 'target_missing' };
 				const itemId = step.target.itemId;
 				const item = itemId ? items.get( itemId ) : undefined;
-				const actorIds = actorRoleIds( step.target ).map( ( roleId ) => runtime.cast[ roleId ] ).filter( Boolean );
+				const actorIds = castIds( step.target, runtime );
 
 				targets.push( {
 					targetKey: targetKey( definition.id, step.stepId ),
@@ -93,35 +98,95 @@ export class QuestActions {
 
 	}
 
-	/** The first open story objective, including talk and goto steps used for map guidance. */
+	/**
+	 * The story objective the player is following: the questline `questId` names
+	 * while it still has an open step, else the first open one, main quest first.
+	 * Talk and goto steps are included, because the map guides to them too.
+	 */
 	objective( query ) {
 
 		this.boundary.input( 'target-query', query );
 
-		for ( const { definition, runtime } of this.session.entries ) {
+		for ( const entry of this.#ordered( query.questId ) ) {
 
-			const active = new Set( runtime.activeSteps().map( ( step ) => step.stepId ) );
-			const step = definition.steps.find( ( candidate ) => active.has( candidate.stepId ) );
+			const step = this.#openStep( entry );
 			if ( ! step ) continue;
 
 			return this.boundary.output( 'active-objective', {
-				targetKey: targetKey( definition.id, step.stepId ),
-				questId: definition.id,
-				stepId: step.stepId,
-				kind: step.target.kind,
-				title: definition.title,
-				text: step.narrative.playerHint,
-				place: runtime.stepPlace( step.stepId, query.timeMin ) ?? null,
-				actorIds: actorRoleIds( step.target ).map( ( roleId ) => runtime.cast[ roleId ] ).filter( Boolean ),
-				venue: step.target.place?.name ?? null,
-				window: step.window ?? null,
-				availability: runtime.stepAvailability( step.stepId, query.timeMin ),
-				guidance: runtime.stepGuidance( step.stepId, query.timeMin )
+				...this.#placeTarget( entry, step, query.timeMin ),
+				guidance: entry.runtime.stepGuidance( step.stepId, query.timeMin )
 			} );
 
 		}
 
 		return this.boundary.output( 'active-objective', null );
+
+	}
+
+	/**
+	 * Every active goto and talk step of every questline. A side job's venue
+	 * gets its mark and its person whether or not it is the followed objective.
+	 */
+	places( query ) {
+
+		this.boundary.input( 'target-query', query );
+		const places = [];
+
+		for ( const entry of this.session.entries ) {
+
+			const active = new Set( entry.runtime.activeSteps().map( ( step ) => step.stepId ) );
+			for ( const step of entry.definition.steps ) {
+
+				if ( ! active.has( step.stepId ) || ! PLACE_KINDS.has( step.target.kind ) ) continue;
+				places.push( this.#placeTarget( entry, step, query.timeMin ) );
+
+			}
+
+		}
+
+		return this.boundary.output( 'place-targets', places );
+
+	}
+
+	/** Why a target is closed right now, in the words the player reads. */
+	static unavailableMessage( reason, window = null ) {
+
+		return unavailableMessage( reason, window );
+
+	}
+
+	/** The chosen questline first, then the rest in definition order. */
+	#ordered( questId ) {
+
+		const chosen = questId ? this.session.entries.find( ( entry ) => entry.definition.id === questId ) : null;
+		return chosen ? [ chosen, ...this.session.entries.filter( ( entry ) => entry !== chosen ) ] : this.session.entries;
+
+	}
+
+	#openStep( { definition, runtime } ) {
+
+		const active = new Set( runtime.activeSteps().map( ( step ) => step.stepId ) );
+		return definition.steps.find( ( candidate ) => active.has( candidate.stepId ) ) ?? null;
+
+	}
+
+	/** One step as a placed objective, on the same projection the quest log reads. */
+	#placeTarget( { definition, runtime }, step, timeMin ) {
+
+		const view = stepView( { step, runtime, sim: this.session.sim, timeMin } );
+		return {
+			targetKey: targetKey( definition.id, step.stepId ),
+			questId: definition.id,
+			stepId: step.stepId,
+			kind: step.target.kind,
+			title: definition.title,
+			text: view.text,
+			place: view.place ? { kind: view.place.kind, id: view.place.id } : null,
+			actorIds: castIds( step.target, runtime ),
+			venue: step.target.place?.name ?? null,
+			window: view.window,
+			availability: { available: view.availability.available, ...( view.availability.reason ? { reason: view.availability.reason } : {} ) }
+		};
 
 	}
 
@@ -182,7 +247,7 @@ export class QuestActions {
 			action: request.action,
 			progressed: true,
 			message: step.narrative.description,
-			completed: moved.map( ( change ) => questCompletion( change, this.session.view() ) ),
+			completed: moved.map( ( change ) => questCompletion( change, this.session.view( request.timeMin ) ) ),
 			inventory: this.session.inventoryView(),
 			worldChanges
 		} );
@@ -216,16 +281,6 @@ export class QuestActions {
 function itemView( item ) {
 
 	return { id: item.itemId, name: item.name, description: item.description, kind: item.kind, quantity: 1 };
-
-}
-
-function actorRoleIds( target ) {
-
-	if ( target.kind === 'listen' ) return target.roleIds;
-	if ( target.kind === 'steal' ) return [ target.fromRoleId ];
-	if ( [ 'talk', 'assassinate', 'rescue', 'escort' ].includes( target.kind ) ) return [ target.roleId ];
-	if ( target.kind === 'transportation' ) return target.passengerRoleIds;
-	return [];
 
 }
 
@@ -328,20 +383,5 @@ function worldChangesFor( actionId, key ) {
 	if ( actionId === 'steal' ) return [ { targetKey: key, state: 'stolen' } ];
 	if ( actionId === 'deliver' ) return [ { targetKey: key, state: 'delivered' } ];
 	return [];
-
-}
-
-function unavailableMessage( reason ) {
-
-	const messages = {
-		role_dead: 'The person required by this objective is dead.',
-		not_present: 'The person required by this objective is not available.',
-		off_duty: 'The person required by this objective is not at the target location now.',
-		outside_window: 'This objective is open at another hour.',
-		missing_item: 'The required item is not in your inventory.',
-		condition: 'The quest conditions for this action are not met.',
-		target_missing: 'The quest target has no valid world location.'
-	};
-	return messages[ reason ] ?? 'The quest target is unavailable.';
 
 }

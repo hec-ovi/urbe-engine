@@ -37,6 +37,12 @@ Game composes native ordinary streets with retained ground, highways and station
 | Semantic animation, objective paths and water surfaces | [Animation](animation/CONTRACT.md), [Routes](routes/CONTRACT.md), [Hydrology](hydro/CONTRACT.md) |
 | Fixture lighting, pipeline preparation and diagnostics | [Light](light/CONTRACT.md), [Look](look/CONTRACT.md), [Debug](debug/CONTRACT.md) |
 
+## Following a story
+
+The quest log's pick is the questline the game follows: the HUD objective, the minimap mark and the walking route all come from it, and with no pick they come from the main story. Every questline's open places keep their own ring and their own cast whichever one is followed.
+
+A conversation reaches the story once it has happened, on its first exchange or when the panel closes, and goes to one questline: the followed one when it wants that person, else the first that does. Arriving at a parcel is routed the same way. A conversation that moves nothing, with somebody an open step names, toasts why in the player's words. The objective line is asked again every four seconds as well as on every state change, so a place that opens on the clock says so without the player moving.
+
 ## Preparation and residency
 
 Ground and props render out to the camera far plane (900 m) and collide within 256 m. Source dimensions, transforms, material keys and placement plans remain unchanged. Original shells stream for large catalogs; selected interiors remain available to Simulation. A furnished floor is its layout's module and furniture placements at that floor's elevation, drawn from catalogs loaded once for the city, and waits for complete collision before it enters those draws.

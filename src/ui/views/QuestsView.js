@@ -4,14 +4,15 @@ import { PanelHeader } from '../components/PanelHeader.js';
 
 /**
  * The quest log: every quest on the left, the picked one with its steps on
- * the right. props: { onClose }
+ * the right. props: { onClose, onSelect }
  */
 export class QuestsView {
 
-	constructor( { onClose } ) {
+	constructor( { onClose, onSelect = () => {} } = {} ) {
 
 		this.quests = [];
 		this.selected = null;
+		this.onSelect = onSelect;
 
 		this.list = el( 'ul', { className: 'list' } );
 		this.side = el( 'div', { className: 'view-side' }, this.list );
@@ -26,7 +27,10 @@ export class QuestsView {
 
 	}
 
-	/** @param quests [{ id, title, text, state: 'active' | 'done' | 'failed', steps: [{ text, done }] }] */
+	/**
+	 * @param quests [{ id, title, text, note, state: 'available' | 'active' | 'blocked' | 'done' | 'failed',
+	 * steps: [{ text, done, npcName, place, availability, window }] }]
+	 */
 	setQuests( quests = [] ) {
 
 		this.quests = quests;
@@ -36,7 +40,12 @@ export class QuestsView {
 				el( 'span', { textContent: quest.title } ),
 				el( 'span', { className: `badge is-${quest.state ?? 'active'}`, textContent: quest.state ?? 'active' } )
 			) );
-			row.firstChild.addEventListener( 'click', () => this.select( quest.id ) );
+			row.firstChild.addEventListener( 'click', () => {
+
+				this.select( quest.id );
+				this.onSelect( quest.id );
+
+			} );
 
 			return row;
 
@@ -73,11 +82,46 @@ export class QuestsView {
 			el( 'h3', { className: 'detail-title', textContent: quest.title } ),
 			el( 'div', { className: 'detail-kind', textContent: quest.state ?? 'active' } ),
 			el( 'p', { className: 'detail-text', textContent: quest.text ?? '' } ),
-			el( 'ul', { className: 'quest-steps' }, ...( quest.steps ?? [] ).map( ( step ) => el( 'li', {
-				className: `quest-step${step.done ? ' is-done' : ''}`
-			}, el( 'span', { className: 'quest-step-mark' } ), el( 'span', { textContent: step.text } ) ) ) )
+			...( quest.note ? [ el( 'p', { className: 'detail-note', textContent: quest.note } ) ] : [] ),
+			el( 'ul', { className: 'quest-steps' }, ...( quest.steps ?? [] ).map( stepRow ) )
 		);
 
 	}
+
+}
+
+/** One step: what to do, who it is about and where, and why it is closed now. */
+function stepRow( step ) {
+
+	const meta = [ step.npcName, step.place?.name ].filter( Boolean ).join( ' - ' );
+	const closed = step.availability && step.availability.available === false;
+	const hours = hoursLine( step.window );
+
+	return el( 'li', { className: `quest-step${step.done ? ' is-done' : ''}${closed ? ' is-closed' : ''}` },
+		el( 'span', { className: 'quest-step-mark' } ),
+		el( 'span', { className: 'quest-step-body' },
+			el( 'span', { textContent: step.text } ),
+			...( meta ? [ el( 'span', { className: 'quest-step-meta', textContent: meta } ) ] : [] ),
+			...( closed && step.availability.text
+				? [ el( 'span', { className: 'quest-step-closed', textContent: step.availability.text } ) ] : [] ),
+			...( hours ? [ el( 'span', { className: 'quest-step-meta', textContent: hours } ) ] : [] )
+		)
+	);
+
+}
+
+/** "Open during the slow hour, 18:00 to 23:00": the step's own words, and the clock. */
+function hoursLine( window ) {
+
+	const label = window?.label?.trim?.() || '';
+	if ( ! label || ! Number.isFinite( window.startMin ) || ! Number.isFinite( window.endMin ) ) return '';
+	return `Open ${label}, ${clock( window.startMin )} to ${clock( window.endMin )}`;
+
+}
+
+function clock( minuteOfDay ) {
+
+	const hours = Math.floor( minuteOfDay / 60 ) % 24;
+	return `${String( hours ).padStart( 2, '0' )}:${String( minuteOfDay % 60 ).padStart( 2, '0' )}`;
 
 }

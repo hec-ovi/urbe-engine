@@ -20,7 +20,9 @@ Status: the public continuity and follow API is wired into the live GameApp, Cro
 - Crouch start: [schema/crouch-start.schema.json](schema/crouch-start.schema.json). One exact npcId and current simulation time. It never derives from player input or movement.
 - Crouch stop: [schema/crouch-stop.schema.json](schema/crouch-stop.schema.json). The same exact npcId and current simulation time.
 - Conversation start: [schema/conversation-start.schema.json](schema/conversation-start.schema.json). Exact npcId, current body position, place, heading and seated state.
-- Conversation stop: [schema/conversation-stop.schema.json](schema/conversation-stop.schema.json). Current simulation time.
+- Conversation stop: [schema/conversation-stop.schema.json](schema/conversation-stop.schema.json). Current simulation time, and optional `hold`.
+- Hold start: [schema/hold-start.schema.json](schema/hold-start.schema.json). One exact npcId, current simulation time, the place it is wanted at, the world point and the heading.
+- Hold release: [schema/hold-release.schema.json](schema/hold-release.schema.json). The held npcId and current simulation time.
 - Visible update: [schema/visible-update.schema.json](schema/visible-update.schema.json). Current time, player position and the offscreen virtualization distance.
 - Restore state: [schema/continuity-save.schema.json](schema/continuity-save.schema.json). A prior output of `serialize()` for the same restored simulation.
 
@@ -31,7 +33,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - Actor state: [schema/actor-state.schema.json](schema/actor-state.schema.json). Exact npcId, name, type, gender, appearance seed, scheduled place and progress, world position, heading, animation, visibility and control mode.
 - Optional actor state: [schema/actor-state-or-null.schema.json](schema/actor-state-or-null.schema.json). Follow updates without an active follower and unloads of unknown materializations return null.
 - Actor states: [schema/actor-states.schema.json](schema/actor-states.schema.json). Stable npcId-sorted projections for every retained materialization, including invisible virtualized actors.
-- Serializable state: [schema/continuity-save.schema.json](schema/continuity-save.schema.json). Every materialized identity plus active follow, return, conversation, or explicit crouch control.
+- Serializable state: [schema/continuity-save.schema.json](schema/continuity-save.schema.json). Every materialized identity plus active follow, return, conversation, explicit crouch or quest hold control.
 
 ## Events
 
@@ -41,11 +43,13 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - `startLead(request)` routes the exact interrupted identity to the authored destination and holds it there until release. `carryFollower(request)` places only the active follower on the measured transit route position.
 - `stopFollow(request)` resumes the simulation and enters `resuming` mode. The NPC walks from its current position to the current scheduled place or next destination before returning to `schedule` mode.
 - `startCrouch(request)` interrupts one actual NPC routine and holds that identity in `posing` mode with crouch animation. `releaseCrouch(request)` resumes the simulation and routes the same identity back to its current schedule.
-- `beginConversation(request)` preserves the body at the visible position and pauses its routine. `endConversation(request)` walks a dialogue-interrupted NPC back into the current schedule. A follower stays interrupted and returns to follow control when dialogue closes.
+- `beginConversation(request)` preserves the body at the visible position and pauses its routine. `endConversation(request)` walks a dialogue-interrupted NPC back into the current schedule; with `hold` it stays exactly where it stands. A follower stays interrupted and returns to follow control when dialogue closes.
+- `hold(request)` interrupts one identity and keeps it at the given point in `posing` mode: the schedule pass never reprojects a held body, so the person a quest step sends the player to is still there when they arrive and after they talk. `releaseHold(request)` resumes the simulation and walks the same identity back into its day. `heldNpcIds` lists what is held now, and a follow, lead or crouch takes over a held body from where it stands.
 - `updateVisible(request)` reprojects visible schedule-controlled actors each frame and marks distant ones invisible without discarding identity or schedule state.
-- `serialize()` and `restore(save)` preserve materialized body traits, world position, schedule progress and active interruption, explicit pose, or return state.
+- `serialize()` and `restore(save)` preserve materialized body traits, world position, schedule progress and active interruption, explicit pose, quest holds, or return state.
 - `Crowd.questMember` adopts an anonymous simulation handle when it resolves to the requested cast npcId, including with continuity enabled. `Crowd.syncActor` returns null while a body is fallen, so control and passenger projection fail closed.
-- `Crowd.castMember(npcId, timeMin, player, parcelId)` is the body of one cast NPC the story wants at a parcel now, whatever its routine says: the body that npcId already owns, wherever it stands, else an anonymous body at that parcel that resolves to it, else one posted within 45 m of the player at the interior's first free counter anchor, then work anchor, then a lobby spot just inside the door. Null beyond that reach, when the crowd is full, or while the owned body is fallen.
+- `Crowd.castMember(npcId, timeMin, player, parcelId)` is the body of one cast NPC the story wants at a parcel now, whatever its routine says: the body that npcId already owns while it is at that parcel, else an anonymous body there that resolves to it, else that identity posted within 45 m of the player at the interior's first free counter anchor, then work anchor, then a lobby spot just inside the door. With continuity the posting is a `hold`, so the next schedule pass leaves it standing instead of walking it home. Null beyond that reach, when the crowd is full, or while the owned body is fallen.
+- `Crowd.questMember` and `castMember` name only the anonymous handle the simulation resolves to the requested npcId. A candidate they look at and reject keeps its own identity, its own look and its right to be evicted.
 
 ## Errors
 

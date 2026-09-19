@@ -6,6 +6,7 @@ import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { QuestSession } from './quests/QuestSession.js';
 import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
+import { QuestActions } from './quests/QuestActions.js';
 import { MissionItemAssets } from './quests/MissionItemAssets.js';
 import { InvestigationGameplay } from './investigation/index.js';
 import { ObjectiveRouter } from './routes/ObjectiveRouter.js';
@@ -109,6 +110,8 @@ const BINDINGS = [
 /** Standing still: this close to one spot for this long. */
 const STILL_RADIUS = 0.1;
 const STILL_SECONDS = 1;
+/** How often the HUD asks the runtime again, so a closed venue opens on the line. */
+const OBJECTIVE_INTERVAL = 4;
 
 /** The camera's depth range, which is also how far the world streams. */
 const NEAR_PLANE = LOOK.near;
@@ -127,12 +130,21 @@ export class GameApp {
 
 		this.config = config;
 		this.navigate = navigate;
+		/** The questline the player is following; null means the main story. */
+		this.followedQuestId = null;
+		this.objectiveTimer = 0;
 		this.talk = new TalkClient( config.outBase );
 		this.view = new GameView( {
 			onResume: () => this.input?.requestLock(),
 			onCloseDialog: () => this.interactor?.close( this.clock ),
 			onSend: ( text ) => this.#say( text ),
-			onOpen: () => this.input?.exitLock(),
+			onOpen: ( name ) => {
+
+				this.input?.exitLock();
+				if ( name === 'QUESTS' ) this.#refreshQuestState();
+
+			},
+			onQuestSelect: ( questId ) => this.#followQuest( questId ),
 			onClose: () => this.input?.requestLock(),
 			onLeave: () => this.#leave(),
 			onSettingChange: ( change ) => this.#setting( change ),
@@ -397,7 +409,7 @@ export class GameApp {
 		this.savedInventory = game?.player.inventory ?? [];
 		this.questItemIds = questlines.flatMap( ( questline ) => questline.items.map( ( item ) => item.itemId ) );
 		this.#refreshInventory();
-		this.view.quests.setQuests( this.quests.view() );
+		this.view.quests.setQuests( this.quests.view( this.clock.timeMin ) );
 		this.signals = new Signals( connections.networks );
 		const routes = new WalkRoutes( connections.networks );
 		const crowdPlaces = placesOf( city.entrances, buildings );
@@ -630,8 +642,17 @@ export class GameApp {
 		this.view.dialog.show( conversation );
 		this.view.avatar.setVisible( Boolean( conversation ) );
 
-		if ( ! conversation ) return;
-		if ( conversation.npcId ) this.#questEvent( { kind: 'talkedTo', npcId: conversation.npcId } );
+		if ( ! conversation ) {
+
+			// The story hears about a conversation once it has happened, not
+			// the instant the panel opens.
+			this.#talkedTo( this.talkingTo );
+			this.talkingTo = null;
+			return;
+
+		}
+		this.talkingTo = conversation.npcId ?? null;
+		this.talked = false;
 
 		// The chat takes the mouse: the input wants focus and the panel a click.
 		this.view.avatar.setAvatar( {
@@ -779,6 +800,10 @@ export class GameApp {
 
 		this.view.setPaused( ! this.input.locked && free );
 		this.#updateObjectiveRoute( delta );
+		// The clock opens and closes places while the player stands still, so
+		// the objective line is asked again on its own cadence.
+		this.objectiveTimer += delta;
+		if ( this.objectiveTimer >= OBJECTIVE_INTERVAL ) this.#refreshCurrentObjective();
 		this.view.minimap.update( feet, this.controller.yaw );
 		if ( this.view.panels.current === 'MAP' ) this.view.map.setPlayer( feet, this.controller.yaw );
 		this.hitches.time( 'location HUD', () => {
@@ -847,6 +872,44 @@ export class GameApp {
 		this.animations.completeDialogueTurn( conversation );
 		this.view.dialog.addMessage( { from: 'npc', name, text: reply } );
 		this.animations.npcDialogueTurn( conversation );
+		this.#talkedTo( conversation.npcId ?? null );
+
+	}
+
+	/**
+	 * One conversation counts once, on its first exchange or when it closes.
+	 * A talk that moves nothing and is about somebody a step names says why.
+	 */
+	#talkedTo( npcId ) {
+
+		if ( ! npcId || this.talked ) return;
+		this.talked = true;
+		const ids = this.#questIdsForTalk( npcId );
+		if ( this.#routeQuestEvent( { kind: 'talkedTo', npcId }, ids ) ) return;
+		this.#reportClosedTalk( npcId, ids );
+
+	}
+
+	#questIdsForTalk( npcId ) {
+
+		return this.questGameplay.places( this.clock.timeMin )
+			.filter( ( place ) => place.kind === 'talk' && place.actorIds.includes( npcId ) )
+			.map( ( place ) => place.questId );
+
+	}
+
+	/** Why the conversation the player just had moved nothing, in their words. */
+	#reportClosedTalk( npcId, questIds ) {
+
+		if ( questIds.length === 0 || ! this.quests.hasCastNpc( npcId ) ) return;
+		const step = this.questGameplay.places( this.clock.timeMin ).find(
+			( place ) => place.kind === 'talk' && place.questId === this.#chosenQuest( questIds ) && place.actorIds.includes( npcId )
+		);
+		if ( ! step || step.availability.available ) return;
+		this.view.toast.show( {
+			title: 'Objective',
+			text: QuestActions.unavailableMessage( step.availability.reason, step.window )
+		} );
 
 	}
 
@@ -856,15 +919,26 @@ export class GameApp {
 		if ( parcelId === this.parcelStanding ) return;
 
 		this.parcelStanding = parcelId;
-		if ( parcelId ) this.#questEvent( { kind: 'arrivedAt', parcelId } );
+		if ( ! parcelId ) return;
+		const ids = this.questGameplay.places( this.clock.timeMin )
+			.filter( ( place ) => place.kind === 'goto' && place.place?.kind === 'parcel' && place.place.id === parcelId )
+			.map( ( place ) => place.questId );
+		this.#routeQuestEvent( { kind: 'arrivedAt', parcelId }, ids );
 
 	}
 
-	/** A player event goes to every questline; what it completed shows as a toast, an ending as the summary. */
-	#questEvent( event ) {
+	/**
+	 * One player event goes to one questline: the one the player is following
+	 * when it wants the event, else the first that does, main story first. The
+	 * same person plays a part in several stories, so a fan-out would finish
+	 * jobs the player never took.
+	 */
+	#routeQuestEvent( event, questIds ) {
 
-		const moved = this.quests.advance( event, this.clock.timeMin );
-		if ( moved.length === 0 ) return;
+		const chosen = this.#chosenQuest( questIds );
+		if ( ! chosen ) return false;
+		const moved = this.quests.advanceFor( chosen, event, this.clock.timeMin );
+		if ( moved.length === 0 ) return false;
 
 		for ( const { definition, completed, ending } of moved ) {
 
@@ -874,6 +948,23 @@ export class GameApp {
 		}
 
 		this.#refreshQuestState();
+		return true;
+
+	}
+
+	#chosenQuest( questIds ) {
+
+		if ( questIds.includes( this.followedQuestId ) ) return this.followedQuestId;
+		return questIds[ 0 ] ?? null;
+
+	}
+
+	/** The quest log's pick becomes the objective the HUD, the map and the route follow. */
+	#followQuest( questId ) {
+
+		this.followedQuestId = questId ?? null;
+		this.#refreshCurrentObjective();
+		this.#updateObjectiveRoute( 0, true );
 
 	}
 
@@ -1030,7 +1121,7 @@ export class GameApp {
 
 	#refreshQuestState() {
 
-		this.view.quests.setQuests( this.quests.view() );
+		this.view.quests.setQuests( this.quests.view( this.clock.timeMin ) );
 		this.#refreshCurrentObjective();
 		this.#refreshInventory();
 		this.#updateObjectiveRoute( 0, true );
@@ -1040,7 +1131,8 @@ export class GameApp {
 	/** The objective's parcel is marked on the maps and named on the HUD, with the walk there while a route stands. */
 	#refreshCurrentObjective() {
 
-		const objective = this.questGameplay.objective( this.clock.timeMin );
+		this.objectiveTimer = 0;
+		const objective = this.questGameplay.objective( this.clock.timeMin, this.followedQuestId );
 		const parcelId = objective?.place?.kind === 'parcel' ? objective.place.id : null;
 
 		if ( this.venues.setObjective( parcelId ? { parcelId, name: objective.venue } : null ) ) {
@@ -1051,7 +1143,7 @@ export class GameApp {
 		}
 
 		this.view.setObjective( currentObjectiveView( objective, this.quests, {
-			venues: this.venues, route: this.objectiveGuide?.route ?? null
+			venues: this.venues, route: this.objectiveGuide?.route ?? null, timeMin: this.clock.timeMin
 		} ) );
 
 	}
@@ -1060,7 +1152,7 @@ export class GameApp {
 
 		if ( ! this.objectiveGuide || ! this.questGameplay || ! this.body ) return;
 		const feet = this.body.feet;
-		const objective = this.questGameplay.objective( this.clock.timeMin );
+		const objective = this.questGameplay.objective( this.clock.timeMin, this.followedQuestId );
 		const destination = objective?.guidance?.destination ?? null;
 		let route = null;
 
@@ -1120,7 +1212,7 @@ export class GameApp {
 		const feet = this.body.feet;
 		this.currentLocation = this.locator.location( feet.x, feet.z );
 		this.discoveredLocations.set( this.currentLocation.id, this.currentLocation );
-		const progress = mergeProgress( this.persistence.game, this.quests.persistenceView() );
+		const progress = mergeProgress( this.persistence.game, this.quests.persistenceView( this.clock.timeMin ) );
 
 		return this.persistence.save( {
 			position: { x: feet.x, y: feet.y, z: feet.z },
@@ -1579,10 +1671,10 @@ export function playableInteractionOwner( interactor, transitFrame ) {
  * @param venues what the city calls each parcel
  * @param route the objective route standing now, or null
  */
-export function currentObjectiveView( active, session, { venues = null, route = null } = {} ) {
+export function currentObjectiveView( active, session, { venues = null, route = null, timeMin = 0 } = {} ) {
 
 	if ( active ) return { title: active.title, objective: active.text, state: 'active', place: objectivePlace( active, venues, route ) };
-	const completed = [ ...( session?.view() ?? [] ) ].reverse().find( ( quest ) => quest.state === 'done' );
+	const completed = [ ...( session?.view( timeMin ) ?? [] ) ].reverse().find( ( quest ) => quest.state === 'done' );
 	if ( ! completed ) return null;
 	const lastStep = [ ...completed.steps ].reverse().find( ( step ) => step.done );
 	return {

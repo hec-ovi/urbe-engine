@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { QuestSession } from './QuestSession.js';
 import { npc, quest, role, simulation, step } from './quest.test-fixtures.js';
 
@@ -36,6 +36,61 @@ describe( 'QuestSession', () => {
 			runtime: { state: { activeStepIds: [], completedStepIds: [ 's_talk', 's_return' ], flags: [], endingId: 'done' } }
 		} );
 		expect( QuestSession.create( [ definition ], sim(), 604, completed ).persistenceView() ).toEqual( completed );
+
+	} );
+
+	it( 'projects each step once for the HUD and the log, and keeps an untouched side job on offer', () => {
+
+		const window = { label: 'during the slow hour', days: [ 0, 1, 2, 3, 4, 5, 6 ], startMin: 1080, endMin: 1380 };
+		const side = quest( 'q2', {
+			roles: [ role( 'barista', 'barista' ) ],
+			steps: [ step( 's_open', { ...talk, atParcelId: 'p1' }, { hint: 'Meet the barista during the slow hour.', endingId: 'done' } ) ]
+		} );
+		side.steps[ 0 ].window = window;
+		const session = QuestSession.create( [ definition, side ], sim(), 600 );
+
+		const [ main, sideJob ] = session.view( 600 );
+		expect( main.state ).toBe( 'active' );
+		expect( main.steps ).toEqual( [ {
+			stepId: 's_talk', text: 'Talk to the barista at the cafe.', done: false, npcName: 'barista Vale',
+			place: { kind: 'parcel', id: 'p1', name: null }, availability: { available: true }, window: null
+		} ] );
+
+		// A side job nobody has started is on offer, and says when it opens.
+		expect( sideJob.state ).toBe( 'available' );
+		expect( sideJob.steps[ 0 ] ).toMatchObject( {
+			text: 'Meet the barista during the slow hour.', npcName: 'barista Vale', window,
+			availability: { available: false, reason: 'outside_window', text: 'This objective is open at another hour. Open 18:00 to 23:00.' }
+		} );
+		expect( session.persistenceView( 600 ).map( ( entry ) => entry.state ) ).toEqual( [ 'active', 'available' ] );
+
+		// One step done and the side job is under way, saved and reloaded.
+		session.advanceFor( 'q2', { kind: 'talkedTo', npcId: 'n1' }, 1200 );
+		const progress = session.persistenceView( 1200 );
+		expect( progress[ 1 ] ).toMatchObject( { state: 'completed' } );
+		expect( QuestSession.create( [ definition, side ], sim(), 1200, progress ).view( 1200 )[ 1 ].state ).toBe( 'done' );
+
+		expect( session.holdsCast( 'n1' ) ).toBe( true );
+		expect( session.holdsCast( 'n9' ) ).toBe( false );
+
+	} );
+
+	it( 'keeps a questline the cast could not fill in the log, with what stopped it', () => {
+
+		const uncastable = quest( 'q_blocked', {
+			roles: [ role( 'fixer', 'fixer' ) ],
+			steps: [ step( 's_meet', { kind: 'talk', roleId: 'fixer', atParcelId: 'p1' }, { hint: 'Find the fixer.', endingId: 'done' } ) ]
+		} );
+		const warning = vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		const session = QuestSession.create( [ definition, uncastable ], sim(), 600 );
+		const reported = warning.mock.calls.at( - 1 )[ 0 ];
+		warning.mockRestore();
+
+		expect( reported ).toContain( 'questline q_blocked not cast' );
+		expect( session.entries.map( ( entry ) => entry.definition.id ) ).toEqual( [ 'q1' ] );
+		const [ , blocked ] = session.view( 600 );
+		expect( blocked ).toMatchObject( { id: 'q_blocked', title: 'q_blocked', state: 'blocked', steps: [] } );
+		expect( reported ).toContain( blocked.note );
 
 	} );
 

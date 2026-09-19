@@ -7,6 +7,13 @@ const PHYSICAL_REACH = { pickup: 2.5, steal: 2, listen: 8 };
 const AREA_REACH = 3.2;
 const MIN_AIM = 0.76;
 const CHEST = 1.3;
+/** Where a quest mark floats: clear of the tallest head, still inside a room. */
+const HEAD = 2.15;
+/** Drawn over the room it stands in, so a person indoors is found from the door. */
+const MARK_RENDER_ORDER = 12;
+/** A mark holds its screen size out to this reach, then stops growing. */
+const MARK_REFERENCE = 5;
+const MARK_MAX_SCALE = 5;
 const FIXED_KINDS = new Set( [ 'rescue', 'access', 'hacking', 'sabotage' ] );
 /** Steps that send the player somewhere and read as nothing there without a mark. */
 const PLACE_KINDS = new Set( [ 'goto', 'talk' ] );
@@ -122,9 +129,24 @@ export class QuestGameplay {
 
 	}
 
-	objective( timeMin ) {
+	/** The objective the player is following: the chosen questline, else the first open one. */
+	objective( timeMin, questId = null ) {
 
-		return this.actions.objective( { timeMin } );
+		return this.actions.objective( { timeMin, ...( questId ? { questId } : {} ) } );
+
+	}
+
+	/** Every active goto and talk step of every questline. */
+	places( timeMin ) {
+
+		return this.actions.places( { timeMin } );
+
+	}
+
+	/** Whether an open step still wants this person where the player found them. */
+	holdsCast( npcId ) {
+
+		return this.session?.holdsCast( npcId ) ?? false;
 
 	}
 
@@ -138,12 +160,12 @@ export class QuestGameplay {
 		const look = vector3( frame.look );
 		const targets = this.actions.targets( { timeMin } );
 		const mechanics = this.#mechanicTargets( timeMin ).map( ( target ) => this.#presentMechanic( target ) );
-		const objective = this.actions.objective( { timeMin } );
+		const places = this.actions.places( { timeMin } );
 		this.#advanceEscort( mechanics, { timeMin, playerPlaces, feet } );
 		this.#advanceTransit( mechanics, { timeMin, playerPlaces, feet } );
 		this.#materializePassiveCast( mechanics, { timeMin, playerPlaces, feet } );
-		this.#materializeObjectiveCast( objective, { timeMin, feet } );
-		this.#sync( [ ...targets, ...mechanics, ...( objective && PLACE_KINDS.has( objective.kind ) ? [ objective ] : [] ) ] );
+		this.#materializePlaceCast( places, { timeMin, feet, eye } );
+		this.#sync( [ ...targets, ...mechanics, ...places ] );
 		const candidates = [];
 		this.liveInteractions.clear();
 
@@ -173,7 +195,7 @@ export class QuestGameplay {
 
 		}
 
-		this.#dropInactiveActorMarks( new Set( [ ...targets, ...mechanics ].map( ( target ) => target.targetKey ) ) );
+		this.#dropInactiveActorMarks( new Set( [ ...targets, ...mechanics, ...places ].map( ( target ) => target.targetKey ) ) );
 		return this.boundary.output( 'gameplay-candidates', candidates );
 
 	}
@@ -381,7 +403,10 @@ export class QuestGameplay {
 
 		const mark = this.staticMarks.get( target.targetKey );
 		if ( ! mark || ! atPlace( playerPlaces, target.place ) || feet.distanceTo( mark.position ) > AREA_REACH ) return null;
-		return interaction( target, playerPlaces, MIN_AIM );
+		// Standing on the mark, looking at it wins the crosshair from whoever is
+		// walking past; looking away still leaves the prompt on offer.
+		const point = mark.position.clone().setY( mark.position.y + CHEST );
+		return interaction( target, playerPlaces, Math.max( MIN_AIM, aimAt( eye, look, point ) ) );
 
 	}
 
@@ -546,15 +571,56 @@ export class QuestGameplay {
 	}
 
 	/**
-	 * The person a talk step sends the player to stands at that parcel while
-	 * the step is active and its hour is open, whatever the rota says: the
-	 * place the objective names is otherwise an empty room at the wrong hour.
+	 * Every person an open talk step sends the player to stands at that parcel
+	 * while its hour is open, whatever the rota says, and wears a mark over
+	 * their head: a side job's venue is otherwise an empty room with nobody in
+	 * it, and a room with ten people in it is nobody in particular.
 	 */
-	#materializeObjectiveCast( objective, { timeMin, feet } ) {
+	#materializePlaceCast( places, { timeMin, feet, eye } ) {
 
-		if ( objective?.kind !== 'talk' || objective.place?.kind !== 'parcel' ) return;
-		if ( objective.availability.reason === 'outside_window' ) return;
-		for ( const npcId of objective.actorIds ) this.crowd.castMember( npcId, timeMin, feet, objective.place.id );
+		const wanted = new Set();
+
+		for ( const target of places ) {
+
+			if ( target.kind !== 'talk' || target.place?.kind !== 'parcel' ) continue;
+			// The runtime accepts a talk only while the step is open, so a body
+			// posted outside that is a person the player talks to for nothing.
+			// The place keeps its mark and the HUD says when it opens.
+			if ( ! target.availability.available ) continue;
+			const members = [];
+			for ( const npcId of target.actorIds ) {
+
+				wanted.add( npcId );
+				const member = this.crowd.castMember( npcId, timeMin, feet, target.place.id );
+				if ( member ) members.push( member );
+
+			}
+			this.#markActors( target, members, eye );
+
+		}
+
+		this.#releaseHolds( wanted, timeMin, feet );
+
+	}
+
+	/** A cast body nobody is waiting on any more goes back to its own day. */
+	#releaseHolds( wanted, timeMin, feet ) {
+
+		for ( const npcId of this.continuity?.heldNpcIds ?? [] ) {
+
+			if ( wanted.has( npcId ) ) continue;
+			try {
+
+				const actor = this.continuity.releaseHold( { npcId, timeMin } );
+				this.crowd.syncActor( actor, feet );
+
+			} catch ( error ) {
+
+				console.warn( `quest cast ${npcId} could not return to its routine: ${messageOf( error )}` );
+
+			}
+
+		}
 
 	}
 
@@ -880,12 +946,18 @@ export class QuestGameplay {
 
 	}
 
+	/**
+	 * One mark over the head of every person an open step is about, turned to
+	 * the eye, grown with the distance so it still reads across a room, and
+	 * drawn over the walls between.
+	 */
 	#markActors( target, members, eye ) {
 
 		let marks = this.actorMarks.get( target.targetKey );
 		if ( marks?.length !== members.length ) {
 
 			this.#removeMark( this.actorMarks, target.targetKey );
+			if ( members.length === 0 ) return;
 			marks = members.map( () => actorMark() );
 			this.actorMarks.set( target.targetKey, marks );
 			this.group.add( ...marks );
@@ -894,8 +966,10 @@ export class QuestGameplay {
 
 		marks?.forEach( ( mark, index ) => {
 
-			mark.position.copy( members[ index ].position ).add( new THREE.Vector3( 0, CHEST, 0 ) );
+			mark.position.copy( members[ index ].position ).add( new THREE.Vector3( 0, HEAD, 0 ) );
 			mark.lookAt( eye );
+			const reach = mark.position.distanceTo( eye );
+			mark.scale.setScalar( Math.min( MARK_MAX_SCALE, Math.max( 1, reach / MARK_REFERENCE ) ) );
 
 		} );
 
@@ -1141,12 +1215,25 @@ function areaMark( target, anchor ) {
 
 }
 
+/** The quest marker: a pennant that points down at the person under it. */
 function actorMark() {
 
-	return new THREE.Mesh(
-		new THREE.TorusGeometry( 0.42, 0.035, 6, 24 ),
-		new THREE.MeshBasicMaterial( { color: 0xff5fa8, transparent: true, opacity: 0.9 } )
-	);
+	const shape = new THREE.Shape();
+	shape.moveTo( 0, - 0.26 );
+	shape.lineTo( 0.19, 0.06 );
+	shape.lineTo( 0.07, 0.06 );
+	shape.lineTo( 0.07, 0.28 );
+	shape.lineTo( - 0.07, 0.28 );
+	shape.lineTo( - 0.07, 0.06 );
+	shape.lineTo( - 0.19, 0.06 );
+	shape.closePath();
+	const mark = new THREE.Mesh( new THREE.ShapeGeometry( shape ), new THREE.MeshBasicMaterial( {
+		color: 0xff5fa8, side: THREE.DoubleSide, transparent: true, opacity: 0.95,
+		depthTest: false, depthWrite: false
+	} ) );
+	mark.renderOrder = MARK_RENDER_ORDER;
+	mark.name = 'quest-actor-mark';
+	return mark;
 
 }
 

@@ -131,6 +131,48 @@ it( 'hands the named body to continuity and to animation composition for the con
 
 } );
 
+it( 'keeps a quest cast in place after the talk, faces the player throughout, and survives a refusal', () => {
+
+	let controlled = null;
+	const continuity = {
+		beginConversation: vi.fn( ( request ) => ( controlled = continuityActor( request, 'conversation', 'idle' ) ) ),
+		endConversation: vi.fn( () => ( { ...controlled, mode: 'posing', animation: 'idle' } ) )
+	};
+	const quests = { candidates: () => [], holdsCast: vi.fn( () => true ) };
+	const { interactor, crowd } = street( continuity, null );
+	interactor.quests = quests;
+	const person = [ ...crowd.members.values() ][ 0 ];
+
+	interactor.update( 1 / 60 );
+	interactor.activate( CLOCK );
+	const facing = person.heading;
+
+	// The player circles them; they keep looking at the player.
+	interactor.controller.body.feet.set( person.position.x + 2, person.position.y, person.position.z );
+	interactor.update( 1 / 60 );
+	expect( person.heading ).not.toBe( facing );
+	expect( person.heading ).toBeCloseTo( Math.PI / 2 );
+
+	interactor.close( { ...CLOCK, timeMin: CLOCK.timeMin + 1 } );
+	expect( quests.holdsCast ).toHaveBeenCalledWith( 'n1' );
+	expect( continuity.endConversation ).toHaveBeenCalledWith( { timeMin: CLOCK.timeMin + 1, hold: true } );
+
+	// A refused conversation costs one press, never the frame.
+	const refusing = street( {
+		beginConversation: () => { throw new Error( 'someone else has control' ); },
+		endConversation: () => { throw new Error( 'no NPC is in conversation' ); }
+	}, null );
+	const warning = vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
+	refusing.interactor.update( 1 / 60 );
+	expect( () => refusing.interactor.activate( CLOCK ) ).not.toThrow();
+	expect( refusing.interactor.conversation ).toMatchObject( { npcId: 'n1', controlled: false } );
+	expect( refusing.sim.interrupted ).toEqual( [ 'n1' ] );
+	expect( () => refusing.interactor.close( CLOCK ) ).not.toThrow();
+	expect( refusing.sim.resumed ).toEqual( [ 'n1' ] );
+	warning.mockRestore();
+
+} );
+
 const CLOCK = { timeMin: 780, daySeconds: 46800 };
 
 /** One walker on one edge, with the player standing on top of them. */

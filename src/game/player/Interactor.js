@@ -54,7 +54,12 @@ export class Interactor {
 
 		for ( const door of this.doors ) this.#moveDoor( door, delta );
 
-		if ( this.conversation ) return null;
+		if ( this.conversation ) {
+
+			this.#facePlayer( this.conversation.person );
+			return null;
+
+		}
 
 		const feet = this.controller.body.feet;
 
@@ -154,8 +159,22 @@ export class Interactor {
 		person.talking = false;
 		if ( npcId && controlled ) {
 
-			actor = this.continuity.endConversation( { timeMin: clock.timeMin } );
-			person = this.crowd.syncActor( actor, this.controller.body.feet ) ?? person;
+			// A person an open step is still about keeps the spot the player
+			// found them in; everybody else walks back into their day.
+			const hold = Boolean( this.quests?.holdsCast?.( npcId ) );
+			try {
+
+				actor = this.continuity.endConversation( { timeMin: clock.timeMin, ...( hold ? { hold } : {} ) } );
+				person = this.crowd.syncActor( actor, this.controller.body.feet ) ?? person;
+
+			} catch ( error ) {
+
+				console.warn( `conversation with ${npcId} ended outside continuity: ${error?.message ?? error}` );
+				this.sim.resume( npcId, clock.timeMin );
+				person.frozen = false;
+				person.clip = person.restClip ?? CLIP.WALK;
+
+			}
 
 		} else {
 
@@ -210,19 +229,27 @@ export class Interactor {
 		const place = personPlace( person );
 		if ( person.npcId && this.continuity && place ) {
 
-			controlledActor = this.continuity.beginConversation( {
-				npcId: person.npcId,
-				timeMin,
-				position: person.position.toArray(),
-				heading: Math.atan2(
-					this.controller.body.feet.x - person.position.x,
-					this.controller.body.feet.z - person.position.z
-				),
-				place,
-				seated: person.clip === CLIP.SIT || person.clip === CLIP.SIT_TALK
-			} );
-			person = this.crowd.syncActor( controlledActor, this.controller.body.feet ) ?? person;
-			controlled = true;
+			// Continuity can refuse: somebody else holds control, or this
+			// identity is gone. One press is lost, never a thrown frame.
+			try {
+
+				controlledActor = this.continuity.beginConversation( {
+					npcId: person.npcId,
+					timeMin,
+					position: person.position.toArray(),
+					heading: headingTo( this.controller.body.feet, person.position ),
+					place,
+					seated: person.clip === CLIP.SIT || person.clip === CLIP.SIT_TALK
+				} );
+				person = this.crowd.syncActor( controlledActor, this.controller.body.feet ) ?? person;
+				controlled = true;
+
+			} catch ( error ) {
+
+				console.warn( `conversation with ${person.npcId} is not under continuity: ${error?.message ?? error}` );
+				this.sim.interrupt( person.npcId, timeMin );
+
+			}
 
 		} else if ( person.npcId ) this.sim.interrupt( person.npcId, timeMin );
 
@@ -230,10 +257,7 @@ export class Interactor {
 		person.talking = false;
 		person.restClip = person.restClip ?? person.clip;
 		person.clip = person.restClip;
-		person.heading = Math.atan2(
-			this.controller.body.feet.x - person.position.x,
-			this.controller.body.feet.z - person.position.z
-		);
+		this.#facePlayer( person );
 
 		this.conversation = {
 			person,
@@ -245,6 +269,14 @@ export class Interactor {
 		this.animations?.beginConversation( this.conversation, controlledActor );
 
 		this.onConversation?.( this.conversation );
+
+	}
+
+	/** The person being talked to looks at the player for the whole conversation. */
+	#facePlayer( person ) {
+
+		if ( ! person ) return;
+		person.heading = headingTo( this.controller.body.feet, person.position );
 
 	}
 
@@ -263,6 +295,12 @@ export class Interactor {
 		this.doorColliders?.sync( door );
 
 	}
+
+}
+
+function headingTo( feet, position ) {
+
+	return Math.atan2( feet.x - position.x, feet.z - position.z );
 
 }
 

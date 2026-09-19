@@ -27,6 +27,8 @@ export class NpcContinuity {
 		this.follow = null;
 		this.conversation = null;
 		this.pose = null;
+		/** Identities a quest is keeping where they stand, by npcId. */
+		this.holds = new Map();
 
 	}
 
@@ -35,7 +37,7 @@ export class NpcContinuity {
 
 		this.boundary.input( 'appearance-request', request );
 		const { npcId, timeMin } = request;
-		if ( this.follow?.npcId === npcId || this.conversation?.npcId === npcId || this.pose?.npcId === npcId ) {
+		if ( this.#controls( npcId ) ) {
 
 			const actor = this.actors.get( npcId );
 			actor.visible = true;
@@ -53,7 +55,7 @@ export class NpcContinuity {
 
 		this.boundary.input( 'unload-request', request );
 		const { npcId } = request;
-		if ( this.follow?.npcId === npcId || this.conversation?.npcId === npcId || this.pose?.npcId === npcId ) {
+		if ( this.#controls( npcId ) ) {
 
 			throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${npcId} is under active control` );
 
@@ -74,6 +76,13 @@ export class NpcContinuity {
 
 			if ( controlled.has( npcId ) ) {
 
+				states.push( clone( actor ) );
+				continue;
+
+			}
+			if ( this.holds.has( npcId ) ) {
+
+				actor.visible = distance( actor.position, request.playerPosition ) <= request.maxDistance;
 				states.push( clone( actor ) );
 				continue;
 
@@ -103,7 +112,10 @@ export class NpcContinuity {
 		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is in conversation` );
 		if ( this.follow ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.follow.npcId} is already following` );
 		if ( this.pose ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.pose.npcId} has an explicit pose` );
-		const actor = this.#scheduledActor( request.npcId, request.timeMin );
+		// A held body walks from where the quest put it, not from its rota.
+		const actor = this.holds.delete( request.npcId )
+			? this.actors.get( request.npcId )
+			: this.#scheduledActor( request.npcId, request.timeMin );
 		if ( actor.place.kind === 'route' ) {
 
 			throw new NpcContinuityError( 'E_NPC_PLACE', `NPC ${request.npcId} cannot start a walking follow while aboard transit` );
@@ -182,7 +194,9 @@ export class NpcContinuity {
 		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is in conversation` );
 		if ( this.follow ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.follow.npcId} is under movement control` );
 		if ( this.pose ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.pose.npcId} already has an explicit pose` );
-		const actor = this.#scheduledActor( request.npcId, request.timeMin );
+		const actor = this.holds.delete( request.npcId )
+			? this.actors.get( request.npcId )
+			: this.#scheduledActor( request.npcId, request.timeMin );
 		if ( actor.place.kind === 'route' ) {
 
 			throw new NpcContinuityError( 'E_NPC_PLACE', `NPC ${request.npcId} cannot crouch while aboard transit` );
@@ -284,6 +298,68 @@ export class NpcContinuity {
 
 	}
 
+	/**
+	 * Puts one identity where a quest needs it and keeps it there. A held body
+	 * is not reprojected onto its rota, so the person a step sends the player
+	 * to is still standing there when the player arrives, and after they talk.
+	 */
+	hold( request ) {
+
+		this.boundary.input( 'hold-start', request );
+		const { npcId, timeMin } = request;
+		if ( this.conversation?.npcId === npcId || this.follow?.npcId === npcId || this.pose?.npcId === npcId ) {
+
+			throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${npcId} is already under control` );
+
+		}
+		const held = this.holds.has( npcId );
+		const actor = held ? this.actors.get( npcId ) : this.#scheduledActor( npcId, timeMin );
+		if ( ! held ) this.#interrupt( npcId, timeMin );
+		actor.position = [ ...request.position ];
+		actor.heading = request.heading;
+		actor.place = clone( request.place );
+		actor.visible = true;
+		actor.mode = 'posing';
+		actor.animation = 'idle';
+		actor.schedule = { ...actor.schedule, nextDestination: clone( request.place ) };
+		this.actors.set( npcId, actor );
+		this.holds.set( npcId, { npcId, lastTimeMin: timeMin } );
+		return this.#actorOut( actor );
+
+	}
+
+	/** Lets a held identity go: it walks from where it stands back into its day. */
+	releaseHold( request ) {
+
+		this.boundary.input( 'hold-release', request );
+		if ( ! this.holds.has( request.npcId ) ) {
+
+			throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${request.npcId} is not held` );
+
+		}
+		const actor = this.actors.get( request.npcId );
+		this.holds.delete( request.npcId );
+		if ( ! actor ) throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', `NPC ${request.npcId} has no materialized actor` );
+		this.#resume( actor.npcId, request.timeMin );
+		if ( this.follow ) {
+
+			// Another identity owns the walk-back slot; this one rejoins its
+			// schedule on the next projection instead of queueing behind it.
+			actor.mode = 'schedule';
+			return this.#actorOut( actor );
+
+		}
+		return this.#startResume( actor, request.timeMin, 'conversation' );
+
+	}
+
+	/** Every identity a quest is holding in place right now. */
+	get heldNpcIds() {
+
+		return [ ...this.holds.keys() ];
+
+	}
+
 	beginConversation( request ) {
 
 		this.boundary.input( 'conversation-start', request );
@@ -291,9 +367,10 @@ export class NpcContinuity {
 		if ( this.pose ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.pose.npcId} has an explicit pose` );
 		if ( this.follow?.mode === 'resuming' && this.follow.npcId === request.npcId ) this.follow = null;
 		const following = [ 'following', 'leading' ].includes( this.follow?.mode ) && this.follow.npcId === request.npcId;
-		const actor = following ? this.actors.get( request.npcId ) : this.#scheduledActor( request.npcId, request.timeMin );
+		const held = this.holds.delete( request.npcId );
+		const actor = following || held ? this.actors.get( request.npcId ) : this.#scheduledActor( request.npcId, request.timeMin );
 		if ( ! actor ) throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', `NPC ${request.npcId} has no materialized actor` );
-		if ( ! following ) this.#interrupt( request.npcId, request.timeMin );
+		if ( ! following && ! held ) this.#interrupt( request.npcId, request.timeMin );
 		actor.position = [ ...request.position ];
 		actor.heading = request.heading;
 		actor.place = clone( request.place );
@@ -310,6 +387,7 @@ export class NpcContinuity {
 
 	}
 
+	/** @param request.hold keeps the body where it stands instead of walking it back. */
 	endConversation( request ) {
 
 		this.boundary.input( 'conversation-stop', request );
@@ -325,6 +403,14 @@ export class NpcContinuity {
 			return this.#actorOut( actor );
 
 		}
+		if ( request.hold ) {
+
+			actor.mode = 'posing';
+			actor.animation = actor.animation === 'sit' ? 'sit' : 'idle';
+			this.holds.set( actor.npcId, { npcId: actor.npcId, lastTimeMin: request.timeMin } );
+			return this.#actorOut( actor );
+
+		}
 		this.#resume( actor.npcId, request.timeMin );
 		return this.#startResume( actor, request.timeMin, 'conversation' );
 
@@ -337,7 +423,8 @@ export class NpcContinuity {
 			actors: [ ...this.actors.values() ].sort( ( a, b ) => a.npcId.localeCompare( b.npcId ) ).map( clone ),
 			follow: this.follow ? clone( this.follow ) : null,
 			conversation: this.conversation ? clone( this.conversation ) : null,
-			pose: this.pose ? clone( this.pose ) : null
+			pose: this.pose ? clone( this.pose ) : null,
+			holds: [ ...this.holds.values() ].sort( ( a, b ) => a.npcId.localeCompare( b.npcId ) ).map( clone )
 		} );
 
 	}
@@ -397,7 +484,18 @@ export class NpcContinuity {
 			}
 
 		}
-		const unownedPose = save.actors.find( ( actor ) => actor.mode === 'posing' && save.pose?.npcId !== actor.npcId );
+		const heldIds = new Set( ( save.holds ?? [] ).map( ( hold ) => hold.npcId ) );
+		for ( const hold of save.holds ?? [] ) {
+
+			if ( ! ids.has( hold.npcId ) ) throw new NpcContinuityError( 'E_NPC_INPUT', `hold state references missing actor ${hold.npcId}` );
+			if ( save.pose?.npcId === hold.npcId || save.conversation?.npcId === hold.npcId || save.follow?.npcId === hold.npcId ) {
+
+				throw new NpcContinuityError( 'E_NPC_INPUT', `held actor ${hold.npcId} also has another control state` );
+
+			}
+
+		}
+		const unownedPose = save.actors.find( ( actor ) => actor.mode === 'posing' && save.pose?.npcId !== actor.npcId && ! heldIds.has( actor.npcId ) );
 		if ( unownedPose ) {
 
 			throw new NpcContinuityError( 'E_NPC_INPUT', `posing actor ${unownedPose.npcId} has no matching pose state` );
@@ -407,6 +505,7 @@ export class NpcContinuity {
 		if ( [ 'following', 'leading' ].includes( save.follow?.mode ) ) interrupted.add( save.follow.npcId );
 		if ( save.conversation?.ownsInterruption ) interrupted.add( save.conversation.npcId );
 		if ( save.pose ) interrupted.add( save.pose.npcId );
+		for ( const npcId of heldIds ) interrupted.add( npcId );
 		for ( const npcId of interrupted ) if ( ! this.simulation.behaviorAt( npcId, 0 )?.interrupted ) {
 
 			throw new NpcContinuityError( 'E_NPC_INPUT', `controlled save actor ${npcId} is not interrupted in the restored simulation` );
@@ -416,6 +515,7 @@ export class NpcContinuity {
 		this.follow = save.follow ? clone( save.follow ) : null;
 		this.conversation = save.conversation ? clone( save.conversation ) : null;
 		this.pose = save.pose ? clone( save.pose ) : null;
+		this.holds = new Map( ( save.holds ?? [] ).map( ( hold ) => [ hold.npcId, clone( hold ) ] ) );
 		return this.serialize();
 
 	}
@@ -644,6 +744,14 @@ export class NpcContinuity {
 
 		const projection = this.routes.project( actor.position );
 		if ( projection ) actor.place = { kind: 'edge', id: projection.edge.id };
+
+	}
+
+	/** Whether some control is already keeping this identity out of its rota. */
+	#controls( npcId ) {
+
+		return this.follow?.npcId === npcId || this.conversation?.npcId === npcId ||
+			this.pose?.npcId === npcId || this.holds.has( npcId );
 
 	}
 

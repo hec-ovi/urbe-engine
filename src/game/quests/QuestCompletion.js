@@ -12,7 +12,9 @@ export function questCompletion( change, views ) {
 				title: change.ending.title,
 				text: change.ending.epilogue,
 				outcome: 'done',
-				steps: view?.steps ?? []
+				// The summary recaps what was done, not what is open: it keeps
+				// the words and the tick, and leaves the live detail behind.
+				steps: ( view?.steps ?? [] ).map( ( step ) => ( { text: step.text, done: step.done } ) )
 			} } : {} )
 		}
 	};

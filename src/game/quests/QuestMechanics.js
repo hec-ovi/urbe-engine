@@ -42,7 +42,7 @@ export class QuestMechanics {
 			ok: true,
 			progressed: true,
 			message: step.narrative.description,
-			completed: moved.map( ( change ) => questCompletion( change, this.session.view() ) )
+			completed: moved.map( ( change ) => questCompletion( change, this.session.view( request.timeMin ) ) )
 		} );
 
 	}

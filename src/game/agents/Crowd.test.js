@@ -432,6 +432,67 @@ describe( 'Crowd cast at a quest parcel', () => {
 
 	} );
 
+	it( 'posts a cast body that has walked off back at the parcel, through continuity', () => {
+
+		const instance = { npcId: 'npc-denna', name: { given: 'River', family: 'Nakamura' }, type: 'receptionist', gender: 'female', appearanceSeed: 7 };
+		const inside = new THREE.Vector3( 10, 0, 10 );
+		const counter = { id: 'f0-a6', position: new THREE.Vector3( 14, 0, 12 ), heading: 1 };
+		const sim = { getNPC: () => instance, crowd: () => ( { agents: [] } ), instantiate: () => null };
+		const hold = vi.fn( ( request ) => ( {
+			...persistentActor( instance ), place: { ...request.place }, position: [ ...request.position ],
+			heading: request.heading, animation: 'idle', mode: 'posing', visible: true
+		} ) );
+		const crowd = new Crowd( {
+			assets: testAssets(), routes: pavement(), signals: { green: () => true }, sim,
+			continuity: { hold },
+			places: new Map( [ [ 'p17', { inside, heading: 0, anchors: { counter: [ counter ] } } ] ] ), capacity: 4
+		} );
+
+		const cast = crowd.castMember( 'npc-denna', 1264, inside, 'p17' );
+		expect( hold ).toHaveBeenCalledWith( {
+			npcId: 'npc-denna', timeMin: 1264, place: { kind: 'parcel', id: 'p17' },
+			position: counter.position.toArray(), heading: 1
+		} );
+		expect( cast ).toMatchObject( { npcId: 'npc-denna', parcelId: 'p17', continuity: true } );
+		expect( cast.position.equals( counter.position ) ).toBe( true );
+		// Standing where it belongs, the same body comes back untouched.
+		expect( crowd.castMember( 'npc-denna', 1265, inside, 'p17' ) ).toBe( cast );
+		expect( hold ).toHaveBeenCalledTimes( 1 );
+
+		// Walked off by its own routine, it is put back rather than handed over.
+		cast.parcelId = null;
+		cast.place = { kind: 'edge', id: 'e1' };
+		expect( crowd.castMember( 'npc-denna', 1266, inside, 'p17' ) ).toBe( cast );
+		expect( hold ).toHaveBeenCalledTimes( 2 );
+		expect( crowd.members.size ).toBe( 1 );
+
+	} );
+
+	it( 'names only the handle that resolves to the cast person, never the ones it walked past', () => {
+
+		const instance = { npcId: 'npc-denna', name: { given: 'River', family: 'Nakamura' }, type: 'receptionist', gender: 'female', appearanceSeed: 7 };
+		const inside = new THREE.Vector3( 10, 0, 10 );
+		const bystander = { npcId: 'npc-passer', name: { given: 'Wen', family: 'Ito' }, type: 'receptionist', gender: 'male', appearanceSeed: 12 };
+		const handle = ( crowdId ) => ( {
+			crowdId, type: 'receptionist', gender: 'female', activity: 'working', place: { kind: 'parcel', id: 'p17' }
+		} );
+		const sim = {
+			getNPC: () => instance,
+			crowd: ( timeMin, scope ) => ( { agents: scope.kind === 'parcel' ? [ handle( 'h1' ), handle( 'h2' ) ] : [] } ),
+			instantiate: ( crowdId ) => crowdId === 'h2' ? instance : bystander
+		};
+		const crowd = new Crowd( {
+			assets: testAssets(), routes: pavement(), signals: { green: () => true }, sim,
+			places: new Map( [ [ 'p17', { inside, heading: 0, anchors: {} } ] ] ), capacity: 4
+		} );
+		crowd.update( 0, inside, { timeMin: 1264, daySeconds: 36000 } );
+
+		const cast = crowd.castMember( 'npc-denna', 1264, inside, 'p17' );
+		expect( cast.npcId ).toBe( 'npc-denna' );
+		expect( [ ...crowd.members.values() ].filter( ( member ) => member.npcId ) ).toEqual( [ cast ] );
+
+	} );
+
 } );
 
 describe( 'Crowd on a lane', () => {

@@ -5,6 +5,7 @@
   "additionalProperties": false,
   "required": ["timeMin"],
   "properties": {
-    "timeMin": { "type": "number", "minimum": 0 }
+    "timeMin": { "type": "number", "minimum": 0 },
+    "questId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }
   }
 }

@@ -36,14 +36,15 @@ const noop = () => {};
  * time over the game, and the chat, avatar, call and mission widgets.
  * Presentation only: it is handed values and reports intents through props.
  * props (all optional): { onResume, onCloseDialog, onSend, onOpen, onClose,
-	 *   onLeave, onSettingChange, onHangUp, onSummaryClose, onTransitSelect, onTransitCancel }
+	 *   onLeave, onSettingChange, onHangUp, onSummaryClose, onTransitSelect,
+	 *   onTransitCancel, onQuestSelect }
  */
 export class GameView {
 
 	constructor( {
 		onResume = noop, onCloseDialog = noop, onSend = noop, onOpen = noop, onClose = noop,
 		onLeave = noop, onSettingChange = noop, onHangUp = noop, onSummaryClose = noop,
-		onTransitSelect = noop, onTransitCancel = noop,
+		onTransitSelect = noop, onTransitCancel = noop, onQuestSelect = noop,
 		menu = {}
 	} = {} ) {
 
@@ -65,7 +66,7 @@ export class GameView {
 
 		this.map = new Map3DView( { onClose: close } );
 		this.inventory = new InventoryView( { onClose: close } );
-		this.quests = new QuestsView( { onClose: close } );
+		this.quests = new QuestsView( { onClose: close, onSelect: onQuestSelect } );
 		this.codex = new CodexView( { onClose: close } );
 		this.settings = new SettingsView( { onChange: onSettingChange, onClose: close } );
 		this.controls = new ControlsView( { onClose: close } );

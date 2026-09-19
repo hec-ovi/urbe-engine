@@ -3,6 +3,7 @@ import interactionRequest from './schema/interaction-request.schema.json';
 import interactionResult from './schema/interaction-result.schema.json';
 import interactionTargets from './schema/interaction-targets.schema.json';
 import activeObjective from './schema/active-objective.schema.json';
+import placeTargets from './schema/place-targets.schema.json';
 import gameplayWorld from './schema/gameplay-world.schema.json';
 import gameplayFrame from './schema/gameplay-frame.schema.json';
 import gameplayCandidates from './schema/gameplay-candidates.schema.json';
@@ -20,7 +21,7 @@ import values from './schema/values.schema.json';
 import { QuestActionError } from './QuestActionError.js';
 
 const SCHEMAS = [
-	values, targetQuery, interactionRequest, interactionTargets, activeObjective, interactionResult,
+	values, targetQuery, interactionRequest, interactionTargets, activeObjective, placeTargets, interactionResult,
 	gameplayWorld, gameplayFrame, gameplayCandidates, gameplayPerform, npcControlRequest, npcControlResult,
 	mechanicRequest, mechanicResult, mechanicTargets, transitState, transitStateRestoreRequest, transitRestoreRequest
 ];

@@ -151,6 +151,26 @@
 	text-decoration: line-through;
 }
 
+.quest-step-body {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.quest-step-meta {
+	color: var(--ui-mute);
+	font-size: 11px;
+}
+
+.quest-step.is-closed {
+	color: var(--ui-dim);
+}
+
+.quest-step-closed {
+	color: #e4c46a;
+	font-size: 11px;
+}
+
 .quest-step-mark {
 	flex: none;
 	width: 14px;

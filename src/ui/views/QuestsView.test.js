@@ -31,4 +31,34 @@ describe( 'QuestsView', () => {
 
 	} );
 
+	it( 'reports the picked quest, badges a side job on offer, and says who, where and when a step is closed', async () => {
+
+		const onSelect = vi.fn();
+		const view = new QuestsView( { onClose: vi.fn(), onSelect } );
+		document.body.replaceChildren( view.element );
+
+		view.setQuests( [ ...QUESTS, {
+			id: 'q3', title: 'Oxide Filter', text: 'Denna saved the cups.', state: 'available',
+			steps: [ {
+				text: 'Hear Denna out about the cups.', done: false, npcName: 'Denna Roe',
+				place: { kind: 'parcel', id: 'p0', name: 'Oxide Filter' },
+				availability: { available: false, reason: 'outside_window', text: 'This objective is open at another hour. Open 18:00 to 23:00.' },
+				window: { label: 'during the slow hour', days: [ 0 ], startMin: 1080, endMin: 1380 }
+			} ]
+		} ] );
+		expect( onSelect ).not.toHaveBeenCalled();
+
+		const offered = screen.getByRole( 'button', { name: /Oxide Filter/ } );
+		expect( offered.textContent ).toContain( 'available' );
+		await userEvent.setup().click( offered );
+		expect( onSelect ).toHaveBeenCalledWith( 'q3' );
+
+		const step = screen.getByText( 'Hear Denna out about the cups.' ).closest( 'li' );
+		expect( step.classList.contains( 'is-closed' ) ).toBe( true );
+		expect( step.textContent ).toContain( 'Denna Roe - Oxide Filter' );
+		expect( step.textContent ).toContain( 'This objective is open at another hour. Open 18:00 to 23:00.' );
+		expect( step.textContent ).toContain( 'Open during the slow hour, 18:00 to 23:00' );
+
+	} );
+
 } );
