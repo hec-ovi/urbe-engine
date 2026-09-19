@@ -17,11 +17,16 @@ const FACES = 6;
  * darks the way air does, view-dependently, where a flat ambient reads as a
  * wash immediately.
  *
- * A bake is six renders of the city and a mip convolution. Only the loading
- * bake does them in one go: a rebake renders one cube face per frame and
- * convolves on the seventh, so no single frame carries the whole city twice,
- * and the reflections in use stay the previous bake's until the new one is
- * whole.
+ * A bake is six renders of the city and a mip convolution. The loading bake
+ * does them under the load's budget, one face per ask; a rebake renders one
+ * cube face per frame and convolves on the seventh, so no single frame
+ * carries the whole city twice, and the reflections in use stay the previous
+ * bake's until the new one is whole.
+ *
+ * The environment the scene reflects is one resident texture, standing from
+ * the moment the probe is built: black until the first bake, and every bake
+ * after writes into it. A material's program is built for the environment it
+ * has, so one that changed identity would have every program built again.
  */
 export class EnvironmentProbe {
 
@@ -46,6 +51,30 @@ export class EnvironmentProbe {
 		this.cube = new THREE.CubeRenderTarget( this.size, { type: THREE.HalfFloatType } );
 		this.camera = new THREE.CubeCamera( NEAR, FAR, this.cube );
 		this.face = FACES;
+		this.#prime();
+
+	}
+
+	/** The resident environment, from an empty cube, before anything is compiled against it. */
+	#prime() {
+
+		const renderer = this.renderer;
+		const current = renderer.getRenderTarget();
+		try {
+
+			for ( let face = 0; face < FACES; face ++ ) {
+
+				renderer.setRenderTarget( this.cube, face, 0 );
+				renderer.clear?.();
+
+			}
+
+		} finally {
+
+			renderer.setRenderTarget( current );
+
+		}
+		this.#finish();
 
 	}
 
@@ -67,11 +96,45 @@ export class EnvironmentProbe {
 
 	}
 
-	/** The whole bake now: the loading screen's, before the first frame. */
+	/** The whole bake now, in one go: for a preview whose frame is not yet drawn. */
 	bake( position, now = performance.now() ) {
 
 		this.#begin( position, now );
 		while ( this.baking ) this.#step();
+
+	}
+
+	/**
+	 * The loading bake: one face per ask of the frame budget, each counted.
+	 * @param onProgress receives (faces done, faces)
+	 */
+	async bakeAsync( position, { slice = null, onProgress = () => {} } = {}, now = performance.now() ) {
+
+		this.#begin( position, now );
+		let done = 0;
+		while ( this.baking ) {
+
+			if ( slice ) await slice.step();
+			this.#step();
+			onProgress( ++ done, FACES );
+
+		}
+
+	}
+
+	/**
+	 * Builds the graphs the cube faces draw with, one per program, before a
+	 * face renders them all in one go: the renderer keeps a graph per render
+	 * target, so the faces cannot use the frame's. The excluded groups are
+	 * left out, as they are of the faces.
+	 *
+	 * @param warmup the frame's `Warmup`, whose uploads and keepers this shares
+	 * @param onProgress receives (done, total) over the graphs
+	 */
+	prepare( warmup, onProgress = () => {} ) {
+
+		return warmup.sibling( { camera: this.camera.children[ 0 ], renderTarget: this.cube, mrt: null } )
+			.warmAll( this.scene, { onProgress, skip: ( node ) => this.excluded.includes( node ) } );
 
 	}
 
@@ -158,8 +221,23 @@ export class EnvironmentProbe {
 
 	#finish() {
 
+		const renderer = this.renderer;
+		const previousMRT = renderer.getMRT();
+		const tone = renderer.toneMapping, color = renderer.outputColorSpace;
 		const previous = this.target;
-		this.target = this.convolve( this.renderer, this.cube.texture, previous );
+		try {
+
+			renderer.setMRT( null );
+			renderer.toneMapping = THREE.NoToneMapping;
+			renderer.outputColorSpace = THREE.ColorManagement.workingColorSpace;
+			this.target = this.convolve( renderer, this.cube.texture, previous );
+
+		} finally {
+
+			renderer.setMRT( previousMRT );
+			renderer.toneMapping = tone; renderer.outputColorSpace = color;
+
+		}
 		this.scene.environment = this.target.texture;
 		if ( previous && previous !== this.target ) previous.dispose();
 

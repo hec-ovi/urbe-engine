@@ -7,7 +7,11 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-export const INTERIOR_ENTRY = new URL( '../../../interior/src/index.ts', import.meta.url ).href;
+// The sibling checkout by default; URBE_INTERIOR_DIR names another checkout of
+// the Interior box (a pinned worktree while its main tree is mid-edit).
+export const INTERIOR_ENTRY = process.env.URBE_INTERIOR_DIR
+	? new URL( 'src/index.ts', `file://${process.env.URBE_INTERIOR_DIR.replace( /\/?$/, '/' )}` ).href
+	: new URL( '../../../interior/src/index.ts', import.meta.url ).href;
 
 /** The expanded NPC support beside the building, for simulation and the runtime. */
 export const NPC_FILE = 'npc.json';

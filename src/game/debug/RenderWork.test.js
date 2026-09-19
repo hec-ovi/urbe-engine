@@ -31,7 +31,7 @@ describe( 'RenderWork', () => {
 		info.createTexture( map );
 		info.createTexture( {} );
 
-		expect( work.since() ).toBe( '3 shaders linked (kit-plans:brick vertex, kit-plans:brick fragment, unnamed fragment), 2 shaders released, 2 textures uploaded (12 MB)' );
+		expect( work.since() ).toBe( '3 shaders linked (kit-plans:brick vertex, kit-plans:brick fragment, unnamed fragment), 2 shaders released (kit-plans:brick vertex, kit-plans:brick fragment), 2 textures uploaded (12 MB)' );
 		expect( work.since() ).toBe( null );
 
 		for ( let i = 0; i < 8; i ++ ) info.createProgram( { name: `m${i}`, stage: 'vertex' } );

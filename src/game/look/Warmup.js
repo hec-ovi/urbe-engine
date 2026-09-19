@@ -23,18 +23,31 @@ export class Warmup {
 	/**
 	 * @param scene the scene the object lives in or is going to, for its lights
 	 * @param mrt the render pipeline's scene-pass MRT, or null when it has none
+	 * @param uploaded, keepers shared with a sibling warm-up, which prepares
+	 *   the same world for another render target
 	 */
-	constructor( renderer, scene, camera, mrt = null, renderTarget = null ) {
+	constructor( renderer, scene, camera, mrt = null, renderTarget = null, { uploaded = new WeakSet(), keepers = new ProgramKeepers() } = {} ) {
 
 		this.renderer = renderer;
 		this.scene = scene;
 		this.camera = camera;
 		this.mrt = mrt;
 		this.renderTarget = renderTarget;
-		this.uploaded = new WeakSet();
+		this.uploaded = uploaded;
 		this.warmed = new Set();
-		this.keepers = new ProgramKeepers();
+		this.keepers = keepers;
 		this.preparing = Promise.resolve();
+
+	}
+
+	/**
+	 * The same world prepared for another pass: the renderer keeps a graph per
+	 * render target, so a probe's cube faces ask for graphs of their own. Maps
+	 * uploaded and programs pinned are shared, because those are the same.
+	 */
+	sibling( { camera = this.camera, renderTarget = this.renderTarget, mrt = this.mrt } = {} ) {
+
+		return new Warmup( this.renderer, this.scene, camera, mrt, renderTarget, { uploaded: this.uploaded, keepers: this.keepers } );
 
 	}
 
@@ -157,13 +170,14 @@ export class Warmup {
 	 * a time so the backend never receives an unbounded set in one request, and
 	 * pins each one behind a keeper.
 	 *
+	 * @param skip subtrees left out, such as the groups a probe never renders
 	 * @returns milliseconds the pass took; `onProgress` counts programs, not
 	 * renderables, so the work reported is the work left to do
 	 */
-	async warmAll( object, { wanted = () => true, onProgress = () => {} } = {} ) {
+	async warmAll( object, { wanted = () => true, onProgress = () => {}, skip = () => false } = {} ) {
 
 		if ( ! object ) return 0;
-		const wantedPrograms = this.programsOf( object );
+		const wantedPrograms = this.programsOf( object, skip );
 		const started = performance.now();
 
 		for ( let index = 0; index < wantedPrograms.length; index ++ ) {
@@ -183,20 +197,29 @@ export class Warmup {
 	}
 
 	/** One renderable per program this object needs and this warm-up lacks. */
-	programsOf( object ) {
+	programsOf( object, skip = () => false ) {
 
 		const wantedPrograms = [];
 		const seen = new Set();
+		const visit = ( node ) => {
 
-		object?.traverse( ( node ) => {
+			if ( skip( node ) ) return;
+			if ( node.material ) {
 
-			if ( ! node.material ) return;
-			const key = programKey( node );
-			if ( seen.has( key ) || this.warmed.has( key ) ) return;
-			seen.add( key );
-			wantedPrograms.push( [ node, key ] );
+				const key = programKey( node );
+				if ( ! seen.has( key ) && ! this.warmed.has( key ) ) {
 
-		} );
+					seen.add( key );
+					wantedPrograms.push( [ node, key ] );
+
+				}
+
+			}
+			for ( const child of node.children ) visit( child );
+
+		};
+
+		if ( object ) visit( object );
 
 		return wantedPrograms;
 

@@ -22,7 +22,7 @@ export class RenderWork {
 	constructor( info ) {
 
 		this.linked = new Map();
-		this.released = 0;
+		this.released = new Map();
 		this.uploaded = 0;
 		this.uploadedBytes = 0;
 		this.freed = 0;
@@ -39,13 +39,8 @@ export class RenderWork {
 
 		};
 
-		listen( 'createProgram', ( program ) => {
-
-			const name = `${program.name || 'unnamed'} ${program.stage}`;
-			this.linked.set( name, ( this.linked.get( name ) ?? 0 ) + 1 );
-
-		} );
-		listen( 'destroyProgram', () => this.released ++ );
+		listen( 'createProgram', ( program ) => count( this.linked, program ) );
+		listen( 'destroyProgram', ( program ) => count( this.released, program ) );
 		listen( 'createTexture', ( texture ) => {
 
 			this.uploaded ++;
@@ -63,18 +58,11 @@ export class RenderWork {
 	since() {
 
 		const built = [];
-		let programs = 0;
-		for ( const count of this.linked.values() ) programs += count;
+		const linked = programs( this.linked, 'linked' );
+		const released = programs( this.released, 'released' );
 
-		if ( programs > 0 ) {
-
-			const names = [ ...this.linked ].sort( ( a, b ) => b[ 1 ] - a[ 1 ] );
-			const shown = names.slice( 0, NAMED ).map( ( [ name, count ] ) => ( count > 1 ? `${name} x${count}` : name ) );
-			if ( names.length > NAMED ) shown.push( `${names.length - NAMED} more` );
-			built.push( `${programs} shader${programs === 1 ? '' : 's'} linked (${shown.join( ', ' )})` );
-
-		}
-		if ( this.released > 0 ) built.push( `${this.released} shader${this.released === 1 ? '' : 's'} released` );
+		if ( linked ) built.push( linked );
+		if ( released ) built.push( released );
 		if ( this.uploaded > 0 ) {
 
 			const size = this.uploadedBytes >= 1 << 20 ? ` (${( this.uploadedBytes / ( 1 << 20 ) ).toFixed( 0 )} MB)` : '';
@@ -83,7 +71,7 @@ export class RenderWork {
 		}
 
 		this.linked.clear();
-		this.released = 0;
+		this.released.clear();
 		this.uploaded = 0;
 		this.uploadedBytes = 0;
 		this.freed = 0;
@@ -91,5 +79,27 @@ export class RenderWork {
 		return built.length ? built.join( ', ' ) : null;
 
 	}
+
+}
+
+function count( names, program ) {
+
+	const name = `${program.name || 'unnamed'} ${program.stage}`;
+	names.set( name, ( names.get( name ) ?? 0 ) + 1 );
+
+}
+
+/** "N shaders linked (name xk, ..., m more)", or null when none were. */
+function programs( names, what ) {
+
+	let total = 0;
+	for ( const count of names.values() ) total += count;
+	if ( total === 0 ) return null;
+
+	const sorted = [ ...names ].sort( ( a, b ) => b[ 1 ] - a[ 1 ] );
+	const shown = sorted.slice( 0, NAMED ).map( ( [ name, count ] ) => ( count > 1 ? `${name} x${count}` : name ) );
+	if ( sorted.length > NAMED ) shown.push( `${sorted.length - NAMED} more` );
+
+	return `${total} shader${total === 1 ? '' : 's'} ${what} (${shown.join( ', ' )})`;
 
 }

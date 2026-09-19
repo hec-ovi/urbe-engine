@@ -12,7 +12,7 @@ Records frame gaps, subsystem costs and renderer allocations for a running city.
 ## Output
 
 - HitchLog exposes `notes`, `count` and `worst`, and prints gaps above its threshold.
-- `RenderWork.since()` returns what the renderer built since the last call, or null: programs linked by material name and stage (the six most, then a count), programs released, and textures uploaded with their size past a megabyte. A program released and linked again in the same frame counts on both sides, which the net counters would hide.
+- `RenderWork.since()` returns what the renderer built since the last call, or null: programs linked and programs released, each by material name and stage (the six most, then a count), and textures uploaded with their size past a megabyte. A program released and linked again in the same frame counts on both sides, which the net counters would hide.
 - FrameReports sends one report per second, with frame median, p95, maximum and up to 20 hitch records. Snapshot collection occurs only when sending. Missing development transport creates no reporter.
 - The plugin validates reports and stores the latest 60 in `performance.json` under its configured directory. Writes are serialized. Reports contain the game id, rendering settings, counters, position and timing only.
 

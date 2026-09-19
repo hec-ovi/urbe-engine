@@ -184,7 +184,12 @@ describe( 'Warmup', () => {
 		const keptBatch = keepers.find( object => object.isBatchedMesh );
 		expect( keptBatch._colorsTexture ).not.toBeNull();
 		expect( Object.keys( keptBatch.geometry.attributes ).sort() ).toEqual( Object.keys( batched.geometry.attributes ).sort() );
-		expect( keepers.find( object => object.isInstancedMesh ).geometry ).toBe( box );
+		// A keeper's geometry is its own triangle in the world's layout, so a
+		// geometry the world disposes never takes the keeper down with it.
+		const keptInstanced = keepers.find( object => object.isInstancedMesh );
+		expect( keptInstanced.geometry ).not.toBe( box );
+		expect( Object.keys( keptInstanced.geometry.attributes ).sort() ).toEqual( Object.keys( box.attributes ).sort() );
+		expect( keptInstanced.geometry.getAttribute( 'position' ).count ).toBe( 3 );
 		for ( const keeper of keepers ) expect( [ material, other ] ).not.toContain( keeper.material );
 
 		// The city pass finds the same materials standing somewhere else.
@@ -200,6 +205,39 @@ describe( 'Warmup', () => {
 		material.dispose();
 
 		expect( disposed ).not.toHaveBeenCalled();
+
+	} );
+
+	it( 'prepares a sibling pass for another render target with the same uploads and keepers, leaving skipped groups out', async () => {
+
+		const scene = new THREE.Scene();
+		const crowd = new THREE.Group();
+		crowd.add( new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial() ) );
+		const street = new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial() );
+		scene.add( crowd, street );
+		const compiled = [];
+		const targets = [];
+		const renderer = fakeRenderer( async ( object ) => { compiled.push( object ); targets.push( renderer.getRenderTarget() ); } );
+		let renderTarget = null;
+		renderer.getRenderTarget = () => renderTarget;
+		renderer.setRenderTarget = next => { renderTarget = next; };
+		renderer.initTexture = vi.fn();
+		street.material.map = new THREE.Texture();
+
+		const frame = new Warmup( renderer, scene, new THREE.PerspectiveCamera(), null, { name: 'frame' } );
+		await frame.warmAll( scene );
+		const cube = { name: 'cube' };
+		const probe = frame.sibling( { camera: new THREE.PerspectiveCamera(), renderTarget: cube, mrt: null } );
+		await probe.warmAll( scene, { skip: ( node ) => node === crowd } );
+
+		// The frame pass built both draws and their keepers; the probe pass
+		// built the street alone, against its own target, uploaded nothing
+		// again and made no second keeper.
+		expect( compiled.filter( object => ! object.name.startsWith( 'keeper:' ) ) ).toEqual( [ crowd.children[ 0 ], street, street ] );
+		expect( targets.at( - 1 ) ).toBe( cube );
+		expect( renderer.initTexture ).toHaveBeenCalledTimes( 1 );
+		expect( probe.keepers ).toBe( frame.keepers );
+		expect( frame.keepers.size ).toBe( 2 );
 
 	} );
 

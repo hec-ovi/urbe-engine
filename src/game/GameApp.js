@@ -542,10 +542,6 @@ export class GameApp {
 		await this.propsStream.update( spawn.point, { prepare: preparing( 'street props' ) } );
 		const surfaces = progress.pass( 'preparing city surfaces' );
 		await this.floorWarmup.warmAll( this.scene, { onProgress: ( done, total ) => surfaces.at( done, total ) } );
-		// The one piece of load work a first frame does not need: the probe
-		// renders the whole city six times over, so it runs on the frame loop
-		// instead, before the first frame that reads it.
-		this.deferred = this.probe ? [ [ 'baking the environment', () => this.probe.bake( spawn.point ) ] ] : [];
 
 		this.interactor = new Interactor( {
 			crowd: this.crowd, doors: city.doors, sim: this.sim,
@@ -579,11 +575,21 @@ export class GameApp {
 		] );
 		// The first frame is a whole tick, run here under the loading view: what
 		// the first update of the crowd, the lights, the rooms and the streams
-		// brings to the renderer is built now, and a second pass pins whatever
-		// program that frame was the first to ask for.
+		// brings to the renderer is built now. The probe then renders the city
+		// six times into its resident environment, its graphs and faces each
+		// counted, and a last pass pins whatever program that frame was the
+		// first to ask for.
 		progress.step( 'preparing the first frame' );
 		this.playStartedAt = performance.now();
 		this.tick( 0 );
+		if ( this.probe ) {
+
+			const probing = progress.pass( 'preparing the probe' );
+			await this.probe.prepare( this.floorWarmup, ( done, total ) => probing.at( done, total ) );
+			const baking = progress.pass( 'baking the environment' );
+			await this.probe.bakeAsync( spawn.point, { slice, onProgress: ( done, total ) => baking.at( done, total ) } );
+
+		}
 		const pinning = progress.pass( 'pinning the programs' );
 		await this.floorWarmup.warmAll( this.scene, { onProgress: ( done, total ) => pinning.at( done, total ) } );
 		this.hitches.notes.length = 0;
@@ -641,15 +647,6 @@ export class GameApp {
 		if ( built ) this.hitches.note( built );
 		this.frameReports?.frame( now, now - this.last, this.hitches.notes );
 		this.hitches.frame( now - this.last );
-		// Load work the first frame did not need, one piece per frame, before
-		// anything this frame draws can ask for it; its cost is a note of the
-		// gap that carries it, like the tick's own.
-		if ( this.deferred?.length ) {
-
-			const [ what, run ] = this.deferred.shift();
-			this.hitches.time( what, run );
-
-		}
 		this.tick( Math.min( 0.05, ( now - this.last ) / 1000 ) );
 		this.last = now;
 		this.#measure( performance.now() - now );
