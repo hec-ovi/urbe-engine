@@ -123,14 +123,18 @@ export class KitAssembler {
 		const oriented = face % 2 === 0 ? bays : { across: bays.deep, deep: bays.across };
 		const fitting = covered.map( ( standing ) => fittingFamilies( oriented, floors, standing ) )
 			.reduce( ( kept, fits ) => kept.filter( ( id ) => fits.includes( id ) ) );
+		const family = this.#family( dressed, fitting, parcelId );
+		// A templated parcel stands the slot's building, drawn for the slot's
+		// class. A lot the slot's family does not fit is the exception: it stands
+		// the building its own lot asks for, design and materials both. So does a
+		// parcel on a block Atlas tiled on its own.
+		const use = dressed && family === dressed.family ? dressed.use : null;
 
 		return {
 			parcelId,
 			signText: request.options.signage?.text ?? null,
 			absorbs: dressed?.absorbs ?? null,
-			// A templated parcel stands the slot's building, drawn for the slot's
-			// class; a parcel on a block Atlas tiled on its own picks its own.
-			plan: this.plans.want( this.#family( dressed, fitting, parcelId ), oriented, floors, dressed?.use ?? parcel ),
+			plan: this.plans.want( family, oriented, floors, use ?? parcel ),
 			frame: this.#frame( rectangle.footprint, face )
 		};
 
@@ -174,14 +178,16 @@ export class KitAssembler {
 
 	/**
 	 * Which family this parcel wears: the slot's, which is the whole point of a
-	 * template, unless the parcel's own envelope moved its height to one that
-	 * family no longer fits. A parcel on a block with no template picks its own.
+	 * template, unless this lot cannot stand it, at its tier or at the height its
+	 * envelope left it. Then it takes a family that does fit, and the plain
+	 * building only where no approved family fits the lot at all. A parcel on a
+	 * block with no template picks its own the same way.
 	 * @param dressed what the template dressed this parcel with, or null
 	 * @param fitting the families the building standing here accepts
 	 */
 	#family( dressed, fitting, parcelId ) {
 
-		if ( dressed && ( dressed.family === null || fitting.includes( dressed.family ) ) ) return dressed.family;
+		if ( dressed && fitting.includes( dressed.family ) ) return dressed.family;
 
 		return chooseFamily( fitting, this.worldSeed, parcelId );
 

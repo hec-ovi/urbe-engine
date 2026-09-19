@@ -102,7 +102,7 @@ describe( 'the approved families a lot may wear', () => {
 
 	} );
 
-	it( 'stands one building on a slot whose uses share no family, drawn for the class the most of its lots carry', () => {
+	it( 'stands the family the most of a slot\'s lots accept and leaves plain to the lots no family fits', () => {
 
 		const template = { id: 'bt-mixed', lots: [ { offset: [ 0, 0 ], width: 24, depth: 32 } ] };
 		const atlas = city( [
@@ -112,12 +112,15 @@ describe( 'the approved families a lot may wear', () => {
 		], template );
 		const city0 = plan( atlas );
 
-		// One slot, one building: no approved family suits both streets, so every
-		// lot of the slot stands the plain plan, drawn for the class most of them
-		// carry, and the rich lot is a copy of it instead of a building of its own.
+		// The rich lot is the only one an approved family accepts, so the slot
+		// stands that family and the rich lot wears it in its own materials. The
+		// mid lots are the exception: no family fits a mid street, so they take
+		// the plain building, and both of them take the same one.
+		expect( city0.of( 'rich' ).family ).not.toBeNull();
+		expect( city0.of( 'rich' ).id ).toContain( 'commercial-rich' );
 		expect( city0.of( 'mid-a' ).family ).toBeNull();
 		expect( city0.of( 'mid-a' ).id ).toContain( 'commercial-mid' );
-		expect( city0.of( 'rich' ).id ).toBe( city0.of( 'mid-a' ).id );
+		expect( city0.of( 'mid-b' ).id ).toBe( city0.of( 'mid-a' ).id );
 
 	} );
 

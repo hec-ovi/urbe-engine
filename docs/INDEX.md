@@ -1,6 +1,6 @@
 # Box map
 
-[Engine 0.26.5 contract](../CONTRACT.md), [agent calling guide](../SKILL.md), [cross-box proposals](ISSUES.md). Raw requirements and local verification records stay untracked.
+[Engine 0.26.6 contract](../CONTRACT.md), [agent calling guide](../SKILL.md), [cross-box proposals](ISSUES.md). Raw requirements and local verification records stay untracked.
 
 | Folder | Purpose and dependencies | Inputs and outputs |
 | --- | --- | --- |

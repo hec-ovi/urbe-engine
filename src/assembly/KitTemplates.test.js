@@ -299,17 +299,24 @@ describe( 'block templates and shared building plans', () => {
 
 /**
  * Every kit parcel of a templated block, and the building each template slot
- * stands: `rows` in blueprint order, `bySlot` the ones standing in a slot (a
- * merged host covers two, so it stands in none) and `base` the building most of
- * a slot's blocks stand, which is the template's own.
+ * stands for each class of lot in it: `rows` in blueprint order, `bySlot` the
+ * ones standing in a slot (a merged host covers two, so it stands in none) and
+ * `base` the building most of those blocks stand, which is the template's own.
  */
 function slotted( city ) {
 
 	const rows = Object.entries( city.manifest.buildings )
 		.filter( ( [ , entry ] ) => entry.template !== null )
-		.map( ( [ id, entry ] ) => ( {
-			id, block: blockOf.get( id ).id, slot: `${entry.template}#${entry.slot}`, record: city.record( id )
-		} ) );
+		.map( ( [ id, entry ] ) => {
+
+			const record = city.record( id );
+
+			// A lot the slot's design does not fit stands one of its own, so a slot
+			// is read per design: the template's, and any exception beside it.
+			return { id, block: blockOf.get( id ).id, record,
+				slot: `${entry.template}#${entry.slot} ${building( record.plan ).dressing}` };
+
+		} );
 	const bySlot = new Map();
 
 	for ( const row of rows ) {
@@ -328,15 +335,15 @@ function slotted( city ) {
 }
 
 /**
- * A plan as the building it is: `shape` is what it looks like (family, class and
- * lot, its bay order normalised because that follows the street the lot fronts)
- * and `floors` how tall it stands.
+ * A plan as the building it is: `dressing` is the family and the class it is
+ * drawn for, `shape` adds the lot (its bay order normalised, because that
+ * follows the street the lot fronts) and `floors` is how tall it stands.
  */
 function building( planId ) {
 
-	const [ , shape, across, deep, floors ] = /^(.+?)-(\d+)x(\d+)x(\d+)f$/.exec( planId );
+	const [ , dressing, across, deep, floors ] = /^(.+?)-(\d+)x(\d+)x(\d+)f$/.exec( planId );
 
-	return { shape: `${shape}-${Math.min( across, deep )}x${Math.max( across, deep )}`, floors: Number( floors ) };
+	return { dressing, shape: `${dressing}-${Math.min( across, deep )}x${Math.max( across, deep )}`, floors: Number( floors ) };
 
 }
 

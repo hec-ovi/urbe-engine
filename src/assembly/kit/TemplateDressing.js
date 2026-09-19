@@ -17,9 +17,9 @@ const TOLERANCE = 0.001;
  * tilings and every block of one template stands the same buildings. The slot
  * stands inside every one of its parcels' envelopes, so it follows the skyline
  * of the zone it belongs to and no tower lot stands as a two-floor box. Its
- * family suits every parcel standing there, so a mixed block never puts a
- * luxury facade on a mid street, and its class is the one the most of its lots
- * carry, so a slot is one building and not one per tier.
+ * family is the one the most of its lots accept and its class the one the most
+ * of the lots standing that family carry, so a slot is one building; a lot that
+ * family does not fit takes one of its own, which is the only exception.
  *
  * One variation per block instance keeps the repetition from reading as a copy:
  * a stable hash of the block id either moves one slot's floor count by one, or
@@ -107,9 +107,9 @@ export class TemplateDressing {
 	/**
 	 * One slot's building: its family, its floor count and the class it is drawn
 	 * for. The floor count stands inside every one of the slot's envelopes; the
-	 * family has to suit every parcel standing there, and is null when they have
-	 * none in common, which is the plain building; the class is the one the most
-	 * of those parcels carry.
+	 * family is the one the most of the slot's lots accept, and is null only when
+	 * none of them accepts any; the class is the one the most of the lots that
+	 * stand that family carry, since the rest take a building of their own.
 	 */
 	#choose( key, width, depth, range, uses ) {
 
@@ -118,12 +118,11 @@ export class TemplateDressing {
 		if ( ! bays ) return null;
 
 		const floors = pickInt( `${this.worldSeed}:kit-floors:${key}`, range.low, range.high );
-		const fitting = uses.length
-			? uses.map( ( parcel ) => fittingFamilies( bays, floors, parcel ) )
-				.reduce( ( kept, fits ) => kept.filter( ( id ) => fits.includes( id ) ) )
-			: [];
+		const fits = uses.map( ( parcel ) => fittingFamilies( bays, floors, parcel ) );
+		const family = chooseFamily( widest( fits ), this.worldSeed, key );
+		const standing = uses.filter( ( parcel, at ) => family === null || fits[ at ].includes( family ) );
 
-		return { family: chooseFamily( fitting, this.worldSeed, key ), bays, floors, range, use: sharedUse( uses ) };
+		return { family, bays, floors, range, use: sharedUse( standing ) };
 
 	}
 
@@ -180,9 +179,9 @@ export class TemplateDressing {
 	}
 
 	/**
-	 * Whether the slot still wears the family it was dressed with once the block
-	 * variation has moved its floor count, so a move never leaves a family on a
-	 * building it no longer fits.
+	 * Whether the slot still stands the family it was dressed with once the block
+	 * variation has moved its floor count, so a move never empties a slot of the
+	 * design it repeats.
 	 */
 	#holds( choice, floors, key ) {
 
@@ -190,7 +189,7 @@ export class TemplateDressing {
 		if ( ! choice.family ) return true;
 
 		return use( this.#parcelsIn( key ) )
-			.every( ( parcel ) => fittingFamilies( choice.bays, floors, parcel ).includes( choice.family ) );
+			.some( ( parcel ) => fittingFamilies( choice.bays, floors, parcel ).includes( choice.family ) );
 
 	}
 
@@ -244,6 +243,23 @@ export class TemplateDressing {
 function use( parcels ) {
 
 	return parcels.map( ( parcel ) => ( { type: parcel.type, tier: parcel.tier } ) );
+
+}
+
+/**
+ * The families the most of a slot's lots accept, which is what that slot
+ * stands. Empty when no lot accepts any, which is the plain building.
+ * @param fits the fitting families of each lot, in the slot's order
+ */
+function widest( fits ) {
+
+	const counted = new Map();
+
+	for ( const families of fits ) for ( const id of families ) counted.set( id, ( counted.get( id ) ?? 0 ) + 1 );
+
+	const most = Math.max( 0, ...counted.values() );
+
+	return [ ...counted ].filter( ( [ , count ] ) => count === most ).map( ( [ id ] ) => id );
 
 }
 
