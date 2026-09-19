@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urbe/engine/kit-placements",
   "title": "Kit building placement record",
-  "description": "One ordinary building: the plan it stands from and the frame it stands in. The plan's shell and blueprint stand in the shared store, shared by every parcel of the same family, bay count and floor count. This parcel's blueprint is that document in the frame below, under this parcel's building id.",
+  "description": "One ordinary building: the plan it stands from and the frame it stands in. The plan's shell and blueprint stand in the shared store, shared by every parcel of the same family, bay count, floor count and programme. This parcel's blueprint is that document in the frame below, under this parcel's building id.",
   "type": "object",
   "additionalProperties": false,
   "required": [ "parcel", "plan", "origin", "rotationY", "lot", "bounds", "signText", "family", "floors", "tint" ],

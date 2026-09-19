@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { AssemblyError } from '../RequestAssembler.js';
+import { AssemblyError, venueSign } from '../RequestAssembler.js';
 import { writeJsonFile, sha256 } from '../JsonFile.js';
 import { share, sharedPath, sharedRoot } from '../SharedResources.js';
-import { BAY } from './Families.js';
+import { BAY, PITCH } from './Families.js';
 import { PLAN_INDEX_FILE, planBlueprintFile, planGlbFile, PLANS_KIND } from './KitFiles.js';
 import { schemaMessage, validatePlanIndex } from './KitSchemas.js';
 
@@ -13,11 +13,9 @@ import { schemaMessage, validatePlanIndex } from './KitSchemas.js';
 const THEME = 'cyberpunk';
 /** A plan is a building, not a city, so its seed is its own and never a world's. */
 const PLAN_SEED = 'plans';
-/** What a storey costs in height when Exterior is left to pitch it. */
-const PITCH = 4.5;
 /** Room above the storeys so the generator can pitch a taller ground floor. */
 const HEADROOM = 6;
-const ID = /^(.+)-(\d+)x(\d+)x(\d+)f$/;
+const ID = /^(.+?)-(?:([a-z_]+)-([a-z_]+)-)?(\d+)x(\d+)x(\d+)f$/;
 
 /**
  * The distinct buildings a city has, each generated once.
@@ -25,9 +23,9 @@ const ID = /^(.+)-(\d+)x(\d+)x(\d+)f$/;
  * A parcel used to ship its own shell, which is the same building over and over:
  * a 1 km city is hundreds of copies of a hundred or so buildings. So the unit of
  * repetition is the whole building. A plan is a family, a bay count across and
- * deep and a floor count; Exterior generates it once on a canonical lot at the
- * origin with face 0 along +X, and every parcel of that plan carries the frame
- * it stands in and nothing else.
+ * deep, a floor count and the programme it is dressed for; Exterior generates it
+ * once on a canonical lot at the origin with face 0 along +X, and every parcel
+ * of that plan carries the frame it stands in and nothing else.
  *
  * A plan's bytes are the same for every city built from the same Exterior, so
  * they stand in the shared store under the hash of what they are, and a second
@@ -64,10 +62,12 @@ export class PlanLibrary {
 	/**
 	 * Registers the plan one parcel stands from, drawn later with all the others.
 	 * @param family an approved family id, or null for Exterior's ordinary output
+	 * @param use the `{ type, tier }` the building is dressed for; the family's
+	 * own programme when a caller wants the plain shared building
 	 */
-	want( family, bays, floors ) {
+	want( family, bays, floors, use = programmeOf( family ) ) {
 
-		const id = planId( family, bays, floors );
+		const id = planId( family, bays, floors, use );
 		const held = this.plans.get( id );
 
 		if ( held ) return held;
@@ -193,8 +193,8 @@ export class PlanLibrary {
 	 */
 	#place( id ) {
 
-		const { family, bays, floors } = planParts( id );
-		const parts = { id, family, baysAcross: bays.across, baysDeep: bays.deep, floors };
+		const { family, type, tier, bays, floors } = planParts( id );
+		const parts = { id, family, type, tier, baysAcross: bays.across, baysDeep: bays.deep, floors };
 		const request = this.#request( parts );
 		const hash = createHash( 'sha256' )
 			.update( JSON.stringify( { request, exterior: this.version } ) ).digest( 'hex' );
@@ -234,10 +234,13 @@ export class PlanLibrary {
 
 	}
 
-	#request( { id, family, baysAcross, baysDeep, floors } ) {
+	#request( { id, family, type, tier, baysAcross, baysDeep, floors } ) {
 
 		const width = baysAcross * BAY;
 		const depth = baysDeep * BAY;
+		// The venue word, not a parcel's name: one building stands on many lots,
+		// so the sign it is drawn with is the one every copy of it can read.
+		const sign = venueSign( type );
 
 		return {
 			seed: `${this.seed}:${id}`,
@@ -248,41 +251,57 @@ export class PlanLibrary {
 				accessPoint: [ width / 2, 0 ],
 				maxHeight: floors * PITCH + HEADROOM
 			},
-			building: { ...use( family ), floors },
+			building: { type, tier, floors },
 			theme: THEME,
 			// A plan with no family is the generator's own building, on the plain
 			// rectangular plate every copy of it stands on.
-			options: { glb: 'merged', ...( family ? { architecture: family } : {} ) }
+			options: {
+				glb: 'merged',
+				...( family ? { architecture: family } : {} ),
+				...( sign ? { signage: { mode: 'marquee', text: sign } } : {} )
+			}
 		};
 
 	}
 
 }
 
-/** What a plan is named after: the four things that decide what is drawn. */
-function planId( family, { across, deep }, floors ) {
+/**
+ * What a plan is named after: everything that decides what is drawn. The
+ * programme is in the name only when it is not the family's own, so the shared
+ * building of a family keeps the short name every city of it already stands on.
+ */
+function planId( family, { across, deep }, floors, use ) {
 
-	return `${family ?? 'plain'}-${across}x${deep}x${floors}f`;
+	const own = programmeOf( family );
+	const programme = use.type === own.type && use.tier === own.tier ? '' : `${use.type}-${use.tier}-`;
+
+	return `${family ?? 'plain'}-${programme}${across}x${deep}x${floors}f`;
 
 }
 
-/** And the four things back out of the name, so any id resolves to its bytes. */
+/** And all of it back out of the name, so any id resolves to its bytes. */
 function planParts( id ) {
 
 	const found = ID.exec( id );
 
 	if ( ! found ) throw new AssemblyError( 'E_KIT_PLANS', `${id} is not a plan id` );
 
+	const family = found[ 1 ] === 'plain' ? null : found[ 1 ];
+	const own = programmeOf( family );
+
 	return {
-		family: found[ 1 ] === 'plain' ? null : found[ 1 ],
-		bays: { across: Number( found[ 2 ] ), deep: Number( found[ 3 ] ) },
-		floors: Number( found[ 4 ] )
+		family,
+		type: found[ 2 ] ?? own.type,
+		tier: found[ 3 ] ?? own.tier,
+		bays: { across: Number( found[ 4 ] ), deep: Number( found[ 5 ] ) },
+		floors: Number( found[ 6 ] )
 	};
 
 }
 
-/** The building a plan is drawn as; neither field moves a wall. */
-function use( family ) {
+/** The programme a family's own shared building is drawn for. */
+function programmeOf( family ) {
 
 	if ( ! family ) return { type: 'residential', tier: 'mid' };
 

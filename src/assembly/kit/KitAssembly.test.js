@@ -156,8 +156,9 @@ describe( 'kit assembly', () => {
 		expect( bytes( first ).byteLength ).toBeLessThan( 1024 );
 		expect( bytes( second ).equals( bytes( first ) ) ).toBe( true );
 
-		// A 40 by 56 m lot is five bays by seven, and its massing stands on them.
-		expect( [ wide.record.plan ] ).toEqual( [ 'plain-5x7x4f' ] );
+		// A 40 by 56 m lot is five bays by seven, drawn for the offices on it,
+		// and its massing stands on them.
+		expect( [ wide.record.plan ] ).toEqual( [ 'plain-offices-mid-5x7x4f' ] );
 		expect( wide.record.bounds.max[ 0 ] - wide.record.bounds.min[ 0 ] ).toBeLessThanOrEqual( 40 );
 		expect( wide.record.bounds.max[ 2 ] - wide.record.bounds.min[ 2 ] ).toBeLessThanOrEqual( 56 );
 

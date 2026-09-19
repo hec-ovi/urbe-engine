@@ -5,7 +5,7 @@ import { writeJsonFile } from '../JsonFile.js';
 import { lotBays } from './BayCount.js';
 import { lotRectangle } from './LotRectangle.js';
 import { chooseFamily } from './FamilyChoice.js';
-import { MIN_FLOORS, fittingFamilies } from './Families.js';
+import { MIN_FLOORS, fittingFamilies, floorRange } from './Families.js';
 import { BlockTemplates } from './BlockTemplates.js';
 import { TemplateDressing } from './TemplateDressing.js';
 import { PlanFrame } from './PlanBlueprint.js';
@@ -13,8 +13,6 @@ import { schemaMessage, validateKitPlacements } from './KitSchemas.js';
 import { blueprintFile, generatedFiles, placementsFile } from './KitFiles.js';
 
 const QUARTER = Math.PI / 2;
-/** What a storey costs in height, which is what caps a lot's floor count. */
-const PITCH = 4.5;
 
 /**
  * One parcel, one placement record.
@@ -27,7 +25,8 @@ const PITCH = 4.5;
  *
  * A block Atlas tiled from a template is dressed by the template, so the city
  * repeats a handful of block designs with one variation each. A block Atlas
- * tiled on its own keeps the per-parcel choice.
+ * tiled on its own keeps the per-parcel choice, and so does a parcel whose slot
+ * has no family its own use accepts.
  */
 export class KitAssembler {
 
@@ -112,22 +111,29 @@ export class KitAssembler {
 
 		}
 
-		const floors = dressed?.floors ?? this.#floors( parcel, request.building.floors );
+		// The building covers this lot and any lot a merge gave it, so both
+		// envelopes bound its height and both uses decide what it may wear.
+		const covered = [ parcel, this.parcels.get( dressed?.absorbs ) ].filter( Boolean );
+		const floors = this.#floors( covered, dressed?.floors ?? request.building.floors );
 
 		if ( ! floors ) return this.#skip( parcelId, 'envelope is shorter than a shared building' );
 		this.reasons.delete( parcelId );
 
 		const face = this.#entranceFace( rectangle.footprint, parcel.access.point );
 		const oriented = face % 2 === 0 ? bays : { across: bays.deep, deep: bays.across };
-		const family = dressed
+		const fitting = covered.map( ( standing ) => fittingFamilies( oriented, floors, standing ) )
+			.reduce( ( kept, fits ) => kept.filter( ( id ) => fits.includes( id ) ) );
+		// The slot's family dresses the parcel while it still fits the height the
+		// envelope left it; otherwise this parcel picks its own.
+		const family = dressed?.family && fitting.includes( dressed.family )
 			? dressed.family
-			: chooseFamily( fittingFamilies( oriented, floors, parcel ), this.worldSeed, parcelId );
+			: chooseFamily( fitting, this.worldSeed, parcelId );
 
 		return {
 			parcelId,
 			signText: request.options.signage?.text ?? null,
 			absorbs: dressed?.absorbs ?? null,
-			plan: this.plans.want( family, oriented, floors ),
+			plan: this.plans.want( family, oriented, floors, parcel ),
 			frame: this.#frame( rectangle.footprint, face )
 		};
 
@@ -169,12 +175,17 @@ export class KitAssembler {
 
 	}
 
-	/** How tall this parcel stands: what its request asked for, inside its envelope. */
-	#floors( parcel, wanted ) {
+	/**
+	 * How tall this building stands: what the template or its own request asked
+	 * for, held inside the envelope of every lot it covers, so a tower lot never
+	 * stands as a two-floor box and no building overruns its allowance.
+	 * @returns null when no shared building fits the envelope at all
+	 */
+	#floors( covered, wanted ) {
 
-		const max = Math.min( parcel.envelope.maxFloors, Math.floor( parcel.envelope.maxHeight / PITCH ) );
+		const { low, high } = floorRange( covered );
 
-		return max >= MIN_FLOORS ? Math.min( Math.max( wanted, MIN_FLOORS ), max ) : null;
+		return high >= MIN_FLOORS ? Math.min( Math.max( wanted, low ), high ) : null;
 
 	}
 

@@ -1,9 +1,16 @@
 import { pickInt } from './hash.js';
+import { landmarkFamilies } from './kit/Families.js';
+import { chooseFamily } from './kit/FamilyChoice.js';
+import { lotRectangle } from './kit/LotRectangle.js';
 import { loadFloorConstants, constantsForType, feasibleFloorRange, feasibleBasementRange } from './floorFeasibility.js';
 import { signText } from './signText.js';
 import { marqueeTextLimit } from './validators.js';
 
 const THEME = 'cyberpunk';
+/** What a parcel no approved design fits is drawn as: Exterior's own choice. */
+const AUTO = 'auto';
+/** Which approved design a unique building takes first, before a seeded pick. */
+const LANDMARK_FIRST = [ 'garden-taper', 'corporate-sectors' ];
 
 // A sign reads the parcel's name when the naming pass gave it one, else what
 // the place is. Only parcel types a passer-by reads off the street are listed;
@@ -16,6 +23,13 @@ const VENUE_SIGN = {
 	police: 'POLICE',
 	restaurant: 'DINER'
 };
+
+/** What this kind of place letters on its marquee, or null when it has no sign. */
+export function venueSign( type ) {
+
+	return VENUE_SIGN[ type ] ?? null;
+
+}
 
 export class AssemblyError extends Error {
 
@@ -78,6 +92,7 @@ export class RequestAssembler {
 
 		const apertures = this.aperturesByBuilding.get( parcelId ) ?? [];
 		const seed = `${this.worldSeed}:${parcelId}`;
+		const floors = this.#chooseFloors( parcel, apertures, seed, floorCap );
 
 		const request = {
 			seed,
@@ -89,14 +104,10 @@ export class RequestAssembler {
 				maxHeight: parcel.envelope.maxHeight,
 				...( this.buildingGrid ? { buildingGrid: this.buildingGrid } : {} )
 			},
-			building: {
-				type: parcel.type,
-				tier: parcel.tier,
-				floors: this.#chooseFloors( parcel, apertures, seed, floorCap )
-			},
+			building: { type: parcel.type, tier: parcel.tier, floors },
 			theme: THEME,
 			apertures,
-			options: { glb, architecture: 'auto' }
+			options: { glb, architecture: this.#architecture( parcel, floors, apertures ) }
 		};
 
 		const text = this.#signText( parcel, signage );
@@ -106,6 +117,29 @@ export class RequestAssembler {
 		if ( basements > 0 ) request.building.basements = basements;
 
 		return request;
+
+	}
+
+	/**
+	 * Which design this building is drawn as. A unique building wears an approved
+	 * family whenever its own footprint, height and street take one: the landmark
+	 * design first, then the corporate tower, then a seeded pick of the rest. A
+	 * connection cut above ground pins its faces, which the landmark design does
+	 * not take. Everything else is Exterior's own choice for the programme.
+	 */
+	#architecture( parcel, floors, apertures ) {
+
+		if ( ! parcel.landmark ) return AUTO;
+
+		const sides = lotRectangle( parcel.footprint );
+
+		if ( ! sides ) return AUTO;
+
+		const fixedFaces = apertures.some( ( aperture ) => aperture.kind !== 'wire-anchor' && aperture.base >= 0 );
+		const fitting = landmarkFamilies( sides, floors, parcel, { fixedFaces } );
+
+		return LANDMARK_FIRST.find( ( id ) => fitting.includes( id ) )
+			?? chooseFamily( fitting, this.worldSeed, parcel.id ) ?? AUTO;
 
 	}
 
@@ -187,7 +221,7 @@ export class RequestAssembler {
 	 */
 	#signText( parcel, signage ) {
 
-		const venue = VENUE_SIGN[ parcel.type ];
+		const venue = venueSign( parcel.type );
 
 		if ( ! venue || signage === 'none' ) return null;
 		if ( signage === 'venue' ) return venue;

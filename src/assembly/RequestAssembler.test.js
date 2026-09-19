@@ -131,6 +131,36 @@ describe( 'RequestAssembler', () => {
 
 	} );
 
+	it( 'names an approved design on a unique building and leaves the choice to Exterior elsewhere', () => {
+
+		const landmark = {
+			id: 'p7', type: 'hospital', tier: 'rich', landmark: true,
+			footprint: [ [ 0, 0 ], [ 90, 0 ], [ 90, 44 ], [ 0, 44 ] ],
+			access: { edgeId: 'e1', point: [ 45, - 2 ] },
+			envelope: { minFloors: 4, maxFloors: 9, floorHeight: 4.5, maxHeight: 45 }
+		};
+		const open = new RequestAssembler( atlasWith( landmark ), { apertures: [] } ).assemble( 'p7' );
+
+		// The landmark design comes first on a plate that fits its taper.
+		expect( open.options.architecture ).toBe( 'garden-taper' );
+		expect( validateExteriorRequest( open ) ).toEqual( [] );
+
+		// A bridge pins the faces, which the landmark design does not take, so
+		// the building wears one of the six that do.
+		const bound = new RequestAssembler( atlasWith( landmark ), connections ).assemble( 'p7' );
+
+		expect( [ 'balcony-grid', 'faceted-bays', 'mirror-frame', 'mirror-shutters', 'white-grid' ] )
+			.toContain( bound.options.architecture );
+
+		// Too small for any of them, and an ordinary lot, keep Exterior's choice.
+		const small = { ...landmark, footprint: [ [ 0, 0 ], [ 14, 0 ], [ 14, 11 ], [ 0, 11 ] ] };
+
+		expect( new RequestAssembler( atlasWith( small ), { apertures: [] } ).assemble( 'p7' ).options.architecture ).toBe( 'auto' );
+		expect( new RequestAssembler( atlasWith( { ...landmark, landmark: false } ), { apertures: [] } )
+			.assemble( 'p7' ).options.architecture ).toBe( 'auto' );
+
+	} );
+
 	it( 'signs a venue with its name lettered for the marquee, steps down to the word, then to nothing', () => {
 
 		const sign = ( atlas, parcelId, options ) => new RequestAssembler( atlas, connections ).assemble( parcelId, options ).options.signage;

@@ -83,45 +83,41 @@ describe( 'block templates and shared building plans', () => {
 
 	} );
 
-	it( 'dresses every block of one template the same apart from its variation, generating each building once', () => {
+	it( 'dresses every slot of one template with one design and gives each block one variation', () => {
 
-		const byTemplate = new Map();
+		const templates = new Map();
 
 		for ( const [ id, entry ] of Object.entries( city.manifest.buildings ) ) {
 
 			if ( entry.template === null ) continue;
 
-			const blocks = byTemplate.get( entry.template ) ?? new Map();
-			const slots = blocks.get( blockOf.get( id ).id ) ?? new Map();
+			const template = templates.get( entry.template )
+				?? { slots: new Map(), merges: new Map(), blocks: new Set() };
 			const record = city.record( id );
+			const block = blockOf.get( id ).id;
 
-			slots.set( entry.slot, `${record.family}/${record.floors}` );
-			blocks.set( blockOf.get( id ).id, slots );
-			byTemplate.set( entry.template, blocks );
+			template.blocks.add( block );
+
+			// A merged building covers two slots and wears a design of its own,
+			// which is the one variation its block takes; the lot it took over
+			// ships nothing and stands in no slot.
+			if ( record.absorbs ) template.merges.set( block, ( template.merges.get( block ) ?? 0 ) + 1 );
+			else template.slots.set( entry.slot, ( template.slots.get( entry.slot ) ?? new Set() ).add( record.family ) );
+
+			templates.set( entry.template, template );
 
 		}
 
-		const repeated = [ ...byTemplate.entries() ].filter( ( [ , blocks ] ) => blocks.size > 1 );
+		const repeated = [ ...templates.values() ].filter( ( template ) => template.blocks.size > 1 );
 
 		expect( repeated.length ).toBeGreaterThan( 0 );
 
-		for ( const [ template, blocks ] of repeated ) {
+		for ( const template of repeated ) {
 
-			const instances = [ ...blocks.values() ];
-			// What the template says, before any block varies: what most of its
-			// instances wear in each lot.
-			const base = new Map( [ ...new Set( instances.flatMap( ( slots ) => [ ...slots.keys() ] ) ) ]
-				.map( ( slot ) => [ slot, commonest( instances.map( ( slots ) => slots.get( slot ) ) ) ] ) );
-
-			for ( const slots of instances ) {
-
-				// One variation per block: one lot's floors moved, or two lots
-				// merged into one building and the second left empty.
-				const differing = [ ...base.keys() ].filter( ( slot ) => base.get( slot ) !== slots.get( slot ) );
-
-				expect( differing.length, `${template} varies in ${differing.join( ', ' )}` ).toBeLessThanOrEqual( 2 );
-
-			}
+			// Every block of the template reads the same: one design per lot,
+			// each standing the height its own envelope allows.
+			for ( const [ slot, families ] of template.slots ) expect( [ ...families ], `slot ${slot}` ).toHaveLength( 1 );
+			for ( const [ block, merged ] of template.merges ) expect( merged, block ).toBe( 1 );
 
 		}
 
