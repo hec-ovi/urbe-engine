@@ -1,7 +1,7 @@
 import { parcelBlueprint } from '../../assembly/kit/PlanBlueprint.js';
 
 /**
- * Manifest-bound building documents, with one shared request budget. A parcel
+ * Manifest-bound building documents, read through the city's shared budget. A parcel
  * assembled from kit pieces carries its placement table instead of a shell GLB,
  * and a furnished one carries the three placement layouts its floors reuse.
  *
@@ -11,8 +11,11 @@ import { parcelBlueprint } from '../../assembly/kit/PlanBlueprint.js';
  */
 export class BuildingSource {
 
-	/** @param planUrls plan id -> where that plan's blueprint stands */
-	constructor( { manifest, outBase, planUrls = new Map(), readJson } ) {
+	/**
+	 * @param plans the city's [plan blueprints](PlanBlueprints.js)
+	 * @param budget the depth of reads this city keeps in flight
+	 */
+	constructor( { manifest, outBase, plans, readJson, budget } ) {
 
 		this.ids = new Set( manifest.parcels );
 		this.interiors = new Set( manifest.interiors );
@@ -22,11 +25,9 @@ export class BuildingSource {
 		// What each kit parcel stands from, and where its blueprint is read.
 		this.buildings = manifest.buildings ?? {};
 		this.outBase = outBase;
-		this.planUrls = planUrls;
+		this.plans = plans;
 		this.readJson = readJson;
-		this.plans = new Map();
-		this.active = 0;
-		this.queue = [];
+		this.budget = budget;
 
 	}
 
@@ -68,22 +69,16 @@ export class BuildingSource {
 	async #kitBlueprint( parcelId, placementsUrl ) {
 
 		const record = await this.#json( placementsUrl );
-		let plan = this.plans.get( record.plan );
 
-		if ( ! plan ) {
+		if ( ! this.plans.has( record.plan ) ) {
 
-			const url = this.planUrls.get( record.plan );
-
-			if ( ! url ) throw inputError( `${parcelId} stands from plan ${record.plan}, which this world does not publish` );
-
-			plan = this.#json( url );
-			this.plans.set( record.plan, plan );
+			throw inputError( `${parcelId} stands from plan ${record.plan}, which this world does not publish` );
 
 		}
 
 		try {
 
-			return parcelBlueprint( await plan, record );
+			return parcelBlueprint( await this.plans.of( record.plan ), record );
 
 		} catch ( error ) {
 
@@ -106,29 +101,7 @@ export class BuildingSource {
 
 	#json( url ) {
 
-		return new Promise( ( resolve, reject ) => {
-
-			this.queue.push( { url, resolve, reject } );
-			this.#drain();
-
-		} );
-
-	}
-
-	#drain() {
-
-		while ( this.active < 8 && this.queue.length ) {
-
-			const { url, resolve, reject } = this.queue.shift();
-			this.active ++;
-			Promise.resolve().then( () => this.readJson( url ) ).then( resolve, reject ).finally( () => {
-
-				this.active --;
-				this.#drain();
-
-			} );
-
-		}
+		return this.budget.run( () => this.readJson( url ) );
 
 	}
 

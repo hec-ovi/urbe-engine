@@ -1,5 +1,7 @@
 import { readWorldDocument } from './WorldDocument.js';
 import { BuildingSource } from './BuildingSource.js';
+import { PlanBlueprints } from './PlanBlueprints.js';
+import { ReadBudget } from './ReadBudget.js';
 import { initialBuildingIds, loadShellCatalog } from './WorldShellCatalog.js';
 import { loadWorldConnections } from './WorldConnections.js';
 import {
@@ -110,9 +112,13 @@ export class WorldSource {
 
 		const known = new Set( atlas.parcels.map( ( parcel ) => parcel.id ) );
 		const listedSet = new Set( manifest.parcels );
-		const sources = new BuildingSource( {
-			manifest, outBase: this.outBase, planUrls: kit?.planUrls ?? new Map(), readJson: url => this.#json( url )
-		} );
+		// One budget and one plan blueprint per city: the parcels and the kit
+		// runtime read the same documents, so they read them through the same
+		// depth of requests and never twice.
+		const budget = new ReadBudget();
+		const readJson = ( url ) => this.#json( url );
+		const plans = new PlanBlueprints( { urls: kit?.planUrls ?? new Map(), readJson, budget } );
+		const sources = new BuildingSource( { manifest, outBase: this.outBase, plans, readJson, budget } );
 		const loadBuildings = ids => sources.load( ids );
 		const buildings = await loadBuildings( initialBuildingIds( shellCatalog, manifest, game ) );
 
@@ -123,7 +129,7 @@ export class WorldSource {
 			rooftopSpans: manifest.rooftopSpans ?? emptyRooftopSpans( atlas.meta.seed ),
 			buildings,
 			shellCatalog,
-			kit,
+			kit: kit && { document: kit.document, baseUrl: kit.baseUrl, blueprints: plans },
 			interiorModules,
 			interiorProps,
 			loadBuildings,

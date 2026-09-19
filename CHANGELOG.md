@@ -1,5 +1,7 @@
 # Changelog
 
+0.25.3: the shell stream reads two cells ahead and builds one at a time, a cell still reading steps aside for one whose files are here, and a plan blueprint is read once per city for every consumer.
+
 0.25.2: a city batch never sweeps the shared store; `npm run gc` is the one sweep, run when no batch is drawing, so batches side by side keep each other's plans.
 
 0.25.1: a material variant with its own tiling repeats at its own scale, so Materials 0.17.4 blade, comb, fixing and joint patterns land on their pitch.

@@ -92,6 +92,39 @@ describe( 'ShellStream public admission', () => {
 
 	} );
 
+	it( 'builds the cell whose files are here while a nearer cell is still reading, one cell at a time', async () => {
+
+		let release;
+		const reading = new Promise( resolve => { release = resolve; } );
+		const admitted = [], building = [];
+		let inside = 0;
+		const loader = {
+			// The nearest cell's files are still coming; the one beyond it is ready.
+			open: vi.fn( async buildings => { if ( buildings.has( 'home' ) ) await reading; } ),
+			load: vi.fn( async () => {
+
+				building.push( ++ inside );
+				await Promise.resolve();
+				inside --;
+				return { group: new THREE.Group(), doors: [], entrances: [], shellColliders: new Map(), centers: new Map(), triangles: 0 };
+
+			} )
+		};
+		const { stream } = fixture( { loader, added: cell => admitted.push( cell.ids[ 0 ] ) } );
+		const loaded = stream.load( { x: 0, z: 0 } );
+
+		await vi.waitFor( () => expect( admitted ).toEqual( [ 'near' ] ) );
+		release();
+		await loaded;
+
+		// The cell that stepped aside rejoins once its files are here, and no two
+		// cells ever built at the same time.
+		expect( admitted ).toEqual( [ 'near', 'home' ] );
+		expect( Math.max( ...building ) ).toBe( 1 );
+		await stream.dispose();
+
+	} );
+
 	it( 'renders the authored distant silhouette with outward triangles and exact material variants', async () => {
 
 		const tower = record( 'far', 1000, 240 );

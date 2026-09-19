@@ -11,6 +11,8 @@ import { PLAN_INDEX_FILE } from '../../../assembly/kit/KitFiles.js';
 import { openingRect } from '../Openings.js';
 import { Interactor } from '../../player/Interactor.js';
 import { releaseShell } from '../streaming/ReleaseShell.js';
+import { PlanBlueprints } from '../../data/PlanBlueprints.js';
+import { ReadBudget } from '../../data/ReadBudget.js';
 import { KitPieces } from './KitPieces.js';
 import { KitCellLoader } from './KitCells.js';
 
@@ -36,10 +38,22 @@ let blueprints = null;
 function openWorld( { mutate = ( document ) => document } = {} ) {
 
 	const reads = [];
+	const blueprintReads = [];
 	const kit = mutate( JSON.parse( JSON.stringify( index ) ) );
+	// The city's one plan blueprint reader, built exactly as WorldSource builds it.
+	const blueprints = new PlanBlueprints( {
+		urls: new Map( kit.plans.map( ( plan ) => [ plan.id, `${sharedRoot()}/${plan.blueprint}` ] ) ),
+		readJson: async ( url ) => {
+
+			blueprintReads.push( url );
+
+			return JSON.parse( await readFile( url, 'utf8' ) );
+
+		},
+		budget: new ReadBudget()
+	} );
 	const pieces = new KitPieces( {
-		kit, baseUrl: sharedRoot(), factory,
-		readJson: async ( url ) => JSON.parse( await readFile( url, 'utf8' ) ),
+		kit, baseUrl: sharedRoot(), factory, blueprints,
 		readBinary: async ( url ) => {
 
 			reads.push( url );
@@ -50,7 +64,7 @@ function openWorld( { mutate = ( document ) => document } = {} ) {
 		}
 	} );
 
-	return { kit, pieces, reads };
+	return { kit, pieces, reads, blueprints, blueprintReads };
 
 }
 
@@ -216,6 +230,24 @@ describe( 'the city draws every building from its shared plan', () => {
 
 		hidden.disposeModelInstances();
 		expect( live( pieces ) ).toBe( 0 );
+
+	} );
+
+	it( 'reads a plan\'s blueprint once for the city, whoever asks for it', async () => {
+
+		const { pieces, blueprints, blueprintReads } = openWorld();
+		const record = building( 'p1' );
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving( [ record ] ) } );
+
+		// What every parcel standing on this plan composes its own blueprint from.
+		expect( await blueprints.of( PLANS[ 0 ] ) ).toBeTruthy();
+
+		// And what the kit reads the plan's doors and openings out of when it
+		// stands it. One document, one read.
+		await shown( loader, [ source( record, false ) ] );
+
+		expect( pieces.has( PLANS[ 0 ] ) ).toBe( true );
+		expect( blueprintReads ).toHaveLength( 1 );
 
 	} );
 

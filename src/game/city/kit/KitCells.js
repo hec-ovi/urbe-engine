@@ -26,6 +26,8 @@ const READ_CONCURRENCY = 8;
  * A cell is also where the city reads its buildings: the plans its parcels
  * stand on are asked for here, so only what stands near the player is ever
  * fetched, and a cell waits on its own plans rather than on the whole set.
+ * `open` is that reading, kept apart from the building so the stream can leave
+ * a cell whose files are still coming and stand the ones whose plans are here.
  */
 export class KitCellLoader {
 
@@ -42,13 +44,56 @@ export class KitCellLoader {
 		this.readJson = readJson;
 		this.shells = shells;
 		this.onError = onError;
+		/** source -> its placement record, so opening a cell and building it read it once */
+		this.records = new WeakMap();
+
+	}
+
+	/**
+	 * Everything this cell has to read, read and nothing more: its parcels'
+	 * placement records and the files the plans they name are published as.
+	 * Decoding those plans is the building cell's own work, so the stream can
+	 * leave a cell whose files are still coming, build the cells whose plans
+	 * already stand, and keep one cell's geometry work on the main thread.
+	 *
+	 * @param buildings Map<parcelId, BuildingSource>
+	 */
+	async open( buildings ) {
+
+		const kit = kitSources( buildings );
+		if ( ! kit.length ) return;
+
+		const records = await mapConcurrent( kit, READ_CONCURRENCY, ( source ) => this.#record( source ) );
+		await this.pieces.fetch( records.map( ( record ) => record.plan ) );
+
+	}
+
+	/** One parcel's placement record, read once however often it is asked for. */
+	#record( source ) {
+
+		let reading = this.records.get( source );
+
+		if ( ! reading ) {
+
+			reading = Promise.resolve( this.readJson( source.placementsUrl ) ).catch( ( error ) => {
+
+				// A failed read is not an answer, so the next caller asks again.
+				this.records.delete( source );
+				throw error;
+
+			} );
+			this.records.set( source, reading );
+
+		}
+
+		return reading;
 
 	}
 
 	/** @param buildings Map<parcelId, BuildingSource> */
 	async load( buildings ) {
 
-		const kit = [ ...buildings.values() ].filter( ( source ) => source.source === 'kit' && source.placementsUrl );
+		const kit = kitSources( buildings );
 		const placed = new Set( kit );
 		const rest = new Map( [ ...buildings ].filter( ( [ , source ] ) => ! placed.has( source ) ) );
 		const base = rest.size ? await this.shells.load( rest ) : empty();
@@ -62,7 +107,7 @@ export class KitCellLoader {
 
 		try {
 
-			const records = await mapConcurrent( kit, READ_CONCURRENCY, ( source ) => this.readJson( source.placementsUrl ) );
+			const records = await mapConcurrent( kit, READ_CONCURRENCY, ( source ) => this.#record( source ) );
 			for ( const [ index, source ] of kit.entries() ) {
 
 				if ( this.pieces.published( records[ index ].plan ) ) continue;
@@ -141,6 +186,13 @@ export class KitCellLoader {
 		};
 
 	}
+
+}
+
+/** The parcels of a cell that stand on a shared plan. */
+function kitSources( buildings ) {
+
+	return [ ...buildings.values() ].filter( ( source ) => source.source === 'kit' && source.placementsUrl );
 
 }
 

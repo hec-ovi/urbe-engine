@@ -19,7 +19,7 @@ export class ShellScene {
 		this.parcels = new Map( atlas.parcels.map( parcel => [ parcel.id, parcel ] ) );
 		Object.assign( this, { factory, physics, colliders, interiors, haze } );
 		this.cells = new Map();
-		this.pieces = kit ? new KitPieces( { kit: kit.document, baseUrl: kit.baseUrl, factory } ) : null;
+		this.pieces = kit ? new KitPieces( { kit: kit.document, baseUrl: kit.baseUrl, blueprints: kit.blueprints, factory } ) : null;
 		this.stream = new ShellStream( {
 			catalog, factory, buildings, loadBuildings,
 			...( this.pieces ? {

@@ -6,6 +6,13 @@ import { releaseShell } from './ReleaseShell.js';
 
 const yieldTask = () => new Promise( resolve => setTimeout( resolve, 0 ) );
 
+/**
+ * Cells the stream holds at once: the one it is about to build and one reading
+ * behind it, so files arrive while geometry is built and a cell that cannot
+ * stand yet is never the only one to choose from.
+ */
+const READS_AHEAD = 2;
+
 /** Serial spatial admission with original shell geometry and bounded residency. */
 export class ShellStream {
 
@@ -102,13 +109,29 @@ export class ShellStream {
 		while ( ! this.closed && seen !== this.revision ) {
 
 			seen = this.revision;
-			const candidates = [ ...this.grid.cells.values() ].filter( cell => this.#wanted( cell, this.loadRadius ) );
-			candidates.sort( ( a, b ) => this.grid.distance( a, this.position ) - this.grid.distance( b, this.position ) );
-			for ( const cell of candidates ) {
+			const queue = [ ...this.grid.cells.values() ].filter( cell => this.#wanted( cell, this.loadRadius ) );
+			queue.sort( ( a, b ) => this.grid.distance( a, this.position ) - this.grid.distance( b, this.position ) );
+			const opening = [];
 
-				if ( this.closed ) return;
-				if ( this.resident.has( cell.id ) || this.failed.has( cell.id ) || ! this.#wanted( cell, this.loadRadius ) ) continue;
-				await this.#admit( cell );
+			while ( ! this.closed ) {
+
+				// The nearest cells ask for their files first, a few ahead of the
+				// one being built, so a cell reads while another cell is built.
+				while ( opening.length < READS_AHEAD && queue.length ) {
+
+					const spatial = queue.shift();
+					if ( this.resident.has( spatial.id ) || this.failed.has( spatial.id ) || ! this.#wanted( spatial, this.loadRadius ) ) continue;
+					opening.push( this.#open( spatial ) );
+
+				}
+				if ( ! opening.length ) break;
+				// The nearest cell whose files are here is built next, so a cell
+				// still reading steps aside instead of holding up one that can
+				// stand. With none of them ready the loop waits for the first,
+				// whichever it is. Building itself stays one cell at a time.
+				if ( ! opening.some( cell => cell.opened ) ) await Promise.race( opening.map( cell => cell.reads ) );
+				const [ next ] = opening.splice( opening.findIndex( cell => cell.opened ), 1 );
+				await this.#admit( next );
 
 			}
 			if ( this.closed ) return;
@@ -118,18 +141,44 @@ export class ShellStream {
 
 	}
 
-	async #admit( spatial ) {
+	/** Starts everything this cell has to read and answers for it; never rejects. */
+	#open( spatial ) {
 
+		const opening = { spatial, opened: false, sources: null, error: null };
+		opening.reads = this.#read( spatial ).then(
+			sources => { opening.sources = sources; opening.opened = true; },
+			error => { opening.error = error; opening.opened = true; }
+		);
+
+		return opening;
+
+	}
+
+	/** This cell's building sources, and whatever its loader reads before it builds. */
+	async #read( spatial ) {
+
+		const ids = spatial.records.map( record => record.id );
+		const missing = ids.filter( id => ! this.buildings.has( id ) );
+		const incoming = missing.length ? await this.loadBuildings( missing ) : new Map();
+		const sources = new Map( ids.map( id => [ id, this.buildings.get( id ) ?? incoming.get( id ) ] ) );
+		if ( [ ...sources ].some( ( [ id, source ] ) => ! source || source.parcelId !== id ) ) throw new Error( 'E_SHELL_SOURCE: catalog/source mismatch' );
+		await this.loader.open?.( sources );
+
+		return sources;
+
+	}
+
+	async #admit( opening ) {
+
+		const { spatial } = opening;
 		let cell;
 		try {
 
-			const ids = spatial.records.map( record => record.id );
-			const missing = ids.filter( id => ! this.buildings.has( id ) );
-			const incoming = missing.length ? await this.loadBuildings( missing ) : new Map();
-			const sources = new Map( ids.map( id => [ id, this.buildings.get( id ) ?? incoming.get( id ) ] ) );
-			if ( [ ...sources ].some( ( [ id, source ] ) => ! source || source.parcelId !== id ) ) throw new Error( 'E_SHELL_SOURCE: catalog/source mismatch' );
+			await opening.reads;
+			if ( opening.error ) throw opening.error;
 			if ( this.closed || ! this.#wanted( spatial, this.loadRadius ) ) return;
-			cell = { ...await this.loader.load( sources ), id: spatial.id, ids, buildings: sources, spatial };
+			const sources = opening.sources;
+			cell = { ...await this.loader.load( sources ), id: spatial.id, ids: [ ...sources.keys() ], buildings: sources, spatial };
 			await this.prepare?.( cell );
 			if ( this.closed || ! this.#wanted( spatial, this.loadRadius ) ) {
 
