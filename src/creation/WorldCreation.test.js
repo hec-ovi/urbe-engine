@@ -210,11 +210,13 @@ function processPort( calls ) {
 
 			const world = valueAfter( args, '--out' );
 			const blueprint = await readJson( valueAfter( args, '--blueprint' ) );
-			// The assembler opens an exact manual pick, or the first candidates up
-			// to an automatic count.
+			// The assembler opens an exact manual pick, or an automatic count with
+			// the places the carried questlines name first, in their order.
+			const carried = await readJson( join( world, 'quests', 'questlines.json' ) ).catch( () => [] );
+			const named = [ ...new Set( JSON.stringify( carried ).match( /"parcelId":"(p\d+)"/g )?.map( ( m ) => m.slice( 12, - 1 ) ) ?? [] ) ];
 			const selected = args.includes( '--interior-parcels' )
 				? valueAfter( args, '--interior-parcels' ).split( ',' )
-				: blueprint.parcels.slice( 0, Number( valueAfter( args, '--interiors' ) ) ).map( ( parcel ) => parcel.id );
+				: [ ...new Set( [ ...named, ...blueprint.parcels.map( ( parcel ) => parcel.id ) ] ) ].slice( 0, Number( valueAfter( args, '--interiors' ) ) );
 			calls.push( { kind: selected.length ? 'interiors' : 'shells', command, args } );
 			await writeJson( join( world, 'blueprint.json' ), blueprint );
 			for ( const parcel of blueprint.parcels ) {

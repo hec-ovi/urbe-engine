@@ -7,8 +7,8 @@ export const QUEST_CAPABLE_TYPES = new Set( [
 
 /**
  * All interior candidates in deterministic priority order. Parcels referenced
- * by carried questlines come first, then other venue parcels. Array order in
- * either input has no effect.
+ * by carried questlines come first, in the order the questlines name them,
+ * then other venue parcels by a stable hash.
  */
 export function interiorCandidates( atlas, questlines = [], available = null ) {
 
@@ -24,7 +24,9 @@ export function interiorCandidates( atlas, questlines = [], available = null ) {
 			- fnv1a( `${atlas.meta.seed}:interior:${group}:${b}` ) || a.localeCompare( b )
 	);
 
-	return [ ...rank( referenced, 'quest' ), ...rank( venues, 'venue' ) ];
+	// Quest locations keep the story's own order (the main line first), so a
+	// count that only covers the main line opens exactly its places.
+	return [ ...new Set( referenced ), ...rank( venues, 'venue' ) ];
 
 }
 

@@ -1,5 +1,7 @@
 # Changelog
 
+0.25.14: the automatic interior pick opens the places the story names first, in story order, so a count that covers the main line opens exactly its locations.
+
 0.25.13: the kept Connections pass plans against the buildings that stand (each kit parcel's plan ring in its frame and roof elevation), so every link end lands on the real facade, and a roof mast composes with its roof, so rooftop cables hang over their own building.
 
 0.25.12: kit colliders stand on the building footprint with the entrance cut in the wall the door sits in, plus a low band where a plinth, steps or planters stand proud of it; the lot line no longer blocks the pavement.

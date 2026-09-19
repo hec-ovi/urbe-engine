@@ -1,6 +1,6 @@
 # Engine contract
 
-Version 0.25.13. Loads assembled city artifacts into a first-person game and exposes catalog, creation, preview, dialogue and save adapters.
+Version 0.25.14. Loads assembled city artifacts into a first-person game and exposes catalog, creation, preview, dialogue and save adapters.
 
 ## Inputs and outputs
 

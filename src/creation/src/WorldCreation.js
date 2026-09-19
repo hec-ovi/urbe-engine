@@ -107,13 +107,18 @@ export class WorldCreation {
 
 			await cp( join( this.outDir, 'cities', city.id ), world, { recursive: true } );
 			await rm( join( world, 'city.json' ), { force: true } );
-			await this.#materialize( city, world );
+			const handoff = await this.#materialize( city, world );
 			const manual = input.mode === 'manual';
 			if ( ! manual && input.count < MAIN_LOCATION_COUNT ) {
 
 				throw new CreationError( 'E_QUEST_LOCATIONS', `the main story needs at least ${MAIN_LOCATION_COUNT} interior locations` );
 
 			}
+			// The assembler ranks the places the story names first, in story order,
+			// when the world carries them under this name; the draft keeps only the
+			// materialized set until the quest stage selects.
+			const carried = join( world, 'quests', 'questlines.json' );
+			if ( ! manual ) await writeJson( carried, handoff.questlines );
 
 			// A manual pick is exact. An automatic one hands the assembler the
 			// count and lets it open candidates in its order, the quest's own
@@ -125,6 +130,7 @@ export class WorldCreation {
 				...( manual ? [ '--interior-parcels', input.buildingIds.join( ',' ) ] : [ '--interiors', String( input.count ) ] )
 			];
 			await this.run( 'npm', args, { cwd: this.engineRoot } );
+			await rm( carried, { force: true } );
 			const manifest = await json( join( world, 'manifest.json' ), 'interior manifest' );
 			if ( manual && ! sameIds( manifest.interiors, input.buildingIds ) ) {
 
