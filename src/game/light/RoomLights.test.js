@@ -35,6 +35,45 @@ const factory = { build: () => new THREE.MeshStandardNodeMaterial() };
  */
 describe( 'RoomLights', () => {
 
+	it( 'shares the pool by what each room publishes and gives the leftovers to the nearest', () => {
+
+		const lights = new RoomLights( factory, { roomSlots: 2, roomSpots: 2, roomStrips: 0 } );
+		const big = room( 'big', 0, 2000 );
+		const small = room( 'small', 6, 400 );
+
+		big.fixtures = [ 0, 1, 2, 3 ].map( ( at ) => ( { ...big.fixtures[ 0 ], lumens: 2000 - at } ) );
+
+		lights.update( [ big, small ], new THREE.Vector3(), 1 );
+
+		// Four lights over five fixtures: the big room's share plus the one the
+		// small room cannot use, because the player is standing in the big one.
+		const lit = lights.spots.filter( ( light ) => light.intensity > 0 );
+		expect( lit ).toHaveLength( 4 );
+		expect( lights.spots.filter( ( light ) => light.position.x === 0 ) ).toHaveLength( 3 );
+		expect( lights.spots.filter( ( light ) => light.position.x === 6 ) ).toHaveLength( 1 );
+
+	} );
+
+	it( 'leaves a cove tucked under its own soffit to the fill and lights the joints instead', () => {
+
+		const lights = new RoomLights( factory, { roomSlots: 1, roomSpots: 0, roomStrips: 1 } );
+		const hall = room( 'hall', 0, 2000 );
+		const line = ( name, lumens, reach, facing ) => ( {
+			kind: 'cove', position: new THREE.Vector3( 0, reach, 0 ), lumens, reach, facing, name,
+			color: new THREE.Color( 1, 1, 1 ), range: 4, beamDeg: 100, diffuse: 0.4, length: 1, angleDeg: 0
+		} );
+
+		// The ceiling cove is the brightest record the room publishes and it
+		// faces a slab 0.2 m away; the wall joint is a tenth of it and faces
+		// into the room.
+		hall.fixtures = [ line( 'ceiling', 2000, 0.2, 'up' ), line( 'joint', 200, 2.4, 'down' ) ];
+		lights.update( [ hall ], new THREE.Vector3(), 1 );
+
+		expect( lights.strips[ 0 ].position.y ).toBe( 2.4 );
+		expect( lights.strips[ 0 ].power ).toBeCloseTo( 200 );
+
+	} );
+
 	it( 'gives the nearest rooms a slot, keeping the same light ids', () => {
 
 		const lights = new RoomLights( factory, tier );

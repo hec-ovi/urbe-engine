@@ -12,7 +12,7 @@ import { InteriorModules } from './InteriorModules.js';
 import { InteriorProps } from './InteriorProps.js';
 import { InteriorStream } from './InteriorStream.js';
 import { partsOf } from './InteriorBoxes.js';
-import { roomsOf } from './InteriorRooms.js';
+import { enclosure, floorOrphans, roomsOf } from './InteriorRooms.js';
 import { Elevators } from './Elevators.js';
 import { FillChannel } from './kit/FillChannel.js';
 import { RoomLights } from '../light/RoomLights.js';
@@ -383,6 +383,33 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		const carrier = floorPlacements( ground ).find( ( one ) => one.id === lens.furniture );
 		expect( carrier.module ).toMatch( /^fit-/ );
 		expect( modules.slotsOf( carrier.module ).some( ( slot ) => slot.includes( '/light-fixture/' ) ) ).toBe( true );
+
+		modules.dispose();
+
+	} );
+
+	it( 'measures a room by the surface it encloses and keeps the lights of a room it never built', async () => {
+
+		const { modules } = await openModules();
+		const [ ground ] = buildingFloors( 'p1', await building() );
+		const rooms = roomsOf( ground, modules );
+
+		// The room's own floor, ceiling and walls, not the sum of every face of
+		// every module's bounding box, which counts backs buried in walls.
+		for ( const room of rooms ) {
+
+			expect( room.area ).toBeCloseTo( enclosure( room.polygon, room.holes, room.height ), 3 );
+
+		}
+
+		// A floor lights rooms it does not publish, the stair cores above all.
+		// Their flux belongs to the air on that floor rather than to nothing.
+		const orphans = floorOrphans( ground );
+		const published = new Set( ground.rooms.map( ( room ) => room.id ) );
+
+		expect( orphans.rooms.length ).toBeGreaterThan( 0 );
+		expect( orphans.rooms.every( ( id ) => ! published.has( id ) ) ).toBe( true );
+		expect( orphans.fixtures.length ).toBeGreaterThan( 0 );
 
 		modules.dispose();
 

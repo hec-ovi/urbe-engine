@@ -39,10 +39,14 @@ export function roomsOf( floor, catalog ) {
 }
 
 /**
- * How much surface of what reflectance each room holds, from the modules
- * standing in it: a module's outer area at the size the placement scales it to,
- * at the mean reflectance of the slots it wears. That is what makes the fill
- * light computable rather than dialled.
+ * What reflectance each room's surfaces carry, from the modules standing in
+ * it: a module's outer area at the size the placement scales it to, at the
+ * mean reflectance of the slots it wears. These areas weight the reflectance
+ * and nothing else; how much surface the room actually encloses is measured
+ * from its own outline, because a module's bounding box counts backs buried in
+ * walls and every face a neighbour hides, which on the played floors comes to
+ * about twice the room's real enclosing surface and up to six times in a
+ * corridor.
  */
 function measure( floor, catalog ) {
 
@@ -88,6 +92,8 @@ export class Room {
 		this.elevation = floor.elevation;
 		this.height = floor.height;
 		this.center = new THREE.Vector3( x, floor.elevation + floor.height / 2, z );
+		/** The room's own extent on the ground, which is what being in view is tested against. */
+		this.bounds = extentOf( this.polygon, x, z );
 		this.visible = false;
 
 		const whole = new Reflectance();
@@ -100,7 +106,10 @@ export class Room {
 
 		}
 
-		this.area = whole.area;
+		// The surface the room's own light bounces around in: its floor, its
+		// ceiling and its walls, from the outline the interior published, with
+		// the vertical core and any other hole counted on both counts.
+		this.area = enclosure( this.polygon, this.holes, this.height ) || whole.area;
 		this.albedo = whole.color();
 		this.floorAlbedo = walked.area > 0 ? walked.color() : this.albedo.clone();
 		this.fixtures = fixtures;
@@ -133,7 +142,7 @@ export class Room {
  * lobby: the floor's rooms taken together, flux over surface, so it is lit
  * air rather than a hole.
  */
-export function floorFill( rooms ) {
+export function floorFill( rooms, orphans = [] ) {
 
 	const whole = { area: 0, albedo: new THREE.Color( 0, 0, 0 ), floorAlbedo: new THREE.Color( 0, 0, 0 ) };
 	const color = new THREE.Color( 0, 0, 0 );
@@ -148,6 +157,14 @@ export function floorFill( rooms ) {
 		whole.floorAlbedo.add( room.floorAlbedo );
 
 	}
+	// A fixture published for a room the floor never built still hangs in the
+	// building, so its flux belongs to the air the stair and the lobby stand in.
+	for ( const fixture of orphans ) {
+
+		flux += fixture.lumens;
+		addScaled( color, fixture.color, fixture.lumens );
+
+	}
 
 	if ( ! rooms.length ) return new THREE.Vector4();
 
@@ -156,6 +173,98 @@ export function floorFill( rooms ) {
 	whole.floorAlbedo.multiplyScalar( 1 / rooms.length );
 
 	return RoomFill.perCopy( whole, flux, color );
+
+}
+
+/** A ring's extent on the ground, or a point where it publishes none. */
+function extentOf( polygon, x, z ) {
+
+	const rect = { x0: Infinity, z0: Infinity, x1: - Infinity, z1: - Infinity };
+
+	for ( const [ px, pz ] of polygon ?? [] ) {
+
+		rect.x0 = Math.min( rect.x0, px );
+		rect.z0 = Math.min( rect.z0, pz );
+		rect.x1 = Math.max( rect.x1, px );
+		rect.z1 = Math.max( rect.z1, pz );
+
+	}
+
+	return rect.x1 >= rect.x0 ? rect : { x0: x, z0: z, x1: x, z1: z };
+
+}
+
+/**
+ * The fixtures a floor published for a room it does not publish, the stair
+ * cores above all: they hang in the building and light nothing unless the
+ * floor takes them. They join the floor's shared pool and its haze, and their
+ * room ids come back so the run can say which rooms were never built.
+ */
+export function floorOrphans( floor ) {
+
+	const published = new Set( ( floor.rooms ?? [] ).map( ( room ) => room.id ) );
+	const byRoom = fixturesByRoom( floor );
+	const fixtures = [];
+	const rooms = [];
+
+	for ( const [ id, set ] of byRoom ) {
+
+		if ( published.has( id ) ) continue;
+
+		rooms.push( id );
+		fixtures.push( ...set );
+
+	}
+
+	return { fixtures, rooms };
+
+}
+
+/**
+ * The surface one storey of a room encloses: floor and ceiling, plus every
+ * wall standing around its outline and around each hole in it.
+ */
+export function enclosure( polygon, holes, height ) {
+
+	if ( ! polygon?.length ) return 0;
+
+	const rings = [ polygon, ...( holes ?? [] ) ];
+	const plan = Math.abs( ringArea( polygon ) ) - ( holes ?? [] ).reduce( ( sum, hole ) => sum + Math.abs( ringArea( hole ) ), 0 );
+	const walls = rings.reduce( ( sum, ring ) => sum + ringLength( ring ), 0 ) * Math.max( 0, height );
+
+	return Math.max( 0, 2 * plan + walls );
+
+}
+
+function ringArea( ring ) {
+
+	let twice = 0;
+
+	for ( let i = 0; i < ring.length; i ++ ) {
+
+		const [ ax, az ] = ring[ i ];
+		const [ bx, bz ] = ring[ ( i + 1 ) % ring.length ];
+		twice += ax * bz - bx * az;
+
+	}
+
+	return twice / 2;
+
+}
+
+function ringLength( ring ) {
+
+	let length = 0;
+
+	for ( let i = 0; i < ring.length; i ++ ) {
+
+		const [ ax, az ] = ring[ i ];
+		const [ bx, bz ] = ring[ ( i + 1 ) % ring.length ];
+		length += Math.hypot( bx - ax, bz - az );
+
+	}
+
+	return length;
 
 }
 
@@ -222,6 +331,9 @@ export function fixturesByRoom( floor ) {
 			color: light.color ? new THREE.Color().setRGB( ...light.color, THREE.LinearSRGBColorSpace ) : kelvinColor( light.colorTemperatureK ),
 			...( light.axis ? { axis: new THREE.Vector3().fromArray( light.axis ) } : {} ),
 			...( light.direction ? { direction: new THREE.Vector3().fromArray( light.direction ) } : {} ),
+			// How far the surface it faces stands from it, which is both how far
+			// its light has to carry and how much room its beam has to open in.
+			reach: Math.max( 0, light.facing === 'up' ? floor.height - above : above ),
 			range: Math.max( 0.5, light.range, light.facing === 'up' ? floor.height - above : above ),
 			beamDeg: light.beamDeg || 100,
 			diffuse: light.diffuse ?? 0.5,

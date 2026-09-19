@@ -7,10 +7,16 @@ const PRESETS = {
 		textureMaxSize: 1024,
 		bloom: { strength: 0, radius: 0.0 },
 		haze: false,
-		// Three slots light the rooms of one live floor from their own fixtures.
+		// Three slots light the rooms of one live floor from their own fixtures,
+		// and the pool they add up to is shared out by what each room publishes.
 		roomSlots: 3,
 		roomSpots: 4,
 		roomStrips: 0,
+		// A recess between two surfaces facing the same way is invisible without
+		// a shadow, which is why a wall panel's relief reads flat. One spot on
+		// the room the player stands in casts; the tiers that run on WebGL2 pay
+		// for a whole extra depth pass for it, so they do not.
+		roomShadow: 0,
 		clusteredLights: 512,
 		batchedLights: 32,
 		// Glossy ground and metals need something to reflect on every tier;
@@ -27,6 +33,7 @@ const PRESETS = {
 		roomSlots: 3,
 		roomSpots: 4,
 		roomStrips: 1,
+		roomShadow: 0,
 		clusteredLights: 1024,
 		batchedLights: 48,
 		probeSize: 64,
@@ -41,6 +48,7 @@ const PRESETS = {
 		roomSlots: 4,
 		roomSpots: 4,
 		roomStrips: 2,
+		roomShadow: 1024,
 		clusteredLights: 1024,
 		batchedLights: 48,
 		probeSize: 64,
@@ -55,6 +63,7 @@ const PRESETS = {
 		roomSlots: 6,
 		roomSpots: 4,
 		roomStrips: 2,
+		roomShadow: 1024,
 		clusteredLights: 1024,
 		batchedLights: 48,
 		probeSize: 128,

@@ -17,12 +17,17 @@ const SKY_RADIANCE = 0.12;
  */
 const SCATTER = 0;
 /**
- * What a room returns per lux of its fixtures' mean illuminance, in cd/m2: a
- * mid-grey surface's albedo over pi, with the interreflected share on top. A
- * room's medium is its own walls seen through its own air, so its far end
- * settles on that radiance rather than on the sky behind a slab.
+ * What a room returns per lux of its fixtures' mean illuminance, in cd/m2.
+ *
+ * A room's medium is its own walls seen through its own air, so its far end
+ * settles on their radiance rather than on the sky behind a slab. A surface
+ * under illuminance E returns E p / pi, and interreflection carries E to
+ * E / (1 - p), so the room's mean radiance is p / ((1 - p) pi) per lux. That
+ * is taken at the dark end of interior reflectance, p = 0.25, so the air stays
+ * under the surfaces it hides in every room rather than over them in the dark
+ * ones, which is what turns a room past five metres into flat fog.
  */
-const ROOM_RETURN = 0.25;
+const ROOM_RETURN = 0.1;
 /**
  * A room's air is thick over metres where the street's is thin over blocks:
  * 15 percent of the medium at 10 m, 47 at 20, so a room reads to its far wall.

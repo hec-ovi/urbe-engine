@@ -15,6 +15,16 @@ const STRIP_WIDTH = 0.06;
  * the inverse-square value, and the light still ends where the room does.
  */
 const REACH_MARGIN = 2.5;
+/**
+ * A line source this close to the surface it faces is indirect: the cove
+ * tucked under a soffit blows a hot line on the slab and returns nothing to
+ * the room, and the bounce off that slab is already in the room's fill, so
+ * spending a rect light on it spends it twice. Those coves are also the
+ * brightest records a room publishes, so without this they take every rect
+ * slot and the wall joints, which are the grazing light the panel relief
+ * reads against, never get one.
+ */
+const INDIRECT_REACH = 0.3;
 const UP = new THREE.Vector3( 0, 1, 0 );
 /** Map decode promises ride on a symbol, which a material copy does not carry over. */
 const RESOURCES = Symbol.for( 'urbe.material-resources' );
@@ -36,6 +46,12 @@ const RESOURCES = Symbol.for( 'urbe.material-resources' );
  * per material, so those materials wear one lights node holding every slot's
  * lights: whichever rooms hold a slot are lit, and the batch never recompiles.
  *
+ * The pool is handed out by need, not one slot per room. A toilet of eight
+ * square metres and a sales floor of two thousand publish very different
+ * numbers of fixtures, so each room takes its share of the pool and whatever
+ * the small rooms cannot use goes to the room the player is nearest, which is
+ * the one they are standing in.
+ *
  * Flux is conserved: whatever the direct lights do not carry stays in the fill,
  * which is the term that gives a wall its bounce gradient. That fill is a
  * room's own, so it rides on each copy (RoomFillNode) rather than in the pool,
@@ -45,12 +61,14 @@ export class RoomLights {
 
 	/**
 	 * @param factory PbrMaterialFactory, for the base material of each key
-	 * @param tier quality descriptor (roomSlots, roomSpots, roomStrips)
+	 * @param tier quality descriptor (roomSlots, roomSpots, roomStrips, roomShadow)
 	 */
 	constructor( factory, tier ) {
 
 		this.factory = factory;
 		this.slots = [];
+		/** The shadow map one room light carries, or 0 where the tier pays for none. */
+		this.shadowSize = tier.roomShadow ?? 0;
 		this.timer = RESHUFFLE_INTERVAL;
 
 		for ( let i = 0; i < tier.roomSlots; i ++ ) {
@@ -58,6 +76,22 @@ export class RoomLights {
 			this.slots.push( slot( tier.roomSpots, tier.roomStrips ) );
 
 		}
+
+		/** The pool itself, flat: any light can be pointed at any room in view. */
+		this.spots = this.slots.flatMap( ( binding ) => binding.spots );
+		// One caster, and it is the first light of the pool, which is the
+		// brightest fixture of the room the player is standing in.
+		if ( this.shadowSize && this.spots.length ) {
+
+			const caster = this.spots[ 0 ];
+			caster.shadow.mapSize.setScalar( this.shadowSize );
+			caster.shadow.bias = - 0.002;
+			caster.shadow.camera.near = 0.2;
+
+		}
+		this.strips = this.slots.flatMap( ( binding ) => binding.strips );
+		this.rooms = [];
+		this.position = new THREE.Vector3();
 
 		/** The one lights node every room material wears, and those materials. */
 		this.pool = {
@@ -115,16 +149,16 @@ export class RoomLights {
 
 	}
 
-	/** A dropped room must not remain referenced by a live light slot. */
+	/** A dropped room must not remain referenced by a live light. */
 	releaseRooms( rooms ) {
 
 		const gone = new Set( rooms );
-		for ( const binding of this.slots ) if ( gone.has( binding.room ) ) {
+		const kept = this.rooms.filter( ( room ) => ! gone.has( room ) );
 
-			binding.room = null;
-			this.#write( binding, null );
+		if ( kept.length === this.rooms.length ) return;
 
-		}
+		this.rooms = kept;
+		this.#write();
 
 	}
 
@@ -138,40 +172,94 @@ export class RoomLights {
 		if ( this.timer < RESHUFFLE_INTERVAL ) return;
 
 		this.timer = 0;
-
-		for ( let i = 0; i < this.slots.length; i ++ ) {
-
-			const binding = this.slots[ i ];
-
-			binding.room = rooms[ i ] ?? null;
-			this.#write( binding, binding.room );
-			refresh( binding );
-
-		}
+		this.rooms = rooms.slice( 0, this.slots.length );
+		this.position.copy( position );
+		this.#write();
 
 	}
 
-	/** Points one slot's lights at the room holding it. */
-	#write( binding, room ) {
-
-		if ( ! room ) {
-
-			for ( const light of binding.members ) light.intensity = 0;
-			return;
-
-		}
+	/** Points the pool at the rooms in view, each room taking its share of it. */
+	#write() {
 
 		// Where the tier carries no line sources, a strip still has to light the
 		// room it was published for, so it competes for a spot instead: the
 		// stretched highlight is lost, the room's own light is not.
-		const line = binding.strips.length > 0;
-		const spots = line ? room.fixtures.filter( ( f ) => f.kind === 'spot' ) : room.fixtures;
-		const strips = line ? room.fixtures.filter( ( f ) => f.kind !== 'spot' ) : [];
+		const line = this.strips.length > 0;
 
-		place( binding.spots, spots, aimSpot );
-		place( binding.strips, strips, aimStrip );
+		const spots = share( this.rooms, this.spots.length, ( room ) => byFlux( line ? room.fixtures.filter( isSpot ) : room.fixtures ) );
+
+		place( this.spots, spots, aimSpot );
+		// A caster with nothing to light still renders its map every frame.
+		if ( this.shadowSize && this.spots.length ) this.spots[ 0 ].castShadow = Boolean( spots[ 0 ] );
+		place(
+			this.strips,
+			line ? share( this.rooms, this.strips.length, ( room ) => byReach( room.fixtures.filter( ( one ) => ! isSpot( one ) ), this.position ) ) : [],
+			aimStrip
+		);
+
+		for ( const binding of this.slots ) refresh( binding );
+		// A slot no longer names one room, so what it holds is whatever of the
+		// pool its own lights were given.
+		for ( const [ at, binding ] of this.slots.entries() ) binding.room = this.rooms[ at ] ?? null;
 
 	}
+
+}
+
+const isSpot = ( fixture ) => fixture.kind === 'spot';
+
+/**
+ * How much of the pool each room gets, and which of its fixtures.
+ *
+ * Every room in view keeps one light, so none of them goes black, and the rest
+ * of the pool is handed out nearest first, each room capped by what it
+ * publishes. A toilet with two fixtures therefore takes two and the sales
+ * floor the player is standing in takes everything the small rooms around it
+ * cannot use, which is what sizing the share by the fixtures a room hangs
+ * amounts to.
+ */
+function share( rooms, capacity, rank ) {
+
+	const wanted = rooms.map( rank );
+	const taken = wanted.map( () => 0 );
+	let spare = capacity;
+
+	for ( let at = 0; at < wanted.length && spare > 0; at ++ ) {
+
+		if ( ! wanted[ at ].length ) continue;
+		taken[ at ] = 1;
+		spare --;
+
+	}
+	for ( let at = 0; at < wanted.length && spare > 0; at ++ ) {
+
+		const more = Math.min( spare, wanted[ at ].length - taken[ at ] );
+		taken[ at ] += more;
+		spare -= more;
+
+	}
+
+	return wanted.flatMap( ( list, at ) => list.slice( 0, taken[ at ] ) );
+
+}
+
+/** A room's spots, brightest first. */
+function byFlux( fixtures ) {
+
+	return fixtures.slice().sort( ( a, b ) => b.lumens - a.lumens );
+
+}
+
+/**
+ * A room's line sources worth a rect light: the ones that face into the room
+ * rather than into the surface they are tucked against, nearest the player
+ * first, because a stretched highlight is only worth a slot where it is seen.
+ */
+function byReach( fixtures, position ) {
+
+	return fixtures
+		.filter( ( one ) => ! ( one.facing === 'up' && one.reach !== undefined && one.reach < INDIRECT_REACH ) )
+		.sort( ( a, b ) => a.position.distanceToSquared( position ) - b.position.distanceToSquared( position ) );
 
 }
 
@@ -199,10 +287,8 @@ function slot( spotCount, stripCount ) {
 
 }
 
-/** Assigns fixtures to a fixed pool of lights, darkening whatever is left over. */
-function place( pool, fixtures, aim ) {
-
-	const chosen = fixtures.slice().sort( ( a, b ) => b.lumens - a.lumens ).slice( 0, pool.length );
+/** Assigns chosen fixtures to the pool, darkening whatever is left over. */
+function place( pool, chosen, aim ) {
 
 	for ( let i = 0; i < pool.length; i ++ ) {
 

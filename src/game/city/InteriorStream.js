@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import { buildingFloors, floorPlacements } from './InteriorLayouts.js';
 import { floorBoxes } from './InteriorBoxes.js';
 import { moduleError } from './InteriorModules.js';
-import { floorFill, roomsOf } from './InteriorRooms.js';
+import { floorFill, floorOrphans, roomsOf } from './InteriorRooms.js';
 import { Haze } from '../light/Haze.js';
 
 /** A building's floors are worth building this close to its footprint. */
@@ -359,8 +359,15 @@ export class InteriorStream {
 		if ( ! this.#wanted( interior, band ) ) return null;
 
 		const rooms = roomsOf( record, this.modules );
+		const orphans = floorOrphans( record );
 		const fills = new Map( rooms.map( ( room ) => [ room.roomId, room.fill ] ) );
-		const shared = floorFill( rooms );
+		const shared = floorFill( rooms, orphans.fixtures );
+
+		if ( orphans.rooms.length ) {
+
+			this.hitches?.note( `floor ${band.id} lights ${orphans.rooms.join( ', ' )}, which it does not publish as rooms`, 0 );
+
+		}
 		const copies = [];
 		const content = new THREE.Group();
 		content.name = `interior:${band.id}`;
@@ -390,7 +397,7 @@ export class InteriorStream {
 
 		}
 
-		const glow = this.haze && Haze.build( rooms.flatMap( ( room ) => room.fixtures ), this.haze );
+		const glow = this.haze && Haze.build( [ ...rooms.flatMap( ( room ) => room.fixtures ), ...orphans.fixtures ], this.haze );
 
 		if ( glow ) content.add( glow );
 

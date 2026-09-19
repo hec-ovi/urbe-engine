@@ -140,7 +140,9 @@ export class InteriorModules {
 		const loaded = await mapConcurrent( this.catalog.modules, LOAD_CONCURRENCY, ( module ) => this.#module( module ) );
 
 		for ( const module of loaded ) this.modules.set( module.id, module );
-		this.batches.add( loaded );
+		// The room's own caster only has something to cast off where the walls,
+		// slabs and fitted furniture are in its depth pass.
+		this.batches.add( loaded, { castShadow: ( this.roomLights.shadowSize ?? 0 ) > 0 } );
 
 		return this;
 

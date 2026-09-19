@@ -18,7 +18,13 @@ describe( 'NightFog', () => {
 		fog.update( room, true, 1 );
 
 		expect( fog.indoor ).toBe( 1 );
-		expect( luminance( fog.color.value ) ).toBeCloseTo( 0.5, 6 );
+		// The air is the room's own walls seen through it, so it sits under
+		// their radiance rather than over it: a surface under illuminance E
+		// returns E p / ((1 - p) pi) once its bounces settle, and the medium is
+		// taken at the dark end of interior reflectance.
+		const surfaces = ( p ) => room.lux * p / ( ( 1 - p ) * Math.PI );
+		expect( luminance( fog.color.value ) ).toBeCloseTo( 0.2, 6 );
+		expect( luminance( fog.color.value ) ).toBeLessThan( surfaces( 0.4 ) );
 		expect( fog.color.value.r ).toBeGreaterThan( fog.color.value.b );
 		const share = 1 - Math.exp( - ( ( fog.base.value * 10 ) ** 2 ) );
 		expect( share ).toBeGreaterThan( 0 );
