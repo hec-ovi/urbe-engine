@@ -2,32 +2,32 @@ import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { cutPlanes } from './Apertures.js';
 import { framesAlong } from './PathFrames.js';
-import { openDeck, rectShell, roundTube } from './Sweep.js';
+import { glazedBridge, rectTube, roundTube } from './Sections.js';
+import { sweep } from './Sweep.js';
 
-// One material per kind of thing, never per link: an air duct is sheet metal,
-// a skybridge and a service tunnel are the same cast concrete, a wire is
-// insulated cable. Three keys is three draw calls for every link in the city.
+// One material per kind of surface, never per link: an air duct is sheet
+// metal, a skybridge and a service tunnel are the same cast concrete, a
+// bridge's band is window glass, a wire is insulated cable. Four keys is four
+// draw calls for every link in the city.
 const KEYS = {
-	'ac-tube': 'cyberpunk/metal/mid',
-	bridge: 'cyberpunk/concrete/mid',
-	tunnel: 'cyberpunk/concrete/mid',
-	wire: 'cyberpunk/rubber/mid',
-	'rooftop-span': 'cyberpunk/rubber/mid'
+	'ac-tube': { shell: 'cyberpunk/metal/mid' },
+	bridge: { shell: 'cyberpunk/concrete/mid', glass: 'cyberpunk/window-glass/mid' },
+	tunnel: { shell: 'cyberpunk/concrete/mid' },
+	wire: { shell: 'cyberpunk/rubber/mid' },
+	'rooftop-span': { shell: 'cyberpunk/rubber/mid' }
 };
 /** A 10 cm cable read from metres away; more sides would be invisible. */
 const WIRE_SIDES = 5;
 /** Thin rooftop spans need a round silhouette in the closer roof view. */
 export const ROOFTOP_WIRE_SIDES = 8;
-/** A parapet a person cannot go over, which is what stops a walk off a deck. */
-export const RAILING = 1.1;
 /** Float slack on an end that lands exactly on the roof it was planned against. */
 const ROOF_SLACK = 0.001;
 
 /**
  * Every inter-building link the connections box published, as geometry and as
- * something to stand on: bridges as open decks between two railings, tunnels
- * and AC tubes as closed boxes you walk through (and over, on a tube), and the
- * wires strung across the streets.
+ * something to stand on: bridges as enclosed glazed crossings you walk
+ * through, tunnels and AC tubes as closed boxes you walk through (and over, on
+ * a tube), and the wires strung across the streets.
  *
  * Each link is swept from its own centerline and cross section, and its two
  * ends are sliced by the planes of the apertures it terminates on, so the end
@@ -64,9 +64,9 @@ export class Links {
 
 		for ( const link of [ ...this.links, ...this.#rooftopLinks() ] ) {
 
-			const key = KEYS[ link.kind ];
+			const keys = KEYS[ link.kind ];
 
-			if ( ! key ) continue;
+			if ( ! keys ) continue;
 
 			if ( ! this.#hosted( link ) ) {
 
@@ -75,16 +75,22 @@ export class Links {
 
 			}
 
-			const geometry = this.#sweep( link );
+			for ( const [ role, geometry ] of this.#sweep( link ) ) {
 
-			if ( ! byKey.has( key ) ) byKey.set( key, [] );
+				const key = keys[ role ];
 
-			byKey.get( key ).push( geometry );
+				if ( ! byKey.has( key ) ) byKey.set( key, [] );
 
-			// The shell is one surface, so walking through a bridge and walking
-			// over a tube are the same triangles. A link that is walkable in
-			// neither sense is not solid at all: a wire is something to look at.
-			if ( link.walkable.inside || link.walkable.over ) solid.push( positionsOnly( geometry ) );
+				byKey.get( key ).push( geometry );
+
+				// The shell is one surface, so walking through a bridge and
+				// walking over a tube are the same triangles, and the glazing
+				// is the wall that stops you leaving through it. A link that is
+				// walkable in neither sense is not solid at all: a wire is
+				// something to look at.
+				if ( link.walkable.inside || link.walkable.over ) solid.push( positionsOnly( geometry ) );
+
+			}
 
 		}
 
@@ -142,10 +148,10 @@ export class Links {
 	}
 
 	/**
-	 * A link's geometry from its centerline and section. Both ends take the
-	 * plane of their own aperture; a wire's anchor is a mounting footprint
-	 * rather than a hole, but its plane is still the facade, so the cable meets
-	 * the wall flush.
+	 * A link's geometry from its centerline and section, by material role. Both
+	 * ends take the plane of their own aperture; a wire's anchor is a mounting
+	 * footprint rather than a hole, but its plane is still the facade, so the
+	 * cable meets the wall flush.
 	 */
 	#sweep( link ) {
 
@@ -155,17 +161,16 @@ export class Links {
 			last: this.planes.get( link.b.apertureId )
 		} );
 
-		if ( shape !== 'rect' ) return roundTube(
-			frames,
+		if ( shape !== 'rect' ) return sweep( frames, roundTube(
 			width / 2,
 			link.kind === 'rooftop-span' ? ROOFTOP_WIRE_SIDES : WIRE_SIDES
-		);
+		) );
 
-		// A bridge is an open crossing in the air, a tube is a duct: the first
-		// is a deck between two railings, the second a closed box.
-		return link.kind === 'bridge'
-			? openDeck( frames, width, height, RAILING )
-			: rectShell( frames, width, height );
+		// A bridge is a crossing people walk through, so it is glazed; a duct
+		// and a tunnel are bare tubes.
+		return sweep( frames, link.kind === 'bridge'
+			? glazedBridge( width, height )
+			: rectTube( width, height ) );
 
 	}
 
@@ -182,12 +187,13 @@ export class Links {
 
 	/**
 	 * A shell has no inside and no outside, so it is drawn from both: standing
-	 * on an AC tube and standing in it look at the same triangles. The wire is
-	 * a closed tube and keeps its back faces culled.
+	 * on an AC tube and standing in it look at the same triangles, and a
+	 * bridge's glazing is seen from the corridor as well as from the street.
+	 * The cable is a closed tube and keeps its back faces culled.
 	 */
 	#material( key ) {
 
-		return key === KEYS.wire
+		return key === KEYS.wire.shell
 			? this.factory.build( key )
 			: this.factory.variant( key, { side: THREE.DoubleSide } );
 

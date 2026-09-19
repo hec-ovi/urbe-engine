@@ -1,109 +1,65 @@
 import * as THREE from 'three/webgpu';
 import { corner } from './PathFrames.js';
 
-/** Corner offsets around a rect section, in half-width and half-height. */
-const RECT = [ [ - 1, - 1 ], [ 1, - 1 ], [ 1, 1 ], [ - 1, 1 ] ];
-
 /**
- * A rect link as one open shell: floor, both walls and roof swept along the
- * centerline, with the two end faces left open so each aperture stays a real
+ * A link swept along its centerline: quad strips between consecutive section
+ * rings, one strip per edge of the section, grouped by the material role that
+ * edge carries. The two end faces are left open so each aperture stays a real
  * hole rather than a capped stub.
  *
  * The shell carries no wall thickness. The aperture's cut is this exact
- * surface, and the floor plate the exterior box aligns to the aperture's
- * `base` is the section's own bottom: a thickness would lift the walking
- * surface a step above the building's floor and double the geometry to hide
- * the gap it left at the opening.
- */
-export function rectShell( frames, width, height ) {
-
-	const rings = frames.map( ( frame ) => RECT.map(
-		( [ across, up ] ) => corner( frame, across * width / 2, up * height / 2 )
-	) );
-
-	return sweep( rings, [ width, height, width, height ] );
-
-}
-
-/**
- * A bridge as an open deck: the walking surface is the section's own bottom,
- * exactly where the exterior box aligns the aperture's `base`, and a railing
- * stands on each edge of it. Nothing spans the opening above, which is what an
- * open deck means: the aperture stays a 3.2 m doorway and the crossing itself
- * is a deck you walk out onto in the open air.
+ * surface, and the floor you walk on is the section's own bottom, level with
+ * the floor plate the exterior box aligns to the aperture's `base`: a
+ * thickness would lift the walking surface a step above the building's floor
+ * and double the geometry to hide the gap it left at the opening.
  *
- * The section is a polyline rather than a loop (railing, deck, railing), so the
- * sweep leaves the top open instead of closing a roof over it.
- */
-export function openDeck( frames, width, height, railing ) {
-
-	const floor = - height / 2;
-	const top = floor + railing;
-	const section = [ [ - 1, top ], [ - 1, floor ], [ 1, floor ], [ 1, top ] ];
-	const rings = frames.map( ( frame ) => section.map(
-		( [ across, up ] ) => corner( frame, across * width / 2, up )
-	) );
-
-	return sweep( rings, [ railing, width, railing ], false );
-
-}
-
-/**
- * A round link as a closed tube of `sides` flats. A wire is 10 cm across and
- * read from metres away, so the flats never show and the tube costs a fraction
- * of a smooth one.
- */
-export function roundTube( frames, radius, sides ) {
-
-	const rings = frames.map( ( frame ) => {
-
-		const ring = [];
-
-		for ( let i = 0; i < sides; i ++ ) {
-
-			const angle = i / sides * Math.PI * 2;
-
-			ring.push( corner( frame, Math.cos( angle ) * radius, Math.sin( angle ) * radius ) );
-
-		}
-
-		return ring;
-
-	} );
-
-	return sweep( rings, new Array( sides ).fill( Math.PI * 2 * radius / sides ) );
-
-}
-
-/**
- * Quad strips between consecutive rings, one strip per edge of the section.
  * UVs are world metres both ways, `station` along the link and the section
  * perimeter across it, because every material a link wears tiles over
  * world-metre UVs and a 0..1 unwrap would stretch one tile over the whole span.
+ *
+ * @param frames section frames from `framesAlong`
+ * @param section `{ corners, roles }` from Sections.js
+ * @returns Map<role, BufferGeometry>
  */
-function sweep( rings, spans, closed = true ) {
+export function sweep( frames, { corners, roles } ) {
 
-	const positions = [];
-	const uvs = [];
+	const rings = frames.map( ( frame ) => corners.map(
+		( [ across, up ] ) => corner( frame, across, up )
+	) );
+	const strips = new Map();
 	let across = 0;
 
-	for ( let edge = 0; edge < spans.length; edge ++ ) {
+	for ( let edge = 0; edge < corners.length; edge ++ ) {
 
-		const next = closed ? ( edge + 1 ) % spans.length : edge + 1;
+		const next = ( edge + 1 ) % corners.length;
+		const span = Math.hypot(
+			corners[ next ][ 0 ] - corners[ edge ][ 0 ],
+			corners[ next ][ 1 ] - corners[ edge ][ 1 ]
+		);
+
+		if ( ! strips.has( roles[ edge ] ) ) strips.set( roles[ edge ], { positions: [], uvs: [] } );
+
+		const strip = strips.get( roles[ edge ] );
 
 		for ( let i = 0; i < rings.length - 1; i ++ ) {
 
 			quad(
-				positions, uvs,
+				strip,
 				rings[ i ][ edge ], rings[ i ][ next ], rings[ i + 1 ][ edge ], rings[ i + 1 ][ next ],
-				across, across + spans[ edge ]
+				across, across + span
 			);
 
 		}
 
-		across += spans[ edge ];
+		across += span;
 
 	}
+
+	return new Map( [ ...strips ].map( ( [ role, strip ] ) => [ role, geometryOf( strip ) ] ) );
+
+}
+
+function geometryOf( { positions, uvs } ) {
 
 	const geometry = new THREE.BufferGeometry();
 	geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( positions, 3 ) );
@@ -117,12 +73,12 @@ function sweep( rings, spans, closed = true ) {
 }
 
 /** One face of one segment, wound so its normal points out of the section. */
-function quad( positions, uvs, a0, a1, b0, b1, v0, v1 ) {
+function quad( strip, a0, a1, b0, b1, v0, v1 ) {
 
 	for ( const [ c, v ] of [ [ a0, v0 ], [ b0, v0 ], [ a1, v1 ], [ a1, v1 ], [ b0, v0 ], [ b1, v1 ] ] ) {
 
-		positions.push( c.point.x, c.point.y, c.point.z );
-		uvs.push( c.station, v );
+		strip.positions.push( c.point.x, c.point.y, c.point.z );
+		strip.uvs.push( c.station, v );
 
 	}
 

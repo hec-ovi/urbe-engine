@@ -20,7 +20,7 @@ The section comes from the link, never from here; these are what each kind is bu
 
 | kind | built as | solid |
 | --- | --- | --- |
-| bridge | open concrete deck between two 1.1 m railings, nothing over the top | walk on |
+| bridge | enclosed concrete box with a window glass band on each wall | walk through |
 | ac-tube | sheet metal shell, ends open | walk through and over |
 | tunnel | concrete shell at basement level, ends open | walk through |
 | wire | closed cable tube along the published catenary | nothing |
@@ -35,12 +35,12 @@ A kind this box does not know is skipped.
 - The section frame is the one the apertures were cut with: `right` horizontal and square to the axis, `up` square to both. A sloped link tilts its section with the axis.
 - Every link ends on a wall it faces, so the axis is never parallel to the face plane it terminates on (measured minimum over the city: 0.65 of a right angle away from parallel).
 - A rect link is one shell with no wall thickness: the aperture's cut is that surface, and the floor you walk on is the section's own bottom, level with the floor plate the exterior box aligns to the aperture's `base`. Shells are drawn from both sides.
-- A bridge is that shell opened: the deck is the section's own bottom, a railing stands on each edge of it, and nothing spans the top, so the aperture stays a doorway onto a crossing in the open air. It meets the two base corners of its cut exactly; a closed link meets all four.
-- Solid follows the flags, not the kind: `inside || over` puts the whole surface in the collider, neither puts nothing there. A tube is one surface, so walking through it and standing on it are the same triangles; a bridge's railings are in the collider too, which is what stops a walk off the deck.
+- A bridge is that shell glazed: a 1.4 m band of window glass starts 0.9 m above its floor on each wall, so the aperture is a doorway into a corridor people cross inside. Every rect link meets all four corners of its cut.
+- Solid follows the flags, not the kind: `inside || over` puts the whole surface in the collider, neither puts nothing there. A tube is one surface, so walking through it and standing on it are the same triangles; a bridge's walls and glazing are in the collider too, which is what keeps a walk inside it.
 - UVs are world metres both ways, `station` along the link and section perimeter across it, because the materials tile over world-metre UVs.
 - A rooftop span uses every path point Connections evaluated from the authoritative catenary. Its first and last ring centers equal the two published attachment positions and every ring radius equals half the published thickness.
-- The whole city merges by material key, never by link: rooftop spans share the wire's rubber bucket, so they add no material bucket when ordinary wire exists. A closed rect sweeps four strips a segment, an open deck three, a street wire five and a rooftop span eight.
-- No link carries a published emitter, so this box publishes no light. Bridges and tunnels are lit by whatever reaches through their open ends.
+- The whole city merges by material key, never by link: rooftop spans share the wire's rubber bucket, so they add no material bucket when ordinary wire exists. A tube sweeps four strips a segment, a glazed bridge eight, a street wire five and a rooftop span eight.
+- No link carries a published emitter, so this box publishes no light. Tunnels are lit by whatever reaches through their open ends, bridges by that and their glazing.
 
 ## Errors
 None thrown. A link of a kind this box does not know is skipped rather than drawn wrong.

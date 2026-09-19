@@ -19,10 +19,9 @@ describe( 'Links', () => {
 	 * the wall misses that hole by centimetres on every diagonal link, which is
 	 * a gap you can see daylight through or a tube poking out of a wall.
 	 *
-	 * A closed link meets all four corners of its cut. A bridge is an open deck,
-	 * so it meets the two at the base, which is the walking surface landing on
-	 * the floor plate the exterior box aligned to that aperture; above them the
-	 * opening is open, which is the point.
+	 * Every rect link is a closed section, so it meets all four corners of its
+	 * cut: the floor lands on the plate the exterior box aligned to that
+	 * aperture and the roof closes on the head of the opening.
 	 */
 	it( 'lands every end face on the aperture the facade was cut with', () => {
 
@@ -39,7 +38,7 @@ describe( 'Links', () => {
 
 		const cuts = new Map( doc.apertures.map( ( aperture ) => [ aperture.id, aperture.cut.polygon ] ) );
 		let worst = 0;
-		let decks = 0;
+		let ends = 0;
 
 		for ( const link of doc.links ) {
 
@@ -47,18 +46,15 @@ describe( 'Links', () => {
 
 			for ( const end of [ link.a, link.b ] ) {
 
-				const polygon = cuts.get( end.apertureId );
-				const wanted = link.kind === 'bridge' ? base( polygon ) : polygon;
+				ends ++;
 
-				if ( link.kind === 'bridge' ) decks ++;
-
-				for ( const vertex of wanted ) worst = Math.max( worst, nearest( points, vertex ) );
+				for ( const vertex of cuts.get( end.apertureId ) ) worst = Math.max( worst, nearest( points, vertex ) );
 
 			}
 
 		}
 
-		expect( decks ).toBeGreaterThan( 0 );
+		expect( ends ).toBeGreaterThan( 0 );
 		expect( worst ).toBeLessThan( 1e-3 );
 
 	} );
@@ -151,6 +147,80 @@ describe( 'Links', () => {
 
 	} );
 
+	/**
+	 * A skybridge is walked through and never over: Connections publishes a
+	 * 4 x 3.2 m corridor and the aperture is the doorway into it. Drawn as
+	 * anything less than a closed box it reads from the street as a slab
+	 * spanning the gap with the sky where its roof should be, and the glazed
+	 * band is what tells you people cross inside it.
+	 */
+	it( 'draws a bridge as an enclosed glazed box', () => {
+
+		const bridge = doc.links.find( ( link ) => link.kind === 'bridge' && level( link ) );
+		const built = new Links( { links: [ bridge ], apertures: doc.apertures }, factory ).build();
+		const shell = meshFor( built, 'cyberpunk/concrete/mid' ).geometry;
+		const glass = meshFor( built, 'cyberpunk/window-glass/mid' ).geometry;
+		const floor = bridge.path[ 0 ][ 1 ] - bridge.crossSection.height / 2;
+		const open = openEdges( [ shell, glass ] );
+
+		// The only holes are the two doorways: eight open edges close a loop
+		// round each end and every one of them lies on that aperture's plane.
+		expect( open ).toHaveLength( 16 );
+		for ( const point of open.flat() ) expect( onEndPlane( point, bridge, doc.apertures ) ).toBe( true );
+
+		// Floor, walls and roof fill the published section, and the band sits
+		// at eye level on both walls.
+		expect( extent( shell, 1 ) ).toEqual( [ expect.closeTo( floor, 3 ), expect.closeTo( floor + bridge.crossSection.height, 3 ) ] );
+		expect( extent( glass, 1 ) ).toEqual( [ expect.closeTo( floor + 0.9, 3 ), expect.closeTo( floor + 2.3, 3 ) ] );
+		expect( glass.getAttribute( 'position' ).count / 3 ).toBe( 4 * ( bridge.path.length - 1 ) );
+
+	} );
+
+	/**
+	 * A duct is a tube. Connections publishes a 2 x 2.4 m rect section walked
+	 * through and over, so all four flats have to be there: a face missing
+	 * leaves a beam you can see the hollow of from the street below.
+	 */
+	it( 'draws a duct as a closed tube', () => {
+
+		const tube = doc.links.find( ( link ) => link.kind === 'ac-tube' && level( link ) );
+		const built = new Links( { links: [ tube ], apertures: doc.apertures }, factory ).build();
+		const geometry = meshFor( built, 'cyberpunk/metal/mid' ).geometry;
+		const base = doc.apertures.find( ( aperture ) => aperture.id === tube.a.apertureId ).base;
+		const open = openEdges( [ geometry ] );
+
+		expect( built.drawCalls ).toBe( 1 );
+		expect( faceNormals( geometry ) ).toHaveLength( 4 );
+		expect( extent( geometry, 1 ) ).toEqual( [ expect.closeTo( base, 3 ), expect.closeTo( base + tube.crossSection.height, 3 ) ] );
+		expect( open ).toHaveLength( 8 );
+		for ( const point of open.flat() ) expect( onEndPlane( point, tube, doc.apertures ) ).toBe( true );
+
+	} );
+
+	/**
+	 * Every link in the city is one batch per material and never one per link:
+	 * the 1 km city publishes hundreds of them, and a submission each would
+	 * land on top of what the skyline already spends.
+	 */
+	it( 'merges every link into one batch per material', () => {
+
+		const built = new Links( doc, factory ).build();
+		const names = built.group.children.map( ( mesh ) => mesh.name );
+		const alone = doc.links.reduce(
+			( total, link ) => total + new Links( { links: [ link ], apertures: doc.apertures }, factory ).build().triangles, 0
+		);
+
+		expect( built.drawCalls ).toBe( names.length );
+		expect( new Set( names ) ).toEqual( new Set( [
+			'links:cyberpunk/concrete/mid', 'links:cyberpunk/window-glass/mid',
+			'links:cyberpunk/metal/mid', 'links:cyberpunk/rubber/mid'
+		] ) );
+		expect( names.length ).toBeLessThan( doc.links.length );
+		// Batched and not thinned: every triangle a link draws alone is in there.
+		expect( built.triangles ).toBe( alone );
+
+	} );
+
 } );
 
 /** The highest point anything in this group reaches. */
@@ -211,15 +281,6 @@ function expectCloseToPoint( point, digits ) {
 
 }
 
-/** The two lowest corners of a cut polygon: the edge a deck lands on. */
-function base( polygon ) {
-
-	const low = Math.min( ...polygon.map( ( vertex ) => vertex[ 1 ] ) );
-
-	return polygon.filter( ( vertex ) => vertex[ 1 ] - low < 1e-6 );
-
-}
-
 /** A link whose two ends sit at the same height, so its roof is one plane. */
 function level( link ) {
 
@@ -265,5 +326,117 @@ function upwardFacing( geometry ) {
 	}
 
 	return out;
+
+}
+
+/** The merged mesh a material key drew. */
+function meshFor( built, key ) {
+
+	return built.group.children.find( ( mesh ) => mesh.name === `links:${key}` );
+
+}
+
+/** The edges only one triangle uses: where a surface is open. */
+function openEdges( geometries ) {
+
+	const used = new Map();
+
+	for ( const geometry of geometries ) {
+
+		const position = geometry.getAttribute( 'position' );
+
+		for ( let triangle = 0; triangle < position.count; triangle += 3 ) {
+
+			const points = [ 0, 1, 2 ].map( ( offset ) => [
+				position.getX( triangle + offset ), position.getY( triangle + offset ), position.getZ( triangle + offset )
+			] );
+
+			for ( const [ from, to ] of [ [ 0, 1 ], [ 1, 2 ], [ 2, 0 ] ] ) {
+
+				const edge = [ points[ from ], points[ to ] ];
+				const id = edge.map( rounded ).sort().join( '|' );
+
+				used.set( id, { edge, count: ( used.get( id )?.count ?? 0 ) + 1 } );
+
+			}
+
+		}
+
+	}
+
+	return [ ...used.values() ].filter( ( entry ) => entry.count === 1 ).map( ( entry ) => entry.edge );
+
+}
+
+function rounded( values ) {
+
+	return values.map( ( value ) => ( Math.abs( value ) < 1e-6 ? 0 : value ).toFixed( 4 ) ).join( ':' );
+
+}
+
+/** [ min, max ] of one axis over a geometry. */
+function extent( geometry, axis ) {
+
+	const position = geometry.getAttribute( 'position' );
+	let min = Infinity;
+	let max = - Infinity;
+
+	for ( let i = 0; i < position.count; i ++ ) {
+
+		const value = position.array[ i * 3 + axis ];
+
+		min = Math.min( min, value );
+		max = Math.max( max, value );
+
+	}
+
+	return [ min, max ];
+
+}
+
+/** The distinct directions the faces of a geometry point in. */
+function faceNormals( geometry ) {
+
+	const normal = geometry.getAttribute( 'normal' );
+	const directions = new Set();
+
+	for ( let i = 0; i < normal.count; i ++ ) directions.add( rounded( [ normal.getX( i ), normal.getY( i ), normal.getZ( i ) ] ) );
+
+	return [ ...directions ];
+
+}
+
+/** Whether a point sits on the plane of one of a link's two aperture cuts. */
+function onEndPlane( point, link, apertures ) {
+
+	return [ link.a, link.b ].some( ( end ) => {
+
+		const polygon = apertures.find( ( aperture ) => aperture.id === end.apertureId ).cut.polygon;
+		const normal = newell( polygon );
+
+		return Math.abs( normal.reduce( ( sum, value, axis ) => sum + value * ( point[ axis ] - polygon[ 0 ][ axis ] ), 0 ) ) < 1e-3;
+
+	} );
+
+}
+
+function newell( polygon ) {
+
+	const normal = [ 0, 0, 0 ];
+
+	for ( let i = 0; i < polygon.length; i ++ ) {
+
+		const a = polygon[ i ];
+		const b = polygon[ ( i + 1 ) % polygon.length ];
+
+		normal[ 0 ] += ( a[ 1 ] - b[ 1 ] ) * ( a[ 2 ] + b[ 2 ] );
+		normal[ 1 ] += ( a[ 2 ] - b[ 2 ] ) * ( a[ 0 ] + b[ 0 ] );
+		normal[ 2 ] += ( a[ 0 ] - b[ 0 ] ) * ( a[ 1 ] + b[ 1 ] );
+
+	}
+
+	const length = Math.hypot( ...normal );
+
+	return normal.map( ( value ) => value / length );
 
 }
