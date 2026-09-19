@@ -14,6 +14,7 @@ import { ConnectionsArtifact } from './ConnectionsArtifact.js';
 import { loadBlueprint } from './BlueprintInput.js';
 import { KitAssembler, PlanLibrary, worldExteriorVersion } from './kit/index.js';
 import { BuildingBlueprints } from './BuildingBlueprints.js';
+import { StandingBuildings } from './StandingBuildings.js';
 import { InteriorModules } from './InteriorModules.js';
 import { dirBytes } from './SharedResources.js';
 
@@ -27,8 +28,6 @@ if ( ! args ) {
 }
 
 const started = performance.now();
-// Kit bands are 4.5 m each (Exterior kit contract).
-const FLOOR_HEIGHT = 4.5;
 const source = await loadBlueprint( args.blueprint );
 if ( source.encoding !== 'json' ) throw new AssemblyError( 'E_STREETS_ARCHIVE_UNSUPPORTED', 'native city assembly requires an ordinary blueprint JSON input' );
 const { atlas } = source;
@@ -74,16 +73,11 @@ const merged = new Map( wanted.map( ( id ) => [ id, kitAssembler.absorbedBy( id 
 const selected = new Set( wanted );
 const kitQueue = new Set( wanted.filter( ( id ) => ! merged.has( id ) && kitAssembler.candidate( id ) ) );
 const queue = wanted.filter( ( id ) => ! kitQueue.has( id ) && ! merged.has( id ) );
-// Links stand on the roofs that will exist: a kit building's floors, a lot a
-// merge emptied, nothing on the rest until the generator answers.
-const roofs = {};
-for ( const id of kitQueue ) roofs[ id ] = { roof: kitAssembler.candidate( id ).plan.floors * FLOOR_HEIGHT, stands: true };
-for ( const id of merged.keys() ) roofs[ id ] = { roof: 0, stands: false };
-connections = await runConnections( atlas, { seed: atlas.meta.seed, buildings: roofs } );
-const connectionsArtifact = new ConnectionsArtifact( atlas, connections );
 const workers = Math.max( 1, args.workers );
 const streets = new StreetsAhead( outDir, atlas );
-const pipeline = new BuildingPipeline( new RequestAssembler( atlas, connections ), { exterior } );
+// A kit building's blueprint is its plan's, turned into the frame the parcel
+// stands in, and every consumer of a standing building reads it from here.
+const blueprints = new BuildingBlueprints( outDir, planLibrary );
 
 if ( stale.length ) console.log( `dropped ${stale.length} folders this blueprint no longer has: ${stale.join( ', ' )}` );
 
@@ -124,6 +118,47 @@ console.log( args.reuseShells
 	: `city ${atlas.meta.seed}: ${kitQueue.size} kit from ${planLibrary.size} plans `
 		+ `(${library.drawn} drawn, ${library.reused} reused, ${library.failed} refused, ${( library.ms / 1000 ).toFixed( 1 )} s), `
 		+ `${queue.length} generated, ${workers} workers${exterior.governor.target ? `, held under ${exterior.governor.target} C` : ''}` );
+
+// The links the world keeps are planned against the buildings that stand, so
+// this pass waits for the plans: a kit parcel's facade is its plan's, inset
+// from the Atlas massing and covering its neighbour's lot where a merge joined
+// them, and its roof is the one Exterior drew. A parcel the generator still
+// owes keeps its Atlas massing, which is all anyone knows about it.
+const standing = new StandingBuildings();
+
+if ( args.reuseShells ) {
+
+	// Nothing is drawn on a reuse run, so what stands is read off the world.
+	const held = out.shells( parcelIds );
+	const complete = new Set( held );
+
+	for ( const id of parcelIds ) if ( ! complete.has( id ) ) standing.empty( id );
+
+	for ( const id of out.kits( held ) ) {
+
+		const blueprint = await blueprints.of( id );
+
+		standing.place( id, blueprint.bounds.footprint, blueprint.roof.elevation );
+
+	}
+
+} else {
+
+	for ( const id of kitQueue ) {
+
+		const chosen = kitAssembler.candidate( id );
+
+		standing.kit( id, planLibrary.blueprint( chosen.plan.id ), chosen.frame );
+
+	}
+
+	for ( const id of merged.keys() ) standing.empty( id );
+
+}
+
+connections = await runConnections( standing.atlas( atlas ), { seed: atlas.meta.seed, buildings: standing.roofs } );
+const connectionsArtifact = new ConnectionsArtifact( atlas, connections );
+const pipeline = new BuildingPipeline( new RequestAssembler( atlas, connections ), { exterior } );
 
 const results = [];
 const parcelsById = new Map( atlas.parcels.map( ( parcel ) => [ parcel.id, parcel ] ) );
@@ -276,14 +311,13 @@ if ( orphaned.size ) {
 }
 
 const shells = out.shells( parcelIds );
-// A kit building's blueprint is its plan's, turned into the frame the parcel
-// stands in, so the plans are bound before anything reads a blueprint.
+// The plans every kit parcel's blueprint is composed from are bound here,
+// before the manifest names them.
 const kitParcels = out.kits( shells );
 const kitPlans = kitParcels.length ? out.kitPlans( kitParcels ) : new Map();
 const plans = [ ...new Set( kitPlans.values() ) ].sort();
 const kitReference = plans.length ? planLibrary.publish( plans ) : null;
 const planBytes = plans.length ? planLibrary.bytes( plans ) : 0;
-const blueprints = new BuildingBlueprints( outDir, planLibrary );
 
 /** How each parcel is drawn, read from what its own folder holds. */
 function classify( ids ) {

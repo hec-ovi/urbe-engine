@@ -79,6 +79,15 @@ export class PlanFrame {
 
 	}
 
+	/** A direction in space: turned on the ground plane, its rise kept. */
+	direction3( [ x, y, z ] ) {
+
+		const [ turnedX, turnedZ ] = this.direction( [ x, z ] );
+
+		return [ turnedX, y, turnedZ ];
+
+	}
+
 	/** A ring of the plan's own ground plane, in world metres. */
 	ring( points ) {
 
@@ -154,7 +163,35 @@ function composeRoof( roof, frame ) {
 		artifacts: ( roof.artifacts ?? [] ).map( ( artifact ) => ( {
 			...artifact,
 			center: frame.point( artifact.center ),
-			...( artifact.rotationDeg === undefined ? {} : { rotationDeg: frame.degrees( artifact.rotationDeg ) } )
+			...( artifact.rotationDeg === undefined ? {} : { rotationDeg: frame.degrees( artifact.rotationDeg ) } ),
+			...( artifact.mastAssembly ? { mastAssembly: composeMast( artifact.mastAssembly, frame ) } : {} )
+		} ) )
+	};
+
+}
+
+/**
+ * An antenna mast, standing on this parcel's roof.
+ *
+ * Its external attachments are where the city's rooftop cables are fitted, so a
+ * point left in the plan's frame hangs a cable over the origin of the city
+ * instead of over the building that offers it.
+ */
+function composeMast( mast, frame ) {
+
+	const segment = ( { from, to } ) => ( { from: frame.point3( from ), to: frame.point3( to ) } );
+
+	return {
+		...mast,
+		mast: segment( mast.mast ),
+		arms: mast.arms.map( segment ),
+		supports: mast.supports.map( segment ),
+		cableAttachments: mast.cableAttachments.map( ( point ) => frame.point3( point ) ),
+		cables: mast.cables.map( ( cable ) => ( { ...cable, path: cable.path.map( ( point ) => frame.point3( point ) ) } ) ),
+		externalAttachments: mast.externalAttachments.map( ( attachment ) => ( {
+			...attachment,
+			position: frame.point3( attachment.position ),
+			...( attachment.normal ? { normal: frame.direction3( attachment.normal ) } : {} )
 		} ) )
 	};
 

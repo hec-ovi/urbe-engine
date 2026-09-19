@@ -1,5 +1,7 @@
 # Changelog
 
+0.25.13: the kept Connections pass plans against the buildings that stand (each kit parcel's plan ring in its frame and roof elevation), so every link end lands on the real facade, and a roof mast composes with its roof, so rooftop cables hang over their own building.
+
 0.25.12: kit colliders stand on the building footprint with the entrance cut in the wall the door sits in, plus a low band where a plinth, steps or planters stand proud of it; the lot line no longer blocks the pavement.
 
 0.25.11: a generated shell draws every mesh node it publishes too; a node name answers for moving door leaves and nothing else.

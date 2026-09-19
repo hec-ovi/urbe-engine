@@ -8,7 +8,7 @@ import { ExteriorWorkers } from '../ExteriorWorkers.js';
 import { validateExteriorBlueprint } from '../validators.js';
 import { sharedRoot } from '../SharedResources.js';
 import {
-	KitAssembler, PlanLibrary, blueprintFile, fittingFamilies, parcelBlueprint, placementsFile,
+	KitAssembler, PlanLibrary, PlanFrame, blueprintFile, fittingFamilies, parcelBlueprint, placementsFile,
 	planBlueprintFile, planGlbFile, PLAN_INDEX_FILE, schemaMessage, validateKitPlacements, validatePlanIndex
 } from './index.js';
 
@@ -38,6 +38,51 @@ function scratch() {
 	roots.push( root );
 
 	return root;
+
+}
+
+/**
+ * The plan with an antenna on its roof: which buildings carry one is Exterior's
+ * choice, and the points a city fits its rooftop cables between are this mast's.
+ */
+function withMast( plan ) {
+
+	const ring = plan.bounds.footprint;
+	const x = ring.reduce( ( sum, point ) => sum + point[ 0 ], 0 ) / ring.length;
+	const z = ring.reduce( ( sum, point ) => sum + point[ 1 ], 0 ) / ring.length;
+	const foot = plan.roof.elevation;
+	const top = foot + 5;
+	const corner = ( dx, dz ) => ( { from: [ x + dx, foot, z + dz ], to: [ x, foot + 1, z ] } );
+
+	return { ...plan, roof: { ...plan.roof, artifacts: [ ...plan.roof.artifacts ?? [], {
+		id: 'roof-artifact:antenna:0', kind: 'antenna', center: [ x, z ], size: [ 1, 1, 5 ], rotationDeg: 30,
+		mastAssembly: {
+			variant: 'crossarm-mast',
+			mast: { from: [ x, foot, z ], to: [ x, top, z ] },
+			arms: [ { from: [ x, top - 1, z ], to: [ x + 0.5, top - 1, z ] } ],
+			supports: [ corner( 0.5, 0.5 ), corner( 0.5, - 0.5 ), corner( - 0.5, 0.5 ), corner( - 0.5, - 0.5 ) ],
+			cableAttachments: [ [ x + 0.5, top - 1, z ] ],
+			cables: [ { id: 'cable:0', path: [ [ x + 0.5, top - 1, z ], [ x, top, z ] ] } ],
+			externalAttachments: [ {
+				id: 'roof-artifact:antenna:0:external:0', position: [ x, top, z ],
+				orientation: 'directional', normal: [ 1, 0, 0 ], clearanceRadius: 0.1
+			} ]
+		}
+	} ] } };
+
+}
+
+/** One parcel standing a plan in the frame given, as KitAssembler records it. */
+function placed( parcel, plan, frame ) {
+
+	const ring = new PlanFrame( frame ).ring( plan.bounds.footprint );
+	const xs = ring.map( ( point ) => point[ 0 ] );
+	const zs = ring.map( ( point ) => point[ 1 ] );
+
+	return { parcel, ...frame, bounds: {
+		min: [ Math.min( ...xs ), 0, Math.min( ...zs ) ],
+		max: [ Math.max( ...xs ), plan.bounds.height, Math.max( ...zs ) ]
+	} };
 
 }
 
@@ -115,6 +160,41 @@ describe( 'kit assembly', () => {
 		expect( [ wide.record.plan ] ).toEqual( [ 'plain-5x7x4f' ] );
 		expect( wide.record.bounds.max[ 0 ] - wide.record.bounds.min[ 0 ] ).toBeLessThanOrEqual( 40 );
 		expect( wide.record.bounds.max[ 2 ] - wide.record.bounds.min[ 2 ] ).toBeLessThanOrEqual( 56 );
+
+	} );
+
+	it( 'stands a roof mast on the parcel it belongs to, cables and all', () => {
+
+		const plan = withMast( plans.blueprint( kit.candidate( 'p1' ).plan.id ) );
+		const mast = plan.roof.artifacts.at( - 1 ).mastAssembly;
+		// Both fixture parcels front a street on -z, so they stand unturned: a
+		// quarter turn is what tells a composed point from a plan-local one.
+		const record = placed( 'p1', plan, { origin: [ 300, 0, 120 ], rotationY: - Math.PI / 2 } );
+		const frame = new PlanFrame( record );
+		const composed = parcelBlueprint( plan, record );
+		const fitted = composed.roof.artifacts.at( - 1 ).mastAssembly;
+		const attachments = fitted.externalAttachments.map( ( attachment ) => attachment.position );
+
+		expect( schemaMessage( validateExteriorBlueprint( composed ) ) ).toBe( '' );
+		expect( attachments ).toEqual( mast.externalAttachments.map( ( attachment ) => frame.point3( attachment.position ) ) );
+		expect( fitted.externalAttachments.map( ( attachment ) => attachment.normal ) )
+			.toEqual( mast.externalAttachments.map( ( attachment ) => frame.direction3( attachment.normal ) ) );
+		expect( fitted.mast ).toEqual( { from: frame.point3( mast.mast.from ), to: frame.point3( mast.mast.to ) } );
+		expect( fitted.cableAttachments ).toEqual( mast.cableAttachments.map( ( point ) => frame.point3( point ) ) );
+		expect( fitted.cables.map( ( cable ) => cable.path ) )
+			.toEqual( mast.cables.map( ( cable ) => cable.path.map( ( point ) => frame.point3( point ) ) ) );
+
+		// The city fits its rooftop cables between these points, so each one has
+		// to stand over this building: on its footprint, above its roof.
+		for ( const [ x, y, z ] of attachments ) {
+
+			expect( x ).toBeGreaterThanOrEqual( record.bounds.min[ 0 ] );
+			expect( x ).toBeLessThanOrEqual( record.bounds.max[ 0 ] );
+			expect( z ).toBeGreaterThanOrEqual( record.bounds.min[ 2 ] );
+			expect( z ).toBeLessThanOrEqual( record.bounds.max[ 2 ] );
+			expect( y ).toBeGreaterThan( plan.roof.elevation );
+
+		}
 
 	} );
 

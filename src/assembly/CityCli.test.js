@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { readWorldArchive } from '../world-archive/index.js';
 import { shellBlueprint } from './shell-blueprints.fixture.js';
+import { BuildingBlueprints } from './BuildingBlueprints.js';
+import { PlanLibrary } from './kit/index.js';
 
 const ENGINE_ROOT = resolve( dirname( fileURLToPath( import.meta.url ) ), '../..' );
 const BLUEPRINT = fileURLToPath( new URL( './native-city.fixture.json', import.meta.url ) );
@@ -14,6 +16,18 @@ function cityCli( root, options ) {
 
 	return spawnSync( process.execPath, [ '--import', 'tsx', 'src/assembly/city-cli.js',
 		'--blueprint', BLUEPRINT, '--out', root, ...options ], { cwd: ENGINE_ROOT, encoding: 'utf8' } );
+
+}
+
+/** How far a point on the ground plane stands from one facade segment. */
+function offFace( [ x, z ], from, to ) {
+
+	const dx = to[ 0 ] - from[ 0 ];
+	const dz = to[ 1 ] - from[ 1 ];
+	const length = dx * dx + dz * dz;
+	const along = Math.max( 0, Math.min( 1, ( ( x - from[ 0 ] ) * dx + ( z - from[ 1 ] ) * dz ) / length ) );
+
+	return Math.hypot( x - ( from[ 0 ] + dx * along ), z - ( from[ 1 ] + dz * along ) );
 
 }
 
@@ -74,5 +88,35 @@ describe( 'assemble-city CLI', () => {
 		expect( manifest.streets.blueprintSha256 ).toBe( manifest.connections.blueprintSha256 );
 
 	}, 20_000 );
+
+	it( 'plans the links against the facade a kit building stands on, not the lot Atlas drew', async () => {
+
+		root = mkdtempSync( join( tmpdir(), 'urbe-city-links-' ) );
+		const parcels = [ 'p16', 'p17' ];
+		const run = cityCli( root, [ '--parcel', parcels.join( ',' ), '--interiors', '0' ] );
+
+		expect( run.status, run.stderr || run.stdout ).toBe( 0 );
+		const connections = JSON.parse( readFileSync( join( root, 'connections.json' ), 'utf8' ) );
+		const blueprints = new BuildingBlueprints( root, new PlanLibrary( { workers: null } ) );
+		const ends = connections.apertures.filter( ( aperture ) => parcels.includes( aperture.buildingId ) );
+
+		// A shared building is inset from the Atlas massing, so an end cut on the
+		// parcel Atlas drew hangs off the wall or pierces it.
+		expect( ends.length ).toBeGreaterThan( 0 );
+		for ( const aperture of ends ) {
+
+			const { footprint } = ( await blueprints.of( aperture.buildingId ) ).bounds;
+			const from = footprint[ aperture.face ];
+			const to = footprint[ ( aperture.face + 1 ) % footprint.length ];
+
+			for ( const [ x,, z ] of aperture.cut.polygon ) {
+
+				expect( offFace( [ x, z ], from, to ) ).toBeLessThan( 0.01 );
+
+			}
+
+		}
+
+	}, 300_000 );
 
 } );
