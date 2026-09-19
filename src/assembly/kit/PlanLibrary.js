@@ -309,3 +309,20 @@ function exteriorVersion() {
 	return JSON.parse( readFileSync( file, 'utf8' ) ).version;
 
 }
+
+/**
+ * Which Exterior drew the plans a world already stands on, read from the plan
+ * index its manifest binds, or null for a world that has no kit buildings yet.
+ * @param outDir the world's directory
+ */
+export function worldExteriorVersion( outDir ) {
+
+	const manifest = join( outDir, 'manifest.json' );
+	if ( ! existsSync( manifest ) ) return null;
+
+	const { kit } = JSON.parse( readFileSync( manifest, 'utf8' ) );
+	const index = kit?.shared ? join( sharedRoot(), kit.shared, PLAN_INDEX_FILE ) : null;
+
+	return index && existsSync( index ) ? JSON.parse( readFileSync( index, 'utf8' ) ).exterior ?? null : null;
+
+}

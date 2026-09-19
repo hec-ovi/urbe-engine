@@ -107,42 +107,33 @@ export class WorldCreation {
 
 			await cp( join( this.outDir, 'cities', city.id ), world, { recursive: true } );
 			await rm( join( world, 'city.json' ), { force: true } );
-			const handoff = await this.#materialize( city, world );
-			const required = questParcelIds( handoff.questlines );
-			let selected;
-			if ( input.mode === 'manual' ) selected = input.buildingIds;
-			else {
+			await this.#materialize( city, world );
+			const manual = input.mode === 'manual';
+			if ( ! manual && input.count < MAIN_LOCATION_COUNT ) {
 
-				if ( input.count < MAIN_LOCATION_COUNT ) {
-
-					throw new CreationError( 'E_QUEST_LOCATIONS', `the main story needs at least ${MAIN_LOCATION_COUNT} interior locations` );
-
-				}
-				selected = [ ...required ];
-				for ( const building of city.buildings ) {
-
-					if ( selected.length >= input.count ) break;
-					if ( building.eligible && ! selected.includes( building.id ) ) selected.push( building.id );
-
-				}
-				selected = selected.slice( 0, input.count );
-
-			}
-			if ( selected.length !== input.count ) {
-
-				throw new CreationError( 'E_INVALID_REQUEST', `city ${city.id} has only ${selected.length} eligible interiors` );
+				throw new CreationError( 'E_QUEST_LOCATIONS', `the main story needs at least ${MAIN_LOCATION_COUNT} interior locations` );
 
 			}
 
+			// A manual pick is exact. An automatic one hands the assembler the
+			// count and lets it open candidates in its order, the quest's own
+			// locations first, skipping a building Interior cannot furnish for the
+			// next one, so one closed building never closes the stage.
 			const args = [
 				'run', 'assemble-city', '--', '--blueprint', join( world, 'blueprint.json' ), '--out', world,
-				'--workers', '1', '--reuse-shells', 'true', '--interior-parcels', selected.join( ',' )
+				'--workers', '1', '--reuse-shells', 'true',
+				...( manual ? [ '--interior-parcels', input.buildingIds.join( ',' ) ] : [ '--interiors', String( input.count ) ] )
 			];
 			await this.run( 'npm', args, { cwd: this.engineRoot } );
 			const manifest = await json( join( world, 'manifest.json' ), 'interior manifest' );
-			if ( ! sameIds( manifest.interiors, selected ) ) {
+			if ( manual && ! sameIds( manifest.interiors, input.buildingIds ) ) {
 
 				throw new CreationError( 'E_OUTPUT_INVALID', 'interior stage did not publish the exact selected buildings' );
+
+			}
+			if ( manifest.interiors.length < MAIN_LOCATION_COUNT ) {
+
+				throw new CreationError( 'E_QUEST_LOCATIONS', `city ${city.id} opens ${manifest.interiors.length} interiors, the main story needs ${MAIN_LOCATION_COUNT}` );
 
 			}
 			await writeJson( join( world, 'draft.json' ), {

@@ -210,9 +210,11 @@ function processPort( calls ) {
 
 			const world = valueAfter( args, '--out' );
 			const blueprint = await readJson( valueAfter( args, '--blueprint' ) );
+			// The assembler opens an exact manual pick, or the first candidates up
+			// to an automatic count.
 			const selected = args.includes( '--interior-parcels' )
 				? valueAfter( args, '--interior-parcels' ).split( ',' )
-				: [];
+				: blueprint.parcels.slice( 0, Number( valueAfter( args, '--interiors' ) ) ).map( ( parcel ) => parcel.id );
 			calls.push( { kind: selected.length ? 'interiors' : 'shells', command, args } );
 			await writeJson( join( world, 'blueprint.json' ), blueprint );
 			for ( const parcel of blueprint.parcels ) {

@@ -12,7 +12,7 @@ import { interiorPlan, parseCityArgs } from './CityPlan.js';
 import { collectShellArtifacts } from './ShellArtifacts.js';
 import { ConnectionsArtifact } from './ConnectionsArtifact.js';
 import { loadBlueprint } from './BlueprintInput.js';
-import { KitAssembler, PlanLibrary } from './kit/index.js';
+import { KitAssembler, PlanLibrary, worldExteriorVersion } from './kit/index.js';
 import { BuildingBlueprints } from './BuildingBlueprints.js';
 import { InteriorModules } from './InteriorModules.js';
 import { collect, dirBytes, OUT_DIR, sweepLine } from './SharedResources.js';
@@ -45,8 +45,12 @@ const assembler = new RequestAssembler( atlas, connections );
 const exterior = new ExteriorWorkers( Math.max( 1, args.workers ) );
 // A city is a hundred or so distinct buildings placed hundreds of times, so
 // each one is generated once into the shared store and every parcel of it
-// carries the frame it stands in.
-const planLibrary = new PlanLibrary( { workers: exterior } );
+// carries the frame it stands in. A reuse run stands on the plans this world
+// was drawn with, whatever Exterior is installed now: their bytes are bound
+// by the version that drew them.
+const planLibrary = new PlanLibrary( {
+	workers: exterior, version: ( args.reuseShells && worldExteriorVersion( outDir ) ) || undefined
+} );
 const kitAssembler = new KitAssembler( atlas, assembler, planLibrary );
 
 const questlinesPath = join( outDir, 'quests', 'questlines.json' );

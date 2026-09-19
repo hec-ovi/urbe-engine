@@ -1,5 +1,7 @@
 # Changelog
 
+0.24.3: a reuse run binds a world's plans at the Exterior version that drew them, and automatic interior selection hands the assembler a count so a building Interior cannot furnish is skipped for the next candidate.
+
 0.24.2: a kit parcel that opens a real interior draws its plan without the window scenery, the fake rooms being their own batch entry beside the entrance leaves.
 
 0.24.1: the load reads world documents, plans, street pieces, room catalogs, characters and cars together, warms one program per material and layout, and shows one counter for the whole load.

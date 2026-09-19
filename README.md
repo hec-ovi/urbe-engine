@@ -1,6 +1,6 @@
 # urbe-engine
 
-Version 0.24.2. Loads an assembled city into a first-person Three.js game with streamed kit buildings, physics, NPCs, quests and revisioned saves.
+Version 0.24.3. Loads an assembled city into a first-person Three.js game with streamed kit buildings, physics, NPCs, quests and revisioned saves.
 
 ## Run
 
