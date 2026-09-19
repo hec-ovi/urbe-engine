@@ -27,6 +27,28 @@ describe( 'NativeTextureSource public resource port', () => {
 		}
 	} );
 
+	it( 'draws a map whose bytes moved on from the catalog hash, and says so', async () => {
+
+		const ports = options();
+		const warned = vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		const source = new NativeTextureSource( ports );
+		try {
+
+			const stale = { ...definition, sha256: 'f'.repeat( 64 ) };
+			const resource = source.load( id, path, stale );
+			await expect( resource.ready ).resolves.toBeUndefined();
+			expect( resource.texture.version ).toBe( 1 );
+			expect( warned ).toHaveBeenCalledOnce();
+
+		} finally {
+
+			source.dispose();
+			warned.mockRestore();
+
+		}
+
+	} );
+
 	it( 'verifies original bytes and waits for budgeting before readiness, sharing one source image', async () => {
 		const ports = options();
 		let prepared;
@@ -48,9 +70,8 @@ describe( 'NativeTextureSource public resource port', () => {
 		expect( () => source.load( id, path, definition ) ).toThrow( /disposed/ );
 	} );
 
-	it.each( [ 'hash', 'prepare' ] )( 'rejects %s failures without a substitute texture', async kind => {
+	it.each( [ 'prepare' ] )( 'rejects %s failures without a substitute texture', async kind => {
 		const ports = options();
-		if ( kind === 'hash' ) ports.fetch = async () => new Response( 'wrong bytes' );
 		if ( kind === 'prepare' ) ports.prepareTexture = () => { throw new Error( 'budget failed' ); };
 		const source = new NativeTextureSource( ports ), resource = source.load( id, path, definition );
 		await expect( resource.ready ).rejects.toMatchObject( { code: 'E_STREET_TEXTURE' } );
