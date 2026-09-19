@@ -13,18 +13,22 @@ const WHITE = new THREE.Color( 1, 1, 1 );
  * its footprint centred and scales it uniformly to the height the catalog
  * publishes, which is the frame a placement's position, rotation and scale
  * assume. What comes out is one instanced draw per model material part, shared
- * by every floor in the city, so a tower of identical desks costs one draw.
+ * by every floor in the city, so a tower of identical desks costs one draw. The
+ * parts wear their own materials lit by the room light pool, and each copy
+ * carries the fill of the room it stands in.
  */
 export class InteriorProps {
 
 	/**
 	 * @param catalog the furniture catalog `building.props` names
 	 * @param baseUrl the directory it was read from, which `modelUri` is relative to
+	 * @param roomLights RoomLights, whose pool lights every part
 	 * @param loadAsset reads one model URL into `{ scene }`
 	 */
-	constructor( { catalog, baseUrl, loadAsset = ( url ) => cityGltfLoader().loadAsync( url ) } ) {
+	constructor( { catalog, baseUrl, roomLights, loadAsset = ( url ) => cityGltfLoader().loadAsync( url ) } ) {
 
 		this.entries = new Map( ( catalog?.assets ?? [] ).map( ( asset ) => [ asset.id, asset ] ) );
+		this.roomLights = roomLights;
 		this.models = new ImportedModels( loadAsset, baseUrl );
 		this.props = new Map();
 		this.loading = new Map();
@@ -63,12 +67,13 @@ export class InteriorProps {
 
 	}
 
-	admit( id, matrix, color = WHITE ) {
+	/** @param fill Vector4 the fill of the room the copy stands in */
+	admit( id, matrix, fill ) {
 
 		const prop = this.props.get( id );
 		if ( ! prop ) throw propError( `no furniture ${id} in this catalog` );
 
-		return prop.draw.add( matrix, color, { slot: - 1 } );
+		return prop.draw.add( matrix, WHITE, { slot: - 1 }, fill );
 
 	}
 
@@ -80,7 +85,12 @@ export class InteriorProps {
 
 	dispose() {
 
-		for ( const prop of this.props.values() ) prop.draw.dispose();
+		for ( const prop of this.props.values() ) {
+
+			prop.draw.dispose();
+			this.roomLights.releaseSources( prop.surfaces.map( ( part ) => part.material ) );
+
+		}
 		this.props.clear();
 		this.loading.clear();
 		this.models.dispose();
@@ -101,7 +111,8 @@ export class InteriorProps {
 			.load( { id, file: entry.modelUri, height: heightOf( entry ) } )
 			.then( ( surfaces ) => {
 
-				const prop = { id, surfaces, draw: new KitPieceDraw( `furniture:${id}`, surfaces.map( ( part, index ) => ( { ...part, bucket: index } ) ) ) };
+				const parts = surfaces.map( ( part, index ) => ( { ...part, bucket: index, material: this.roomLights.materialFor( id, part.material ) } ) );
+				const prop = { id, surfaces, draw: new KitPieceDraw( `furniture:${id}`, parts, { fill: true } ) };
 				this.props.set( id, prop );
 				this.group.add( prop.draw.group );
 

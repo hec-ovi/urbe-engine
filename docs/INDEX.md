@@ -1,6 +1,6 @@
 # Box map
 
-[Engine 0.26.6 contract](../CONTRACT.md), [agent calling guide](../SKILL.md), [cross-box proposals](ISSUES.md). Raw requirements and local verification records stay untracked.
+[Engine 0.26.7 contract](../CONTRACT.md), [agent calling guide](../SKILL.md), [cross-box proposals](ISSUES.md). Raw requirements and local verification records stay untracked.
 
 | Folder | Purpose and dependencies | Inputs and outputs |
 | --- | --- | --- |
@@ -38,7 +38,7 @@
 | `animation` | Accepted action clip sequences for Agents | [Contract and schemas](../src/game/animation/CONTRACT.md) |
 | `quests` | Exact story action, target and progress coordination | [Contract and schemas](../src/game/quests/CONTRACT.md) |
 | `investigation` | Authored evidence scenes and saved discoveries | [Contract and schemas](../src/game/investigation/CONTRACT.md) |
-| `routes` | Objective paths over Connections | [Contract and schemas](../src/game/routes/CONTRACT.md) |
+| `routes` | Objective paths over Connections, carried on to the parcel's door | [Contract and schemas](../src/game/routes/CONTRACT.md) |
 | `transit` | Timetables, boarding and station destinations | [Contract and schemas](../src/game/transit/CONTRACT.md) |
 | `hydro` | Atlas water surfaces with Materials bindings | [Contract and schemas](../src/game/hydro/CONTRACT.md) |
 | `light`, `look`, `sky` | Fixture lighting, prepared rendering and fixed night setting | [Light](../src/game/light/CONTRACT.md), [Look](../src/game/look/CONTRACT.md), [Game](../src/game/CONTRACT.md) |

@@ -2,11 +2,14 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { cityGltfLoader } from '../data/CityGltfLoader.js';
 import { mapConcurrent } from './BuildingsLoader.js';
 import { bake } from './GeometryBake.js';
+import { shellMaterial } from './ShellSurface.js';
 import { MaterialBatches } from './kit/MaterialBatches.js';
 
 const LOAD_CONCURRENCY = 8;
 /** A catalog key is theme, kind and tier; anything else is a node name. */
 const KEY = /^[a-z0-9_-]+\/[a-z0-9_-]+\/[a-z0-9_-]+$/;
+/** Which diffuser a module's lit surface wears; a module not named here wears the canonical one. */
+const FIXTURE_VARIANTS = { 'ceiling-led-strip': 'strip' };
 
 /**
  * The city's whole room vocabulary, loaded once.
@@ -18,7 +21,8 @@ const KEY = /^[a-z0-9_-]+\/[a-z0-9_-]+\/[a-z0-9_-]+$/;
  * material slot for the entire city, holding every module surface that wears
  * it: admitting a floor appends matrices to batches that already exist, and the
  * draw count follows the slots the catalog publishes rather than the modules
- * wearing them or the number of rooms standing.
+ * wearing them or the number of rooms standing. Every slot material is lit by
+ * the room light pool, and each copy carries the fill of the room it stands in.
  *
  * A module file that is missing, refuses to decode or does not match the byte
  * count `modules.json` publishes fails the whole set with `E_INTERIOR_MODULE`.
@@ -29,17 +33,19 @@ export class InteriorModules {
 	 * @param catalog the validated `modules.json` document
 	 * @param baseUrl the directory it was read from, which its file paths are relative to
 	 * @param factory PbrMaterialFactory, for the material of each published slot
+	 * @param roomLights RoomLights, whose pool lights every slot material
 	 * @param readBinary reads one URL into an ArrayBuffer
 	 */
-	constructor( { catalog, baseUrl, factory, loader = cityGltfLoader(), readBinary = fetchBinary } ) {
+	constructor( { catalog, baseUrl, factory, roomLights, loader = cityGltfLoader(), readBinary = fetchBinary } ) {
 
 		this.catalog = catalog;
 		this.baseUrl = String( baseUrl ).replace( /\/+$/, '' );
 		this.factory = factory;
+		this.roomLights = roomLights;
 		this.loader = loader;
 		this.readBinary = readBinary;
 		this.modules = new Map();
-		this.batches = new MaterialBatches( 'interior-modules' );
+		this.batches = new MaterialBatches( 'interior-modules', { fill: true } );
 		this.group = this.batches.group;
 		this.ready = this.#load();
 
@@ -97,13 +103,14 @@ export class InteriorModules {
 
 	/**
 	 * Draws one more copy of a module.
+	 * @param fill Vector4 the fill of the room the copy stands in
 	 * @returns a handle to hand back to `release`
 	 */
-	admit( id, matrix ) {
+	admit( id, matrix, fill ) {
 
 		if ( ! this.modules.has( id ) ) throw moduleError( `no module ${id} in this catalog` );
 
-		return this.batches.admit( id, matrix );
+		return this.batches.admit( id, matrix, null, fill );
 
 	}
 
@@ -118,12 +125,8 @@ export class InteriorModules {
 		this.batches.dispose();
 		for ( const module of this.modules.values() ) {
 
-			for ( const { geometry, material } of module.surfaces ) {
-
-				geometry.dispose();
-				material.dispose();
-
-			}
+			for ( const { geometry } of module.surfaces ) geometry.dispose();
+			this.roomLights.releaseSources( module.surfaces.map( ( surface ) => surface.source ) );
 
 		}
 		this.modules.clear();
@@ -162,7 +165,7 @@ export class InteriorModules {
 
 		}
 
-		const surfaces = readModule( scene, record, this.factory );
+		const surfaces = readModule( scene, record, this.factory, this.roomLights );
 
 		return {
 			id: record.id,
@@ -179,11 +182,13 @@ export class InteriorModules {
 
 /**
  * One module GLB read into what the city draws it with: its meshes baked into
- * the module's own frame and merged by material slot, one factory material per
- * slot. Slot names are catalog keys, so a mesh whose material name has been
- * rewritten falls back to the slot the catalog publishes at that position.
+ * the module's own frame and merged by material slot, one material per slot
+ * built the way a shell surface is, so a lit diffuser is its own lamp, and
+ * worn through the room light pool. Slot names are catalog keys, so a mesh
+ * whose material name has been rewritten falls back to the slot the catalog
+ * publishes at that position.
  */
-function readModule( scene, record, factory ) {
+function readModule( scene, record, factory, roomLights ) {
 
 	scene.updateMatrixWorld( true );
 
@@ -213,7 +218,9 @@ function readModule( scene, record, factory ) {
 		if ( geometries.length > 1 ) for ( const part of geometries ) part.dispose();
 		geometry.computeBoundingBox();
 
-		return { bucket: key, geometry, material: factory.build( key ) };
+		const source = shellMaterial( factory, { key, variantId: FIXTURE_VARIANTS[ record.id ] } );
+
+		return { bucket: key, geometry, source, material: roomLights.materialFor( key, source ) };
 
 	} );
 

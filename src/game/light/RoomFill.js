@@ -49,8 +49,9 @@ export function albedoOf( key ) {
  * brown-green shadow a photograph of a night interior has and a flat ambient
  * never does.
  *
- * A `HemisphereLight` carries it because for a light probe `color * intensity`
- * is the irradiance in lux exactly, and it costs three operations and no BRDF.
+ * Each copy of a draw carries its room's fill (RoomFillNode), for which
+ * `color * intensity` is the irradiance in lux exactly, three operations and
+ * no BRDF.
  */
 export class RoomFill {
 
@@ -74,28 +75,16 @@ export class RoomFill {
 	}
 
 	/**
-	 * Writes the fill onto a hemisphere light. The upper half is the
-	 * interreflected fixture colour; the lower half is that light having
-	 * bounced off the floor once more, so a down-facing surface reads
-	 * different from an up-facing one, which is what makes the gradient up a
-	 * wall look like bounce instead of ambient.
+	 * The fill as one copy of a draw carries it: the interreflected irradiance,
+	 * and the floor's reflectance for the half of it that comes back up off the
+	 * floor. A surface facing down reads different from one facing up, which is
+	 * what makes the gradient up a wall look like bounce instead of ambient.
 	 */
-	static apply( light, room, flux, color ) {
+	static perCopy( room, flux, color, target = new THREE.Vector4() ) {
 
 		const up = RoomFill.irradiance( room, flux, color, _up );
-		const lux = luminance( up );
 
-		light.intensity = lux;
-
-		if ( lux <= 0 ) return;
-
-		light.color.setRGB( up.r / lux, up.g / lux, up.b / lux, THREE.LinearSRGBColorSpace );
-		light.groundColor.setRGB(
-			up.r * room.floorAlbedo.r / lux,
-			up.g * room.floorAlbedo.g / lux,
-			up.b * room.floorAlbedo.b / lux,
-			THREE.LinearSRGBColorSpace
-		);
+		return target.set( up.r, up.g, up.b, luminance( room.floorAlbedo ) );
 
 	}
 

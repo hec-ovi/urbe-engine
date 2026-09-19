@@ -1,11 +1,13 @@
 import * as THREE from 'three/webgpu';
 import { lights } from 'three/tsl';
-import { RoomFill } from './RoomFill.js';
+import { RoomFillNode } from './RoomFillNode.js';
 
 const RESHUFFLE_INTERVAL = 0.2;
 /** Housing depth of a published strip or cove, in metres. */
 const STRIP_WIDTH = 0.06;
 const UP = new THREE.Vector3( 0, 1, 0 );
+/** Map decode promises ride on a symbol, which a material copy does not carry over. */
+const RESOURCES = Symbol.for( 'urbe.material-resources' );
 
 /**
  * Interior rooms lit by the fixtures the interior box published for them.
@@ -17,14 +19,17 @@ const UP = new THREE.Vector3( 0, 1, 0 );
  * so a set built fresh per room would compile a shader per room and stutter at
  * every doorway.
  *
- * So the sets are a fixed pool. Each slot owns the same light objects for the
- * life of the run, and entering a room re-points them: same ids, same shader,
- * one set of materials compiled once. The rooms move through the slots, never
- * the other way round. Rooms in view without a slot take the dim set, which is
- * fill only, so a corridor seen through a doorway is lit air rather than a hole.
+ * So the lights are a fixed pool. Each slot owns the same spot and strip
+ * objects for the life of the run, and entering a room re-points them: same
+ * ids, same shader. The rooms move through the slots, never the other way
+ * round. Every module and furniture surface in the city is drawn by one batch
+ * per material, so those materials wear one lights node holding every slot's
+ * lights: whichever rooms hold a slot are lit, and the batch never recompiles.
  *
  * Flux is conserved: whatever the direct lights do not carry stays in the fill,
- * which is the term that gives a wall its bounce gradient.
+ * which is the term that gives a wall its bounce gradient. That fill is a
+ * room's own, so it rides on each copy (RoomFillNode) rather than in the pool,
+ * where one room's bounce would light the whole city.
  */
 export class RoomLights {
 
@@ -44,27 +49,24 @@ export class RoomLights {
 
 		}
 
-		this.dim = slot( 0, 0 );
-
-	}
-
-	/** Every light object the pool owns, for the frame's matrix update. */
-	#all() {
-
-		return [ this.dim, ...this.slots ];
+		/** The one lights node every room material wears, and those materials. */
+		this.pool = {
+			lightsNode: lights( [ ...this.slots.flatMap( ( binding ) => binding.members ), new RoomFillNode() ] ),
+			materials: new Map()
+		};
 
 	}
 
 	/**
-	 * The material a room's mesh wears while it holds `binding`. Cloned once per
-	 * binding and key, so the whole run compiles (slots + 1) x keys shaders.
-	 * A key may name the variant the interior box asked for after a `#`: a
-	 * patterned ceiling and a plain one are one database entry and two looks.
+	 * The material a room surface wears: the source, or the key's catalog
+	 * material, cloned once per identity and lit by the pool. A key may name
+	 * the variant the interior box asked for after a `#`: a patterned ceiling
+	 * and a plain one are one database entry and two looks.
 	 */
-	materialFor( binding, key, source = null ) {
+	materialFor( key, source = null ) {
 
 		const identity = source ?? key;
-		let material = binding.materials.get( identity );
+		let material = this.pool.materials.get( identity );
 
 		if ( ! material ) {
 
@@ -75,12 +77,15 @@ export class RoomLights {
 			// standard material drops it, which leaves the room lit by the
 			// city's own lights, which is to say not at all.
 			const base = source ?? this.factory.build( entry, variant );
-			material = ( source?.isMeshBasicMaterial ? new THREE.MeshBasicNodeMaterial() : new THREE.MeshPhysicalNodeMaterial() ).copy( base );
-			// Three's NodeMaterial.copy does not copy inherited material accessors.
+			material = ( base.isMeshBasicMaterial ? new THREE.MeshBasicNodeMaterial() : new THREE.MeshPhysicalNodeMaterial() ).copy( base );
+			// Three's NodeMaterial.copy does not copy inherited material accessors
+			// or symbol-keyed properties.
 			material.alphaTest = base.alphaTest;
-			material.name = `${key}|room${binding.index}`;
-			material.lightsNode = binding.lightsNode;
-			binding.materials.set( identity, material );
+			if ( base[ RESOURCES ] ) material[ RESOURCES ] = base[ RESOURCES ];
+			material.name = `${base.name || key}|room`;
+			// An unlit source stays unlit.
+			if ( ! base.isMeshBasicMaterial ) material.lightsNode = this.pool.lightsNode;
+			this.pool.materials.set( identity, material );
 
 		}
 
@@ -88,13 +93,13 @@ export class RoomLights {
 
 	}
 
-	/** Source clones belong to the streamed floor; catalog bindings stay cached. */
+	/** Source clones belong to whoever loaded the source; catalog clones stay cached. */
 	releaseSources( sources ) {
 
-		for ( const source of sources ) for ( const binding of this.#all() ) {
+		for ( const source of sources ) {
 
-			binding.materials.get( source )?.dispose();
-			binding.materials.delete( source );
+			this.pool.materials.get( source )?.dispose();
+			this.pool.materials.delete( source );
 
 		}
 
@@ -104,7 +109,7 @@ export class RoomLights {
 	releaseRooms( rooms ) {
 
 		const gone = new Set( rooms );
-		for ( const binding of this.#all() ) if ( gone.has( binding.room ) ) {
+		for ( const binding of this.slots ) if ( gone.has( binding.room ) ) {
 
 			binding.room = null;
 			this.#write( binding, null );
@@ -115,7 +120,6 @@ export class RoomLights {
 
 	/**
 	 * @param rooms every room currently in view, nearest first
-	 * @param position the player's feet
 	 */
 	update( rooms, position, delta ) {
 
@@ -125,34 +129,15 @@ export class RoomLights {
 
 		this.timer = 0;
 
-		const near = rooms.slice( 0, this.slots.length );
-
 		for ( let i = 0; i < this.slots.length; i ++ ) {
 
 			const binding = this.slots[ i ];
-			const room = near[ i ];
 
-			if ( binding.room !== room ) {
-
-				binding.room?.wear( this.dim, this );
-				binding.room = room ?? null;
-				room?.wear( binding, this );
-
-			}
-
-			this.#write( binding, room );
+			binding.room = rooms[ i ] ?? null;
+			this.#write( binding, binding.room );
+			refresh( binding );
 
 		}
-
-		for ( const room of rooms.slice( this.slots.length ) ) {
-
-			if ( room.binding !== this.dim ) room.wear( this.dim, this );
-
-		}
-
-		this.#writeDim( rooms.slice( this.slots.length ) );
-
-		for ( const binding of this.#all() ) refresh( binding );
 
 	}
 
@@ -161,9 +146,7 @@ export class RoomLights {
 
 		if ( ! room ) {
 
-			binding.fill.intensity = 0;
-			for ( const light of binding.spots ) light.intensity = 0;
-			for ( const light of binding.strips ) light.intensity = 0;
+			for ( const light of binding.members ) light.intensity = 0;
 			return;
 
 		}
@@ -178,54 +161,13 @@ export class RoomLights {
 		place( binding.spots, spots, aimSpot );
 		place( binding.strips, strips, aimStrip );
 
-		binding.fill.position.copy( room.center ).add( UP );
-		RoomFill.apply( binding.fill, room, room.flux, room.color );
-
-	}
-
-	/** One shared fill for the rooms in view that hold no slot. */
-	#writeDim( rooms ) {
-
-		if ( ! rooms.length ) {
-
-			this.dim.fill.intensity = 0;
-			return;
-
-		}
-
-		let flux = 0;
-		let area = 0;
-		_color.setRGB( 0, 0, 0, THREE.LinearSRGBColorSpace );
-		_albedo.setRGB( 0, 0, 0, THREE.LinearSRGBColorSpace );
-		_floor.setRGB( 0, 0, 0, THREE.LinearSRGBColorSpace );
-
-		for ( const room of rooms ) {
-
-			flux += room.flux;
-			area += room.area;
-			_color.r += room.color.r * room.flux;
-			_color.g += room.color.g * room.flux;
-			_color.b += room.color.b * room.flux;
-			_albedo.add( room.albedo );
-			_floor.add( room.floorAlbedo );
-
-		}
-
-		if ( flux > 0 ) _color.multiplyScalar( 1 / flux );
-		_albedo.multiplyScalar( 1 / rooms.length );
-		_floor.multiplyScalar( 1 / rooms.length );
-
-		this.dim.fill.position.copy( rooms[ 0 ].center ).add( UP );
-		RoomFill.apply( this.dim.fill, { area, albedo: _albedo, floorAlbedo: _floor }, flux, _color );
-
 	}
 
 }
 
-/** One light set with ids that never change, plus the materials wearing it. */
+/** One light set with ids that never change. */
 function slot( spotCount, stripCount ) {
 
-	const fill = new THREE.HemisphereLight( 0xffffff, 0xffffff, 0 );
 	const spots = [];
 	const strips = [];
 
@@ -243,15 +185,7 @@ function slot( spotCount, stripCount ) {
 
 	}
 
-	const members = [ fill, ...spots, ...strips ];
-
-	return {
-		index: _slots ++,
-		fill, spots, strips, members,
-		lightsNode: lights( members ),
-		materials: new Map(),
-		room: null
-	};
+	return { spots, strips, members: [ ...spots, ...strips ], room: null };
 
 }
 
@@ -335,8 +269,4 @@ function refresh( binding ) {
 
 }
 
-let _slots = 0;
 const _down = new THREE.Vector3( 0, - 1, 0 );
-const _color = new THREE.Color();
-const _albedo = new THREE.Color();
-const _floor = new THREE.Color();

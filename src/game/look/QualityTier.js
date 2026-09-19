@@ -7,7 +7,8 @@ const PRESETS = {
 		textureMaxSize: 1024,
 		bloom: { strength: 0, radius: 0.0 },
 		haze: false,
-		roomSlots: 2,
+		// Three slots light the rooms of one live floor from their own fixtures.
+		roomSlots: 3,
 		roomSpots: 4,
 		roomStrips: 0,
 		clusteredLights: 512,

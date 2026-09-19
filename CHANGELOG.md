@@ -1,5 +1,7 @@
 # Changelog
 
+0.26.7: furnished rooms are lit: every module and furniture batch samples the room light pool with a per-copy fill, fixtures glow at the diffuser level shells use, downlights reach the floor, the indoor air carries the room's own radiance, the low tier holds three room slots, and the low tier keeps an environment probe.
+
 0.26.6: a mixed template slot stands the family most of its lots accept, a lot that family cannot stand takes the family that fits it in its own materials, and plain stands only where no approved family fits the lot at its tier.
 
 0.26.5: a template slot decides the whole building (family, floors, dressing class) for every block that uses it, a merge of two slots stands one building wherever it recurs, and a block's one variation is a merge or a floor step on one slot; the 1 km sample stands 373 kit buildings on 122 plans.

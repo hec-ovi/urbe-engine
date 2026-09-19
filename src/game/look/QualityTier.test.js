@@ -23,7 +23,8 @@ describe( 'QualityTier', () => {
 		// low is the fallback backend's tier: no bloom chain, but a room fill is on; haze quads are off on every tier.
 		expect( low.bloom.strength ).toBe( 0 );
 		expect( low.haze ).toBe( false );
-		expect( low.roomSlots ).toBeGreaterThan( 0 );
+		// Enough slots that one live floor's rooms are lit from their own fixtures.
+		expect( low.roomSlots ).toBe( QualityTier.describe( 'medium' ).roomSlots );
 		for ( const name of QualityTier.names() ) expect( QualityTier.describe( name ).materialMaps )
 			.toEqual( [ 'basecolor', 'normal', 'roughness', 'metallic', 'ao', 'emission' ] );
 		expect( low.textureMaxSize ).toBe( 1024 );

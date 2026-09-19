@@ -1,6 +1,9 @@
 import * as THREE from 'three/webgpu';
+import { FillChannel } from './FillChannel.js';
 
 const FIRST_CAPACITY = 64;
+/** A copy added without a fill stands dark. */
+const NO_FILL = new THREE.Vector4();
 /** Past this many named slices, one upload of the live region costs less. */
 const MAX_RANGES = 64;
 
@@ -21,8 +24,11 @@ const MAX_RANGES = 64;
  */
 export class KitPieceDraw {
 
-	/** @param surfaces [{ bucket, geometry, material }] */
-	constructor( name, surfaces ) {
+	/**
+	 * @param surfaces [{ bucket, geometry, material }]
+	 * @param fill whether each copy carries a fill light (FillChannel)
+	 */
+	constructor( name, surfaces, { fill = false } = {} ) {
 
 		this.name = name;
 		this.surfaces = surfaces;
@@ -31,6 +37,7 @@ export class KitPieceDraw {
 		this.capacity = FIRST_CAPACITY;
 		this.matrices = instanceBuffer( FIRST_CAPACITY, 16 );
 		this.colors = instanceBuffer( FIRST_CAPACITY, 3, 1 );
+		this.fills = fill ? new FillChannel( FIRST_CAPACITY ) : null;
 		this.group = new THREE.Group();
 		this.group.name = name;
 		this.meshes = surfaces.map( ( surface ) => this.#mesh( surface ) );
@@ -40,15 +47,17 @@ export class KitPieceDraw {
 
 	/**
 	 * @param owner a record this draw owns the `slot` field of
+	 * @param fill Vector4 the copy's fill light, on a draw made with one
 	 * @returns the same owner, with its slot written
 	 */
-	add( matrix, color, owner ) {
+	add( matrix, color, owner, fill = null ) {
 
 		if ( this.count === this.capacity ) this.#grow( this.capacity * 2 );
 
 		const slot = this.count ++;
 		matrix.toArray( this.matrices.array, slot * 16 );
 		color.toArray( this.colors.array, slot * 3 );
+		this.fills?.set( slot, fill ?? NO_FILL );
 		owner.draw = this;
 		owner.slot = slot;
 		this.owners[ slot ] = owner;
@@ -69,6 +78,7 @@ export class KitPieceDraw {
 
 			this.matrices.array.copyWithin( slot * 16, last * 16, last * 16 + 16 );
 			this.colors.array.copyWithin( slot * 3, last * 3, last * 3 + 3 );
+			this.fills?.move( last, slot );
 			this.owners[ slot ] = this.owners[ last ];
 			this.owners[ slot ].slot = slot;
 
@@ -82,6 +92,7 @@ export class KitPieceDraw {
 	/** Instance buffers are this draw's; geometry and materials are the kit's. */
 	dispose() {
 
+		this.fills?.dispose();
 		for ( const mesh of this.meshes ) mesh.dispose();
 		this.group.clear();
 		this.group.removeFromParent();
@@ -98,6 +109,7 @@ export class KitPieceDraw {
 		// Every surface of the piece reads the one buffer pair this draw keeps.
 		mesh.instanceMatrix = this.matrices;
 		mesh.instanceColor = this.colors;
+		this.fills?.attach( mesh );
 		mesh.count = this.count;
 		mesh.castShadow = true;
 		mesh.receiveShadow = true;
@@ -123,6 +135,7 @@ export class KitPieceDraw {
 		colors.array.set( this.colors.array );
 		this.matrices = matrices;
 		this.colors = colors;
+		this.fills?.grow( capacity );
 		this.capacity = capacity;
 		this.meshes = this.meshes.map( ( previous, index ) => {
 

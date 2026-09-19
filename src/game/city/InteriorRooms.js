@@ -1,7 +1,7 @@
 import { floorPlacements } from './InteriorLayouts.js';
 import * as THREE from 'three/webgpu';
 import { roomFootprintAnchor, roomFootprintContains } from '../../../../interior/src/core/room-footprint.ts';
-import { albedoOf } from '../light/RoomFill.js';
+import { RoomFill, albedoOf } from '../light/RoomFill.js';
 import { kelvinColor } from '../light/Color.js';
 
 /**
@@ -10,8 +10,9 @@ import { kelvinColor } from '../light/Color.js';
  * A room is what the interior box published for it: a footprint, the fixtures
  * hanging in it, and the surfaces its modules stand as. Nothing here owns
  * geometry, because every module surface is drawn once for the whole city;
- * a room exists so its fixtures can be lit, its air can be measured, and the
- * player can be told which room they are standing in.
+ * a room exists so its fixtures can be lit, its fill can be carried by the
+ * copies standing in it, its air can be measured, and the player can be told
+ * which room they are standing in.
  */
 
 /** Modules that are not room surface: fixtures, furniture frames, the lift. */
@@ -88,7 +89,6 @@ export class Room {
 		this.height = floor.height;
 		this.center = new THREE.Vector3( x, floor.elevation + floor.height / 2, z );
 		this.visible = false;
-		this.binding = null;
 
 		const whole = new Reflectance();
 		const walked = new Reflectance();
@@ -113,6 +113,9 @@ export class Room {
 
 		}
 
+		/** What every copy standing in this room carries: its interreflected light. */
+		this.fill = RoomFill.perCopy( this, this.flux, this.color );
+
 	}
 
 	/** Published occupied footprint at this storey's height. Core exclusions stay outside. */
@@ -123,12 +126,36 @@ export class Room {
 
 	}
 
-	/** Takes a light binding. The room's surfaces are drawn by the shared module draws. */
-	wear( binding ) {
+}
 
-		this.binding = binding;
+/**
+ * The fill for a copy standing in no published room, a stair shaft or a lift
+ * lobby: the floor's rooms taken together, flux over surface, so it is lit
+ * air rather than a hole.
+ */
+export function floorFill( rooms ) {
+
+	const whole = { area: 0, albedo: new THREE.Color( 0, 0, 0 ), floorAlbedo: new THREE.Color( 0, 0, 0 ) };
+	const color = new THREE.Color( 0, 0, 0 );
+	let flux = 0;
+
+	for ( const room of rooms ) {
+
+		flux += room.flux;
+		whole.area += room.area;
+		addScaled( color, room.color, room.flux );
+		whole.albedo.add( room.albedo );
+		whole.floorAlbedo.add( room.floorAlbedo );
 
 	}
+
+	if ( ! rooms.length ) return new THREE.Vector4();
+
+	if ( flux > 0 ) color.multiplyScalar( 1 / flux );
+	whole.albedo.multiplyScalar( 1 / rooms.length );
+	whole.floorAlbedo.multiplyScalar( 1 / rooms.length );
+
+	return RoomFill.perCopy( whole, flux, color );
 
 }
 
@@ -170,7 +197,9 @@ function addScaled( target, color, weight ) {
 
 /**
  * The fixtures of one floor, grouped by the room they were published for, in
- * the units three wants: lumens as published, kelvin resolved to a colour.
+ * the units three wants: lumens as published, kelvin resolved to a colour. A
+ * published range is a useful radius; a fixture hung higher than its range
+ * reaches the floor anyway, or its beam would end in mid air.
  */
 export function fixturesByRoom( floor ) {
 
@@ -187,7 +216,7 @@ export function fixturesByRoom( floor ) {
 			color: light.color ? new THREE.Color().setRGB( ...light.color, THREE.LinearSRGBColorSpace ) : kelvinColor( light.colorTemperatureK ),
 			...( light.axis ? { axis: new THREE.Vector3().fromArray( light.axis ) } : {} ),
 			...( light.direction ? { direction: new THREE.Vector3().fromArray( light.direction ) } : {} ),
-			range: Math.max( 0.5, light.range ),
+			range: Math.max( 0.5, light.range, light.position[ 1 ] - floor.elevation ),
 			beamDeg: light.beamDeg || 100,
 			diffuse: light.diffuse ?? 0.5,
 			length: light.length || 0.6,

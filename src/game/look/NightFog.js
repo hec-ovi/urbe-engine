@@ -16,8 +16,18 @@ const SKY_RADIANCE = 0.12;
  * sits well under the road it lights.
  */
 const SCATTER = 0;
-/** A room's air is thick over metres where the street's is thin over blocks. */
-const INDOOR_DENSITY = 0.12;
+/**
+ * What a room returns per lux of its fixtures' mean illuminance, in cd/m2: a
+ * mid-grey surface's albedo over pi, with the interreflected share on top. A
+ * room's medium is its own walls seen through its own air, so its far end
+ * settles on that radiance rather than on the sky behind a slab.
+ */
+const ROOM_RETURN = 0.25;
+/**
+ * A room's air is thick over metres where the street's is thin over blocks:
+ * 15 percent of the medium at 10 m, 47 at 20, so a room reads to its far wall.
+ */
+const INDOOR_DENSITY = 0.04;
 /** Seconds to cross from one medium to the other, walking through a door. */
 const ADAPT = 0.6;
 
@@ -51,7 +61,6 @@ export class NightFog {
 		this.density = uniform( density );
 		this.height = uniform( HEIGHT );
 		this.base = uniform( 0 );
-		this.scatter = uniform( SCATTER );
 		this.indoor = 0;
 
 		const outside = exponentialHeightFogFactor( this.density, this.height );
@@ -81,9 +90,10 @@ export class NightFog {
 
 		this.base.value = this.indoorDensity * this.indoor;
 
-		const lit = this.scatter.value * air.lux;
+		// Indoors the sky is behind a slab, so the air is the room's own light,
+		// arriving as the medium does; leaving, the street's air is the street's at once.
+		const lit = air.lux * ( indoor ? ROOM_RETURN * this.indoor : SCATTER );
 		const hue = luminance( air.color );
-		// Indoors the sky is behind a slab, so the air is the room's own light.
 		const floor = 1 - this.indoor;
 
 		this.color.value.setRGB(

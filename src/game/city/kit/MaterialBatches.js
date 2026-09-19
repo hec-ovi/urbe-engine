@@ -18,9 +18,11 @@ import { MaterialBatch } from './MaterialBatch.js';
  */
 export class MaterialBatches {
 
-	constructor( name ) {
+	/** @param fill whether each copy carries a fill light, for draws standing in rooms */
+	constructor( name, { fill = false } = {} ) {
 
 		this.name = name;
+		this.fill = fill;
 		/** material key to MaterialBatch */
 		this.batches = new Map();
 		/** entry id to [{ batch, geometryId }] */
@@ -108,7 +110,8 @@ export class MaterialBatches {
 			const batch = new MaterialBatch( `${this.name}:${key}`, surfaces[ 0 ].material, {
 				vertices, indices,
 				castShadow: surfaces.every( ( surface ) => surface.castShadow ?? castShadow ),
-				instances
+				instances,
+				fill: this.fill
 			} );
 			this.batches.set( key, batch );
 			this.group.add( batch.mesh );
@@ -149,12 +152,12 @@ export class MaterialBatches {
 	}
 
 	/** Draws one more copy of an entry. @returns a handle to hand back to `release` */
-	admit( id, matrix, color = null ) {
+	admit( id, matrix, color = null, fill = null ) {
 
 		const parts = this.entries.get( id );
 		const instances = [];
 
-		for ( const { batch, geometryId } of parts ) instances.push( batch.add( geometryId, matrix, color ) );
+		for ( const { batch, geometryId } of parts ) instances.push( batch.add( geometryId, matrix, color, fill ) );
 		this.copies ++;
 
 		return { parts, instances };

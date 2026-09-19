@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { RoomLights } from './RoomLights.js';
+import { RoomFillNode } from './RoomFillNode.js';
 
 const tier = { roomSlots: 2, roomSpots: 2, roomStrips: 1 };
 
-/** A room as RoomLights sees it: numbers, fixtures, and a binding it wears. */
+/** A room as RoomLights sees it: numbers and fixtures. */
 function room( id, x, flux ) {
 
 	return {
@@ -19,15 +20,7 @@ function room( id, x, flux ) {
 			kind: 'spot', position: new THREE.Vector3( x, 2.6, 0 ), lumens: flux,
 			color: new THREE.Color( 1, 0.8, 0.6 ), range: 4, beamDeg: 100,
 			diffuse: 0.4, length: 0, angleDeg: 0, facing: 'down'
-		} ],
-		binding: null,
-		worn: [],
-		wear( binding ) {
-
-			this.binding = binding;
-			this.worn.push( binding.index );
-
-		}
+		} ]
 	};
 
 }
@@ -42,7 +35,7 @@ const factory = { build: () => new THREE.MeshStandardNodeMaterial() };
  */
 describe( 'RoomLights', () => {
 
-	it( 'gives the nearest rooms a slot and everything else the dim set, keeping the same light ids', () => {
+	it( 'gives the nearest rooms a slot, keeping the same light ids', () => {
 
 		const lights = new RoomLights( factory, tier );
 		const near = [ room( 'a', 0, 2000 ), room( 'b', 5, 1000 ), room( 'c', 9, 800 ) ];
@@ -51,13 +44,13 @@ describe( 'RoomLights', () => {
 		lights.update( near, new THREE.Vector3(), 1 );
 		const first = ids();
 
-		expect( near[ 0 ].binding ).toBe( lights.slots[ 0 ] );
-		expect( near[ 1 ].binding ).toBe( lights.slots[ 1 ] );
-		expect( near[ 2 ].binding ).toBe( lights.dim );
+		expect( lights.slots[ 0 ].room ).toBe( near[ 0 ] );
+		expect( lights.slots[ 1 ].room ).toBe( near[ 1 ] );
 
 		lights.update( [ room( 'd', 40, 500 ), near[ 0 ] ], new THREE.Vector3( 40, 0, 0 ), 1 );
 
 		expect( ids() ).toEqual( first );
+		expect( lights.slots[ 0 ].room.id ).toBe( 'd' );
 
 	} );
 
@@ -76,7 +69,7 @@ describe( 'RoomLights', () => {
 		expect( spot.decay ).toBe( 2 );
 		// Unused lights in the pool go dark rather than being removed.
 		expect( lights.slots[ 0 ].spots[ 1 ].intensity ).toBe( 0 );
-		expect( lights.slots[ 1 ].fill.intensity ).toBe( 0 );
+		expect( lights.slots[ 1 ].spots[ 0 ].intensity ).toBe( 0 );
 
 	} );
 
@@ -98,20 +91,35 @@ describe( 'RoomLights', () => {
 
 	} );
 
-	it( 'compiles one material per binding and key, not one per room', () => {
+	it( 'lights every room material from one pool of every slot\'s lights, with the fill read per copy', () => {
 
 		const lights = new RoomLights( factory, tier );
 		const key = 'cyberpunk/plaster/mid';
 
-		const first = lights.materialFor( lights.slots[ 0 ], key );
+		const first = lights.materialFor( key );
 
-		expect( lights.materialFor( lights.slots[ 0 ], key ) ).toBe( first );
-		expect( lights.materialFor( lights.slots[ 1 ], key ) ).not.toBe( first );
-		expect( first.lightsNode ).toBe( lights.slots[ 0 ].lightsNode );
+		expect( lights.materialFor( key ) ).toBe( first );
+		expect( first.lightsNode ).toBe( lights.pool.lightsNode );
 		// A standard material loses `lightsNode` in the conversion the renderer
 		// does for it, and the room comes out lit by the city instead of by
 		// itself, which at night means not at all.
 		expect( first.isNodeMaterial ).toBe( true );
+
+		// The pool is the spots and strips of every slot and the per-copy fill:
+		// no fill light of its own, which would light every room with every other's.
+		const members = lights.pool.lightsNode.getLights();
+		expect( members.filter( ( light ) => light.isLight ) ).toEqual( lights.slots.flatMap( ( slot ) => slot.members ) );
+		expect( members.some( ( light ) => light.isHemisphereLight ) ).toBe( false );
+		expect( members.filter( ( light ) => light instanceof RoomFillNode ) ).toHaveLength( 1 );
+
+		// A source keeps its identity and its maps; an unlit one stays unlit.
+		const source = new THREE.MeshStandardMaterial( { emissiveIntensity: 180, alphaTest: 0.5 } );
+		const worn = lights.materialFor( key, source );
+		expect( worn ).toBe( lights.materialFor( key, source ) );
+		expect( worn ).not.toBe( first );
+		expect( worn.emissiveIntensity ).toBe( 180 );
+		expect( worn.alphaTest ).toBe( 0.5 );
+		expect( lights.materialFor( key, new THREE.MeshBasicMaterial() ).lightsNode ).toBe( null );
 
 	} );
 

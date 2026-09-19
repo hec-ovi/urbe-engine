@@ -10,15 +10,19 @@ import { InteriorProps } from './InteriorProps.js';
 import { InteriorStream } from './InteriorStream.js';
 import { partsOf } from './InteriorBoxes.js';
 import { Elevators } from './Elevators.js';
+import { FillChannel } from './kit/FillChannel.js';
+import { RoomLights } from '../light/RoomLights.js';
 import { Warmup } from '../look/Warmup.js';
 
 const MODULE_DIR = new URL( '../../../../interior/out/modules', import.meta.url ).pathname;
 const PROP_DIR = new URL( '../props/fixtures', import.meta.url ).pathname;
 
 const factory = {
-	build: () => new THREE.MeshStandardMaterial(),
-	variant: () => new THREE.MeshStandardMaterial()
+	build: ( key ) => new THREE.MeshStandardMaterial( { name: key } ),
+	variant: ( key, tweaks ) => new THREE.MeshStandardMaterial( { name: `${key}#${tweaks.variantId ?? ''}`, emissiveIntensity: tweaks.emissiveLevel } )
 };
+/** The pool every room surface is lit through. */
+const roomLights = new RoomLights( factory, { roomSlots: 2, roomSpots: 2, roomStrips: 0 } );
 
 async function bytesOf( url ) {
 
@@ -33,7 +37,7 @@ async function openModules() {
 
 	const catalog = JSON.parse( await readFile( `${MODULE_DIR}/modules.json`, 'utf8' ) );
 	const reads = [];
-	const modules = new InteriorModules( { catalog, baseUrl: MODULE_DIR, factory, readBinary: async ( url ) => {
+	const modules = new InteriorModules( { catalog, baseUrl: MODULE_DIR, factory, roomLights, readBinary: async ( url ) => {
 
 		reads.push( url );
 
@@ -84,6 +88,7 @@ function interiorProps( interior ) {
 	return new InteriorProps( {
 		catalog: propCatalog( interior ),
 		baseUrl: PROP_DIR,
+		roomLights,
 		loadAsset: async ( url ) => cityGltfLoader().parseAsync( await bytesOf( url ), '' )
 	} );
 
@@ -133,6 +138,9 @@ async function settle( model, feet ) {
 }
 
 const metres = ( value ) => Number( value.toFixed( 6 ) );
+/** One copy's fill as its draw's channel holds it, beside a vector at that precision. */
+const texelOf = ( mesh, slot ) => [ ...FillChannel.of( mesh ).texture.image.data.subarray( slot * 4, slot * 4 + 4 ) ];
+const float32 = ( vector ) => [ ...new Float32Array( vector.toArray() ) ];
 const feetOn = ( floor ) => ( { x: 12, y: floor * 4.5 + 0.1, z: 16 } );
 const bandOf = ( model, floor ) => model.live.get( 'p1' ).bands.find( ( band ) => band.floor === floor );
 const propCopies = ( model ) => [ ...model.props.props.values() ].reduce( ( total, one ) => total + one.draw.count, 0 );
@@ -216,6 +224,37 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 	} );
 
+	it( 'lights every module slot and furniture part through the room pool, the strip\'s diffuser at the lamp level', async () => {
+
+		const { modules } = await openModules();
+
+		for ( const batch of modules.batches.batches.values() ) expect( batch.material.lightsNode ).toBe( roomLights.pool.lightsNode );
+		const diffuser = modules.batches.batches.get( 'cyberpunk/light-fixture/mid' ).material;
+		expect( diffuser.emissiveIntensity ).toBe( 180 );
+		expect( diffuser.name ).toBe( 'cyberpunk/light-fixture/mid#strip|room' );
+		expect( modules.batches.batches.get( 'cyberpunk/plaster/mid' ).material.emissiveIntensity ).toBe( 1 );
+
+		const entry = { id: 'file-shelf', modelUri: 'static.glb', dimensionsMeters: [ 0.8, 0.5, 1.2 ] };
+		const props = new InteriorProps( {
+			catalog: { assets: [ entry ] }, baseUrl: PROP_DIR, roomLights,
+			loadAsset: async ( url ) => cityGltfLoader().parseAsync( await bytesOf( url ), '' )
+		} );
+		await props.prepare( [ entry.id ] );
+		const draw = props.props.get( entry.id ).draw;
+		for ( const mesh of draw.meshes ) expect( mesh.material.lightsNode ).toBe( roomLights.pool.lightsNode );
+
+		// A copy carries its room's fill, and keeps it when the draw compacts.
+		const fill = new THREE.Vector4( 1.5, 1.2, 0.9, 0.3 );
+		const first = props.admit( entry.id, new THREE.Matrix4(), new THREE.Vector4( 0, 0, 0, 0 ) );
+		const second = props.admit( entry.id, new THREE.Matrix4(), fill );
+		props.release( first );
+		expect( texelOf( draw.meshes[ 0 ], second.slot ) ).toEqual( float32( fill ) );
+
+		props.dispose();
+		modules.dispose();
+
+	} );
+
 	it( 'appends a floor\'s modules and furniture at its own elevation, and takes exactly those back on a drop', async () => {
 
 		const model = await stream();
@@ -227,10 +266,20 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		expect( band.handles ).toHaveLength( copies - liftCopies( floorPlacements( band.record ) ) );
 		expect( model.modules.copyCount + propCopies( model ) ).toBe( band.handles.length + neighbours( model, 1 ) );
 
-		// A copy stands at its placement plus the floor's own elevation.
+		// A copy stands at its placement plus the floor's own elevation, and
+		// carries the fill of the room it stands in into the batch it is drawn by.
 		const wall = floorPlacements( band.record ).find( ( one ) => one.module === 'wall-segment' );
-		const at = new THREE.Vector3().setFromMatrixPosition( matrixOf( model, band, wall ) );
+		const copy = copyOf( model, band, wall );
+		const at = new THREE.Vector3().setFromMatrixPosition( copy.matrix );
 		expect( at.y ).toBeCloseTo( wall.position[ 1 ] + 4.5, 6 );
+		const room = band.rooms.find( ( one ) => one.roomId === wall.room );
+		expect( copy.fill ).toBe( room.fill );
+		expect( room.fill.x ).toBeGreaterThan( 0 );
+		const { batch, geometryId } = model.modules.batches.entries.get( 'wall-segment' )[ 0 ];
+		const instance = band.handles[ band.copies.indexOf( copy ) ].handle.instances[ 0 ];
+		expect( batch.mesh.getMatrixAt( instance, new THREE.Matrix4() ).elements[ 13 ] ).toBeCloseTo( at.y, 6 );
+		expect( texelOf( batch.mesh, instance ) ).toEqual( float32( room.fill ) );
+		expect( geometryId ).toBeGreaterThanOrEqual( 0 );
 
 		// Every middle floor reads the one middle table and differs only by height.
 		const middles = [ 1, 2, 3 ].map( ( floor ) => bandOf( model, floor ).record );
@@ -251,7 +300,7 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		// The catalog measures [width, depth, height]; the mesh is Y up.
 		const entry = { id: 'file-shelf', modelUri: 'file-shelf.glb', dimensionsMeters: [ 1.0627, 0.4354, 1.9 ] };
 		const props = new InteriorProps( {
-			catalog: { assets: [ entry ] }, baseUrl: '/furniture',
+			catalog: { assets: [ entry ] }, baseUrl: '/furniture', roomLights,
 			loadAsset: async () => ( { scene: boxScene( 1.0627, 1.9, 0.4354 ) } )
 		} );
 
@@ -364,11 +413,11 @@ function neighbours( model, floor ) {
 
 }
 
-function matrixOf( model, band, placement ) {
+function copyOf( model, band, placement ) {
 
 	const at = floorPlacements( band.record ).indexOf( placement );
 	const before = floorPlacements( band.record ).slice( 0, at ).filter( ( one ) => one.module === 'lift-car' || one.module === 'lift-doors' ).length;
 
-	return band.copies[ at - before ].matrix;
+	return band.copies[ at - before ];
 
 }

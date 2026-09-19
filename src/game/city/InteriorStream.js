@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import { buildingFloors, floorPlacements } from './InteriorLayouts.js';
 import { floorBoxes } from './InteriorBoxes.js';
 import { moduleError } from './InteriorModules.js';
-import { roomsOf } from './InteriorRooms.js';
+import { floorFill, roomsOf } from './InteriorRooms.js';
 import { Haze } from '../light/Haze.js';
 
 /** A building's floors are worth building this close to its footprint. */
@@ -37,8 +37,8 @@ const FAILED = 'failed';
  *   floor records and every floor gets a band, empty until it is wanted;
  * - a floor within one of the player's own is built: its placements become
  *   instances of the shared module and furniture draws at that floor's
- *   elevation, its rooms are published for the light pool, and its modules
- *   become one cuboid compound;
+ *   elevation, each carrying the fill of the room it stands in, its rooms are
+ *   published for the light pool, and its modules become one cuboid compound;
  * - those same floors are in the scene and in the physics world, one more
  *   above and below stays built, and a floor further away than that drops its
  *   instances. Walking up the stairs moves the window;
@@ -342,6 +342,9 @@ export class InteriorStream {
 
 		if ( ! this.#wanted( interior, band ) ) return null;
 
+		const rooms = roomsOf( record, this.modules );
+		const fills = new Map( rooms.map( ( room ) => [ room.roomId, room.fill ] ) );
+		const shared = floorFill( rooms );
 		const copies = [];
 		const content = new THREE.Group();
 		content.name = `interior:${band.id}`;
@@ -365,12 +368,12 @@ export class InteriorStream {
 			copies.push( {
 				draws: placement.module ? this.modules : this.props,
 				id: placement.module ?? placement.prop,
-				matrix: matrixOf( placement, record.elevation )
+				matrix: matrixOf( placement, record.elevation ),
+				fill: fills.get( placement.room ) ?? shared
 			} );
 
 		}
 
-		const rooms = roomsOf( record, this.modules );
 		const glow = this.haze && Haze.build( rooms.flatMap( ( room ) => room.fixtures ), this.haze );
 
 		if ( glow ) content.add( glow );
@@ -465,7 +468,7 @@ class FloorBand {
 		if ( this.handles ) return;
 
 		reserve( this.copies );
-		this.handles = this.copies.map( ( { draws, id, matrix } ) => ( { draws, handle: draws.admit( id, matrix ) } ) );
+		this.handles = this.copies.map( ( { draws, id, matrix, fill } ) => ( { draws, handle: draws.admit( id, matrix, fill ) } ) );
 		this.group.visible = true;
 
 	}
