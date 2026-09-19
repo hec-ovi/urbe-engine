@@ -3,7 +3,6 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { kelvinColor } from '../light/Color.js';
 import { signField } from './kit/KitSigns.js';
 import { signText } from '../../assembly/signText.js';
-import { marqueeTextLimit } from '../../assembly/validators.js';
 
 /** The parcel types that are places to go into rather than places to live. */
 const VENUE_TYPES = new Set( [
@@ -143,7 +142,9 @@ export class Venues {
 
 		const field = place?.name ? this.places.get( place.parcelId )?.field : null;
 
-		if ( field ) this.lettered = this.signs?.admit( field, signText( place.name, marqueeTextLimit() ) ) ?? null;
+		// The field's own cells bound the word: the blank marquee publishes its
+		// cell pitch, and a plate takes what fits its width.
+		if ( field ) this.lettered = this.signs?.admit( field, signText( place.name, Math.max( 1, Math.floor( field.width / ( field.cellSize ?? 0.5 ) ) ) ) ) ?? null;
 
 		return true;
 
