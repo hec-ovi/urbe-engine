@@ -54,9 +54,11 @@ export class WorldCreation {
 			], { cwd: this.engineRoot } );
 			const atlas = await json( join( world, 'blueprint.json' ), 'generated city blueprint' );
 			const manifest = await json( join( world, 'manifest.json' ), 'generated city manifest' );
-			if ( manifest.parcels.length !== atlas.parcels.length || manifest.interiors.length !== 0 ) {
+			// Every parcel stands, is a shell, or is an empty lot on purpose; none is unaccounted for.
+			const sources = manifest.sources ?? {};
+			if ( atlas.parcels.some( ( parcel ) => ! [ 'kit', 'shell', 'empty' ].includes( sources[ parcel.id ] ) ) || manifest.interiors.length !== 0 ) {
 
-				throw new CreationError( 'E_OUTPUT_INVALID', 'city stage must contain every shell and no interiors' );
+				throw new CreationError( 'E_OUTPUT_INVALID', 'city stage must account for every parcel and hold no interiors' );
 
 			}
 

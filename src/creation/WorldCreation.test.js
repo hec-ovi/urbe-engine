@@ -223,6 +223,7 @@ function processPort( calls ) {
 			await writeJson( join( world, 'manifest.json' ), {
 				contractVersion: '1.0.0', seed: blueprint.seed, atlasVersion: blueprint.version,
 				named: false, namingTheme: null, parcels: blueprint.parcels.map( ( parcel ) => parcel.id ),
+				sources: Object.fromEntries( blueprint.parcels.map( ( parcel ) => [ parcel.id, 'shell' ] ) ),
 				interiors: selected, floors: Object.fromEntries( selected.map( ( id ) => [ id, [ '000' ] ] ) )
 			} );
 			return '';
