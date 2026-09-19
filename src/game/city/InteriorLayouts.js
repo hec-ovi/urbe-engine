@@ -48,7 +48,9 @@ function floorOf( parcelId, entry, layout ) {
 			...light,
 			position: [ light.position[ 0 ], light.position[ 1 ] + elevation, light.position[ 2 ] ]
 		} ) ),
-		placements: layout.placements
+		// A floor's window returns are its own, built from its own openings;
+		// they draw with the layout it shares.
+		placements: entry.treatments?.length ? layout.placements.concat( entry.treatments ) : layout.placements
 	};
 
 }
