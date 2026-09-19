@@ -17,7 +17,8 @@ const PLAN_SEED = 'plans';
 /** Room above the storeys so the generator can pitch a taller ground floor. */
 const HEADROOM = 6;
 /** The shape of the sign field a business carries, which the city letters. */
-const SIGN_RATIO = '3:2';
+/** Letter cells of the blank marquee a business plan carries over its entrance; the parcel's word is lettered on it at runtime. */
+const SIGN_CELLS = 10;
 const ID = /^(.+?)-(?:([a-z_]+)-([a-z_]+)-)?(\d+)x(\d+)x(\d+)f$/;
 
 /**
@@ -261,7 +262,7 @@ export class PlanLibrary {
 			options: {
 				glb: 'merged',
 				...( family ? { architecture: family } : {} ),
-				...( lettered( programme ) ? { signage: { mode: 'logo', ratio: SIGN_RATIO } } : {} )
+				...( lettered( programme ) ? { signage: { mode: 'marquee', cells: SIGN_CELLS } } : {} )
 			}
 		};
 

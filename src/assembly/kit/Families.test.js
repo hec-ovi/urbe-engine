@@ -178,7 +178,7 @@ describe( 'the approved families a lot may wear', () => {
 		// A business carries the field the city letters each parcel's own word
 		// on, and the plan itself is drawn with none.
 		expect( hotel.building ).toMatchObject( { tier: 'rich', floors: 6 } );
-		expect( hotel.options.signage ).toEqual( { mode: 'logo', ratio: '3:2' } );
+		expect( hotel.options.signage ).toEqual( { mode: 'marquee', cells: 10 } );
 		// A home is a home: no sign at all.
 		expect( city0.plans.plans.get( city0.of( 'homes' ).id ).request.options ).not.toHaveProperty( 'signage' );
 

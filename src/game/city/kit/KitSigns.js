@@ -63,7 +63,9 @@ export class KitSigns {
 		if ( ! this.mesh || ! row || ! glyphs.length ) return null;
 
 		const handle = { slots: [] };
-		const size = Math.min( row.height, row.width / glyphs.length );
+		// A marquee publishes its cell pitch and letter height; a plate is
+		// filled with what fits.
+		const size = sign.cellSize ? Math.min( sign.cellSize, row.width / glyphs.length ) : Math.min( row.height, row.width / glyphs.length );
 
 		for ( const [ index, glyph ] of glyphs.entries() ) {
 
