@@ -149,7 +149,7 @@ describe( 'playable world creation contract', () => {
 			questsRoot: join( root, 'quests' ), outDir: join( root, 'engine/out' )
 		};
 		await mkdir( join( config.questsRoot, 'creation/fixtures' ), { recursive: true } );
-		await writeJson( join( config.questsRoot, 'creation/fixtures/urbe-cyberpunk.npc-types.json' ), { contractVersion: '1.0.0', types: [] } );
+		await writeJson( join( config.questsRoot, 'creation/samples/urbe-small/npc-types.json' ), { contractVersion: '1.0.0', types: [] } );
 		const calls = [];
 		return { config, calls, run: processPort( calls ) };
 
