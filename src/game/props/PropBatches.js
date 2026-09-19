@@ -1,9 +1,15 @@
 import { Color, DynamicDrawUsage, Group, InstancedMesh } from 'three/webgpu';
 import { PropBudget } from './PropBudget.js';
 
-/** One visible batch per model, finish and material part, across all nearby cells. */
+/**
+ * One visible batch per model, finish and material part, across all nearby cells.
+ *
+ * A model and finish wears the same geometry and the same materials wherever it
+ * stands, so it is prepared once for the city: a batch rebuilt to hold more
+ * copies of it draws what is already prepared.
+ */
 export class PropBatches {
-	constructor( models, group ) { this.models = models; this.group = group; this.batches = new Map(); this.maxWorkMs = 0; }
+	constructor( models, group ) { this.models = models; this.group = group; this.batches = new Map(); this.prepared = new Set(); this.maxWorkMs = 0; }
 	async sync( placements, prepare, wanted ) {
 		const selected = new Map(), budget = new PropBudget();
 		for ( const item of placements ) {
@@ -19,11 +25,11 @@ export class PropBatches {
 			const batch = replacement ? this.#create( key, items ) : previous;
 			if ( replacement ) write( batch, items );
 			try {
-				if ( prepare && batch.prepared !== prepare ) {
+				if ( prepare && ! this.prepared.has( key ) ) {
 					await budget.step();
 					if ( wanted() ) await prepare( batch.group, { wanted } );
 					budget.restart();
-					if ( wanted() ) batch.prepared = prepare;
+					if ( wanted() ) this.prepared.add( key );
 				}
 				if ( ! wanted() ) { if ( replacement ) release( batch ); return; }
 				if ( ! replacement ) write( batch, items );
@@ -42,11 +48,11 @@ export class PropBatches {
 			mesh.instanceMatrix.setUsage( DynamicDrawUsage ); mesh.userData.tintable = part.tintable;
 			group.add( mesh );
 		} );
-		return { group, capacity, prepared: null };
+		return { group, capacity };
 	}
 	get count() { let count = 0; for ( const batch of this.batches.values() ) count += batch.count; return count; }
 	get draws() { let count = 0; for ( const batch of this.batches.values() ) count += batch.group.children.length; return count; }
-	dispose() { for ( const batch of this.batches.values() ) release( batch ); this.batches.clear(); }
+	dispose() { for ( const batch of this.batches.values() ) release( batch ); this.batches.clear(); this.prepared.clear(); }
 }
 
 function write( batch, items ) {

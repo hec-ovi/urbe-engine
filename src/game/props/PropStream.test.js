@@ -71,6 +71,22 @@ it( 'coalesces updates and cancels obsolete preparation before adding visibility
 	stream.dispose();
 } );
 
+it( 'prepares a model and finish once for the city, however many cells stand it', async () => {
+	const stream = await dressing().stream( { cellSize: 64 } );
+	const prepared = [];
+	const prepare = vi.fn( async group => { prepared.push( group.name ); } );
+	await stream.update( { x: 0, z: 0 }, { radius: 100, prepare } );
+	const batches = prepare.mock.calls.length;
+	expect( batches ).toBeGreaterThan( 0 );
+	expect( new Set( prepared ).size ).toBe( batches );
+	// A window over the whole city rebuilds those batches with room for every
+	// copy: same geometry, same materials, nothing left to prepare.
+	await stream.update( { x: 0, z: 0 }, { radius: 2000, prepare } );
+	expect( stream.stats.resident ).toBe( 36 );
+	expect( prepare ).toHaveBeenCalledTimes( batches );
+	stream.dispose();
+} );
+
 it( 'validates stream settings before loading assets and refuses invalid windows', async () => {
 	const loadAsset = vi.fn();
 	await expect( dressing( world(), { loadAsset } ).stream( { cellSize: 0 } ) ).rejects.toMatchObject( { code: 'E_PROP_STREAM' } );

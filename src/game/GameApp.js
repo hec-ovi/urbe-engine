@@ -14,6 +14,7 @@ import { GamePersistence, mergeInventory, mergeProgress, uniqueLocations } from 
 import { groundAnchors } from './agents/Anchors.js';
 import { GameView } from '../ui/views/GameView.js';
 import { GameConfig } from './data/GameConfig.js';
+import { LoadProgress } from './LoadProgress.js';
 import { WorldSource } from './data/WorldSource.js';
 import { Signals } from './data/Signals.js';
 import { SIDEWALK_HEIGHT } from './ground/GroundBuilder.js';
@@ -72,6 +73,8 @@ import { mapModel, blockWorld } from './world/MapModel.js';
 
 const _push = new THREE.Vector3();
 const THEME = 'cyberpunk';
+/** Named steps one load runs through, the counter's own first units. */
+const LOAD_STEPS = 15;
 /** Past this a room is behind opaque walls and haze, so it is not drawn. */
 const ROOM_VISIBLE_RADIUS = 32;
 const NPC_VISIBLE_RADIUS = 115;
@@ -163,13 +166,26 @@ export class GameApp {
 	async #run() {
 
 		const config = this.config;
-		this.view.step( 'reading the world' );
+		const progress = this.progress = new LoadProgress(
+			( text ) => this.view.step( text ), { log: import.meta.env.DEV }
+		);
+		progress.plan( LOAD_STEPS ).step( 'reading the world' );
+		// What a first frame needs that the world's own documents do not decide
+		// starts here and is awaited where it is used: the renderer, the material
+		// theme, the physics engine, the characters and the cars all fetch while
+		// the city is being read.
 		const source = new WorldSource( config );
+		const reading = progress.timed( 'world documents', source.load() );
+		const rendering = progress.timed( 'renderer', RendererFactory.create( config.backend ) );
+		const resolver = new MaterialResolver();
+		const theme = progress.timed( 'material theme', resolver.loadTheme( THEME ) );
+		const starting = progress.timed( 'physics', Physics.create() );
+		const cars = progress.timed( 'cars', CarModels.load( config.maxCars ) );
 		const {
 			atlas, connections, nativeStreets, rooftopSpans, buildings, unbuilt, npcTypes, questlines, investigations,
 			mechanicTargetBindings, missionAssetRequests, missionItemBindings, game, shellCatalog, kit,
 			interiorModules, interiorProps, loadBuildings
-		} = await source.load();
+		} = await reading;
 		const spawn = game ? savedSpawn( game ) : pickSpawn( connections.networks, atlas );
 		const spatial = Boolean( shellCatalog );
 		const transitRoutes = connections.networks.transit.routes;
@@ -187,8 +203,8 @@ export class GameApp {
 			scale: config.timeScale
 		} );
 
-		this.view.step( 'starting the renderer' );
-		this.renderer = await RendererFactory.create( config.backend );
+		progress.step( 'starting the renderer' );
+		this.renderer = await rendering;
 		// After init, because that is when the WebGPU-to-WebGL2 fallback has
 		// already happened and the tier is a choice about cost, not backend.
 		const backend = RendererFactory.actualBackend( this.renderer );
@@ -204,10 +220,12 @@ export class GameApp {
 
 		this.scene = new THREE.Scene();
 		this.camera = new THREE.PerspectiveCamera( LOOK.fov, window.innerWidth / window.innerHeight, NEAR_PLANE, FAR_PLANE );
+		// The crowd's own files need the backend and nothing else, and its bake
+		// is the first thing the frame loop does, not the last the load does.
+		const characters = progress.timed( 'characters', CharacterAssets.load( config.maxCrowd, backend === 'webgpu', { bake: false } ) );
 
-		this.view.step( 'resolving materials' );
-		const resolver = new MaterialResolver();
-		await resolver.loadTheme( THEME );
+		progress.step( 'resolving materials' );
+		await theme;
 		this.resolver = resolver;
 		const factory = new PbrMaterialFactory( resolver, this.tier, new TextureSource().detect( this.renderer ) );
 		this.missionItems = new MissionItemAssets( {
@@ -217,29 +235,35 @@ export class GameApp {
 			materialCatalog: resolver.missionCatalog( THEME )
 		} );
 		this.rooms = new RoomLights( factory, this.tier );
-		this.physics = await Physics.create();
+		this.physics = await starting;
 		this.colliders = new WorldColliders( this.physics );
 
-		this.view.step( 'laying the ground' );
+		progress.step( 'laying the ground' );
 		this.nativeStreets = nativeStreets;
 		const ground = this.groundStream = new GroundScene( atlas, factory, nativeStreets,
 			{ anisotropy: this.tier.textureAnisotropy ?? 8 } );
-		await ground.update( spawn.point, { radius: FAR_PLANE, collisionRadius: 256, collision: this.colliders } );
 		this.scene.add( ground.group );
-		this.hydrology = await HydrologyHost.install( { blueprint: atlas, factory, scene: this.scene } );
+		const laying = progress.timed( 'ground', ground.update( spawn.point, { radius: FAR_PLANE, collisionRadius: 256, collision: this.colliders } ) );
+		const water = progress.timed( 'water', HydrologyHost.install( { blueprint: atlas, factory, scene: this.scene } ) );
 
-		this.view.step( `loading ${buildings.size} buildings` );
+		progress.step( `loading ${buildings.size} buildings` );
 		if ( spatial ) this.shellScene = new ShellScene( {
 			atlas, catalog: shellCatalog, factory, buildings, loadBuildings, kit,
 			physics: this.physics, colliders: this.colliders,
 			interiors: ! config.off.has( 'interiors' ), haze: this.tier.haze ? OUTDOOR_HAZE : null
 		} );
-		const city = spatial ? await this.shellScene.stream.load( spawn.point ) : await new BuildingsLoader( factory ).load( buildings );
-		this.scene.add( city.group );
-
-		this.elevators = new Elevators( factory );
-		this.hitches = new HitchLog();
-		this.work = new RenderWork( this.renderer.info );
+		const standing = progress.timed( 'building plans and shells',
+			spatial ? this.shellScene.stream.load( spawn.point ) : new BuildingsLoader( factory ).load( buildings ) );
+		// The street's lamps and dressing and the room catalogs belong to the
+		// city, not to any cell of it, so they are read beside the building
+		// plans instead of after them. Each of these is its own set of files.
+		const lamps = new StreetLamps( atlas, factory, connections.networks.walk ).build();
+		const dressing = progress.timed( 'street props', new Dressing( atlas, connections.networks.walk, factory, {
+			replacedModuleOwnerIds: nativeStreets?.manifest.ground.replacements.moduleOwnerIds ?? [],
+			obstacles: [ ...DressingObstacles.fromPosts( lamps.posts ), ...( nativeStreets?.manifest.features ?? [] ).filter( feature => feature.kind !== 'tree-grate' ).map( feature => ( {
+				footprint: feature.footprint, bottom: feature.bounds.min[ 1 ], top: feature.bounds.max[ 1 ]
+			} ) ) ]
+		} ).stream() );
 		// The room modules and the furniture are the city's, not any building's:
 		// loaded once, drawn once per surface however many floors are standing.
 		this.interiorModules = interiorModules
@@ -248,7 +272,13 @@ export class GameApp {
 		this.interiorProps = interiorProps
 			? new InteriorProps( { catalog: interiorProps.document, baseUrl: interiorProps.baseUrl } )
 			: null;
-		await this.interiorModules?.ready;
+		const [ city ] = await Promise.all( [ standing, laying, progress.timed( 'room catalogs', this.interiorModules?.ready ) ] );
+		this.hydrology = await water;
+		this.scene.add( city.group );
+
+		this.elevators = new Elevators( factory );
+		this.hitches = new HitchLog();
+		this.work = new RenderWork( this.renderer.info );
 		this.stream = new InteriorStream( {
 			modules: this.interiorModules, props: this.interiorProps, roomLights: this.rooms, elevators: this.elevators,
 			haze: this.tier.haze ? INDOOR_HAZE : null, hitches: this.hitches
@@ -256,16 +286,10 @@ export class GameApp {
 		if ( this.interiorModules && ! config.off.has( 'interiors' ) ) this.stream.register( buildings, city.centers );
 		this.scene.add( this.stream.group );
 
-		this.view.step( 'hanging the neon' );
+		progress.step( 'hanging the neon' );
 		const neon = spatial ? { group: new THREE.Group(), glows: [] } : new Neon( atlas, buildings, factory ).build();
-		const lamps = new StreetLamps( atlas, factory, connections.networks.walk ).build();
 		const links = new Links( connections, factory, rooftopSpans, { hosts: roofElevations( shellCatalog, buildings ) } ).build();
-		const props = this.propsStream = await new Dressing( atlas, connections.networks.walk, factory, {
-			replacedModuleOwnerIds: nativeStreets?.manifest.ground.replacements.moduleOwnerIds ?? [],
-			obstacles: [ ...DressingObstacles.fromPosts( lamps.posts ), ...( nativeStreets?.manifest.features ?? [] ).filter( feature => feature.kind !== 'tree-grate' ).map( feature => ( {
-				footprint: feature.footprint, bottom: feature.bounds.min[ 1 ], top: feature.bounds.max[ 1 ]
-			} ) ) ]
-		} ).stream();
+		const props = this.propsStream = await dressing;
 		await props.update( spawn.point, { radius: FAR_PLANE, collisionRadius: 256, collision: this.colliders } );
 		this.transit = new Transit( { atlas, networks: connections.networks, factory } );
 		this.windowRooms = new LitWindows( atlas, buildings, factory );
@@ -279,7 +303,7 @@ export class GameApp {
 			this.windowRooms.build( { enabled: ! spatial && ! config.off.has( 'interiors' ) } )
 		);
 
-		this.view.step( 'lighting the street' );
+		progress.step( 'lighting the street' );
 		const stableFixtures = [ ...( this.shellScene?.pinnedGlows ?? neon.glows ), ...lamps.glows, ...this.transit.glows ];
 		const fixtures = [ ...stableFixtures, ...( this.shellScene?.streamedGlows ?? [] ) ];
 		this.lights = new CityLights( fixtures, this.lighting.capacity, { streamed: Boolean( spatial ) } );
@@ -297,7 +321,7 @@ export class GameApp {
 		this.scene.add( this.venues.build( city.entrances ) );
 		this.#hangHaze( spatial ? [ ...lamps.glows, ...this.transit.glows ] : fixtures );
 
-		this.view.step( 'raising the sky' );
+		progress.step( 'raising the sky' );
 		this.look.raise( this.scene, {
 			hour: config.lightingHour,
 			fog: config.off.has( 'fog' ) ? { density: 0, indoorDensity: 0 } : { density: config.fog },
@@ -314,7 +338,7 @@ export class GameApp {
 		this.probe?.exclude( this.stream.group, props.group, this.transit.group );
 		if ( this.hydrology.group ) this.probe?.exclude( this.hydrology.group );
 
-		this.view.step( 'building the physics world' );
+		progress.step( 'building the physics world' );
 		this.safetyGround = new SafetyGround( {
 			atlas, buildings, groups: [ ground.group, city.group, links.group, this.transit.group ],
 			physics: this.physics, factory, camera: this.camera
@@ -342,7 +366,7 @@ export class GameApp {
 
 		};
 
-		this.view.step( 'waking the population' );
+		progress.step( 'waking the population' );
 		this.sim = SimBridge.create(
 			atlas,
 			connections,
@@ -371,11 +395,8 @@ export class GameApp {
 		} );
 		if ( game?.npcState?.continuity ) this.npcContinuity.restore( game.npcState.continuity );
 
-		this.view.step( 'loading characters' );
-		const assets = await CharacterAssets.load(
-			config.maxCrowd,
-			RendererFactory.actualBackend( this.renderer ) === 'webgpu'
-		);
+		progress.step( 'loading characters' );
+		const assets = await characters;
 		this.scene.add( assets.group );
 		this.probe?.exclude( assets.group );
 		this.crowd = new Crowd( {
@@ -398,8 +419,8 @@ export class GameApp {
 			hero: this.hero
 		} );
 
-		this.view.step( 'loading traffic' );
-		const carModels = await CarModels.load( config.maxCars );
+		progress.step( 'loading traffic' );
+		const carModels = await cars;
 		this.scene.add( carModels.group );
 		this.traffic = new Traffic( {
 			networks: connections.networks, models: carModels,
@@ -408,7 +429,7 @@ export class GameApp {
 			seed: atlas.meta.seed
 		} );
 
-		this.view.step( 'stepping outside' );
+		progress.step( 'stepping outside' );
 		this.body = new PlayerBody( this.physics, spawn.point );
 		this.input = new Input( this.renderer.domElement );
 		this.controller = new PlayerController( { body: this.body, camera: this.camera, input: this.input } );
@@ -480,25 +501,34 @@ export class GameApp {
 
 		// Construct the scene pass before a WebGPU probe bake so its final
 		// material programs can be warmed against that render context.
-		this.view.step( 'warming the renderer' );
+		progress.step( 'warming the renderer' );
 		this.look.compose( this.camera );
 		this.floorWarmup = prepareInteriorStreaming(
 			this.stream, this.renderer, this.scene, this.camera, this.look.pipeline.mrt, this.look.pipeline.renderTarget
 		);
 		if ( this.shellScene ) this.shellScene.warmup = this.floorWarmup;
-		// Every preparation pass says how far it has got: a loading screen that
-		// stops moving is indistinguishable from one that has stopped.
-		const preparing = ( what ) => ( group, options ) => this.floorWarmup.warmAll( group, {
-			...options,
-			onProgress: ( done, total ) => this.view.step( `preparing ${what} ${done} / ${total}` )
-		} );
+		// Every pass counts into the load's own tally, and warms the programs it
+		// is the first to need: one the ground already built costs the street
+		// props nothing, and the city pass ends up with what neither had.
+		const preparing = ( what ) => ( group, options ) => {
+
+			const pass = progress.pass( `preparing ${what}` );
+
+			return this.floorWarmup.warmAll( group, { ...options, onProgress: ( done, total ) => pass.at( done, total ) } );
+
+		};
 		if ( this.groundStream ) await this.groundStream.update( spawn.point, { prepare: preparing( 'the ground' ) } );
 		await this.propsStream.update( spawn.point, { prepare: preparing( 'street props' ) } );
-		this.view.step( 'baking the environment' );
-		this.probe?.bake( spawn.point );
-		await this.floorWarmup.warmAll( this.scene, {
-			onProgress: ( done, total ) => this.view.step( `preparing city surfaces ${done} / ${total}` )
-		} );
+		const surfaces = progress.pass( 'preparing city surfaces' );
+		await this.floorWarmup.warmAll( this.scene, { onProgress: ( done, total ) => surfaces.at( done, total ) } );
+		// The two pieces of load work a first frame does not need: the probe
+		// renders the whole city six times over, and the crowd's bake builds
+		// its vertex animation buffers. Both run on the frame loop instead,
+		// before the first frame that reads them.
+		this.deferred = [
+			[ 'baking the crowd', () => assets.bake() ],
+			...( this.probe ? [ [ 'baking the environment', () => this.probe.bake( spawn.point ) ] ] : [] )
+		];
 
 		this.interactor = new Interactor( {
 			crowd: this.crowd, doors: city.doors, sim: this.sim,
@@ -530,10 +560,11 @@ export class GameApp {
 			`/materials/${THEME}`,
 			'/models/quaternius'
 		] );
-		this.view.step( 'preparing the first frame' );
+		progress.step( 'preparing the first frame' );
 		this.look.render();
 		this.view.setPaused( true );
 		this.view.ready();
+		progress.finish();
 		this.playStartedAt = performance.now();
 
 		this.renderer.domElement.addEventListener( 'click', () => this.input.requestLock() );
@@ -575,6 +606,15 @@ export class GameApp {
 	}
 
 	#frame() {
+
+		// Load work the first frame did not need, one piece per frame, before
+		// anything this frame draws can ask for it.
+		if ( this.deferred?.length ) {
+
+			const [ what, run ] = this.deferred.shift();
+			this.hitches.time( what, run );
+
+		}
 
 		const now = performance.now();
 		// What the renderer built for itself last frame, before the gap that

@@ -149,6 +149,35 @@ describe( 'Warmup', () => {
 
 	} );
 
+	it( 'builds one program per material and vertex layout, counts those, and never builds one twice', async () => {
+
+		const material = new THREE.MeshStandardMaterial();
+		const other = new THREE.MeshStandardMaterial();
+		const batch = new THREE.Group();
+		// Six draws wearing three programs: one material over two vertex
+		// layouts, which is what a batch and its instanced copies are, and one
+		// material standing in three separate draws.
+		for ( let i = 0; i < 3; i ++ ) batch.add( new THREE.Mesh( new THREE.BoxGeometry(), material ) );
+		batch.add( new THREE.InstancedMesh( new THREE.BoxGeometry(), material, 2 ) );
+		batch.add( new THREE.Mesh( new THREE.BoxGeometry(), other ), new THREE.Mesh( new THREE.BoxGeometry(), other ) );
+
+		const compiled = [];
+		const warmup = new Warmup( fakeRenderer( async ( object ) => compiled.push( object ) ), new THREE.Scene(), new THREE.PerspectiveCamera(), null );
+		const counted = [];
+		await warmup.warmAll( batch, { onProgress: ( done, total ) => counted.push( [ done, total ] ) } );
+
+		expect( compiled ).toHaveLength( 3 );
+		expect( counted ).toEqual( [ [ 1, 3 ], [ 2, 3 ], [ 3, 3 ] ] );
+
+		// The city pass finds the same materials standing somewhere else.
+		const elsewhere = new THREE.Group();
+		elsewhere.add( new THREE.Mesh( new THREE.BoxGeometry(), material ), new THREE.Mesh( new THREE.BoxGeometry(), other ) );
+		await warmup.warmAll( elsewhere );
+
+		expect( compiled ).toHaveLength( 3 );
+
+	} );
+
 	it( 'waits for streamed node resources, uploads each shared texture once, and rejects a failed one before upload', async () => {
 
 		let ready;

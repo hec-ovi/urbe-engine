@@ -91,23 +91,30 @@ export class WorldSource {
 		} );
 		const atlas = blueprint.data;
 		this.#assertBlueprint( manifest, atlas );
-		const connections = await loadWorldConnections( blueprint, manifest.connections, ( file, reference ) => this.#document( `${this.outBase}/${file}`, reference ) );
-		const nativeStreets = manifest.streets ? await openNativeStreetSource( {
-			baseUrl: this.outBase, sharedBase: this.sharedBase, reference: manifest.streets, blueprint
-		} ) : null;
+		// Everything the manifest names beside the blueprint is a separate file
+		// that waits on none of the others, so they are read together: a 1 km
+		// city carries tens of megabytes between them.
+		const [ connections, nativeStreets, shellCatalog, kit, interiorModules, interiorProps, npcTypes, quests ] = await Promise.all( [
+			loadWorldConnections( blueprint, manifest.connections, ( file, reference ) => this.#document( `${this.outBase}/${file}`, reference ) ),
+			manifest.streets ? openNativeStreetSource( {
+				baseUrl: this.outBase, sharedBase: this.sharedBase, reference: manifest.streets, blueprint
+			} ) : null,
+			loadShellCatalog( manifest, ( file, reference ) => this.#document( `${this.outBase}/${file}`, reference ) ),
+			this.#kit( manifest ),
+			this.#resource( manifest.interiorModules ),
+			this.#resource( manifest.interiorProps ),
+			// The naming box's typed set for this world, when the out dir carries one.
+			this.#json( `${this.outBase}/${NPC_TYPES_FILE}` ).catch( () => null ),
+			this.#quests( game )
+		] );
 
 		const known = new Set( atlas.parcels.map( ( parcel ) => parcel.id ) );
 		const listedSet = new Set( manifest.parcels );
-		const shellCatalog = await loadShellCatalog( manifest, ( file, reference ) => this.#document( `${this.outBase}/${file}`, reference ) );
-		const kit = await this.#kit( manifest );
-		const interiorModules = await this.#resource( manifest.interiorModules );
-		const interiorProps = await this.#resource( manifest.interiorProps );
 		const sources = new BuildingSource( {
 			manifest, outBase: this.outBase, planUrls: kit?.planUrls ?? new Map(), readJson: url => this.#json( url )
 		} );
 		const loadBuildings = ids => sources.load( ids );
 		const buildings = await loadBuildings( initialBuildingIds( shellCatalog, manifest, game ) );
-		const quests = await this.#quests( game );
 
 		return {
 			atlas,
@@ -123,8 +130,7 @@ export class WorldSource {
 			// Catalog games carry the player and quest runtime beside their world.
 			// Direct city previews have no descriptor and retain session-only play.
 			game,
-			// The naming box's typed set for this world, when the out dir carries one.
-			npcTypes: await this.#json( `${this.outBase}/${NPC_TYPES_FILE}` ).catch( () => null ),
+			npcTypes,
 			...quests,
 			unbuilt: [ ...known ].filter( ( id ) => ! listedSet.has( id ) )
 		};

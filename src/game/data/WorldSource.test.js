@@ -29,6 +29,26 @@ function documentHash( document ) {
 
 }
 
+const square = [ [ 0, 0 ], [ 8, 0 ], [ 8, 8 ], [ 0, 8 ] ];
+/** One plan's blueprint, in its own frame: what a kit parcel's is composed from. */
+const planDocument = {
+	buildingId: 'tower', version: '1', seed: 'plans',
+	bounds: { footprint: square, height: 4 },
+	floors: [ {
+		index: 0, kind: 'lobby', elevation: 0, height: 4, outline: square,
+		openings: [ { id: 'window:0', kind: 'window', edge: 0, offset: 2, sill: 1, width: 2, height: 2 } ],
+		roomEnvelope: {
+			corners: [ [ 1, 1 ], [ 7, 1 ], [ 7, 7 ], [ 1, 7 ] ], origin: [ 1, 1 ], axisU: [ 1, 0 ], axisV: [ 0, 1 ],
+			width: 6, depth: 6, grid: { origin: [ 0, 0 ], angle: 0, spacing: 0.5 }, vertical: { min: 0, max: 3 }
+		}
+	} ],
+	balconyBands: [], anchors: [], signage: [], screens: [], lights: [],
+	facade: { exteriorStyle: 'premium-mineral', grids: [ { floor: 0, edge: 0, length: 8 } ] },
+	facadeArtifacts: [], fireEscape: null, facadeServices: { version: 1 },
+	roof: { elevation: 4, outline: square, parapetHeight: 0, bulkhead: null, artifacts: [] },
+	materials: [], materialVariants: {}
+};
+
 const atlas = {
 	meta: { seed: 'city', version: '0.14.0' },
 	parcels: [ { id: 'p0' }, { id: 'p1' } ]
@@ -190,24 +210,6 @@ describe( 'WorldSource selective interiors', () => {
 
 	it( 'composes a kit parcel blueprint from its plan, reading that plan once for the city', async () => {
 
-		const square = [ [ 0, 0 ], [ 8, 0 ], [ 8, 8 ], [ 0, 8 ] ];
-		const plan = {
-			buildingId: 'tower', version: '1', seed: 'plans',
-			bounds: { footprint: square, height: 4 },
-			floors: [ {
-				index: 0, kind: 'lobby', elevation: 0, height: 4, outline: square,
-				openings: [ { id: 'window:0', kind: 'window', edge: 0, offset: 2, sill: 1, width: 2, height: 2 } ],
-				roomEnvelope: {
-					corners: [ [ 1, 1 ], [ 7, 1 ], [ 7, 7 ], [ 1, 7 ] ], origin: [ 1, 1 ], axisU: [ 1, 0 ], axisV: [ 0, 1 ],
-					width: 6, depth: 6, grid: { origin: [ 0, 0 ], angle: 0, spacing: 0.5 }, vertical: { min: 0, max: 3 }
-				}
-			} ],
-			balconyBands: [], anchors: [], signage: [], screens: [], lights: [],
-			facade: { exteriorStyle: 'premium-mineral', grids: [ { floor: 0, edge: 0, length: 8 } ] },
-			facadeArtifacts: [], fireEscape: null, facadeServices: { version: 1 },
-			roof: { elevation: 4, outline: square, parapetHeight: 0, bulkhead: null, artifacts: [] },
-			materials: [], materialVariants: {}
-		};
 		const record = ( parcel, origin ) => ( {
 			parcel, plan: 'tower', origin, rotationY: Math.PI / 2, lot: square,
 			bounds: { min: [ 0, 0, 0 ], max: [ 8, 4, 8 ] }, signText: null, family: 'white-grid', floors: 1, tint: parcel
@@ -224,7 +226,7 @@ describe( 'WorldSource selective interiors', () => {
 				}
 			} ],
 			[ '/out/shared/kit/0123456789abcdef/kit.json', kitDocument ],
-			[ '/out/shared/plans/0123456789abcdef/tower.blueprint.json', plan ],
+			[ '/out/shared/plans/0123456789abcdef/tower.blueprint.json', planDocument ],
 			[ '/out/city/p0/p0.placements.json', record( 'p0', [ 100, 0, 200 ] ) ],
 			[ '/out/city/p1/p1.placements.json', record( 'p1', [ 300, 0, 400 ] ) ]
 		] );
@@ -256,7 +258,81 @@ describe( 'WorldSource selective interiors', () => {
 
 	} );
 
+	it( 'reads the documents the manifest names together, and the buildings after them', async () => {
+
+		const documents = new Map( [
+			[ '/out/city/blueprint.json', atlas ],
+			[ '/out/city/manifest.json', {
+				...manifest, interiors: [],
+				kit: { file: 'kit.json', sha256: documentHash( kitDocument ), shared: 'kit/0123456789abcdef' },
+				sources: { p0: 'kit', p1: 'kit' },
+				buildings: {
+					p0: { template: null, slot: null, plan: 'tower' },
+					p1: { template: null, slot: null, plan: 'tower' }
+				}
+			} ],
+			[ '/out/city/interior-modules/modules.json', modules ],
+			[ '/out/shared/kit/0123456789abcdef/kit.json', kitDocument ]
+		] );
+		// One round is everything that was in flight together: a document read
+		// on its own has a round to itself.
+		const open = [];
+		vi.stubGlobal( 'fetch', vi.fn( ( url ) => new Promise( ( resolve ) => open.push( [ url, resolve ] ) ) ) );
+
+		let settled = false;
+		const missing = [];
+		const loading = new WorldSource( { blueprintUrl: '/atlas/city.json', outBase: '/out/city' } )
+			.load().finally( () => { settled = true; } );
+		const rounds = [];
+
+		for ( let round = 0; round < 12 && ! settled; round ++ ) {
+
+			await new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
+			if ( ! open.length ) continue;
+			const batch = open.splice( 0 );
+			rounds.push( batch.map( ( [ url ] ) => url ) );
+			for ( const [ url, resolve ] of batch ) {
+
+				if ( optional( url ) ) resolve( response( 404, null ) );
+				else if ( documents.has( url ) ) resolve( response( 200, documents.get( url ) ) );
+				else if ( url.endsWith( '.placements.json' ) ) resolve( response( 200, placement( url ) ) );
+				else if ( url.endsWith( 'tower.blueprint.json' ) ) resolve( response( 200, planDocument ) );
+				else missing.push( url );
+
+			}
+
+		}
+
+		await loading;
+
+		expect( missing ).toEqual( [] );
+		const together = rounds.find( ( urls ) => urls.some( ( url ) => url.endsWith( '/kit.json' ) ) );
+		expect( together ).toEqual( expect.arrayContaining( [
+			'/out/shared/kit/0123456789abcdef/kit.json',
+			'/out/city/interior-modules/modules.json',
+			'/out/city/npc-types.json',
+			'/out/city/quests/quest-bundle.json'
+		] ) );
+		// A parcel is read from the index, so no round holds both.
+		expect( together.some( ( url ) => url.endsWith( '.placements.json' ) ) ).toBe( false );
+		expect( rounds.some( ( urls ) => urls.some( ( url ) => url.endsWith( '/p0/p0.placements.json' ) ) ) ).toBe( true );
+
+	} );
+
 } );
+
+/** One kit parcel's placement record, on a lot of its own. */
+function placement( url ) {
+
+	const parcel = url.slice( url.lastIndexOf( '/' ) + 1 ).split( '.' )[ 0 ];
+	const square = [ [ 0, 0 ], [ 8, 0 ], [ 8, 8 ], [ 0, 8 ] ];
+
+	return {
+		parcel, plan: 'tower', origin: [ 0, 0, 0 ], rotationY: 0, lot: square,
+		bounds: { min: [ 0, 0, 0 ], max: [ 8, 4, 8 ] }, signText: null, family: 'white-grid', floors: 1, tint: parcel
+	};
+
+}
 
 function optional( url ) {
 

@@ -7,6 +7,12 @@ import { frameYield } from '../../app/FrameYield.js';
  * Hidden or off-camera objects are staged for compilation and restored exactly.
  * The compile uses the render pipeline's multiple render target because that
  * decides which fragment program the visible frame requests.
+ *
+ * What the backend builds is a program: one material drawn with one vertex
+ * layout. The city draws the same few dozen materials over thousands of
+ * batches, cells and pages, so one renderable warms every copy of its program
+ * and the rest cost nothing. Programs already built stay built for the life of
+ * this warm-up, whichever pass asked for them.
  */
 export class Warmup {
 
@@ -22,6 +28,7 @@ export class Warmup {
 		this.mrt = mrt;
 		this.renderTarget = renderTarget;
 		this.uploaded = new WeakSet();
+		this.warmed = new Set();
 		this.preparing = Promise.resolve();
 
 	}
@@ -115,28 +122,71 @@ export class Warmup {
 	}
 
 	/**
-	 * Warms one renderable at a time so the backend never receives an unbounded
-	 * set of programs in one compile request.
+	 * Warms one representative of every program this object still needs, one at
+	 * a time so the backend never receives an unbounded set in one request.
+	 *
+	 * @returns milliseconds the pass took; `onProgress` counts programs, not
+	 * renderables, so the work reported is the work left to do
 	 */
 	async warmAll( object, { wanted = () => true, onProgress = () => {} } = {} ) {
 
 		if ( ! object ) return 0;
-		const renderables = [];
-		object.traverse( ( node ) => { if ( node.material ) renderables.push( node ); } );
+		const wantedPrograms = this.programsOf( object );
 		const started = performance.now();
 
-		for ( let index = 0; index < renderables.length; index ++ ) {
+		for ( let index = 0; index < wantedPrograms.length; index ++ ) {
 
 			if ( ! wanted() ) break;
-			await this.#prepare( renderables[ index ] );
-			onProgress( index + 1, renderables.length );
-			if ( index + 1 < renderables.length ) await frameYield();
+			const [ node, key ] = wantedPrograms[ index ];
+			await this.#prepare( node );
+			this.warmed.add( key );
+			onProgress( index + 1, wantedPrograms.length );
+			if ( index + 1 < wantedPrograms.length ) await frameYield();
 
 		}
 
 		return performance.now() - started;
 
 	}
+
+	/** One renderable per program this object needs and this warm-up lacks. */
+	programsOf( object ) {
+
+		const wantedPrograms = [];
+		const seen = new Set();
+
+		object?.traverse( ( node ) => {
+
+			if ( ! node.material ) return;
+			const key = programKey( node );
+			if ( seen.has( key ) || this.warmed.has( key ) ) return;
+			seen.add( key );
+			wantedPrograms.push( [ node, key ] );
+
+		} );
+
+		return wantedPrograms;
+
+	}
+
+}
+
+/**
+ * What the backend builds one of: the material, and the vertex layout it is
+ * drawn with. Two renderables that agree on both request the same program,
+ * whichever batch, cell or page they belong to.
+ */
+function programKey( node ) {
+
+	const materials = Array.isArray( node.material ) ? node.material : [ node.material ];
+	const attributes = Object.keys( node.geometry?.attributes ?? {} ).sort().join( ',' );
+	const morphs = Object.keys( node.geometry?.morphAttributes ?? {} ).sort().join( ',' );
+	const kind = [
+		node.isInstancedMesh, node.isBatchedMesh, node.isSkinnedMesh, node.isPoints, node.isLine,
+		node.instanceColor, node.geometry?.isInstancedBufferGeometry
+	].map( ( flag ) => ( flag ? 1 : 0 ) ).join( '' );
+
+	return `${materials.map( ( material ) => material?.uuid ?? 'none' ).join( '+' )}|${kind}|${attributes}|${morphs}`;
 
 }
 
