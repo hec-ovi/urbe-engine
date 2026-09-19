@@ -422,7 +422,8 @@ export class GameApp {
 		} );
 		this.hero = await HeroCharacter.create( {
 			animation: assets.animation,
-			warmup: null
+			warmup: null,
+			textureSize: this.tier.textureMaxSize
 		} );
 		this.scene.add( this.hero.group );
 		this.animations = new GameplayAnimationDirector( {
@@ -542,6 +543,10 @@ export class GameApp {
 		await this.propsStream.update( spawn.point, { prepare: preparing( 'street props' ) } );
 		const surfaces = progress.pass( 'preparing city surfaces' );
 		await this.floorWarmup.warmAll( this.scene, { onProgress: ( done, total ) => surfaces.at( done, total ) } );
+		// The shapes a conversation or a fall puts on the street, read and
+		// built now so neither ever uploads or links.
+		const heroes = progress.pass( 'preparing the characters' );
+		await this.hero.prepare( ( done, total ) => heroes.at( done, total ) );
 
 		this.interactor = new Interactor( {
 			crowd: this.crowd, doors: city.doors, sim: this.sim,

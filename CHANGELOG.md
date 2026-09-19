@@ -1,5 +1,7 @@
 # Changelog
 
+0.26.11: the hero character stays resident for the run (both shapes read and warmed at load, maps sized to the tier, one dressed material per shape worn again by the next person), so a fall or a conversation uploads and links nothing.
+
 0.26.10: a template deals its variations across its blocks (every block one variation, the template's own building the majority on every slot), and a floor step is offered only where the block's own lot stands the design at both counts.
 
 0.26.9: the environment stands from construction and bakes under the loading counter, program keepers own their own triangle, released programs are named in the hitch line, and URBE_INTERIOR_DIR runs Interior from a pinned checkout.

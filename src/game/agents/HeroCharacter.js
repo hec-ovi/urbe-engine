@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { MeshStandardNodeMaterial } from 'three/webgpu';
+import { ImageBitmapLoader, MeshStandardNodeMaterial } from 'three/webgpu';
 import { uniform, vec2 } from 'three/tsl';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
@@ -17,12 +17,23 @@ import { Ragdoll } from '../physics/Ragdoll.js';
 const TALK = 'Idle_Talking_Loop';
 const SIT_TALK = 'Sitting_Talking_Loop';
 const BLEND_MS = 160;
+/** The maps' side when the tier names none. */
+const TEXTURE_SIZE = 1024;
+/** What a prepared shape wears while its programs are built. */
+const PLAIN_LOOK = {
+	skin: new THREE.Color( 1, 1, 1 ), shirt: new THREE.Color( 1, 1, 1 ), trousers: new THREE.Color( 1, 1, 1 ), sleeve: 0, hem: 0
+};
 
 /**
  * One full-quality skinned person while the player is talking to them. The
  * mass-crowd instance stays authoritative until this model is loaded and its
  * shaders are warm; then that one slot is hidden. There is never more than one
  * focused armature or AnimationMixer updating in the city.
+ *
+ * A shape read once stays for the run: its maps come in downscaled to the
+ * tier's texture size, its dressed materials are kept and worn again, and
+ * `prepare` reads and warms the shapes at load, so a conversation or a fall
+ * later uploads nothing and links nothing.
  */
 export class HeroCharacter {
 
@@ -34,7 +45,8 @@ export class HeroCharacter {
 
 	}
 
-	constructor( { animation, warmup = null, loadModel = defaultLoad, street = streetBodies } ) {
+	/** @param textureSize the side the pack's maps are downscaled to, the tier's texture size */
+	constructor( { animation, warmup = null, textureSize = TEXTURE_SIZE, loadModel = ( descriptor ) => defaultLoad( descriptor, textureSize ), street = streetBodies } ) {
 
 		this.animation = animation;
 		this.street = street;
@@ -78,6 +90,7 @@ export class HeroCharacter {
 
 			this.group.remove( root );
 			mixer.stopAllAction();
+			undress( root );
 			return false;
 
 		}
@@ -92,9 +105,30 @@ export class HeroCharacter {
 		};
 		mixer.addEventListener( 'finished', ( event ) => this.#finished( mixer, event ) );
 		this.#play( sequence, onFinished );
-		this.#keepOnly( this.active.key, this.fallen?.key );
 
 		return true;
+
+	}
+
+	/**
+	 * Reads every shape a person can take and builds its programs, so the
+	 * first conversation or fall of the run pays for neither.
+	 *
+	 * @param onProgress receives (done, total) over the shapes
+	 */
+	async prepare( onProgress = () => {} ) {
+
+		const shapes = [ 'male', 'female' ].map( ( gender ) => avatarFor( gender, 0 ) );
+
+		for ( const [ index, descriptor ] of shapes.entries() ) {
+
+			const source = await this.#model( descriptor );
+			const root = characterRoot( source, { position: new THREE.Vector3(), heading: 0, look: PLAIN_LOOK }, `prepared-${descriptor.id}` );
+			await this.warmup?.warm( root );
+			undress( root );
+			onProgress( index + 1, shapes.length );
+
+		}
 
 	}
 
@@ -123,13 +157,12 @@ export class HeroCharacter {
 			person.hero = true;
 			this.fallen = { person, root, ragdoll, descriptor, key: modelKey( descriptor ) };
 			this.street.take( person.id );
-			this.#keepOnly( this.active?.key, this.fallen.key );
 			return true;
 
 		} catch ( error ) {
 
 			ragdoll?.dispose();
-			if ( root ) disposeCharacterRoot( root );
+			if ( root ) undress( root );
 			throw error;
 
 		} finally {
@@ -190,8 +223,7 @@ export class HeroCharacter {
 		fallen.ragdoll.dispose();
 		fallen.person.hero = false;
 		this.group.remove( fallen.root );
-		disposeCharacterRoot( fallen.root );
-		this.#keepOnly( this.active?.key );
+		undress( fallen.root );
 		return fallen.person;
 
 	}
@@ -211,7 +243,7 @@ export class HeroCharacter {
 		person.hero = false;
 		mixer.stopAllAction();
 		this.group.remove( root );
-		disposeCharacterRoot( root );
+		undress( root );
 		this.active = null;
 
 	}
@@ -296,6 +328,7 @@ export class HeroCharacter {
 
 				assertRigCompatibility( model.scene, this.animation.scene );
 				model.motions = new CharacterAnimations( model.scene, this.animation.scene );
+				model.wardrobe = [];
 				for ( const hair of modelHairs( model ) ) {
 
 					assertRigCompatibility( hair.scene, this.animation.scene );
@@ -309,21 +342,6 @@ export class HeroCharacter {
 		}
 
 		return this.models.get( key );
-
-	}
-
-	/** Full Source maps are 4K, so an inactive shape cannot remain resident. */
-	#keepOnly( ...keys ) {
-
-		const retained = new Set( keys.filter( Boolean ) );
-
-		for ( const [ cached, model ] of this.models ) {
-
-			if ( retained.has( cached ) ) continue;
-			this.models.delete( cached );
-			model.then( disposeModel );
-
-		}
 
 	}
 
@@ -350,7 +368,7 @@ function samePerson( left, right ) {
 function characterRoot( source, person, name ) {
 
 	const root = clone( source.scene );
-	dress( root, person.look );
+	dress( root, source, person.look );
 	root.name = name;
 	root.position.copy( person.position );
 	root.rotation.y = person.heading;
@@ -380,21 +398,49 @@ function poseAtCrowdFrame( root, animation, motions, person ) {
 
 }
 
-function disposeCharacterRoot( root ) {
+/** Hands the root's dressed material back to its model's wardrobe. */
+function undress( root ) {
 
-	for ( const material of root.userData.transientMaterials ?? [] ) material.dispose();
+	if ( root.userData.dressed ) root.userData.dressed.worn = false;
+	root.userData.dressed = null;
 
 }
 
-async function defaultLoad( descriptor ) {
+async function defaultLoad( descriptor, textureSize ) {
 
-	const loader = new GLTFLoader();
+	const loader = new GLTFLoader().register( ( parser ) => new ResizedTextures( parser, textureSize ) );
 	const [ model, ...hairs ] = await Promise.all( [
 		loader.loadAsync( `${CHARACTER_ROOT}/${descriptor.file}` ),
 		...descriptor.hairs.map( ( file ) => loader.loadAsync( `${CHARACTER_ROOT}/${file}` ) )
 	] );
 
 	return { ...model, hairs };
+
+}
+
+/**
+ * The pack's maps downscaled on the way in, the way the crowd's are: a 4K map
+ * per channel is what kept a shape from staying resident.
+ */
+class ResizedTextures {
+
+	constructor( parser, size ) {
+
+		this.parser = parser;
+		this.name = 'urbe_resized_textures';
+		this.loader = new ImageBitmapLoader( parser.options.manager )
+			.setOptions( { premultiplyAlpha: 'none', resizeWidth: size, resizeHeight: size, resizeQuality: 'high' } );
+		this.loader.setCrossOrigin( parser.options.crossOrigin );
+
+	}
+
+	loadTexture( textureIndex ) {
+
+		const { source } = this.parser.json.textures[ textureIndex ];
+
+		return source === undefined ? null : this.parser.loadTextureImage( textureIndex, source, this.loader );
+
+	}
 
 }
 
@@ -452,53 +498,50 @@ function skinnedMesh( root ) {
 
 }
 
-/** Paints the focused bare base with the same outfit the baked slot wore. */
-function dress( root, look ) {
+/**
+ * Paints the focused bare base with the same outfit the baked slot wore, in a
+ * dressed material the model keeps: one is sewn the first time a root needs
+ * it and worn again by the next, its look written into uniforms, so a person
+ * shown or fallen never builds a material or drops one.
+ */
+function dress( root, model, look ) {
 
 	if ( ! look ) return;
 	const body = skinnedMesh( root );
 	const source = Array.isArray( body.material ) ? body.material[ 0 ] : body.material;
 	if ( ! source?.map ) return;
 
-	body.geometry.setAttribute( 'cloth', garments( body ) );
+	if ( ! body.geometry.hasAttribute( 'cloth' ) ) body.geometry.setAttribute( 'cloth', garments( body ) );
+	const dressed = model.wardrobe.find( ( entry ) => ! entry.worn ) ?? sew( model, body.geometry, source );
+	dressed.worn = true;
+	dressed.look.skin.value.copy( look.skin );
+	dressed.look.shirt.value.copy( look.shirt );
+	dressed.look.trousers.value.copy( look.trousers );
+	dressed.look.sleeve.value = look.sleeve;
+	dressed.look.hem.value = look.hem;
+	body.material = dressed.material;
+	root.userData.dressed = dressed;
+
+}
+
+function sew( model, geometry, source ) {
+
+	const look = {
+		skin: uniform( new THREE.Color() ), shirt: uniform( new THREE.Color() ), trousers: uniform( new THREE.Color() ),
+		sleeve: uniform( 0 ), hem: uniform( 0 )
+	};
 	const material = new MeshStandardNodeMaterial( {
 		roughness: source.roughness ?? 0.78,
 		metalness: source.metalness ?? 0,
 		normalMap: source.normalMap ?? null,
 		roughnessMap: source.roughnessMap ?? null
 	} );
-	material.colorNode = dressedColorNode( body.geometry, source.map, {
-		skin: uniform( look.skin ),
-		shirt: uniform( look.shirt ),
-		trousers: uniform( look.trousers ),
-		cut: vec2( uniform( look.sleeve ), uniform( look.hem ) )
+	material.colorNode = dressedColorNode( geometry, source.map, {
+		skin: look.skin, shirt: look.shirt, trousers: look.trousers, cut: vec2( look.sleeve, look.hem )
 	} );
-	body.material = material;
-	root.userData.transientMaterials = [ material ];
+	const dressed = { material, look, worn: false };
+	model.wardrobe.push( dressed );
 
-}
-
-function disposeModel( model ) {
-
-	const geometries = new Set();
-	const materials = new Set();
-	const textures = new Set();
-
-	for ( const root of [ model.scene, ...modelHairs( model ).map( ( hair ) => hair.scene ) ] ) root?.traverse( ( node ) => {
-
-		if ( node.geometry ) geometries.add( node.geometry );
-		for ( const material of Array.isArray( node.material ) ? node.material : [ node.material ] ) {
-
-			if ( ! material ) continue;
-			materials.add( material );
-			for ( const value of Object.values( material ) ) if ( value?.isTexture ) textures.add( value );
-
-		}
-
-	} );
-
-	for ( const texture of textures ) texture.dispose();
-	for ( const material of materials ) material.dispose();
-	for ( const geometry of geometries ) geometry.dispose();
+	return dressed;
 
 }

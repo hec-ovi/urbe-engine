@@ -6,7 +6,7 @@ import { Physics } from '../physics/index.js';
 
 describe( 'focused character', () => {
 
-	it( 'loads one deterministic full model, warms it, and replaces only that crowd slot', async () => {
+	it( 'loads one deterministic full model once for the run, warms it, dresses it in a material the model keeps, and replaces only that crowd slot', async () => {
 
 		const loaded = [];
 		const warm = vi.fn().mockResolvedValue( 0 );
@@ -45,7 +45,46 @@ describe( 'focused character', () => {
 		hero.hide();
 		expect( person.hero ).toBe( false );
 		expect( hero.group.children ).toHaveLength( 0 );
-		expect( dispose ).toHaveBeenCalledOnce();
+
+		// The next person of that shape wears the same material with their own
+		// colours; the model, its maps and its material are never dropped.
+		const next = { ...person, look: { ...outfit(), shirt: new THREE.Color( 0xff0000 ), hem: 0.5 } };
+		expect( await hero.show( next ) ).toBe( true );
+		expect( loaded ).toHaveLength( 1 );
+		expect( dispose ).not.toHaveBeenCalled();
+		const again = [];
+		hero.active.root.traverse( ( node ) => { if ( node.isSkinnedMesh ) again.push( node ); } );
+		expect( again[ 0 ].material ).toBe( body.material );
+		expect( hero.active.root.userData.dressed.look.shirt.value.getHex() ).toBe( 0xff0000 );
+		expect( hero.active.root.userData.dressed.look.hem.value ).toBe( 0.5 );
+		hero.hide();
+
+	} );
+
+	it( 'prepares both shapes at load through the warm-up, so a first conversation or fall reads and links nothing', async () => {
+
+		const loaded = [];
+		const warmed = [];
+		const hero = new HeroCharacter( {
+			animation: animation(),
+			warmup: { warm: async ( root ) => { warmed.push( root.name ); return 0; } },
+			loadModel: ( descriptor ) => { loaded.push( descriptor.gender ); return { scene: rig( 'body' ), hairs: [ { scene: rig( 'hair' ) } ] }; }
+		} );
+		const progress = [];
+
+		await hero.prepare( ( done, total ) => progress.push( [ done, total ] ) );
+
+		expect( loaded ).toEqual( [ 'male', 'female' ] );
+		expect( warmed ).toEqual( [ 'prepared-regular-male', 'prepared-regular-female' ] );
+		expect( progress ).toEqual( [ [ 1, 2 ], [ 2, 2 ] ] );
+		expect( hero.group.children ).toHaveLength( 0 );
+
+		const person = { gender: 'male', appearanceSeed: 3, clip: 1, hero: false, position: new THREE.Vector3(), heading: 0, look: outfit() };
+		expect( await hero.show( person ) ).toBe( true );
+		expect( loaded ).toHaveLength( 2 );
+		// The prepared root's material was handed back and is what this person wears.
+		expect( hero.models.size ).toBe( 2 );
+		expect( ( await hero.models.get( 'regular-male:Hairstyles/Rigged to Head Bone/Male/Hair_SimpleParted.gltf' ) ).wardrobe ).toHaveLength( 1 );
 
 	} );
 
