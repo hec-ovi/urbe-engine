@@ -13,7 +13,7 @@ import { cityDescriptor, gameDescriptor } from './descriptors.js';
 
 const SIDE_JOB_LIMIT = 3;
 const MAIN_LOCATION_COUNT = 7;
-const NPC_TYPES = 'creation/fixtures/urbe-cyberpunk.npc-types.json';
+const NPC_TYPES = 'creation/samples/urbe-small/npc-types.json';
 const RECORDING = 'creation/samples/urbe-small/recording.json';
 
 export class WorldCreation {
