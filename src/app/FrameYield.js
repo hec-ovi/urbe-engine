@@ -37,7 +37,7 @@ export function frameYield() {
 }
 
 /** A turn of the event loop that a background tab does not slow to one a second. */
-function eventLoopTurn() {
+export function eventLoopTurn() {
 
 	return new Promise( ( resolve ) => {
 

@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { FrameBudget } from '../../../app/FrameBudget.js';
 import { readWorldDocument } from '../../data/WorldDocument.js';
 import { BuildingsLoader, mapConcurrent } from '../BuildingsLoader.js';
 import { KitPlacement, placementError } from './KitPlacement.js';
@@ -35,14 +36,16 @@ export class KitCellLoader {
 	 * @param pieces KitPieces
 	 * @param readJson reads one URL into a parsed document
 	 * @param shells the original loader, for landmark parcels
+	 * @param slice the frame budget building a cell is paced by
 	 * @param onError receives the plans this cell could not stand
 	 */
-	constructor( { pieces, factory, readJson = readPlacements, shells = new BuildingsLoader( factory ), onError = console.error } ) {
+	constructor( { pieces, factory, readJson = readPlacements, slice = new FrameBudget( { paced: false } ), shells = new BuildingsLoader( factory, undefined, {}, slice ), onError = console.error } ) {
 
 		this.pieces = pieces;
 		this.factory = factory;
 		this.readJson = readJson;
 		this.shells = shells;
+		this.slice = slice;
 		this.onError = onError;
 		/** source -> its placement record, so opening a cell and building it read it once */
 		this.records = new WeakMap();
@@ -120,6 +123,10 @@ export class KitCellLoader {
 			await this.pieces.want( records.map( ( record ) => record.plan ) );
 
 			for ( const [ index, source ] of kit.entries() ) {
+
+				// One building's doors and cuboids at a time: a cell of nine of
+				// them is nine steps, not one.
+				await this.slice.step();
 
 				const record = records[ index ];
 

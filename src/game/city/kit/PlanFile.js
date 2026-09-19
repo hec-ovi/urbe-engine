@@ -46,10 +46,11 @@ export async function readPlanFile( entry, { baseUrl, readBinary, blueprints } )
 /**
  * That file decoded into what the city draws this building with: its surfaces,
  * the fake rooms behind its glass and its entrance leaves, in the plan's own
- * frame. A file that refuses to decode is `E_KIT_PIECES` like one that never
- * arrived.
+ * frame. It is the largest piece of work a cell brings and it runs a step at a
+ * time under the frame budget. A file that refuses to decode is `E_KIT_PIECES`
+ * like one that never arrived.
  */
-export async function decodePlan( entry, { bytes, blueprint }, { baseUrl, factory, loader } ) {
+export async function decodePlan( entry, { bytes, blueprint }, { baseUrl, factory, loader, slice } ) {
 
 	let scene;
 
@@ -63,7 +64,7 @@ export async function decodePlan( entry, { bytes, blueprint }, { baseUrl, factor
 
 	}
 
-	const shell = readShell( scene, factory, blueprint );
+	const shell = await readShell( scene, factory, blueprint, slice );
 	// The fake rooms behind the glass are their own entry: a parcel that opens a
 	// real interior draws the plan without them.
 	const surfaces = shell.surfaces.filter( ( { bucket } ) => ! SCENIC.test( bucket ) );

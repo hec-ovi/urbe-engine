@@ -11,6 +11,7 @@ import { PLAN_INDEX_FILE } from '../../../assembly/kit/KitFiles.js';
 import { openingRect } from '../Openings.js';
 import { Interactor } from '../../player/Interactor.js';
 import { releaseShell } from '../streaming/ReleaseShell.js';
+import { FrameBudget } from '../../../app/FrameBudget.js';
 import { PlanBlueprints } from '../../data/PlanBlueprints.js';
 import { ReadBudget } from '../../data/ReadBudget.js';
 import { KitPieces } from './KitPieces.js';
@@ -35,7 +36,7 @@ let index = null;
 let blueprints = null;
 
 /** The world's plan index, read exactly as the runtime reads it from a world. */
-function openWorld( { mutate = ( document ) => document } = {} ) {
+function openWorld( { mutate = ( document ) => document, slice } = {} ) {
 
 	const reads = [];
 	const blueprintReads = [];
@@ -53,7 +54,7 @@ function openWorld( { mutate = ( document ) => document } = {} ) {
 		budget: new ReadBudget()
 	} );
 	const pieces = new KitPieces( {
-		kit, baseUrl: sharedRoot(), factory, blueprints,
+		kit, baseUrl: sharedRoot(), factory, blueprints, slice,
 		readBinary: async ( url ) => {
 
 			reads.push( url );
@@ -230,6 +231,48 @@ describe( 'the city draws every building from its shared plan', () => {
 
 		hidden.disposeModelInstances();
 		expect( live( pieces ) ).toBe( 0 );
+
+	} );
+
+	it( 'admits a cell a step at a time while the city is drawn, and flat out while it loads', async () => {
+
+		// A frame yield waits for the display; an event loop turn does not, which
+		// is how the two answers tell themselves apart.
+		const frames = [];
+		vi.stubGlobal( 'requestAnimationFrame', ( run ) => {
+
+			frames.push( run );
+			setTimeout( () => run( 0 ), 0 );
+
+		} );
+
+		// Every step is over budget, so each one that yields is counted.
+		const slice = new FrameBudget( { slice: 0, paced: false } );
+		const { pieces } = openWorld( { slice } );
+		const first = building( 'p1' );
+		const loader = new KitCellLoader( { pieces, factory, slice, readJson: serving( [ first ] ) } );
+		const loading = new Map( [ source( first, false ) ] );
+
+		await loader.open( loading );
+		await loader.load( loading );
+
+		// A load has no frame to protect and has to finish before there is one.
+		expect( frames ).toHaveLength( 0 );
+		expect( pieces.has( PLANS[ 0 ] ) ).toBe( true );
+
+		// Playing, standing a plan and building a building hand the frame back
+		// between their steps rather than holding it for the whole cell.
+		slice.pace();
+		const later = building( 'p2', { origin: [ 300, 0, 400 ], rotationY: 0, plan: PLANS[ 1 ] } );
+		const playing = new Map( [ source( later, false ) ] );
+		const other = new KitCellLoader( { pieces, factory, slice, readJson: serving( [ later ] ) } );
+
+		await other.open( playing );
+		await other.load( playing );
+
+		expect( pieces.has( PLANS[ 1 ] ) ).toBe( true );
+		expect( frames.length ).toBeGreaterThan( 20 );
+		vi.unstubAllGlobals();
 
 	} );
 

@@ -1,6 +1,7 @@
 import { bake } from './GeometryBake.js';
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+import { FrameBudget } from '../../app/FrameBudget.js';
 import { cityGltfLoader } from '../data/CityGltfLoader.js';
 import { doorFrames, doorLeafFrame } from './DoorGeometry.js';
 import { takeTriangles, centroidAt } from './Triangles.js';
@@ -21,7 +22,6 @@ const EXTERIOR = 'merged';
 const DOOR = 'door';
 const BALCONY = 'balcony';
 const LOAD_CONCURRENCY = 8;
-const MAIN_THREAD_SLICE_MS = 8;
 // Only surfaces that can stop or support a person enter Rapier. Window frames,
 // signs, lamps and trim still render, but cooking their small relief geometry
 // duplicates millions of triangles without changing the walkable shell.
@@ -44,12 +44,16 @@ const COLLIDER_KINDS = new Set( [
  */
 export class BuildingsLoader {
 
-	/** @param factory PbrMaterialFactory */
-	constructor( factory, loader = cityGltfLoader(), modelOptions = {} ) {
+	/**
+	 * @param factory PbrMaterialFactory
+	 * @param slice the frame budget reading a shell is paced by
+	 */
+	constructor( factory, loader = cityGltfLoader(), modelOptions = {}, slice = new FrameBudget( { paced: false } ) ) {
 
 		this.factory = factory;
 		this.loader = loader;
 		this.modelOptions = modelOptions;
+		this.slice = slice;
 
 	}
 
@@ -121,8 +125,9 @@ export class BuildingsLoader {
 
 		}
 
-		let sliceStarted = performance.now();
 		for ( const { key, scenic, geometries } of shellBatches.values() ) {
+
+			await this.slice.step();
 
 			const merged = BufferGeometryUtils.mergeGeometries( geometries, false );
 			geometries.forEach( ( g ) => g.dispose() );
@@ -133,12 +138,6 @@ export class BuildingsLoader {
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
 			group.add( mesh );
-			if ( performance.now() - sliceStarted >= MAIN_THREAD_SLICE_MS ) {
-
-				await taskYield();
-				sliceStarted = performance.now();
-
-			}
 
 		}
 
@@ -163,9 +162,12 @@ export class BuildingsLoader {
 
 		const meshes = [];
 		gltf.scene.traverse( ( node ) => { if ( node.isMesh ) meshes.push( node ); } );
-		let sliceStarted = performance.now();
 
 		for ( const node of meshes ) {
+
+			// Ahead of the branches, because the window scenery a node can carry
+			// is the most expensive of them and every branch leaves the loop.
+			await this.slice.step();
 
 			const name = node.name ?? '';
 			const key = node.material?.name ?? '';
@@ -234,12 +236,6 @@ export class BuildingsLoader {
 				if ( isColliderMaterial( key ) ) exteriorFlat.push( positionsOnly( rest ) );
 
 			}
-			if ( performance.now() - sliceStarted >= MAIN_THREAD_SLICE_MS ) {
-
-				await taskYield();
-				sliceStarted = performance.now();
-
-			}
 
 		}
 
@@ -290,12 +286,6 @@ export async function mapConcurrent( values, concurrency, operation ) {
 export function isColliderMaterial( key ) {
 
 	return COLLIDER_KINDS.has( String( key ).split( '/' )[ 1 ] );
-
-}
-
-function taskYield() {
-
-	return new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
 
 }
 

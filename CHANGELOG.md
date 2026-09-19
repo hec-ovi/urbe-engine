@@ -1,5 +1,7 @@
 # Changelog
 
+0.25.7: cell admission runs under a frame budget while the city is drawn (no main-thread stretch over 100 ms, worst 911 ms before) and flat out while it loads; one budget paces plan decoding, shell baking, batch merges and props.
+
 0.25.6: a furnished building is complete when every layout its floors name is on disk, so a two-floor building publishes into the manifest.
 
 0.25.5: two-floor buildings are interior candidates, opening with ground and crown (Interior 0.31.6), and each floor draws its own window returns with the layout it shares.

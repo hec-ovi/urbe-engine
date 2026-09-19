@@ -1,3 +1,4 @@
+import { FrameBudget } from '../../../app/FrameBudget.js';
 import { cityGltfLoader } from '../../data/CityGltfLoader.js';
 import { ReadBudget } from '../../data/ReadBudget.js';
 import { MaterialBatches } from './MaterialBatches.js';
@@ -37,9 +38,10 @@ export class KitPieces {
 	 * @param kit the world's plan index document
 	 * @param baseUrl the shared store root its file paths are relative to
 	 * @param blueprints the city's [plan blueprints](../../data/PlanBlueprints.js)
+	 * @param slice the frame budget decoding a plan is paced by
 	 * @param readBinary reads one URL into an ArrayBuffer
 	 */
-	constructor( { kit, baseUrl, factory, blueprints, loader = cityGltfLoader(), readBinary = fetchBinary } ) {
+	constructor( { kit, baseUrl, factory, blueprints, slice = new FrameBudget( { paced: false } ), loader = cityGltfLoader(), readBinary = fetchBinary } ) {
 
 		/** plan id -> what the index publishes for it */
 		this.index = new Map( kit.plans.map( ( plan ) => [ plan.id, plan ] ) );
@@ -47,6 +49,7 @@ export class KitPieces {
 		this.factory = factory;
 		this.loader = loader;
 		this.blueprints = blueprints;
+		this.slice = slice;
 		this.readBinary = readBinary;
 		/** plan id -> its id, lot bays, surfaces, scenery and leaves, once it stands */
 		this.plans = new Map();
@@ -109,7 +112,7 @@ export class KitPieces {
 	/**
 	 * Stands every plan these ids name: their files in hand, decoded and merged
 	 * into the draws. The files are read for all of them at once and decoded one
-	 * at a time, because decoding is the main thread.
+	 * at a time under the frame budget, because decoding is the main thread.
 	 *
 	 * @returns when each of them is either standing or recorded as failed
 	 */
@@ -118,7 +121,12 @@ export class KitPieces {
 		const wanted = this.#pending( planIds );
 
 		for ( const id of wanted ) this.#file( id ).catch( () => null );
-		for ( const id of wanted ) await this.#stand( id );
+		for ( const id of wanted ) {
+
+			await this.slice.step();
+			await this.#stand( id );
+
+		}
 
 	}
 

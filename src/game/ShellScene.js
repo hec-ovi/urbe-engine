@@ -1,3 +1,5 @@
+import { FrameBudget } from '../app/FrameBudget.js';
+import { BuildingsLoader } from './city/BuildingsLoader.js';
 import { ShellStream } from './city/streaming/ShellStream.js';
 import { KitPieces } from './city/kit/KitPieces.js';
 import { KitCellLoader } from './city/kit/KitCells.js';
@@ -19,14 +21,18 @@ export class ShellScene {
 		this.parcels = new Map( atlas.parcels.map( parcel => [ parcel.id, parcel ] ) );
 		Object.assign( this, { factory, physics, colliders, interiors, haze } );
 		this.cells = new Map();
-		this.pieces = kit ? new KitPieces( { kit: kit.document, baseUrl: kit.baseUrl, blueprints: kit.blueprints, factory } ) : null;
+		// One budget for the whole of admitting a cell: decoding a plan and
+		// building a building give the frame its turn through the same slice.
+		// It starts unpaced, because a load has no frame to protect and the
+		// cells around the spawn have to stand before play begins.
+		this.slice = new FrameBudget( { paced: false } );
+		this.pieces = kit ? new KitPieces( { kit: kit.document, baseUrl: kit.baseUrl, blueprints: kit.blueprints, factory, slice: this.slice } ) : null;
 		this.stream = new ShellStream( {
 			catalog, factory, buildings, loadBuildings,
-			...( this.pieces ? {
-				loader: new KitCellLoader( { pieces: this.pieces, factory } ),
-				loadRadius: KIT_LOAD_RADIUS,
-				dropRadius: KIT_DROP_RADIUS
-			} : {} ),
+			loader: this.pieces
+				? new KitCellLoader( { pieces: this.pieces, factory, slice: this.slice } )
+				: new BuildingsLoader( factory, undefined, {}, this.slice ),
+			...( this.pieces ? { loadRadius: KIT_LOAD_RADIUS, dropRadius: KIT_DROP_RADIUS } : {} ),
 			prepare: cell => this.#prepare( cell ),
 			added: cell => { this.cells.set( cell.id, cell ); this.onFixturesChanged?.(); },
 			removed: cell => this.#remove( cell )

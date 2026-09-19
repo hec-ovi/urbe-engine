@@ -1,5 +1,5 @@
 import { Color, DynamicDrawUsage, Group, InstancedMesh } from 'three/webgpu';
-import { PropBudget } from './PropBudget.js';
+import { FrameBudget } from '../../app/FrameBudget.js';
 
 /**
  * One visible batch per model, finish and material part, across all nearby cells.
@@ -11,7 +11,7 @@ import { PropBudget } from './PropBudget.js';
 export class PropBatches {
 	constructor( models, group ) { this.models = models; this.group = group; this.batches = new Map(); this.prepared = new Set(); this.maxWorkMs = 0; }
 	async sync( placements, prepare, wanted ) {
-		const selected = new Map(), budget = new PropBudget();
+		const selected = new Map(), budget = new FrameBudget();
 		for ( const item of placements ) {
 			const key = `${item.model}:${item.finish}`;
 			if ( ! selected.has( key ) ) selected.set( key, [] );
