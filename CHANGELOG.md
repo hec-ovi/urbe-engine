@@ -1,5 +1,7 @@
 # Changelog
 
+0.25.6: a furnished building is complete when every layout its floors name is on disk, so a two-floor building publishes into the manifest.
+
 0.25.5: two-floor buildings are interior candidates, opening with ground and crown (Interior 0.31.6), and each floor draws its own window returns with the layout it shares.
 
 0.25.4: the investigation frame accepts transit places, an authored source that throws is put down for the session instead of stopping the game, the fixture list is rebuilt without spreading it, and a catalog game starts with 200 walkers and 18 cars while city inspection keeps empty streets.

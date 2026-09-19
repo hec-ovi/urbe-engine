@@ -53,6 +53,13 @@ describe( 'OutDir', () => {
 
 		const dir = worldWith( [ 'p0', 'p1', 'p2' ] );
 
+		// p0 is a two-floor building: it publishes ground and crown and no middle
+		rmSync( join( dir, 'p0', 'interior', 'layouts', 'middle.json' ) );
+		writeFileSync( join( dir, 'p0', 'interior', 'building.json' ), JSON.stringify( {
+			version: 1, buildingId: 'p0', modules: 'modules.json', props: 'catalog.json',
+			layouts: { ground: 'layouts/ground.json', crown: 'layouts/crown.json' },
+			floors: [ { index: 0, layout: 'ground', elevation: 0, openings: {} }, { index: 1, layout: 'crown', elevation: 4, openings: {} } ]
+		} ) + '\n' );
 		// p1 got as far as its shell and then failed: no interior on disk
 		rmSync( join( dir, 'p1', 'interior' ), { recursive: true } );
 		// p2 names three layouts and one of them was never written
@@ -65,9 +72,9 @@ describe( 'OutDir', () => {
 		expect( out.writeManifest( atlas, shells, out.interiors( shells ) ) ).toEqual( {
 			contractVersion: '1.0.0', seed: 'urbe-tiny', atlasVersion: '0.2.4',
 			named: false, namingTheme: null,
-			parcels: [ 'p0', 'p1', 'p2' ], interiors: [ 'p0' ], floors: { p0: [ '000', '001', '002' ] }
+			parcels: [ 'p0', 'p1', 'p2' ], interiors: [ 'p0' ], floors: { p0: [ '000', '001' ] }
 		} );
-		expect( out.floorsOf( 'p0' ) ).toEqual( [ '000', '001', '002' ] );
+		expect( out.floorsOf( 'p0' ) ).toEqual( [ '000', '001' ] );
 
 		// a named world records its theme, and the blueprint travels with the manifest
 		const named = new OutDir( worldWith( [ 'p1', 'p2' ] ) );

@@ -155,19 +155,20 @@ export class OutDir {
 
 	/**
 	 * The floor tags of one parcel, lowest first, or null when the building
-	 * document, one of the three layouts it names or its NPC support is missing.
-	 * A furnished building is JSON alone: its geometry is the city's shared
-	 * module set, so there is nothing per floor to stream.
+	 * document, a layout one of its floors names or its NPC support is missing.
+	 * A building publishes the layouts its floors use (ground and crown alone
+	 * for two floors). A furnished building is JSON alone: its geometry is the
+	 * city's shared module set, so there is nothing per floor to stream.
 	 */
 	floorsOf( parcelId ) {
 
 		const interiorDir = join( this.dir, parcelId, 'interior' );
 		const building = readJson( join( interiorDir, INTERIOR_BUILDING_FILE ) );
-		const layouts = Object.values( building?.layouts ?? {} );
+		const layouts = building?.layouts ?? {};
 
-		if ( ! building?.floors?.length || layouts.length !== 3 ) return null;
+		if ( ! building?.floors?.length || ! building.floors.every( ( floor ) => floor.layout in layouts ) ) return null;
 		if ( ! existsSync( join( interiorDir, NPC_FILE ) ) ) return null;
-		if ( ! layouts.every( ( file ) => existsSync( join( interiorDir, file ) ) ) ) return null;
+		if ( ! Object.values( layouts ).every( ( file ) => existsSync( join( interiorDir, file ) ) ) ) return null;
 
 		return building.floors.map( ( floor ) => floorTag( floor.index ) ).sort( ( a, b ) => Number( a ) - Number( b ) );
 
