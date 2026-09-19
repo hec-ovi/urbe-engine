@@ -1,3 +1,4 @@
+import { floorPlacements } from './InteriorLayouts.js';
 import * as THREE from 'three/webgpu';
 import { roomFootprintAnchor, roomFootprintContains } from '../../../../interior/src/core/room-footprint.ts';
 import { albedoOf } from '../light/RoomFill.js';
@@ -46,7 +47,7 @@ function measure( floor, catalog ) {
 
 	const byRoom = new Map();
 
-	for ( const placement of floor.placements ) {
+	for ( const placement of floorPlacements( floor ) ) {
 
 		if ( ! placement.module || UNMEASURED.has( placement.module ) ) continue;
 

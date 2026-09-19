@@ -1,3 +1,4 @@
+import { floorPlacements } from './InteriorLayouts.js';
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
@@ -222,12 +223,12 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		await settle( model, feetOn( 1 ) );
 
 		const band = bandOf( model, 1 );
-		const copies = band.record.placements.length;
-		expect( band.handles ).toHaveLength( copies - liftCopies( band.record.placements ) );
+		const copies = floorPlacements( band.record ).length;
+		expect( band.handles ).toHaveLength( copies - liftCopies( floorPlacements( band.record ) ) );
 		expect( model.modules.copyCount + propCopies( model ) ).toBe( band.handles.length + neighbours( model, 1 ) );
 
 		// A copy stands at its placement plus the floor's own elevation.
-		const wall = band.record.placements.find( ( one ) => one.module === 'wall-segment' );
+		const wall = floorPlacements( band.record ).find( ( one ) => one.module === 'wall-segment' );
 		const at = new THREE.Vector3().setFromMatrixPosition( matrixOf( model, band, wall ) );
 		expect( at.y ).toBeCloseTo( wall.position[ 1 ] + 4.5, 6 );
 
@@ -365,8 +366,8 @@ function neighbours( model, floor ) {
 
 function matrixOf( model, band, placement ) {
 
-	const at = band.record.placements.indexOf( placement );
-	const before = band.record.placements.slice( 0, at ).filter( ( one ) => one.module === 'lift-car' || one.module === 'lift-doors' ).length;
+	const at = floorPlacements( band.record ).indexOf( placement );
+	const before = floorPlacements( band.record ).slice( 0, at ).filter( ( one ) => one.module === 'lift-car' || one.module === 'lift-doors' ).length;
 
 	return band.copies[ at - before ].matrix;
 

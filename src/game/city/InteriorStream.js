@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { buildingFloors } from './InteriorLayouts.js';
+import { buildingFloors, floorPlacements } from './InteriorLayouts.js';
 import { floorBoxes } from './InteriorBoxes.js';
 import { moduleError } from './InteriorModules.js';
 import { roomsOf } from './InteriorRooms.js';
@@ -338,7 +338,7 @@ export class InteriorStream {
 		const { record } = band;
 		const started = performance.now();
 
-		await this.props?.prepare( record.placements.filter( ( one ) => one.prop ).map( ( one ) => one.prop ) );
+		await this.props?.prepare( floorPlacements( record ).filter( ( one ) => one.prop ).map( ( one ) => one.prop ) );
 
 		if ( ! this.#wanted( interior, band ) ) return null;
 
@@ -346,7 +346,7 @@ export class InteriorStream {
 		const content = new THREE.Group();
 		content.name = `interior:${band.id}`;
 
-		for ( const placement of record.placements ) {
+		for ( const placement of floorPlacements( record ) ) {
 
 			// The lifts move their own copies, so those never enter the shared draws.
 			if ( placement.module === LIFT_CAR || placement.module === LIFT_DOORS ) {
@@ -391,8 +391,8 @@ export class InteriorStream {
 		return {
 			content, rooms, copies,
 			solid: {
-				boxes: floorBoxes( record.placements, record.elevation, ( id ) => this.modules.boundsOf( id ) ),
-				positions: propTriangles( record.placements, record.elevation, this.props )
+				boxes: floorBoxes( floorPlacements( record ), record.elevation, ( id ) => this.modules.boundsOf( id ) ),
+				positions: propTriangles( floorPlacements( record ), record.elevation, this.props )
 			}
 		};
 

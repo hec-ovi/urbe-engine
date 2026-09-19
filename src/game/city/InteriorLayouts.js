@@ -48,9 +48,10 @@ function floorOf( parcelId, entry, layout ) {
 			...light,
 			position: [ light.position[ 0 ], light.position[ 1 ] + elevation, light.position[ 2 ] ]
 		} ) ),
-		// A floor's window returns are its own, built from its own openings;
-		// they draw with the layout it shares.
-		placements: entry.treatments?.length ? layout.placements.concat( entry.treatments ) : layout.placements
+		// The layout's placements are one record every floor of the band shares;
+		// a floor's window returns are its own, built from its own openings.
+		placements: layout.placements,
+		treatments: entry.treatments ?? []
 	};
 
 }
@@ -58,5 +59,12 @@ function floorOf( parcelId, entry, layout ) {
 export function layoutError( message ) {
 
 	return Object.assign( new Error( `E_INTERIOR_LAYOUT: ${message}` ), { code: 'E_INTERIOR_LAYOUT' } );
+
+}
+
+/** Everything a floor draws: the placements of the layout it shares, then its own window returns. */
+export function floorPlacements( floor ) {
+
+	return floor.treatments?.length ? floor.placements.concat( floor.treatments ) : floor.placements;
 
 }
