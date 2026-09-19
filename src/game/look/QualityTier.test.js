@@ -29,7 +29,7 @@ describe( 'QualityTier', () => {
 		expect( low.textureMaxSize ).toBe( 1024 );
 		expect( low.textureMaxSize ).toBeLessThan( ultra.textureMaxSize );
 		expect( low.textureAnisotropy ).toBeLessThan( ultra.textureAnisotropy );
-		expect( low.probeSize ).toBe( 0 );
+		expect( low.probeSize ).toBe( 32 );
 
 		expect( ultra.roomSlots ).toBeGreaterThan( low.roomSlots );
 		expect( ultra.probeSize ).toBeGreaterThan( low.probeSize );

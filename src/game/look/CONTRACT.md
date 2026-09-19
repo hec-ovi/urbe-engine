@@ -29,7 +29,7 @@ The world renders directly into an HDR target at the same call depth used for pi
 - There is no auto-exposure. Exposure is authored per volume so walking out of a lit room into the street is a drop the player feels.
 - Fog colour is read back from the fixtures around the player, never authored: the air is the colour of the light in it.
 - Every effect reads the quality descriptor, never the backend. The backend picks a default tier once, after `init()`, and nothing downstream asks again.
-- `low` keeps physical units, computed room fill and fog. It disables bloom and the environment probe, limits material variety and texture dimensions to bound memory. Medium through ultra keep the probe.
+- `low` keeps physical units, computed room fill, fog and a small environment probe (32 px) so glossy ground and metals reflect the scene on every backend. It disables bloom and limits material variety and texture dimensions to bound memory.
 - Startup prepares every exterior program serially with visible progress before play begins. Each streamed floor prepares while detached, once for the dim binding and once per fixed room-light slot, before visibility. Fixed light identities and the exact scene-pass target keep later camera translation on the prepared pipeline keys.
 
 ## Acceptance bands

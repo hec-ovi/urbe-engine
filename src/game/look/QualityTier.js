@@ -12,10 +12,12 @@ const PRESETS = {
 		roomStrips: 0,
 		clusteredLights: 512,
 		batchedLights: 32,
-		probeSize: 0,
+		// Glossy ground and metals need something to reflect on every tier;
+		// a small probe costs a few milliseconds every two minutes.
+		probeSize: 32,
 		probeInterval: 120,
 		materialMaps: MATERIAL_MAPS,
-		textureAnisotropy: 2
+		textureAnisotropy: 4
 	},
 	medium: {
 		textureMaxSize: 1024,
