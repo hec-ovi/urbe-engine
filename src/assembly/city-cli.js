@@ -27,11 +27,14 @@ if ( ! args ) {
 }
 
 const started = performance.now();
+// Kit bands are 4.5 m each (Exterior kit contract).
+const FLOOR_HEIGHT = 4.5;
 const source = await loadBlueprint( args.blueprint );
 if ( source.encoding !== 'json' ) throw new AssemblyError( 'E_STREETS_ARCHIVE_UNSUPPORTED', 'native city assembly requires an ordinary blueprint JSON input' );
 const { atlas } = source;
-const connections = await runConnections( atlas, { seed: atlas.meta.seed } );
-const connectionsArtifact = new ConnectionsArtifact( atlas, connections );
+// A first pass on the envelope heights gives the requests their apertures;
+// the pass the world keeps runs once the kit has decided what stands where.
+let connections = await runConnections( atlas, { seed: atlas.meta.seed } );
 const outDir = resolve( args.out );
 const out = new OutDir( outDir );
 
@@ -67,9 +70,16 @@ const merged = new Map( wanted.map( ( id ) => [ id, kitAssembler.absorbedBy( id 
 const selected = new Set( wanted );
 const kitQueue = new Set( wanted.filter( ( id ) => ! merged.has( id ) && kitAssembler.candidate( id ) ) );
 const queue = wanted.filter( ( id ) => ! kitQueue.has( id ) && ! merged.has( id ) );
+// Links stand on the roofs that will exist: a kit building's floors, a lot a
+// merge emptied, nothing on the rest until the generator answers.
+const roofs = {};
+for ( const id of kitQueue ) roofs[ id ] = { roof: kitAssembler.candidate( id ).plan.floors * FLOOR_HEIGHT, stands: true };
+for ( const id of merged.keys() ) roofs[ id ] = { roof: 0, stands: false };
+connections = await runConnections( atlas, { seed: atlas.meta.seed, buildings: roofs } );
+const connectionsArtifact = new ConnectionsArtifact( atlas, connections );
 const workers = Math.max( 1, args.workers );
 const streets = new StreetsAhead( outDir, atlas );
-const pipeline = new BuildingPipeline( assembler, { exterior } );
+const pipeline = new BuildingPipeline( new RequestAssembler( atlas, connections ), { exterior } );
 
 if ( stale.length ) console.log( `dropped ${stale.length} folders this blueprint no longer has: ${stale.join( ', ' )}` );
 
