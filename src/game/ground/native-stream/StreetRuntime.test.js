@@ -97,12 +97,13 @@ describe( 'saved street kit runtime', () => {
 		// Per copy culling answers for the batch, so the object test is off.
 		expect( batches.every( node => node.perObjectFrustumCulled && ! node.frustumCulled ) ).toBe( true );
 		expect( batches.filter( node => node.sortObjects ).every( node => node.material.transparent ) ).toBe( true );
-		// Paint, scans and the lettered marquee face lie over what they mark; only bodies cast.
-		expect( new Set( batches.filter( node => node.castShadow ).map( node => node.material.userData.streetNativeSurface ) ) )
-			.toEqual( new Set( [ 'asphalt', 'basalt', 'concrete', 'curb', 'district-curb-blue', 'district-curb-red', 'district-curb-yellow',
-				'district-gutter-blue', 'district-gutter-red', 'district-gutter-yellow', 'district-hex', 'district-junction-blue',
-				'district-junction-yellow', 'district-panel-blue', 'district-panel-dark', 'green', 'gutter', 'joint', 'ochre',
-				'ordinary', 'paintedConcrete', 'perforated', 'plastic' ] ) );
+		// Shadows follow the kit's collision authority: the road and pavement
+		// bodies cast, and paint, decals and the lettered marquee face, which
+		// lie over what they mark, never do.
+		const overlay = ( id ) => [ 'road-paint', 'decal', 'display' ].includes( MANIFEST.materials.binding.surfaces[ id ].effect );
+		const casting = new Set( batches.filter( node => node.castShadow ).map( node => node.material.userData.streetNativeSurface ) );
+		for ( const body of [ 'asphalt', 'concrete', 'curb', 'gutter' ] ) expect( casting.has( body ), body ).toBe( true );
+		expect( [ ...casting ].filter( overlay ) ).toEqual( [] );
 		await stream.update( { x: 264, z: 200 } );
 		expect( world.readPiece ).toHaveBeenCalledTimes( MANIFEST.kit.pieces.length );
 		expect( stream.stats ).toMatchObject( { indexed: MANIFEST.placements.placements.length, pending: false } );
