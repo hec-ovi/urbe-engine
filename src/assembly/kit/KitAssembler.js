@@ -24,9 +24,9 @@ const QUARTER = Math.PI / 2;
  * a record of well under a kilobyte.
  *
  * A block Atlas tiled from a template is dressed by the template, so the city
- * repeats a handful of block designs with one variation each. A block Atlas
- * tiled on its own keeps the per-parcel choice, and so does a parcel whose slot
- * has no family its own use accepts.
+ * repeats a handful of block designs with one variation each and its plans grow
+ * with its templates rather than with its lots. A block Atlas tiled on its own
+ * keeps the per-parcel choice.
  */
 export class KitAssembler {
 
@@ -123,17 +123,14 @@ export class KitAssembler {
 		const oriented = face % 2 === 0 ? bays : { across: bays.deep, deep: bays.across };
 		const fitting = covered.map( ( standing ) => fittingFamilies( oriented, floors, standing ) )
 			.reduce( ( kept, fits ) => kept.filter( ( id ) => fits.includes( id ) ) );
-		// The slot's family dresses the parcel while it still fits the height the
-		// envelope left it; otherwise this parcel picks its own.
-		const family = dressed?.family && fitting.includes( dressed.family )
-			? dressed.family
-			: chooseFamily( fitting, this.worldSeed, parcelId );
 
 		return {
 			parcelId,
 			signText: request.options.signage?.text ?? null,
 			absorbs: dressed?.absorbs ?? null,
-			plan: this.plans.want( family, oriented, floors, parcel ),
+			// A templated parcel stands the slot's building, drawn for the slot's
+			// class; a parcel on a block Atlas tiled on its own picks its own.
+			plan: this.plans.want( this.#family( dressed, fitting, parcelId ), oriented, floors, dressed?.use ?? parcel ),
 			frame: this.#frame( rectangle.footprint, face )
 		};
 
@@ -172,6 +169,21 @@ export class KitAssembler {
 
 		this.reasons.set( parcelId, reason );
 		return null;
+
+	}
+
+	/**
+	 * Which family this parcel wears: the slot's, which is the whole point of a
+	 * template, unless the parcel's own envelope moved its height to one that
+	 * family no longer fits. A parcel on a block with no template picks its own.
+	 * @param dressed what the template dressed this parcel with, or null
+	 * @param fitting the families the building standing here accepts
+	 */
+	#family( dressed, fitting, parcelId ) {
+
+		if ( dressed && ( dressed.family === null || fitting.includes( dressed.family ) ) ) return dressed.family;
+
+		return chooseFamily( fitting, this.worldSeed, parcelId );
 
 	}
 

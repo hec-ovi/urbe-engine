@@ -83,41 +83,56 @@ describe( 'block templates and shared building plans', () => {
 
 	} );
 
-	it( 'dresses every slot of one template with one design and gives each block one variation', () => {
+	it( 'gives a block one variation: a merge of two lots, or a floor step of one on a single slot', () => {
 
-		const templates = new Map();
+		const { rows, base } = slotted( city );
+		const varied = new Map();
+		const kinds = new Set();
 
-		for ( const [ id, entry ] of Object.entries( city.manifest.buildings ) ) {
+		for ( const row of rows ) {
 
-			if ( entry.template === null ) continue;
+			// A merged building covers two slots, which is its block's variation.
+			if ( row.record.absorbs ) kinds.add( 'merge' );
+			else {
 
-			const template = templates.get( entry.template )
-				?? { slots: new Map(), merges: new Map(), blocks: new Set() };
-			const record = city.record( id );
-			const block = blockOf.get( id ).id;
+				const stands = base.get( row.slot );
+				const stood = building( row.record.plan );
 
-			template.blocks.add( block );
+				// Every other slot stands the template's own building unchanged, so
+				// the only difference left is a floor step of one.
+				if ( stood.shape === stands.shape && stood.floors === stands.floors ) continue;
 
-			// A merged building covers two slots and wears a design of its own,
-			// which is the one variation its block takes; the lot it took over
-			// ships nothing and stands in no slot.
-			if ( record.absorbs ) template.merges.set( block, ( template.merges.get( block ) ?? 0 ) + 1 );
-			else template.slots.set( entry.slot, ( template.slots.get( entry.slot ) ?? new Set() ).add( record.family ) );
+				expect( stood.shape, `${row.id} ${row.record.plan}` ).toBe( stands.shape );
+				expect( Math.abs( stood.floors - stands.floors ), `${row.id} ${row.record.plan}` ).toBe( 1 );
+				kinds.add( 'floors' );
 
-			templates.set( entry.template, template );
+			}
+
+			varied.set( row.block, ( varied.get( row.block ) ?? 0 ) + 1 );
 
 		}
 
-		const repeated = [ ...templates.values() ].filter( ( template ) => template.blocks.size > 1 );
+		// The city takes both kinds, and no block takes two.
+		expect( [ ...kinds ].sort() ).toEqual( [ 'floors', 'merge' ] );
+		for ( const [ block, count ] of varied ) expect( count, block ).toBe( 1 );
 
-		expect( repeated.length ).toBeGreaterThan( 0 );
+	} );
 
-		for ( const template of repeated ) {
+	it( 'stands the same plans on every block of one template, slot for slot', () => {
 
-			// Every block of the template reads the same: one design per lot,
-			// each standing the height its own envelope allows.
-			for ( const [ slot, families ] of template.slots ) expect( [ ...families ], `slot ${slot}` ).toHaveLength( 1 );
-			for ( const [ block, merged ] of template.merges ) expect( merged, block ).toBe( 1 );
+		const { bySlot } = slotted( city );
+		const repeated = [ ...bySlot ].filter( ( [ , rows ] ) => new Set( rows.map( ( row ) => row.block ) ).size > 1 );
+
+		expect( repeated.length, 'the tiny city repeats a template' ).toBeGreaterThan( 0 );
+
+		for ( const [ slot, rows ] of repeated ) {
+
+			const stood = rows.map( ( row ) => building( row.record.plan ) );
+
+			// One slot, one building: what it is never differs between two blocks,
+			// and how tall it stands only where a block's floor step took it.
+			expect( new Set( stood.map( ( entry ) => entry.shape ) ), slot ).toHaveLength( 1 );
+			expect( new Set( stood.map( ( entry ) => entry.floors ) ).size, slot ).toBeLessThanOrEqual( 2 );
 
 		}
 
@@ -281,6 +296,49 @@ describe( 'block templates and shared building plans', () => {
 	}, 600_000 );
 
 } );
+
+/**
+ * Every kit parcel of a templated block, and the building each template slot
+ * stands: `rows` in blueprint order, `bySlot` the ones standing in a slot (a
+ * merged host covers two, so it stands in none) and `base` the building most of
+ * a slot's blocks stand, which is the template's own.
+ */
+function slotted( city ) {
+
+	const rows = Object.entries( city.manifest.buildings )
+		.filter( ( [ , entry ] ) => entry.template !== null )
+		.map( ( [ id, entry ] ) => ( {
+			id, block: blockOf.get( id ).id, slot: `${entry.template}#${entry.slot}`, record: city.record( id )
+		} ) );
+	const bySlot = new Map();
+
+	for ( const row of rows ) {
+
+		if ( row.record.absorbs ) continue;
+
+		bySlot.set( row.slot, [ ...( bySlot.get( row.slot ) ?? [] ), row ] );
+
+	}
+
+	const base = new Map( [ ...bySlot ].map( ( [ slot, standing ] ) => [ slot,
+		building( commonest( standing.map( ( row ) => row.record.plan ) ) ) ] ) );
+
+	return { rows, bySlot, base };
+
+}
+
+/**
+ * A plan as the building it is: `shape` is what it looks like (family, class and
+ * lot, its bay order normalised because that follows the street the lot fronts)
+ * and `floors` how tall it stands.
+ */
+function building( planId ) {
+
+	const [ , shape, across, deep, floors ] = /^(.+?)-(\d+)x(\d+)x(\d+)f$/.exec( planId );
+
+	return { shape: `${shape}-${Math.min( across, deep )}x${Math.max( across, deep )}`, floors: Number( floors ) };
+
+}
 
 /** Every opening of a building, as the rectangle it cuts, in document order. */
 function openings( blueprint ) {

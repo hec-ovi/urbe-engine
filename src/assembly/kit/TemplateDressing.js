@@ -1,5 +1,6 @@
 import { fnv1a, pickInt } from '../hash.js';
 import { lotBays } from './BayCount.js';
+import { sharedUse } from './DressingClass.js';
 import { chooseFamily } from './FamilyChoice.js';
 import { fittingFamilies, floorRange } from './Families.js';
 import { slotKey } from './BlockTemplates.js';
@@ -10,20 +11,21 @@ const TOLERANCE = 0.001;
 /**
  * What every lot of a block template wears.
  *
- * The template, not the parcel, picks the family and the floor count: a stable
- * hash of the world seed, the template id and the lot slot dresses each slot
- * once, so the city repeats a handful of tilings and two blocks of one template
- * read as the same block. The slot stands inside every one of its parcels'
- * envelopes, so it follows the skyline of the zone it belongs to and no tower
- * lot stands as a two-floor box. A family that suits every parcel of the slot
- * dresses all of them; when the slot's uses have none in common each parcel
- * picks its own, so a mixed block never puts a luxury facade on a mid street
- * and never puts a plain one on a rich street either.
+ * The template, not the parcel, picks the whole building: a stable hash of the
+ * world seed, the template id and the lot slot gives each slot one family, one
+ * floor count and one class to be drawn for, so the city repeats a handful of
+ * tilings and every block of one template stands the same buildings. The slot
+ * stands inside every one of its parcels' envelopes, so it follows the skyline
+ * of the zone it belongs to and no tower lot stands as a two-floor box. Its
+ * family suits every parcel standing there, so a mixed block never puts a
+ * luxury facade on a mid street, and its class is the one the most of its lots
+ * carry, so a slot is one building and not one per tier.
  *
  * One variation per block instance keeps the repetition from reading as a copy:
  * a stable hash of the block id either moves one slot's floor count by one, or
  * merges two adjacent slots of equal depth into one rectangular building, so
- * that block stands one long building where its neighbours stand two.
+ * that block stands one long building where its neighbours stand two. Every
+ * other slot of the block stands the template's building unchanged.
  */
 export class TemplateDressing {
 
@@ -34,6 +36,8 @@ export class TemplateDressing {
 		this.templates = templates;
 		this.parcels = new Map( atlas.parcels.map( ( parcel ) => [ parcel.id, parcel ] ) );
 		this.slots = new Map();
+		/** `${templateId}#${first}+${second}` -> the building a merge of those slots stands */
+		this.merges = new Map();
 		/** parcelId -> what it builds, or what absorbed it */
 		this.dressed = new Map();
 
@@ -43,10 +47,11 @@ export class TemplateDressing {
 
 	/**
 	 * How this parcel is dressed:
-	 * `{ family, floors, bays, lot }` for a building, `lot` being the ground it
-	 * covers, which spans two lots when the block's variation merged them;
-	 * `{ absorbedBy }` for the neighbour a merge took over; null when the parcel
-	 * is not on a templated block and keeps the per-parcel choice.
+	 * `{ family, floors, bays, use, lot }` for a building, `use` being the class
+	 * it is drawn for and `lot` the ground it covers, which spans two lots when
+	 * the block's variation merged them; `{ absorbedBy }` for the neighbour a
+	 * merge took over; null when the parcel is not on a templated block and
+	 * keeps the per-parcel choice.
 	 */
 	of( parcelId ) {
 
@@ -73,10 +78,38 @@ export class TemplateDressing {
 	}
 
 	/**
-	 * One slot's family and floors. The floor count stands inside every one of
-	 * the slot's envelopes; the family has to suit every parcel standing there,
-	 * and is null when they have none in common, which sends each parcel to its
-	 * own choice.
+	 * The long building two slots of a template stand when a block merges them,
+	 * decided over every parcel standing in either slot, so every block that
+	 * takes that merge stands the same building.
+	 * @returns the merge option, or null when the joined lot is no building
+	 */
+	merge( templateId, first, second ) {
+
+		const key = `${slotKey( templateId, first )}+${second}`;
+		const held = this.merges.get( key );
+
+		if ( held !== undefined ) return held;
+
+		const template = this.templates.templates.get( templateId );
+		const lot = joined( template.lots[ first ], template.lots[ second ] );
+		const parcels = [ first, second ].flatMap( ( index ) => this.#parcelsIn( slotKey( templateId, index ) ) );
+		const choice = lot && parcels.length
+			? this.#choose( key, lot.width, lot.depth, floorRange( parcels ), use( parcels ) )
+			: null;
+		const option = choice ? { kind: 'merge', slots: [ first, second ], lot, ...choice } : null;
+
+		this.merges.set( key, option );
+
+		return option;
+
+	}
+
+	/**
+	 * One slot's building: its family, its floor count and the class it is drawn
+	 * for. The floor count stands inside every one of the slot's envelopes; the
+	 * family has to suit every parcel standing there, and is null when they have
+	 * none in common, which is the plain building; the class is the one the most
+	 * of those parcels carry.
 	 */
 	#choose( key, width, depth, range, uses ) {
 
@@ -90,7 +123,7 @@ export class TemplateDressing {
 				.reduce( ( kept, fits ) => kept.filter( ( id ) => fits.includes( id ) ) )
 			: [];
 
-		return { family: chooseFamily( fitting, this.worldSeed, key ), bays, floors, range };
+		return { family: chooseFamily( fitting, this.worldSeed, key ), bays, floors, range, use: sharedUse( uses ) };
 
 	}
 
@@ -106,7 +139,7 @@ export class TemplateDressing {
 	#dressBlock( blockId, { templateId, corner, slots } ) {
 
 		const template = this.templates.templates.get( templateId );
-		const options = this.#variations( templateId, template, slots );
+		const options = this.#variations( templateId, slots );
 		const chosen = options.length
 			? options[ fnv1a( `${this.worldSeed}:kit-variation:${blockId}` ) % options.length ]
 			: null;
@@ -120,7 +153,11 @@ export class TemplateDressing {
 			this.dressed.set( parcelId, {
 				family: choice.family,
 				bays: choice.bays,
+				// Every slot but the one the variation picked stands the template's
+				// own building, so a block reads as a copy of its template plus one
+				// deliberate difference.
 				floors: chosen?.kind === 'floors' && chosen.slot === index ? chosen.floors : choice.floors,
+				use: choice.use,
 				lot: ringOf( corner, template.lots[ index ] )
 			} );
 
@@ -134,6 +171,7 @@ export class TemplateDressing {
 			family: chosen.family,
 			bays: chosen.bays,
 			floors: chosen.floors,
+			use: chosen.use,
 			lot: ringOf( corner, chosen.lot ),
 			absorbs: slots.get( chosen.slots[ 1 ] )
 		} );
@@ -160,7 +198,7 @@ export class TemplateDressing {
 	 * Everything this block could do differently, in one stable order: the
 	 * mergeable lot pairs, then the slots whose floor count can move.
 	 */
-	#variations( templateId, template, slots ) {
+	#variations( templateId, slots ) {
 
 		const present = [ ...slots.keys() ].sort( ( a, b ) => a - b );
 		const merges = [];
@@ -171,15 +209,13 @@ export class TemplateDressing {
 
 				if ( second <= first ) continue;
 
-				const lot = joined( template.lots[ first ], template.lots[ second ] );
-				// A merge is this block's own building over its own two lots, so it
-				// stands inside both of their envelopes or it is not an option.
+				// A merge is offered only for two lots one building suits, which is
+				// this block's own pair; the building it stands is the template's,
+				// so every block that merges the same two slots stands that one.
 				const covered = [ first, second ].map( ( index ) => this.parcels.get( slots.get( index ) ) ).filter( Boolean );
-				const range = floorRange( covered );
-				const merged = lot && range.fits && this.#choose( `${slotKey( templateId, first )}+${second}`,
-					lot.width, lot.depth, range, use( covered ) );
+				const merged = floorRange( covered ).fits && this.merge( templateId, first, second );
 
-				if ( merged ) merges.push( { kind: 'merge', slots: [ first, second ], lot, ...merged } );
+				if ( merged ) merges.push( merged );
 
 			}
 

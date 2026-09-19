@@ -1,5 +1,7 @@
 # Changelog
 
+0.26.5: a template slot decides the whole building (family, floors, dressing class) for every block that uses it, a merge of two slots stands one building wherever it recurs, and a block's one variation is a merge or a floor step on one slot; the 1 km sample stands 373 kit buildings on 122 plans.
+
 0.26.4: a business plan carries a blank ten-cell marquee over its entrance (Exterior 0.58.11) and the runtime letters the parcel's word on its cell pitch.
 
 0.26.3: a plan is family, bays, floors and dressing class (tier, home or business); the venue word leaves the plan and is lettered per parcel at runtime on the plan's sign field from the shared letter atlas, one batch for the city.

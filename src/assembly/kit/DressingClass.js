@@ -42,3 +42,33 @@ export function lettered( programme ) {
 	return programme === TRADE;
 
 }
+
+/**
+ * The use one shared building is drawn for: the class the most of the lots
+ * standing on it carry, the first of them when several tie. A slot of a block
+ * template is one building, so its lots of another tier stand that one rather
+ * than each asking for a building of its own.
+ * @param uses `{ type, tier }` of every parcel standing on the building
+ * @returns one of those uses, or null when there are none
+ */
+export function sharedUse( uses ) {
+
+	const counted = new Map();
+
+	for ( const use of uses ) {
+
+		const { programme, tier } = dressingClass( use );
+		const held = counted.get( `${programme}-${tier}` );
+
+		if ( held ) held.count ++;
+		else counted.set( `${programme}-${tier}`, { use, count: 1 } );
+
+	}
+
+	let commonest = null;
+
+	for ( const entry of counted.values() ) if ( ! commonest || entry.count > commonest.count ) commonest = entry;
+
+	return commonest?.use ?? null;
+
+}
