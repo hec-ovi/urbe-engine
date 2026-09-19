@@ -4,6 +4,7 @@ import { readWorldDocument } from '../../data/WorldDocument.js';
 import { BuildingsLoader, mapConcurrent } from '../BuildingsLoader.js';
 import { KitPlacement, placementError } from './KitPlacement.js';
 import { KitCellInstances } from './KitCellInstances.js';
+import { signField } from './KitSigns.js';
 import { buildingBoxes } from './KitColliders.js';
 import { interiorOpenings } from './KitOpenings.js';
 import { mainDoor, swingLeaves } from './KitDoors.js';
@@ -36,12 +37,14 @@ export class KitCellLoader {
 	 * @param pieces KitPieces
 	 * @param readJson reads one URL into a parsed document
 	 * @param shells the original loader, for landmark parcels
+	 * @param signs KitSigns, the city's one sign batch; null letters nothing
 	 * @param slice the frame budget building a cell is paced by
 	 * @param onError receives the plans this cell could not stand
 	 */
-	constructor( { pieces, factory, readJson = readPlacements, slice = new FrameBudget( { paced: false } ), shells = new BuildingsLoader( factory, undefined, {}, slice ), onError = console.error } ) {
+	constructor( { pieces, factory, signs = null, readJson = readPlacements, slice = new FrameBudget( { paced: false } ), shells = new BuildingsLoader( factory, undefined, {}, slice ), onError = console.error } ) {
 
 		this.pieces = pieces;
+		this.signs = signs;
 		this.factory = factory;
 		this.readJson = readJson;
 		this.shells = shells;
@@ -155,7 +158,11 @@ export class KitCellLoader {
 					placement,
 					colour: tintFor( placement.family, placement.tint, new THREE.Color() ),
 					swinging,
-					interior: Boolean( source.hasInterior )
+					interior: Boolean( source.hasInterior ),
+					// One plan stands on many lots, so its sign field carries no
+					// word: this parcel's own is lettered on it where it stands.
+					sign: blueprint ? signField( blueprint ) : null,
+					word: record.signText
 				} );
 
 				if ( ! swinging ) continue;
@@ -177,7 +184,7 @@ export class KitCellLoader {
 
 		if ( base.group.children.length ) group.add( base.group );
 
-		const instances = new KitCellInstances( this.pieces, standing );
+		const instances = new KitCellInstances( this.pieces, standing, this.signs );
 
 		return {
 			...base,

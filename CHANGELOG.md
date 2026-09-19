@@ -1,5 +1,7 @@
 # Changelog
 
+0.26.3: a plan is family, bays, floors and dressing class (tier, home or business); the venue word leaves the plan and is lettered per parcel at runtime on the plan's sign field from the shared letter atlas, one batch for the city.
+
 0.26.2: a template slot shares the floor count most of its lots allow, and a lot whose envelope excludes it takes the nearest count it does allow.
 
 0.26.1: a prop model this machine cannot serve costs only the placements that wanted it, reported as unresolved; the buildings beside them still stand and the game still starts.

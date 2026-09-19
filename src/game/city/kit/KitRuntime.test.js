@@ -16,8 +16,10 @@ import { releaseShell } from '../streaming/ReleaseShell.js';
 import { FrameBudget } from '../../../app/FrameBudget.js';
 import { PlanBlueprints } from '../../data/PlanBlueprints.js';
 import { ReadBudget } from '../../data/ReadBudget.js';
+import { CHARSET } from '../../../assembly/signText.js';
 import { KitPieces } from './KitPieces.js';
 import { KitCellLoader } from './KitCells.js';
+import { KitSigns, signField } from './KitSigns.js';
 
 /** One approved family on a 24 by 32 m lot: an entrance, balcony doors and a roof. */
 const FAMILY = 'mirror-frame';
@@ -25,11 +27,22 @@ const BAYS = { across: 3, deep: 4 };
 /** Two plans of it, so a city can read one and come back for the other. */
 const FLOORS = [ 5, 10 ];
 const PLANS = FLOORS.map( ( floors ) => `${FAMILY}-${BAYS.across}x${BAYS.deep}x${floors}f` );
+/** The same building dressed for business, which carries the sign field. */
+const TRADE = { type: 'commerce', tier: 'high_rich' };
+const SHOP = `${FAMILY}-commercial-${TRADE.tier}-${BAYS.across}x${BAYS.deep}x${FLOORS[ 0 ]}f`;
 
 const factory = {
 	resolver: { resolve: () => null },
 	build: () => new THREE.MeshStandardMaterial(),
 	variant: () => new THREE.MeshStandardMaterial()
+};
+
+/** The same factory, serving the letter atlas the city letters its signs from. */
+const atlasFactory = {
+	...factory,
+	build: ( key ) => key.includes( 'letter-atlas' )
+		? Object.assign( new THREE.MeshStandardMaterial(), { emissiveMap: new THREE.Texture() } )
+		: new THREE.MeshStandardMaterial()
 };
 
 let workers = null;
@@ -102,7 +115,7 @@ function openWorld( { mutate = ( document ) => document, slice, skipUnnamed = fa
 }
 
 /** One parcel standing from a shared plan, in the shape assembly writes it. */
-function building( parcel, { origin = [ 100, 0, 50 ], rotationY = Math.PI / 2, plan = PLANS[ 0 ] } = {} ) {
+function building( parcel, { origin = [ 100, 0, 50 ], rotationY = Math.PI / 2, plan = PLANS[ 0 ], signText = null } = {} ) {
 
 	const lot = [ [ 0, 0 ], [ 24, 0 ], [ 24, 32 ], [ 0, 32 ] ].map( ( [ u, v ] ) => [
 		origin[ 0 ] + u * Math.cos( rotationY ) + v * Math.sin( rotationY ),
@@ -115,7 +128,7 @@ function building( parcel, { origin = [ 100, 0, 50 ], rotationY = Math.PI / 2, p
 			min: [ Math.min( ...lot.map( ( c ) => c[ 0 ] ) ), 0, Math.min( ...lot.map( ( c ) => c[ 1 ] ) ) ],
 			max: [ Math.max( ...lot.map( ( c ) => c[ 0 ] ) ), blueprints.get( plan ).bounds.height, Math.max( ...lot.map( ( c ) => c[ 1 ] ) ) ]
 		},
-		signText: null, family: FAMILY, floors: blueprints.get( plan ).floors.length, tint: parcel
+		signText, family: FAMILY, floors: blueprints.get( plan ).floors.length, tint: parcel
 	};
 
 }
@@ -187,6 +200,36 @@ function materialsOf( pieces ) {
 
 }
 
+/** The sign field one parcel's building carries, where that building stands. */
+function fieldOf( record ) {
+
+	return signField( parcelBlueprint( blueprints.get( record.plan ), record ) );
+
+}
+
+/** What the batch letters on one field, in the order the letters stand. */
+function wordAt( signs, field ) {
+
+	const forward = new THREE.Vector3( field.normal[ 0 ], 0, field.normal[ 1 ] ).normalize();
+	const right = new THREE.Vector3().crossVectors( new THREE.Vector3( 0, 1, 0 ), forward );
+	const centre = new THREE.Vector3( ...field.center );
+	const at = new THREE.Vector3();
+	const letters = [];
+
+	for ( let slot = 0; slot < signs.count; slot ++ ) {
+
+		at.setFromMatrixPosition( new THREE.Matrix4().fromArray( signs.matrices.array, slot * 16 ) );
+
+		if ( at.distanceTo( centre ) > Math.max( field.width, field.height ) ) continue;
+
+		letters.push( { char: CHARSET[ signs.glyphs.array[ slot ] ], along: at.clone().sub( centre ).dot( right ) } );
+
+	}
+
+	return letters.sort( ( a, b ) => a.along - b.along ).map( ( letter ) => letter.char ).join( '' );
+
+}
+
 describe( 'the city draws every building from its shared plan', () => {
 
 	beforeAll( async () => {
@@ -196,11 +239,12 @@ describe( 'the city draws every building from its shared plan', () => {
 		const library = new PlanLibrary( { workers } );
 
 		for ( const floors of FLOORS ) library.want( FAMILY, BAYS, floors );
+		library.want( FAMILY, BAYS, FLOORS[ 0 ], TRADE );
 		await library.draw();
 		const reference = library.publish();
 
 		index = JSON.parse( readFileSync( join( sharedRoot(), reference.shared, PLAN_INDEX_FILE ), 'utf8' ) );
-		blueprints = new Map( PLANS.map( ( id ) => [ id, library.blueprint( id ) ] ) );
+		blueprints = new Map( [ ...PLANS, SHOP ].map( ( id ) => [ id, library.blueprint( id ) ] ) );
 
 	}, 300_000 );
 
@@ -209,6 +253,31 @@ describe( 'the city draws every building from its shared plan', () => {
 		await workers.close();
 
 	} );
+
+	it( 'letters each parcel its own word on the sign field the plan they share carries', async () => {
+
+		const { pieces } = openWorld();
+		const signs = new KitSigns( { factory: atlasFactory } );
+		const coffee = building( 'p20', { origin: [ 0, 0, 0 ], rotationY: 0, plan: SHOP, signText: 'COFFEE' } );
+		const hotel = building( 'p21', { origin: [ 400, 0, 200 ], rotationY: Math.PI / 2, plan: SHOP, signText: 'HOTEL' } );
+		const loader = new KitCellLoader( { pieces, factory, signs, readJson: serving( [ coffee, hotel ] ) } );
+		const cell = await shown( loader, [ source( coffee, false ), source( hotel, false ) ] );
+
+		// One plan, drawn once and carrying no word of its own.
+		expect( coffee.plan ).toBe( hotel.plan );
+		expect( blueprints.get( SHOP ).signage.some( ( sign ) => sign.text ) ).toBe( false );
+		// Every sign in the city letters from one sheet, so all of them draw in
+		// one batch, and each parcel reads its own word where it stands.
+		expect( signs.group.children ).toHaveLength( 1 );
+		expect( signs.count ).toBe( 'COFFEEHOTEL'.length );
+		expect( wordAt( signs, fieldOf( coffee ) ) ).toBe( 'COFFEE' );
+		expect( wordAt( signs, fieldOf( hotel ) ) ).toBe( 'HOTEL' );
+
+		// Dropping the cell takes its letters back out with its buildings.
+		cell.group.visible = false;
+		expect( signs.count ).toBe( 0 );
+
+	}, 60_000 );
 
 	it( 'reads a plan the first time a cell stands on it, keeps one batch per material, and appends and drops exactly a cell\'s copies', async () => {
 

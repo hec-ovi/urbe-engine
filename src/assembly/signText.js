@@ -1,6 +1,6 @@
 // The exterior letter atlas (../exterior/CONTRACT.md, signage): a character
 // outside it reads as the trailing space, a blank cell.
-const CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.,'!?:/&+ ";
+export const CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.,'!?:/&+ ";
 
 /**
  * Marquee text from a parcel name: diacritics folded onto their base letter,

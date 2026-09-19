@@ -1,6 +1,6 @@
 # Kit runtime
 
-Draws every ordinary building from the shared plan it is a copy of: one batch per material the plans wear, cuboid colliders per building, cells streamed by distance, and each plan read the first time a cell stands on it.
+Draws every ordinary building from the shared plan it is a copy of: one batch per material the plans wear, each parcel's own word lettered on the sign field its plan carries, cuboid colliders per building, cells streamed by distance, and each plan read the first time a cell stands on it.
 
 ## In
 
@@ -9,7 +9,8 @@ Draws every ordinary building from the shared plan it is a copy of: one batch pe
 - Per distinct building `<store>/plans/<hash>/<plan>.glb` and `<plan>.blueprint.json`, in the plan's own metres with its origin at zero and face 0 along +X. A city has a hundred or so plans and hundreds of buildings, several hundred megabytes between them, so a plan is read once for the whole city and only when a cell that stands on it is admitted. Nothing of the set is read to start playing. The blueprint is the same document every parcel of that plan composes its own from, so it comes from the city's shared reader and is read once whoever asks.
 - The building blueprint, which `BuildingSource` composes from the plan's and the record's frame, and which is where the doors and the colliders read every opening.
 - `BuildingSource` entries with `source: "kit"` and `placementsUrl`. Anything else stays a landmark shell and loads through `BuildingsLoader`.
-- The shared PBR factory for plan materials and `WorldColliders.addBoxes` for collision.
+- The shared PBR factory for plan materials, the Materials letter atlas (`cyberpunk/letter-atlas/rich#neon`) for the signs, and `WorldColliders.addBoxes` for collision.
+- The sign field of each building, off its blueprint: the `signage` entry its plan carries no word of its own on, already in this parcel's world frame. A plan drawn with a word letters itself and is left alone.
 
 ## Out
 
@@ -20,6 +21,7 @@ Draws every ordinary building from the shared plan it is a copy of: one batch pe
 - `boxColliders`: per building, the four walls of its own footprint by envelope height, a cap over the roof, a low band wherever the plan's plinths, steps and planter walls stand proud of that footprint, and the entrance leaf as its own cuboid when nothing is going to move it. The footprint is the world box of the massing the record publishes, so the ground between it and the lot line stays walkable. A wall is cut into piers, sills and lintels around every passable opening the blueprint carries: the street entrance, and every door, balcony door, open front and aperture behind it. Openings that meet become one hole, and an opening that misses a slab's own heights is not its hole. The cap is cut around the stair head the blueprint's roof bulkhead reserves. Windows stay solid. No trimesh and no cooking.
 - Doors from the blueprint, through the same `DoorGeometry` frames a generated shell publishes: hinge, along, normal, centre, outside, inside, width, height and pivots. A parcel with an interior gets the street entrance's leaves as its own pivots, posed from the plan's, so `Interactor`, `DoorMotion` and `DoorColliders` run unchanged; a closed parcel draws those leaves with its shell and keeps them solid.
 - Source centres from the lot centre, which is what interior residency and room culling measure from.
+- `KitSigns` ([KitSigns.js](KitSigns.js)): the words the city reads. One shared plan stands on many lots with no word of its own, so what tells a hotel from a diner is lettered here: `admit(sign, word)` stands one square quad per letter across that building's sign field, each reading its cell of the letter atlas, and returns the handle `release` takes them back out with. A cell letters its parcels when it is shown and takes its letters out when it is dropped, the same way its copies enter and leave the plan batches.
 
 ## Rules
 
@@ -32,6 +34,7 @@ Draws every ordinary building from the shared plan it is a copy of: one batch pe
 - A batch that takes more copies or more geometry than it has room for, and a batch taking its first coloured copy, gets new buffers, and a draw already built reads the ones it was built from. Both dispose the batch material, which is what makes the renderer build the draws again, in the shadow pass as well as the colour pass; the material keeps drawing unchanged.
 - Kit batches cast and receive shadows. The batch object is not frustum tested, because one sphere over every copy in the city can only answer "visible"; each copy is tested instead, against the geometry it draws. Opaque batches do not sort.
 - Per-copy variety is the instance colour the record's tint seed hashes to inside its family's tint range, which multiplies the plan's own albedo. Never a unique geometry.
+- Every sign in the city letters from one sheet, so all of them draw in one batch however many buildings stand. A letter is a lit decal: it casts no shadow, writes no depth, and a blank cell of the sheet draws nothing, so a space in a word is a gap. A character outside the atlas reads as that blank. A parcel with no word of its own, and a building whose plan carries no sign field, letter nothing.
 - Landmark parcels in the same cell still load their own shell through the original path, and both results merge into one cell.
 
 ## Errors

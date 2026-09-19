@@ -2,9 +2,10 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { AssemblyError, venueSign } from '../RequestAssembler.js';
+import { AssemblyError } from '../RequestAssembler.js';
 import { writeJsonFile, sha256 } from '../JsonFile.js';
 import { share, sharedPath, sharedRoot } from '../SharedResources.js';
+import { dressingClass, drawnAs, lettered } from './DressingClass.js';
 import { BAY, PITCH } from './Families.js';
 import { PLAN_INDEX_FILE, planBlueprintFile, planGlbFile, PLANS_KIND } from './KitFiles.js';
 import { schemaMessage, validatePlanIndex } from './KitSchemas.js';
@@ -15,6 +16,8 @@ const THEME = 'cyberpunk';
 const PLAN_SEED = 'plans';
 /** Room above the storeys so the generator can pitch a taller ground floor. */
 const HEADROOM = 6;
+/** The shape of the sign field a business carries, which the city letters. */
+const SIGN_RATIO = '3:2';
 const ID = /^(.+?)-(?:([a-z_]+)-([a-z_]+)-)?(\d+)x(\d+)x(\d+)f$/;
 
 /**
@@ -62,12 +65,13 @@ export class PlanLibrary {
 	/**
 	 * Registers the plan one parcel stands from, drawn later with all the others.
 	 * @param family an approved family id, or null for Exterior's ordinary output
-	 * @param use the `{ type, tier }` the building is dressed for; the family's
-	 * own programme when a caller wants the plain shared building
+	 * @param use the `{ type, tier }` of the parcel standing on it, which decides
+	 * the [dressing class](DressingClass.js) the building is drawn for; the
+	 * family's own when a caller wants the plain shared building
 	 */
 	want( family, bays, floors, use = programmeOf( family ) ) {
 
-		const id = planId( family, bays, floors, use );
+		const id = planId( family, bays, floors, dressingClass( use ) );
 		const held = this.plans.get( id );
 
 		if ( held ) return held;
@@ -193,8 +197,8 @@ export class PlanLibrary {
 	 */
 	#place( id ) {
 
-		const { family, type, tier, bays, floors } = planParts( id );
-		const parts = { id, family, type, tier, baysAcross: bays.across, baysDeep: bays.deep, floors };
+		const { family, programme, tier, bays, floors } = planParts( id );
+		const parts = { id, family, programme, tier, baysAcross: bays.across, baysDeep: bays.deep, floors };
 		const request = this.#request( parts );
 		const hash = createHash( 'sha256' )
 			.update( JSON.stringify( { request, exterior: this.version } ) ).digest( 'hex' );
@@ -234,13 +238,10 @@ export class PlanLibrary {
 
 	}
 
-	#request( { id, family, type, tier, baysAcross, baysDeep, floors } ) {
+	#request( { id, family, programme, tier, baysAcross, baysDeep, floors } ) {
 
 		const width = baysAcross * BAY;
 		const depth = baysDeep * BAY;
-		// The venue word, not a parcel's name: one building stands on many lots,
-		// so the sign it is drawn with is the one every copy of it can read.
-		const sign = venueSign( type );
 
 		return {
 			seed: `${this.seed}:${id}`,
@@ -251,14 +252,16 @@ export class PlanLibrary {
 				accessPoint: [ width / 2, 0 ],
 				maxHeight: floors * PITCH + HEADROOM
 			},
-			building: { type, tier, floors },
+			building: { type: drawnAs( programme ), tier, floors },
 			theme: THEME,
 			// A plan with no family is the generator's own building, on the plain
-			// rectangular plate every copy of it stands on.
+			// rectangular plate every copy of it stands on. A business carries an
+			// empty sign field and never a word: one building stands on many lots,
+			// so the city letters each parcel's own word on it at draw time.
 			options: {
 				glb: 'merged',
 				...( family ? { architecture: family } : {} ),
-				...( sign ? { signage: { mode: 'marquee', text: sign } } : {} )
+				...( lettered( programme ) ? { signage: { mode: 'logo', ratio: SIGN_RATIO } } : {} )
 			}
 		};
 
@@ -268,15 +271,15 @@ export class PlanLibrary {
 
 /**
  * What a plan is named after: everything that decides what is drawn. The
- * programme is in the name only when it is not the family's own, so the shared
- * building of a family keeps the short name every city of it already stands on.
+ * dressing class is in the name only when it is not the family's own, so the
+ * shared building of a family keeps the short name.
  */
-function planId( family, { across, deep }, floors, use ) {
+function planId( family, { across, deep }, floors, { programme, tier } ) {
 
-	const own = programmeOf( family );
-	const programme = use.type === own.type && use.tier === own.tier ? '' : `${use.type}-${use.tier}-`;
+	const own = dressingClass( programmeOf( family ) );
+	const dressing = programme === own.programme && tier === own.tier ? '' : `${programme}-${tier}-`;
 
-	return `${family ?? 'plain'}-${programme}${across}x${deep}x${floors}f`;
+	return `${family ?? 'plain'}-${dressing}${across}x${deep}x${floors}f`;
 
 }
 
@@ -288,11 +291,11 @@ function planParts( id ) {
 	if ( ! found ) throw new AssemblyError( 'E_KIT_PLANS', `${id} is not a plan id` );
 
 	const family = found[ 1 ] === 'plain' ? null : found[ 1 ];
-	const own = programmeOf( family );
+	const own = dressingClass( programmeOf( family ) );
 
 	return {
 		family,
-		type: found[ 2 ] ?? own.type,
+		programme: found[ 2 ] ?? own.programme,
 		tier: found[ 3 ] ?? own.tier,
 		bays: { across: Number( found[ 4 ] ), deep: Number( found[ 5 ] ) },
 		floors: Number( found[ 6 ] )

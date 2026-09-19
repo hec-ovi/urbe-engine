@@ -3,6 +3,7 @@ import { BuildingsLoader } from './city/BuildingsLoader.js';
 import { ShellStream } from './city/streaming/ShellStream.js';
 import { KitPieces } from './city/kit/KitPieces.js';
 import { KitCellLoader } from './city/kit/KitCells.js';
+import { KitSigns } from './city/kit/KitSigns.js';
 import { Neon } from './city/Neon.js';
 import { LitWindows } from './city/LitWindows.js';
 import { DoorColliders } from './physics/index.js';
@@ -27,10 +28,13 @@ export class ShellScene {
 		// cells around the spawn have to stand before play begins.
 		this.slice = new FrameBudget( { paced: false } );
 		this.pieces = kit ? new KitPieces( { kit: kit.document, baseUrl: kit.baseUrl, blueprints: kit.blueprints, factory, slice: this.slice } ) : null;
+		// One plan stands on many lots with no word of its own, so the words the
+		// city reads are lettered here, per parcel, in one batch.
+		this.signs = kit ? new KitSigns( { factory } ) : null;
 		this.stream = new ShellStream( {
 			catalog, factory, buildings, loadBuildings,
 			loader: this.pieces
-				? new KitCellLoader( { pieces: this.pieces, factory, slice: this.slice } )
+				? new KitCellLoader( { pieces: this.pieces, factory, signs: this.signs, slice: this.slice } )
 				: new BuildingsLoader( factory, undefined, {}, this.slice ),
 			...( this.pieces ? { loadRadius: KIT_LOAD_RADIUS, dropRadius: KIT_DROP_RADIUS } : {} ),
 			prepare: cell => this.#prepare( cell ),
@@ -41,7 +45,7 @@ export class ShellScene {
 		// hang off the stream itself. A cell's copies only enter them when the
 		// stream turns that cell visible, which is after the skyline that still
 		// carries its impostors has been rebuilt without them.
-		if ( this.pieces ) this.stream.group.add( this.pieces.group );
+		if ( this.pieces ) this.stream.group.add( this.pieces.group, this.signs.group );
 
 	}
 

@@ -267,8 +267,16 @@ describe( 'block templates and shared building plans', () => {
 		// The one list the game loads never names it, so nothing is ever fetched for it.
 		expect( run.manifest.parcels ).not.toContain( broken );
 		expect( run.manifest.sources[ broken ] ).toBe( 'empty' );
-		// It costs its own lot and nothing else: the same city, one building fewer.
-		expect( run.manifest.parcels.length ).toBe( city.manifest.parcels.length - 1 );
+		// It costs its own lot and nothing else: every other parcel of the
+		// blueprint either stands or is a lot the city means to leave empty, and
+		// no other one reports a thing.
+		const empty = Object.entries( run.manifest.sources )
+			.filter( ( [ , source ] ) => source === 'empty' ).map( ( [ id ] ) => id );
+
+		expect( empty ).toContain( broken );
+		expect( run.manifest.parcels.length + empty.length ).toBe( atlas.parcels.length );
+		expect( run.report.parcels.filter( ( parcel ) => parcel.error ).map( ( parcel ) => parcel.parcelId ) )
+			.toEqual( [ broken ] );
 
 	}, 600_000 );
 

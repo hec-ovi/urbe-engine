@@ -1,11 +1,11 @@
 # Box map
 
-[Engine 0.26.2 contract](../CONTRACT.md), [agent calling guide](../SKILL.md), [cross-box proposals](ISSUES.md). Raw requirements and local verification records stay untracked.
+[Engine 0.26.3 contract](../CONTRACT.md), [agent calling guide](../SKILL.md), [cross-box proposals](ISSUES.md). Raw requirements and local verification records stay untracked.
 
 | Folder | Purpose and dependencies | Inputs and outputs |
 | --- | --- | --- |
 | `src/assembly` | Assemble cities: kit placements over shared plans, generated landmark shells, native streets, interiors; kits and catalogs live once under `out/shared` | [Contract](../src/assembly/CONTRACT.md), [manifest](../src/assembly/schema/world-manifest.schema.json), [shell catalog](../src/assembly/schema/shell-catalog.schema.json) |
-| `src/assembly/kit` | Dress a block from its Atlas template, generate each distinct building once and give a parcel only the frame it stands in | [Contract](../src/assembly/kit/CONTRACT.md), [placement record](../src/assembly/kit/kit-placements.schema.json), [plan index](../src/assembly/kit/kit-plans.schema.json) |
+| `src/assembly/kit` | Dress a block from its Atlas template, generate each distinct building once per dressing class and give a parcel only the frame it stands in | [Contract](../src/assembly/kit/CONTRACT.md), [placement record](../src/assembly/kit/kit-placements.schema.json), [plan index](../src/assembly/kit/kit-plans.schema.json) |
 | `src/world-archive` | Read/write bounded hashed JSON collections using filesystem or fetch | [Contract](../src/world-archive/CONTRACT.md), [ports](../src/world-archive/schema/api.d.ts), [index](../src/world-archive/schema/index.schema.json) |
 | `src/server` | HTTP adapters for Library, Creation, Assembly and Quests dialogue | [Contract and route schemas](../src/server/CONTRACT.md) |
 | `src/library` | Catalog and revisioned filesystem saves | [Contract and schemas](../src/library/CONTRACT.md) |
@@ -28,7 +28,7 @@
 | `ground/native-stream` | Draw saved streets as one batch per native surface over the shared piece kit, with each copy's tint, wear, scan cell and marquee text on the batch's own table, and admit their cuboids | [Contract](../src/game/ground/native-stream/CONTRACT.md), [stream](../src/game/ground/schema/stream.d.ts) |
 | `city` | Exterior shells, furnished floors from shared room modules (three layouts per building), doors, scenic rooms and fixtures; building vegetation uses the Props asset loader | [Contract](../src/game/city/CONTRACT.md), [floor stream](../src/game/city/schema/interior-stream.d.ts), [fixture stream](../src/game/city/schema/street-fixtures.d.ts), [building models](../src/game/city/schema/building-models.d.ts) |
 | `city/streaming` | Nearby original shells and source-derived skyline; cells read a couple ahead and build one at a time; kit worlds load within 384 m and drop beyond 640 m through `KitCellLoader` | [Contract](../src/game/city/streaming/CONTRACT.md), [ports](../src/game/city/streaming/schema/stream.d.ts) |
-| `city/kit` | Building plans read as the cells that stand on them are admitted, batched by material, with cuboid colliders per streamed cell | [Contract](../src/game/city/kit/CONTRACT.md) |
+| `city/kit` | Building plans read as the cells that stand on them are admitted, batched by material, each parcel's own word lettered on the sign field its plan carries, with cuboid colliders per streamed cell | [Contract](../src/game/city/kit/CONTRACT.md) |
 | `props` | Source land/model placements with Ground clearance and Physics | [Contract](../src/game/props/CONTRACT.md), [stream](../src/game/props/stream.d.ts) |
 | `links` | Connection geometry and materials | [Contract](../src/game/links/CONTRACT.md) |
 | `physics` | Rapier world, player body and actor impacts | [Contract](../src/game/physics/CONTRACT.md), [band admission](../src/game/physics/schema/band-admission.d.ts) |

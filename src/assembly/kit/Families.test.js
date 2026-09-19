@@ -165,29 +165,36 @@ describe( 'the approved families a lot may wear', () => {
 
 	} );
 
-	it( 'draws each plan for the programme of the parcel standing on it, signed with its venue', () => {
+	it( 'draws one plan for every business of a tier, with an empty sign field it letters no word on', () => {
 
 		const atlas = city( [
 			{ id: 'hotel', type: 'hotel', tier: 'rich', low: 6, high: 6, at: [ 0, 0 ], size: [ 24, 32 ] },
-			{ id: 'homes', type: 'residential', tier: 'rich', low: 6, high: 6, at: [ 100, 0 ], size: [ 24, 32 ] }
+			{ id: 'market', type: 'commerce', tier: 'rich', low: 6, high: 6, at: [ 100, 0 ], size: [ 24, 32 ] },
+			{ id: 'homes', type: 'residential', tier: 'rich', low: 6, high: 6, at: [ 200, 0 ], size: [ 24, 32 ] }
 		] );
 		const city0 = plan( atlas );
 		const hotel = city0.plans.plans.get( city0.of( 'hotel' ).id ).request;
 
-		expect( hotel.building ).toMatchObject( { type: 'hotel', tier: 'rich', floors: 6 } );
-		expect( hotel.options.signage ).toEqual( { mode: 'marquee', text: 'HOTEL' } );
+		// A business carries the field the city letters each parcel's own word
+		// on, and the plan itself is drawn with none.
+		expect( hotel.building ).toMatchObject( { tier: 'rich', floors: 6 } );
+		expect( hotel.options.signage ).toEqual( { mode: 'logo', ratio: '3:2' } );
+		// A home is a home: no sign at all.
 		expect( city0.plans.plans.get( city0.of( 'homes' ).id ).request.options ).not.toHaveProperty( 'signage' );
 
-		// One building, two programmes: two plans, two sets of bytes.
+		// One building of one tier, whatever business stands in it; a home of
+		// the same size and family is another building and another set of bytes.
 		const library = new PlanLibrary( { workers: null } );
 		const size = { across: 3, deep: 4 };
-		const office = library.want( 'white-grid', size, 6, { type: 'offices', tier: 'rich' } );
-		const home = library.want( 'white-grid', size, 6, { type: 'residential', tier: 'high_rich' } );
+		const inn = library.want( 'white-grid', size, 6, { type: 'hotel', tier: 'rich' } );
+		const market = library.want( 'white-grid', size, 6, { type: 'commerce', tier: 'rich' } );
+		const home = library.want( 'white-grid', size, 6, { type: 'residential', tier: 'rich' } );
 
-		expect( office.id ).toBe( 'white-grid-offices-rich-3x4x6f' );
-		expect( office.id ).not.toBe( home.id );
-		expect( office.hash ).not.toBe( home.hash );
-		expect( library.folder( office.id ) ).not.toBe( library.folder( home.id ) );
+		expect( inn.id ).toBe( 'white-grid-commercial-rich-3x4x6f' );
+		expect( market.id ).toBe( inn.id );
+		expect( market.hash ).toBe( inn.hash );
+		expect( home.id ).toBe( 'white-grid-residential-rich-3x4x6f' );
+		expect( library.folder( home.id ) ).not.toBe( library.folder( inn.id ) );
 
 	} );
 

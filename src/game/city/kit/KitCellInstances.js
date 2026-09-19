@@ -13,13 +13,17 @@ export class KitCellInstances {
 
 	/**
 	 * @param pieces KitPieces
-	 * @param buildings [{ placement, colour, swinging, interior }]
+	 * @param buildings [{ placement, colour, swinging, interior, sign, word }]
+	 * @param signs KitSigns, which letters each parcel's own word on its
+	 * building's sign field; null for a city that letters none
 	 */
-	constructor( pieces, buildings ) {
+	constructor( pieces, buildings, signs = null ) {
 
 		this.pieces = pieces;
 		this.buildings = buildings;
+		this.signs = signs;
 		this.handles = null;
+		this.lettered = null;
 
 	}
 
@@ -61,9 +65,16 @@ export class KitCellInstances {
 		// its copies never reallocates part way through.
 		this.pieces.reserve( this.buildings.map( ( { placement } ) => placement.plan ) );
 
-		for ( const { placement, colour, swinging, interior } of this.buildings ) {
+		const lettered = [];
+		this.lettered = lettered;
+
+		for ( const { placement, colour, swinging, interior, sign, word } of this.buildings ) {
 
 			handles.push( this.pieces.admit( placement.plan, placement.toWorld, colour, { swinging, interior } ) );
+
+			const letters = sign && word ? this.signs?.admit( sign, word ) : null;
+
+			if ( letters ) lettered.push( letters );
 
 		}
 
@@ -74,7 +85,9 @@ export class KitCellInstances {
 		if ( ! this.handles ) return;
 
 		for ( const handle of this.handles ) this.pieces.release( handle );
+		for ( const letters of this.lettered ?? [] ) this.signs.release( letters );
 		this.handles = null;
+		this.lettered = null;
 
 	}
 
