@@ -12,6 +12,7 @@ import { isSceneryNode, shellMaterial, shellScenery, shellVariant } from './Shel
 import { cutPlate, interiorStoreys, storeyIndex } from './StoreyPlates.js';
 import { BuildingModels } from './BuildingModels.js';
 import { ShellBatches } from './ShellBatches.js';
+import { prepare } from './kit/BatchGeometry.js';
 
 // A moving leaf is the one thing a node name still answers for: each is its
 // own node, `door:<id>/leaf:N` or `balcony:<id>/leaf:N`, with an authored
@@ -133,8 +134,21 @@ export class BuildingsLoader {
 
 			this.hitches.time( 'shell merge', () => {
 
-				const merged = BufferGeometryUtils.mergeGeometries( geometries, false );
-				geometries.forEach( ( g ) => g.dispose() );
+				// One attribute layout across the bucket first: a producer
+				// quantizes what it likes and a cut surface comes back in its own
+				// type, and a batch has one buffer per attribute.
+				const parts = prepare( geometries );
+				const merged = parts.length === 1 ? parts[ 0 ] : BufferGeometryUtils.mergeGeometries( parts, false );
+				geometries.forEach( ( g ) => { if ( g !== merged ) g.dispose(); } );
+
+				// One material's surfaces that will not merge are one material's
+				// surfaces missing, never a city that refuses to stand.
+				if ( ! merged ) {
+
+					console.warn( `shell surfaces for ${key} do not merge` );
+					return;
+
+				}
 				triangles += merged.getAttribute( 'position' ).count / 3;
 				const baseMaterial = shellMaterial( this.factory, splitBucket( key ) );
 				const mesh = new THREE.Mesh( merged, scenic ? ScenicSurface.material( baseMaterial ) : baseMaterial );

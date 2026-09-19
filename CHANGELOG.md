@@ -1,5 +1,7 @@
 # Changelog
 
+0.27.3: a cut storey plate comes back in the attribute types the plate published, and a shell's surfaces are made to share one layout before they merge, so a furnished building stands instead of failing the city's first shell admission. A bucket that will not merge costs that one material and is named, never the whole city.
+
 0.27.2: a building that opens an interior stands one floor. Exterior's storey plates are cut back to the band outside the interior's own rooms, drawn and solid there, so a furnished floor is no longer two coplanar surfaces and the stair and lift wells are real holes through it; a plan that insets its top floor's rooms past its own wall carries a plate under that band, which is where the player fell through. A lift shaft closes itself: a landing is solid while its leaves are shut and the cab floor stands where the cab waits. A room downlight's cutoff stands past the surface it faces, so the floor under it is lit rather than black. The assembly's temperature ceiling is on by default, follows the die instead of the chassis probe, sits three degrees under the throttle point the driver publishes or 97 C where it publishes none, and decides on a held reading rather than a spike, never narrowing below two workers.
 
 0.27.1: where a step happens is read from the bundle, which settles it at build time; the cast only says who stands there.

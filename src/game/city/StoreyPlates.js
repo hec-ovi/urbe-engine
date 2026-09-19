@@ -175,9 +175,23 @@ export function cutPlate( geometry, rect ) {
 
 	const band = new THREE.BufferGeometry();
 
+	// Each attribute comes back in the type the plate published it in: a
+	// producer quantizes normals and UVs, and a batch has one buffer per
+	// attribute, so a band of plain floats could not join the geometries it
+	// shares a material with.
 	sources.forEach( ( source, at ) => {
 
-		band.setAttribute( ATTRIBUTES[ at ], new THREE.Float32BufferAttribute( written[ at ], source.itemSize ) );
+		const { itemSize, normalized } = source;
+		const values = written[ at ];
+		const attribute = new THREE.BufferAttribute( new source.array.constructor( values.length ), itemSize, normalized );
+
+		for ( let index = 0; index * itemSize < values.length; index ++ ) {
+
+			for ( let part = 0; part < itemSize; part ++ ) attribute.setComponent( index, part, values[ index * itemSize + part ] );
+
+		}
+
+		band.setAttribute( ATTRIBUTES[ at ], attribute );
 
 	} );
 
