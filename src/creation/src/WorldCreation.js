@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { cp, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createLibrary, LibraryError } from '../../library/index.js';
@@ -142,6 +143,11 @@ export class WorldCreation {
 				throw new CreationError( 'E_QUEST_LOCATIONS', `city ${city.id} opens ${manifest.interiors.length} interiors, the main story needs ${MAIN_LOCATION_COUNT}` );
 
 			}
+			// The first pass told the assembler which buildings the story wants;
+			// the assembler skips any Interior cannot furnish, so the story is
+			// written again against the ones that actually opened. Without this a
+			// story can name a building the player cannot walk into.
+			await this.#materialize( city, world, manifest.interiors );
 			await writeJson( join( world, 'draft.json' ), {
 				contractVersion: '1.0.0', cityId: city.id, interiorIds: manifest.interiors, questId: null
 			} );
@@ -257,16 +263,22 @@ export class WorldCreation {
 
 	}
 
-	async #materialize( city, world ) {
+	/**
+	 * @param within the parcels the story may use, or nothing for the whole city.
+	 * A venue that cannot stand inside the set moves to a compatible parcel that
+	 * is in it, so every place the story names is a building the player opens.
+	 */
+	async #materialize( city, world, within = null ) {
 
 		const questsDir = join( world, 'quests' );
 		await mkdir( questsDir, { recursive: true } );
 		const types = join( world, 'npc-types.json' );
-		await cp( join( this.questsRoot, NPC_TYPES ), types );
+		if ( ! existsSync( types ) ) await cp( join( this.questsRoot, NPC_TYPES ), types );
 		const output = join( questsDir, 'all.questlines.json' );
 		await this.run( 'npm', [
 			'run', 'materialize', '--', join( this.questsRoot, RECORDING ), city.size,
-			join( world, 'blueprint.json' ), types, output
+			join( world, 'blueprint.json' ), types, output,
+			...( within ? [ `--parcels=${within.join( ',' )}` ] : [] )
 		], { cwd: this.questsRoot } );
 		return readQuestBundle( questsDir, 'materialized quest bundle' );
 

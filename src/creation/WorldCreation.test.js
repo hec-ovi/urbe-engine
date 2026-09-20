@@ -78,7 +78,11 @@ describe( 'playable world creation contract', () => {
 			await expect( readFile( join( fixture.config.outDir, absent ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
 
 		}
-		expect( fixture.calls.map( ( call ) => call.kind ) ).toEqual( [ 'atlas', 'shells', 'materialize', 'interiors' ] );
+		// The story is written once for the assembler to rank the buildings it
+		// wants, and again against the ones that opened, so it never names a
+		// building the player cannot walk into.
+		expect( fixture.calls.map( ( call ) => call.kind ) ).toEqual( [ 'atlas', 'shells', 'materialize', 'interiors', 'materialize' ] );
+		expect( fixture.calls.at( - 1 ).args.some( ( arg ) => String( arg ).startsWith( '--parcels=' ) ) ).toBe( true );
 
 		const free = { cityId: city.id, interiorIds: [], questId: null };
 		const first = await creation.createGame( free );
@@ -92,7 +96,7 @@ describe( 'playable world creation contract', () => {
 
 		}
 		// Free play copies the city shell; it runs no further generation command.
-		expect( fixture.calls.map( ( call ) => call.kind ) ).toEqual( [ 'atlas', 'shells', 'materialize', 'interiors' ] );
+		expect( fixture.calls.map( ( call ) => call.kind ) ).toEqual( [ 'atlas', 'shells', 'materialize', 'interiors', 'materialize' ] );
 
 	} );
 
