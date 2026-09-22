@@ -31,6 +31,20 @@ it( 'takes whichever target the centre of the screen is on, and the door when th
 } );
 
 /** Quests and investigations share one crosshair route and both symbolic bindings. */
+it( 'offers the quest action when stealing and talking aim at the same person', () => {
+
+	const eye = new THREE.Vector3( 0, 1.7, 0 );
+	const person = { position: new THREE.Vector3( 0, 0, - 1.5 ), type: 'security' };
+	const look = person.position.clone().add( new THREE.Vector3( 0, 1.3, 0 ) ).sub( eye ).normalize();
+	const theft = { kind: 'quest', aim: Math.min( 1, look.dot( look ) ), interaction: { targetKey: 'quest:notes:steal', prompt: 'E  steal the cup notes' } };
+	expect( pick( eye, look, [], [ person ], [], [ theft ] ) ).toBe( theft );
+	// A less centered quest target cannot steal a deliberately aimed conversation.
+	expect( pick( eye, look, [], [ person ], [], [ { ...theft, aim: 0.95 } ] ).kind ).toBe( 'npc' );
+	const door = { center: person.position.clone(), open: 0 };
+	expect( pick( eye, look, [ door ], [ person ], [], [ theft ] ).kind ).toBe( 'door' );
+
+} );
+
 it( 'offers authored quest and investigation targets through the shared crosshair and forwards E and R exactly', () => {
 
 	const controller = {

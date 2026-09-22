@@ -366,7 +366,12 @@ export function pick( eye, look, doors, people, panels = [], questTargets = [] )
 
 		if ( candidate.aim < MIN_AIM ) continue;
 
-		if ( ! best || candidate.aim > best.aim ) best = candidate;
+		const samePersonAction = best?.kind === 'npc' &&
+			[ 'quest', 'investigation' ].includes( candidate.kind ) && Math.abs( candidate.aim - best.aim ) < 1e-6;
+		// Stealing from a person uses the same chest point as talking. On that
+		// exact aim, offer the measured quest action rather than hiding it
+		// forever behind generic talk. A distinct, better-aimed target still wins.
+		if ( ! best || candidate.aim > best.aim || samePersonAction ) best = candidate;
 
 	}
 

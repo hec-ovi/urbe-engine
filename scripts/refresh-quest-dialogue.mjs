@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Refresh conversation text in an existing playthrough without changing its save,
-// cast, objectives or city. Materialization is staged; only dialogue is promoted.
-// node scripts/refresh-quest-dialogue.mjs <game-id> [--check] [--recording=<path>]
+// cast, quest mechanics or city. Optional presentation refresh names one quest.
+// node scripts/refresh-quest-dialogue.mjs <game-id> [--check] [--recording=<path>] [--presentation=<quest-id>]
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -17,10 +17,11 @@ const questsRoot = resolve( engineRoot, '../quests' );
 const outDir = join( engineRoot, 'out' );
 const [ gameId, ...options ] = process.argv.slice( 2 );
 if ( ! /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/.test( gameId ?? '' )
-	|| options.some( option => option !== '--check' && ! option.startsWith( '--recording=' ) ) ) {
-	throw new Error( 'Usage: node scripts/refresh-quest-dialogue.mjs <game-id> [--check] [--recording=<path>]' );
+	|| options.some( option => option !== '--check' && ! option.startsWith( '--recording=' ) && ! option.startsWith( '--presentation=' ) ) ) {
+	throw new Error( 'Usage: node scripts/refresh-quest-dialogue.mjs <game-id> [--check] [--recording=<path>] [--presentation=<quest-id>]' );
 }
 const checkOnly = options.includes( '--check' );
+const presentationIds = new Set( options.filter( option => option.startsWith( '--presentation=' ) ).map( option => option.slice( 15 ) ) );
 const recording = resolve( options.find( option => option.startsWith( '--recording=' ) )?.slice( 12 )
 	?? join( questsRoot, 'creation/samples/urbe-small/recording.json' ) );
 const gameDir = join( outDir, 'games', gameId );
@@ -54,18 +55,21 @@ try {
 	const authored = await readBundle( join( staged, 'quest-bundle.json' ) );
 	new QuestlineSetValidator().validate( authored.questlines );
 	const updated = structuredClone( carried.questlines );
+	for ( const id of presentationIds ) assert.ok( updated.some( definition => definition.id === id ), `Unknown presentation quest ${id}.` );
 	const refreshedSteps = [];
 	for ( const definition of updated ) {
 		const source = authored.questlines.find( candidate => candidate.id === definition.id );
 		assert.ok( source, `Materialization did not produce ${definition.id}.` );
 		assert.deepEqual( source.steps.map( step => step.stepId ), definition.steps.map( step => step.stepId ), `${definition.id}: step identities changed.` );
 		for ( const step of definition.steps ) {
-			if ( step.target.kind !== 'talk' ) continue;
+			if ( step.target.kind !== 'talk' && ! presentationIds.has( definition.id ) ) continue;
 			const sourceStep = source.steps.find( candidate => candidate.stepId === step.stepId );
-			assert.deepEqual( sourceStep.target, step.target, `${definition.id}/${step.stepId}: talk target changed.` );
+			assert.deepEqual( sourceStep.target, step.target, `${definition.id}/${step.stepId}: target changed.` );
 			for ( const field of [ 'gives', 'needs', 'conditions', 'effects', 'next', 'branching', 'endingId', 'window' ] ) {
 				assert.deepEqual( sourceStep[ field ], step[ field ], `${definition.id}/${step.stepId}: ${field} changed; text-only refresh is unsafe.` );
 			}
+			if ( presentationIds.has( definition.id ) ) step.narrative = structuredClone( sourceStep.narrative );
+			if ( step.target.kind !== 'talk' ) continue;
 			const role = definition.roles.find( candidate => candidate.roleId === step.target.roleId );
 			const sourceRole = source.roles.find( candidate => candidate.roleId === step.target.roleId );
 			assert.deepEqual( sourceRole?.characterName, role?.characterName, `${definition.id}/${step.stepId}: authored character identity changed.` );
@@ -73,8 +77,16 @@ try {
 			step.dialogue = structuredClone( sourceStep.dialogue );
 			refreshedSteps.push( `${definition.id}/${step.stepId}` );
 		}
+		if ( presentationIds.has( definition.id ) ) {
+			assert.deepEqual( source.items.map( item => item.itemId ), definition.items.map( item => item.itemId ), `${definition.id}: item identities changed.` );
+			for ( const item of definition.items ) {
+				const sourceItem = source.items.find( candidate => candidate.itemId === item.itemId );
+				item.name = sourceItem.name;
+				item.description = sourceItem.description;
+			}
+		}
 	}
-	assert.deepEqual( withoutDialogue( updated ), withoutDialogue( carried.questlines ), 'Refresh changed non-dialogue quest data.' );
+	assert.deepEqual( withoutUpdatedText( updated ), withoutUpdatedText( carried.questlines ), 'Refresh changed protected quest data.' );
 	new QuestlineSetValidator().validate( updated );
 	publicQuestBundle( carried.manifest, { ...carried, questlines: updated } );
 	for ( const progress of [ ...game.quests, ...game.sideJobs ] ) {
@@ -86,7 +98,7 @@ try {
 	}
 	const replacement = Buffer.from( JSON.stringify( updated, null, 2 ) + '\n' );
 	const report = {
-		gameId, checkOnly, refreshedTalks: refreshedSteps.length,
+		gameId, checkOnly, refreshedTalks: refreshedSteps.length, refreshedPresentationQuestIds: [ ...presentationIds ],
 		choices: updated.flatMap( definition => definition.steps.flatMap( step => step.dialogue?.choices ?? [] ) ).length,
 		questlinesFile, beforeSha256: digest( originalBytes ), afterSha256: digest( replacement ),
 		gameSha256: digest( descriptorBytes ), bundleSha256: digest( bundleBytes ),
@@ -112,7 +124,8 @@ try {
 	await assertProtectedFiles();
 	await library.loadGame( { id: gameId } );
 	await readBundle( bundleFile );
-	console.log( JSON.stringify( { ...report, descriptorUnchanged: true, nonDialogueDataUnchanged: true }, null, 2 ) );
+	console.log( JSON.stringify( { ...report, descriptorUnchanged: true, protectedQuestDataUnchanged: true,
+		nonDialogueDataUnchanged: presentationIds.size === 0 }, null, 2 ) );
 } catch ( error ) {
 	if ( promoted ) {
 		const rollback = join( staged, 'questlines.rollback.json' );
@@ -147,8 +160,18 @@ async function materialize( output ) {
 	} );
 }
 
-function withoutDialogue( definitions ) {
-	return definitions.map( definition => ( { ...definition, steps: definition.steps.map( ( { dialogue, ...step } ) => step ) } ) );
+function withoutUpdatedText( definitions ) {
+	return definitions.map( definition => ( {
+		...definition,
+		items: definition.items.map( item => {
+			const { name, description, ...protectedItem } = item;
+			return presentationIds.has( definition.id ) ? protectedItem : item;
+		} ),
+		steps: definition.steps.map( ( { dialogue, ...step } ) => {
+			const { narrative, ...protectedStep } = step;
+			return presentationIds.has( definition.id ) ? protectedStep : step;
+		} )
+	} ) );
 }
 
 function digest( bytes ) { return createHash( 'sha256' ).update( bytes ).digest( 'hex' ); }

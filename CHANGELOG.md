@@ -1,5 +1,7 @@
 # Changelog
 
+0.29.1: a measured quest action wins an exact aim tie with generic talk, making theft from an NPC reachable while preserving door priority and deliberate targeting. Existing saves can explicitly refresh one quest’s narrative and item labels without changing mechanics, cast or progress.
+
 0.29.0: story conversations open with authored dialogue and clickable questions/decisions. All fifteen recorded conversations work without the chat model; closing or free-text chat cannot silently finish a quest. Reply failures can be retried, the newest text remains reachable on small screens, and keyboard focus stays in the conversation. Saved games keep their progress while their dialogue catalogs are refreshed. The journal separates inspection from following, explains unavailable steps and presents final alternatives with independent lead tracking. Timed objectives offer an explicit wait until their next opening. Outcomes close correctly back to play, and modal layers cannot recapture gameplay input. Listening and theft ignore non-solid NPC sensors while retaining obstruction by walls and props.
 
 NPC identity is carried from population sampling to the visible crowd, preventing a controlled person from gaining an anonymous twin. Standing and seated conversation participants remain still through schedule changes, crowd refreshes and streaming; saved conversations do not leave orphan controls.
