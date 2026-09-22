@@ -73,16 +73,14 @@ export function isSceneryNode( node ) {
 }
 
 /**
- * What a shell does with one scenery surface. A parcel with a real interior
- * behind that glass drops it; a closed shell keeps it with the room's own
- * light baked in, which is what makes it a lit room rather than a lit wall.
+ * What a shell does with one scenery surface. Both closed and furnished
+ * parcels keep the exterior room image with its own light baked in. A caller
+ * drawing a furnished parcel gives it an ExteriorScenery visibility mask.
  *
  * @param scenic ScenicSurface for this building
- * @returns the geometry to draw, or null when a real interior replaces it
+ * @returns the exterior scenery geometry to draw
  */
-export function shellScenery( node, factory, { key, hasInterior, scenic } ) {
-
-	if ( hasInterior !== false ) return null;
+export function shellScenery( node, factory, { key, scenic } ) {
 
 	const geometry = bake( node );
 

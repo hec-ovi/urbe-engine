@@ -4,12 +4,13 @@ import { Rng } from '../../city/Rng.js';
 import { nightLevel } from '../light/NightSwitch.js';
 import { openingRect } from './Openings.js';
 import { windowBay, appendBay } from './WindowBay.js';
+import { ExteriorScenery } from './ExteriorScenery.js';
 import roomBindings from '../../../../materials/bindings/window-room-surfaces.json';
 
 const LIT_SHARE = 0.42;
 const WHITE = new THREE.Color( 0xffffff );
 
-/** Fitted scenic upper rooms behind closed shells, batched by catalog role. */
+/** Fitted scenic upper rooms; furnished buildings show them only from outside. */
 export class LitWindows {
 
 	constructor( atlas, buildings, factory ) {
@@ -26,16 +27,16 @@ export class LitWindows {
 
 		this.dispose();
 		if ( ! enabled ) return this.group;
-		const fixtures = { position: [], color: [], uv: [] };
+		const fixtures = new Map();
 		const surfaces = new Map();
-		const surfaceFor = ( role, binding, back, lit ) => {
+		const surfaceFor = ( role, binding, back, lit, owner, exterior ) => {
 
 			const { kind, variant: id } = lit ? ( role === 'back' ? back : binding[ role ] ) : binding.left;
-			const bucket = `${kind}:${id}`;
+			const bucket = `${kind}:${id}:${owner}`;
 			if ( ! surfaces.has( bucket ) ) {
 
 				const [ w, h ] = this.factory.resolver.resolve( `cyberpunk/${kind}/mid` )?.aspect ?? [ 1, 1 ];
-				surfaces.set( bucket, { kind, id, aspect: w / h, data: { position: [], color: [], uv: [] } } );
+				surfaces.set( bucket, { kind, id, exterior, aspect: w / h, data: { position: [], color: [], uv: [] } } );
 
 			}
 			const surface = surfaces.get( bucket );
@@ -46,7 +47,10 @@ export class LitWindows {
 		for ( const parcel of this.atlas.parcels ) {
 
 			const building = this.buildings.get( parcel.id );
-			if ( building?.hasInterior !== false ) continue;
+			if ( ! building ) continue;
+			const exterior = building.hasInterior !== false ? new ExteriorScenery( building.blueprint ) : null;
+			const owner = exterior ? parcel.id : '';
+			if ( ! fixtures.has( owner ) ) fixtures.set( owner, { exterior, data: { position: [], color: [], uv: [] } } );
 			const domestic = [ 'residential', 'hotel' ].includes( parcel.type );
 			const variant = domestic ? 'apartment' : [ 'offices', 'corpo' ].includes( parcel.type ) ? 'office' : 'lobby';
 			const binding = roomBindings.rooms[ variant ];
@@ -71,7 +75,7 @@ export class LitWindows {
 					const color = new THREE.Color( domestic ? 0xffd7b0 : 0xe4edff );
 					const level = lit ? rng.range( 8, 16 ) : 0;
 					const back = binding.backPool[ Math.floor( rng.next() * binding.backPool.length ) ];
-					appendBay( bay, ( role ) => surfaceFor( role, binding, back, lit ), fixtures, color, level, lit );
+					appendBay( bay, ( role ) => surfaceFor( role, binding, back, lit, owner, exterior ), fixtures.get( owner ).data, color, level, lit );
 
 				}
 
@@ -79,14 +83,22 @@ export class LitWindows {
 
 		}
 
-		for ( const { kind, id, data } of surfaces.values() ) {
+		for ( const { kind, id, data, exterior } of surfaces.values() ) {
 
 			// Exact role variants are independent of the quality tier's pattern budget.
 			const material = this.factory.build( `cyberpunk/${kind}/mid`, id );
-			this.group.add( mesh( `${kind}:${id}`, data, material ) );
+			const room = mesh( `${kind}:${id}`, data, material );
+			if ( exterior ) exterior.attach( room.material );
+			this.group.add( room );
 
 		}
-		if ( fixtures.position.length ) this.group.add( mesh( 'fixtures', fixtures ) );
+		for ( const { data, exterior } of fixtures.values() ) if ( data.position.length ) {
+
+			const lamps = mesh( 'fixtures', data );
+			if ( exterior ) exterior.attach( lamps.material );
+			this.group.add( lamps );
+
+		}
 		return this.group;
 
 	}

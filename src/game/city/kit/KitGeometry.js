@@ -48,6 +48,7 @@ export async function readShell( scene, factory, blueprint, slice, hitches = new
 	const frames = doorFrames( blueprint );
 	const main = frames.find( ( frame ) => frame.role === 'main' && frame.motion.supported ) ?? null;
 	const shell = new Map();
+	const windowScenery = new Map();
 	const leaves = new Map();
 	const plates = new Map();
 	const meshes = [];
@@ -76,8 +77,8 @@ export async function readShell( scene, factory, blueprint, slice, hitches = new
 
 				// A shared shell is drawn as a closed building, so the fake rooms
 				// behind its glass stand with the room's own light baked in.
-				const geometry = shellScenery( node, factory, { key, hasInterior: false, scenic } );
-				if ( geometry ) push( shell, bucket, geometry );
+				const geometry = shellScenery( node, factory, { key, scenic } );
+				if ( geometry ) push( windowScenery, bucket, geometry );
 				return;
 
 			}
@@ -141,7 +142,8 @@ export async function readShell( scene, factory, blueprint, slice, hitches = new
 
 	}
 
-	return { surfaces, leaves: addressable, plates: storeys, plateSurfaces: await merged( whole, factory, slice, hitches ) };
+	return { surfaces, scenery: await merged( windowScenery, factory, slice, hitches ),
+		leaves: addressable, plates: storeys, plateSurfaces: await merged( whole, factory, slice, hitches ) };
 
 }
 

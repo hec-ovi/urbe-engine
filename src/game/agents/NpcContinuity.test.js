@@ -272,6 +272,87 @@ describe( 'NPC continuity integration', () => {
 
 	} );
 
+	it.each( [ false, true ] )( 'returns a stationary %s seated person to the same post after closing, reopening and restoring', ( seated ) => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const position = [ 561, 1, 251 ], place = { kind: 'parcel', id: 'p_cafe' };
+		const post = { heading: 0.75, spot: seated ? 'seat:0' : 'work:0' };
+		const request = { npcId: npc.npcId, timeMin: MON_9, position, place, heading: 2, seated, post };
+		const expected = { position, place, heading: post.heading, spot: post.spot, mode: 'schedule', animation: seated ? 'sit' : 'idle' };
+		const schedule = bridge.continuityAt( npc.npcId, MON_9 ).schedule;
+		for ( let opening = 0; opening < 3; opening ++ ) {
+
+			controller.beginConversation( request );
+			expect( controller.endConversation( { timeMin: MON_9 + 1 } ) ).toMatchObject( expected );
+			expect( controller.serialize().follow ).toBeNull();
+			expect( controller.heldNpcIds ).toEqual( [] );
+			expect( bridge.behaviorAt( npc.npcId, MON_9 + 1 ).interrupted ).toBe( false );
+			for ( let second = 0; second < 61; second ++ ) {
+
+				expect( controller.updateVisible( { timeMin: MON_9 + 1 + second / 60, playerPosition: position, maxDistance: 45 } )[ 0 ] )
+					.toMatchObject( { ...expected, visible: true } );
+
+			}
+
+		}
+		// A conversation saved before closing and an ordinary saved post both restore.
+		controller.beginConversation( request );
+		const restored = setup( restoreSimulation( simulationInput(), bridge.simulation.serialize() ) );
+		restored.controller.restore( controller.serialize() );
+		expect( restored.controller.endConversation( { timeMin: MON_9 + 2 } ) ).toMatchObject( expected );
+		const afterClose = setup( restoreSimulation( simulationInput(), restored.bridge.simulation.serialize() ) );
+		afterClose.controller.restore( restored.controller.serialize() );
+		expect( afterClose.controller.appear( { npcId: npc.npcId, timeMin: MON_9 + 3 } ) ).toMatchObject( expected );
+		// A new schedule occurrence must release the post, including a later week
+		// with the same entry index and parcel.
+		const nextWeek = afterClose.controller.appear( { npcId: npc.npcId, timeMin: MON_9 + 7 * 1440 } );
+		expect( nextWeek.schedule.startMin ).not.toBe( schedule.startMin );
+		expect( nextWeek.position ).not.toEqual( position );
+		expect( afterClose.controller.serialize().posts ).toBeUndefined();
+		const shifted = restored.controller.appear( { npcId: npc.npcId, timeMin: schedule.endMin } );
+		expect( shifted.position ).not.toEqual( position );
+		expect( restored.controller.serialize().posts ).toBeUndefined();
+
+	} );
+
+	it( 'closing a worker conversation leaves another NPC follower under its original control', () => {
+
+		const { bridge, controller } = setup();
+		const worker = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const follower = bridge.getNPCVendor( { parcelId: 'p_clinic', timeMin: MON_9 } );
+		controller.hold( { npcId: follower.npcId, timeMin: MON_9, position: [ 500, 3, 250 ], heading: 0,
+			place: { kind: 'parcel', id: 'p_cafe' }, seated: false } );
+		controller.startFollow( { npcId: follower.npcId, timeMin: MON_9, playerPosition: [ 560, 1, 250 ] } );
+		const follow = controller.serialize().follow;
+		controller.beginConversation( { npcId: worker.npcId, timeMin: MON_9, position: [ 561, 1, 251 ], heading: 2,
+			place: { kind: 'parcel', id: 'p_cafe' }, seated: false, post: { heading: 0, spot: 'work:0' } } );
+		expect( controller.endConversation( { timeMin: MON_9 + 1 } ).mode ).toBe( 'schedule' );
+		expect( controller.serialize().follow ).toEqual( follow );
+
+	} );
+
+	it( 'closes a legacy saved indoor conversation without losing the person when no return route exists', () => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const position = [ 561, 1, 251 ];
+		controller.beginConversation( { npcId: npc.npcId, timeMin: MON_9, position, heading: 1.2,
+			place: { kind: 'parcel', id: 'p_cafe' }, seated: true } );
+		const restored = setup( restoreSimulation( simulationInput(), bridge.simulation.serialize() ) );
+		restored.controller.restore( controller.serialize() );
+		restored.controller.routes.route = () => null;
+		expect( restored.controller.endConversation( { timeMin: MON_9 + 1 } ) ).toMatchObject( {
+			position, heading: 1.2, mode: 'schedule', animation: 'sit', visible: true
+		} );
+		expect( restored.controller.serialize().conversation ).toBeNull();
+		expect( restored.controller.serialize().follow ).toBeNull();
+		expect( restored.bridge.behaviorAt( npc.npcId, MON_9 + 1 ).interrupted ).toBe( false );
+		expect( restored.controller.updateVisible( { timeMin: MON_9 + 2, playerPosition: position, maxDistance: 45 } )[ 0 ] )
+			.toMatchObject( { position, visible: true, animation: 'sit', mode: 'schedule' } );
+
+	} );
+
 	it( 'owns conversation interruption and walks back without moving the visible body on close', () => {
 
 		const { bridge, controller } = setup();

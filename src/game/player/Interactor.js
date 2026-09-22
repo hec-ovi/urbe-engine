@@ -193,6 +193,20 @@ export class Interactor {
 	#talk( person, clock ) {
 
 		const timeMin = clock.timeMin;
+		// Resolving a sampled handle can return an existing body across town.
+		// The player chose this visible placement, before identity deduplication.
+		const position = person.position.clone();
+		const place = personPlace( person );
+		const sitting = seated( person );
+		const post = person.stationary && place?.kind === 'parcel' &&
+			! [ 'following', 'leading', 'resuming', 'posing' ].includes( person.controlMode )
+			? { heading: person.heading, ...( person.spot ? { spot: person.spot } : {} ) } : null;
+		const placement = {
+			heading: person.heading, parcelId: person.parcelId, edge: person.edge,
+			place, stationary: person.stationary, distance: person.distance, direction: person.direction,
+			offset: person.offset, clip: person.clip, restClip: person.restClip ?? person.clip,
+			spot: person.spot, activity: person.activity
+		};
 
 		if ( ! person.npcId ) {
 
@@ -212,7 +226,21 @@ export class Interactor {
 			if ( instance ) {
 
 				person.crowdId = handle;
-				if ( this.crowd.identify ) person = this.crowd.identify( person, instance ) ?? person;
+				if ( this.crowd.identify ) {
+
+					const canonical = this.crowd.identify( person, instance ) ?? person;
+					if ( canonical !== person ) {
+
+						// An alias cannot move an active escort or an explicitly
+						// controlled body. The duplicate has still been retired.
+						if ( protectedPlacement( canonical, this.continuity ) ) return;
+						canonical.position.copy( position );
+						Object.assign( canonical, placement );
+
+					}
+					person = canonical;
+
+				}
 				else {
 
 					person.npcId = instance.npcId;
@@ -226,7 +254,6 @@ export class Interactor {
 
 		let controlled = false;
 		let controlledActor = null;
-		const place = personPlace( person );
 		if ( person.npcId && this.continuity && place ) {
 
 			// Continuity can refuse: somebody else holds control, or this
@@ -236,10 +263,11 @@ export class Interactor {
 				controlledActor = this.continuity.beginConversation( {
 					npcId: person.npcId,
 					timeMin,
-					position: person.position.toArray(),
-					heading: seated( person ) ? person.heading : headingTo( this.controller.body.feet, person.position ),
+					position: position.toArray(),
+					heading: sitting ? placement.heading : headingTo( this.controller.body.feet, position ),
 					place,
-					seated: person.clip === CLIP.SIT || person.clip === CLIP.SIT_TALK
+					...( post ? { post } : {} ),
+					seated: sitting
 				} );
 				person = this.crowd.syncActor( controlledActor, this.controller.body.feet ) ?? person;
 				controlled = true;
@@ -305,6 +333,14 @@ export class Interactor {
 		this.doorColliders?.sync( door );
 
 	}
+
+}
+
+function protectedPlacement( person, continuity ) {
+
+	return person.fallen || [ 'following', 'leading', 'posing', 'conversation' ].includes( person.controlMode ) ||
+		( continuity?.follow?.npcId === person.npcId && [ 'following', 'leading' ].includes( continuity.follow.mode ) ) ||
+		continuity?.pose?.npcId === person.npcId || continuity?.conversation?.npcId === person.npcId;
 
 }
 

@@ -80,16 +80,12 @@ describe( 'shell window rooms', () => {
 
 	it( 'builds no fallback room where the shell already answers for the window', () => {
 
-		// An authored exterior room node, a real interior, a disabled run, a
+		// An authored exterior room node, a disabled run, a
 		// door, a basement window and opaque glazing each leave the shell alone.
 		const authored = fixture();
 		authored.floor.openings.forEach( opening => { opening.scenery = { nodeId: 'scenery:1' }; } );
 		expect( authored.windows.build().children ).toHaveLength( 0 );
 		expect( authored.factory.build ).not.toHaveBeenCalled();
-
-		const real = fixture( { hasInterior: true } );
-		expect( real.windows.build().children ).toHaveLength( 0 );
-		expect( real.factory.build ).not.toHaveBeenCalled();
 
 		const shell = fixture();
 		expect( shell.windows.build( { enabled: false } ).children ).toHaveLength( 0 );
@@ -108,6 +104,28 @@ describe( 'shell window rooms', () => {
 		opaque.factory.resolver.resolve.mockReturnValue( { physical: { transmission: 0.78 } } );
 		expect( opaque.windows.build().children.length ).toBeGreaterThan( 0 );
 		opaque.windows.dispose();
+
+	} );
+
+	it( 'keeps fallback room images outside furnished buildings and removes them from the interior view', () => {
+
+		const { windows } = fixture( { hasInterior: true } );
+		const group = windows.build();
+		expect( group.children.length ).toBeGreaterThan( 0 );
+		const camera = new THREE.PerspectiveCamera();
+		for ( const [ position, visible ] of [ [ [ 2, 4.7, - 2 ], true ], [ [ 2, 4.7, 2 ], false ], [ [ 2, 4.7, - 2 ], true ] ] ) {
+
+			camera.position.set( ...position );
+			camera.updateMatrixWorld();
+			for ( const mesh of group.children ) {
+
+				mesh.material.maskNode.update( { camera } );
+				expect( mesh.material.maskNode.value ).toBe( visible );
+
+			}
+
+		}
+		windows.dispose();
 
 	} );
 

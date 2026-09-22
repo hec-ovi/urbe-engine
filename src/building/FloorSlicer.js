@@ -1,4 +1,4 @@
-import { positionWorld, uniform } from 'three/tsl';
+import { positionWorld, renderGroup, uniform } from 'three/tsl';
 
 const CEILING_INSET = 0.05; // cut just below the floor's ceiling, meters
 const NO_SLICE = 1e6; // cut far above any building: nothing discarded
@@ -16,17 +16,21 @@ export class FloorSlicer {
 	constructor( floors ) {
 
 		this.floors = [ ...floors ].sort( ( a, b ) => a.index - b.index );
-		this.cut = uniform( NO_SLICE );
+		this.cut = uniform( NO_SLICE ).setGroup( renderGroup );
+		this.materials = new WeakSet();
 
 	}
 
 	/** Wires the slice cut into a material; call once per material. */
 	attach( material ) {
 
+		if ( this.materials.has( material ) ) return;
+		this.materials.add( material );
 		// A mask, never opacity: it discards before the alpha chain runs, so a
 		// blended decal, a masked cutout and a transmissive pane all keep the
 		// exact alpha behaviour the catalog authored for them.
-		material.maskNode = positionWorld.y.lessThanEqual( this.cut );
+		const slice = positionWorld.y.lessThanEqual( this.cut );
+		material.maskNode = material.maskNode ? material.maskNode.and( slice ) : slice;
 
 	}
 

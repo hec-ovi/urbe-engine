@@ -10,6 +10,10 @@
     "position": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" },
     "heading": { "type": "number" },
     "place": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/place" },
-    "seated": { "type": "boolean" }
+    "seated": { "type": "boolean" },
+    "post": {
+      "type": "object", "additionalProperties": false, "required": ["heading"],
+      "properties": { "heading": { "type": "number" }, "spot": { "type": "string", "minLength": 1 } }
+    }
   }
 }

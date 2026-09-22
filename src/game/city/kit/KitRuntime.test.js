@@ -592,7 +592,7 @@ describe( 'the city draws every building from its shared plan', () => {
 
 	} );
 
-	it( 'draws a parcel that opens a real interior without the plan\'s window scenery or its storey plates', async () => {
+	it( 'keeps furnished parcels\' exterior room images separate from their interior view and cut storey plates', async () => {
 
 		const { pieces } = openWorld();
 		const record = building( 'p1' );
@@ -608,13 +608,31 @@ describe( 'the city draws every building from its shared plan', () => {
 		closed.group.visible = false;
 		expect( pieces.batches.instanceCount ).toBe( 0 );
 
-		// An open parcel swings its own leaves, shows its real rooms and stands
-		// its own cut plates, so none of the three stand in the shared batches.
+		// A furnished parcel owns the scenery camera mask and cut plates.
 		const swung = plan.leaves.reduce( ( sum, leaf ) => sum + leaf.surfaces.length, 0 );
 		const open = await shown( loader, [ source( record, true ) ] );
 		expect( pieces.batches.instanceCount ).toBe( whole - plan.scenery.length - plan.plateSurfaces.length - swung );
+		const scenery = open.group.getObjectByName( 'kit-scenery:p1' );
+		expect( scenery.children ).toHaveLength( plan.scenery.length );
+		const camera = new THREE.PerspectiveCamera();
+		for ( const [ position, visible ] of [ [ [ 90, 1.7, 40 ], true ], [ [ 116, 1.7, 38 ], false ], [ [ 90, 1.7, 40 ], true ] ] ) {
+
+			camera.position.set( ...position );
+			camera.updateMatrixWorld();
+			for ( const mesh of scenery.children ) {
+
+				mesh.material.maskNode.update( { camera } );
+				expect( mesh.material.maskNode.value ).toBe( visible );
+
+			}
+
+		}
+		const sharedGeometry = plan.scenery.map( surface => vi.spyOn( surface.geometry, 'dispose' ) );
+		const ownedMaterials = scenery.children.map( mesh => vi.spyOn( mesh.material, 'dispose' ) );
 		open.disposeModelInstances();
 		releaseShell( open );
+		expect( ownedMaterials.every( spy => spy.mock.calls.length === 1 ) ).toBe( true );
+		expect( sharedGeometry.every( spy => spy.mock.calls.length === 0 ) ).toBe( true );
 
 	} );
 

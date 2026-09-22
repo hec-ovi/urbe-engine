@@ -65,6 +65,10 @@
           "lastTimeMin": { "type": "number", "minimum": 0 }
         }
       }
+    },
+    "posts": {
+      "type": "array",
+      "items": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/scheduledPost" }
     }
   }
 }

@@ -29,6 +29,8 @@ export class NpcContinuity {
 		this.pose = null;
 		/** Identities a quest is keeping where they stand, by npcId. */
 		this.holds = new Map();
+		/** Rendered staff/chair placements, valid only for one schedule occurrence. */
+		this.posts = new Map();
 
 	}
 
@@ -325,6 +327,7 @@ export class NpcContinuity {
 		actor.position = [ ...request.position ];
 		actor.heading = request.heading;
 		actor.place = clone( request.place );
+		delete actor.spot;
 		actor.visible = true;
 		actor.mode = 'posing';
 		actor.animation = request.seated ? 'sit' : 'idle';
@@ -379,6 +382,19 @@ export class NpcContinuity {
 		// its off-shift schedule here can fail on a distant unloaded place, or
 		// replace an existing return path before control has been acquired.
 		const actor = this.actors.get( request.npcId ) ?? this.#scheduledActor( request.npcId, request.timeMin );
+		if ( request.post && ! following && ! held && request.place.kind === 'parcel' ) {
+
+			const state = this.simulation.continuityAt( request.npcId, request.timeMin );
+			const { entryIndex, startMin, endMin } = state.schedule;
+			this.posts.set( request.npcId, {
+				npcId: request.npcId, place: clone( request.place ), position: [ ...request.position ],
+				schedulePlace: clone( state.behavior.place ),
+				heading: request.post.heading, animation: request.seated ? 'sit' : 'idle',
+				entryIndex, startMin, endMin,
+				...( request.post.spot ? { spot: request.post.spot } : {} )
+			} );
+
+		}
 		if ( ! following && ! held ) this.#interrupt( request.npcId, request.timeMin );
 		if ( returning ) this.follow = null;
 		this.holds.delete( request.npcId );
@@ -388,6 +404,7 @@ export class NpcContinuity {
 		actor.visible = true;
 		actor.mode = 'conversation';
 		actor.animation = request.seated ? 'sit' : 'idle';
+		if ( this.posts.get( actor.npcId )?.spot ) actor.spot = this.posts.get( actor.npcId ).spot;
 		this.actors.set( actor.npcId, actor );
 		this.conversation = {
 			npcId: actor.npcId,
@@ -435,7 +452,8 @@ export class NpcContinuity {
 			follow: this.follow ? clone( this.follow ) : null,
 			conversation: this.conversation ? clone( this.conversation ) : null,
 			pose: this.pose ? clone( this.pose ) : null,
-			holds: [ ...this.holds.values() ].sort( ( a, b ) => a.npcId.localeCompare( b.npcId ) ).map( clone )
+			holds: [ ...this.holds.values() ].sort( ( a, b ) => a.npcId.localeCompare( b.npcId ) ).map( clone ),
+			...( this.posts.size ? { posts: [ ...this.posts.values() ].sort( ( a, b ) => a.npcId.localeCompare( b.npcId ) ).map( clone ) } : {} )
 		} );
 
 	}
@@ -522,11 +540,21 @@ export class NpcContinuity {
 			throw new NpcContinuityError( 'E_NPC_INPUT', `controlled save actor ${npcId} is not interrupted in the restored simulation` );
 
 		}
+		const postIds = new Set();
+		for ( const post of save.posts ?? [] ) {
+
+			if ( ! ids.has( post.npcId ) || postIds.has( post.npcId ) || post.endMin <= post.startMin ) {
+				throw new NpcContinuityError( 'E_NPC_INPUT', `invalid scheduled post for ${post.npcId}` );
+			}
+			postIds.add( post.npcId );
+
+		}
 		this.actors = new Map( save.actors.map( ( actor ) => [ actor.npcId, clone( actor ) ] ) );
 		this.follow = save.follow ? clone( save.follow ) : null;
 		this.conversation = save.conversation ? clone( save.conversation ) : null;
 		this.pose = save.pose ? clone( save.pose ) : null;
 		this.holds = new Map( ( save.holds ?? [] ).map( ( hold ) => [ hold.npcId, clone( hold ) ] ) );
+		this.posts = new Map( ( save.posts ?? [] ).map( ( post ) => [ post.npcId, clone( post ) ] ) );
 		return this.serialize();
 
 	}
@@ -586,9 +614,29 @@ export class NpcContinuity {
 
 	#startResume( actor, timeMin, source ) {
 
-		const scheduled = this.#resumeTarget( actor, timeMin );
+		let scheduled;
+		try { scheduled = this.#resumeTarget( actor, timeMin ); }
+		catch ( error ) {
+
+			if ( source === 'conversation' && actor.place.kind === 'parcel' ) return this.#keepUnroutablePost( actor, timeMin );
+			throw error;
+
+		}
+		if ( this.posts.has( actor.npcId ) && distance( actor.position, scheduled.position ) <= ARRIVAL_DISTANCE ) {
+
+			// Resuming a worker or seated visitor at their actual post needs no
+			// detour onto the street graph, and must not take an escort's slot.
+			Object.assign( actor, scheduled, { visible: actor.visible, mode: 'schedule' } );
+			return this.#actorOut( actor );
+
+		}
 		const route = this.routes.route( actor.position, scheduled.position );
-		if ( ! route ) throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${actor.npcId} cannot resume its schedule` );
+		if ( ! route ) {
+
+			if ( source === 'conversation' && actor.place.kind === 'parcel' ) return this.#keepUnroutablePost( actor, timeMin );
+			throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${actor.npcId} cannot resume its schedule` );
+
+		}
 		actor.mode = 'resuming';
 		actor.animation = route.distanceMeters > ARRIVAL_DISTANCE ? 'walk' : scheduled.animation;
 		actor.schedule = scheduled.schedule;
@@ -604,9 +652,28 @@ export class NpcContinuity {
 
 	}
 
+	/** Old saves lack a post record. A missing exit route must not erase the
+	 * person or abort loading; retain the visible post for this occurrence. */
+	#keepUnroutablePost( actor, timeMin ) {
+
+		const state = this.simulation.continuityAt( actor.npcId, timeMin );
+		const { entryIndex, startMin, endMin } = state.schedule;
+		actor.mode = 'schedule';
+		actor.animation = actor.animation === 'sit' ? 'sit' : 'idle';
+		actor.schedule = clone( state.schedule );
+		this.posts.set( actor.npcId, {
+			npcId: actor.npcId, place: clone( actor.place ), position: [ ...actor.position ], heading: actor.heading,
+			animation: actor.animation, schedulePlace: clone( state.behavior.place ), entryIndex, startMin, endMin,
+			...( actor.spot ? { spot: actor.spot } : {} )
+		} );
+		return this.#actorOut( actor );
+
+	}
+
 	#finishResume( actor, scheduled ) {
 
 		const visible = actor.visible;
+		if ( ! scheduled.spot ) delete actor.spot;
 		Object.assign( actor, scheduled, { visible, mode: 'schedule' } );
 		this.follow = null;
 
@@ -647,7 +714,15 @@ export class NpcContinuity {
 			);
 
 		}
-		const located = this.#locate( npc, state );
+		let post = this.posts.get( npcId );
+		if ( post && ( placeKey( post.schedulePlace ?? post.place ) !== placeKey( state.behavior.place ) ||
+			post.entryIndex !== state.schedule.entryIndex || post.startMin !== state.schedule.startMin || post.endMin !== state.schedule.endMin ) ) {
+
+			this.posts.delete( npcId );
+			post = null;
+
+		}
+		const located = post ? clone( post ) : this.#locate( npc, state );
 		return {
 			npcId: npc.npcId,
 			name: clone( npc.name ),
@@ -657,7 +732,8 @@ export class NpcContinuity {
 			place: located.place,
 			position: located.position,
 			heading: located.heading,
-			animation: state.animation,
+			animation: post?.animation ?? state.animation,
+			...( post?.spot ? { spot: post.spot } : {} ),
 			mode: 'schedule',
 			schedule: clone( state.schedule ),
 			visible: false
@@ -798,13 +874,24 @@ export class NpcContinuity {
 
 	#actorOut( actor ) {
 
+		this.#clearStaleSpot( actor );
 		return this.boundary.output( 'actor-state', clone( actor ) );
 
 	}
 
 	#actorMaybeOut( actor ) {
 
+		if ( actor ) this.#clearStaleSpot( actor );
 		return this.boundary.output( 'actor-state-or-null', actor ? clone( actor ) : null );
+
+	}
+
+	#clearStaleSpot( actor ) {
+
+		const post = this.posts.get( actor.npcId );
+		if ( actor.spot && ( ! post || placeKey( actor.place ) !== placeKey( post.place ) || distance( actor.position, post.position ) > 0.01 ) ) {
+			delete actor.spot;
+		}
 
 	}
 

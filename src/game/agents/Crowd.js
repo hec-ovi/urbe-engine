@@ -155,7 +155,9 @@ export class Crowd {
 		member.stationary = ! member.edge;
 		member.distance = member.edge ? this.routes.project( actor.position )?.distance ?? 0 : 0;
 		member.direction = 1;
-		member.spot = actor.place.kind === 'parcel' ? reservedSpot ?? `npc:${actor.npcId}` : null;
+		// A saved post keeps its real anchor reserved even when streaming has
+		// removed the old body, so the next staff sample cannot fill its seat.
+		member.spot = actor.place.kind === 'parcel' ? actor.spot ?? reservedSpot ?? `npc:${actor.npcId}` : null;
 		return member;
 
 	}

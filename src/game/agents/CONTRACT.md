@@ -100,3 +100,11 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 ## Dialogue ownership
 
 A statistical sample carrying an established `npcId` reuses the canonical named body. A sampled handle already owned by a quest/continuity actor cannot spawn another anonymous copy; later identity resolution also merges a pre-existing alias. Stress copies never inherit persistent identity. During dialogue, continuity owns position and the animation director keeps the standing/seated posture, speaking and listening clips while rejecting schedule locomotion. Ending a conversation releases the interruption or retains the next quest appointment. The host closes a restored conversation when its UI was not restored.
+
+## Conversation placement and scheduled posts
+
+The clicked body supplies position, facing, parcel and seated posture before handle identification. If it resolves to an older canonical body, that same canonical object adopts the clicked placement rather than moving the conversation across the city. Active escorts and explicitly controlled aliases cannot be relocated this way.
+
+A stationary parcel conversation may carry `post:{heading,spot?}` in its start request. Continuity preserves the visible position and idle/sit posture in optional saved `posts` records keyed by npcId and the absolute schedule occurrence (entry index, start/end and schedule place). Closing resumes Simulation, but the worker or visitor stays at that post while the occurrence is unchanged. A real schedule transition expires the placement; it is separate from quest holds and follow ownership. Optional actor `spot` restores the exact Crowd reservation after streaming, and is cleared on physical relocation.
+
+Legacy saved conversations without a post may have no usable return path from their actual interior position. Closing such a parcel conversation keeps that visible position for the current schedule occurrence instead of throwing, leaving stale conversation control, or deleting the person on the next frame.

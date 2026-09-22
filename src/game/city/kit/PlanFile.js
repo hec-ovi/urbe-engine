@@ -1,9 +1,6 @@
 import { documentHash } from '../../data/WorldDocument.js';
 import { readShell } from './KitGeometry.js';
 
-/** The fake rooms behind a plan's glass, which a real interior replaces. */
-const SCENIC = /\|scenic$/;
-
 /**
  * One building plan's published files, read and checked against what the index
  * says they are.
@@ -66,12 +63,9 @@ export async function decodePlan( entry, { bytes, blueprint }, { baseUrl, factor
 	}
 
 	const shell = await readShell( scene, factory, blueprint, slice, hitches );
-	// The fake rooms behind the glass are their own entry: a parcel that opens a
-	// real interior draws the plan without them. Its storey plates are the same
-	// again: that parcel cuts its own out of them.
-	const surfaces = shell.surfaces.filter( ( { bucket } ) => ! SCENIC.test( bucket ) );
-	const scenery = shell.surfaces.filter( ( { bucket } ) => SCENIC.test( bucket ) );
-	const { leaves, plates, plateSurfaces } = shell;
+	// All scenery stays separate, including its curtains and fixtures: a
+	// furnished parcel owns the camera mask for every part of the fake rooms.
+	const { surfaces, scenery, leaves, plates, plateSurfaces } = shell;
 
 	return {
 		id: entry.id, baysAcross: entry.baysAcross, baysDeep: entry.baysDeep,

@@ -9,6 +9,7 @@ import { ScenicSurface } from '../game/city/ScenicSurface.js';
 import { shellGlows } from '../game/city/ShellFixtures.js';
 import { StreetLamps } from '../game/city/StreetLamps.js';
 import { LitWindows } from '../game/city/LitWindows.js';
+import { ExteriorScenery } from '../game/city/ExteriorScenery.js';
 import { isSceneryNode, shellMaterial, shellScenery, shellVariant } from '../game/city/ShellSurface.js';
 import { BuildingAssetError, BuildingAssets } from './BuildingAssets.js';
 import { BuildingStage } from './BuildingStage.js';
@@ -324,6 +325,7 @@ export class BuildingViewerApp {
 		const meshes = [];
 		building.traverse( ( node ) => { if ( node.isMesh ) meshes.push( node ); } );
 		const scenic = new ScenicSurface( blueprint );
+		const exterior = hasInterior !== false ? new ExteriorScenery( blueprint ) : null;
 		// One baked material per catalog surface, as the city merges them.
 		const baked = new Map();
 		const dress = ( material ) => {
@@ -341,7 +343,7 @@ export class BuildingViewerApp {
 
 				// Scenery bakes to world space, so it is rehung on the model root.
 				const geometry = shellScenery( node, factory, {
-					key: node.material?.name ?? '', hasInterior, scenic
+					key: node.material?.name ?? '', scenic
 				} );
 				node.removeFromParent();
 				if ( ! geometry ) continue;
@@ -355,9 +357,9 @@ export class BuildingViewerApp {
 
 				}
 
-				const mesh = new THREE.Mesh(
-					geometry, geometry.hasAttribute( 'scenicRadiance' ) ? baked.get( base ) : base
-				);
+				let material = geometry.hasAttribute( 'scenicRadiance' ) ? baked.get( base ) : base;
+				if ( exterior ) material = exterior.material( material );
+				const mesh = new THREE.Mesh( geometry, material );
 				mesh.name = node.name;
 				building.add( mesh );
 				continue;

@@ -8,6 +8,7 @@ import { doorFrames, doorLeafFrame } from './DoorGeometry.js';
 import { takeTriangles, centroidAt } from './Triangles.js';
 import { bucketFor, splitBucket } from './Variety.js';
 import { ScenicSurface } from './ScenicSurface.js';
+import { ExteriorScenery } from './ExteriorScenery.js';
 import { isSceneryNode, shellMaterial, shellScenery, shellVariant } from './ShellSurface.js';
 import { cutPlate, interiorStoreys, storeyIndex } from './StoreyPlates.js';
 import { BuildingModels } from './BuildingModels.js';
@@ -93,6 +94,7 @@ export class BuildingsLoader {
 		group.name = 'city';
 
 		const shellBatches = new ShellBatches();
+		const draws = [ { batches: shellBatches, group } ];
 		const doors = [];
 		const entrances = [];
 		const unsupportedDoors = [];
@@ -103,6 +105,24 @@ export class BuildingsLoader {
 		for ( const building of loaded ) {
 
 			unsupportedDoors.push( ...building.unsupportedDoors );
+
+			if ( building.windowScenery.size ) {
+
+				const sceneryGroup = new THREE.Group();
+				sceneryGroup.name = `exterior-scenery:${building.parcelId}`;
+				const batches = new ShellBatches();
+				for ( const [ surface, geometries ] of building.windowScenery ) {
+
+					const { key, variantId: authored, doubleSided } = splitBucket( surface );
+					batches.add( bucketFor( key, shellVariant( this.factory, {
+						key, authored, parcelId: building.parcelId
+					} ), doubleSided ), geometries );
+
+				}
+				draws.push( { batches, group: sceneryGroup, exterior: new ExteriorScenery( building.blueprint ) } );
+				group.add( sceneryGroup );
+
+			}
 
 			for ( const [ surface, geometries ] of building.exterior ) {
 
@@ -128,7 +148,7 @@ export class BuildingsLoader {
 
 		}
 
-		for ( const { key, scenic, geometries } of shellBatches.values() ) {
+		for ( const draw of draws ) for ( const { key, scenic, geometries } of draw.batches.values() ) {
 
 			await this.slice.step();
 
@@ -151,11 +171,13 @@ export class BuildingsLoader {
 				}
 				triangles += merged.getAttribute( 'position' ).count / 3;
 				const baseMaterial = shellMaterial( this.factory, splitBucket( key ) );
-				const mesh = new THREE.Mesh( merged, scenic ? ScenicSurface.material( baseMaterial ) : baseMaterial );
+				let material = scenic ? ScenicSurface.material( baseMaterial ) : baseMaterial;
+				if ( draw.exterior ) material = scenic ? draw.exterior.attach( material ) : draw.exterior.material( material );
+				const mesh = new THREE.Mesh( merged, material );
 				mesh.name = `shell:${key}`;
-				mesh.castShadow = true;
+				mesh.castShadow = ! draw.exterior;
 				mesh.receiveShadow = true;
-				group.add( mesh );
+				draw.group.add( mesh );
 
 			} );
 
@@ -172,6 +194,7 @@ export class BuildingsLoader {
 		gltf.scene.updateMatrixWorld( true );
 
 		const exterior = new Map();
+		const windowScenery = new Map();
 		const frames = doorFrames( blueprint );
 		const doors = hasInterior ? frames.filter( door => door.motion.supported ) : [];
 		const unsupportedDoors = ( hasInterior ? frames : [] ).filter( door => ! door.motion.supported ).map( door => ( {
@@ -192,7 +215,7 @@ export class BuildingsLoader {
 			// is the most expensive of them and every branch leaves the loop.
 			await this.slice.step();
 
-			this.hitches.time( 'shell surface', () => this.#readNode( node, { frames, doors, doorParts, exterior, exteriorFlat, scenic, hasInterior, storeys, blueprint } ) );
+			this.hitches.time( 'shell surface', () => this.#readNode( node, { frames, doors, doorParts, exterior, windowScenery, exteriorFlat, scenic, hasInterior, storeys, blueprint } ) );
 
 		}
 
@@ -206,6 +229,8 @@ export class BuildingsLoader {
 
 		return {
 			parcelId,
+			blueprint,
+			windowScenery,
 			unsupportedDoors,
 			exterior,
 			exteriorFlat: exteriorFlat.length ? BufferGeometryUtils.mergeGeometries( exteriorFlat, false ) : null,
@@ -216,7 +241,7 @@ export class BuildingsLoader {
 	}
 
 	/** One mesh node of a shell into the surface, leaf, plate or scenery it stands as. */
-	#readNode( node, { frames, doors, doorParts, exterior, exteriorFlat, scenic, hasInterior, storeys, blueprint } ) {
+	#readNode( node, { frames, doors, doorParts, exterior, windowScenery, exteriorFlat, scenic, hasInterior, storeys, blueprint } ) {
 
 		const name = node.name ?? '';
 		const key = node.material?.name ?? '';
@@ -228,8 +253,8 @@ export class BuildingsLoader {
 		);
 		if ( isSceneryNode( node ) ) {
 
-			const geometry = shellScenery( node, this.factory, { key, hasInterior, scenic } );
-			if ( geometry ) push( exterior, surface, geometry );
+			const geometry = shellScenery( node, this.factory, { key, scenic } );
+			if ( geometry ) push( hasInterior ? windowScenery : exterior, surface, geometry );
 			return;
 
 		}

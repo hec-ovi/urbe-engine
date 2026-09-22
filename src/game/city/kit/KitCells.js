@@ -12,6 +12,7 @@ import { cutPlate, interiorStoreys } from '../StoreyPlates.js';
 import { interiorOpenings } from './KitOpenings.js';
 import { mainDoor, swingLeaves } from './KitDoors.js';
 import { tintFor } from './KitTint.js';
+import { ExteriorScenery } from '../ExteriorScenery.js';
 
 /** Placement records are pure reads, so a cell asks for all of them at once. */
 const READ_CONCURRENCY = 8;
@@ -115,6 +116,7 @@ export class KitCellLoader {
 		const boxColliders = [];
 		const emptyLots = new Map();
 		const cutPlates = [];
+		const windowScenery = [];
 		let triangles = 0;
 
 		try {
@@ -168,6 +170,13 @@ export class KitCellLoader {
 						cutPlates.push( plates );
 
 					}
+					if ( source.hasInterior ) {
+
+						const scenery = this.#scenery( placement, blueprint );
+						group.add( scenery.group );
+						windowScenery.push( scenery );
+
+					}
 
 					triangles += this.pieces.trianglesOf( record.plan );
 					boxColliders.push( ...buildingBoxes( placement, {
@@ -201,6 +210,7 @@ export class KitCellLoader {
 
 		} catch ( error ) {
 
+			for ( const scenery of windowScenery ) scenery.dispose();
 			base.disposeModelInstances?.();
 			throw error;
 
@@ -221,10 +231,38 @@ export class KitCellLoader {
 
 				instances.hide();
 				for ( const plates of cutPlates ) plates.dispose();
+				for ( const scenery of windowScenery ) scenery.dispose();
 				base.disposeModelInstances?.();
 
 			}
 		};
+
+	}
+
+	/** Furnished parcels share room geometry while owning their camera mask. */
+	#scenery( placement, blueprint ) {
+
+		const group = new THREE.Group();
+		group.name = `kit-scenery:${placement.parcelId}`;
+		group.matrix.copy( placement.toWorld );
+		group.matrixAutoUpdate = false;
+		const exterior = new ExteriorScenery( blueprint );
+		for ( const { geometry, material } of this.pieces.plans.get( placement.plan ).scenery ) {
+
+			const mesh = new THREE.Mesh( geometry, exterior.material( material ) );
+			mesh.name = 'exterior-window-room';
+			mesh.receiveShadow = true;
+			group.add( mesh );
+
+		}
+		return { group, dispose: () => {
+
+			// The shared plan still owns the geometry and the texture maps.
+			for ( const mesh of group.children ) mesh.material.dispose();
+			group.clear();
+			group.removeFromParent();
+
+		} };
 
 	}
 

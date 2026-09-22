@@ -160,6 +160,52 @@ describe( 'persistent NPC projection', () => {
 
 	} );
 
+	it.each( [ [ 'seat', 'leisure', 'sit' ], [ 'work', 'working', 'idle' ] ] )(
+		'reserves a restored %s post so another sampled person cannot occupy it', ( kind, activity, animation ) => {
+
+			const instance = {
+				npcId: 'posted-person', name: { given: 'Mina', family: 'Costa' },
+				type: 'barista', gender: 'female', appearanceSeed: 91234
+			};
+			const inside = new THREE.Vector3( 2, 0, 3 );
+			const anchors = [
+				{ position: new THREE.Vector3( 4, 0, 3 ), heading: 0.5 },
+				{ position: new THREE.Vector3( 6, 0, 3 ), heading: 0.5 }
+			];
+			const sample = { npcId: instance.npcId, crowdId: 'posted-handle', type: instance.type,
+				gender: instance.gender, appearanceSeed: instance.appearanceSeed, activity,
+				place: { kind: 'parcel', id: 'cafe' } };
+			let agents = [ sample ];
+			const crowd = new Crowd( {
+				assets: testAssets(), routes: pavement(), signals: { green: () => true },
+				sim: { getNPC: () => instance, crowd: ( timeMin, scope ) => ( { agents: scope.kind === 'parcel' ? agents : [] } ) },
+				places: new Map( [ [ 'cafe', { inside, heading: 0, anchors: { [ kind ]: anchors } } ] ] ), capacity: 4
+			} );
+			crowd.update( 0, inside, { timeMin: 600, daySeconds: 36000 } );
+			const original = crowd.memberForNpc( instance.npcId );
+			const actor = { ...persistentActor( instance ), place: sample.place,
+				position: original.position.toArray(), heading: original.heading, animation, mode: 'schedule' };
+			// Promotion without a saved post still preserves the existing reservation.
+			expect( crowd.syncActor( actor, inside ).spot ).toBe( `${kind}:0` );
+			const saved = { ...actor, spot: original.spot };
+			crowd.syncActor( { ...saved, visible: false }, new THREE.Vector3( 1000, 0, 1000 ) );
+			expect( crowd.count ).toBe( 0 );
+			const restored = crowd.syncActor( saved, inside );
+			expect( restored ).not.toBe( original );
+			expect( restored.spot ).toBe( `${kind}:0` );
+
+			agents = [ sample, { ...sample, npcId: undefined, crowdId: 'new-person', appearanceSeed: 42 } ];
+			crowd.update( 3, inside, { timeMin: 601, daySeconds: 36060 } );
+			const newcomer = [ ...crowd.members.values() ].find( member => member.crowdId === 'new-person' );
+			expect( crowd.count ).toBe( 2 );
+			expect( [ ...crowd.members.values() ].filter( member => member.npcId === instance.npcId ) ).toEqual( [ restored ] );
+			expect( restored.position.toArray() ).toEqual( anchors[ 0 ].position.toArray() );
+			expect( newcomer.spot ).toBe( `${kind}:1` );
+			expect( newcomer.position.toArray() ).toEqual( anchors[ 1 ].position.toArray() );
+
+		}
+	);
+
 	it( 'adopts the existing anonymous parcel body before continuity projects the same cast NPC', () => {
 
 		const instance = {

@@ -145,6 +145,73 @@ it( 'hands the named body to continuity and to animation composition for the con
 
 } );
 
+it.each( [ false, true ] )( 'opens a late-identified %s seated post on its clicked body instead of its distant canonical body', ( sitting ) => {
+
+	let controlled;
+	const continuity = {
+		beginConversation: vi.fn( request => ( controlled = continuityActor( request, 'conversation', request.seated ? 'sit' : 'idle' ) ) ),
+		endConversation: vi.fn( () => ( { ...controlled, mode: 'schedule' } ) )
+	};
+	const { interactor, crowd, sim } = street( continuity );
+	const clicked = [ ...crowd.members.values() ][ 0 ];
+	clicked.position.set( 233.07, 0, 109.56 );
+	Object.assign( clicked, { parcelId: 'p14', edge: null, stationary: true, activity: 'working',
+		heading: 1.2, clip: sitting ? CLIP.SIT : CLIP.IDLE, spot: sitting ? 'seat:0' : 'counter:0' } );
+	const visible = clicked.position.toArray();
+	const distant = [ 160.6, 0.15, 44.85 ];
+	const canonical = crowd.syncActor( continuityActor( {
+		npcId: 'n1', position: distant, heading: 0.4, place: { kind: 'edge', id: 'e1' }
+	}, 'resuming', 'walk' ), new THREE.Vector3( ...distant ) );
+	canonical.hero = true;
+	const focusedPosition = canonical.position;
+	interactor.controller.body.feet.copy( clicked.position ).add( new THREE.Vector3( 0, 0, 1.5 ) );
+	interactor.controller.eye.copy( interactor.controller.body.feet ).add( new THREE.Vector3( 0, 1.7, 0 ) );
+	interactor.update( 0 );
+	expect( interactor.target.person ).toBe( clicked );
+	interactor.activate( CLOCK );
+
+	expect( continuity.beginConversation ).toHaveBeenCalledWith( {
+		npcId: 'n1', timeMin: CLOCK.timeMin, position: visible, place: { kind: 'parcel', id: 'p14' },
+		heading: sitting ? 1.2 : 0, seated: sitting, post: { heading: 1.2, spot: clicked.spot }
+	} );
+	expect( interactor.conversation.person ).toBe( canonical );
+	expect( crowd.memberForNpc( 'n1' ) ).toBe( canonical );
+	expect( canonical.position ).toBe( focusedPosition );
+	expect( canonical.position.toArray() ).toEqual( visible );
+	expect( canonical ).toMatchObject( { hero: true, parcelId: 'p14', edge: null, stationary: true,
+		spot: clicked.spot, clip: sitting ? CLIP.SIT : CLIP.IDLE, activity: 'working' } );
+	expect( crowd.count ).toBe( 1 );
+	expect( sim.interrupted ).toEqual( [] );
+	interactor.close( CLOCK );
+	expect( canonical.position.toArray() ).toEqual( visible );
+	expect( crowd.count ).toBe( 1 );
+
+} );
+
+it.each( [ 'following', 'leading', 'posing' ] )( 'does not move a protected %s identity to its newly identified alias', mode => {
+
+	const continuity = { beginConversation: vi.fn() };
+	const { interactor, crowd, sim } = street( continuity );
+	const clicked = [ ...crowd.members.values() ][ 0 ];
+	const distant = [ 160.6, 0.15, 44.85 ];
+	const canonical = crowd.syncActor( continuityActor( {
+		npcId: 'n1', position: distant, heading: 0.4, place: { kind: 'edge', id: 'e1' }
+	}, mode, 'walk' ), new THREE.Vector3( ...distant ) );
+	canonical.hero = true;
+	interactor.update( 0 );
+	expect( interactor.target.person ).toBe( clicked );
+	interactor.activate( CLOCK );
+
+	expect( continuity.beginConversation ).not.toHaveBeenCalled();
+	expect( interactor.conversation ).toBeNull();
+	expect( crowd.memberForNpc( 'n1' ) ).toBe( canonical );
+	expect( canonical.position.toArray() ).toEqual( distant );
+	expect( canonical ).toMatchObject( { hero: true, controlMode: mode } );
+	expect( crowd.count ).toBe( 1 );
+	expect( sim.interrupted ).toEqual( [] );
+
+} );
+
 it( 'keeps a quest cast in place after the talk, faces the player throughout, and survives a refusal', () => {
 
 	let controlled = null;

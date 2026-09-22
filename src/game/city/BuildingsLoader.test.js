@@ -12,7 +12,7 @@ const factory = {
 
 describe( 'building shells', () => {
 
-	it( 'hinges a door and drops shell scenery only where the parcel has a real interior', async () => {
+	it( 'keeps exterior window scenery and hides it only while the camera is inside its real interior', async () => {
 
 		for ( const hasInterior of [ false, true ] ) {
 
@@ -34,12 +34,25 @@ describe( 'building shells', () => {
 				parcelId: 'p0', blueprint: entranceBlueprint(), shellUrl: '/p0.glb', hasInterior
 			} ] ] ) );
 
-			// A closed shell keeps its door leaf, its privacy layer and its
-			// painted rooms; a real interior replaces all of them.
+			// An open building swings its door but keeps the exterior window image.
 			expect( Boolean( city.group.getObjectByName( 'shell:cyberpunk/door/mid' ) ) ).toBe( ! hasInterior );
-			expect( Boolean( city.group.getObjectByName( 'shell:cyberpunk/curtain/mid' ) ) ).toBe( ! hasInterior );
-			expect( Boolean( city.group.getObjectByName( 'shell:cyberpunk/window-glass-opaque/mid' ) ) ).toBe( ! hasInterior );
-			expect( Boolean( city.group.getObjectByName( 'shell:cyberpunk/paired-room-lit/mid' ) ) ).toBe( ! hasInterior );
+			for ( const kind of [ 'curtain', 'window-glass-opaque', 'paired-room-lit' ] ) {
+
+				const surface = city.group.getObjectByName( `shell:cyberpunk/${kind}/mid` );
+				expect( surface ).toBeTruthy();
+				if ( ! hasInterior ) continue;
+				const camera = new THREE.PerspectiveCamera();
+				for ( const [ position, visible ] of [ [ [ - 2, 1.7, 2 ], true ], [ [ 2, 1.7, 2 ], false ], [ [ - 2, 1.7, 2 ], true ] ] ) {
+
+					camera.position.set( ...position );
+					camera.updateMatrixWorld();
+					surface.material.maskNode.update( { camera } );
+					expect( surface.material.maskNode.value ).toBe( visible );
+
+				}
+				expect( surface.castShadow ).toBe( false );
+
+			}
 
 			// Scenery never collides; glass, cladding and a fixed leaf do.
 			expect( city.shellColliders.get( 'p0' ).getAttribute( 'position' ).count ).toBe( hasInterior ? 6 : 9 );
@@ -285,7 +298,7 @@ function entranceBlueprint() {
 		buildingId: 'p0',
 		bounds: { footprint: [ [ 0, 0 ], [ 4, 0 ], [ 4, 4 ], [ 0, 4 ] ] },
 		floors: [ {
-			index: 0, elevation: 0,
+			index: 0, elevation: 0, height: 3,
 			outline: [ [ 0, 0 ], [ 4, 0 ], [ 4, 4 ], [ 0, 4 ] ],
 			openings: [ {
 				id: 'entrance', kind: 'door', doorRole: 'main', edge: 0, offset: 1, width: 1, sill: 0, height: 2,

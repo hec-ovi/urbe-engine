@@ -35,9 +35,12 @@ it( 'keeps ordinary and illuminated room surfaces separate when their material i
 		return { scene };
 	} };
 	const city = await new BuildingsLoader( factory, loader ).load( buildings );
-	const ordinary = city.group.children.find( mesh => ! mesh.geometry.hasAttribute( 'scenicRadiance' ) );
-	const scenic = city.group.children.find( mesh => mesh.geometry.hasAttribute( 'scenicRadiance' ) );
-	expect( city.group.children ).toHaveLength( 2 );
+	const ordinary = city.group.children.find( mesh => mesh.geometry && ! mesh.geometry.hasAttribute( 'scenicRadiance' ) );
+	const scenic = city.group.children.find( mesh => mesh.geometry?.hasAttribute( 'scenicRadiance' ) );
+	expect( city.group.children ).toHaveLength( 3 );
+	const furnished = city.group.getObjectByName( 'exterior-scenery:p2' );
+	expect( furnished.children ).toHaveLength( 1 );
+	expect( furnished.children[ 0 ].material.maskNode ).toBeTruthy();
 	expect( Array.from( ordinary.geometry.attributes.position.array ) ).toEqual( positions.ordinary );
 	expect( Array.from( scenic.geometry.attributes.position.array ) ).toEqual( positions.scenic );
 	expect( ordinary.material ).toBe( material );
@@ -46,7 +49,7 @@ it( 'keeps ordinary and illuminated room surfaces separate when their material i
 	expect( scenic.material.emissiveNode ).toBeTruthy();
 	expect( scenic.geometry.attributes.scenicRadiance.count ).toBe( scenic.geometry.attributes.position.count );
 	expect( Array.from( scenic.geometry.attributes.scenicRadiance.array ).every( value => Number.isFinite( value ) && value > 0 ) ).toBe( true );
-	expect( city.triangles ).toBe( 10 );
-	expect( factory.build.mock.calls ).toEqual( [ [ key, 'surface' ], [ key, 'surface' ] ] );
+	expect( city.triangles ).toBe( 12 );
+	expect( factory.build.mock.calls ).toEqual( [ [ key, 'surface' ], [ key, 'surface' ], [ key, 'surface' ] ] );
 	releaseShell( city );
 } );

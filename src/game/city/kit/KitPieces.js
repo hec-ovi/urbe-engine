@@ -9,7 +9,7 @@ import { decodePlan, pieceError, readPlanFile } from './PlanFile.js';
 const LOAD_CONCURRENCY = 8;
 /** The entrance leaves of a plan, drawn with it unless the parcel swings them. */
 const LEAVES = ( planId ) => `${planId}/leaves`;
-/** The fake rooms behind a plan's glass, drawn unless the parcel opens a real interior. */
+/** The fake rooms behind a plan's glass; furnished parcels draw their own masked copies. */
 const SCENERY = ( planId ) => `${planId}/scenery`;
 /** And its storey plates, which a parcel that opens one cuts its own out of. */
 const PLATES = ( planId ) => `${planId}/plates`;
@@ -180,7 +180,7 @@ export class KitPieces {
 	 *   pivots, so the shared copies of them stay out of the batches
 	 * @param interior true when this parcel opens a real interior behind its
 	 *   glass, so the plan's fake rooms and its storey plates stay out of the
-	 *   batches: the parcel draws its own cut plates instead
+	 *   batches: the parcel draws camera-masked rooms and its own cut plates
 	 * @returns one handle per copy, to hand back to `release`
 	 */
 	admit( planId, matrix, color, { swinging = false, interior = false } = {} ) {

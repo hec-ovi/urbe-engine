@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { fog, uniform, exponentialHeightFogFactor, densityFogFactor } from 'three/tsl';
+import { fog, uniform, renderGroup, exponentialHeightFogFactor, densityFogFactor } from 'three/tsl';
 import { luminance } from '../light/Color.js';
 
 /** Where the street's haze thins out. Above it a tower stands clear of it. */
@@ -28,11 +28,6 @@ const SCATTER = 0;
  * ones, which is what turns a room past five metres into flat fog.
  */
 const ROOM_RETURN = 0.1;
-/**
- * A room's air is thick over metres where the street's is thin over blocks:
- * 15 percent of the medium at 10 m, 47 at 20, so a room reads to its far wall.
- */
-const INDOOR_DENSITY = 0.04;
 /** Seconds to cross from one medium to the other, walking through a door. */
 const ADAPT = 0.6;
 
@@ -47,28 +42,33 @@ const ADAPT = 0.6;
  * street is a real surface brightness in the same units as everything else, so
  * it lifts the darks by the right amount at any exposure.
  *
- * Two media in series. Height fog pools in the street and thins over the roofs,
- * which is what separates a skyline into planes; a thin uniform medium comes in
- * indoors, where a room is hazy over a few metres and a tower's twenty-fifth
- * floor is above the street's haze entirely. Colour and both densities are
- * uniforms, so tuning them never rebuilds a shader.
+ * Height fog pools in the street and thins over the roofs. Enclosed rooms have
+ * clear air by default: crossing a doorway fades the street medium away rather
+ * than covering the room in its fixtures' colour. An explicit indoorDensity
+ * can add a uniform medium where one is wanted. The transition uses uniforms,
+ * so crossing the threshold never rebuilds a shader.
  */
 export class NightFog {
 
-	constructor( scene, { density, color, indoorDensity = INDOOR_DENSITY } ) {
+	constructor( scene, { density, color, indoorDensity = 0 } ) {
 
 		this.indoorDensity = indoorDensity;
 
 		this.sky = new THREE.Color( color );
 		this.sky.multiplyScalar( SKY_RADIANCE / Math.max( 1e-4, luminance( this.sky ) ) );
 
-		this.color = uniform( this.sky.clone() );
-		this.density = uniform( density );
-		this.height = uniform( HEIGHT );
-		this.base = uniform( 0 );
+		// Fog belongs to the scene pass, not each material's object buffer.
+		// Static standard meshes can share an unchanged-material observer, so
+		// only the first would refresh an object-local fog buffer after a door
+		// crossing. A shared render group keeps every facade on the same air.
+		this.color = uniform( this.sky.clone() ).setGroup( renderGroup );
+		this.density = uniform( density ).setGroup( renderGroup );
+		this.height = uniform( HEIGHT ).setGroup( renderGroup );
+		this.base = uniform( 0 ).setGroup( renderGroup );
+		this.outdoor = uniform( 1 ).setGroup( renderGroup );
 		this.indoor = 0;
 
-		const outside = exponentialHeightFogFactor( this.density, this.height );
+		const outside = exponentialHeightFogFactor( this.density, this.height ).mul( this.outdoor );
 		const inside = densityFogFactor( this.base );
 
 		// The environment probe bakes at street range, where the sky dome is
@@ -94,12 +94,14 @@ export class NightFog {
 			: this.indoor + Math.sign( target - this.indoor ) * step;
 
 		this.base.value = this.indoorDensity * this.indoor;
+		this.outdoor.value = 1 - this.indoor;
 
-		// Indoors the sky is behind a slab, so the air is the room's own light,
-		// arriving as the medium does; leaving, the street's air is the street's at once.
-		const lit = air.lux * ( indoor ? ROOM_RETURN * this.indoor : SCATTER );
+		// Clear interiors must not retint the fading street medium with room
+		// light: doing so briefly fills the doorway with a bright veil.
+		const roomShare = this.indoorDensity > 0 ? this.indoor : 0;
+		const lit = air.lux * ( indoor ? ROOM_RETURN * roomShare : SCATTER );
 		const hue = luminance( air.color );
-		const floor = 1 - this.indoor;
+		const floor = 1 - roomShare;
 
 		this.color.value.setRGB(
 			this.sky.r * floor + ( hue > 0 ? air.color.r / hue * lit : 0 ),
