@@ -1593,7 +1593,8 @@ export function pickSpawn( networks, atlas, buildings ) {
 
 		} ).sort( ( a, b ) => Math.hypot( a.x - door.center.x, a.z - door.center.z )
 			- Math.hypot( b.x - door.center.x, b.z - door.center.z ) )[ 0 ];
-		const point = approach ? new THREE.Vector3( approach.x, approach.y, approach.z ) : door.outside.clone();
+		const point = approach ? new THREE.Vector3( approach.x, approach.y, approach.z )
+			: door.outside.clone().addScaledVector( outward, 6 );
 		point.y = Math.max( point.y, SIDEWALK_HEIGHT ) + 0.05;
 		return { point, lookAt: door.center.clone() };
 
