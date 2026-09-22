@@ -139,9 +139,9 @@ export class QuestGameplay {
 	}
 
 	/** The objective the player is following: the chosen questline, else the first open one. */
-	objective( timeMin, questId = null ) {
+	objective( timeMin, questId = null, stepId = null ) {
 
-		return this.actions.objective( { timeMin, ...( questId ? { questId } : {} ) } );
+		return this.actions.objective( { timeMin, ...( questId ? { questId } : {} ), ...( stepId ? { stepId } : {} ) } );
 
 	}
 
@@ -941,8 +941,11 @@ export class QuestGameplay {
 		const targetHandles = new Set(
 			( this.targetColliders.get( targetKey ) ?? [] ).map( ( handle ) => handle.collider.handle )
 		);
+		// ImpactWorld's pedestrian/vehicle sensors measure contacts; they are
+		// not solid occluders. In particular, a speaker's own capsule reaches
+		// farther than the endpoint margin and must not block their chest.
 		return ! this.physics.world.castRay(
-			ray, distance - 0.25, true, undefined, undefined, this.playerCollider, undefined,
+			ray, distance - 0.25, true, this.physics.rapier.QueryFilterFlags?.EXCLUDE_SENSORS, undefined, this.playerCollider, undefined,
 			( collider ) => ! targetHandles.has( collider.handle )
 		);
 

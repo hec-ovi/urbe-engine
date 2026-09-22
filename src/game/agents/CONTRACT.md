@@ -96,3 +96,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 
 - The gameplay animation coordinator owns speaking and listening gestures. This controller publishes the exact identity, posture, follow mode, and routine resume state it consumes.
 - Simulation route workers publish a route workplace but no trip assignment. They fail closed because no authoritative vehicle position or route progress exists; passenger commute legs carry the required transit assignment.
+
+## Dialogue ownership
+
+A statistical sample carrying an established `npcId` reuses the canonical named body. A sampled handle already owned by a quest/continuity actor cannot spawn another anonymous copy; later identity resolution also merges a pre-existing alias. Stress copies never inherit persistent identity. During dialogue, continuity owns position and the animation director keeps the standing/seated posture, speaking and listening clips while rejecting schedule locomotion. Ending a conversation releases the interruption or retains the next quest appointment. The host closes a restored conversation when its UI was not restored.

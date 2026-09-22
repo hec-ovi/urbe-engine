@@ -153,7 +153,8 @@ ctx.fillRect( 40, 80, 70, 68 );
 view.avatar.setAvatar( { name: 'Ada Vance', canvas: portrait, bar: 0.8 } );
 
 view.dialog.setNpc( { name: 'Ada Vance', role: 'office worker' } );
-view.dialog.setProfile( { facts: [ [ 'works at', 'quay office' ], [ 'shift', '09:00-17:00 day' ] ], now: 'working · indoors · parcel p40  (paused for you)', routine: [] } );
+view.dialog.setStory( { title: 'The night ledger', objective: 'Ask Ada about the containers.' } );
+view.dialog.setChoices( [ { id: 'ledger', text: 'Where can I find the ledger?' }, { id: 'sign', text: 'Who signs for the night containers?' } ] );
 view.dialog.setTranscript( [
 	{ from: 'npc', name: 'Ada', text: 'The ledger is in the back office. Nobody reads it but me.' },
 	{ from: 'player', text: 'Who signs for the night containers?' }

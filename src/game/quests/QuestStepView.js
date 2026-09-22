@@ -1,35 +1,46 @@
 import { castIds, characterName } from './QuestCast.js';
 import { unavailableMessage } from './QuestAvailability.js';
+import { nextQuestWindow } from './QuestWait.js';
 
 /**
  * One step as everything that shows it reads it: the HUD objective, the quest
  * log and the saved game all take these words, this person and this hour, so
  * two surfaces can never name the same step differently.
  *
- * @returns { stepId, text, done, npcName, place, availability, window }
+ * @returns { stepId, text, state, done, npcName, place, availability, window }
  */
-export function stepView( { step, runtime, sim = null, timeMin = 0, done = false } ) {
+export function stepView( { step, runtime, sim = null, timeMin = 0, done = false, cancelled = false } ) {
 
 	const text = step.narrative.playerHint;
-	if ( done ) {
+	if ( done || cancelled ) {
 
-		return { stepId: step.stepId, text, done: true, npcName: null, place: null, availability: { available: true }, window: null };
+		return {
+			stepId: step.stepId, text, state: cancelled ? 'cancelled' : 'done', done,
+			npcName: null, place: null, availability: { available: ! cancelled }, window: null
+		};
 
 	}
 
 	const window = step.window ?? null;
-	const availability = runtime.stepAvailability( step.stepId, timeMin );
+	const physical = runtime.stepAvailability( step.stepId, timeMin );
+	// A closed appointment often has nobody at its venue yet. Explain the
+	// authored opening before that temporary absence so the player can wait.
+	// This changes presentation only; interaction still requires live presence.
+	const placement = runtime.stepPlacementAvailability( step.stepId, timeMin );
+	const availability = placement.reason === 'outside_window' ? placement : physical;
 
 	return {
 		stepId: step.stepId,
 		text,
+		state: availability.available ? 'active' : 'locked',
 		done: false,
 		npcName: personName( sim, castIds( step.target, runtime )[ 0 ], runtime ),
 		place: placeView( step, runtime, timeMin ),
 		availability: availability.available
 			? { available: true }
 			: { ...availability, text: unavailableMessage( availability.reason, window ) },
-		window
+		window,
+		...( availability.reason === 'outside_window' ? { wait: nextQuestWindow( window, timeMin ) } : {} )
 	};
 
 }

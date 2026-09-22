@@ -4,9 +4,9 @@ Purpose: converts active quest steps into deterministic player interaction targe
 
 ## Inputs
 
-- Target query: [schema/target-query.schema.json](schema/target-query.schema.json). `timeMin` uses the simulation clock; optional `questId` names the questline the player is following.
+- Target query: [schema/target-query.schema.json](schema/target-query.schema.json). `timeMin` uses the simulation clock; optional `questId` names the questline and `stepId` its explicitly followed active alternative.
 - Interaction request: [schema/interaction-request.schema.json](schema/interaction-request.schema.json). The host supplies the selected target, symbolic input action, current places, and physical focus facts when the mechanic targets an item or person.
-- Objective query: [schema/target-query.schema.json](schema/target-query.schema.json). The same clock query selects one open questline and its first definition-ordered step for map guidance: the `questId` the host passes while that questline still has an open step, else the first open one, main story first.
+- Objective query: [schema/target-query.schema.json](schema/target-query.schema.json). The same clock query selects one open questline and its explicitly followed active `stepId`, otherwise its first definition-ordered step, for map guidance: the `questId` the host passes while that questline still has an open step, else the first open one, main story first.
 - Live world projection: [schema/gameplay-world.schema.json](schema/gameplay-world.schema.json). The assembled city publishes one deterministic entry or access anchor per parcel.
 - Live interaction frame: [schema/gameplay-frame.schema.json](schema/gameplay-frame.schema.json). The host supplies validated clock, place and camera facts.
 - Live selected binding: [schema/gameplay-perform.schema.json](schema/gameplay-perform.schema.json). The shared interactor returns only the selected target key, symbolic binding and current clock.
@@ -85,3 +85,13 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - Crouch control resolves only the requested cast npcId, holds it until its matching release, and resumes its persisted simulation routine.
 - Parcel area mechanics are offered only at their deterministic entry or interior anchor. District observation remains an area action throughout the named district.
 - Quest item data currently publishes a parcel but no room or transform. The live layer places the exact bound assembly at the parcel's ground-floor interior entry anchor, or its published access point when no interior door exists. An absent binding, fixed assembly, missing `take` anchor or unresolved material produces no pickup. Observe data publishes only a district, so the layer does not invent individual evidence clues.
+
+## Explicit story conversations
+
+`QuestSession.dialoguesFor(npcId,timeMin)` returns the active authored topics for the exact cast identity. `chooseDialogue(questId,stepId,npcId,choiceId,timeMin)` delegates to the runtime’s scoped choice boundary and returns its reply plus the completed steps/ending when appropriate. Stale IDs, the wrong person, unavailable choices and already completed steps do not mutate progress. Information questions return a reply without progression. `conversationRecap(npcId)` supplies the last completed lead and noncommitting follow-up questions for returning players.
+
+The host accepts story choices only from the currently open conversation and selected topic. Optional typed replies cannot call the talk-completion event; closing is noncommitting. Authored dialogue remains usable without a model server. Free-chat calls serialize, time out, expose retry, and late replies are discarded after closing or accepting a story choice. Quest step IDs, casts and state format stay compatible with previous saves. `scripts/refresh-quest-dialogue.mjs` uses production materialization and copies only validated dialogue into an existing bundle, preserving its descriptor, graph, cast, progress, inventory and geometry.
+
+The journal can explicitly wait for an authored time window. The host computes the next eligible weekday/opening, advances only forward, rechecks that the same active step is still time-gated, refreshes the population and journal, and saves without advancing the quest. Conversation, transit and active escort control prevent waiting. Known objective locations remain trackable while unavailable.
+
+Physical interaction sight tests exclude non-solid impact sensors, including the target NPC’s own capsule. Solid walls, doors and props still block listening/theft/pickup; distances and exact identity checks remain unchanged.

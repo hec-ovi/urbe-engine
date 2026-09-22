@@ -52,7 +52,7 @@ describe( 'QuestSession', () => {
 		const [ main, sideJob ] = session.view( 600 );
 		expect( main.state ).toBe( 'active' );
 		expect( main.steps ).toEqual( [ {
-			stepId: 's_talk', text: 'Talk to the barista at the cafe.', done: false, npcName: 'barista Vale',
+			stepId: 's_talk', text: 'Talk to the barista at the cafe.', state: 'active', done: false, npcName: 'barista Vale',
 			place: { kind: 'parcel', id: 'p1', name: null }, availability: { available: true }, window: null
 		} ] );
 
@@ -72,6 +72,26 @@ describe( 'QuestSession', () => {
 
 		expect( session.holdsCast( 'n1' ) ).toBe( true );
 		expect( session.holdsCast( 'n9' ) ).toBe( false );
+
+	} );
+
+	it( 'offers the next appointment even while its living cast is away from the venue', () => {
+
+		const timed = structuredClone( definition );
+		timed.steps[ 0 ].window = { label: 'daytime', days: [ 0, 1, 2, 3, 4, 5, 6 ], startMin: 480, endMin: 960 };
+		const people = sim();
+		const session = QuestSession.create( [ timed ], people, 600 );
+		people.behaviorAt = () => ( { mode: 'interior', activity: 'home', place: { kind: 'parcel', id: 'p2' } } );
+		const runtime = session.entries[ 0 ].runtime;
+		expect( runtime.stepAvailability( 's_talk', 1260 ).reason ).toBe( 'off_duty' );
+		expect( session.view( 1260 )[ 0 ].steps[ 0 ] ).toMatchObject( {
+			availability: { available: false, reason: 'outside_window' },
+			wait: { timeMin: 1920, label: 'Tue 08:00' }
+		} );
+		expect( session.view( 600 )[ 0 ].steps[ 0 ].availability.reason ).toBe( 'off_duty' );
+		people.people.get( 'n1' ).flags.dead = true;
+		expect( session.view( 1260 )[ 0 ].steps[ 0 ].availability.reason ).toBe( 'role_dead' );
+		expect( session.view( 1260 )[ 0 ].steps[ 0 ].wait ).toBeUndefined();
 
 	} );
 
@@ -150,6 +170,36 @@ describe( 'QuestSession', () => {
 
 		expect( session.entries.map( ( { definition } ) => definition.steps[ 0 ].target.place ) ).toEqual( [ { parcelId: 'p1', name: 'coffee shop' }, { parcelId: 'p1', name: 'coffee shop' } ] );
 		expect( session.entries.map( ( { runtime } ) => Object.values( runtime.cast )[ 0 ] ) ).toEqual( [ 'n1', 'n2' ] );
+
+	} );
+
+	it( 'identifies open endings and cancels only known open alternatives after one ending is completed', () => {
+
+		const choices = quest( 'choices', {
+			roles: [ role( 'barista', 'barista' ) ],
+			steps: [
+				step( 'gather', talk, { next: [ { toStepId: 'publish', when: [] }, { toStepId: 'sell', when: [] } ] } ),
+				step( 'publish', talk, { hint: 'Give Ada the evidence.', endingId: 'record' } ),
+				step( 'sell', { kind: 'goto', place: { parcelId: 'p2' } }, { hint: 'Bring the evidence to the buyer.', endingId: 'deal', wantedByRoleId: 'barista' } )
+			]
+		} );
+		choices.endings = [
+			{ endingId: 'record', title: 'On record', epilogue: 'Ada files the evidence.' },
+			{ endingId: 'deal', title: 'The deal', epilogue: 'The buyer keeps the evidence.' }
+		];
+		const session = QuestSession.create( [ choices ], sim(), 600 );
+		expect( session.view( 600 )[ 0 ].steps.map( ( step ) => step.stepId ) ).toEqual( [ 'gather' ] );
+		session.advance( { kind: 'talkedTo', npcId: 'n1' }, 601 );
+		const options = session.view( 601 )[ 0 ].steps.filter( ( step ) => step.endingId );
+		expect( options.map( ( step ) => step.endingTitle ) ).toEqual( [ 'On record', 'The deal' ] );
+		expect( options[ 0 ] ).toMatchObject( { state: 'active', commitment: "I'm ready: On record." } );
+		expect( options[ 1 ].commitment ).toBeUndefined();
+		session.advance( { kind: 'talkedTo', npcId: 'n1' }, 602 );
+		const ended = session.view( 602 )[ 0 ];
+		expect( ended.state ).toBe( 'done' );
+		expect( ended.steps.find( ( step ) => step.stepId === 'publish' ) ).toMatchObject( { state: 'done', done: true } );
+		expect( ended.steps.find( ( step ) => step.stepId === 'sell' ) ).toMatchObject( { state: 'cancelled', done: false } );
+		expect( session.persistenceView( 602 )[ 0 ].completedSteps ).toEqual( [ 'gather', 'publish' ] );
 
 	} );
 

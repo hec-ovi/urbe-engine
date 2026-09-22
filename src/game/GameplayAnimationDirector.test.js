@@ -4,6 +4,56 @@ import { GameplayAnimationDirector } from './GameplayAnimationDirector.js';
 
 describe( 'live gameplay animation composition', () => {
 
+	it( 'replaces a focused follower with standing rest for the entire open conversation', () => {
+
+		const rig = setup();
+		const following = actor( { animation: 'run', mode: 'following' } );
+		rig.director.update( [ following ], 0 );
+		const conversation = { npcId: following.npcId };
+		rig.director.beginConversation( conversation, { ...following, mode: 'conversation' } );
+		expect( current( rig.director, following.npcId ) ).toMatchObject( {
+			mode: 'routine', action: null, currentClip: 'Idle_Loop', posture: 'standing'
+		} );
+		expect( lastSegments( rig.hero ) ).toEqual( [ 'Idle_Loop' ] );
+
+		// A previously produced follow snapshot cannot reclaim an open chat.
+		rig.director.update( [ following ], 0.1 );
+		expect( current( rig.director, following.npcId ).currentClip ).toBe( 'Idle_Loop' );
+		rig.director.npcDialogueTurn( conversation );
+		rig.director.update( [ following ], 2 );
+		expect( lastSegments( rig.hero ) ).toEqual( [ 'Idle_Loop' ] );
+		expect( rig.director.snapshot().actions ).toEqual( [] );
+
+		// Closing between turns still updates the focused rig to its resumed
+		// routine, even though the timed speaking action has already finished.
+		const resumed = { ...following, animation: 'walk', mode: 'resuming' };
+		rig.director.endConversation( conversation, resumed );
+		expect( lastSegments( rig.hero ) ).toEqual( [ 'Walk_Loop' ] );
+
+	} );
+
+	it( 'keeps a seated conversation pose when schedule snapshots change before and between turns', () => {
+
+		const rig = setup();
+		const seated = actor( { animation: 'sit', mode: 'conversation' } );
+		const conversation = { npcId: seated.npcId };
+		rig.director.beginConversation( conversation, seated );
+		const walking = { ...seated, animation: 'walk', mode: 'schedule' };
+		rig.director.update( [ walking ], 0.1 );
+		expect( lastSegments( rig.hero ) ).toEqual( [ 'Sitting_Idle_Loop' ] );
+		rig.director.playerDialogueTurn( conversation );
+		expect( lastSegments( rig.hero ) ).toEqual( [ 'Sitting_Nodding_Loop' ] );
+		rig.director.npcDialogueTurn( conversation );
+		expect( lastSegments( rig.hero ) ).toEqual( [ 'Sitting_Talking_Loop' ] );
+		rig.director.update( [ walking ], 2 );
+		expect( current( rig.director, seated.npcId ) ).toMatchObject( {
+			currentClip: 'Sitting_Idle_Loop', posture: 'seated'
+		} );
+		expect( lastSegments( rig.hero ) ).toEqual( [ 'Sitting_Idle_Loop' ] );
+		expect( rig.crowd.setAnimationClip.mock.calls.some( ( [ , clip ] ) => clip === 'Walk_Loop' ) ).toBe( false );
+
+	} );
+
 	it( 'changes speaker and listener roles atomically, then resumes the latest NPC routine', () => {
 
 		const rig = setup();

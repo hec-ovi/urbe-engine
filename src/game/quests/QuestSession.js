@@ -275,6 +275,51 @@ export class QuestSession {
 
 	}
 
+	/** Authored, explicit conversation choices for this exact living cast identity. */
+	dialoguesFor( npcId, timeMin ) {
+
+		return this.entries.flatMap( ( { definition, runtime } ) => runtime.activeSteps().flatMap( step => {
+
+			const dialogue = runtime.dialogueFor( step.stepId, npcId, timeMin );
+			return dialogue ? [ { ...dialogue, title: definition.title, objective: step.narrative.playerHint } ] : [];
+
+		} ) );
+
+	}
+
+	chooseDialogue( questId, stepId, npcId, choiceId, timeMin ) {
+
+		const entry = this.entries.find( entry => entry.definition.id === questId );
+		if ( ! entry ) return { accepted: false, reason: 'stale' };
+		const result = entry.runtime.chooseDialogue( stepId, npcId, choiceId, timeMin );
+		if ( ! result.accepted || ! result.advanceResult ) return result;
+		return { ...result, change: {
+			definition: entry.definition,
+			completed: entry.definition.steps.filter( step => result.advanceResult.completedStepIds.includes( step.stepId ) ),
+			ending: entry.definition.endings.find( ending => ending.endingId === result.advanceResult.endingId ) ?? null
+		} };
+
+	}
+
+	/** A returning player hears the last accepted lead instead of the introduction again. */
+	conversationRecap( npcId ) {
+
+		for ( const { definition, runtime } of this.entries ) {
+
+			const completed = new Set( runtime.serialize().completedStepIds );
+			const step = [ ...definition.steps ].reverse().find( step => completed.has( step.stepId )
+				&& step.target.kind === 'talk' && runtime.cast[ step.target.roleId ] === npcId && step.dialogue );
+			const choice = step?.dialogue.choices.find( choice => choice.completesStep );
+			if ( choice ) return {
+				questId: definition.id, stepId: step.stepId, title: definition.title, reply: choice.reply,
+				questions: step.endingId ? [] : step.dialogue.choices.filter( choice => ! choice.completesStep )
+			};
+
+		}
+		return null;
+
+	}
+
 	/**
 	 * @param event PlayerEvent
 	 * @returns what changed: [{ definition, completed: [QuestStep], ending: QuestEnding | null }], only for questlines the event moved
@@ -418,6 +463,16 @@ export class QuestSession {
 			const state = runtime.serialize();
 			const status = runtime.status();
 			const steps = new Map( definition.steps.map( ( step ) => [ step.stepId, step ] ) );
+			const journalStep = ( step, options = {} ) => ( {
+				...stepView( { step, runtime, sim: this.sim, timeMin, ...options } ),
+				...( step.endingId ? {
+					endingId: step.endingId,
+					endingTitle: definition.endings.find( ( ending ) => ending.endingId === step.endingId )?.title,
+					...( step.target.kind === 'talk' ? { commitment: step.dialogue?.choices.find( ( choice ) => choice.completesStep )?.text
+						?? `I'm ready: ${definition.endings.find( ( ending ) => ending.endingId === step.endingId )?.title}.` } : {} ),
+					stake: step.narrative.stake
+				} : {} )
+			} );
 
 			return {
 				id: definition.id,
@@ -425,8 +480,9 @@ export class QuestSession {
 				text: status === 'completed' ? runtime.ending()?.epilogue ?? definition.premise : definition.premise,
 				state: this.#state( entry, status, state, 'done' ),
 				steps: [
-					...state.completedStepIds.map( ( id ) => stepView( { step: steps.get( id ), runtime, done: true } ) ),
-					...runtime.activeSteps().map( ( step ) => stepView( { step, runtime, sim: this.sim, timeMin } ) )
+					...state.completedStepIds.map( ( id ) => journalStep( steps.get( id ), { done: true } ) ),
+					...runtime.activeSteps().map( ( step ) => journalStep( step ) ),
+					...cancelledJournalSteps( definition, state ).map( ( step ) => journalStep( step, { cancelled: true } ) )
 				]
 			};
 
@@ -444,6 +500,24 @@ export class QuestSession {
 		return side && state.completedStepIds.length === 0 ? 'available' : 'active';
 
 	}
+
+}
+
+/** Ending a quest closes other known open paths. Never guess whether a conditional edge opened. */
+function cancelledJournalSteps( definition, state ) {
+
+	if ( ! state.endingId ) return [];
+	const steps = new Map( definition.steps.map( ( step ) => [ step.stepId, step ] ) );
+	const open = new Set( definition.entryStepIds );
+	for ( const id of state.completedStepIds ) {
+
+		open.delete( id );
+		const step = steps.get( id );
+		if ( step.branching !== 'parallel' ) continue;
+		for ( const edge of step.next ) if ( edge.when.length === 0 ) open.add( edge.toStepId );
+
+	}
+	return [ ...open ].filter( ( id ) => ! state.completedStepIds.includes( id ) ).map( ( id ) => steps.get( id ) );
 
 }
 

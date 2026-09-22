@@ -35,16 +35,16 @@ describe( 'playable game navigation', () => {
 		await user.type( input, 'where is the quay?{Enter}' );
 
 		await vi.waitFor( () => expect( app.talk.say ).toHaveBeenCalledOnce() );
-		expect( app.talk.say ).toHaveBeenCalledWith( app.interactor.conversation, 'where is the quay?', 725, [] );
+		expect( app.talk.say ).toHaveBeenCalledWith( app.interactor.conversation, 'where is the quay?', 725, [], { signal: expect.anything() } );
 		expect( screen.getByText( 'Down the steps.' ) ).toBeTruthy();
 		expect( app.animations.playerDialogueTurn ).toHaveBeenCalledOnce();
 		expect( app.animations.npcDialogueTurn ).toHaveBeenCalledOnce();
 		expect( app.animations.completeDialogueTurn ).toHaveBeenCalledOnce();
-		expect( app.questGameplay.places ).toHaveBeenCalledWith( 725 );
+		expect( app.questGameplay.places ).not.toHaveBeenCalled();
 
 		app.talk.say.mockRejectedValueOnce( new Error( 'model unavailable' ) );
 		await user.type( input, 'second line{Enter}' );
-		await vi.waitFor( () => expect( screen.getByText( '...' ) ).toBeTruthy() );
+		await vi.waitFor( () => expect( screen.getByText( /reply could not be reached/ ) ).toBeTruthy() );
 
 		await user.type( input, 'third line{Enter}' );
 		await vi.waitFor( () => expect( app.talk.say ).toHaveBeenCalledTimes( 3 ) );

@@ -29,6 +29,7 @@ export class GameplayAnimationDirector {
 		this.actions = new Map();
 		this.actorActions = new Map();
 		this.conversations = new WeakMap();
+		this.conversationActors = new Map();
 		this.timed = new Map();
 		this.physicsActors = new Set();
 		this.focus = null;
@@ -47,6 +48,12 @@ export class GameplayAnimationDirector {
 
 			const actorId = this.#actorId( actor.npcId );
 			if ( this.physicsActors.has( actorId ) ) continue;
+			if ( this.conversationActors.has( actorId ) ) {
+
+				this.#syncActor( actor );
+				continue;
+
+			}
 			let held = this.actorActions.get( actorId );
 			// Quest appointments also hold their bodies in posing mode. Only
 			// an explicit crouch animation may start the crouch action.
@@ -118,6 +125,7 @@ export class GameplayAnimationDirector {
 		if ( ! identity ) return null;
 		const actorId = this.#actorId( identity );
 		this.physicsActors.add( actorId );
+		this.conversationActors.delete( actorId );
 		const held = this.actorActions.get( actorId );
 		if ( this.focus?.npcId === identity ) this.focus = null;
 		return held ? this.#settle( held.actionId, 'interrupt', 'physics', false ) : null;
@@ -158,9 +166,16 @@ export class GameplayAnimationDirector {
 	beginConversation( conversation, actor ) {
 
 		if ( ! conversation?.npcId || ! actor ) return null;
-		const actorId = this.#syncActor( actor );
+		const actorId = this.#actorId( actor.npcId );
 		this.#replaceParticipants( [ PLAYER_ID, actorId ] );
-		this.conversations.set( conversation, { actorId, npcId: conversation.npcId, actionId: null } );
+		// The open conversation owns posture even between speaking turns. A
+		// stale schedule/follow snapshot must not resume locomotion or stand up
+		// a seated listener when a timed turn completes.
+		const routine = routineFor( { ...actor, mode: 'conversation' } );
+		const state = { actorId, npcId: conversation.npcId, actionId: null, routine };
+		this.conversations.set( conversation, state );
+		this.conversationActors.set( actorId, state );
+		this.#syncActor( actor, conversation.npcId );
 		return { actorId, npcId: conversation.npcId };
 
 	}
@@ -199,7 +214,8 @@ export class GameplayAnimationDirector {
 
 		const state = this.conversations.get( conversation );
 		if ( ! state ) return null;
-		if ( actor ) this.#syncActor( actor );
+		this.conversationActors.delete( state.actorId );
+		if ( actor ) this.#syncActor( actor, state.npcId );
 		const result = state.actionId
 			? this.#settle( state.actionId, 'interrupt', reason, true, state.npcId )
 			: null;
@@ -323,10 +339,10 @@ export class GameplayAnimationDirector {
 
 	}
 
-	#syncActor( actor ) {
+	#syncActor( actor, focusNpcId = null ) {
 
 		const actorId = this.#actorId( actor.npcId );
-		this.#sync( actorId, routineFor( actor ) );
+		this.#sync( actorId, this.conversationActors.get( actorId )?.routine ?? routineFor( actor ), focusNpcId );
 		return actorId;
 
 	}
@@ -340,15 +356,15 @@ export class GameplayAnimationDirector {
 
 	}
 
-	#sync( actorId, routine ) {
+	#sync( actorId, routine, focusNpcId = null ) {
 
 		const key = JSON.stringify( routine );
-		if ( this.routines.get( actorId ) === key ) return null;
+		if ( this.routines.get( actorId ) === key && ! focusNpcId ) return null;
 		const result = this.coordinator.dispatch( {
 			version: '1', commandId: this.#id( 'routine' ), kind: 'sync-routine', actorId, routine
 		} );
 		this.routines.set( actorId, key );
-		this.#render( result, null, 'routine' );
+		this.#render( result, focusNpcId, 'routine' );
 		return result;
 
 	}
@@ -418,14 +434,15 @@ function playerRoutine() {
 
 function routineFor( actor ) {
 
-	const clipName = CLIP_BY_ANIMATION[ actor.animation ] ?? 'Idle_Loop';
-	const posture = actor.animation === 'sit' ? 'seated' : 'standing';
-	const activity = actor.animation === 'run' ? 'sprint'
-		: actor.animation === 'walk' ? ( actor.mode === 'resuming' ? 'travel' : 'walk' )
-			: actor.animation === 'sit' ? 'sit' : 'idle';
+	const animation = actor.mode === 'conversation' ? ( actor.animation === 'sit' ? 'sit' : 'idle' ) : actor.animation;
+	const clipName = CLIP_BY_ANIMATION[ animation ] ?? 'Idle_Loop';
+	const posture = animation === 'sit' ? 'seated' : 'standing';
+	const activity = animation === 'run' ? 'sprint'
+		: animation === 'walk' ? ( actor.mode === 'resuming' ? 'travel' : 'walk' )
+			: animation === 'sit' ? 'sit' : 'idle';
 	const entry = Number.isInteger( actor.schedule?.entryIndex ) ? actor.schedule.entryIndex : 0;
 	return {
-		routineId: `npc:${safePart( actor.mode )}:${entry}:${safePart( actor.animation )}`,
+		routineId: `npc:${safePart( actor.mode )}:${entry}:${safePart( animation )}`,
 		activity, posture, clipName, loop: true
 	};
 

@@ -4,6 +4,7 @@ import { QuestGameplay, questGameplayWorld } from './QuestGameplay.js';
 import { QuestActionError } from './QuestActionError.js';
 import { MissionItemAssets } from './MissionItemAssets.js';
 import { Physics } from '../physics/Physics.js';
+import { ImpactWorld } from '../physics/ImpactWorld.js';
 
 const FEET = new THREE.Vector3( 0, 0, 0 );
 const EYE = new THREE.Vector3( 0, 1.7, 0 );
@@ -192,6 +193,46 @@ describe( 'live quest target projection', () => {
 
 		const blocked = setup( fakeActions( target ), { crowd, blocked: true } );
 		expect( blocked.candidates( frame( look ) ) ).toEqual( [] );
+
+	} );
+
+	it.each( [ 'listen', 'steal' ] )( 'offers %s through impact sensors while solid walls, doors and props still block it', async ( kind ) => {
+
+		const physics = await Physics.create();
+		const impacts = new ImpactWorld( physics );
+		const members = [
+			{ id: 'body-a', npcId: 'cast-a', position: new THREE.Vector3( - 0.3, 0, - 1.5 ) },
+			{ id: 'body-b', npcId: 'cast-b', position: new THREE.Vector3( 0.3, 0, - 1.5 ) }
+		].slice( 0, kind === 'listen' ? 2 : 1 );
+		impacts.sync( { people: members, vehicles: [] } );
+		physics.world.step();
+		const target = { ...questTarget( kind, [ action( kind, kind ) ] ), actorIds: members.map( member => member.npcId ) };
+		const crowd = {
+			questMember: npcId => members.find( member => member.npcId === npcId ),
+			castMember: npcId => members.find( member => member.npcId === npcId )
+		};
+		const gameplay = setup( fakeActions( target ), { physics, playerCollider: null, crowd } );
+		const look = pointLook( 0, CHEST, - 1.5 );
+		const to = members[ 0 ].position.clone().setY( CHEST ).sub( EYE );
+		const distance = to.length();
+		const hit = physics.world.castRay( new physics.rapier.Ray( EYE, to.normalize() ), distance - 0.25, true );
+		expect( hit.collider.isSensor() ).toBe( true );
+		expect( gameplay.candidates( frame( look ) ) ).toHaveLength( 1 );
+
+		for ( const [ label, size ] of [ [ 'wall', [ 4, 3, 0.1 ] ], [ 'door', [ 1, 2, 0.1 ] ], [ 'prop', [ 0.65, 0.65, 0.65 ] ] ] ) {
+
+			const geometry = new THREE.BoxGeometry( ...size );
+			const solid = physics.addKinematicTrimesh( geometry, { x: 0, y: 1.35, z: - 0.7 } );
+			physics.world.step();
+			expect( gameplay.candidates( frame( look ) ), `${label} occludes the actors` ).toEqual( [] );
+			physics.remove( solid );
+			geometry.dispose();
+			physics.world.step();
+			expect( gameplay.candidates( frame( look ) ) ).toHaveLength( 1 );
+
+		}
+		impacts.dispose();
+		physics.world.free();
 
 	} );
 

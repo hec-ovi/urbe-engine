@@ -58,3 +58,12 @@ describe( 'quest guidance inside a merged building', () => {
 	} );
 
 } );
+
+it('keeps conversation and outcome modals in control of pointer capture and gameplay keys',async()=>{
+ const {playableModalOpen}=await import('./GameApp.js');
+ const view={panels:{current:null},transit:{open:false},summary:{element:{hidden:true}}};
+ expect(playableModalOpen(view,{conversation:null})).toBe(false);
+ expect(playableModalOpen(view,{conversation:{npcId:'n'}})).toBe(true);
+ view.summary.element.hidden=false;expect(playableModalOpen(view,{conversation:null})).toBe(true);
+ view.summary.element.hidden=true;view.panels.current='QUESTS';expect(playableModalOpen(view,{conversation:null})).toBe(true);
+});

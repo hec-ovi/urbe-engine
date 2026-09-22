@@ -212,7 +212,7 @@ export class Interactor {
 			if ( instance ) {
 
 				person.crowdId = handle;
-				if ( this.crowd.identify ) this.crowd.identify( person, instance );
+				if ( this.crowd.identify ) person = this.crowd.identify( person, instance ) ?? person;
 				else {
 
 					person.npcId = instance.npcId;
@@ -260,6 +260,13 @@ export class Interactor {
 		this.#facePlayer( person );
 
 		const characterName = this.quests?.characterName?.( person.npcId );
+		const scheduled = person.npcId ? this.sim.behaviorAt( person.npcId, timeMin ) : null;
+		const actualPlace = controlledActor?.place ?? personPlace( person );
+		const behavior = scheduled && actualPlace ? {
+			mode: actualPlace.kind === 'parcel' ? 'interior' : actualPlace.kind === 'route' ? 'transit' : 'street',
+			activity: [ 'working', 'shopping', 'leisure', 'home', 'commuting', 'transit_wait' ].includes( person.activity ) ? person.activity : 'leisure',
+			place: actualPlace, interrupted: true
+		} : scheduled;
 		this.conversation = {
 			person,
 			npcId: person.npcId,
@@ -267,7 +274,7 @@ export class Interactor {
 			// A presentation copy keeps the story's name coherent in the
 			// prompt, profile and reply without renaming the simulation NPC.
 			instance: characterName ? { ...person.instance, name: characterName } : person.instance,
-			behavior: person.npcId ? this.sim.behaviorAt( person.npcId, timeMin ) : null
+			behavior
 		};
 		this.animations?.beginConversation( this.conversation, controlledActor );
 

@@ -6,6 +6,7 @@
   "required": ["timeMin"],
   "properties": {
     "timeMin": { "type": "number", "minimum": 0 },
-    "questId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }
+    "questId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" },
+    "stepId": { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/id" }
   }
 }

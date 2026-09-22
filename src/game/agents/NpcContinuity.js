@@ -146,12 +146,14 @@ export class NpcContinuity {
 		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is in conversation` );
 		if ( this.follow ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.follow.npcId} is already under movement control` );
 		if ( this.pose ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.pose.npcId} has an explicit pose` );
-		const actor = this.#scheduledActor( request.npcId, request.timeMin );
+		const held = this.holds.has( request.npcId );
+		const actor = held ? this.actors.get( request.npcId ) : this.#scheduledActor( request.npcId, request.timeMin );
 		if ( actor.place.kind === 'route' ) throw new NpcContinuityError( 'E_NPC_PLACE', `NPC ${request.npcId} cannot lead while aboard transit` );
 		const destination = this.#locatePlace( request.destination, null ).position;
 		const route = this.routes.route( actor.position, destination );
 		if ( ! route ) throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${request.npcId} cannot reach the escort destination` );
 		this.#interrupt( request.npcId, request.timeMin );
+		this.holds.delete( request.npcId );
 		actor.visible = true;
 		actor.mode = 'leading';
 		actor.animation = route.distanceMeters > ARRIVAL_DISTANCE ? 'walk' : 'idle';
@@ -175,6 +177,9 @@ export class NpcContinuity {
 		}
 		const actor = this.actors.get( request.npcId );
 		if ( ! actor ) throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', `NPC ${request.npcId} has no materialized actor` );
+		// Dialogue owns the physical body until close, even if transit is still
+		// publishing a passenger location for the interrupted follower.
+		if ( this.conversation?.npcId === actor.npcId ) return this.#actorOut( actor );
 		actor.position = [ ...request.position ];
 		actor.place = { kind: 'route', id: request.routeId };
 		actor.mode = 'following';
@@ -245,7 +250,7 @@ export class NpcContinuity {
 		if ( this.conversation?.npcId === actor.npcId ) {
 
 			actor.mode = 'conversation';
-			actor.animation = 'idle';
+			actor.animation = actor.animation === 'sit' ? 'sit' : 'idle';
 			this.follow.lastTimeMin = request.timeMin;
 			return this.#actorOut( actor );
 
@@ -367,12 +372,16 @@ export class NpcContinuity {
 		this.boundary.input( 'conversation-start', request );
 		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is already in conversation` );
 		if ( this.pose ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.pose.npcId} has an explicit pose` );
-		if ( this.follow?.mode === 'resuming' && this.follow.npcId === request.npcId ) this.follow = null;
+		const returning = this.follow?.mode === 'resuming' && this.follow.npcId === request.npcId;
 		const following = [ 'following', 'leading' ].includes( this.follow?.mode ) && this.follow.npcId === request.npcId;
-		const held = this.holds.delete( request.npcId );
-		const actor = following || held ? this.actors.get( request.npcId ) : this.#scheduledActor( request.npcId, request.timeMin );
-		if ( ! actor ) throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', `NPC ${request.npcId} has no materialized actor` );
+		const held = this.holds.has( request.npcId );
+		// The visible body is authoritative at interaction time. Re-projecting
+		// its off-shift schedule here can fail on a distant unloaded place, or
+		// replace an existing return path before control has been acquired.
+		const actor = this.actors.get( request.npcId ) ?? this.#scheduledActor( request.npcId, request.timeMin );
 		if ( ! following && ! held ) this.#interrupt( request.npcId, request.timeMin );
+		if ( returning ) this.follow = null;
+		this.holds.delete( request.npcId );
 		actor.position = [ ...request.position ];
 		actor.heading = request.heading;
 		actor.place = clone( request.place );

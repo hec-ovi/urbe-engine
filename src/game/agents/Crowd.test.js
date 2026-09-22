@@ -194,8 +194,119 @@ describe( 'persistent NPC projection', () => {
 		expect( named ).toMatchObject( { crowdId: 'staff-handle', npcId: 'cast-worker', continuity: true } );
 		expect( crowd.members.size ).toBe( 1 );
 
+		// The statistical post still reports this handle while continuity owns it.
+		// Twenty resamples and repeated quest materialization must consume that
+		// same body, including while a focused rig hides its VAT instance.
+		named.hero = true;
+		const position = named.position.clone();
+		for ( let second = 3; second <= 60; second += 3 ) {
+
+			crowd.update( 3, inside, { timeMin: 600 + second / 60, daySeconds: 36000 + second } );
+			expect( crowd.questMember( instance.npcId, 600 + second / 60, inside, actor.place ) ).toBe( named );
+			expect( crowd.count ).toBe( 1 );
+			expect( named.position.equals( position ) ).toBe( true );
+
+		}
+		expect( sim.instantiate ).toHaveBeenCalledTimes( 1 );
+
 		// a body the schedule puts somewhere else is never the cast NPC's
 		expect( crowd.questMember( instance.npcId, 601, inside, { kind: 'edge', id: 'e1' } ) ).toBeNull();
+
+	} );
+
+	it( 'consumes established samples even when a quest body was posted before its handle was loaded', () => {
+
+		const instance = {
+			npcId: 'reserved-worker', name: { given: 'Petra', family: 'Costa' },
+			type: 'barista', gender: 'female', appearanceSeed: 44
+		};
+		const inside = new THREE.Vector3( 2, 0, 3 );
+		const actor = { ...persistentActor( instance ), place: { kind: 'parcel', id: 'cafe' },
+			position: inside.toArray(), animation: 'sit', mode: 'conversation' };
+		const handle = { npcId: instance.npcId, crowdId: 'late-staff-handle', type: 'barista',
+			gender: 'female', appearanceSeed: 44, activity: 'working', place: actor.place };
+		const sim = {
+			crowd: ( timeMin, scope ) => ( { agents: scope.kind === 'parcel' ? [ handle ] : [] } ),
+			instantiate: vi.fn( () => instance ), getNPC: () => instance
+		};
+		const crowd = new Crowd( { assets: testAssets(), routes: pavement(), signals: { green: () => true }, sim,
+			places: new Map( [ [ 'cafe', { inside, heading: 0, anchors: {} } ] ] ), capacity: 4 } );
+		const member = crowd.syncActor( actor, inside );
+		member.hero = true;
+		for ( let second = 0; second <= 60; second += 3 ) {
+
+			crowd.update( 3, inside, { timeMin: 1260 + second / 60, daySeconds: 75600 + second } );
+			expect( [ ...crowd.members.values() ] ).toEqual( [ member ] );
+			expect( member.position.toArray() ).toEqual( actor.position );
+			expect( member.clip ).toBe( CLIP.SIT );
+
+		}
+		expect( sim.instantiate ).not.toHaveBeenCalled();
+		// Unload/reload creates one replacement whose identity already belongs
+		// to the sampled worker; projecting continuity adopts that exact body.
+		member.hero = false;
+		crowd.syncActor( { ...actor, visible: false }, inside );
+		crowd.update( 3, inside, { timeMin: 1261, daySeconds: 75660 } );
+		const replacement = crowd.memberForNpc( instance.npcId );
+		expect( replacement ).not.toBe( member );
+		expect( crowd.syncActor( actor, inside ) ).toBe( replacement );
+		expect( crowd.count ).toBe( 1 );
+
+	} );
+
+	it( 'keeps stress-test copies anonymous when the street sample has an established identity', () => {
+
+		const instance = { npcId: 'walker', type: 'courier', gender: 'female', appearanceSeed: 44 };
+		const agent = { npcId: instance.npcId, crowdId: 'walk-handle', type: 'courier', gender: 'female',
+			appearanceSeed: 44, activity: 'commuting', place: { kind: 'edge', id: 'e2' }, progress: 0.5, direction: 1 };
+		const crowd = new Crowd( { assets: testAssets(), routes: pavement(), signals: { green: () => true },
+			sim: { getNPC: () => instance, crowd: () => ( { agents: [ agent ] } ) },
+			places: new Map(), capacity: 6, stress: 2 } );
+		crowd.update( 0, new THREE.Vector3(), { timeMin: 1260, daySeconds: 75600 } );
+		const copies = [ ...crowd.members.values() ].filter( member => member.copy );
+		expect( copies ).toHaveLength( 2 );
+		expect( copies.every( member => member.npcId === null && member.instance === null && member.crowdId === null ) ).toBe( true );
+		expect( [ ...crowd.members.values() ].filter( member => member.npcId === instance.npcId ) ).toHaveLength( 1 );
+
+	} );
+
+	it( 'removes an anonymous existing post when its next sample identifies the separately posted cast body', () => {
+
+		const instance = { npcId: 'reserved', type: 'barista', gender: 'female', appearanceSeed: 44 };
+		const inside = new THREE.Vector3();
+		let agent = { crowdId: 'alias', type: 'barista', gender: 'female', appearanceSeed: 44,
+			activity: 'working', place: { kind: 'parcel', id: 'cafe' } };
+		const crowd = new Crowd( { assets: testAssets(), routes: pavement(), signals: { green: () => true },
+			sim: { getNPC: () => instance, crowd: ( timeMin, scope ) => ( { agents: scope.kind === 'parcel' ? [ agent ] : [] } ) },
+			places: new Map( [ [ 'cafe', { inside, heading: 0, anchors: {} } ] ] ), capacity: 4 } );
+		crowd.update( 0, inside, { timeMin: 1260, daySeconds: 75600 } );
+		const alias = [ ...crowd.members.values() ][ 0 ];
+		const canonical = crowd.syncActor( { ...persistentActor( instance ), place: agent.place }, inside );
+		canonical.hero = true;
+		expect( crowd.count ).toBe( 2 );
+		agent = { ...agent, npcId: instance.npcId };
+		crowd.update( 3, inside, { timeMin: 1260, daySeconds: 75603 } );
+		expect( [ ...crowd.members.values() ] ).toEqual( [ canonical ] );
+		expect( crowd.members.has( alias.id ) ).toBe( false );
+
+	} );
+
+	it( 'merges a discovered alias into the existing focused identity', () => {
+
+		const instance = { npcId: 'reserved', type: 'barista', gender: 'female', appearanceSeed: 44 };
+		const inside = new THREE.Vector3();
+		const agent = { crowdId: 'alias', type: 'barista', gender: 'female', appearanceSeed: 44,
+			activity: 'working', place: { kind: 'parcel', id: 'cafe' } };
+		const crowd = new Crowd( { assets: testAssets(), routes: pavement(), signals: { green: () => true },
+			sim: { getNPC: () => instance, crowd: ( timeMin, scope ) => ( { agents: scope.kind === 'parcel' ? [ agent ] : [] } ) },
+			places: new Map( [ [ 'cafe', { inside, heading: 0, anchors: {} } ] ] ), capacity: 4 } );
+		const canonical = crowd.syncActor( { ...persistentActor( instance ), place: agent.place }, inside );
+		canonical.hero = true;
+		crowd.update( 0, inside, { timeMin: 1260, daySeconds: 75600 } );
+		const alias = [ ...crowd.members.values() ].find( member => ! member.npcId );
+		expect( alias ).toBeDefined();
+		expect( crowd.identify( alias, instance ) ).toBe( canonical );
+		expect( [ ...crowd.members.values() ] ).toEqual( [ canonical ] );
 
 	} );
 

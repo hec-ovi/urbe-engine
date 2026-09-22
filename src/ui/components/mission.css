@@ -45,8 +45,12 @@
 	color: #c4d1d9;
 }
 
+.summary-layer { position: absolute; inset: 0; z-index: 40; pointer-events: auto; background: rgba(3, 6, 9, .55); }
+.summary-layer[hidden] { display: none; }
+
 .summary {
 	position: absolute;
+	z-index: 40;
 	pointer-events: auto;
 	left: 50%;
 	top: 50%;

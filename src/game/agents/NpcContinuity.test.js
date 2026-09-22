@@ -313,6 +313,78 @@ describe( 'NPC continuity integration', () => {
 
 	} );
 
+	it.each( [ false, true ] )( 'pins a %s seated appointment at 21:00 across a schedule boundary, reopen and streaming', ( seated ) => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const place = { kind: 'parcel', id: 'p_cafe' };
+		const position = [ 561, 1, 251 ];
+		const request = { npcId: npc.npcId, timeMin: 1260, position, heading: 0.5, place, seated };
+		expect( bridge.behaviorAt( npc.npcId, 1260 ).place.id ).not.toBe( place.id );
+		controller.hold( request );
+		for ( let opening = 0; opening < 2; opening ++ ) {
+
+			controller.beginConversation( request );
+			for ( let second = 0; second <= 60; second ++ ) {
+
+				const timeMin = 1260 + second * 3;
+				controller.updateFollow( { timeMin, deltaSeconds: 1, playerPosition: [ 10000, 1, 10000 ] } );
+				const [ actor ] = controller.updateVisible( { timeMin, playerPosition: [ 10000, 1, 10000 ], maxDistance: 45 } );
+				expect( actor ).toMatchObject( { npcId: npc.npcId, position, heading: 0.5, place,
+					mode: 'conversation', animation: seated ? 'sit' : 'idle', visible: true } );
+				expect( controller.appear( { npcId: npc.npcId, timeMin } ) ).toEqual( actor );
+				expect( code( () => controller.hold( { ...request, position: [ 999, 1, 999 ] } ) ) ).toBe( 'E_NPC_CONFLICT' );
+				expect( code( () => controller.releaseHold( { npcId: npc.npcId, timeMin } ) ) ).toBe( 'E_NPC_CONFLICT' );
+
+			}
+			expect( controller.endConversation( { timeMin: 1440, hold: true } ) ).toMatchObject( {
+				position, heading: 0.5, place, mode: 'posing', animation: seated ? 'sit' : 'idle'
+			} );
+
+		}
+		const save = controller.serialize();
+		const restored = setup( restoreSimulation( simulationInput(), bridge.simulation.serialize() ) ).controller;
+		restored.restore( save );
+		expect( restored.appear( { npcId: npc.npcId, timeMin: 1441 } ) ).toMatchObject( {
+			position, heading: 0.5, place, mode: 'posing', animation: seated ? 'sit' : 'idle'
+		} );
+
+	} );
+
+	it.each( [ false, true ] )( 'can close an autosaved conversation after restore with current quest hold %s', ( hold ) => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const position = [ 561, 1, 251 ];
+		controller.hold( { npcId: npc.npcId, timeMin: 1260, position, heading: 0.5,
+			place: { kind: 'parcel', id: 'p_cafe' }, seated: true } );
+		controller.beginConversation( { npcId: npc.npcId, timeMin: 1260, position, heading: 0.5,
+			place: { kind: 'parcel', id: 'p_cafe' }, seated: true } );
+		const save = controller.serialize();
+		const restored = setup( restoreSimulation( simulationInput(), bridge.simulation.serialize() ) );
+		restored.controller.restore( save );
+		const closed = restored.controller.endConversation( { timeMin: 1261, hold } );
+		expect( restored.controller.serialize().conversation ).toBeNull();
+		expect( closed.position ).toEqual( position );
+		expect( closed.mode ).toBe( hold ? 'posing' : 'resuming' );
+		expect( restored.controller.heldNpcIds ).toEqual( hold ? [ npc.npcId ] : [] );
+		expect( restored.bridge.behaviorAt( npc.npcId, 1261 ).interrupted ).toBe( hold );
+
+	} );
+
+	it( 'keeps a seated follower fixed when transit and movement update during dialogue', () => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const actor = controller.startFollow( { npcId: npc.npcId, timeMin: MON_9, playerPosition: [ 560, 1, 250 ] } );
+		const talking = controller.beginConversation( { npcId: npc.npcId, timeMin: MON_9, position: actor.position,
+			heading: actor.heading, place: actor.place, seated: true } );
+		expect( controller.carryFollower( { npcId: npc.npcId, routeId: 'bus', position: [ 900, 1, 900 ] } ) ).toEqual( talking );
+		expect( controller.updateFollow( { timeMin: MON_9 + 1, deltaSeconds: 1, playerPosition: [ 900, 1, 900 ] } ) ).toEqual( talking );
+		expect( controller.endConversation( { timeMin: MON_9 + 1 } ).mode ).toBe( 'following' );
+
+	} );
+
 	it( 'holds a quest cast where it is put, through a conversation and a save, until it is released', () => {
 
 		const { bridge, controller } = setup();

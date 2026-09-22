@@ -132,9 +132,168 @@
 }
 
 .quest-steps {
-	margin: 16px 0 0;
+	margin: 8px 0 0;
 	padding: 0;
 	list-style: none;
+}
+
+.view-quests .list-row {
+	align-items: flex-start;
+	flex-direction: column;
+	gap: 7px;
+	line-height: 1.5;
+}
+
+.quest-list-title,
+.quest-step-body {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.quest-list-badges {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.quest-following {
+	font-size: 11px;
+	color: var(--ui-accent);
+}
+
+.quest-detail-status {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin: 10px 0;
+}
+
+.quest-detail-status .detail-kind {
+	margin: 0;
+}
+
+.quest-track {
+	min-height: 42px;
+}
+
+.quest-track[aria-pressed="true"] {
+	color: var(--ui-accent);
+	background: var(--ui-accent-wash);
+	cursor: default;
+}
+
+.quest-lead-track,
+.quest-wait {
+	align-self: flex-start;
+	min-height: 42px;
+	margin-top: 8px;
+	white-space: normal;
+}
+
+.quest-wait-note {
+	font-size: 11px;
+	line-height: 1.6;
+	color: #a8bac6;
+}
+
+.quest-lead-track[aria-pressed="true"],
+.quest-alternatives .quest-step.is-followed {
+	border-color: var(--ui-accent);
+}
+
+.quest-lead-track:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.quest-tracking-note,
+.quest-choice-note {
+	margin: 8px 0 12px;
+	font-size: 12px;
+	line-height: 1.6;
+	color: #a8bac6;
+}
+
+.quest-section-title {
+	margin: 20px 0 0;
+	font: 600 13px var(--ui-mono);
+	color: var(--ui-text);
+}
+
+.quest-step-state {
+	font-size: 10px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--ui-accent);
+}
+
+.quest-step.is-locked .quest-step-state {
+	color: #e4c46a;
+}
+
+.quest-step.is-done .quest-step-state,
+.quest-step.is-cancelled .quest-step-state {
+	color: #a8bac6;
+}
+
+.quest-history {
+	margin-top: 22px;
+	border-top: 1px solid var(--ui-line-2);
+	padding-top: 14px;
+}
+
+.quest-history summary {
+	padding: 6px 0;
+	cursor: pointer;
+	font: 12px var(--ui-mono);
+	color: #a8bac6;
+}
+
+.quest-history summary:focus-visible {
+	outline: 2px solid var(--ui-accent);
+	outline-offset: 3px;
+}
+
+.quest-alternatives .quest-step {
+	padding: 14px;
+	border: 1px solid var(--ui-line);
+	background: var(--ui-accent-wash);
+}
+
+.quest-alternatives .quest-step-mark {
+	display: none;
+}
+
+.quest-ending-title {
+	font-size: 14px;
+	color: var(--ui-text);
+}
+
+.quest-choice-summary {
+	margin: 10px 0 0;
+	font: 12px var(--ui-mono);
+	line-height: 1.6;
+	color: var(--ui-accent);
+}
+
+.quest-step-stake {
+	margin-top: 5px;
+	color: #a8bac6;
+}
+
+.quest-step-commitment {
+	margin: 6px 0;
+	color: var(--ui-accent);
+}
+
+.quest-or {
+	padding: 9px;
+	text-align: center;
+	font: 11px var(--ui-mono);
+	color: #a8bac6;
 }
 
 .quest-step {
@@ -143,12 +302,16 @@
 	padding: 8px 0;
 	border-bottom: 1px solid var(--ui-line-2);
 	font: 12px var(--ui-mono);
+	line-height: 1.6;
 	color: #c4d1d9;
 }
 
 .quest-step.is-done {
 	color: var(--ui-mute);
-	text-decoration: line-through;
+}
+
+.quest-step.is-cancelled {
+	color: var(--ui-mute);
 }
 
 .quest-step-body {
@@ -177,6 +340,10 @@
 	height: 14px;
 	margin-top: 2px;
 	border: 1px solid var(--ui-line);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 11px;
 }
 
 .quest-step.is-done .quest-step-mark {
@@ -212,6 +379,21 @@
 }
 
 @media ( max-width: 700px ) {
+
+	.view-quests .view-side {
+		flex: 0 0 28%;
+		min-height: 100px;
+	}
+
+	.view-quests .list-row {
+		padding: 10px 14px;
+	}
+
+	.quest-step,
+	.quest-tracking-note,
+	.quest-choice-note {
+		font-size: 13px;
+	}
 
 	.inv-grid {
 		grid-template-columns: repeat(5, minmax(44px, 1fr));

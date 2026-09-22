@@ -7,6 +7,27 @@ import { MissionSummary } from './MissionSummary.js';
 /** The card that closes a mission: what it says and how it goes away. */
 describe( 'MissionSummary', () => {
 
+	it( 'keeps epilogue clicks inside the dialog for Escape and keyboard navigation', async () => {
+
+		const onClose = vi.fn();
+		const summary = new MissionSummary( { onClose } );
+		document.body.replaceChildren( summary.element );
+		summary.show( { title: 'Salt Wharf', text: 'The crates went inland.' } );
+		const text = screen.getByText( 'The crates went inland.' );
+		const user = userEvent.setup();
+		await user.click( text );
+		expect( document.activeElement ).toBe( summary.element );
+		await user.tab();
+		expect( document.activeElement ).toBe( summary.header.close );
+		await user.click( text );
+		await user.tab( { shift: true } );
+		expect( document.activeElement ).toBe( summary.done );
+		await user.click( text );
+		await user.keyboard( '{Escape}' );
+		expect( onClose ).toHaveBeenCalledOnce();
+
+	} );
+
 	it( 'lays out title, outcome, text and ticked steps as a dialog focused on continue, and closes on continue or Escape', async () => {
 
 		const onClose = vi.fn();

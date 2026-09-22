@@ -5,6 +5,7 @@ const DAYS = [ 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun' ];
  * World time in the simulation's own unit: integer minutes since Monday 00:00
  * (../simulation/CONTRACT.md). One real second is one world second, so a game
  * day is a real day; the scale exists only for debugging and defaults to 1.
+ * Explicit journal waiting advances seconds to the next authored quest window.
  */
 export class GameClock {
 

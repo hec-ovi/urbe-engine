@@ -99,7 +99,8 @@ export class Crowd {
 	syncActor( actor, player ) {
 
 		if ( ! actor ) return null;
-		let member = [ ...this.members.values() ].find( ( candidate ) => candidate.npcId === actor.npcId ) ?? null;
+		let member = this.memberForNpc( actor.npcId );
+		if ( member ) this.#deduplicate( member );
 		if ( member?.fallen ) return null;
 		if ( ! actor.visible ) {
 
@@ -168,7 +169,9 @@ export class Crowd {
 	/** The rendered body for one persistent identity, if it is currently loaded. */
 	memberForNpc( npcId ) {
 
-		return [ ...this.members.values() ].find( ( member ) => member.npcId === npcId ) ?? null;
+		return [ ...this.members.values() ]
+			.filter( ( member ) => member.npcId === npcId )
+			.sort( ( left, right ) => identityPriority( right ) - identityPriority( left ) )[ 0 ] ?? null;
 
 	}
 
@@ -189,8 +192,29 @@ export class Crowd {
 	/** Applies one actual simulation instance to a rendered body. */
 	identify( member, instance ) {
 
+		const owned = this.memberForNpc( instance.npcId );
 		identify( member, instance );
-		return member;
+		const canonical = owned ?? member;
+		this.#deduplicate( canonical );
+		return canonical;
+
+	}
+
+	/** One established identity and one sampled handle can own only one body. */
+	#deduplicate( canonical ) {
+
+		for ( const [ id, member ] of this.members ) {
+
+			if ( member === canonical || member.copy ) continue;
+			if ( ( canonical.npcId && member.npcId === canonical.npcId ) ||
+				( canonical.crowdId && member.crowdId === canonical.crowdId ) ) {
+
+				this.street.leave( id );
+				this.members.delete( id );
+
+			}
+
+		}
 
 	}
 
@@ -706,6 +730,13 @@ export class Crowd {
 	 */
 	#adoptQuestHandle( npc, timeMin, place ) {
 
+		const owned = this.memberForNpc( npc.npcId );
+		if ( owned ) {
+
+			this.#deduplicate( owned );
+			return owned;
+
+		}
 		const candidates = [ ...this.members.values() ]
 			.filter( ( member ) => ! member.copy && ! member.retiring && ! member.fallen && ! member.npcId && member.crowdId )
 			.filter( ( member ) => member.type === npc.type && memberAt( member, place ) )
@@ -771,7 +802,21 @@ export class Crowd {
 
 		for ( const entry of entries ) {
 
-			const member = fitTo( free, entry.agent, entry.at );
+			// A continuity, dialogue or quest body still consumes its sample.
+			// Excluding it from the movable candidates must not spawn its twin.
+			const owned = entry.agent.npcId ? this.memberForNpc( entry.agent.npcId ) : null;
+			const handle = [ ...this.members.values() ].find( ( member ) => ! member.copy && member.crowdId === entry.agent.crowdId );
+			const existing = owned ?? handle;
+			if ( owned && handle && handle !== owned ) identify( handle, this.sim.getNPC( entry.agent.npcId ) );
+			if ( existing ) {
+
+				if ( entry.agent.npcId && ! existing.npcId ) identify( existing, this.sim.getNPC( entry.agent.npcId ) );
+				this.#deduplicate( existing );
+				for ( const candidate of free ) if ( ! this.members.has( candidate.id ) ) free.delete( candidate );
+				if ( ! free.has( existing ) ) continue;
+
+			}
+			const member = existing ?? fitTo( free, entry.agent, entry.at );
 
 			if ( ! member ) {
 
@@ -785,7 +830,7 @@ export class Crowd {
 
 		}
 
-		for ( const member of free ) this.#retire( member );
+		for ( const member of free ) if ( this.members.has( member.id ) ) this.#retire( member );
 
 	}
 
@@ -819,6 +864,7 @@ export class Crowd {
 		member.crowdId = agent.crowdId;
 		member.type = agent.type;
 		member.activity = agent.activity;
+		if ( agent.npcId ) identify( member, this.sim.getNPC( agent.npcId ) );
 
 	}
 
@@ -934,6 +980,8 @@ export class Crowd {
 
 			copy.copy = true;
 			copy.crowdId = null;
+			copy.npcId = null;
+			copy.instance = null;
 
 		}
 
@@ -1126,14 +1174,15 @@ export class Crowd {
 
 	#base( agent, seed ) {
 
+		const instance = agent.npcId ? this.sim.getNPC( agent.npcId ) : null;
 		return {
 			id: null,
 			crowdId: agent.crowdId,
 			type: agent.type,
 			gender: agent.gender ?? null,
 			activity: agent.activity,
-			npcId: null,
-			instance: null,
+			npcId: instance?.npcId ?? null,
+			instance,
 			parcelId: null,
 			spot: null,
 			variant: bodyFor( agent.gender, seed ),
@@ -1358,6 +1407,13 @@ export class Crowd {
 		}
 
 	}
+
+}
+
+function identityPriority( member ) {
+
+	return member.hero || member.controlMode === 'conversation' ? 4
+		: member.fallen ? 3 : member.continuity ? 2 : member.quest ? 1 : 0;
 
 }
 

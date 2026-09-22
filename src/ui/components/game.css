@@ -268,8 +268,8 @@
 
 .hud-objective-text {
 	margin-top: 3px;
-	color: var(--ui-dim);
-	font-size: 11px;
+	color: #c0cfdb;
+	font: 13px/1.45 system-ui, sans-serif;
 	line-height: 1.45;
 }
 
@@ -280,6 +280,15 @@
 	font-size: 10px;
 	letter-spacing: 0.06em;
 }
+
+.hud-objective-note {
+	margin-top: 6px;
+	color: #edc09d;
+	font: 12px/1.45 system-ui, sans-serif;
+}
+
+.hud-objective.is-unavailable { border-left-color: #ce9263; }
+.hud-objective.is-unavailable .hud-objective-state { color: #edc09d; }
 
 .hud-objective-hours {
 	margin-top: 2px;

@@ -43,8 +43,9 @@ export class GameView {
 
 	constructor( {
 		onResume = noop, onCloseDialog = noop, onSend = noop, onOpen = noop, onClose = noop,
-		onLeave = noop, onSettingChange = noop, onHangUp = noop, onSummaryClose = noop,
-		onTransitSelect = noop, onTransitCancel = noop, onQuestSelect = noop,
+		onLeave = noop, onSettingChange = noop, onHangUp = noop, onSummaryClose = noop, onSummaryOpen = noop,
+		onTransitSelect = noop, onTransitCancel = noop, onQuestSelect = noop, onQuestTrack = noop, onQuestWait = noop,
+		onDialogueChoice = noop, onDialogueTopic = noop, onDialogueRetry = noop, onDialogueJournal = noop,
 		menu = {}
 	} = {} ) {
 
@@ -59,14 +60,15 @@ export class GameView {
 		this.avatar = new AvatarCard();
 		this.call = new VideoCallPanel( { onHangUp } );
 		this.toast = new MissionToast();
-		this.dialog = new ChatPanel( { onSend, onClose: onCloseDialog } );
-		this.summary = new MissionSummary( { onClose: onSummaryClose } );
+		this.dialog = new ChatPanel( { onSend, onClose: onCloseDialog,
+			onChoice: onDialogueChoice, onTopic: onDialogueTopic, onRetry: onDialogueRetry, onJournal: onDialogueJournal } );
+		this.summary = new MissionSummary( { onOpen: onSummaryOpen, onClose: () => { this.summary.setVisible( false ); onSummaryClose(); } } );
 		this.transit = new TransitHud( { onSelect: onTransitSelect, onCancel: onTransitCancel } );
 		this.pause = new PauseMenu( { onResume } );
 
 		this.map = new Map3DView( { onClose: close } );
 		this.inventory = new InventoryView( { onClose: close } );
-		this.quests = new QuestsView( { onClose: close, onSelect: onQuestSelect } );
+		this.quests = new QuestsView( { onClose: close, onSelect: onQuestSelect, onTrack: onQuestTrack, onWait: onQuestWait } );
 		this.codex = new CodexView( { onClose: close } );
 		this.settings = new SettingsView( { onChange: onSettingChange, onClose: close } );
 		this.controls = new ControlsView( { onClose: close } );
@@ -149,7 +151,7 @@ export class GameView {
 	setPaused( paused ) {
 
 		this.paused = paused;
-		this.pause.setVisible( paused );
+		this.pause.setVisible( paused && this.summary.element.hidden && this.dialog.element.hidden );
 		this.tabs.element.hidden = ! ( paused || this.panels.current );
 
 	}

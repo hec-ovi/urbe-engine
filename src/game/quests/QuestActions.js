@@ -109,7 +109,7 @@ export class QuestActions {
 
 		for ( const entry of this.#ordered( query.questId ) ) {
 
-			const step = this.#openStep( entry );
+			const step = this.#openStep( entry, entry.definition.id === query.questId ? query.stepId : null );
 			if ( ! step ) continue;
 
 			return this.boundary.output( 'active-objective', {
@@ -163,10 +163,11 @@ export class QuestActions {
 
 	}
 
-	#openStep( { definition, runtime } ) {
+	#openStep( { definition, runtime }, stepId = null ) {
 
 		const active = new Set( runtime.activeSteps().map( ( step ) => step.stepId ) );
-		return definition.steps.find( ( candidate ) => active.has( candidate.stepId ) ) ?? null;
+		return definition.steps.find( candidate => candidate.stepId === stepId && active.has( candidate.stepId ) )
+			?? definition.steps.find( ( candidate ) => active.has( candidate.stepId ) ) ?? null;
 
 	}
 
@@ -304,7 +305,7 @@ function presentation( step, item ) {
 	const actions = {
 		observe: [ action( 'inspect', 'Inspect', 'interact', true ) ],
 		listen: [ action( 'listen', 'Listen', 'interact', true ) ],
-		work: [ action( 'work', 'Start work', 'interact', true ) ],
+		work: [ action( 'work', 'Complete maintenance shift', 'interact', true ) ],
 		deliver: [ action( 'deliver', 'Deliver', 'interact', true ) ],
 		steal: [ action( 'steal', 'Steal', 'interact', true ) ],
 		pickup: [

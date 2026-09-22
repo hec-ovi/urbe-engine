@@ -134,11 +134,17 @@ export class GameApp {
 		this.navigate = navigate;
 		/** The questline the player is following; null means the main story. */
 		this.followedQuestId = null;
+		this.followedStepId = null;
 		this.objectiveTimer = 0;
 		this.talk = new TalkClient( config.outBase );
 		this.view = new GameView( {
 			onResume: () => this.input?.requestLock(),
-			onCloseDialog: () => this.interactor?.close( this.clock ),
+			onCloseDialog: () => {
+				this.interactor?.close( this.clock );
+				if ( this.view.summary.element.hidden ) this.input?.requestLock();
+			},
+			onSummaryClose: () => this.input?.requestLock(),
+			onSummaryOpen: () => { this.input?.exitLock(); this.view.setPaused( false ); },
 			onSend: ( text ) => this.#say( text ),
 			onOpen: ( name ) => {
 
@@ -146,7 +152,12 @@ export class GameApp {
 				if ( name === 'QUESTS' ) this.#refreshQuestState();
 
 			},
-			onQuestSelect: ( questId ) => this.#followQuest( questId ),
+			onQuestTrack: ( questId, stepId ) => this.#followQuest( questId, stepId ),
+			onQuestWait: ( questId, stepId ) => this.#waitForQuest( questId, stepId ),
+			onDialogueChoice: choice => this.#chooseDialogue( choice ),
+			onDialogueTopic: topic => this.#selectDialogue( topic ),
+			onDialogueRetry: () => this.#say( this.failedDialogueLine, true ),
+			onDialogueJournal: () => { this.interactor?.close( this.clock ); this.view.open( 'QUESTS' ); },
 			onClose: () => this.input?.requestLock(),
 			onLeave: () => this.#leave(),
 			onSettingChange: ( change ) => this.#setting( change ),
@@ -422,7 +433,16 @@ export class GameApp {
 			routes,
 			places: npcContinuityPlaces( atlas, city.entrances, buildings, transitRoutes )
 		} );
-		if ( game?.npcState?.continuity ) this.npcContinuity.restore( game.npcState.continuity );
+		if ( game?.npcState?.continuity ) {
+
+			this.npcContinuity.restore( game.npcState.continuity );
+			// A save can be made while a choice is answered. The modal itself
+			// does not survive reload, so do not restore an orphan conversation.
+			if ( this.npcContinuity.conversation ) this.npcContinuity.endConversation( {
+				timeMin: this.clock.timeMin, hold: this.quests.holdsCast( this.npcContinuity.conversation.npcId )
+			} );
+
+		}
 
 		progress.step( 'loading characters' );
 		const assets = await characters;
@@ -621,7 +641,9 @@ export class GameApp {
 		this.view.ready();
 		progress.finish();
 
-		this.renderer.domElement.addEventListener( 'click', () => this.input.requestLock() );
+		this.renderer.domElement.addEventListener( 'click', () => {
+			if ( ! playableModalOpen( this.view, this.interactor ) ) this.input.requestLock();
+		} );
 		window.addEventListener( 'resize', () => this.#resize() );
 
 		if ( import.meta.env.DEV ) window.__game = this;
@@ -646,20 +668,43 @@ export class GameApp {
 	/** Shows or closes the typed conversation owned by the current interaction. */
 	presentConversation( conversation ) {
 
+		this.dialogueAbort?.abort();
+		this.dialogueAbort = null;
+		this.dialogueTurn = ( this.dialogueTurn ?? 0 ) + 1;
+		this.dialoguePending = false;
+		this.failedDialogueLine = null;
+		this.activeDialogue = null;
 		this.view.dialog.show( conversation );
 		this.view.avatar.setVisible( Boolean( conversation ) );
 
 		if ( ! conversation ) {
 
-			// The story hears about a conversation once it has happened, not
-			// the instant the panel opens.
-			this.#talkedTo( this.talkingTo );
-			this.talkingTo = null;
+			if ( this.pendingDialogueEnding ) this.view.summary.show( this.pendingDialogueEnding );
+			this.pendingDialogueEnding = null;
 			return;
 
 		}
-		this.talkingTo = conversation.npcId ?? null;
-		this.talked = false;
+		const topics = this.quests.dialoguesFor( conversation.npcId, this.clock.timeMin );
+		const preferred = topics.find( topic => topic.questlineId === this.followedQuestId ) ?? topics[ 0 ];
+		if ( preferred ) this.#selectDialogue( { questId: preferred.questlineId, stepId: preferred.stepId } );
+		else {
+
+			const recap = this.quests.conversationRecap( conversation.npcId );
+			this.view.dialog.setStory( recap ? { title: recap.title, objective: 'Previous conversation' } : null );
+			this.view.dialog.addMessage( { from: 'npc', name: conversation.instance ? TalkClient.nameOf( conversation.instance ) : '',
+				text: recap?.reply ?? 'What can I do for you?' } );
+			if ( recap ) {
+
+				this.view.dialog.setStatus( 'Your current lead is in the journal.' );
+				this.view.dialog.setChoices( [ ...recap.questions,
+					{ id: 'remember-agreement', text: 'Remind me what we agreed.' }
+				].map( choice => ( { text: choice.text,
+					value: { recap: true, questId: recap.questId, stepId: recap.stepId, choiceId: choice.id }
+				} ) ), true );
+
+			}
+
+		}
 
 		// The chat takes the mouse: the input wants focus and the panel a click.
 		this.view.avatar.setAvatar( {
@@ -693,6 +738,7 @@ export class GameApp {
 	 */
 	tick( delta ) {
 
+		this.controller.frozen = ! this.input.locked || playableModalOpen( this.view, this.interactor );
 		this.clock.advance( delta );
 		this.hydrology.update( Math.max( 0, ( performance.now() - this.playStartedAt ) / 1000 ) );
 
@@ -780,7 +826,7 @@ export class GameApp {
 		if ( transitFrame.result?.autoDisembarked ) this.#persistTransitState();
 		this.view.prompt.update( this.input.locked ? prompt : null );
 
-		if ( this.input.consume( 'KeyE' ) && this.input.locked ) {
+		if ( this.input.consume( 'KeyE' ) && this.input.locked && ! playableModalOpen( this.view, this.interactor ) ) {
 
 			const owner = playableInteractionOwner( this.interactor, transitFrame );
 			if ( owner === 'conversation' ) this.interactor.close( this.clock );
@@ -788,7 +834,7 @@ export class GameApp {
 			else this.#transitAction( this.transitGameplay.activate(), playerPlaces );
 
 		}
-		if ( this.input.consume( 'KeyR' ) && this.input.locked && ! this.interactor.conversation && ! transitFrame.aboard ) {
+		if ( this.input.consume( 'KeyR' ) && this.input.locked && ! playableModalOpen( this.view, this.interactor ) && ! transitFrame.aboard ) {
 
 			this.#questActionResult( this.interactor.activate( this.clock, 'secondary-interact' ) );
 
@@ -796,7 +842,7 @@ export class GameApp {
 
 		// A panel or the chat owns the keyboard while it is up; the game's own
 		// keys only fire on the street.
-		const free = ! this.view.panels.current && ! this.interactor.conversation && ! this.view.transit.open;
+		const free = ! playableModalOpen( this.view, this.interactor );
 
 		if ( free ) {
 
@@ -849,75 +895,132 @@ export class GameApp {
 
 	}
 
-	/** A setting changed in the HUD: the ones that are uniforms apply on the spot, the tier reloads the run. */
-	/** The player's line goes to the person in front of them; their answer lands in the same panel. */
-	async #say( text ) {
-
-		this.view.dialog.addMessage( { from: 'player', name: 'you', text } );
+	/** Typed chat is optional. It never substitutes for an explicit quest reply. */
+	async #say( text, retry = false ) {
 		const conversation = this.interactor?.conversation;
-		if ( ! conversation?.instance ) return;
-		const turn = ( this.dialogueTurn ?? 0 ) + 1;
-		this.dialogueTurn = turn;
+		if ( ! conversation?.instance || this.dialoguePending || ! text?.trim() ) return;
+		this.dialoguePending = true;
+		const turn = this.dialogueTurn = ( this.dialogueTurn ?? 0 ) + 1;
+		const controller = this.dialogueAbort = new AbortController();
+		const timeout = setTimeout( () => controller.abort(), 30000 );
+		if ( ! retry ) this.view.dialog.addMessage( { from: 'player', name: 'You', text } );
+		this.view.dialog.setSending( true );
+		this.view.dialog.setStatus( 'Waiting for a reply… Your story choices remain available.' );
 		this.animations.playerDialogueTurn( conversation );
-
 		const name = TalkClient.nameOf( conversation.instance );
-		let reply;
-		try { reply = await this.talk.say( conversation, text, this.clock.timeMin, this.quests.snapshot() ); }
-		catch ( error ) {
-
+		try {
+			const reply = await this.talk.say( conversation, text, this.clock.timeMin, this.quests.snapshot(), { signal: controller.signal } );
+			if ( this.interactor.conversation !== conversation || turn !== this.dialogueTurn ) return;
+			this.failedDialogueLine = null;
+			this.animations.completeDialogueTurn( conversation );
+			this.view.dialog.addMessage( { from: 'npc', name, text: reply } );
+			this.view.dialog.setStatus( '' );
+			this.animations.npcDialogueTurn( conversation );
+		} catch ( error ) {
+			if ( this.interactor.conversation !== conversation || turn !== this.dialogueTurn ) return;
 			console.warn( 'talk:', error.message );
-			if ( this.interactor.conversation === conversation && turn === this.dialogueTurn ) {
-
-				this.animations.completeDialogueTurn( conversation );
-				this.view.dialog.addMessage( { from: 'npc', name, text: '...' } );
-
+			this.animations.completeDialogueTurn( conversation );
+			this.failedDialogueLine = text;
+			this.view.dialog.setStatus( 'The reply could not be reached. Retry, or use a story reply below.', { error: true, retry: true } );
+		} finally {
+			clearTimeout( timeout );
+			if ( turn === this.dialogueTurn ) {
+				this.dialoguePending = false;
+				this.dialogueAbort = null;
+				this.view.dialog.setSending( false );
 			}
+		}
+	}
+
+	#selectDialogue( { questId, stepId } ) {
+		const conversation = this.interactor?.conversation;
+		if ( ! conversation?.npcId ) return;
+		const topics = this.quests.dialoguesFor( conversation.npcId, this.clock.timeMin );
+		const dialogue = topics.find( topic => topic.questlineId === questId && topic.stepId === stepId );
+		if ( ! dialogue ) {
+			this.activeDialogue = null;
+			this.view.dialog.setChoices( [] );
+			this.view.dialog.setStatus( 'That conversation is no longer available. Check your journal.' );
+			return;
+		}
+		const changed = this.activeDialogue?.questlineId !== questId || this.activeDialogue?.stepId !== stepId;
+		this.activeDialogue = dialogue;
+		this.view.dialog.setStory( { title: dialogue.title, objective: dialogue.objective } );
+		this.view.dialog.setTopics( topics.map( topic => ( {
+			key: topic.questlineId + '/' + topic.stepId, title: topic.title,
+			value: { questId: topic.questlineId, stepId: topic.stepId }
+		} ) ), questId + '/' + stepId );
+		if ( changed ) this.view.dialog.addMessage( { from: 'npc', name: TalkClient.nameOf( conversation.instance ), text: dialogue.opening } );
+		const unavailable = ! dialogue.availability.available;
+		this.view.dialog.setChoices( dialogue.choices.map( choice => ( {
+			text: choice.text, disabled: unavailable,
+			value: { questId, stepId, choiceId: choice.id }
+		} ) ), changed );
+		this.view.dialog.setStatus( unavailable ? QuestActions.unavailableMessage( dialogue.availability.reason ) : '' );
+	}
+
+	#chooseDialogue( { questId, stepId, choiceId, recap = false } ) {
+		const conversation = this.interactor?.conversation;
+		if ( recap && conversation?.npcId ) {
+
+			const memory = this.quests.conversationRecap( conversation.npcId );
+			if ( memory?.questId !== questId || memory.stepId !== stepId ) return;
+			const question = choiceId === 'remember-agreement'
+				? { text: 'Remind me what we agreed.', reply: memory.reply }
+				: memory.questions.find( choice => choice.id === choiceId );
+			if ( ! question ) return;
+			this.view.dialog.addMessage( { from: 'player', name: 'You', text: question.text } );
+			this.view.dialog.addMessage( { from: 'npc', name: TalkClient.nameOf( conversation.instance ), text: question.reply } );
+			this.animations.npcDialogueTurn( conversation );
 			return;
 
 		}
-		if ( this.interactor.conversation !== conversation || turn !== this.dialogueTurn ) return;
-		this.animations.completeDialogueTurn( conversation );
-		this.view.dialog.addMessage( { from: 'npc', name, text: reply } );
+		if ( ! conversation?.npcId || this.activeDialogue?.questlineId !== questId || this.activeDialogue?.stepId !== stepId ) return;
+		const choice = this.activeDialogue.choices.find( choice => choice.id === choiceId );
+		if ( ! choice ) return;
+		const result = this.quests.chooseDialogue( questId, stepId, conversation.npcId, choiceId, this.clock.timeMin );
+		if ( ! result.accepted ) {
+			const message = result.availability && ! result.availability.available
+				? QuestActions.unavailableMessage( result.availability.reason )
+				: 'That reply is no longer available. Check your journal and try the current topic.';
+			this.view.dialog.setStatus( message, { error: true } );
+			return;
+		}
+		// A story decision wins over an optional free-chat request still in flight.
+		this.dialogueAbort?.abort();
+		this.dialogueAbort = null;
+		this.dialogueTurn = ( this.dialogueTurn ?? 0 ) + 1;
+		this.dialoguePending = false;
+		this.failedDialogueLine = null;
+		this.view.dialog.setSending( false );
+		this.view.dialog.setStatus( '' );
+		this.view.dialog.addMessage( { from: 'player', name: 'You', text: choice.text } );
+		this.view.dialog.addMessage( { from: 'npc', name: TalkClient.nameOf( conversation.instance ), text: result.reply } );
 		this.animations.npcDialogueTurn( conversation );
-		this.#talkedTo( conversation.npcId ?? null );
-
-	}
-
-	/**
-	 * One conversation counts once, on its first exchange or when it closes.
-	 * A talk that moves nothing and is about somebody a step names says why.
-	 */
-	#talkedTo( npcId ) {
-
-		if ( ! npcId || this.talked ) return;
-		this.talked = true;
-		const ids = this.#questIdsForTalk( npcId );
-		if ( this.#routeQuestEvent( { kind: 'talkedTo', npcId }, ids ) ) return;
-		this.#reportClosedTalk( npcId, ids );
-
-	}
-
-	#questIdsForTalk( npcId ) {
-
-		return this.questGameplay.places( this.clock.timeMin )
-			.filter( ( place ) => place.kind === 'talk' && place.actorIds.includes( npcId ) )
-			.map( ( place ) => place.questId );
-
-	}
-
-	/** Why the conversation the player just had moved nothing, in their words. */
-	#reportClosedTalk( npcId, questIds ) {
-
-		if ( questIds.length === 0 || ! this.quests.hasCastNpc( npcId ) ) return;
-		const step = this.questGameplay.places( this.clock.timeMin ).find(
-			( place ) => place.kind === 'talk' && place.questId === this.#chosenQuest( questIds ) && place.actorIds.includes( npcId )
-		);
-		if ( ! step || step.availability.available ) return;
-		this.view.toast.show( {
-			title: 'Objective',
-			text: QuestActions.unavailableMessage( step.availability.reason, step.window )
+		if ( ! result.change ) return;
+		this.activeDialogue = null;
+		this.followedQuestId = questId;
+		this.followedStepId = null;
+		this.view.dialog.setChoices( [] );
+		this.#refreshQuestState();
+		const ending = result.change.ending;
+		const next = this.questGameplay.objective( this.clock.timeMin, questId );
+		this.view.dialog.setStory( { title: result.change.definition.title, objective: ending ? 'Decision recorded' : 'Lead recorded', journal: ! ending } );
+		const remaining = this.quests.dialoguesFor( conversation.npcId, this.clock.timeMin );
+		this.view.dialog.setTopics( remaining.map( topic => ( {
+			key: topic.questlineId + '/' + topic.stepId, title: topic.title,
+			value: { questId: topic.questlineId, stepId: topic.stepId }
+		} ) ) );
+		this.view.dialog.setStatus( ending ? 'Decision recorded. End the conversation to see the outcome.'
+			: next ? 'Journal updated: ' + next.text : 'Journal updated.' );
+		if ( ending ) {
+			this.pendingDialogueEnding = { title: ending.title, text: ending.epilogue, outcome: 'done' };
+		}
+		else this.view.toast.show( { title: result.change.definition.title, text: 'New lead added to your journal.' } );
+		if ( this.persistence ) this.#saveCurrent().catch( error => {
+			console.error( error );
+			this.view.dialog.setStatus( 'Your choice was accepted, but saving failed. ' + error.message, { error: true } );
 		} );
-
 	}
 
 	/** Stepping into a building's rooms is arriving there for the story; the street in between is not a place. */
@@ -967,11 +1070,34 @@ export class GameApp {
 	}
 
 	/** The quest log's pick becomes the objective the HUD, the map and the route follow. */
-	#followQuest( questId ) {
+	#followQuest( questId, stepId = null ) {
 
 		this.followedQuestId = questId ?? null;
+		this.followedStepId = stepId;
 		this.#refreshCurrentObjective();
 		this.#updateObjectiveRoute( 0, true );
+
+	}
+
+	#waitForQuest( questId, stepId ) {
+
+		if ( this.interactor?.conversation || this.transitGameplay?.aboard
+			|| [ 'following', 'leading' ].includes( this.npcContinuity?.serialize().follow?.mode ) ) {
+			this.view.toast.show( { title: 'Cannot wait yet', text: 'Finish the conversation, ride or escort first.' } );
+			return;
+		}
+		const step = this.quests.view( this.clock.timeMin ).find( quest => quest.id === questId )?.steps.find( step => step.stepId === stepId );
+		if ( step?.availability.reason !== 'outside_window' || ! step.wait || step.wait.timeMin <= this.clock.timeMin ) return;
+		this.clock.seconds = step.wait.timeMin * 60;
+		this.followedQuestId = questId;
+		this.followedStepId = stepId;
+		if ( this.crowd ) this.crowd.timer = 10;
+		this.#refreshQuestState();
+		this.view.toast.show( { title: 'Waited until ' + step.wait.label, text: 'The world clock has advanced. Your quest progress is unchanged.' } );
+		if ( this.persistence ) this.#saveCurrent().catch( error => {
+			console.error( error );
+			this.view.toast.show( { title: 'Save failed', text: error.message } );
+		} );
 
 	}
 
@@ -1139,7 +1265,27 @@ export class GameApp {
 	#refreshCurrentObjective() {
 
 		this.objectiveTimer = 0;
-		const objective = this.questGameplay.objective( this.clock.timeMin, this.followedQuestId );
+		if ( this.view.panels.current === 'QUESTS' ) {
+
+			const quests = this.quests.view( this.clock.timeMin ), signature = JSON.stringify( quests );
+			if ( signature !== this.journalSignature ) {
+				this.journalSignature = signature;
+				this.view.quests.setQuests( quests );
+			}
+
+		}
+		const objective = this.questGameplay.objective( this.clock.timeMin, this.followedQuestId, this.followedStepId );
+		if ( objective?.stepId !== this.followedStepId ) this.followedStepId = null;
+		this.view.quests.setTrackedQuest( objective?.questId ?? null, this.followedStepId );
+		if ( this.activeDialogue && this.interactor?.conversation ) {
+
+			const current = this.quests.dialoguesFor( this.interactor.conversation.npcId, this.clock.timeMin )
+				.find( topic => topic.questlineId === this.activeDialogue.questlineId && topic.stepId === this.activeDialogue.stepId );
+			if ( ! current || JSON.stringify( current.availability ) !== JSON.stringify( this.activeDialogue.availability ) ) {
+				this.#selectDialogue( { questId: this.activeDialogue.questlineId, stepId: this.activeDialogue.stepId } );
+			}
+
+		}
 		const parcelId = objective?.place?.kind === 'parcel' ? objective.place.id : null;
 
 		if ( this.venues.setObjective( parcelId ? { parcelId, name: objective.venue } : null ) ) {
@@ -1163,7 +1309,7 @@ export class GameApp {
 
 		if ( ! this.objectiveGuide || ! this.questGameplay || ! this.body ) return;
 		const feet = this.body.feet;
-		const objective = this.questGameplay.objective( this.clock.timeMin, this.followedQuestId );
+		const objective = this.questGameplay.objective( this.clock.timeMin, this.followedQuestId, this.followedStepId );
 		const local = localObjectivePlace( objective, {
 			locator: this.locator, crowd: this.crowd, session: this.quests,
 			feet, roomParcelId: this.standing?.parcelId ?? null
@@ -1719,7 +1865,10 @@ export function playableInteractionOwner( interactor, transitFrame ) {
  */
 export function currentObjectiveView( active, session, { venues = null, route = null, timeMin = 0, local = null } = {} ) {
 
-	if ( active ) return { title: active.title, objective: active.text, state: 'active', place: objectivePlace( active, venues, route, local ) };
+	if ( active ) return { title: active.title, objective: active.text,
+		state: active.availability?.available === false ? 'unavailable' : 'active',
+		...( active.availability?.available === false ? { note: QuestActions.unavailableMessage( active.availability.reason, active.window ) } : {} ),
+		place: objectivePlace( active, venues, route, local ) };
 	const completed = [ ...( session?.view( timeMin ) ?? [] ) ].reverse().find( ( quest ) => quest.state === 'done' );
 	if ( ! completed ) return null;
 	const lastStep = [ ...completed.steps ].reverse().find( ( step ) => step.done );
@@ -1790,5 +1939,12 @@ export function localObjectivePlace( active, { locator, crowd, session, feet, ro
 	const level = Math.abs( member.position.y ) < 1 ? 'Ground floor'
 		: member.position.y - feet.y > 2 ? 'Upstairs' : feet.y - member.position.y > 2 ? 'Downstairs' : 'On this floor';
 	return { label: `Inside · ${person} · ${level}`, distanceMeters: Math.round( feet.distanceTo( member.position ) ) };
+
+}
+
+/** A modal owns both pointer capture and game actions until it closes. */
+export function playableModalOpen( view, interactor ) {
+
+	return Boolean( interactor?.conversation || view.panels.current || view.transit.open || ! view.summary.element.hidden );
 
 }

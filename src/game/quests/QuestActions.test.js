@@ -35,6 +35,24 @@ const definitions = [
 
 describe( 'QuestActions target contract', () => {
 
+	it( 'follows a selected active alternative without accepting an ending or changing progress', () => {
+
+		const choice = quest( 'q_choice', { roles: [ role( 'giver', 'giver' ) ], entryStepIds: [ 'publish', 'sell' ], steps: [
+			step( 'publish', { kind: 'goto', place: { parcelId: 'p_record' } }, { endingId: 'public' } ),
+			step( 'sell', { kind: 'goto', place: { parcelId: 'p_offer' } }, { endingId: 'private' } )
+		] } );
+		choice.endings = [ { endingId: 'public', title: 'On record', epilogue: 'The evidence is public.' },
+			{ endingId: 'private', title: 'The offer', epilogue: 'The evidence remains private.' } ];
+		const session = QuestSession.create( [ choice ], people(), 600 );
+		const actions = new QuestActions( session ), before = session.snapshot();
+		expect( actions.objective( { timeMin: 600, questId: choice.id, stepId: 'sell' } ) )
+			.toMatchObject( { stepId: 'sell', place: { id: 'p_offer' } } );
+		expect( actions.objective( { timeMin: 600, questId: choice.id, stepId: 'publish' } ) )
+			.toMatchObject( { stepId: 'publish', place: { id: 'p_record' } } );
+		expect( session.snapshot() ).toEqual( before );
+
+	} );
+
 	it( 'projects active steps with stable identities, cast actors, symbolic bindings, and item metadata', () => {
 
 		const targets = setup().actions.targets( { timeMin: 600 } );

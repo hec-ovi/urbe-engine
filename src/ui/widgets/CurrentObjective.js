@@ -12,12 +12,14 @@ export class CurrentObjective {
 		this.text = el( 'span', { className: 'hud-objective-text' } );
 		this.place = el( 'span', { className: 'hud-objective-place' } );
 		this.hours = el( 'span', { className: 'hud-objective-hours' } );
+		this.note = el( 'span', { className: 'hud-objective-note' } );
 		this.element = el( 'button', { className: 'hud-objective', type: 'button', ariaLive: 'polite' },
 			this.state,
 			this.title,
 			this.text,
 			this.place,
-			this.hours
+			this.hours,
+			this.note
 		);
 		this.element.addEventListener( 'click', onOpen );
 		this.setObjective( null );
@@ -45,15 +47,18 @@ export class CurrentObjective {
 			this.text.textContent = EMPTY;
 			this.place.textContent = EMPTY;
 			this.hours.textContent = EMPTY;
+			this.note.textContent = EMPTY;
 			this.element.removeAttribute( 'aria-label' );
 			return;
 
 		}
 
 		const done = value?.state === 'done';
+		const unavailable = value?.state === 'unavailable';
 		this.element.hidden = false;
 		this.element.classList.toggle( 'is-done', done );
-		this.state.textContent = done ? 'Objective complete' : 'Current objective';
+		this.element.classList.toggle( 'is-unavailable', unavailable );
+		this.state.textContent = done ? 'Objective complete' : unavailable ? 'Objective unavailable' : 'Current objective';
 		this.title.textContent = title;
 		this.title.hidden = ! title;
 		this.text.textContent = objective;
@@ -62,7 +67,9 @@ export class CurrentObjective {
 		this.place.hidden = ! place;
 		this.hours.textContent = hours;
 		this.hours.hidden = ! hours;
-		this.element.setAttribute( 'aria-label', `${ done ? 'Objective complete' : 'Open current quest' }: ${ [ title, objective, place, hours ].filter( Boolean ).join( ', ' ) }` );
+		this.note.textContent = value?.note ?? '';
+		this.note.hidden = ! this.note.textContent;
+		this.element.setAttribute( 'aria-label', `${ done ? 'Objective complete' : 'Open current quest' }: ${ [ title, objective, place, hours, value?.note ].filter( Boolean ).join( ', ' ) }` );
 
 	}
 
