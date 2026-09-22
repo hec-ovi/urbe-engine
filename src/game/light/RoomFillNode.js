@@ -1,8 +1,28 @@
-import { LightingNode } from 'three/webgpu';
-import { drawIndex, instanceIndex, int, ivec2, mix, normalWorld, textureLoad, textureSize, varying } from 'three/tsl';
+import { DataTexture, FloatType, LightingNode, RGBAFormat, TextureNode } from 'three/webgpu';
+import { drawIndex, instanceIndex, int, ivec2, mix, NodeUpdateType, normalWorld, textureLoad, textureSize, varying } from 'three/tsl';
 
 /** A draw standing in rooms publishes its per-copy fill here (city/kit/FillChannel.js). */
 const CHANNEL = Symbol.for( 'urbe.fill-channel' );
+/** Warm-up keepers have no room channel and must not borrow another actor's. */
+const EMPTY = new DataTexture( new Float32Array( 4 ), 1, 1, RGBAFormat, FloatType );
+EMPTY.needsUpdate = true;
+
+/** A cached actor graph follows the drawn root, including replacement or grown channels. */
+class RoomFillTextureNode extends TextureNode {
+
+	static get type() { return 'RoomFillTextureNode'; }
+
+	// TextureNode.setup can reset updateType for a texel load without UV transforms.
+	getUpdateType() { return NodeUpdateType.OBJECT; }
+
+	updateReference( { object } ) {
+
+		this.value = object[ CHANNEL ]?.texture ?? EMPTY;
+		return this.value;
+
+	}
+
+}
 
 /**
  * The light a room returns to its own surfaces, read per copy.
@@ -53,7 +73,7 @@ export function roomFillValue( mesh, builder ) {
 	const instanced = mesh.isInstancedMesh || mesh.geometry?.isInstancedBufferGeometry;
 	const drawn = mesh.isBatchedMesh && builder.getDrawIndex() !== null ? drawIndex : instanced ? instanceIndex : int( 0 );
 	const id = mesh.isBatchedMesh ? texel( mesh._indirectTexture, drawn ).x : drawn;
-	return varying( texel( channel.texture, id ) );
+	return varying( texel( new RoomFillTextureNode( channel.texture ), id ) );
 
 }
 

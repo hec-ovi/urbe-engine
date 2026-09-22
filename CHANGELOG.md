@@ -1,5 +1,7 @@
 # Changelog
 
+0.29.3: cached character and room materials bind the currently drawn mesh’s live room-fill texture, including replaced and grown channels. Reusing a focused model after warm-up or another conversation no longer leaves its body reading a disposed black lighting texture.
+
 0.29.2: conversations retain the clicked NPC body when an older identity exists elsewhere. Ordinary workers and seated visitors return to their exact post, facing and posture after chat, saving and streaming, until their schedule occurrence changes. An unreachable return route no longer makes a saved speaker disappear or aborts loading. Exterior window scenery is retained on furnished buildings and hidden from their actual interior view. Scene-wide fog uniforms prevent stale indoor colour washing exterior shells white; ordinary interiors now have clear air.
 
 0.29.1: a measured quest action wins an exact aim tie with generic talk, making theft from an NPC reachable while preserving door priority and deliberate targeting. Existing saves can explicitly refresh one quest’s narrative and item labels without changing mechanics, cast or progress.
