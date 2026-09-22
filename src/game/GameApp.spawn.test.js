@@ -18,11 +18,13 @@ const openBuilding = {
 	} ] }
 };
 
-it( 'starts partial worlds outside a real open entrance and faces its rotated doorway', () => {
+it( 'starts partial worlds on the approach sidewalk facing a real rotated entrance', () => {
 	const buildings = new Map( [ [ 'open', openBuilding ], [ 'closed', { hasInterior: false } ] ] );
 	const spawn = pickSpawn( networks, atlas, buildings );
-	expect( spawn.point.toArray() ).toEqual( [ 101.4, 0.2, 55 ] );
+	expect( spawn.point.toArray() ).toEqual( [ 110, 0.2, 60 ] );
 	expect( spawn.lookAt.toArray() ).toEqual( [ 100, 0, 55 ] );
+	const noApproach = pickSpawn( { walk: { nodes: [ { kind: 'sidewalk', x: 95, y: 0, z: 55 } ] } }, atlas, buildings );
+	expect( noApproach.point.toArray() ).toEqual( [ 101.4, 0.2, 55 ] );
 } );
 
 it( 'retains the existing sidewalk fallback when no open building is published', () => {

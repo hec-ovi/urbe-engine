@@ -1581,7 +1581,19 @@ export function pickSpawn( networks, atlas, buildings ) {
 	if ( entrances.length ) {
 
 		const door = entrances[ 0 ];
-		const point = door.outside.clone();
+		// Start where the entrance and its facade are visible, rather than
+		// filling the first frame with the closed door at arm's length.
+		const outward = door.outside.clone().sub( door.center ).normalize();
+		const approach = networks.walk.nodes.filter( node => {
+
+			if ( ! [ 'sidewalk', 'corner' ].includes( node.kind ) ) return false;
+			const x = node.x - door.center.x, z = node.z - door.center.z;
+			const distance = Math.hypot( x, z );
+			return distance >= 4 && distance <= 24 && x * outward.x + z * outward.z > 1;
+
+		} ).sort( ( a, b ) => Math.hypot( a.x - door.center.x, a.z - door.center.z )
+			- Math.hypot( b.x - door.center.x, b.z - door.center.z ) )[ 0 ];
+		const point = approach ? new THREE.Vector3( approach.x, approach.y, approach.z ) : door.outside.clone();
 		point.y = Math.max( point.y, SIDEWALK_HEIGHT ) + 0.05;
 		return { point, lookAt: door.center.clone() };
 
