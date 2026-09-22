@@ -31,7 +31,7 @@ describe( 'building navigation', () => {
 
 		window.history.replaceState( null, '', '/?mode=building&parcel=p2&out=/out/small&source=interior&backend=webgl' );
 		expect( BuildingViewerApp.configFromUrl() ).toEqual( {
-			parcel: 'p2', out: '/out/small', source: 'interior', backend: 'webgl', quality: null
+			parcel: 'p2', out: '/out/small', source: 'interior', backend: 'webgl', quality: null, view: 'inspect', brightness: 1
 		} );
 
 	} );

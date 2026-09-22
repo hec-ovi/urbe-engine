@@ -9,6 +9,7 @@
     "timeMin": { "type": "number", "minimum": 0 },
     "place": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/place" },
     "position": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" },
-    "heading": { "type": "number" }
+    "heading": { "type": "number" },
+    "seated": { "type": "boolean", "description": "Preserve an existing seated body when adopting it for a quest. Omitted means standing." }
   }
 }

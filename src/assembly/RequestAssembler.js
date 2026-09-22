@@ -124,8 +124,9 @@ export class RequestAssembler {
 	 * Which design this building is drawn as. A unique building wears an approved
 	 * family whenever its own footprint, height and street take one: the landmark
 	 * design first, then the corporate tower, then a seeded pick of the rest. A
-	 * connection cut above ground pins its faces, which the landmark design does
-	 * not take. Everything else is Exterior's own choice for the programme.
+	 * connection above ground pins its face, including an uncut cable anchor:
+	 * a tapered facade cannot leave an attachment at the old parcel plane.
+	 * Everything else is Exterior's own choice for the programme.
 	 */
 	#architecture( parcel, floors, apertures ) {
 
@@ -135,7 +136,7 @@ export class RequestAssembler {
 
 		if ( ! sides ) return AUTO;
 
-		const fixedFaces = apertures.some( ( aperture ) => aperture.kind !== 'wire-anchor' && aperture.base >= 0 );
+		const fixedFaces = apertures.some( ( aperture ) => aperture.base >= 0 );
 		const fitting = landmarkFamilies( sides, floors, parcel, { fixedFaces } );
 
 		return LANDMARK_FIRST.find( ( id ) => fitting.includes( id ) )

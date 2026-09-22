@@ -98,7 +98,8 @@ export class GroundMeshBuilder {
 				const ccw = signedArea( ring ) > 0;
 				return ledge( ring, spec.y, CURB_WIDTH, ( a, b ) => road.bordersEdge( a, b, ccw ) );
 
-			} );
+			} ).map( geometry => this.cut( geometry ) ).filter( Boolean );
+			if ( ! fills.length ) continue;
 			const merged = BufferGeometryUtils.mergeGeometries( fills, false );
 			fills.forEach( ( g ) => g.dispose() );
 
@@ -129,18 +130,29 @@ export class GroundMeshBuilder {
 
 		if ( curbs.length ) {
 
-			const merged = BufferGeometryUtils.mergeGeometries( curbs, false );
-			curbs.forEach( ( g ) => g.dispose() );
-			const material = this.palette.surface( 'curb' );
-			const mesh = new THREE.Mesh( merged, this.factory.build( material.key, material.variantId ) );
-			mesh.name = 'ground:kerb';
-			group.add( mesh );
-			solid.push( merged );
+			const clipped = curbs.map( geometry => this.cut( geometry ) ).filter( Boolean );
+			const merged = clipped.length ? BufferGeometryUtils.mergeGeometries( clipped, false ) : null;
+			clipped.forEach( ( g ) => g.dispose() );
+			if ( merged ) {
+
+				const material = this.palette.surface( 'curb' );
+				const mesh = new THREE.Mesh( merged, this.factory.build( material.key, material.variantId ) );
+				mesh.name = 'ground:kerb';
+				group.add( mesh );
+				solid.push( merged );
+
+			}
 
 		}
 
 		const fitted = paving.build( this.factory, road );
-		for ( const mesh of fitted.meshes ) group.add( mesh );
+		for ( const mesh of fitted.meshes ) {
+
+			mesh.geometry = this.cut( mesh.geometry );
+			if ( mesh.geometry ) group.add( mesh );
+
+		}
+		fitted.colliderGeometry = this.cut( fitted.colliderGeometry );
 		if ( fitted.colliderGeometry ) solid.push( fitted.colliderGeometry );
 
 		const physical = modules.build( this.factory, { collision: this.context.collision !== false } );
@@ -160,6 +172,15 @@ export class GroundMeshBuilder {
 		physical.colliderGeometry?.dispose();
 		highways.colliderGeometry?.dispose();
 		return { group, colliderGeometry, bounds };
+
+	}
+
+	cut( geometry ) {
+
+		if ( ! geometry || ! this.context.openings ) return geometry;
+		const result = this.context.openings.cut( geometry );
+		if ( result !== geometry ) geometry.dispose();
+		return result;
 
 	}
 

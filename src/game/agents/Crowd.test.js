@@ -468,7 +468,30 @@ describe( 'Crowd cast at a quest parcel', () => {
 
 	} );
 
-	it( 'names only the handle that resolves to the cast person, never the ones it walked past', () => {
+	it( 'shows a posted cast from the doorway of a large floor even when its counter is beyond the street radius', () => {
+
+		const instance = { npcId: 'cast-guard', name: { given: 'Ren', family: 'Cross' }, type: 'guard', gender: 'male', appearanceSeed: 9 };
+		const inside = new THREE.Vector3( 191, 0, 129.7 );
+		const counter = { id: 'counter', position: new THREE.Vector3( 233.07, 0, 109.56 ), heading: 0 };
+		const hold = ( request ) => ( {
+			...persistentActor( instance ), place: request.place, position: request.position,
+			heading: request.heading, animation: 'idle', mode: 'posing', visible: true
+		} );
+		const crowd = new Crowd( {
+			assets: testAssets(), routes: pavement(), signals: { green: () => true },
+			sim: { getNPC: () => instance, crowd: () => ( { agents: [] } ), instantiate: () => null },
+			continuity: { hold }, capacity: 4,
+			places: new Map( [ [ 'p14', { inside, heading: 0, anchors: { counter: [ counter ] } } ] ] )
+		} );
+
+		expect( counter.position.distanceTo( inside ) ).toBeGreaterThan( 45 );
+		expect( crowd.castMember( instance.npcId, 600, inside, 'p14' ) ).toMatchObject( {
+			npcId: instance.npcId, parcelId: 'p14', position: counter.position
+		} );
+
+	} );
+
+	it.each( [ false, true ] )( 'names only the matching handle and retains the appointment (continuity %s)', ( controlled ) => {
 
 		const instance = { npcId: 'npc-denna', name: { given: 'River', family: 'Nakamura' }, type: 'receptionist', gender: 'female', appearanceSeed: 7 };
 		const inside = new THREE.Vector3( 10, 0, 10 );
@@ -481,15 +504,25 @@ describe( 'Crowd cast at a quest parcel', () => {
 			crowd: ( timeMin, scope ) => ( { agents: scope.kind === 'parcel' ? [ handle( 'h1' ), handle( 'h2' ) ] : [] } ),
 			instantiate: ( crowdId ) => crowdId === 'h2' ? instance : bystander
 		};
+		const hold = vi.fn( ( request ) => ( {
+			...persistentActor( instance ), place: { ...request.place }, position: [ ...request.position ],
+			heading: request.heading, animation: 'idle', mode: 'posing', visible: true
+		} ) );
 		const crowd = new Crowd( {
 			assets: testAssets(), routes: pavement(), signals: { green: () => true }, sim,
-			places: new Map( [ [ 'p17', { inside, heading: 0, anchors: {} } ] ] ), capacity: 4
+			places: new Map( [ [ 'p17', { inside, heading: 0, anchors: {} } ] ] ), capacity: 4,
+			continuity: controlled ? { hold } : null
 		} );
 		crowd.update( 0, inside, { timeMin: 1264, daySeconds: 36000 } );
 
 		const cast = crowd.castMember( 'npc-denna', 1264, inside, 'p17' );
 		expect( cast.npcId ).toBe( 'npc-denna' );
 		expect( [ ...crowd.members.values() ].filter( ( member ) => member.npcId ) ).toEqual( [ cast ] );
+		expect( cast ).toMatchObject( { quest: true, frozen: true } );
+		if ( controlled ) expect( hold ).toHaveBeenCalledWith( expect.objectContaining( {
+			npcId: 'npc-denna', place: { kind: 'parcel', id: 'p17' }, position: cast.position.toArray()
+		} ) );
+		expect( crowd.members.size ).toBe( 2 );
 
 	} );
 

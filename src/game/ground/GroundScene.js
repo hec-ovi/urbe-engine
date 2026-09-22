@@ -3,12 +3,13 @@ import { GroundBuilder } from './GroundBuilder.js';
 import { NativeTextureSource } from './materials/NativeTextureSource.js';
 import { NativeStreetMaterials } from './materials/NativeStreetMaterials.js';
 import { NativeStreetStream } from './native-stream/NativeStreetStream.js';
+import { GroundOpenings } from './GroundOpenings.js';
 
 /** Coordinates native ordinary streets with the retained authored infrastructure. */
 export class GroundScene {
-	constructor( atlas, factory, nativeSource = null, textureOptions = {} ) {
+	constructor( atlas, factory, nativeSource = null, textureOptions = {}, buildingSources = {} ) {
 		this.group = new Group(); this.group.name = 'ground';
-		this.retained = new GroundBuilder( nativeSource?.retainedAtlas() ?? atlas, factory ).stream();
+		this.retained = new GroundBuilder( nativeSource?.retainedAtlas() ?? atlas, factory, { openings: new GroundOpenings( buildingSources ) } ).stream();
 		this.streams = [ this.retained ];
 		if ( nativeSource ) {
 			this.textures = new NativeTextureSource( textureOptions );

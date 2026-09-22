@@ -29,6 +29,23 @@ function plain( vertices ) {
 
 describe( 'the batching class takes primitives as a loader publishes them', () => {
 
+	it( 'retains per-copy texture repeats across growth and reuse without duplicating geometry', () => {
+		const batches = new MaterialBatches( 'repeat', { uvRepeat: true } ).add( [ {
+			id: 'wall', surfaces: [ { bucket: 'stone', geometry: shared( { vertices: 3, drawn: 3 } ), material: new THREE.MeshStandardNodeMaterial() } ]
+		} ], { instances: 1 } );
+		const first = batches.admit( 'wall', new THREE.Matrix4(), null, null, [ 12, 8 ] );
+		const second = batches.admit( 'wall', new THREE.Matrix4(), null, null, [ 4, 1 ] );
+		const batch = first.parts[ 0 ].batch;
+		const repeat = handle => Array.from( batch.uvRepeat.texture.image.data.slice( handle.instances[ 0 ] * 4, handle.instances[ 0 ] * 4 + 2 ) );
+		expect( repeat( first ) ).toEqual( [ 12, 8 ] );
+		expect( repeat( second ) ).toEqual( [ 4, 1 ] );
+		expect( first.parts[ 0 ].geometryId ).toBe( second.parts[ 0 ].geometryId );
+		batches.release( first );
+		const third = batches.admit( 'wall', new THREE.Matrix4() );
+		expect( repeat( third ) ).toEqual( [ 1, 1 ] );
+		batches.dispose();
+	} );
+
 	it( 'batches one bucket that mixes an indexed primitive with a non indexed one', () => {
 
 		const material = new THREE.MeshStandardMaterial();

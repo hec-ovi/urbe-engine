@@ -9,6 +9,9 @@ Expose checked development HTTP routes for world builds, the launcher and NPC di
 ## Inputs
 
 - `POST /api/building`: [schema/building-build-request.schema.json](schema/building-build-request.schema.json).
+  An optional Exterior `request` creates a standalone paired building; see the
+  [paired preview contract](../building/CONTRACT.md#paired-previews). It uses the existing
+  generator APIs and never invents or rescales a facade to fit the requested lot.
 - `GET /api/exteriors`: no input; checks local batch runtime prerequisites.
 - `POST /api/exteriors`: [exact displayed blueprint envelope](schema/exterior-build-request.schema.json).
 - `GET /api/exteriors/<id>`: job id returned by POST.

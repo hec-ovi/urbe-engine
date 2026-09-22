@@ -175,7 +175,9 @@ function processPort( calls ) {
 		if ( args.includes( 'materialize' ) ) {
 
 			calls.push( { kind: 'materialize', command, args } );
-			const output = args.at( -1 );
+			// Output is the fifth positional CLI argument; trailing selection
+			// flags must never become filenames in the checkout running the test.
+			const output = args[ args.indexOf( '--' ) + 5 ];
 			const questlines = definitions();
 			const objectives = questlines.flatMap( ( definition ) => definition.steps.map( ( step ) => ( {
 				questId: definition.id, stepId: step.stepId, action: step.target

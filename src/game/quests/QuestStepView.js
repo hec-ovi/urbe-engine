@@ -1,4 +1,4 @@
-import { castIds } from './QuestCast.js';
+import { castIds, characterName } from './QuestCast.js';
 import { unavailableMessage } from './QuestAvailability.js';
 
 /**
@@ -24,7 +24,7 @@ export function stepView( { step, runtime, sim = null, timeMin = 0, done = false
 		stepId: step.stepId,
 		text,
 		done: false,
-		npcName: personName( sim, castIds( step.target, runtime )[ 0 ] ),
+		npcName: personName( sim, castIds( step.target, runtime )[ 0 ], runtime ),
 		place: placeView( step, runtime, timeMin ),
 		availability: availability.available
 			? { available: true }
@@ -41,9 +41,12 @@ export function stepLine( view ) {
 
 }
 
-function personName( sim, npcId ) {
+function personName( sim, npcId, runtime ) {
 
-	if ( ! sim || ! npcId ) return null;
+	if ( ! npcId ) return null;
+	const authored = characterName( runtime, npcId );
+	if ( authored ) return `${authored.given} ${authored.family}`;
+	if ( ! sim ) return null;
 	try {
 
 		const npc = sim.getNPC( npcId );

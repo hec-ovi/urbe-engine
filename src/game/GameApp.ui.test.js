@@ -40,6 +40,7 @@ describe( 'playable game navigation', () => {
 		expect( app.animations.playerDialogueTurn ).toHaveBeenCalledOnce();
 		expect( app.animations.npcDialogueTurn ).toHaveBeenCalledOnce();
 		expect( app.animations.completeDialogueTurn ).toHaveBeenCalledOnce();
+		expect( app.questGameplay.places ).toHaveBeenCalledWith( 725 );
 
 		app.talk.say.mockRejectedValueOnce( new Error( 'model unavailable' ) );
 		await user.type( input, 'second line{Enter}' );
@@ -67,6 +68,7 @@ function dialogueApp() {
 	};
 	app.clock = { timeMin: 725 };
 	app.quests = { snapshot: () => [] };
+	app.questGameplay = { places: vi.fn( () => [] ) };
 	app.animations = {
 		playerDialogueTurn: vi.fn(), npcDialogueTurn: vi.fn(), completeDialogueTurn: vi.fn()
 	};

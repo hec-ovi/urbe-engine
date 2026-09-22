@@ -10,9 +10,9 @@ import { MaterialReportPanel } from '../widgets/MaterialReportPanel.js';
  */
 export class BuildingView {
 
-	constructor( { parcel, onSourceChange, onSliceChange, onRetry, onExterior } ) {
+	constructor( { parcel, brightness, onBrightnessChange, onSourceChange, onSliceChange, onRetry, onExterior, onWalk, onInspect } ) {
 
-		this.controls = new BuildingControlsPanel( { parcel, onSourceChange, onSliceChange } );
+		this.controls = new BuildingControlsPanel( { parcel, brightness, onBrightnessChange, onSourceChange, onSliceChange, onWalk, onInspect } );
 		this.report = new MaterialReportPanel();
 		this.onRetry = onRetry;
 		this.onExterior = onExterior;
@@ -24,6 +24,10 @@ export class BuildingView {
 		);
 
 	}
+
+	setWalkOptions( floors, active, inside ) { this.controls.setWalkOptions( floors, active, inside ); }
+	setWalkActive( active ) { this.controls.setWalkActive( active ); }
+	setInteraction( text ) { this.controls.setInteraction( text ); }
 
 	mount( parent ) {
 
@@ -58,6 +62,7 @@ export class BuildingView {
 	setCameraCaptured( captured, failed = false ) {
 
 		this.controls.setCameraCaptured( captured, failed );
+		this.report.element.hidden = captured;
 
 	}
 

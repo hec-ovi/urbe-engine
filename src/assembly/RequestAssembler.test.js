@@ -152,6 +152,12 @@ describe( 'RequestAssembler', () => {
 		expect( [ 'balcony-grid', 'faceted-bays', 'mirror-frame', 'mirror-shutters', 'white-grid' ] )
 			.toContain( bound.options.architecture );
 
+		// Even an uncut cable anchor must remain on its exact authored plane.
+		const wire = aperture( 'wire', 'wire-anchor', 7.5, 0.1 );
+		const anchored = new RequestAssembler( atlasWith( landmark ), { apertures: [ wire ] } ).assemble( 'p7' );
+		expect( anchored.options.architecture ).not.toBe( 'garden-taper' );
+		expect( anchored.apertures ).toEqual( [ wire ] );
+
 		// Too small for any of them, and an ordinary lot, keep Exterior's choice.
 		const small = { ...landmark, footprint: [ [ 0, 0 ], [ 14, 0 ], [ 14, 11 ], [ 0, 11 ] ] };
 

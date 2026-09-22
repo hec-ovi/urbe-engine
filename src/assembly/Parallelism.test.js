@@ -15,10 +15,13 @@ describe( 'batch parallelism', () => {
 		expect( defaultWorkers( { [ WORKERS_ENV ]: '6' } ) ).toBe( 6 );
 		for ( const value of [ '0', '-2', '2.5', 'many', '' ] ) expect( defaultWorkers( { [ WORKERS_ENV ]: value } ) ).toBe( quarter );
 
-		// The ceiling is on by default, sits under the die's published throttle
-		// point where there is one, and takes the environment's own over both.
+		// The ceiling is the project's number, never raised to meet the
+		// hardware, lowered under a throttle point published below it, and the
+		// environment's own beats both.
+		expect( DEFAULT_MAX_TEMP ).toBe( 90 );
 		expect( maxTemperature( {} ) ).toBe( DEFAULT_MAX_TEMP );
-		expect( maxTemperature( {}, 100 ) ).toBe( 100 - MARGIN );
+		expect( maxTemperature( {}, 100 ) ).toBe( DEFAULT_MAX_TEMP );
+		expect( maxTemperature( {}, 85 ) ).toBe( 85 - MARGIN );
 		expect( maxTemperature( { [ MAX_TEMP_ENV ]: '70' }, 100 ) ).toBe( 70 );
 		expect( maxTemperature( { [ MAX_TEMP_ENV ]: '0' } ) ).toBe( 0 );
 		expect( maxTemperature( { [ MAX_TEMP_ENV ]: 'hot' } ) ).toBe( DEFAULT_MAX_TEMP );

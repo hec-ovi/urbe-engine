@@ -47,3 +47,9 @@ Draws every ordinary building from the shared plan it is a copy of: one batch pe
 ## Depends on
 
 Kit assembly output, [City GLTF loader](../../data/CityGltfLoader.js), [plan blueprints](../../data/PlanBlueprints.js), [shell streaming](../streaming/CONTRACT.md), [door geometry](../DoorGeometry.js), [shell surfaces](../ShellSurface.js), [PBR factory](../../../building/CONTRACT.md), [Physics](../../physics/CONTRACT.md).
+
+Interior module batches also carry `uvRepeat` per instance, in a separate texture channel.
+Every surface map (colour, normal, roughness, metalness, AO and emission) receives the
+published repeat before its material tiling transform. Buffer growth retains those
+values; reused slots default to `[1,1]`. Room-light and batch-index lookup textures are
+excluded. No geometry or material is duplicated for a fitted module size.

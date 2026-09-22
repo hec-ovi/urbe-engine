@@ -31,6 +31,24 @@ describe( 'BuildingAssets', () => {
 
 	} );
 
+	it( 'loads the paired placement layouts and their shared catalogs without requiring an interior GLB', async () => {
+		const building = { floors: [ { index: 0 } ], layouts: { ground: 'layouts/ground.json' } };
+		const docs = {
+			'/out/previews/p1/interior/building.json': building,
+			'/out/previews/p1/interior/layouts/ground.json': { id: 'ground', placements: [] },
+			'/out/previews/p1/preview.json': { interiorModules: { shared: 'rooms/a', file: 'modules.json' }, interiorProps: { shared: 'rooms/a', file: 'catalog.json' } },
+			'/out/shared/rooms/a/modules.json': { modules: [] },
+			'/out/shared/rooms/a/catalog.json': { assets: [] }
+		};
+		vi.stubGlobal( 'fetch', vi.fn( async url => response( docs[ url ] ? 200 : 404, docs[ url ] ?? null ) ) );
+		const assets = new BuildingAssets( 'p1', '/out/previews' );
+		const source = await assets.inspectScene( 'interior' );
+		expect( source ).toMatchObject( { available: true, format: 'placements' } );
+		expect( await assets.loadInterior( source ) ).toMatchObject( {
+			building, layouts: { ground: { id: 'ground' } }, modules: { baseUrl: '/out/shared/rooms/a' }, props: { document: { assets: [] } }
+		} );
+	} );
+
 } );
 
 function response( status, body, type = 'application/json' ) {

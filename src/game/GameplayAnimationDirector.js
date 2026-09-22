@@ -48,7 +48,9 @@ export class GameplayAnimationDirector {
 			const actorId = this.#actorId( actor.npcId );
 			if ( this.physicsActors.has( actorId ) ) continue;
 			let held = this.actorActions.get( actorId );
-			if ( actor.mode === 'posing' ) {
+			// Quest appointments also hold their bodies in posing mode. Only
+			// an explicit crouch animation may start the crouch action.
+			if ( actor.mode === 'posing' && actor.animation === 'crouch' ) {
 
 				this.#ensureCrouchActor( actorId );
 				if ( held?.kind !== 'crouch' ) {

@@ -189,8 +189,10 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 		}
 
-		// Thirteen treads, one cuboid each, each one rising over the last.
-		const treads = partsOf( 'stair-flight-13', modules.boundsOf( 'stair-flight-13' ) );
+		// Thirteen treads followed by both rows of solid guard posts.
+		const flight = partsOf( 'stair-flight-13', modules.boundsOf( 'stair-flight-13' ) );
+		expect( flight ).toHaveLength( 39 );
+		const treads = flight.slice( 0, 13 );
 		expect( treads ).toHaveLength( 13 );
 		expect( treads.map( ( part ) => part[ 4 ] ) ).toEqual( [ ...treads ].map( ( part ) => part[ 4 ] ).sort( ( a, b ) => a - b ) );
 

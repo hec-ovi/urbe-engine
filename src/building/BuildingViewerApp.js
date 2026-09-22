@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { RendererFactory } from '../app/RendererFactory.js';
 import { QualityTier } from '../game/look/QualityTier.js';
 import { NightLook } from '../game/look/NightLook.js';
+import { LOOK } from '../game/look/LookSettings.js';
 import { Warmup } from '../game/look/Warmup.js';
 import { CityLights } from '../game/light/CityLights.js';
 import { ScenicSurface } from '../game/city/ScenicSurface.js';
@@ -11,6 +12,8 @@ import { LitWindows } from '../game/city/LitWindows.js';
 import { isSceneryNode, shellMaterial, shellScenery, shellVariant } from '../game/city/ShellSurface.js';
 import { BuildingAssetError, BuildingAssets } from './BuildingAssets.js';
 import { BuildingStage } from './BuildingStage.js';
+import { BuildingsLoader } from '../game/city/BuildingsLoader.js';
+import { BuildingWalk } from './BuildingWalk.js';
 import { MaterialResolver } from './MaterialResolver.js';
 import { PbrMaterialFactory } from './PbrMaterialFactory.js';
 import { FloorSlicer } from './FloorSlicer.js';
@@ -32,7 +35,7 @@ const PREPARE_BUDGET_MS = 15000;
  * game shows it: the same night look (game/look/NightLook.js), the same surface
  * rules (game/city/ShellSurface.js) and the building's own fixtures in lumens
  * (game/city/ShellFixtures.js), so what is judged here is the model and its
- * materials rather than a second, kinder lighting rig.
+ * materials. The inspection brightness control adjusts exposure live.
  */
 export class BuildingViewerApp {
 
@@ -46,22 +49,42 @@ export class BuildingViewerApp {
 			source: [ 'shell', 'interior' ].includes( params.get( 'source' ) ) ? params.get( 'source' ) : 'shell',
 			backend: params.get( 'backend' ) === 'webgl' ? 'webgl' : 'webgpu',
 			// Unset follows the backend, exactly as a played run does.
-			quality: QualityTier.names().includes( params.get( 'quality' ) ) ? params.get( 'quality' ) : null
+			quality: QualityTier.names().includes( params.get( 'quality' ) ) ? params.get( 'quality' ) : null,
+			view: params.get( 'view' ) === 'walk' ? 'walk' : 'inspect',
+			brightness: previewBrightness( params.get( 'brightness' ) )
 		};
 
 	}
 
 	constructor( config ) {
 
-		this.config = config;
+		this.config = { ...config, brightness: previewBrightness( config.brightness ) };
 		this.view = new BuildingView( {
 			parcel: config.parcel,
+			brightness: this.config.brightness,
+			onBrightnessChange: value => this.setBrightness( value ),
 			onSourceChange: ( source ) => this.navigate( { source } ),
 			onSliceChange: ( value ) => this.slicer?.apply( value ),
+			onWalk: ( floor ) => this.enterWalk( floor ),
+			onInspect: () => this.navigate( { view: 'inspect' } ),
 			onRetry: () => window.location.reload(),
 			onExterior: () => this.navigate( { source: 'shell' } )
 		} );
 		this.view.mount( document.body );
+
+	}
+
+	setBrightness( value ) {
+
+		this.config.brightness = previewBrightness( value );
+		if ( this.look ) {
+			this.look.exposure.base = LOOK.exposure * this.config.brightness;
+			this.look.exposure.update( 0 );
+		}
+		const url = new URL( window.location.href );
+		if ( this.config.brightness === 1 ) url.searchParams.delete( 'brightness' );
+		else url.searchParams.set( 'brightness', String( this.config.brightness ) );
+		window.history.replaceState( window.history.state, '', url );
 
 	}
 
@@ -132,7 +155,10 @@ export class BuildingViewerApp {
 			this.renderer.setPixelRatio( Math.min( window.devicePixelRatio, MAX_PIXEL_RATIO ) );
 			document.body.prepend( this.renderer.domElement );
 
-			return NightLook.begin( this.renderer, { quality, backend: RendererFactory.actualBackend( this.renderer ) } );
+			return NightLook.begin( this.renderer, {
+				quality, backend: RendererFactory.actualBackend( this.renderer ),
+				exposure: LOOK.exposure * this.config.brightness
+			} );
 
 		} );
 		this.look = look;
@@ -152,8 +178,19 @@ export class BuildingViewerApp {
 
 		// A parcel whose interior is generated shows that interior in the game,
 		// so its painted rooms are the shell's only where none exists.
-		const hasInterior = source === 'interior' || interior.available;
+		const paired = source === 'interior' && selected.format === 'placements' ? await assets.loadInterior( selected ) : null;
+		const hasInterior = source === 'interior';
+		let city = null;
 		const building = await progress.run( 'reading the model', async () => {
+			if ( source === 'shell' || paired ) {
+				city = await new BuildingsLoader( factory ).load( new Map( [ [ parcel, {
+					parcelId: parcel, blueprint, shellUrl: assets.sceneUrl( 'shell' ), hasInterior: Boolean( paired ), interior: paired
+				} ] ] ) );
+				city.group.traverse( node => {
+					if ( node.material ) for ( const material of Array.isArray( node.material ) ? node.material : [ node.material ] ) this.slicer.attach( material );
+				} );
+				return city.group;
+			}
 
 			const scene = await assets.loadScene( source, selected );
 			this.#dressSurfaces( scene, { factory, blueprint, parcel, hasInterior } );
@@ -169,6 +206,11 @@ export class BuildingViewerApp {
 		} );
 		stage.scene.add( building );
 		Object.assign( this, stage ); // scene, camera, controls
+		if ( city ) {
+			this.walk = await progress.run( 'preparing walkable floors', () => BuildingWalk.create( { app: this, city, interior: paired, blueprint, factory, parcel } ) );
+			this.view.setWalkOptions( this.walk.destinations, this.config.view === 'walk', source === 'interior' );
+			if ( this.config.view === 'walk' ) await this.walk.enter( paired ? paired.building.floors[ 0 ].index : null );
+		}
 
 		await progress.run( 'lighting the street', async () => {
 
@@ -211,12 +253,18 @@ export class BuildingViewerApp {
 			const now = performance.now();
 			const delta = Math.min( 0.05, ( now - last ) / 1000 );
 			last = now;
-			this.controls.update();
+			if ( ! this.walk?.enabled ) this.controls.update();
+			this.walk?.update( delta );
 			this.lights.update( this.camera.position, delta );
 			this.look.render();
 
 		} );
 
+	}
+
+	async enterWalk( floor ) {
+		try { await this.walk?.enter( floor ); }
+		catch ( error ) { this.view.showIssue( { title: 'Walk unavailable', message: error.message } ); }
 	}
 
 	/**
@@ -332,6 +380,12 @@ export class BuildingViewerApp {
 
 	}
 
+}
+
+/** Keep malformed or unbounded URL values out of the tone mapper. */
+function previewBrightness( value ) {
+	const number = Number( value );
+	return Number.isFinite( number ) && number > 0 ? Math.min( 32, Math.max( 0.5, number ) ) : 1;
 }
 
 /** Which way the building looks out: where Exterior put its entrance or its sign. */

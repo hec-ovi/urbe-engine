@@ -122,6 +122,10 @@ export class BuildingAssets {
 	 * failure.
 	 */
 	async inspectScene( source ) {
+		if ( source === 'interior' ) {
+			const building = await readJson( `${this.base}/interior/building.json` );
+			if ( building?.floors?.length && building.layouts ) return { available: true, source, format: 'placements', building };
+		}
 
 		const url = this.sceneUrl( source );
 		const response = await fetch( url, { method: 'HEAD' } );
@@ -142,6 +146,26 @@ export class BuildingAssets {
 			source, url, status: response.status, mediaType: type
 		};
 
+	}
+
+	/** Current Interior output is placement JSON with shared geometry catalogs. */
+	async loadInterior( inspected ) {
+		const building = inspected.building;
+		const layouts = Object.fromEntries( await Promise.all( Object.entries( building.layouts ).map( async ( [ id, file ] ) => {
+			const layout = await readJson( `${this.base}/interior/${file}` );
+			if ( ! layout ) throw new Error( `Missing interior layout ${file}` );
+			return [ id, layout ];
+		} ) ) );
+		const resources = await readJson( `${this.base}/preview.json` ) ?? await readJson( `${this.world}/manifest.json` );
+		const catalog = async reference => {
+			if ( ! reference ) throw new Error( 'Missing interior resource catalog reference' );
+			const baseUrl = reference.shared ? `/out/shared/${reference.shared}` : `${this.world}/interior`;
+			const document = await readJson( `${baseUrl}/${reference.file}` );
+			if ( ! document ) throw new Error( `Missing interior catalog ${reference.file}` );
+			return { document, baseUrl };
+		};
+		const [ modules, props ] = await Promise.all( [ catalog( resources?.interiorModules ), catalog( resources?.interiorProps ) ] );
+		return { building, layouts, modules, props };
 	}
 
 	/** @param source 'shell' | 'interior' @returns the glTF scene (THREE.Group) */

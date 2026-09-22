@@ -16,7 +16,7 @@ const PRESETS = {
 		// a shadow, which is why a wall panel's relief reads flat. One spot on
 		// the room the player stands in casts; the tiers that run on WebGL2 pay
 		// for a whole extra depth pass for it, so they do not.
-		roomShadow: 0,
+		roomShadow: 512,
 		clusteredLights: 512,
 		batchedLights: 32,
 		// Glossy ground and metals need something to reflect on every tier;

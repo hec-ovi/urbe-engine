@@ -96,10 +96,12 @@ function roofDoorRect( blueprint ) {
 
 	const axis = new THREE.Vector3( bulkhead.axis[ 0 ], 0, bulkhead.axis[ 1 ] ).normalize();
 	const normal = new THREE.Vector3( bulkhead.doorNormal[ 0 ], 0, bulkhead.doorNormal[ 1 ] ).normalize();
+	const reach = Math.abs( normal.dot( axis ) ) > 0.999 ? bulkhead.width : bulkhead.depth;
+	const tangent = new THREE.Vector3( - normal.z, 0, normal.x );
 	const mid = new THREE.Vector3( bulkhead.center[ 0 ], roof.elevation, bulkhead.center[ 1 ] )
-		.addScaledVector( normal, bulkhead.depth / 2 );
-	const start = mid.clone().addScaledVector( axis, bulkhead.doorWidth / 2 );
-	const end = mid.clone().addScaledVector( axis, - bulkhead.doorWidth / 2 );
+		.addScaledVector( normal, reach / 2 );
+	const start = mid.clone().addScaledVector( tangent, bulkhead.doorWidth / 2 );
+	const end = mid.clone().addScaledVector( tangent, - bulkhead.doorWidth / 2 );
 
 	return {
 		start,

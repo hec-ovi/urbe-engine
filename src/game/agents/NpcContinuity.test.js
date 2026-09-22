@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { Vector3 } from 'three/webgpu';
 import { FIXTURE_BLUEPRINT, FIXTURE_INTERIORS, restoreSimulation } from '../../../../simulation/dist/index.js';
 import { SimBridge } from '../sim/SimBridge.js';
 import { CLIP, clipForNpcAnimation } from './CharacterAssets.js';
 import { NpcContinuity, selectNpcAnimation } from './NpcContinuity.js';
 import { NpcContinuityError } from './NpcContinuityError.js';
 import { WalkRoutes } from './WalkRoutes.js';
+import { Crowd } from './Crowd.js';
 
 const MON_9 = 9 * 60;
 
@@ -361,6 +363,55 @@ describe( 'NPC continuity integration', () => {
 		}
 		expect( returning ).toMatchObject( { npcId: npc.npcId, mode: 'schedule' } );
 		expect( bridge.behaviorAt( npc.npcId, MON_9 + 34 ).interrupted ).toBe( false );
+
+	} );
+
+	it( 'preserves a seated quest body and reclaims its routine return without taking over an active escort', () => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const request = {
+			npcId: npc.npcId, timeMin: MON_9, place: { kind: 'parcel', id: 'p_cafe' },
+			position: [ 561, 1, 251 ], heading: Math.PI / 2, seated: true
+		};
+		const player = new Vector3( ...request.position );
+		const crowd = new Crowd( {
+			assets: null, sim: bridge, continuity: controller, routes: new WalkRoutes( network() ), signals: null,
+			places: new Map( [ [ 'p_cafe', { inside: player.clone(), heading: 0, anchors: {} } ] ] ), capacity: 8
+		} );
+		const visible = crowd.syncActor( {
+			...controller.appear( { npcId: npc.npcId, timeMin: MON_9 } ),
+			position: request.position, place: request.place, heading: request.heading, animation: 'sit'
+		}, player );
+		const adopted = crowd.castMember( npc.npcId, MON_9, player, 'p_cafe' );
+		expect( adopted ).toBe( visible );
+		expect( adopted ).toMatchObject( { heading: request.heading, controlMode: 'posing', clip: CLIP.SIT } );
+		expect( adopted.position.toArray() ).toEqual( request.position );
+		expect( controller.updateVisible( {
+			timeMin: MON_9 + 1, playerPosition: request.position, maxDistance: 100
+		} )[ 0 ] ).toMatchObject( { animation: 'sit', position: request.position } );
+		expect( controller.releaseHold( { npcId: npc.npcId, timeMin: MON_9 + 2 } ).mode ).toBe( 'resuming' );
+		const next = { ...request, timeMin: MON_9 + 3, position: [ 562, 1, 252 ] };
+		expect( controller.hold( next ) ).toMatchObject( { animation: 'sit', mode: 'posing', position: next.position } );
+		expect( controller.serialize().follow ).toBeNull();
+		expect( bridge.behaviorAt( npc.npcId, MON_9 + 4 ).interrupted ).toBe( true );
+
+		for ( const mode of [ 'following', 'leading' ] ) {
+
+			const escort = setup();
+			const person = escort.bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+			if ( mode === 'following' ) escort.controller.startFollow( {
+				npcId: person.npcId, timeMin: MON_9, playerPosition: [ 560, 1, 250 ]
+			} );
+			else escort.controller.startLead( {
+				npcId: person.npcId, timeMin: MON_9,
+				destination: { kind: 'parcel', id: FIXTURE_BLUEPRINT.parcels.find( ( parcel ) => parcel.id !== 'p_cafe' ).id }
+			} );
+			const before = escort.controller.serialize();
+			expect( code( () => escort.controller.hold( { ...request, npcId: person.npcId } ) ) ).toBe( 'E_NPC_CONFLICT' );
+			expect( escort.controller.serialize() ).toEqual( before );
+
+		}
 
 	} );
 

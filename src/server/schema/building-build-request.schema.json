@@ -6,6 +6,7 @@
   "additionalProperties": false,
   "required": ["parcel", "out"],
   "properties": {
+    "request": { "type": "object", "description": "Optional Exterior BuildingRequest. Generates a standalone exterior and its paired interior through the producer APIs. buildingId must equal parcel." },
     "parcel": {
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"

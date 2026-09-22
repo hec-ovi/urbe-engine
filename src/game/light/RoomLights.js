@@ -80,10 +80,15 @@ export class RoomLights {
 		/** The pool itself, flat: any light can be pointed at any room in view. */
 		this.spots = this.slots.flatMap( ( binding ) => binding.spots );
 		// One caster, and it is the first light of the pool, which is the
-		// brightest fixture of the room the player is standing in.
+		// brightest fixture of the room the player is standing in. It casts for
+		// the life of the run: `castShadow` is part of a material's light hash,
+		// so turning it on and off at every doorway would recompile every room
+		// material there. A light with no room is parked under the world
+		// instead, where its map rasterizes nothing.
 		if ( this.shadowSize && this.spots.length ) {
 
 			const caster = this.spots[ 0 ];
+			caster.castShadow = true;
 			caster.shadow.mapSize.setScalar( this.shadowSize );
 			caster.shadow.bias = - 0.002;
 			caster.shadow.camera.near = 0.2;
@@ -186,11 +191,7 @@ export class RoomLights {
 		// stretched highlight is lost, the room's own light is not.
 		const line = this.strips.length > 0;
 
-		const spots = share( this.rooms, this.spots.length, ( room ) => byFlux( line ? room.fixtures.filter( isSpot ) : room.fixtures ) );
-
-		place( this.spots, spots, aimSpot );
-		// A caster with nothing to light still renders its map every frame.
-		if ( this.shadowSize && this.spots.length ) this.spots[ 0 ].castShadow = Boolean( spots[ 0 ] );
+		place( this.spots, share( this.rooms, this.spots.length, ( room ) => byFlux( line ? room.fixtures.filter( isSpot ) : room.fixtures ) ), aimSpot );
 		place(
 			this.strips,
 			line ? share( this.rooms, this.strips.length, ( room ) => byReach( room.fixtures.filter( ( one ) => ! isSpot( one ) ), this.position ) ) : [],
@@ -298,6 +299,9 @@ function place( pool, chosen, aim ) {
 		if ( ! fixture ) {
 
 			light.intensity = 0;
+			// Parked under the world: a caster still renders its map every
+			// frame, and down here there is nothing in it to rasterize.
+			light.position.copy( PARKED );
 			continue;
 
 		}
@@ -366,3 +370,5 @@ function refresh( binding ) {
 }
 
 const _down = new THREE.Vector3( 0, - 1, 0 );
+/** Where a light with no room waits, well under the deepest basement. */
+const PARKED = new THREE.Vector3( 0, - 10000, 0 );

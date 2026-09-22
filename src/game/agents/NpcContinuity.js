@@ -307,7 +307,8 @@ export class NpcContinuity {
 
 		this.boundary.input( 'hold-start', request );
 		const { npcId, timeMin } = request;
-		if ( this.conversation?.npcId === npcId || this.follow?.npcId === npcId || this.pose?.npcId === npcId ) {
+		const returning = this.follow?.mode === 'resuming' && this.follow.npcId === npcId;
+		if ( this.conversation?.npcId === npcId || ( this.follow?.npcId === npcId && ! returning ) || this.pose?.npcId === npcId ) {
 
 			throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${npcId} is already under control` );
 
@@ -315,12 +316,13 @@ export class NpcContinuity {
 		const held = this.holds.has( npcId );
 		const actor = held ? this.actors.get( npcId ) : this.#scheduledActor( npcId, timeMin );
 		if ( ! held ) this.#interrupt( npcId, timeMin );
+		if ( returning ) this.follow = null;
 		actor.position = [ ...request.position ];
 		actor.heading = request.heading;
 		actor.place = clone( request.place );
 		actor.visible = true;
 		actor.mode = 'posing';
-		actor.animation = 'idle';
+		actor.animation = request.seated ? 'sit' : 'idle';
 		actor.schedule = { ...actor.schedule, nextDestination: clone( request.place ) };
 		this.actors.set( npcId, actor );
 		this.holds.set( npcId, { npcId, lastTimeMin: timeMin } );

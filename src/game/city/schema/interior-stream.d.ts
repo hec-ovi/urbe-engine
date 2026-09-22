@@ -4,15 +4,17 @@ import type { InteriorProps } from '../InteriorProps.js';
 import type { RoomLights } from '../../light/RoomLights.js';
 import type { Elevators } from '../Elevators.js';
 
-/** `building.json` and the three layouts it names, as BuildingSource reads them. */
+type InteriorLayoutId = 'ground' | 'middle' | 'crown' | `floor-${number}`;
+
+/** `building.json` and its declared layouts, as BuildingSource reads them. */
 export interface InteriorSource {
 	building: {
-		floors: Array<{ index: number; layout: 'ground' | 'middle' | 'crown'; elevation: number }>;
-		layouts: Record<'ground' | 'middle' | 'crown', string>;
+		floors: Array<{ index: number; layout: InteriorLayoutId; elevation: number }>;
+		layouts: Partial<Record<InteriorLayoutId, string>>;
 		[field: string]: unknown;
 	};
 	/** Full layout fields follow Interior's floor-placement.schema.json. */
-	layouts: Record<'ground' | 'middle' | 'crown', Record<string, unknown>>;
+	layouts: Partial<Record<InteriorLayoutId, Record<string, unknown>>>;
 }
 
 /** What one floor's modules and furniture are to the physics world. */

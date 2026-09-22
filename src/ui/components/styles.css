@@ -171,3 +171,13 @@ canvas {
 .viewer-error-actions .button {
 	margin-top: 0;
 }
+/* The building preview uses the same centred aim as first-person play. */
+.building-light-controls { margin: 12px 0; padding: 10px 0; border-top: 1px solid #3a4048; border-bottom: 1px solid #3a4048; }
+.building-light-controls input[type="range"] { width: 130px; accent-color: #8deeff; cursor: pointer; }
+.building-light-controls input:focus-visible { outline: 2px solid #8deeff; outline-offset: 2px; }
+.building-light-controls output { min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
+.building-crosshair { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); color: white; font: 20px monospace; pointer-events: none; }
+.building-interaction { position: fixed; left: 50%; bottom: 12%; transform: translateX(-50%); background: #111c; color: white; padding: 8px 14px; pointer-events: none; }
+.building-crosshair[hidden], .building-interaction[hidden] { display: none; }
+.panel-controls.building-captured { background: transparent; border: 0; pointer-events: none; }
+.panel-controls.building-captured > :not(.building-crosshair):not(.building-interaction) { display: none; }

@@ -22,10 +22,11 @@ export class MaterialBatches {
 	 * @param fill whether each copy carries a fill light, for draws standing in rooms
 	 * @param hitches the log a batch names its rebuilds in
 	 */
-	constructor( name, { fill = false, hitches = null } = {} ) {
+	constructor( name, { fill = false, uvRepeat = false, hitches = null } = {} ) {
 
 		this.name = name;
 		this.fill = fill;
+		this.uvRepeat = uvRepeat;
 		this.hitches = hitches;
 		/** material key to MaterialBatch */
 		this.batches = new Map();
@@ -116,6 +117,7 @@ export class MaterialBatches {
 				castShadow: surfaces.every( ( surface ) => surface.castShadow ?? castShadow ),
 				instances,
 				fill: this.fill,
+				uvRepeat: this.uvRepeat,
 				hitches: this.hitches
 			} );
 			this.batches.set( key, batch );
@@ -157,12 +159,12 @@ export class MaterialBatches {
 	}
 
 	/** Draws one more copy of an entry. @returns a handle to hand back to `release` */
-	admit( id, matrix, color = null, fill = null ) {
+	admit( id, matrix, color = null, fill = null, uvRepeat = [ 1, 1 ] ) {
 
 		const parts = this.entries.get( id );
 		const instances = [];
 
-		for ( const { batch, geometryId } of parts ) instances.push( batch.add( geometryId, matrix, color, fill ) );
+		for ( const { batch, geometryId } of parts ) instances.push( batch.add( geometryId, matrix, color, fill, uvRepeat ) );
 		this.copies ++;
 
 		return { parts, instances };

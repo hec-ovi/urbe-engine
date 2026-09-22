@@ -30,6 +30,11 @@ const RETURN_MEMBER = 0.02;
 /** A stair tread's slab and the step it rises over the one below. */
 const TREAD_THICKNESS = 0.15;
 const RISE = 0.17;
+/** The posts Interior authors on both edges of every tread. */
+const POST_HEIGHT = 1;
+const POST_WIDTH = 0.05;
+const POST_INSET = 0.025;
+const POST_DEPTH = 0.04;
 
 /**
  * The cuboids one floor's modules stand as.
@@ -135,7 +140,7 @@ function cut( id, [ x0, y0, z0 ], [ x1, y1, z1 ] ) {
 	}
 
 	const treads = Number( /^stair-flight-(\d+)$/.exec( id )?.[ 1 ] );
-	if ( treads ) return stairTreads( treads, [ x0, y0, z0 ], [ x1, z1 ] );
+	if ( treads ) return stairParts( treads, [ x0, y0, z0 ], [ x1, z1 ] );
 
 	// Everything else is solid to its published bounds: a wall piece, a slab,
 	// a ceiling field, a fitted desk.
@@ -150,15 +155,34 @@ function cut( id, [ x0, y0, z0 ], [ x1, y1, z1 ] ) {
  * divide its published depth; the first one's underside is the flight's floor,
  * and the published height also covers the handrail above the top step.
  */
-function stairTreads( treads, [ x0, y0, z0 ], [ x1, z1 ] ) {
+function stairParts( treads, [ x0, y0, z0 ], [ x1, z1 ] ) {
 
 	const depth = ( z1 - z0 ) / treads;
 	const parts = [];
 
 	for ( let step = 0; step < treads; step ++ ) {
 
-		const base = y0 + step * RISE;
-		parts.push( box( x0, base, z0 + step * depth, x1, base + TREAD_THICKNESS, z0 + ( step + 1 ) * depth ) );
+		// Closed risers can reach below the slab; the walking surface remains
+		// one authored rise per step, independent of the module's lower bound.
+		const top = ( step + 1 ) * RISE;
+		const base = y0 < 0 ? y0 + step * RISE : Math.max( y0, top - TREAD_THICKNESS );
+		parts.push( box( x0, base, z0 + step * depth, x1, top, z0 + ( step + 1 ) * depth ) );
+
+	}
+
+	// The rendered posts are only 0.24 m apart: their exact cuboids keep the
+	// capsule between the rails while leaving both ends of a flight open for
+	// the turn landing. Tread-only collision let players walk sideways through
+	// the visible guards and fall into the adjacent flight.
+	for ( let step = 0; step < treads; step ++ ) {
+
+		const top = ( step + 1 ) * RISE;
+		const middle = z0 + ( step + 0.5 ) * depth;
+		for ( const x of [ x0 + POST_INSET, x1 - POST_INSET - POST_WIDTH ] ) {
+
+			parts.push( box( x, top, middle - POST_DEPTH / 2, x + POST_WIDTH, top + POST_HEIGHT, middle + POST_DEPTH / 2 ) );
+
+		}
 
 	}
 

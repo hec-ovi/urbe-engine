@@ -392,6 +392,7 @@ export class InteriorStream {
 				draws: placement.module ? this.modules : this.props,
 				id: placement.module ?? placement.prop,
 				matrix: matrixOf( placement, record.elevation ),
+				uvRepeat: placement.uvRepeat ?? [ 1, 1 ],
 				fill: fills.get( placement.room ) ?? shared
 			} );
 
@@ -491,7 +492,7 @@ class FloorBand {
 		if ( this.handles ) return;
 
 		reserve( this.copies );
-		this.handles = this.copies.map( ( { draws, id, matrix, fill } ) => ( { draws, handle: draws.admit( id, matrix, fill ) } ) );
+		this.handles = this.copies.map( ( { draws, id, matrix, fill, uvRepeat } ) => ( { draws, handle: draws.admit( id, matrix, fill, uvRepeat ) } ) );
 		this.group.visible = true;
 
 	}

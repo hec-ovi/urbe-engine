@@ -94,6 +94,40 @@ describe( 'QuestSession', () => {
 
 	} );
 
+	it( 'keeps a restored shared character when a new side job is added', () => {
+
+		const people = simulation( new Map( [ [ 'n1', npc( 'n1', 'barista', 'p1' ) ], [ 'n2', npc( 'n2', 'barista', 'p1' ) ] ] ) );
+		const saved = QuestSession.create( [ definition ], people, 600 ).snapshot();
+		const side = { ...structuredClone( definition ), id: 'q_side', title: 'Side job' };
+		const restored = QuestSession.create( [ definition, side ], people, 600, saved );
+
+		expect( restored.entries.map( ( { runtime } ) => runtime.cast.barista ) ).toEqual( [ 'n1', 'n1' ] );
+		expect( restored.blocked ).toEqual( [] );
+		const savedSide = QuestSession.create( [ side ], people, 600 ).snapshot();
+		expect( QuestSession.create( [ definition, side ], people, 600, savedSide ).entries
+			.map( ( { runtime } ) => runtime.cast.barista ) ).toEqual( [ 'n1', 'n1' ] );
+
+	} );
+
+	it( 'repairs a legacy save that gave two characters one body without losing completed steps', () => {
+
+		const def = quest( 'legacy', {
+			roles: [ role( 'a', 'barista' ), role( 'b', 'barista' ) ],
+			steps: [
+				step( 'first', { ...talk, roleId: 'a' }, { next: [ { toStepId: 'second', when: [] } ] } ),
+				step( 'second', { ...talk, roleId: 'b' }, { endingId: 'done' } )
+			]
+		} );
+		const people = simulation( new Map( [ [ 'n1', npc( 'n1', 'barista', 'p1' ) ], [ 'n2', npc( 'n2', 'barista', 'p1' ) ] ] ) );
+		const state = { activeStepIds: [ 'second' ], completedStepIds: [ 'first' ], flags: [] };
+		const restored = QuestSession.create( [ def ], people, 600, [ { id: def.id, cast: { a: 'n1', b: 'n1' }, state } ] );
+
+		expect( restored.entries[ 0 ].runtime.cast ).toEqual( { a: 'n1', b: 'n2' } );
+		expect( restored.entries[ 0 ].runtime.serialize() ).toEqual( state );
+		expect( restored.advanceFor( def.id, { kind: 'talkedTo', npcId: 'n2' }, 600 ) ).toHaveLength( 1 );
+
+	} );
+
 	it( 'stamps a carried questline\'s places from the world and casts one person per character across the set', () => {
 
 		const carried = ( id, roleId ) => {

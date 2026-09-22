@@ -109,9 +109,34 @@ describe( 'live quest target projection', () => {
 		expect( mark.material.depthTest ).toBe( false );
 		expect( mark.renderOrder ).toBeGreaterThan( 1 );
 
+		actions.places.mockReturnValue( [ place( 'q_side', 'talk', [ 'npc-denna' ], { available: false, reason: 'outside_window' } ) ] );
+		gameplay.candidates( frame( pointLook( 0, 0.2, - 2 ) ) );
+		expect( gameplay.actorMarks.has( 'quest:q_side:talk' ) ).toBe( false );
+
 		actions.places.mockReturnValue( [] );
 		gameplay.candidates( frame( pointLook( 0, 0.2, - 2 ) ) );
 		expect( gameplay.group.children ).toHaveLength( 0 );
+
+	} );
+
+	it( 'gives one shared character the appointment the player is approaching', () => {
+
+		const target = ( questId, parcelId ) => ( {
+			targetKey: `quest:${questId}:talk`, questId, stepId: 'talk', kind: 'talk', title: questId, text: 'Meet the contact.',
+			place: { kind: 'parcel', id: parcelId }, actorIds: [ 'same-person' ], venue: null, window: null, availability: { available: true }
+		} );
+		const actions = { targets: () => [], places: () => [ target( 'main', 'far' ), target( 'side', 'near' ) ] };
+		const body = { position: new THREE.Vector3( 0, 0, - 2 ) };
+		const crowd = { castMember: vi.fn( () => body ) };
+		const gameplay = setup( actions, { crowd } );
+		gameplay.anchors.set( 'far', new THREE.Vector3( 20, 0, - 2 ) );
+		gameplay.anchors.set( 'near', body.position.clone() );
+
+		gameplay.candidates( frame( pointLook( 0, 1.3, - 2 ) ) );
+		expect( crowd.castMember ).toHaveBeenCalledTimes( 1 );
+		expect( crowd.castMember ).toHaveBeenCalledWith( 'same-person', 600, expect.any( THREE.Vector3 ), 'near' );
+		expect( gameplay.actorMarks.has( 'quest:side:talk' ) ).toBe( true );
+		expect( gameplay.actorMarks.has( 'quest:main:talk' ) ).toBe( false );
 
 	} );
 
@@ -148,7 +173,10 @@ describe( 'live quest target projection', () => {
 		const target = { ...questTarget( 'listen', [ action( 'listen', 'Listen' ) ] ), actorIds };
 		const actions = fakeActions( target );
 		const animations = { questInteraction: vi.fn() };
-		const crowd = { questMember: vi.fn( ( npcId ) => members.find( ( member ) => member.npcId === npcId ) ) };
+		const crowd = {
+			questMember: vi.fn( ( npcId ) => members.find( ( member ) => member.npcId === npcId ) ),
+			castMember: vi.fn( ( npcId ) => members.find( ( member ) => member.npcId === npcId ) )
+		};
 		const gameplay = setup( actions, { animations, crowd } );
 		const look = pointLook( 0, 1.3, - 2 );
 		const candidate = gameplay.candidates( frame( look ) )[ 0 ];

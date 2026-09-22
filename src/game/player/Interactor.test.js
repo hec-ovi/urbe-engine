@@ -175,6 +175,35 @@ it( 'keeps a quest cast in place after the talk, faces the player throughout, an
 
 const CLOCK = { timeMin: 780, daySeconds: 46800 };
 
+it( 'keeps a seated speaker aligned with their furniture while the player circles the chair', () => {
+
+	let controlled;
+	const continuity = {
+		beginConversation: vi.fn( ( request ) => ( controlled = continuityActor( request, 'conversation', 'sit' ) ) ),
+		endConversation: vi.fn( () => ( { ...controlled, mode: 'posing', animation: 'sit' } ) )
+	};
+	const { interactor, crowd } = street( continuity );
+	const person = [ ...crowd.members.values() ][ 0 ];
+	person.clip = CLIP.SIT;
+	person.heading = Math.PI;
+	const position = person.position.toArray();
+	interactor.quests = { candidates: () => [], holdsCast: () => true };
+	interactor.update( 1 / 60 );
+	interactor.activate( CLOCK );
+	expect( continuity.beginConversation ).toHaveBeenCalledWith( expect.objectContaining( { seated: true, heading: Math.PI } ) );
+	for ( const offset of [ [ 2, 0 ], [ 0, - 2 ], [ - 2, 0 ] ] ) {
+
+		interactor.controller.body.feet.set( person.position.x + offset[ 0 ], person.position.y, person.position.z + offset[ 1 ] );
+		interactor.update( 1 / 60 );
+		expect( person.heading ).toBe( Math.PI );
+		expect( person.position.toArray() ).toEqual( position );
+
+	}
+	interactor.close( CLOCK );
+	expect( person.heading ).toBe( Math.PI );
+
+} );
+
 /** One walker on one edge, with the player standing on top of them. */
 function street( continuity = null, animations = null ) {
 

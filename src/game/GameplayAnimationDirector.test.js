@@ -109,6 +109,30 @@ describe( 'live gameplay animation composition', () => {
 
 	} );
 
+	it( 'keeps standing and seated quest holds in their authored pose instead of treating all holds as crouches', () => {
+
+		const rig = setup();
+		const standing = actor( { animation: 'idle', mode: 'posing' } );
+		rig.director.update( [ standing ], 0 );
+		expect( current( rig.director, standing.npcId ) ).toMatchObject( {
+			mode: 'routine', action: null, posture: 'standing', currentClip: 'Idle_Loop'
+		} );
+		expect( rig.director.snapshot().actions ).toEqual( [] );
+		const seated = { ...standing, animation: 'sit' };
+		rig.director.update( [ seated ], 0.1 );
+		expect( current( rig.director, seated.npcId ) ).toMatchObject( {
+			mode: 'routine', action: null, posture: 'seated', currentClip: 'Sitting_Idle_Loop'
+		} );
+		expect( rig.director.snapshot().actions ).toEqual( [] );
+		// A previously explicit crouch also settles when a new ordinary hold
+		// takes over that same identity.
+		rig.director.update( [ { ...standing, animation: 'crouch' } ], 0.1 );
+		expect( current( rig.director, standing.npcId ).currentClip ).toBe( 'Crouch_Idle_Loop' );
+		rig.director.update( [ standing ], 0.1 );
+		expect( current( rig.director, standing.npcId ) ).toMatchObject( { mode: 'routine', action: null, currentClip: 'Idle_Loop' } );
+
+	} );
+
 	it( 'coordinates an accepted quest action, and listening as one speaker with all sorted listeners', () => {
 
 		const rig = setup();

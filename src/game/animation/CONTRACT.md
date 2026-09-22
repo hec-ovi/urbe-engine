@@ -4,6 +4,8 @@
 
 Coordinates quest, dialogue, follow, crouch, and routine animations as one deterministic actor-state machine.
 
+Continuity `posing` mode includes ordinary quest appointments as well as explicit crouches. The game director starts a crouch action only when the actor also publishes `animation: 'crouch'`; standing and seated holds retain their idle or sitting clips.
+
 ## Inputs
 
 - Coordinator config: [schema/coordinator-config.schema.json](schema/coordinator-config.schema.json). Supplies the loaded Pro animation catalog and initial actor routines. Construction fails unless all required clip names exist.

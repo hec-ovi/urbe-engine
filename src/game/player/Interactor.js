@@ -72,7 +72,7 @@ export class Interactor {
 			[ ...this.#candidates( 'quests', questState ), ...this.#candidates( 'investigations', questState ) ]
 		);
 
-		return this.target ? prompt( this.target ) : null;
+		return this.target ? prompt( this.target, this.quests ) : null;
 
 	}
 
@@ -237,7 +237,7 @@ export class Interactor {
 					npcId: person.npcId,
 					timeMin,
 					position: person.position.toArray(),
-					heading: headingTo( this.controller.body.feet, person.position ),
+					heading: seated( person ) ? person.heading : headingTo( this.controller.body.feet, person.position ),
 					place,
 					seated: person.clip === CLIP.SIT || person.clip === CLIP.SIT_TALK
 				} );
@@ -259,11 +259,14 @@ export class Interactor {
 		person.clip = person.restClip;
 		this.#facePlayer( person );
 
+		const characterName = this.quests?.characterName?.( person.npcId );
 		this.conversation = {
 			person,
 			npcId: person.npcId,
 			controlled,
-			instance: person.instance,
+			// A presentation copy keeps the story's name coherent in the
+			// prompt, profile and reply without renaming the simulation NPC.
+			instance: characterName ? { ...person.instance, name: characterName } : person.instance,
 			behavior: person.npcId ? this.sim.behaviorAt( person.npcId, timeMin ) : null
 		};
 		this.animations?.beginConversation( this.conversation, controlledActor );
@@ -272,10 +275,10 @@ export class Interactor {
 
 	}
 
-	/** The person being talked to looks at the player for the whole conversation. */
+	/** Standing speakers turn to the player; seated bodies keep their chair's pose. */
 	#facePlayer( person ) {
 
-		if ( ! person ) return;
+		if ( ! person || seated( person ) ) return;
 		person.heading = headingTo( this.controller.body.feet, person.position );
 
 	}
@@ -295,6 +298,13 @@ export class Interactor {
 		this.doorColliders?.sync( door );
 
 	}
+
+}
+
+function seated( person ) {
+
+	return person.clip === CLIP.SIT || person.clip === CLIP.SIT_TALK
+		|| person.restClip === CLIP.SIT || person.restClip === CLIP.SIT_TALK;
 
 }
 
@@ -370,7 +380,7 @@ function aimAt( eye, look, position, rise ) {
 }
 
 /** What the prompt says, always naming the thing it will act on. */
-function prompt( target ) {
+function prompt( target, quests ) {
 
 	if ( target.kind === 'quest' || target.kind === 'investigation' ) return target.interaction.prompt;
 	if ( target.kind === 'elevator' ) return target.shaft.label( target );
@@ -383,7 +393,7 @@ function prompt( target ) {
 
 	}
 
-	const given = target.person.instance?.name?.given;
+	const given = quests?.characterName?.( target.person.npcId )?.given ?? target.person.instance?.name?.given;
 
 	return `E  talk to ${given ?? `the ${target.person.type.replace( /_/g, ' ' )}`}`;
 

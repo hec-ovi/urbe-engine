@@ -3,8 +3,50 @@ import * as THREE from 'three/webgpu';
 import { HeroCharacter } from './HeroCharacter.js';
 import { StreetBodies } from './StreetBodies.js';
 import { Physics } from '../physics/index.js';
+import { ActorLighting } from '../light/ActorLighting.js';
+import { FillChannel } from '../city/kit/FillChannel.js';
 
 describe( 'focused character', () => {
+
+	it( 'keeps the actual focused body and hair lit through movement, preparation and wardrobe reuse', async () => {
+
+		const fill = new THREE.Vector4( 20, 14, 8, 0.4 );
+		const lighting = new ActorLighting( { spots: [], strips: [] }, () => [ { holds: ( position ) => position.x > 0, fill } ] );
+		const hero = new HeroCharacter( {
+			animation: animation(), lighting,
+			loadModel: () => ( { scene: rig( 'body' ), hairs: [ { scene: rig( 'hair' ) } ] } )
+		} );
+		await hero.prepare();
+		const person = { gender: 'male', appearanceSeed: 3, clip: 3, hero: false, position: new THREE.Vector3( 1, 0, 1 ), heading: 0, look: outfit() };
+		await hero.show( person );
+		const root = hero.active.root;
+		const meshes = [];
+		root.traverse( ( node ) => { if ( node.isMesh ) meshes.push( node ); } );
+		const channel = FillChannel.of( meshes[ 0 ] );
+		expect( meshes.length ).toBeGreaterThan( 1 );
+		for ( const mesh of meshes ) {
+
+			expect( FillChannel.of( mesh ) ).toBe( channel );
+			expect( mesh.material.actorRoomNode ).toBe( lighting.node );
+
+		}
+		expect( Array.from( channel.texture.image.data.slice( 0, 3 ) ) ).toEqual( [ 20, 14, 8 ] );
+		person.position.x = - 1;
+		hero.update( 0.1 );
+		expect( Array.from( channel.texture.image.data ) ).toEqual( [ 0, 0, 0, 0 ] );
+		const dispose = vi.spyOn( channel.texture, 'dispose' );
+		const material = meshes[ 0 ].material;
+		hero.hide();
+		expect( dispose ).toHaveBeenCalledOnce();
+		person.position.x = 1;
+		await hero.show( person );
+		const again = [];
+		hero.active.root.traverse( ( node ) => { if ( node.isMesh ) again.push( node ); } );
+		expect( again[ 0 ].material ).toBe( material );
+		expect( FillChannel.of( again[ 0 ] ) ).not.toBe( channel );
+		hero.hide();
+
+	} );
 
 	it( 'loads one deterministic full model once for the run, warms it, dresses it in a material the model keeps, and replaces only that crowd slot', async () => {
 

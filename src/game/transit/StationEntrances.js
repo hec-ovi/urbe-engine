@@ -61,7 +61,7 @@ export class StationEntrances {
 function surface( factory, role ) {
 	const key = { concrete: 'cyberpunk/concrete/poor', metal: 'cyberpunk/metal/poor', paint: 'cyberpunk/prop-coating/poor', rubber: 'cyberpunk/rubber/poor', edge: 'cyberpunk/prop-coating/poor', sign: 'cyberpunk/signage/rich', screen: 'cyberpunk/prop-coating/poor', text: 'cyberpunk/prop-coating/poor' }[ role ];
 	if ( [ 'screen', 'text' ].includes( role ) ) return factory.variant( key, { emissive: new THREE.Color( role === 'screen' ? '#174e50' : '#94bda5' ), emissiveLevel: role === 'screen' ? 0.7 : 3 } );
-	if ( role === 'sign' ) return factory.variant( key, { variantId: '1', emissive: kelvinColor( 4000 ), emissiveScale: 8 } );
+	if ( role === 'sign' ) return factory.variant( key, { variantId: 'casing', emissive: kelvinColor( 4000 ), emissiveScale: 8 } );
 	if ( role === 'edge' ) return factory.build( 'cyberpunk/metal/poor', 'zinc' );
 	return factory.build( key );
 }

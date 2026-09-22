@@ -1,5 +1,6 @@
 import { BatchedMesh, Vector4 } from 'three/webgpu';
 import { FillChannel } from './FillChannel.js';
+import { UvRepeatChannel } from './UvRepeatChannel.js';
 
 /** Enough copies for a first cell; a cell that wants more grows it. */
 const FIRST_CAPACITY = 64;
@@ -28,7 +29,7 @@ export class MaterialBatch {
 	 * @param instances copies to make room for before the first cell stands
 	 * @param fill whether each copy carries a fill light (FillChannel)
 	 */
-	constructor( name, material, { vertices, indices = 0, instances = FIRST_CAPACITY, castShadow = false, fill = false, hitches = null } ) {
+	constructor( name, material, { vertices, indices = 0, instances = FIRST_CAPACITY, castShadow = false, fill = false, uvRepeat = false, hitches = null } ) {
 
 		this.name = name;
 		this.material = material;
@@ -52,6 +53,7 @@ export class MaterialBatch {
 		// and the per-copy test is what culls.
 		this.mesh.frustumCulled = false;
 		this.fill = fill ? new FillChannel( this.capacity ).attach( this.mesh ) : null;
+		this.uvRepeat = uvRepeat ? new UvRepeatChannel( this.capacity ).attach( this.mesh ) : null;
 
 	}
 
@@ -96,6 +98,7 @@ export class MaterialBatch {
 
 		this.mesh.setInstanceCount( Math.max( wanted, this.capacity * 2 ) );
 		this.fill?.grow( this.capacity );
+		this.uvRepeat?.grow( this.capacity );
 		this.rebuild();
 
 	}
@@ -145,13 +148,14 @@ export class MaterialBatch {
 	}
 
 	/** Draws one more copy of one primitive. @returns the instance to hand back */
-	add( geometryId, matrix, color = null, fill = null ) {
+	add( geometryId, matrix, color = null, fill = null, uvRepeat = [ 1, 1 ] ) {
 
 		this.reserve( 1 );
 
 		const instance = this.mesh.addInstance( geometryId );
 		this.mesh.setMatrixAt( instance, matrix );
 		this.fill?.set( instance, fill ?? NO_FILL );
+		this.uvRepeat?.set( instance, uvRepeat );
 		if ( color ) {
 
 			this.mesh.setColorAt( instance, color );
@@ -182,6 +186,7 @@ export class MaterialBatch {
 	dispose() {
 
 		this.fill?.dispose();
+		this.uvRepeat?.dispose();
 		this.mesh.dispose();
 		this.mesh.removeFromParent();
 		this.count = 0;

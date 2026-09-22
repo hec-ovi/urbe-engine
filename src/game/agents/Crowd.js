@@ -62,7 +62,7 @@ const STREET_REACH = 25;
  */
 export class Crowd {
 
-	constructor( { assets, routes, signals, sim, places, capacity, spawnRadius = SPAWN_RADIUS, stress = 0, continuity = null, street = streetBodies } ) {
+	constructor( { assets, routes, signals, sim, places, capacity, spawnRadius = SPAWN_RADIUS, stress = 0, continuity = null, street = streetBodies, lighting = null } ) {
 
 		this.assets = assets;
 		this.street = street;
@@ -74,6 +74,12 @@ export class Crowd {
 		this.spawnRadius = spawnRadius;
 		this.stress = stress;
 		this.continuity = continuity;
+		this.lighting = lighting;
+		if ( lighting ) for ( let variant = 0; variant < assets.variants.length; variant ++ ) {
+
+			for ( const mesh of assets.meshesOf( variant ) ) lighting.attach( mesh.mesh, capacity );
+
+		}
 		this.members = new Map();
 		this.timer = REFRESH_INTERVAL;
 		/** People the simulation reported on the pavements around the player at
@@ -102,8 +108,12 @@ export class Crowd {
 
 		}
 		const position = new THREE.Vector3( ...actor.position );
+		const reservedSpot = member?.parcelId === actor.place.id && member.position.distanceToSquared( position ) < 0.0001
+			? member.spot : null;
 		const reach = actor.place.kind === 'parcel' ? PARCEL_RADIUS : this.spawnRadius;
-		if ( ! member && position.distanceTo( player ) > reach ) return null;
+		const nearEntrance = actor.place.kind === 'parcel' &&
+			this.places.get( actor.place.id )?.inside.distanceTo( player ) <= PARCEL_RADIUS;
+		if ( ! member && position.distanceTo( player ) > reach && ! nearEntrance ) return null;
 		const instance = this.sim.getNPC( actor.npcId );
 
 		if ( ! member ) {
@@ -144,7 +154,7 @@ export class Crowd {
 		member.stationary = ! member.edge;
 		member.distance = member.edge ? this.routes.project( actor.position )?.distance ?? 0 : 0;
 		member.direction = 1;
-		member.spot = actor.place.kind === 'parcel' ? `npc:${actor.npcId}` : null;
+		member.spot = actor.place.kind === 'parcel' ? reservedSpot ?? `npc:${actor.npcId}` : null;
 		return member;
 
 	}
@@ -612,12 +622,21 @@ export class Crowd {
 	 * has walked off is put back through continuity, so the next schedule
 	 * projection keeps it there instead of taking it home.
 	 */
-	castMember( npcId, timeMin, player, parcelId ) {
+	castMember( npcId, timeMin, player, parcelId, { meeting = false } = {} ) {
 
 		const at = { kind: 'parcel', id: parcelId };
 		const owned = this.memberForNpc( npcId );
 		if ( owned?.fallen ) return null;
-		if ( owned && memberAt( owned, at ) ) return owned;
+		let present = owned && memberAt( owned, at ) ? owned : null;
+		const alreadyMeeting = present?.spot?.startsWith( 'meeting:' );
+		if ( present && ( ! meeting || alreadyMeeting || present.controlMode === 'conversation' ) &&
+			( ! this.continuity || [ 'posing', 'conversation' ].includes( present.controlMode ) ) ) {
+
+			present.quest = true;
+			present.frozen = true;
+			return present;
+
+		}
 
 		const place = this.places.get( parcelId );
 		if ( ! place || place.inside.distanceTo( player ) > PARCEL_RADIUS ) return null;
@@ -625,21 +644,29 @@ export class Crowd {
 		const npc = this.sim.getNPC( npcId );
 		if ( ! owned ) {
 
-			const adopted = this.#adoptQuestHandle( npc, timeMin, at );
-			if ( adopted ) return adopted;
+			present = this.#adoptQuestHandle( npc, timeMin, at );
 
 		}
 
 		const seed = npc.appearanceSeed ?? hash( `quest:${npcId}` );
-		const spot = this.#anchorAt( place, this.#spotsAt( parcelId ), POSTS, seed );
+		const spot = meeting && ! alreadyMeeting
+			? this.#meetingAt( place, this.#spotsAt( parcelId ) )
+			: present
+			? { position: present.position, heading: present.heading, spot: present.spot }
+			: this.#anchorAt( place, this.#spotsAt( parcelId ), POSTS, seed );
 
 		if ( this.continuity ) {
 
 			try {
 
-				return this.syncActor( this.continuity.hold( {
-					npcId, timeMin, place: at, position: spot.position.toArray(), heading: spot.heading
+				const member = this.syncActor( this.continuity.hold( {
+					npcId, timeMin, place: at, position: spot.position.toArray(), heading: spot.heading,
+					...( ! meeting && present && [ CLIP.SIT, CLIP.SIT_TALK ].includes( present.clip ) ? { seated: true } : {} )
 				} ), player );
+				// Retain the actual anchor reservation: replacing it with npc:id
+				// lets the next appointment occupy the same counter or work spot.
+				if ( member ) member.spot = spot.spot;
+				return member;
 
 			} catch {
 
@@ -648,12 +675,21 @@ export class Crowd {
 			}
 
 		}
+		if ( present || owned ) {
+
+			const member = present ?? owned;
+			member.position.copy( spot.position );
+			Object.assign( member, { heading: spot.heading, spot: spot.spot, parcelId, place: at, stationary: true, quest: true, frozen: true } );
+			return member;
+
+		}
 
 		if ( ! this.#makeRoomForQuest( player ) ) return null;
 		const member = this.#add( {
 			...this.#base( { crowdId: `quest:${npcId}`, type: npc.type, gender: npc.gender, activity: 'working' }, seed ),
 			stationary: true,
 			quest: true,
+			frozen: true,
 			parcelId,
 			...spot
 		} );
@@ -1014,6 +1050,28 @@ export class Crowd {
 
 	}
 
+	/** A listening group meets together in the entrance circulation space.
+	 * Two arbitrary service posts can be on opposite sides of a large floor.
+	 * The published inside point is 1.8 m behind the door; step farther inside
+	 * and put partners 1.3 m apart, facing one another rather than a wall.
+	 */
+	#meetingAt( place, taken ) {
+
+		const index = firstFree( taken, 'meeting' );
+		const side = index % 2 === 0 ? - 0.65 : 0.65;
+		const inward = 0.8 + Math.floor( index / 2 ) * 1.1;
+		return {
+			spot: `meeting:${index}`,
+			position: place.inside.clone().add( new THREE.Vector3(
+				- Math.sin( place.heading ) * inward + Math.cos( place.heading ) * side,
+				0,
+				- Math.cos( place.heading ) * inward - Math.sin( place.heading ) * side
+			) ),
+			heading: place.heading + ( index % 2 === 0 ? Math.PI / 2 : - Math.PI / 2 )
+		};
+
+	}
+
 	/**
 	 * Where a body stands inside a building: the first free anchor of the
 	 * kinds wanted, in that order, or a spot in the lobby around the door when
@@ -1280,10 +1338,12 @@ export class Crowd {
 			const slot = counts[ member.variant ];
 
 			if ( slot >= this.capacity ) continue;
+			const fill = this.lighting?.fillAt( member.position );
 
 			for ( const mesh of this.assets.meshesOf( member.variant ) ) {
 
 				mesh.setInstance( slot, member.position, member.heading, member.frame, member.clip, member.look );
+				this.lighting?.write( mesh.mesh, slot, fill );
 
 			}
 

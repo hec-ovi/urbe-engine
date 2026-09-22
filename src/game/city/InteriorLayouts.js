@@ -1,14 +1,13 @@
 /**
- * One furnished building's floors, from the three layouts it reuses.
+ * One furnished building's floors, from its published layouts.
  *
  * Interior publishes a building as a ground layout, one middle layout shared
  * by every middle floor and a crown layout, each a table of module and prop
  * placements in its own floor's frame with the walking surface at zero. A
- * floor here is that table plus the elevation the building puts it at, so the
- * middle floors of a tower differ by one number and nothing else.
+ * floor here is that table plus the elevation the building puts it at. Tapered
+ * or otherwise changing floors can name additional layouts; only floors whose
+ * geometry agrees share a table.
  */
-
-const LAYOUTS = [ 'ground', 'middle', 'crown' ];
 
 /**
  * @param parcelId the parcel the building stands on
@@ -21,13 +20,14 @@ export function buildingFloors( parcelId, { building, layouts } ) {
 
 	return [ ...building.floors ]
 		.sort( ( a, b ) => a.index - b.index )
-		.map( ( entry ) => floorOf( parcelId, entry, layouts?.[ entry.layout ] ) );
+		.map( ( entry ) => floorOf( parcelId, entry,
+			Object.hasOwn( building.layouts ?? layouts ?? {}, entry.layout ) && Object.hasOwn( layouts ?? {}, entry.layout )
+				? layouts[ entry.layout ] : null ) );
 
 }
 
 function floorOf( parcelId, entry, layout ) {
 
-	if ( ! LAYOUTS.includes( entry.layout ) ) throw layoutError( `${parcelId} floor ${entry.index} names layout ${entry.layout}` );
 	if ( ! layout ) throw layoutError( `${parcelId} floor ${entry.index} has no ${entry.layout} layout` );
 
 	const source = layout.floor;
@@ -42,6 +42,7 @@ function floorOf( parcelId, entry, layout ) {
 		height: source.height,
 		rooms: source.rooms,
 		core: source.core,
+		coreAngleDeg: source.coreAngleDeg ?? 0,
 		// A layout's fixtures are measured from its own walking surface; a floor's
 		// are where they hang in the world.
 		lights: ( source.lights ?? [] ).map( ( light ) => ( {

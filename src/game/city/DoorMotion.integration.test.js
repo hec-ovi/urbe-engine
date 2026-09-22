@@ -5,6 +5,7 @@ import { BuildingsLoader } from './BuildingsLoader.js';
 import { Interactor } from '../player/Interactor.js';
 import { DoorColliders } from '../physics/DoorColliders.js';
 import { Physics } from '../physics/Physics.js';
+import { doorFrames } from './DoorGeometry.js';
 import { BODY_RADIUS, PlayerBody } from '../physics/PlayerBody.js';
 import unsupportedDoorsSchema from './schema/unsupported-doors.schema.json';
 
@@ -15,6 +16,26 @@ const factory = { resolver: { resolve: () => null }, build: () => new THREE.Mesh
 const point = ( u, y = 0, depth = 0 ) => ORIGIN.clone().addScaledVector( AXIS, u ).addScaledVector( INWARD, depth ).setY( y );
 
 describe( 'authored door motion through loading, interaction and physics', () => {
+
+	it( 'places the roof door on the authored enclosure face for either stair orientation', () => {
+
+		for ( const normal of [ AXIS, INWARD, INWARD.clone().negate() ] ) {
+			const width = 7.2, depth = 4;
+			const [ door ] = doorFrames( {
+				buildingId: 'roof', floors: [ { index: 6, openings: [] } ],
+				roof: { elevation: 31.5, bulkhead: { center: [ 13, 20.9 ], axis: [ AXIS.x, AXIS.z ],
+					width, depth, doorNormal: [ normal.x, normal.z ], doorWidth: 1, doorHeight: 2.1 } }
+			} );
+			const reach = Math.abs( normal.dot( AXIS ) ) > .999 ? width : depth;
+			const center = new THREE.Vector3( 13, 31.5, 20.9 ).addScaledVector( normal, reach / 2 );
+			expect( door.center.distanceTo( center ) ).toBeLessThan( 1e-8 );
+			expect( door.along.dot( normal ) ).toBeCloseTo( 0, 8 );
+			expect( door.hinge.distanceTo( center ) ).toBeCloseTo( .5, 8 );
+			expect( door.role ).toBe( 'roof' );
+			expect( door.floor ).toBe( 7 );
+		}
+
+	} );
 
 	it( 'moves indexed pocket leaves into their chambers while collision and fixed casing retain their exact geometry', async () => {
 

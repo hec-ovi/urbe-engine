@@ -55,6 +55,15 @@ export class QuestGameplay {
 		this.escort = null;
 		this.transitQuest = null;
 		this.mechanicResults = [];
+		this.session?.setPresenceSource?.( ( npcId ) => {
+
+			const member = this.crowd.memberForNpc?.( npcId );
+			if ( ! member || member.fallen || member.retiring || ! member.parcelId ) return null;
+			if ( ! [ 'posing', 'conversation' ].includes( member.controlMode ) && ! ( member.quest && member.stationary && ! member.continuity ) ) return null;
+			const activity = [ 'home', 'working', 'shopping', 'leisure' ].includes( member.activity ) ? member.activity : 'leisure';
+			return { place: { kind: 'parcel', id: member.parcelId }, activity };
+
+		} );
 
 	}
 
@@ -150,6 +159,13 @@ export class QuestGameplay {
 
 	}
 
+	/** The same authored cast label used by the objective and dialogue prompt. */
+	characterName( npcId ) {
+
+		return this.session?.characterName( npcId ) ?? null;
+
+	}
+
 	/** Candidates consumed by the shared door, lift, NPC and quest Interactor. */
 	candidates( frame ) {
 
@@ -158,13 +174,17 @@ export class QuestGameplay {
 		const feet = vector3( frame.feet );
 		const eye = vector3( frame.eye );
 		const look = vector3( frame.look );
-		const targets = this.actions.targets( { timeMin } );
+		let targets = this.actions.targets( { timeMin } );
 		const mechanics = this.#mechanicTargets( timeMin ).map( ( target ) => this.#presentMechanic( target ) );
-		const places = this.actions.places( { timeMin } );
+		let places = this.actions.places( { timeMin } );
 		this.#advanceEscort( mechanics, { timeMin, playerPlaces, feet } );
 		this.#advanceTransit( mechanics, { timeMin, playerPlaces, feet } );
 		this.#materializePassiveCast( mechanics, { timeMin, playerPlaces, feet } );
-		this.#materializePlaceCast( places, { timeMin, feet, eye } );
+		this.#materializePlaceCast( [ ...places, ...targets.filter( ( target ) => target.kind === 'listen' ) ], { timeMin, feet, eye } );
+		// Posting updates physical presence. Project it in this frame so the
+		// interaction, quest log and map all agree with the body just created.
+		targets = this.actions.targets( { timeMin } );
+		places = this.actions.places( { timeMin } );
 		this.#sync( [ ...targets, ...mechanics, ...places ] );
 		const candidates = [];
 		this.liveInteractions.clear();
@@ -579,20 +599,38 @@ export class QuestGameplay {
 	#materializePlaceCast( places, { timeMin, feet, eye } ) {
 
 		const wanted = new Set();
+		const assigned = new Map();
+		const distance = ( target ) => this.anchors.get( target.place?.id )?.distanceToSquared( feet ) ?? Infinity;
 
-		for ( const target of places ) {
+		// A shared character can have several open appointments. The one the
+		// player is approaching owns its single body, instead of two targets
+		// moving it back and forth in the same frame.
+		for ( const target of [ ...places ].sort( ( left, right ) => distance( left ) - distance( right ) ) ) {
 
-			if ( target.kind !== 'talk' || target.place?.kind !== 'parcel' ) continue;
-			// The runtime accepts a talk only while the step is open, so a body
-			// posted outside that is a person the player talks to for nothing.
-			// The place keeps its mark and the HUD says when it opens.
-			if ( ! target.availability.available ) continue;
+			if ( ! [ 'talk', 'listen' ].includes( target.kind ) || target.place?.kind !== 'parcel' ) continue;
+			// A pinned meeting may differ from the cast's ordinary workplace.
+			// Check its authored hour and quest state before posting, then let
+			// the runtime verify the body's actual presence before advancing.
+			if ( ! target.availability.available && ! this.session?.canPlaceCast?.( target.questId, target.stepId, timeMin ) ) {
+
+				this.#markActors( target, [], eye );
+				continue;
+
+			}
 			const members = [];
 			for ( const npcId of target.actorIds ) {
 
 				wanted.add( npcId );
-				const member = this.crowd.castMember( npcId, timeMin, feet, target.place.id );
-				if ( member ) members.push( member );
+				if ( assigned.has( npcId ) && assigned.get( npcId ) !== target.place.id ) continue;
+				const member = target.kind === 'listen'
+					? this.crowd.castMember( npcId, timeMin, feet, target.place.id, { meeting: true } )
+					: this.crowd.castMember( npcId, timeMin, feet, target.place.id );
+				if ( member ) {
+
+					assigned.set( npcId, target.place.id );
+					members.push( member );
+
+				}
 
 			}
 			this.#markActors( target, members, eye );

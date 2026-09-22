@@ -13,6 +13,8 @@ const PREFIX = 16;
 const ENTRY = /^[0-9a-f]{16}$/;
 /** What a world on disk is found by; `OutDir` is what writes it. */
 const MANIFEST_FILE = 'manifest.json';
+/** Standalone paired previews bind their room/furniture resources here. */
+const PREVIEW_FILE = 'preview.json';
 
 /**
  * Resources a world references instead of carrying.
@@ -87,8 +89,8 @@ export function take( source, destination, move = true ) {
  *
  * A rebuild publishes what it drew under fresh hashes, so a night of them
  * leaves a store many times the size of the cities standing on disk. A sweep
- * reads every manifest under the worlds root, keeps the sets they name and the
- * plan sets their kit index names, and deletes the rest. Nothing outside the
+ * reads every world manifest and paired preview under the worlds root, keeps
+ * their sets and the plan sets their kit index names, and deletes the rest. Nothing outside the
  * store is read for deletion and nothing outside it is touched.
  *
  * @param root where worlds stand, each one a folder holding a manifest.json
@@ -184,14 +186,17 @@ function* entries( store ) {
 
 }
 
-/** Every world under a folder; the walk stops at each manifest it finds. */
+/** Every world or standalone preview; the walk stops at each published artifact. */
 function* manifests( dir, store ) {
 
 	if ( ! existsSync( dir ) || resolve( dir ) === resolve( store ) ) return;
 
 	const manifest = readJson( join( dir, MANIFEST_FILE ) );
+	const preview = readJson( join( dir, PREVIEW_FILE ) );
+	if ( preview ) yield { interiorModules: preview.interiorModules, interiorProps: preview.interiorProps };
 
 	if ( manifest ) return yield manifest;
+	if ( preview ) return;
 
 	for ( const child of readdirSync( dir, { withFileTypes: true } ) ) {
 

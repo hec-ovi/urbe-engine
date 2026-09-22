@@ -1,11 +1,12 @@
-import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { AssemblyError } from './RequestAssembler.js';
 import { sha256 } from './JsonFile.js';
 import { validateInteriorModules } from './validators.js';
 import { INTERIOR_ENTRY } from './interiorRunner.js';
-import { share, sharedRoot } from './SharedResources.js';
+import { share, sharedPath, sharedRoot } from './SharedResources.js';
 
 /** Interior's furniture catalog, with the models its `modelUri` names beside it. */
 export const PROPS_DIR = fileURLToPath( new URL( '../../../interior/src/assets/', import.meta.url ) );
@@ -72,11 +73,19 @@ export class InteriorModules {
 					`interior modules schema: ${errors.map( ( e ) => `${e.instancePath || '/'} ${e.message}` ).join( '; ' )}` );
 
 			}
+			for ( const module of modules.document.modules ) if ( ! existsSync( join( staged, module.file ) ) ) {
+
+				throw new AssemblyError( 'E_INTERIOR_FAILED', `interior module ${module.id} names a missing model ${module.file}` );
+
+			}
 
 			const props = this.#props( staged );
-			// One folder for the pair, named for both catalogs: a world that binds
-			// these module bytes binds exactly this furniture too.
-			const shared = share( MODULES_KIND, sha256( `${modules.reference.sha256}${props.sha256}` ), staged, { move: true } );
+			// Model bytes are part of the identity too: a geometry/material edit can
+			// leave a catalog (including its byte counts) unchanged.
+			const identity = bundleHash( staged );
+			const destination = join( sharedRoot(), sharedPath( MODULES_KIND, identity ) );
+			if ( existsSync( destination ) ) repairBundle( staged, destination );
+			const shared = share( MODULES_KIND, identity, staged, { move: true } );
 
 			this.references = {
 				modules: { ...modules.reference, shared },
@@ -172,6 +181,47 @@ export class InteriorModules {
 		mkdirSync( destination, { recursive: true } );
 		for ( const [ file, bytes ] of built.files ) writeFileSync( join( destination, file ), bytes );
 		writeFileSync( join( destination, 'modules.json' ), JSON.stringify( built.catalog ) + '\n' );
+
+	}
+
+}
+
+function* bundleFiles( directory, prefix = '' ) {
+
+	for ( const entry of readdirSync( directory, { withFileTypes: true } ).sort( ( a, b ) => a.name < b.name ? - 1 : a.name > b.name ? 1 : 0 ) ) {
+
+		const file = prefix + entry.name;
+		if ( entry.isDirectory() ) yield* bundleFiles( join( directory, entry.name ), `${file}/` );
+		else if ( entry.isFile() ) yield file;
+
+	}
+
+}
+
+function bundleHash( directory ) {
+
+	const hash = createHash( 'sha256' );
+	for ( const file of bundleFiles( directory ) ) hash.update( `${file}\0${sha256( readFileSync( join( directory, file ) ) )}\0` );
+	return hash.digest( 'hex' );
+
+}
+
+/** Repair an incomplete existing set with identical bytes, one atomic file rename at a time. */
+function repairBundle( source, destination ) {
+
+	for ( const file of bundleFiles( source ) ) {
+
+		const from = join( source, file );
+		const target = join( destination, file );
+		if ( existsSync( target ) && sha256( readFileSync( from ) ) === sha256( readFileSync( target ) ) ) continue;
+		mkdirSync( dirname( target ), { recursive: true } );
+		const temporary = `${target}.repair-${randomUUID()}`;
+		try {
+
+			copyFileSync( from, temporary );
+			renameSync( temporary, target );
+
+		} finally { rmSync( temporary, { force: true } ); }
 
 	}
 

@@ -41,6 +41,8 @@ Game composes native ordinary streets with retained ground, highways and station
 
 The quest log's pick is the questline the game follows: the HUD objective, the minimap mark and the walking route all come from it, and with no pick they come from the main story. Every questline's open places keep their own ring and their own cast whichever one is followed.
 
+World location, quest place references and saved location first use the streamed room, then the actual published ground-floor building outline, then the original Atlas lot. Thus a kit building merged over a neighbouring lot keeps its host identity across its occupied footprint without changing the Atlas or claiming setbacks and courtyard holes. Once the player is inside the objective's occupied building, the outdoor entrance route clears; the HUD names the actual marked cast person and floor cue with their live distance instead of routing back to the street.
+
 A conversation reaches the story once it has happened, on its first exchange or when the panel closes, and goes to one questline: the followed one when it wants that person, else the first that does. Arriving at a parcel is routed the same way. A conversation that moves nothing, with somebody an open step names, toasts why in the player's words. The objective line is asked again every four seconds as well as on every state change, so a place that opens on the clock says so without the player moving.
 
 ## Preparation and residency

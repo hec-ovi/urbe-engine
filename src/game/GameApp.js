@@ -23,6 +23,7 @@ import { GroundScene } from './ground/GroundScene.js';
 import { SafetyGround } from './ground/SafetyGround.js';
 import { HydrologyHost } from './hydro/index.js';
 import { BuildingsLoader } from './city/BuildingsLoader.js';
+import { doorFrames } from './city/DoorGeometry.js';
 import { ShellScene } from './ShellScene.js';
 import { Links } from './links/Links.js';
 import { Transit } from './transit/Transit.js';
@@ -48,6 +49,7 @@ import { NightSwitch } from './light/NightSwitch.js';
 import { NightLook } from './look/NightLook.js';
 import { LOOK } from './look/LookSettings.js';
 import { RoomLights } from './light/RoomLights.js';
+import { ActorLighting } from './light/ActorLighting.js';
 import { Haze } from './light/Haze.js';
 import { HitchLog } from './debug/HitchLog.js';
 import { RenderWork } from './debug/RenderWork.js';
@@ -204,7 +206,7 @@ export class GameApp {
 			mechanicTargetBindings, missionAssetRequests, missionItemBindings, game, shellCatalog, kit,
 			interiorModules, interiorProps, loadBuildings
 		} = await reading;
-		const spawn = game ? savedSpawn( game ) : pickSpawn( connections.networks, atlas );
+		const spawn = game ? savedSpawn( game ) : pickSpawn( connections.networks, atlas, unbuilt.length ? buildings : undefined );
 		const spatial = Boolean( shellCatalog );
 		const transitRoutes = connections.networks.transit.routes;
 		this.transitJourney = new TransitJourney( {
@@ -212,7 +214,9 @@ export class GameApp {
 		} );
 		this.persistence = game ? new GamePersistence( { game, gameId: config.gameId } ) : null;
 		const stationAccess = new StationAccess( atlas );
-		this.locator = new Locator( atlas, transitRoutes, stationAccess.entrances );
+		this.locator = new Locator( atlas, transitRoutes, stationAccess.entrances, {
+			buildingFootprints: occupiedBuildingFootprints( shellCatalog, buildings )
+		} );
 		this.clock = new GameClock( {
 			startHour: transitStartHour(
 				this.transitJourney,
@@ -263,7 +267,7 @@ export class GameApp {
 		progress.step( 'laying the ground' );
 		this.nativeStreets = nativeStreets;
 		const ground = this.groundStream = new GroundScene( atlas, factory, nativeStreets,
-			{ anisotropy: this.tier.textureAnisotropy ?? 8 } );
+			{ anisotropy: this.tier.textureAnisotropy ?? 8 }, { catalog: shellCatalog, buildings } );
 		this.scene.add( ground.group );
 		const laying = progress.timed( 'ground', ground.update( spawn.point, { radius: FAR_PLANE, collisionRadius: 256, collision: this.colliders } ) );
 		const water = progress.timed( 'water', HydrologyHost.install( { blueprint: atlas, factory, scene: this.scene } ) );
@@ -422,6 +426,7 @@ export class GameApp {
 
 		progress.step( 'loading characters' );
 		const assets = await characters;
+		const actorLighting = new ActorLighting( this.rooms, () => this.stream.rooms );
 		this.scene.add( assets.group );
 		this.probe?.exclude( assets.group );
 		this.crowd = new Crowd( {
@@ -430,12 +435,14 @@ export class GameApp {
 			capacity: config.maxCrowd,
 			spawnRadius: config.crowdRadius,
 			stress: config.stress,
-			continuity: this.npcContinuity
+			continuity: this.npcContinuity,
+			lighting: actorLighting
 		} );
 		this.hero = await HeroCharacter.create( {
 			animation: assets.animation,
 			warmup: null,
-			textureSize: this.tier.textureMaxSize
+			textureSize: this.tier.textureMaxSize,
+			lighting: actorLighting
 		} );
 		this.scene.add( this.hero.group );
 		this.animations = new GameplayAnimationDirector( {
@@ -470,7 +477,7 @@ export class GameApp {
 			controller: this.controller
 		} );
 		if ( this.transitGameplay.restoreRejected ) console.warn( 'transit journey: saved trip is no longer valid' );
-		this.currentLocation = game?.currentLocation ?? this.locator.location( spawn.point.x, spawn.point.z );
+		this.currentLocation = this.locator.location( spawn.point.x, spawn.point.z );
 		this.discoveredLocations = new Map(
 			( game?.discoveredLocations ?? [ this.currentLocation ] ).map( ( location ) => [ location.id, location ] )
 		);
@@ -809,10 +816,10 @@ export class GameApp {
 		this.hitches.time( 'location HUD', () => {
 
 			const district = this.locator.district( feet.x, feet.z );
-			this.currentLocation = this.locator.location( feet.x, feet.z );
+			this.currentLocation = this.locator.location( feet.x, feet.z, this.standing?.parcelId ?? null );
 			this.discoveredLocations.set( this.currentLocation.id, this.currentLocation );
 			this.view.clock.update( this.clock.label, district );
-			this.view.readout.update( feet, district, this.locator.parcel( feet.x, feet.z ) );
+			this.view.readout.update( feet, district, this.locator.parcel( feet.x, feet.z, this.standing?.parcelId ?? null ) );
 
 		} );
 
@@ -1143,7 +1150,11 @@ export class GameApp {
 		}
 
 		this.view.setObjective( currentObjectiveView( objective, this.quests, {
-			venues: this.venues, route: this.objectiveGuide?.route ?? null, timeMin: this.clock.timeMin
+			venues: this.venues, route: this.objectiveGuide?.route ?? null, timeMin: this.clock.timeMin,
+			local: localObjectivePlace( objective, {
+				locator: this.locator, crowd: this.crowd, session: this.quests,
+				feet: this.body?.feet, roomParcelId: this.standing?.parcelId ?? null
+			} )
 		} ) );
 
 	}
@@ -1153,7 +1164,13 @@ export class GameApp {
 		if ( ! this.objectiveGuide || ! this.questGameplay || ! this.body ) return;
 		const feet = this.body.feet;
 		const objective = this.questGameplay.objective( this.clock.timeMin, this.followedQuestId );
-		const destination = objective?.guidance?.destination ?? null;
+		const local = localObjectivePlace( objective, {
+			locator: this.locator, crowd: this.crowd, session: this.quests,
+			feet, roomParcelId: this.standing?.parcelId ?? null
+		} );
+		// Once inside the actual venue, the marked person is the destination;
+		// an outdoor route back to the doorstep sends the player away again.
+		const destination = local ? null : objective?.guidance?.destination ?? null;
 		let route = null;
 
 		try {
@@ -1210,7 +1227,7 @@ export class GameApp {
 	#saveCurrent() {
 
 		const feet = this.body.feet;
-		this.currentLocation = this.locator.location( feet.x, feet.z );
+		this.currentLocation = this.locator.location( feet.x, feet.z, this.standing?.parcelId ?? null );
 		this.discoveredLocations.set( this.currentLocation.id, this.currentLocation );
 		const progress = mergeProgress( this.persistence.game, this.quests.persistenceView( this.clock.timeMin ) );
 
@@ -1296,7 +1313,7 @@ export class GameApp {
 		const room = this.#inside( visible, feet );
 
 		this.standing = room;
-		this.#arrive( room?.parcelId ?? null );
+		this.#arrive( room ? this.locator.refs( feet.x, feet.z, room.parcelId ).find( ( place ) => place.kind === 'parcel' )?.id ?? null : null );
 
 		// Crossing the threshold is what changes everything around the camera;
 		// walking from one room to the next does not, and rebaking on that
@@ -1494,7 +1511,7 @@ function placesOf( doors, buildings ) {
 	return new Map( doors.map( ( door ) => [ door.parcelId, {
 		inside: door.inside.clone(),
 		heading: Math.atan2( door.normal.x, door.normal.z ),
-		anchors: groundAnchors( buildings.get( door.parcelId )?.npc, door.inside.y )
+		anchors: groundAnchors( buildings.get( door.parcelId )?.npc, door.inside.y, buildings.get( door.parcelId )?.interior )
 	} ] ) );
 
 }
@@ -1510,7 +1527,7 @@ export function npcContinuityPlaces( atlas, doors, buildings, transitRoutes = []
 			? door.inside.toArray()
 			: [ parcel.access.point[ 0 ], SIDEWALK_HEIGHT, parcel.access.point[ 1 ] ];
 		const anchors = door
-			? Object.values( groundAnchors( buildings.get( parcel.id )?.npc, door.inside.y ) )
+			? Object.values( groundAnchors( buildings.get( parcel.id )?.npc, door.inside.y, buildings.get( parcel.id )?.interior ) )
 				.flat()
 				.map( ( anchor ) => ( { id: anchor.id, position: anchor.position.toArray(), heading: anchor.heading } ) )
 			: [];
@@ -1547,12 +1564,28 @@ export function npcContinuityPlaces( atlas, doors, buildings, transitRoutes = []
  * than at a wall: the walk node nearest the built centre, aimed at the corner
  * furthest from it.
  */
-export function pickSpawn( networks, atlas ) {
+export function pickSpawn( networks, atlas, buildings ) {
 
 	const centre = atlas.parcels.reduce(
 		( acc, p ) => [ acc[ 0 ] + p.access.point[ 0 ] / atlas.parcels.length, acc[ 1 ] + p.access.point[ 1 ] / atlas.parcels.length ],
 		[ 0, 0 ]
 	);
+	// A partial/review world retains Atlas land for its empty lots. Start at an
+	// actual open building, using its authored door after any kit transform,
+	// rather than letting those unbuilt parcels choose a deserted street.
+	const entrances = [ ...( buildings?.values() ?? [] ) ]
+		.filter( building => building.hasInterior )
+		.flatMap( building => doorFrames( building.blueprint ).filter( door => door.floor === 0 && door.role === 'main' ) )
+		.sort( ( a, b ) => Math.hypot( a.center.x - centre[ 0 ], a.center.z - centre[ 1 ] )
+			- Math.hypot( b.center.x - centre[ 0 ], b.center.z - centre[ 1 ] ) || a.parcelId.localeCompare( b.parcelId ) );
+	if ( entrances.length ) {
+
+		const door = entrances[ 0 ];
+		const point = door.outside.clone();
+		point.y = Math.max( point.y, SIDEWALK_HEIGHT ) + 0.05;
+		return { point, lookAt: door.center.clone() };
+
+	}
 
 	const candidates = networks.walk.nodes.filter( ( n ) => n.kind === 'sidewalk' || n.kind === 'corner' );
 	const pool = candidates.length ? candidates : networks.walk.nodes;
@@ -1671,9 +1704,9 @@ export function playableInteractionOwner( interactor, transitFrame ) {
  * @param venues what the city calls each parcel
  * @param route the objective route standing now, or null
  */
-export function currentObjectiveView( active, session, { venues = null, route = null, timeMin = 0 } = {} ) {
+export function currentObjectiveView( active, session, { venues = null, route = null, timeMin = 0, local = null } = {} ) {
 
-	if ( active ) return { title: active.title, objective: active.text, state: 'active', place: objectivePlace( active, venues, route ) };
+	if ( active ) return { title: active.title, objective: active.text, state: 'active', place: objectivePlace( active, venues, route, local ) };
 	const completed = [ ...( session?.view( timeMin ) ?? [] ) ].reverse().find( ( quest ) => quest.state === 'done' );
 	if ( ! completed ) return null;
 	const lastStep = [ ...completed.steps ].reverse().find( ( step ) => step.done );
@@ -1690,17 +1723,59 @@ export function currentObjectiveView( active, session, { venues = null, route = 
  * The venue line under the objective: the questline's name for the place, else
  * the city's, the walk there, and the hour it opens while it is closed.
  */
-function objectivePlace( active, venues, route ) {
+function objectivePlace( active, venues, route, local ) {
 
 	if ( active.place?.kind !== 'parcel' ) return null;
-	const name = active.venue ?? venues?.nameOf( active.place.id ) ?? null;
+	const venue = active.venue ?? venues?.nameOf( active.place.id ) ?? null;
+	const name = local ? [ venue, local.label ].filter( Boolean ).join( ' · ' ) : venue;
 	if ( ! name ) return null;
 	const routed = route?.destination.kind === 'parcel' && route.destination.id === active.place.id;
 	const closed = active.availability.reason === 'outside_window' && active.window;
 	return {
 		name,
-		...( routed ? { distanceMeters: Math.round( route.distanceMeters ) } : {} ),
+		...( local ? { distanceMeters: local.distanceMeters } : routed ? { distanceMeters: Math.round( route.distanceMeters ) } : {} ),
 		...( closed ? { window: { label: active.window.label, startMin: active.window.startMin, endMin: active.window.endMin } } : {} )
 	};
+
+}
+
+/** Ground occupation comes from the building that was published, including
+ * merged kit buildings, rather than the older Atlas subdivision beneath it.
+ */
+export function occupiedBuildingFootprints( shellCatalog, buildings = new Map() ) {
+
+	if ( shellCatalog ) return shellCatalog.buildings.flatMap( ( building ) => {
+
+		const ground = building.bands.find( ( band ) => band.bottom <= 0 && band.top > 0 );
+		return ground ? [ { parcelId: building.id, outline: ground.outline, ...( ground.holes ? { holes: ground.holes } : {} ) } ] : [];
+
+	} );
+	return [ ...buildings ].flatMap( ( [ parcelId, source ] ) => {
+
+		const ground = source.blueprint?.floors?.find( ( floor ) => floor.index === 0 );
+		return ground ? [ { parcelId, outline: ground.outline, ...( ground.holes ? { holes: ground.holes } : {} ) } ] : [];
+
+	} );
+
+}
+
+/** Live in-venue guidance follows the actual cast body, never a street route. */
+export function localObjectivePlace( active, { locator, crowd, session, feet, roomParcelId = null } ) {
+
+	if ( active?.place?.kind !== 'parcel' || ! feet || ! locator ) return null;
+	const parcelId = roomParcelId
+		? locator.refs( feet.x, feet.z, roomParcelId ).find( ( place ) => place.kind === 'parcel' )?.id
+		: locator.occupiedParcelId?.( feet.x, feet.z );
+	if ( parcelId !== active.place.id ) return null;
+	const members = ( active.actorIds ?? [] ).map( ( npcId ) => crowd?.memberForNpc( npcId ) )
+		.filter( ( member ) => member && ! member.fallen && ! member.retiring && member.parcelId === parcelId )
+		.sort( ( left, right ) => feet.distanceToSquared( left.position ) - feet.distanceToSquared( right.position ) );
+	const member = members[ 0 ];
+	if ( ! member ) return { label: 'Inside', distanceMeters: 0 };
+	const name = session?.characterName( member.npcId ) ?? member.instance?.name;
+	const person = name ? `${name.given} ${name.family}` : 'Marked person';
+	const level = Math.abs( member.position.y ) < 1 ? 'Ground floor'
+		: member.position.y - feet.y > 2 ? 'Upstairs' : feet.y - member.position.y > 2 ? 'Downstairs' : 'On this floor';
+	return { label: `Inside · ${person} · ${level}`, distanceMeters: Math.round( feet.distanceTo( member.position ) ) };
 
 }

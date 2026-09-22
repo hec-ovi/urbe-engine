@@ -1,11 +1,12 @@
 /**
- * Where a world point is, in the blueprint's own terms: which district, and
- * which parcel if you are standing on one. Small city, few polygons, so a
- * direct point-in-polygon test is the whole implementation.
+ * Where a world point is: a streamed room or published building footprint
+ * owns occupied space, with the original parcel lots as the outdoor fallback.
+ * One kit building may intentionally stand across more than one Atlas lot.
  */
 export class Locator {
 
-	constructor( atlas, transitRoutes = [], stationEntrances = [] ) {
+	/** buildingFootprints: [{ parcelId, outline, holes? }], in world coordinates. */
+	constructor( atlas, transitRoutes = [], stationEntrances = [], { buildingFootprints = [] } = {} ) {
 
 		this.districts = atlas.districts.map( ( d ) => ( {
 			id: d.id,
@@ -18,6 +19,12 @@ export class Locator {
 			label: `${p.id} ${p.type}`.replace( /_/g, ' ' ),
 			ring: p.lot ?? p.footprint
 		} ) );
+		this.parcelById = new Map( this.parcels.map( parcel => [ parcel.id, parcel ] ) );
+		// Only a published, known building can own space. Do not enlarge its
+		// source lot or relabel a whole absorbed lot: courtyards and setbacks
+		// outside the occupied outline retain their original geography.
+		this.buildingFootprints = buildingFootprints.filter( footprint =>
+			this.parcelById.has( footprint.parcelId ) && footprint.outline?.length >= 3 );
 
 		const busLevels = new Map();
 		for ( const route of transitRoutes.filter( ( candidate ) => candidate.kind === 'bus' ) ) {
@@ -63,9 +70,18 @@ export class Locator {
 
 	}
 
-	parcel( x, z ) {
+	parcel( x, z, roomParcelId = null ) {
 
-		return this.parcels.find( ( p ) => inside( p.ring, x, z ) )?.label ?? null;
+		return this.#parcelAt( x, z, roomParcelId )?.label ?? null;
+
+	}
+
+	/** The actual standing building at this point, excluding lot setbacks and holes. */
+	occupiedParcelId( x, z ) {
+
+		return this.buildingFootprints.find( footprint =>
+			( inside( footprint.outline, x, z ) || onRing( footprint.outline, x, z ) ) &&
+			! ( footprint.holes ?? [] ).some( hole => inside( hole, x, z ) || onRing( hole, x, z ) ) )?.parcelId ?? null;
 
 	}
 
@@ -76,9 +92,7 @@ export class Locator {
 		const district = this.districts.find( ( candidate ) => inside( candidate.ring, x, z ) );
 		if ( district ) refs.push( { kind: 'district', id: district.id } );
 
-		const parcel = roomParcelId
-			? this.parcels.find( ( candidate ) => candidate.id === roomParcelId )
-			: this.parcels.find( ( candidate ) => inside( candidate.ring, x, z ) );
+		const parcel = this.#parcelAt( x, z, roomParcelId );
 		if ( parcel ) refs.push( { kind: 'parcel', id: parcel.id } );
 
 		return refs;
@@ -86,13 +100,23 @@ export class Locator {
 	}
 
 	/** Stable save-game location, preferring the parcel over its containing district. */
-	location( x, z ) {
+	location( x, z, roomParcelId = null ) {
 
-		const parcel = this.parcels.find( ( candidate ) => inside( candidate.ring, x, z ) );
+		const parcel = this.#parcelAt( x, z, roomParcelId );
 		if ( parcel ) return { id: parcel.id, name: parcel.label };
 
 		const district = this.districts.find( ( candidate ) => inside( candidate.ring, x, z ) );
 		return district ? { id: district.id, name: district.label } : { id: 'outskirts', name: 'outskirts' };
+
+	}
+
+	#parcelAt( x, z, roomParcelId ) {
+
+		const room = this.parcelById.get( roomParcelId );
+		if ( room ) return room;
+		const buildingId = this.occupiedParcelId( x, z );
+		if ( buildingId ) return this.parcelById.get( buildingId );
+		return this.parcels.find( parcel => inside( parcel.ring, x, z ) );
 
 	}
 
@@ -135,5 +159,26 @@ function inside( ring, x, z ) {
 	}
 
 	return hit;
+
+}
+
+/** Occupied outer edges belong to the building; a hole edge belongs to the hole. */
+function onRing( ring, x, z ) {
+
+	const epsilon = 1e-7;
+	for ( let i = 0, j = ring.length - 1; i < ring.length; j = i ++ ) {
+
+		const [ ax, az ] = ring[ j ];
+		const [ bx, bz ] = ring[ i ];
+		const dx = bx - ax;
+		const dz = bz - az;
+		const length = Math.hypot( dx, dz );
+		if ( length === 0 ) continue;
+		if ( Math.abs( dx * ( z - az ) - dz * ( x - ax ) ) > epsilon * length ) continue;
+		const along = ( x - ax ) * dx + ( z - az ) * dz;
+		if ( along >= - epsilon * length && along <= length * length + epsilon * length ) return true;
+
+	}
+	return false;
 
 }

@@ -25,4 +25,26 @@ describe( 'a furnished building draws its floors from the layouts it publishes',
 
 	} );
 
+	it( 'streams changing landmark floors from their own declared layouts and rejects absent tables', () => {
+
+		const middle = layout( 'm' );
+		const tapered = layout( 'taper' );
+		tapered.floor.rooms = [ { id: 'narrow-upper-room' } ];
+		const interior = {
+			building: { layouts: { middle: 'layouts/middle.json', 'floor-2': 'layouts/floor-2.json' }, floors: [
+				{ index: 2, layout: 'floor-2', elevation: 9 },
+				{ index: 1, layout: 'middle', elevation: 4.5 }
+			] },
+			layouts: { middle, 'floor-2': tapered }
+		};
+		const floors = buildingFloors( 'landmark', interior );
+		expect( floors.map( floor => floor.floor ) ).toEqual( [ 1, 2 ] );
+		expect( floorPlacements( floors[ 1 ] )[ 0 ].id ).toBe( 'taper-wall' );
+		expect( floors[ 1 ].rooms ).toEqual( [ { id: 'narrow-upper-room' } ] );
+		expect( floors[ 1 ].lights[ 0 ].position[ 1 ] ).toBe( 11.8 );
+		delete interior.layouts[ 'floor-2' ];
+		expect( () => buildingFloors( 'landmark', interior ) ).toThrow( /floor 2 has no floor-2 layout/ );
+
+	} );
+
 } );

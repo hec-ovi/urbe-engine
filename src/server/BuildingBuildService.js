@@ -1,7 +1,10 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { basename, join, resolve, sep } from 'node:path';
 import AjvModule from 'ajv/dist/2020.js';
+import { validateExteriorRequest } from '../assembly/validators.js';
+import { isDeepStrictEqual } from 'node:util';
+import { PreviewRevision, previewState } from '../building/PreviewRevision.js';
 
 const Ajv2020 = AjvModule.default ?? AjvModule;
 const REQUEST_SCHEMA = new URL( './schema/building-build-request.schema.json', import.meta.url );
@@ -30,12 +33,14 @@ export class BuildingBuildService {
 
 	#active = new Map();
 
-	constructor( { engineRoot, atlasDir, build = runAssembly } ) {
+	constructor( { engineRoot, atlasDir, build = runAssembly, buildPaired = runPairedPreview } ) {
 
 		this.engineRoot = resolve( engineRoot );
 		this.outRoot = join( this.engineRoot, 'out' );
 		this.atlasDir = resolve( atlasDir );
 		this.build = build;
+		this.buildPaired = buildPaired;
+		this.previewRevision = new PreviewRevision( this.engineRoot );
 		this.validate = new Ajv2020( { allErrors: true } ).compile( JSON.parse( readFileSync( REQUEST_SCHEMA, 'utf8' ) ) );
 
 	}
@@ -59,6 +64,29 @@ export class BuildingBuildService {
 		}
 
 		const parcelDir = join( outDir, parcel );
+		const requestPath = join( parcelDir, `${parcel}.request.json` );
+		if ( input.request ) {
+			const errors = validateExteriorRequest( input.request );
+			if ( errors.length || input.request.buildingId !== parcel ) throw new BuildingBuildError( 'E_INVALID_REQUEST', 'request must be a valid Exterior request with buildingId equal to parcel', 400 );
+			if ( existsSync( requestPath ) && ! isDeepStrictEqual( readJson( requestPath, 'E_WORLD_INVALID', 422 ), input.request ) ) {
+				throw new BuildingBuildError( 'E_INVALID_REQUEST', 'This preview id already names another request; choose a new parcel id.', 409 );
+			}
+			if ( ! existsSync( requestPath ) && existsSync( join( parcelDir, `${parcel}.glb` ) ) ) throw new BuildingBuildError( 'E_INVALID_REQUEST', 'An existing shell without its original request cannot be replaced.', 409 );
+			mkdirSync( parcelDir, { recursive: true } );
+			if ( ! existsSync( requestPath ) ) writeFileSync( requestPath, JSON.stringify( input.request, null, 2 ) + '\n' );
+		}
+		// Standalone API requests always produce a pair, even when opened from the exterior tab.
+		if ( input.request || ( out === '/out/previews' || out.startsWith( '/out/previews/' ) ) && existsSync( requestPath ) ) {
+			const paired = () => previewState( parcelDir, parcel, this.previewRevision.current(), {
+				sharedDir: process.env.URBE_SHARED_DIR || join( this.outRoot, 'shared' ), fingerprint: this.previewRevision
+			} ).complete;
+			if ( paired() ) return { parcel, out, source, built: false };
+			const key = `${out}:${parcel}:paired`;
+			if ( ! this.#active.has( key ) ) this.#active.set( key, this.#buildPaired( parcelDir, parcel ) );
+			try { await this.#active.get( key ); } finally { this.#active.delete( key ); }
+			if ( ! paired() ) throw new BuildingBuildError( 'E_BUILD_INCOMPLETE', 'The paired building was not published.', 500 );
+			return { parcel, out, source, built: true };
+		}
 		if ( complete( parcelDir, parcel, source ) ) return { parcel, out, source, built: false };
 
 		const blueprintPath = this.#blueprint( outDir, basename( outDir ) );
@@ -132,13 +160,28 @@ export class BuildingBuildService {
 
 	}
 
+	async #buildPaired( directory, parcel ) {
+
+		try {
+
+			await this.buildPaired( { engineRoot: this.engineRoot, directory, parcel } );
+
+		} catch ( error ) {
+
+			if ( error instanceof BuildingBuildError ) throw error;
+			throw new BuildingBuildError( 'E_BUILD_FAILED', error.message, 500 );
+
+		}
+
+	}
+
 }
 
 function complete( dir, parcel, source ) {
 
 	const exterior = existsSync( join( dir, `${parcel}.blueprint.json` ) ) && existsSync( join( dir, `${parcel}.glb` ) );
 
-	return exterior && ( source === 'shell' || existsSync( join( dir, 'interior', 'building.glb' ) ) );
+	return exterior && ( source === 'shell' || existsSync( join( dir, 'interior', 'building.glb' ) ) || existsSync( join( dir, 'interior', 'building.json' ) ) );
 
 }
 
@@ -183,4 +226,15 @@ function runAssembly( { engineRoot, parcel, source, outDir, blueprintPath } ) {
 
 	} );
 
+}
+
+function runPairedPreview( { engineRoot, directory, parcel } ) {
+	return new Promise( ( resolvePromise, reject ) => {
+		const child = spawn( 'node', [ '--import', 'tsx', 'src/building/build-preview.js', directory, parcel ], { cwd: engineRoot, stdio: [ 'ignore', 'pipe', 'pipe' ] } );
+		let output = '';
+		child.stdout.on( 'data', chunk => { output += chunk; } );
+		child.stderr.on( 'data', chunk => { output += chunk; } );
+		child.on( 'error', reject );
+		child.on( 'close', status => status === 0 ? resolvePromise() : reject( new BuildingBuildError( 'E_BUILD_FAILED', output.trim().slice( - 4000 ), 500 ) ) );
+	} );
 }

@@ -16,3 +16,11 @@ export function castIds( target, runtime ) {
 	return actorRoleIds( target ).map( ( roleId ) => runtime.cast[ roleId ] ).filter( Boolean );
 
 }
+
+/** An authored character label belongs only to the exact identity playing it. */
+export function characterName( runtime, npcId ) {
+
+	const role = runtime.def.roles.find( ( candidate ) => runtime.cast[ candidate.roleId ] === npcId );
+	return role?.characterName ?? role?.reservedName ?? null;
+
+}

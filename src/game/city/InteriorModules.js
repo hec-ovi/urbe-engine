@@ -4,6 +4,7 @@ import { mapConcurrent } from './BuildingsLoader.js';
 import { bake, plain } from './GeometryBake.js';
 import { shellMaterial } from './ShellSurface.js';
 import { MaterialBatches } from './kit/MaterialBatches.js';
+import { moduleUvContext } from './kit/UvRepeatChannel.js';
 
 const LOAD_CONCURRENCY = 8;
 /** A catalog key is theme, kind and tier; a slot is a key and the variant it wears. */
@@ -47,7 +48,7 @@ export class InteriorModules {
 		this.loader = loader;
 		this.readBinary = readBinary;
 		this.modules = new Map();
-		this.batches = new MaterialBatches( 'interior-modules', { fill: true } );
+		this.batches = new MaterialBatches( 'interior-modules', { fill: true, uvRepeat: true } );
 		this.group = this.batches.group;
 		this.ready = this.#load();
 
@@ -108,11 +109,11 @@ export class InteriorModules {
 	 * @param fill Vector4 the fill of the room the copy stands in
 	 * @returns a handle to hand back to `release`
 	 */
-	admit( id, matrix, fill ) {
+	admit( id, matrix, fill, uvRepeat = [ 1, 1 ] ) {
 
 		if ( ! this.modules.has( id ) ) throw moduleError( `no module ${id} in this catalog` );
 
-		return this.batches.admit( id, matrix, null, fill );
+		return this.batches.admit( id, matrix, null, fill, uvRepeat );
 
 	}
 
@@ -226,7 +227,9 @@ function readModule( scene, record, factory, roomLights ) {
 		const source = shellMaterial( factory, { key, variantId } );
 		untile( geometry, source );
 
-		return { bucket: slot, geometry, source, material: roomLights.materialFor( slot, source ) };
+		const material = roomLights.materialFor( slot, source );
+		material.contextNode = moduleUvContext( material );
+		return { bucket: slot, geometry, source, material };
 
 	} );
 

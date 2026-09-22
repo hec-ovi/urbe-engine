@@ -1,5 +1,5 @@
 import { CastResolver, QuestlineRuntime, StepStamp, StoryVenues } from '../../../../quests/dist/runtime.js';
-import { castIds } from './QuestCast.js';
+import { castIds, characterName } from './QuestCast.js';
 import { stepLine, stepView } from './QuestStepView.js';
 
 /**
@@ -15,11 +15,12 @@ export class QuestSession {
 	 * @param blocked questlines the cast could not fill, kept for the log with
 	 * their reason: a job that vanishes from the menu reads as a broken game.
 	 */
-	constructor( entries, sim, blocked = [] ) {
+	constructor( entries, sim, blocked = [], presence = { read: null } ) {
 
 		this.entries = entries;
 		this.sim = sim;
 		this.blocked = blocked;
+		this.presence = presence;
 
 	}
 
@@ -45,35 +46,62 @@ export class QuestSession {
 		const taken = new Set();
 		const characters = new Map();
 		const saved = new Map( persisted.map( ( entry ) => [ entry.id, entry ] ) );
+		const presence = { read: null };
+		const runtimeSim = physicalSimulation( sim, presence );
+		const stamped = definitions.map( ( carried ) => stamp ? stamp.definition( carried ) : carried );
+		const restored = new Map();
+		const repairedStates = new Map();
+		const owners = new Map();
 
-		for ( const [ index, carried ] of definitions.entries() ) {
+		// Reserve every valid saved character before filling any new questline,
+		// including a newly added main story that appears before a saved side job.
+		for ( const definition of stamped ) {
 
-			// The main questline is written first; everything after it is a side job.
-			const side = index > 0;
-			const definition = stamp ? stamp.definition( carried ) : carried;
 			const previous = saved.get( definition.id );
+			if ( ! previous ) continue;
+			try {
 
-			if ( previous ) {
+				const snapshot = this.#persistedRuntime( definition, previous, sim );
+				if ( ! snapshot ) continue;
+				const runtime = QuestlineRuntime.restore( definition, snapshot.cast, runtimeSim, snapshot.state );
+				let repair = false;
+				for ( const role of definition.roles ) {
 
-				try {
+					const character = `${role.roleId}:${role.npcType}`;
+					const npcId = snapshot.cast[ role.roleId ];
+					if ( owners.has( npcId ) && owners.get( npcId ) !== character ||
+						characters.has( character ) && characters.get( character ) !== npcId ) {
 
-					const snapshot = this.#persistedRuntime( definition, previous, sim );
-					if ( snapshot ) {
-
-						entries.push( {
-							definition, side,
-							runtime: QuestlineRuntime.restore( definition, snapshot.cast, sim, snapshot.state )
-						} );
-						for ( const npcId of Object.values( snapshot.cast ) ) taken.add( npcId );
+						repair = true;
 						continue;
 
 					}
-
-				} catch ( error ) {
-
-					console.warn( `questline ${definition.id} restore ignored: ${this.#message( error )}` );
+					owners.set( npcId, character );
+					characters.set( character, npcId );
+					taken.add( npcId );
 
 				}
+				// Older saves could assign several different characters one body.
+				// Recast only the conflicting identities, keeping quest progress.
+				if ( repair ) repairedStates.set( definition.id, snapshot.state );
+				else restored.set( definition.id, runtime );
+
+			} catch ( error ) {
+
+				console.warn( `questline ${definition.id} restore ignored: ${this.#message( error )}` );
+
+			}
+
+		}
+
+		for ( const [ index, definition ] of stamped.entries() ) {
+
+			// The main questline is written first; everything after it is a side job.
+			const side = index > 0;
+			if ( restored.has( definition.id ) ) {
+
+				entries.push( { definition, side, runtime: restored.get( definition.id ) } );
+				continue;
 
 			}
 
@@ -89,7 +117,10 @@ export class QuestSession {
 					continue;
 
 				}
-				entries.push( { definition, side, runtime: new QuestlineRuntime( definition, result.cast, sim ) } );
+				const runtime = repairedStates.has( definition.id )
+					? QuestlineRuntime.restore( definition, result.cast, runtimeSim, repairedStates.get( definition.id ) )
+					: new QuestlineRuntime( definition, result.cast, runtimeSim );
+				entries.push( { definition, side, runtime } );
 				for ( const npcId of Object.values( result.cast ) ) taken.add( npcId );
 
 			} catch ( error ) {
@@ -100,7 +131,7 @@ export class QuestSession {
 
 		}
 
-		return new QuestSession( entries, sim, blocked );
+		return new QuestSession( entries, sim, blocked, presence );
 
 	}
 
@@ -205,6 +236,34 @@ export class QuestSession {
 	hasCastNpc( npcId ) {
 
 		return this.entries.some( ( { runtime } ) => Object.values( runtime.cast ).includes( npcId ) );
+
+	}
+
+	/** Story-facing name, without mutating the simulation's person or any bystander. */
+	characterName( npcId ) {
+
+		for ( const { runtime } of this.entries ) {
+
+			const name = characterName( runtime, npcId );
+			if ( name ) return { ...name };
+
+		}
+		return null;
+
+	}
+
+	/** Actual controlled bodies override their interrupted routine for presence only. */
+	setPresenceSource( read ) {
+
+		this.presence.read = read;
+
+	}
+
+	/** A parcel appointment can be staffed before schedule-based presence is true. */
+	canPlaceCast( questId, stepId, timeMin ) {
+
+		const entry = this.entries.find( ( candidate ) => candidate.definition.id === questId );
+		return entry?.runtime.stepPlacementAvailability( stepId, timeMin ).available ?? false;
 
 	}
 
@@ -392,5 +451,29 @@ export class QuestSession {
 function castBlockReason( block ) {
 
 	return `role ${block.roleId} (${block.npcType}) cannot be cast: ${block.reason}`;
+
+}
+
+/** Keep the simulation authoritative for identities, routines and consequences;
+ * the host's exact, retained body is authoritative for where a conversation is.
+ */
+function physicalSimulation( sim, presence ) {
+
+	return new Proxy( sim, {
+		get( target, key ) {
+
+			if ( key === 'behaviorAt' ) return ( npcId, timeMin ) => {
+
+				const routine = sim.behaviorAt( npcId, timeMin );
+				const actual = presence.read?.( npcId );
+				if ( ! actual || ! routine ) return routine;
+				return { ...routine, place: { ...actual.place }, mode: 'interior', activity: actual.activity, interrupted: true };
+
+			};
+			const value = Reflect.get( target, key, target );
+			return typeof value === 'function' ? value.bind( target ) : value;
+
+		}
+	} );
 
 }

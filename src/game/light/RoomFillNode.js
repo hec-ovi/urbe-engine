@@ -33,9 +33,7 @@ export class RoomFillNode extends LightingNode {
 		const channel = mesh[ CHANNEL ];
 		if ( ! channel ) return;
 
-		const drawn = builder.getDrawIndex() === null ? instanceIndex : drawIndex;
-		const id = mesh.isBatchedMesh ? texel( mesh._indirectTexture, drawn ).x : drawn;
-		const fill = varying( texel( channel.texture, id ) );
+		const fill = roomFillValue( mesh, builder );
 
 		const sky = fill.xyz;
 		const ground = sky.mul( fill.w );
@@ -44,6 +42,18 @@ export class RoomFillNode extends LightingNode {
 		builder.context.irradiance.addAssign( mix( ground, sky, weight ) );
 
 	}
+
+}
+
+/** Instanced crowds use their slot; a focused rig shares texel zero across its meshes. */
+export function roomFillValue( mesh, builder ) {
+
+	const channel = mesh[ CHANNEL ];
+	if ( ! channel ) return null;
+	const instanced = mesh.isInstancedMesh || mesh.geometry?.isInstancedBufferGeometry;
+	const drawn = mesh.isBatchedMesh && builder.getDrawIndex() !== null ? drawIndex : instanced ? instanceIndex : int( 0 );
+	const id = mesh.isBatchedMesh ? texel( mesh._indirectTexture, drawn ).x : drawn;
+	return varying( texel( channel.texture, id ) );
 
 }
 

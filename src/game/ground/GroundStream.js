@@ -8,10 +8,11 @@ import { frameYield } from '../../app/FrameYield.js';
 /** Serial tile admission with independent render and collision windows. */
 export class GroundStream {
 
-	constructor( atlas, factory, { cellSize = 128 } = {} ) {
+	constructor( atlas, factory, { cellSize = 128, openings = null } = {} ) {
 
 		if ( ! Number.isFinite( cellSize ) || cellSize < 8 ) fail( 'cellSize must be at least 8 metres' );
 		this.index = new GroundTiles( atlas, cellSize );
+		this.index.context.openings = openings;
 		this.factory = factory;
 		this.bounds = this.index.bounds;
 		this.group = new THREE.Group();

@@ -46,10 +46,11 @@ export class HeroCharacter {
 	}
 
 	/** @param textureSize the side the pack's maps are downscaled to, the tier's texture size */
-	constructor( { animation, warmup = null, textureSize = TEXTURE_SIZE, loadModel = ( descriptor ) => defaultLoad( descriptor, textureSize ), street = streetBodies } ) {
+	constructor( { animation, warmup = null, textureSize = TEXTURE_SIZE, loadModel = ( descriptor ) => defaultLoad( descriptor, textureSize ), street = streetBodies, lighting = null } ) {
 
 		this.animation = animation;
 		this.street = street;
+		this.lighting = lighting;
 		this.warmup = warmup;
 		this.loadModel = loadModel;
 		this.models = new Map();
@@ -80,6 +81,7 @@ export class HeroCharacter {
 		if ( request !== this.request ) return false;
 
 		const root = characterRoot( source, person, `focused-${descriptor.id}` );
+		this.lighting?.attachRoot( root, person.position );
 		root.visible = false;
 
 		const mixer = new THREE.AnimationMixer( root );
@@ -90,6 +92,7 @@ export class HeroCharacter {
 
 			this.group.remove( root );
 			mixer.stopAllAction();
+			this.lighting?.releaseRoot( root );
 			undress( root );
 			return false;
 
@@ -124,7 +127,9 @@ export class HeroCharacter {
 
 			const source = await this.#model( descriptor );
 			const root = characterRoot( source, { position: new THREE.Vector3(), heading: 0, look: PLAIN_LOOK }, `prepared-${descriptor.id}` );
+			this.lighting?.attachRoot( root, root.position );
 			await this.warmup?.warm( root );
+			this.lighting?.releaseRoot( root );
 			undress( root );
 			onProgress( index + 1, shapes.length );
 
@@ -150,6 +155,7 @@ export class HeroCharacter {
 			const source = await this.#model( descriptor );
 			if ( this.fallen ) return false;
 			root = characterRoot( source, person, `fallen-${descriptor.id}` );
+			this.lighting?.attachRoot( root, person.position );
 			poseAtCrowdFrame( root, this.animation, source.motions, person );
 			if ( samePerson( this.active?.person, person ) ) this.#dropActive();
 			ragdoll = Ragdoll.create( { physics, root, impact } );
@@ -162,7 +168,12 @@ export class HeroCharacter {
 		} catch ( error ) {
 
 			ragdoll?.dispose();
-			if ( root ) undress( root );
+			if ( root ) {
+
+				this.lighting?.releaseRoot( root );
+				undress( root );
+
+			}
 			throw error;
 
 		} finally {
@@ -190,6 +201,7 @@ export class HeroCharacter {
 		const { person, root, mixer } = this.active;
 		root.position.copy( person.position );
 		root.rotation.y = person.heading;
+		this.lighting?.writeRoot( root, person.position );
 		mixer.update( delta );
 
 	}
@@ -206,6 +218,7 @@ export class HeroCharacter {
 		ragdoll.update( delta );
 		const at = ragdoll.position;
 		person.position.set( at.x, person.position.y, at.z );
+		this.lighting?.writeRoot( this.fallen.root, person.position );
 
 		if ( ! ragdoll.settled ) return;
 
@@ -223,6 +236,7 @@ export class HeroCharacter {
 		fallen.ragdoll.dispose();
 		fallen.person.hero = false;
 		this.group.remove( fallen.root );
+		this.lighting?.releaseRoot( fallen.root );
 		undress( fallen.root );
 		return fallen.person;
 
@@ -243,6 +257,7 @@ export class HeroCharacter {
 		person.hero = false;
 		mixer.stopAllAction();
 		this.group.remove( root );
+		this.lighting?.releaseRoot( root );
 		undress( root );
 		this.active = null;
 

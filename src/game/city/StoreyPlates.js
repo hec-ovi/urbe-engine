@@ -41,7 +41,8 @@ export function storeyIndex( node ) {
  * the interior does not publish is absent, and its plate stays whole.
  *
  * @param interior `{ building, layouts }` as BuildingSource reads them
- * @returns Map<floorIndex, { elevation, rect: { x0, z0, x1, z1 } }>
+ * @returns Map<floorIndex, { elevation, rect: { x0, z0, x1, z1, angle } }>
+ * `angle` turns the rectangle's layout frame into world XZ, in radians.
  */
 export function interiorStoreys( parcelId, interior ) {
 
@@ -65,22 +66,29 @@ export function interiorStoreys( parcelId, interior ) {
 function envelopeOf( floor ) {
 
 	const rect = { x0: Infinity, z0: Infinity, x1: - Infinity, z1: - Infinity };
+	const angle = ( floor.coreAngleDeg ?? 0 ) * Math.PI / 180;
+	const cos = Math.cos( angle ), sin = Math.sin( angle );
+	const intoFrame = ( x, z ) => [ cos * x + sin * z, - sin * x + cos * z ];
 
 	for ( const room of floor.rooms ?? [] ) {
 
-		for ( const [ x, z ] of room.polygon ?? [] ) grow( rect, x, z );
+		for ( const [ x, z ] of room.polygon ?? [] ) grow( rect, ...intoFrame( x, z ) );
 
 	}
 	// The core is inside the rooms on every plan seen, and including it is what
 	// guarantees the stair and the lift are open whatever a plan does.
 	for ( const one of coreRects( floor.core ) ) {
 
-		grow( rect, one.x, one.z );
-		grow( rect, one.x + one.w, one.z + one.d );
+		// Core rects publish a world centre and frame-aligned width/depth. Their
+		// world corners rotate about that centre by coreAngleDeg, including the
+		// common 90-degree layout orientation of an unrotated parcel.
+		const [ x, z ] = intoFrame( one.x + one.w / 2, one.z + one.d / 2 );
+		grow( rect, x - one.w / 2, z - one.d / 2 );
+		grow( rect, x + one.w / 2, z + one.d / 2 );
 
 	}
 
-	return rect.x1 - rect.x0 > EPSILON && rect.z1 - rect.z0 > EPSILON ? rect : null;
+	return rect.x1 - rect.x0 > EPSILON && rect.z1 - rect.z0 > EPSILON ? { ...rect, angle } : null;
 
 }
 
@@ -119,7 +127,7 @@ function grow( rect, x, z ) {
  * interpolates the same way its position does.
  *
  * @param geometry a baked plate: non-indexed, position, normal and uv
- * @param rect the envelope, in the same frame as the geometry
+ * @param rect the frame-space envelope, with optional `angle` from frame to world XZ
  * @returns the band, or null when the envelope covers the whole plate
  */
 export function cutPlate( geometry, rect ) {
@@ -129,13 +137,15 @@ export function cutPlate( geometry, rect ) {
 	const written = sources.map( () => [] );
 	const x = [ 0, 0, 0 ];
 	const z = [ 0, 0, 0 ];
+	const cos = Math.cos( rect.angle ?? 0 ), sin = Math.sin( rect.angle ?? 0 );
 
 	for ( let start = 0; start + 2 < position.count; start += 3 ) {
 
 		for ( let corner = 0; corner < 3; corner ++ ) {
 
-			x[ corner ] = position.getX( start + corner );
-			z[ corner ] = position.getZ( start + corner );
+			const worldX = position.getX( start + corner ), worldZ = position.getZ( start + corner );
+			x[ corner ] = cos * worldX + sin * worldZ;
+			z[ corner ] = - sin * worldX + cos * worldZ;
 
 		}
 
