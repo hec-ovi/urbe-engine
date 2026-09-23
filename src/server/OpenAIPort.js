@@ -9,6 +9,8 @@ export class OpenAIPort {
 
 		this.baseUrl = baseUrl.replace( /\/$/, '' );
 		this.model = model || null;
+		/** Server-reported token totals across calls; completion includes any thinking the server does not return. */
+		this.usage = { calls: 0, promptTokens: 0, completionTokens: 0 };
 
 	}
 
@@ -27,6 +29,9 @@ export class OpenAIPort {
 		if ( ! response.ok ) throw new Error( `model server ${response.status} at ${this.baseUrl}` );
 
 		const data = await response.json();
+		this.usage.calls += 1;
+		this.usage.promptTokens += data.usage?.prompt_tokens ?? 0;
+		this.usage.completionTokens += data.usage?.completion_tokens ?? 0;
 		return data.choices?.[ 0 ]?.message?.content ?? '';
 
 	}

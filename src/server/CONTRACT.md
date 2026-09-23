@@ -36,7 +36,7 @@ Expose checked development HTTP routes for world builds, the launcher and NPC di
 ## Invariants
 
 - A route invokes its service only after its request passes the public boundary.
-- Talk uses the visible NPC, current behavior and current quest snapshot supplied by `GameApp`. An empty `LLM_MODEL` selects the first model advertised by `LLM_BASE_URL`.
+- Talk uses the visible NPC, current behavior and current quest snapshot supplied by `GameApp`. An empty `LLM_MODEL` selects the first model advertised by `LLM_BASE_URL`. The talk port tallies the prompt and completion tokens the server reports, and the dev server logs the running totals after each reply.
 - Routes return JSON with no undeclared fields.
 - Filesystem services keep every resolved path inside the configured output root. Talk world paths contain no `.` or `..` segment.
 - Building `out` accepts `/out` and nested output folders, including `/out/games/<id>`. Each segment starts with a letter or digit and contains at most 64 letters, digits, dots, underscores or hyphens. Existing sources are returned without rebuilding; missing sources use the carried blueprint or a named Atlas sample.

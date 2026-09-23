@@ -27,4 +27,16 @@ describe( 'OpenAI-compatible dialogue port', () => {
 
 	} );
 
+	it( 'tallies the token usage the server reports', async () => {
+
+		vi.stubGlobal( 'fetch', vi.fn( async () => new Response( JSON.stringify( {
+			choices: [ { message: { content: 'Ready.' } } ],
+			usage: { prompt_tokens: 12, completion_tokens: 3 }
+		} ) ) ) );
+		const port = new OpenAIPort( 'http://models/v1', 'local-model' );
+		await port.complete( { system: 'Role.', prompt: 'Hello.' } );
+		expect( port.usage ).toEqual( { calls: 1, promptTokens: 12, completionTokens: 3 } );
+
+	} );
+
 } );

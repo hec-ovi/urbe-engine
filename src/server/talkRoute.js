@@ -28,6 +28,7 @@ export function talkRoute( outRoot, providedService = null ) {
 						new OpenAIPort( process.env.LLM_BASE_URL ?? DEFAULT_BASE_URL, process.env.LLM_MODEL || null ), outRoot
 					);
 					const reply = await service.reply( request );
+					if ( service.llm?.usage ) console.info( 'talk tokens', service.llm.usage );
 					send( res, 200, boundary.output( { reply } ) );
 
 				} catch ( error ) {
