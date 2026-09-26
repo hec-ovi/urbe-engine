@@ -10,9 +10,14 @@ export class CityTemplate {
 		this.input = {
 			...input,
 			name: input.name?.trim() ?? `${template.label} city ${randomUUID().slice( 0, 8 )}`,
-			seed: input.seed?.trim() ?? randomUUID()
+			seed: input.seed?.trim() ?? randomUUID(),
+			...( input.theme === undefined ? {} : { theme: input.theme.trim() } )
 		};
-		if ( ! this.input.name || ! this.input.seed ) throw new CreationError( 'E_INVALID_REQUEST', 'Name and seed must contain text when supplied' );
+		if ( ! this.input.name || ! this.input.seed || this.input.theme === '' ) {
+
+			throw new CreationError( 'E_INVALID_REQUEST', 'Name, seed and theme must contain text when supplied' );
+
+		}
 		this.args = template.args;
 
 	}

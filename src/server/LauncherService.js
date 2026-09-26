@@ -68,28 +68,29 @@ export class LauncherService {
 
 	}
 
-	async generateCity( input ) {
+	/** Creation stages take `{ progress }`, told each line the stage's commands print. */
+	async generateCity( input, options ) {
 
-		const city = await this.#creation( 'generateCity', input );
+		const city = await this.#creation( 'generateCity', input, options );
 		return { city: presentCity( city ), catalog: await this.catalog() };
 
 	}
 
-	async generateInstances( input ) {
+	async generateInstances( input, options ) {
 
-		return { instances: await this.#creation( 'generateInstances', input ) };
-
-	}
-
-	async generateQuests( input ) {
-
-		return { quests: await this.#creation( 'generateQuests', input ) };
+		return { instances: await this.#creation( 'generateInstances', input, options ) };
 
 	}
 
-	async createGame( input ) {
+	async generateQuests( input, options ) {
 
-		const game = await this.#creation( 'createGame', input );
+		return { quests: await this.#creation( 'generateQuests', input, options ) };
+
+	}
+
+	async createGame( input, options ) {
+
+		const game = await this.#creation( 'createGame', input, options );
 		const city = await this.library.loadCity( { id: game.cityId } );
 		return { game: presentGame( game, city ), catalog: await this.catalog() };
 
@@ -132,14 +133,14 @@ export class LauncherService {
 
 	}
 
-	async #creation( method, input ) {
+	async #creation( method, input, options = {} ) {
 
 		if ( ! this.creation || typeof this.creation[ method ] !== 'function' ) {
 
 			throw new LauncherServiceError( 'E_CREATION_UNAVAILABLE', `${method} is not connected`, 503 );
 
 		}
-		return this.creation[ method ]( input );
+		return this.creation[ method ]( input, options );
 
 	}
 

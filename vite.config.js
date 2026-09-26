@@ -28,11 +28,19 @@ const ATLAS_DIR = normalize( process.env.URBE_ATLAS_DIR ?? fileURLToPath( new UR
 // CC0 character, animation and vehicle packs. Not in the repo: they live in
 // the machine's model store. Override with URBE_MODELS_DIR.
 const MODELS_DIR = normalize( process.env.URBE_MODELS_DIR ?? join( homedir(), 'models', 'quaternius' ) );
+// Creation names themed cities and writes stories through the machine's
+// OpenAI-compatible model server; without LLM_BASE_URL it builds unnamed
+// cities with the recorded story only.
 const creation = createWorldCreation( {
 	engineRoot: ROOT,
 	atlasRoot: fileURLToPath( new URL( '../atlas', import.meta.url ) ),
 	questsRoot: fileURLToPath( new URL( '../quests', import.meta.url ) ),
-	outDir: join( ROOT, 'out' )
+	namingRoot: fileURLToPath( new URL( '../naming', import.meta.url ) ),
+	themesDir: THEMES_DIR,
+	outDir: join( ROOT, 'out' ),
+	...( process.env.LLM_BASE_URL ? {
+		model: { baseUrl: process.env.LLM_BASE_URL, ...( process.env.LLM_MODEL ? { model: process.env.LLM_MODEL } : {} ) }
+	} : {} )
 } );
 
 const TYPES = {

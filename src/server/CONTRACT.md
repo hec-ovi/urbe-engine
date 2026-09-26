@@ -1,10 +1,10 @@
 # Development server contract
 
-Contract version: 1.4
+Contract version: 1.5
 
 ## Purpose
 
-Expose checked development HTTP routes for world builds, the launcher, NPC dialogue, what people remember of it and NPC speech.
+Expose checked development HTTP routes for world builds, the launcher and its creation jobs, NPC dialogue, what people remember of it and NPC speech.
 
 ## Inputs
 
@@ -16,6 +16,8 @@ Expose checked development HTTP routes for world builds, the launcher, NPC dialo
 - `POST /api/exteriors`: [exact displayed blueprint envelope](schema/exterior-build-request.schema.json).
 - `GET /api/exteriors/<id>`: job id returned by POST.
 - `POST /api/launcher`: [schema/launcher-request.schema.json](schema/launcher-request.schema.json).
+- `POST /api/creation-jobs`: a [launcher request](schema/launcher-request.schema.json) for `generateCity`, `generateInstances`, `generateQuests` or `createGame`.
+- `GET /api/creation-jobs/<id>`: job id returned by POST.
 - `POST /api/talk` and `POST /api/talk/stream`: [schema/talk-request.schema.json](schema/talk-request.schema.json). `npc` is the Simulation NPCInstance the browser shows, including its optional `age`, `traits` and `transitJob`. `quests` is the optional exact `QuestSession.snapshot()`. Optional `offers` (`follow`, `places`) is what this NPC may propose, answered only on the stream; optional `guide` is the place it has led the player to.
 - `GET /api/talk/memory?out=<out>` and `PUT /api/talk/memory`: [schema/talk-memory.schema.json](schema/talk-memory.schema.json), `{ out, memory }` for one served world, `memory` a game save's [dialogue memory](../library/schema/dialogue-memory.schema.json) of at most 200 people with at most 24 notes and 24 turns each; GET takes the `out` alone.
 - `GET /api/voice`: no input.
@@ -29,6 +31,7 @@ Expose checked development HTTP routes for world builds, the launcher, NPC dialo
 - Exterior capability: HTTP 200 [schema/exterior-capability.schema.json](schema/exterior-capability.schema.json).
 - Exterior POST: HTTP 202 [job](schema/exterior-build-job.schema.json); polling returns HTTP 200 with the same shape.
 - Launcher success: the selected result in [the launcher contract](../launcher/CONTRACT.md).
+- Creation job POST: HTTP 202 [job](schema/creation-job.schema.json) `{ id, method, state, submittedAt, startedAt, finishedAt, progress, result, error }`, queued; reading it returns HTTP 200 with the same shape. `progress` is the last line the stage's commands printed (Atlas, Naming, assembly, Quests), or null before the first. `state` is `queued`, `running`, `succeeded` with `result` the launcher result of that method, or `failed` with `error` `{ code, message }` as the launcher route would answer it.
 - Talk success: HTTP 200 [schema/talk-response.schema.json](schema/talk-response.schema.json).
 - Talk stream: HTTP 200 `application/x-ndjson`, one [event](schema/talk-stream-event.schema.json) per line, in order: `delta` pieces of the cleaned reply; `sentence` with `index` from 0 each time a sentence completes, for per-sentence voice; `offer` for each companion action the NPC proposed from `offers`; `done` with the whole reply.
 - Talk memory: GET answers HTTP 200 with the world's `{ out, memory }`, sorted by npcId; PUT answers HTTP 204 once the world's memory is the one sent and nothing else.
@@ -42,6 +45,7 @@ Expose checked development HTTP routes for world builds, the launcher, NPC dialo
 - Building failures use [schema/building-build-error.schema.json](schema/building-build-error.schema.json).
 - Exterior errors: [schema/exterior-build-error.schema.json](schema/exterior-build-error.schema.json). Invalid JSON/envelope/duplicate parcel ids return 400, uploads over 128 MiB return 413, unavailable runtime 503, four retained jobs return 429 `E_BUSY`, absent job 404, storage failure 500. Background failures remain visible in the failed job.
 - Launcher failures use `E_INVALID_REQUEST`, the closed library and creation errors, or `E_LAUNCHER` for an internal failure.
+- Creation job POST refuses a method other than the four stages or an input its stage schema refuses with 400 `E_INVALID_REQUEST`, answers 503 `E_CREATION_UNAVAILABLE` without creation and 429 `E_BUSY` while four jobs wait or run; a job id this session does not keep is 404 `E_JOB_NOT_FOUND`. A stage that fails later stays visible in its failed job.
 - Talk invalid JSON or request values return HTTP 400 [schema/talk-error.schema.json](schema/talk-error.schema.json) on every talk route, the memory routes included. World, dialogue, model and invalid output failures return the same shape with HTTP 502. On the stream, a failure after the first event ends it with one `error` event instead.
 - Voice failures before the audio starts return [schema/voice-error.schema.json](schema/voice-error.schema.json) `{ error, code }`: `E_INVALID_REQUEST` 400 (invalid JSON, request values or group, checked before Voice sees them), `E_EMPTY_SPEECH` 400 (the line holds only cues), `E_BUSY` 429 (the prefetch queue is full), `E_LOADING` 503 (the Voice model still loads), `E_UNAVAILABLE` 503 (`VOICE_BASE_URL` empty or Voice unreachable), `E_UPSTREAM` 502 (any other Voice failure or refusal). A line that breaks off after its audio starts drops the connection before the body ends, so the browser's read fails; only a body that ends normally holds the whole line. A break while the browser still listens is logged; a browser leaving is not.
 
@@ -56,6 +60,7 @@ Expose checked development HTTP routes for world builds, the launcher, NPC dialo
 - Routes return JSON, NDJSON lines on the talk stream, WAV on the voice line or no body on a prefetch cancel or a memory replace, with no undeclared fields.
 - Filesystem services keep every resolved path inside the configured output root. Talk world paths contain no `.` or `..` segment.
 - Building `out` accepts `/out` and nested output folders, including `/out/games/<id>`. Each segment starts with a letter or digit and contains at most 64 letters, digits, dots, underscores or hyphens. Existing sources are returned without rebuilding; missing sources use the carried blueprint or a named Atlas sample.
+- Creation jobs run one at a time in submission order, beside the synchronous launcher route: a stage reads and writes the shared catalog, and one game's stages build on each other. A job keeps its input only until it runs. The session keeps the newest 32 jobs, letting the oldest settled ones go first; job state lives until server restart, and what a stage published stays on disk.
 - Exterior jobs create a unique direct child of Engine `out`, reject a symbolic-link output root, and never replace existing worlds. They carry the supplied blueprint unchanged, without seed lookup or regeneration, and run public `assemble-city --interiors 0`. Connections remains a mandatory gate.
 - The exterior boundary checks only its consumed Atlas envelope and safe unique parcel ids, not all Atlas geometry. Assembly performs downstream validation. `blueprintHash` is SHA-256 over recursively key-sorted JSON; arrays keep their order.
 - Jobs run in submission order, one city batch at a time. They report complete nonempty regular shell/blueprint file pairs. Success additionally requires a schema-valid manifest matching every requested parcel, seed and Atlas version, no interiors, and an unchanged carried blueprint. Partial results never enable opening a completed city. Job state lives until server restart; generated files remain on disk.
@@ -73,6 +78,7 @@ Expose checked development HTTP routes for world builds, the launcher, NPC dialo
 - [Building assembly](../assembly/CONTRACT.md)
 - [Connections](../../../connections/CONTRACT.md)
 - [Launcher](../launcher/CONTRACT.md)
+- [World creation](../creation/CONTRACT.md), whose stages the creation jobs run
 - [Library](../library/CONTRACT.md), the dialogue memory schema by reference
 - [Quests](../../../quests/CONTRACT.md)
 - [Simulation](../../../simulation/CONTRACT.md)

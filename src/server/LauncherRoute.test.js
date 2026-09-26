@@ -1,10 +1,12 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cpSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HttpLauncherApi } from '../launcher/HttpLauncherApi.js';
+import { CreationError } from '../creation/index.js';
+import { CreationJobs } from './CreationJobs.js';
 import { LauncherService } from './LauncherService.js';
 import { launcherRoute } from './launcherRoute.js';
 import { GamePersistence } from '../game/persistence/index.js';
@@ -27,24 +29,8 @@ describe( 'launcher HTTP boundary', () => {
 		const outDir = join( root, 'out' );
 		cpSync( FIXTURE, outDir, { recursive: true } );
 		const service = new LauncherService( { outDir } );
-		const plugin = launcherRoute( root, null, service );
-		let handler;
-		plugin.configureServer( { middlewares: { use: ( path, callback ) => {
-
-			expect( path ).toBe( '/api/launcher' );
-			handler = callback;
-
-		} } } );
-		const server = createServer( ( req, res ) => handler( req, res, () => {
-
-			res.statusCode = 404;
-			res.end();
-
-		} ) );
-		await new Promise( ( resolve ) => server.listen( 0, '127.0.0.1', resolve ) );
-		cleanups.push( () => new Promise( ( resolve ) => server.close( resolve ) ) );
+		const base = await serve( launcherRoute( root, null, service ) );
 		cleanups.push( () => rmSync( root, { recursive: true, force: true } ) );
-		const base = `http://127.0.0.1:${server.address().port}`;
 		const api = new HttpLauncherApi( ( url, options ) => fetch( base + url, options ) );
 
 		const catalog = await api.catalog();
@@ -141,5 +127,81 @@ describe( 'launcher HTTP boundary', () => {
 		expect( ( await api.continueGame( free.id ) ).playUrl ).toContain( 'game=free-play' );
 
 	} );
+
+	it( 'queues creation stages as jobs that run in submission order and keep their result or error', async () => {
+
+		const order = [];
+		let release;
+		const held = new Promise( ( resolve ) => release = resolve );
+		const creation = {
+			check( method, input ) {
+
+				if ( ! input?.size ) throw new CreationError( 'E_INVALID_REQUEST', '/ must have required property size' );
+
+			},
+			async generateCity( input, { progress } ) {
+
+				order.push( input.name );
+				progress( `planning ${input.name}` );
+				if ( input.name === 'first' ) await held;
+				if ( input.name === 'broken' ) throw new CreationError( 'E_COMMAND_FAILED', 'atlas exited 1', 500 );
+				return { id: input.name, name: input.name, size: input.size, seed: 's', buildings: [], districtCount: 1 };
+
+			}
+		};
+		const outDir = mkdtempSync( join( tmpdir(), 'urbe-jobs-' ) );
+		cleanups.push( () => rmSync( outDir, { recursive: true, force: true } ) );
+		const service = new LauncherService( { outDir, creation } );
+		service.catalog = async () => ( { games: [], cities: [] } );
+		const base = await serve( launcherRoute( '/unused', creation, service, new CreationJobs( { service, creation, maxPending: 2 } ) ) );
+		const post = async ( body ) => {
+
+			const response = await fetch( `${base}/api/creation-jobs`, { method: 'POST', body: JSON.stringify( body ) } );
+			return { status: response.status, body: await response.json() };
+
+		};
+		const read = async ( id ) => ( await fetch( `${base}/api/creation-jobs/${id}` ) ).json();
+
+		const first = await post( { method: 'generateCity', input: { size: 'small', name: 'first' } } );
+		expect( first.status ).toBe( 202 );
+		expect( first.body ).toMatchObject( { method: 'generateCity', state: 'queued', progress: null, result: null, error: null } );
+		const second = await post( { method: 'generateCity', input: { size: 'small', name: 'broken' } } );
+		expect( ( await post( { method: 'generateCity', input: { size: 'small', name: 'third' } } ) ).body.code ).toBe( 'E_BUSY' );
+		expect( await post( { method: 'generateCity', input: {} } ) ).toMatchObject( { status: 400, body: { code: 'E_INVALID_REQUEST' } } );
+		expect( await post( { method: 'catalog' } ) ).toMatchObject( { status: 400, body: { code: 'E_INVALID_REQUEST' } } );
+		expect( await read( first.body.id ) ).toMatchObject( { state: 'running', progress: 'planning first' } );
+		expect( await read( second.body.id ) ).toMatchObject( { state: 'queued' } );
+
+		release();
+		await vi.waitFor( async () => expect( ( await read( second.body.id ) ).state ).toBe( 'failed' ) );
+		expect( order ).toEqual( [ 'first', 'broken' ] );
+		expect( await read( first.body.id ) ).toMatchObject( {
+			state: 'succeeded', result: { city: { id: 'first', status: 'ready' }, catalog: { games: [], cities: [] } }
+		} );
+		expect( await read( second.body.id ) ).toMatchObject( { error: { code: 'E_COMMAND_FAILED', message: 'atlas exited 1' }, result: null } );
+		const missing = await fetch( `${base}/api/creation-jobs/creation-00000000-0000-0000-0000-000000000000` );
+		expect( [ missing.status, ( await missing.json() ).code ] ).toEqual( [ 404, 'E_JOB_NOT_FOUND' ] );
+
+	} );
+
+	/** Mounts the plugin's middlewares by prefix on a loopback server, as Vite does. @returns its base URL */
+	async function serve( plugin ) {
+
+		const routes = [];
+		plugin.configureServer( { middlewares: { use: ( path, callback ) => routes.push( [ path, callback ] ) } } );
+		const server = createServer( ( req, res ) => {
+
+			const [ prefix, handler ] = routes.find( ( [ path ] ) => req.url.startsWith( path ) ) ?? [];
+			const missing = () => { res.statusCode = 404; res.end(); };
+			if ( ! handler ) return missing();
+			req.url = req.url.slice( prefix.length ) || '/';
+			handler( req, res, missing );
+
+		} );
+		await new Promise( ( resolve ) => server.listen( 0, '127.0.0.1', resolve ) );
+		cleanups.push( () => new Promise( ( resolve ) => server.close( resolve ) ) );
+		return `http://127.0.0.1:${server.address().port}`;
+
+	}
 
 } );

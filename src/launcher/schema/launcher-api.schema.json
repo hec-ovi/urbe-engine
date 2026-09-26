@@ -25,7 +25,8 @@
       "properties": {
         "name": { "type": "string", "minLength": 1 },
         "seed": { "type": "string", "minLength": 1 },
-        "size": { "enum": [ "small", "medium", "large" ] }
+        "size": { "enum": [ "small", "medium", "large" ] },
+        "theme": { "type": "string", "minLength": 1, "maxLength": 400 }
       }
     },
     "generateCityResult": {

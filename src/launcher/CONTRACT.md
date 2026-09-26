@@ -24,7 +24,7 @@ Purpose: connect the isolated game front door to a catalog and generation API wi
 - Local game loading reads and parses the selected file, passes the JSON object to `api.importGame`, validates the returned catalog, then opens the games directory.
 - Every generation action sets its stage busy, validates the API result, feeds the returned artifact to `MainMenuView.setCreationState`, and clears busy. A new city invalidates downstream artifacts in the UI; a new interior set invalidates quests and the game.
 - Automatic interior generation requires 9 through 24 locations. Nine reserves seven distinct main-story locations and two unique side-job locations. Manual mode accepts 1 through 24 explicitly selected buildings. Quest generation accepts at most three side jobs.
-- City creation accepts size alone; the server supplies its identity. Creating a game with `questId: null` permits an empty interior list. Creation refreshes the catalog when needed, then opens the new game through the validated Continue response.
+- City creation accepts size alone; the server supplies its identity. An optional `theme` asks the server to name the city in that character. Creating a game with `questId: null` permits an empty interior list. Creation refreshes the catalog when needed, then opens the new game through the validated Continue response.
 
 ## Errors
 
@@ -45,4 +45,4 @@ Purpose: connect the isolated game front door to a catalog and generation API wi
 ## Depends on
 
 - `../ui/CONTRACT.md`
-- The browser transport posts to the engine route described by [../server/schema/launcher-request.schema.json](../server/schema/launcher-request.schema.json).
+- The browser transport posts to the engine route described by [../server/schema/launcher-request.schema.json](../server/schema/launcher-request.schema.json). `HttpLauncherApi` submits the four generation stages as [creation jobs](../server/CONTRACT.md) and reads each job every two seconds until it settles, through up to five dropped reads in a row, so a stage that runs for most of an hour holds no request open; the other methods post to `/api/launcher`.

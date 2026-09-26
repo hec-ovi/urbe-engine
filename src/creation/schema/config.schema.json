@@ -2,12 +2,23 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:urbe:engine:creation:config",
   "type": "object",
-  "required": ["engineRoot", "atlasRoot", "questsRoot", "outDir"],
+  "required": ["engineRoot", "atlasRoot", "questsRoot", "themesDir", "outDir"],
   "properties": {
     "engineRoot": { "type": "string", "minLength": 1 },
     "atlasRoot": { "type": "string", "minLength": 1 },
     "questsRoot": { "type": "string", "minLength": 1 },
-    "outDir": { "type": "string", "minLength": 1 }
+    "namingRoot": { "type": "string", "minLength": 1 },
+    "themesDir": { "type": "string", "minLength": 1 },
+    "outDir": { "type": "string", "minLength": 1 },
+    "model": {
+      "type": "object",
+      "required": ["baseUrl"],
+      "properties": {
+        "baseUrl": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": false
 }

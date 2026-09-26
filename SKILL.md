@@ -9,7 +9,7 @@ Engine loads city artifacts into a first-person game with streaming, physics, NP
 
 ## Call
 
-Run `npm run play -- --port 5306` from the repository. Use `POST /api/launcher` for catalog operations, then open the returned play URL. Creation and single-building assembly are separate calls described in [CONTRACT.md](CONTRACT.md).
+Run `npm run play -- --port 5306` from the repository. Use `POST /api/launcher` for catalog operations, then open the returned play URL. Creation and single-building assembly are separate calls described in [CONTRACT.md](CONTRACT.md). A creation stage can run for most of an hour (a themed city is named and a story written through the model server), so submit it to `POST /api/creation-jobs` with the same `{method, input}` and read `GET /api/creation-jobs/<id>` until it settles ([server contract](src/server/CONTRACT.md)).
 
 Launcher JSON has `method` (required, no default) and `input` (omitted only for `catalog`). `continueGame`, `exportGame` and `exportCity` take an existing ID. `importGame` takes a game descriptor; `saveCurrent` takes a live save payload. All creation fields and defaults are linked from the [request schema](src/server/schema/launcher-request.schema.json).
 

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:server:creation-job",
+  "title": "Creation job",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "method", "state", "submittedAt", "startedAt", "finishedAt", "progress", "result", "error"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^creation-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+    "method": { "enum": ["generateCity", "generateInstances", "generateQuests", "createGame"] },
+    "state": { "enum": ["queued", "running", "succeeded", "failed"] },
+    "submittedAt": { "$ref": "#/$defs/instant" },
+    "startedAt": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/instant" }] },
+    "finishedAt": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/instant" }] },
+    "progress": {
+      "description": "The last line the stage's commands printed, while it runs and after; null before the first.",
+      "anyOf": [{ "type": "null" }, { "type": "string", "minLength": 1 }]
+    },
+    "result": {
+      "description": "The stage's launcher result once it succeeded, as POST /api/launcher answers that method.",
+      "anyOf": [{ "type": "null" }, { "type": "object" }]
+    },
+    "error": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": { "code": { "type": "string", "pattern": "^E_[A-Z_]+$" }, "message": { "type": "string" } }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "instant": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$" }
+  }
+}
