@@ -1,6 +1,7 @@
 import { pickInt } from './hash.js';
 import { landmarkFamilies } from './kit/Families.js';
 import { chooseFamily } from './kit/FamilyChoice.js';
+import { floorAssignments } from './FloorPrograms.js';
 import { lotRectangle, plateSides } from './kit/LotRectangle.js';
 import { loadFloorConstants, constantsForType, feasibleFloorRange, feasibleBasementRange } from './floorFeasibility.js';
 import { signText } from './signText.js';
@@ -160,8 +161,10 @@ export class RequestAssembler {
 	 * @param parcelId atlas parcel id
 	 * @param options.blueprint the exterior blueprint document for this building
 	 * @param options.shellGlb path to the named-mode shell GLB
-	 * @returns InteriorRequest per ../interior/schemas/request.schema.json;
-	 * assignments omitted so interior derives kinds from the blueprint floor slots
+	 * @returns InteriorRequest per ../interior/schemas/request.schema.json,
+	 * with every floor's programme assigned from the parcel's own use
+	 * ([FloorPrograms.js](FloorPrograms.js)): a shared plan's floors are named
+	 * for the class it was drawn for, not for the parcel standing on it
 	 * @throws AssemblyError E_PARCEL_UNKNOWN
 	 */
 	assembleInterior( parcelId, { blueprint, shellGlb = null } ) {
@@ -176,6 +179,7 @@ export class RequestAssembler {
 			// Metadata interior keeps; a kit building has no GLB of its own.
 			...( shellGlb ? { shellGlb } : {} ),
 			blueprint,
+			assignments: floorAssignments( parcel, blueprint ),
 			materialTheme: THEME
 		};
 
