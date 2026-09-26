@@ -217,6 +217,17 @@ export class GameplayAnimationDirector {
 
 	}
 
+	/**
+	 * The person's voice is heard: `speech` (`{ seed, loudness() }`) while a
+	 * line of theirs plays, null once it ends. Their focused rig moves its head
+	 * and neck to it, over whatever clip it plays.
+	 */
+	speaking( conversation, speech ) {
+
+		this.hero.speak( conversation?.npcId, speech );
+
+	}
+
 	/** Completes the active turn while leaving the conversation open. */
 	completeDialogueTurn( conversation ) {
 

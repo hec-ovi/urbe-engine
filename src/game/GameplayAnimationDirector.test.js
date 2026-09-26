@@ -117,6 +117,12 @@ describe( 'live gameplay animation composition', () => {
 		expect( talking() ).toBe( 'Sitting_Nodding_Loop' );
 		expect( rig.director.holdDialogueTurn( { npcId: 'stranger' }, 3 ) ).toBeNull();
 
+		// Whose voice plays reaches the focused rig, which moves its head to it.
+		const speech = { seed: 7, loudness: () => 0.1 };
+		rig.director.speaking( conversation, speech );
+		rig.director.speaking( conversation, null );
+		expect( rig.hero.speak.mock.calls ).toEqual( [ [ scheduled.npcId, speech ], [ scheduled.npcId, null ] ] );
+
 	} );
 
 	it( 'interrupts the exact NPC action for physics and holds routine projection until release', () => {
@@ -267,7 +273,7 @@ function setup( members = [ member( 'npc-1', 3 ) ] ) {
 		setAnimationClip: vi.fn(),
 		memberForNpc: vi.fn( ( npcId ) => byId.get( npcId ) ?? null )
 	};
-	const hero = { show: vi.fn( () => true ), hide: vi.fn() };
+	const hero = { show: vi.fn( () => true ), hide: vi.fn(), speak: vi.fn() };
 	const animation = { animations: REQUIRED_CLIPS.map( ( name ) => ( { name, duration: 0.5 } ) ) };
 	const director = new GameplayAnimationDirector( {
 		catalog: {

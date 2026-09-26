@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ANIMATION_URL, CROWD_CLIP_NAMES, CROWD_MODELS, avatarFor } from './CharacterCatalog.js';
 import { CharacterPoser, modelKey } from './CharacterPoser.js';
+import { SpeechGesture } from './SpeechGesture.js';
 import { FRAMES } from './VatBaker.js';
 import { streetBodies } from './StreetBodies.js';
 import { Ragdoll } from '../physics/Ragdoll.js';
@@ -21,8 +22,10 @@ const PLAIN_LOOK = { skin: WHITE, shirt: WHITE, trousers: WHITE, hair: WHITE, sl
  *
  * The rig is the crowd body the person walks in: the same variant, the same
  * painted outfit, the same hair tint on hairstyle and eyebrows and the same
- * surface response, so the swap is not seen. A look that changes while the rig
- * is resident is worn at once.
+ * surface response, and it starts in the crowd's clip at the crowd's frame,
+ * blending from there into what it plays, so the swap is not seen. A look that
+ * changes while the rig is resident is worn at once. While the person's voice
+ * plays (`speak`) the rig's head and neck move to it (SpeechGesture).
  *
  * Its shapes come from the CharacterPoser it shares with the still bodies of
  * staged scenes: read once for the run with maps downscaled to the tier's
@@ -54,6 +57,8 @@ export class HeroCharacter {
 		this.fallen = null;
 		this.fallPending = false;
 		this.request = 0;
+		/** Whose voice plays now: `{ npcId, seed, loudness() }`, or null. */
+		this.speech = null;
 
 	}
 
@@ -78,6 +83,7 @@ export class HeroCharacter {
 		// A look that changes while the rig warms is worn on the next update.
 		const look = person.look;
 		const root = this.poser.dress( source, person, `focused-${descriptor.id}` );
+		const gesture = new SpeechGesture( root );
 		this.lighting?.attachRoot( root, person.position );
 		root.visible = false;
 
@@ -99,11 +105,12 @@ export class HeroCharacter {
 		person.hero = true;
 		root.visible = true;
 		this.active = {
-			person, look, root, mixer, descriptor, key: modelKey( descriptor ),
+			person, look, root, mixer, gesture, descriptor, key: modelKey( descriptor ),
 			motions: source.motions,
 			playback: null, sequence: 0, currentAction: null, currentClip: null
 		};
 		mixer.addEventListener( 'finished', ( event ) => this.#finished( mixer, event ) );
+		this.#handOff( person );
 		this.#play( sequence, onFinished );
 
 		return true;
@@ -190,17 +197,32 @@ export class HeroCharacter {
 
 	}
 
+	/**
+	 * The person `npcId` is heard: `speech` (`{ seed, loudness() }`) while a
+	 * line of theirs plays, null once it ends. Their focused rig moves its head
+	 * and neck to it.
+	 */
+	speak( npcId, speech ) {
+
+		if ( ! npcId ) return;
+		if ( speech ) this.speech = { npcId, seed: speech.seed, loudness: speech.loudness };
+		else if ( this.speech?.npcId === npcId ) this.speech = null;
+
+	}
+
 	update( delta ) {
 
 		if ( this.fallen ) this.#fall( delta );
 		if ( ! this.active ) return;
 
-		const { person, root, mixer } = this.active;
+		const { person, root, mixer, gesture } = this.active;
 		if ( person.look !== this.active.look ) this.#wear();
 		root.position.copy( person.position );
 		root.rotation.y = person.heading;
 		this.lighting?.writeRoot( root, person.position );
+		gesture.rest();
 		mixer.update( delta );
+		gesture.update( delta, person.npcId && this.speech?.npcId === person.npcId ? this.speech : null );
 
 	}
 
@@ -288,6 +310,22 @@ export class HeroCharacter {
 
 	}
 
+	/**
+	 * Starts a new rig where the crowd body stood: in the crowd's clip at the
+	 * crowd's frame. The first segment blends from it, or carries it on when it
+	 * is the same loop.
+	 */
+	#handOff( person ) {
+
+		const { name, clip, time } = crowdFrame( this.animation, person );
+		const action = this.active.mixer.clipAction( this.active.motions.clip( clip ) );
+		action.play();
+		action.time = time;
+		this.active.currentAction = action;
+		this.active.currentClip = name;
+
+	}
+
 	#play( segments, onFinished ) {
 
 		const active = this.active;
@@ -307,7 +345,8 @@ export class HeroCharacter {
 		if ( ! segment ) return;
 		const previous = active.currentAction;
 		const action = active.mixer.clipAction( active.motions.clip( segment.clip ) );
-		action.reset();
+		// A loop asked for again plays on from where it is.
+		if ( action !== previous || ! segment.loop ) action.reset();
 		action.enabled = true;
 		action.clampWhenFinished = ! segment.loop;
 		action.setLoop( segment.loop ? THREE.LoopRepeat : THREE.LoopOnce, segment.loop ? Infinity : 1 );
@@ -360,16 +399,24 @@ function samePerson( left, right ) {
 
 }
 
-/** Reconstructs the baked person's authored frame before physics owns it. */
-function poseAtCrowdFrame( root, animation, motions, person ) {
+/** The clip a crowd body plays and how far into it the body is: its baked frame. */
+function crowdFrame( animation, person ) {
 
 	const name = CROWD_CLIP_NAMES[ person.clip ] ?? CROWD_CLIP_NAMES[ 1 ];
 	const clip = THREE.AnimationClip.findByName( animation.animations, name );
 	if ( ! clip ) throw new Error( `Pro animation library is missing ${name}` );
+	return { name, clip, time: ( ( person.frame ?? 0 ) % FRAMES / FRAMES ) * clip.duration };
+
+}
+
+/** Reconstructs the baked person's authored frame before physics owns it. */
+function poseAtCrowdFrame( root, animation, motions, person ) {
+
+	const { clip, time } = crowdFrame( animation, person );
 	const mixer = new THREE.AnimationMixer( root );
 	const action = mixer.clipAction( motions.clip( clip ) );
 	action.play();
-	mixer.setTime( ( ( person.frame ?? 0 ) % FRAMES / FRAMES ) * clip.duration );
+	mixer.setTime( time );
 	root.updateWorldMatrix( true, true );
 	action.paused = true;
 

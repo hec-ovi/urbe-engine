@@ -24,7 +24,11 @@ export function audio( seconds, value = 0.25 ) {
 
 }
 
-/** A Web Audio context on a clock the test moves; `sources` are every buffer source made, in order. */
+/**
+ * A Web Audio context on a clock the test moves; `sources` are every buffer
+ * source made, in order. An analyser reads `wave(i)`, the i-th sample of its
+ * window, which the test sets; silence until then.
+ */
 export class FakeAudioContext {
 
 	constructor() {
@@ -34,6 +38,7 @@ export class FakeAudioContext {
 		this.destination = {};
 		this.sources = [];
 		this.gains = [];
+		this.analysers = [];
 
 	}
 
@@ -42,6 +47,21 @@ export class FakeAudioContext {
 		const gain = { gain: { value: 1 }, connect: vi.fn() };
 		this.gains.push( gain );
 		return gain;
+
+	}
+
+	createAnalyser() {
+
+		const analyser = {
+			fftSize: 2048, connect: vi.fn(), wave: () => 0,
+			getFloatTimeDomainData: vi.fn( ( samples ) => {
+
+				for ( let i = 0; i < Math.min( samples.length, analyser.fftSize ); i ++ ) samples[ i ] = analyser.wave( i );
+
+			} )
+		};
+		this.analysers.push( analyser );
+		return analyser;
 
 	}
 

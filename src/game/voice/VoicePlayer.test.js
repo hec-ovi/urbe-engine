@@ -124,7 +124,7 @@ describe( 'VoicePlayer', () => {
 
 		const { player, context } = rig();
 		player.setVolume( 0.4 );
-		expect( player.output.gain.value ).toBe( 0.4 );
+		expect( context().gains[ 0 ].gain.value ).toBe( 0.4 );
 		player.setVolume( 0.7 );
 		expect( context().gains[ 0 ].gain.value ).toBe( 0.7 );
 
@@ -152,6 +152,32 @@ describe( 'VoicePlayer', () => {
 		expect( context().state ).toBe( 'suspended' );
 
 		expect( await new VoicePlayer( { AudioContextClass: undefined } ).ready() ).toBe( false );
+
+	} );
+
+	it( 'measures the loudness of what the lines play before the volume, in one buffer for the session', async () => {
+
+		const { player, context } = rig();
+		expect( player.loudness() ).toBe( 0 );
+		const line = player.play( { estimate: 0.5 } );
+		await settled();
+		line.push( audio( 0.5 ) );
+		const [ analyser ] = context().analysers;
+		const [ gain ] = context().gains;
+		expect( context().sources[ 0 ].connect ).toHaveBeenCalledWith( analyser );
+		expect( analyser.connect ).toHaveBeenCalledWith( gain );
+		expect( gain.connect ).toHaveBeenCalledWith( context().destination );
+		expect( player.loudness() ).toBe( 0 );
+
+		// A sine of amplitude 0.5 over whole periods: its RMS is 0.5 / sqrt(2), whatever the volume.
+		analyser.wave = ( i ) => 0.5 * Math.sin( 2 * Math.PI * i / 64 );
+		player.setVolume( 0.1 );
+		expect( player.loudness() ).toBeCloseTo( 0.5 / Math.SQRT2, 6 );
+		analyser.wave = ( i ) => ( i % 2 ? 0.2 : - 0.2 );
+		expect( player.loudness() ).toBeCloseTo( 0.2, 6 );
+		const [ [ first ], [ second ] ] = analyser.getFloatTimeDomainData.mock.calls.slice( - 2 );
+		expect( second ).toBe( first );
+		expect( first ).toHaveLength( analyser.fftSize );
 
 	} );
 

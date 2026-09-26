@@ -19,19 +19,26 @@ const PRIOR_SECONDS = 1;
 const LEARN_SECONDS = 1;
 /** How long asking the audio clock to run may take. */
 const RESUME_MS = 400;
+/** Samples the loudness is measured over: about 21 ms at 48 kHz. */
+const LOUDNESS_WINDOW = 1024;
 /** The presses a browser lets audio start from, heard before the page handles them. */
 const UNLOCKS = [ 'keydown', 'pointerdown' ];
 const CAPTURE = { capture: true };
 
 /**
  * Web Audio output for NPC lines: one AudioContext and volume, and a
- * Playback per line. Browsers only let audio run after a key or pointer
- * press, so `unlockOn` asks for it on presses until it runs.
+ * Playback per line. Every line passes an AnalyserNode before the volume, so
+ * `loudness()` reads what is heard whatever the volume. Browsers only let
+ * audio run after a key or pointer press, so `unlockOn` asks for it on
+ * presses until it runs.
  */
 export class VoicePlayer {
 
 	#context = null;
-	#output = null;
+	#analyser = null;
+	/** The analyser's latest samples, read into one buffer for the session. */
+	#window = null;
+	#gain = null;
 	#volume = 1;
 	/** Seconds of audio per second of arrival, learned from the lines that arrived whole. */
 	rate = PRIOR_RATE;
@@ -53,20 +60,40 @@ export class VoicePlayer {
 
 		if ( ! this.#context ) {
 
-			this.#context = new this.AudioContextClass();
-			this.#output = this.#context.createGain();
-			this.#output.gain.value = this.#volume;
-			this.#output.connect( this.#context.destination );
+			const context = this.#context = new this.AudioContextClass();
+			this.#gain = context.createGain();
+			this.#gain.gain.value = this.#volume;
+			this.#gain.connect( context.destination );
+			this.#analyser = context.createAnalyser();
+			this.#analyser.fftSize = LOUDNESS_WINDOW;
+			this.#analyser.connect( this.#gain );
+			this.#window = new Float32Array( LOUDNESS_WINDOW );
 
 		}
 		return this.#context;
 
 	}
 
-	/** Where every line's audio goes: the volume. */
+	/** Where every line's audio goes: the analyser, then the volume. */
 	get output() {
 
-		return this.context && this.#output;
+		return this.context && this.#analyser;
+
+	}
+
+	/**
+	 * The root mean square of the last LOUDNESS_WINDOW samples the lines
+	 * played, before the volume: 0 in silence, about 0.1 to 0.3 in speech.
+	 * Cheap enough for every frame; it allocates nothing and makes no clock.
+	 */
+	loudness() {
+
+		if ( ! this.#analyser ) return 0;
+		const samples = this.#window;
+		this.#analyser.getFloatTimeDomainData( samples );
+		let sum = 0;
+		for ( let i = 0; i < samples.length; i ++ ) sum += samples[ i ] * samples[ i ];
+		return Math.sqrt( sum / samples.length );
 
 	}
 
@@ -109,7 +136,7 @@ export class VoicePlayer {
 	setVolume( volume ) {
 
 		this.#volume = volume;
-		if ( this.#output ) this.#output.gain.value = volume;
+		if ( this.#gain ) this.#gain.gain.value = volume;
 
 	}
 

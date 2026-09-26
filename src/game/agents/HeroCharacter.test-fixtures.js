@@ -40,21 +40,24 @@ export function rig( name = 'body', { eyebrows = false } = {} ) {
 
 }
 
-/** The talk, sit and sprint clips a focused rig plays and a death a still lies in, on the test rig's skeleton. */
+/**
+ * The crowd's clips, the talk, sit and sprint clips a focused rig plays and a
+ * death a still lies in, on the test rig's skeleton; each a second long.
+ */
 export function animation() {
 
 	const scene = rig();
 	const times = [ 0, 1 ];
 	const values = [ 0, 0, 0, 1, 0, 0, 0, 1 ];
+	const still = ( name ) => new THREE.AnimationClip( name, 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] );
 
 	return {
 		scene,
 		animations: [
-			new THREE.AnimationClip( 'Idle_Talking_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
-			new THREE.AnimationClip( 'Sitting_Talking_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
-			new THREE.AnimationClip( 'Idle_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
-			new THREE.AnimationClip( 'Sprint_Enter', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
-			new THREE.AnimationClip( 'Sprint_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
+			...[
+				'Walk_Loop', 'Idle_Loop', 'Idle_Talking_Loop', 'Sitting_Idle_Loop', 'Sitting_Talking_Loop',
+				'Sprint_Loop', 'Crouch_Idle_Loop', 'Sprint_Enter'
+			].map( still ),
 			// Falls a quarter turn about +X over its second, as a body lies down.
 			new THREE.AnimationClip( 'Death01', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, [ 0, 0, 0, 1, Math.SQRT1_2, 0, 0, Math.SQRT1_2 ] ) ] )
 		]

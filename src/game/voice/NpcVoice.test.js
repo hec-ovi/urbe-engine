@@ -81,13 +81,14 @@ function rig( { client = fakeClient(), enabled = true } = {} ) {
 	const { player, contexts } = fakePlayer( clock );
 	const dialog = { setSpeaking: vi.fn() };
 	const hold = vi.fn();
+	const speaking = vi.fn();
 	const voice = new NpcVoice( {
-		dialog, hold, enabled, client, player, now: () => clock.ms,
+		dialog, hold, speaking, enabled, client, player, now: () => clock.ms,
 		types: [ { type: 'barista', category: 'vendor', label: 'Barista' } ],
 		persona: ( npcId ) => npcId === 'npc.mara' ? SPEAKER.persona : null
 	} );
 	const marks = () => dialog.setSpeaking.mock.calls.map( ( [ line, state ] ) => `${line.id} ${state}` );
-	return { voice, client, dialog, hold, clock, marks, context: () => contexts[ 0 ] };
+	return { voice, client, dialog, hold, speaking, clock, marks, context: () => contexts[ 0 ] };
 
 }
 
@@ -121,6 +122,44 @@ describe( 'NpcVoice', () => {
 		await flush();
 		expect( marks().at( -1 ) ).toBe( 'b idle' );
 		expect( voice.report() ).toMatchObject( { status: 'ok', requested: 2, started: 2, played: 2, bytes: 2 * ( 44 + 24000 ), failed: 0, queued: 0 } );
+
+	} );
+
+	it( 'tells the host whose voice plays, with each line\'s own seed and the loudness of what is heard, until it ends or stops', async () => {
+
+		const { voice, client, speaking, context } = rig();
+		const talk = conversation();
+		voice.said( { conversation: talk, line: { id: 'a' }, text: 'Hello there.' } );
+		voice.said( { conversation: talk, line: { id: 'b' }, text: 'Second.' } );
+		await flush();
+		answer( client.lines[ 0 ] );
+		await flush();
+		answer( client.lines[ 1 ] );
+		await flush();
+		expect( speaking.mock.calls.map( ( [ heard, speech ] ) => [ heard, speech && Object.keys( speech ) ] ) ).toEqual( [ [ talk, [ 'seed', 'loudness' ] ] ] );
+		const [ , first ] = speaking.mock.calls[ 0 ];
+		context().analysers[ 0 ].wave = () => 0.25;
+		expect( first.loudness() ).toBeCloseTo( 0.25 );
+
+		context().advance( 0.6 );
+		await flush();
+		expect( speaking.mock.calls.slice( 1 ).map( ( [ , speech ] ) => speech && 'speech' ) ).toEqual( [ null, 'speech' ] );
+		const [ , second ] = speaking.mock.calls[ 2 ];
+		expect( Number.isInteger( first.seed ) && Number.isInteger( second.seed ) ).toBe( true );
+		expect( second.seed ).not.toBe( first.seed );
+
+		// The same person saying the same words again has the same seed; a stop ends it.
+		voice.silenced();
+		await flush();
+		expect( speaking.mock.calls.at( - 1 ) ).toEqual( [ talk, null ] );
+		voice.said( { conversation: talk, line: { id: 'c' }, text: 'Hello there.' } );
+		await flush();
+		expect( speaking.mock.calls.at( - 1 )[ 1 ].seed ).toBe( first.seed );
+		const calls = speaking.mock.calls.length;
+		voice.said( { conversation: talk, line: { id: 'd' }, text: 'Not yet heard.' } );
+		voice.silenced();
+		await flush();
+		expect( speaking.mock.calls.slice( calls ) ).toEqual( [ [ talk, null ] ] );
 
 	} );
 
@@ -347,7 +386,7 @@ describe( 'NpcVoice', () => {
 		const client = fakeClient();
 		const { player, contexts } = fakePlayer();
 		const quests = { persona: ( npcId ) => npcId === 'npc.mara' ? SPEAKER.persona : null };
-		const animations = { holdDialogueTurn: vi.fn() };
+		const animations = { holdDialogueTurn: vi.fn(), speaking: vi.fn() };
 		const target = new EventTarget();
 		const dialog = { setSpeaking: vi.fn() };
 		const voice = NpcVoice.forGame( { npcTypes: null, quests, animations, target, dialog, client, player, enabled: false } );
@@ -363,6 +402,7 @@ describe( 'NpcVoice', () => {
 		answer( client.lines[ 0 ] );
 		await flush();
 		expect( animations.holdDialogueTurn ).toHaveBeenCalledWith( conversation(), expect.any( Number ) );
+		expect( animations.speaking ).toHaveBeenCalledWith( conversation(), { seed: expect.any( Number ), loudness: expect.any( Function ) } );
 		voice.setEnabled( false );
 		await flush();
 		expect( contexts[ 0 ].state ).toBe( 'suspended' );

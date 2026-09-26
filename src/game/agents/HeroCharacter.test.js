@@ -4,6 +4,7 @@ import { HeroCharacter } from './HeroCharacter.js';
 import { hairColorNode } from './HairMesh.js';
 import { look } from './Appearance.js';
 import { CROWD_SURFACE } from './CrowdMesh.js';
+import { SPEECH_LIMITS } from './SpeechGesture.js';
 import { StreetBodies } from './StreetBodies.js';
 import { Physics } from '../physics/index.js';
 import { ActorLighting } from '../light/ActorLighting.js';
@@ -279,6 +280,81 @@ describe( 'focused character', () => {
 		expect( hero.active.currentClip ).toBe( 'Sprint_Enter' );
 		hero.update( 1.1 );
 		expect( hero.active.currentClip ).toBe( 'Sprint_Loop' );
+
+	} );
+
+	it( 'starts where the crowd body stood, in its clip at its frame, and blends from there or plays the same loop on', async () => {
+
+		const hero = new HeroCharacter( { animation: animation(), loadModel: () => ( { scene: rig( 'body' ) } ) } );
+		const actionOf = ( name ) => hero.active.mixer.existingAction( hero.active.motions.clip( THREE.AnimationClip.findByName( hero.animation.animations, name ) ) );
+		// Standing idle a quarter into the loop (frame 8 of 32), then talking.
+		const person = {
+			npcId: 'n1', gender: 'male', variant: 0, appearanceSeed: 3, clip: 1, frame: 8, hero: false,
+			position: new THREE.Vector3(), heading: 0, look: outfit()
+		};
+		await hero.show( person, [ { clipName: 'Idle_Talking_Loop', loop: true, blendMs: 200 } ] );
+		const [ idle, talk ] = [ actionOf( 'Idle_Loop' ), actionOf( 'Idle_Talking_Loop' ) ];
+		expect( idle.time ).toBeCloseTo( 0.25 );
+		expect( talk.time ).toBe( 0 );
+		hero.update( 0.1 );
+		expect( idle.getEffectiveWeight() ).toBeCloseTo( 0.5 );
+		expect( talk.getEffectiveWeight() ).toBeCloseTo( 0.5 );
+		hero.update( 0.15 );
+		expect( talk.getEffectiveWeight() ).toBe( 1 );
+		expect( idle.enabled ).toBe( false );
+
+		// Seated three quarters into the loop, and sitting on: the same loop plays on from there, asked again or not.
+		hero.hide();
+		await hero.show( { ...person, clip: 3, frame: 24 }, [ { clipName: 'Sitting_Idle_Loop', loop: true } ] );
+		const sitting = actionOf( 'Sitting_Idle_Loop' );
+		expect( sitting.time ).toBeCloseTo( 0.75 );
+		hero.update( 0.1 );
+		hero.play( [ { clipName: 'Sitting_Idle_Loop', loop: true } ] );
+		expect( sitting.time ).toBeCloseTo( 0.85 );
+		expect( sitting.getEffectiveWeight() ).toBe( 1 );
+
+	} );
+
+	it( 'moves the head of the person whose voice plays over the clip, and hands it back to the clip once the voice ends', async () => {
+
+		const hero = new HeroCharacter( { animation: animation(), loadModel: () => ( { scene: rig( 'body' ) } ) } );
+		const person = {
+			npcId: 'n1', gender: 'male', variant: 0, appearanceSeed: 3, clip: 2, frame: 0, hero: false,
+			position: new THREE.Vector3(), heading: 0, look: outfit()
+		};
+		await hero.show( person );
+		const head = hero.active.root.getObjectByName( 'Head' );
+		hero.update( 1 / 60 );
+		const pose = head.quaternion.clone();
+		const turns = [];
+		const frames = ( seconds ) => {
+
+			for ( let frame = 0; frame < seconds * 60; frame ++ ) {
+
+				time += 1 / 60;
+				hero.update( 1 / 60 );
+				turns.push( head.quaternion.angleTo( pose ) );
+
+			}
+
+		};
+		let time = 0;
+		const speech = { seed: 9, loudness: () => 0.08 * ( 0.5 + 0.5 * Math.sin( 2 * Math.PI * 4 * time ) ) ** 2 };
+
+		hero.speak( 'n2', speech );
+		frames( 1 );
+		expect( Math.max( ...turns ) ).toBe( 0 );
+
+		hero.speak( 'n1', speech );
+		frames( 2 );
+		expect( Math.max( ...turns ) ).toBeGreaterThan( 0.5 * Math.PI / 180 );
+		expect( Math.max( ...turns ) ).toBeLessThan( Math.hypot( ...Object.values( SPEECH_LIMITS ) ) );
+
+		hero.speak( 'n2', null );
+		expect( hero.speech ).toMatchObject( { npcId: 'n1', seed: 9 } );
+		hero.speak( 'n1', null );
+		frames( 3 );
+		expect( head.quaternion.equals( pose ) ).toBe( true );
 
 	} );
 

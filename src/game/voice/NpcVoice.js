@@ -53,19 +53,22 @@ export class NpcVoice {
 	#upstreamFailures = 0;
 	/** Utterances still to finish per chat line, which is marked speaking until none are left. */
 	#lines = new Map();
+	/** Where a line's speech reads its loudness: the one player every line plays through. */
+	#loudness = () => this.player.loudness();
 
 	/**
 	 * @param options.dialog the ChatPanel whose lines are marked while they are voiced
 	 * @param options.types the world's NPC type definitions ({ type, category, label }), for the speaker's category and label
 	 * @param options.persona npcId -> the quest role persona the person is cast in, or null
 	 * @param options.hold (conversation, seconds) keeps the person speaking that much longer, while their audio plays
+	 * @param options.speaking (conversation, speech) hears each line's audio start, with its speech, and end, with null
 	 */
 	constructor( {
-		dialog, types = [], persona = () => null, hold = () => {}, enabled = true, volume = 1,
+		dialog, types = [], persona = () => null, hold = () => {}, speaking = () => {}, enabled = true, volume = 1,
 		client = new VoiceClient(), player = new VoicePlayer(), cache = new VoiceCache(), now = () => Date.now()
 	} ) {
 
-		Object.assign( this, { dialog, persona, hold, enabled, client, player, cache, now } );
+		Object.assign( this, { dialog, persona, hold, speaking, enabled, client, player, cache, now } );
 		this.types = new Map( types.map( ( type ) => [ type.type, type ] ) );
 		/** Voice's status as last asked: `unknown` until the first line. */
 		this.status = 'unknown';
@@ -89,8 +92,8 @@ export class NpcVoice {
 	 * The game's own voice for a loaded world: speakers typed by the world's
 	 * NPC type set (Simulation's default when it has none), cast personas
 	 * from `quests`, and the person kept talking by `animations` while their
-	 * audio plays. The audio clock unlocks on a press on `target` while voice
-	 * is on. Other options go to the constructor.
+	 * audio plays, moving to it. The audio clock unlocks on a press on
+	 * `target` while voice is on. Other options go to the constructor.
 	 */
 	static forGame( { npcTypes, quests, animations, target, ...options } ) {
 
@@ -98,7 +101,8 @@ export class NpcVoice {
 			...options,
 			types: ( npcTypes ?? DEFAULT_TYPE_SET ).types,
 			persona: ( npcId ) => quests.persona( npcId ),
-			hold: ( conversation, seconds ) => animations.holdDialogueTurn( conversation, seconds )
+			hold: ( conversation, seconds ) => animations.holdDialogueTurn( conversation, seconds ),
+			speaking: ( conversation, speech ) => animations.speaking( conversation, speech )
 		} );
 		voice.player.unlockOn( target, () => voice.enabled );
 		return voice;
@@ -188,7 +192,8 @@ export class NpcVoice {
 
 	#queue( { conversation, line, speaker, text } ) {
 
-		const utterance = { speaker, text, controller: new AbortController(), reached: Promise.withResolvers() };
+		const key = keyOf( speaker, text );
+		const utterance = { speaker, text, key, controller: new AbortController(), reached: Promise.withResolvers() };
 		this.#mark( line, 1 );
 		utterance.playback = this.player.play( {
 			estimate: text.length / CHARS_PER_SECOND,
@@ -197,6 +202,7 @@ export class NpcVoice {
 
 				this.stats.started ++;
 				this.dialog.setSpeaking( line, 'playing' );
+				this.speaking( conversation, { seed: seedOf( key ), loudness: this.#loudness } );
 
 			},
 			onAhead: ( seconds ) => this.hold( conversation, seconds )
@@ -205,9 +211,11 @@ export class NpcVoice {
 		this.#utterances.add( utterance );
 		utterance.playback.done.then( () => {
 
-			if ( utterance.playback.started && ! utterance.failed && ! utterance.controller.signal.aborted ) this.stats.played ++;
+			const { started } = utterance.playback;
+			if ( started && ! utterance.failed && ! utterance.controller.signal.aborted ) this.stats.played ++;
 			this.#utterances.delete( utterance );
 			this.#mark( line, - 1 );
+			if ( started ) this.speaking( conversation, null );
 
 		} );
 		this.#next( () => this.#load( utterance ) );
@@ -229,8 +237,7 @@ export class NpcVoice {
 	 */
 	async #load( utterance ) {
 
-		const { speaker, text, controller, playback, reached } = utterance;
-		const key = keyOf( speaker, text );
+		const { speaker, text, key, controller, playback, reached } = utterance;
 		try {
 
 			const cached = this.cache.get( key );
@@ -374,6 +381,15 @@ export function pieces( text, max = MAX_TEXT ) {
 function keyOf( speaker, text ) {
 
 	return `${speaker.id}\u001f${text}`;
+
+}
+
+/** A line's own 32-bit number (FNV-1a of its key): the same person saying the same words moves the same way. */
+function seedOf( key ) {
+
+	let hash = 2166136261;
+	for ( let i = 0; i < key.length; i ++ ) hash = Math.imul( hash ^ key.charCodeAt( i ), 16777619 );
+	return hash >>> 0;
 
 }
 
