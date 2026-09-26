@@ -74,6 +74,11 @@ function carrying( stream, manifest, value ) {
 	return drawn( stream, manifest ).find( ( [ placement ] ) => placement[ value ] !== undefined );
 }
 
+/** The first copy standing of a placement with a message to letter. */
+function lettered( stream, manifest ) {
+	return drawn( stream, manifest ).find( ( [ placement ] ) => placement.text?.length );
+}
+
 /** How much ground each cuboid top covers, in square metres. */
 function coverage( boxes ) {
 	const area = new Map();
@@ -298,24 +303,43 @@ describe( 'saved street kit runtime', () => {
 		stream.dispose();
 	} );
 
-	it( 'letters a marquee copy from the glyphs its placement names', async () => {
+	it( 'draws a marquee run\'s LED face as a panel that reads no glyphs', async () => {
 		const world = bundle(), stream = new NativeStreetStream( world.source, world.materials );
 		await stream.update( { x: 200, z: 200 }, { radius: 512 } );
-		const [ placement, handle ] = carrying( stream, world.manifest, 'text' );
-		const display = MANIFEST.kit.pieces.find( piece => piece.id === placement.piece ).surfaces
-			.find( id => MANIFEST.materials.binding.surfaces[ id ].effect === 'display' );
-		const table = stream.pieces.instances.tables.get( display );
+		const [ placement ] = lettered( stream, world.manifest );
+		const surfaces = MANIFEST.kit.pieces.find( piece => piece.id === placement.piece ).surfaces;
+		const led = surfaces.find( id => MANIFEST.materials.binding.surfaces[ id ].effect === 'led-matrix' );
+
+		// Every segment of a run carries the run's message, and the browser
+		// draws its LED field as the face alone: no surface of the piece
+		// reads a glyph, and the face stays opaque.
+		expect( led ).toBeDefined();
+		for ( const id of surfaces ) expect( stream.pieces.instances.tables.get( id ).glyphs ).toBe( 0 );
+		expect( world.materials.build( led, stream.pieces.instances.options( led ) ).transparent ).toBe( false );
+		stream.dispose();
+	} );
+
+	it( 'letters a display face from the glyphs its placement names', async () => {
+		// A saved bundle whose marquee face is a display face, as Streets
+		// published it before its LED runs: the same pieces and placements.
+		const manifest = structuredClone( MANIFEST ), binding = manifest.materials.binding;
+		const face = MANIFEST.kit.pieces.flatMap( piece => piece.surfaces ).find( id => binding.surfaces[ id ].effect === 'led-matrix' );
+		binding.surfaces[ face ] = binding.surfaces[ 'district-marquee' ];
+		const world = bundle( manifest ), stream = new NativeStreetStream( world.source, world.materials );
+		await stream.update( { x: 200, z: 200 }, { radius: 512 } );
+		const [ placement, handle ] = lettered( stream, world.manifest );
+		const table = stream.pieces.instances.tables.get( face );
 
 		// The face letters the text itself: its row holds the glyph count and
 		// one atlas index per glyph, and it draws over the frame behind it.
-		expect( table.glyphs ).toBe( Math.max( ...world.manifest.placements.placements.filter( p => p.text ).map( p => p.text.length ) ) );
-		const values = row( stream, display, handle );
+		expect( table.glyphs ).toBe( Math.max( ...manifest.placements.placements.map( p => p.text?.length ?? 0 ) ) );
+		const values = row( stream, face, handle );
 		expect( values[ 4 ] ).toBe( placement.text.length );
 		expect( values.filter( ( _, index ) => index >= 8 && index % 4 === 0 ).slice( 0, placement.text.length ) ).toEqual( placement.text );
-		expect( world.materials.build( display, stream.pieces.instances.options( display ) ).transparent ).toBe( true );
+		expect( world.materials.build( face, stream.pieces.instances.options( face ) ).transparent ).toBe( true );
 		// The frame around the face reads no glyphs of its own.
 		for ( const id of MANIFEST.kit.pieces.find( piece => piece.id === placement.piece ).surfaces ) {
-			if ( id !== display ) expect( stream.pieces.instances.tables.get( id ).glyphs ).toBe( 0 );
+			if ( id !== face ) expect( stream.pieces.instances.tables.get( id ).glyphs ).toBe( 0 );
 		}
 		stream.dispose();
 	} );

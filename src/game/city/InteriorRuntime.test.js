@@ -87,20 +87,21 @@ async function building() {
 
 }
 
-/** Every furniture id the layouts name, against one real static model. */
-function propCatalog( interior ) {
+/** Every furniture id the layouts name but the withheld ones, against one real static model. */
+function propCatalog( interior, withheld ) {
 
 	const ids = new Set( Object.values( interior.layouts ).flatMap( ( layout ) => layout.placements ).filter( ( one ) => one.prop ).map( ( one ) => one.prop ) );
 
 	// Width, depth and height, all different, the way the real catalog measures.
-	return { assets: [ ...ids ].map( ( id ) => ( { id, modelUri: 'static.glb', dimensionsMeters: [ 0.8, 0.5, 1.2 ] } ) ) };
+	return { assets: [ ...ids ].filter( ( id ) => ! withheld.includes( id ) )
+		.map( ( id ) => ( { id, modelUri: 'static.glb', dimensionsMeters: [ 0.8, 0.5, 1.2 ] } ) ) };
 
 }
 
-function interiorProps( interior ) {
+function interiorProps( interior, withheld = [] ) {
 
 	return new InteriorProps( {
-		catalog: propCatalog( interior ),
+		catalog: propCatalog( interior, withheld ),
 		baseUrl: PROP_DIR,
 		roomLights,
 		loadAsset: async ( url ) => cityGltfLoader().parseAsync( await bytesOf( url ), '' )
@@ -108,8 +109,12 @@ function interiorProps( interior ) {
 
 }
 
-/** A stream with one furnished building registered 3 m away. */
-async function stream( { props = true, elevators = null, mutate = null } = {} ) {
+/**
+ * A stream with one furnished building registered 3 m away. `withheld` names
+ * furniture its catalog leaves out, the way a world publishes local-only
+ * models this machine lacks.
+ */
+async function stream( { props = true, withheld = [], elevators = null, mutate = null } = {} ) {
 
 	const { modules } = await openModules();
 	const source = structuredClone( await building() );
@@ -117,7 +122,7 @@ async function stream( { props = true, elevators = null, mutate = null } = {} ) 
 	mutate?.( source );
 
 	const model = new InteriorStream( {
-		modules, props: props ? interiorProps( source ) : null,
+		modules, props: props ? interiorProps( source, withheld ) : null,
 		roomLights: { releaseRooms: () => {} }, haze: null, elevators
 	} );
 
@@ -446,6 +451,47 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		expect( bounds.getCenter( new THREE.Vector3() ).x ).toBeCloseTo( 0, 6 );
 
 		props.dispose();
+
+	} );
+
+	it( 'stands a floor without the furniture its catalog does not publish, and names those ids once', async () => {
+
+		const { layouts } = await building();
+		const named = ( layout ) => layouts[ layout ].placements.filter( ( one ) => one.prop ).map( ( one ) => one.prop );
+		// A piece both the ground and the middle layout name, withheld from the catalog.
+		const withheld = named( 'ground' ).find( ( id ) => named( 'middle' ).includes( id ) );
+		expect( withheld ).toBeDefined();
+		const warn = vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		const model = await stream( { withheld: [ withheld ] } );
+
+		try {
+
+			await settle( model, feetOn( 0 ) );
+			await settle( model, feetOn( 1 ) );
+
+			for ( const floor of [ 0, 1 ] ) {
+
+				const band = bandOf( model, floor );
+				const placements = floorPlacements( band.record );
+				const missing = placements.filter( ( one ) => one.prop === withheld ).length;
+
+				expect( missing ).toBeGreaterThan( 0 );
+				expect( band.state ).toBe( 'loaded' );
+				expect( band.handles ).toHaveLength( placements.length - liftCopies( placements ) - missing );
+				expect( band.copies.some( ( copy ) => copy.id === withheld ) ).toBe( false );
+				expect( band.copies.some( ( copy ) => copy.draws === model.props ) ).toBe( true );
+
+			}
+			expect( model.props.has( withheld ) ).toBe( false );
+			expect( warn.mock.calls.filter( ( [ message ] ) => message.includes( withheld ) ) )
+				.toEqual( [ [ `interior furniture ${withheld} is not in this world's catalog; its placements stand empty` ] ] );
+
+		} finally {
+
+			warn.mockRestore();
+			model.dispose();
+
+		}
 
 	} );
 

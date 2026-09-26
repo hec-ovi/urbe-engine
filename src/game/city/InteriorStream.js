@@ -386,8 +386,9 @@ export class InteriorStream {
 				throw moduleError( `${band.id} places ${placement.module}` );
 
 			}
-			// A world published without a furniture catalog stands unfurnished.
-			if ( placement.prop && ! this.props ) continue;
+			// A world published without a furniture catalog stands unfurnished,
+			// and one without this piece's model stands without that piece.
+			if ( placement.prop && ! this.props?.has( placement.prop ) ) continue;
 			copies.push( {
 				draws: placement.module ? this.modules : this.props,
 				id: placement.module ?? placement.prop,

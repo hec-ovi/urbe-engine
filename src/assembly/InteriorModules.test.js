@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { InteriorModules } from './InteriorModules.js';
+import { sha256 } from './JsonFile.js';
 
 describe( 'shared Interior geometry publication', () => {
 
@@ -64,6 +65,41 @@ describe( 'shared Interior geometry publication', () => {
 		expect( existsSync( join( directory, 'catalog.json' ) ) ).toBe( true );
 		expect( readFileSync( join( directory, 'wall.glb' ), 'utf8' ) ).toBe( 'wall' );
 		expect( readFileSync( join( directory, 'sink.glb' ), 'utf8' ) ).toBe( 'sink' );
+
+	} );
+
+	it( 'leaves out the local-only models this machine lacks with one warning, and fails on any other missing model', async () => {
+
+		const sink = { id: 'sink', modelUri: 'sink.glb', availability: 'local-only' };
+		const absent = [ 'sofa', 'bed' ].map( ( id ) => ( { id, modelUri: `models/${id}.glb`, availability: 'local-only' } ) );
+		const source = JSON.stringify( { version: 1, assets: [ sink, ...absent ] } );
+		const warn = vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		const catalogOf = ( { props } ) => readFileSync( join( process.env.URBE_SHARED_DIR, props.shared, props.file ) );
+
+		writeFileSync( join( propsDir, 'catalog.json' ), source );
+
+		try {
+
+			// The world binds the catalog it publishes: the furniture this machine can draw.
+			const partial = await publish();
+			const published = catalogOf( partial );
+			expect( JSON.parse( published ) ).toEqual( { version: 1, assets: [ sink ] } );
+			expect( partial.props.sha256 ).toBe( sha256( published ) );
+			expect( existsSync( join( process.env.URBE_SHARED_DIR, partial.props.shared, 'models' ) ) ).toBe( false );
+			expect( warn.mock.calls ).toEqual( [ [ expect.stringMatching( /^interior furniture: 2 local-only models .*: sofa, bed$/ ) ] ] );
+
+			// Once the machine holds them, the catalog travels as Interior wrote it.
+			mkdirSync( join( propsDir, 'models' ) );
+			for ( const { modelUri } of absent ) writeFileSync( join( propsDir, modelUri ), modelUri );
+			const complete = await publish();
+			expect( catalogOf( complete ).toString( 'utf8' ) ).toBe( source );
+			expect( complete.props.shared ).not.toBe( partial.props.shared );
+			expect( warn ).toHaveBeenCalledOnce();
+
+		} finally { warn.mockRestore(); }
+
+		writeFileSync( join( propsDir, 'catalog.json' ), JSON.stringify( { assets: [ sink, { id: 'chair', modelUri: 'models/chair.glb', availability: 'redistributable' } ] } ) );
+		await expect( publish() ).rejects.toMatchObject( { code: 'E_INTERIOR_FAILED', message: expect.stringContaining( 'furniture chair names a missing model models/chair.glb' ) } );
 
 	} );
 

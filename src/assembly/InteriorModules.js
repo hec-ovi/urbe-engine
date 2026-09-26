@@ -98,10 +98,15 @@ export class InteriorModules {
 
 	}
 
-	/** The furniture catalog and every model it names, copied beside the modules. */
+	/**
+	 * The furniture catalog and every model it names, copied beside the modules.
+	 * A `local-only` model is downloaded per machine and never shipped with
+	 * Interior: an entry whose model this machine lacks leaves the published
+	 * catalog, one warning names every such id, and its placements stand empty.
+	 */
 	#props( destination ) {
 
-		const source = join( this.propsDir, 'catalog.json' );
+		const source = join( this.propsDir, PROPS_FILE );
 
 		if ( ! existsSync( source ) ) {
 
@@ -109,9 +114,8 @@ export class InteriorModules {
 
 		}
 
-		copyFileSync( source, join( destination, PROPS_FILE ) );
-
-		const { document, reference } = this.#catalog( destination, PROPS_FILE );
+		const bytes = readFileSync( source );
+		const document = parseCatalog( bytes, PROPS_FILE );
 
 		if ( ! Array.isArray( document.assets ) ) {
 
@@ -119,8 +123,10 @@ export class InteriorModules {
 
 		}
 
-		// Every id a placement can name has to resolve, so the models the catalog
-		// publishes travel with it: the runtime reads them relative to this file.
+		// The runtime reads each model relative to the published catalog, so
+		// every model it names travels with it.
+		const absent = [];
+
 		for ( const asset of document.assets ) {
 
 			if ( ! asset?.modelUri ) continue;
@@ -129,6 +135,12 @@ export class InteriorModules {
 
 			if ( ! existsSync( model ) ) {
 
+				if ( asset.availability === 'local-only' ) {
+
+					absent.push( asset.id );
+					continue;
+
+				}
 				throw new AssemblyError( 'E_INTERIOR_FAILED', `furniture ${asset.id} names a missing model ${asset.modelUri}` );
 
 			}
@@ -140,7 +152,19 @@ export class InteriorModules {
 
 		}
 
-		return reference;
+		let published = bytes;
+
+		if ( absent.length ) {
+
+			console.warn( `interior furniture: ${absent.length} local-only models are not on this machine, so their placements stand empty: ${absent.join( ', ' )}` );
+			const assets = document.assets.filter( ( asset ) => ! absent.includes( asset.id ) );
+			published = Buffer.from( JSON.stringify( { ...document, assets }, null, 2 ) + '\n' );
+
+		}
+
+		writeFileSync( join( destination, PROPS_FILE ), published );
+
+		return { file: PROPS_FILE, sha256: sha256( published ) };
 
 	}
 
@@ -149,15 +173,7 @@ export class InteriorModules {
 
 		const bytes = readFileSync( join( directory, file ) );
 
-		try {
-
-			return { document: JSON.parse( bytes.toString( 'utf8' ) ), reference: { file, sha256: sha256( bytes ) } };
-
-		} catch ( error ) {
-
-			throw new AssemblyError( 'E_INTERIOR_FAILED', `${file} is not JSON: ${error.message}` );
-
-		}
+		return { document: parseCatalog( bytes, file ), reference: { file, sha256: sha256( bytes ) } };
 
 	}
 
@@ -181,6 +197,20 @@ export class InteriorModules {
 		mkdirSync( destination, { recursive: true } );
 		for ( const [ file, bytes ] of built.files ) writeFileSync( join( destination, file ), bytes );
 		writeFileSync( join( destination, 'modules.json' ), JSON.stringify( built.catalog ) + '\n' );
+
+	}
+
+}
+
+function parseCatalog( bytes, file ) {
+
+	try {
+
+		return JSON.parse( bytes.toString( 'utf8' ) );
+
+	} catch ( error ) {
+
+		throw new AssemblyError( 'E_INTERIOR_FAILED', `${file} is not JSON: ${error.message}` );
 
 	}
 

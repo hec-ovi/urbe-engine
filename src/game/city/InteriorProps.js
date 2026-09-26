@@ -32,6 +32,8 @@ export class InteriorProps {
 		this.models = new ImportedModels( loadAsset, baseUrl );
 		this.props = new Map();
 		this.loading = new Map();
+		/** Ids the catalog does not publish that a floor has named, each warned about once. */
+		this.absent = new Set();
 		this.group = new THREE.Group();
 		this.group.name = 'interior-props';
 
@@ -60,10 +62,24 @@ export class InteriorProps {
 
 	}
 
-	/** Loads whatever of these ids is not standing yet. Resolves when all are. */
+	/**
+	 * Loads whatever of these ids is not standing yet. Resolves when all are.
+	 * An id the catalog does not publish, a local-only model this machine
+	 * lacks, stands nowhere: the first request naming it warns once.
+	 */
 	async prepare( ids ) {
 
-		await Promise.all( [ ...new Set( ids ) ].map( ( id ) => this.#prop( id ) ) );
+		const wanted = [ ...new Set( ids ) ];
+		const absent = wanted.filter( ( id ) => ! this.entries.has( id ) && ! this.absent.has( id ) );
+
+		if ( absent.length ) {
+
+			for ( const id of absent ) this.absent.add( id );
+			console.warn( `interior furniture ${absent.join( ', ' )} is not in this world's catalog; its placements stand empty` );
+
+		}
+
+		await Promise.all( wanted.filter( ( id ) => this.entries.has( id ) ).map( ( id ) => this.#prop( id ) ) );
 
 	}
 
@@ -93,6 +109,7 @@ export class InteriorProps {
 		}
 		this.props.clear();
 		this.loading.clear();
+		this.absent.clear();
 		this.models.dispose();
 		this.group.clear();
 		this.group.removeFromParent();
@@ -105,8 +122,6 @@ export class InteriorProps {
 		if ( this.loading.has( id ) ) return this.loading.get( id );
 
 		const entry = this.entries.get( id );
-		if ( ! entry ) return Promise.reject( propError( `no furniture ${id} in this catalog` ) );
-
 		const pending = this.models
 			.load( { id, file: entry.modelUri, height: heightOf( entry ) } )
 			.then( ( surfaces ) => {
