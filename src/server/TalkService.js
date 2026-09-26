@@ -37,15 +37,17 @@ export class TalkService {
 
 	/**
 	 * The NPC's reply as it is spoken: `delta` text pieces, each `sentence` as it
-	 * completes, then any `offer`, then `done` with the whole reply. A completed
-	 * exchange is remembered before `done`; a failed or aborted one is not.
-	 * @param request a checked talk request: out, npc, behavior, line, timeMin, quests?, offers?, guide?
+	 * completes, then any `offer`, then `done` with the whole reply. The
+	 * `prior` lines said since the last exchange carry the conversation on up
+	 * to `line`. A completed exchange is remembered, after its prior lines,
+	 * before `done`; a failed or aborted one is not.
+	 * @param request a checked talk request: out, npc, behavior, line, timeMin, quests?, offers?, guide?, prior?
 	 * @param options.signal aborting it ends the model request
 	 */
-	async *stream( { out, npc, behavior, line, timeMin, quests = [], offers, guide }, { signal } = {} ) {
+	async *stream( { out, npc, behavior, line, timeMin, quests = [], offers, guide, prior = [] }, { signal } = {} ) {
 
 		const world = await this.#world( out );
-		const context = world.contextFor( npc, behavior, quests, timeMin, guide );
+		const context = world.contextFor( npc, behavior, quests, timeMin, { guide, prior } );
 		const name = `${npc.name.given} ${npc.name.family}`;
 		const sentences = new Sentences();
 		let index = 0;
@@ -65,7 +67,7 @@ export class TalkService {
 
 			} else {
 
-				world.remember( npc.npcId, { line, reply: event.reply, atMin: timeMin } );
+				world.remember( npc.npcId, { line, reply: event.reply, atMin: timeMin, prior } );
 				yield { type: 'done', reply: event.reply };
 
 			}
@@ -137,11 +139,12 @@ class TalkWorld {
 	}
 
 	/**
-	 * The NPC's context with exactly the questlines the browser holds now. A
+	 * The NPC's context with exactly the questlines the browser holds now, the
+	 * place it led the player to and the lines said since the last exchange. A
 	 * questline the request no longer carries leaves with a fresh context service
 	 * that keeps every NPC's memory.
 	 */
-	contextFor( npc, behavior, quests, timeMin, guide ) {
+	contextFor( npc, behavior, quests, timeMin, { guide, prior } ) {
 
 		this.port.set( npc, behavior );
 		const held = quests.filter( ( quest ) => this.definitions.has( quest.id ) );
@@ -159,7 +162,7 @@ class TalkWorld {
 			this.context.attachQuestline( QuestlineRuntime.restore( this.definitions.get( quest.id ), quest.cast, this.port, quest.state ) );
 
 		}
-		return this.context.contextFor( npc.npcId, timeMin, guide ? { guide } : {} );
+		return this.context.contextFor( npc.npcId, timeMin, { ...( guide ? { guide } : {} ), prior } );
 
 	}
 

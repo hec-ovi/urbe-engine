@@ -70,6 +70,36 @@ describe( 'TalkClient', () => {
 
 	} );
 
+	it( 'sends the lines said with the person since their last reply ahead of the line, until a reply is done', async () => {
+
+		const bodies = [];
+		let fail = false;
+		vi.stubGlobal( 'fetch', async ( _url, init ) => {
+
+			bodies.push( JSON.parse( init.body ) );
+			return fail ? Response.json( { error: 'model server down' }, { status: 502 } ) : streamed( '{"type":"done","reply":"The file."}\n' );
+
+		} );
+		const client = new TalkClient( '/out/w' );
+		client.said( 'n9', 'npc', 'Someone else.' );
+		client.said( 'n1', 'npc', '[sigh] Femke Zwart. Six days gone.' );
+		client.said( 'n1', 'player', 'And if she is alive?' );
+		const shown = [ { speaker: 'npc', text: '[sigh] Femke Zwart. Six days gone.' }, { speaker: 'player', text: 'And if she is alive?' } ];
+
+		fail = true;
+		await expect( collect( client.stream( conversation, 'What?', 0 ) ) ).rejects.toMatchObject( { status: 502 } );
+		fail = false;
+		await collect( client.stream( conversation, 'What are you talking about?', 0 ) );
+		await collect( client.stream( conversation, 'I see.', 0 ) );
+		expect( bodies.map( ( body ) => body.prior ) ).toEqual( [ shown, shown, undefined ] );
+
+		for ( let i = 0; i < 14; i ++ ) client.said( 'n1', 'npc', `${i}`.repeat( 5000 ) );
+		await collect( client.stream( conversation, 'Go on.', 0 ) );
+		expect( bodies[ 3 ].prior ).toHaveLength( 12 );
+		expect( bodies[ 3 ].prior[ 0 ].text ).toBe( '2'.repeat( 4000 ) );
+
+	} );
+
 	it( 'throws a refused or failed request with its HTTP status, and a failed stream with 502', async () => {
 
 		vi.stubGlobal( 'fetch', async () => Response.json( { error: 'talk request does not match its contract: /npc/mood' }, { status: 400 } ) );

@@ -1,16 +1,23 @@
+/** The newest lines said in a conversation that go ahead of a typed line, */
+const PRIOR_LINES = 12;
+/** each cut to this many characters. */
+const LINE_CHARS = 4000;
+
 /**
  * The browser side of a conversation: the player's line, the person they are
- * facing and what that person is doing go to the dev server's
- * /api/talk/stream, and the NPC's words come back as they are spoken. The
- * world's dialogue memory is read for a save and replaced from one through
- * /api/talk/memory. A failure throws an Error whose `status` is the HTTP
- * status the server gave.
+ * facing, what that person is doing and the lines already said to them go to
+ * the dev server's /api/talk/stream, and the NPC's words come back as they
+ * are spoken. The world's dialogue memory is read for a save and replaced
+ * from one through /api/talk/memory. A failure throws an Error whose
+ * `status` is the HTTP status the server gave.
  */
 export class TalkClient {
 
 	/** A save's memory the server has not taken yet, and the hand-over under way. */
 	#unrestored = null;
 	#handing = null;
+	/** The lines said with one person that no reply carried and the server has not remembered. */
+	#prior = { npcId: null, lines: [] };
 
 	constructor( out ) {
 
@@ -25,10 +32,28 @@ export class TalkClient {
 	}
 
 	/**
+	 * Notes a line shown in a conversation with `npcId` that no reply stream
+	 * carried: an authored opening, a story choice and its reply, a greeting,
+	 * an answer to a chat action. The next typed line to that person carries
+	 * the newest PRIOR_LINES of them as `prior`, which the server remembers
+	 * ahead of that exchange; a line said with someone else starts them again.
+	 * @param speaker 'player' or 'npc'
+	 */
+	said( npcId, speaker, text ) {
+
+		if ( this.#prior.npcId !== npcId ) this.#prior = { npcId, lines: [] };
+		this.#prior.lines = [ ...this.#prior.lines, { speaker, text: text.slice( 0, LINE_CHARS ) } ].slice( - PRIOR_LINES );
+
+	}
+
+	/**
 	 * The reply as it is spoken, one event at a time: `{ type: 'delta', text }`,
 	 * `{ type: 'sentence', index, text }`, `{ type: 'offer', kind, placeId?, name? }`
 	 * and last `{ type: 'done', reply }`. An `error` event throws with status 502.
-	 * Leaving the loop early, or aborting `signal`, ends the reply on the server.
+	 * The lines said with this person since their last reply go along, and
+	 * leave once `done` arrives, remembered with it; a reply that fails keeps
+	 * them for the next line. Leaving the loop early, or aborting `signal`,
+	 * ends the reply on the server.
 	 * @param conversation Interactor's { instance, behavior }
 	 * @param quests the questlines as they stand, QuestSession.snapshot()
 	 * @param options.guide the place this person has led the player to, { placeId, kind, name?, notes? }
@@ -37,7 +62,8 @@ export class TalkClient {
 	async *stream( conversation, line, timeMin, quests = [], { signal, guide, offers } = {} ) {
 
 		await this.#handOver();
-		const response = await this.#post( { conversation, line, timeMin, quests, guide, offers }, signal );
+		const prior = this.#prior.npcId === conversation.instance.npcId ? this.#prior.lines : [];
+		const response = await this.#post( { conversation, line, timeMin, quests, guide, offers, prior }, signal );
 		const reader = response.body.getReader();
 		const decoder = new TextDecoder();
 		let buffer = '';
@@ -54,6 +80,7 @@ export class TalkClient {
 					if ( ! text.trim() ) continue;
 					const event = JSON.parse( text );
 					if ( event.type === 'error' ) throw talkError( event.error, 502 );
+					if ( event.type === 'done' ) this.#prior.lines = this.#prior.lines.filter( ( entry ) => ! prior.includes( entry ) );
 					yield event;
 					if ( event.type === 'done' ) return;
 
@@ -111,7 +138,7 @@ export class TalkClient {
 
 	}
 
-	async #post( { conversation, line, timeMin, quests, guide, offers }, signal ) {
+	async #post( { conversation, line, timeMin, quests, guide, offers, prior }, signal ) {
 
 		const response = await fetch( '/api/talk/stream', {
 			method: 'POST',
@@ -119,7 +146,7 @@ export class TalkClient {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify( {
 				out: this.out, npc: conversation.instance, behavior: conversation.behavior, line, timeMin, quests,
-				...( guide ? { guide } : {} ), ...( offers ? { offers } : {} )
+				...( guide ? { guide } : {} ), ...( offers ? { offers } : {} ), ...( prior.length ? { prior } : {} )
 			} )
 		} );
 		if ( response.ok ) return response;

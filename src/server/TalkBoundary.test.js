@@ -67,15 +67,17 @@ describe( 'talk request contract', () => {
 
 	} );
 
-	it( 'closes the npc, offers and guide shapes', () => {
+	it( 'closes the npc, offers, guide and prior shapes', () => {
 
 		const sim = createSimulation( { seed: 'talk-drift', blueprint: FIXTURE_BLUEPRINT, interiors: FIXTURE_INTERIORS } );
 		const npc = sim.getNPCVendor( { parcelId: 'p_cafe', timeMin: 540 } );
 		const request = { out: '/out/w', npc, behavior: sim.behaviorAt( npc.npcId, 540 ), line: 'Hi', timeMin: 540 };
 		expect( boundary.input( { ...request,
 			offers: { follow: true, places: [ { placeId: 'p_rest', name: 'The Rusty Anchor' } ] },
-			guide: { placeId: 'p_rest', kind: 'parcel', name: 'The Rusty Anchor', notes: [ 'A police line crosses the door.' ] }
+			guide: { placeId: 'p_rest', kind: 'parcel', name: 'The Rusty Anchor', notes: [ 'A police line crosses the door.' ] },
+			prior: [ { speaker: 'npc', text: '[sigh] The file closes at nothing.' }, { speaker: 'player', text: 'x'.repeat( 4000 ) } ]
 		} ) ).toBeTruthy();
+		const said = { speaker: 'npc', text: 'Hm.' };
 		for ( const invalid of [
 			{ ...request, npc: { ...npc, mood: 'tired' } },
 			{ ...request, npc: { ...npc, traits: [ 'calm', 'calm' ] } },
@@ -83,7 +85,12 @@ describe( 'talk request contract', () => {
 			{ ...request, offers: { follow: true, ride: true } },
 			{ ...request, guide: { placeId: 'p_rest', kind: 'route' } },
 			{ ...request, line: 'x'.repeat( 2001 ) },
-			{ ...request, guide: { placeId: 'p_rest', kind: 'parcel', notes: [ 'x'.repeat( 2001 ) ] } }
+			{ ...request, guide: { placeId: 'p_rest', kind: 'parcel', notes: [ 'x'.repeat( 2001 ) ] } },
+			{ ...request, prior: Array( 13 ).fill( said ) },
+			{ ...request, prior: [ { ...said, speaker: 'narrator' } ] },
+			{ ...request, prior: [ { ...said, text: '' } ] },
+			{ ...request, prior: [ { ...said, text: 'x'.repeat( 4001 ) } ] },
+			{ ...request, prior: [ { ...said, atMin: 1 } ] }
 		] ) expect( () => boundary.input( invalid ) ).toThrow( /does not match its contract/ );
 		expect( boundary.input( { ...request, line: 'x'.repeat( 2000 ) } ) ).toBeTruthy();
 

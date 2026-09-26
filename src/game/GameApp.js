@@ -1021,7 +1021,7 @@ export class GameApp {
 	async #say( text, { retry = false, arrival = null } = {} ) {
 		const conversation = this.interactor?.conversation;
 		if ( ! conversation?.instance || this.dialoguePending || ! text?.trim() ) return;
-		const turn = this.#playerSays( retry || arrival ? null : text );
+		const turn = this.#playerSays( retry || arrival ? null : text, { typed: true } );
 		const current = () => this.interactor.conversation === conversation && turn === this.dialogueTurn;
 		const controller = this.dialogueAbort = new AbortController();
 		this.dialoguePending = true;
@@ -1096,10 +1096,15 @@ export class GameApp {
 		else this.#npcSays( conversation, result.line );
 	}
 
-	/** The player takes the turn and their line, if any, shows. Returns the new turn. */
-	#playerSays( text ) {
+	/**
+	 * The player takes the turn and their line, if any, shows. A line they did
+	 * not type (a story choice, a recap question, a chat action) goes with the
+	 * next typed line. Returns the new turn.
+	 */
+	#playerSays( text, { typed = false } = {} ) {
 		const turn = this.#interrupt();
 		if ( text ) this.view.dialog.addMessage( { from: 'player', name: 'You', text } );
+		if ( text && ! typed ) this.talk.said( this.interactor.conversation.npcId, 'player', text );
 		return turn;
 	}
 
@@ -1146,7 +1151,8 @@ export class GameApp {
 	/**
 	 * Every NPC line enters the chat here: it shows without its inline cues,
 	 * the person takes the speaking turn and the line observer hears the raw
-	 * text, cues and all. A whole line is heard at once. `{ streaming: true }`
+	 * text, cues and all. A whole line is heard at once and goes with the next
+	 * typed line, which a streamed reply follows already. `{ streaming: true }`
 	 * opens the line with its first text and returns it to grow: `append(text)`,
 	 * `hear(sentence)` as each sentence completes, then `finish()`, or
 	 * `discard()` for a reply that never completed.
@@ -1160,6 +1166,7 @@ export class GameApp {
 		this.animations.npcDialogueTurn( conversation );
 		if ( ! streaming ) {
 			heard( this.view.dialog.addMessage( { ...speaker, text: stripCues( text ) } ), text );
+			this.talk.said( conversation.npcId, 'npc', text );
 			return null;
 		}
 		const message = this.view.dialog.beginMessage( speaker );

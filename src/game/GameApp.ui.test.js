@@ -167,7 +167,7 @@ function dialogueApp() {
 	app.animations = {
 		playerDialogueTurn: vi.fn(), npcDialogueTurn: vi.fn(), completeDialogueTurn: vi.fn()
 	};
-	app.talk = { stream: vi.fn( () => talkStream( replyEvents( 'Down the ', 'steps.' ) ) ) };
+	app.talk = { stream: vi.fn( () => talkStream( replyEvents( 'Down the ', 'steps.' ) ) ), said: vi.fn() };
 	app.companion = { offers: () => [], talkOffers: () => null, guide: () => null };
 	app.interactor = {
 		conversation,

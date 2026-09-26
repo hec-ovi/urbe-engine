@@ -181,6 +181,24 @@ describe( 'TalkService', () => {
 
 	} );
 
+	it( 'carries the lines shown since the last reply into the conversation and remembers them ahead of the exchange', async () => {
+
+		const model = fakeModel();
+		const service = new TalkService( model, ( await servedWorld() ).root );
+		const prior = [ { speaker: 'npc', text: '[sigh] The file closes at nothing.' }, { speaker: 'player', text: 'And if she is alive?' } ];
+
+		await say( service, 'What are you talking about?', { prior } );
+		expect( model.system( 0 ) ).toContain( 'The conversation so far:\nYou: The file closes at nothing.\nPlayer: And if she is alive?' );
+		expect( model.seen[ 0 ].messages[ 1 ].content ).toContain( '"What are you talking about?"' );
+
+		await say( service, 'Go on.' );
+		expect( model.system( 1 ) ).toContain( 'You: The file closes at nothing.\nPlayer: And if she is alive?\nPlayer: What are you talking about?\nYou: Hm.' );
+		expect( ( await service.memory( '/out/w' ) )[ 0 ].memory.turns.map( ( turn ) => turn.text ) ).toEqual( [
+			'The file closes at nothing.', 'And if she is alive?', 'What are you talking about?', 'Hm.', 'Go on.', 'Hm.'
+		] );
+
+	} );
+
 	it( 'holds exactly the questlines the request carries and keeps memory when one leaves', async () => {
 
 		const model = fakeModel();

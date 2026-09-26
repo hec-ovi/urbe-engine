@@ -74,7 +74,7 @@ describe( 'driving the player through its own paths', () => {
 		app.clock = { timeMin: 1260 };
 		app.quests = { snapshot: () => [] };
 		app.animations = { playerDialogueTurn: vi.fn(), completeDialogueTurn: vi.fn(), npcDialogueTurn: vi.fn() };
-		app.talk = { stream: vi.fn( () => talkStream( replyEvents( 'Mostly I watch ', 'the cranes.' ) ) ) };
+		app.talk = { stream: vi.fn( () => talkStream( replyEvents( 'Mostly I watch ', 'the cranes.' ) ) ), said: vi.fn() };
 		app.companion = { offers: () => [], talkOffers: () => null, guide: () => null };
 		app.interactor = { conversation: { npcId: 'a301', instance: { name: { given: 'Hugo', family: 'Duarte' } }, behavior: null } };
 

@@ -34,7 +34,7 @@ function fixture( { ending = false, errand = false } = {} ) {
  app.venues={setObjective:()=>false,nameOf:()=> 'Market'};
  app.savedInventory=[];app.questItemIds=['lead'];app.input={exitLock:vi.fn(),requestLock:vi.fn()};
  app.animations={npcDialogueTurn:vi.fn(),playerDialogueTurn:vi.fn(),completeDialogueTurn:vi.fn()};
- app.talk={stream:vi.fn(()=>talkStream(replyEvents('I wish I had more to tell you.')))};
+ app.talk={stream:vi.fn(()=>talkStream(replyEvents('I wish I had more to tell you.'))),said:vi.fn()};
  const companion=app.companion={offers:vi.fn(()=>[]),talkOffers:vi.fn(()=>null),guide:vi.fn(()=>null),accepted:vi.fn(()=>false),accept:vi.fn(),acceptFromTool:vi.fn()};
  app.scenery={refresh:vi.fn()};
  // As Interactor.talkTo: the person's body, while it has one, opens a conversation when none is open.
@@ -60,6 +60,10 @@ describe('explicit quest dialogue through the playable UI',()=>{
   await user.click(chat.getByRole('button',{name:'End conversation'}));expect(state()).toEqual(initial);
   open();await user.type(chat.getByRole('textbox',{name:'say something'}),'hello{Enter}');
   await vi.waitFor(()=>expect(chat.getByText('I wish I had more to tell you.')).toBeTruthy());expect(state()).toEqual(initial);
+  // Every line shown goes with the next typed one, raw; the typed line and its streamed reply travel on their own.
+  const opening='My brother never came home. Kip found something near the quay.';
+  expect(app.talk.said.mock.calls).toEqual([['person','npc',opening],['person','player','Tell me about your brother.'],
+   ['person','npc','[sigh] He worked the cranes. He always came home before dawn.'],['person','npc',opening]]);
   expect(app.scenery.refresh).not.toHaveBeenCalled();
   const choice=chat.getByRole('button',{name:'I will find Kip and ask what he saw.'});await user.click(choice);choice.click();
 	 expect(document.activeElement).toBe(chat.getByRole('button',{name:'End conversation'}));

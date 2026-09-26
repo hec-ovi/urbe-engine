@@ -33,6 +33,19 @@
         }
       }
     },
+    "prior": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["speaker", "text"],
+        "properties": {
+          "speaker": { "enum": ["player", "npc"] },
+          "text": { "type": "string", "minLength": 1, "maxLength": 4000 }
+        }
+      }
+    },
     "guide": {
       "type": "object",
       "additionalProperties": false,
