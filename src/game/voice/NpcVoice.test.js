@@ -60,14 +60,22 @@ function answer( request, { breaks = false } = {} ) {
 
 }
 
+/** A player on fake audio contexts; `contexts` lists each one it made. */
+function fakePlayer( clock = { ms: 0 } ) {
+
+	const contexts = [];
+	const player = new VoicePlayer( {
+		AudioContextClass: class { constructor() { contexts.push( new FakeAudioContext() ); return contexts.at( - 1 ); } },
+		now: () => clock.ms
+	} );
+	return { player, contexts };
+
+}
+
 function rig( { client = fakeClient(), enabled = true } = {} ) {
 
 	const clock = { ms: 0 };
-	let context = null;
-	const player = new VoicePlayer( {
-		AudioContextClass: class { constructor() { return context = new FakeAudioContext(); } },
-		now: () => clock.ms
-	} );
+	const { player, contexts } = fakePlayer( clock );
 	const dialog = { setSpeaking: vi.fn() };
 	const hold = vi.fn();
 	const voice = new NpcVoice( {
@@ -76,7 +84,7 @@ function rig( { client = fakeClient(), enabled = true } = {} ) {
 		persona: ( npcId ) => npcId === 'npc.mara' ? SPEAKER.persona : null
 	} );
 	const marks = () => dialog.setSpeaking.mock.calls.map( ( [ line, state ] ) => `${line.id} ${state}` );
-	return { voice, client, dialog, hold, clock, marks, context: () => context };
+	return { voice, client, dialog, hold, clock, marks, context: () => contexts[ 0 ] };
 
 }
 
@@ -203,7 +211,7 @@ describe( 'NpcVoice', () => {
 		context().advance( 1 );
 		await say( 'd', 'Broken.' );
 		expect( client.lines ).toHaveLength( 3 );
-		expect( voice.report() ).toMatchObject( { cached: 1, failed: 1, error: 'terminated' } );
+		expect( voice.report() ).toMatchObject( { started: 3, played: 2, cached: 1, failed: 1, error: 'terminated' } );
 
 	} );
 
@@ -222,6 +230,66 @@ describe( 'NpcVoice', () => {
 		expect( group ).toBe( voice.group );
 		expect( items ).toHaveLength( 8 );
 		expect( items[ 0 ] ).toEqual( { text: 'Reply 0.', speaker: SPEAKER } );
+
+	} );
+
+	it( 'sends the lines the player may hear next only once the lines said before them have loaded, and drops them once silenced', async () => {
+
+		const { voice, client } = rig();
+		voice.said( { conversation: conversation(), line: { id: 'a' }, text: 'Opening.' } );
+		voice.upcoming( { conversation: conversation(), texts: [ 'Reply A.', 'Reply B.' ] } );
+		await flush();
+		expect( client.speak ).toHaveBeenCalledOnce();
+		expect( client.prefetch ).not.toHaveBeenCalled();
+		answer( client.lines[ 0 ] );
+		await flush();
+		expect( client.prefetched ).toEqual( [ { group: voice.group, items: [ { text: 'Reply A.', speaker: SPEAKER }, { text: 'Reply B.', speaker: SPEAKER } ] } ] );
+
+		voice.said( { conversation: conversation(), line: { id: 'b' }, text: 'Another topic.' } );
+		voice.upcoming( { conversation: conversation(), texts: [ 'Reply C.' ] } );
+		await flush();
+		voice.silenced();
+		await flush();
+		expect( client.prefetch ).toHaveBeenCalledOnce();
+
+	} );
+
+	it( 'as the game\'s voice, types speakers by the world\'s set or Simulation\'s default, casts personas from the quests and unlocks audio only while on', async () => {
+
+		const client = fakeClient();
+		const { player, contexts } = fakePlayer();
+		const quests = { persona: ( npcId ) => npcId === 'npc.mara' ? SPEAKER.persona : null };
+		const animations = { holdDialogueTurn: vi.fn() };
+		const target = new EventTarget();
+		const dialog = { setSpeaking: vi.fn() };
+		const voice = NpcVoice.forGame( { npcTypes: null, quests, animations, target, dialog, client, player, enabled: false } );
+		target.dispatchEvent( new Event( 'keydown' ) );
+		expect( contexts ).toHaveLength( 0 );
+		voice.setEnabled( true );
+		target.dispatchEvent( new Event( 'pointerdown' ) );
+		expect( contexts ).toHaveLength( 1 );
+
+		voice.said( { conversation: conversation(), line: { id: 'a' }, text: 'Hello.' } );
+		await flush();
+		expect( client.lines[ 0 ].line.speaker ).toEqual( SPEAKER );
+		answer( client.lines[ 0 ] );
+		await flush();
+		expect( animations.holdDialogueTurn ).toHaveBeenCalledWith( conversation(), expect.any( Number ) );
+		voice.setEnabled( false );
+		await flush();
+		expect( contexts[ 0 ].state ).toBe( 'suspended' );
+		voice.setEnabled( true );
+		await flush();
+		expect( contexts[ 0 ].state ).toBe( 'running' );
+
+		const themed = NpcVoice.forGame( {
+			npcTypes: { types: [ { type: 'barista', category: 'street', label: 'Night brewer' } ] },
+			quests: { persona: () => null }, animations, target, dialog, client, player
+		} );
+		themed.said( { conversation: conversation(), line: { id: 'b' }, text: 'Hello.' } );
+		await flush();
+		const { persona: _, ...uncast } = SPEAKER;
+		expect( client.lines[ 1 ].line.speaker ).toStrictEqual( { ...uncast, category: 'street', label: 'Night brewer' } );
 
 	} );
 

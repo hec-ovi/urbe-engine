@@ -18,18 +18,6 @@ export class VoiceCache {
 
 	}
 
-	get bytes() {
-
-		return this.#bytes;
-
-	}
-
-	get size() {
-
-		return this.#lines.size;
-
-	}
-
 	has( key ) {
 
 		return this.#lines.has( key );
@@ -49,7 +37,7 @@ export class VoiceCache {
 
 	set( key, samples ) {
 
-		this.delete( key );
+		this.#drop( key );
 		const bytes = samples.length * BYTES_PER_SAMPLE;
 		if ( bytes > this.maxBytes ) return;
 		this.#lines.set( key, samples );
@@ -57,25 +45,18 @@ export class VoiceCache {
 		for ( const [ oldest ] of this.#lines ) {
 
 			if ( this.#bytes <= this.maxBytes && this.#lines.size <= this.maxEntries ) break;
-			this.delete( oldest );
+			this.#drop( oldest );
 
 		}
 
 	}
 
-	delete( key ) {
+	#drop( key ) {
 
 		const samples = this.#lines.get( key );
 		if ( ! samples ) return;
 		this.#lines.delete( key );
 		this.#bytes -= samples.length * BYTES_PER_SAMPLE;
-
-	}
-
-	clear() {
-
-		this.#lines.clear();
-		this.#bytes = 0;
 
 	}
 

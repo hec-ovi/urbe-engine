@@ -132,13 +132,46 @@ describe( 'VoicePlayer', () => {
 		context().resume = () => Promise.resolve();
 		expect( await player.ready() ).toBe( false );
 		const target = new EventTarget();
+		let wanted = false;
 		context().resume = vi.fn( () => { context().state = 'running'; return Promise.resolve(); } );
-		player.unlockOn( target );
+		player.unlockOn( target, () => wanted );
+		target.dispatchEvent( new Event( 'keydown' ) );
+		expect( context().resume ).not.toHaveBeenCalled();
+		wanted = true;
 		target.dispatchEvent( new Event( 'keydown' ) );
 		expect( context().resume ).toHaveBeenCalledOnce();
 		expect( await player.ready() ).toBe( true );
+		context().state = 'suspended';
+		target.dispatchEvent( new Event( 'pointerdown' ) );
+		expect( context().resume ).toHaveBeenCalledOnce();
+
+		player.resume();
+		expect( context().resume ).toHaveBeenCalledTimes( 2 );
+		player.suspend();
+		await settled();
+		expect( context().state ).toBe( 'suspended' );
 
 		expect( await new VoicePlayer( { AudioContextClass: undefined } ).ready() ).toBe( false );
+
+	} );
+
+	it( 'makes no audio clock for a press while it is not wanted, nor to rest or run one, and stops listening once one runs', () => {
+
+		const contexts = [];
+		const player = new VoicePlayer( { AudioContextClass: class { constructor() { contexts.push( this ); } } } );
+		const target = new EventTarget();
+		player.unlockOn( target, () => false );
+		target.dispatchEvent( new Event( 'keydown' ) );
+		player.suspend();
+		player.resume();
+		expect( contexts ).toHaveLength( 0 );
+
+		const running = rig();
+		const wanted = vi.fn( () => true );
+		running.player.unlockOn( target, wanted );
+		target.dispatchEvent( new Event( 'keydown' ) );
+		target.dispatchEvent( new Event( 'pointerdown' ) );
+		expect( wanted ).toHaveBeenCalledOnce();
 
 	} );
 

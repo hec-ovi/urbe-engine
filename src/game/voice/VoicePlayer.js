@@ -19,11 +19,14 @@ const PRIOR_SECONDS = 1;
 const LEARN_SECONDS = 1;
 /** How long asking the audio clock to run may take. */
 const RESUME_MS = 400;
+/** The presses a browser lets audio start from, heard before the page handles them. */
+const UNLOCKS = [ 'keydown', 'pointerdown' ];
+const CAPTURE = { capture: true };
 
 /**
  * Web Audio output for NPC lines: one AudioContext and volume, and a
  * Playback per line. Browsers only let audio run after a key or pointer
- * press, so `unlockOn` asks for it on every press until it runs.
+ * press, so `unlockOn` asks for it on presses until it runs.
  */
 export class VoicePlayer {
 
@@ -67,11 +70,38 @@ export class VoicePlayer {
 
 	}
 
-	unlockOn( target ) {
+	/**
+	 * Asks the audio clock to run on each key or pointer press on `target`
+	 * while `wanted()` holds, and stops listening once it runs. No press made
+	 * while it is not wanted creates the clock.
+	 */
+	unlockOn( target, wanted = () => true ) {
 
 		if ( ! this.supported ) return;
-		const unlock = () => this.context.state === 'running' || this.context.resume().catch( () => {} );
-		for ( const type of [ 'keydown', 'pointerdown' ] ) target.addEventListener( type, unlock, { capture: true } );
+		const done = () => UNLOCKS.forEach( ( type ) => target.removeEventListener( type, unlock, CAPTURE ) );
+		const unlock = () => {
+
+			if ( ! wanted() ) return;
+			const context = this.context;
+			if ( context.state === 'running' ) return done();
+			context.resume().then( () => context.state === 'running' && done(), () => {} );
+
+		};
+		UNLOCKS.forEach( ( type ) => target.addEventListener( type, unlock, CAPTURE ) );
+
+	}
+
+	/** Lets the audio clock rest, once there is one. */
+	suspend() {
+
+		this.#context?.suspend().catch( () => {} );
+
+	}
+
+	/** Asks a resting audio clock to run; from a press or a setting change the browser allows it. */
+	resume() {
+
+		this.#context?.resume().catch( () => {} );
 
 	}
 

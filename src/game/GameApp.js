@@ -5,7 +5,6 @@ import { TextureSource } from '../building/TextureSource.js';
 import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { NpcVoice } from './voice/NpcVoice.js';
-import { DEFAULT_TYPE_SET } from '../../../simulation/dist/index.js';
 import { stripCues } from '../../../quests/dist/runtime.js';
 import { QuestSession } from './quests/QuestSession.js';
 import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
@@ -451,18 +450,6 @@ export class GameApp {
 			game ? [ ...game.quests, ...game.sideJobs ] : [],
 			{ world: atlas, types: npcTypes }
 		);
-		if ( ! this.lineObserver ) {
-
-			this.lineObserver = this.voice = new NpcVoice( {
-				dialog: this.view.dialog,
-				types: ( npcTypes ?? DEFAULT_TYPE_SET ).types,
-				persona: ( npcId ) => this.quests.persona( npcId ),
-				hold: ( conversation, seconds ) => this.animations.holdDialogueTurn( conversation, seconds ),
-				enabled: config.voice
-			} );
-			this.voice.player.unlockOn( window );
-
-		}
 		this.savedInventory = game?.player.inventory ?? [];
 		this.questItemIds = questlines.flatMap( ( questline ) => questline.items.map( ( item ) => item.itemId ) );
 		this.#refreshInventory();
@@ -513,6 +500,13 @@ export class GameApp {
 			crowd: this.crowd,
 			hero: this.hero
 		} );
+		if ( ! this.lineObserver ) {
+
+			this.lineObserver = this.voice = NpcVoice.forGame( {
+				dialog: this.view.dialog, npcTypes, quests: this.quests, animations: this.animations, enabled: config.voice, target: window
+			} );
+
+		}
 
 		progress.step( 'loading traffic' );
 		const carModels = await cars;

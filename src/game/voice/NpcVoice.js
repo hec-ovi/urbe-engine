@@ -1,3 +1,4 @@
+import { DEFAULT_TYPE_SET } from '../../../../simulation/dist/index.js';
 import { PcmStreamDecoder } from './PcmStreamDecoder.js';
 import { VoiceCache } from './VoiceCache.js';
 import { VoiceClient } from './VoiceClient.js';
@@ -25,8 +26,9 @@ const CUE_TAGS = /\[[^\]]*\]/g;
  * is already on screen; the audio follows. A streamed line starts once enough
  * has arrived to play through (VoicePlayer). `silenced()` stops the audio and
  * drops the queue. A person without identity, age or gender is not voiced.
- * Voice being off, down or failing leaves the conversation silent and
- * otherwise untouched.
+ * Lines the player may hear next are rendered ahead once the lines said
+ * before them have loaded. Voice being off, down or failing leaves the
+ * conversation silent and otherwise untouched.
  */
 export class NpcVoice {
 
@@ -34,8 +36,10 @@ export class NpcVoice {
 	#utterances = new Set();
 	/** The last queued utterance's playback end: the next one starts after it. */
 	#tail = null;
-	/** Downloads run one at a time, in queue order, as Voice renders them. */
+	/** Downloads run one at a time, in queue order, as Voice renders them; prefetches wait their turn in it too. */
 	#loading = Promise.resolve();
+	/** Counts silences: a prefetch asked for before the latest one is dropped unsent. */
+	#silences = 0;
 	#checking = null;
 	#retryAt = 0;
 	/** Utterances still to finish per chat line, which is marked speaking until none are left. */
@@ -72,9 +76,30 @@ export class NpcVoice {
 
 	}
 
-	/** Line observer: stops what is playing and drops what is queued. */
+	/**
+	 * The game's own voice for a loaded world: speakers typed by the world's
+	 * NPC type set (Simulation's default when it has none), cast personas
+	 * from `quests`, and the person kept talking by `animations` while their
+	 * audio plays. The audio clock unlocks on a press on `target` while voice
+	 * is on. Other options go to the constructor.
+	 */
+	static forGame( { npcTypes, quests, animations, target, ...options } ) {
+
+		const voice = new NpcVoice( {
+			...options,
+			types: ( npcTypes ?? DEFAULT_TYPE_SET ).types,
+			persona: ( npcId ) => quests.persona( npcId ),
+			hold: ( conversation, seconds ) => animations.holdDialogueTurn( conversation, seconds )
+		} );
+		voice.player.unlockOn( target, () => voice.enabled );
+		return voice;
+
+	}
+
+	/** Line observer: stops what is playing and drops what is queued, prefetches not yet sent included. */
 	silenced() {
 
+		this.#silences ++;
 		for ( const utterance of this.#utterances ) {
 
 			utterance.controller.abort();
@@ -89,23 +114,30 @@ export class NpcVoice {
 	/**
 	 * Line observer: lines the player may hear next from this person, rendered
 	 * ahead so they play at once. The host sends them only while no typed reply
-	 * is pending, so they never compete with the dialogue model.
+	 * is pending, so they never compete with the dialogue model. They go to
+	 * Voice once the lines said before them have loaded, so those render first,
+	 * and not at all if the conversation was silenced meanwhile.
 	 */
-	async upcoming( { conversation, texts } ) {
+	upcoming( { conversation, texts } ) {
 
 		const speaker = this.#speaker( conversation );
 		if ( ! speaker ) return;
-		const items = texts.flatMap( ( text ) => pieces( text ) ).filter( ( text ) => ! this.cache.has( keyOf( speaker, text ) ) )
-			.slice( 0, PREFETCH_MAX ).map( ( text ) => ( { text, speaker } ) );
-		if ( ! items.length || ! ( await this.#available() ) ) return;
-		await this.client.prefetch( this.group, items ).catch( ( error ) => console.warn( 'voice prefetch:', error.message ) );
+		const silences = this.#silences;
+		return this.#next( () => this.#prefetch( speaker, texts, silences ) );
 
 	}
 
+	/** Off stops the voice and rests the audio clock; on, from the settings, lets it run again. */
 	setEnabled( enabled ) {
 
 		this.enabled = enabled;
-		if ( ! enabled ) this.silenced();
+		if ( enabled ) this.player.resume();
+		else {
+
+			this.silenced();
+			this.player.suspend();
+
+		}
 
 	}
 
@@ -151,30 +183,41 @@ export class NpcVoice {
 		this.#utterances.add( utterance );
 		utterance.playback.done.then( () => {
 
-			if ( utterance.playback.started && ! utterance.controller.signal.aborted ) this.stats.played ++;
+			if ( utterance.playback.started && ! utterance.failed && ! utterance.controller.signal.aborted ) this.stats.played ++;
 			this.#utterances.delete( utterance );
 			this.#mark( line, - 1 );
 
 		} );
-		this.#loading = this.#loading.then( () => this.#load( utterance ) ).catch( ( error ) => console.error( 'voice:', error ) );
+		this.#next( () => this.#load( utterance ) );
 
 	}
 
-	/** Feeds one utterance's playback from the session cache or from Voice; a line that breaks off plays what came and is not kept. */
-	async #load( { speaker, text, controller, playback } ) {
+	/** Runs `step` once the downloads and prefetches queued before it are through. */
+	#next( step ) {
 
+		return this.#loading = this.#loading.then( step ).catch( ( error ) => console.error( 'voice:', error ) );
+
+	}
+
+	/**
+	 * Feeds one utterance's playback from the session cache or from Voice. A
+	 * line that breaks off plays what came, counts as failed, not played, and
+	 * is not kept.
+	 */
+	async #load( utterance ) {
+
+		const { speaker, text, controller, playback } = utterance;
 		const key = keyOf( speaker, text );
-		const cached = this.cache.get( key );
-		if ( cached ) {
-
-			this.stats.cached ++;
-			playback.push( cached );
-			return playback.end();
-
-		}
 		try {
 
-			if ( controller.signal.aborted || ! ( await this.#available() ) || ! ( await this.player.ready() ) ) return;
+			const cached = this.cache.get( key );
+			if ( controller.signal.aborted || ! ( cached || await this.#available() ) || ! ( await this.player.ready() ) ) return;
+			if ( cached ) {
+
+				this.stats.cached ++;
+				return playback.push( cached );
+
+			}
 			this.stats.requested ++;
 			const response = await this.client.speak( { text, speaker }, { signal: controller.signal } );
 			const decoder = new PcmStreamDecoder();
@@ -193,6 +236,7 @@ export class NpcVoice {
 		} catch ( error ) {
 
 			if ( controller.signal.aborted ) return;
+			utterance.failed = true;
 			this.stats.failed ++;
 			this.stats.error = error.message;
 			if ( error.status === 503 ) this.#unavailable( error.code === 'E_LOADING' ? 'loading' : 'unreachable' );
@@ -203,6 +247,16 @@ export class NpcVoice {
 			playback.end();
 
 		}
+
+	}
+
+	/** Sends the lines not heard yet, at most a batch, as this session's prefetch group, unless silenced since `silences`. */
+	async #prefetch( speaker, texts, silences ) {
+
+		const items = texts.flatMap( ( text ) => pieces( text ) ).filter( ( text ) => ! this.cache.has( keyOf( speaker, text ) ) )
+			.slice( 0, PREFETCH_MAX ).map( ( text ) => ( { text, speaker } ) );
+		if ( ! items.length || ! ( await this.#available() ) || silences !== this.#silences ) return;
+		this.client.prefetch( this.group, items ).catch( ( error ) => console.warn( 'voice prefetch:', error.message ) );
 
 	}
 

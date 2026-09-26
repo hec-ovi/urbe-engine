@@ -44,7 +44,9 @@ export function voiceRoute( port = VoicePort.fromEnv() ) {
 	 * Answers once Voice has the first audio and pipes the rest unbuffered. A
 	 * line that breaks off, or a browser that leaves, destroys the response
 	 * before its body ends, so a partial line never reads as a whole one; the
-	 * browser leaving also stops the render, queued or streaming.
+	 * browser leaving also stops the render, queued or streaming. Only a break
+	 * while the browser still listens is logged: the upstream read fails
+	 * before the response is destroyed and the signal aborts.
 	 */
 	async function speak( req, res ) {
 
@@ -53,11 +55,9 @@ export function voiceRoute( port = VoicePort.fromEnv() ) {
 		const upstream = await port.speak( line, { signal } );
 		const headers = PASSED_HEADERS.filter( ( name ) => upstream.headers.has( name ) ).map( ( name ) => [ name, upstream.headers.get( name ) ] );
 		res.writeHead( 200, { 'Content-Type': 'audio/wav', 'Cache-Control': 'no-store', ...Object.fromEntries( headers ) } );
-		await pipeline( Readable.fromWeb( upstream.body ), res ).catch( ( error ) => {
-
-			if ( ! signal.aborted ) console.warn( 'voice: a line broke off:', messageOf( error ) );
-
-		} );
+		const body = Readable.fromWeb( upstream.body );
+		body.once( 'error', ( error ) => signal.aborted || console.warn( 'voice: a line broke off:', messageOf( error ) ) );
+		await pipeline( body, res ).catch( () => {} );
 
 	}
 

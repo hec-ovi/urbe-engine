@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createServer } from 'node:http';
 import { voiceRoute } from './voiceRoute.js';
 import { VoicePort } from './VoicePort.js';
@@ -13,6 +13,7 @@ describe( 'NPC speech HTTP boundary', () => {
 	const servers = [];
 	afterEach( async () => {
 
+		vi.restoreAllMocks();
 		for ( const server of servers.splice( 0 ) ) {
 
 			server.closeAllConnections();
@@ -59,20 +60,29 @@ describe( 'NPC speech HTTP boundary', () => {
 
 	} );
 
-	it( 'fails the read of a line that breaks off, and stops a queued line the browser leaves', async () => {
+	it( 'fails the read of a line that breaks off and logs it, and stops a line the browser leaves, queued or streaming, without a word', async () => {
 
+		const warn = vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
 		const voice = await fakeVoice();
 		const origin = await serve( new VoicePort( voice.url ) );
 		const broken = await speak( origin, { text: 'break', speaker: SPEAKER } );
 		expect( broken.status ).toBe( 200 );
 		await expect( broken.arrayBuffer() ).rejects.toThrow();
+		await vi.waitFor( () => expect( warn ).toHaveBeenCalledExactlyOnceWith( 'voice: a line broke off:', expect.any( String ) ) );
 
-		const controller = new AbortController();
-		const queued = speak( origin, { text: 'queue', speaker: SPEAKER }, controller.signal );
+		const queuedLeft = new AbortController();
+		const queued = speak( origin, { text: 'queue', speaker: SPEAKER }, queuedLeft.signal );
 		await voice.waiting;
-		controller.abort();
+		queuedLeft.abort();
 		await expect( queued ).rejects.toThrow();
 		await voice.left;
+
+		const streamingLeft = new AbortController();
+		const streaming = await speak( origin, { text: 'stream', speaker: SPEAKER }, streamingLeft.signal );
+		await streaming.body.getReader().read();
+		streamingLeft.abort();
+		await voice.streamLeft;
+		expect( warn ).toHaveBeenCalledOnce();
 
 	} );
 
@@ -165,18 +175,20 @@ describe( 'NPC speech HTTP boundary', () => {
 
 	/**
 	 * A Voice box whose line text picks the answer: `stream` sends the header and
-	 * a frame, then its last frame once released; `hit` a whole file; `break`
-	 * drops the connection mid-body; `queue` never answers and notes when its
-	 * client leaves; an error code answers with that Voice error.
+	 * a frame, then its last frame once released, and notes when its client
+	 * leaves; `hit` a whole file; `break` drops the connection mid-body; `queue`
+	 * never answers and notes when its client leaves; an error code answers with
+	 * that Voice error.
 	 */
 	async function fakeVoice() {
 
 		const voice = { health: 'ok', lines: [], prefetched: [] };
 		let release;
 		const released = new Promise( ( resolve ) => release = resolve );
-		let waiting, left;
+		let waiting, left, streamLeft;
 		voice.waiting = new Promise( ( resolve ) => waiting = resolve );
 		voice.left = new Promise( ( resolve ) => left = resolve );
+		voice.streamLeft = new Promise( ( resolve ) => streamLeft = resolve );
 		voice.release = release;
 		voice.url = await listen( async ( request, response ) => {
 
@@ -208,6 +220,7 @@ describe( 'NPC speech HTTP boundary', () => {
 			response.writeHead( 200, { ...headers, 'X-Voice-Cache': 'miss' } );
 			response.write( Buffer.concat( [ HEADER, FRAME ] ) );
 			if ( body.text === 'break' ) return setTimeout( () => response.destroy(), 20 );
+			response.on( 'close', () => response.writableFinished || streamLeft() );
 			await released;
 			response.end( FRAME );
 

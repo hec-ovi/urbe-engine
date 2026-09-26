@@ -66,6 +66,13 @@ export class FakeAudioContext {
 
 	}
 
+	suspend() {
+
+		this.state = 'suspended';
+		return Promise.resolve();
+
+	}
+
 	/** Moves the clock and ends every source whose audio has played by then. */
 	advance( seconds ) {
 
