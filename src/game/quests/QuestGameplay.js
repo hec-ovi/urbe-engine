@@ -90,8 +90,8 @@ export class QuestGameplay {
 
 			} else if ( request.kind === 'release-follow' ) {
 
-				const follow = this.continuity.serialize().follow;
-				if ( follow?.npcId !== request.npcId || follow.mode !== 'following' ) {
+				const companion = this.continuity.companion;
+				if ( companion?.npcId !== request.npcId || companion.mode !== 'following' ) {
 
 					return this.#controlFailure( request, 'conflict', `NPC ${request.npcId} is not following` );
 
@@ -490,17 +490,16 @@ export class QuestGameplay {
 			try {
 
 				const npcId = target.actorIds[ 0 ];
-				const state = this.continuity.serialize();
-				const existing = target.target.mode === 'follow-player'
-					&& state.follow?.npcId === npcId && state.follow.mode === 'following';
-				const actor = existing
-					? state.actors.find( ( candidate ) => candidate.npcId === npcId )
+				const destination = continuityPlace( target.target.to );
+				if ( target.target.mode === 'lead-player' && ! destination ) return null;
+				// A companion already in this mode, as after a reload, is this escort's.
+				const actor = this.#escorting( target )
+					? this.continuity.actor( npcId )
 					: target.target.mode === 'lead-player'
-						? this.continuity.startLead( { npcId, timeMin, destination: runtimePlace( target.target.to ) } )
+						? this.continuity.startLead( { npcId, timeMin, destination } )
 						: this.continuity.startFollow( {
 							npcId, timeMin, playerPosition: interaction.playerPosition.toArray()
 						} );
-				if ( ! actor ) return null;
 				this.crowd.syncActor( actor, interaction.members[ 0 ].position );
 				this.escort = { targetKey: target.targetKey, target };
 				return null;
@@ -546,15 +545,15 @@ export class QuestGameplay {
 		let started = false;
 		try {
 
-			const state = this.continuity.serialize();
-			const existing = state.follow?.npcId === npcId && state.follow.mode === 'following';
-			if ( state.follow && ! existing ) return {
+			const companion = this.continuity.companion;
+			const existing = companion?.npcId === npcId && companion.mode === 'following';
+			if ( companion && ! existing ) return {
 				ok: false,
-				result: this.mechanics.reject( request, `NPC ${state.follow.npcId} already has movement control.` )
+				result: this.mechanics.reject( request, `NPC ${companion.npcId} already has movement control.` )
 			};
 			started = ! existing;
 			const actor = existing
-				? state.actors.find( ( candidate ) => candidate.npcId === npcId )
+				? this.continuity.actor( npcId )
 				: this.continuity.startFollow( {
 					npcId, timeMin: request.timeMin, playerPosition: interaction.playerPosition.toArray()
 				} );
@@ -662,30 +661,87 @@ export class QuestGameplay {
 
 	}
 
+	/**
+	 * Completes the active escort once its companion and the player are at
+	 * the destination: a leader must have arrived, a follower must be at hand.
+	 * The quest step is completed while the NPC is still interrupted, then the
+	 * NPC is released into its day. An escort whose companion gave up, or
+	 * whose step closed, ends.
+	 */
 	#advanceEscort( targets, { timeMin, playerPlaces, feet } ) {
 
 		if ( ! this.escort ) return;
+		const npcId = this.escort.target.actorIds[ 0 ];
 		const target = targets.find( ( candidate ) => candidate.targetKey === this.escort.targetKey );
-		if ( ! target ) { this.escort = null; return; }
-		const state = this.continuity?.serialize();
-		const follow = state?.follow;
-		const actor = state?.actors?.find( ( candidate ) => candidate.npcId === target.actorIds[ 0 ] );
-		const nearby = actor?.position && feet.distanceTo( new THREE.Vector3().fromArray( actor.position ) ) <= ESCORT_REACH;
-		const arrivedActor = target.target.mode === 'lead-player'
-			? follow?.mode === 'leading' && actor?.animation === 'idle'
-			: follow?.mode === 'following' && nearby;
-		if ( ! arrivedActor || ! atPlace( playerPlaces, runtimePlace( target.target.to ) ) ) return;
-		try { this.continuity.stopFollow( { timeMin } ); } catch { return; }
-		this.escort = null;
+		if ( ! target || ! this.#escorting( this.escort.target ) ) {
+
+			this.escort = null;
+			this.#releaseFollower( npcId, timeMin, feet );
+			return;
+
+		}
+		const companion = this.continuity.companion;
+		const arrived = target.target.mode === 'lead-player'
+			? companion.phase === 'arrived'
+			: feet.distanceTo( new THREE.Vector3().fromArray( companion.position ) ) <= ESCORT_REACH;
+		if ( ! arrived || ! atPlace( playerPlaces, runtimePlace( target.target.to ) ) ) return;
 		const result = this.mechanics.complete( {
 			questId: target.questId, stepId: target.stepId, timeMin, event: mechanicEvent( target )
 		} );
-		if ( result.ok ) {
+		if ( ! result.ok ) return;
+		this.escort = null;
+		this.changedTargets.add( target.targetKey );
+		this.mechanicResults.push( result );
+		this.#releaseFollower( npcId, timeMin, feet );
 
-			this.changedTargets.add( target.targetKey );
-			this.mechanicResults.push( result );
+	}
+
+	/** Whether the continuity companion is this escort target's NPC, in its mode. */
+	#escorting( target ) {
+
+		const companion = this.continuity?.companion;
+		return companion?.npcId === target.actorIds[ 0 ]
+			&& companion.mode === ( target.target.mode === 'lead-player' ? 'leading' : 'following' );
+
+	}
+
+	/** The active escort for the save, or null. */
+	serializeEscort() {
+
+		const escort = this.escort;
+		return this.boundary.output( 'escort-state', escort ? {
+			questId: escort.target.questId,
+			stepId: escort.target.stepId,
+			npcId: escort.target.actorIds[ 0 ],
+			mode: escort.target.target.mode
+		} : null );
+
+	}
+
+	/**
+	 * Takes back a saved escort when its step is still open and the restored
+	 * continuity companion is the same NPC in the same mode. A companion left
+	 * over from an escort that cannot be taken back is released.
+	 */
+	restoreEscort( request ) {
+
+		this.boundary.input( 'escort-restore-request', request );
+		const saved = request.state;
+		if ( this.escort || ! saved ) return false;
+		const target = this.#mechanicTargets( request.timeMin ).find( ( candidate ) =>
+			candidate.kind === 'escort'
+			&& candidate.questId === saved.questId
+			&& candidate.stepId === saved.stepId
+			&& candidate.actorIds[ 0 ] === saved.npcId
+			&& candidate.target.mode === saved.mode );
+		if ( target && this.#escorting( target ) ) {
+
+			this.escort = { targetKey: target.targetKey, target };
+			return true;
 
 		}
+		if ( this.continuity?.companion?.npcId === saved.npcId ) this.#releaseFollower( saved.npcId, request.timeMin, null );
+		return false;
 
 	}
 
@@ -772,11 +828,8 @@ export class QuestGameplay {
 
 		const npcId = tracked.passengerNpcId;
 		if ( ! npcId ) return true;
-		if ( ! this.continuity ) return false;
-		const state = this.continuity.serialize();
-		if ( state.follow?.npcId !== npcId || state.follow.mode !== 'following' ) return false;
-		const actor = state.actors.find( ( candidate ) => candidate.npcId === npcId );
-		if ( ! actor ) return false;
+		if ( ! this.#following( npcId ) ) return false;
+		const actor = this.continuity.actor( npcId );
 		const player = new THREE.Vector3().fromArray( position );
 		if ( player.distanceTo( new THREE.Vector3().fromArray( actor.position ) ) > ESCORT_REACH ) return false;
 		return Boolean( this.crowd.syncActor( actor, player ) );
@@ -805,26 +858,19 @@ export class QuestGameplay {
 	#restoredPassenger( target, routeId ) {
 
 		if ( target.actorIds.length === 0 ) return true;
-		if ( ! this.continuity ) return false;
 		const npcId = target.actorIds[ 0 ];
-		const state = this.continuity.serialize();
-		const actor = state.actors.find( ( candidate ) => candidate.npcId === npcId );
-		return state.follow?.npcId === npcId
-			&& state.follow.mode === 'following'
-			&& actor?.place?.kind === 'route'
-			&& actor.place.id === routeId;
+		if ( ! this.#following( npcId ) ) return false;
+		const place = this.continuity.actor( npcId ).place;
+		return place.kind === 'route' && place.id === routeId;
 
 	}
 
 	#restoredGroundPassenger( target, position ) {
 
 		if ( target.actorIds.length === 0 ) return true;
-		if ( ! this.continuity ) return false;
 		const npcId = target.actorIds[ 0 ];
-		const state = this.continuity.serialize();
-		const actor = state.actors.find( ( candidate ) => candidate.npcId === npcId );
-		if ( state.follow?.npcId !== npcId || state.follow.mode !== 'following' || ! actor ) return false;
-		return Boolean( this.crowd.syncActor( actor, new THREE.Vector3().fromArray( position ) ) );
+		if ( ! this.#following( npcId ) ) return false;
+		return Boolean( this.crowd.syncActor( this.continuity.actor( npcId ), new THREE.Vector3().fromArray( position ) ) );
 
 	}
 
@@ -835,10 +881,8 @@ export class QuestGameplay {
 		const player = new THREE.Vector3().fromArray( position );
 		const member = this.#questMember( npcId, timeMin, player, runtimePlace( target.target.from ) );
 		if ( ! member || member.position.distanceTo( player ) > ESCORT_REACH ) return false;
-		const state = this.continuity.serialize();
-		const follow = state.follow;
-		if ( follow?.npcId === npcId && follow.mode === 'following' ) return true;
-		if ( follow ) return false;
+		if ( this.#following( npcId ) ) return true;
+		if ( this.continuity.companion ) return false;
 		try {
 
 			const actor = this.continuity.startFollow( { npcId, timeMin, playerPosition: [ ...position ] } );
@@ -882,16 +926,22 @@ export class QuestGameplay {
 
 	#releaseFollower( npcId, timeMin, player ) {
 
-		if ( ! npcId || ! this.continuity ) return false;
+		if ( ! npcId || this.continuity?.companion?.npcId !== npcId ) return false;
 		try {
 
-			const follow = this.continuity.serialize().follow;
-			if ( follow?.npcId !== npcId || ! [ 'following', 'leading' ].includes( follow.mode ) ) return false;
 			const actor = this.continuity.stopFollow( { timeMin } );
-			this.crowd.syncActor( actor, player );
+			if ( player ) this.crowd.syncActor( actor, player );
 			return true;
 
 		} catch { return false; }
+
+	}
+
+	/** Whether this NPC is the continuity companion, following the player. */
+	#following( npcId ) {
+
+		const companion = this.continuity?.companion;
+		return companion?.npcId === npcId && companion.mode === 'following';
 
 	}
 
@@ -1284,6 +1334,16 @@ function runtimePlace( place ) {
 	if ( place.districtId ) return { kind: 'district', id: place.districtId };
 	if ( place.stationId ) return { kind: 'station', id: place.stationId };
 	return { kind: 'stop', id: place.stopId };
+
+}
+
+/** The continuity place of an authored escort place: stations are walked to as their `stop`, districts have no point. */
+function continuityPlace( place ) {
+
+	if ( place.parcelId ) return { kind: 'parcel', id: place.parcelId };
+	if ( place.stationId ) return { kind: 'stop', id: place.stationId };
+	if ( place.stopId ) return { kind: 'stop', id: place.stopId };
+	return null;
 
 }
 

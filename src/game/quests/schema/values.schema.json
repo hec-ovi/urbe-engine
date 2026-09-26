@@ -13,6 +13,17 @@
         "id": { "$ref": "#/$defs/id" }
       }
     },
+    "escort": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["questId", "stepId", "npcId", "mode"],
+      "properties": {
+        "questId": { "$ref": "#/$defs/id" },
+        "stepId": { "$ref": "#/$defs/id" },
+        "npcId": { "$ref": "#/$defs/id" },
+        "mode": { "enum": ["follow-player", "lead-player"] }
+      }
+    },
     "vector3": {
       "type": "object",
       "additionalProperties": false,

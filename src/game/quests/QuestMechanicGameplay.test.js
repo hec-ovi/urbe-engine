@@ -114,6 +114,84 @@ describe( 'live measured quest mechanic hosts', () => {
 
 	} );
 
+	it( 'completes a lead escort only once the leader has arrived, before letting it go', () => {
+
+		const harness = setup( [ escortDefinition( 'lead-player' ) ] );
+		startEscort( harness );
+		expect( harness.continuity.startLead ).toHaveBeenCalledWith( {
+			npcId: 'npc.witness', timeMin: TIME, destination: { kind: 'parcel', id: 'p7' }
+		} );
+		const complete = harness.mechanics.complete.bind( harness.mechanics );
+		const controlAtCompletion = [];
+		vi.spyOn( harness.mechanics, 'complete' ).mockImplementation( ( request ) => {
+
+			controlAtCompletion.push( harness.control.follow?.mode ?? null );
+			return complete( request );
+
+		} );
+
+		// Standing still waiting for the player is not arriving.
+		harness.control.actor.position = [ 10, 0, -2 ];
+		harness.control.phase = 'waiting';
+		harness.gameplay.candidates( frame( P7, [ 10, 0, 0 ], [ 10, 1.3, -2 ] ) );
+		expect( harness.gameplay.drainMechanicResults() ).toEqual( [] );
+
+		harness.control.phase = 'arrived';
+		harness.gameplay.candidates( frame( P7, [ 10, 0, 0 ], [ 10, 1.3, -2 ] ) );
+		expect( harness.gameplay.drainMechanicResults()[ 0 ] ).toMatchObject( { ok: true, eventKind: 'escorted', progressed: true } );
+		expect( controlAtCompletion ).toEqual( [ 'leading' ] );
+		expect( harness.continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: TIME } );
+		expect( harness.gameplay.serializeEscort() ).toBeNull();
+
+	} );
+
+	it( 'walks a lead escort to a station as its continuity stop', () => {
+
+		const harness = setup( [ escortDefinition( 'lead-player', { stationId: 'station-b' } ) ] );
+		startEscort( harness );
+		expect( harness.continuity.startLead ).toHaveBeenCalledWith( {
+			npcId: 'npc.witness', timeMin: TIME, destination: { kind: 'stop', id: 'station-b' }
+		} );
+
+	} );
+
+	it( 'saves an active escort and takes it back after a reload', () => {
+
+		const source = setup( [ escortDefinition( 'lead-player' ) ] );
+		startEscort( source );
+		const state = source.gameplay.serializeEscort();
+		expect( state ).toEqual( { questId: 'escort-lead-player', stepId: 'escort', npcId: 'npc.witness', mode: 'lead-player' } );
+
+		const reloaded = setup( [ escortDefinition( 'lead-player' ) ] );
+		reloaded.control.follow = { npcId: 'npc.witness', mode: 'leading' };
+		expect( reloaded.gameplay.restoreEscort( { timeMin: TIME, state } ) ).toBe( true );
+		expect( reloaded.gameplay.serializeEscort() ).toEqual( state );
+		reloaded.control.actor.position = [ 10, 0, -2 ];
+		reloaded.control.phase = 'arrived';
+		reloaded.gameplay.candidates( frame( P7, [ 10, 0, 0 ], [ 10, 1.3, -2 ] ) );
+		expect( reloaded.gameplay.drainMechanicResults()[ 0 ] ).toMatchObject( { ok: true, eventKind: 'escorted' } );
+
+		// A companion in another mode is not this escort: it is let go.
+		const stale = setup( [ escortDefinition( 'lead-player' ) ] );
+		stale.control.follow = { npcId: 'npc.witness', mode: 'following' };
+		expect( stale.gameplay.restoreEscort( { timeMin: TIME, state } ) ).toBe( false );
+		expect( stale.continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: TIME } );
+		expect( setup( [ escortDefinition( 'lead-player' ) ] ).gameplay.restoreEscort( { timeMin: TIME, state: null } ) ).toBe( false );
+
+	} );
+
+	it( 'ends an escort whose leader gave up and offers it again', () => {
+
+		const harness = setup( [ escortDefinition( 'lead-player' ) ] );
+		const candidate = startEscort( harness );
+		expect( harness.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 1.3, -2 ] ) ) ).toEqual( [] );
+		harness.control.follow = null;
+		const offered = harness.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 1.3, -2 ] ) );
+		expect( offered.map( ( value ) => value.interaction.targetKey ) ).toEqual( [ candidate.interaction.targetKey ] );
+		expect( harness.gameplay.serializeEscort() ).toBeNull();
+
+	} );
+
 	it( 'keeps the passenger from parcel to boarding and from disembarkation to the authored destination only', () => {
 
 		const harness = setup( [ transportDefinition() ] );
@@ -196,6 +274,16 @@ describe( 'live measured quest mechanic hosts', () => {
 
 } );
 
+function startEscort( harness ) {
+
+	const candidate = harness.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 1.3, -2 ] ) )[ 0 ];
+	expect( harness.gameplay.perform( {
+		targetKey: candidate.interaction.targetKey, bindingAction: 'interact', timeMin: TIME
+	} ) ).toBeNull();
+	return candidate;
+
+}
+
 function rescue( harness ) {
 
 	const candidate = harness.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 0.75, -2 ] ) )[ 0 ];
@@ -247,21 +335,29 @@ function setup( definitions, options = {} ) {
 	] );
 	const sim = simulation( people, options );
 	const session = QuestSession.create( definitions, sim, TIME );
-	const control = { actor: actor(), actors: [], follow: null };
+	const control = { actor: actor(), actors: [], follow: null, phase: 'walking' };
 	if ( ! options.initiallyEmpty ) control.actors.push( control.actor );
+	const find = ( npcId ) => control.actors.find( ( value ) => value.npcId === npcId );
+	const take = ( request, mode ) => {
+
+		control.actor = find( request.npcId ) ?? actor( request.npcId );
+		if ( ! control.actors.includes( control.actor ) ) control.actors.push( control.actor );
+		control.actor.mode = mode;
+		control.follow = { npcId: request.npcId, mode };
+		return structuredClone( control.actor );
+
+	};
 	const continuity = {
-		serialize: vi.fn( () => ( {
-			version: '1', actors: structuredClone( control.actors ), follow: control.follow, conversation: null, pose: null
-		} ) ),
-		startFollow: vi.fn( ( request ) => {
+		get companion() {
 
-			control.actor = control.actors.find( ( value ) => value.npcId === request.npcId ) ?? actor( request.npcId );
-			if ( ! control.actors.includes( control.actor ) ) control.actors.push( control.actor );
-			control.actor.mode = 'following';
-			control.follow = { npcId: request.npcId, mode: 'following' };
-			return structuredClone( control.actor );
+			return control.follow
+				? { ...control.follow, phase: control.phase, position: [ ...find( control.follow.npcId ).position ] }
+				: null;
 
-		} ),
+		},
+		actor: vi.fn( ( npcId ) => structuredClone( find( npcId ) ?? null ) ),
+		startFollow: vi.fn( ( request ) => take( request, 'following' ) ),
+		startLead: vi.fn( ( request ) => take( request, 'leading' ) ),
 		carryFollower: vi.fn( ( request ) => {
 
 			control.actor = control.actors.find( ( value ) => value.npcId === request.npcId );
@@ -271,7 +367,7 @@ function setup( definitions, options = {} ) {
 		} ),
 		stopFollow: vi.fn( () => {
 
-			control.actor = control.actors.find( ( value ) => value.npcId === control.follow?.npcId ) ?? control.actor;
+			control.actor = find( control.follow?.npcId ) ?? control.actor;
 			control.actor.mode = 'resuming';
 			control.follow = null;
 			return structuredClone( control.actor );
@@ -357,13 +453,13 @@ function rescueDefinition() {
 
 }
 
-function escortDefinition( mode ) {
+function escortDefinition( mode, to = { parcelId: 'p7' } ) {
 
 	return quest( `escort-${mode}`, {
 		roles: [ role( 'witness', 'witness' ) ], flags: [ 'escort-done' ], endingId: 'safe',
 		steps: [ step( 'escort', {
 			kind: 'escort', roleId: 'witness', routeId: 'safe-route', mode,
-			from: { parcelId: 'p4' }, to: { parcelId: 'p7' }, completionFlag: 'escort-done'
+			from: { parcelId: 'p4' }, to, completionFlag: 'escort-done'
 		}, { endingId: 'safe' } ) ]
 	} );
 

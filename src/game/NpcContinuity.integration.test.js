@@ -54,9 +54,10 @@ describe( 'live NPC gameplay integration', () => {
 		let actor = restored.controller.serialize().actors[ 0 ];
 		for ( let step = 0; step < 300 && actor.mode === 'resuming'; step ++ ) {
 
-			actor = restored.controller.updateFollow( {
+			restored.controller.updateFollow( {
 				timeMin: TIME + 1, deltaSeconds: 1, playerPosition: PLAYER.toArray()
 			} );
+			actor = restored.controller.actor( npc.npcId );
 			restored.crowd.syncActor( actor, PLAYER );
 
 		}

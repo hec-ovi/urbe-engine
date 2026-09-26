@@ -53,6 +53,15 @@
         "spot": { "type": "string", "minLength": 1 }
       }
     },
+    "pace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["giveUpBeyond", "giveUpAfterMin"],
+      "properties": {
+        "giveUpBeyond": { "type": "number", "exclusiveMinimum": 0 },
+        "giveUpAfterMin": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
     "route": {
       "type": "object",
       "additionalProperties": false,

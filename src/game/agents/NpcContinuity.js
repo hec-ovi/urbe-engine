@@ -3,15 +3,31 @@ import { NpcContinuityError } from './NpcContinuityError.js';
 
 const WALK_SPEED = 1.4;
 const RUN_SPEED = 2.4;
+/** A leader's slowest walk while the player lags behind it. */
+const SLOW_SPEED = 0.8;
 const RUN_DISTANCE = 8;
 const STOPPING_DISTANCE = 1.8;
 const ARRIVAL_DISTANCE = 0.08;
+/** Distance below which a remaining stretch counts as already walked. */
+const EPSILON = 1e-6;
+/** A leader slows past this lag, stops and waits past the next, and walks on inside the last. */
+const LEAD_SLOW_FROM = 4;
+const LEAD_WAIT_BEYOND = 10;
+const LEAD_RESUME_WITHIN = 6;
+/** How far beside the leader's path the player may be and still count as ahead on it. */
+const LEAD_PATH_WIDTH = 6;
+/** Give-up used by a lead request that names no pace. */
+const LEAD_PACE = { giveUpBeyond: 60, giveUpAfterMin: 3 };
+/** A cached route is planned again once its moving target has gone this far from its end. */
+const FOLLOW_REPLAN = 1;
+const RETURN_REPLAN = 2;
 
 /**
- * Persistent materialization and quest-follow control for actual simulation
- * NPC ids. It owns no population or schedule data: every scheduled state is
- * projected from the simulation, and every moving point is sampled from the
- * Connections walk graph supplied through WalkRoutes.
+ * Persistent materialization and control of actual simulation NPC ids: one
+ * companion following or leading the player, walks home, conversation, crouch
+ * and quest holds. It owns no population or schedule data: every scheduled
+ * state is projected from the simulation, and every moving point is sampled
+ * from the Connections walk graph supplied through WalkRoutes.
  */
 export class NpcContinuity {
 
@@ -24,13 +40,48 @@ export class NpcContinuity {
 		this.transitRoutes = new Map( ( networks.transit?.routes ?? [] ).map( ( route ) => [ route.id, route ] ) );
 		this.places = new Map( this.boundary.input( 'places', places ).map( ( place ) => [ placeKey( place ), place ] ) );
 		this.actors = new Map();
+		/** The one companion following or leading the player. */
 		this.follow = null;
+		/** Identities walking from where control let them go back into their day, by npcId. */
+		this.returns = new Map();
 		this.conversation = null;
 		this.pose = null;
 		/** Identities a quest is keeping where they stand, by npcId. */
 		this.holds = new Map();
 		/** Rendered staff/chair placements, valid only for one schedule occurrence. */
 		this.posts = new Map();
+		/** Companion phase changes since the latest updateFollow began. */
+		this.events = [];
+
+	}
+
+	/** The companion's identity, mode, phase and position, without a validated save. */
+	get companion() {
+
+		if ( ! this.follow ) return null;
+		const { npcId, mode, phase } = this.follow;
+		return { npcId, mode, phase, position: [ ...this.actors.get( npcId ).position ] };
+
+	}
+
+	/** Every identity a quest is holding in place right now. */
+	get heldNpcIds() {
+
+		return [ ...this.holds.keys() ];
+
+	}
+
+	/** The retained state of one materialized identity, or null. */
+	actor( npcId ) {
+
+		return this.#actorMaybeOut( this.actors.get( npcId ) ?? null );
+
+	}
+
+	/** Returns and clears the companion phase changes of the latest updateFollow and later calls. */
+	drainEvents() {
+
+		return this.boundary.output( 'control-events', this.events.splice( 0 ) );
 
 	}
 
@@ -39,7 +90,7 @@ export class NpcContinuity {
 
 		this.boundary.input( 'appearance-request', request );
 		const { npcId, timeMin } = request;
-		if ( this.#controls( npcId ) ) {
+		if ( this.#controls( npcId ) || this.returns.has( npcId ) ) {
 
 			const actor = this.actors.get( npcId );
 			actor.visible = true;
@@ -62,17 +113,23 @@ export class NpcContinuity {
 			throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${npcId} is under active control` );
 
 		}
+		this.returns.delete( npcId );
 		const actor = this.actors.get( npcId );
 		if ( actor ) actor.visible = false;
 		return this.#actorMaybeOut( actor ?? null );
 
 	}
 
-	/** Reprojects every visible materialization and virtualizes distant schedule-controlled bodies. */
+	/**
+	 * Reprojects every visible materialization and virtualizes distant
+	 * schedule-controlled bodies. A walk home out of sight is finished by the
+	 * schedule it was walking back to.
+	 */
 	updateVisible( request ) {
 
 		this.boundary.input( 'visible-update', request );
 		const controlled = new Set( [ this.follow?.npcId, this.conversation?.npcId, this.pose?.npcId ].filter( Boolean ) );
+		const near = ( actor ) => distance( actor.position, request.playerPosition ) <= request.maxDistance;
 		const states = [];
 		for ( const [ npcId, actor ] of [ ...this.actors.entries() ].sort( ( a, b ) => a[ 0 ].localeCompare( b[ 0 ] ) ) ) {
 
@@ -82,17 +139,18 @@ export class NpcContinuity {
 				continue;
 
 			}
-			if ( this.holds.has( npcId ) ) {
+			if ( this.holds.has( npcId ) || ( this.returns.has( npcId ) && near( actor ) ) ) {
 
-				actor.visible = distance( actor.position, request.playerPosition ) <= request.maxDistance;
+				actor.visible = near( actor );
 				states.push( clone( actor ) );
 				continue;
 
 			}
+			this.returns.delete( npcId );
 			try {
 
 				const scheduled = this.#scheduledActor( npcId, request.timeMin );
-				scheduled.visible = distance( scheduled.position, request.playerPosition ) <= request.maxDistance;
+				scheduled.visible = near( scheduled );
 				this.actors.set( npcId, scheduled );
 				states.push( clone( scheduled ) );
 
@@ -108,16 +166,12 @@ export class NpcContinuity {
 
 	}
 
+	/** Interrupts one NPC and routes it toward the player from where its body is. */
 	startFollow( request ) {
 
 		this.boundary.input( 'follow-start', request );
-		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is in conversation` );
-		if ( this.follow ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.follow.npcId} is already following` );
-		if ( this.pose ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.pose.npcId} has an explicit pose` );
-		// A held body walks from where the quest put it, not from its rota.
-		const actor = this.holds.delete( request.npcId )
-			? this.actors.get( request.npcId )
-			: this.#scheduledActor( request.npcId, request.timeMin );
+		this.#assertNoControl();
+		const actor = this.#body( request.npcId, request.timeMin );
 		if ( actor.place.kind === 'route' ) {
 
 			throw new NpcContinuityError( 'E_NPC_PLACE', `NPC ${request.npcId} cannot start a walking follow while aboard transit` );
@@ -125,44 +179,35 @@ export class NpcContinuity {
 		}
 		const route = this.routes.route( actor.position, request.playerPosition );
 		if ( ! route ) throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${request.npcId} cannot reach the player` );
-		this.#interrupt( request.npcId, request.timeMin );
-		actor.visible = true;
+		this.#take( actor, request.timeMin );
 		actor.mode = 'following';
 		actor.animation = route.distanceMeters > STOPPING_DISTANCE ? 'walk' : 'idle';
-		this.actors.set( actor.npcId, actor );
 		this.follow = {
-			npcId: actor.npcId,
-			mode: 'following',
-			source: 'follow',
-			route: savedRoute( route, request.playerPosition, 0 ),
-			lastTimeMin: request.timeMin
+			npcId: actor.npcId, mode: 'following', phase: 'walking',
+			route: savedRoute( route, request.playerPosition ), lastTimeMin: request.timeMin,
+			...( request.pace ? { pace: { ...request.pace } } : {} )
 		};
 		return this.#actorOut( actor );
 
 	}
 
-	/** Interrupts one NPC and routes it ahead to an exact authored place. */
+	/** Interrupts one NPC and leads the player from where its body is to an exact authored place. */
 	startLead( request ) {
 
 		this.boundary.input( 'lead-start', request );
-		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is in conversation` );
-		if ( this.follow ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.follow.npcId} is already under movement control` );
-		if ( this.pose ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.pose.npcId} has an explicit pose` );
-		const held = this.holds.has( request.npcId );
-		const actor = held ? this.actors.get( request.npcId ) : this.#scheduledActor( request.npcId, request.timeMin );
+		this.#assertNoControl();
+		const actor = this.#body( request.npcId, request.timeMin );
 		if ( actor.place.kind === 'route' ) throw new NpcContinuityError( 'E_NPC_PLACE', `NPC ${request.npcId} cannot lead while aboard transit` );
 		const destination = this.#locatePlace( request.destination, null ).position;
 		const route = this.routes.route( actor.position, destination );
 		if ( ! route ) throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${request.npcId} cannot reach the escort destination` );
-		this.#interrupt( request.npcId, request.timeMin );
-		this.holds.delete( request.npcId );
-		actor.visible = true;
+		this.#take( actor, request.timeMin );
 		actor.mode = 'leading';
 		actor.animation = route.distanceMeters > ARRIVAL_DISTANCE ? 'walk' : 'idle';
-		this.actors.set( actor.npcId, actor );
 		this.follow = {
-			npcId: actor.npcId, mode: 'leading', source: 'follow',
-			route: savedRoute( route, destination, 0 ), lastTimeMin: request.timeMin
+			npcId: actor.npcId, mode: 'leading', phase: 'walking',
+			route: savedRoute( route, destination ), lastTimeMin: request.timeMin,
+			destination: clone( request.destination ), pace: { ...( request.pace ?? LEAD_PACE ) }
 		};
 		return this.#actorOut( actor );
 
@@ -178,7 +223,6 @@ export class NpcContinuity {
 
 		}
 		const actor = this.actors.get( request.npcId );
-		if ( ! actor ) throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', `NPC ${request.npcId} has no materialized actor` );
 		// Dialogue owns the physical body until close, even if transit is still
 		// publishing a passenger location for the interrupted follower.
 		if ( this.conversation?.npcId === actor.npcId ) return this.#actorOut( actor );
@@ -187,9 +231,7 @@ export class NpcContinuity {
 		actor.mode = 'following';
 		actor.animation = 'idle';
 		actor.visible = true;
-		this.follow.route = {
-			path3: [ [ ...request.position ] ], distanceMeters: 0, cursor: 0, destination: [ ...request.position ]
-		};
+		this.follow.route = restingRoute( request.position, request.position );
 		return this.#actorOut( actor );
 
 	}
@@ -198,22 +240,16 @@ export class NpcContinuity {
 	startCrouch( request ) {
 
 		this.boundary.input( 'crouch-start', request );
-		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is in conversation` );
-		if ( this.follow ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.follow.npcId} is under movement control` );
-		if ( this.pose ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.pose.npcId} already has an explicit pose` );
-		const actor = this.holds.delete( request.npcId )
-			? this.actors.get( request.npcId )
-			: this.#scheduledActor( request.npcId, request.timeMin );
+		this.#assertNoControl();
+		const actor = this.#body( request.npcId, request.timeMin );
 		if ( actor.place.kind === 'route' ) {
 
 			throw new NpcContinuityError( 'E_NPC_PLACE', `NPC ${request.npcId} cannot crouch while aboard transit` );
 
 		}
-		this.#interrupt( request.npcId, request.timeMin );
-		actor.visible = true;
+		this.#take( actor, request.timeMin );
 		actor.mode = 'posing';
 		actor.animation = selectNpcAnimation( { action: 'crouch' } );
-		this.actors.set( actor.npcId, actor );
 		this.pose = { npcId: actor.npcId, kind: 'crouch', lastTimeMin: request.timeMin };
 		return this.#actorOut( actor );
 
@@ -229,10 +265,9 @@ export class NpcContinuity {
 
 		}
 		const actor = this.actors.get( request.npcId );
-		if ( ! actor ) throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', `NPC ${request.npcId} has no materialized actor` );
 		this.#resume( actor.npcId, request.timeMin );
 		this.pose = null;
-		try { return this.#startResume( actor, request.timeMin, 'crouch' ); }
+		try { return this.#startResume( actor, request.timeMin ); }
 		catch ( error ) {
 
 			actor.mode = 'released';
@@ -243,65 +278,56 @@ export class NpcContinuity {
 
 	}
 
+	/**
+	 * Advances the companion and every walk home. Returns the companion's state,
+	 * or null when there is none; phase changes wait in `drainEvents()`.
+	 */
 	updateFollow( request ) {
 
 		this.boundary.input( 'follow-update', request );
+		this.events = [];
+		for ( const npcId of [ ...this.returns.keys() ].sort() ) this.#advanceReturn( this.actors.get( npcId ), request );
 		if ( ! this.follow ) return this.#actorMaybeOut( null );
 		const actor = this.actors.get( this.follow.npcId );
-		if ( ! actor ) return this.#releaseInvalid( 'E_NPC_UNAVAILABLE', 'followed NPC state is unavailable', request.timeMin );
+		this.follow.lastTimeMin = request.timeMin;
 		if ( this.conversation?.npcId === actor.npcId ) {
 
 			actor.mode = 'conversation';
 			actor.animation = actor.animation === 'sit' ? 'sit' : 'idle';
-			this.follow.lastTimeMin = request.timeMin;
 			return this.#actorOut( actor );
 
 		}
-		try {
+		try { this.#living( actor.npcId ); }
+		catch ( error ) { return this.#releaseInvalid( 'E_NPC_UNAVAILABLE', messageOf( error ), request.timeMin ); }
+		if ( this.#lost( actor, request ) ) {
 
-			const npc = this.simulation.getNPC( actor.npcId );
-			if ( npc.flags?.dead ) return this.#releaseInvalid( 'E_NPC_UNAVAILABLE', `NPC ${actor.npcId} is dead`, request.timeMin );
-
-		} catch ( error ) {
-
-			return this.#releaseInvalid( 'E_NPC_UNAVAILABLE', messageOf( error ), request.timeMin );
+			this.#giveUp( actor, request.timeMin );
+			return this.#actorOut( actor );
 
 		}
-
 		if ( this.follow.mode === 'following' ) this.#advanceFollowing( actor, request );
-		else if ( this.follow.mode === 'leading' ) this.#advanceLeading( actor, request );
-		else this.#advanceResume( actor, request );
-		if ( this.follow ) this.follow.lastTimeMin = request.timeMin;
+		else this.#advanceLeading( actor, request );
 		return this.#actorOut( actor );
 
 	}
 
+	/** Lets the companion go: the simulation resumes and it walks back into its day from where it stands. */
 	stopFollow( request ) {
 
 		this.boundary.input( 'follow-stop', request );
-		if ( ! this.follow ) throw new NpcContinuityError( 'E_NPC_CONFLICT', 'no NPC is following' );
-		if ( ! [ 'following', 'leading' ].includes( this.follow.mode ) ) throw new NpcContinuityError( 'E_NPC_CONFLICT', 'NPC is already returning to its schedule' );
+		if ( ! this.follow ) throw new NpcContinuityError( 'E_NPC_CONFLICT', 'no NPC is following or leading' );
 		if ( this.conversation?.npcId === this.follow.npcId ) throw new NpcContinuityError( 'E_NPC_CONFLICT', 'close the conversation before release' );
 		const actor = this.actors.get( this.follow.npcId );
-		if ( ! actor ) return this.#releaseInvalid( 'E_NPC_UNAVAILABLE', 'followed NPC state is unavailable', request.timeMin );
-		this.#resume( this.follow.npcId, request.timeMin );
-		let scheduled;
-		try { scheduled = this.#resumeTarget( actor, request.timeMin ); }
-		catch ( error ) { return this.#releaseInvalid( 'E_NPC_UNAVAILABLE', messageOf( error ), request.timeMin ); }
-		const route = this.routes.route( actor.position, scheduled.position );
-		if ( ! route ) return this.#releaseInvalid( 'E_NPC_PATH', `NPC ${actor.npcId} cannot resume its schedule`, request.timeMin );
-		actor.mode = 'resuming';
-		actor.animation = route.distanceMeters > ARRIVAL_DISTANCE ? 'walk' : scheduled.animation;
-		actor.schedule = scheduled.schedule;
-		this.follow = {
-			npcId: actor.npcId,
-			mode: 'resuming',
-			source: 'follow',
-			route: savedRoute( route, scheduled.position, 0 ),
-			lastTimeMin: request.timeMin
-		};
-		if ( route.distanceMeters <= ARRIVAL_DISTANCE ) this.#finishResume( actor, scheduled );
-		return this.#actorOut( actor );
+		this.#resume( actor.npcId, request.timeMin );
+		this.follow = null;
+		try { return this.#startResume( actor, request.timeMin ); }
+		catch {
+
+			actor.mode = 'released';
+			actor.animation = 'idle';
+			return this.#actorOut( actor );
+
+		}
 
 	}
 
@@ -314,8 +340,7 @@ export class NpcContinuity {
 
 		this.boundary.input( 'hold-start', request );
 		const { npcId, timeMin } = request;
-		const returning = this.follow?.mode === 'resuming' && this.follow.npcId === npcId;
-		if ( this.conversation?.npcId === npcId || ( this.follow?.npcId === npcId && ! returning ) || this.pose?.npcId === npcId ) {
+		if ( this.conversation?.npcId === npcId || this.follow?.npcId === npcId || this.pose?.npcId === npcId ) {
 
 			throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${npcId} is already under control` );
 
@@ -323,7 +348,7 @@ export class NpcContinuity {
 		const held = this.holds.has( npcId );
 		const actor = held ? this.actors.get( npcId ) : this.#scheduledActor( npcId, timeMin );
 		if ( ! held ) this.#interrupt( npcId, timeMin );
-		if ( returning ) this.follow = null;
+		this.returns.delete( npcId );
 		actor.position = [ ...request.position ];
 		actor.heading = request.heading;
 		actor.place = clone( request.place );
@@ -349,24 +374,8 @@ export class NpcContinuity {
 		}
 		const actor = this.actors.get( request.npcId );
 		this.holds.delete( request.npcId );
-		if ( ! actor ) throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', `NPC ${request.npcId} has no materialized actor` );
 		this.#resume( actor.npcId, request.timeMin );
-		if ( this.follow ) {
-
-			// Another identity owns the walk-back slot; this one rejoins its
-			// schedule on the next projection instead of queueing behind it.
-			actor.mode = 'schedule';
-			return this.#actorOut( actor );
-
-		}
-		return this.#startResume( actor, request.timeMin, 'conversation' );
-
-	}
-
-	/** Every identity a quest is holding in place right now. */
-	get heldNpcIds() {
-
-		return [ ...this.holds.keys() ];
+		return this.#startResume( actor, request.timeMin, { keepPost: true } );
 
 	}
 
@@ -375,14 +384,13 @@ export class NpcContinuity {
 		this.boundary.input( 'conversation-start', request );
 		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is already in conversation` );
 		if ( this.pose ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.pose.npcId} has an explicit pose` );
-		const returning = this.follow?.mode === 'resuming' && this.follow.npcId === request.npcId;
-		const following = [ 'following', 'leading' ].includes( this.follow?.mode ) && this.follow.npcId === request.npcId;
+		const companion = this.follow?.npcId === request.npcId;
 		const held = this.holds.has( request.npcId );
 		// The visible body is authoritative at interaction time. Re-projecting
 		// its off-shift schedule here can fail on a distant unloaded place, or
 		// replace an existing return path before control has been acquired.
 		const actor = this.actors.get( request.npcId ) ?? this.#scheduledActor( request.npcId, request.timeMin );
-		if ( request.post && ! following && ! held && request.place.kind === 'parcel' ) {
+		if ( request.post && ! companion && ! held && request.place.kind === 'parcel' ) {
 
 			const state = this.simulation.continuityAt( request.npcId, request.timeMin );
 			const { entryIndex, startMin, endMin } = state.schedule;
@@ -395,9 +403,15 @@ export class NpcContinuity {
 			} );
 
 		}
-		if ( ! following && ! held ) this.#interrupt( request.npcId, request.timeMin );
-		if ( returning ) this.follow = null;
+		if ( ! companion && ! held ) this.#interrupt( request.npcId, request.timeMin );
+		this.returns.delete( request.npcId );
 		this.holds.delete( request.npcId );
+		// A companion moved by the dialogue plans its way on from where it now stands.
+		if ( companion && distance( actor.position, request.position ) > ARRIVAL_DISTANCE ) {
+
+			this.follow.route = restingRoute( request.position, this.follow.route.destination );
+
+		}
 		actor.position = [ ...request.position ];
 		actor.heading = request.heading;
 		actor.place = clone( request.place );
@@ -408,14 +422,18 @@ export class NpcContinuity {
 		this.actors.set( actor.npcId, actor );
 		this.conversation = {
 			npcId: actor.npcId,
-			ownsInterruption: ! following,
+			ownsInterruption: ! companion,
 			lastTimeMin: request.timeMin
 		};
 		return this.#actorOut( actor );
 
 	}
 
-	/** @param request.hold keeps the body where it stands instead of walking it back. */
+	/**
+	 * Closes the conversation. A companion goes back to following or leading;
+	 * anybody else walks back into their day on their own, leaving the
+	 * companion as it was. @param request.hold keeps the body where it stands.
+	 */
 	endConversation( request ) {
 
 		this.boundary.input( 'conversation-stop', request );
@@ -423,7 +441,6 @@ export class NpcContinuity {
 		const conversation = this.conversation;
 		const actor = this.actors.get( conversation.npcId );
 		this.conversation = null;
-		if ( ! actor ) throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', `NPC ${conversation.npcId} has no materialized actor` );
 		if ( ! conversation.ownsInterruption ) {
 
 			actor.mode = this.follow.mode;
@@ -440,28 +457,33 @@ export class NpcContinuity {
 
 		}
 		this.#resume( actor.npcId, request.timeMin );
-		return this.#startResume( actor, request.timeMin, 'conversation' );
+		return this.#startResume( actor, request.timeMin, { keepPost: true } );
 
 	}
 
 	serialize() {
 
+		const byId = ( a, b ) => a.npcId.localeCompare( b.npcId );
 		return this.boundary.output( 'continuity-save', {
-			version: '1',
-			actors: [ ...this.actors.values() ].sort( ( a, b ) => a.npcId.localeCompare( b.npcId ) ).map( clone ),
+			version: '2',
+			actors: [ ...this.actors.values() ].sort( byId ).map( clone ),
 			follow: this.follow ? clone( this.follow ) : null,
+			returns: [ ...this.returns.values() ].sort( byId ).map( clone ),
 			conversation: this.conversation ? clone( this.conversation ) : null,
 			pose: this.pose ? clone( this.pose ) : null,
-			holds: [ ...this.holds.values() ].sort( ( a, b ) => a.npcId.localeCompare( b.npcId ) ).map( clone ),
-			...( this.posts.size ? { posts: [ ...this.posts.values() ].sort( ( a, b ) => a.npcId.localeCompare( b.npcId ) ).map( clone ) } : {} )
+			holds: [ ...this.holds.values() ].sort( byId ).map( clone ),
+			...( this.posts.size ? { posts: [ ...this.posts.values() ].sort( byId ).map( clone ) } : {} )
 		} );
 
 	}
 
-	restore( save ) {
+	/** Restores a prior `serialize()` output; a version 1 save is upgraded first. */
+	restore( input ) {
 
-		this.boundary.input( 'continuity-save', save );
+		this.boundary.input( 'continuity-save', input );
+		const save = input.version === '1' ? upgradeSave( input ) : input;
 		const ids = new Set();
+		const controlled = [ save.follow, save.conversation, save.pose ].filter( Boolean ).map( ( control ) => control.npcId );
 		for ( const actor of save.actors ) {
 
 			if ( ids.has( actor.npcId ) ) throw new NpcContinuityError( 'E_NPC_INPUT', `duplicate actor ${actor.npcId}` );
@@ -469,8 +491,7 @@ export class NpcContinuity {
 			let npc;
 			try { npc = this.simulation.getNPC( actor.npcId ); }
 			catch { throw new NpcContinuityError( 'E_NPC_INPUT', `save actor ${actor.npcId} is not present in the restored simulation` ); }
-			if ( ( save.follow?.npcId === actor.npcId || save.conversation?.npcId === actor.npcId ||
-				save.pose?.npcId === actor.npcId ) && npc.flags?.dead ) {
+			if ( controlled.includes( actor.npcId ) && npc.flags?.dead ) {
 
 				throw new NpcContinuityError( 'E_NPC_INPUT', `controlled save actor ${actor.npcId} is dead` );
 
@@ -483,24 +504,23 @@ export class NpcContinuity {
 			}
 
 		}
-		if ( save.follow && ! ids.has( save.follow.npcId ) ) {
+		for ( const [ kind, control ] of [ [ 'follow', save.follow ], [ 'conversation', save.conversation ], [ 'pose', save.pose ] ] ) {
 
-			throw new NpcContinuityError( 'E_NPC_INPUT', `follow state references missing actor ${save.follow.npcId}` );
+			if ( control && ! ids.has( control.npcId ) ) {
 
-		}
-		if ( save.conversation && ! ids.has( save.conversation.npcId ) ) {
+				throw new NpcContinuityError( 'E_NPC_INPUT', `${kind} state references missing actor ${control.npcId}` );
 
-			throw new NpcContinuityError( 'E_NPC_INPUT', `conversation state references missing actor ${save.conversation.npcId}` );
-
-		}
-		if ( save.pose && ! ids.has( save.pose.npcId ) ) {
-
-			throw new NpcContinuityError( 'E_NPC_INPUT', `pose state references missing actor ${save.pose.npcId}` );
+			}
 
 		}
 		if ( save.pose && ( save.follow || save.conversation ) ) {
 
 			throw new NpcContinuityError( 'E_NPC_INPUT', 'pose state conflicts with another NPC control state' );
+
+		}
+		if ( save.conversation && ! save.conversation.ownsInterruption && save.follow?.npcId !== save.conversation.npcId ) {
+
+			throw new NpcContinuityError( 'E_NPC_INPUT', `conversation with ${save.conversation.npcId} leaves no companion to return to` );
 
 		}
 		if ( save.pose ) {
@@ -513,28 +533,32 @@ export class NpcContinuity {
 			}
 
 		}
-		const heldIds = new Set( ( save.holds ?? [] ).map( ( hold ) => hold.npcId ) );
-		for ( const hold of save.holds ?? [] ) {
+		const heldIds = new Set();
+		for ( const [ kind, entry ] of [
+			...( save.holds ?? [] ).map( ( hold ) => [ 'hold', hold ] ),
+			...save.returns.map( ( walk ) => [ 'return', walk ] )
+		] ) {
 
-			if ( ! ids.has( hold.npcId ) ) throw new NpcContinuityError( 'E_NPC_INPUT', `hold state references missing actor ${hold.npcId}` );
-			if ( save.pose?.npcId === hold.npcId || save.conversation?.npcId === hold.npcId || save.follow?.npcId === hold.npcId ) {
+			if ( ! ids.has( entry.npcId ) ) throw new NpcContinuityError( 'E_NPC_INPUT', `${kind} state references missing actor ${entry.npcId}` );
+			if ( controlled.includes( entry.npcId ) || heldIds.has( entry.npcId ) ) {
 
-				throw new NpcContinuityError( 'E_NPC_INPUT', `held actor ${hold.npcId} also has another control state` );
+				throw new NpcContinuityError( 'E_NPC_INPUT', `${kind} actor ${entry.npcId} also has another control state` );
 
 			}
+			heldIds.add( entry.npcId );
 
 		}
-		const unownedPose = save.actors.find( ( actor ) => actor.mode === 'posing' && save.pose?.npcId !== actor.npcId && ! heldIds.has( actor.npcId ) );
+		const unownedPose = save.actors.find( ( actor ) => actor.mode === 'posing' && save.pose?.npcId !== actor.npcId &&
+			! ( save.holds ?? [] ).some( ( hold ) => hold.npcId === actor.npcId ) );
 		if ( unownedPose ) {
 
 			throw new NpcContinuityError( 'E_NPC_INPUT', `posing actor ${unownedPose.npcId} has no matching pose state` );
 
 		}
-		const interrupted = new Set();
-		if ( [ 'following', 'leading' ].includes( save.follow?.mode ) ) interrupted.add( save.follow.npcId );
+		const interrupted = new Set( ( save.holds ?? [] ).map( ( hold ) => hold.npcId ) );
+		if ( save.follow ) interrupted.add( save.follow.npcId );
 		if ( save.conversation?.ownsInterruption ) interrupted.add( save.conversation.npcId );
 		if ( save.pose ) interrupted.add( save.pose.npcId );
-		for ( const npcId of heldIds ) interrupted.add( npcId );
 		for ( const npcId of interrupted ) if ( ! this.simulation.behaviorAt( npcId, 0 )?.interrupted ) {
 
 			throw new NpcContinuityError( 'E_NPC_INPUT', `controlled save actor ${npcId} is not interrupted in the restored simulation` );
@@ -551,81 +575,193 @@ export class NpcContinuity {
 		}
 		this.actors = new Map( save.actors.map( ( actor ) => [ actor.npcId, clone( actor ) ] ) );
 		this.follow = save.follow ? clone( save.follow ) : null;
+		this.returns = new Map( save.returns.map( ( walk ) => [ walk.npcId, clone( walk ) ] ) );
 		this.conversation = save.conversation ? clone( save.conversation ) : null;
 		this.pose = save.pose ? clone( save.pose ) : null;
 		this.holds = new Map( ( save.holds ?? [] ).map( ( hold ) => [ hold.npcId, clone( hold ) ] ) );
 		this.posts = new Map( ( save.posts ?? [] ).map( ( post ) => [ post.npcId, clone( post ) ] ) );
+		this.events = [];
 		return this.serialize();
 
 	}
 
+	/** Walks toward the player over the cached route, running when far and stopping short of them. */
 	#advanceFollowing( actor, request ) {
 
-		const route = this.routes.route( actor.position, request.playerPosition );
+		const follow = this.follow;
+		const route = this.#plan( follow, actor, request.playerPosition, FOLLOW_REPLAN );
 		if ( ! route ) return this.#releaseInvalid( 'E_NPC_PATH', `NPC ${actor.npcId} cannot reach the player`, request.timeMin );
-		const remaining = Math.max( 0, route.distanceMeters - STOPPING_DISTANCE );
-		const speed = route.distanceMeters > RUN_DISTANCE ? RUN_SPEED : remaining > 0 ? WALK_SPEED : 0;
-		const travel = Math.min( remaining, speed * request.deltaSeconds );
-		const moved = pointAtDistance( route.path3, travel );
-		actor.position = moved.position;
-		actor.heading = moved.heading ?? actor.heading;
+		const remaining = route.distanceMeters - route.cursor;
+		const toGo = Math.max( 0, remaining - STOPPING_DISTANCE );
+		const speed = remaining > RUN_DISTANCE ? RUN_SPEED : toGo > EPSILON ? WALK_SPEED : 0;
+		this.#walk( actor, route, Math.min( toGo, speed * request.deltaSeconds ) );
 		actor.animation = selectNpcAnimation( { speed } );
 		actor.mode = 'following';
-		this.#putOnWalkGraph( actor );
-		this.follow.route = savedRoute( route, request.playerPosition, travel );
+		this.#phase( speed > 0 ? 'walking' : 'waiting', request.timeMin );
 
 	}
 
+	/**
+	 * Walks ahead of the player to the destination at the player's pace: full
+	 * speed with the player close or ahead on the path, slower as the player
+	 * lags, then stopped and facing them until they catch up. At the end it
+	 * stays arrived, facing the player, until released.
+	 */
 	#advanceLeading( actor, request ) {
 
-		const destination = this.follow.route.destination;
-		const route = this.routes.route( actor.position, destination );
+		const lead = this.follow;
+		const route = this.#plan( lead, actor, lead.route.destination, ARRIVAL_DISTANCE );
 		if ( ! route ) return this.#releaseInvalid( 'E_NPC_PATH', `NPC ${actor.npcId} cannot reach the escort destination`, request.timeMin );
-		const travel = Math.min( route.distanceMeters, WALK_SPEED * request.deltaSeconds );
-		const moved = pointAtDistance( route.path3, travel );
-		actor.position = moved.position;
-		actor.heading = moved.heading ?? actor.heading;
-		actor.animation = route.distanceMeters - travel <= ARRIVAL_DISTANCE ? 'idle' : 'walk';
+		const player = request.playerPosition;
+		let speed = 0;
+		if ( lead.phase !== 'arrived' ) {
+
+			const gap = distance( actor.position, player );
+			if ( gap <= LEAD_SLOW_FROM ) speed = WALK_SPEED;
+			else if ( playerAhead( route, player ) ) speed = gap > RUN_DISTANCE ? RUN_SPEED : WALK_SPEED;
+			else if ( gap <= ( lead.phase === 'waiting' ? LEAD_RESUME_WITHIN : LEAD_WAIT_BEYOND ) ) {
+
+				speed = WALK_SPEED - ( WALK_SPEED - SLOW_SPEED ) * Math.min( 1, ( gap - LEAD_SLOW_FROM ) / ( LEAD_WAIT_BEYOND - LEAD_SLOW_FROM ) );
+
+			}
+
+		}
+		this.#walk( actor, route, Math.min( route.distanceMeters - route.cursor, speed * request.deltaSeconds ) );
 		actor.mode = 'leading';
-		this.#putOnWalkGraph( actor );
-		this.follow.route = savedRoute( route, destination, travel );
+		if ( route.distanceMeters - route.cursor <= ARRIVAL_DISTANCE ) {
+
+			if ( lead.destination ) actor.place = clone( lead.destination );
+			actor.heading = headingTo( actor.position, player, actor.heading );
+			actor.animation = 'idle';
+			this.#phase( 'arrived', request.timeMin );
+			return;
+
+		}
+		if ( speed === 0 ) actor.heading = headingTo( actor.position, player, actor.heading );
+		actor.animation = selectNpcAnimation( { speed } );
+		this.#phase( speed > 0 ? 'walking' : 'waiting', request.timeMin );
 
 	}
 
-	#advanceResume( actor, request ) {
+	#advanceReturn( actor, request ) {
 
+		const walk = this.returns.get( actor.npcId );
 		let scheduled;
 		try { scheduled = this.#resumeTarget( actor, request.timeMin ); }
-		catch ( error ) { return this.#releaseInvalid( 'E_NPC_UNAVAILABLE', messageOf( error ), request.timeMin ); }
-		const route = this.routes.route( actor.position, scheduled.position );
-		if ( ! route ) return this.#releaseInvalid( 'E_NPC_PATH', `NPC ${actor.npcId} cannot resume its schedule`, request.timeMin );
-		const travel = Math.min( route.distanceMeters, WALK_SPEED * request.deltaSeconds );
-		const moved = pointAtDistance( route.path3, travel );
-		actor.position = moved.position;
-		actor.heading = moved.heading ?? actor.heading;
+		catch { return this.#dropReturn( actor ); }
+		const route = this.#plan( walk, actor, scheduled.position, RETURN_REPLAN );
+		if ( ! route ) return this.#dropReturn( actor );
+		const travel = Math.min( route.distanceMeters - route.cursor, WALK_SPEED * request.deltaSeconds );
+		this.#walk( actor, route, travel );
 		actor.animation = travel > 0 ? 'walk' : scheduled.animation;
 		actor.schedule = scheduled.schedule;
 		actor.mode = 'resuming';
-		this.#putOnWalkGraph( actor );
-		this.follow.route = savedRoute( route, scheduled.position, travel );
-		if ( route.distanceMeters - travel <= ARRIVAL_DISTANCE ) this.#finishResume( actor, scheduled );
+		if ( route.distanceMeters - route.cursor <= ARRIVAL_DISTANCE && distance( route.destination, scheduled.position ) <= ARRIVAL_DISTANCE ) {
+
+			this.#finishResume( actor, scheduled );
+
+		}
 
 	}
 
-	#startResume( actor, timeMin, source ) {
+	#dropReturn( actor ) {
 
+		this.returns.delete( actor.npcId );
+		actor.mode = 'released';
+		actor.animation = 'idle';
+
+	}
+
+	/**
+	 * The record's cached route, planned again from the body only when its
+	 * target has moved past `replanBeyond`, or when the route has run out short
+	 * of the target.
+	 */
+	#plan( record, actor, target, replanBeyond ) {
+
+		const route = record.route;
+		const exhausted = route.distanceMeters - route.cursor <= ARRIVAL_DISTANCE;
+		if ( distance( route.destination, target ) <= replanBeyond &&
+			! ( exhausted && distance( actor.position, target ) > ARRIVAL_DISTANCE ) ) return route;
+		const planned = this.routes.route( actor.position, target );
+		if ( ! planned ) return null;
+		record.route = savedRoute( planned, target );
+		return record.route;
+
+	}
+
+	/** Moves the body `travel` metres on along its cached route. */
+	#walk( actor, route, travel ) {
+
+		if ( ! ( travel > 0 ) ) return;
+		route.cursor = Math.min( route.distanceMeters, route.cursor + travel );
+		const moved = pointAtDistance( route.path3, route.cursor );
+		actor.position = moved.position;
+		actor.heading = moved.heading ?? actor.heading;
+		this.#putOnWalkGraph( actor );
+
+	}
+
+	/** Whether the player has stayed beyond the companion's give-up distance for its give-up time. */
+	#lost( actor, request ) {
+
+		const follow = this.follow;
+		if ( ! follow.pace || distance( actor.position, request.playerPosition ) <= follow.pace.giveUpBeyond ) {
+
+			delete follow.lostSinceMin;
+			return false;
+
+		}
+		follow.lostSinceMin ??= request.timeMin;
+		return request.timeMin - follow.lostSinceMin >= follow.pace.giveUpAfterMin;
+
+	}
+
+	#giveUp( actor, timeMin ) {
+
+		const { npcId, mode } = this.follow;
+		this.#resume( npcId, timeMin );
+		this.follow = null;
+		this.events.push( { npcId, mode, phase: 'gave-up', timeMin, reason: 'player-lost' } );
+		try { this.#startResume( actor, timeMin ); }
+		catch {
+
+			actor.mode = 'released';
+			actor.animation = 'idle';
+
+		}
+
+	}
+
+	#phase( phase, timeMin ) {
+
+		const follow = this.follow;
+		if ( follow.phase === phase ) return;
+		follow.phase = phase;
+		this.events.push( { npcId: follow.npcId, mode: follow.mode, phase, timeMin } );
+
+	}
+
+	/**
+	 * Hands a released body back to its schedule: straight onto its post, or
+	 * as a walk home of its own that no companion or other walk waits on.
+	 * @param options.keepPost keeps a parcel body at its post when no way home exists
+	 */
+	#startResume( actor, timeMin, { keepPost = false } = {} ) {
+
+		const keep = keepPost && actor.place.kind === 'parcel';
 		let scheduled;
 		try { scheduled = this.#resumeTarget( actor, timeMin ); }
 		catch ( error ) {
 
-			if ( source === 'conversation' && actor.place.kind === 'parcel' ) return this.#keepUnroutablePost( actor, timeMin );
+			if ( keep ) return this.#keepUnroutablePost( actor, timeMin );
 			throw error;
 
 		}
 		if ( this.posts.has( actor.npcId ) && distance( actor.position, scheduled.position ) <= ARRIVAL_DISTANCE ) {
 
 			// Resuming a worker or seated visitor at their actual post needs no
-			// detour onto the street graph, and must not take an escort's slot.
+			// detour onto the street graph.
 			Object.assign( actor, scheduled, { visible: actor.visible, mode: 'schedule' } );
 			return this.#actorOut( actor );
 
@@ -633,21 +769,20 @@ export class NpcContinuity {
 		const route = this.routes.route( actor.position, scheduled.position );
 		if ( ! route ) {
 
-			if ( source === 'conversation' && actor.place.kind === 'parcel' ) return this.#keepUnroutablePost( actor, timeMin );
+			if ( keep ) return this.#keepUnroutablePost( actor, timeMin );
 			throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${actor.npcId} cannot resume its schedule` );
 
 		}
+		if ( route.distanceMeters <= ARRIVAL_DISTANCE ) {
+
+			this.#finishResume( actor, scheduled );
+			return this.#actorOut( actor );
+
+		}
 		actor.mode = 'resuming';
-		actor.animation = route.distanceMeters > ARRIVAL_DISTANCE ? 'walk' : scheduled.animation;
+		actor.animation = 'walk';
 		actor.schedule = scheduled.schedule;
-		this.follow = {
-			npcId: actor.npcId,
-			mode: 'resuming',
-			source,
-			route: savedRoute( route, scheduled.position, 0 ),
-			lastTimeMin: timeMin
-		};
-		if ( route.distanceMeters <= ARRIVAL_DISTANCE ) this.#finishResume( actor, scheduled );
+		this.returns.set( actor.npcId, { npcId: actor.npcId, route: savedRoute( route, scheduled.position ) } );
 		return this.#actorOut( actor );
 
 	}
@@ -675,7 +810,7 @@ export class NpcContinuity {
 		const visible = actor.visible;
 		if ( ! scheduled.spot ) delete actor.spot;
 		Object.assign( actor, scheduled, { visible, mode: 'schedule' } );
-		this.follow = null;
+		this.returns.delete( actor.npcId );
 
 	}
 
@@ -695,23 +830,64 @@ export class NpcContinuity {
 
 	}
 
-	#scheduledActor( npcId, timeMin ) {
+	/**
+	 * The body a new control starts from: the one on screen, held by a quest
+	 * or walking home, where it stands; otherwise the schedule's projection.
+	 */
+	#body( npcId, timeMin ) {
+
+		const actor = this.actors.get( npcId );
+		if ( ! actor || ! ( actor.visible || this.holds.has( npcId ) || this.returns.has( npcId ) ) ) {
+
+			return this.#scheduledActor( npcId, timeMin );
+
+		}
+		this.#living( npcId );
+		return actor;
+
+	}
+
+	/** Takes a body under control: a held one keeps its interruption, anybody else is interrupted now. */
+	#take( actor, timeMin ) {
+
+		if ( ! this.holds.delete( actor.npcId ) ) this.#interrupt( actor.npcId, timeMin );
+		this.returns.delete( actor.npcId );
+		actor.visible = true;
+		this.actors.set( actor.npcId, actor );
+
+	}
+
+	#assertNoControl() {
+
+		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is in conversation` );
+		if ( this.follow ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.follow.npcId} is already ${this.follow.mode}` );
+		if ( this.pose ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.pose.npcId} has an explicit pose` );
+
+	}
+
+	/** The simulation instance of a live identity. */
+	#living( npcId ) {
 
 		let npc;
+		try { npc = this.simulation.getNPC( npcId ); }
+		catch ( error ) {
+
+			throw new NpcContinuityError( error?.code === 'E_UNKNOWN_ID' ? 'E_NPC_UNKNOWN' : 'E_NPC_UNAVAILABLE', messageOf( error ) );
+
+		}
+		if ( npc.flags?.dead ) throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', `NPC ${npcId} is dead` );
+		return npc;
+
+	}
+
+	#scheduledActor( npcId, timeMin ) {
+
+		const npc = this.#living( npcId );
 		let state;
-		try {
+		try { state = this.simulation.continuityAt( npcId, timeMin ); }
+		catch ( error ) {
 
-			npc = this.simulation.getNPC( npcId );
-			if ( npc.flags?.dead ) throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', `NPC ${npcId} is dead` );
-			state = this.simulation.continuityAt( npcId, timeMin );
-
-		} catch ( error ) {
-
-			if ( error instanceof NpcContinuityError ) throw error;
-			throw new NpcContinuityError(
-				error?.code === 'E_UNKNOWN_ID' ? 'E_NPC_UNKNOWN' : 'E_NPC_UNAVAILABLE',
-				messageOf( error )
-			);
+			throw new NpcContinuityError( error?.code === 'E_UNKNOWN_ID' ? 'E_NPC_UNKNOWN' : 'E_NPC_UNAVAILABLE', messageOf( error ) );
 
 		}
 		let post = this.posts.get( npcId );
@@ -856,19 +1032,17 @@ export class NpcContinuity {
 
 	}
 
+	/** Ends the companion when it died or lost its way: the simulation resumes and the host hears it gave up. */
 	#releaseInvalid( code, message, timeMin ) {
 
-		if ( ! this.follow ) throw new NpcContinuityError( code, message );
-		const actor = this.actors.get( this.follow.npcId );
-		try { this.simulation.resume( this.follow.npcId, timeMin ?? this.follow.lastTimeMin ); } catch {}
+		const { npcId, mode } = this.follow;
+		const actor = this.actors.get( npcId );
+		try { this.simulation.resume( npcId, timeMin ); } catch {}
 		this.follow = null;
-		if ( actor ) {
-
-			actor.mode = 'released';
-			actor.animation = 'idle';
-
-		}
-		return this.#actorMaybeOut( actor ?? null );
+		this.events.push( { npcId, mode, phase: 'gave-up', timeMin, reason: code === 'E_NPC_PATH' ? 'unreachable' : 'unavailable' } );
+		actor.mode = 'released';
+		actor.animation = 'idle';
+		return this.#actorOut( actor );
 
 	}
 
@@ -920,14 +1094,7 @@ function pointAtDistance( path, distanceAlong ) {
 		if ( remaining <= span || index === path.length - 1 ) {
 
 			const t = span > 0 ? Math.min( 1, remaining / span ) : 0;
-			return {
-				position: [
-					a[ 0 ] + ( b[ 0 ] - a[ 0 ] ) * t,
-					a[ 1 ] + ( b[ 1 ] - a[ 1 ] ) * t,
-					a[ 2 ] + ( b[ 2 ] - a[ 2 ] ) * t
-				],
-				heading: Math.atan2( b[ 0 ] - a[ 0 ], b[ 2 ] - a[ 2 ] )
-			};
+			return { position: lerp( a, b, t ), heading: Math.atan2( b[ 0 ] - a[ 0 ], b[ 2 ] - a[ 2 ] ) };
 
 		}
 		remaining -= span;
@@ -937,13 +1104,60 @@ function pointAtDistance( path, distanceAlong ) {
 
 }
 
-function savedRoute( route, destination, cursor ) {
+function savedRoute( route, destination ) {
 
 	return {
 		path3: route.path3.map( ( point ) => [ ...point ] ),
 		distanceMeters: route.distanceMeters,
-		cursor,
+		cursor: 0,
 		destination: [ ...destination ]
+	};
+
+}
+
+/** A route standing at one point, planned again on the next update that needs to move. */
+function restingRoute( position, destination ) {
+
+	return { path3: [ [ ...position ] ], distanceMeters: 0, cursor: 0, destination: [ ...destination ] };
+
+}
+
+/** Whether the player stands beside the rest of the route, ahead of the walker on it. */
+function playerAhead( route, player ) {
+
+	let before = 0;
+	for ( let index = 1; index < route.path3.length; index ++ ) {
+
+		const a = route.path3[ index - 1 ];
+		const b = route.path3[ index ];
+		const span = distance( a, b );
+		if ( before + span > route.cursor ) {
+
+			const t = span > 0 ? Math.max( 0, Math.min( 1, dot( player, a, b ) / ( span * span ) ) ) : 0;
+			const along = before + span * t;
+			if ( along > route.cursor + ARRIVAL_DISTANCE && distance( player, lerp( a, b, t ) ) <= LEAD_PATH_WIDTH ) return true;
+
+		}
+		before += span;
+
+	}
+	return false;
+
+}
+
+/** Upgrades a version 1 save: its single slot held either the companion or one walk home. */
+function upgradeSave( save ) {
+
+	const { follow, ...rest } = save;
+	const returning = follow?.mode === 'resuming';
+	return {
+		...rest,
+		version: '2',
+		follow: ! follow || returning ? null : {
+			npcId: follow.npcId, mode: follow.mode, phase: 'walking', route: follow.route, lastTimeMin: follow.lastTimeMin,
+			...( follow.mode === 'leading' ? { pace: { ...LEAD_PACE } } : {} )
+		},
+		returns: returning ? [ { npcId: follow.npcId, route: follow.route } ] : []
 	};
 
 }
@@ -1017,6 +1231,20 @@ function pathDistance( path ) {
 
 }
 
+function headingTo( from, to, fallback ) {
+
+	const dx = to[ 0 ] - from[ 0 ];
+	const dz = to[ 2 ] - from[ 2 ];
+	return Math.hypot( dx, dz ) > 1e-6 ? Math.atan2( dx, dz ) : fallback;
+
+}
+
+function lerp( a, b, t ) { return [ a[ 0 ] + ( b[ 0 ] - a[ 0 ] ) * t, a[ 1 ] + ( b[ 1 ] - a[ 1 ] ) * t, a[ 2 ] + ( b[ 2 ] - a[ 2 ] ) * t ]; }
+function dot( point, a, b ) {
+
+	return ( point[ 0 ] - a[ 0 ] ) * ( b[ 0 ] - a[ 0 ] ) + ( point[ 1 ] - a[ 1 ] ) * ( b[ 1 ] - a[ 1 ] ) + ( point[ 2 ] - a[ 2 ] ) * ( b[ 2 ] - a[ 2 ] );
+
+}
 function placeKey( place ) { return `${place.kind}:${place.id}`; }
 function distance( a, b ) { return Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ], b[ 2 ] - a[ 2 ] ); }
 function clone( value ) { return structuredClone( value ); }

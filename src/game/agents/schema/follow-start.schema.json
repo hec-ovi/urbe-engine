@@ -7,6 +7,7 @@
   "properties": {
     "npcId": { "type": "string", "minLength": 1 },
     "timeMin": { "type": "number", "minimum": 0 },
-    "playerPosition": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" }
+    "playerPosition": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" },
+    "pace": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/pace" }
   }
 }

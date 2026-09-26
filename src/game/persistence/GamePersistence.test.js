@@ -29,7 +29,8 @@ const questTransit = {
 const npcState = {
 	timeMin: 780,
 	simulation: { version: '1', seed: 'fixture-seed', events: [] },
-	continuity: { version: '1', actors: [], follow: null, conversation: null }
+	continuity: { version: '2', actors: [], follow: null, returns: [], conversation: null },
+	questEscort: { questId: 'main', stepId: 'escort-witness', npcId: 'npc-1', mode: 'lead-player' }
 };
 
 const investigations = [ {

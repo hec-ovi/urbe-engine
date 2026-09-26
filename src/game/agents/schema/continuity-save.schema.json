@@ -1,29 +1,87 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:urbe:engine:npc-agents:continuity-save",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["version", "actors", "follow"],
-  "properties": {
-    "version": { "const": "1" },
-    "actors": { "type": "array", "items": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/actor" } },
-    "follow": {
-      "oneOf": [
-        { "type": "null" },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["npcId", "mode", "route", "lastTimeMin"],
-          "properties": {
-            "npcId": { "type": "string", "minLength": 1 },
-            "mode": { "enum": ["following", "leading", "resuming"] },
-            "source": { "enum": ["follow", "conversation", "crouch"] },
-            "route": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/route" },
-            "lastTimeMin": { "type": "number", "minimum": 0 }
+  "oneOf": [{ "$ref": "#/$defs/current" }, { "$ref": "#/$defs/legacy" }],
+  "$defs": {
+    "current": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "actors", "follow", "returns"],
+      "properties": {
+        "version": { "const": "2" },
+        "actors": { "$ref": "#/$defs/actors" },
+        "follow": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["npcId", "mode", "phase", "route", "lastTimeMin"],
+              "properties": {
+                "npcId": { "type": "string", "minLength": 1 },
+                "mode": { "enum": ["following", "leading"] },
+                "phase": { "enum": ["walking", "waiting", "arrived"] },
+                "route": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/route" },
+                "lastTimeMin": { "type": "number", "minimum": 0 },
+                "destination": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/place" },
+                "pace": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/pace" },
+                "lostSinceMin": { "type": "number", "minimum": 0 }
+              },
+              "if": { "properties": { "mode": { "const": "following" } } },
+              "then": { "properties": { "phase": { "enum": ["walking", "waiting"] }, "destination": false } },
+              "else": { "properties": { "pace": true }, "required": ["pace"] }
+            }
+          ]
+        },
+        "returns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["npcId", "route"],
+            "properties": {
+              "npcId": { "type": "string", "minLength": 1 },
+              "route": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/route" }
+            }
           }
-        }
-      ]
+        },
+        "conversation": { "$ref": "#/$defs/conversation" },
+        "pose": { "$ref": "#/$defs/pose" },
+        "holds": { "$ref": "#/$defs/holds" },
+        "posts": { "$ref": "#/$defs/posts" }
+      }
     },
+    "legacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "actors", "follow"],
+      "properties": {
+        "version": { "const": "1" },
+        "actors": { "$ref": "#/$defs/actors" },
+        "follow": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["npcId", "mode", "route", "lastTimeMin"],
+              "properties": {
+                "npcId": { "type": "string", "minLength": 1 },
+                "mode": { "enum": ["following", "leading", "resuming"] },
+                "source": { "enum": ["follow", "conversation", "crouch"] },
+                "route": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/route" },
+                "lastTimeMin": { "type": "number", "minimum": 0 }
+              }
+            }
+          ]
+        },
+        "conversation": { "$ref": "#/$defs/conversation" },
+        "pose": { "$ref": "#/$defs/pose" },
+        "holds": { "$ref": "#/$defs/holds" },
+        "posts": { "$ref": "#/$defs/posts" }
+      }
+    },
+    "actors": { "type": "array", "items": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/actor" } },
     "conversation": {
       "oneOf": [
         { "type": "null" },

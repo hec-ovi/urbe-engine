@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Vector3 } from 'three/webgpu';
 import { FIXTURE_BLUEPRINT, FIXTURE_INTERIORS, restoreSimulation } from '../../../../simulation/dist/index.js';
 import { SimBridge } from '../sim/SimBridge.js';
@@ -166,10 +166,11 @@ describe( 'NPC continuity integration', () => {
 		actor = controller.stopFollow( { timeMin: MON_9 + 1 } );
 		expect( actor.mode ).toBe( 'resuming' );
 		expect( actor.position ).toEqual( held );
+		expect( controller.companion ).toBeNull();
 		let previous = actor.position;
 		for ( let step = 0; step < 300 && actor.mode === 'resuming'; step ++ ) {
 
-			actor = controller.updateFollow( { timeMin: MON_9 + 1, deltaSeconds: 1, playerPosition: player } );
+			actor = walkOn( controller, npc.npcId, { timeMin: MON_9 + 1, deltaSeconds: 1, playerPosition: player } );
 			expect( separation( previous, actor.position ) ).toBeLessThanOrEqual( 1.4 + 1e-9 );
 			previous = actor.position;
 
@@ -196,24 +197,7 @@ describe( 'NPC continuity integration', () => {
 
 	} );
 
-	it( 'leads to an authored place and attaches an exact follower to a measured transit route', () => {
-
-		const leading = setup();
-		const npc = leading.bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
-		const destinationId = FIXTURE_BLUEPRINT.parcels.find( ( parcel ) => parcel.id !== 'p_cafe' ).id;
-		let actor = leading.controller.startLead( {
-			npcId: npc.npcId, timeMin: MON_9, destination: { kind: 'parcel', id: destinationId }
-		} );
-		expect( actor.mode ).toBe( 'leading' );
-		for ( let step = 0; step < 600 && actor.animation !== 'idle'; step ++ ) {
-
-			actor = leading.controller.updateFollow( {
-				timeMin: MON_9, deltaSeconds: 1, playerPosition: [ 0, 0, 0 ]
-			} );
-
-		}
-		expect( actor ).toMatchObject( { mode: 'leading', animation: 'idle' } );
-		expect( leading.controller.stopFollow( { timeMin: MON_9 + 1 } ).mode ).toBe( 'resuming' );
+	it( 'attaches an exact follower to a measured transit route', () => {
 
 		const riding = setup();
 		const rider = riding.bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
@@ -260,7 +244,7 @@ describe( 'NPC continuity integration', () => {
 		expect( restored.bridge.behaviorAt( npc.npcId, startedAt + 1 ).interrupted ).toBe( false );
 		for ( let step = 0; step < 300 && returning.mode === 'resuming'; step ++ ) {
 
-			returning = restored.controller.updateFollow( {
+			returning = walkOn( restored.controller, npc.npcId, {
 				timeMin: startedAt + 1, deltaSeconds: 1, playerPosition: [ 560, 1, 250 ]
 			} );
 
@@ -370,7 +354,7 @@ describe( 'NPC continuity integration', () => {
 		expect( returning.mode ).toBe( 'resuming' );
 		for ( let step = 0; step < 300 && returning.mode === 'resuming'; step ++ ) {
 
-			returning = controller.updateFollow( { timeMin: MON_9 + 1, deltaSeconds: 1, playerPosition: visible } );
+			returning = walkOn( controller, npc.npcId, { timeMin: MON_9 + 1, deltaSeconds: 1, playerPosition: visible } );
 
 		}
 		expect( returning ).toMatchObject( { npcId: npc.npcId, mode: 'schedule', place: { kind: 'parcel', id: 'p_cafe' } } );
@@ -511,7 +495,7 @@ describe( 'NPC continuity integration', () => {
 		expect( returning.mode ).toBe( 'resuming' );
 		for ( let step = 0; step < 300 && returning.mode === 'resuming'; step ++ ) {
 
-			returning = controller.updateFollow( { timeMin: MON_9 + 33, deltaSeconds: 1, playerPosition: counter } );
+			returning = walkOn( controller, npc.npcId, { timeMin: MON_9 + 33, deltaSeconds: 1, playerPosition: counter } );
 
 		}
 		expect( returning ).toMatchObject( { npcId: npc.npcId, mode: 'schedule' } );
@@ -568,6 +552,227 @@ describe( 'NPC continuity integration', () => {
 
 	} );
 
+	it.each( [ 'following', 'leading' ] )( 'talking to a bystander never drops the active %s companion', ( mode ) => {
+
+		const { bridge, controller } = setup();
+		const companion = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const bystander = bridge.getNPCVendor( { parcelId: 'p_clinic', timeMin: MON_9 } );
+		const player = [ 560, 1, 250 ];
+		startCompanion( controller, mode, companion.npcId, player );
+		controller.beginConversation( { npcId: bystander.npcId, timeMin: MON_9, position: [ 505, 3, 250 ], heading: 0,
+			place: { kind: 'edge', id: 'walk-p_clinic' }, seated: false } );
+		expect( controller.endConversation( { timeMin: MON_9 + 1 } ).mode ).toBe( 'resuming' );
+		expect( controller.companion ).toMatchObject( { npcId: companion.npcId, mode } );
+		expect( walkingHome( controller ) ).toEqual( [ bystander.npcId ] );
+		for ( let step = 0; step < 300 && walkingHome( controller ).length; step ++ ) {
+
+			controller.updateFollow( { timeMin: MON_9 + 1, deltaSeconds: 1, playerPosition: player } );
+			expect( controller.companion ).toMatchObject( { npcId: companion.npcId, mode } );
+
+		}
+		expect( controller.actor( bystander.npcId ) ).toMatchObject( { mode: 'schedule' } );
+		expect( controller.actor( companion.npcId ).mode ).toBe( mode );
+		expect( bridge.behaviorAt( companion.npcId, MON_9 + 2 ).interrupted ).toBe( true );
+		expect( bridge.behaviorAt( bystander.npcId, MON_9 + 2 ).interrupted ).toBe( false );
+		expect( controller.serialize().follow ).toMatchObject( { npcId: companion.npcId, mode } );
+
+	} );
+
+	it( 'lets a new companion start while someone walks home, and finishes a walk home out of sight', () => {
+
+		const { bridge, controller } = setup();
+		const walker = bridge.getNPCVendor( { parcelId: 'p_clinic', timeMin: MON_9 } );
+		const guide = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		controller.beginConversation( { npcId: walker.npcId, timeMin: MON_9, position: [ 505, 3, 250 ], heading: 0,
+			place: { kind: 'edge', id: 'walk-p_clinic' }, seated: false } );
+		controller.endConversation( { timeMin: MON_9 + 1 } );
+		expect( walkingHome( controller ) ).toEqual( [ walker.npcId ] );
+		expect( controller.startLead( { npcId: guide.npcId, timeMin: MON_9 + 1, destination: { kind: 'parcel', id: 'p_clinic' } } ).mode )
+			.toBe( 'leading' );
+
+		// A walk home is not held in view: beyond the visible distance the schedule takes the body back.
+		const far = [ 5000, 1, 5000 ];
+		const states = controller.updateVisible( { timeMin: MON_9 + 1, playerPosition: far, maxDistance: 45 } );
+		expect( states.find( ( actor ) => actor.npcId === walker.npcId ) ).toMatchObject( { mode: 'schedule', visible: false } );
+		expect( states.find( ( actor ) => actor.npcId === guide.npcId ) ).toMatchObject( { mode: 'leading', visible: true } );
+		expect( walkingHome( controller ) ).toEqual( [] );
+		expect( controller.serialize().returns ).toEqual( [] );
+
+	} );
+
+	it( 'paces a lead: waits for a lagging player, walks on when they catch up and arrives once', () => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const destination = { kind: 'parcel', id: 'p_clinic' };
+		let actor = controller.startLead( { npcId: npc.npcId, timeMin: MON_9, destination } );
+		const start = actor.position;
+		const events = [];
+		const step = ( playerPosition ) => {
+
+			actor = controller.updateFollow( { timeMin: MON_9, deltaSeconds: 1, playerPosition } );
+			events.push( ...controller.drainEvents() );
+			return actor;
+
+		};
+		for ( let index = 0; index < 60 && controller.companion.phase !== 'waiting'; index ++ ) step( start );
+		expect( controller.companion.phase ).toBe( 'waiting' );
+		expect( actor.animation ).toBe( 'idle' );
+		const gap = separation( actor.position, start );
+		expect( gap ).toBeGreaterThan( 10 );
+		expect( gap ).toBeLessThan( 11 );
+		expect( actor.heading ).toBeCloseTo( Math.atan2( start[ 0 ] - actor.position[ 0 ], start[ 2 ] - actor.position[ 2 ] ) );
+		expect( step( start ).position ).toEqual( actor.position );
+
+		// The player comes within reach: the leader walks on, at full pace while they keep up.
+		step( actor.position );
+		expect( controller.companion.phase ).toBe( 'walking' );
+		expect( actor.animation ).toBe( 'walk' );
+		for ( let index = 0; index < 1000 && controller.companion.phase !== 'arrived'; index ++ ) step( actor.position );
+		expect( actor ).toMatchObject( { mode: 'leading', animation: 'idle', place: destination } );
+		for ( let index = 0; index < 5; index ++ ) step( actor.position );
+		expect( events.map( ( event ) => event.phase ) ).toEqual( [ 'waiting', 'walking', 'arrived' ] );
+		expect( events.at( - 1 ) ).toEqual( { npcId: npc.npcId, mode: 'leading', phase: 'arrived', timeMin: MON_9 } );
+		expect( controller.serialize().follow ).toMatchObject( { mode: 'leading', phase: 'arrived', destination } );
+		expect( controller.stopFollow( { timeMin: MON_9 + 1 } ).mode ).toBe( 'resuming' );
+
+	} );
+
+	it( 'keeps leading, and hurries, while the player is ahead on its path', () => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const target = FIXTURE_BLUEPRINT.parcels.find( ( parcel ) => parcel.id === 'p_clinic' ).access.point;
+		const ahead = [ target[ 0 ], 1, target[ 1 ] ];
+		let actor = controller.startLead( { npcId: npc.npcId, timeMin: MON_9, destination: { kind: 'parcel', id: 'p_clinic' } } );
+		actor = controller.updateFollow( { timeMin: MON_9, deltaSeconds: 1, playerPosition: ahead } );
+		expect( actor.animation ).toBe( 'run' );
+		const phases = [];
+		for ( let index = 0; index < 600 && controller.companion.phase !== 'arrived'; index ++ ) {
+
+			controller.updateFollow( { timeMin: MON_9, deltaSeconds: 1, playerPosition: ahead } );
+			phases.push( ...controller.drainEvents().map( ( event ) => event.phase ) );
+
+		}
+		expect( phases ).toEqual( [ 'arrived' ] );
+
+	} );
+
+	it.each( [ 'following', 'leading' ] )( 'a %s companion given a pace gives up on a player who stays too far away', ( mode ) => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const pace = { giveUpBeyond: 20, giveUpAfterMin: 2 };
+		startCompanion( controller, mode, npc.npcId, [ 560, 1, 250 ], pace );
+		const far = [ 5000, 1, 5000 ];
+		for ( const timeMin of [ MON_9, MON_9 + 1, MON_9 + 1.5 ] ) {
+
+			controller.updateFollow( { timeMin, deltaSeconds: 0, playerPosition: far } );
+			expect( controller.companion ).toMatchObject( { npcId: npc.npcId, mode } );
+
+		}
+		// Coming back in range restarts the clock.
+		controller.updateFollow( { timeMin: MON_9 + 1.6, deltaSeconds: 0, playerPosition: controller.companion.position } );
+		expect( controller.serialize().follow.lostSinceMin ).toBeUndefined();
+		controller.updateFollow( { timeMin: MON_9 + 2, deltaSeconds: 0, playerPosition: far } );
+		controller.updateFollow( { timeMin: MON_9 + 3.9, deltaSeconds: 0, playerPosition: far } );
+		expect( controller.companion ).not.toBeNull();
+		const actor = controller.updateFollow( { timeMin: MON_9 + 4, deltaSeconds: 0, playerPosition: far } );
+		expect( controller.drainEvents().at( - 1 ) ).toEqual( {
+			npcId: npc.npcId, mode, phase: 'gave-up', timeMin: MON_9 + 4, reason: 'player-lost'
+		} );
+		expect( controller.companion ).toBeNull();
+		expect( [ 'resuming', 'schedule' ] ).toContain( actor.mode );
+		expect( bridge.behaviorAt( npc.npcId, MON_9 + 4 ).interrupted ).toBe( false );
+
+	} );
+
+	it( 'a follower without a pace keeps following however far the player goes', () => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		controller.startFollow( { npcId: npc.npcId, timeMin: MON_9, playerPosition: [ 560, 1, 250 ] } );
+		for ( let minute = 0; minute < 60; minute += 5 ) {
+
+			controller.updateFollow( { timeMin: MON_9 + minute, deltaSeconds: 0, playerPosition: [ 5000, 1, 5000 ] } );
+
+		}
+		expect( controller.companion ).toMatchObject( { npcId: npc.npcId, mode: 'following' } );
+
+	} );
+
+	it.each( [ 'following', 'leading' ] )( 'starts %s from the body on screen, not a later schedule projection', ( mode ) => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const commute = npc.routine.find( ( entry ) => entry.days.includes( 0 ) && entry.walk?.to.id === 'p_cafe' );
+		const seen = controller.appear( { npcId: npc.npcId, timeMin: commute.startMin + 0.25 } );
+		const later = commute.startMin + 1;
+		const other = setup();
+		other.bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const projected = other.controller.appear( { npcId: npc.npcId, timeMin: later } );
+		expect( separation( seen.position, projected.position ) ).toBeGreaterThan( 1 );
+		const started = startCompanion( controller, mode, npc.npcId, [ 560, 1, 250 ], null, later );
+		expect( started.position ).toEqual( seen.position );
+
+	} );
+
+	it( 'plans a route once and plans again only when its target moves', () => {
+
+		const { bridge, controller } = setup();
+		const plan = vi.spyOn( controller.routes, 'route' );
+		const guide = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		let actor = controller.startLead( { npcId: guide.npcId, timeMin: MON_9, destination: { kind: 'parcel', id: 'p_clinic' } } );
+		for ( let index = 0; index < 40; index ++ ) {
+
+			actor = controller.updateFollow( { timeMin: MON_9, deltaSeconds: 0.5, playerPosition: actor.position } );
+
+		}
+		expect( plan ).toHaveBeenCalledTimes( 1 );
+		controller.stopFollow( { timeMin: MON_9 + 1 } );
+
+		const follow = setup();
+		const walker = follow.bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const routes = vi.spyOn( follow.controller.routes, 'route' );
+		const player = [ 560, 1, 250 ];
+		follow.controller.startFollow( { npcId: walker.npcId, timeMin: MON_9, playerPosition: player } );
+		for ( const offset of [ 0, 0.5, 0.9, 0.4 ] ) {
+
+			follow.controller.updateFollow( { timeMin: MON_9, deltaSeconds: 0.5, playerPosition: [ player[ 0 ] + offset, 1, 250 ] } );
+
+		}
+		expect( routes ).toHaveBeenCalledTimes( 1 );
+		follow.controller.updateFollow( { timeMin: MON_9, deltaSeconds: 0.5, playerPosition: [ player[ 0 ] + 3, 1, 250 ] } );
+		expect( routes ).toHaveBeenCalledTimes( 2 );
+
+	} );
+
+	it( 'restores a version 1 save: its walk home becomes a return and its leader keeps its route', () => {
+
+		const returning = setup();
+		const walker = returning.bridge.getNPCVendor( { parcelId: 'p_clinic', timeMin: MON_9 } );
+		returning.controller.beginConversation( { npcId: walker.npcId, timeMin: MON_9, position: [ 505, 3, 250 ], heading: 0,
+			place: { kind: 'edge', id: 'walk-p_clinic' }, seated: false } );
+		returning.controller.endConversation( { timeMin: MON_9 + 1 } );
+		const current = returning.controller.serialize();
+		const legacy = legacySave( current, { ...current.returns[ 0 ], mode: 'resuming', source: 'conversation', lastTimeMin: MON_9 + 1 } );
+		const restored = setup( restoreSimulation( simulationInput(), returning.bridge.simulation.serialize() ) ).controller;
+		expect( restored.restore( legacy ) ).toEqual( current );
+		expect( walkingHome( restored ) ).toEqual( [ walker.npcId ] );
+
+		const leading = setup();
+		const guide = leading.bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		leading.controller.startLead( { npcId: guide.npcId, timeMin: MON_9, destination: { kind: 'parcel', id: 'p_clinic' } } );
+		const { route, lastTimeMin } = leading.controller.serialize().follow;
+		const old = legacySave( leading.controller.serialize(), { npcId: guide.npcId, mode: 'leading', route, lastTimeMin } );
+		const upgraded = setup( restoreSimulation( simulationInput(), leading.bridge.simulation.serialize() ) ).controller;
+		expect( upgraded.restore( old ).follow ).toEqual( {
+			npcId: guide.npcId, mode: 'leading', phase: 'walking', route, lastTimeMin, pace: { giveUpBeyond: 60, giveUpAfterMin: 3 }
+		} );
+		expect( upgraded.companion ).toMatchObject( { npcId: guide.npcId, mode: 'leading', phase: 'walking' } );
+
+	} );
+
 	it( 'fails closed on unknown, placeless, unavailable and malformed identities', () => {
 
 		const { bridge, controller } = setup();
@@ -588,6 +793,9 @@ describe( 'NPC continuity integration', () => {
 		const released = controller.updateFollow( { timeMin: MON_9 + 1, deltaSeconds: 1, playerPosition: [ 560, 1, 250 ] } );
 		expect( released.mode ).toBe( 'released' );
 		expect( controller.serialize().follow ).toBeNull();
+		expect( controller.drainEvents() ).toEqual( [ {
+			npcId: worker.npcId, mode: 'following', phase: 'gave-up', timeMin: MON_9 + 1, reason: 'unavailable'
+		} ] );
 
 	} );
 
@@ -723,6 +931,35 @@ function network() {
 			service: [ { start: 0, end: 86400, headway: 600, phase: 0 } ]
 		} ] }
 	};
+
+}
+
+function walkingHome( controller ) {
+
+	return controller.serialize().returns.map( ( walk ) => walk.npcId );
+
+}
+
+function walkOn( controller, npcId, request ) {
+
+	controller.updateFollow( request );
+	return controller.actor( npcId );
+
+}
+
+function startCompanion( controller, mode, npcId, playerPosition, pace = null, timeMin = MON_9 ) {
+
+	return mode === 'following'
+		? controller.startFollow( { npcId, timeMin, playerPosition, ...( pace ? { pace } : {} ) } )
+		: controller.startLead( { npcId, timeMin, destination: { kind: 'parcel', id: 'p_clinic' }, ...( pace ? { pace } : {} ) } );
+
+}
+
+/** The version 1 shape of a save whose single slot held `follow`. */
+function legacySave( save, follow ) {
+
+	const { returns, follow: current, ...rest } = save;
+	return { ...rest, version: '1', follow };
 
 }
 

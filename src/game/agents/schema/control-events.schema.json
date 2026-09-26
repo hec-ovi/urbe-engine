@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-agents:control-events",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["npcId", "mode", "phase", "timeMin"],
+    "properties": {
+      "npcId": { "type": "string", "minLength": 1 },
+      "mode": { "enum": ["following", "leading"] },
+      "phase": { "enum": ["walking", "waiting", "arrived", "gave-up"] },
+      "timeMin": { "type": "number", "minimum": 0 },
+      "reason": { "enum": ["player-lost", "unreachable", "unavailable"] }
+    },
+    "if": { "properties": { "phase": { "const": "gave-up" } } },
+    "then": { "properties": { "reason": true }, "required": ["reason"] },
+    "else": { "properties": { "reason": false } }
+  }
+}

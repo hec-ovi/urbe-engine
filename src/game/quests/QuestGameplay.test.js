@@ -269,7 +269,8 @@ describe( 'explicit quest NPC control', () => {
 			stopFollow: vi.fn( () => { state.follow = null; return actor( 'resuming' ); } ),
 			startCrouch: vi.fn( ( request ) => { state.pose = { npcId: request.npcId, kind: 'crouch' }; return actor( 'posing', 'crouch' ); } ),
 			releaseCrouch: vi.fn( () => { state.pose = null; return actor( 'resuming' ); } ),
-			serialize: vi.fn( () => structuredClone( state ) )
+			serialize: vi.fn( () => structuredClone( state ) ),
+			get companion() { return state.follow; }
 		};
 		const crowd = { questMember: () => null, syncActor: vi.fn() };
 		const animations = { npcControl: vi.fn() };
@@ -304,7 +305,7 @@ describe( 'explicit quest NPC control', () => {
 
 		const continuity = {
 			startFollow: vi.fn( () => { throw Object.assign( new Error( 'no authored route' ), { code: 'E_NPC_PATH' } ); } ),
-			serialize: vi.fn( () => ( { follow: { npcId: 'cast-b', mode: 'following' } } ) )
+			companion: { npcId: 'cast-b', mode: 'following' }
 		};
 		const gameplay = setup( fakeActions( questTarget( 'observe', [ action( 'inspect', 'Inspect' ) ] ) ), {
 			session: { hasCastNpc: ( npcId ) => npcId === 'cast-a' },
