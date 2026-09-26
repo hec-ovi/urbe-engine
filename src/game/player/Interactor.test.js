@@ -274,6 +274,9 @@ it( 'opens a conversation with a person by id without aiming, and keeps a person
 	interactor.close( CLOCK, 'player-left', { keep: true } );
 	expect( continuity.endConversation ).toHaveBeenLastCalledWith( { timeMin: CLOCK.timeMin, hold: true } );
 	expect( interactor.talkTo( 'n2', CLOCK ) ).toBeNull();
+	crowd.memberForNpc( 'n1' ).retiring = true;
+	expect( interactor.talkTo( 'n1', CLOCK ) ).toBeNull();
+	crowd.memberForNpc( 'n1' ).retiring = false;
 	crowd.memberForNpc( 'n1' ).fallen = true;
 	expect( interactor.talkTo( 'n1', CLOCK ) ).toBeNull();
 	expect( continuity.beginConversation ).toHaveBeenCalledTimes( 2 );
