@@ -1,9 +1,15 @@
 import { Float32BufferAttribute } from 'three';
 
-/** World-space, non-indexed, always with normals. Merging needs one layout. */
-export function bake( mesh ) {
+/**
+ * World-space, always with normals. Merging needs one layout, so it is
+ * non-indexed unless the caller keeps the producer's index (`indexed`), which
+ * a published normal allows: a copy drawn many times shades each shared vertex
+ * once, and a simplifier needs the triangles' shared corners.
+ */
+export function bake( mesh, { indexed = false } = {} ) {
 
-	const geometry = ( mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone() );
+	const keep = indexed && mesh.geometry.index && mesh.geometry.getAttribute( 'normal' );
+	const geometry = ( mesh.geometry.index && ! keep ? mesh.geometry.toNonIndexed() : mesh.geometry.clone() );
 
 	// A producer may publish positions quantized into a normalized integer, with
 	// the scale back to metres in the node transform. Applying that transform

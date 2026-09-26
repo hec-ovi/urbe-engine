@@ -3,13 +3,17 @@ import { attribute, texture, vec3 } from 'three/tsl';
 import { nightLevel } from '../light/NightSwitch.js';
 import { ScenicIrradiance } from './ScenicIrradiance.js';
 
-/** Bakes receiver illumination on a metre grid while retaining surface positions and UVs. */
+/**
+ * Bakes receiver illumination on a grid of `cell` metres, a metre by default,
+ * while retaining surface positions and UVs. A room seen from far away keeps
+ * its light on a coarser grid for a fraction of the triangles.
+ */
 export class ScenicSurface {
 	static supports( key ) { return key.split( '/' )[ 1 ]?.startsWith( 'paired-room-' ); }
 
 	constructor( blueprint ) { this.field = new ScenicIrradiance( blueprint ); }
 
-	bake( source, key, fallback = 1 ) {
+	bake( source, key, fallback = 1, cell = 1 ) {
 		const state = /(?:-|\/)(dark|dim)(?:\/|$)/.exec( key )?.[ 1 ] ?? 'lit';
 		const position = source.getAttribute( 'position' ), normal = source.getAttribute( 'normal' ), uv = source.getAttribute( 'uv' );
 		const data = { position: [], normal: [], uv: [], scenicRadiance: [] };
@@ -18,7 +22,7 @@ export class ScenicSurface {
 			const center = points.reduce( ( sum, point ) => sum.add( point ), new Vector3() ).multiplyScalar( 1 / 3 );
 			const room = this.field.roomAt( center, state );
 			const n = new Vector3().fromBufferAttribute( normal, offset ).normalize();
-			const steps = room ? Math.max( 1, Math.ceil( Math.max( points[ 0 ].distanceTo( points[ 1 ] ), points[ 1 ].distanceTo( points[ 2 ] ), points[ 2 ].distanceTo( points[ 0 ] ) ) ) ) : 1;
+			const steps = room ? Math.max( 1, Math.ceil( Math.max( points[ 0 ].distanceTo( points[ 1 ] ), points[ 1 ].distanceTo( points[ 2 ] ), points[ 2 ].distanceTo( points[ 0 ] ) ) / cell ) ) : 1;
 			const vertex = ( i, j ) => {
 				const weights = [ 1 - ( i + j ) / steps, i / steps, j / steps ];
 				const p = new Vector3(), tex = [ 0, 0 ];

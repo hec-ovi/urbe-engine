@@ -1,6 +1,7 @@
 import { Group } from 'three/webgpu';
 import { prepare } from './BatchGeometry.js';
 import { MaterialBatch } from './MaterialBatch.js';
+import { HIDDEN_FAR, NEAR_ONLY } from './SphereCulledBatch.js';
 
 /**
  * One kit's whole vocabulary, drawn as one batch per material.
@@ -15,19 +16,24 @@ import { MaterialBatch } from './MaterialBatch.js';
  *
  * A kit that reads its pieces as the city needs them hands them over in as many
  * calls as it likes: the batches grow to take them and the draw count does not.
+ *
+ * A surface may also carry `far`, the geometry it draws past `lod.distance`
+ * from `lod.point`; a far geometry with no triangles draws nothing out there.
  */
 export class MaterialBatches {
 
 	/**
 	 * @param fill whether each copy carries a fill light, for draws standing in rooms
 	 * @param hitches the log a batch names its rebuilds in
+	 * @param lod `{ point, distance }` the far surfaces are chosen by, shared with the caller
 	 */
-	constructor( name, { fill = false, uvRepeat = false, hitches = null } = {} ) {
+	constructor( name, { fill = false, uvRepeat = false, hitches = null, lod = null } = {} ) {
 
 		this.name = name;
 		this.fill = fill;
 		this.uvRepeat = uvRepeat;
 		this.hitches = hitches;
+		this.lod = lod;
 		/** material key to MaterialBatch */
 		this.batches = new Map();
 		/** entry id to [{ batch, geometryId }] */
@@ -68,7 +74,7 @@ export class MaterialBatches {
 	 * beside what is standing. The draw count follows the materials, so entries
 	 * arriving later never add a batch a material already has.
 	 *
-	 * @param entries [{ id, surfaces: [{ bucket, geometry, material, castShadow? }] }]
+	 * @param entries [{ id, surfaces: [{ bucket, geometry, material, castShadow?, far? }] }]
 	 * @param castShadow whether this kit's batches cast, unless a surface says otherwise
 	 * @param instances copies each new batch makes room for before the first cell
 	 */
@@ -94,8 +100,9 @@ export class MaterialBatches {
 			// A batch is filled from the geometries as they come out of here, and
 			// every owner of a surface reads it from the same record, so the
 			// prepared geometry is written back over the one that was handed in.
-			const ready = prepare( surfaces.map( ( surface ) => surface.geometry ), this.batches.get( key )?.layout ?? null );
-			for ( const [ index, surface ] of surfaces.entries() ) surface.geometry = ready[ index ];
+			const held = drawn( surfaces );
+			const ready = prepare( held.map( ( [ surface, field ] ) => surface[ field ] ), this.batches.get( key )?.layout ?? null );
+			for ( const [ index, [ surface, field ] ] of held.entries() ) surface[ field ] = ready[ index ];
 
 		}
 
@@ -118,7 +125,8 @@ export class MaterialBatches {
 				instances,
 				fill: this.fill,
 				uvRepeat: this.uvRepeat,
-				hitches: this.hitches
+				hitches: this.hitches,
+				lod: this.lod
 			} );
 			this.batches.set( key, batch );
 			this.group.add( batch.mesh );
@@ -130,8 +138,10 @@ export class MaterialBatches {
 			this.entries.set( entry.id, entry.surfaces.map( ( surface ) => {
 
 				const batch = this.batches.get( surface.bucket );
+				const geometryId = batch.addGeometry( surface.geometry );
+				const far = ! surface.far ? NEAR_ONLY : hasTriangles( surface.far ) ? batch.addGeometry( surface.far ) : HIDDEN_FAR;
 
-				return { batch, geometryId: batch.addGeometry( surface.geometry ) };
+				return { batch, geometryId, far };
 
 			} ) );
 
@@ -164,7 +174,7 @@ export class MaterialBatches {
 		const parts = this.entries.get( id );
 		const instances = [];
 
-		for ( const { batch, geometryId } of parts ) instances.push( batch.add( geometryId, matrix, color, fill, uvRepeat ) );
+		for ( const { batch, geometryId, far } of parts ) instances.push( batch.add( geometryId, matrix, color, fill, uvRepeat, far ) );
 		this.copies ++;
 
 		return { parts, instances };
@@ -192,8 +202,24 @@ export class MaterialBatches {
 
 }
 
+/** Every geometry a batch holds for these surfaces, as [surface, field]: each near one, and each far one with triangles. */
+function drawn( surfaces ) {
+
+	return surfaces.flatMap( ( surface ) => [
+		[ surface, 'geometry' ],
+		...( surface.far && hasTriangles( surface.far ) ? [ [ surface, 'far' ] ] : [] )
+	] );
+
+}
+
 function total( surfaces, of ) {
 
-	return surfaces.reduce( ( sum, surface ) => sum + of( surface.geometry ), 0 );
+	return drawn( surfaces ).reduce( ( sum, [ surface, field ] ) => sum + of( surface[ field ] ), 0 );
+
+}
+
+function hasTriangles( geometry ) {
+
+	return ( geometry.getIndex()?.count ?? geometry.getAttribute( 'position' )?.count ?? 0 ) > 0;
 
 }

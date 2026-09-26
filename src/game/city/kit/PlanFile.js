@@ -1,4 +1,5 @@
 import { documentHash } from '../../data/WorldDocument.js';
+import { farShells } from './FarSurfaces.js';
 import { readShell } from './KitGeometry.js';
 
 /**
@@ -43,11 +44,12 @@ export async function readPlanFile( entry, { baseUrl, readBinary, blueprints } )
 /**
  * That file decoded into what the city draws this building with: its surfaces,
  * the fake rooms behind its glass and its entrance leaves, in the plan's own
- * frame. It is the largest piece of work a cell brings and it runs a step at a
- * time under the frame budget. A file that refuses to decode is `E_KIT_PIECES`
- * like one that never arrived.
+ * frame, each facade with the far surface it draws past the far distance. It
+ * is the largest piece of work a cell brings and it runs a step at a time under
+ * the frame budget, the simplifying on the simplifier's worker. A file that
+ * refuses to decode is `E_KIT_PIECES` like one that never arrived.
  */
-export async function decodePlan( entry, { bytes, blueprint }, { baseUrl, factory, loader, slice, hitches } ) {
+export async function decodePlan( entry, { bytes, blueprint }, { baseUrl, factory, loader, slice, hitches, simplifier } ) {
 
 	let scene;
 
@@ -66,6 +68,7 @@ export async function decodePlan( entry, { bytes, blueprint }, { baseUrl, factor
 	// All scenery stays separate, including its curtains and fixtures: a
 	// furnished parcel owns the camera mask for every part of the fake rooms.
 	const { surfaces, scenery, leaves, plates, plateSurfaces } = shell;
+	await farShells( surfaces, simplifier );
 
 	return {
 		id: entry.id, baysAcross: entry.baysAcross, baysDeep: entry.baysDeep,

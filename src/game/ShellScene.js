@@ -2,6 +2,7 @@ import { FrameBudget } from '../app/FrameBudget.js';
 import { HitchLog } from './debug/HitchLog.js';
 import { BuildingsLoader } from './city/BuildingsLoader.js';
 import { ShellStream } from './city/streaming/ShellStream.js';
+import { FAR_DISTANCE, FarSimplifier } from './city/kit/FarSurfaces.js';
 import { KitPieces } from './city/kit/KitPieces.js';
 import { KitCellLoader } from './city/kit/KitCells.js';
 import { KitSigns } from './city/kit/KitSigns.js';
@@ -38,15 +39,16 @@ export class ShellScene {
 		this.parcels = new Map( atlas.parcels.map( parcel => [ parcel.id, parcel ] ) );
 		Object.assign( this, { factory, physics, colliders, interiors, haze, slice, hitches } );
 		this.cells = new Map();
-		this.pieces = kit ? new KitPieces( { kit: kit.document, baseUrl: kit.baseUrl, blueprints: kit.blueprints, factory, slice, hitches } ) : null;
+		// One worker simplifies the far surfaces of plans and landmark shells alike.
+		const simplifier = new FarSimplifier();
+		const shells = new BuildingsLoader( factory, undefined, {}, slice, hitches, simplifier );
+		this.pieces = kit ? new KitPieces( { kit: kit.document, baseUrl: kit.baseUrl, blueprints: kit.blueprints, factory, slice, hitches, simplifier } ) : null;
 		// One plan stands on many lots with no word of its own, so the words the
 		// city reads are lettered here, per parcel, in one batch.
 		this.signs = kit ? new KitSigns( { factory } ) : null;
 		this.stream = new ShellStream( {
 			catalog, factory, buildings, loadBuildings, hitches,
-			loader: this.pieces
-				? new KitCellLoader( { pieces: this.pieces, factory, signs: this.signs, slice, hitches } )
-				: new BuildingsLoader( factory, undefined, {}, slice, hitches ),
+			loader: this.pieces ? new KitCellLoader( { pieces: this.pieces, factory, signs: this.signs, slice, hitches, shells } ) : shells,
 			...( this.pieces ? { loadRadius: KIT_LOAD_RADIUS, dropRadius: KIT_DROP_RADIUS } : {} ),
 			prepare: cell => this.#prepare( cell ),
 			added: cell => { this.cells.set( cell.id, cell ); this.onFixturesChanged?.(); },
@@ -57,6 +59,30 @@ export class ShellScene {
 		// stream turns that cell visible, which is after the skyline that still
 		// carries its impostors has been rebuilt without them.
 		if ( this.pieces ) this.stream.group.add( this.pieces.group, this.signs.group );
+
+	}
+
+	/**
+	 * Streams cells around the player and measures every far surface from
+	 * there: the plan copies' in their batches, and each standing shell's
+	 * merged facades, which show their far mesh once it lies past the distance.
+	 */
+	update( position ) {
+
+		this.stream.update( position );
+		this.pieces?.focus( position );
+		for ( const cell of this.cells.values() ) {
+
+			for ( const { near, far, sphere } of cell.lods ?? [] ) {
+
+				if ( ! far ) continue;
+				const beyond = sphere.center.distanceTo( position ) > FAR_DISTANCE + sphere.radius;
+				near.visible = ! beyond;
+				far.visible = beyond;
+
+			}
+
+		}
 
 	}
 

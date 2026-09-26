@@ -20,6 +20,8 @@ The optional loader port follows `BuildingsLoader.load(sources)`. A cell is admi
 
 `dispose()` cancels pending work and releases owned geometry. Loaded sources must match the requested catalog IDs. Invalid distances or positions throw `E_SHELL_SETTINGS` or `E_SHELL_POSITION`; source mismatches report `E_SHELL_SOURCE`. Failed initial admission rejects `load` with `E_SHELL_LOAD`. Later loading and preparation failures report through `onError` and keep distant geometry. The optional loader port follows BuildingsLoader's public result and defaults to the original GLB loader.
 
+Far facades: `ShellScene` hands one [far-surface simplifier](../kit/FarSurfaces.js) to the kit and to the shell loader, so a standing original shell also carries `lods`, `{ near, far, sphere }` per merged facade (window rooms and a furnished parcel's masked rooms excepted). The far mesh is the facade simplified on the worker, drawn without an index as the facade is, hung hidden beside it once the worker answers and never for a cell already released. `ShellScene.update(feet)`, each frame, shows it instead of the facade while the facade's sphere lies wholly past 150 m.
+
 Release also disposes materials marked `ownedScenicMaterial`; shared factory materials and their maps remain alive. Kit pieces are city-owned: a cell release takes its instances out of the shared draws and never disposes their geometry.
 Building model groups call their cell-owned disposer before shell traversal, including cancelled admission, preparation failure and eviction. Their imported textures and instance buffers are released with their geometry.
 

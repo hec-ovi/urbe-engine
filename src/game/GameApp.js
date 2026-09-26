@@ -888,7 +888,7 @@ export class GameApp {
 
 		const feet = this.body.feet;
 		this.safetyGround.update( this.camera );
-		this.shellScene?.stream.update( feet );
+		this.shellScene?.update( feet );
 		this.groundStream?.update( feet ).catch( error => console.error( 'ground streaming', error ) );
 		this.propsStream?.update( feet ).catch( error => console.error( 'prop streaming', error ) );
 

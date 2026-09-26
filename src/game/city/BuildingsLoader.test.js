@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu';
 import { BuildingsLoader } from './BuildingsLoader.js';
 import { Interactor } from '../player/Interactor.js';
 import { releaseShell } from './streaming/ReleaseShell.js';
+import { FarSimplifier } from './kit/FarSurfaces.js';
 
 const factory = {
 	resolver: { resolve: () => null },
@@ -11,6 +12,45 @@ const factory = {
 };
 
 describe( 'building shells', () => {
+
+	it( 'hangs a simplified far facade beside each merged one, never for a shell already gone', async () => {
+
+		// A wall of coplanar quads, each written with vertices of its own.
+		const loader = { loadAsync: async () => {
+
+			const wall = new THREE.PlaneGeometry( 12, 6, 24, 12 ).toNonIndexed();
+			const material = new THREE.MeshBasicMaterial();
+			material.name = 'cyberpunk/paired-cladding/mid';
+			const scene = new THREE.Group();
+			scene.add( Object.assign( new THREE.Mesh( wall, material ), { name: 'mergedcladding' } ) );
+
+			return { scene };
+
+		} };
+		const buildings = () => new Map( [ [ 'p0', { parcelId: 'p0', blueprint: entranceBlueprint(), shellUrl: '/p0.glb', hasInterior: false } ] ] );
+		const shells = new BuildingsLoader( factory, loader, {}, undefined, undefined, new FarSimplifier() );
+
+		const city = await shells.load( buildings() );
+		const [ level ] = city.lods;
+		await vi.waitFor( () => expect( level.far ).toBeTruthy() );
+		// It stands hidden beside the facade until the far distance calls for it,
+		// and draws as the facade does: without an index, in a few triangles.
+		expect( level.far.parent ).toBe( level.near.parent );
+		expect( level.far.visible ).toBe( false );
+		expect( level.far.material ).toBe( level.near.material );
+		expect( level.far.geometry.getIndex() ).toBeNull();
+		expect( level.far.geometry.getAttribute( 'position' ).count ).toBeLessThanOrEqual( 6 );
+		expect( level.sphere.radius ).toBeGreaterThan( 6 );
+
+		const gone = await shells.load( buildings() );
+		releaseShell( gone );
+		await new Promise( ( resolve ) => setTimeout( resolve, 20 ) );
+		expect( gone.lods[ 0 ].far ).toBeNull();
+
+		// Without a simplifier every shell draws near.
+		expect( ( await new BuildingsLoader( factory, loader ).load( buildings() ) ).lods ).toEqual( [] );
+
+	} );
 
 	it( 'keeps exterior window scenery and hides it only while the camera is inside its real interior', async () => {
 

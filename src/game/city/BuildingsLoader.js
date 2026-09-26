@@ -14,6 +14,7 @@ import { cutPlate, interiorStoreys, storeyIndex } from './StoreyPlates.js';
 import { BuildingModels } from './BuildingModels.js';
 import { ShellBatches } from './ShellBatches.js';
 import { prepare } from './kit/BatchGeometry.js';
+import { farSurface } from './kit/FarSurfaces.js';
 
 // A moving leaf is the one thing a node name still answers for: each is its
 // own node, `door:<id>/leaf:N` or `balcony:<id>/leaf:N`, with an authored
@@ -50,14 +51,17 @@ export class BuildingsLoader {
 	 * @param factory PbrMaterialFactory
 	 * @param slice the frame budget reading a shell is paced by
 	 * @param hitches the log each step of reading a shell is named in
+	 * @param simplifier makes the far surfaces a shell draws past the far
+	 *   distance ([FarSurfaces.js](kit/FarSurfaces.js)); null draws every shell near
 	 */
-	constructor( factory, loader = cityGltfLoader(), modelOptions = {}, slice = new FrameBudget( { paced: false } ), hitches = new HitchLog() ) {
+	constructor( factory, loader = cityGltfLoader(), modelOptions = {}, slice = new FrameBudget( { paced: false } ), hitches = new HitchLog(), simplifier = null ) {
 
 		this.factory = factory;
 		this.loader = loader;
 		this.modelOptions = modelOptions;
 		this.slice = slice;
 		this.hitches = hitches;
+		this.simplifier = simplifier;
 
 	}
 
@@ -70,10 +74,17 @@ export class BuildingsLoader {
 		const models = await new BuildingModels( url => this.loader.loadAsync( url ), this.modelOptions ).load( buildings );
 		try {
 
-			const city = await this.#loadShells( buildings );
+			const { surfaces, ...city } = await this.#loadShells( buildings );
 			if ( models.group.children.length ) city.group.add( models.group );
 			city.triangles += models.triangles;
-			return { ...city, unresolvedModelInstances: models.unresolved, disposeModelInstances: () => models.dispose() };
+			const standing = { released: false };
+			const lods = this.simplifier ? surfaces.map( ( mesh ) => farLevel( mesh, this.simplifier, standing ) ) : [];
+			return { ...city, lods, unresolvedModelInstances: models.unresolved, disposeModelInstances: () => {
+
+				standing.released = true;
+				models.dispose();
+
+			} };
 
 		} catch ( error ) {
 
@@ -95,6 +106,8 @@ export class BuildingsLoader {
 
 		const shellBatches = new ShellBatches();
 		const draws = [ { batches: shellBatches, group } ];
+		/** The merged facades a far surface can stand in for: neither window rooms nor a furnished parcel's masked ones. */
+		const surfaces = [];
 		const doors = [];
 		const entrances = [];
 		const unsupportedDoors = [];
@@ -178,12 +191,13 @@ export class BuildingsLoader {
 				mesh.castShadow = ! draw.exterior;
 				mesh.receiveShadow = true;
 				draw.group.add( mesh );
+				if ( ! scenic && ! draw.exterior ) surfaces.push( mesh );
 
 			} );
 
 		}
 
-		return { group, doors, entrances, shellColliders, centers, triangles, unsupportedDoors };
+		return { group, doors, entrances, shellColliders, centers, triangles, unsupportedDoors, surfaces };
 
 	}
 
@@ -478,3 +492,39 @@ const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _centroid = new THREE.Vector3();
+
+/**
+ * One merged facade and the far surface it draws past the far distance, hung
+ * beside it hidden once the simplifier answers, unless the cell has gone by
+ * then. `ShellScene.update` shows one or the other. The far mesh draws without
+ * an index, as the facade does, so both share one program.
+ */
+function farLevel( near, simplifier, standing ) {
+
+	near.geometry.computeBoundingSphere();
+	const level = { near, far: null, sphere: near.geometry.boundingSphere };
+
+	farSurface( near.geometry, near.material, simplifier ).then( ( indexed ) => {
+
+		if ( ! indexed ) return;
+		const geometry = indexed.toNonIndexed();
+		indexed.dispose();
+		if ( standing.released || ! near.parent ) {
+
+			geometry.dispose();
+			return;
+
+		}
+		const far = new THREE.Mesh( geometry, near.material );
+		far.name = `${near.name}:far`;
+		far.castShadow = near.castShadow;
+		far.receiveShadow = near.receiveShadow;
+		far.visible = false;
+		near.parent.add( far );
+		level.far = far;
+
+	} );
+
+	return level;
+
+}

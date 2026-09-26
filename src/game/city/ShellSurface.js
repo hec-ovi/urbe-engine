@@ -78,14 +78,15 @@ export function isSceneryNode( node ) {
  * drawing a furnished parcel gives it an ExteriorScenery visibility mask.
  *
  * @param scenic ScenicSurface for this building
+ * @param cell the grid in metres the room light is baked on
  * @returns the exterior scenery geometry to draw
  */
-export function shellScenery( node, factory, { key, scenic } ) {
+export function shellScenery( node, factory, { key, scenic, cell = 1 } ) {
 
 	const geometry = bake( node );
 
 	return ScenicSurface.supports( key )
-		? scenic.bake( geometry, key, factory.resolver.resolve( key )?.physical?.emissiveStrength ?? 1 )
+		? scenic.bake( geometry, key, factory.resolver.resolve( key )?.physical?.emissiveStrength ?? 1, cell )
 		: geometry;
 
 }

@@ -1,7 +1,9 @@
+import { Vector3 } from 'three/webgpu';
 import { FrameBudget } from '../../../app/FrameBudget.js';
 import { HitchLog } from '../../debug/HitchLog.js';
 import { cityGltfLoader } from '../../data/CityGltfLoader.js';
 import { ReadBudget } from '../../data/ReadBudget.js';
+import { FAR_DISTANCE, FarSimplifier } from './FarSurfaces.js';
 import { MaterialBatches } from './MaterialBatches.js';
 import { decodePlan, pieceError, readPlanFile } from './PlanFile.js';
 
@@ -30,6 +32,10 @@ const PLATES = ( planId ) => `${planId}/plates`;
  * the draw count follows the materials the plans wear and never the number of
  * plans read or buildings standing.
  *
+ * A copy farther than FAR_DISTANCE from the point `focus` last named draws its
+ * far surfaces: facades simplified on a worker and window rooms lit on a coarser
+ * grid ([FarSurfaces.js](FarSurfaces.js)). Nothing is far before a focus is named.
+ *
  * A plan whose files are missing or corrupt never stands. It is recorded with
  * its `E_KIT_PIECES` cause and the parcels that are copies of it stay empty
  * lots, because one building the city cannot draw is not a reason to refuse the
@@ -44,8 +50,9 @@ export class KitPieces {
 	 * @param slice the frame budget decoding a plan is paced by
 	 * @param hitches the log each step of standing a plan is named in
 	 * @param readBinary reads one URL into an ArrayBuffer
+	 * @param simplifier makes the far facades, off the main thread where it can
 	 */
-	constructor( { kit, baseUrl, factory, blueprints, slice = new FrameBudget( { paced: false } ), hitches = new HitchLog(), loader = cityGltfLoader(), readBinary = fetchBinary } ) {
+	constructor( { kit, baseUrl, factory, blueprints, slice = new FrameBudget( { paced: false } ), hitches = new HitchLog(), loader = cityGltfLoader(), readBinary = fetchBinary, simplifier = new FarSimplifier() } ) {
 
 		/** plan id -> what the index publishes for it */
 		this.index = new Map( kit.plans.map( ( plan ) => [ plan.id, plan ] ) );
@@ -56,6 +63,7 @@ export class KitPieces {
 		this.slice = slice;
 		this.hitches = hitches;
 		this.readBinary = readBinary;
+		this.simplifier = simplifier;
 		/** plan id -> its id, lot bays, surfaces, scenery, plates and leaves, once it stands */
 		this.plans = new Map();
 		/** plan id -> its file, read and checked, until the decode consumes it */
@@ -67,8 +75,17 @@ export class KitPieces {
 		// Cells read ahead of the one being built, so the plans asked for first
 		// are the ones read first.
 		this.budget = new ReadBudget( LOAD_CONCURRENCY );
-		this.batches = new MaterialBatches( 'kit-plans', { hitches } );
+		/** Where copies are measured from for their far surfaces, shared with every batch. */
+		this.lod = { point: null, distance: FAR_DISTANCE };
+		this.batches = new MaterialBatches( 'kit-plans', { hitches, lod: this.lod } );
 		this.group = this.batches.group;
+
+	}
+
+	/** Measures every copy from this point for its far surfaces, from the next pass on. */
+	focus( position ) {
+
+		( this.lod.point ??= new Vector3() ).copy( position );
 
 	}
 
@@ -209,10 +226,16 @@ export class KitPieces {
 	dispose() {
 
 		this.batches.dispose();
+		this.simplifier.dispose();
 		this.files.clear();
 		for ( const plan of this.plans.values() ) {
 
-			for ( const { geometry } of [ ...plan.surfaces, ...plan.scenery ] ) geometry.dispose();
+			for ( const { geometry, far } of [ ...plan.surfaces, ...plan.scenery ] ) {
+
+				geometry.dispose();
+				far?.dispose();
+
+			}
 			for ( const plate of plan.plates ) for ( const { geometry } of plate.surfaces ) geometry.dispose();
 			for ( const { geometry } of plan.plateSurfaces ) geometry.dispose();
 			for ( const leaf of plan.leaves ) for ( const { geometry } of leaf.surfaces ) geometry.dispose();

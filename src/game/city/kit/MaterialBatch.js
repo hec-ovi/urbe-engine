@@ -1,5 +1,6 @@
-import { BatchedMesh, Vector4 } from 'three/webgpu';
+import { Vector4 } from 'three/webgpu';
 import { FillChannel } from './FillChannel.js';
+import { NEAR_ONLY, SphereCulledBatch } from './SphereCulledBatch.js';
 import { UvRepeatChannel } from './UvRepeatChannel.js';
 
 /** Enough copies for a first cell; a cell that wants more grows it. */
@@ -17,9 +18,10 @@ const NO_FILL = new Vector4();
  * bind group and one vertex buffer for every piece that wears the material.
  *
  * Culling stays per copy: the batch's own bounding sphere would cover the whole
- * city, so the object test is off and `perObjectFrustumCulled` answers for each
- * copy against that copy's geometry. Opaque batches do not sort, because depth
- * ordering only pays where blending needs it.
+ * city, so the object test is off and each copy is tested against the sphere
+ * kept for it where it was placed ([SphereCulledBatch.js](SphereCulledBatch.js)).
+ * Opaque batches do not sort, because depth ordering only pays where blending
+ * needs it.
  */
 export class MaterialBatch {
 
@@ -28,8 +30,9 @@ export class MaterialBatch {
 	 * @param indices their total index count, or 0 when the geometry is not indexed
 	 * @param instances copies to make room for before the first cell stands
 	 * @param fill whether each copy carries a fill light (FillChannel)
+	 * @param lod `{ point, distance }` a copy past which draws its far geometry
 	 */
-	constructor( name, material, { vertices, indices = 0, instances = FIRST_CAPACITY, castShadow = false, fill = false, uvRepeat = false, hitches = null } ) {
+	constructor( name, material, { vertices, indices = 0, instances = FIRST_CAPACITY, castShadow = false, fill = false, uvRepeat = false, hitches = null, lod = null } ) {
 
 		this.name = name;
 		this.material = material;
@@ -42,7 +45,7 @@ export class MaterialBatch {
 		this.indices = 0;
 		/** True once a copy has carried a colour, which the shader only reads from then on. */
 		this.coloured = false;
-		this.mesh = new BatchedMesh( Math.max( 1, instances ), this.vertexCapacity, this.indexCapacity, material );
+		this.mesh = new SphereCulledBatch( Math.max( 1, instances ), this.vertexCapacity, this.indexCapacity, material );
 		this.mesh.name = name;
 		this.mesh.perObjectFrustumCulled = true;
 		this.mesh.sortObjects = Boolean( material.transparent );
@@ -52,6 +55,7 @@ export class MaterialBatch {
 		// the batch draws in world coordinates, so the object test is skipped
 		// and the per-copy test is what culls.
 		this.mesh.frustumCulled = false;
+		this.mesh.lod = lod;
 		this.fill = fill ? new FillChannel( this.capacity ).attach( this.mesh ) : null;
 		this.uvRepeat = uvRepeat ? new UvRepeatChannel( this.capacity ).attach( this.mesh ) : null;
 
@@ -147,13 +151,18 @@ export class MaterialBatch {
 
 	}
 
-	/** Draws one more copy of one primitive. @returns the instance to hand back */
-	add( geometryId, matrix, color = null, fill = null, uvRepeat = [ 1, 1 ] ) {
+	/**
+	 * Draws one more copy of one primitive.
+	 * @param far the geometry id it draws past the far distance, or NEAR_ONLY or HIDDEN_FAR
+	 * @returns the instance to hand back
+	 */
+	add( geometryId, matrix, color = null, fill = null, uvRepeat = [ 1, 1 ], far = NEAR_ONLY ) {
 
 		this.reserve( 1 );
 
 		const instance = this.mesh.addInstance( geometryId );
 		this.mesh.setMatrixAt( instance, matrix );
+		this.mesh.setFarAt( instance, far );
 		this.fill?.set( instance, fill ?? NO_FILL );
 		this.uvRepeat?.set( instance, uvRepeat );
 		if ( color ) {

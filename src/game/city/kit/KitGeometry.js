@@ -10,6 +10,7 @@ import { ShellBatches } from '../ShellBatches.js';
 import { isSceneryNode, shellMaterial, shellScenery, shellVariant } from '../ShellSurface.js';
 import { storeyIndex } from '../StoreyPlates.js';
 import { HitchLog } from '../../debug/HitchLog.js';
+import { FAR_ROOM_CELL } from './FarSurfaces.js';
 
 /**
  * One plan's shell GLB read into what the city draws it with.
@@ -27,6 +28,10 @@ import { HitchLog } from '../../debug/HitchLog.js';
  * `plates` are the storey plates, one per floor, kept apart for the same
  * reason: a parcel with a real interior draws its own module floors over them
  * ([StoreyPlates.js](../StoreyPlates.js)).
+ *
+ * The facades keep the producer's index, which the far surfaces are simplified
+ * from ([FarSurfaces.js](FarSurfaces.js)). Each window room also carries
+ * `far`, the same room with its light baked on a coarser grid.
  *
  * All geometry is plan-local, the frame the plan was generated in: origin at
  * the entrance-face corner, face 0 along +X, walking surface at Y=0. A leaf also
@@ -49,6 +54,7 @@ export async function readShell( scene, factory, blueprint, slice, hitches = new
 	const main = frames.find( ( frame ) => frame.role === 'main' && frame.motion.supported ) ?? null;
 	const shell = new Map();
 	const windowScenery = new Map();
+	const farScenery = new Map();
 	const leaves = new Map();
 	const plates = new Map();
 	const meshes = [];
@@ -78,7 +84,9 @@ export async function readShell( scene, factory, blueprint, slice, hitches = new
 				// A shared shell is drawn as a closed building, so the fake rooms
 				// behind its glass stand with the room's own light baked in.
 				const geometry = shellScenery( node, factory, { key, scenic } );
-				if ( geometry ) push( windowScenery, bucket, geometry );
+				if ( ! geometry ) return;
+				push( windowScenery, bucket, geometry );
+				if ( ScenicSurface.supports( key ) ) push( farScenery, bucket, shellScenery( node, factory, { key, scenic, cell: FAR_ROOM_CELL } ) );
 				return;
 
 			}
@@ -109,7 +117,7 @@ export async function readShell( scene, factory, blueprint, slice, hitches = new
 			// the parts its family signs itself with, and the leaves of every door
 			// this path does not move. What a node is called never decides whether
 			// it is drawn; its material decides which batch it lands in.
-			push( shell, bucket, bake( node ) );
+			push( shell, bucket, bake( node, { indexed: true } ) );
 
 		} );
 
@@ -142,8 +150,18 @@ export async function readShell( scene, factory, blueprint, slice, hitches = new
 
 	}
 
-	return { surfaces, scenery: await merged( windowScenery, factory, slice, hitches ),
-		leaves: addressable, plates: storeys, plateSurfaces: await merged( whole, factory, slice, hitches ) };
+	const scenery = await merged( windowScenery, factory, slice, hitches );
+
+	for ( const { key, scenic, geometries } of batchesOf( farScenery ).values() ) {
+
+		await slice.step();
+		const far = hitches.time( 'plan merge', () => mergedGeometry( key, geometries ) );
+		const near = scenery.find( ( surface ) => surface.bucket === ( scenic ? `${key}|scenic` : key ) );
+		if ( near ) near.far = far;
+
+	}
+
+	return { surfaces, scenery, leaves: addressable, plates: storeys, plateSurfaces: await merged( whole, factory, slice, hitches ) };
 
 }
 
@@ -154,22 +172,15 @@ export async function readShell( scene, factory, blueprint, slice, hitches = new
  */
 async function merged( buckets, factory, slice, hitches ) {
 
-	const batches = new ShellBatches();
-	for ( const [ bucket, geometries ] of buckets ) batches.add( bucket, geometries );
-
 	const surfaces = [];
 
-	for ( const { key, scenic, geometries } of batches.values() ) {
+	for ( const { key, scenic, geometries } of batchesOf( buckets ).values() ) {
 
 		await slice.step();
 
 		hitches.time( 'plan merge', () => {
 
-			const parts = geometries.length === 1 ? geometries : prepare( geometries );
-			const geometry = parts.length === 1 ? parts[ 0 ] : BufferGeometryUtils.mergeGeometries( parts, false );
-			if ( ! geometry ) throw placementError( `${key}: shell primitives do not merge` );
-			if ( parts.length > 1 ) for ( const part of parts ) part.dispose();
-			geometry.computeBoundingBox();
+			const geometry = mergedGeometry( key, geometries );
 			const base = shellMaterial( factory, splitBucket( key ) );
 
 			surfaces.push( { bucket: scenic ? `${key}|scenic` : key, geometry, material: scenic ? ScenicSurface.material( base ) : base } );
@@ -179,6 +190,29 @@ async function merged( buckets, factory, slice, hitches ) {
 	}
 
 	return surfaces;
+
+}
+
+/** The buckets split by baked receiver shading, which is a separate merge. */
+function batchesOf( buckets ) {
+
+	const batches = new ShellBatches();
+	for ( const [ bucket, geometries ] of buckets ) batches.add( bucket, geometries );
+
+	return batches;
+
+}
+
+/** One geometry of every primitive in a merge, with its bounding box. */
+function mergedGeometry( key, geometries ) {
+
+	const parts = geometries.length === 1 ? geometries : prepare( geometries );
+	const geometry = parts.length === 1 ? parts[ 0 ] : BufferGeometryUtils.mergeGeometries( parts, false );
+	if ( ! geometry ) throw placementError( `${key}: shell primitives do not merge` );
+	if ( parts.length > 1 ) for ( const part of parts ) part.dispose();
+	geometry.computeBoundingBox();
+
+	return geometry;
 
 }
 
