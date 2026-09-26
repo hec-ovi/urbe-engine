@@ -12,6 +12,7 @@ import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
 import { QuestActions } from './quests/QuestActions.js';
 import { MissionItemAssets } from './quests/MissionItemAssets.js';
 import { InvestigationGameplay } from './investigation/index.js';
+import { SceneryDirector } from './scenery/index.js';
 import { ObjectiveRouter } from './routes/ObjectiveRouter.js';
 import { ObjectiveGuide } from './routes/ObjectiveGuide.js';
 import { GamePersistence, mergeInventory, mergeProgress, uniqueLocations } from './persistence/index.js';
@@ -255,7 +256,7 @@ export class GameApp {
 		const starting = progress.timed( 'physics', Physics.create() );
 		const cars = progress.timed( 'cars', CarModels.load( config.maxCars ) );
 		const {
-			atlas, connections, nativeStreets, rooftopSpans, buildings, unbuilt, npcTypes, questlines, investigations,
+			atlas, connections, nativeStreets, rooftopSpans, buildings, unbuilt, npcTypes, questlines, investigations, scenery,
 			mechanicTargetBindings, missionAssetRequests, missionItemBindings, game, shellCatalog, kit,
 			interiorModules, interiorProps, loadBuildings
 		} = await reading;
@@ -341,11 +342,12 @@ export class GameApp {
 		// city, not to any cell of it, so they are read beside the building
 		// plans instead of after them. Each of these is its own set of files.
 		const lamps = new StreetLamps( atlas, factory, connections.networks.walk ).build();
+		// What stands solid on the street: dressing keeps clear of it, and a
+		// quest scene on the sidewalk stands around it and the dressing both.
+		const obstacles = [ ...DressingObstacles.fromPosts( lamps.posts ), ...DressingObstacles.fromFeatures( nativeStreets?.manifest.features ?? [] ) ];
 		const dressing = progress.timed( 'street props', new Dressing( atlas, connections.networks.walk, factory, {
 			replacedModuleOwnerIds: nativeStreets?.manifest.ground.replacements.moduleOwnerIds ?? [],
-			obstacles: [ ...DressingObstacles.fromPosts( lamps.posts ), ...( nativeStreets?.manifest.features ?? [] ).filter( feature => feature.kind !== 'tree-grate' ).map( feature => ( {
-				footprint: feature.footprint, bottom: feature.bounds.min[ 1 ], top: feature.bounds.max[ 1 ]
-			} ) ) ]
+			obstacles
 		} ).stream() );
 		// The room modules and the furniture are the city's, not any building's:
 		// loaded once, drawn once per surface however many floors are standing.
@@ -616,6 +618,18 @@ export class GameApp {
 		} );
 		this.scene.add( this.investigations.group );
 		this.probe?.exclude( this.investigations.group );
+		// What the quests leave standing, while they call for it; it also
+		// decides when each investigation scene stands.
+		this.scenery = SceneryDirector.create( {
+			specs: scenery, session: this.quests, sim: this.sim,
+			world: { buildings, doors: city.entrances, atlas, obstacles: [ ...obstacles, ...DressingObstacles.fromPlacements( props.placements ) ] },
+			missionAssets: { get: ( assetId ) => this.missionItems.asset( assetId ) },
+			interiors: this.stream, overlay: this.investigations, saved: game?.scenery ?? [],
+			animation: assets.animation, theme: THEME, poser: this.hero.poser, lighting: actorLighting,
+			materialFactory: factory, physics: this.physics, playerCollider: this.body.collider
+		} );
+		this.scene.add( this.scenery.group );
+		this.probe?.exclude( this.scenery.group );
 		this.objectiveGuide = new ObjectiveGuide( new ObjectiveRouter( stationAccess.walk( connections.networks.walk ), {
 			places: routePlaces( city.entrances )
 		} ) );
@@ -629,9 +643,12 @@ export class GameApp {
 			this.stream, this.renderer, this.scene, this.camera, this.look.pipeline.mrt, this.look.pipeline.renderTarget
 		);
 		if ( this.shellScene ) this.shellScene.warmup = this.floorWarmup;
-		// A focused character's model is prepared through the same queue when a
-		// conversation asks for it, not on the frame that first draws it.
+		// A focused character's model and a scene the quests stand are prepared
+		// through the same queue when they are asked for, not on the frame that
+		// first draws them.
 		this.hero.warmup = this.floorWarmup;
+		this.scenery.renderer.warmup = this.floorWarmup;
+		this.investigations.renderer.warmup = this.floorWarmup;
 		// The city is about to be drawn, so admitting a cell from here on gives
 		// the frame its turn instead of holding it.
 		slice.pace();
@@ -881,6 +898,7 @@ export class GameApp {
 			this.crowd.update( delta, feet, this.clock );
 
 		} );
+		this.hitches.time( 'scenery', () => this.scenery.update( { timeMin: this.clock.timeMin, feet }, delta ) );
 		this.hero.update( delta );
 		this.hitches.time( 'traffic', () => this.traffic.update( delta, feet, this.clock.daySeconds ) );
 		this.impactWorld.sync( {
@@ -1243,7 +1261,7 @@ export class GameApp {
 	/** Places the scenery stages now, as places a person may lead the player to. */
 	#stagedScenes() {
 		const scenes = [];
-		for ( const staged of this.scenery?.stagedPlaces() ?? [] ) {
+		for ( const staged of this.scenery.stagedPlaces() ) {
 			const place = { kind: 'parcel', id: staged.place.parcelId };
 			const name = this.companion.places.name( place );
 			if ( name ) scenes.push( { place, name, relation: 'scene' } );
@@ -1569,8 +1587,10 @@ export class GameApp {
 
 	}
 
+	/** A quest has moved: the journal, objective, inventory and route follow at once, and the scenery at its next update. */
 	#refreshQuestState() {
 
+		this.scenery.refresh();
 		this.view.quests.setQuests( this.quests.view( this.clock.timeMin ) );
 		this.#refreshCurrentObjective();
 		this.#refreshInventory();
@@ -1712,6 +1732,7 @@ export class GameApp {
 			transitJourney: this.transitGameplay.state,
 			questTransit: this.questGameplay.serializeTransit(),
 			investigations: this.investigations.serialize(),
+			scenery: this.scenery.serialize(),
 			npcState: {
 				timeMin: this.clock.timeMin,
 				simulation: this.sim.serialize(),

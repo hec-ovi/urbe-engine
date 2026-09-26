@@ -36,6 +36,7 @@ function fixture( { ending = false, errand = false } = {} ) {
  app.animations={npcDialogueTurn:vi.fn(),playerDialogueTurn:vi.fn(),completeDialogueTurn:vi.fn()};
  app.talk={stream:vi.fn(()=>talkStream(replyEvents('I wish I had more to tell you.')))};
  const companion=app.companion={offers:vi.fn(()=>[]),talkOffers:vi.fn(()=>null),guide:vi.fn(()=>null),accepted:vi.fn(()=>false),accept:vi.fn(),acceptFromTool:vi.fn()};
+ app.scenery={refresh:vi.fn()};
  // As Interactor.talkTo: the person's body, while it has one, opens a conversation when none is open.
  app.interactor={conversation:null,close:vi.fn(function(){this.conversation=null;app.presentConversation(null);}),
   talkTo:vi.fn(function(npcId){if(this.conversation||person.gone)return null;this.conversation={npcId,instance:person,behavior:null};app.presentConversation(this.conversation);return this.conversation;})};
@@ -48,7 +49,7 @@ beforeEach(()=>{document.body.replaceChildren();stubCanvas();vi.spyOn(console,'w
 afterEach(()=>vi.restoreAllMocks());
 
 describe('explicit quest dialogue through the playable UI',()=>{
- it('keeps questions and goodbye noncommitting, advances one chosen reply, and updates the same journal and HUD',async()=>{
+ it('keeps questions and goodbye noncommitting, advances one chosen reply, and updates the same journal, HUD and scenery',async()=>{
   const {app,open,state}=fixture();const user=userEvent.setup();open();
   const chat=within(app.view.dialog.element);
   expect(chat.getByText(/My brother never came home/)).toBeTruthy();
@@ -59,9 +60,11 @@ describe('explicit quest dialogue through the playable UI',()=>{
   await user.click(chat.getByRole('button',{name:'End conversation'}));expect(state()).toEqual(initial);
   open();await user.type(chat.getByRole('textbox',{name:'say something'}),'hello{Enter}');
   await vi.waitFor(()=>expect(chat.getByText('I wish I had more to tell you.')).toBeTruthy());expect(state()).toEqual(initial);
+  expect(app.scenery.refresh).not.toHaveBeenCalled();
   const choice=chat.getByRole('button',{name:'I will find Kip and ask what he saw.'});await user.click(choice);choice.click();
 	 expect(document.activeElement).toBe(chat.getByRole('button',{name:'End conversation'}));
   expect(state().completedStepIds).toEqual(['ask']);expect(state().activeStepIds).toEqual(['visit']);
+  expect(app.scenery.refresh).toHaveBeenCalledOnce();
   expect(app.quests.inventoryView()).toHaveLength(1);
   expect(chat.getByText(/Look for him at the market/)).toBeTruthy();
   expect(chat.getByRole('status').textContent).toContain('Journal updated:');

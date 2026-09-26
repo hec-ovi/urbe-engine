@@ -35,10 +35,10 @@ describe( 'playable game navigation', () => {
 
 	} );
 
-	it( 'saves the quest escort, the companion and what people remember beside the continuity, and keeps the saved memory when it cannot be read', async () => {
+	it( 'saves the quest scenery, the quest escort, the companion and what people remember beside the continuity, and keeps the saved memory when it cannot be read', async () => {
 
 		const navigate = vi.fn();
-		const { app, escort, companion } = savingApp( { navigate } );
+		const { app, escort, companion, scenery } = savingApp( { navigate } );
 		app.talk = { memory: vi.fn( async () => MEMORY ) };
 		app.view.setPaused( true );
 		const user = userEvent.setup();
@@ -46,6 +46,7 @@ describe( 'playable game navigation', () => {
 		await user.click( screen.getByRole( 'button', { name: /leave/i } ) );
 		await vi.waitFor( () => expect( navigate ).toHaveBeenCalledWith( '/' ) );
 		expect( app.persistence.save.mock.calls[ 0 ][ 0 ] ).toMatchObject( {
+			scenery,
 			npcState: { timeMin: 725, simulation: { sim: true }, continuity: { continuity: true }, questEscort: escort, companion },
 			dialogueMemory: MEMORY
 		} );
@@ -153,6 +154,7 @@ function savingApp( options ) {
 	const app = new GameApp( {}, options );
 	const escort = { questId: 'q1', stepId: 's1', npcId: 'npc-kip', mode: 'lead-player' };
 	const companion = { version: '1', npcId: 'npc-ada', kind: 'follow', startedAtMin: 700, phase: 'walking' };
+	const scenery = [ { contractVersion: '1.0', sceneId: 'q1.sc_quay', status: 'retired', stagedAtMin: 610, retiredAtMin: 700 } ];
 	app.persistence = { game: { quests: [], sideJobs: [] }, save: vi.fn( async () => ( {} ) ) };
 	app.body = { feet: { x: 1, y: 2, z: 3 } };
 	app.controller = { yaw: 0.5 };
@@ -165,10 +167,11 @@ function savingApp( options ) {
 	app.transitGameplay = { state: null };
 	app.questGameplay = { serializeTransit: () => null, serializeEscort: () => escort, control: () => ( { ok: true } ) };
 	app.investigations = { serialize: () => [] };
+	app.scenery = { serialize: () => scenery };
 	app.sim = { serialize: () => ( { sim: true } ) };
 	app.npcContinuity = { serialize: () => ( { continuity: true } ) };
 	app.companion = { serialize: () => companion };
-	return { app, escort, companion };
+	return { app, escort, companion, scenery };
 
 }
 
