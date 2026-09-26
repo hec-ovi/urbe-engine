@@ -23,6 +23,7 @@ Purpose: stands what a quest leaves in the world (a body on a floor, blood besid
 - `blockers()`: the footprints (`{ center: { x, z }, width, depth, yawRadians }`) of the bodies and fixed props that stand now in street scenes and have not been taken out, for the crowd's walkers to keep out of.
 - [capabilities.json](capabilities.json), valid against [schema/capabilities.schema.json](schema/capabilities.schema.json): the place kinds, poses, prop kinds, lighting presets and limits the engine stages. It is what the engine declares to Quests as `hostCapabilities.scenery`.
 - `StagingAssembler.js`: the placement geometry investigation scenes and scenery share (`validateStaging`, `placeEntities`, `placeDecals`, `reachableApproaches`, `publicEntity`).
+- `ScenePlaceResolver.entrySpot(parcelId, { width, depth })`: where a thing laid just inside a parcel's main entrance stands, `{ x, y, z }` on the floor of the room the entrance opens into, nearest the door's inside point and clear of its furniture, holes and doorways, by the same staging geometry; null without a furnished interior, a main entrance or free floor. The quests layer lays mission assemblies there.
 
 ## Events
 

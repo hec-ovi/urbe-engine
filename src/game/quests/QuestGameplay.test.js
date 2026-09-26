@@ -43,6 +43,23 @@ describe( 'live quest target projection', () => {
 
 	} );
 
+	it( 'lays a pickup on the entrance room\'s free floor the place resolver finds, else at the parcel anchor', () => {
+
+		const target = questTarget( 'pickup', [ action( 'take', 'Take' ) ] );
+		const itemPlaces = { entrySpot: vi.fn( () => ( { x: 0.8, y: 0.1, z: - 1.5 } ) ) };
+		const placed = setup( fakeActions( target ), { itemPlaces } );
+		const candidate = placed.candidates( frame( pointLook( 0.8, 0.3, - 1.5 ) ) )[ 0 ];
+		const assembly = missionItemAssets().get( 'q', 'item.case' );
+		expect( itemPlaces.entrySpot ).toHaveBeenCalledWith( 'p9', assembly.dimensions );
+		expect( placed.staticMarks.get( target.targetKey ).position.toArray() ).toEqual( [ 0.8, 0.1, - 1.5 ] );
+		expect( candidate.interaction.prompt ).toBe( 'E  take target pickup' );
+
+		const anchored = setup( fakeActions( target ), { itemPlaces: { entrySpot: () => null } } );
+		anchored.candidates( frame( pointLook( 0, 0.2, - 2 ) ) );
+		expect( anchored.staticMarks.get( target.targetKey ).position.toArray() ).toEqual( [ 0, 0, - 2 ] );
+
+	} );
+
 	it( 'renders and collides the exact bound assembly without letting it occlude its own interaction', async () => {
 
 		const physics = await Physics.create();
@@ -327,7 +344,7 @@ describe( 'explicit quest NPC control', () => {
 
 function setup( actions, {
 	crowd = { questMember: () => null }, blocked = false, session = null, continuity = null, animations = null,
-	physics = null, playerCollider = {}, materialFactory = null, missionItems = missionItemAssets()
+	physics = null, playerCollider = {}, materialFactory = null, missionItems = missionItemAssets(), itemPlaces = null
 } = {} ) {
 
 	class Ray {
@@ -343,7 +360,7 @@ function setup( actions, {
 		physics: physics ?? { rapier: { Ray }, world: { castRay: () => blocked ? { toi: 0.5 } : null } },
 		playerCollider,
 		materialFactory: materialFactory ?? { build: () => new THREE.MeshStandardMaterial( { color: 0x223344 } ) },
-		missionItems
+		missionItems, itemPlaces
 	} );
 
 }

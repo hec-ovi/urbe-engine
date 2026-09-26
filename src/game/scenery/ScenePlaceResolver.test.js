@@ -100,6 +100,34 @@ describe( 'scene places', () => {
 
 	} );
 
+	it( 'finds the entrance room\'s free floor nearest the door for a thing laid inside it, clear of what stands there', () => {
+
+		const record = floorRooms( 0 );
+		const layout = interior.layouts[ record.layout ].floor;
+		// The door's inside point falls on a piece of furniture, as it can on a stair core.
+		const item = layout.furniture.find( ( candidate ) => record.rooms.some( ( room ) => room.id === candidate.room ) );
+		const inside = { x: item.position[ 0 ], y: 0, z: item.position[ 1 ] };
+		const doors = [ { id: 'entrance', parcelId: 'p1', inside } ];
+		const places = resolver( { interior, npc }, { doors } );
+		const spot = places.entrySpot( 'p1', { width: 0.3, depth: 0.2 } );
+		const { location } = places.resolve( { kind: 'parcel-entry', parcelId: 'p1' }, 1 );
+
+		expect( spot.y ).toBe( record.elevation );
+		const local = rotate2( { x: spot.x - location.origin.x, z: spot.z - location.origin.z }, -location.yawRadians );
+		for ( const zone of location.blockedZones ) {
+
+			expect( Math.abs( local.x - zone.center.x ) > zone.width / 2 || Math.abs( local.z - zone.center.z ) > zone.depth / 2 ).toBe( true );
+
+		}
+		expect( Math.hypot( spot.x - inside.x, spot.z - inside.z ) ).toBeLessThan( 4 );
+		expect( places.entrySpot( 'p1', { width: 0.3, depth: 0.2 } ) ).toEqual( spot );
+
+		// No main entrance, no furnished interior: no spot.
+		expect( resolver().entrySpot( 'p1', { width: 0.3, depth: 0.2 } ) ).toBeNull();
+		expect( resolver( { interior: null, npc }, { doors } ).entrySpot( 'p1', { width: 0.3, depth: 0.2 } ) ).toBeNull();
+
+	} );
+
 	it( 'lays a street scene on the sidewalk in front of the access point, its back on the lot line and its fixtures blocked', () => {
 
 		const door = { id: 'p5:main', parcelId: 'p5', inside: { x: 37.8, y: 0.2, z: 145.3 } };

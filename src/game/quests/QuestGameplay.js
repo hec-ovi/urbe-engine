@@ -29,9 +29,14 @@ const ESCORT_REACH = 3.2;
  */
 export class QuestGameplay {
 
+	/**
+	 * @param itemPlaces where a mission assembly laid inside a parcel stands,
+	 * `entrySpot( parcelId, { width, depth } )` as the scene place resolver
+	 * answers it; without one, or where it has no spot, at the parcel's anchor
+	 */
 	constructor( {
 		session, actions, world, crowd, physics, playerCollider, materialFactory, missionItems,
-		continuity = null, animations = null, mechanics = null
+		continuity = null, animations = null, mechanics = null, itemPlaces = null
 	} ) {
 
 		this.boundary = new QuestActionBoundary();
@@ -46,6 +51,7 @@ export class QuestGameplay {
 		this.playerCollider = playerCollider;
 		this.materialFactory = materialFactory;
 		this.missionItems = missionItems;
+		this.itemPlaces = itemPlaces;
 		this.group = new THREE.Group();
 		this.group.name = 'quest-targets';
 		this.anchors = new Map( world.parcels.map( ( parcel ) => [ parcel.id, new THREE.Vector3( ...parcel.anchor ) ] ) );
@@ -1054,12 +1060,16 @@ export class QuestGameplay {
 				: fixed?.assembly ?? null;
 			if ( target.kind === 'pickup' && ( ! assembly?.portable || ! anchorFor( assembly, 'take' ) ) ) continue;
 			if ( FIXED_KINDS.has( target.kind ) && ! fixed ) continue;
+			// A mission assembly stands on the entrance room's free floor: the
+			// door's inside point may fall on a stair core or furniture.
+			const spot = assembly && this.itemPlaces?.entrySpot( target.place.id, assembly.dimensions );
+			const at = spot ? new THREE.Vector3( spot.x, spot.y, spot.z ) : anchor;
 			const mark = target.kind === 'pickup' || fixed
-				? missionMark( target, anchor, assembly, this.materialFactory, fixed?.binding.interactionId ?? 'take' )
+				? missionMark( target, at, assembly, this.materialFactory, fixed?.binding.interactionId ?? 'take' )
 				: areaMark( target, anchor );
 			this.staticMarks.set( target.targetKey, mark );
 			this.group.add( mark );
-			if ( assembly ) this.#collide( target.targetKey, assembly, anchor );
+			if ( assembly ) this.#collide( target.targetKey, assembly, at );
 
 		}
 

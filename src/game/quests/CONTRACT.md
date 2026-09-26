@@ -91,7 +91,7 @@ Purpose: converts active quest steps into deterministic player interaction targe
 - Follow control resolves only the requested cast npcId and never substitutes a nearby statistical handle.
 - Crouch control resolves only the requested cast npcId, holds it until its matching release, and resumes its persisted simulation routine.
 - Parcel area mechanics are offered only at their deterministic entry or interior anchor. District observation remains an area action throughout the named district.
-- Quest item data currently publishes a parcel but no room or transform. The live layer places the exact bound assembly at the parcel's ground-floor interior entry anchor, or its published access point when no interior door exists. An absent binding, fixed assembly, missing `take` anchor or unresolved material produces no pickup. Observe data publishes only a district, so the layer does not invent individual evidence clues.
+- Quest item data currently publishes a parcel but no room or transform. The live layer places the exact bound assembly, a pickup's or a fixed mechanic's, on the free floor of the room the parcel's main entrance opens into, nearest the door's inside point and clear of that room's furniture, holes (its stair and lift cores) and doorways (`ScenePlaceResolver.entrySpot`, given as `itemPlaces`); without that room, at the parcel's ground-floor interior entry anchor, or its published access point when no interior door exists. An absent binding, fixed assembly, missing `take` anchor or unresolved material produces no pickup. Observe data publishes only a district, so the layer does not invent individual evidence clues.
 
 ## Explicit story conversations
 

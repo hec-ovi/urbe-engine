@@ -1,6 +1,6 @@
 import { buildingFloors } from '../city/InteriorLayouts.js';
 import { area, intersectionArea } from '../props/Footprints.js';
-import { hash32, rotate2, round } from './StagingAssembler.js';
+import { hash32, localToWorld, placeEntities, rotate2, round } from './StagingAssembler.js';
 import { SceneryError } from './SceneryError.js';
 
 /** Bodies keep this far off a room's outline, which Interior draws on the wall line. */
@@ -104,6 +104,37 @@ export class ScenePlaceResolver {
 			place: { parcelId: place.parcelId, floor: place.floor, roomId: room.id },
 			anchor: slot ? frameLocal( location, { x: slot.position[ 0 ], z: slot.position[ 1 ] } ) : null
 		};
+
+	}
+
+	/**
+	 * Where a thing `{ width, depth }` laid down inside a parcel's main
+	 * entrance stands: on the floor of the room the entrance opens into,
+	 * nearest the door's inside point and clear of its furniture, holes (the
+	 * cores and stairs cut out of it) and doorways, as `{ x, y, z }` on that
+	 * floor. Null for a parcel with no furnished interior or main entrance, or
+	 * a room with no free floor for it.
+	 */
+	entrySpot( parcelId, { width, depth } ) {
+
+		const door = this.#mainDoor( parcelId );
+		if ( ! door || ! this.buildings.get( parcelId )?.interior ) return null;
+		try {
+
+			const { location } = this.#entry( { kind: 'parcel-entry', parcelId } );
+			const refuse = ( message ) => { throw noFit( message ); };
+			const [ spot ] = placeEntities( {
+				sceneId: `entry:${parcelId}`, seed: 0, location, bodies: [], decals: [],
+				props: [ { entityId: 'item', dimensions: { width, depth }, placement: { point: frameLocal( location, door.inside ) } } ]
+			}, { geometry: refuse, noFit: refuse } );
+			return localToWorld( location, spot.localFootprint.center );
+
+		} catch ( error ) {
+
+			if ( error instanceof SceneryError ) return null;
+			throw error;
+
+		}
 
 	}
 

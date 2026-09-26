@@ -12,7 +12,7 @@ import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
 import { QuestActions } from './quests/QuestActions.js';
 import { MissionItemAssets } from './quests/MissionItemAssets.js';
 import { InvestigationGameplay } from './investigation/index.js';
-import { SceneryDirector } from './scenery/index.js';
+import { ScenePlaceResolver, SceneryDirector } from './scenery/index.js';
 import { ObjectiveRouter } from './routes/ObjectiveRouter.js';
 import { ObjectiveGuide } from './routes/ObjectiveGuide.js';
 import { GamePersistence, mergeInventory, mergeProgress, uniqueLocations } from './persistence/index.js';
@@ -578,7 +578,8 @@ export class GameApp {
 			materialFactory: factory,
 			missionItems: this.missionItems,
 			continuity: this.npcContinuity,
-			animations: this.animations
+			animations: this.animations,
+			itemPlaces: new ScenePlaceResolver( { buildings, doors: city.entrances, atlas } )
 		} );
 		const savedTransitQuest = game && Object.hasOwn( game, 'questTransit' ) ? game.questTransit : undefined;
 		const transitState = this.transitJourney.state;
