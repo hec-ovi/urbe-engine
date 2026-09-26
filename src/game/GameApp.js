@@ -1104,7 +1104,7 @@ export class GameApp {
 	#playerSays( text, { typed = false } = {} ) {
 		const turn = this.#interrupt();
 		if ( text ) this.view.dialog.addMessage( { from: 'player', name: 'You', text } );
-		if ( text && ! typed ) this.talk.said( this.interactor.conversation.npcId, 'player', text );
+		if ( text && ! typed ) this.talk.said( this.interactor.conversation.npcId, 'player', text, this.clock.timeMin );
 		return turn;
 	}
 
@@ -1166,7 +1166,7 @@ export class GameApp {
 		this.animations.npcDialogueTurn( conversation );
 		if ( ! streaming ) {
 			heard( this.view.dialog.addMessage( { ...speaker, text: stripCues( text ) } ), text );
-			this.talk.said( conversation.npcId, 'npc', text );
+			this.talk.said( conversation.npcId, 'npc', text, this.clock.timeMin );
 			return null;
 		}
 		const message = this.view.dialog.beginMessage( speaker );

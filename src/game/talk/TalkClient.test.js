@@ -70,7 +70,7 @@ describe( 'TalkClient', () => {
 
 	} );
 
-	it( 'sends the lines said with the person since their last reply ahead of the line, until a reply is done', async () => {
+	it( 'sends the lines said with the person since their last reply ahead of the line, each once and at its minute, until a reply is done', async () => {
 
 		const bodies = [];
 		let fail = false;
@@ -81,10 +81,12 @@ describe( 'TalkClient', () => {
 
 		} );
 		const client = new TalkClient( '/out/w' );
-		client.said( 'n9', 'npc', 'Someone else.' );
-		client.said( 'n1', 'npc', '[sigh] Femke Zwart. Six days gone.' );
-		client.said( 'n1', 'player', 'And if she is alive?' );
-		const shown = [ { speaker: 'npc', text: '[sigh] Femke Zwart. Six days gone.' }, { speaker: 'player', text: 'And if she is alive?' } ];
+		client.said( 'n9', 'npc', 'Someone else.', 1 );
+		client.said( 'n1', 'npc', '[sigh] Femke Zwart. Six days gone.', 2 );
+		client.said( 'n1', 'player', 'And if she is alive?', 3 );
+		// The talk closed and opened again: its opening shows again, and goes once.
+		client.said( 'n1', 'npc', '[sigh] Femke Zwart. Six days gone.', 90 );
+		const shown = [ { speaker: 'npc', text: '[sigh] Femke Zwart. Six days gone.', atMin: 2 }, { speaker: 'player', text: 'And if she is alive?', atMin: 3 } ];
 
 		fail = true;
 		await expect( collect( client.stream( conversation, 'What?', 0 ) ) ).rejects.toMatchObject( { status: 502 } );
@@ -93,10 +95,14 @@ describe( 'TalkClient', () => {
 		await collect( client.stream( conversation, 'I see.', 0 ) );
 		expect( bodies.map( ( body ) => body.prior ) ).toEqual( [ shown, shown, undefined ] );
 
-		for ( let i = 0; i < 14; i ++ ) client.said( 'n1', 'npc', `${i}`.repeat( 5000 ) );
+		client.said( 'n1', 'npc', '[sigh] Femke Zwart. Six days gone.', 95 );
+		await collect( client.stream( conversation, 'Again?', 0 ) );
+		expect( bodies[ 3 ].prior ).toEqual( [ { speaker: 'npc', text: '[sigh] Femke Zwart. Six days gone.', atMin: 95 } ] );
+
+		for ( let i = 0; i < 14; i ++ ) client.said( 'n1', 'npc', String.fromCharCode( 97 + i ).repeat( 5000 ), 100 + i );
 		await collect( client.stream( conversation, 'Go on.', 0 ) );
-		expect( bodies[ 3 ].prior ).toHaveLength( 12 );
-		expect( bodies[ 3 ].prior[ 0 ].text ).toBe( '2'.repeat( 4000 ) );
+		expect( bodies[ 4 ].prior ).toHaveLength( 12 );
+		expect( bodies[ 4 ].prior[ 0 ] ).toEqual( { speaker: 'npc', text: 'c'.repeat( 4000 ), atMin: 102 } );
 
 	} );
 

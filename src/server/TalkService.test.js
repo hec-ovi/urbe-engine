@@ -181,11 +181,11 @@ describe( 'TalkService', () => {
 
 	} );
 
-	it( 'carries the lines shown since the last reply into the conversation and remembers them ahead of the exchange', async () => {
+	it( 'carries the lines shown since the last reply into the conversation and remembers them ahead of the exchange, each at its minute', async () => {
 
 		const model = fakeModel();
 		const service = new TalkService( model, ( await servedWorld() ).root );
-		const prior = [ { speaker: 'npc', text: '[sigh] The file closes at nothing.' }, { speaker: 'player', text: 'And if she is alive?' } ];
+		const prior = [ { speaker: 'npc', text: '[sigh] The file closes at nothing.', atMin: 590 }, { speaker: 'player', text: 'And if she is alive?', atMin: 591 } ];
 
 		await say( service, 'What are you talking about?', { prior } );
 		expect( model.system( 0 ) ).toContain( 'The conversation so far:\nYou: The file closes at nothing.\nPlayer: And if she is alive?' );
@@ -193,8 +193,8 @@ describe( 'TalkService', () => {
 
 		await say( service, 'Go on.' );
 		expect( model.system( 1 ) ).toContain( 'You: The file closes at nothing.\nPlayer: And if she is alive?\nPlayer: What are you talking about?\nYou: Hm.' );
-		expect( ( await service.memory( '/out/w' ) )[ 0 ].memory.turns.map( ( turn ) => turn.text ) ).toEqual( [
-			'The file closes at nothing.', 'And if she is alive?', 'What are you talking about?', 'Hm.', 'Go on.', 'Hm.'
+		expect( ( await service.memory( '/out/w' ) )[ 0 ].memory.turns.map( ( { text, atMin } ) => [ text, atMin ] ) ).toEqual( [
+			[ 'The file closes at nothing.', 590 ], [ 'And if she is alive?', 591 ], [ 'What are you talking about?', 600 ], [ 'Hm.', 600 ], [ 'Go on.', 600 ], [ 'Hm.', 600 ]
 		] );
 
 	} );

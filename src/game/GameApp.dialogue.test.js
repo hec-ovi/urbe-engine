@@ -10,6 +10,7 @@ import { GameClock } from './time/GameClock.js';
 import { HitchLog } from './debug/HitchLog.js';
 import { npc, quest, role, simulation, step } from './quests/quest.test-fixtures.js';
 import { replyEvents, talkError, talkStream } from './talk/talk.test-fixtures.js';
+import { TalkClient } from './talk/TalkClient.js';
 
 function fixture( { ending = false, errand = false } = {} ) {
  const opening = step('ask', { kind:'talk', roleId:'giver', atParcelId:'p1' }, { gives:['lead'], next:[{toStepId:'visit',when:[]}] });
@@ -46,11 +47,15 @@ function fixture( { ending = false, errand = false } = {} ) {
 }
 
 beforeEach(()=>{document.body.replaceChildren();stubCanvas();vi.spyOn(console,'warn').mockImplementation(()=>{});});
-afterEach(()=>vi.restoreAllMocks());
+afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();});
 
 describe('explicit quest dialogue through the playable UI',()=>{
  it('keeps questions and goodbye noncommitting, advances one chosen reply, and updates the same journal, HUD and scenery',async()=>{
-  const {app,open,state}=fixture();const user=userEvent.setup();open();
+  const {app,open,state}=fixture();const user=userEvent.setup();
+  // The talk client itself, over a server that answers every line alike.
+  const bodies=[];vi.stubGlobal('fetch',async(_url,init)=>{bodies.push(JSON.parse(init.body));
+   return new Response(replyEvents('I wish I had more to tell you.').map(event=>JSON.stringify(event)+'\n').join(''));});
+  app.talk=new TalkClient('/out/t');vi.spyOn(app.talk,'said');open();
   const chat=within(app.view.dialog.element);
   expect(chat.getByText(/My brother never came home/)).toBeTruthy();
   expect(chat.queryByText(/working @ parcel/)).toBeNull();
@@ -60,10 +65,12 @@ describe('explicit quest dialogue through the playable UI',()=>{
   await user.click(chat.getByRole('button',{name:'End conversation'}));expect(state()).toEqual(initial);
   open();await user.type(chat.getByRole('textbox',{name:'say something'}),'hello{Enter}');
   await vi.waitFor(()=>expect(chat.getByText('I wish I had more to tell you.')).toBeTruthy());expect(state()).toEqual(initial);
-  // Every line shown goes with the next typed one, raw; the typed line and its streamed reply travel on their own.
+  // Every line shown goes with the next typed one, raw and once, at its minute; the typed line and its streamed reply travel on their own.
   const opening='My brother never came home. Kip found something near the quay.';
-  expect(app.talk.said.mock.calls).toEqual([['person','npc',opening],['person','player','Tell me about your brother.'],
-   ['person','npc','[sigh] He worked the cranes. He always came home before dawn.'],['person','npc',opening]]);
+  expect(app.talk.said.mock.calls).toEqual([['person','npc',opening,1260],['person','player','Tell me about your brother.',1260],
+   ['person','npc',CRANES,1260],['person','npc',opening,1260]]);
+  expect(bodies.map(body=>[body.line,body.prior])).toEqual([['hello',[{speaker:'npc',text:opening,atMin:1260},
+   {speaker:'player',text:'Tell me about your brother.',atMin:1260},{speaker:'npc',text:CRANES,atMin:1260}]]]);
   expect(app.scenery.refresh).not.toHaveBeenCalled();
   const choice=chat.getByRole('button',{name:'I will find Kip and ask what he saw.'});await user.click(choice);choice.click();
 	 expect(document.activeElement).toBe(chat.getByRole('button',{name:'End conversation'}));

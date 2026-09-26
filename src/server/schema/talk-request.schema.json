@@ -39,10 +39,11 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["speaker", "text"],
+        "required": ["speaker", "text", "atMin"],
         "properties": {
           "speaker": { "enum": ["player", "npc"] },
-          "text": { "type": "string", "minLength": 1, "maxLength": 4000 }
+          "text": { "type": "string", "minLength": 1, "maxLength": 4000 },
+          "atMin": { "type": "number" }
         }
       }
     },

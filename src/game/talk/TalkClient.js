@@ -32,17 +32,22 @@ export class TalkClient {
 	}
 
 	/**
-	 * Notes a line shown in a conversation with `npcId` that no reply stream
-	 * carried: an authored opening, a story choice and its reply, a greeting,
-	 * an answer to a chat action. The next typed line to that person carries
-	 * the newest PRIOR_LINES of them as `prior`, which the server remembers
-	 * ahead of that exchange; a line said with someone else starts them again.
+	 * Notes a line shown at minute `atMin` in a conversation with `npcId` that
+	 * no reply stream carried: an authored opening, a story choice and its
+	 * reply, a greeting, an answer to a chat action. The next typed line to
+	 * that person carries the newest PRIOR_LINES of them as `prior`, which the
+	 * server remembers ahead of that exchange, each at its minute. A line
+	 * still waiting to go, such as an opening shown again when the talk
+	 * reopens, is not noted twice; a line said with someone else starts them
+	 * again.
 	 * @param speaker 'player' or 'npc'
 	 */
-	said( npcId, speaker, text ) {
+	said( npcId, speaker, text, atMin ) {
 
 		if ( this.#prior.npcId !== npcId ) this.#prior = { npcId, lines: [] };
-		this.#prior.lines = [ ...this.#prior.lines, { speaker, text: text.slice( 0, LINE_CHARS ) } ].slice( - PRIOR_LINES );
+		const line = { speaker, text: text.slice( 0, LINE_CHARS ), atMin };
+		if ( this.#prior.lines.some( ( kept ) => kept.speaker === line.speaker && kept.text === line.text ) ) return;
+		this.#prior.lines = [ ...this.#prior.lines, line ].slice( - PRIOR_LINES );
 
 	}
 

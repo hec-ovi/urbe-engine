@@ -75,9 +75,9 @@ describe( 'talk request contract', () => {
 		expect( boundary.input( { ...request,
 			offers: { follow: true, places: [ { placeId: 'p_rest', name: 'The Rusty Anchor' } ] },
 			guide: { placeId: 'p_rest', kind: 'parcel', name: 'The Rusty Anchor', notes: [ 'A police line crosses the door.' ] },
-			prior: [ { speaker: 'npc', text: '[sigh] The file closes at nothing.' }, { speaker: 'player', text: 'x'.repeat( 4000 ) } ]
+			prior: [ { speaker: 'npc', text: '[sigh] The file closes at nothing.', atMin: 530 }, { speaker: 'player', text: 'x'.repeat( 4000 ), atMin: 531 } ]
 		} ) ).toBeTruthy();
-		const said = { speaker: 'npc', text: 'Hm.' };
+		const said = { speaker: 'npc', text: 'Hm.', atMin: 530 };
 		for ( const invalid of [
 			{ ...request, npc: { ...npc, mood: 'tired' } },
 			{ ...request, npc: { ...npc, traits: [ 'calm', 'calm' ] } },
@@ -90,7 +90,9 @@ describe( 'talk request contract', () => {
 			{ ...request, prior: [ { ...said, speaker: 'narrator' } ] },
 			{ ...request, prior: [ { ...said, text: '' } ] },
 			{ ...request, prior: [ { ...said, text: 'x'.repeat( 4001 ) } ] },
-			{ ...request, prior: [ { ...said, atMin: 1 } ] }
+			{ ...request, prior: [ { speaker: 'npc', text: 'Hm.' } ] },
+			{ ...request, prior: [ { ...said, atMin: '530' } ] },
+			{ ...request, prior: [ { ...said, heard: true } ] }
 		] ) expect( () => boundary.input( invalid ) ).toThrow( /does not match its contract/ );
 		expect( boundary.input( { ...request, line: 'x'.repeat( 2000 ) } ) ).toBeTruthy();
 
