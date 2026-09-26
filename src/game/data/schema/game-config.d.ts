@@ -18,6 +18,7 @@ export interface GameQuery {
   /** Number 0.005-4, default 0.024. */ exposure?: string;
   /** Number 0-0.05, default 0.0003. */ fog?: string;
   /** Comma-separated fog,bloom,probe,haze,interiors; default empty. */ off?: string;
+  /** Present: installs the automation probe on an `out` preview; ignored with game. */ automation?: string;
 }
 
 /** GameConfig.fromUrl() result, passed to new GameApp(config). */
@@ -41,4 +42,5 @@ export interface GameConfig {
   exposure: number;
   fog: number;
   off: Set<'fog' | 'bloom' | 'probe' | 'haze' | 'interiors'>;
+  automation: boolean;
 }

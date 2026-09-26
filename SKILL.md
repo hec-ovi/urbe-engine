@@ -26,11 +26,12 @@ Query values are strings; [the query and parsed-setting types](src/game/data/sch
 | `backend` | `webgpu` | `webgl` selects WebGL2 |
 | `quality` | backend default | High on WebGPU, low on WebGL2; medium and ultra also supported |
 | `hour` | `21` | Start world hour, 0-23; saved world time takes precedence; lighting stays at 21 |
-| `crowd`, `cars` | `0`, `0` | Capacities, each 0-600; not guaranteed visible counts |
+| `crowd`, `cars` | `0`, `0`; `200`, `18` with `game` | Capacities, each 0-600; not guaranteed visible counts |
 | `crowdRadius`, `carRadius` | `90`, `110` | Population radius in metres, 1-10000 |
 | `density` | `1` | Population scale, 0-8 |
 | `exposure`, `fog` | `0.024`, `0.0003` | Exposure 0.005-4, fog density 0-0.05 |
 | `lanes`, `stress`, `off` | `paint`, `0`, empty | Diagnostics: lane mode, repeated crowd bodies (0-40), omitted rendering stages |
+| `automation` | absent | Present on an `out` preview: installs the [automation probe](src/game/debug/CONTRACT.md) as `window.urbe.automation`; ignored with `game` |
 
 ## Response and errors
 

@@ -136,6 +136,8 @@ export class GameApp {
 		this.followedQuestId = null;
 		this.followedStepId = null;
 		this.objectiveTimer = 0;
+		/** Actions pressAction queued for the next tick. */
+		this.pressedActions = new Set();
 		this.talk = new TalkClient( config.outBase );
 		this.view = new GameView( {
 			onResume: () => this.input?.requestLock(),
@@ -662,6 +664,13 @@ export class GameApp {
 		this.work = new RenderWork( this.renderer.info );
 		this.last = performance.now();
 		this.renderer.setAnimationLoop( () => this.#frame() );
+		// A driver's hands on a read-only preview, installed once the city plays.
+		if ( config.automation ) {
+
+			const { AutomationProbe } = await import( './debug/AutomationProbe.js' );
+			this.automation = new AutomationProbe( this );
+
+		}
 
 	}
 
@@ -826,7 +835,8 @@ export class GameApp {
 		if ( transitFrame.result?.autoDisembarked ) this.#persistTransitState();
 		this.view.prompt.update( this.input.locked ? prompt : null );
 
-		if ( this.input.consume( 'KeyE' ) && this.input.locked && ! playableModalOpen( this.view, this.interactor ) ) {
+		const presses = playablePresses( this.input, this.pressedActions );
+		if ( presses.has( 'interact' ) && ! playableModalOpen( this.view, this.interactor ) ) {
 
 			const owner = playableInteractionOwner( this.interactor, transitFrame );
 			if ( owner === 'conversation' ) this.interactor.close( this.clock );
@@ -834,7 +844,7 @@ export class GameApp {
 			else this.#transitAction( this.transitGameplay.activate(), playerPlaces );
 
 		}
-		if ( this.input.consume( 'KeyR' ) && this.input.locked && ! playableModalOpen( this.view, this.interactor ) && ! transitFrame.aboard ) {
+		if ( presses.has( 'secondary-interact' ) && ! playableModalOpen( this.view, this.interactor ) && ! transitFrame.aboard ) {
 
 			this.#questActionResult( this.interactor.activate( this.clock, 'secondary-interact' ) );
 
@@ -1581,15 +1591,49 @@ export class GameApp {
 
 		if ( ! pose ) return false;
 
-		this.body.teleport( pose.point );
 		this.controller.yaw = pose.yaw;
 		this.controller.pitch = pose.pitch;
+
+		return this.placePlayer( pose.point );
+
+	}
+
+	/**
+	 * Stands the player's feet at `feet` and, given a `target` point, aims the
+	 * crosshair at it. False while a ride carries the body.
+	 */
+	placePlayer( feet, target = null ) {
+
+		if ( ! this.body.teleport( feet ) ) return false;
+
+		if ( target ) {
+
+			const eye = this.body.eye;
+			this.controller.lookAt( target );
+			this.controller.pitch = Math.atan2( target.y - eye.y, Math.hypot( target.x - eye.x, target.z - eye.z ) );
+
+		}
 		this.controller.update( 0 );
 		// The probe rebakes itself on the next step, once the rooms around the
 		// camera have taken their light slots and are worth reflecting.
 		this.indoors = undefined;
 
 		return true;
+
+	}
+
+	/** Presses E (`interact`) or R (`secondary-interact`) on the next tick, through the key's own owners. */
+	pressAction( action = 'interact' ) {
+
+		if ( action !== 'interact' && action !== 'secondary-interact' ) throw new Error( `unknown action: ${action}` );
+		this.pressedActions.add( action );
+
+	}
+
+	/** Sends one typed line in the open conversation, as the chat box does; settles once its reply or failure shows. */
+	sayLine( text ) {
+
+		return this.#say( text );
 
 	}
 
@@ -1846,6 +1890,17 @@ export function playableTransitPrompt( worldPrompt, transitFrame ) {
 
 	if ( transitFrame?.aboard ) return transitFrame.prompt ?? null;
 	return worldPrompt ?? transitFrame?.prompt ?? null;
+
+}
+
+/** E and R this frame: a key pressed under pointer capture, or the action pressAction queued since the last tick. */
+export function playablePresses( input, queued ) {
+
+	const presses = new Set( queued );
+	queued.clear();
+	if ( input.consume( 'KeyE' ) && input.locked ) presses.add( 'interact' );
+	if ( input.consume( 'KeyR' ) && input.locked ) presses.add( 'secondary-interact' );
+	return presses;
 
 }
 

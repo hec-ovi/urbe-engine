@@ -43,7 +43,7 @@
 | `hydro` | Atlas water surfaces with Materials bindings | [Contract and schemas](../src/game/hydro/CONTRACT.md) |
 | `light`, `look`, `sky` | Fixture lighting, prepared rendering and fixed night setting | [Light](../src/game/light/CONTRACT.md), [Look](../src/game/look/CONTRACT.md), [Game](../src/game/CONTRACT.md) |
 | `persistence` | Coherent live state and acknowledged Library revisions | [Contract and schemas](../src/game/persistence/CONTRACT.md) |
-| `debug` | Frame/subsystem timing and renderer allocation reports | [Contract](../src/game/debug/CONTRACT.md), [report](../src/game/debug/report.schema.json) |
+| `debug` | Frame/subsystem timing, renderer allocation reports and the automation probe | [Contract](../src/game/debug/CONTRACT.md), [report](../src/game/debug/report.schema.json) |
 | `time`, `world`, `talk` | Host clock, spatial queries, map values and text transport | [Game](../src/game/CONTRACT.md), [talk request](../src/server/schema/talk-request.schema.json), [reply](../src/server/schema/talk-response.schema.json) |
 
 Catalogs preserve tapered upper outlines for distant rendering; authored podium lights and reflective black glazing use their source properties.

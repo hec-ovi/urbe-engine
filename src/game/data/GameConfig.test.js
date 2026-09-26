@@ -50,6 +50,17 @@ describe( 'game URL configuration', () => {
 
 	} );
 
+	it( 'installs the automation probe only on a preview, never on a catalog game that saves', () => {
+
+		window.history.replaceState( {}, '', '/?mode=game&out=/out/games/night-shift&automation' );
+		expect( GameConfig.fromUrl() ).toMatchObject( { gameId: null, automation: true } );
+		window.history.replaceState( {}, '', '/?mode=game&game=night-shift&automation=1' );
+		expect( GameConfig.fromUrl() ).toMatchObject( { gameId: 'night-shift', automation: false } );
+		window.history.replaceState( {}, '', '/?mode=game' );
+		expect( GameConfig.fromUrl().automation ).toBe( false );
+
+	} );
+
 	it( 'refuses a game id that could escape the game directory', () => {
 
 		window.history.replaceState( {}, '', '/?mode=game&game=../outside' );
