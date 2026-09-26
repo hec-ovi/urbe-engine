@@ -212,6 +212,8 @@ export class GameApp {
 			onTransitCancel: () => this.#cancelTransitSelection()
 		} );
 		this.view.mount( document.body );
+		// The developer readouts show when the run asks for them (GameConfig `details`) or the settings turn them on.
+		this.view.setDetails( this.details = Boolean( config.details ) );
 		this.stats = {
 			frameMs: 16.7, gpuMs: 0, drawCalls: 0, triangles: 0,
 			crowd: 0, cars: 0, interiors: 0, lights: 0,
@@ -706,7 +708,7 @@ export class GameApp {
 		this.#updateObjectiveRoute( 0, true );
 		this.view.settings.setValues( {
 			quality: this.tier.name, fog: config.fog, exposure: config.exposure, crowd: config.maxCrowd,
-			voice: this.voice?.enabled ? 'on' : 'off', voiceVolume: this.voice?.volume ?? 1
+			voice: this.voice?.enabled ? 'on' : 'off', voiceVolume: this.voice?.volume ?? 1, details: this.details ? 'on' : 'off'
 		} );
 		this.view.controls.setBindings( BINDINGS );
 		this.view.readout.setAbout( [
@@ -859,7 +861,7 @@ export class GameApp {
 	tick( delta ) {
 
 		// Paused, or with a panel open, the world holds still: no time passes for it.
-		this.pauseState.update( { locked: this.input.locked } );
+		this.pauseState.update( this.input.locked );
 		const holding = this.pauseState.holds( this.view.panels.current );
 		if ( holding !== this.holding ) this.voice?.setPaused( this.holding = holding );
 		if ( holding ) delta = 0;
@@ -979,10 +981,9 @@ export class GameApp {
 		if ( free ) {
 
 			for ( const [ code, panel ] of PANEL_KEYS ) if ( this.input.consume( code ) ) this.view.toggle( panel );
-			// Escape pauses; one that closed a panel this frame was spent on it.
+			// Escape or N asks for the pause menu; an Escape that closed a panel this frame was spent on it.
 			const escape = this.input.consume( 'Escape' ) && this.wasFree;
-			if ( this.input.consume( 'KeyN' ) || escape && this.input.locked ) this.input.exitLock();
-			else if ( escape ) this.pauseState.update( { locked: false, escape } );
+			if ( ( this.input.consume( 'KeyN' ) || escape ) && this.pauseState.ask( this.input.locked ) ) this.input.exitLock();
 
 		}
 		this.wasFree = free;
@@ -1002,7 +1003,7 @@ export class GameApp {
 			this.currentLocation = this.locator.location( feet.x, feet.z, this.standing?.parcelId ?? null );
 			this.discoveredLocations.set( this.currentLocation.id, this.currentLocation );
 			this.view.clock.update( this.clock.label, district );
-			this.view.readout.update( feet, district, this.locator.parcel( feet.x, feet.z, this.standing?.parcelId ?? null ) );
+			if ( this.details ) this.view.readout.update( feet, district, this.locator.parcel( feet.x, feet.z, this.standing?.parcelId ?? null ) );
 
 		} );
 
@@ -1307,18 +1308,21 @@ export class GameApp {
 		}
 		const changed = this.activeDialogue?.questlineId !== questId || this.activeDialogue?.stepId !== stepId;
 		this.activeDialogue = dialogue;
-		this.view.dialog.setStory( { title: dialogue.title, objective: dialogue.objective } );
+		// The goal would only say to talk to this person; why the talk matters says more.
+		this.view.dialog.setStory( { title: dialogue.title, stake: dialogue.stake } );
 		this.view.dialog.setTopics( topics.map( topic => ( {
 			key: topic.questlineId + '/' + topic.stepId, title: topic.title,
 			value: { questId: topic.questlineId, stepId: topic.stepId }
 		} ) ), questId + '/' + stepId );
 		if ( changed ) {
 			this.#interrupt();
+			// The scene sets where the player stands and why before the person speaks.
+			this.view.dialog.addMessage( { from: 'scene', text: dialogue.scene } );
 			this.#npcSays( conversation, dialogue.opening, { kind: 'story' } );
 		}
 		const unavailable = ! dialogue.availability.available;
 		this.view.dialog.setChoices( dialogue.choices.map( choice => ( {
-			text: choice.text, disabled: unavailable,
+			text: choice.text, disabled: unavailable, commits: choice.completesStep,
 			value: { questId, stepId, choiceId: choice.id }
 		} ) ), changed );
 		// A new topic has just taken the turn from any typed reply, so rendering
@@ -1870,6 +1874,7 @@ export class GameApp {
 		else if ( key === 'crowd' ) this.crowd.capacity = value;
 		else if ( key === 'voice' ) this.voice?.setEnabled( value === 'on' );
 		else if ( key === 'voiceVolume' ) this.voice?.setVolume( value );
+		else if ( key === 'details' ) this.view.setDetails( this.details = value === 'on' );
 		else if ( key === 'quality' ) {
 
 			const query = new URLSearchParams( window.location.search );
@@ -1957,7 +1962,7 @@ export class GameApp {
 		this.stats.hitches = this.hitches.count;
 		this.stats.worstMs = this.hitches.worst;
 		this.#materials();
-		this.view.stats.update( this.stats );
+		if ( this.details ) this.view.stats.update( this.stats );
 
 		if ( this.stats.backend !== 'webgpu' ) return;
 		this.renderer.resolveTimestampsAsync?.( 'render' ).catch( () => {} );

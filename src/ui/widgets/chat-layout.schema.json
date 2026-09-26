@@ -2,19 +2,39 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Conversation panel labels; {name} stands for the person talked to",
   "type": "object",
-  "required": ["log", "you", "story", "topics", "choices", "actions", "free", "tags", "retry", "leave"],
+  "required": ["log", "from", "story", "topics", "choices", "actions", "free", "tags", "retry", "leave"],
   "additionalProperties": false,
   "properties": {
     "log": { "description": "Accessible name of the transcript.", "$ref": "#/$defs/text" },
-    "you": { "description": "Name over the player's lines.", "$ref": "#/$defs/text" },
+    "from": {
+      "description": "Name over a line by who it is from: the player, or the scene set as a story talk opens.",
+      "type": "object",
+      "required": ["player", "scene"],
+      "additionalProperties": false,
+      "properties": { "player": { "$ref": "#/$defs/text" }, "scene": { "$ref": "#/$defs/text" } }
+    },
     "story": {
       "type": "object",
-      "required": ["kicker", "goal", "journal"],
+      "required": ["kicker", "goal", "stake", "journal"],
       "additionalProperties": false,
-      "properties": { "kicker": { "$ref": "#/$defs/text" }, "goal": { "$ref": "#/$defs/text" }, "journal": { "$ref": "#/$defs/text" } }
+      "properties": {
+        "kicker": { "$ref": "#/$defs/text" },
+        "goal": { "$ref": "#/$defs/text" },
+        "stake": { "description": "Label of why the talk matters.", "$ref": "#/$defs/text" },
+        "journal": { "$ref": "#/$defs/text" }
+      }
     },
     "topics": { "$ref": "#/$defs/section" },
-    "choices": { "$ref": "#/$defs/section" },
+    "choices": {
+      "type": "object",
+      "required": ["title", "hint", "commits"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "$ref": "#/$defs/text" },
+        "hint": { "$ref": "#/$defs/text" },
+        "commits": { "description": "Marks a reply that moves the story on.", "$ref": "#/$defs/text" }
+      }
+    },
     "actions": { "$ref": "#/$defs/section" },
     "free": {
       "type": "object",

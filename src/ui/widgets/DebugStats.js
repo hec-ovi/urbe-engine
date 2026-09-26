@@ -3,11 +3,12 @@ import { el } from '../components/dom.js';
 const TARGET_MS = 16.7;
 
 /**
- * The performance readout, always on. Which backend and quality tier are live,
- * at what render size, then frame time, GPU milliseconds, draw calls and how
- * much of the world is up: a regression in any of them shows up here the moment
- * it happens rather than as "the game feels slow", and a screenshot of the
- * corner is enough to know which path the frame took.
+ * The performance readout, one of the developer details. Which backend and
+ * quality tier are live, at what render size, then frame time, GPU
+ * milliseconds, draw calls and how much of the world is up: a regression in
+ * any of them shows up here the moment it happens rather than as "the game
+ * feels slow", and a screenshot of the corner is enough to know which path
+ * the frame took.
  */
 export class DebugStats {
 

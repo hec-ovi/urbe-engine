@@ -9,10 +9,10 @@ import { ChatPanel } from './ChatPanel.js';
 
 const ADA = { name: 'Ada Vance', role: 'office worker' };
 
-const STORY = { title: 'The missing report', objective: 'Hear Ada out about the report.' };
+const STORY = { title: 'The missing report', objective: 'Hear Ada out about the report.', stake: 'Without it the night shift loses its pay.' };
 const CHOICES = [
 	{ id: 'ask', text: 'Who needs the report?', value: { questId: 'report', stepId: 'meet', choiceId: 'ask' } },
-	{ id: 'accept', text: 'I will get the report.', hint: 'Accept Ada’s request', value: { questId: 'report', stepId: 'meet', choiceId: 'accept' } }
+	{ id: 'accept', text: 'I will get the report.', commits: true, value: { questId: 'report', stepId: 'meet', choiceId: 'accept' } }
 ];
 
 describe( 'ChatPanel', () => {
@@ -65,6 +65,11 @@ describe( 'ChatPanel', () => {
 		expect( screen.getByText( 'Down the steps.' ).closest( '.chat-line' ).classList.contains( 'is-npc' ) ).toBe( true );
 		expect( screen.getByText( 'Got it.' ).closest( '.chat-line' ).classList.contains( 'is-player' ) ).toBe( true );
 		expect( within( screen.getByRole( 'log' ) ).getByText( 'You' ) ).toBeTruthy();
+		// The scene a story talk opens on reads as the scene, never as a person or a tag.
+		const scene = panel.addMessage( { from: 'scene', text: 'The office is dark but for one lamp.' } );
+		expect( scene.classList.contains( 'is-scene' ) ).toBe( true );
+		expect( scene.firstElementChild.textContent ).toBe( 'Scene' );
+		expect( scene.dataset.tag ).toBeUndefined();
 		panel.setTranscript( [] );
 		expect( panel.transcript.children ).toHaveLength( 0 );
 		const input = screen.getByRole( 'textbox', { name: 'say something' } );
@@ -194,8 +199,14 @@ describe( 'ChatPanel', () => {
 		panel.setChoices( CHOICES, true );
 		expect( screen.getByText( STORY.title ) ).toBeTruthy();
 		expect( screen.getByText( STORY.objective ).previousElementSibling.textContent ).toBe( 'Your goal' );
+		expect( screen.getByText( STORY.stake ).previousElementSibling.textContent ).toBe( 'Why it matters' );
+		panel.setStory( { title: STORY.title, stake: STORY.stake } );
+		expect( screen.queryByText( 'Your goal' ) ).toBeNull();
 		const replies = within( screen.getByRole( 'group', { name: 'Story replies' } ) );
 		const first = replies.getByRole( 'button', { name: 'Who needs the report?' } );
+		// Only the reply that commits is marked as moving the story on.
+		expect( replies.getByRole( 'button', { name: 'I will get the report.', description: 'Moves the story on' } ) ).toBeTruthy();
+		expect( replies.getAllByText( 'Moves the story on' ) ).toHaveLength( 1 );
 		expect( document.activeElement ).toBe( first );
 		const user = userEvent.setup();
 		await user.keyboard( '{Enter}' );
@@ -217,7 +228,7 @@ describe( 'ChatPanel', () => {
 
 	it( 'does not dispatch disabled choices and focuses End conversation when every reply is unavailable', async () => {
 
-		panel.setChoices( CHOICES.map( choice => ( { ...choice, disabled: true, hint: 'Ada returns at 18:00.' } ) ), true );
+		panel.setChoices( CHOICES.map( choice => ( { ...choice, disabled: true } ) ), true );
 		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'End conversation' } ) );
 		const unavailable = screen.getByRole( 'button', { name: /Who needs the report/ } );
 		expect( unavailable.disabled ).toBe( true );

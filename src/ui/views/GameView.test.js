@@ -54,6 +54,12 @@ describe( 'GameView', () => {
 		expect( view.panels.current ).toBeNull();
 		expect( view.tabs.element.hidden ).toBe( true );
 
+		// The developer readouts come and go together.
+		view.setDetails( false );
+		expect( [ view.readout.element.hidden, view.stats.element.hidden ] ).toEqual( [ true, true ] );
+		view.setDetails( true );
+		expect( [ view.readout.element.hidden, view.stats.element.hidden ] ).toEqual( [ false, false ] );
+
 		view.setPointerFree( true );
 		expect( view.free.hidden ).toBe( false );
 		expect( view.free.textContent ).toBe( 'Click the view to look around. Esc opens the menu.' );

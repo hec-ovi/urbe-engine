@@ -1,0 +1,28 @@
+{
+  "title": "Settings",
+  "key": "O",
+  "sections": [
+    {
+      "title": "look and load",
+      "fields": [
+        { "key": "quality", "label": "quality tier", "type": "select", "options": ["low", "medium", "high", "ultra"] },
+        { "key": "fog", "label": "fog density", "type": "range", "min": 0, "max": 0.003, "step": 0.0001 },
+        { "key": "exposure", "label": "exposure", "type": "number", "min": 0.001, "max": 1, "step": 0.001 },
+        { "key": "crowd", "label": "crowd count", "type": "number", "min": 0, "max": 2000, "step": 10 }
+      ]
+    },
+    {
+      "title": "voices",
+      "fields": [
+        { "key": "voice", "label": "npc voices", "type": "select", "options": ["on", "off"] },
+        { "key": "voiceVolume", "label": "voice volume", "type": "range", "min": 0, "max": 1, "step": 0.05 }
+      ]
+    },
+    {
+      "title": "screen",
+      "fields": [
+        { "key": "details", "label": "developer details (position, files, frame stats)", "type": "select", "options": ["off", "on"] }
+      ]
+    }
+  ]
+}

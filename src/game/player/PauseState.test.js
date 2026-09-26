@@ -8,7 +8,7 @@ describe( 'PauseState', () => {
 		const state = new PauseState();
 		expect( state.paused ).toBe( true );
 		expect( state.holds( null ) ).toBe( true );
-		state.update( { locked: true } );
+		state.update( true );
 		expect( state.paused ).toBe( false );
 		expect( state.holds( null ) ).toBe( false );
 		state.lost( false );
@@ -23,19 +23,30 @@ describe( 'PauseState', () => {
 		const state = new PauseState();
 		state.held();
 		state.release( true );
-		state.update( { locked: true } );
+		state.update( true );
 		state.lost( true );
-		state.update( { locked: false } );
+		state.update( false );
 		expect( state.paused ).toBe( false );
 		expect( state.free( { locked: false, open: true } ) ).toBe( false );
 		// The chat closed and the pointer was not taken back: the world plays on.
 		state.lost( false );
 		expect( state.paused ).toBe( false );
 		expect( state.free( { locked: false, open: false } ) ).toBe( true );
-		state.update( { locked: false, escape: true } );
+		expect( state.ask( false ) ).toBe( false );
 		expect( state.paused ).toBe( true );
 		expect( state.released ).toBe( false );
 		expect( state.free( { locked: false, open: false } ) ).toBe( false );
+
+	} );
+
+	it( 'lets the held pointer go when the player asks for the menu, and pauses on its loss', () => {
+
+		const state = new PauseState();
+		state.held();
+		expect( state.ask( true ) ).toBe( true );
+		expect( state.paused ).toBe( false );
+		state.lost( false );
+		expect( state.paused ).toBe( true );
 
 	} );
 

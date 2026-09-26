@@ -162,6 +162,14 @@ export class GameView {
 
 	}
 
+	/** The developer readouts: where the player stands, the files loaded and the frame stats. */
+	setDetails( shown ) {
+
+		this.readout.element.hidden = ! shown;
+		this.stats.element.hidden = ! shown;
+
+	}
+
 	mount( parent ) {
 
 		parent.append( this.element );

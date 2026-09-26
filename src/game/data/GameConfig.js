@@ -29,7 +29,7 @@ const OFF_STAGES = [ 'fog', 'bloom', 'probe', 'haze', 'interiors' ];
  * One game run, described entirely by the URL query:
  * ?mode=game[&game=<catalog-id>][&world=city-urbe-tiny][&out=/out/city-tiny][&backend=webgpu|webgl]
  * [&hour=21][&crowd=160][&cars=18][&crowdRadius=90][&carRadius=110][&density=1][&lanes=glow|debug]
- * [&quality=low|medium|high|ultra][&exposure=0.024][&fog=0.0003][&off=fog,bloom,probe,haze,interiors][&voice=off][&automation]
+ * [&quality=low|medium|high|ultra][&exposure=0.024][&fog=0.0003][&off=fog,bloom,probe,haze,interiors][&voice=off][&details=on|off][&automation]
  *
  * `off` names look stages to leave out of a run, for telling them apart on
  * screen: the street fog, the emissive bloom, the environment probe, the haze
@@ -99,6 +99,10 @@ export class GameConfig {
 			// NPC lines are spoken while the dev server offers voice; `off` keeps
 			// the run silent until the settings turn it on.
 			voice: q.get( 'voice' ) !== 'off',
+			// The developer readouts (position, loaded files, frame stats): on
+			// in a preview, off in a catalog game unless asked for; the
+			// settings can change it.
+			details: q.has( 'details' ) ? q.get( 'details' ) !== 'off' : ! gameId,
 			// Debug only: a driver's probe (debug/CONTRACT.md). A catalog game
 			// saves, so only an `out` preview can be driven.
 			automation: q.has( 'automation' ) && ! gameId

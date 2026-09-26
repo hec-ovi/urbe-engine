@@ -98,17 +98,22 @@ export class ChatPanel {
 		for ( const [ set, template ] of this.named ) set( template.replaceAll( '{name}', name ) );
 	}
 
-	/** `{ title, objective?, journal? }`: the story this conversation is part of and the player's goal in it; null hides it. */
+	/**
+	 * `{ title, objective?, stake?, journal? }`: the story this conversation is
+	 * part of, the player's goal in it and why the talk matters; null hides it.
+	 */
 	setStory( story ) {
 		this.story.hidden = ! story;
 		this.journal.hidden = ! story || story.journal === false;
+		const line = ( label, text, className ) => text ? [ el( 'div', { className: 'chat-quest-goal' },
+			el( 'span', { className: 'chat-quest-label', textContent: label } ),
+			el( 'span', { className, textContent: text } )
+		) ] : [];
 		this.story.replaceChildren( ...( story ? [
 			el( 'div', { className: 'chat-quest-kicker', textContent: layout.story.kicker } ),
 			el( 'div', { className: 'chat-quest-title', textContent: story.title } ),
-			...( story.objective ? [ el( 'div', { className: 'chat-quest-goal' },
-				el( 'span', { className: 'chat-quest-label', textContent: layout.story.goal } ),
-				el( 'span', { className: 'chat-quest-objective', textContent: story.objective } )
-			) ] : [] ),
+			...line( layout.story.goal, story.objective, 'chat-quest-objective' ),
+			...line( layout.story.stake, story.stake, 'chat-quest-stake' ),
 			this.journal
 		] : [] ) );
 		this.#latest();
@@ -149,15 +154,25 @@ export class ChatPanel {
 		this.#latest();
 	}
 
-	/** Story replies, numbered: the number keys pick them while the text box is not in use. */
+	/**
+	 * Story replies `{ text, value, disabled?, commits? }`, numbered: the number
+	 * keys pick them while the text box is not in use. A reply that `commits`
+	 * is marked as the one that moves the story on.
+	 */
 	setChoices( choices, focus = false ) {
 		const heldFocus = this.choices.contains( document.activeElement );
 		this.choiceSection.hidden = choices.length === 0;
-		this.choices.replaceChildren( ...choices.map( choice => {
+		this.choices.replaceChildren( ...choices.map( ( choice, index ) => {
 			const button = el( 'button', { type: 'button', className: 'chat-choice', disabled: Boolean( choice.disabled ) },
-				el( 'span', { textContent: choice.text } ),
-				...( choice.hint ? [ el( 'small', { textContent: choice.hint } ) ] : [] )
+				el( 'span', { textContent: choice.text } )
 			);
+			if ( choice.commits ) {
+				// The mark describes the reply; the reply's words alone name it.
+				const mark = el( 'small', { className: 'chat-choice-commits', id: `chat-commits-${index}`, textContent: layout.choices.commits } );
+				mark.setAttribute( 'aria-hidden', 'true' );
+				button.setAttribute( 'aria-describedby', mark.id );
+				button.append( mark );
+			}
 			button.addEventListener( 'click', () => this.onChoice( choice.value ?? choice.id ) );
 			return button;
 		} ) );
@@ -201,7 +216,11 @@ export class ChatPanel {
 		if ( ! available && composerFocused ) this.#focusFallback();
 	}
 
-	/** Appends a whole line and returns its element; `kind` tags a line of the story (`story`) or of free talk (`talk`). */
+	/**
+	 * Appends a whole line and returns its element. `from` is `npc`, `player`
+	 * or `scene` (the place and moment a story talk opens on, set apart from
+	 * speech); `kind` tags a line of the story (`story`) or of free talk (`talk`).
+	 */
 	addMessage( { from, name, text, kind } ) {
 		const line = this.#line( from, name, kind );
 		line.lastElementChild.textContent = text;
@@ -305,7 +324,7 @@ export class ChatPanel {
 
 	#line( from, name, kind ) {
 		const line = el( 'div', { className: 'chat-line is-' + from },
-			el( 'div', { className: 'chat-line-from', textContent: name ?? ( from === 'player' ? layout.you : '' ) } ),
+			el( 'div', { className: 'chat-line-from', textContent: name ?? layout.from[ from ] ?? '' } ),
 			el( 'div', { className: 'chat-line-text' } )
 		);
 		if ( layout.tags[ kind ] ) line.dataset.tag = layout.tags[ kind ];

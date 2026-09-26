@@ -72,6 +72,17 @@ describe( 'game URL configuration', () => {
 
 	} );
 
+	it( 'shows the developer readouts in a preview and hides them in a catalog game, unless the run asks', () => {
+
+		for ( const [ query, details ] of [ [ '&out=/out/t', true ], [ '&out=/out/t&details=off', false ], [ '&game=night-shift', false ], [ '&game=night-shift&details=on', true ] ] ) {
+
+			window.history.replaceState( {}, '', `/?mode=game${query}` );
+			expect( GameConfig.fromUrl().details ).toBe( details );
+
+		}
+
+	} );
+
 	it( 'refuses a game id that could escape the game directory', () => {
 
 		window.history.replaceState( {}, '', '/?mode=game&game=../outside' );

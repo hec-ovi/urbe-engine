@@ -59,7 +59,14 @@ describe('explicit quest dialogue through the playable UI',()=>{
   const chat=within(app.view.dialog.element);
   expect(chat.getByText(/My brother never came home/)).toBeTruthy();
   expect(chat.getByText(/My brother never came home/).closest('.chat-line').dataset.tag).toBe('story');
-  expect(chat.getByText('Complete ask.').previousElementSibling.textContent).toBe('Your goal');
+  // The talk opens on its scene, and the story says why it matters, not to talk to the person already talked to.
+  expect(chat.getByText('ask completed.').closest('.chat-line').nextElementSibling.textContent).toContain('My brother never came home');
+  expect(chat.getByText('ask completed.').closest('.chat-line').classList.contains('is-scene')).toBe(true);
+  expect(chat.getByText('The objective remains unresolved otherwise.').previousElementSibling.textContent).toBe('Why it matters');
+  expect(chat.queryByText('Complete ask.')).toBeNull();
+  // Only the reply that completes the step is marked as moving the story on.
+  expect(chat.getByRole('button',{name:'I will find Kip and ask what he saw.',description:'Moves the story on'})).toBeTruthy();
+  expect(chat.getByRole('button',{name:'Tell me about your brother.'}).getAttribute('aria-describedby')).toBeNull();
   expect(chat.queryByText(/working @ parcel/)).toBeNull();
   const initial=structuredClone(state());
   await user.click(chat.getByRole('button',{name:'Tell me about your brother.'}));

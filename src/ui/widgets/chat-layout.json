@@ -1,9 +1,13 @@
 {
   "log": "Conversation",
-  "you": "You",
-  "story": { "kicker": "Story", "goal": "Your goal", "journal": "Open journal" },
+  "from": { "player": "You", "scene": "Scene" },
+  "story": { "kicker": "Story", "goal": "Your goal", "stake": "Why it matters", "journal": "Open journal" },
   "topics": { "title": "Topics", "hint": "Each one is a different matter with {name}." },
-  "choices": { "title": "Story replies", "hint": "Pick one to answer. Your pick moves the story." },
+  "choices": {
+    "title": "Story replies",
+    "hint": "Questions keep the talk going. A marked reply moves the story on.",
+    "commits": "Moves the story on"
+  },
   "actions": { "title": "Ask {name} along", "hint": "They walk with you or show you a place." },
   "free": {
     "title": "Free talk",

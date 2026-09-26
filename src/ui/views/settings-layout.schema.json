@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Settings panel: its header and the fields it shows, section by section",
+  "type": "object",
+  "required": ["title", "key", "sections"],
+  "additionalProperties": false,
+  "properties": {
+    "title": { "$ref": "#/$defs/text" },
+    "key": { "description": "The key that opens the panel, as its header shows it.", "$ref": "#/$defs/text" },
+    "sections": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["title", "fields"],
+        "additionalProperties": false,
+        "properties": {
+          "title": { "$ref": "#/$defs/text" },
+          "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/field" } }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 },
+    "field": {
+      "description": "One setting: `key` is what the change reports.",
+      "oneOf": [{ "$ref": "#/$defs/select" }, { "$ref": "#/$defs/scale" }]
+    },
+    "select": {
+      "description": "A choice between options, each value its own label.",
+      "type": "object",
+      "required": ["key", "label", "type", "options"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "$ref": "#/$defs/text" },
+        "label": { "$ref": "#/$defs/text" },
+        "type": { "const": "select" },
+        "options": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/text" } }
+      }
+    },
+    "scale": {
+      "description": "A number between bounds, as a slider (range) or a box (number).",
+      "type": "object",
+      "required": ["key", "label", "type", "min", "max", "step"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "$ref": "#/$defs/text" },
+        "label": { "$ref": "#/$defs/text" },
+        "type": { "enum": ["range", "number"] },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "step": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    }
+  }
+}

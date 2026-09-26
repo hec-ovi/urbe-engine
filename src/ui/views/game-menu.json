@@ -5,7 +5,7 @@
     "MAP": { "label": "Map", "key": "M", "detail": "The city, where you stand and the way to your goal." },
     "INVENTORY": { "label": "Inventory", "key": "I", "detail": "What you carry." },
     "CODEX": { "label": "Codex", "key": "X", "detail": "Notes you have collected." },
-    "SETTINGS": { "label": "Settings", "key": "O", "detail": "Picture quality, crowd size and NPC voices." },
+    "SETTINGS": { "label": "Settings", "key": "O", "detail": "Picture quality, crowd size, NPC voices and developer details." },
     "CONTROLS": { "label": "Controls", "key": "?", "detail": "Every key and what it does." },
     "save": { "label": "Save", "detail": "Keep your progress now." },
     "LEAVE": { "label": "Leave", "detail": "Back to the main menu. A saved game saves first." }

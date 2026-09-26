@@ -55,6 +55,7 @@
 .chat-line[data-tag]::before { content: attr(data-tag); position: absolute; top: 12px; right: 14px; color: var(--ui-mute); font: 9px var(--ui-mono); letter-spacing: .1em; text-transform: uppercase; }
 .chat-line[data-tag] .chat-line-from { padding-right: 76px; }
 .chat-line.is-npc[data-tag=story] { border-left: 2px solid var(--ui-accent-dim); }
+.chat-line.is-scene { max-width: 100%; padding: 0 0 0 12px; background: none; border: 0; border-left: 2px solid var(--ui-line); color: #b3c3cf; font-size: 13px; font-style: italic; }
 .chat-line-from { margin-bottom: 5px; font: 10px var(--ui-mono); letter-spacing: .1em; text-transform: uppercase; color: #90a9bb; }
 .chat-line-text { white-space: pre-line; }
 .chat-line.is-streaming .chat-line-text::after { content: '\258D'; margin-left: 1px; color: var(--ui-accent); }
@@ -70,7 +71,7 @@
 .chat-choice::before { content: counter(reply); grid-row: 1 / span 2; align-self: start; padding-top: 1px; color: var(--ui-accent); font: 600 12px var(--ui-mono); text-align: center; border: 1px solid var(--ui-accent-dim); line-height: 18px; }
 .chat-choice > * { grid-column: 2; }
 .chat-choice:hover:not(:disabled) { background: #20444e; border-color: var(--ui-accent); }
-.chat-choice small { color: #9fbbc6; font-size: 11px; }
+.chat-choice .chat-choice-commits { color: var(--ui-accent); font: 10px var(--ui-mono); letter-spacing: .1em; text-transform: uppercase; }
 .chat-choice:disabled { opacity: .5; cursor: not-allowed; }
 .chat-feedback { padding: 8px 18px; font-size: 12px; color: #aac4d0; background: #2ee6ff07; }
 .chat-feedback.is-error { color: #ffbea5; background: #f0754410; }

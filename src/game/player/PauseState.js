@@ -3,7 +3,7 @@
  * world plays on. Holding the pointer is playing. The pointer lost on the
  * street is the player pausing, unless the game let it go for a chat or a
  * panel of its own: then the world plays on until the player clicks back in,
- * or presses Escape to pause.
+ * or asks for the pause menu.
  */
 export class PauseState {
 
@@ -37,16 +37,24 @@ export class PauseState {
 
 	}
 
-	/** Once a frame: holding the pointer plays; Escape with the pointer free pauses. */
-	update( { locked, escape = false } ) {
+	/** Once a frame: holding the pointer plays. */
+	update( locked ) {
 
 		if ( locked ) this.paused = false;
-		else if ( escape ) {
 
-			this.paused = true;
-			this.released = false;
+	}
 
-		}
+	/**
+	 * The player asks for the pause menu (Escape or N on the street). Holding
+	 * the pointer, it must be let go, and true is returned: its loss pauses.
+	 * With the pointer already free, the menu comes up now.
+	 */
+	ask( locked ) {
+
+		if ( locked ) return true;
+		this.paused = true;
+		this.released = false;
+		return false;
 
 	}
 

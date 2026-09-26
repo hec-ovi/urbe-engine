@@ -352,13 +352,17 @@ export class QuestSession {
 
 	}
 
-	/** Authored, explicit conversation choices for this exact living cast identity. */
+	/**
+	 * Authored, explicit conversation choices for this exact living cast
+	 * identity, each with its story's title, the step's scene as the talk
+	 * opens and its stake: why the talk matters.
+	 */
 	dialoguesFor( npcId, timeMin ) {
 
 		return this.entries.flatMap( ( { definition, runtime } ) => runtime.activeSteps().flatMap( step => {
 
 			const dialogue = runtime.dialogueFor( step.stepId, npcId, timeMin );
-			return dialogue ? [ { ...dialogue, title: definition.title, objective: step.narrative.playerHint } ] : [];
+			return dialogue ? [ { ...dialogue, title: definition.title, scene: step.narrative.description, stake: step.narrative.stake } ] : [];
 
 		} ) );
 
