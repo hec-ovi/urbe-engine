@@ -35,6 +35,49 @@ describe( 'playable game navigation', () => {
 
 	} );
 
+	it( 'saves the quest escort, the companion and what people remember beside the continuity, and keeps the saved memory when it cannot be read', async () => {
+
+		const navigate = vi.fn();
+		const app = new GameApp( {}, { navigate } );
+		const memory = [ { npcId: 'npc-ada', memory: { digest: [ 'Asked about the quay.' ], turns: [] } } ];
+		const escort = { questId: 'q1', stepId: 's1', npcId: 'npc-kip', mode: 'lead-player' };
+		const companion = { version: '1', npcId: 'npc-ada', kind: 'follow', startedAtMin: 700, phase: 'walking' };
+		app.persistence = { game: { quests: [], sideJobs: [] }, save: vi.fn( async () => ( {} ) ) };
+		app.body = { feet: { x: 1, y: 2, z: 3 } };
+		app.controller = { yaw: 0.5 };
+		app.clock = { timeMin: 725 };
+		app.locator = { location: () => ( { id: 'p1', name: 'Quay' } ) };
+		app.discoveredLocations = new Map();
+		app.savedInventory = [];
+		app.questItemIds = [];
+		app.quests = { persistenceView: () => [], inventoryView: () => [] };
+		app.transitGameplay = { state: null };
+		app.questGameplay = { serializeTransit: () => null, serializeEscort: () => escort };
+		app.investigations = { serialize: () => [] };
+		app.sim = { serialize: () => ( { sim: true } ) };
+		app.npcContinuity = { serialize: () => ( { continuity: true } ) };
+		app.companion = { serialize: () => companion };
+		app.talk = { memory: vi.fn( async () => memory ) };
+		app.view.setPaused( true );
+		const user = userEvent.setup();
+
+		await user.click( screen.getByRole( 'button', { name: /leave/i } ) );
+		await vi.waitFor( () => expect( navigate ).toHaveBeenCalledWith( '/' ) );
+		expect( app.persistence.save.mock.calls[ 0 ][ 0 ] ).toMatchObject( {
+			npcState: { timeMin: 725, simulation: { sim: true }, continuity: { continuity: true }, questEscort: escort, companion },
+			dialogueMemory: memory
+		} );
+
+		app.talk.memory.mockRejectedValueOnce( new Error( 'talk 502' ) );
+		vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		app.questGameplay.control = () => ( { ok: true } );
+		app.questNpcControl( { kind: 'start-follow', npcId: 'npc-kip' } );
+		await vi.waitFor( () => expect( app.persistence.save ).toHaveBeenCalledTimes( 2 ) );
+		expect( app.persistence.save.mock.calls[ 1 ][ 0 ] ).not.toHaveProperty( 'dialogueMemory' );
+		expect( console.warn ).toHaveBeenCalledWith( 'dialogue memory not saved:', 'talk 502' );
+
+	} );
+
 	it( 'turns NPC voices on and off and sets their volume from the settings', async () => {
 
 		const app = new GameApp( {} );
@@ -114,6 +157,7 @@ function dialogueApp() {
 		playerDialogueTurn: vi.fn(), npcDialogueTurn: vi.fn(), completeDialogueTurn: vi.fn()
 	};
 	app.talk = { stream: vi.fn( () => talkStream( replyEvents( 'Down the ', 'steps.' ) ) ) };
+	app.companion = { offers: () => [], talkOffers: () => null, guide: () => null };
 	app.interactor = {
 		conversation,
 		close: vi.fn( () => { app.interactor.conversation = null; } )

@@ -75,6 +75,7 @@ describe( 'driving the player through its own paths', () => {
 		app.quests = { snapshot: () => [] };
 		app.animations = { playerDialogueTurn: vi.fn(), completeDialogueTurn: vi.fn(), npcDialogueTurn: vi.fn() };
 		app.talk = { stream: vi.fn( () => talkStream( replyEvents( 'Mostly I watch ', 'the cranes.' ) ) ) };
+		app.companion = { offers: () => [], talkOffers: () => null, guide: () => null };
 		app.interactor = { conversation: { npcId: 'a301', instance: { name: { given: 'Hugo', family: 'Duarte' } }, behavior: null } };
 
 		await app.sayLine( 'What do you do around here?' );

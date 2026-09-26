@@ -2,7 +2,7 @@
 
 Purpose: materializes persistent simulation NPC identities and controls one companion (follow or lead), passenger carry, conversation, explicit crouch, quest holds and deterministic schedule return over Connections paths.
 
-Status: the public continuity and follow API is wired into the live GameApp, Crowd, Interactor and explicit quest control adapter.
+Status: the public continuity and follow API is wired into the live GameApp, Crowd, Interactor, the companion and explicit quest control adapter. GameApp gives the continuity `InteriorRoutes` over Interior's browser navigation entry (`interior/dist/nav.js`) and, each frame, the room the player stands in as `playerPlace`.
 
 ## Inputs
 

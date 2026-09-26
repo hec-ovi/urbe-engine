@@ -6,6 +6,7 @@ import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { NpcVoice } from './voice/NpcVoice.js';
 import { stripCues } from '../../../quests/dist/runtime.js';
+import { findPath } from '../../../interior/dist/nav.js';
 import { QuestSession } from './quests/QuestSession.js';
 import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
 import { QuestActions } from './quests/QuestActions.js';
@@ -68,6 +69,8 @@ import { GameplayAnimationDirector } from './GameplayAnimationDirector.js';
 import { Crowd } from './agents/Crowd.js';
 import { WalkRoutes } from './agents/WalkRoutes.js';
 import { NpcContinuity } from './agents/NpcContinuity.js';
+import { InteriorRoutes } from './agents/InteriorRoutes.js';
+import { CompanionGameplay } from './companion/CompanionGameplay.js';
 import { CarModels } from './agents/CarModels.js';
 import { Traffic } from './agents/Traffic.js';
 import { SimBridge } from './sim/SimBridge.js';
@@ -164,11 +167,19 @@ export class GameApp {
 		this.objectiveTimer = 0;
 		/** Actions pressAction queued for the next tick. */
 		this.pressedActions = new Set();
+		/** The quest places the player stood in at the latest tick. */
+		this.playerPlaces = [];
+		/** The conversation the chat shows, or null. */
+		this.conversationShown = null;
+		/** The chat's action row: offer id to the label the player says. */
+		this.dialogueActions = new Map();
+		/** A leader's arrival while it opens its conversation, or null. */
+		this.arriving = null;
 		this.talk = new TalkClient( config.outBase );
 		this.view = new GameView( {
 			onResume: () => this.input?.requestLock(),
 			onCloseDialog: () => {
-				this.interactor?.close( this.clock );
+				this.#closeConversation();
 				if ( this.view.summary.element.hidden ) this.input?.requestLock();
 			},
 			onSummaryClose: () => this.input?.requestLock(),
@@ -185,8 +196,8 @@ export class GameApp {
 			onDialogueChoice: choice => this.#chooseDialogue( choice ),
 			onDialogueTopic: topic => this.#selectDialogue( topic ),
 			onDialogueAction: id => this.#dialogueAction( id ),
-			onDialogueRetry: () => this.#say( this.failedDialogueLine, true ),
-			onDialogueJournal: () => { this.interactor?.close( this.clock ); this.view.open( 'QUESTS' ); },
+			onDialogueRetry: () => this.#say( this.failedDialogueLine, { retry: true } ),
+			onDialogueJournal: () => { this.#closeConversation(); this.view.open( 'QUESTS' ); },
 			onClose: () => this.input?.requestLock(),
 			onLeave: () => this.#leave(),
 			onSettingChange: ( change ) => this.#setting( change ),
@@ -253,6 +264,11 @@ export class GameApp {
 			atlas, routes: transitRoutes, ...( game?.transitJourney ? { state: game.transitJourney } : {} )
 		} );
 		this.persistence = game ? new GamePersistence( { game, gameId: config.gameId } ) : null;
+		// What people remember of talking with the player is the save's: the
+		// dialogue server takes it back beside the load.
+		const remembering = game
+			? this.talk.restoreMemory( game.dialogueMemory ?? [] ).catch( ( error ) => console.warn( 'dialogue memory:', error.message ) )
+			: null;
 		const stationAccess = new StationAccess( atlas );
 		this.locator = new Locator( atlas, transitRoutes, stationAccess.entrances, {
 			buildingFootprints: occupiedBuildingFootprints( shellCatalog, buildings )
@@ -457,10 +473,12 @@ export class GameApp {
 		this.signals = new Signals( connections.networks );
 		const routes = new WalkRoutes( connections.networks );
 		const crowdPlaces = placesOf( city.entrances, buildings );
+		const continuityPlaces = npcContinuityPlaces( atlas, city.entrances, buildings, transitRoutes );
 		this.npcContinuity = new NpcContinuity( {
 			simulation: this.sim,
 			routes,
-			places: npcContinuityPlaces( atlas, city.entrances, buildings, transitRoutes )
+			places: continuityPlaces,
+			interiorRoutes: new InteriorRoutes( buildings, { findPath } )
 		} );
 		if ( game?.npcState?.continuity ) {
 
@@ -574,6 +592,18 @@ export class GameApp {
 		}
 		this.scene.add( this.questGameplay.group );
 		this.probe?.exclude( this.questGameplay.group );
+		this.companion = new CompanionGameplay( {
+			continuity: this.npcContinuity, sim: this.sim, routes, places: continuityPlaces, atlas,
+			quests: this.questGameplay, scenes: () => this.#stagedScenes(), crowd: this.crowd
+		} );
+		// After the continuity and with no conversation open: the escort first,
+		// then the companion, which lets go a follower neither of them owns.
+		if ( game?.npcState ) {
+
+			this.questGameplay.restoreEscort( { timeMin: this.clock.timeMin, state: game.npcState.questEscort ?? null } );
+			this.companion.restore( { timeMin: this.clock.timeMin, state: game.npcState.companion ?? null } );
+
+		}
 		this.investigations = await InvestigationGameplay.create( {
 			requests: investigations,
 			session: this.quests,
@@ -675,6 +705,7 @@ export class GameApp {
 		}
 		const pinning = progress.pass( 'pinning the programs' );
 		await this.floorWarmup.warmAll( this.scene, { onProgress: ( done, total ) => pinning.at( done, total ) } );
+		await remembering;
 		this.hitches.notes.length = 0;
 		this.view.setPaused( true );
 		this.view.ready();
@@ -711,10 +742,16 @@ export class GameApp {
 
 	}
 
-	/** Shows or closes the typed conversation owned by the current interaction. */
+	/**
+	 * Shows or closes the typed conversation owned by the current interaction.
+	 * A person who agreed to come along goes on saying so as the chat closes;
+	 * every other close silences what was said.
+	 */
 	presentConversation( conversation ) {
 
-		this.#interrupt();
+		const leaving = this.conversationShown;
+		this.conversationShown = conversation;
+		this.#interrupt( { silence: Boolean( conversation ) || ! this.#comingAlong( leaving ) } );
 		this.failedDialogueLine = null;
 		this.activeDialogue = null;
 		const speaker = conversation && speakerOf( conversation );
@@ -731,7 +768,10 @@ export class GameApp {
 		if ( ! conversation.instance ) this.view.dialog.setFreeChat( false, PASSER_BY.note );
 		const topics = this.quests.dialoguesFor( conversation.npcId, this.clock.timeMin );
 		const preferred = topics.find( topic => topic.questlineId === this.followedQuestId ) ?? topics[ 0 ];
+		const arrival = this.arriving?.npcId === conversation.npcId ? this.arriving : null;
 		if ( preferred ) this.#selectDialogue( { questId: preferred.questlineId, stepId: preferred.stepId } );
+		// A person who has led the player here talks about the place.
+		else if ( arrival ) this.#say( arrival.ask, { arrival } );
 		else {
 
 			const recap = this.quests.conversationRecap( conversation.npcId );
@@ -750,6 +790,7 @@ export class GameApp {
 			}
 
 		}
+		this.#showActions( conversation );
 
 		// The chat takes the mouse: the input wants focus and the panel a click.
 		this.view.avatar.setAvatar( { name: speaker.name, bar: 1 } );
@@ -817,23 +858,30 @@ export class GameApp {
 		} );
 
 		this.lights.update( this.camera.position, delta );
-		this.hitches.time( 'crowd', () => {
+		const playerPlaces = this.playerPlaces = questPlayerPlaces( this.locator, feet, this.standing?.parcelId ?? null );
+		const companionSignals = this.hitches.time( 'crowd', () => {
 
+			const room = this.standing;
+			const playerPosition = feet.toArray();
 			this.npcContinuity.updateFollow( {
 				timeMin: this.clock.timeMin,
 				deltaSeconds: delta,
-				playerPosition: feet.toArray()
+				playerPosition,
+				...( room ? { playerPlace: { kind: 'parcel', id: room.parcelId, floor: room.floor } } : {} )
 			} );
+			const signals = this.companion.update( { timeMin: this.clock.timeMin, playerPosition, playerPlaces } );
 			const actors = this.npcContinuity.updateVisible( {
 				timeMin: this.clock.timeMin,
-				playerPosition: feet.toArray(),
+				playerPosition,
 				maxDistance: NPC_VISIBLE_RADIUS
 			} );
 			this.crowd.syncActors( actors, feet );
 			this.animations.update( actors, delta );
 			this.crowd.update( delta, feet, this.clock );
+			return signals;
 
 		} );
+		this.#companionSignals( companionSignals );
 		this.hero.update( delta );
 		this.hitches.time( 'traffic', () => this.traffic.update( delta, feet, this.clock.daySeconds ) );
 		this.impactWorld.sync( {
@@ -845,7 +893,6 @@ export class GameApp {
 		this.venues.update( delta, feet, this.clock.timeMin, this.sim, this.lights );
 		this.hitches.time( 'relight', () => this.#relight( feet, delta ) );
 
-		const playerPlaces = questPlayerPlaces( this.locator, feet, this.standing?.parcelId ?? null );
 		const worldPrompt = this.interactor.update( delta, {
 			timeMin: this.clock.timeMin,
 			playerPlaces,
@@ -873,7 +920,7 @@ export class GameApp {
 		if ( interact && ! playableModalOpen( this.view, this.interactor ) ) {
 
 			const owner = playableInteractionOwner( this.interactor, transitFrame );
-			if ( owner === 'conversation' ) this.interactor.close( this.clock );
+			if ( owner === 'conversation' ) this.#closeConversation();
 			else if ( owner === 'world' ) this.#questActionResult( this.interactor.activate( this.clock ) );
 			else this.#transitAction( this.transitGameplay.activate(), playerPlaces );
 
@@ -943,11 +990,18 @@ export class GameApp {
 	 * Typed chat is optional. It never substitutes for an explicit quest reply.
 	 * The reply streams into one NPC line that shows with its first text; a
 	 * reply that fails, goes quiet or is overtaken leaves no part of it behind.
+	 * The request carries the place the person has led the player to and,
+	 * for the player's own words, what the person may propose: agreeing in a
+	 * whole reply to come along, they are held to the companion's rules and,
+	 * agreed, set off as the chat closes.
+	 * @param options.retry the line goes again without showing again
+	 * @param options.arrival a leader's arrival: `text` is its unseen question,
+	 *   nothing is proposed, and its own line stands in for a reply that fails
 	 */
-	async #say( text, retry = false ) {
+	async #say( text, { retry = false, arrival = null } = {} ) {
 		const conversation = this.interactor?.conversation;
 		if ( ! conversation?.instance || this.dialoguePending || ! text?.trim() ) return;
-		const turn = this.#playerSays( retry ? null : text );
+		const turn = this.#playerSays( retry || arrival ? null : text );
 		const current = () => this.interactor.conversation === conversation && turn === this.dialogueTurn;
 		const controller = this.dialogueAbort = new AbortController();
 		this.dialoguePending = true;
@@ -959,11 +1013,11 @@ export class GameApp {
 		this.view.dialog.setSending( true );
 		this.view.dialog.setStatus( 'Waiting for a reply… Your story choices remain available.' );
 		this.animations.playerDialogueTurn( conversation );
-		let reply = null, done = false;
-		const offers = [];
+		let reply = null, done = false, whole = null, offer = null;
 		try {
 			listen();
-			for await ( const event of this.talk.stream( conversation, text, this.clock.timeMin, this.quests.snapshot(), { signal: controller.signal } ) ) {
+			const context = { signal: controller.signal, ...this.#talkContext( conversation, ! arrival ) };
+			for await ( const event of this.talk.stream( conversation, text, this.clock.timeMin, this.quests.snapshot(), context ) ) {
 				if ( ! current() ) return;
 				listen();
 				if ( event.type === 'delta' && reply ) reply.append( event.text );
@@ -971,22 +1025,25 @@ export class GameApp {
 					this.view.dialog.setStatus( '' );
 					reply = this.#npcSays( conversation, event.text, { streaming: true } );
 				} else if ( event.type === 'sentence' ) reply?.hear( event.text );
-				else if ( event.type === 'offer' ) offers.push( event );
+				else if ( event.type === 'offer' ) offer ??= event;
+				else if ( event.type === 'done' ) whole = event.reply;
 			}
 			if ( ! current() ) return;
 			if ( ! reply ) throw new Error( 'the reply ended without a word' );
 			reply.finish();
 			done = true;
 			this.failedDialogueLine = null;
-			this.#showOffers( conversation, offers );
 		} catch ( error ) {
 			if ( ! current() ) return;
 			console.warn( 'talk:', error.message );
 			this.#silence();
 			this.animations.completeDialogueTurn( conversation );
 			const refused = error.status === 400;
-			this.failedDialogueLine = refused ? null : text;
-			this.view.dialog.setStatus( refused ? REPLY_REFUSED : REPLY_FAILED, { error: true, retry: ! refused } );
+			this.failedDialogueLine = refused || arrival ? null : text;
+			if ( arrival ) {
+				this.view.dialog.setStatus( '' );
+				this.#npcSays( conversation, arrival.line );
+			} else this.view.dialog.setStatus( refused ? REPLY_REFUSED : REPLY_FAILED, { error: true, retry: ! refused } );
 		} finally {
 			clearTimeout( quiet );
 			if ( ! done ) reply?.discard();
@@ -996,6 +1053,27 @@ export class GameApp {
 				this.view.dialog.setSending( false );
 			}
 		}
+		if ( done && offer ) this.#takeOffer( conversation, offer, whole );
+	}
+
+	/** What the talk request adds for this person: the place they have led the player to and, when `proposing`, the companion offers they may make. */
+	#talkContext( { npcId }, proposing ) {
+		const offers = proposing ? this.companion.talkOffers( this.#offers( npcId ) ) : null;
+		const guide = this.companion.guide( npcId );
+		return { ...( offers ? { offers } : {} ), ...( guide ? { guide } : {} ) };
+	}
+
+	/**
+	 * The person agreed in their reply to follow or to lead the way. The typed
+	 * request is the player's consent, so an offer the rules allow is taken:
+	 * the chat closes on the reply and they set off. Otherwise they say why not.
+	 */
+	#takeOffer( conversation, { kind, placeId }, reply ) {
+		const result = this.companion.acceptFromTool( {
+			npcId: conversation.npcId, kind, ...( placeId ? { placeId } : {} ), timeMin: this.clock.timeMin, playerPlaces: this.playerPlaces
+		} );
+		if ( result.ok ) this.#sendAlong( conversation, reply );
+		else this.#npcSays( conversation, result.line );
 	}
 
 	/** The player takes the turn and their line, if any, shows. Returns the new turn. */
@@ -1007,10 +1085,10 @@ export class GameApp {
 
 	/**
 	 * Whatever the person was saying lapses: a typed reply still arriving is
-	 * given up and leaves no line, the observer is silenced and offers are
-	 * withdrawn. Starts a new dialogue turn and returns it.
+	 * given up and leaves no line, and unless `silence` is false the observer
+	 * is silenced. Starts a new dialogue turn and returns it.
 	 */
-	#interrupt() {
+	#interrupt( { silence = true } = {} ) {
 		if ( this.dialoguePending ) {
 			this.dialogueAbort.abort();
 			this.dialogueAbort = null;
@@ -1018,9 +1096,7 @@ export class GameApp {
 			this.view.dialog.setSending( false );
 			this.view.dialog.setStatus( '' );
 		}
-		this.#silence();
-		this.dialogueOffers = null;
-		this.view.dialog.setActions( [] );
+		if ( silence ) this.#silence();
 		return this.dialogueTurn = ( this.dialogueTurn ?? 0 ) + 1;
 	}
 
@@ -1073,19 +1149,99 @@ export class GameApp {
 		return { append, hear: ( sentence ) => heard( message.line, sentence ), finish: message.finish, discard: message.discard };
 	}
 
-	/** Each offer in the NPC's reply becomes one chat action. */
-	#showOffers( conversation, offers ) {
-		const given = conversation.instance.name.given;
-		this.dialogueOffers = new Map( offers.map( ( offer ) => [ offer.kind === 'lead' ? `lead:${offer.placeId}` : offer.kind, offer ] ) );
-		this.view.dialog.setActions( [ ...this.dialogueOffers ].map( ( [ id, offer ] ) => ( {
-			id, label: offer.kind === 'lead' ? `Go with ${given} to ${offer.name}` : `Bring ${given} along`
-		} ) ) );
+	/** What the player may ask of this person now, available or not: the companion's offers. */
+	#offers( npcId ) {
+		return this.companion.offers( { npcId, timeMin: this.clock.timeMin, playerPlaces: this.playerPlaces } );
 	}
 
-	/** Nothing takes an offer up yet: the choice is only logged. */
+	/** The chat's action row: every offer for a person with an identity, whose refusal they say in words. */
+	#showActions( conversation ) {
+		const offers = conversation.instance ? this.#offers( conversation.npcId ) : [];
+		this.dialogueActions = new Map( offers.map( ( offer ) => [ offer.offerId, offer.label ] ) );
+		this.view.dialog.setActions( offers.map( ( offer ) => ( { id: offer.offerId, label: offer.label } ) ) );
+	}
+
+	/**
+	 * The player asks the person along, to lead the way or to go: the ask
+	 * shows as the player's line and the person answers by the companion's
+	 * rules. Agreed, the chat closes on their answer and they set off.
+	 */
 	#dialogueAction( id ) {
-		const offer = this.dialogueOffers?.get( id );
-		if ( offer ) console.info( 'dialogue offer chosen, not acted on:', offer );
+		const conversation = this.interactor?.conversation;
+		const label = this.dialogueActions.get( id );
+		if ( ! conversation?.npcId || ! label ) return;
+		const result = this.companion.accept( { npcId: conversation.npcId, offerId: id, timeMin: this.clock.timeMin, playerPlaces: this.playerPlaces } );
+		this.#playerSays( label );
+		this.#npcSays( conversation, result.line );
+		if ( result.ok ) this.#sendAlong( conversation, result.line );
+		else this.#showActions( conversation );
+	}
+
+	/** Whether this conversation's person agreed to come along and waits for it to close. */
+	#comingAlong( conversation ) {
+		return Boolean( conversation?.npcId && this.companion.accepted( conversation.npcId ) );
+	}
+
+	/** Ends the open conversation; a person who agreed to come along stays where they stand for the companion to take. */
+	#closeConversation( reason = 'player-left' ) {
+		const conversation = this.interactor?.conversation;
+		if ( conversation ) this.interactor.close( this.clock, reason, { keep: this.#comingAlong( conversation ) } );
+	}
+
+	/** The chat closes on what the person said, which a toast keeps, and control returns to the player. */
+	#sendAlong( conversation, line ) {
+		this.#closeConversation();
+		this.view.toast.show( { title: speakerOf( conversation ).name, text: stripCues( line ) } );
+		this.input?.requestLock();
+	}
+
+	/** What the companion reports this frame: words on the way, a refusal, the arrival and a notice when it ends. */
+	#companionSignals( signals ) {
+		for ( const signal of signals ) {
+			if ( signal.kind === 'arrival' ) this.#arrival( signal );
+			else if ( signal.kind === 'line' || signal.kind === 'refused' ) this.#companionSays( signal.npcId, signal.line );
+			else if ( signal.kind === 'ended' && signal.notice ) this.view.toast.show( { title: 'Companion', text: signal.notice } );
+		}
+	}
+
+	/**
+	 * A leader has brought the player to its place: the conversation opens and
+	 * the person talks about it. A conversation already open with them takes
+	 * the place with its next turn; without a body to talk to, the person says
+	 * their arrival line on the street.
+	 */
+	#arrival( signal ) {
+		if ( this.interactor.conversation ) return;
+		this.arriving = signal;
+		const conversation = this.interactor.talkTo( signal.npcId, this.clock );
+		this.arriving = null;
+		if ( ! conversation ) this.#companionSays( signal.npcId, signal.line );
+	}
+
+	/**
+	 * What the companion says outside a conversation: a toast under their name,
+	 * heard by the line observer with no chat line. Nothing is said over a
+	 * conversation the player is having.
+	 */
+	#companionSays( npcId, text ) {
+		if ( this.interactor.conversation ) return;
+		const npc = this.sim.getNPC( npcId );
+		const name = this.questGameplay.characterName( npcId );
+		const instance = name ? { ...npc, name } : npc;
+		this.view.toast.show( { title: TalkClient.nameOf( instance ), text: stripCues( text ) } );
+		this.lineHeard = true;
+		this.#observe( 'said', { conversation: { npcId, instance }, line: null, text } );
+	}
+
+	/** Places the scenery stages now, as places a person may lead the player to. */
+	#stagedScenes() {
+		const scenes = [];
+		for ( const staged of this.scenery?.stagedPlaces() ?? [] ) {
+			const place = { kind: 'parcel', id: staged.place.parcelId };
+			const name = this.companion.places.name( place );
+			if ( name ) scenes.push( { place, name, relation: 'scene' } );
+		}
+		return scenes;
 	}
 
 	#selectDialogue( { questId, stepId } ) {
@@ -1236,9 +1392,8 @@ export class GameApp {
 
 	#waitForQuest( questId, stepId ) {
 
-		if ( this.interactor?.conversation || this.transitGameplay?.aboard
-			|| [ 'following', 'leading' ].includes( this.npcContinuity?.serialize().follow?.mode ) ) {
-			this.view.toast.show( { title: 'Cannot wait yet', text: 'Finish the conversation, ride or escort first.' } );
+		if ( this.interactor?.conversation || this.transitGameplay?.aboard || this.npcContinuity?.companion ) {
+			this.view.toast.show( { title: 'Cannot wait yet', text: 'Finish the conversation, the ride or the walk with your company first.' } );
 			return;
 		}
 		const step = this.quests.view( this.clock.timeMin ).find( quest => quest.id === questId )?.steps.find( step => step.stepId === stepId );
@@ -1346,7 +1501,7 @@ export class GameApp {
 
 		let person = this.crowd.member( impact.personId );
 		if ( ! person ) return;
-		if ( this.interactor?.conversation?.person === person ) this.interactor.close( this.clock, 'physics' );
+		if ( this.interactor?.conversation?.person === person ) this.#closeConversation( 'physics' );
 		person = this.crowd.beginRagdoll( impact.personId );
 		if ( ! person ) return;
 		this.animations.physicsInterrupt( person );
@@ -1525,8 +1680,19 @@ export class GameApp {
 
 	}
 
-	#saveCurrent() {
+	/**
+	 * Saves the game as it stands. What people remember of talking with the
+	 * player is read from the dialogue server first; when it cannot be read,
+	 * the save keeps the memory it holds.
+	 */
+	async #saveCurrent() {
 
+		const dialogueMemory = await this.talk.memory().catch( ( error ) => {
+
+			console.warn( 'dialogue memory not saved:', error.message );
+			return null;
+
+		} );
 		const feet = this.body.feet;
 		this.currentLocation = this.locator.location( feet.x, feet.z, this.standing?.parcelId ?? null );
 		this.discoveredLocations.set( this.currentLocation.id, this.currentLocation );
@@ -1546,8 +1712,11 @@ export class GameApp {
 			npcState: {
 				timeMin: this.clock.timeMin,
 				simulation: this.sim.serialize(),
-				continuity: this.npcContinuity.serialize()
+				continuity: this.npcContinuity.serialize(),
+				questEscort: this.questGameplay.serializeEscort(),
+				companion: this.companion.serialize()
 			},
+			...( dialogueMemory ? { dialogueMemory } : {} ),
 			elapsedSeconds: Math.max( 0, ( performance.now() - this.playStartedAt ) / 1000 )
 		} );
 

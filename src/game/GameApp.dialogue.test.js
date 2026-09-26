@@ -33,10 +33,11 @@ function fixture( { ending = false, errand = false } = {} ) {
  app.savedInventory=[];app.questItemIds=['lead'];app.input={exitLock:vi.fn(),requestLock:vi.fn()};
  app.animations={npcDialogueTurn:vi.fn(),playerDialogueTurn:vi.fn(),completeDialogueTurn:vi.fn()};
  app.talk={stream:vi.fn(()=>talkStream(replyEvents('I wish I had more to tell you.')))};
- app.interactor={conversation:null,close(){this.conversation=null;app.presentConversation(null);}};
+ const companion=app.companion={offers:vi.fn(()=>[]),talkOffers:vi.fn(()=>null),guide:vi.fn(()=>null),accepted:vi.fn(()=>false),accept:vi.fn(),acceptFromTool:vi.fn()};
+ app.interactor={conversation:null,close:vi.fn(function(){this.conversation=null;app.presentConversation(null);})};
  const open=()=>{app.interactor.conversation={npcId:person.npcId,instance:person,behavior:null};app.presentConversation(app.interactor.conversation);};
  const state=()=>app.quests.snapshot()[0].state;
- return{app,open,state,observer,log};
+ return{app,open,state,observer,log,companion,person};
 }
 
 beforeEach(()=>{document.body.replaceChildren();stubCanvas();vi.spyOn(console,'warn').mockImplementation(()=>{});});
@@ -171,29 +172,84 @@ describe('explicit quest dialogue through the playable UI',()=>{
   expect(chat.getByText(/Look for him at the market/)).toBeTruthy();
  });
 
- it('streams a typed reply into one growing line heard by sentence, and turns its offers into actions that change nothing yet',async()=>{
-  const {app,open,state,observer}=fixture();open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
+ const OFFERS=[
+  {offerId:'follow',kind:'follow',label:'Come with me',available:false,reason:'on_duty'},
+  {offerId:'lead:parcel:p2',kind:'lead',label:'Show me Market',available:true,destination:{place:{kind:'parcel',id:'p2'},name:'Market',relation:'quest'}}
+ ];
+ const lines=(app)=>[...app.view.dialog.transcript.children].map(line=>line.lastElementChild.textContent);
+
+ it('streams a typed reply into one growing line heard by sentence, carrying what the person may propose, and sets off with a person who agrees',async()=>{
+  const {app,open,state,observer,log,companion}=fixture();companion.offers.mockReturnValue(OFFERS);
+  companion.talkOffers.mockReturnValue({places:[{placeId:'p2',name:'Market'}]});
+  companion.acceptFromTool.mockImplementation(()=>{companion.accepted.mockReturnValue(true);return{ok:true,npcId:'person',offerId:'lead:parcel:p2',kind:'lead',line:'Follow me to Market.'};});
+  open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
+  expect(within(chat.getByRole('group',{name:'Suggested actions'})).getAllByRole('button').map(button=>button.textContent)).toEqual(['Come with me','Show me Market']);
+  expect(companion.offers).toHaveBeenLastCalledWith({npcId:'person',timeMin:1260,playerPlaces:[]});
   let release;const rest=new Promise(done=>{release=done;});
   app.talk.stream.mockImplementationOnce(()=>talkStream([{type:'delta',text:'Kip drinks '},rest,{type:'sentence',index:0,text:'Kip drinks [sigh] at the market.'},
    {type:'offer',kind:'lead',placeId:'p2',name:'Market'},{type:'offer',kind:'follow'},{type:'done',reply:'Kip drinks [sigh] at the market.'}]));
   const initial=structuredClone(state());observer.said.mockClear();
-  await user.type(chat.getByRole('textbox'),'where is Kip?{Enter}');
+  await user.type(chat.getByRole('textbox'),'take me to Kip{Enter}');
+  expect(app.talk.stream.mock.calls.at(-1)[4]).toEqual({signal:expect.any(AbortSignal),offers:{places:[{placeId:'p2',name:'Market'}]}});
   await vi.waitFor(()=>expect(chat.getByText('Kip drinks')).toBeTruthy());
   expect(chat.getByRole('textbox').disabled).toBe(true);expect(chat.queryByText(/Waiting for a reply/)).toBeNull();
-  expect(observer.said).not.toHaveBeenCalled();expect(app.animations.npcDialogueTurn).toHaveBeenCalledTimes(2);
+  expect(observer.said).not.toHaveBeenCalled();expect(companion.acceptFromTool).not.toHaveBeenCalled();
   release({type:'delta',text:'[sigh] at the market.'});
-  await vi.waitFor(()=>expect(chat.getByText('Kip drinks at the market.')).toBeTruthy());
-  const line=chat.getByText('Kip drinks at the market.').closest('.chat-line');
-  expect(line.lastElementChild.textContent).toBe('Kip drinks at the market.');
-  expect(observer.said).toHaveBeenCalledExactlyOnceWith({conversation:app.interactor.conversation,line,text:'Kip drinks [sigh] at the market.'});
-  expect(app.animations.npcDialogueTurn).toHaveBeenCalledTimes(2);expect(chat.getByRole('textbox').disabled).toBe(false);
-  const actions=within(chat.getByRole('group',{name:'Suggested actions'}));
-  expect(actions.getAllByRole('button').map(button=>button.textContent)).toEqual(['Go with Petra to Market','Bring Petra along']);
-  const info=vi.spyOn(console,'info').mockImplementation(()=>{});
-  await user.click(actions.getByRole('button',{name:'Bring Petra along'}));
-  expect(info).toHaveBeenCalledExactlyOnceWith('dialogue offer chosen, not acted on:',{type:'offer',kind:'follow'});expect(state()).toEqual(initial);
-  await user.click(chat.getByRole('button',{name:'Tell me about your brother.'}));
-  expect(chat.queryByRole('group',{name:'Suggested actions'})).toBeNull();
+  await vi.waitFor(()=>expect(app.interactor.conversation).toBeNull());
+  expect(observer.said).toHaveBeenCalledExactlyOnceWith({conversation:expect.objectContaining({npcId:'person'}),line:expect.any(HTMLElement),text:'Kip drinks [sigh] at the market.'});
+  expect(companion.acceptFromTool).toHaveBeenCalledExactlyOnceWith({npcId:'person',kind:'lead',placeId:'p2',timeMin:1260,playerPlaces:[]});
+  expect(app.interactor.close).toHaveBeenCalledExactlyOnceWith(app.clock,'player-left',{keep:true});
+  expect(app.view.dialog.element.hidden).toBe(true);
+  expect(app.view.toast.element.textContent).toBe('Petra MossKip drinks at the market.');
+  // The person goes on saying it as they set off: the close silences nothing.
+  expect(log.at(-1)).toBe('said: Kip drinks [sigh] at the market.');
+  expect(state()).toEqual(initial);
+ });
+
+ it('answers a chat action by the companion rules: a refusal is said in the chat, an agreement closes it on the person\'s words and keeps them there',async()=>{
+  const {app,open,log,companion}=fixture();companion.offers.mockReturnValue(OFFERS);open();
+  const user=userEvent.setup();const chat=within(app.view.dialog.element);const actions=()=>within(chat.getByRole('group',{name:'Suggested actions'}));
+  companion.accept.mockReturnValueOnce({ok:false,npcId:'person',code:'on_duty',line:'I\'m working. Not now.'});
+  await user.click(actions().getByRole('button',{name:'Come with me'}));
+  expect(companion.accept).toHaveBeenLastCalledWith({npcId:'person',offerId:'follow',timeMin:1260,playerPlaces:[]});
+  expect(lines(app).slice(-2)).toEqual(['Come with me','I\'m working. Not now.']);
+  expect(app.view.dialog.element.hidden).toBe(false);expect(actions().getAllByRole('button')).toHaveLength(2);
+
+  // A typed agreement the rules refuse is said too, and the chat stays open.
+  app.talk.stream.mockImplementationOnce(()=>talkStream([...replyEvents('Sure, this way.').slice(0,-1),{type:'offer',kind:'follow'},{type:'done',reply:'Sure, this way.'}]));
+  companion.acceptFromTool.mockReturnValueOnce({ok:false,npcId:'person',code:'on_duty',line:'My shift isn\'t over.'});
+  await user.type(chat.getByRole('textbox'),'come with me{Enter}');
+  await vi.waitFor(()=>expect(chat.getByText('My shift isn\'t over.')).toBeTruthy());
+  expect(app.interactor.conversation).not.toBeNull();
+
+  companion.accept.mockImplementationOnce(()=>{companion.accepted.mockReturnValue(true);return{ok:true,npcId:'person',offerId:'lead:parcel:p2',kind:'lead',line:'Follow me to Market.'};});
+  log.length=0;
+  await user.click(actions().getByRole('button',{name:'Show me Market'}));
+  expect(app.interactor.close).toHaveBeenCalledExactlyOnceWith(app.clock,'player-left',{keep:true});
+  expect(app.view.dialog.element.hidden).toBe(true);expect(app.view.toast.element.textContent).toContain('Petra MossFollow me to Market.');
+  expect(log).toEqual(['silenced','said: Follow me to Market.']);
+ });
+
+ it('lets a person who has led the player here talk about the place unasked, and say their own line when the model cannot',async()=>{
+  const {app,log,companion,person}=fixture();app.quests.dialoguesFor=()=>[];
+  const guide={placeId:'p2',kind:'parcel',name:'Market'};companion.guide.mockReturnValue(guide);
+  // The arrival's question is not the player's words: it proposes nothing.
+  companion.talkOffers.mockReturnValue({follow:true});
+  const arrival={kind:'arrival',npcId:'person',guide,relation:'quest',ask:'So this is Market. Tell me about it.',line:'Here it is: Market.'};
+  // As Interactor.talkTo opens it while the arrival is handled.
+  const talk=(signal)=>{app.arriving=signal;app.interactor.conversation={npcId:person.npcId,instance:person,behavior:null};app.presentConversation(app.interactor.conversation);app.arriving=null;};
+  app.talk.stream.mockImplementationOnce(()=>talkStream(replyEvents('The market never sleeps.')));
+  talk(arrival);
+  await vi.waitFor(()=>expect(lines(app)).toEqual(['The market never sleeps.']));
+  expect(app.talk.stream.mock.calls.at(-1).slice(1,3)).toEqual(['So this is Market. Tell me about it.',1260]);
+  expect(app.talk.stream.mock.calls.at(-1)[4]).toEqual({signal:expect.any(AbortSignal),guide});
+  app.interactor.close();log.length=0;
+
+  app.talk.stream.mockImplementationOnce(()=>talkStream([],talkError('model unavailable',502)));
+  talk(arrival);
+  await vi.waitFor(()=>expect(lines(app)).toEqual(['Here it is: Market.']));
+  expect(within(app.view.dialog.element).queryByRole('button',{name:'Retry reply'})).toBeNull();
+  expect(log).toEqual(['said: Here it is: Market.']);
  });
 
  it('drops a failed half reply, silencing what was heard of it, and offers Retry, but says a refused line cannot be retried',async()=>{
