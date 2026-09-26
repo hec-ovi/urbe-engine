@@ -6,7 +6,18 @@
   "properties": {
     "name": { "type": "string", "minLength": 1 },
     "seed": { "type": "string", "minLength": 1 },
-    "size": { "enum": ["small", "medium", "large"] }
+    "size": { "enum": ["small", "medium", "large"] },
+    "districtCount": { "$ref": "#/$defs/districtCount" }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "districtCount": {
+      "description": "Atlas `districtCount`: the inclusive [min, max] district range, min <= max. Omitted, Atlas scales it with the city's area.",
+      "type": "array",
+      "prefixItems": [{ "$ref": "#/$defs/districts" }, { "$ref": "#/$defs/districts" }],
+      "minItems": 2,
+      "items": false
+    },
+    "districts": { "type": "integer", "minimum": 1, "maximum": 12 }
+  }
 }

@@ -7,7 +7,7 @@ Builds cities and saved games, with optional interiors and quests. Creation asks
 ## Inputs
 
 - `createWorldCreation(config, ports?)`: [schema/config.schema.json](schema/config.schema.json). `themesDir` is the Materials themes directory. Ports: `run`, `clock`, `library` and `preflight` replace the process runner, the clock, the catalog and the scenery check.
-- `planCity(input)` and `generateCity(input)`: [schema/generate-city.schema.json](schema/generate-city.schema.json).
+- `planCity(input)` and `generateCity(input)`: [schema/generate-city.schema.json](schema/generate-city.schema.json). Optional `districtCount`, `[min, max]` from 1 to 12 with min <= max, is Atlas's own district range, handed to it unchanged as `--district-count min,max`. Omitted, Atlas scales the range with the city's area as it always has. A minimum the size cannot hold (Atlas needs 300 x 300 m a district, so small takes at most 2) fails in Atlas, `E_COMMAND_FAILED`.
 - `buildCity(input)`: [schema/build-city.schema.json](schema/build-city.schema.json). Optional `named` is the plan as an author named it: `blueprint`, the Naming box's named blueprint, and `types`, its NPC types.
 - `generateInstances(input)`: [schema/generate-instances.schema.json](schema/generate-instances.schema.json).
 - `generateQuests(input)`: [schema/generate-quests.schema.json](schema/generate-quests.schema.json).
@@ -19,7 +19,7 @@ Builds cities and saved games, with optional interiors and quests. Creation asks
 
 ## Outputs
 
-- `planCity`: [schema/plan-result.schema.json](schema/plan-result.schema.json), also written as `out/plans/<id>/plan.json` beside the plan `blueprint.json`.
+- `planCity`: [schema/plan-result.schema.json](schema/plan-result.schema.json), also written as `out/plans/<id>/plan.json` beside the plan `blueprint.json`. It records the `districtCount` asked for, when it was.
 - `buildCity` and `generateCity`: [schema/city-result.schema.json](schema/city-result.schema.json).
 - `generateInstances`: [schema/instances-result.schema.json](schema/instances-result.schema.json).
 - `generateQuests` and `importStory`: [schema/quests-result.schema.json](schema/quests-result.schema.json).
@@ -48,7 +48,7 @@ Closed set in [schema/creation-error.schema.json](schema/creation-error.schema.j
 ## Invariants
 
 - `out/plans/<id>` is a plan waiting for its build. `out/cities/<id>` is a shell-only city. `out/drafts/<id>` is the replaceable creation draft. `out/games/<id>` is the final self-contained game.
-- Small is 500 m, medium is 1000 m, large (shown as Big) is 3000 m. The launcher city field defaults to large. Atlas receives the user's seed, so the same size and seed plan the same geometry. Profiles live in [city-templates.json](city-templates.json).
+- Small is 500 m, medium is 1000 m, large (shown as Big) is 3000 m. The launcher city field defaults to large. Atlas receives the user's seed, so the same size, seed and district range plan the same geometry. A plan must record the district range asked for in its `meta.params`; one that does not (an Atlas that does not know the flag) is `E_OUTPUT_INVALID` and nothing is published. Profiles live in [city-templates.json](city-templates.json).
 - City creation requires only size. Omitted names and seeds receive fresh identities; explicit names and seeds remain supported. A plan's id is its city's id, and neither a plan nor a city may already hold it: `planCity` and `generateCity` refuse a taken id with `E_EXISTS`.
 - `generateCity` plans and builds in one stage, unnamed. `planCity` stops after Atlas: its descriptor carries the plan's statistics and binds the plan's bytes by checksum, so an author can name the plan (the Naming box reads `blueprint.json` and writes `blueprint.named.json` and `npc-types.json`, beside it or anywhere) before `buildCity` builds it.
 - `buildCity` refuses a plan whose `blueprint.json` does not match its checksum. Unnamed, it builds the plan's bytes. Named, the blueprint must record `meta.naming.theme` and be the plan with names: equal to it once every `name` and `meta.naming` are left out of both. The assembler takes the named blueprint as the author wrote it, with the NPC types beside it, and binds the world's hashes to it, so the world never binds the unnamed plan; its manifest is `named` with `namingTheme` that theme, and it carries `npc-types.json`. Once its city stands the plan leaves `out/plans`: whatever an author wrote beside `plan.json` and `blueprint.json` (the Naming CLI's outputs and author dir, when named in place) moves into the city as `naming/`, which a draft keeps and a game does not ship.

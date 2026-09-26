@@ -10,6 +10,10 @@
     "name": { "type": "string", "minLength": 1 },
     "size": { "enum": ["small", "medium", "large"] },
     "seed": { "type": "string", "minLength": 1 },
+    "districtCount": {
+      "description": "The district range the plan was asked for, when it was.",
+      "$ref": "urn:urbe:engine:creation:generate-city#/$defs/districtCount"
+    },
     "plannedAt": { "$ref": "urn:urbe:engine:library:city-descriptor#/$defs/timestamp" },
     "blueprint": {
       "description": "The Atlas plan, `blueprint.json` beside this descriptor in `out/plans/<id>`, and the bytes a build checks it still is.",

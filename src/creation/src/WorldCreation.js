@@ -81,6 +81,7 @@ export class WorldCreation {
 
 		if ( ! Object.hasOwn( STAGE_INPUTS, method ) ) throw new CreationError( 'E_INVALID_REQUEST', `${method} is no creation stage` );
 		this.boundary.assert( STAGE_INPUTS[ method ], input );
+		if ( STAGE_INPUTS[ method ] === 'generate-city' ) CityTemplate.check( input );
 
 	}
 
@@ -98,7 +99,7 @@ export class WorldCreation {
 		try {
 
 			const atlas = await this.#atlas( this.#runner( progress ), template, temporary );
-			const plan = this.boundary.assert( 'plan-result', await planDescriptor( temporary, id, template.input, atlas, this.clock() ) );
+			const plan = this.boundary.assert( 'plan-result', await planDescriptor( temporary, id, template, atlas, this.clock() ) );
 			await writeJson( join( temporary, 'plan.json' ), plan );
 			await publish( join( this.outDir, 'plans', id ), temporary, 'city plan' );
 			return plan;
@@ -374,7 +375,14 @@ export class WorldCreation {
 
 		const blueprint = join( dir, 'blueprint.json' );
 		await run( 'npm', template.command( blueprint ), { cwd: this.atlasRoot } );
-		return json( blueprint, 'city plan' );
+		const atlas = await json( blueprint, 'city plan' );
+		// An Atlas that does not know a parameter plans without it; the plan must be the one asked for.
+		for ( const [ key, value ] of Object.entries( template.params ) ) {
+
+			if ( ! isDeepStrictEqual( atlas.meta?.params?.[ key ], value ) ) throw new CreationError( 'E_OUTPUT_INVALID', `Atlas planned without the ${key} asked for` );
+
+		}
+		return atlas;
 
 	}
 

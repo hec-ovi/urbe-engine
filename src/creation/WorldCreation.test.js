@@ -298,6 +298,37 @@ describe( 'playable world creation contract', () => {
 
 	} );
 
+	it( 'hands Atlas the district range asked for, records it in the plan and refuses a plan made without it', async () => {
+
+		const fixture = await setup();
+		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
+		for ( const input of [
+			{ districtCount: [ 5, 4 ] }, { districtCount: [ 0, 4 ] }, { districtCount: [ 4, 13 ] }, { districtCount: [ 4 ] },
+			{ districtCount: [ 4.5, 5 ] }, { hydrology: { type: 'sea-coast' } }
+		] ) expect( () => creation.check( 'planCity', { size: 'medium', ...input } ), JSON.stringify( input ) ).toThrow( CreationError );
+		await expectCode( creation.planCity( { size: 'medium', districtCount: [ 5, 4 ] } ), 'E_INVALID_REQUEST' );
+
+		const asked = { districtCount: [ 4, 5 ] };
+		const plan = await creation.planCity( { name: 'Tide Ward', seed: 'tide-1', size: 'medium', ...asked } );
+		expect( fixture.calls[ 0 ].args.slice( 7 ) ).toEqual( [ '--size', '1000', '--no-trains', '--district-count', '4,5' ] );
+		expect( plan ).toMatchObject( { id: 'tide-ward', seed: 'tide-1', ...asked } );
+		expect( await readJson( join( fixture.config.outDir, 'plans/tide-ward/plan.json' ) ) ).toEqual( plan );
+		await creation.buildCity( { cityId: plan.id } );
+		expect( ( await readJson( join( fixture.config.outDir, 'cities/tide-ward/blueprint.json' ) ) ).meta.params ).toEqual( asked );
+
+		// Omitted, Atlas gets today's command and the plan records nothing more.
+		const bare = await creation.planCity( { name: 'Bare Tide', seed: 'bare', size: 'small' } );
+		expect( fixture.calls.at( - 1 ).args.slice( 7 ) ).toEqual( [ '--size', '500', '--no-trains' ] );
+		expect( bare ).not.toHaveProperty( 'districtCount' );
+
+		fixture.olderAtlas = true;
+		await expectCode( creation.generateCity( { name: 'Old Tide', size: 'medium', districtCount: [ 4, 5 ] } ), 'E_OUTPUT_INVALID' );
+		await expectCode( creation.planCity( { name: 'Old Tide', size: 'medium', districtCount: [ 4, 5 ] } ), 'E_OUTPUT_INVALID' );
+		await expect( lstat( join( fixture.config.outDir, 'plans/old-tide' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+		await expect( lstat( join( fixture.config.outDir, 'cities/old-tide' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+
+	} );
+
 	it( 'builds an unnamed plan into the city the template makes', async () => {
 
 		const fixture = await setup();
@@ -431,7 +462,8 @@ function processCommand( fixture ) {
 		if ( args[ 0 ] === 'run' && args[ 1 ] === 'generate' ) {
 
 			calls.push( { kind: 'atlas', command, args } );
-			await writeJson( valueAfter( args, '--out' ), atlas() );
+			// An Atlas older than the flags plans without them.
+			await writeJson( valueAfter( args, '--out' ), atlas( fixture.olderAtlas ? undefined : planParams( args ) ) );
 			return '';
 
 		}
@@ -524,11 +556,12 @@ async function writeBundle( output, questlines ) {
 
 }
 
-function atlas() {
+/** The fixture plan; `params` is what Atlas records in `meta.params` for the flags it was given. */
+function atlas( params ) {
 
 	return {
 		version: '0.14.0', seed: 'fixture', districts: [ { id: 'd0' } ],
-		meta: { seed: 'fixture' }, stats: { population: 120, parcelCounts: {}, perDistrict: [] },
+		meta: { seed: 'fixture', ...( params && { params } ) }, stats: { population: 120, parcelCounts: {}, perDistrict: [] },
 		parcels: parcelIds().map( ( id, index ) => ( {
 			id, type: HOMES.includes( id ) ? 'residential' : index % 2 ? 'commerce' : 'clinic',
 			access: { point: [ 10 + index * 8, 20 + index * 4 ] }
@@ -598,6 +631,13 @@ function missionRequest( questId, seed ) {
 function parcelIds() {
 
 	return Array.from( { length: 10 }, ( _, index ) => `p${ index }` );
+
+}
+
+/** The Atlas parameters its district range flag stands for; none without it. */
+function planParams( args ) {
+
+	return args.includes( '--district-count' ) ? { districtCount: valueAfter( args, '--district-count' ).split( ',' ).map( Number ) } : undefined;
 
 }
 

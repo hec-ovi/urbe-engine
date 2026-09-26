@@ -2,11 +2,11 @@ import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
-/** A planned city: its identity, the Atlas plan's bytes it is bound to, and the plan's statistics. */
-export async function planDescriptor( root, id, input, atlas, now ) {
+/** A planned city: its identity, the Atlas parameters asked for, the Atlas plan's bytes it is bound to, and the plan's statistics. */
+export async function planDescriptor( root, id, { input, params }, atlas, now ) {
 
 	return {
-		contractVersion: '1.0.0', id, name: input.name, size: input.size, seed: input.seed,
+		contractVersion: '1.0.0', id, name: input.name, size: input.size, seed: input.seed, ...params,
 		plannedAt: now.toISOString(),
 		blueprint: await resource( root, 'blueprint.json', 'application/json' ),
 		stats: atlas.stats
