@@ -1,6 +1,7 @@
 import { QuestActionBoundary } from './QuestActionBoundary.js';
 import { questCompletion } from './QuestCompletion.js';
 import { castIds } from './QuestCast.js';
+import { completionEvent } from './QuestEvent.js';
 import { unavailableMessage } from './QuestAvailability.js';
 import { stepView } from './QuestStepView.js';
 
@@ -237,7 +238,8 @@ export class QuestActions {
 
 		const entry = this.session.entries.find( ( candidate ) => candidate.definition.id === target.questId );
 		const step = entry.definition.steps.find( ( candidate ) => candidate.stepId === target.stepId );
-		const moved = this.session.advanceFor( target.questId, playerEvent( step, entry.runtime ), request.timeMin );
+		const event = completionEvent( step.target, castIds( step.target, entry.runtime ) );
+		const moved = this.session.advanceFor( target.questId, event, request.timeMin );
 
 		if ( moved.length === 0 ) return this.#failure( request, 'runtime_rejected', 'The quest state rejected that interaction.' );
 
@@ -285,7 +287,8 @@ function itemView( item ) {
 
 }
 
-function targetKey( questId, stepId ) {
+/** The stable key of one step's target: every projection of that step carries it. */
+export function targetKey( questId, stepId ) {
 
 	return `quest:${encodeURIComponent( questId )}:${encodeURIComponent( stepId )}`;
 
@@ -354,27 +357,6 @@ function physicalFailure( target, request ) {
 function samePlace( left, right ) {
 
 	return left.kind === right.kind && left.id === right.id;
-
-}
-
-function playerEvent( step, runtime ) {
-
-	const target = step.target;
-	if ( target.kind === 'pickup' ) return { kind: 'pickedUp', itemId: target.itemId };
-	if ( target.kind === 'observe' ) return { kind: 'observed', districtId: target.districtId };
-	if ( target.kind === 'listen' ) return { kind: 'overheard', npcIds: target.roleIds.map( ( roleId ) => runtime.cast[ roleId ] ) };
-	if ( target.kind === 'steal' ) return { kind: 'stole', itemId: target.itemId };
-	if ( target.kind === 'work' ) return { kind: 'workedShift', parcelId: target.atParcelId };
-	if ( target.kind === 'deliver' ) {
-
-		return {
-			kind: 'delivered',
-			itemId: target.itemId,
-			...( 'parcelId' in target.place ? { parcelId: target.place.parcelId } : { districtId: target.place.districtId } )
-		};
-
-	}
-	throw new Error( `unsupported quest interaction ${target.kind}` );
 
 }
 

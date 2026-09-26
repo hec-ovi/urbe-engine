@@ -10,6 +10,10 @@ import { animation, rig } from '../agents/HeroCharacter.test-fixtures.js';
 import { ActorLighting } from '../light/ActorLighting.js';
 import { SceneryCompiler } from '../scenery/SceneryCompiler.js';
 import { assets, courier, crimeScene, frame } from '../scenery/scenery.test-fixtures.js';
+import { QuestActions } from '../quests/QuestActions.js';
+import { QuestMechanics } from '../quests/QuestMechanics.js';
+import { QuestSession } from '../quests/QuestSession.js';
+import { npc, quest, role, simulation, step } from '../quests/quest.test-fixtures.js';
 
 const SEED = 3207466384;
 
@@ -320,7 +324,7 @@ describe( 'automation probe', () => {
 			serialize: () => [ 'courier-found', 'wake', 'old-scene' ].map( ( sceneId ) => ( { sceneId } ) ),
 			sceneFor: ( sceneId ) => ( {
 				'courier-found': { spec: crimeScene(), status: 'staged', failed: null, resolved: { place: staging.assembly.place, actors: courier }, request: staging.request, assembly: staging.assembly },
-				wake: { spec: crimeScene( { sceneId: 'wake', purpose: 'wake' } ), status: 'dormant', failed: 'E_SCENERY_NO_FIT', resolved: null, request: null, assembly: null }
+				wake: { spec: { ...crimeScene( { sceneId: 'wake', purpose: 'wake' } ), investigationSceneId: 'wake-evidence' }, status: 'dormant', failed: 'E_SCENERY_NO_FIT', resolved: null, request: null, assembly: null }
 			} )[ sceneId ] ?? null,
 			renderer: {
 				// The scene stands a few frames after the player comes near.
@@ -328,6 +332,8 @@ describe( 'automation probe', () => {
 				visuals: () => ( { focus: ( entityId ) => drawn.has( entityId ) ? { position: new THREE.Vector3(), visible: true } : null } )
 			}
 		};
+		// The wake's evidence did not stand with it.
+		game.investigations = { scenes: new Map( [ [ 'wake-evidence', { status: 'dormant' } ] ] ) };
 		game.companion = { places: { positions: new Map( [ [ 'parcel:p47', [ 10, 0.2, 12 ] ] ] ) } };
 		// The flat's floor, 2.4 m up over the frame, is solid once the player has stood at the door.
 		let solid = false;
@@ -352,9 +358,9 @@ describe( 'automation probe', () => {
 			{
 				sceneId: 'courier-found', questId: 'quest-missing-courier', purpose: 'crime-scene', status: 'staged', failed: null,
 				place: { parcelId: 'p47', floor: 0, roomId: 'f0-r1' }, frame: { kind: 'interior', origin: [ 10, 2.4, 20 ], width: 8, depth: 7 },
-				elements: [ 'courier', 'drive', 'pool' ], standing: false
+				elements: [ 'courier', 'drive', 'pool' ], standing: false, evidence: null
 			},
-			{ sceneId: 'wake', questId: 'quest-missing-courier', purpose: 'wake', status: 'dormant', failed: 'E_SCENERY_NO_FIT', place: null, frame: null, elements: [], standing: false }
+			{ sceneId: 'wake', questId: 'quest-missing-courier', purpose: 'wake', status: 'dormant', failed: 'E_SCENERY_NO_FIT', place: null, frame: null, elements: [], standing: false, evidence: 'dormant' }
 		] );
 
 		const visit = await probe.visitScene( 'courier-found' );
@@ -368,6 +374,264 @@ describe( 'automation probe', () => {
 
 		expect( await probe.visitScene( 'wake' ) ).toMatchObject( { placed: false, standing: false, shown: [] } );
 		await expect( probe.visitScene( 'ghost' ) ).rejects.toThrow( 'no scene ghost' );
+
+	} );
+
+} );
+
+/**
+ * A story in play over the walker's game: a talk with authored replies at
+ * p1 open from 20:00, a walk to p2, an escort by a guard who keeps p3 only
+ * from 20:00 to 23:00, then two endings the player chooses between: a
+ * scene's evidence or a shift of work at p2. The clock stands at 10:00;
+ * waiting moves it on. Standing just inside p1's or p2's door is standing in
+ * one of its rooms.
+ */
+function storied() {
+
+	const { game, walker } = playing();
+	const ask = step( 's_ask', { kind: 'talk', roleId: 'giver', atParcelId: 'p1' }, { gives: [ 'lead' ], next: [ { toStepId: 's_go', when: [] } ] } );
+	ask.window = { label: 'tonight', days: [ 0, 1, 2, 3, 4, 5, 6 ], startMin: 1200, endMin: 1380 };
+	ask.dialogue = { opening: 'Kip saw something at the quay.', choices: [
+		{ id: 'why', text: 'What did he see?', reply: 'Ask him.', completesStep: false },
+		{ id: 'go', text: 'I will find him.', reply: 'He is at the pier.', completesStep: true }
+	] };
+	const walk = step( 's_walk', {
+		kind: 'escort', roleId: 'guard', routeId: 'rt_pier', mode: 'lead-player', from: { parcelId: 'p3' }, to: { parcelId: 'p2' }, completionFlag: 'walked'
+	}, { next: [ { toStepId: 's_left', when: [] }, { toStepId: 's_right', when: [] } ] } );
+	walk.effects.push( { kind: 'simFlag', roleId: 'guard', op: { kind: 'die' } } );
+	const definition = {
+		...quest( 'q_pier', {
+			roles: [ role( 'giver', 'vendor' ), role( 'guard', 'guard' ) ], flags: [ 'walked', 'read' ],
+			items: [
+				{ itemId: 'lead', kind: 'information', name: 'Kip at the pier', description: 'Kip saw it.' },
+				{ itemId: 'tag', kind: 'information', name: 'The tag', description: 'A brass tag.' }
+			],
+			steps: [
+				ask,
+				step( 's_go', { kind: 'goto', place: { parcelId: 'p2' } }, { needs: [ 'lead' ], next: [ { toStepId: 's_walk', when: [] } ] } ),
+				walk,
+				step( 's_left', {
+					kind: 'investigation', sceneId: 'sc', evidenceId: 'ev_tag', evidenceItemId: 'tag', subjectRoleIds: [ 'guard' ],
+					place: { parcelId: 'p2' }, completionFlag: 'read'
+				}, { gives: [ 'tag' ], endingId: 'left' } ),
+				step( 's_right', { kind: 'work', atParcelId: 'p2', role: 'porter' }, { endingId: 'right' } )
+			]
+		} ),
+		endings: [ { endingId: 'left', title: 'Left', epilogue: 'Gone left.' }, { endingId: 'right', title: 'Right', epilogue: 'Gone right.' } ]
+	};
+	const guard = npc( 'guard', 'guard', 'p3' );
+	guard.routine = [
+		{ days: [ 0, 1, 2, 3, 4, 5, 6 ], startMin: 0, endMin: 1200, activity: 'home', place: { kind: 'parcel', id: 'p8' } },
+		{ days: [ 0, 1, 2, 3, 4, 5, 6 ], startMin: 1200, endMin: 1380, activity: 'working', place: { kind: 'parcel', id: 'p3' } },
+		{ days: [ 0, 1, 2, 3, 4, 5, 6 ], startMin: 1380, endMin: 1440, activity: 'home', place: { kind: 'parcel', id: 'p8' } }
+	];
+	const sim = simulation( new Map( [ [ 'giver', npc( 'giver', 'vendor', 'p1' ) ], [ 'guard', guard ] ] ) );
+	const working = sim.behaviorAt;
+	sim.behaviorAt = ( npcId, timeMin ) => {
+
+		const routine = sim.getNPC( npcId ).routine;
+		const entry = routine.find( ( each ) => timeMin % 1440 >= each.startMin && timeMin % 1440 < each.endMin );
+		return routine.length > 1 ? { mode: 'interior', activity: entry.activity, interrupted: false, place: entry.place } : working( npcId, timeMin );
+
+	};
+	game.sim = sim;
+	game.clock.timeMin = 600;
+	game.quests = QuestSession.create( [ definition ], sim, 600 );
+	const actions = new QuestActions( game.quests );
+	game.questGameplay = {
+		objective: ( timeMin, questId ) => actions.objective( { timeMin, ...( questId ? { questId } : {} ) } ),
+		mechanics: new QuestMechanics( game.quests ), staticMarks: new Map(), escort: null
+	};
+	game.waitUntil = vi.fn( ( timeMin ) => timeMin > game.clock.timeMin && Boolean( game.clock.timeMin = timeMin ) );
+	game.questActionResult = vi.fn();
+	game.scenery = { serialize: () => [], sceneFor: () => null, renderer: { isRealized: () => false } };
+	game.investigations = { scenes: new Map() };
+	game.stream = { pending: new Map( [ [ 'p1', {} ], [ 'p2', {} ] ] ), live: new Map() };
+	game.locator = {
+		parcelById: new Map( [ 'p1', 'p2', 'p3' ].map( ( id ) => [ id, { id } ] ) ),
+		districts: [ { id: 'd1' } ],
+		refs: ( x ) => x >= 30 ? [ { kind: 'district', id: 'd1' } ] : [ { kind: 'district', id: 'd0' } ]
+	};
+	game.objectiveGuide = { router: { route: ( { destination } ) => {
+
+		if ( destination.id === 'p3' ) throw Object.assign( new Error( 'no way' ), { code: 'E_OBJECTIVE_ROUTE_UNREACHABLE' } );
+		return { distanceMeters: 212.4 };
+
+	} } };
+	const placed = game.placePlayer.getMockImplementation();
+	game.placePlayer.mockImplementation( ( feet, target ) => {
+
+		game.standing = { 12: { parcelId: 'p1' }, 40: { parcelId: 'p2' } }[ feet.x ] ?? null;
+		return placed( feet, target );
+
+	} );
+	game.companion = { active: null, places: { positions: new Map( [
+		[ 'parcel:p1', [ 12, 0.2, 5 ] ], [ 'parcel:p2', [ 40, 0.2, 5 ] ], [ 'parcel:p5', [ 34, 0.2, 5 ] ], [ 'parcel:p6', [ 60, 0.2, 5 ] ],
+		[ 'parcel:p3', [ 70, 0.2, 5 ] ]
+	] ) } };
+
+	return { game, walker };
+
+}
+
+describe( 'story fast-forward', () => {
+
+	it( 'reads a questline, and completes its steps in order through the runtime, waiting for their hour and taking a named branch', async () => {
+
+		const { game } = storied();
+		const probe = new AutomationProbe( game );
+		const start = probe.quest();
+		expect( start ).toMatchObject( {
+			questId: 'q_pier', state: 'active', ending: null, completed: [], flags: [], inventory: [],
+			objective: { stepId: 's_ask', kind: 'talk', place: { kind: 'parcel', id: 'p1', exists: true, interior: true }, route: { metres: 212, reason: null } }
+		} );
+		expect( start.active ).toEqual( [ expect.objectContaining( {
+			stepId: 's_ask', kind: 'talk', targetKey: 'quest:q_pier:s_ask', availability: { available: false, reason: 'outside_window' },
+			wait: { timeMin: 1200, label: 'Mon 20:00', minutes: 600 },
+			cast: [ { npcId: 'giver', name: 'vendor Vale', dead: false, member: null } ],
+			choices: [ { id: 'why', text: 'What did he see?', completesStep: false }, { id: 'go', text: 'I will find him.', completesStep: true } ]
+		} ) ] );
+
+		// The clock waits for the talk's hour, then it commits its first completing reply; the game takes the result as a player's.
+		const talked = await probe.advance();
+		expect( talked ).toMatchObject( {
+			questId: 'q_pier', stopped: 'count', completed: [ { stepId: 's_ask', kind: 'talk', ok: true, reason: null, waited: { from: 600, to: 1200, label: 'Mon 20:00' } } ]
+		} );
+		expect( game.waitUntil ).toHaveBeenCalledExactlyOnceWith( 1200 );
+		expect( talked.quest ).toMatchObject( { completed: [ 's_ask' ], inventory: [ 'lead' ], objective: { stepId: 's_go', kind: 'goto' } } );
+		expect( game.questActionResult ).toHaveBeenCalledWith( expect.objectContaining( { ok: true, completed: [ expect.objectContaining( { stepIds: [ 's_ask' ] } ) ] } ) );
+
+		// The escort's guard keeps p3 at this hour; it completes with its effects.
+		const walked = await probe.advance( { toStepId: 's_left' } );
+		expect( walked.stopped ).toBe( 'reached' );
+		expect( walked.completed ).toEqual( [
+			{ stepId: 's_go', kind: 'goto', ok: true, reason: null, waited: null },
+			{ stepId: 's_walk', kind: 'escort', ok: true, reason: null, waited: null }
+		] );
+		expect( game.sim.getNPC( 'guard' ).flags.dead ).toBe( true );
+		expect( walked.quest ).toMatchObject( { flags: [ 'walked' ], active: [ { stepId: 's_left' }, { stepId: 's_right' } ] } );
+
+		const ended = await probe.advance( { steps: 3, branch: 's_right' } );
+		expect( ended ).toMatchObject( { stopped: 'ended', completed: [ { stepId: 's_right', ok: true } ], quest: { state: 'done', ending: { endingId: 'right', title: 'Right' }, objective: null } } );
+		expect( ( await probe.advance() ).completed ).toEqual( [] );
+		await expect( probe.advance( { questId: 'q_none' } ) ).rejects.toThrow( 'no questline q_none in play' );
+
+	} );
+
+	it( 'never completes a step its runtime refuses, and reports why without moving the story', async () => {
+
+		const { game } = storied();
+		const probe = new AutomationProbe( game );
+		await probe.advance( { toStepId: 's_walk' } );
+		// Past the guard's hours, the escort's start is an appointment: the story posts him there once the player stands at its door.
+		game.clock.timeMin = 1400;
+		game.quests.setPresenceSource( ( npcId ) => npcId === 'guard' && game.body.feet.x === 70 ? { place: { kind: 'parcel', id: 'p3' }, activity: 'working' } : null );
+		expect( await probe.ready( { stepId: 's_walk' } ) ).toMatchObject( { available: true, reason: null, waited: null } );
+		expect( game.body.feet.x ).toBe( 70 );
+		const before = game.quests.snapshot();
+		game.sim.getNPC( 'guard' ).flags.dead = true;
+		const refused = await probe.advance();
+		expect( refused ).toMatchObject( { stopped: 'rejected', completed: [ { stepId: 's_walk', ok: false, reason: 'role_dead', waited: null } ] } );
+		expect( game.quests.snapshot() ).toEqual( before );
+		expect( probe.quest().objective ).toMatchObject( { stepId: 's_walk', place: { kind: 'parcel', id: 'p3', exists: true, interior: false }, route: { metres: null, reason: 'E_OBJECTIVE_ROUTE_UNREACHABLE' } } );
+		await expect( probe.ready( { stepId: 's_ask' } ) ).rejects.toThrow( 'no active step s_ask in q_pier' );
+
+	} );
+
+	it( 'stands the player at a place, before a step\'s person, on its mark and at its evidence, and clicks a chat reply', async () => {
+
+		const { game, walker } = storied();
+		const probe = new AutomationProbe( game );
+		expect( await probe.visit( { kind: 'parcel', id: 'p2' } ) ).toMatchObject( { placed: true, room: 'p2' } );
+		expect( game.body.feet.toArray() ).toEqual( [ 40, expect.closeTo( 0.25 ), 5 ] );
+		// The door nearest the player inside d1.
+		game.body.feet.set( 20, 0.2, 5 );
+		expect( await probe.visit( { kind: 'district', id: 'd1' } ) ).toMatchObject( { placed: true, room: null } );
+		expect( game.body.feet.x ).toBe( 34 );
+
+		// The talk's person is the walker once the story posts them at p1.
+		walker.npcId = 'giver';
+		const talk = await probe.reach( { stepId: 's_ask' } );
+		expect( talk ).toMatchObject( { placed: true, place: { kind: 'parcel', id: 'p1' }, member: 'p1', offered: true, target: { kind: 'npc', person: 'p1', key: null } } );
+
+		const { conversation } = await probe.press();
+		expect( conversation ).toMatchObject( { npcId: 'a301' } );
+		const chosen = [];
+		game.view.dialog.onChoice = ( value ) => chosen.push( value );
+		game.view.dialog.setStory( { title: 'q_pier', objective: 'Complete s_ask.' } );
+		game.view.dialog.setChoices( [ { text: 'What did he see?', value: 'why', disabled: true }, { text: 'I will find him.', value: 'go' } ] );
+		expect( probe.state().chat ).toMatchObject( {
+			story: { title: 'q_pier', objective: 'Complete s_ask.' },
+			choices: [ { text: 'What did he see?', disabled: true }, { text: 'I will find him.', disabled: false } ]
+		} );
+		expect( ( await probe.choose( 'What did he see?' ) ).clicked ).toBe( false );
+		expect( ( await probe.choose( 'I will find him.' ) ).clicked ).toBe( true );
+		expect( chosen ).toEqual( [ 'go' ] );
+
+		// A work step's mark stands at p2's door; E there takes it.
+		await probe.advance( { toStepId: 's_right' } );
+		const key = 'quest:q_pier:s_right';
+		game.questGameplay.staticMarks.set( key, { position: new THREE.Vector3( 40, 0.23, 5 ), userData: { kind: 'work' } } );
+		game.placePlayer.mockImplementation( ( feet ) => {
+
+			game.body.feet.set( feet.x, feet.y, feet.z );
+			game.standing = feet.x === 40 ? { parcelId: 'p2' } : null;
+			game.interactor.target = { kind: 'quest', interaction: { targetKey: key } };
+			return true;
+
+		} );
+		expect( await probe.reach( { stepId: 's_right' } ) ).toMatchObject( { placed: true, offered: true, target: { kind: 'quest', key } } );
+
+		// A mission prop there is tried from each spot around it until E takes it: here only from its -z side.
+		game.questGameplay.staticMarks.set( key, { position: new THREE.Vector3( 40, 0.2, 5 ), userData: { kind: 'pickup', focusPoint: new THREE.Vector3( 40, 0.5, 5 ) } } );
+		game.placePlayer.mockClear();
+		game.placePlayer.mockImplementation( ( feet ) => {
+
+			game.body.feet.set( feet.x, feet.y, feet.z );
+			game.standing = feet.x === 40 ? { parcelId: 'p2' } : null;
+			game.interactor.target = feet.z < 4 ? { kind: 'quest', interaction: { targetKey: key } } : null;
+			return true;
+
+		} );
+		expect( await probe.reach( { stepId: 's_right' } ) ).toMatchObject( { placed: true, offered: true } );
+		expect( game.placePlayer.mock.calls.length ).toBeGreaterThan( 2 );
+		expect( game.body.feet.z ).toBeCloseTo( 3.6 );
+		expect( game.placePlayer.mock.lastCall[ 1 ] ).toEqual( new THREE.Vector3( 40, 0.5, 5 ) );
+
+	} );
+
+	it( 'stands the player at the approach of a staged scene\'s evidence aimed at it, and reads a quest escort as the companion', async () => {
+
+		const { game } = storied();
+		const probe = new AutomationProbe( game );
+		await probe.advance( { toStepId: 's_left' } );
+		// The evidence is a tag on the floor of the scene at p2.
+		const evidence = { evidenceId: 'ev_tag', entityId: 'tag', targetKey: 'investigation:tag', approachPoint: { x: 41, y: 0.2, z: 6 } };
+		game.investigations.scenes.set( 'sc', {
+			request: { questId: 'q_pier', questBindings: [ { stepId: 's_left', evidenceId: 'ev_tag' } ] }, status: 'staged', state: {},
+			runtime: { targets: () => [ evidence ] },
+			visuals: { focus: ( entityId ) => entityId === 'tag' ? { visible: true, position: new THREE.Vector3( 42, 0.25, 6 ) } : null }
+		} );
+		game.placePlayer.mockImplementation( ( feet ) => {
+
+			game.body.feet.set( feet.x, feet.y, feet.z );
+			game.standing = feet.x === 40 ? { parcelId: 'p2' } : null;
+			game.interactor.target = feet.x === 41 ? { kind: 'investigation', interaction: { targetKey: 'investigation:tag' } } : null;
+			return true;
+
+		} );
+		expect( await probe.reach( { stepId: 's_left' } ) ).toMatchObject( { placed: true, offered: true, target: { kind: 'investigation', key: 'investigation:tag' } } );
+		expect( game.placePlayer ).toHaveBeenLastCalledWith( { x: 41, y: expect.closeTo( 0.25 ), z: 6 }, new THREE.Vector3( 42, 0.25, 6 ) );
+
+		// A quest escort under way reads as the companion, bound for its step's destination.
+		game.questGameplay.escort = { target: { actorIds: [ 'guard' ], target: { to: { parcelId: 'p2', name: 'the pier' } } } };
+		game.npcContinuity = { companion: { npcId: 'guard', mode: 'leading', phase: 'walking', position: [ 30, 0.2, 5 ] } };
+		game.body.feet.set( 27, 0.2, 5 );
+		expect( probe.companion() ).toEqual( {
+			npcId: 'guard', kind: 'escort', phase: null, mode: 'leading', walk: 'walking', distance: 3, position: [ 30, 0.2, 5 ],
+			destination: { name: 'the pier', relation: 'quest', distance: 10 }
+		} );
 
 	} );
 

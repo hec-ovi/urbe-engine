@@ -3,6 +3,7 @@ import { guidanceFor } from '../../../../quests/dist/runtime.js';
 import { QuestActions } from './QuestActions.js';
 import { QuestActionBoundary } from './QuestActionBoundary.js';
 import { QuestMechanics } from './QuestMechanics.js';
+import { completionEvent } from './QuestEvent.js';
 
 const PHYSICAL_REACH = { pickup: 2.5, steal: 2, listen: 8 };
 const AREA_REACH = 3.2;
@@ -1382,28 +1383,10 @@ function continuityPlace( place ) {
 
 }
 
+/** The measured mechanic's completion event, for the cast the projected target resolved. */
 function mechanicEvent( projected ) {
 
-	const target = projected.target;
-	if ( projected.kind === 'rescue' ) return {
-		kind: 'released', npcId: projected.actorIds[ 0 ], releaseTargetId: target.releaseTargetId,
-		place: target.place
-	};
-	if ( projected.kind === 'escort' ) return {
-		kind: 'escorted', npcId: projected.actorIds[ 0 ], routeId: target.routeId, mode: target.mode,
-		from: target.from, to: target.to
-	};
-	if ( projected.kind === 'access' ) return {
-		kind: 'accessed', accessPointId: target.accessPointId, credentialItemId: target.credentialItemId,
-		place: target.place
-	};
-	if ( projected.kind === 'hacking' ) return { kind: 'hacked', targetId: target.targetId, place: target.place };
-	if ( projected.kind === 'sabotage' ) return { kind: 'sabotaged', targetId: target.targetId, place: target.place };
-	if ( projected.kind === 'transportation' ) return {
-		kind: 'transported', journeyId: target.journeyId, mode: target.mode, from: target.from, to: target.to,
-		passengerNpcIds: [ ...projected.actorIds ], cargoItemIds: [ ...target.cargoItemIds ]
-	};
-	throw new Error( `unsupported measured mechanic ${projected.kind}` );
+	return completionEvent( projected.target, projected.actorIds );
 
 }
 

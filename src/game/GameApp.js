@@ -920,7 +920,7 @@ export class GameApp {
 			eye: { x: this.controller.eye.x, y: this.controller.eye.y, z: this.controller.eye.z },
 			look: { x: this.controller.look.x, y: this.controller.look.y, z: this.controller.look.z }
 		} );
-		for ( const result of this.questGameplay.drainMechanicResults() ) this.#questActionResult( result );
+		for ( const result of this.questGameplay.drainMechanicResults() ) this.questActionResult( result );
 		if ( ! transitFrame ) transitFrame = this.transitGameplay.update( {
 			daySeconds: this.clock.daySeconds,
 			interactionBlocked: Boolean( worldPrompt || this.interactor.conversation )
@@ -941,13 +941,13 @@ export class GameApp {
 
 			const owner = playableInteractionOwner( this.interactor, transitFrame );
 			if ( owner === 'conversation' ) this.#closeConversation();
-			else if ( owner === 'world' ) this.#questActionResult( this.interactor.activate( this.clock ) );
+			else if ( owner === 'world' ) this.questActionResult( this.interactor.activate( this.clock ) );
 			else this.#transitAction( this.transitGameplay.activate(), playerPlaces );
 
 		}
 		if ( secondary && ! playableModalOpen( this.view, this.interactor ) && ! transitFrame.aboard ) {
 
-			this.#questActionResult( this.interactor.activate( this.clock, 'secondary-interact' ) );
+			this.questActionResult( this.interactor.activate( this.clock, 'secondary-interact' ) );
 
 		}
 
@@ -1422,11 +1422,9 @@ export class GameApp {
 		}
 		const step = this.quests.view( this.clock.timeMin ).find( quest => quest.id === questId )?.steps.find( step => step.stepId === stepId );
 		if ( step?.availability.reason !== 'outside_window' || ! step.wait || step.wait.timeMin <= this.clock.timeMin ) return;
-		this.clock.seconds = step.wait.timeMin * 60;
 		this.followedQuestId = questId;
 		this.followedStepId = stepId;
-		if ( this.crowd ) this.crowd.timer = 10;
-		this.#refreshQuestState();
+		this.waitUntil( step.wait.timeMin );
 		this.view.toast.show( { title: 'Waited until ' + step.wait.label, text: 'The world clock has advanced. Your quest progress is unchanged.' } );
 		if ( this.persistence ) this.#saveCurrent().catch( error => {
 			console.error( error );
@@ -1435,8 +1433,22 @@ export class GameApp {
 
 	}
 
+	/**
+	 * Moves the world clock on to `timeMin`, never back, and lets the crowd,
+	 * scenery, journal and objective catch up; quest progress is unchanged.
+	 */
+	waitUntil( timeMin ) {
+
+		if ( ! ( timeMin > this.clock.timeMin ) ) return false;
+		this.clock.seconds = timeMin * 60;
+		if ( this.crowd ) this.crowd.timer = 10;
+		this.#refreshQuestState();
+		return true;
+
+	}
+
 	/** A QuestActions result updates every player-facing and persisted projection of that runtime state. */
-	#questActionResult( result ) {
+	questActionResult( result ) {
 
 		if ( ! result ) return;
 		if ( ! result.ok ) {
@@ -1535,7 +1547,7 @@ export class GameApp {
 				if ( accepted ) {
 
 					const result = this.questGameplay.fatalImpact( impact, person.npcId, this.clock.timeMin );
-					if ( result ) this.#questActionResult( result );
+					if ( result ) this.questActionResult( result );
 					return;
 
 				}
@@ -1575,7 +1587,7 @@ export class GameApp {
 			playerPlaces: places,
 			position: [ feet.x, feet.y, feet.z ]
 		} );
-		if ( result ) this.#questActionResult( result );
+		if ( result ) this.questActionResult( result );
 
 	}
 
