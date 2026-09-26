@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createServer } from 'node:http';
+import { sendBytes } from './routeHttp.test-fixtures.js';
 import { talkRoute } from './talkRoute.js';
 
 describe( 'NPC dialogue HTTP boundary', () => {
@@ -137,6 +138,9 @@ describe( 'NPC dialogue HTTP boundary', () => {
 			expect( await refused.json() ).toEqual( { error: expect.any( String ) } );
 
 		}
+		const oversized = await sendBytes( `${origin}/api/talk/memory`, 'PUT', 32 * 1024 * 1024 + 1 );
+		expect( oversized.status ).toBe( 413 );
+		expect( await oversized.json() ).toEqual( { error: 'talk memory request is over 33554432 bytes' } );
 		for ( const query of [ '', '?out=%2Fetc' ] ) expect( ( await fetch( `${origin}/api/talk/memory${query}` ) ).status ).toBe( 400 );
 		expect( service.restoreMemory ).toHaveBeenCalledTimes( 2 );
 		expect( service.memory ).toHaveBeenCalledOnce();

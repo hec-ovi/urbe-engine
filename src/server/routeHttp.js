@@ -28,8 +28,15 @@ export async function readJson( req, what, limit ) {
 
 			if ( size > limit ) return;
 			size += chunk.length;
-			if ( size <= limit ) chunks.push( chunk );
-			else reject( new BodyError( 413, `${what} request is over ${limit} bytes` ) );
+			if ( size <= limit ) {
+
+				chunks.push( chunk );
+				return;
+
+			}
+			// The rest is read and dropped, so the refusal still reaches the client.
+			chunks.length = 0;
+			reject( new BodyError( 413, `${what} request is over ${limit} bytes` ) );
 
 		} );
 		req.on( 'end', () => resolve( Buffer.concat( chunks ).toString( 'utf8' ) ) );

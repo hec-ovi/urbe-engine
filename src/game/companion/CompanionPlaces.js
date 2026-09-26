@@ -58,13 +58,15 @@ export class CompanionPlaces {
 	 * The places one person could lead the player to from `from`, best first:
 	 * by relation, then by the length of the walk, then by place id. A place
 	 * the player stands in, one the city cannot place or name, and one out of
-	 * reach are left out. Offered places that would read the same are named
-	 * with the compass point they lie toward (`the shop to the north`); of
-	 * those that still read the same, the first is kept.
+	 * reach are left out, and so is one that reads the same as a better place
+	 * in name, way and walk, unless it is a quest place. Offered places that
+	 * share a name carry `offeredAs`, which adds the compass point they lie
+	 * toward (`the shop to the north`) and, for two that lie the same way, the
+	 * walk (`the shop to the north, 240 m away`).
 	 * @param npc the simulation instance: job, transit job, home and routine
 	 * @param quests open quest place targets `{ questId, stepId, place }`
 	 * @param scenes staged scenery places `{ place, name, relation: 'scene', notes? }`
-	 * @returns `[{ place, name, relation, distance, questId?, stepId?, notes? }]`
+	 * @returns `[{ place, name, offeredAs?, relation, distance, questId?, stepId?, notes? }]`
 	 */
 	destinations( { npc, from, playerPlaces, quests = [], scenes = [] } ) {
 
@@ -98,20 +100,33 @@ export class CompanionPlaces {
 			const name = candidate.name ?? this.name( candidate.place );
 			const route = name ? this.routes.route( from, position ) : null;
 			if ( ! route || route.distanceMeters > MAX_LEAD || route.distanceMeters < MIN_LEAD ) continue;
-			found.push( { ...candidate, name, distance: route.distanceMeters } );
+			const distance = route.distanceMeters;
+			found.push( { ...candidate, name, distance, point: bearing( from, position ), metres: Math.round( distance / 10 ) * 10 } );
 
 		}
-		const offered = found
-			.sort( ( a, b ) => RANK[ a.relation ] - RANK[ b.relation ] || a.distance - b.distance || keyOf( a.place ).localeCompare( keyOf( b.place ) ) )
-			.slice( 0, MAX_PLACES );
-		const counts = new Map();
-		for ( const { name } of offered ) counts.set( name, ( counts.get( name ) ?? 0 ) + 1 );
-		const shown = new Set();
-		return offered
-			.map( ( entry ) => counts.get( entry.name ) > 1
-				? { ...entry, name: this.lines.say( `name-${bearing( from, this.positions.get( keyOf( entry.place ) ) )}`, { place: entry.name } ) }
-				: entry )
-			.filter( ( { name } ) => ! shown.has( name ) && shown.add( name ) );
+		found.sort( ( a, b ) => RANK[ a.relation ] - RANK[ b.relation ] || a.distance - b.distance || keyOf( a.place ).localeCompare( keyOf( b.place ) ) );
+		const offered = [];
+		const heard = new Set();
+		for ( const entry of found ) {
+
+			if ( offered.length === MAX_PLACES ) break;
+			// A place that reads the same as a better one in name, way and walk is one the player cannot tell apart.
+			const words = `${entry.name}|${entry.point}|${entry.metres}`;
+			if ( heard.has( words ) && entry.relation !== 'quest' ) continue;
+			heard.add( words );
+			offered.push( entry );
+
+		}
+		return offered.map( ( entry ) => {
+
+			const { point, metres, ...destination } = entry;
+			const alike = offered.filter( ( other ) => other !== entry && other.name === entry.name );
+			if ( ! alike.length ) return destination;
+			const toward = this.lines.say( `name-${point}`, { place: entry.name } );
+			const offeredAs = alike.some( ( other ) => other.point === point ) ? this.lines.say( 'name-away', { place: toward, metres } ) : toward;
+			return { ...destination, offeredAs };
+
+		} );
 
 	}
 

@@ -56,20 +56,32 @@ describe( 'companion places', () => {
 
 	} );
 
-	it( 'tells apart offered places that would read the same by the way they lie, and offers one of those that still do', () => {
+	it( 'tells apart offered places that share a name by the way they lie and then the walk, and gives the slot of one that still reads the same to the next place', () => {
 
-		const atlas = { parcels: [ 'c1', 'c2', 'c3' ].map( ( id ) => ( { id, type: 'coffee_shop' } ) ).concat( { id: 'p2', type: 'restaurant', name: 'Bar Nadir' } ) };
+		const atlas = { parcels: [ 'c1', 'c2', 'c3', 'c4' ].map( ( id ) => ( { id, type: 'coffee_shop' } ) ).concat( { id: 'p2', type: 'restaurant', name: 'Bar Nadir' } ) };
 		const places = new CompanionPlaces( {
 			atlas, lines: CompanionLines.standard(),
 			routes: { route: ( from, to ) => ( { distanceMeters: Math.hypot( to[ 0 ] - from[ 0 ], to[ 2 ] - from[ 2 ] ) } ) },
 			places: [
 				{ kind: 'parcel', id: 'c1', position: [ 100, 0, 0 ] }, { kind: 'parcel', id: 'c2', position: [ 0, 0, - 200 ] },
-				{ kind: 'parcel', id: 'c3', position: [ 300, 0, 20 ] }, { kind: 'parcel', id: 'p2', position: [ - 150, 0, 150 ] }
+				{ kind: 'parcel', id: 'c3', position: [ 300, 0, 20 ] }, { kind: 'parcel', id: 'c4', position: [ 101, 0, 2 ] },
+				{ kind: 'parcel', id: 'p2', position: [ - 150, 0, 150 ] }
 			]
 		} );
-		const npc = { home: { parcelId: 'p2' }, routine: [ 'c1', 'c2', 'c3' ].map( ( id ) => ( { activity: 'shopping', place: { kind: 'parcel', id } } ) ) };
-		expect( places.destinations( { npc, from: [ 0, 0, 0 ], playerPlaces: [] } ).map( ( entry ) => [ entry.place.id, entry.name ] ) ).toEqual( [
-			[ 'p2', 'Bar Nadir' ], [ 'c1', 'the coffee shop to the east' ], [ 'c2', 'the coffee shop to the north' ]
+		const npc = { home: { parcelId: 'p2' }, routine: [ 'c1', 'c2', 'c3', 'c4' ].map( ( id ) => ( { activity: 'shopping', place: { kind: 'parcel', id } } ) ) };
+		const offered = ( quests ) => places.destinations( { npc, from: [ 0, 0, 0 ], playerPlaces: [], quests } );
+
+		// c4 reads as c1 does, so the farther c3 takes the fourth slot; each keeps its plain name beside the offered one.
+		expect( offered().map( ( entry ) => [ entry.place.id, entry.name, entry.offeredAs ] ) ).toEqual( [
+			[ 'p2', 'Bar Nadir', undefined ],
+			[ 'c1', 'the coffee shop', 'the coffee shop to the east, 100 m away' ],
+			[ 'c2', 'the coffee shop', 'the coffee shop to the north' ],
+			[ 'c3', 'the coffee shop', 'the coffee shop to the east, 300 m away' ]
+		] );
+		// Quest places are all offered, however they read.
+		const quests = [ 'c4', 'c1' ].map( ( id ) => ( { questId: 'q', stepId: id, place: { kind: 'parcel', id } } ) );
+		expect( offered( quests ).map( ( entry ) => [ entry.place.id, entry.relation ] ) ).toEqual( [
+			[ 'c1', 'quest' ], [ 'c4', 'quest' ], [ 'p2', 'home' ], [ 'c2', 'haunt' ]
 		] );
 
 	} );

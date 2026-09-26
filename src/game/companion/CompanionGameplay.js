@@ -83,7 +83,7 @@ export class CompanionGameplay {
 
 		const follow = offers.some( ( offer ) => offer.kind === 'follow' && offer.available );
 		const places = offers.filter( ( offer ) => offer.kind === 'lead' && offer.available )
-			.map( ( offer ) => ( { placeId: offer.destination.place.id, name: offer.destination.name } ) );
+			.map( ( { destination } ) => ( { placeId: destination.place.id, name: destination.offeredAs ?? destination.name } ) );
 		return this.boundary.output( 'talk-offers', follow || places.length
 			? { ...( follow ? { follow: true } : {} ), ...( places.length ? { places } : {} ) }
 			: null );
@@ -210,7 +210,7 @@ export class CompanionGameplay {
 			const minutes = distance / PLAYER_PACE / 60 + ARRIVAL_TALK_MIN;
 			offers.push( {
 				...offer( `lead:${placeKey( destination.place )}`,
-					this.lines.say( `label-lead-${destination.relation}`, { place: destination.name } ),
+					this.lines.say( `label-lead-${destination.relation}`, { place: destination.offeredAs ?? destination.name } ),
 					refusal ?? ( free < minutes ? 'no_time' : null ), 'lead' ),
 				destination
 			} );
@@ -244,11 +244,12 @@ export class CompanionGameplay {
 			return this.boundary.output( 'accept-result', { ok: false, npcId, code, line: this.lines.say( `refuse-${code}`, {}, seed ) } );
 
 		}
-		const destination = chosen.destination;
-		this.pending = { npcId, kind: chosen.kind, ...( destination ? { destination } : {} ) };
+		// Under way the place goes by its own name: the compass point was from where it was offered.
+		const { offeredAs, ...destination } = chosen.destination ?? {};
+		this.pending = { npcId, kind: chosen.kind, ...( chosen.destination ? { destination } : {} ) };
 		return this.boundary.output( 'accept-result', {
 			ok: true, npcId, offerId: chosen.offerId, kind: chosen.kind,
-			line: this.lines.say( `accept-${chosen.kind}`, destination ? { place: destination.name } : {}, seed )
+			line: this.lines.say( `accept-${chosen.kind}`, chosen.destination ? { place: offeredAs ?? destination.name } : {}, seed )
 		} );
 
 	}

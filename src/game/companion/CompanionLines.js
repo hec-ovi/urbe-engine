@@ -13,9 +13,9 @@ const KEYS = [
 	'arrival-work', 'arrival-home', 'arrival-haunt', 'arrival-quest', 'arrival-scene', 'arrival-ask',
 	'notice-gave-up-player-lost', 'notice-gave-up-unreachable',
 	'name-unnamed', 'name-stop', 'name-station',
-	...COMPASS.map( ( point ) => `name-${point}` )
+	...COMPASS.map( ( point ) => `name-${point}` ), 'name-away'
 ];
-const NAMES = new Set( [ 'place', 'name', 'word' ] );
+const NAMES = new Set( [ 'place', 'name', 'word', 'metres' ] );
 const FIELD = /\{(\w+)\}/g;
 
 /**

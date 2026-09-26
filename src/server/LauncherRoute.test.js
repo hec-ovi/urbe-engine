@@ -10,6 +10,7 @@ import { CreationError } from '../creation/index.js';
 import { CREATION_METHODS, CreationJobs } from './CreationJobs.js';
 import { LauncherService } from './LauncherService.js';
 import { launcherRoute } from './launcherRoute.js';
+import { sendBytes } from './routeHttp.test-fixtures.js';
 import { GamePersistence } from '../game/persistence/index.js';
 import { DESCRIPTOR_SCHEMAS } from '../library/src/DescriptorSchemas.js';
 import persistenceValues from '../game/persistence/schema/values.schema.json' with { type: 'json' };
@@ -206,6 +207,23 @@ describe( 'launcher HTTP boundary', () => {
 		expect( validateJob( built ) ).toBe( true );
 		expect( ( await settled( { method: 'importStory', input: { cityId: 'planned', recording: 'story', sideJobs: 1 } } ) ).result )
 			.toEqual( { quests: { id: 'planned-story-1', mainSteps: 8, sideJobs: 1 } } );
+
+	} );
+
+	it( 'refuses a launcher or creation job body over 128 MiB before any method or stage runs', async () => {
+
+		const service = { catalog: vi.fn() };
+		const jobs = { start: vi.fn() };
+		const base = await serve( launcherRoute( '/unused', null, service, jobs ) );
+		for ( const [ path, what ] of [ [ '/api/launcher', 'launcher' ], [ '/api/creation-jobs', 'creation job' ] ] ) {
+
+			const response = await sendBytes( `${base}${path}`, 'POST', 128 * 1024 * 1024 + 1 );
+			expect( response.status ).toBe( 413 );
+			expect( await response.json() ).toEqual( { code: 'E_INVALID_REQUEST', message: `${what} request is over 134217728 bytes` } );
+
+		}
+		expect( service.catalog ).not.toHaveBeenCalled();
+		expect( jobs.start ).not.toHaveBeenCalled();
 
 	} );
 

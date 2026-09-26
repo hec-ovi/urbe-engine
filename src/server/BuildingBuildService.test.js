@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { BuildingBuildService } from './BuildingBuildService.js';
 import { buildingRoute } from './buildingRoute.js';
+import { sendBytes } from './routeHttp.test-fixtures.js';
 import { buildPairedPreview } from '../building/build-preview.js';
 import { sha256 } from '../building/PreviewRevision.js';
 
@@ -76,6 +77,10 @@ describe( 'POST /api/building', () => {
 		const malformed = await fetch( `${origin}/api/building`, { method: 'POST', body: '{' } );
 		expect( malformed.status ).toBe( 400 );
 		expect( await malformed.json() ).toEqual( { code: 'E_INVALID_REQUEST', message: expect.stringMatching( /^building request is not valid JSON/ ) } );
+
+		const oversized = await sendBytes( `${origin}/api/building`, 'POST', 1024 * 1024 + 1 );
+		expect( oversized.status ).toBe( 413 );
+		expect( await oversized.json() ).toEqual( { code: 'E_INVALID_REQUEST', message: 'building request is over 1048576 bytes' } );
 
 	} );
 

@@ -1,6 +1,6 @@
 # Companion lines
 
-What a person says, and what the player reads, when they come along, lead the way or go back to their day. Each `##` section is one key; each `-` item is one way of saying it, and the person always picks the same way at the same minute. `{place}` is the name the player sees for a place, `{name}` the person's given name and `{word}` a venue word. An unnamed place reads `the clinic`, so no sentence starts with `{place}`. A `name-<point>` line names a place by the compass point it lies toward, for places offered together that would read the same.
+What a person says, and what the player reads, when they come along, lead the way or go back to their day. Each `##` section is one key; each `-` item is one way of saying it, and the person always picks the same way at the same minute. `{place}` is the name the player sees for a place, `{name}` the person's given name, `{word}` a venue word and `{metres}` a walk to 10 m. An unnamed place reads `the clinic`, so no sentence starts with `{place}`. Places offered together that share a name are told apart by the compass point they lie toward (`name-<point>`), and two that lie the same way also by the walk there (`name-away`).
 
 ## label-follow
 
@@ -164,3 +164,7 @@ What a person says, and what the player reads, when they come along, lead the wa
 ## name-north-west
 
 - {place} to the northwest
+
+## name-away
+
+- {place}, {metres} m away

@@ -45,6 +45,10 @@
       "properties": {
         "place": { "$ref": "#/$defs/place" },
         "name": { "$ref": "#/$defs/text" },
+        "offeredAs": {
+          "description": "An offered place that shares its name with another offered with it: the name with the compass point it lies toward, and the walk when both lie the same way. Offer labels, the accept line and the talk offers read it; the arrival and the guide keep `name`.",
+          "$ref": "#/$defs/text"
+        },
         "relation": { "$ref": "#/$defs/relation" },
         "questId": { "$ref": "#/$defs/id" },
         "stepId": { "$ref": "#/$defs/id" },

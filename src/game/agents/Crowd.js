@@ -1521,8 +1521,6 @@ function angleTo( from, to ) {
 
 }
 
-/** How far off the middle of a pavement a walker may keep, by its width. A
- *  stretch that publishes no width is walked down the middle. */
 /** Whether a point on the ground lies in a footprint grown by `margin` on every side. */
 function covers( { center, width, depth, yawRadians }, point, margin ) {
 
@@ -1534,6 +1532,8 @@ function covers( { center, width, depth, yawRadians }, point, margin ) {
 
 }
 
+/** How far off the middle of a pavement a walker may keep, by its width. A
+ *  stretch that publishes no width is walked down the middle. */
 function laneRoom( edge ) {
 
 	return edge.width > 0 ? Math.max( 0, Math.min( LANE_HALF, edge.width / 2 - PERSON_RADIUS ) ) : 0;

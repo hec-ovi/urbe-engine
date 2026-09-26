@@ -117,6 +117,30 @@ describe( 'a companion under way', () => {
 
 	} );
 
+	it( 'offers two places of one name by the way they lie, and names the chosen one plainly once under way and at the place', () => {
+
+		const twin = { ...SCENE, place: { kind: 'parcel', id: 'p_shop' }, notes: [ 'Glass on the floor.' ] };
+		const game = setup( {}, null, null, [ SCENE, twin ] );
+		const mira = game.talkTo( 'p_cafe', AFTERNOON );
+		const offers = game.companion.offers( game.ask( mira ) );
+		expect( offers.filter( ( offer ) => offer.destination?.relation === 'scene' ).map( ( offer ) => [ offer.offerId, offer.label ] ) ).toEqual( [
+			[ 'lead:parcel:p_rest', 'Show me the back room to the west' ],
+			[ 'lead:parcel:p_shop', 'Show me the back room to the east' ]
+		] );
+		expect( game.companion.talkOffers( offers ).places ).toContainEqual( { placeId: 'p_rest', name: 'the back room to the west' } );
+
+		const accepted = game.companion.accept( { ...game.ask( mira ), offerId: 'lead:parcel:p_rest' } );
+		expect( [ 'Follow me to the back room to the west.', 'This way. Keep close.', 'Come on. It isn\'t far.' ] ).toContain( accepted.line );
+		game.continuity.endConversation( { timeMin: AFTERNOON, hold: true } );
+		expect( game.frame( AFTERNOON, mira.position ).map( ( signal ) => signal.kind ) ).toEqual( [ 'started' ] );
+		expect( game.companion.active.destination ).toEqual( SCENE );
+
+		const signals = game.walkBeside( AFTERNOON + 1, () => game.companion.active.phase === 'ready' );
+		expect( signals[ 0 ] ).toMatchObject( { kind: 'arrival', guide: { placeId: 'p_rest', name: 'the back room' } } );
+		expect( [ 'So this is the back room. Tell me about it.', 'We\'re here. What should I know about the back room?' ] ).toContain( signals[ 0 ].ask );
+
+	} );
+
 	it( 'calls out while waiting for a lagging player, once a clock minute', () => {
 
 		const game = setup();
@@ -313,11 +337,11 @@ describe( 'free time', () => {
 } );
 
 /**
- * The fixture city with one quest place (the clinic) and one staged scene
- * (the restaurant's back room), a continuity over its walk graph, and the
- * companion, optionally restored from an earlier game.
+ * The fixture city with one quest place (the clinic) and staged scenes (the
+ * restaurant's back room by default), a continuity over its walk graph, and
+ * the companion, optionally restored from an earlier game.
  */
-function setup( quests = {}, crowd = null, restored = null ) {
+function setup( quests = {}, crowd = null, restored = null, scenes = [ SCENE ] ) {
 
 	const networks = network();
 	const buildings = new Map( Object.entries( FIXTURE_INTERIORS ).map( ( [ id, npc ] ) => [ id, { npc } ] ) );
@@ -340,7 +364,7 @@ function setup( quests = {}, crowd = null, restored = null ) {
 	};
 	const companion = new CompanionGameplay( {
 		continuity, sim: bridge, routes, places, atlas: FIXTURE_BLUEPRINT, quests: questPort,
-		scenes: () => [ structuredClone( SCENE ) ], crowd
+		scenes: () => structuredClone( scenes ), crowd
 	} );
 	const game = {
 		bridge, continuity, companion,
