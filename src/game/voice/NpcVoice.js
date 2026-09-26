@@ -27,7 +27,8 @@ const CUE_TAGS = /\[[^\]]*\]/g;
  * order, so one person speaks at a time and never over themselves. The text
  * is already on screen; the audio follows. A streamed line starts once enough
  * has arrived to play through (VoicePlayer). `silenced()` stops the audio and
- * drops the queue and the lines rendered ahead. A person without identity,
+ * drops the queue and the lines rendered ahead, except those said along with
+ * it, as a chosen reply is. A person without identity,
  * age or gender is not voiced. Lines the player may hear next are rendered
  * ahead once the lines said before them have loaded. Voice being off, down
  * or failing leaves the conversation silent and otherwise untouched.
@@ -104,7 +105,12 @@ export class NpcVoice {
 
 	}
 
-	/** Line observer: stops what is playing and drops what is queued, and what is rendered ahead, sent or not. */
+	/**
+	 * Line observer: stops what is playing and drops what is queued, and what
+	 * is rendered ahead, sent or not. Lines said right after it in the same
+	 * task, as the reply to a choice is, reach Voice before the group is
+	 * cancelled, so their renders ahead go on.
+	 */
 	silenced() {
 
 		this.#silences ++;
@@ -118,7 +124,12 @@ export class NpcVoice {
 		this.#tail = null;
 		if ( ! this.#batched ) return;
 		this.#batched = false;
-		this.#toGroup( 'cancel', () => this.client.cancel( this.group ) );
+		queueMicrotask( () => {
+
+			const said = [ ...this.#utterances ].map( ( utterance ) => utterance.reached.promise );
+			this.#toGroup( 'cancel', () => Promise.all( said ).then( () => this.client.cancel( this.group ) ) );
+
+		} );
 
 	}
 
@@ -177,7 +188,7 @@ export class NpcVoice {
 
 	#queue( { conversation, line, speaker, text } ) {
 
-		const utterance = { speaker, text, controller: new AbortController() };
+		const utterance = { speaker, text, controller: new AbortController(), reached: Promise.withResolvers() };
 		this.#mark( line, 1 );
 		utterance.playback = this.player.play( {
 			estimate: text.length / CHARS_PER_SECOND,
@@ -213,11 +224,12 @@ export class NpcVoice {
 	/**
 	 * Feeds one utterance's playback from the session cache or from Voice. A
 	 * line that breaks off plays what came, counts as failed, not played, and
-	 * is not kept.
+	 * is not kept. `reached` resolves once Voice answers, or once it will not
+	 * be asked.
 	 */
 	async #load( utterance ) {
 
-		const { speaker, text, controller, playback } = utterance;
+		const { speaker, text, controller, playback, reached } = utterance;
 		const key = keyOf( speaker, text );
 		try {
 
@@ -231,6 +243,7 @@ export class NpcVoice {
 			}
 			this.stats.requested ++;
 			const response = await this.client.speak( { text, speaker }, { signal: controller.signal } );
+			reached.resolve();
 			this.#upstreamFailures = 0;
 			const decoder = new PcmStreamDecoder();
 			const whole = [];
@@ -257,6 +270,7 @@ export class NpcVoice {
 
 		} finally {
 
+			reached.resolve();
 			playback.end();
 
 		}

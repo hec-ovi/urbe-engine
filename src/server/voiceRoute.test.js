@@ -156,6 +156,7 @@ describe( 'NPC speech HTTP boundary', () => {
 		};
 		expect( await cancel( encodeURIComponent( 'dialogue/1 a' ) ) ).toEqual( [ 204, '' ] );
 		expect( voice.cancelled ).toEqual( [ 'dialogue/1 a' ] );
+		expect( await cancel( '' ) ).toEqual( [ 400, 'E_INVALID_REQUEST' ] );
 		expect( await cancel( 'x'.repeat( 129 ) ) ).toEqual( [ 400, 'E_INVALID_REQUEST' ] );
 		expect( await cancel( '%E0%A4%A' ) ).toEqual( [ 400, 'E_INVALID_REQUEST' ] );
 		expect( voice.cancelled ).toHaveLength( 1 );

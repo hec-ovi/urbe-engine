@@ -42,21 +42,22 @@ function fakeClient( status = 'ok' ) {
 
 }
 
-function answer( request, { breaks = false } = {} ) {
+/** Answers a line with its first bytes, then, once `rest` resolves, the rest of a whole WAV or a break. */
+function answer( request, { breaks = false, rest } = {} ) {
 
 	const bytes = wav( HALF_SECOND );
 	let sent = 0;
-	request.resolve( new Response( new ReadableStream( { pull( controller ) {
+	request.resolve( new Response( new ReadableStream( { async pull( controller ) {
 
-		if ( sent === 0 ) controller.enqueue( bytes.subarray( 0, 10044 ) );
-		else if ( breaks ) controller.error( new TypeError( 'terminated' ) );
+		if ( sent ++ === 0 ) return controller.enqueue( bytes.subarray( 0, 10044 ) );
+		await rest;
+		if ( breaks ) controller.error( new TypeError( 'terminated' ) );
 		else {
 
 			controller.enqueue( bytes.subarray( 10044 ) );
 			controller.close();
 
 		}
-		sent ++;
 
 	} } ) ) );
 
@@ -303,6 +304,39 @@ describe( 'NpcVoice', () => {
 
 		await voice.upcoming( { conversation: conversation(), texts: [ 'Reply B.' ] } );
 		voice.setEnabled( false );
+		await flush();
+		expect( client.cancel ).toHaveBeenCalledTimes( 2 );
+
+	} );
+
+	it( 'cancels the group only once the lines said along with the silence reach Voice, so a chosen reply rendered ahead goes on', async () => {
+
+		const { voice, client } = rig();
+		const say = ( id, text ) => voice.said( { conversation: conversation(), line: { id }, text } );
+		say( 'a', 'Opening.' );
+		voice.upcoming( { conversation: conversation(), texts: [ 'Reply A.', 'Reply B.' ] } );
+		await flush();
+		answer( client.lines[ 0 ] );
+		await flush();
+		expect( client.prefetch ).toHaveBeenCalledOnce();
+
+		voice.silenced();
+		say( 'b', 'Reply A.' );
+		await flush();
+		expect( client.lines.map( ( request ) => request.line.text ) ).toEqual( [ 'Opening.', 'Reply A.' ] );
+		expect( client.cancel ).not.toHaveBeenCalled();
+		let arrive;
+		answer( client.lines[ 1 ], { rest: new Promise( ( resolve ) => arrive = resolve ) } );
+		await flush();
+		expect( client.cancel ).toHaveBeenCalledExactlyOnceWith( voice.group );
+		arrive();
+
+		await voice.upcoming( { conversation: conversation(), texts: [ 'Reply C.' ] } );
+		voice.silenced();
+		say( 'c', 'Reply C.' );
+		await flush();
+		expect( client.cancel ).toHaveBeenCalledOnce();
+		voice.silenced();
 		await flush();
 		expect( client.cancel ).toHaveBeenCalledTimes( 2 );
 

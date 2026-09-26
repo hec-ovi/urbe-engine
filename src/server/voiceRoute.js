@@ -17,7 +17,7 @@ const PASSED_HEADERS = [ 'content-length', 'x-voice-key', 'x-voice-cache' ];
 export function voiceRoute( port = VoicePort.fromEnv() ) {
 
 	const boundary = new VoiceBoundary();
-	const routes = { 'GET /': capability, 'POST /': speak, 'POST /prefetch': prefetch, 'DELETE /prefetch/': cancel };
+	const routes = { 'GET /': capability, 'POST /': speak, 'POST /prefetch': prefetch, 'DELETE /prefetch/:group': cancel };
 
 	return {
 		name: 'voice-route',
@@ -26,8 +26,8 @@ export function voiceRoute( port = VoicePort.fromEnv() ) {
 			server.middlewares.use( '/api/voice', ( req, res, next ) => {
 
 				const { pathname } = new URL( req.url, 'http://voice' );
-				const group = pathname.match( /^\/prefetch\/([^/]+)$/ )?.[ 1 ];
-				const route = routes[ `${req.method} ${group ? '/prefetch/' : pathname}` ];
+				const group = pathname.match( /^\/prefetch\/([^/]*)$/ )?.[ 1 ];
+				const route = routes[ `${req.method} ${group === undefined ? pathname : '/prefetch/:group'}` ];
 				if ( ! route ) return next();
 				route( req, res, group ).catch( ( error ) => fail( res, error ) );
 
