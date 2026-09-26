@@ -1,15 +1,12 @@
 import { CROWD_MODELS } from '../agents/CharacterCatalog.js';
+import { PERSON_RADIUS } from '../physics/ImpactWorld.js';
+import { STEP_HEIGHT } from '../physics/PlayerBody.js';
+import { CHEST } from '../player/Interactor.js';
 
 /** How far from a person the player stands to talk: well inside the talk range. */
 const FACE_DISTANCE = 1.3;
-/** A person is aimed at around the chest, the point the crosshair rule reads. */
-const CHEST = 1.3;
-/** Ground this far above or below the person's feet is still their level: the body's own step. */
-const STEP = 0.42;
 /** Feet land this far above the measured ground, as a spawn does, so the capsule never starts inside it. */
 const FOOTING = 0.05;
-/** The body's own capsule radius, kept clear of the person's chest line. */
-const RADIUS = 0.35;
 /** A person's look, by the names the crowd bakes and the focused body is dressed with. */
 const LOOK_FIELDS = [ 'skin', 'shirt', 'trousers', 'hair', 'sleeve', 'hem' ];
 
@@ -164,7 +161,8 @@ export class AutomationProbe {
 	/**
 	 * Feet for talking to `member`: FACE_DISTANCE away, trying their front first
 	 * and then around them, on ground within a step of theirs with nothing
-	 * solid between that spot and their chest. Null when no such spot exists.
+	 * solid between that spot and their body at chest height. Null when no such
+	 * spot exists.
 	 */
 	#spotBeside( member ) {
 
@@ -175,12 +173,12 @@ export class AutomationProbe {
 			const angle = heading + turn * Math.PI / 4;
 			const x = position.x + Math.sin( angle ) * FACE_DISTANCE;
 			const z = position.z + Math.cos( angle ) * FACE_DISTANCE;
-			const drop = this.#ray( { x, y: position.y + CHEST, z }, { x: 0, y: - 1, z: 0 }, CHEST + STEP );
-			if ( drop === null || drop < CHEST - STEP ) continue;
+			const drop = this.#ray( { x, y: position.y + CHEST, z }, { x: 0, y: - 1, z: 0 }, CHEST + STEP_HEIGHT );
+			if ( drop === null || drop < CHEST - STEP_HEIGHT ) continue;
 			const ground = position.y + CHEST - drop;
 			const reach = Math.hypot( FACE_DISTANCE, position.y - ground );
 			const toChest = { x: ( position.x - x ) / reach, y: ( position.y - ground ) / reach, z: ( position.z - z ) / reach };
-			if ( this.#ray( { x, y: ground + CHEST, z }, toChest, reach - RADIUS ) !== null ) continue;
+			if ( this.#ray( { x, y: ground + CHEST, z }, toChest, reach - PERSON_RADIUS ) !== null ) continue;
 
 			return { x, y: ground + FOOTING, z };
 
@@ -190,7 +188,7 @@ export class AutomationProbe {
 
 	}
 
-	/** Metres along a unit ray to the first solid the player does not own, or null. */
+	/** Metres along a unit ray to the first solid the player does not own, or null; people are sensors and never stop it. */
 	#ray( origin, direction, length ) {
 
 		const { physics, body } = this.game;

@@ -2,7 +2,8 @@ import * as THREE from 'three/webgpu';
 import { RagdollBoundary } from './RagdollBoundary.js';
 import { RagdollError } from './RagdollError.js';
 
-const PERSON_RADIUS = 0.32;
+/** A pedestrian's body capsule radius. */
+export const PERSON_RADIUS = 0.32;
 const PERSON_HALF_HEIGHT = 0.55;
 const CAR_HALF = { x: 0.95, y: 0.65, z: 2.3 };
 const MIN_IMPACT_SPEED = 2;

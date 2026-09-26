@@ -19,10 +19,10 @@ Records frame gaps, subsystem costs and renderer allocations for a running city,
 - The probe holds pointer capture (`input.locked`), which a headless browser never grants, so prompts, movement and the unpaused view are the player's own. Its methods answer plain JSON; colours are `#rrggbb`, positions `[x, y, z]`.
   - `state()`: backend, tier, draw calls, fps, feet, yaw, pitch, clock, crowd size, E target `{kind, person}`, conversation `{npcId, name, type, controlled, person}` and chat `{open, lines: [{from, name, text}], status, error, sending}`.
   - `people({radius = 90, limit = 8})`: crowd members nearest first, `{id, crowdId, npcId, name, type, gender, distance, position, look}`.
-  - `approach(id)`: stands the player 1.3 m from member `id`, their front first, on ground within a step of theirs with a clear line to their chest, aimed at the chest. After two frames: `{placed, person, target}`; `placed` is false when no spot qualifies.
+  - `approach(id)`: stands the player 1.3 m from member `id`, their front first, on ground within a step of theirs (`STEP_HEIGHT`) with nothing solid between that spot and their body (`PERSON_RADIUS`) at chest height (`CHEST`), aimed at the chest. After two frames: `{placed, person, target}`; `placed` is false when no spot qualifies.
   - `press(action = 'interact')`: E, or R for `secondary-interact`, on the next tick. After two frames: `{target, conversation}`.
   - `converse(id?, {attempts = 3})`: approach, then E, on `id` or the nearest people in turn. The conversation, or null.
-  - `appearance({timeoutMs = 20000})`: the conversation person's `crowd` look `{seed, body, hairStyle, skin, shirt, trousers, hair, sleeve, hem}` and the focused body's `hero` look in the same fields without `seed`, read from its model and dressed uniforms by those names. A field the body is not dressed with is null; `hero` is null when the body never shows.
+  - `appearance({timeoutMs = 20000})`: the conversation person's `crowd` look `{seed, body, hairStyle, skin, shirt, trousers, hair, sleeve, hem}` and the focused body's `hero` look in the same fields without `seed`, read from its model and dressed uniforms by those names. A field the body is not dressed with is null; `hero` is null when the body never shows. Null when no conversation is open.
   - `say(text)`: `{ms, reply, added, status, error}` once the reply or its failure shows.
   - `follow()`, `lead()`: `{supported: false, reason}`.
 
@@ -32,4 +32,4 @@ Invalid reports are discarded. Transport or storage failures report a warning an
 
 ## Dependencies
 
-[Game](../CONTRACT.md), [Agents](../agents/CONTRACT.md) for the crowd models, [Vite custom events](https://vite.dev/guide/api-plugin#client-server-communication).
+[Game](../CONTRACT.md), [Agents](../agents/CONTRACT.md) for the crowd models, [Physics](../physics/CONTRACT.md) and [Player](../player/CONTRACT.md) for the body measures, [Vite custom events](https://vite.dev/guide/api-plugin#client-server-communication).

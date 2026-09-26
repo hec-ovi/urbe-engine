@@ -13,7 +13,7 @@ const MIN_AIM = 0.76;
  */
 const TIE = 0.05;
 /** A person is aimed at around the chest, not at their feet. */
-const CHEST = 1.3;
+export const CHEST = 1.3;
 /** And a door around the handle, not at the sill. */
 const HANDLE = 1.1;
 

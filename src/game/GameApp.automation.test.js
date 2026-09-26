@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { stubCanvas } from '../ui/test-helpers/canvas.js';
-import { GameApp, playablePresses } from './GameApp.js';
+import { GameApp, playablePress } from './GameApp.js';
 import { Input } from './player/Input.js';
 import { PlayerController } from './player/PlayerController.js';
 
@@ -13,20 +13,25 @@ describe( 'driving the player through its own paths', () => {
 		const input = new Input( document.createElement( 'canvas' ) );
 		const app = Object.create( GameApp.prototype );
 		app.pressedActions = new Set();
+		const frame = () => [ [ 'interact', 'KeyE' ], [ 'secondary-interact', 'KeyR' ] ]
+			.filter( ( [ action, code ] ) => playablePress( input, app.pressedActions, action, code ) )
+			.map( ( [ action ] ) => action );
 
 		input.pressed.add( 'KeyE' );
-		expect( playablePresses( input, app.pressedActions ).size ).toBe( 0 );
+		expect( frame() ).toEqual( [] );
 		expect( input.pressed.size ).toBe( 0 );
 
 		input.locked = true;
 		input.pressed.add( 'KeyE' );
-		expect( [ ...playablePresses( input, app.pressedActions ) ] ).toEqual( [ 'interact' ] );
+		expect( frame() ).toEqual( [ 'interact' ] );
 
 		input.locked = false;
+		input.pressed.add( 'KeyE' );
 		app.pressAction( 'secondary-interact' );
 		expect( () => app.pressAction( 'jump' ) ).toThrow( 'unknown action: jump' );
-		expect( [ ...playablePresses( input, app.pressedActions ) ] ).toEqual( [ 'secondary-interact' ] );
-		expect( playablePresses( input, app.pressedActions ).size ).toBe( 0 );
+		expect( frame() ).toEqual( [ 'secondary-interact' ] );
+		expect( input.pressed.size ).toBe( 0 );
+		expect( frame() ).toEqual( [] );
 		input.dispose();
 
 	} );

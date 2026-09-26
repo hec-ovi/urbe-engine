@@ -4,6 +4,8 @@ export const EYE_HEIGHT = 1.7;
 export const BODY_RADIUS = 0.32;
 export const CROUCH_EYE_HEIGHT = 1.05;
 export const JUMP_SPEED = 6.5;
+/** The highest ledge the body walks up onto. */
+export const STEP_HEIGHT = 0.42;
 
 const STAND_HALF_HEIGHT = 0.55;
 const CROUCH_HALF_HEIGHT = 0.255;
@@ -38,9 +40,9 @@ export class PlayerBody {
 
 		this.controller = world.createCharacterController( 0.02 );
 		this.controller.setUp( { x: 0, y: 1, z: 0 } );
-		// Steps up to 0.42 m; a tread is 0.28 m (interior STAIR.tread), and the
-		// width the step test asks for stays under it so every tread counts.
-		this.controller.enableAutostep( 0.42, 0.2, true );
+		// A tread is 0.28 m (interior STAIR.tread), and the width the step test
+		// asks for stays under it so every tread counts.
+		this.controller.enableAutostep( STEP_HEIGHT, 0.2, true );
 		this.controller.enableSnapToGround( 0.6 );
 		this.controller.setMaxSlopeClimbAngle( ( 55 * Math.PI ) / 180 );
 		this.controller.setMinSlopeSlideAngle( ( 40 * Math.PI ) / 180 );

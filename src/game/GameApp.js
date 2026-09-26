@@ -835,8 +835,9 @@ export class GameApp {
 		if ( transitFrame.result?.autoDisembarked ) this.#persistTransitState();
 		this.view.prompt.update( this.input.locked ? prompt : null );
 
-		const presses = playablePresses( this.input, this.pressedActions );
-		if ( presses.has( 'interact' ) && ! playableModalOpen( this.view, this.interactor ) ) {
+		const interact = playablePress( this.input, this.pressedActions, 'interact', 'KeyE' );
+		const secondary = playablePress( this.input, this.pressedActions, 'secondary-interact', 'KeyR' );
+		if ( interact && ! playableModalOpen( this.view, this.interactor ) ) {
 
 			const owner = playableInteractionOwner( this.interactor, transitFrame );
 			if ( owner === 'conversation' ) this.interactor.close( this.clock );
@@ -844,7 +845,7 @@ export class GameApp {
 			else this.#transitAction( this.transitGameplay.activate(), playerPlaces );
 
 		}
-		if ( presses.has( 'secondary-interact' ) && ! playableModalOpen( this.view, this.interactor ) && ! transitFrame.aboard ) {
+		if ( secondary && ! playableModalOpen( this.view, this.interactor ) && ! transitFrame.aboard ) {
 
 			this.#questActionResult( this.interactor.activate( this.clock, 'secondary-interact' ) );
 
@@ -1893,14 +1894,14 @@ export function playableTransitPrompt( worldPrompt, transitFrame ) {
 
 }
 
-/** E and R this frame: a key pressed under pointer capture, or the action pressAction queued since the last tick. */
-export function playablePresses( input, queued ) {
+/**
+ * Whether `action` fires this frame: its key `code` pressed under pointer
+ * capture, or pressAction queued it since the last tick. Takes both either way.
+ */
+export function playablePress( input, queued, action, code ) {
 
-	const presses = new Set( queued );
-	queued.clear();
-	if ( input.consume( 'KeyE' ) && input.locked ) presses.add( 'interact' );
-	if ( input.consume( 'KeyR' ) && input.locked ) presses.add( 'secondary-interact' );
-	return presses;
+	const key = input.consume( code ) && input.locked;
+	return queued.delete( action ) || key;
 
 }
 
