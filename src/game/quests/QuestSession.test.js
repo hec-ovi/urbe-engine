@@ -75,6 +75,19 @@ describe( 'QuestSession', () => {
 
 	} );
 
+	it( 'opens on the main questline\'s prologue and keeps each prologue in the log', () => {
+
+		const told = { ...definition, prologue: 'You owe the cafe.\n\nThe barista has work for you.' };
+		const side = { ...quest( 'q2', { roles: [ role( 'barista', 'barista' ) ], steps: [ step( 's_open', talk, { endingId: 'done' } ) ] } ), prologue: 'Not the opening.' };
+
+		const session = QuestSession.create( [ told, side ], sim(), 600 );
+		expect( session.prologue() ).toEqual( { title: 'q1', text: 'You owe the cafe.\n\nThe barista has work for you.' } );
+		expect( session.view( 600 ).map( ( quest ) => quest.prologue ) ).toEqual( [ told.prologue, side.prologue ] );
+		expect( QuestSession.create( [ definition, side ], sim(), 600 ).prologue() ).toBeNull();
+		expect( QuestSession.create( [ definition ], sim(), 600 ).view( 600 )[ 0 ] ).not.toHaveProperty( 'prologue' );
+
+	} );
+
 	it( 'offers the next appointment even while its living cast is away from the venue', () => {
 
 		const timed = structuredClone( definition );

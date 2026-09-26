@@ -14,6 +14,7 @@ Purpose: restores one cataloged game and saves its live player and quest state t
 
 ## Events
 
+- `unplayed` is true while the loaded game has no saved play time: a new game.
 - `save(liveState)` posts one `saveCurrent` request to `/api/launcher`. Saves are serialized so a later request uses the revision returned by the previous one. An optional field the live state leaves out is sent as the loaded or last returned descriptor holds it ([SavedFields.js](SavedFields.js)), the same rule the launcher applies to what it stores.
 
 ## Errors

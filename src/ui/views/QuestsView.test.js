@@ -31,6 +31,21 @@ describe( 'QuestsView', () => {
 
 	} );
 
+	it( 'keeps a quest\'s prologue to read again, folded, a paragraph per blank line', async () => {
+
+		const view = new QuestsView( { onClose: vi.fn() } );
+		document.body.replaceChildren( view.element );
+		view.setQuests( [ { ...QUESTS[ 0 ], prologue: 'You work the quay.\n\nAda Vance has a ledger for you.' }, QUESTS[ 1 ] ] );
+
+		const prologue = screen.getByText( 'Prologue' ).closest( 'details' );
+		expect( prologue.open ).toBe( false );
+		expect( [ ...prologue.querySelectorAll( 'p' ) ].map( ( p ) => p.textContent ) ).toEqual( [ 'You work the quay.', 'Ada Vance has a ledger for you.' ] );
+
+		await userEvent.setup().click( screen.getByRole( 'button', { name: /Late shift/ } ) );
+		expect( screen.queryByText( 'Prologue' ) ).toBeNull();
+
+	} );
+
 	it( 'reports the picked quest, badges a side job on offer, and says who, where and when a step is closed', async () => {
 
 		const onSelect = vi.fn();

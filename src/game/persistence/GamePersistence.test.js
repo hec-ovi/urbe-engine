@@ -195,6 +195,16 @@ describe( 'playable game persistence', () => {
 
 	} );
 
+	it( 'calls a game unplayed until a save carries play time', () => {
+
+		const fresh = structuredClone( gameFixture );
+		fresh.save.playTimeSeconds = 0;
+
+		expect( new GamePersistence( { game: fresh, gameId: 'night-shift', fetcher: vi.fn() } ).unplayed ).toBe( true );
+		expect( new GamePersistence( { game: gameFixture, gameId: 'night-shift', fetcher: vi.fn() } ).unplayed ).toBe( false );
+
+	} );
+
 	it( 'rejects mismatched loaded games, invalid live values, and malformed save responses', async () => {
 
 		expect( () => new GamePersistence( { game: gameFixture, gameId: 'other', fetcher: vi.fn() } ) )

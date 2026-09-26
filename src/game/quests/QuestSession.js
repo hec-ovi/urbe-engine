@@ -491,6 +491,7 @@ export class QuestSession {
 				id: definition.id,
 				title: definition.title,
 				text: status === 'completed' ? runtime.ending()?.epilogue ?? definition.premise : definition.premise,
+				...( definition.prologue ? { prologue: definition.prologue } : {} ),
 				state: this.#state( entry, status, state, 'done' ),
 				steps: [
 					...state.completedStepIds.map( ( id ) => journalStep( steps.get( id ), { done: true } ) ),
@@ -502,6 +503,14 @@ export class QuestSession {
 		} ).concat( this.blocked.map( ( entry ) => ( {
 			id: entry.id, title: entry.title, text: entry.text, state: 'blocked', note: entry.reason, steps: []
 		} ) ) );
+
+	}
+
+	/** What a new game opens on: the main questline's prologue as `{ title, text }`, or null when it has none. */
+	prologue() {
+
+		const main = this.entries.find( ( entry ) => ! entry.side )?.definition;
+		return main?.prologue ? { title: main.title, text: main.prologue } : null;
 
 	}
 

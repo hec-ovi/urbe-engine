@@ -56,4 +56,29 @@ describe( 'MissionSummary', () => {
 
 	} );
 
+	it( 'opens a prologue under its own line, a paragraph per blank line, focused on Begin and skipped by Escape', async () => {
+
+		const onClose = vi.fn();
+		const onOpen = vi.fn();
+		const summary = new MissionSummary( { onClose, onOpen } );
+		document.body.replaceChildren( summary.element );
+
+		summary.show( { kind: 'prologue', title: 'Salt Wharf', text: 'You work the quay.\n\nAda Vance has a ledger for you.' } );
+
+		expect( screen.getByRole( 'dialog', { name: 'Salt Wharf' } ) ).toBeTruthy();
+		expect( screen.getByText( 'Prologue' ) ).toBeTruthy();
+		expect( summary.element.querySelector( '.badge' ) ).toBeNull();
+		expect( [ ...summary.text.querySelectorAll( 'p' ) ].map( ( p ) => p.textContent ) ).toEqual( [ 'You work the quay.', 'Ada Vance has a ledger for you.' ] );
+		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'Begin' } ) );
+		expect( onOpen ).toHaveBeenCalledOnce();
+
+		await userEvent.setup().keyboard( '{Escape}' );
+		expect( onClose ).toHaveBeenCalledOnce();
+
+		summary.show( { title: 'Salt Wharf', text: 'The crates went inland.' } );
+		expect( screen.getByRole( 'button', { name: 'continue' } ) ).toBeTruthy();
+		expect( screen.queryByText( 'Prologue' ) ).toBeNull();
+
+	} );
+
 } );

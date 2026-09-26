@@ -20,6 +20,13 @@ export class GamePersistence {
 
 	}
 
+	/** A new game: nothing has been saved with play time yet. */
+	get unplayed() {
+
+		return this.game.save.playTimeSeconds === 0;
+
+	}
+
 	/** Serializes saves so every request uses the last confirmed revision. */
 	save( live ) {
 

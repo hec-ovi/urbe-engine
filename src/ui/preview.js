@@ -116,8 +116,10 @@ view.inventory.setItems( [
 ] );
 view.inventory.select( 0 );
 
+const PROLOGUE = 'The last working quay in Rain Sector takes containers off the night barges and signs for every one of them.\n\nYou run the quay office\'s errands and owe the office more than it pays you.\n\nAda Vance has sent for you. Go to the Quay Office.';
+
 view.quests.setQuests( [
-	{ id: 'q1', title: 'Salt Wharf', text: 'Somebody has been moving containers off the last working quay at night. Find out who signs for them.', state: 'active', steps: [ { text: 'Talk to Ada Vance at the quay office', done: true }, { text: 'Check the freight ledger', done: false }, { text: 'Be at pier 4 after 23:00', done: false } ] },
+	{ id: 'q1', title: 'Salt Wharf', text: 'Somebody has been moving containers off the last working quay at night. Find out who signs for them.', prologue: PROLOGUE, state: 'active', steps: [ { text: 'Talk to Ada Vance at the quay office', done: true }, { text: 'Check the freight ledger', done: false }, { text: 'Be at pier 4 after 23:00', done: false } ] },
 	{ id: 'q2', title: 'Late shift', text: 'Cover the bar while Nadir is out.', state: 'done', steps: [ { text: 'Serve until close', done: true } ] }
 ] );
 
@@ -178,5 +180,7 @@ view.setLibrary( {
 		availableBuildings: [ { id: 'p11', label: 'Quay Office', type: 'office' }, { id: 'p64', label: 'Bar Nadir', type: 'business' } ]
 	} ]
 } );
-view.showMainMenu();
+// /src/ui/preview.html?prologue opens on the story card a new game starts with.
+if ( new URLSearchParams( location.search ).has( 'prologue' ) ) view.summary.show( { kind: 'prologue', title: 'Salt Wharf', text: PROLOGUE } );
+else view.showMainMenu();
 window.view = view;

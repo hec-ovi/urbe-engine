@@ -1,9 +1,12 @@
 import { el } from '../components/dom.js';
 import { PanelHeader } from '../components/PanelHeader.js';
+import { prose } from '../components/Prose.js';
+import layout from './summary-layout.json' with { type: 'json' };
 
 /**
- * The card that closes a mission: title, outcome, what happened, each step
- * ticked or not. props: { onClose() }
+ * The story card over the game: the prologue a new game opens on, or the
+ * card that closes a mission with its outcome and each step ticked or not.
+ * Labels come from summary-layout.json. props: { onClose(), onOpen() }
  */
 export class MissionSummary {
 
@@ -13,9 +16,9 @@ export class MissionSummary {
 
 		this.header = new PanelHeader( { title: '', onClose } );
 		this.outcome = el( 'div', { className: 'detail-kind' } );
-		this.text = el( 'p', { className: 'detail-text' } );
+		this.text = el( 'div', { className: 'prose' } );
 		this.steps = el( 'ul', { className: 'quest-steps' } );
-		this.done = el( 'button', { className: 'hud-button is-primary', type: 'button', textContent: 'continue' } );
+		this.done = el( 'button', { className: 'hud-button is-primary', type: 'button', textContent: layout.kinds.outcome.action } );
 		this.done.addEventListener( 'click', onClose );
 
 		this.card = el( 'div', { className: 'summary' },
@@ -23,7 +26,7 @@ export class MissionSummary {
 			el( 'div', { className: 'summary-body' }, this.outcome, this.text, this.steps ),
 			el( 'div', { className: 'summary-footer' }, this.done )
 		);
-		this.element = el( 'div', { className: 'summary-layer', role: 'dialog', ariaLabel: 'Mission summary' }, this.card );
+		this.element = el( 'div', { className: 'summary-layer', role: 'dialog', ariaLabel: layout.label }, this.card );
 		this.element.tabIndex = - 1;
 		this.element.addEventListener( 'pointerdown', event => {
 			if ( event.target === this.element ) { event.preventDefault(); this.done.focus(); }
@@ -41,17 +44,22 @@ export class MissionSummary {
 
 	}
 
-	/** @param summary { title, text, outcome: 'done' | 'failed', steps: [{ text, done }] } */
-	show( { title, text, outcome = 'done', steps = [] } ) {
+	/**
+	 * @param summary { kind: 'outcome' | 'prologue', title, text, outcome: 'done' | 'failed', steps: [{ text, done }] };
+	 * a blank line in `text` starts a new paragraph
+	 */
+	show( { kind = 'outcome', title, text, outcome = 'done', steps = [] } ) {
 
+		const labels = layout.kinds[ kind ];
 		this.header.setTitle( title );
-		this.outcome.replaceChildren( el( 'span', { className: `badge is-${outcome}`, textContent: outcome } ) );
-		this.text.textContent = text ?? '';
+		this.outcome.replaceChildren( labels.kicker ?? el( 'span', { className: `badge is-${outcome}`, textContent: outcome } ) );
+		this.text.replaceChildren( ...prose( text ) );
 		this.steps.replaceChildren( ...steps.map( ( step ) => el( 'li', {
 			className: `quest-step${step.done ? ' is-done' : ''}`
 		}, el( 'span', { className: 'quest-step-mark' } ), el( 'span', { textContent: step.text } ) ) ) );
+		this.done.textContent = labels.action;
 		this.element.hidden = false;
-		this.element.setAttribute( 'aria-label', title || 'Mission summary' );
+		this.element.setAttribute( 'aria-label', title || layout.label );
 		this.onOpen();
 		this.done.focus();
 

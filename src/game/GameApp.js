@@ -728,6 +728,9 @@ export class GameApp {
 		this.view.setPaused( true );
 		this.view.ready();
 		progress.finish();
+		// A new game opens on its story's prologue; Begin or Escape hands over the mouse.
+		const prologue = this.persistence?.unplayed ? this.quests.prologue() : null;
+		if ( prologue ) this.view.summary.show( { kind: 'prologue', ...prologue } );
 
 		this.renderer.domElement.addEventListener( 'click', () => {
 			if ( ! playableModalOpen( this.view, this.interactor ) ) this.input.requestLock();

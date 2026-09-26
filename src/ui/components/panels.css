@@ -230,6 +230,10 @@
 	max-width: 60ch;
 }
 
+.prose .detail-text + .detail-text {
+	margin-top: 12px;
+}
+
 .detail-row {
 	display: flex;
 	gap: 14px;

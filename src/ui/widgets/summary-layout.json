@@ -1,0 +1,7 @@
+{
+  "label": "Mission summary",
+  "kinds": {
+    "outcome": { "action": "continue" },
+    "prologue": { "kicker": "Prologue", "action": "Begin" }
+  }
+}

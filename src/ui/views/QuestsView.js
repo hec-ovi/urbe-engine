@@ -1,6 +1,8 @@
 import { el } from '../components/dom.js';
 import { emptyState } from '../components/EmptyState.js';
 import { PanelHeader } from '../components/PanelHeader.js';
+import { prose } from '../components/Prose.js';
+import story from '../widgets/summary-layout.json' with { type: 'json' };
 
 /**
  * The quest log: every quest on the left, the picked one with its steps on
@@ -33,7 +35,7 @@ export class QuestsView {
 	}
 
 	/**
-	 * @param quests [{ id, title, text, note, state: 'available' | 'active' | 'blocked' | 'done' | 'failed',
+	 * @param quests [{ id, title, text, prologue?, note, state: 'available' | 'active' | 'blocked' | 'done' | 'failed',
 	 * steps: [{ text, done, npcName, place, availability, window, wait?: { timeMin, label } }] }]
 	 */
 	setQuests( quests = [] ) {
@@ -147,6 +149,10 @@ export class QuestsView {
 			el( 'summary', { textContent: `Quest history (${history.length})` } ),
 			el( 'ul', { className: 'quest-steps' }, ...history.map( ( step ) => stepRow( step ) ) )
 		);
+		const prologue = el( 'details', { className: 'quest-history quest-prologue' },
+			el( 'summary', { textContent: story.kinds.prologue.kicker } ),
+			el( 'div', { className: 'prose' }, ...prose( quest.prologue ) )
+		);
 		const premise = el( 'details', { className: 'quest-history quest-premise', open: current.length === 0 },
 			el( 'summary', { textContent: quest.state === 'done' ? 'Outcome' : 'About this quest' } ),
 			el( 'p', { className: 'detail-text', textContent: quest.text ?? '' } )
@@ -178,6 +184,7 @@ export class QuestsView {
 
 				}
 			}, waiting ) ] : [] ),
+			...( quest.prologue ? [ prologue ] : [] ),
 			...( quest.text ? [ premise ] : [] ),
 			...( history.length ? [ historyDetails ] : [] )
 		);
