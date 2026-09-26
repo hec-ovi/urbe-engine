@@ -249,6 +249,37 @@ it( 'keeps a quest cast in place after the talk, faces the player throughout, an
 
 } );
 
+it( 'opens a conversation with a person by id without aiming, and keeps a person the host keeps where they stand', () => {
+
+	let controlled = null;
+	const continuity = {
+		beginConversation: vi.fn( ( request ) => ( controlled = continuityActor( request, 'conversation', 'idle' ) ) ),
+		endConversation: vi.fn( () => ( { ...controlled, mode: 'posing', animation: 'idle' } ) )
+	};
+	const { interactor, crowd, panels } = street( continuity );
+	interactor.update( 1 / 60 );
+	interactor.activate( CLOCK );
+	interactor.close( CLOCK );
+	expect( continuity.endConversation ).toHaveBeenLastCalledWith( { timeMin: CLOCK.timeMin } );
+
+	// The player looks away: nobody is aimed at, and the host opens the talk.
+	interactor.controller.look.set( 0, 0, 1 );
+	interactor.update( 1 / 60 );
+	expect( interactor.target ).toBeNull();
+	const conversation = interactor.talkTo( 'n1', CLOCK );
+	expect( conversation ).toMatchObject( { npcId: 'n1', controlled: true } );
+	expect( panels.at( - 1 ) ).toBe( conversation );
+	expect( interactor.talkTo( 'n1', CLOCK ) ).toBeNull();
+
+	interactor.close( CLOCK, 'player-left', { keep: true } );
+	expect( continuity.endConversation ).toHaveBeenLastCalledWith( { timeMin: CLOCK.timeMin, hold: true } );
+	expect( interactor.talkTo( 'n2', CLOCK ) ).toBeNull();
+	crowd.memberForNpc( 'n1' ).fallen = true;
+	expect( interactor.talkTo( 'n1', CLOCK ) ).toBeNull();
+	expect( continuity.beginConversation ).toHaveBeenCalledTimes( 2 );
+
+} );
+
 const CLOCK = { timeMin: 780, daySeconds: 46800 };
 
 /**

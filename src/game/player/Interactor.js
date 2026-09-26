@@ -147,7 +147,27 @@ export class Interactor {
 
 	}
 
-	close( clock, reason = 'player-left' ) {
+	/**
+	 * Opens a conversation with the body this person has on the street now, as
+	 * E on them would, without aiming: the host asks for it when a companion
+	 * has led the player somewhere. The conversation, or null when the person
+	 * has no body in the crowd, is fallen or somebody is already talked to.
+	 */
+	talkTo( npcId, clock ) {
+
+		const person = this.crowd.memberForNpc( npcId );
+		if ( this.conversation || ! person || person.fallen || person.retiring ) return null;
+		this.#talk( person, clock );
+		return this.conversation;
+
+	}
+
+	/**
+	 * Ends the conversation. A person an open quest step still names, or one
+	 * the host `keep`s (somebody who agreed to come along), stays where the
+	 * player found them; everybody else walks back into their day.
+	 */
+	close( clock, reason = 'player-left', { keep = false } = {} ) {
 
 		if ( ! this.conversation ) return;
 
@@ -159,9 +179,7 @@ export class Interactor {
 		person.talking = false;
 		if ( npcId && controlled ) {
 
-			// A person an open step is still about keeps the spot the player
-			// found them in; everybody else walks back into their day.
-			const hold = Boolean( this.quests?.holdsCast?.( npcId ) );
+			const hold = keep || Boolean( this.quests?.holdsCast?.( npcId ) );
 			try {
 
 				actor = this.continuity.endConversation( { timeMin: clock.timeMin, ...( hold ? { hold } : {} ) } );
