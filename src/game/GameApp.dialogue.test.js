@@ -10,18 +10,23 @@ import { GameClock } from './time/GameClock.js';
 import { npc, quest, role, simulation, step } from './quests/quest.test-fixtures.js';
 import { replyEvents, talkError, talkStream } from './talk/talk.test-fixtures.js';
 
-function fixture( ending = false ) {
+function fixture( { ending = false, errand = false } = {} ) {
  const opening = step('ask', { kind:'talk', roleId:'giver', atParcelId:'p1' }, { gives:['lead'], next:[{toStepId:'visit',when:[]}] });
  opening.dialogue = { opening:'My brother never came home. Kip found something near the quay.', choices:[
   {id:'background',text:'Tell me about your brother.',reply:'[sigh] He worked the cranes. He always came home before dawn.',completesStep:false},
   {id:'accept',text:'I will find Kip and ask what he saw.',reply:'Look for him at the market. Tell him Petra sent you.',completesStep:true}
  ]};
  if (ending) { opening.next=[];opening.endingId='done'; }
- const definition = quest('missing_person', {roles:[role('giver','vendor')],items:[{itemId:'lead',kind:'information',name:'Kip at the market',description:'Ask Kip about the quay.'}],steps:ending?[opening]:[opening,step('visit',{kind:'goto',place:{parcelId:'p2'}},{needs:['lead'],endingId:'done'})]});
+ const definitions = [quest('missing_person', {roles:[role('giver','vendor')],items:[{itemId:'lead',kind:'information',name:'Kip at the market',description:'Ask Kip about the quay.'}],steps:ending?[opening]:[opening,step('visit',{kind:'goto',place:{parcelId:'p2'}},{needs:['lead'],endingId:'done'})]})];
+ if (errand) {
+  const letter = step('letter', { kind:'talk', roleId:'giver', atParcelId:'p1' }, { endingId:'done' });
+  letter.dialogue = { opening:'Could you carry a letter for me?', choices:[{id:'carry',text:'I will take it.',reply:'Thank you.',completesStep:true}] };
+  definitions.push(quest('errand', {roles:[role('giver','vendor')],steps:[letter]}));
+ }
  const person=npc('person','vendor','p1');person.name={given:'Petra',family:'Moss'};
  const sim=simulation(new Map([[person.npcId,person]]));
- const observer={said:vi.fn(),silenced:vi.fn()};
- const app=new GameApp({},{lineObserver:observer});app.clock={timeMin:1260};app.quests=QuestSession.create([definition],sim,1260);
+ const log=[];const observer={said:vi.fn(heard=>log.push('said: '+heard.text)),silenced:vi.fn(()=>log.push('silenced'))};
+ const app=new GameApp({},{lineObserver:observer});app.clock={timeMin:1260};app.quests=QuestSession.create(definitions,sim,1260);
  const actions=new QuestActions(app.quests);
  app.questGameplay={objective:(timeMin,questId)=>actions.objective({timeMin,...(questId?{questId}:{})})};
  app.venues={setObjective:()=>false,nameOf:()=> 'Market'};
@@ -31,7 +36,7 @@ function fixture( ending = false ) {
  app.interactor={conversation:null,close(){this.conversation=null;app.presentConversation(null);}};
  const open=()=>{app.interactor.conversation={npcId:person.npcId,instance:person,behavior:null};app.presentConversation(app.interactor.conversation);};
  const state=()=>app.quests.snapshot()[0].state;
- return{app,open,state,observer};
+ return{app,open,state,observer,log};
 }
 
 beforeEach(()=>{document.body.replaceChildren();stubCanvas();vi.spyOn(console,'warn').mockImplementation(()=>{});});
@@ -81,19 +86,65 @@ describe('explicit quest dialogue through the playable UI',()=>{
   expect(chat.getAllByText('thanks')).toHaveLength(count);expect(state().completedStepIds).toEqual(['ask']);
  });
  it('passes every NPC line through one speaking turn and the line observer, silenced whenever the player takes the turn',async()=>{
-  const {app,open,observer}=fixture();open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
+  const {app,open,observer,log}=fixture();open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
   expect(chat.getByText('vendor')).toBeTruthy();expect(app.view.dialog.element.textContent).not.toMatch(/p1|working/);
   await user.click(chat.getByRole('button',{name:'Tell me about your brother.'}));
   await user.click(chat.getByRole('button',{name:'I will find Kip and ask what he saw.'}));
   await user.click(chat.getByRole('button',{name:'End conversation'}));
   open();await user.click(chat.getByRole('button',{name:'Tell me about your brother.'}));
-  const said=observer.said.mock.calls.map(([heard])=>heard);
-  expect(said.map(heard=>heard.text)).toEqual(['My brother never came home. Kip found something near the quay.','[sigh] He worked the cranes. He always came home before dawn.',
-   'Look for him at the market. Tell him Petra sent you.','Look for him at the market. Tell him Petra sent you.','[sigh] He worked the cranes. He always came home before dawn.']);
-  for(const heard of said){expect(heard.line.classList.contains('is-npc')).toBe(true);expect(heard.line.lastElementChild.textContent).toBe(heard.text.replace('[sigh] ',''));expect(heard.line.firstElementChild.textContent).toBe('Petra Moss');}
+  expect(log).toEqual(['said: My brother never came home. Kip found something near the quay.','silenced','said: [sigh] He worked the cranes. He always came home before dawn.','silenced',
+   'said: Look for him at the market. Tell him Petra sent you.','silenced','said: Look for him at the market. Tell him Petra sent you.','silenced','said: [sigh] He worked the cranes. He always came home before dawn.']);
+  for(const [heard] of observer.said.mock.calls){expect(heard.line.classList.contains('is-npc')).toBe(true);expect(heard.line.lastElementChild.textContent).toBe(heard.text.replace('[sigh] ',''));expect(heard.line.firstElementChild.textContent).toBe('Petra Moss');}
   expect(app.view.dialog.transcript.textContent).not.toContain('[sigh]');
   expect(app.animations.npcDialogueTurn).toHaveBeenCalledTimes(5);
-  expect(observer.silenced).toHaveBeenCalledTimes(6);
+ });
+
+ /** Types a line whose reply shows and is heard in part, then waits until released, ignoring its abort as a slow server would. */
+ async function typeHalfReply(app,chat,user){
+  let release;const rest=new Promise(done=>{release=done;});
+  app.talk.stream.mockImplementationOnce(()=>talkStream([{type:'delta',text:'Kip drinks. '},{type:'sentence',index:0,text:'Kip drinks.'},rest,{type:'done',reply:'Kip drinks. He sings.'}]));
+  await user.type(chat.getByRole('textbox'),'where is Kip?{Enter}');
+  await vi.waitFor(()=>expect(chat.getByText('Kip drinks.')).toBeTruthy());
+  return async()=>{release({type:'sentence',index:1,text:'He sings.'});await new Promise(done=>setTimeout(done,0));};
+ }
+ function expectOvertaken(app,chat,log,said){
+  expect(app.talk.stream.mock.calls.at(-1)[4].signal.aborted).toBe(true);
+  expect(chat.queryByText(/Kip drinks|He sings/)).toBeNull();expect(chat.queryByText(/Waiting for a reply/)).toBeNull();
+  expect(log).toEqual(['silenced','said: Kip drinks.','silenced',said]);
+  expect(chat.getByRole('textbox').disabled).toBe(false);
+ }
+
+ it('lets a recap question overtake a typed reply still arriving, which leaves no line and is never heard after the silence',async()=>{
+  const {app,open,log}=fixture();open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
+  await user.click(chat.getByRole('button',{name:'I will find Kip and ask what he saw.'}));
+  await user.click(chat.getByRole('button',{name:'End conversation'}));open();log.length=0;
+  const release=await typeHalfReply(app,chat,user);
+  await user.click(chat.getByRole('button',{name:'Remind me what we agreed.'}));await release();
+  expectOvertaken(app,chat,log,'said: Look for him at the market. Tell him Petra sent you.');
+  expect([...app.view.dialog.transcript.children].slice(-2).map(line=>line.lastElementChild.textContent)).toEqual(['Remind me what we agreed.','Look for him at the market. Tell him Petra sent you.']);
+ });
+
+ it('lets a new topic overtake a typed reply still arriving, and reopening the same topic changes nothing',async()=>{
+  const {app,open,log}=fixture({errand:true});open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
+  const topics=within(chat.getByRole('group',{name:'Conversation topics'}));log.length=0;
+  const release=await typeHalfReply(app,chat,user);
+  await user.click(topics.getByRole('button',{name:'missing_person'}));
+  expect(app.talk.stream.mock.calls.at(-1)[4].signal.aborted).toBe(false);
+  await user.click(topics.getByRole('button',{name:'errand'}));await release();
+  expectOvertaken(app,chat,log,'said: Could you carry a letter for me?');
+ });
+
+ it('keeps a throwing line observer from breaking the conversation it follows',async()=>{
+  const {app,open,state,observer}=fixture();const error=vi.spyOn(console,'error').mockImplementation(()=>{});
+  const fail=()=>{throw new TypeError('no voice');};observer.said.mockImplementation(fail);observer.silenced.mockImplementation(fail);
+  open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
+  expect(app.input.exitLock).toHaveBeenCalledOnce();
+  await user.type(chat.getByRole('textbox'),'hello{Enter}');
+  await vi.waitFor(()=>expect(chat.getByText('I wish I had more to tell you.')).toBeTruthy());
+  expect(chat.queryByRole('button',{name:'Retry reply'})).toBeNull();
+  await user.click(chat.getByRole('button',{name:'I will find Kip and ask what he saw.'}));
+  expect(state().completedStepIds).toEqual(['ask']);expect(chat.getByRole('status').textContent).toContain('Journal updated:');
+  expect(error).toHaveBeenCalledWith('line observer said:',expect.any(TypeError));expect(error).toHaveBeenCalledWith('line observer silenced:',expect.any(TypeError));
  });
 
  it('streams a typed reply into one growing line heard by sentence, and turns its offers into actions that change nothing yet',async()=>{
@@ -121,34 +172,34 @@ describe('explicit quest dialogue through the playable UI',()=>{
   expect(chat.queryByRole('group',{name:'Suggested actions'})).toBeNull();
  });
 
- it('drops a failed half reply and offers Retry, but says a refused line cannot be retried',async()=>{
-  const {app,open,observer}=fixture();open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
-  app.talk.stream.mockImplementationOnce(()=>talkStream([{type:'delta',text:'Half a thought'}],talkError('model server 500 at x',502)));
-  observer.silenced.mockClear();observer.said.mockClear();
+ it('drops a failed half reply, silencing what was heard of it, and offers Retry, but says a refused line cannot be retried',async()=>{
+  const {app,open,log}=fixture();open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
+  app.talk.stream.mockImplementationOnce(()=>talkStream([{type:'delta',text:'Half a thought. '},{type:'sentence',index:0,text:'Half a thought.'}],talkError('model server 500 at x',502)));
+  log.length=0;
   await user.type(chat.getByRole('textbox'),'hello{Enter}');
   await vi.waitFor(()=>expect(chat.getByRole('button',{name:'Retry reply'})).toBeTruthy());
   expect(chat.queryByText(/Half a thought/)).toBeNull();expect(chat.getByText(/reply could not be reached/)).toBeTruthy();
-  expect(observer.silenced).toHaveBeenCalledTimes(2);expect(app.animations.completeDialogueTurn).toHaveBeenCalledOnce();
+  expect(log).toEqual(['silenced','said: Half a thought.','silenced']);expect(app.animations.completeDialogueTurn).toHaveBeenCalledOnce();
   app.talk.stream.mockImplementationOnce(()=>talkStream([],talkError('talk request does not match its contract: /npc must NOT have additional properties',400)));
   await user.click(chat.getByRole('button',{name:'Retry reply'}));
   await vi.waitFor(()=>expect(chat.getByText(/refused this line/)).toBeTruthy());
   expect(chat.queryByRole('button',{name:'Retry reply'})).toBeNull();expect(chat.getByRole('textbox').disabled).toBe(false);
-  expect(chat.getAllByText('hello')).toHaveLength(1);expect(app.talk.stream).toHaveBeenCalledTimes(2);expect(observer.said).not.toHaveBeenCalled();
+  expect(chat.getAllByText('hello')).toHaveLength(1);expect(app.talk.stream).toHaveBeenCalledTimes(2);expect(log).toHaveLength(3);
  });
 
- it('greets from a passer-by without identity and says plainly that free chat is unavailable',async()=>{
+ it('lets a passer-by without identity brush the player off, and says plainly that free chat is unavailable',async()=>{
   const {app,observer}=fixture();
   app.interactor.conversation={npcId:null,instance:null,behavior:null};app.presentConversation(app.interactor.conversation);
   expect(screen.getByRole('dialog',{name:'Someone passing by'})).toBeTruthy();
   const chat=within(app.view.dialog.element);
   expect(chat.queryByRole('textbox')).toBeNull();expect(chat.getByText('This passer-by has no time to chat.')).toBeTruthy();
-  expect(chat.getByText('What can I do for you?').closest('.chat-line').firstElementChild.textContent).toBe('Someone passing by');
+  expect(chat.getByText('Sorry, I can\'t stop.').closest('.chat-line').firstElementChild.textContent).toBe('Someone passing by');
   expect(observer.said).toHaveBeenCalledOnce();
   await app.sayLine('hello');expect(app.talk.stream).not.toHaveBeenCalled();
  });
 
  it('shows an ending after the final reply is read, and Continue closes the outcome and returns control',async()=>{
-  const {app,open,state}=fixture(true);open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
+  const {app,open,state}=fixture({ending:true});open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
   await user.click(chat.getByRole('button',{name:'I will find Kip and ask what he saw.'}));
   expect(state().endingId).toBe('done');expect(app.view.dialog.element.hidden).toBe(false);
   expect(app.view.summary.element.hidden).toBe(true);

@@ -61,18 +61,20 @@ describe( 'playable game navigation', () => {
 
 	} );
 
-	it( 'gives up a reply that goes quiet, leaving no part of it and offering Retry', async () => {
+	it( 'waits as long as a reply keeps arriving, then gives it up 90 s after it goes quiet, leaving no part of it and offering Retry', async () => {
 
 		vi.useFakeTimers();
 		const app = dialogueApp();
 		app.talk.stream.mockImplementationOnce( ( conversation, line, timeMin, quests, { signal } ) => talkStream( [
 			{ type: 'delta', text: 'Down the' },
+			new Promise( ( resolve ) => setTimeout( () => resolve( { type: 'delta', text: ' steps' } ), 60000 ) ),
 			new Promise( ( resolve, reject ) => signal.addEventListener( 'abort', () => reject( signal.reason ) ) )
 		] ) );
 		const said = app.sayLine( 'where is the quay?' );
-		await vi.advanceTimersByTimeAsync( 1000 );
-		expect( app.view.dialog.transcript.lastElementChild.textContent ).toBe( 'Ada VanceDown the' );
-		await vi.advanceTimersByTimeAsync( 90000 );
+		await vi.advanceTimersByTimeAsync( 120000 );
+		expect( app.view.dialog.transcript.lastElementChild.textContent ).toBe( 'Ada VanceDown the steps' );
+		expect( console.warn ).not.toHaveBeenCalled();
+		await vi.advanceTimersByTimeAsync( 30000 );
 		await said;
 		expect( [ ...app.view.dialog.transcript.children ].map( ( line ) => line.textContent ) ).toEqual( [ 'Youwhere is the quay?' ] );
 		expect( screen.getByRole( 'button', { name: 'Retry reply' } ) ).toBeTruthy();

@@ -123,7 +123,8 @@ const OBJECTIVE_INTERVAL = 4;
 const REPLY_IDLE_MS = 90000;
 const REPLY_FAILED = 'The reply could not be reached. Retry, or use a story reply below.';
 const REPLY_REFUSED = 'The dialogue service refused this line because the game sent a request it does not accept. Retry would not help.';
-const PASSER_BY_CHAT = 'This passer-by has no time to chat.';
+/** A passer-by without identity only brushes the player off, and the chat says so. */
+const PASSER_BY = { greeting: 'Sorry, I can\'t stop.', note: 'This passer-by has no time to chat.' };
 
 /** The camera's depth range, which is also how far the world streams. */
 const NEAR_PLANE = LOOK.near;
@@ -147,9 +148,11 @@ export class GameApp {
 		 * Hears every NPC line the chat shows, or null: `said({ conversation,
 		 * line, text })` for a whole line, or for each sentence of a streamed
 		 * reply as it completes, with `line` its chat element; `silenced()` once
-		 * what was said stops mattering.
+		 * what it heard stops mattering. See #observe.
 		 */
 		this.lineObserver = lineObserver;
+		/** The observer heard a line it has not been silenced for since. */
+		this.lineHeard = false;
 		/** The questline the player is following; null means the main story. */
 		this.followedQuestId = null;
 		this.followedStepId = null;
@@ -696,14 +699,9 @@ export class GameApp {
 	/** Shows or closes the typed conversation owned by the current interaction. */
 	presentConversation( conversation ) {
 
-		this.dialogueAbort?.abort();
-		this.dialogueAbort = null;
-		this.dialogueTurn = ( this.dialogueTurn ?? 0 ) + 1;
-		this.dialoguePending = false;
+		this.#interrupt();
 		this.failedDialogueLine = null;
 		this.activeDialogue = null;
-		this.dialogueOffers = null;
-		this.lineObserver?.silenced();
 		const speaker = conversation && speakerOf( conversation );
 		this.view.dialog.show( speaker );
 		this.view.avatar.setVisible( Boolean( conversation ) );
@@ -715,7 +713,7 @@ export class GameApp {
 			return;
 
 		}
-		if ( ! conversation.instance ) this.view.dialog.setFreeChat( false, PASSER_BY_CHAT );
+		if ( ! conversation.instance ) this.view.dialog.setFreeChat( false, PASSER_BY.note );
 		const topics = this.quests.dialoguesFor( conversation.npcId, this.clock.timeMin );
 		const preferred = topics.find( topic => topic.questlineId === this.followedQuestId ) ?? topics[ 0 ];
 		if ( preferred ) this.#selectDialogue( { questId: preferred.questlineId, stepId: preferred.stepId } );
@@ -723,7 +721,7 @@ export class GameApp {
 
 			const recap = this.quests.conversationRecap( conversation.npcId );
 			this.view.dialog.setStory( recap ? { title: recap.title, objective: 'Previous conversation' } : null );
-			this.#npcSays( conversation, recap?.reply ?? 'What can I do for you?' );
+			this.#npcSays( conversation, recap?.reply ?? ( conversation.instance ? 'What can I do for you?' : PASSER_BY.greeting ) );
 			if ( recap ) {
 
 				this.view.dialog.setStatus( 'Your current lead is in the journal.' );
@@ -933,16 +931,15 @@ export class GameApp {
 	async #say( text, retry = false ) {
 		const conversation = this.interactor?.conversation;
 		if ( ! conversation?.instance || this.dialoguePending || ! text?.trim() ) return;
-		this.dialoguePending = true;
-		const turn = this.dialogueTurn = ( this.dialogueTurn ?? 0 ) + 1;
+		const turn = this.#playerSays( retry ? null : text );
 		const current = () => this.interactor.conversation === conversation && turn === this.dialogueTurn;
 		const controller = this.dialogueAbort = new AbortController();
+		this.dialoguePending = true;
 		let quiet = 0;
 		const listen = () => {
 			clearTimeout( quiet );
 			quiet = setTimeout( () => controller.abort( new Error( `no reply for ${REPLY_IDLE_MS / 1000} s` ) ), REPLY_IDLE_MS );
 		};
-		this.#playerSays( retry ? null : text );
 		this.view.dialog.setSending( true );
 		this.view.dialog.setStatus( 'Waiting for a reply… Your story choices remain available.' );
 		this.animations.playerDialogueTurn( conversation );
@@ -969,7 +966,7 @@ export class GameApp {
 		} catch ( error ) {
 			if ( ! current() ) return;
 			console.warn( 'talk:', error.message );
-			this.lineObserver?.silenced();
+			this.#silence();
 			this.animations.completeDialogueTurn( conversation );
 			const refused = error.status === 400;
 			this.failedDialogueLine = refused ? null : text;
@@ -985,12 +982,51 @@ export class GameApp {
 		}
 	}
 
-	/** The player's turn: their line shows, and what the NPC said and offered lapses. */
+	/** The player takes the turn and their line, if any, shows. Returns the new turn. */
 	#playerSays( text ) {
-		this.lineObserver?.silenced();
+		const turn = this.#interrupt();
+		if ( text ) this.view.dialog.addMessage( { from: 'player', name: 'You', text } );
+		return turn;
+	}
+
+	/**
+	 * Whatever the person was saying lapses: a typed reply still arriving is
+	 * given up and leaves no line, the observer is silenced and offers are
+	 * withdrawn. Starts a new dialogue turn and returns it.
+	 */
+	#interrupt() {
+		if ( this.dialoguePending ) {
+			this.dialogueAbort.abort();
+			this.dialogueAbort = null;
+			this.dialoguePending = false;
+			this.view.dialog.setSending( false );
+			this.view.dialog.setStatus( '' );
+		}
+		this.#silence();
 		this.dialogueOffers = null;
 		this.view.dialog.setActions( [] );
-		if ( text ) this.view.dialog.addMessage( { from: 'player', name: 'You', text } );
+		return this.dialogueTurn = ( this.dialogueTurn ?? 0 ) + 1;
+	}
+
+	/** The observer forgets what it heard; with nothing heard there is nothing to silence. */
+	#silence() {
+		if ( ! this.lineHeard ) return;
+		this.lineHeard = false;
+		this.#observe( 'silenced' );
+	}
+
+	/**
+	 * Tells the line observer, synchronously. It follows the conversation and
+	 * never steers it: what it throws is logged, and quest state, saving and
+	 * the reply go on.
+	 */
+	#observe( event, detail ) {
+		if ( ! this.lineObserver ) return;
+		try {
+			this.lineObserver[ event ]( detail );
+		} catch ( error ) {
+			console.error( `line observer ${event}:`, error );
+		}
 	}
 
 	/**
@@ -1003,7 +1039,10 @@ export class GameApp {
 	 */
 	#npcSays( conversation, text, { streaming = false } = {} ) {
 		const speaker = { from: 'npc', name: speakerOf( conversation ).name };
-		const heard = ( line, words ) => this.lineObserver?.said( { conversation, line, text: words } );
+		const heard = ( line, words ) => {
+			this.lineHeard = true;
+			this.#observe( 'said', { conversation, line, text: words } );
+		};
 		this.animations.npcDialogueTurn( conversation );
 		if ( ! streaming ) {
 			heard( this.view.dialog.addMessage( { ...speaker, text: stripCues( text ) } ), text );
@@ -1049,7 +1088,10 @@ export class GameApp {
 			key: topic.questlineId + '/' + topic.stepId, title: topic.title,
 			value: { questId: topic.questlineId, stepId: topic.stepId }
 		} ) ), questId + '/' + stepId );
-		if ( changed ) this.#npcSays( conversation, dialogue.opening );
+		if ( changed ) {
+			this.#interrupt();
+			this.#npcSays( conversation, dialogue.opening );
+		}
 		const unavailable = ! dialogue.availability.available;
 		this.view.dialog.setChoices( dialogue.choices.map( choice => ( {
 			text: choice.text, disabled: unavailable,
@@ -1084,13 +1126,8 @@ export class GameApp {
 			this.view.dialog.setStatus( message, { error: true } );
 			return;
 		}
-		// A story decision wins over an optional free-chat request still in flight.
-		this.dialogueAbort?.abort();
-		this.dialogueAbort = null;
-		this.dialogueTurn = ( this.dialogueTurn ?? 0 ) + 1;
-		this.dialoguePending = false;
+		// A story decision also settles a free-chat line that failed.
 		this.failedDialogueLine = null;
-		this.view.dialog.setSending( false );
 		this.view.dialog.setStatus( '' );
 		this.#playerSays( choice.text );
 		this.#npcSays( conversation, result.reply );
