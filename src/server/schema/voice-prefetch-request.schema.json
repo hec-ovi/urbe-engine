@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:server:voice-prefetch-request",
+  "description": "Lines the player may hear next, rendered ahead at low priority. A batch replaces the lines of its group still waiting.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["group", "items"],
+  "properties": {
+    "group": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": { "$ref": "urn:urbe:engine:server:voice-request" }
+    }
+  }
+}

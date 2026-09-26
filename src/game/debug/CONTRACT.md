@@ -17,7 +17,7 @@ Records frame gaps, subsystem costs and renderer allocations for a running city,
 - FrameReports sends one report per second, with frame median, p95, maximum and up to 20 hitch records. Snapshot collection occurs only when sending. Missing development transport creates no reporter.
 - The plugin validates reports and stores the latest 60 in `performance.json` under its configured directory. Writes are serialized. Reports contain the game id, rendering settings, counters, position and timing only.
 - The probe holds pointer capture (`input.locked`), which a headless browser never grants, so prompts, movement and the unpaused view are the player's own. Its methods answer plain JSON; colours are `#rrggbb`, positions `[x, y, z]`.
-  - `state()`: backend, tier, draw calls, fps, feet, yaw, pitch, clock, crowd size, E target `{kind, person}`, conversation `{npcId, name, type, controlled, person}` and chat `{open, lines: [{from, name, text}], status, error, sending}`.
+  - `state()`: backend, tier, draw calls, fps, feet, yaw, pitch, clock, crowd size, E target `{kind, person}`, conversation `{npcId, name, type, controlled, person}` and chat `{open, lines: [{from, name, text, speaking}], status, error, sending}`, where `speaking` is how the line is voiced (`pending`, `playing`) or null.
   - `people({radius = 90, limit = 8})`: crowd members nearest first, `{id, crowdId, npcId, name, type, gender, distance, position, look}`.
   - `approach(id)`: stands the player 1.3 m from member `id`, their front first, on ground within a step of theirs (`STEP_HEIGHT`) with nothing solid between that spot and their body (`PERSON_RADIUS`) at chest height (`CHEST`), aimed at the chest. After two frames: `{placed, person, target}`; `placed` is false when no spot qualifies.
   - `press(action = 'interact')`: E, or R for `secondary-interact`, on the next tick. After two frames: `{target, conversation}`.
@@ -25,6 +25,7 @@ Records frame gaps, subsystem costs and renderer allocations for a running city,
   - `appearance({id, timeoutMs = 20000})`: one person's `crowd` look `{seed, body, hairStyle, skin, shirt, trousers, hair, eyebrows, sleeve, hem}` and the focused body's `hero` look in the same fields without `seed`. The crowd's eyebrows are its hair tint. The hero's fields are read from its model and dressed uniforms; its `hair` and `eyebrows` are the tint those meshes actually wear. A field the body is not dressed with is null. Without `id` it is the conversation's person, waiting up to `timeoutMs` for their focused body, and null when no conversation is open; with `id` it is that crowd member as they stand now, null when there is none. `hero` is null when no focused body shows the person.
   - `leave()`: ends the open conversation by the chat's own leave button. After two frames: `{conversation}`.
   - `say(text)`: `{ms, reply, added, status, error}` once the reply or its failure shows.
+  - `voice({started = 0, played = 0, timeoutMs = 60000})`: the game's own NPC voice report (`NpcVoice.report()`, [Voice](../voice/CONTRACT.md)) once `started` lines have begun to play and `played` have played to their end, one more line has failed, the voice finds the server's voice unavailable or `timeoutMs` passes; null when a caller observes the lines instead.
   - `follow()`, `lead()`: `{supported: false, reason}`.
 
 ## Errors

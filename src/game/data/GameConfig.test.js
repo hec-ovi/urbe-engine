@@ -61,6 +61,17 @@ describe( 'game URL configuration', () => {
 
 	} );
 
+	it( 'speaks NPC lines unless the run asks for voice off', () => {
+
+		for ( const [ query, voice ] of [ [ '', true ], [ '&voice=on', true ], [ '&voice=off', false ] ] ) {
+
+			window.history.replaceState( {}, '', `/?mode=game${query}` );
+			expect( GameConfig.fromUrl().voice ).toBe( voice );
+
+		}
+
+	} );
+
 	it( 'refuses a game id that could escape the game directory', () => {
 
 		window.history.replaceState( {}, '', '/?mode=game&game=../outside' );

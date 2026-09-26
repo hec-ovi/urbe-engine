@@ -17,10 +17,17 @@ export function castIds( target, runtime ) {
 
 }
 
+/** The role the exact identity plays in this questline, or undefined. */
+export function castRole( runtime, npcId ) {
+
+	return runtime.def.roles.find( ( candidate ) => runtime.cast[ candidate.roleId ] === npcId );
+
+}
+
 /** An authored character label belongs only to the exact identity playing it. */
 export function characterName( runtime, npcId ) {
 
-	const role = runtime.def.roles.find( ( candidate ) => runtime.cast[ candidate.roleId ] === npcId );
+	const role = castRole( runtime, npcId );
 	return role?.characterName ?? role?.reservedName ?? null;
 
 }

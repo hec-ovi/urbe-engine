@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen } from '@testing-library/dom';
+import { fireEvent, screen } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
 import { stubCanvas } from '../ui/test-helpers/canvas.js';
 import { GameApp } from './GameApp.js';
@@ -32,6 +32,18 @@ describe( 'playable game navigation', () => {
 
 		expect( navigate ).toHaveBeenCalledOnce();
 		expect( navigate ).toHaveBeenCalledWith( '/' );
+
+	} );
+
+	it( 'turns NPC voices on and off and sets their volume from the settings', async () => {
+
+		const app = new GameApp( {} );
+		app.voice = { setEnabled: vi.fn(), setVolume: vi.fn() };
+		app.view.open( 'SETTINGS' );
+		await userEvent.setup().selectOptions( screen.getByLabelText( 'npc voices' ), 'off' );
+		fireEvent.input( screen.getByLabelText( 'voice volume' ), { target: { value: '0.3' } } );
+		expect( app.voice.setEnabled ).toHaveBeenCalledExactlyOnceWith( false );
+		expect( app.voice.setVolume ).toHaveBeenCalledExactlyOnceWith( 0.3 );
 
 	} );
 

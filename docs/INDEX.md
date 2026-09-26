@@ -7,7 +7,7 @@
 | `src/assembly` | Assemble cities: kit placements over shared plans, generated landmark shells, native streets, interiors; kits and catalogs live once under `out/shared` | [Contract](../src/assembly/CONTRACT.md), [manifest](../src/assembly/schema/world-manifest.schema.json), [shell catalog](../src/assembly/schema/shell-catalog.schema.json) |
 | `src/assembly/kit` | Dress a block from its Atlas template, generate each distinct building once per dressing class and give a parcel only the frame it stands in | [Contract](../src/assembly/kit/CONTRACT.md), [placement record](../src/assembly/kit/kit-placements.schema.json), [plan index](../src/assembly/kit/kit-plans.schema.json) |
 | `src/world-archive` | Read/write bounded hashed JSON collections using filesystem or fetch | [Contract](../src/world-archive/CONTRACT.md), [ports](../src/world-archive/schema/api.d.ts), [index](../src/world-archive/schema/index.schema.json) |
-| `src/server` | HTTP adapters for Library, Creation, Assembly and Quests dialogue | [Contract and route schemas](../src/server/CONTRACT.md) |
+| `src/server` | HTTP adapters for Library, Creation, Assembly, Quests dialogue and Voice speech | [Contract and route schemas](../src/server/CONTRACT.md) |
 | `src/library` | Catalog and revisioned filesystem saves | [Contract and schemas](../src/library/CONTRACT.md) |
 | `src/creation` | Create cities and playthroughs through Atlas, Assembly, Quests and Library | [Contract and schemas](../src/creation/CONTRACT.md) |
 | `src/launcher` | Call server APIs and pass results to UI | [Contract](../src/launcher/CONTRACT.md), [API](../src/launcher/schema/launcher-api.schema.json) |
@@ -44,6 +44,7 @@
 | `light`, `look`, `sky` | Fixture lighting, prepared rendering and fixed night setting | [Light](../src/game/light/CONTRACT.md), [Look](../src/game/look/CONTRACT.md), [Game](../src/game/CONTRACT.md) |
 | `persistence` | Coherent live state and acknowledged Library revisions | [Contract and schemas](../src/game/persistence/CONTRACT.md) |
 | `debug` | Frame/subsystem timing, renderer allocation reports and the automation probe | [Contract](../src/game/debug/CONTRACT.md), [report](../src/game/debug/report.schema.json) |
+| `voice` | NPC lines spoken in each person's voice through the Voice box and Web Audio | [Contract](../src/game/voice/CONTRACT.md), [line request](../src/server/schema/voice-request.schema.json) |
 | `time`, `world`, `talk` | Host clock, spatial queries, map values and text transport | [Game](../src/game/CONTRACT.md), [talk request](../src/server/schema/talk-request.schema.json), [reply](../src/server/schema/talk-response.schema.json) |
 
 Catalogs preserve tapered upper outlines for distant rendering; authored podium lights and reflective black glazing use their source properties.

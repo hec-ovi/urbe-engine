@@ -1,5 +1,5 @@
 import { CastResolver, QuestlineRuntime, StepStamp, StoryVenues } from '../../../../quests/dist/runtime.js';
-import { castIds, characterName } from './QuestCast.js';
+import { castIds, castRole, characterName } from './QuestCast.js';
 import { stepLine, stepView } from './QuestStepView.js';
 
 /**
@@ -246,6 +246,19 @@ export class QuestSession {
 
 			const name = characterName( runtime, npcId );
 			if ( name ) return { ...name };
+
+		}
+		return null;
+
+	}
+
+	/** The persona of the role this exact identity plays in the first questline that casts it, or null. */
+	persona( npcId ) {
+
+		for ( const { runtime } of this.entries ) {
+
+			const persona = castRole( runtime, npcId )?.persona;
+			if ( persona ) return persona;
 
 		}
 		return null;

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:server:voice-error",
+  "description": "E_INVALID_REQUEST 400, E_EMPTY_SPEECH 400 (only cues), E_BUSY 429 (prefetch queue full), E_UPSTREAM 502 (Voice failed or refused), E_LOADING 503 (its model still loads), E_UNAVAILABLE 503 (off or unreachable).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["error", "code"],
+  "properties": {
+    "error": { "type": "string", "minLength": 1 },
+    "code": { "enum": ["E_INVALID_REQUEST", "E_EMPTY_SPEECH", "E_BUSY", "E_UPSTREAM", "E_LOADING", "E_UNAVAILABLE"] }
+  }
+}

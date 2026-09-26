@@ -198,6 +198,23 @@ export class GameplayAnimationDirector {
 
 	}
 
+	/**
+	 * Keeps the NPC speaking at least `seconds` longer, while their voice
+	 * plays: their running turn is held, or a new one starts once the last has
+	 * ended. It never takes the turn from the player.
+	 */
+	holdDialogueTurn( conversation, seconds ) {
+
+		const state = this.conversations.get( conversation );
+		if ( ! state ) return null;
+		const running = this.actions.has( state.actionId );
+		if ( running && state.speakerId !== state.actorId ) return null;
+		if ( ! running ) this.npcDialogueTurn( conversation );
+		this.timed.set( state.actionId, Math.max( this.timed.get( state.actionId ) ?? 0, seconds ) );
+		return state.actionId;
+
+	}
+
 	/** Completes the active turn while leaving the conversation open. */
 	completeDialogueTurn( conversation ) {
 
@@ -266,6 +283,7 @@ export class GameplayAnimationDirector {
 		const listeners = speakerId === PLAYER_ID ? [ state.actorId ] : [ PLAYER_ID ];
 		const started = this.#dialogue( speakerId, listeners, state.npcId );
 		state.actionId = started.actionId;
+		state.speakerId = speakerId;
 		return started;
 
 	}

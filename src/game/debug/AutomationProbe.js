@@ -155,6 +155,27 @@ export class AutomationProbe {
 
 	}
 
+	/**
+	 * What the game's own NPC voice has done this session (NpcVoice.report):
+	 * `{ enabled, status, queued, requested, started, played, bytes, cached,
+	 * failed, error }`, once `started` lines have begun to play and `played`
+	 * have played to their end, one more line has failed, Voice is found
+	 * unavailable or `timeoutMs` has passed. Null without the game's own voice.
+	 */
+	async voice( { started = 0, played = 0, timeoutMs = 60000 } = {} ) {
+
+		const voice = this.game.voice;
+		if ( ! voice ) return null;
+		const { failed } = voice.report();
+		const settled = ( report ) => report.started >= started && report.played >= played ||
+			report.failed > failed || ! [ 'ok', 'unknown' ].includes( report.status );
+		const begun = performance.now();
+		while ( ! settled( voice.report() ) && performance.now() - begun < timeoutMs ) await frames( 1 );
+
+		return voice.report();
+
+	}
+
 	/** Following a person is not driven yet. */
 	follow() {
 
@@ -245,7 +266,8 @@ export class AutomationProbe {
 			lines: [ ...dialog.transcript.children ].map( ( line ) => ( {
 				from: line.className.match( /\bis-(\w+)/ )?.[ 1 ] ?? null,
 				name: line.firstElementChild?.textContent ?? '',
-				text: line.lastElementChild?.textContent ?? ''
+				text: line.lastElementChild?.textContent ?? '',
+				speaking: line.dataset.speaking ?? null
 			} ) ),
 			status: dialog.status.textContent,
 			error: dialog.feedback.classList.contains( 'is-error' ),

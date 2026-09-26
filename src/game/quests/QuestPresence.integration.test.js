@@ -47,6 +47,8 @@ describe( 'authored quest appointments with the real population and rendered cro
 		expect( sim.getNPC( npcId ).name ).toEqual( originalName );
 		const bystander = sim.findNPCs( { type: 'barista' } ).find( ( person ) => person.npcId !== npcId );
 		expect( session.characterName( bystander.npcId ) ).toBeNull();
+		expect( session.persona( npcId ) ).toBe( definition.roles[ 0 ].persona );
+		expect( session.persona( bystander.npcId ) ).toBeNull();
 
 	} );
 

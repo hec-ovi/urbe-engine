@@ -28,6 +28,6 @@ From the urbe root, `node compose/check-matrix.mjs` calls Atlas generate and thi
 
 The server mounts sibling Materials catalogs, Atlas samples and Engine `out/`. Piece kits, street kits and interior catalogs live once under `out/shared` (override with `URBE_SHARED_DIR`). `URBE_ATLAS_DIR` overrides the sample directory. `URBE_MODELS_DIR` selects character, animation and prop assets, default `~/models/quaternius`. [Character installation](src/game/agents/CONTRACT.md) and [prop installation](src/game/props/CONTRACT.md) describe their audited stores.
 
-Text dialogue uses `LLM_BASE_URL` (default `http://localhost:8080/v1`), `LLM_MODEL` (default first advertised model), an optional `LLM_API_KEY` and `LLM_TIMEOUT_MS` (default 60000, the longest the model server may stay silent). Prompts come from Quests.
+Text dialogue uses `LLM_BASE_URL` (default `http://localhost:8080/v1`), `LLM_MODEL` (default first advertised model), an optional `LLM_API_KEY` and `LLM_TIMEOUT_MS` (default 60000, the longest the model server may stay silent). Prompts come from Quests. NPC speech uses the Voice box at `VOICE_BASE_URL` (default `http://localhost:5308`, empty for none); the game plays silently without it, and `voice=off` in the query or the settings turn it off.
 
 Exports contain JSON descriptors and references. Asset packaging and complete-game portability are open in [docs/ISSUES.md](docs/ISSUES.md). Crowd and car capacities default to zero; explicit `crowd` and `cars` query values enable them. Large-world moving performance remains an acceptance task.

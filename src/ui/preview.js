@@ -127,7 +127,7 @@ view.codex.setEntries( [
 	{ id: 'd1', title: 'Salt Wharf', category: 'places', text: 'The last quay still taking containers after the inland freight line shut.' }
 ] );
 
-view.settings.setValues( { quality: 'high', fog: 0.0006, exposure: 0.024, crowd: 200 } );
+view.settings.setValues( { quality: 'high', fog: 0.0006, exposure: 0.024, crowd: 200, voice: 'on', voiceVolume: 0.8 } );
 view.controls.setBindings( [
 	{ action: 'walk', keys: [ 'W', 'A', 'S', 'D' ] },
 	{ action: 'run', keys: [ 'Shift' ] },

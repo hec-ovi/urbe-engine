@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { talkRoute } from './src/server/talkRoute.js';
+import { voiceRoute } from './src/server/voiceRoute.js';
 import { buildingRoute } from './src/server/buildingRoute.js';
 import { launcherRoute } from './src/server/launcherRoute.js';
 import { createWorldCreation } from './src/creation/index.js';
@@ -91,7 +92,8 @@ export default defineConfig( ( { mode } ) => ( {
 		mount( 'serve-models', '/models', MODELS_DIR ),
 		buildingRoute( ROOT, ATLAS_DIR ),
 		launcherRoute( ROOT, creation ),
-		talkRoute( ROOT )
+		talkRoute( ROOT ),
+		voiceRoute()
 	],
 	server: {
 		// Play mode owns 5175: every recorded play URL names it, and a free

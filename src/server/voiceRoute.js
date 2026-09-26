@@ -1,0 +1,91 @@
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { closing, messageOf, readJson, sendJson } from './routeHttp.js';
+import { VoiceBoundary } from './VoiceBoundary.js';
+import { VoiceError, VoicePort } from './VoicePort.js';
+
+/** What the browser learns about a line besides its audio: which render it is and whether it was cached. */
+const PASSED_HEADERS = [ 'content-length', 'x-voice-key', 'x-voice-cache' ];
+
+/**
+ * Vite plugin for NPC speech over the Voice box. GET /api/voice says whether
+ * lines can be spoken now, POST /api/voice streams one line's WAV through as
+ * it renders, POST /api/voice/prefetch queues lines the player may hear next.
+ * Every request is checked before it reaches Voice.
+ */
+export function voiceRoute( port = VoicePort.fromEnv() ) {
+
+	const boundary = new VoiceBoundary();
+	const routes = { 'GET /': capability, 'POST /': speak, 'POST /prefetch': prefetch };
+
+	return {
+		name: 'voice-route',
+		configureServer( server ) {
+
+			server.middlewares.use( '/api/voice', ( req, res, next ) => {
+
+				const route = routes[ `${req.method} ${new URL( req.url, 'http://voice' ).pathname}` ];
+				if ( ! route ) return next();
+				route( req, res ).catch( ( error ) => fail( res, error ) );
+
+			} );
+
+		}
+	};
+
+	async function capability( _req, res ) {
+
+		const status = await port.status();
+		sendJson( res, 200, boundary.check( 'capability', { enabled: status === 'ok', status } ) );
+
+	}
+
+	/**
+	 * Answers once Voice has the first audio and pipes the rest unbuffered. A
+	 * line that breaks off, or a browser that leaves, destroys the response
+	 * before its body ends, so a partial line never reads as a whole one; the
+	 * browser leaving also stops the render, queued or streaming.
+	 */
+	async function speak( req, res ) {
+
+		const line = await admit( req, 'line' );
+		const signal = closing( res );
+		const upstream = await port.speak( line, { signal } );
+		const headers = PASSED_HEADERS.filter( ( name ) => upstream.headers.has( name ) ).map( ( name ) => [ name, upstream.headers.get( name ) ] );
+		res.writeHead( 200, { 'Content-Type': 'audio/wav', 'Cache-Control': 'no-store', ...Object.fromEntries( headers ) } );
+		await pipeline( Readable.fromWeb( upstream.body ), res ).catch( ( error ) => {
+
+			if ( ! signal.aborted ) console.warn( 'voice: a line broke off:', messageOf( error ) );
+
+		} );
+
+	}
+
+	async function prefetch( req, res ) {
+
+		const batch = await admit( req, 'prefetch' );
+		const keys = await port.prefetch( batch, { signal: closing( res ) } );
+		sendJson( res, 202, boundary.check( 'keys', keys ) );
+
+	}
+
+	async function admit( req, kind ) {
+
+		let value;
+		try { value = await readJson( req, 'voice' ); }
+		catch ( error ) { throw new VoiceError( 400, 'E_INVALID_REQUEST', messageOf( error ) ); }
+		return boundary.check( kind, value );
+
+	}
+
+	/** A browser that already left, or a response already under way, has nobody to answer. */
+	function fail( res, error ) {
+
+		if ( error?.name === 'AbortError' || res.headersSent || res.destroyed ) return res.destroy();
+		const failure = error instanceof VoiceError ? error : new VoiceError( 502, 'E_UPSTREAM', messageOf( error ) );
+		if ( ! ( error instanceof VoiceError ) ) console.warn( 'voice:', failure.message );
+		sendJson( res, failure.status, boundary.check( 'error', { error: failure.message, code: failure.code } ) );
+
+	}
+
+}

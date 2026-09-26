@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:server:voice-capability",
+  "description": "Whether NPC lines can be spoken now. status is the Voice health (ok, loading, degraded), unreachable when it does not answer, or off when VOICE_BASE_URL is empty; enabled only at ok.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["enabled", "status"],
+  "properties": {
+    "enabled": { "type": "boolean" },
+    "status": { "enum": ["ok", "loading", "degraded", "unreachable", "off"] }
+  }
+}

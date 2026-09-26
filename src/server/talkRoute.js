@@ -1,4 +1,5 @@
 import { OpenAIPort } from './OpenAIPort.js';
+import { closing, messageOf, readJson, sendJson } from './routeHttp.js';
 import { TalkBoundary } from './TalkBoundary.js';
 import { TalkService } from './TalkService.js';
 
@@ -40,11 +41,11 @@ export function talkRoute( outRoot, providedService = null ) {
 
 			const text = await talk().reply( request, { signal: closing( res ) } );
 			logUsage();
-			send( res, 200, boundary.output( { reply: text } ) );
+			sendJson( res, 200, boundary.output( { reply: text } ) );
 
 		} catch ( error ) {
 
-			send( res, 502, boundary.error( { error: messageOf( error ) } ) );
+			sendJson( res, 502, boundary.error( { error: messageOf( error ) } ) );
 
 		}
 
@@ -71,7 +72,7 @@ export function talkRoute( outRoot, providedService = null ) {
 
 			const failure = boundary.error( { error: messageOf( error ) } );
 			if ( res.headersSent ) res.end( `${JSON.stringify( boundary.event( { type: 'error', ...failure } ) )}\n` );
-			else send( res, 502, failure );
+			else sendJson( res, 502, failure );
 
 		}
 
@@ -82,11 +83,11 @@ export function talkRoute( outRoot, providedService = null ) {
 
 		try {
 
-			return boundary.input( parseRequestJson( await body( req ) ) );
+			return boundary.input( await readJson( req, 'talk' ) );
 
 		} catch ( error ) {
 
-			send( res, 400, boundary.error( { error: messageOf( error ) } ) );
+			sendJson( res, 400, boundary.error( { error: messageOf( error ) } ) );
 			return null;
 
 		}
@@ -98,55 +99,5 @@ export function talkRoute( outRoot, providedService = null ) {
 		if ( service.llm?.usage ) console.info( 'talk tokens', service.llm.usage );
 
 	}
-
-}
-
-/** Aborts when the browser goes away before the answer is complete. */
-function closing( res ) {
-
-	const controller = new AbortController();
-	res.on( 'close', () => res.writableFinished || controller.abort() );
-	return controller.signal;
-
-}
-
-function parseRequestJson( text ) {
-
-	try { return JSON.parse( text ); }
-	catch ( cause ) {
-
-		const error = new Error( `talk request is not valid JSON: ${messageOf( cause )}` );
-		error.code = 'E_TALK_REQUEST_JSON';
-		throw error;
-
-	}
-
-}
-
-function messageOf( error ) {
-
-	return error instanceof Error && error.message ? error.message : String( error ) || 'talk service failed';
-
-}
-
-function body( req ) {
-
-	return new Promise( ( resolve, reject ) => {
-
-		let text = '';
-		req.setEncoding( 'utf8' );
-		req.on( 'data', ( chunk ) => text += chunk );
-		req.on( 'end', () => resolve( text ) );
-		req.on( 'error', reject );
-
-	} );
-
-}
-
-function send( res, status, payload ) {
-
-	res.statusCode = status;
-	res.setHeader( 'Content-Type', 'application/json' );
-	res.end( JSON.stringify( payload ) );
 
 }

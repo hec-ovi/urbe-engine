@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:server:voice-request",
+  "description": "One NPC line to speak: its raw text, cues included, and the facts its voice is designed from, the Voice box's speaker.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["text", "speaker"],
+  "properties": {
+    "text": { "type": "string", "minLength": 1, "maxLength": 1200 },
+    "speaker": { "$ref": "#/$defs/speaker" }
+  },
+  "$defs": {
+    "speaker": {
+      "description": "id is the Simulation npcId; traits is [] when the NPC has none; category and label come from the world's NPC type; persona is the quest role the NPC is cast in.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "gender", "age", "traits"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "gender": { "enum": ["male", "female"] },
+        "age": { "type": "integer", "minimum": 0, "maximum": 120 },
+        "traits": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "type": "string", "minLength": 1, "maxLength": 40 }
+        },
+        "category": { "enum": ["resident", "worker", "vendor", "authority", "transit", "street"] },
+        "label": { "type": "string", "maxLength": 120 },
+        "persona": { "type": "string", "maxLength": 4000 }
+      }
+    }
+  }
+}

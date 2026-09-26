@@ -90,6 +90,35 @@ describe( 'live gameplay animation composition', () => {
 
 	} );
 
+	it( 'holds the NPC talking while their voice plays, and never over the player\'s turn', () => {
+
+		const rig = setup();
+		const scheduled = actor( { animation: 'sit', mode: 'schedule' } );
+		rig.director.update( [ scheduled ], 0 );
+		const conversation = { npcId: scheduled.npcId };
+		rig.director.beginConversation( conversation, { ...scheduled, mode: 'conversation' } );
+		const talking = () => current( rig.director, scheduled.npcId ).currentClip;
+
+		rig.director.npcDialogueTurn( conversation );
+		rig.director.holdDialogueTurn( conversation, 5 );
+		rig.director.update( [ scheduled ], 4 );
+		expect( talking() ).toBe( 'Sitting_Talking_Loop' );
+		rig.director.holdDialogueTurn( conversation, 0.5 );
+		rig.director.update( [ scheduled ], 1.1 );
+		expect( talking() ).toBe( 'Sitting_Idle_Loop' );
+
+		rig.director.holdDialogueTurn( conversation, 3 );
+		expect( talking() ).toBe( 'Sitting_Talking_Loop' );
+		rig.director.update( [ scheduled ], 2.9 );
+		expect( talking() ).toBe( 'Sitting_Talking_Loop' );
+
+		rig.director.playerDialogueTurn( conversation );
+		expect( rig.director.holdDialogueTurn( conversation, 3 ) ).toBeNull();
+		expect( talking() ).toBe( 'Sitting_Nodding_Loop' );
+		expect( rig.director.holdDialogueTurn( { npcId: 'stranger' }, 3 ) ).toBeNull();
+
+	} );
+
 	it( 'interrupts the exact NPC action for physics and holds routine projection until release', () => {
 
 		const rig = setup();

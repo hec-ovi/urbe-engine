@@ -4,6 +4,8 @@ import { MaterialResolver } from '../building/MaterialResolver.js';
 import { TextureSource } from '../building/TextureSource.js';
 import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
+import { NpcVoice } from './voice/NpcVoice.js';
+import { DEFAULT_TYPE_SET } from '../../../simulation/dist/index.js';
 import { stripCues } from '../../../quests/dist/runtime.js';
 import { QuestSession } from './quests/QuestSession.js';
 import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
@@ -145,12 +147,16 @@ export class GameApp {
 		this.config = config;
 		this.navigate = navigate;
 		/**
-		 * Hears every NPC line the chat shows, or null: `said({ conversation,
-		 * line, text })` for a whole line, or for each sentence of a streamed
-		 * reply as it completes, with `line` its chat element; `silenced()` once
-		 * what it heard stops mattering. See #observe.
+		 * Hears every NPC line the chat shows: `said({ conversation, line, text })`
+		 * for a whole line, or for each sentence of a streamed reply as it
+		 * completes, with `line` its chat element; `silenced()` once what it
+		 * heard stops mattering; optionally `upcoming({ conversation, texts })`
+		 * for the replies the player's choices would bring. See #observe.
+		 * Without one, the game speaks the lines itself (NpcVoice).
 		 */
 		this.lineObserver = lineObserver;
+		/** The game's own NPC voice once the world is loaded, or null while a caller observes the lines. */
+		this.voice = null;
 		/** The observer heard a line it has not been silenced for since. */
 		this.lineHeard = false;
 		/** The questline the player is following; null means the main story. */
@@ -445,6 +451,18 @@ export class GameApp {
 			game ? [ ...game.quests, ...game.sideJobs ] : [],
 			{ world: atlas, types: npcTypes }
 		);
+		if ( ! this.lineObserver ) {
+
+			this.lineObserver = this.voice = new NpcVoice( {
+				dialog: this.view.dialog,
+				types: ( npcTypes ?? DEFAULT_TYPE_SET ).types,
+				persona: ( npcId ) => this.quests.persona( npcId ),
+				hold: ( conversation, seconds ) => this.animations.holdDialogueTurn( conversation, seconds ),
+				enabled: config.voice
+			} );
+			this.voice.player.unlockOn( window );
+
+		}
 		this.savedInventory = game?.player.inventory ?? [];
 		this.questItemIds = questlines.flatMap( ( questline ) => questline.items.map( ( item ) => item.itemId ) );
 		this.#refreshInventory();
@@ -633,7 +651,10 @@ export class GameApp {
 		this.view.map.setWorld( blockWorld( atlas, connections.networks ) );
 		this.view.map.setVenues( this.venues.marks );
 		this.#updateObjectiveRoute( 0, true );
-		this.view.settings.setValues( { quality: this.tier.name, fog: config.fog, exposure: config.exposure, crowd: config.maxCrowd } );
+		this.view.settings.setValues( {
+			quality: this.tier.name, fog: config.fog, exposure: config.exposure, crowd: config.maxCrowd,
+			voice: this.voice?.enabled ? 'on' : 'off', voiceVolume: this.voice?.volume ?? 1
+		} );
 		this.view.controls.setBindings( BINDINGS );
 		this.view.readout.setAbout( [
 			config.blueprintUrl,
@@ -730,6 +751,7 @@ export class GameApp {
 				].map( choice => ( { text: choice.text,
 					value: { recap: true, questId: recap.questId, stepId: recap.stepId, choiceId: choice.id }
 				} ) ), true );
+				this.#observe( 'upcoming', { conversation, texts: recap.questions.map( question => question.reply ) } );
 
 			}
 
@@ -1016,16 +1038,18 @@ export class GameApp {
 	}
 
 	/**
-	 * Tells the line observer, synchronously. It follows the conversation and
-	 * never steers it: what it throws is logged, and quest state, saving and
-	 * the reply go on.
+	 * Tells the line observer, synchronously, when it listens for `event`. It
+	 * follows the conversation and never steers it: what it throws or rejects
+	 * with is logged, and quest state, saving and the reply go on.
 	 */
 	#observe( event, detail ) {
-		if ( ! this.lineObserver ) return;
+		const hear = this.lineObserver?.[ event ];
+		if ( ! hear ) return;
+		const log = ( error ) => console.error( `line observer ${event}:`, error );
 		try {
-			this.lineObserver[ event ]( detail );
+			hear.call( this.lineObserver, detail )?.catch?.( log );
 		} catch ( error ) {
-			console.error( `line observer ${event}:`, error );
+			log( error );
 		}
 	}
 
@@ -1097,6 +1121,9 @@ export class GameApp {
 			text: choice.text, disabled: unavailable,
 			value: { questId, stepId, choiceId: choice.id }
 		} ) ), changed );
+		// A new topic has just taken the turn from any typed reply, so rendering
+		// its replies ahead never competes with the dialogue model.
+		if ( changed && ! unavailable ) this.#observe( 'upcoming', { conversation, texts: dialogue.choices.map( choice => choice.reply ) } );
 		this.view.dialog.setStatus( unavailable ? QuestActions.unavailableMessage( dialogue.availability.reason ) : '' );
 	}
 
@@ -1577,6 +1604,8 @@ export class GameApp {
 		if ( key === 'fog' ) this.fog.density.value = value;
 		else if ( key === 'exposure' ) this.exposure.base = value;
 		else if ( key === 'crowd' ) this.crowd.capacity = value;
+		else if ( key === 'voice' ) this.voice?.setEnabled( value === 'on' );
+		else if ( key === 'voiceVolume' ) this.voice?.setVolume( value );
 		else if ( key === 'quality' ) {
 
 			const query = new URLSearchParams( window.location.search );

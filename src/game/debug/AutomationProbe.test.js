@@ -182,6 +182,30 @@ describe( 'automation probe', () => {
 
 	} );
 
+	it( 'waits for the game\'s voice to start a line, fail one or find Voice away, and shows which chat line is voiced', async () => {
+
+		const { game } = playing();
+		const report = { enabled: true, status: 'unknown', queued: 1, requested: 0, started: 0, played: 0, bytes: 0, cached: 0, failed: 0, error: null };
+		game.voice = { report: () => ( { ...report } ) };
+		const probe = new AutomationProbe( game );
+		setTimeout( () => Object.assign( report, { status: 'ok', requested: 1, started: 1, bytes: 48044 } ), 5 );
+		expect( await probe.voice( { started: 1 } ) ).toMatchObject( { status: 'ok', started: 1, played: 0, bytes: 48044 } );
+		setTimeout( () => Object.assign( report, { played: 1 } ), 5 );
+		expect( await probe.voice( { played: 1 } ) ).toMatchObject( { started: 1, played: 1 } );
+		setTimeout( () => Object.assign( report, { failed: 1, error: 'voice 502' } ), 5 );
+		expect( await probe.voice( { started: 2 } ) ).toMatchObject( { started: 1, failed: 1 } );
+		report.status = 'unreachable';
+		expect( await probe.voice( { started: 3 } ) ).toMatchObject( { status: 'unreachable' } );
+		expect( await probe.voice( { started: 3, timeoutMs: 0 } ) ).toMatchObject( { started: 1 } );
+		expect( await new AutomationProbe( playing().game ).voice() ).toBeNull();
+
+		await probe.converse();
+		await probe.say( 'Hello?' );
+		game.view.dialog.setSpeaking( game.view.dialog.transcript.lastElementChild, 'playing' );
+		expect( probe.state().chat.lines.map( ( line ) => line.speaking ) ).toEqual( [ null, 'playing' ] );
+
+	} );
+
 	it( 'reports follow and lead as not driven yet', () => {
 
 		const probe = new AutomationProbe( playing().game );

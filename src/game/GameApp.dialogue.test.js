@@ -147,6 +147,30 @@ describe('explicit quest dialogue through the playable UI',()=>{
   expect(error).toHaveBeenCalledWith('line observer said:',expect.any(TypeError));expect(error).toHaveBeenCalledWith('line observer silenced:',expect.any(TypeError));
  });
 
+ const CRANES='[sigh] He worked the cranes. He always came home before dawn.',MARKET='Look for him at the market. Tell him Petra sent you.';
+ it('tells an observer that listens for them which replies each newly opened topic may bring, once per topic',async()=>{
+  const {app,open,observer}=fixture({errand:true});observer.upcoming=vi.fn();open();
+  const user=userEvent.setup();const chat=within(app.view.dialog.element);const topics=within(chat.getByRole('group',{name:'Conversation topics'}));
+  expect(observer.upcoming).toHaveBeenCalledExactlyOnceWith({conversation:app.interactor.conversation,texts:[CRANES,MARKET]});
+  await user.click(topics.getByRole('button',{name:'missing_person'}));
+  await user.click(chat.getByRole('button',{name:'Tell me about your brother.'}));
+  expect(observer.upcoming).toHaveBeenCalledOnce();
+  await user.click(topics.getByRole('button',{name:'errand'}));
+  expect(observer.upcoming).toHaveBeenLastCalledWith({conversation:app.interactor.conversation,texts:['Thank you.']});
+  expect(observer.upcoming).toHaveBeenCalledTimes(2);
+ });
+
+ it('tells the observer which replies a recap\'s questions may bring, and logs what it rejects with',async()=>{
+  const {app,open,observer}=fixture();const error=vi.spyOn(console,'error').mockImplementation(()=>{});open();
+  const user=userEvent.setup();const chat=within(app.view.dialog.element);
+  await user.click(chat.getByRole('button',{name:'I will find Kip and ask what he saw.'}));
+  await user.click(chat.getByRole('button',{name:'End conversation'}));
+  observer.upcoming=vi.fn(async()=>{throw new Error('no prefetch');});open();
+  expect(observer.upcoming).toHaveBeenCalledExactlyOnceWith({conversation:app.interactor.conversation,texts:[CRANES]});
+  await vi.waitFor(()=>expect(error).toHaveBeenCalledWith('line observer upcoming:',expect.objectContaining({message:'no prefetch'})));
+  expect(chat.getByText(/Look for him at the market/)).toBeTruthy();
+ });
+
  it('streams a typed reply into one growing line heard by sentence, and turns its offers into actions that change nothing yet',async()=>{
   const {app,open,state,observer}=fixture();open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
   let release;const rest=new Promise(done=>{release=done;});
