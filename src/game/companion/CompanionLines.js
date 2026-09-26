@@ -1,6 +1,8 @@
 import standard from './lines.md?raw';
 import { CompanionError } from './CompanionError.js';
 
+/** Compass points clockwise from north (-z), east being +x: the `name-<point>` keys. */
+export const COMPASS = [ 'north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west' ];
 /** Every key the companion speaks or shows; a lines document lacking one is refused. */
 const KEYS = [
 	'label-follow', 'label-dismiss',
@@ -10,7 +12,8 @@ const KEYS = [
 	'lead-waiting',
 	'arrival-work', 'arrival-home', 'arrival-haunt', 'arrival-quest', 'arrival-scene', 'arrival-ask',
 	'notice-gave-up-player-lost', 'notice-gave-up-unreachable',
-	'name-unnamed', 'name-stop', 'name-station'
+	'name-unnamed', 'name-stop', 'name-station',
+	...COMPASS.map( ( point ) => `name-${point}` )
 ];
 const NAMES = new Set( [ 'place', 'name', 'word' ] );
 const FIELD = /\{(\w+)\}/g;

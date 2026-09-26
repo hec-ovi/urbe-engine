@@ -8,6 +8,10 @@
  */
 export class TalkClient {
 
+	/** A save's memory the server has not taken yet, and the hand-over under way. */
+	#unrestored = null;
+	#handing = null;
+
 	constructor( out ) {
 
 		this.out = out;
@@ -32,6 +36,7 @@ export class TalkClient {
 	 */
 	async *stream( conversation, line, timeMin, quests = [], { signal, guide, offers } = {} ) {
 
+		await this.#handOver();
 		const response = await this.#post( { conversation, line, timeMin, quests, guide, offers }, signal );
 		const reader = response.body.getReader();
 		const decoder = new TextDecoder();
@@ -68,21 +73,41 @@ export class TalkClient {
 	/** What people in this world remember of talking with the player, for the save: `[{ npcId, memory }]`. */
 	async memory() {
 
+		await this.#handOver();
 		const response = await fetch( `/api/talk/memory?out=${encodeURIComponent( this.out )}` );
 		if ( ! response.ok ) throw await failure( response );
 		return ( await response.json() ).memory;
 
 	}
 
-	/** Makes a save's `memory` all that people in this world remember. */
-	async restoreMemory( memory ) {
+	/**
+	 * Makes a save's `memory` all that people in this world remember. Until
+	 * the server has taken it, `stream` and `memory` hand it over first and
+	 * throw when they cannot, so the server never remembers an exchange
+	 * without it and a late hand-over never replaces one.
+	 */
+	restoreMemory( memory ) {
 
-		const response = await fetch( '/api/talk/memory', {
+		this.#unrestored = memory;
+		return this.#handOver();
+
+	}
+
+	/** Sends the memory the server has not taken, once at a time. */
+	#handOver() {
+
+		if ( ! this.#unrestored ) return Promise.resolve();
+		const memory = this.#unrestored;
+		return this.#handing ??= fetch( '/api/talk/memory', {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify( { out: this.out, memory } )
-		} );
-		if ( ! response.ok ) throw await failure( response );
+		} ).then( async ( response ) => {
+
+			if ( ! response.ok ) throw await failure( response );
+			if ( this.#unrestored === memory ) this.#unrestored = null;
+
+		} ).finally( () => { this.#handing = null; } );
 
 	}
 

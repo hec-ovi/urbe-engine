@@ -20,6 +20,7 @@ Purpose: stands what a quest leaves in the world (a body on a floor, blood besid
 - `group`: the scenes standing around the player.
 - `serialize()`: [saved scenery](schema/saved-scenery.schema.json), every spec's state in scene id order, then any saved state no spec names, unchanged.
 - `isStaged(sceneId)`, `sceneFor(sceneId)` (spec, status, failure code, resolution, staging request and [staging assembly](schema/staging-assembly.schema.json)) and `stagedPlaces()` (`{ sceneId, questId, purpose, place, notes }` of every scene standing, for a companion to lead to). `notes` are plain sentences from [notes.md](notes.md), one for the scene's purpose, then one for each body, prop and decal in spec order that an overlay has not taken out; they say what shows there, never who someone is or what happened.
+- `blockers()`: the footprints (`{ center: { x, z }, width, depth, yawRadians }`) of the bodies and fixed props that stand now in street scenes and have not been taken out, for the crowd's walkers to keep out of.
 - [capabilities.json](capabilities.json), valid against [schema/capabilities.schema.json](schema/capabilities.schema.json): the place kinds, poses, prop kinds, lighting presets and limits the engine stages. It is what the engine declares to Quests as `hostCapabilities.scenery`.
 - `StagingAssembler.js`: the placement geometry investigation scenes and scenery share (`validateStaging`, `placeEntities`, `placeDecals`, `reachableApproaches`, `publicEntity`).
 

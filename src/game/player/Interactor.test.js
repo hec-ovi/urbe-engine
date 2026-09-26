@@ -269,6 +269,9 @@ it( 'opens a conversation with a person by id without aiming, and keeps a person
 	const conversation = interactor.talkTo( 'n1', CLOCK );
 	expect( conversation ).toMatchObject( { npcId: 'n1', controlled: true } );
 	expect( panels.at( - 1 ) ).toBe( conversation );
+	// The view turns to the face of the person the host opened the talk with.
+	const face = conversation.person.position.clone().setY( conversation.person.position.y + 1.55 );
+	expect( interactor.controller.turnTo ).toHaveBeenCalledExactlyOnceWith( face );
 	expect( interactor.talkTo( 'n1', CLOCK ) ).toBeNull();
 
 	interactor.close( CLOCK, 'player-left', { keep: true } );
@@ -406,7 +409,8 @@ function street( continuity = null, animations = null, sim = simulation( new Map
 			body: { feet },
 			forward: new THREE.Vector3( 0, 0, - 1 ),
 			look: new THREE.Vector3( 0, 0, - 1 ),
-			eye: feet.clone().setY( feet.y + 1.7 )
+			eye: feet.clone().setY( feet.y + 1.7 ),
+			turnTo: vi.fn()
 		}
 	} );
 	interactor.onConversation = ( conversation ) => panels.push( conversation );

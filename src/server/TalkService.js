@@ -35,13 +35,6 @@ export class TalkService {
 
 	}
 
-	/** @returns the NPC's whole reply, see `stream` */
-	async reply( request, options ) {
-
-		for await ( const event of this.stream( request, options ) ) if ( event.type === 'done' ) return event.reply;
-
-	}
-
 	/**
 	 * The NPC's reply as it is spoken: `delta` text pieces, each `sentence` as it
 	 * completes, then any `offer`, then `done` with the whole reply. A completed

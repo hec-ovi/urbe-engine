@@ -16,6 +16,8 @@ const TIE = 0.05;
 export const CHEST = 1.3;
 /** And a door around the handle, not at the sill. */
 const HANDLE = 1.1;
+/** Where the view turns to on a person the host opens a conversation with. */
+const FACE = 1.55;
 
 /**
  * What pressing E does, and what the prompt says before you press it.
@@ -150,14 +152,17 @@ export class Interactor {
 	/**
 	 * Opens a conversation with the body this person has on the street now, as
 	 * E on them would, without aiming: the host asks for it when a companion
-	 * has led the player somewhere. The conversation, or null when the person
-	 * has no body in the crowd, is fallen or somebody is already talked to.
+	 * has led the player somewhere, and the view turns to the person's face.
+	 * The conversation, or null when the person has no body in the crowd, is
+	 * fallen or somebody is already talked to.
 	 */
 	talkTo( npcId, clock ) {
 
 		const person = this.crowd.memberForNpc( npcId );
 		if ( this.conversation || ! person || person.fallen || person.retiring ) return null;
 		this.#talk( person, clock );
+		const { position } = this.conversation?.person ?? {};
+		if ( position ) this.controller.turnTo( position.clone().setY( position.y + FACE ) );
 		return this.conversation;
 
 	}

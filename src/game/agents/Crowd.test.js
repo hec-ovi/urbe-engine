@@ -391,6 +391,41 @@ describe( 'persistent NPC projection', () => {
 
 } );
 
+describe( 'Crowd blockers', () => {
+
+	it( 'turns a walker back before a blocked footprint and lets one already inside walk out', () => {
+
+		// A body lying across the pavement between x = -13 and -11.
+		const body = { center: { x: - 12, z: 0 }, width: 2, depth: 1.2, yawRadians: 0 };
+		const agents = [ [ 'coming', 0.5 ], [ 'inside', 0.7 ] ].map( ( [ crowdId, progress ] ) => ( {
+			crowdId, type: 'commuter', activity: 'commuting', place: { kind: 'edge', id: 'e2' }, progress, direction: 1
+		} ) );
+		const crowd = new Crowd( {
+			assets: testAssets(), routes: pavement(), signals: { green: () => true }, sim: { crowd: () => ( { agents } ) },
+			places: new Map(), capacity: 4, blockers: () => [ body ]
+		} );
+		const walker = ( crowdId ) => [ ...crowd.members.values() ].find( ( member ) => member.crowdId === crowdId );
+		crowd.update( 0, PLAYER, { timeMin: 0, daySeconds: 0 } );
+		expect( walker( 'coming' ).position.x ).toBeCloseTo( - 20 );
+		expect( walker( 'inside' ).position.x ).toBeCloseTo( - 12 );
+
+		const path = [];
+		for ( let step = 1; step <= 100; step ++ ) {
+
+			crowd.update( 0.1, PLAYER, { timeMin: 0, daySeconds: step / 10 } );
+			path.push( walker( 'coming' ).position.x );
+
+		}
+		const reach = - 13 - 0.34;
+		expect( Math.max( ...path ) ).toBeLessThanOrEqual( reach );
+		expect( Math.max( ...path ) ).toBeGreaterThan( reach - 0.2 );
+		expect( path.at( - 1 ) ).toBeLessThan( Math.max( ...path ) - 2 );
+		expect( walker( 'inside' ).position.x ).toBeGreaterThan( - 11 + 0.34 );
+
+	} );
+
+} );
+
 describe( 'exact animation projection', () => {
 
 	it( 'maps every coordinator clip to its closest VAT state', () => {

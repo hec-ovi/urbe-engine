@@ -8,7 +8,7 @@
     "out": { "type": "string", "pattern": "^/out(?:/(?!\\.{1,2}(?:/|$))[A-Za-z0-9._-]+)+$" },
     "npc": { "$ref": "#/$defs/npc" },
     "behavior": { "$ref": "#/$defs/behavior" },
-    "line": { "type": "string", "minLength": 1 },
+    "line": { "type": "string", "minLength": 1, "maxLength": 2000 },
     "timeMin": { "type": "number" },
     "quests": {
       "type": "array",
@@ -41,7 +41,7 @@
         "placeId": { "$ref": "#/$defs/id" },
         "kind": { "enum": ["parcel", "stop"] },
         "name": { "type": "string", "minLength": 1 },
-        "notes": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        "notes": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 2000 } }
       }
     }
   },

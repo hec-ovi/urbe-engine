@@ -4,21 +4,24 @@ import { TalkBoundary } from './TalkBoundary.js';
 import { TalkService } from './TalkService.js';
 
 const NDJSON = { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache' };
+/** The largest talk request body: the person, what they do, the line and the quests as they stand. */
+const TALK_BYTES = 256 * 1024;
+/** The largest memory a save hands back; the server keeps a bounded part of it. */
+const MEMORY_BYTES = 32 * 1024 * 1024;
 
 /**
- * Vite plugin for NPC dialogue. POST /api/talk answers with the NPC's whole
- * reply, POST /api/talk/stream with one JSON event per line as the reply is
- * spoken. Both check the browser's dialogue snapshot first; the model server
- * comes from the LLM_* environment (OpenAIPort.fromEnv). GET and PUT
- * /api/talk/memory read and replace what people remember in one world, for
- * the game save.
+ * Vite plugin for NPC dialogue. POST /api/talk/stream answers with one JSON
+ * event per line as the reply is spoken, after checking the browser's
+ * dialogue snapshot; the model server comes from the LLM_* environment
+ * (OpenAIPort.fromEnv). GET and PUT /api/talk/memory read and replace what
+ * people remember in one world, for the game save.
  */
 export function talkRoute( outRoot, providedService = null ) {
 
 	let service = providedService;
 	const boundary = new TalkBoundary();
 	const talk = () => service ??= new TalkService( OpenAIPort.fromEnv(), outRoot );
-	const routes = { 'POST /': reply, 'POST /stream': stream, 'GET /memory': memory, 'PUT /memory': restoreMemory };
+	const routes = { 'POST /stream': stream, 'GET /memory': memory, 'PUT /memory': restoreMemory };
 
 	return {
 		name: 'talk-route',
@@ -50,7 +53,7 @@ export function talkRoute( outRoot, providedService = null ) {
 		}
 		try {
 
-			sendJson( res, 200, boundary.memory( { out, memory: await talk().memory( out ) }, 'E_TALK_OUTPUT' ) );
+			sendJson( res, 200, boundary.kept( { out, memory: await talk().memory( out ) } ) );
 
 		} catch ( error ) {
 
@@ -63,16 +66,8 @@ export function talkRoute( outRoot, providedService = null ) {
 	/** 204 once the world's memory is the one sent. */
 	async function restoreMemory( req, res ) {
 
-		let request;
-		try {
-
-			request = boundary.memory( await readJson( req, 'talk memory' ) );
-
-		} catch ( error ) {
-
-			return sendJson( res, 400, boundary.error( { error: messageOf( error ) } ) );
-
-		}
+		const request = await admit( req, res, 'talk memory', MEMORY_BYTES, ( value ) => boundary.memory( value ) );
+		if ( ! request ) return;
 		try {
 
 			await talk().restoreMemory( request.out, request.memory );
@@ -87,28 +82,10 @@ export function talkRoute( outRoot, providedService = null ) {
 
 	}
 
-	async function reply( req, res ) {
-
-		const request = await admit( req, res );
-		if ( ! request ) return;
-		try {
-
-			const text = await talk().reply( request, { signal: closing( res ) } );
-			logUsage();
-			sendJson( res, 200, boundary.output( { reply: text } ) );
-
-		} catch ( error ) {
-
-			sendJson( res, 502, boundary.error( { error: messageOf( error ) } ) );
-
-		}
-
-	}
-
 	/** Answers 200 with the first event; a failure before it is a 502, after it an `error` event. */
 	async function stream( req, res ) {
 
-		const request = await admit( req, res );
+		const request = await admit( req, res, 'talk', TALK_BYTES, ( value ) => boundary.input( value ) );
 		if ( ! request ) return;
 		try {
 
@@ -132,16 +109,16 @@ export function talkRoute( outRoot, providedService = null ) {
 
 	}
 
-	/** The checked request, or null once a 400 has been sent. */
-	async function admit( req, res ) {
+	/** The request `check` passes, or null once a 400, or a 413 for a body over `limit`, has been sent. */
+	async function admit( req, res, what, limit, check ) {
 
 		try {
 
-			return boundary.input( await readJson( req, 'talk' ) );
+			return check( await readJson( req, what, limit ) );
 
 		} catch ( error ) {
 
-			sendJson( res, 400, boundary.error( { error: messageOf( error ) } ) );
+			sendJson( res, error.status ?? 400, boundary.error( { error: messageOf( error ) } ) );
 			return null;
 
 		}

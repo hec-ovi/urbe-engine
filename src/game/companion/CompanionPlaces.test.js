@@ -56,6 +56,24 @@ describe( 'companion places', () => {
 
 	} );
 
+	it( 'tells apart offered places that would read the same by the way they lie, and offers one of those that still do', () => {
+
+		const atlas = { parcels: [ 'c1', 'c2', 'c3' ].map( ( id ) => ( { id, type: 'coffee_shop' } ) ).concat( { id: 'p2', type: 'restaurant', name: 'Bar Nadir' } ) };
+		const places = new CompanionPlaces( {
+			atlas, lines: CompanionLines.standard(),
+			routes: { route: ( from, to ) => ( { distanceMeters: Math.hypot( to[ 0 ] - from[ 0 ], to[ 2 ] - from[ 2 ] ) } ) },
+			places: [
+				{ kind: 'parcel', id: 'c1', position: [ 100, 0, 0 ] }, { kind: 'parcel', id: 'c2', position: [ 0, 0, - 200 ] },
+				{ kind: 'parcel', id: 'c3', position: [ 300, 0, 20 ] }, { kind: 'parcel', id: 'p2', position: [ - 150, 0, 150 ] }
+			]
+		} );
+		const npc = { home: { parcelId: 'p2' }, routine: [ 'c1', 'c2', 'c3' ].map( ( id ) => ( { activity: 'shopping', place: { kind: 'parcel', id } } ) ) };
+		expect( places.destinations( { npc, from: [ 0, 0, 0 ], playerPlaces: [] } ).map( ( entry ) => [ entry.place.id, entry.name ] ) ).toEqual( [
+			[ 'p2', 'Bar Nadir' ], [ 'c1', 'the coffee shop to the east' ], [ 'c2', 'the coffee shop to the north' ]
+		] );
+
+	} );
+
 	it( 'leaves out what is too near, too far or has no way there', () => {
 
 		const places = setup( ( from, to ) => to[ 0 ] === 400 ? null : { distanceMeters: Math.abs( to[ 0 ] - from[ 0 ] ) } );

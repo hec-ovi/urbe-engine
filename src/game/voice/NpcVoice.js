@@ -14,7 +14,7 @@ const PERSONA_MAX = 4000;
 const RECHECK_MS = 30000;
 /** Voice queues at most this many prefetched lines. */
 const PREFETCH_MAX = 8;
-/** Lines failing in a row with 502 (Voice answers, its model server does not) before Voice is rested like a 503. */
+/** Lines failing in a row with 502, or breaking off after their audio started (Voice answers, its model server does not), before Voice is rested like a 503. */
 const UPSTREAM_FAILURES = 2;
 const GENDERS = new Set( [ 'male', 'female' ] );
 /** A line with a letter or digit outside its [cue] tags has something to say. */
@@ -49,7 +49,7 @@ export class NpcVoice {
 	#batched = false;
 	#checking = null;
 	#retryAt = 0;
-	/** Lines failed in a row with 502. */
+	/** Lines failed in a row with 502 or broken off. */
 	#upstreamFailures = 0;
 	/** Utterances still to finish per chat line, which is marked speaking until none are left. */
 	#lines = new Map();
@@ -238,6 +238,7 @@ export class NpcVoice {
 	async #load( utterance ) {
 
 		const { speaker, text, key, controller, playback, reached } = utterance;
+		let answered = false;
 		try {
 
 			const cached = this.cache.get( key );
@@ -250,8 +251,8 @@ export class NpcVoice {
 			}
 			this.stats.requested ++;
 			const response = await this.client.speak( { text, speaker }, { signal: controller.signal } );
+			answered = true;
 			reached.resolve();
-			this.#upstreamFailures = 0;
 			const decoder = new PcmStreamDecoder();
 			const whole = [];
 			const reader = response.body.getReader();
@@ -264,6 +265,7 @@ export class NpcVoice {
 
 			}
 			this.cache.set( key, joined( whole ) );
+			this.#upstreamFailures = 0;
 
 		} catch ( error ) {
 
@@ -272,7 +274,7 @@ export class NpcVoice {
 			this.stats.failed ++;
 			this.stats.error = error.message;
 			if ( error.status === 503 ) this.#unavailable( error.code === 'E_LOADING' ? 'loading' : 'unreachable' );
-			else if ( error.status === 502 && ++ this.#upstreamFailures >= UPSTREAM_FAILURES ) this.#unavailable( 'degraded' );
+			else if ( ( error.status === 502 || answered ) && ++ this.#upstreamFailures >= UPSTREAM_FAILURES ) this.#unavailable( 'degraded' );
 			console.warn( 'voice:', error.message );
 
 		} finally {

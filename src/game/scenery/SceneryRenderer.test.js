@@ -43,10 +43,12 @@ describe( 'scenery renderer', () => {
 			.toEqual( [ 'cyberpunk/metal/mid#paint', 'cyberpunk/plastic/poor#bag', 'cyberpunk/metal/mid#paint' ] );
 
 		// Only the body blocks: the drive is portable.
+		expect( renderer.footprints( 'courier-found' ) ).toEqual( [ entity.footprint ] );
 		const colliders = physics.world.colliders.len();
 		renderer.unrealize( 'courier-found' );
 		expect( physics.world.colliders.len() ).toBe( colliders - 1 );
 		expect( renderer.group.children ).toHaveLength( 0 );
+		expect( renderer.footprints( 'courier-found' ) ).toEqual( [] );
 		expect( poser.release ).toHaveBeenCalledExactlyOnceWith( root );
 		expect( lighting.releaseRoot ).toHaveBeenCalledExactlyOnceWith( root );
 
@@ -76,6 +78,10 @@ describe( 'scenery renderer', () => {
 		await renderer.realize( assembly );
 		expect( visuals.focus( 'courier' ) ).not.toBeNull();
 		expect( visuals.focus( 'drive' ) ).toBeNull();
+		// A body taken out blocks nobody.
+		expect( renderer.footprints( 'courier-found' ) ).toHaveLength( 1 );
+		visuals.collect( 'courier' );
+		expect( renderer.footprints( 'courier-found' ) ).toEqual( [] );
 
 	} );
 

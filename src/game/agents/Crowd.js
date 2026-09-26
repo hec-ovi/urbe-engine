@@ -38,6 +38,8 @@ const SPAWN_TRIES = 6;
 const PERSON_HEIGHT = 2;
 /** How far around a walker talk looks for the street they belong to. */
 const STREET_REACH = 25;
+/** How near a blocked footprint a walker looks at their next step: more than anybody walks in a frame. */
+const BLOCK_LOOK = 1;
 
 /**
  * The people in the world, all of them real. Two sources, both the simulation
@@ -63,7 +65,11 @@ const STREET_REACH = 25;
  */
 export class Crowd {
 
-	constructor( { assets, routes, signals, sim, places, capacity, spawnRadius = SPAWN_RADIUS, stress = 0, continuity = null, street = streetBodies, lighting = null } ) {
+	/**
+	 * @param blockers what walkers keep out of now: a function returning solid
+	 * footprints on the pavement, `[{ center: { x, z }, width, depth, yawRadians }]`
+	 */
+	constructor( { assets, routes, signals, sim, places, capacity, spawnRadius = SPAWN_RADIUS, stress = 0, continuity = null, street = streetBodies, lighting = null, blockers = () => [] } ) {
 
 		this.assets = assets;
 		this.street = street;
@@ -76,6 +82,7 @@ export class Crowd {
 		this.stress = stress;
 		this.continuity = continuity;
 		this.lighting = lighting;
+		this.blockers = blockers;
 		if ( lighting ) for ( let variant = 0; variant < assets.variants.length; variant ++ ) {
 
 			for ( const mesh of assets.meshesOf( variant ) ) lighting.attach( mesh.mesh, capacity );
@@ -286,9 +293,10 @@ export class Crowd {
 
 		}
 
+		const blocked = this.blockers();
 		for ( const member of this.members.values() ) {
 
-			this.#advance( member, delta, clock.daySeconds );
+			this.#advance( member, delta, clock.daySeconds, blocked );
 
 		}
 
@@ -1278,13 +1286,13 @@ export class Crowd {
 
 	}
 
-	#advance( member, delta, daySeconds ) {
+	#advance( member, delta, daySeconds, blocked ) {
 
 		if ( ! member.stationary && ! member.frozen ) {
 
-			const blocked = member.waiting && ! this.signals.green( member.pendingSignal, daySeconds );
+			const held = member.waiting && ! this.signals.green( member.pendingSignal, daySeconds );
 
-			if ( blocked ) {
+			if ( held ) {
 
 				member.clip = CLIP.IDLE;
 
@@ -1292,9 +1300,15 @@ export class Crowd {
 
 				member.waiting = false;
 				member.clip = CLIP.WALK;
-				member.distance += member.speed * delta;
+				const distance = member.distance + member.speed * delta;
 
-				if ( member.distance >= member.edge.length ) this.#step( member, daySeconds );
+				if ( this.#walksInto( member, distance, blocked ) ) this.#turnBack( member );
+				else {
+
+					member.distance = distance;
+					if ( member.distance >= member.edge.length ) this.#step( member, daySeconds );
+
+				}
 
 			}
 
@@ -1304,6 +1318,33 @@ export class Crowd {
 
 		const duration = this.assets.durations[ member.clip ] || 1;
 		member.frame = ( member.frame + ( delta / duration ) * FRAMES ) % FRAMES;
+
+	}
+
+	/**
+	 * Whether the step to `distance` takes a walker into a blocked footprint
+	 * it is not already inside; one already inside walks out.
+	 */
+	#walksInto( member, distance, blocked ) {
+
+		let next = null;
+		for ( const footprint of blocked ) {
+
+			if ( ! covers( footprint, member.position, PERSON_RADIUS + BLOCK_LOOK ) || covers( footprint, member.position, PERSON_RADIUS ) ) continue;
+			next ??= standing( member.edge, this.routes.pointAt( member.edge, Math.min( distance, member.edge.length ), member.direction ), member.offset );
+			if ( covers( footprint, next, PERSON_RADIUS ) ) return true;
+
+		}
+		return false;
+
+	}
+
+	/** Walks back the way the walker came, from where they stand. */
+	#turnBack( member ) {
+
+		member.direction *= - 1;
+		member.distance = member.edge.length - Math.min( member.distance, member.edge.length );
+		member.offset = - member.offset;
 
 	}
 
@@ -1482,6 +1523,17 @@ function angleTo( from, to ) {
 
 /** How far off the middle of a pavement a walker may keep, by its width. A
  *  stretch that publishes no width is walked down the middle. */
+/** Whether a point on the ground lies in a footprint grown by `margin` on every side. */
+function covers( { center, width, depth, yawRadians }, point, margin ) {
+
+	const dx = point.x - center.x;
+	const dz = point.z - center.z;
+	const cos = Math.cos( yawRadians );
+	const sin = Math.sin( yawRadians );
+	return Math.abs( dx * cos - dz * sin ) <= width / 2 + margin && Math.abs( dx * sin + dz * cos ) <= depth / 2 + margin;
+
+}
+
 function laneRoom( edge ) {
 
 	return edge.width > 0 ? Math.max( 0, Math.min( LANE_HALF, edge.width / 2 - PERSON_RADIUS ) ) : 0;

@@ -2,24 +2,32 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:urbe:engine:server:talk-memory",
   "title": "What people remember of talking with the player in one served world",
-  "description": "The body of PUT /api/talk/memory and the answer to GET /api/talk/memory: the world's out path and a save's dialogue memory, at most 200 people with at most 24 notes and 24 turns each.",
+  "description": "The body of PUT /api/talk/memory: the world's out path and a save's dialogue memory, which the server keeps bounded as #/$defs/kept. The answer to GET /api/talk/memory is #/$defs/kept: at most 200 people with at most 24 notes and 24 turns each.",
   "type": "object",
   "additionalProperties": false,
   "required": ["out", "memory"],
   "properties": {
     "out": { "$ref": "urn:urbe:engine:server:talk-request#/properties/out" },
-    "memory": {
-      "$ref": "urn:urbe:engine:library:dialogue-memory",
-      "type": "array",
-      "maxItems": 200,
-      "items": {
-        "type": "object",
-        "properties": {
-          "memory": {
+    "memory": { "$ref": "urn:urbe:engine:library:dialogue-memory" }
+  },
+  "$defs": {
+    "kept": {
+      "$ref": "#",
+      "type": "object",
+      "properties": {
+        "memory": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
             "type": "object",
             "properties": {
-              "digest": { "type": "array", "maxItems": 24 },
-              "turns": { "type": "array", "maxItems": 24 }
+              "memory": {
+                "type": "object",
+                "properties": {
+                  "digest": { "type": "array", "maxItems": 24 },
+                  "turns": { "type": "array", "maxItems": 24 }
+                }
+              }
             }
           }
         }

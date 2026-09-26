@@ -257,6 +257,30 @@ describe( 'NpcVoice', () => {
 
 	} );
 
+	it( 'rests Voice once two lines in a row break off after their audio starts', async () => {
+
+		const { voice, client } = rig();
+		const say = async ( id ) => {
+
+			voice.said( { conversation: conversation(), line: { id }, text: `Line ${id}.` } );
+			await flush();
+
+		};
+		await say( 'a' );
+		answer( client.lines[ 0 ], { breaks: true } );
+		await say( 'b' );
+		answer( client.lines[ 1 ] );
+		await say( 'c' );
+		answer( client.lines[ 2 ], { breaks: true } );
+		await say( 'd' );
+		expect( voice.report() ).toMatchObject( { status: 'ok', failed: 2 } );
+		answer( client.lines[ 3 ], { breaks: true } );
+		await say( 'e' );
+		expect( client.speak ).toHaveBeenCalledTimes( 4 );
+		expect( voice.report() ).toMatchObject( { status: 'degraded', failed: 3 } );
+
+	} );
+
 	it( 'replays a line heard whole from the session cache and asks again for one that broke off, playing what came', async () => {
 
 		const { voice, client, marks, context } = rig();

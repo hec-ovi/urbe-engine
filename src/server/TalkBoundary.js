@@ -1,12 +1,11 @@
 import Ajv2020 from 'ajv/dist/2020.js';
 import requestSchema from './schema/talk-request.schema.json' with { type: 'json' };
-import responseSchema from './schema/talk-response.schema.json' with { type: 'json' };
 import errorSchema from './schema/talk-error.schema.json' with { type: 'json' };
 import eventSchema from './schema/talk-stream-event.schema.json' with { type: 'json' };
 import memorySchema from './schema/talk-memory.schema.json' with { type: 'json' };
 import dialogueMemorySchema from '../library/schema/dialogue-memory.schema.json' with { type: 'json' };
 
-const schemas = { request: requestSchema, response: responseSchema, error: errorSchema, event: eventSchema, memory: memorySchema };
+const schemas = { request: requestSchema, error: errorSchema, event: eventSchema, memory: memorySchema };
 
 /** Exact JSON boundary for the development NPC dialogue routes. */
 export class TalkBoundary {
@@ -15,6 +14,7 @@ export class TalkBoundary {
 
 		const ajv = new Ajv2020( { allErrors: true, strict: true } ).addSchema( [ ...Object.values( schemas ), dialogueMemorySchema ] );
 		this.validators = Object.fromEntries( Object.entries( schemas ).map( ( [ name, schema ] ) => [ name, ajv.getSchema( schema.$id ) ] ) );
+		this.validators.kept = ajv.getSchema( `${memorySchema.$id}#/$defs/kept` );
 		this.validators.out = ajv.getSchema( `${requestSchema.$id}#/properties/out` );
 
 	}
@@ -22,12 +22,6 @@ export class TalkBoundary {
 	input( value ) {
 
 		return this.#validate( 'request', value, 'E_TALK_INPUT' );
-
-	}
-
-	output( value ) {
-
-		return this.#validate( 'response', value, 'E_TALK_OUTPUT' );
 
 	}
 
@@ -44,10 +38,17 @@ export class TalkBoundary {
 
 	}
 
-	/** A world's dialogue memory, going in (`E_TALK_INPUT`) or out (`E_TALK_OUTPUT`). */
-	memory( value, code = 'E_TALK_INPUT' ) {
+	/** A save's dialogue memory for one world, as a PUT hands it over. */
+	memory( value ) {
 
-		return this.#validate( 'memory', value, code );
+		return this.#validate( 'memory', value, 'E_TALK_INPUT' );
+
+	}
+
+	/** A world's dialogue memory as the server keeps it, as a GET answers it. */
+	kept( value ) {
+
+		return this.#validate( 'kept', value, 'E_TALK_OUTPUT' );
 
 	}
 

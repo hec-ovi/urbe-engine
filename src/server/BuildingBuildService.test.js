@@ -75,7 +75,7 @@ describe( 'POST /api/building', () => {
 
 		const malformed = await fetch( `${origin}/api/building`, { method: 'POST', body: '{' } );
 		expect( malformed.status ).toBe( 400 );
-		expect( await malformed.json() ).toEqual( { code: 'E_INVALID_REQUEST', message: 'request body is not valid JSON' } );
+		expect( await malformed.json() ).toEqual( { code: 'E_INVALID_REQUEST', message: expect.stringMatching( /^building request is not valid JSON/ ) } );
 
 	} );
 

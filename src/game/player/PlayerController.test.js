@@ -123,6 +123,29 @@ describe( 'PlayerController', () => {
 
 	} );
 
+	it( 'turns the view to a point the short way round, eased, and ends with the crosshair on it', () => {
+
+		const { controller } = harness();
+		controller.yaw = 3;
+		controller.frozen = true;
+		// Behind and to the left of a player looking along +Z, at eye height.
+		const target = new THREE.Vector3( 2, 1.7, - 2 );
+		controller.turnTo( target, 0.4 );
+		controller.update( 0.1 );
+		const early = controller.yaw;
+		controller.update( 0.1 );
+		const middle = controller.yaw;
+		expect( early - 3 ).toBeLessThan( middle - early );
+		controller.update( 0.25 );
+		expect( controller.turn ).toBeNull();
+		expect( controller.look.x ).toBeCloseTo( Math.SQRT1_2 );
+		expect( controller.look.z ).toBeCloseTo( - Math.SQRT1_2 );
+		expect( controller.pitch ).toBeCloseTo( 0 );
+		// The short way round: 2.5 rad on, not 3.8 back.
+		expect( controller.yaw ).toBeCloseTo( 7 * Math.PI / 4 );
+
+	} );
+
 } );
 
 function harness() {

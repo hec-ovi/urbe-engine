@@ -60,31 +60,6 @@ describe( 'playable game navigation', () => {
 
 	} );
 
-	it( 'hands the loaded memory to the dialogue server again before each save until it takes it, and saves no other memory meanwhile', async () => {
-
-		const { app } = savingApp();
-		const later = [ ...MEMORY, { npcId: 'npc-kip', memory: { digest: [], turns: [ { speaker: 'npc', text: 'Keep up.', atMin: 730 } ] } } ];
-		// The load's hand-off failed: the server holds none of the save's memory.
-		app.unrestoredMemory = MEMORY;
-		app.talk = { restoreMemory: vi.fn().mockRejectedValueOnce( new Error( 'talk 502' ) ).mockResolvedValue(), memory: vi.fn( async () => later ) };
-		vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
-		const save = async ( times ) => {
-
-			app.questNpcControl( { kind: 'start-follow', npcId: 'npc-kip' } );
-			await vi.waitFor( () => expect( app.persistence.save ).toHaveBeenCalledTimes( times ) );
-			return app.persistence.save.mock.calls[ times - 1 ][ 0 ];
-
-		};
-
-		expect( await save( 1 ) ).not.toHaveProperty( 'dialogueMemory' );
-		expect( app.talk.memory ).not.toHaveBeenCalled();
-		expect( console.warn ).toHaveBeenCalledWith( 'dialogue memory not restored:', 'talk 502' );
-		expect( await save( 2 ) ).toMatchObject( { dialogueMemory: later } );
-		expect( await save( 3 ) ).toMatchObject( { dialogueMemory: later } );
-		expect( app.talk.restoreMemory.mock.calls ).toEqual( [ [ MEMORY ], [ MEMORY ] ] );
-
-	} );
-
 	it( 'turns NPC voices on and off and sets their volume from the settings', async () => {
 
 		const app = new GameApp( {} );

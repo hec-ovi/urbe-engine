@@ -57,6 +57,14 @@ export class SceneryRenderer {
 
 	}
 
+	/** The footprints of one realized scene's elements that block movement and still show. */
+	footprints( sceneId ) {
+
+		const visuals = this.scenes.get( sceneId )?.visuals.values() ?? [];
+		return [ ...visuals ].filter( ( { object, entity } ) => entity?.blocksMovement && object.visible ).map( ( { entity } ) => entity.footprint );
+
+	}
+
 	/** Builds, warms and shows one scene; resolves false when it was unrealized meanwhile. */
 	async realize( assembly ) {
 

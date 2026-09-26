@@ -113,9 +113,44 @@ describe( 'TalkClient', () => {
 		expect( fetch.mock.calls[ 1 ][ 1 ].method ).toBe( 'PUT' );
 		expect( JSON.parse( fetch.mock.calls[ 1 ][ 1 ].body ) ).toEqual( { out: '/out/games/g 1', memory } );
 
-		vi.stubGlobal( 'fetch', async () => Response.json( { error: 'talk memory does not match its contract' }, { status: 400 } ) );
-		await expect( client.restoreMemory( memory ) ).rejects.toMatchObject( { message: 'talk memory does not match its contract', status: 400 } );
-		await expect( client.memory() ).rejects.toMatchObject( { status: 400 } );
+		vi.stubGlobal( 'fetch', async () => Response.json( { error: 'no world at /out/games/g 1' }, { status: 502 } ) );
+		await expect( client.memory() ).rejects.toMatchObject( { message: 'no world at /out/games/g 1', status: 502 } );
+
+	} );
+
+	it( 'hands a save\'s memory over before any talk or memory read until the server takes it, once at a time', async () => {
+
+		const memory = [ { npcId: 'n1', memory: { digest: [ 'Owes the player.' ], turns: [] } } ];
+		const puts = [];
+		let refuse = true;
+		const fetch = vi.fn( async ( url, init ) => {
+
+			if ( init?.method === 'PUT' ) {
+
+				puts.push( JSON.parse( init.body ) );
+				return refuse ? Response.json( { error: 'model server down' }, { status: 502 } ) : new Response( null, { status: 204 } );
+
+			}
+			if ( url.startsWith( '/api/talk/memory' ) ) return Response.json( { out: '/out/w', memory } );
+			return streamed( '{"type":"done","reply":"Hi."}\n' );
+
+		} );
+		vi.stubGlobal( 'fetch', fetch );
+		const client = new TalkClient( '/out/w' );
+
+		await expect( client.restoreMemory( memory ) ).rejects.toMatchObject( { status: 502 } );
+		// Nothing is said, or read for a save, without the saved memory in place.
+		await expect( collect( client.stream( conversation, 'Hello', 0 ) ) ).rejects.toMatchObject( { message: 'model server down' } );
+		await expect( client.memory() ).rejects.toMatchObject( { status: 502 } );
+		expect( fetch.mock.calls.filter( ( [ url ] ) => url !== '/api/talk/memory' ) ).toEqual( [] );
+
+		refuse = false;
+		await Promise.all( [ collect( client.stream( conversation, 'Hello', 0 ) ), client.memory() ] );
+		await client.memory();
+		expect( puts ).toEqual( Array( 4 ).fill( { out: '/out/w', memory } ) );
+		expect( fetch.mock.calls.map( ( [ url, init ] ) => `${init?.method ?? 'GET'} ${url.split( '?' )[ 0 ]}` ).slice( - 4 ) ).toEqual( [
+			'PUT /api/talk/memory', 'POST /api/talk/stream', 'GET /api/talk/memory', 'GET /api/talk/memory'
+		] );
 
 	} );
 

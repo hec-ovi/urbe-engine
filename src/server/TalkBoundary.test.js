@@ -81,8 +81,30 @@ describe( 'talk request contract', () => {
 			{ ...request, npc: { ...npc, traits: [ 'calm', 'calm' ] } },
 			{ ...request, npc: { ...npc, age: 41.5 } },
 			{ ...request, offers: { follow: true, ride: true } },
-			{ ...request, guide: { placeId: 'p_rest', kind: 'route' } }
+			{ ...request, guide: { placeId: 'p_rest', kind: 'route' } },
+			{ ...request, line: 'x'.repeat( 2001 ) },
+			{ ...request, guide: { placeId: 'p_rest', kind: 'parcel', notes: [ 'x'.repeat( 2001 ) ] } }
 		] ) expect( () => boundary.input( invalid ) ).toThrow( /does not match its contract/ );
+		expect( boundary.input( { ...request, line: 'x'.repeat( 2000 ) } ) ).toBeTruthy();
+
+	} );
+
+	it( 'takes in any save\'s dialogue memory and answers with what the server keeps', () => {
+
+		const turn = { speaker: 'npc', text: 'Hi.', atMin: 1 };
+		const person = ( at, turns ) => ( { npcId: `n${at}`, memory: { digest: [], turns: Array( turns ).fill( turn ) } } );
+		const saved = { out: '/out/games/g', memory: [ person( 0, 26 ) ] };
+		expect( boundary.memory( saved ) ).toBe( saved );
+		expect( boundary.memory( { ...saved, memory: Array.from( { length: 201 }, ( _, at ) => person( at, 1 ) ) } ) ).toBeTruthy();
+		expect( () => boundary.kept( saved ) ).toThrow( /talk kept does not match its contract: \/memory\/0\/memory\/turns/ );
+		expect( () => boundary.kept( { ...saved, memory: Array.from( { length: 201 }, ( _, at ) => person( at, 1 ) ) } ) ).toThrow( /\/memory must NOT have more than 200 items/ );
+		expect( boundary.kept( { ...saved, memory: [ person( 0, 24 ) ] } ) ).toBeTruthy();
+		for ( const invalid of [ { ...saved, memory: [ { npcId: 'x', memory: { turns: [] } } ] }, { ...saved, out: '/out/../src' }, { ...saved, extra: 1 } ] ) {
+
+			expect( () => boundary.memory( invalid ) ).toThrow( /talk memory does not match its contract/ );
+			expect( () => boundary.kept( invalid ) ).toThrow( /talk kept does not match its contract/ );
+
+		}
 
 	} );
 

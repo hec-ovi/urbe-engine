@@ -1,4 +1,5 @@
 import { VENUES } from '../../../../quests/dist/runtime.js';
+import { COMPASS } from './CompanionLines.js';
 
 /** Farthest a person leads the player, along the pavement, in metres. */
 const MAX_LEAD = 800;
@@ -57,7 +58,9 @@ export class CompanionPlaces {
 	 * The places one person could lead the player to from `from`, best first:
 	 * by relation, then by the length of the walk, then by place id. A place
 	 * the player stands in, one the city cannot place or name, and one out of
-	 * reach are left out.
+	 * reach are left out. Offered places that would read the same are named
+	 * with the compass point they lie toward (`the shop to the north`); of
+	 * those that still read the same, the first is kept.
 	 * @param npc the simulation instance: job, transit job, home and routine
 	 * @param quests open quest place targets `{ questId, stepId, place }`
 	 * @param scenes staged scenery places `{ place, name, relation: 'scene', notes? }`
@@ -98,9 +101,17 @@ export class CompanionPlaces {
 			found.push( { ...candidate, name, distance: route.distanceMeters } );
 
 		}
-		return found
+		const offered = found
 			.sort( ( a, b ) => RANK[ a.relation ] - RANK[ b.relation ] || a.distance - b.distance || keyOf( a.place ).localeCompare( keyOf( b.place ) ) )
 			.slice( 0, MAX_PLACES );
+		const counts = new Map();
+		for ( const { name } of offered ) counts.set( name, ( counts.get( name ) ?? 0 ) + 1 );
+		const shown = new Set();
+		return offered
+			.map( ( entry ) => counts.get( entry.name ) > 1
+				? { ...entry, name: this.lines.say( `name-${bearing( from, this.positions.get( keyOf( entry.place ) ) )}`, { place: entry.name } ) }
+				: entry )
+			.filter( ( { name } ) => ! shown.has( name ) && shown.add( name ) );
 
 	}
 
@@ -126,6 +137,14 @@ export function standsIn( playerPlaces, place ) {
 function keyOf( place ) {
 
 	return `${place.kind}:${place.id}`;
+
+}
+
+/** The compass point `to` lies toward from `from`. */
+function bearing( from, to ) {
+
+	const turns = Math.atan2( to[ 0 ] - from[ 0 ], from[ 2 ] - to[ 2 ] ) / ( 2 * Math.PI );
+	return COMPASS[ ( Math.round( turns * COMPASS.length ) + COMPASS.length ) % COMPASS.length ];
 
 }
 

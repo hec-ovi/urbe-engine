@@ -16,50 +16,28 @@ describe( 'NPC dialogue HTTP boundary', () => {
 
 	} );
 
-	it( 'accepts the exact GameApp snapshot including quests and returns the closed reply shape', async () => {
+	it( 'refuses malformed, invalid or oversized requests before inference', async () => {
 
-		const service = { reply: vi.fn( async () => 'Meet me by the station.' ) };
+		const service = { stream: vi.fn() };
 		const origin = await serve( service );
-		const request = talkRequest();
-		const response = await post( origin, '/api/talk', JSON.stringify( request ) );
-		expect( response.status ).toBe( 200 );
-		expect( await response.json() ).toEqual( { reply: 'Meet me by the station.' } );
-		expect( service.reply ).toHaveBeenCalledWith( request, { signal: expect.any( AbortSignal ) } );
+		for ( const body of [
+			'{',
+			JSON.stringify( { ...talkRequest(), unknown: true } ),
+			JSON.stringify( { ...talkRequest(), npc: { ...talkRequest().npc, mood: 'tired' } } ),
+			JSON.stringify( { ...talkRequest(), timeMin: 'now' } ),
+			JSON.stringify( { ...talkRequest(), out: '/out/../src' } ),
+			JSON.stringify( { ...talkRequest(), line: 'x'.repeat( 2001 ) } )
+		] ) {
 
-	} );
-
-	it( 'refuses malformed or invalid requests before inference and reports service failures as a bad gateway', async () => {
-
-		const service = { reply: vi.fn(), stream: vi.fn() };
-		const origin = await serve( service );
-		for ( const path of [ '/api/talk', '/api/talk/stream' ] ) {
-
-			for ( const body of [
-				'{',
-				JSON.stringify( { ...talkRequest(), unknown: true } ),
-				JSON.stringify( { ...talkRequest(), npc: { ...talkRequest().npc, mood: 'tired' } } ),
-				JSON.stringify( { ...talkRequest(), timeMin: 'now' } ),
-				JSON.stringify( { ...talkRequest(), out: '/out/../src' } )
-			] ) {
-
-				const response = await post( origin, path, body );
-				expect( response.status ).toBe( 400 );
-				expect( await response.json() ).toEqual( { error: expect.any( String ) } );
-
-			}
+			const response = await post( origin, '/api/talk/stream', body );
+			expect( response.status ).toBe( 400 );
+			expect( await response.json() ).toEqual( { error: expect.any( String ) } );
 
 		}
-		expect( service.reply ).not.toHaveBeenCalled();
+		const oversized = await post( origin, '/api/talk/stream', JSON.stringify( { ...talkRequest(), padding: 'x'.repeat( 256 * 1024 ) } ) );
+		expect( oversized.status ).toBe( 413 );
+		expect( await oversized.json() ).toEqual( { error: 'talk request is over 262144 bytes' } );
 		expect( service.stream ).not.toHaveBeenCalled();
-
-		for ( const failure of [ new Error( 'text model unavailable' ), new SyntaxError( 'model or world response is malformed' ) ] ) {
-
-			const failing = await serve( { reply: vi.fn( async () => { throw failure; } ) } );
-			const response = await post( failing, '/api/talk', JSON.stringify( talkRequest() ) );
-			expect( response.status ).toBe( 502 );
-			expect( await response.json() ).toEqual( { error: failure.message } );
-
-		}
 
 	} );
 
@@ -147,9 +125,12 @@ describe( 'NPC dialogue HTTP boundary', () => {
 		expect( replaced.status ).toBe( 204 );
 		expect( service.restoreMemory ).toHaveBeenCalledExactlyOnceWith( out, memory );
 
-		for ( const body of [ '{', JSON.stringify( { out: '/out/../src', memory } ), JSON.stringify( { out, memory: [ { npcId: 'x', memory: { turns: [] } } ] } ),
-			JSON.stringify( { out, memory: Array.from( { length: 201 }, ( _, at ) => ( { npcId: `n${at}`, memory: { digest: [], turns: [] } } ) ) } ),
-			JSON.stringify( { out, memory: [ { npcId: 'x', memory: { digest: [], turns: Array( 25 ).fill( memory[ 0 ].memory.turns[ 0 ] ) } } ] } ) ] ) {
+		// A save may hold more than the server keeps: it takes the whole and keeps its bounded part.
+		const long = [ { npcId: 'x', memory: { digest: [], turns: Array( 25 ).fill( memory[ 0 ].memory.turns[ 0 ] ) } } ];
+		expect( ( await put( JSON.stringify( { out, memory: long } ) ) ).status ).toBe( 204 );
+		expect( service.restoreMemory ).toHaveBeenLastCalledWith( out, long );
+
+		for ( const body of [ '{', JSON.stringify( { out: '/out/../src', memory } ), JSON.stringify( { out, memory: [ { npcId: 'x', memory: { turns: [] } } ] } ) ] ) {
 
 			const refused = await put( body );
 			expect( refused.status ).toBe( 400 );
@@ -157,8 +138,13 @@ describe( 'NPC dialogue HTTP boundary', () => {
 
 		}
 		for ( const query of [ '', '?out=%2Fetc' ] ) expect( ( await fetch( `${origin}/api/talk/memory${query}` ) ).status ).toBe( 400 );
-		expect( service.restoreMemory ).toHaveBeenCalledOnce();
+		expect( service.restoreMemory ).toHaveBeenCalledTimes( 2 );
 		expect( service.memory ).toHaveBeenCalledOnce();
+
+		const beyond = await serve( { memory: vi.fn( async () => long ) } );
+		const unkept = await fetch( `${beyond}/api/talk/memory?out=${encodeURIComponent( out )}` );
+		expect( unkept.status ).toBe( 502 );
+		expect( ( await unkept.json() ).error ).toMatch( /talk kept does not match its contract/ );
 
 		const failing = await serve( { memory: vi.fn( async () => { throw new Error( 'no world at /out/games/night-shift' ); } ) } );
 		const failed = await fetch( `${failing}/api/talk/memory?out=${encodeURIComponent( out )}` );
@@ -169,9 +155,9 @@ describe( 'NPC dialogue HTTP boundary', () => {
 
 	it( 'leaves other methods and paths to the next middleware', async () => {
 
-		const origin = await serve( { reply: vi.fn(), stream: vi.fn() } );
+		const origin = await serve( { stream: vi.fn() } );
 		expect( ( await fetch( `${origin}/api/talk` ) ).status ).toBe( 404 );
-		expect( ( await post( origin, '/api/talk/other', JSON.stringify( talkRequest() ) ) ).status ).toBe( 404 );
+		for ( const path of [ '/api/talk', '/api/talk/other' ] ) expect( ( await post( origin, path, JSON.stringify( talkRequest() ) ) ).status ).toBe( 404 );
 
 	} );
 

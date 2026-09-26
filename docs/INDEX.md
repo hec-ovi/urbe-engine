@@ -47,7 +47,7 @@
 | `persistence` | Coherent live state and acknowledged Library revisions | [Contract and schemas](../src/game/persistence/CONTRACT.md) |
 | `debug` | Frame/subsystem timing, renderer allocation reports and the automation probe | [Contract](../src/game/debug/CONTRACT.md), [report](../src/game/debug/report.schema.json) |
 | `voice` | NPC lines spoken in each person's voice through the Voice box and Web Audio | [Contract](../src/game/voice/CONTRACT.md), [line request](../src/server/schema/voice-request.schema.json) |
-| `time`, `world`, `talk` | Host clock, spatial queries, map values, text transport and the dialogue memory a save keeps | [Game](../src/game/CONTRACT.md), [talk request](../src/server/schema/talk-request.schema.json), [reply](../src/server/schema/talk-response.schema.json), [memory](../src/server/schema/talk-memory.schema.json) |
+| `time`, `world`, `talk` | Host clock, spatial queries, map values, text transport and the dialogue memory a save keeps | [Game](../src/game/CONTRACT.md), [talk request](../src/server/schema/talk-request.schema.json), [reply events](../src/server/schema/talk-stream-event.schema.json), [memory](../src/server/schema/talk-memory.schema.json) |
 
 Catalogs preserve tapered upper outlines for distant rendering; authored podium lights and reflective black glazing use their source properties.
 

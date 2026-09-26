@@ -176,8 +176,6 @@ export class GameApp {
 		this.dialogueActions = new Map();
 		/** A leader's arrival while it opens its conversation, or null. */
 		this.arriving = null;
-		/** The loaded save's dialogue memory until the dialogue server holds it, else null. */
-		this.unrestoredMemory = null;
 		this.talk = new TalkClient( config.outBase );
 		this.view = new GameView( {
 			onResume: () => this.input?.requestLock(),
@@ -268,9 +266,10 @@ export class GameApp {
 		} );
 		this.persistence = game ? new GamePersistence( { game, gameId: config.gameId } ) : null;
 		// What people remember of talking with the player is the save's: the
-		// dialogue server takes it back beside the load.
-		this.unrestoredMemory = game ? game.dialogueMemory ?? [] : null;
-		const remembering = this.#restoreMemory();
+		// dialogue server takes it back beside the load, or before the first
+		// talk or save that finds it has not.
+		const remembering = game && this.talk.restoreMemory( game.dialogueMemory ?? [] )
+			.catch( ( error ) => console.warn( 'dialogue memory not restored yet:', error.message ) );
 		const stationAccess = new StationAccess( atlas );
 		this.locator = new Locator( atlas, transitRoutes, stationAccess.entrances, {
 			buildingFootprints: occupiedBuildingFootprints( shellCatalog, buildings )
@@ -506,7 +505,9 @@ export class GameApp {
 			spawnRadius: config.crowdRadius,
 			stress: config.stress,
 			continuity: this.npcContinuity,
-			lighting: actorLighting
+			lighting: actorLighting,
+			// Walkers keep out of the bodies a street scene stands.
+			blockers: () => this.scenery?.blockers() ?? []
 		} );
 		this.hero = await HeroCharacter.create( {
 			animation: assets.animation,
@@ -1698,7 +1699,7 @@ export class GameApp {
 	/**
 	 * Saves the game as it stands. What people remember of talking with the
 	 * player is read from the dialogue server first; when it cannot be read,
-	 * or the server does not hold the loaded save's memory yet, the save keeps
+	 * or the server cannot take the loaded save's memory yet, the save keeps
 	 * the memory it holds.
 	 */
 	async #saveCurrent() {
@@ -1734,39 +1735,15 @@ export class GameApp {
 
 	}
 
-	/** What people remember for a save, or null while the server does not hold the loaded memory or cannot give it. */
-	async #dialogueMemory() {
+	/** What people remember for a save, or null while the server cannot give it. */
+	#dialogueMemory() {
 
-		if ( ! await this.#restoreMemory() ) return null;
 		return this.talk.memory().catch( ( error ) => {
 
 			console.warn( 'dialogue memory not saved:', error.message );
 			return null;
 
 		} );
-
-	}
-
-	/**
-	 * Hands the loaded save's dialogue memory to the server while it does not
-	 * hold it: at load, and again before each save until it takes it. True
-	 * once the server holds it.
-	 */
-	async #restoreMemory() {
-
-		if ( ! this.unrestoredMemory ) return true;
-		try {
-
-			await this.talk.restoreMemory( this.unrestoredMemory );
-			this.unrestoredMemory = null;
-			return true;
-
-		} catch ( error ) {
-
-			console.warn( 'dialogue memory not restored:', error.message );
-			return false;
-
-		}
 
 	}
 

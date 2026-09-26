@@ -1,19 +1,43 @@
-/** Request and response pieces the dialogue and voice routes share. */
+/** Request and response pieces the development routes share. */
 
-/** The request body parsed as JSON; `what` names the route in the error. */
-export async function readJson( req, what ) {
+/** A request body the route refuses before it reads it as a request: not JSON (400) or over its size (413). */
+export class BodyError extends Error {
+
+	constructor( status, message ) {
+
+		super( message );
+		this.status = status;
+		this.code = 'E_INVALID_REQUEST';
+
+	}
+
+}
+
+/**
+ * The request body parsed as JSON; `what` names the route in the error. A
+ * body over `limit` bytes is refused without reading the rest into memory.
+ * @throws BodyError
+ */
+export async function readJson( req, what, limit ) {
 
 	const text = await new Promise( ( resolve, reject ) => {
 
-		let body = '';
-		req.setEncoding( 'utf8' );
-		req.on( 'data', ( chunk ) => body += chunk );
-		req.on( 'end', () => resolve( body ) );
+		let size = 0;
+		const chunks = [];
+		req.on( 'data', ( chunk ) => {
+
+			if ( size > limit ) return;
+			size += chunk.length;
+			if ( size <= limit ) chunks.push( chunk );
+			else reject( new BodyError( 413, `${what} request is over ${limit} bytes` ) );
+
+		} );
+		req.on( 'end', () => resolve( Buffer.concat( chunks ).toString( 'utf8' ) ) );
 		req.on( 'error', reject );
 
 	} );
 	try { return JSON.parse( text ); }
-	catch ( cause ) { throw new Error( `${what} request is not valid JSON: ${messageOf( cause )}` ); }
+	catch ( cause ) { throw new BodyError( 400, `${what} request is not valid JSON: ${messageOf( cause )}` ); }
 
 }
 
@@ -21,6 +45,7 @@ export function sendJson( res, status, payload ) {
 
 	res.statusCode = status;
 	res.setHeader( 'Content-Type', 'application/json' );
+	res.setHeader( 'Cache-Control', 'no-store' );
 	res.end( JSON.stringify( payload ) );
 
 }

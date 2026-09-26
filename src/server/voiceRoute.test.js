@@ -103,6 +103,9 @@ describe( 'NPC speech HTTP boundary', () => {
 			expect( await response.json() ).toEqual( { error: expect.any( String ), code: 'E_INVALID_REQUEST' } );
 
 		}
+		const oversized = await post( origin, '/api/voice/prefetch', JSON.stringify( { group: 'g', lines: [ { text: 'x'.repeat( 256 * 1024 ), speaker: SPEAKER } ] } ) );
+		expect( oversized.status ).toBe( 413 );
+		expect( await oversized.json() ).toEqual( { error: 'voice request is over 262144 bytes', code: 'E_INVALID_REQUEST' } );
 		expect( voice.lines ).toEqual( [] );
 
 	} );

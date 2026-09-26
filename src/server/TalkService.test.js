@@ -81,7 +81,12 @@ function fakeModel( ...scripts ) {
 
 }
 
-const say = ( service, line, extra = {} ) => service.reply( { out: '/out/w', npc, behavior, line, timeMin: 600, ...extra } );
+/** The NPC's whole reply to `line`: the stream's `done`. */
+async function say( service, line, extra = {} ) {
+
+	for await ( const event of service.stream( { out: '/out/w', npc, behavior, line, timeMin: 600, ...extra } ) ) if ( event.type === 'done' ) return event.reply;
+
+}
 
 async function events( iterable ) {
 

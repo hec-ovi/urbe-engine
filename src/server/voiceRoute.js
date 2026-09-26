@@ -6,6 +6,8 @@ import { VoiceError, VoicePort } from './VoicePort.js';
 
 /** What the browser learns about a line besides its audio: which render it is and whether it was cached. */
 const PASSED_HEADERS = [ 'content-length', 'x-voice-key', 'x-voice-cache' ];
+/** The largest voice request body: a batch of lines rendered ahead with their speakers. */
+const MAX_BYTES = 256 * 1024;
 
 /**
  * Vite plugin for NPC speech over the Voice box. GET /api/voice says whether
@@ -86,8 +88,8 @@ export function voiceRoute( port = VoicePort.fromEnv() ) {
 	async function admit( req, kind ) {
 
 		let value;
-		try { value = await readJson( req, 'voice' ); }
-		catch ( error ) { throw new VoiceError( 400, 'E_INVALID_REQUEST', messageOf( error ) ); }
+		try { value = await readJson( req, 'voice', MAX_BYTES ); }
+		catch ( error ) { throw new VoiceError( error.status ?? 400, 'E_INVALID_REQUEST', messageOf( error ) ); }
 		return boundary.check( kind, value );
 
 	}

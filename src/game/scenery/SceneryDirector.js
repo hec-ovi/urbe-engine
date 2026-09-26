@@ -156,6 +156,18 @@ export class SceneryDirector {
 
 	}
 
+	/**
+	 * What walkers keep out of: the footprints of the bodies and fixed props
+	 * standing in street scenes now, `[{ center: { x, z }, width, depth, yawRadians }]`.
+	 */
+	blockers() {
+
+		return [ ...this.scenes.values() ]
+			.filter( ( scene ) => scene.compiled?.assembly.frame.kind === 'street' )
+			.flatMap( ( scene ) => this.renderer.footprints( scene.spec.sceneId ) );
+
+	}
+
 	serialize() {
 
 		const states = [ ...this.scenes.values() ].map( ( scene ) => scene.kept ?? stateOf( scene ) );

@@ -1,5 +1,9 @@
 import { BuildingBuildService } from './BuildingBuildService.js';
 import { exteriorRoute } from './exteriorRoute.js';
+import { readJson, sendJson } from './routeHttp.js';
+
+/** The largest building request body: a parcel, an out path and an optional Exterior request. */
+const MAX_BYTES = 1024 * 1024;
 
 /** POST /api/building ensures that one selected Atlas parcel has the requested preview source. */
 export function buildingRoute( engineRoot, atlasDir, service = null ) {
@@ -17,16 +21,11 @@ export function buildingRoute( engineRoot, atlasDir, service = null ) {
 
 				try {
 
-					const result = await service.ensure( JSON.parse( await body( req ) ) );
-					send( res, 200, result );
+					sendJson( res, 200, await service.ensure( await readJson( req, 'building', MAX_BYTES ) ) );
 
 				} catch ( error ) {
 
-					const malformed = error instanceof SyntaxError;
-					send( res, malformed ? 400 : error.status ?? 500, {
-						code: malformed ? 'E_INVALID_REQUEST' : error.code ?? 'E_BUILD_FAILED',
-						message: malformed ? 'request body is not valid JSON' : error.message
-					} );
+					sendJson( res, error.status ?? 500, { code: error.code ?? 'E_BUILD_FAILED', message: error.message } );
 
 				}
 
@@ -34,26 +33,5 @@ export function buildingRoute( engineRoot, atlasDir, service = null ) {
 
 		}
 	};
-
-}
-
-function body( req ) {
-
-	return new Promise( ( resolve, reject ) => {
-
-		let text = '';
-		req.on( 'data', ( chunk ) => text += chunk );
-		req.on( 'end', () => resolve( text ) );
-		req.on( 'error', reject );
-
-	} );
-
-}
-
-function send( res, status, payload ) {
-
-	res.statusCode = status;
-	res.setHeader( 'Content-Type', 'application/json' );
-	res.end( JSON.stringify( payload ) );
 
 }

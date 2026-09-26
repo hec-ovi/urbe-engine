@@ -2,7 +2,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { generate, expandBuilding, makePlacementFixture } from '../../../../interior/src/index.ts';
 import { SceneryDirector } from './SceneryDirector.js';
-import { assets, crimeScene } from './scenery.test-fixtures.js';
+import { assets, crimeScene, LAMP, STREET_ATLAS } from './scenery.test-fixtures.js';
 
 let buildings;
 
@@ -20,6 +20,23 @@ const FAR = { x: 400, y: 0, z: 400 };
 const spec = ( extra = {} ) => crimeScene( { place: { kind: 'room', parcelId: 'p47', floor: 1, roomKinds: [ 'living', 'bedroom' ] }, ...extra } );
 
 describe( 'scenery lifecycle', () => {
+
+	it( 'tells walkers what stands in its street scenes, not in its rooms', () => {
+
+		const street = crimeScene( {
+			sceneId: 'hit', place: { kind: 'street', parcelId: 'p5' }, activeWhen: { kind: 'stepActive', stepId: 'arrive' },
+			actors: [ { actorId: 'victim', role: 'victim', identity: { kind: 'anonymous', gender: 'male', appearanceSeed: 1 }, pose: 'death-a', placement: { zone: 'center' } } ],
+			props: [ { propId: 'pool', kind: 'blood-pool', nearActorId: 'victim' } ]
+		} );
+		const { director, renderer, kill } = setup( [ spec( { activeWhen: { kind: 'stepActive', stepId: 'arrive' } } ), street ] );
+		kill( 'npc-courier' );
+		renderer.footprints.mockImplementation( ( sceneId ) => [ { sceneId } ] );
+		expect( director.blockers() ).toEqual( [] );
+		director.update( { timeMin: 10, feet: { x: 31, y: 0.2, z: 144 } } );
+		expect( [ director.isStaged( 'courier-found' ), director.isStaged( 'hit' ) ] ).toEqual( [ true, true ] );
+		expect( director.blockers() ).toEqual( [ { sceneId: 'hit' } ] );
+
+	} );
 
 	it( 'stays dormant until its condition holds, stages once with the dead cast person, and retires for good at the quest end', () => {
 
@@ -257,7 +274,7 @@ function setup( specs, { saved = [], overlay = null, animation = null, blocked =
 	const world = { quest, kill: ( npcId ) => dead.add( npcId ), shown: true, renderer: fakeRenderer() };
 	world.interiors = { floorShown: vi.fn( () => world.shown ) };
 	world.director = SceneryDirector.create( {
-		specs, session, sim, world: { buildings }, missionAssets: assets, interiors: world.interiors,
+		specs, session, sim, world: { buildings, atlas: STREET_ATLAS, obstacles: LAMP }, missionAssets: assets, interiors: world.interiors,
 		overlay, renderer: world.renderer, animation, saved
 	} );
 	return world;
@@ -274,7 +291,8 @@ function fakeRenderer() {
 		isRealized: ( sceneId ) => realized.has( sceneId ),
 		isPending: () => false,
 		visuals: vi.fn( ( sceneId ) => ( { sceneId } ) ),
-		taken: vi.fn( () => new Set() )
+		taken: vi.fn( () => new Set() ),
+		footprints: vi.fn( () => [] )
 	};
 
 }

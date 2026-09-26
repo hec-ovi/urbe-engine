@@ -9,6 +9,8 @@ const SENSITIVITY = 0.0022;
 const PITCH_LIMIT = Math.PI / 2 - 0.02;
 const BOB_RATE = 9.5;
 const BOB_AMOUNT = 0.035;
+/** How long the view takes to turn to something the game shows the player. */
+const TURN_SECONDS = 0.45;
 
 /**
  * First person: mouse look under pointer lock, WASD on the ground plane at
@@ -31,6 +33,8 @@ export class PlayerController {
 		this.frozen = false;
 		this.movementLocked = false;
 		this.carrierYaw = null;
+		/** A turn the game asked for, eased over its seconds, or null. */
+		this.turn = null;
 
 	}
 
@@ -41,9 +45,23 @@ export class PlayerController {
 
 	}
 
+	/**
+	 * Turns the view to `target` over `seconds`, easing in and out, the short
+	 * way round: the crosshair ends on the point.
+	 */
+	turnTo( target, seconds = TURN_SECONDS ) {
+
+		const eye = this.body.eye;
+		const yaw = Math.atan2( target.x - eye.x, target.z - eye.z ) + Math.PI;
+		const pitch = Math.atan2( target.y - eye.y, Math.hypot( target.x - eye.x, target.z - eye.z ) );
+		this.turn = { from: [ this.yaw, this.pitch ], by: [ angleDelta( yaw, this.yaw ), pitch - this.pitch ], seconds, at: 0 };
+
+	}
+
 	update( delta ) {
 
 		this.zoom.update( delta, this.input.zooming, this.input.locked && ! this.frozen );
+		this.#turn( delta );
 		this.#look();
 		this.#stance();
 
@@ -136,6 +154,18 @@ export class PlayerController {
 		this.body.endCarry( new THREE.Vector3().fromArray( position ) );
 		this.movementLocked = false;
 		this.carrierYaw = null;
+
+	}
+
+	#turn( delta ) {
+
+		if ( ! this.turn ) return;
+		const { from, by, seconds } = this.turn;
+		const done = Math.min( 1, ( this.turn.at += delta ) / seconds );
+		const eased = done * done * ( 3 - 2 * done );
+		this.yaw = from[ 0 ] + by[ 0 ] * eased;
+		this.pitch = from[ 1 ] + by[ 1 ] * eased;
+		if ( done === 1 ) this.turn = null;
 
 	}
 
