@@ -7,7 +7,8 @@
     "name": { "type": "string", "minLength": 1 },
     "seed": { "type": "string", "minLength": 1 },
     "size": { "enum": ["small", "medium", "large"] },
-    "districtCount": { "$ref": "#/$defs/districtCount" }
+    "districtCount": { "$ref": "#/$defs/districtCount" },
+    "features": { "$ref": "#/$defs/features" }
   },
   "additionalProperties": false,
   "$defs": {
@@ -18,6 +19,17 @@
       "minItems": 2,
       "items": false
     },
-    "districts": { "type": "integer", "minimum": 1, "maximum": 12 }
+    "districts": { "type": "integer", "minimum": 1, "maximum": 12 },
+    "features": {
+      "description": "Atlas `features` toggles: false is `--no-<feature>`. An omitted toggle, or true, keeps Atlas's default, on.",
+      "type": "object",
+      "properties": {
+        "highways": { "type": "boolean" },
+        "subways": { "type": "boolean" },
+        "alleys": { "type": "boolean" }
+      },
+      "minProperties": 1,
+      "additionalProperties": false
+    }
   }
 }

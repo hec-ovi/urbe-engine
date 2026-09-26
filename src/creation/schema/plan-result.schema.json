@@ -14,6 +14,10 @@
       "description": "The district range the plan was asked for, when it was.",
       "$ref": "urn:urbe:engine:creation:generate-city#/$defs/districtCount"
     },
+    "features": {
+      "description": "The Atlas feature toggles the plan was asked for, when they were.",
+      "$ref": "urn:urbe:engine:creation:generate-city#/$defs/features"
+    },
     "plannedAt": { "$ref": "urn:urbe:engine:library:city-descriptor#/$defs/timestamp" },
     "blueprint": {
       "description": "The Atlas plan, `blueprint.json` beside this descriptor in `out/plans/<id>`, and the bytes a build checks it still is.",

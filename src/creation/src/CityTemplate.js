@@ -2,6 +2,9 @@ import { randomUUID } from 'node:crypto';
 import templates from '../city-templates.json' with { type: 'json' };
 import { CreationError } from './CreationError.js';
 
+/** The Atlas features a city may turn off, in the order their `--no-<feature>` flags go. */
+const FEATURES = [ 'highways', 'subways', 'alleys' ];
+
 export class CityTemplate {
 
 	/** Refuses what the schema cannot say: a blank name or seed, and a district range that runs backwards. */
@@ -24,16 +27,20 @@ export class CityTemplate {
 		};
 		this.args = template.args;
 		/** The Atlas parameters asked for, handed to Atlas unchanged; the plan must record them. */
-		this.params = input.districtCount ? { districtCount: input.districtCount } : {};
+		this.params = {
+			...( input.districtCount && { districtCount: input.districtCount } ),
+			...( input.features && { features: input.features } )
+		};
 
 	}
 
 	command( blueprint ) {
 
-		const { districtCount } = this.params;
+		const { districtCount, features } = this.params;
 		return [
 			'run', 'generate', '--', '--seed', this.input.seed, '--out', blueprint, ...this.args,
-			...( districtCount ? [ '--district-count', districtCount.join( ',' ) ] : [] )
+			...( districtCount ? [ '--district-count', districtCount.join( ',' ) ] : [] ),
+			...FEATURES.filter( ( feature ) => features?.[ feature ] === false ).map( ( feature ) => `--no-${feature}` )
 		];
 
 	}

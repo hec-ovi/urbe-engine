@@ -310,22 +310,50 @@ describe( 'playable world creation contract', () => {
 
 		const asked = { districtCount: [ 4, 5 ] };
 		const plan = await creation.planCity( { name: 'Tide Ward', seed: 'tide-1', size: 'medium', ...asked } );
-		expect( fixture.calls[ 0 ].args.slice( 7 ) ).toEqual( [ '--size', '1000', '--no-trains', '--district-count', '4,5' ] );
+		expect( fixture.calls[ 0 ].args.slice( 7 ) ).toEqual( [ '--size', '1000', '--district-count', '4,5' ] );
 		expect( plan ).toMatchObject( { id: 'tide-ward', seed: 'tide-1', ...asked } );
 		expect( await readJson( join( fixture.config.outDir, 'plans/tide-ward/plan.json' ) ) ).toEqual( plan );
 		await creation.buildCity( { cityId: plan.id } );
-		expect( ( await readJson( join( fixture.config.outDir, 'cities/tide-ward/blueprint.json' ) ) ).meta.params ).toEqual( asked );
+		expect( ( await readJson( join( fixture.config.outDir, 'cities/tide-ward/blueprint.json' ) ) ).meta.params ).toMatchObject( asked );
 
 		// Omitted, Atlas gets today's command and the plan records nothing more.
 		const bare = await creation.planCity( { name: 'Bare Tide', seed: 'bare', size: 'small' } );
-		expect( fixture.calls.at( - 1 ).args.slice( 7 ) ).toEqual( [ '--size', '500', '--no-trains' ] );
+		expect( fixture.calls.at( - 1 ).args.slice( 7 ) ).toEqual( [ '--size', '500' ] );
 		expect( bare ).not.toHaveProperty( 'districtCount' );
+		expect( bare ).not.toHaveProperty( 'features' );
 
 		fixture.olderAtlas = true;
 		await expectCode( creation.generateCity( { name: 'Old Tide', size: 'medium', districtCount: [ 4, 5 ] } ), 'E_OUTPUT_INVALID' );
 		await expectCode( creation.planCity( { name: 'Old Tide', size: 'medium', districtCount: [ 4, 5 ] } ), 'E_OUTPUT_INVALID' );
 		await expect( lstat( join( fixture.config.outDir, 'plans/old-tide' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
 		await expect( lstat( join( fixture.config.outDir, 'cities/old-tide' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+
+	} );
+
+	it( 'turns off the Atlas features asked for, records them in the plan and refuses a plan that kept one', async () => {
+
+		const fixture = await setup();
+		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
+		for ( const input of [ { features: {} }, { features: { trains: false } }, { features: { highways: 'no' } } ] ) {
+
+			expect( () => creation.check( 'planCity', { size: 'small', ...input } ), JSON.stringify( input ) ).toThrow( CreationError );
+
+		}
+
+		const asked = { features: { highways: false, alleys: true } };
+		const plan = await creation.planCity( { name: 'Open Sky', seed: 'sky', size: 'small', ...asked } );
+		expect( fixture.calls[ 0 ].args.slice( 7 ) ).toEqual( [ '--size', '500', '--no-highways' ] );
+		expect( plan ).toMatchObject( { id: 'open-sky', ...asked } );
+		expect( await readJson( join( fixture.config.outDir, 'plans/open-sky/plan.json' ) ) ).toEqual( plan );
+
+		await creation.generateCity( { name: 'Low Town', size: 'small', features: { alleys: false, subways: false, highways: false } } );
+		expect( fixture.calls.filter( ( call ) => call.kind === 'atlas' ).at( - 1 ).args.slice( 7 ) ).toEqual( [
+			'--size', '500', '--no-highways', '--no-subways', '--no-alleys'
+		] );
+
+		fixture.olderAtlas = true;
+		await expectCode( creation.planCity( { name: 'Old Sky', size: 'small', features: { highways: false } } ), 'E_OUTPUT_INVALID' );
+		await expect( lstat( join( fixture.config.outDir, 'plans/old-sky' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
 
 	} );
 
@@ -336,9 +364,10 @@ describe( 'playable world creation contract', () => {
 		const plan = await creation.planCity( { name: 'Bare Ward', seed: 'bare', size: 'medium' } );
 		// A folder beside the plan holds no people the build would take up.
 		await writeJson( join( fixture.config.outDir, 'plans/bare-ward/npc-types.json' ), { types: [ { type: 'stray' } ] } );
+		const planned = await readFile( join( fixture.config.outDir, 'plans/bare-ward/blueprint.json' ) );
 		await writeFile( join( fixture.config.outDir, 'plans/bare-ward/blueprint.json' ), '{}' );
 		await expectCode( creation.buildCity( { cityId: plan.id } ), 'E_STAGE_MISMATCH' );
-		await writeJson( join( fixture.config.outDir, 'plans/bare-ward/blueprint.json' ), atlas() );
+		await writeFile( join( fixture.config.outDir, 'plans/bare-ward/blueprint.json' ), planned );
 
 		const city = await creation.buildCity( { cityId: plan.id } );
 		expect( city ).toMatchObject( { id: 'bare-ward', seed: 'bare', size: 'medium' } );
@@ -634,10 +663,13 @@ function parcelIds() {
 
 }
 
-/** The Atlas parameters its district range flag stands for; none without it. */
+/** The Atlas parameters its flags stand for, as Atlas resolves them: every feature toggle, a district range only when given one. */
 function planParams( args ) {
 
-	return args.includes( '--district-count' ) ? { districtCount: valueAfter( args, '--district-count' ).split( ',' ).map( Number ) } : undefined;
+	return {
+		...( args.includes( '--district-count' ) && { districtCount: valueAfter( args, '--district-count' ).split( ',' ).map( Number ) } ),
+		features: Object.fromEntries( [ 'highways', 'subways', 'alleys' ].map( ( feature ) => [ feature, ! args.includes( `--no-${feature}` ) ] ) )
+	};
 
 }
 

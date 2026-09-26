@@ -379,7 +379,7 @@ export class WorldCreation {
 		// An Atlas that does not know a parameter plans without it; the plan must be the one asked for.
 		for ( const [ key, value ] of Object.entries( template.params ) ) {
 
-			if ( ! isDeepStrictEqual( atlas.meta?.params?.[ key ], value ) ) throw new CreationError( 'E_OUTPUT_INVALID', `Atlas planned without the ${key} asked for` );
+			if ( ! holds( atlas.meta?.params?.[ key ], value ) ) throw new CreationError( 'E_OUTPUT_INVALID', `Atlas planned without the ${key} asked for` );
 
 		}
 		return atlas;
@@ -741,6 +741,14 @@ async function checkAuthored( dir, label, profile ) {
 		throw new CreationError( 'E_INVALID_REQUEST', `${label} was cast with profile ${meta.profile}, a ${profile} city replays it with profile ${profile}: record it with --profile ${profile}` );
 
 	}
+
+}
+
+/** Whether Atlas's resolved parameter holds the one asked for: the same value, or of an object each field asked for. */
+function holds( resolved, asked ) {
+
+	if ( ! asked || typeof asked !== 'object' || Array.isArray( asked ) ) return isDeepStrictEqual( resolved, asked );
+	return Object.entries( asked ).every( ( [ key, value ] ) => holds( resolved?.[ key ], value ) );
 
 }
 
