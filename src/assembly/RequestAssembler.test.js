@@ -127,7 +127,8 @@ describe( 'RequestAssembler', () => {
 		expect( interior.seed ).toBe( 'urbe:p7' );
 		expect( interior.building ).toEqual( { id: 'p7', type: 'offices', tier: 'rich' } );
 		expect( interior.materialTheme ).toBe( 'cyberpunk' );
-		expect( interior.assignments ).toEqual( [ { floor: 0, kind: 'lobby' } ] );
+		// Interior furnishes every floor for the parcel's own type.
+		expect( interior ).not.toHaveProperty( 'assignments' );
 
 	} );
 

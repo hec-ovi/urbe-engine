@@ -185,6 +185,10 @@ describe( 'assemble-city kit path', () => {
 
 		}
 		expect( interiorSchemas( 'urbe/interior/npc', interior( 'npc.json' ) ) ).toBe( '' );
+		// A market on a shared commercial plan opens its shop at the street with
+		// offices above, not the class the plan was drawn for on every floor.
+		const programmes = Object.fromEntries( Object.entries( building.layouts ).map( ( [ name, layout ] ) => [ name, interior( layout ).floor.kind ] ) );
+		expect( programmes ).toEqual( { ground: 'retail', middle: 'office', crown: 'office' } );
 
 		const out = new OutDir( root );
 		const shells = out.shells( PARCELS );
