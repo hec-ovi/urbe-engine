@@ -1,12 +1,12 @@
 import Ajv2020 from "ajv/dist/2020.js";
-import valuesSchema from "../schema/values.schema.json";
-import materialCatalogSchema from "../schema/material-catalog.schema.json";
-import createRequestSchema from "../schema/create-request.schema.json";
-import assetAssemblySchema from "../schema/asset-assembly.schema.json";
-import assetLookupSchema from "../schema/asset-lookup.schema.json";
-import registryQuerySchema from "../schema/registry-query.schema.json";
-import registryResultSchema from "../schema/registry-result.schema.json";
-import errorSchema from "../schema/error.schema.json";
+import valuesSchema from "../schema/values.schema.json" with { type: "json" };
+import materialCatalogSchema from "../schema/material-catalog.schema.json" with { type: "json" };
+import createRequestSchema from "../schema/create-request.schema.json" with { type: "json" };
+import assetAssemblySchema from "../schema/asset-assembly.schema.json" with { type: "json" };
+import assetLookupSchema from "../schema/asset-lookup.schema.json" with { type: "json" };
+import registryQuerySchema from "../schema/registry-query.schema.json" with { type: "json" };
+import registryResultSchema from "../schema/registry-result.schema.json" with { type: "json" };
+import errorSchema from "../schema/error.schema.json" with { type: "json" };
 import { MissionAssetError } from "./MissionAssetError.js";
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });

@@ -115,17 +115,24 @@ export class MaterialResolver {
 		const db = this.themes.get( theme );
 		if ( ! db ) throw new Error( `theme index ${theme} is not loaded` );
 
-		return {
-			contractVersion: '1.0',
-			entries: Object.entries( db.entries )
-				.map( ( [ key, entry ] ) => ( {
-					key,
-					...( entry.aliases?.length ? { aliases: [ ...entry.aliases ] } : {} ),
-					variants: entry.variants.map( ( variant ) => variant.id )
-				} ) )
-				.sort( ( left, right ) => left.key.localeCompare( right.key ) )
-		};
+		return missionMaterialCatalog( db.entries );
 
 	}
+
+}
+
+/** The mission-assets v1.0 material catalog of one theme index's `entries`, wherever the index was read. */
+export function missionMaterialCatalog( entries ) {
+
+	return {
+		contractVersion: '1.0',
+		entries: Object.entries( entries )
+			.map( ( [ key, entry ] ) => ( {
+				key,
+				...( entry.aliases?.length ? { aliases: [ ...entry.aliases ] } : {} ),
+				variants: entry.variants.map( ( variant ) => variant.id )
+			} ) )
+			.sort( ( left, right ) => left.key.localeCompare( right.key ) )
+	};
 
 }
