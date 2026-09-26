@@ -176,7 +176,9 @@ export function placeDecals( request, entities, fail ) {
  * The nearest point to each visual an entrance reaches on a walking grid
  * around every blocker, within interaction distance and in clear line to the
  * visual, or null where there is none. `visuals` maps a key to
- * `{ entityId, relatedEntityId?, local }`.
+ * `{ entityId, relatedEntityId?, local }`. The player stands clear of each
+ * blocker by their radius; the line to a visual is hidden only by a blocker
+ * itself, so a prop lying beside a body is seen past it.
  */
 export function reachableApproaches( location, entities, visuals ) {
 
@@ -186,15 +188,11 @@ export function reachableApproaches( location, entities, visuals ) {
 	const rows = Math.max( 1, Math.floor( location.depth / step ) );
 	const cellWidth = location.width / columns;
 	const cellDepth = location.depth / rows;
-	const blocked = [
-		...location.blockedZones.map( ( zone ) => ( { ...zone, width: zone.width + PLAYER_RADIUS * 2, depth: zone.depth + PLAYER_RADIUS * 2 } ) ),
-		...entities.filter( ( entity ) => entity.blocksMovement ).map( ( entity ) => ( {
-			...entity.localFootprint,
-			entityId: entity.entityId,
-			width: entity.localFootprint.width + PLAYER_RADIUS * 2,
-			depth: entity.localFootprint.depth + PLAYER_RADIUS * 2
-		} ) )
+	const solid = [
+		...location.blockedZones,
+		...entities.filter( ( entity ) => entity.blocksMovement ).map( ( entity ) => ( { ...entity.localFootprint, entityId: entity.entityId } ) )
 	];
+	const blocked = solid.map( ( rect ) => ( { ...rect, width: rect.width + PLAYER_RADIUS * 2, depth: rect.depth + PLAYER_RADIUS * 2 } ) );
 	const visited = new Uint8Array( columns * rows );
 	const queue = new Int32Array( columns * rows );
 	let head = 0;
@@ -244,7 +242,7 @@ export function reachableApproaches( location, entities, visuals ) {
 			const point = cellCenter( index % columns, Math.floor( index / columns ), cellWidth, cellDepth, location );
 			const distance = Math.hypot( point.x - visual.local.x, point.z - visual.local.z );
 			if ( distance > MAX_INTERACTION_DISTANCE || distance >= bestDistance ) continue;
-			const occluders = blocked.filter( ( rect ) => rect.entityId !== visual.entityId && rect.entityId !== visual.relatedEntityId );
+			const occluders = solid.filter( ( rect ) => ! rect.entityId || rect.entityId !== visual.entityId && rect.entityId !== visual.relatedEntityId );
 			if ( occluders.some( ( rect ) => segmentIntersectsRect( point, visual.local, rect ) ) ) continue;
 			best = point;
 			bestDistance = distance;
