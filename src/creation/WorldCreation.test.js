@@ -351,9 +351,12 @@ describe( 'playable world creation contract', () => {
 			'--size', '500', '--no-highways', '--no-subways', '--no-alleys'
 		] );
 
-		fixture.olderAtlas = true;
+		// Atlas resolved every feature yet kept the highway asked away: nothing is published.
+		fixture.featuresIgnored = true;
+		await expectCode( creation.generateCity( { name: 'Old Sky', size: 'small', features: { highways: false } } ), 'E_OUTPUT_INVALID' );
 		await expectCode( creation.planCity( { name: 'Old Sky', size: 'small', features: { highways: false } } ), 'E_OUTPUT_INVALID' );
 		await expect( lstat( join( fixture.config.outDir, 'plans/old-sky' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+		await expect( lstat( join( fixture.config.outDir, 'cities/old-sky' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
 
 	} );
 
@@ -491,8 +494,9 @@ function processCommand( fixture ) {
 		if ( args[ 0 ] === 'run' && args[ 1 ] === 'generate' ) {
 
 			calls.push( { kind: 'atlas', command, args } );
-			// An Atlas older than the flags plans without them.
-			await writeJson( valueAfter( args, '--out' ), atlas( fixture.olderAtlas ? undefined : planParams( args ) ) );
+			// An Atlas older than the flags plans without them; one that ignores the feature flags keeps every feature.
+			const heard = fixture.featuresIgnored ? args.filter( ( arg ) => ! arg.startsWith( '--no-' ) ) : args;
+			await writeJson( valueAfter( args, '--out' ), atlas( fixture.olderAtlas ? undefined : planParams( heard ) ) );
 			return '';
 
 		}
