@@ -6,7 +6,7 @@ import { worldToLocal } from './StagingAssembler.js';
 
 describe( 'scenery compiler', () => {
 
-	it( 'lays out the crime scene in its frame, apart, clear of the doors and reachable, the same every time', () => {
+	it( 'lays out the crime scene in its frame, apart and clear of the doors, the same every time', () => {
 
 		const compiler = new SceneryCompiler( { missionAssets: assets } );
 		const { request, assembly } = compiler.compile( crimeScene(), frame, courier );
@@ -41,14 +41,6 @@ describe( 'scenery compiler', () => {
 		} );
 		expect( pool.transform.position.y ).toBeCloseTo( location.origin.y + 0.006, 6 );
 
-		expect( assembly.approaches.map( ( approach ) => approach.entityId ).sort() ).toEqual( [ 'courier', 'drive', 'pool' ] );
-		for ( const { entityId, point } of assembly.approaches ) {
-
-			const target = entityId === 'pool' ? worldToLocal( location, pool.transform.position ) : rects[ entityId === 'courier' ? 0 : 1 ].center;
-			const at = worldToLocal( location, point );
-			expect( Math.hypot( at.x - target.x, at.z - target.z ) ).toBeLessThanOrEqual( 2.25 );
-
-		}
 		expect( request.bodies[ 0 ] ).toMatchObject( { entityId: 'courier', placement: { zone: 'center' } } );
 		expect( assembly.frame ).toEqual( { kind: 'interior', origin: location.origin, yawRadians: 0, width: 8, depth: 7 } );
 

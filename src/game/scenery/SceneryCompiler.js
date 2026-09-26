@@ -2,7 +2,7 @@ import { INVESTIGATION_ANIMATION_ASSET, sourceBody } from '../investigation/Prod
 import { poseOf } from './PoseCatalog.js';
 import { SceneryBoundary } from './SceneryBoundary.js';
 import { SceneryError } from './SceneryError.js';
-import { placeDecals, placeEntities, publicEntity, reachableApproaches, validateStaging, worldToLocal } from './StagingAssembler.js';
+import { placeDecals, placeEntities, publicEntity, validateStaging } from './StagingAssembler.js';
 
 /** Incident decals by prop kind: the theme's material, its variant and its published world size. */
 const DECALS = {
@@ -111,17 +111,6 @@ export class SceneryCompiler {
 		validateStaging( request, FAIL );
 		const placed = placeEntities( request, FAIL );
 		const fitted = placeDecals( request, placed, FAIL );
-		const visuals = new Map( [
-			...placed.map( ( entity ) => [ entity.entityId, { entityId: entity.entityId, local: entity.localFootprint.center } ] ),
-			...fitted.map( ( decal ) => [ decal.entityId, {
-				entityId: decal.entityId,
-				relatedEntityId: request.decals.find( ( item ) => item.entityId === decal.entityId ).nearEntityId,
-				local: worldToLocal( request.location, decal.transform.position )
-			} ] )
-		] );
-		const approaches = [ ...reachableApproaches( request.location, placed, visuals ) ]
-			.filter( ( [ , point ] ) => point )
-			.map( ( [ entityId, point ] ) => ( { entityId, point } ) );
 		const location = request.location;
 		const assembly = this.boundary.output( 'staging-assembly', {
 			contractVersion: '1.0',
@@ -145,8 +134,7 @@ export class SceneryCompiler {
 					at: pose.at
 				};
 
-			} ),
-			approaches
+			} )
 		} );
 		return { request, assembly };
 

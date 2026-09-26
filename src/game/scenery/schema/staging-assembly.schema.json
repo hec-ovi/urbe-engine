@@ -4,12 +4,12 @@
   "title": "One staged scene placed in its measured frame",
   "type": "object",
   "additionalProperties": false,
-  "required": ["contractVersion", "sceneId", "questId", "place", "frame", "entities", "decals", "actors", "approaches"],
+  "required": ["contractVersion", "sceneId", "questId", "place", "frame", "entities", "decals", "actors"],
   "properties": {
     "contractVersion": { "const": "1.0" },
     "sceneId": { "$ref": "urn:urbe:engine:scenery:values#/$defs/id" },
     "questId": { "$ref": "urn:urbe:engine:scenery:values#/$defs/id" },
-    "place": { "$ref": "urn:urbe:engine:scenery:values#/$defs/resolvedPlace" },
+    "place": { "$ref": "urn:urbe:engine:scenery:scene-state#/$defs/resolvedPlace" },
     "frame": {
       "type": "object",
       "additionalProperties": false,
@@ -39,18 +39,6 @@
           "poseId": { "$ref": "urn:urbe:engine:scenery:values#/$defs/poseId" },
           "clip": { "type": "string", "minLength": 1 },
           "at": { "type": "number", "minimum": 0, "maximum": 1 }
-        }
-      }
-    },
-    "approaches": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["entityId", "point"],
-        "properties": {
-          "entityId": { "$ref": "urn:urbe:engine:scenery:values#/$defs/id" },
-          "point": { "$ref": "urn:urbe:engine:investigation:values#/$defs/vector3" }
         }
       }
     }
