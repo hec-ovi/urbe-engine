@@ -35,6 +35,31 @@ describe( 'interior routes', () => {
 
 	} );
 
+	it( 'follows buildings as streamed cells load and drop them', () => {
+
+		const streamed = new Map();
+		const navs = [];
+		const routes = new InteriorRoutes( streamed, { findPath: ( { nav } ) => {
+
+			navs.push( nav );
+			return { legs: [ { floor: 0, points: [ [ 12, 10 ] ] } ], connectors: [] };
+
+		} } );
+		expect( routes.covers( 'p1' ) ).toBe( false );
+		streamed.set( 'p1', buildings().get( 'p1' ) );
+		expect( routes.covers( 'p1' ) ).toBe( true );
+		expect( routes.route( 'p1', [ 10, 1, 10 ], [ 14, 1, 10 ] ) ).toEqual( { path3: [ [ 10, 1, 10 ], [ 12, 1, 10 ], [ 14, 1, 10 ] ] } );
+		streamed.delete( 'p1' );
+		expect( routes.covers( 'p1' ) ).toBe( false );
+		expect( routes.route( 'p1', [ 10, 1, 10 ], [ 14, 1, 10 ] ) ).toBeNull();
+		// Loaded again, the building is walked over the record it came back with.
+		const again = { npc: { nav: { ...NAV } }, interior: { building: { floors: [ { index: 0, elevation: 2 } ] } } };
+		streamed.set( 'p1', again );
+		expect( routes.route( 'p1', [ 10, 2, 10 ], [ 14, 2, 10 ] ) ).toEqual( { path3: [ [ 10, 2, 10 ], [ 12, 2, 10 ], [ 14, 2, 10 ] ] } );
+		expect( navs.at( - 1 ) ).toBe( again.npc.nav );
+
+	} );
+
 } );
 
 function buildings() {

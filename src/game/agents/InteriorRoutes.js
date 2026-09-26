@@ -11,21 +11,22 @@ const STEP = 0.5;
 export class InteriorRoutes {
 
 	/**
-	 * @param buildings Map of parcelId to `{ npc, interior }` as BuildingSource reads them
+	 * @param buildings live Map of parcelId to `{ npc, interior }` as BuildingSource
+	 *   reads them; streamed worlds add and drop records as cells load and leave
 	 * @param findPath Interior's browser navigation entry (`dist/nav.js`)
 	 */
 	constructor( buildings, { findPath } ) {
 
 		this.buildings = buildings;
 		this.findPath = findPath;
-		this.levels = new Map();
+		this.walkable = new WeakMap();
 
 	}
 
-	/** Whether this building publishes navigation and its floor elevations. */
+	/** Whether this building is loaded and publishes navigation and its floor elevations. */
 	covers( parcelId ) {
 
-		return this.#levels( parcelId ) !== null;
+		return this.#walkable( parcelId ) !== null;
 
 	}
 
@@ -36,9 +37,10 @@ export class InteriorRoutes {
 	 */
 	route( parcelId, from, to ) {
 
-		const levels = this.#levels( parcelId );
-		if ( ! levels ) return null;
-		const found = this.findPath( { nav: this.buildings.get( parcelId ).npc.nav, from: navPoint( levels, from ), to: navPoint( levels, to ) } );
+		const walkable = this.#walkable( parcelId );
+		if ( ! walkable ) return null;
+		const { nav, levels } = walkable;
+		const found = this.findPath( { nav, from: navPoint( levels, from ), to: navPoint( levels, to ) } );
 		if ( ! found || found.error ) return null;
 		const path3 = [ [ ...from ] ];
 		for ( const leg of found.legs ) {
@@ -53,24 +55,30 @@ export class InteriorRoutes {
 
 	}
 
-	/** Floor index to walking-surface elevation, or null when the building cannot be walked. */
-	#levels( parcelId ) {
+	/**
+	 * The loaded building's navigation and floor index to walking-surface
+	 * elevation, kept per building record; null while the building is not
+	 * loaded or cannot be walked.
+	 */
+	#walkable( parcelId ) {
 
-		if ( this.levels.has( parcelId ) ) return this.levels.get( parcelId );
 		const building = this.buildings.get( parcelId );
-		const nav = building?.npc?.nav;
-		const floors = building?.interior?.building?.floors;
-		let levels = null;
-		if ( nav?.floors?.length && floors?.length ) {
-
-			levels = new Map( floors.map( ( floor ) => [ floor.index, floor.elevation ] ) );
-			if ( nav.roofAccess ) levels.set( nav.roofAccess.floor, nav.roofAccess.elevation );
-
-		}
-		this.levels.set( parcelId, levels );
-		return levels;
+		if ( ! building ) return null;
+		if ( ! this.walkable.has( building ) ) this.walkable.set( building, walkable( building ) );
+		return this.walkable.get( building );
 
 	}
+
+}
+
+function walkable( { npc, interior } ) {
+
+	const nav = npc?.nav;
+	const floors = interior?.building?.floors;
+	if ( ! nav?.floors?.length || ! floors?.length ) return null;
+	const levels = new Map( floors.map( ( floor ) => [ floor.index, floor.elevation ] ) );
+	if ( nav.roofAccess ) levels.set( nav.roofAccess.floor, nav.roofAccess.elevation );
+	return { nav, levels };
 
 }
 
