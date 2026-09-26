@@ -145,6 +145,22 @@ describe( 'live measured quest mechanic hosts', () => {
 
 	} );
 
+	it( 'sends the player where an escort goes once it is under way', () => {
+
+		const harness = setup( [ escortDefinition( 'lead-player' ) ] );
+		expect( harness.gameplay.objective( TIME ) ).toMatchObject( {
+			stepId: 'escort', place: P4, guidance: { place: P4, destination: P4 }
+		} );
+		startEscort( harness );
+		expect( harness.gameplay.objective( TIME ) ).toMatchObject( {
+			stepId: 'escort', place: P7, guidance: { questId: 'escort-lead-player', stepId: 'escort', place: P7, destination: P7 }
+		} );
+		harness.control.follow = null;
+		harness.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 1.3, -2 ] ) );
+		expect( harness.gameplay.objective( TIME ).place ).toEqual( P4 );
+
+	} );
+
 	it( 'walks a lead escort to a station as its continuity stop', () => {
 
 		const harness = setup( [ escortDefinition( 'lead-player', { stationId: 'station-b' } ) ] );

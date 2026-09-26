@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { guidanceFor } from '../../../../quests/dist/runtime.js';
 import { QuestActions } from './QuestActions.js';
 import { QuestActionBoundary } from './QuestActionBoundary.js';
 import { QuestMechanics } from './QuestMechanics.js';
@@ -138,10 +139,21 @@ export class QuestGameplay {
 
 	}
 
-	/** The objective the player is following: the chosen questline, else the first open one. */
+	/**
+	 * The objective the player is following: the chosen questline, else the
+	 * first open one. While its escort is under way the step sends the player
+	 * where the escort goes, not where it began.
+	 */
 	objective( timeMin, questId = null, stepId = null ) {
 
-		return this.actions.objective( { timeMin, ...( questId ? { questId } : {} ), ...( stepId ? { stepId } : {} ) } );
+		const objective = this.actions.objective( { timeMin, ...( questId ? { questId } : {} ), ...( stepId ? { stepId } : {} ) } );
+		const escort = this.escort?.target;
+		if ( ! objective || escort?.questId !== objective.questId || escort.stepId !== objective.stepId ) return objective;
+		const to = runtimePlace( escort.target.to );
+		return this.boundary.output( 'active-objective', {
+			...objective, place: to, venue: escort.target.to.name ?? null,
+			guidance: guidanceFor( objective.questId, objective.stepId, to )
+		} );
 
 	}
 
