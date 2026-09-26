@@ -156,6 +156,51 @@ describe( 'InvestigationGameplay over a scenery scene', () => {
 
 } );
 
+describe( 'InvestigationSceneRenderer staging', () => {
+
+	it( 'reads each Source body once at load and warms a scene before it shows or blocks', async () => {
+
+		const animation = { scene: rig(), animations: [ new THREE.AnimationClip( 'Death02', 1, [] ) ] };
+		const loadGltf = vi.fn( async () => ( { scene: rig() } ) );
+		const physics = { addTrimesh: vi.fn( () => ( {} ) ), remove: vi.fn() };
+		const seen = [];
+		const warmup = { warm: vi.fn( async ( group ) => {
+
+			seen.push( { shown: gameplay.renderer.group.children.includes( group ), colliders: physics.addTrimesh.mock.calls.length, bodies: group.children.length } );
+
+		} ) };
+		const gameplay = await InvestigationGameplay.create( {
+			requests: [ interior ], session: questSession(), physics, animation, loadGltf, warmup,
+			materialFactory: { build: ( key ) => new THREE.MeshStandardMaterial( { name: key } ) }
+		} );
+		expect( loadGltf ).toHaveBeenCalledExactlyOnceWith( interior.bodies[ 0 ].asset.uri );
+
+		expect( await gameplay.stage( interior.sceneId, null ) ).toBe( true );
+		expect( loadGltf ).toHaveBeenCalledOnce();
+		expect( seen ).toEqual( [ { shown: false, colliders: 0, bodies: expect.any( Number ) } ] );
+		expect( seen[ 0 ].bodies ).toBeGreaterThan( 0 );
+		expect( physics.addTrimesh ).toHaveBeenCalled();
+		expect( gameplay.renderer.group.children ).toHaveLength( 1 );
+
+	} );
+
+	it( 'reads a body that failed at load again when its scene stages, and fails that scene alone', async () => {
+
+		const animation = { scene: rig(), animations: [ new THREE.AnimationClip( 'Death02', 1, [] ) ] };
+		const loadGltf = vi.fn( async () => { throw new Error( '404' ); } );
+		const gameplay = await InvestigationGameplay.create( {
+			requests: [ interior ], session: questSession(), animation, loadGltf,
+			materialFactory: { build: ( key ) => new THREE.MeshStandardMaterial( { name: key } ) }
+		} );
+		expect( loadGltf ).toHaveBeenCalledOnce();
+		await expect( gameplay.stage( interior.sceneId, null ) ).rejects.toMatchObject( { code: 'E_INVESTIGATION_ASSET', message: expect.stringMatching( /404/ ) } );
+		expect( loadGltf ).toHaveBeenCalledTimes( 2 );
+		expect( gameplay.renderer.group.children ).toHaveLength( 0 );
+
+	} );
+
+} );
+
 describe( 'InvestigationSceneRenderer production failures', () => {
 
 	it( 'ignores the selected entity collider while retaining real world occlusion', async () => {

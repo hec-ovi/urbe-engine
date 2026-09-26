@@ -9,17 +9,22 @@ import { decalQuaternion } from '../scenery/SceneryRenderer.js';
 /**
  * Three.js/Rapier adapter for already validated, renderer-neutral assemblies.
  * A scene is drawn from `realize` until `release`; an entity collected stays
- * out whenever its scene is drawn again.
+ * out whenever its scene is drawn again. Source bodies are read once per
+ * model, `prepare` reads them ahead, and a scene is warmed before it shows,
+ * so standing it mid-game fetches, uploads and links nothing new.
  */
 export class InvestigationSceneRenderer {
 
-	constructor( { materialFactory, physics, playerCollider = null, animation = null, loadGltf = defaultLoad } ) {
+	/** @param warmup builds a scene's programs and maps before it is shown, or null */
+	constructor( { materialFactory, physics, playerCollider = null, animation = null, loadGltf = defaultLoad, warmup = null } ) {
 
 		this.materialFactory = materialFactory;
 		this.physics = physics;
 		this.playerCollider = playerCollider;
 		this.animation = animation;
 		this.loadGltf = loadGltf;
+		this.warmup = warmup;
+		this.models = new Map();
 		this.group = new THREE.Group();
 		this.group.name = 'investigation-scenes';
 		this.visuals = new Map();
@@ -29,7 +34,21 @@ export class InvestigationSceneRenderer {
 
 	}
 
-	/** Builds one scene's bodies, props, decals and colliders and shows them; false when released meanwhile. */
+	/**
+	 * Reads every Source body these assemblies stand, once, ahead of staging
+	 * them. A body that fails is read again when its scene stages, which
+	 * reports the failure for that scene alone.
+	 */
+	async prepare( assemblies ) {
+
+		const uris = new Set( assemblies.flatMap( ( assembly ) => assembly.entities )
+			.filter( ( entity ) => entity.role === 'body' && entity.sourceMaterialPolicy !== 'dressed-appearance' )
+			.map( ( entity ) => entity.asset.uri ) );
+		await Promise.allSettled( [ ...uris ].map( ( uri ) => this.#model( uri ) ) );
+
+	}
+
+	/** Builds, warms and shows one scene's bodies, props, decals and colliders; false when released meanwhile. */
 	async realize( assembly ) {
 
 		if ( this.scenes.has( assembly.sceneId ) ) return false;
@@ -42,10 +61,12 @@ export class InvestigationSceneRenderer {
 		try {
 
 			await this.#addScene( assembly, scene.group );
+			await this.warmup?.warm( scene.group );
 
 		} catch ( error ) {
 
-			this.release( assembly.sceneId );
+			if ( this.scenes.get( assembly.sceneId ) === scene ) this.release( assembly.sceneId );
+			else this.#drop( scene );
 			throw error;
 
 		}
@@ -55,8 +76,9 @@ export class InvestigationSceneRenderer {
 			return false;
 
 		}
-		this.group.add( scene.group );
+		for ( const entity of assembly.entities ) if ( entity.blocksMovement && ! this.collected.has( entity.entityId ) ) this.#collide( entity );
 		for ( const entityId of scene.entityIds ) if ( this.collected.has( entityId ) ) this.#hide( entityId );
+		this.group.add( scene.group );
 		return true;
 
 	}
@@ -142,7 +164,6 @@ export class InvestigationSceneRenderer {
 				entity.transform.position.z
 			);
 			this.visuals.set( entity.entityId, { object, focus, owned: entity.role !== 'body' } );
-			if ( entity.blocksMovement ) this.#collide( entity );
 
 		}
 		for ( const decal of assembly.decals ) {
@@ -190,11 +211,9 @@ export class InvestigationSceneRenderer {
 
 			assertProductionBody( entity );
 			if ( entity.sourceMaterialPolicy === 'dressed-appearance' ) throw new Error( 'a dressed body stands through its scenery scene' );
-			if ( ! this.animation ) throw new Error( 'the audited Pro animation library is unavailable' );
-			const model = await this.loadGltf( entity.asset.uri );
-			assertRigCompatibility( model.scene, this.animation.scene );
+			const model = await this.#model( entity.asset.uri );
 			const root = clone( model.scene );
-			for ( const clipRoot of [ root ] ) assertTexturedMeshes( clipRoot, entity.entityId );
+			assertTexturedMeshes( root, entity.entityId );
 			const clip = THREE.AnimationClip.findByName( this.animation.animations, entity.poseId );
 			if ( ! clip ) throw new Error( `Pro animation library is missing ${entity.poseId}` );
 			const mixer = new THREE.AnimationMixer( root );
@@ -216,6 +235,28 @@ export class InvestigationSceneRenderer {
 			throw assetError( `${entity.entityId}: ${error.message}` );
 
 		}
+
+	}
+
+	/** One Source body, read and checked against the rig once for the run. */
+	#model( uri ) {
+
+		if ( ! this.models.has( uri ) ) {
+
+			const loading = ( async () => {
+
+				if ( ! this.animation ) throw new Error( 'the audited Pro animation library is unavailable' );
+				const model = await this.loadGltf( uri );
+				assertRigCompatibility( model.scene, this.animation.scene );
+				return model;
+
+			} )();
+			// A body that fails to read is read again the next time a scene asks for it.
+			loading.catch( () => { if ( this.models.get( uri ) === loading ) this.models.delete( uri ); } );
+			this.models.set( uri, loading );
+
+		}
+		return this.models.get( uri );
 
 	}
 

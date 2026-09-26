@@ -29,13 +29,21 @@ export class InvestigationGameplay {
 
 		} );
 		validateBindings( scenes.map( ( scene ) => scene.request ), options.session );
-		const renderer = options.renderer ?? new InvestigationSceneRenderer( {
-			materialFactory: options.materialFactory,
-			physics: options.physics,
-			playerCollider: options.playerCollider,
-			animation: options.animation,
-			loadGltf: options.loadGltf
-		} );
+		let renderer = options.renderer;
+		if ( ! renderer ) {
+
+			renderer = new InvestigationSceneRenderer( {
+				materialFactory: options.materialFactory,
+				physics: options.physics,
+				playerCollider: options.playerCollider,
+				animation: options.animation,
+				loadGltf: options.loadGltf,
+				warmup: options.warmup
+			} );
+			// Bodies are read at load, so a scene that stages mid-game fetches nothing.
+			await renderer.prepare( scenes.filter( ( scene ) => scene.assembly ).map( ( scene ) => scene.assembly ) );
+
+		}
 		return new InvestigationGameplay( { ...options, boundary, assembler, scenes, renderer } );
 
 	}
