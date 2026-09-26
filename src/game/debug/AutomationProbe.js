@@ -531,18 +531,29 @@ export class AutomationProbe {
 	 * Stands the player at a place `{ kind, id }`: a parcel's door, just
 	 * inside where it has one, a station or stop, or the door nearest the
 	 * player inside a district, and waits up to `timeoutMs` for the room at a
-	 * parcel with an interior. After two frames: `{ placed, places, room }`,
-	 * `places` the quest places the player stands in and `room` the parcel of
-	 * the room they stand in, or null.
+	 * parcel with an interior. A floor the interior stream has not loaded yet
+	 * has no ground: the player stands outside the parcel's door meanwhile
+	 * (where objective routes end) and steps in once it is solid, or stays
+	 * there. After two frames: `{ placed, places, room }`, `places` the quest
+	 * places the player stands in and `room` the parcel of the room they stand
+	 * in, or null.
 	 */
 	async visit( { kind, id }, { timeoutMs = 10000 } = {} ) {
 
 		const door = kind === 'district' ? this.#doorIn( id ) : this.#placeAt( continuityPlace( kind, id ) );
-		const placed = Boolean( door ) && this.#standOn( door );
 		const started = performance.now();
+		const waiting = () => performance.now() - started < timeoutMs;
+		let placed = Boolean( door ) && this.#standOn( door );
+		const outside = ! placed && door && kind === 'parcel' ? this.game.objectiveGuide?.router.doors.get( id ) : null;
+		if ( outside && this.#standOn( outside ) ) {
+
+			placed = true;
+			while ( ! this.#standOn( door ) && waiting() ) await frames( 1 );
+
+		}
 		if ( placed && kind === 'parcel' && this.#interior( id ) ) {
 
-			while ( this.game.standing?.parcelId !== id && performance.now() - started < timeoutMs ) await frames( 1 );
+			while ( this.game.standing?.parcelId !== id && waiting() ) await frames( 1 );
 
 		}
 		await frames( 2 );
