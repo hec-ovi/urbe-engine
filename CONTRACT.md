@@ -11,8 +11,7 @@ Version 0.27.5. Loads assembled city artifacts into a first-person game and expo
 | `?mode=game` | [Query and parsed settings](src/game/data/schema/game-config.d.ts) | Playable session through [Game](src/game/CONTRACT.md) |
 | Assembly CLIs | [Assembly requests and flags](src/assembly/CONTRACT.md) | [World manifest](src/assembly/schema/world-manifest.schema.json), [kit placement tables](src/assembly/kit/kit-placements.schema.json), GLBs and floor documents |
 | `POST /api/building` | [Building request](src/server/schema/building-build-request.schema.json) | [Building result](src/server/schema/building-build-result.schema.json) |
-| `POST /api/talk` | [NPC, behavior, line, time and optional quests](src/server/schema/talk-request.schema.json) | [Reply](src/server/schema/talk-response.schema.json) |
-| `POST /api/talk/stream` | Same request as `/api/talk` | NDJSON [talk stream events](src/server/schema/talk-stream-event.schema.json): deltas, sentences, companion offers, done |
+| `POST /api/talk/stream` | [NPC, behavior, line, time, optional quests, offers and guide](src/server/schema/talk-request.schema.json) | NDJSON [talk stream events](src/server/schema/talk-stream-event.schema.json): deltas, sentences, companion offers, done |
 | `GET /api/talk/memory?out=`, `PUT /api/talk/memory` | [World out and dialogue memory](src/server/schema/talk-memory.schema.json): at most 200 people, 24 notes and 24 turns each | `{ out, memory }` or 204 |
 | `GET /api/voice`, `POST /api/voice`, `POST /api/voice/prefetch` | [Speaker facts, text and priority](src/server/schema/voice-request.schema.json) | Capability, then streamed WAV PCM16 24 kHz from the Voice box; `enabled:false` when Voice is not running ([server contract](src/server/CONTRACT.md)) |
 | `/api/exteriors` | [Capability and exact-blueprint jobs](src/server/CONTRACT.md) | [Capability](src/server/schema/exterior-capability.schema.json) or [job](src/server/schema/exterior-build-job.schema.json) |
@@ -28,11 +27,13 @@ A catalog game owns its directory and acknowledged save revision. A direct `out`
 - `?mode=experiment`: [render experiment](docs/INDEX.md#previews) with URL settings from `RunConfig`.
 - `/src/game/props/preview/`: [street models](src/game/props/preview/CONTRACT.md).
 
+World folders: no file under a city, draft or game changes in place. Writers write a new file and rename it over the old one; folder producers such as Quests materialize write into a scratch folder that is then moved in. Worlds clone by hard links, so this rule keeps every copy independent.
+
 ## Errors
 
 - Launcher returns `{code,message}`: `E_INVALID_REQUEST`, `E_CREATION_UNAVAILABLE`, `E_LAUNCHER`, plus [Library](src/library/schema/library-error.schema.json) and [Creation](src/creation/schema/creation-error.schema.json) codes.
 - Building and exterior routes declare the closed sets in [building errors](src/server/schema/building-build-error.schema.json) and [exterior errors](src/server/schema/exterior-build-error.schema.json).
-- Talk returns HTTP 400 for malformed input or 502 for service failure, with [an error string](src/server/schema/talk-error.schema.json). A stream that fails after it starts ends with an `error` event.
+- Talk returns HTTP 400 for malformed input, 413 for an oversized body or 502 for service failure, with [an error string](src/server/schema/talk-error.schema.json). A stream that fails after it starts ends with an `error` event.
 - Game admission, asset loading, persistence and interaction failures follow [Game](src/game/CONTRACT.md) and its linked interfaces. Startup failure displays its message and does not grant play.
 
 Launcher and building routes can also pass through a dependency's error code. Startup has no global error enum. Closing those existing output surfaces requires the proposals in [Issues](docs/ISSUES.md).
