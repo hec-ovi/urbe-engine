@@ -12,11 +12,12 @@ Status: the public continuity and follow API is wired into the live GameApp, Cro
 - Place anchors: [schema/places.schema.json](schema/places.schema.json). Optional loaded parcel and public transport stop positions plus interior anchor ids, positions and headings. Rail station ids use the simulation's `stop` place kind at the published platform level.
 - Appearance request: [schema/appearance-request.schema.json](schema/appearance-request.schema.json). One already-instanced npcId and current simulation time.
 - Unload request: [schema/unload-request.schema.json](schema/unload-request.schema.json). The materialized npcId whose body leaves the visible set.
-- Follow start: [schema/follow-start.schema.json](schema/follow-start.schema.json). One already-instanced, live `npcId`, simulation time, player position and optional `pace`.
+- Follow start: [schema/follow-start.schema.json](schema/follow-start.schema.json). One already-instanced, live `npcId`, simulation time, player position, optional `playerPlace` and optional `pace`.
 - Lead start: [schema/lead-start.schema.json](schema/lead-start.schema.json). One live npcId, simulation time, exact authored destination place and optional `pace`.
 - Pace: [values.schema.json#/$defs/pace](schema/values.schema.json). `giveUpBeyond` metres and `giveUpAfterMin` simulation minutes. A lead without one gives up beyond 60 m after 3 minutes; a follow without one never gives up.
 - Follower carry: [schema/follower-carry.schema.json](schema/follower-carry.schema.json). The active follower, measured transit position and authoritative route id.
-- Follow update: [schema/follow-update.schema.json](schema/follow-update.schema.json). Current simulation time, bounded frame delta and player position.
+- Follow update: [schema/follow-update.schema.json](schema/follow-update.schema.json). Current simulation time, bounded frame delta, player position and optional `playerPlace`: the parcel and floor of the building the player stands in.
+- Interior routes: optional `interiorRoutes` in the constructor, `{ covers(parcelId), route(parcelId, from, to) }`, where `route` answers [schema/interior-route.schema.json](schema/interior-route.schema.json): a world `path3` inside that building from one point to the other, or null. `InteriorRoutes(buildings, { findPath })` provides it from each building's Interior navigation (`npc.nav`) and published floor elevations, `findPath` being Interior's browser navigation entry; a point stands on the highest floor at most 0.5 m above its feet.
 - Follow stop: [schema/follow-stop.schema.json](schema/follow-stop.schema.json). Current simulation time.
 - Crouch start: [schema/crouch-start.schema.json](schema/crouch-start.schema.json). One exact npcId and current simulation time. It never derives from player input or movement.
 - Crouch stop: [schema/crouch-stop.schema.json](schema/crouch-stop.schema.json). The same exact npcId and current simulation time.
@@ -34,7 +35,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - Actor state: [schema/actor-state.schema.json](schema/actor-state.schema.json). Exact npcId, name, type, gender, appearance seed, scheduled place and progress, world position, heading, animation, visibility and control mode.
 - Optional actor state: [schema/actor-state-or-null.schema.json](schema/actor-state-or-null.schema.json). Follow updates without a companion, unloads of unknown materializations and `actor(npcId)` for an unknown identity return null.
 - Actor states: [schema/actor-states.schema.json](schema/actor-states.schema.json). Stable npcId-sorted projections for every retained materialization, including invisible virtualized actors.
-- Serializable state: [schema/continuity-save.schema.json](schema/continuity-save.schema.json), version 2. Every materialized identity, the companion (`follow`: mode, phase, cached route, lead destination, pace, `lostSinceMin`), every walk home (`returns`), conversation, explicit crouch, quest holds and posts.
+- Serializable state: [schema/continuity-save.schema.json](schema/continuity-save.schema.json), version 2. Every materialized identity, the companion (`follow`: mode, phase, cached route, lead destination, pace, `lostSinceMin`), every walk home (`returns`), conversation, explicit crouch, quest holds and posts. A cached route keeps the building its goal stands in (`parcelId`) and the stretches it walks inside buildings (`indoor`).
 - Control events: [schema/control-events.schema.json](schema/control-events.schema.json). `drainEvents()` returns and clears the companion phase changes since the latest `updateFollow` began: `{npcId, mode, phase, timeMin}`, with `reason` (`player-lost`, `unreachable`, `unavailable`) on `gave-up`. The next `updateFollow` drops undrained events. Events are not saved.
 - `companion`: `{npcId, mode, phase, position}` or null, read without schema validation so a host may read it every frame. Phase is `walking`, `waiting` or `arrived`.
 - `heldNpcIds` lists the identities held now. `actor(npcId)` is the retained state of one identity.
@@ -43,9 +44,10 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 
 - `appear(request)` projects the NPC's actual simulation schedule. Passenger transit legs map schedule progress through the matching per-leg timetable onto the route's authoritative 3D shape. `unload(request)` removes visibility while retaining identity state. A later `appear` uses the same npcId and body traits.
 - There is at most one companion, following or leading. Any number of identities walk home at once, each on its own route, and none of them blocks a new companion, crouch or hold.
-- `startFollow(request)` and `startLead(request)` accept only a live, positioned NPC and interrupt its routine. They start from the body where it stands when it is on screen, held or walking home, and from its schedule projection otherwise. A held body keeps its interruption; a walk home is taken over.
+- `startFollow(request)` and `startLead(request)` accept only a live, positioned NPC and interrupt its routine. They start from the body where it stands when it is on screen, held or walking home, and from its schedule projection otherwise. A held body keeps its interruption; a walk home is taken over. The companion itself may be asked: it changes mode, or destination, where it stands and keeps its interruption.
 - `updateFollow(request)` advances every walk home in npcId order, then the companion, and returns the companion's state or null. Routes are cached: a follow plans again once the player is 1 m from the planned end, a walk home once its scheduled point has moved 2 m, a lead only when its route runs out short of the destination. Movement per update never exceeds speed times elapsed time.
-- A follower walks at 1.4 m/s, runs at 2.4 m/s beyond 8 m and stops 1.8 m from the player; its phase is `walking` while it moves and `waiting` while it stands.
+- A follower walks at 1.4 m/s, runs at 2.4 m/s beyond 8 m and stops 1.8 m from the player; its phase is `walking` while it moves and `waiting` while it stands, facing the player. When the player stands in a building, interior routes lead the follower in through its door; without them, or with no way to the player inside, it follows a player on the ground floor within 12 m of the door and otherwise walks to the door and waits there, asking the interior routes again once the player has moved 2 m.
+- With interior routes, every walk (follow, lead, walk home) from a body inside a covered building goes out through its door, and a walk home to a place inside one goes in through its door. A body is in that parcel while it walks those stretches; a building the interior routes do not cover, or find no way through, is left and entered in a straight line from the pavement.
 - A leader walks at 1.4 m/s while the player is within 4 m or ahead on its path (running beyond 8 m), slows toward 0.8 m/s as the player lags to 10 m, and past that stops in phase `waiting`, facing the player, until the player is back within 6 m. At the destination it takes phase `arrived` once and keeps it: it stands at the destination place facing the player, stays where a conversation moves it, and stays leading until released.
 - A companion with a pace gives up once the player has stayed beyond `giveUpBeyond` for `giveUpAfterMin` (`player-lost`). A companion also gives up when it dies (`unavailable`) or has no route to the player or destination (`unreachable`). On any give-up the simulation resumes, a `gave-up` event says why, and the body walks home when it has a route there; otherwise it is `released` where it stands.
 - `carryFollower(request)` places only the active follower on the measured transit route position.
@@ -78,6 +80,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - Connections walk graph and transit route output.
 - [Ground](../ground/CONTRACT.md) for the shared raised-pavement datum.
 - Character asset catalog for the audited animation clips.
+- Optionally, [Interior](../../../../interior/CONTRACT.md) navigation through `InteriorRoutes` for walks inside buildings.
 
 ## Invariants
 
@@ -104,7 +107,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 
 ## Boundary behavior
 
-- The gameplay animation coordinator owns speaking and listening gestures. This controller publishes the exact identity, posture, follow mode, and routine resume state it consumes. A waiting or arrived leader is `idle`, turned toward the player.
+- The gameplay animation coordinator owns speaking and listening gestures. This controller publishes the exact identity, posture, follow mode, and routine resume state it consumes. A waiting or arrived leader is `idle`, turned toward the player. The coordinator presents a leader as it presents a follower: the follow walk or sprint action while it moves, idle while it stands, and the same action when it changes mode where it stands.
 - Simulation route workers publish a route workplace but no trip assignment. They fail closed because no authoritative vehicle position or route progress exists; passenger commute legs carry the required transit assignment.
 
 ## Dialogue ownership

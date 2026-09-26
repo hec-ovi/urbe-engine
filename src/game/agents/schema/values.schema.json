@@ -70,7 +70,33 @@
         "path3": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/vec3" } },
         "distanceMeters": { "type": "number", "minimum": 0 },
         "cursor": { "type": "number", "minimum": 0 },
-        "destination": { "$ref": "#/$defs/vec3" }
+        "destination": { "$ref": "#/$defs/vec3" },
+        "parcelId": { "description": "The building the route was planned into.", "type": "string", "minLength": 1 },
+        "indoor": {
+          "description": "Stretches of the route walked inside a building, as distances along it.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["parcelId", "from", "to"],
+            "properties": {
+              "parcelId": { "type": "string", "minLength": 1 },
+              "from": { "type": "number", "minimum": 0 },
+              "to": { "type": "number", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "playerPlace": {
+      "description": "The building and floor the player stands in.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "floor"],
+      "properties": {
+        "kind": { "const": "parcel" },
+        "id": { "type": "string", "minLength": 1 },
+        "floor": { "type": "integer" }
       }
     },
     "scheduledPost": {

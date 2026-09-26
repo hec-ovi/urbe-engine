@@ -172,9 +172,23 @@ export class Crowd {
 	/** The rendered body for one persistent identity, if it is currently loaded. */
 	memberForNpc( npcId ) {
 
-		return [ ...this.members.values() ]
-			.filter( ( member ) => member.npcId === npcId )
-			.sort( ( left, right ) => identityPriority( right ) - identityPriority( left ) )[ 0 ] ?? null;
+		// One pass, asked for every controlled actor every frame: the first body
+		// of the highest identity priority, as a stable sort would pick it.
+		let found = null;
+		let priority = - 1;
+		for ( const member of this.members.values() ) {
+
+			if ( member.npcId !== npcId ) continue;
+			const rank = identityPriority( member );
+			if ( rank > priority ) {
+
+				found = member;
+				priority = rank;
+
+			}
+
+		}
+		return found;
 
 	}
 

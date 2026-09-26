@@ -188,6 +188,28 @@ describe( 'live gameplay animation composition', () => {
 
 	} );
 
+	it( 'presents a leader as a companion: walking ahead, standing while it waits or has arrived, and back after a chat', () => {
+
+		const rig = setup();
+		const leading = actor( { animation: 'walk', mode: 'leading' } );
+		rig.director.update( [ leading ], 0 );
+		expect( current( rig.director, leading.npcId ) ).toMatchObject( { action: 'follow-walk', currentClip: 'Walk_Loop' } );
+		const waiting = { ...leading, animation: 'idle' };
+		rig.director.update( [ waiting ], 0.1 );
+		expect( current( rig.director, leading.npcId ) ).toMatchObject( { action: 'idle', currentClip: 'Idle_Loop' } );
+
+		// Turning to following where it stands keeps the action it is in.
+		const dispatched = rig.crowd.setAnimationClip.mock.calls.length;
+		rig.director.update( [ { ...waiting, mode: 'following' } ], 0.1 );
+		expect( rig.crowd.setAnimationClip.mock.calls.length ).toBe( dispatched );
+
+		const conversation = { npcId: leading.npcId };
+		rig.director.beginConversation( conversation, { ...waiting, mode: 'conversation' } );
+		rig.director.endConversation( conversation, leading );
+		expect( current( rig.director, leading.npcId ) ).toMatchObject( { action: 'follow-walk', currentClip: 'Walk_Loop' } );
+
+	} );
+
 	it( 'keeps standing and seated quest holds in their authored pose instead of treating all holds as crouches', () => {
 
 		const rig = setup();

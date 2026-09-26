@@ -806,6 +806,89 @@ describe( 'NPC continuity integration', () => {
 
 	} );
 
+	it( 'turns the companion from following to leading and back where it stands, interrupted once', () => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const other = bridge.getNPCVendor( { parcelId: 'p_clinic', timeMin: MON_9 } );
+		controller.startFollow( { npcId: npc.npcId, timeMin: MON_9, playerPosition: [ 560, 1, 250 ] } );
+		const walked = walkOn( controller, npc.npcId, { timeMin: MON_9, deltaSeconds: 1, playerPosition: [ 560, 1, 250 ] } );
+		const lead = controller.startLead( { npcId: npc.npcId, timeMin: MON_9 + 1, destination: { kind: 'parcel', id: 'p_clinic' } } );
+		expect( lead ).toMatchObject( { mode: 'leading', position: walked.position } );
+		expect( controller.startFollow( { npcId: npc.npcId, timeMin: MON_9 + 2, playerPosition: [ 560, 1, 250 ] } ).mode ).toBe( 'following' );
+		expect( code( () => controller.startLead( { npcId: other.npcId, timeMin: MON_9 + 2, destination: { kind: 'parcel', id: 'p_cafe' } } ) ) )
+			.toBe( 'E_NPC_CONFLICT' );
+		const interruptions = bridge.simulation.serialize().events.filter( ( event ) => event.npcId === npc.npcId );
+		expect( interruptions.map( ( event ) => event.k ) ).toEqual( [ 'interrupt' ] );
+
+	} );
+
+	it( 'waits at the door of a building the player is upstairs or deep inside, and follows them in near the door', () => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const door = [ 560, 1, 250 ];
+		const upstairs = { playerPosition: [ 562, 5, 262 ], playerPlace: { kind: 'parcel', id: 'p_r1', floor: 1 } };
+		let actor = controller.startFollow( { npcId: npc.npcId, timeMin: MON_9, ...upstairs } );
+		for ( let step = 0; step < 400 && controller.companion.phase !== 'waiting'; step ++ ) {
+
+			actor = controller.updateFollow( { timeMin: MON_9, deltaSeconds: 1, ...upstairs } );
+
+		}
+		expect( separation( actor.position, door ) ).toBeLessThan( 0.1 );
+		expect( actor ).toMatchObject( { mode: 'following', animation: 'idle' } );
+		expect( actor.heading ).toBeCloseTo( Math.atan2( 2, 12 ) );
+
+		const near = { playerPosition: [ 560, 1, 258 ], playerPlace: { kind: 'parcel', id: 'p_r1', floor: 0 } };
+		for ( let step = 0; step < 20; step ++ ) actor = controller.updateFollow( { timeMin: MON_9, deltaSeconds: 1, ...near } );
+		expect( separation( actor.position, near.playerPosition ) ).toBeCloseTo( 1.8, 1 );
+
+	} );
+
+	it( 'walks out of and into buildings along interior routes and knows when it is inside', () => {
+
+		const interiorRoutes = indoorRoutes( [ 'p_cafe', 'p_r1' ] );
+		const { bridge, controller } = setup( null, network(), { interiorRoutes } );
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const anchor = [ 300, 1, 256 ];
+		controller.hold( { npcId: npc.npcId, timeMin: MON_9, place: { kind: 'parcel', id: 'p_cafe' }, position: anchor, heading: 0 } );
+		const inside = { playerPosition: [ 566, 1, 270 ], playerPlace: { kind: 'parcel', id: 'p_r1', floor: 0 } };
+		controller.startFollow( { npcId: npc.npcId, timeMin: MON_9, ...inside } );
+		const { route } = controller.serialize().follow;
+		expect( route ).toMatchObject( { parcelId: 'p_r1', destination: inside.playerPosition } );
+		expect( route.indoor.map( ( stretch ) => stretch.parcelId ) ).toEqual( [ 'p_cafe', 'p_r1' ] );
+		expect( route.indoor[ 0 ].from ).toBe( 0 );
+		expect( route.indoor[ 1 ].to ).toBeCloseTo( route.distanceMeters );
+		expect( interiorRoutes.calls ).toEqual( [
+			[ 'p_cafe', anchor, [ 305, 1, 250 ] ], [ 'p_r1', [ 560, 1, 250 ], inside.playerPosition ]
+		] );
+
+		const places = [];
+		let actor;
+		for ( let step = 0; step < 400 && controller.companion.phase !== 'waiting'; step ++ ) {
+
+			actor = controller.updateFollow( { timeMin: MON_9, deltaSeconds: 1, ...inside } );
+			places.push( actor.place.kind === 'parcel' ? actor.place.id : 'street' );
+
+		}
+		expect( [ ...new Set( places ) ] ).toEqual( [ 'p_cafe', 'street', 'p_r1' ] );
+		expect( separation( actor.position, inside.playerPosition ) ).toBeCloseTo( 1.8, 1 );
+
+		// No way to the player inside: the follower waits at the door and asks again only once they move.
+		interiorRoutes.blocked = true;
+		const deep = { playerPosition: [ 575, 1, 280 ], playerPlace: inside.playerPlace };
+		for ( let step = 0; step < 400 && separation( actor.position, [ 560, 1, 250 ] ) > 0.1; step ++ ) {
+
+			actor = controller.updateFollow( { timeMin: MON_9, deltaSeconds: 1, ...deep } );
+
+		}
+		expect( separation( actor.position, [ 560, 1, 250 ] ) ).toBeLessThan( 0.1 );
+		const asked = interiorRoutes.calls.length;
+		for ( let step = 0; step < 5; step ++ ) controller.updateFollow( { timeMin: MON_9, deltaSeconds: 1, ...deep } );
+		expect( interiorRoutes.calls.length ).toBe( asked );
+
+	} );
+
 	it( 'fails closed on unknown, placeless, unavailable and malformed identities', () => {
 
 		const { bridge, controller } = setup();
@@ -852,7 +935,7 @@ describe( 'NPC animation state', () => {
 
 } );
 
-function setup( simulation = null, networks = network() ) {
+function setup( simulation = null, networks = network(), options = {} ) {
 
 	const buildings = new Map( Object.entries( FIXTURE_INTERIORS ).map( ( [ id, npc ] ) => [ id, { npc } ] ) );
 	const bridge = simulation ? new SimBridge( simulation ) : SimBridge.create( FIXTURE_BLUEPRINT, { networks }, buildings );
@@ -868,7 +951,7 @@ function setup( simulation = null, networks = network() ) {
 			heading: anchor.facingDeg * Math.PI / 180
 		} ) ) : []
 	} ) );
-	return { bridge, controller: new NpcContinuity( { simulation: bridge, routes, places } ) };
+	return { bridge, controller: new NpcContinuity( { simulation: bridge, routes, places, ...options } ) };
 
 }
 
@@ -963,6 +1046,24 @@ function network() {
 			template: [ { arrive: 0, depart: 0 }, { arrive: 60, depart: 60 } ],
 			service: [ { start: 0, end: 86400, headway: 600, phase: 0 } ]
 		} ] }
+	};
+
+}
+
+/** Interior routes over the listed buildings: a step aside, then straight on, or no way while `blocked`. */
+function indoorRoutes( parcelIds ) {
+
+	return {
+		calls: [],
+		blocked: false,
+		covers: ( parcelId ) => parcelIds.includes( parcelId ),
+		route( parcelId, from, to ) {
+
+			this.calls.push( [ parcelId, from, to ] );
+			if ( this.blocked || separation( from, to ) < 1e-6 ) return null;
+			return { path3: [ from, [ from[ 0 ] + 2, from[ 1 ], from[ 2 ] ], to ] };
+
+		}
 	};
 
 }

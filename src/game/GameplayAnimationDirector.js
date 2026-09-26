@@ -6,6 +6,8 @@ const CLIP_BY_ANIMATION = Object.freeze( {
 	walk: 'Walk_Loop', run: 'Sprint_Loop', idle: 'Idle_Loop',
 	sit: 'Sitting_Idle_Loop', crouch: 'Crouch_Idle_Loop'
 } );
+/** A companion walks, runs or stands in the follow actions whether it follows the player or leads them. */
+const COMPANION_MODES = new Set( [ 'following', 'leading' ] );
 const QUEST_VARIANT = Object.freeze( {
 	take: 'pickup-ground', read: 'read', inspect: 'observe', steal: 'steal-ground',
 	work: 'work-interact', deliver: 'deliver'
@@ -77,7 +79,7 @@ export class GameplayAnimationDirector {
 				held = null;
 
 			}
-			if ( actor.mode === 'following' ) {
+			if ( COMPANION_MODES.has( actor.mode ) ) {
 
 				const variant = followVariant( actor.animation );
 				if ( variant && ( held?.kind !== 'follow' || held.variant !== variant ) ) {
@@ -237,7 +239,7 @@ export class GameplayAnimationDirector {
 			? this.#settle( state.actionId, 'interrupt', reason, true, state.npcId )
 			: null;
 		this.conversations.delete( conversation );
-		if ( actor?.mode === 'following' ) {
+		if ( COMPANION_MODES.has( actor?.mode ) ) {
 
 			const variant = followVariant( actor.animation );
 			if ( variant ) return this.#startQuest( state.actorId, variant, 'follow', state.npcId );

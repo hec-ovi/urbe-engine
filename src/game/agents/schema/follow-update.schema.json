@@ -7,6 +7,7 @@
   "properties": {
     "timeMin": { "type": "number", "minimum": 0 },
     "deltaSeconds": { "type": "number", "minimum": 0, "maximum": 1 },
-    "playerPosition": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" }
+    "playerPosition": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" },
+    "playerPlace": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/playerPlace" }
   }
 }

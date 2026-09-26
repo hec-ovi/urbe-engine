@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-agents:interior-route",
+  "oneOf": [
+    { "type": "null" },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path3"],
+      "properties": {
+        "path3": { "type": "array", "minItems": 2, "items": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" } }
+      }
+    }
+  ]
+}
