@@ -618,6 +618,20 @@ describe( 'story fast-forward', () => {
 
 	} );
 
+	it( 'stands the player in the district an observe names, looking up so no person or door takes E', async () => {
+
+		const { game } = storied();
+		const watch = quest( 'q_watch', { roles: [ role( 'giver', 'vendor' ) ], steps: [ step( 's_watch', { kind: 'observe', districtId: 'd1' }, { endingId: 'done' } ) ] } );
+		game.quests = QuestSession.create( [ watch ], game.sim, 600 );
+		game.body.feet.set( 20, 0.2, 5 );
+		const probe = new AutomationProbe( game );
+		expect( await probe.reach( { questId: 'q_watch', stepId: 's_watch' } ) ).toMatchObject( { placed: true, place: { kind: 'district', id: 'd1' } } );
+		const [ feet, aim ] = game.placePlayer.mock.lastCall;
+		expect( feet.x ).toBe( 34 );
+		expect( aim ).toEqual( { x: 34, y: expect.closeTo( 100.25 ), z: 6 } );
+
+	} );
+
 	it( 'stands the player a few steps back between the people a listen names, until E listens rather than talks', async () => {
 
 		const { game, walker } = playing();

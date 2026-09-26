@@ -571,9 +571,10 @@ export class AutomationProbe {
 	 * steps back from the people a listen names looking between them, beside a
 	 * mission prop or on the mark at the parcel's door, at the approach of a
 	 * staged scene's evidence aimed at it, or at the place a go or observe step
-	 * names. After two frames: `{ placed, place, member, target, offered, ms }`,
-	 * `member` the crowd member stood before and `offered` whether E now does
-	 * the step: talks to its person, or takes its quest or evidence target.
+	 * names, looking up for an observe so nothing else takes E. After two
+	 * frames: `{ placed, place, member, target, offered, ms }`, `member` the
+	 * crowd member stood before and `offered` whether E now does the step:
+	 * talks to its person, or takes its quest or evidence target.
 	 */
 	async reach( { questId = null, stepId, timeoutMs = 20000 } = {} ) {
 
@@ -655,7 +656,18 @@ export class AutomationProbe {
 
 			}
 
-		} else placed = Boolean( there?.placed );
+		} else {
+
+			placed = Boolean( there?.placed );
+			// Observing takes E with nothing else under the crosshair: look up, over the heads and doors.
+			if ( placed && kind === 'observe' ) {
+
+				const { x, y, z } = this.game.body.feet;
+				this.game.placePlayer( { x, y, z }, { x, y: y + 100, z: z + 1 } );
+
+			}
+
+		}
 
 		await frames( 2 );
 		const target = targetOf( this.game.interactor.target );
