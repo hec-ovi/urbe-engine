@@ -5,7 +5,7 @@ Purpose: restores one cataloged game and saves its live player and quest state t
 ## Inputs
 
 - Loaded game descriptor: [schema/game-state.schema.json](schema/game-state.schema.json). The id must equal the `game` URL parameter.
-- Live state at save time: [schema/live-state.schema.json](schema/live-state.schema.json). Position is the player's foot point in world metres, elapsed time is seconds since this run became playable, optional `transitJourney` is the exact timetable state, optional `questTransit` is the quest-side approach, aboard or arrival state, optional `npcState` is the exact simulation replay plus continuity save at the same world minute, and optional `investigations` contains complete evidence, collection, and one-shot transition state.
+- Live state at save time: [schema/live-state.schema.json](schema/live-state.schema.json). Position is the player's foot point in world metres, elapsed time is seconds since this run became playable, optional `transitJourney` is the exact timetable state, optional `questTransit` is the quest-side approach, aboard or arrival state, optional `npcState` is the exact simulation replay, continuity save and optional active quest escort (`questEscort`) at the same world minute, and optional `investigations` contains complete evidence, collection, and one-shot transition state.
 
 ## Outputs
 

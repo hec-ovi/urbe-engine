@@ -192,6 +192,47 @@ describe( 'live measured quest mechanic hosts', () => {
 
 	} );
 
+	it( 'ends an escort once, saying why, when its hour closes and offers it again in that hour', () => {
+
+		const definition = escortDefinition( 'lead-player' );
+		definition.steps[ 0 ].window = { label: 'the morning', days: [ 0, 1, 2, 3, 4, 5, 6 ], startMin: 540, endMin: 630 };
+		const harness = setup( [ definition ] );
+		const candidate = startEscort( harness );
+		const complete = vi.spyOn( harness.mechanics, 'complete' );
+		harness.control.actor.position = [ 10, 0, -2 ];
+		harness.control.phase = 'arrived';
+		const late = { ...frame( P7, [ 10, 0, 0 ], [ 10, 1.3, -2 ] ), timeMin: 700 };
+		for ( let index = 0; index < 5; index ++ ) harness.gameplay.candidates( late );
+		expect( harness.gameplay.drainMechanicResults() ).toEqual( [
+			expect.objectContaining( { ok: false, progressed: false, message: 'This objective is open at another hour.' } )
+		] );
+		expect( complete ).not.toHaveBeenCalled();
+		expect( harness.continuity.stopFollow ).toHaveBeenCalledTimes( 1 );
+		expect( harness.gameplay.serializeEscort() ).toBeNull();
+
+		// Home again in its hour, the open step is offered again.
+		harness.control.actor.position = [ 0, 0, -2 ];
+		const offered = harness.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 1.3, -2 ] ) );
+		expect( offered.map( ( value ) => value.interaction.targetKey ) ).toEqual( [ candidate.interaction.targetKey ] );
+
+	} );
+
+	it( 'ends an escort whose completion is rejected once, and lets its NPC go', () => {
+
+		const harness = setup( [ escortDefinition( 'lead-player' ) ] );
+		startEscort( harness );
+		const complete = vi.spyOn( harness.mechanics, 'complete' )
+			.mockImplementation( ( request ) => harness.mechanics.reject( request, 'Refused.' ) );
+		harness.control.actor.position = [ 10, 0, -2 ];
+		harness.control.phase = 'arrived';
+		for ( let index = 0; index < 5; index ++ ) harness.gameplay.candidates( frame( P7, [ 10, 0, 0 ], [ 10, 1.3, -2 ] ) );
+		expect( harness.gameplay.drainMechanicResults() ).toEqual( [ expect.objectContaining( { ok: false, message: 'Refused.' } ) ] );
+		expect( complete ).toHaveBeenCalledTimes( 1 );
+		expect( harness.continuity.stopFollow ).toHaveBeenCalledTimes( 1 );
+		expect( harness.gameplay.serializeEscort() ).toBeNull();
+
+	} );
+
 	it( 'keeps the passenger from parcel to boarding and from disembarkation to the authored destination only', () => {
 
 		const harness = setup( [ transportDefinition() ] );

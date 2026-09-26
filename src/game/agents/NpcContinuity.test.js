@@ -590,13 +590,19 @@ describe( 'NPC continuity integration', () => {
 		expect( controller.startLead( { npcId: guide.npcId, timeMin: MON_9 + 1, destination: { kind: 'parcel', id: 'p_clinic' } } ).mode )
 			.toBe( 'leading' );
 
-		// A walk home is not held in view: beyond the visible distance the schedule takes the body back.
-		const far = [ 5000, 1, 5000 ];
-		const states = controller.updateVisible( { timeMin: MON_9 + 1, playerPosition: far, maxDistance: 45 } );
+		// A walk home is not held in view: beyond the visible distance the schedule
+		// takes the body back, out of sight for that update even where its
+		// schedule place is near, and shows it there on the next.
+		const home = controller.serialize().returns[ 0 ].route.destination;
+		const reach = separation( controller.actor( walker.npcId ).position, home ) / 2;
+		expect( reach ).toBeGreaterThan( 1 );
+		const update = () => controller.updateVisible( { timeMin: MON_9 + 1, playerPosition: home, maxDistance: reach } );
+		const states = update();
 		expect( states.find( ( actor ) => actor.npcId === walker.npcId ) ).toMatchObject( { mode: 'schedule', visible: false } );
 		expect( states.find( ( actor ) => actor.npcId === guide.npcId ) ).toMatchObject( { mode: 'leading', visible: true } );
 		expect( walkingHome( controller ) ).toEqual( [] );
 		expect( controller.serialize().returns ).toEqual( [] );
+		expect( update().find( ( actor ) => actor.npcId === walker.npcId ) ).toMatchObject( { mode: 'schedule', visible: true } );
 
 	} );
 
@@ -631,6 +637,15 @@ describe( 'NPC continuity integration', () => {
 		for ( let index = 0; index < 1000 && controller.companion.phase !== 'arrived'; index ++ ) step( actor.position );
 		expect( actor ).toMatchObject( { mode: 'leading', animation: 'idle', place: destination } );
 		for ( let index = 0; index < 5; index ++ ) step( actor.position );
+
+		// A conversation that moves the arrived leader leaves it arrived where it now stands.
+		const moved = [ actor.position[ 0 ] + 0.5, actor.position[ 1 ], actor.position[ 2 ] ];
+		controller.beginConversation( { npcId: npc.npcId, timeMin: MON_9, position: moved, heading: 0, place: destination, seated: false } );
+		controller.endConversation( { timeMin: MON_9 } );
+		const beside = [ moved[ 0 ] + 2, moved[ 1 ], moved[ 2 ] ];
+		for ( let index = 0; index < 20; index ++ ) step( beside );
+		expect( actor ).toMatchObject( { mode: 'leading', animation: 'idle', position: moved } );
+		expect( actor.heading ).toBeCloseTo( Math.PI / 2 );
 		expect( events.map( ( event ) => event.phase ) ).toEqual( [ 'waiting', 'walking', 'arrived' ] );
 		expect( events.at( - 1 ) ).toEqual( { npcId: npc.npcId, mode: 'leading', phase: 'arrived', timeMin: MON_9 } );
 		expect( controller.serialize().follow ).toMatchObject( { mode: 'leading', phase: 'arrived', destination } );
@@ -698,6 +713,24 @@ describe( 'NPC continuity integration', () => {
 
 		}
 		expect( controller.companion ).toMatchObject( { npcId: npc.npcId, mode: 'following' } );
+
+	} );
+
+	it( 'a companion that cannot reach the player gives up and walks back into its day', () => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		controller.startFollow( { npcId: npc.npcId, timeMin: MON_9, playerPosition: [ 560, 1, 250 ] } );
+		const island = [ 900, 1, 900 ];
+		const plan = controller.routes.route.bind( controller.routes );
+		controller.routes.route = ( from, to ) => to === island ? null : plan( from, to );
+		const actor = controller.updateFollow( { timeMin: MON_9 + 1, deltaSeconds: 1, playerPosition: island } );
+		expect( controller.drainEvents() ).toEqual( [
+			{ npcId: npc.npcId, mode: 'following', phase: 'gave-up', timeMin: MON_9 + 1, reason: 'unreachable' }
+		] );
+		expect( controller.companion ).toBeNull();
+		expect( [ 'resuming', 'schedule' ] ).toContain( actor.mode );
+		expect( bridge.behaviorAt( npc.npcId, MON_9 + 1 ).interrupted ).toBe( false );
 
 	} );
 

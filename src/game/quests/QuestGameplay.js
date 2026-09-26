@@ -666,18 +666,21 @@ export class QuestGameplay {
 	 * the destination: a leader must have arrived, a follower must be at hand.
 	 * The quest step is completed while the NPC is still interrupted, then the
 	 * NPC is released into its day. An escort whose companion gave up, or
-	 * whose step closed, ends.
+	 * whose step closed, ends. So does one whose step became unavailable, as
+	 * when its hour ends, and one whose completion is rejected: the player
+	 * reads why once, and the step is offered again when it opens.
 	 */
 	#advanceEscort( targets, { timeMin, playerPlaces, feet } ) {
 
 		if ( ! this.escort ) return;
 		const npcId = this.escort.target.actorIds[ 0 ];
 		const target = targets.find( ( candidate ) => candidate.targetKey === this.escort.targetKey );
-		if ( ! target || ! this.#escorting( this.escort.target ) ) {
+		if ( ! target || ! this.#escorting( this.escort.target ) ) return this.#endEscort( npcId, timeMin, feet, null );
+		const request = { questId: target.questId, stepId: target.stepId, timeMin, event: mechanicEvent( target ) };
+		if ( ! target.availability.available ) {
 
-			this.escort = null;
-			this.#releaseFollower( npcId, timeMin, feet );
-			return;
+			const message = QuestActions.unavailableMessage( target.availability.reason );
+			return this.#endEscort( npcId, timeMin, feet, this.mechanics.reject( request, message ) );
 
 		}
 		const companion = this.continuity.companion;
@@ -685,13 +688,17 @@ export class QuestGameplay {
 			? companion.phase === 'arrived'
 			: feet.distanceTo( new THREE.Vector3().fromArray( companion.position ) ) <= ESCORT_REACH;
 		if ( ! arrived || ! atPlace( playerPlaces, runtimePlace( target.target.to ) ) ) return;
-		const result = this.mechanics.complete( {
-			questId: target.questId, stepId: target.stepId, timeMin, event: mechanicEvent( target )
-		} );
-		if ( ! result.ok ) return;
+		const result = this.mechanics.complete( request );
+		if ( result.ok ) this.changedTargets.add( target.targetKey );
+		this.#endEscort( npcId, timeMin, feet, result );
+
+	}
+
+	/** Ends the active escort, reports its result when there is one, and lets its NPC go. */
+	#endEscort( npcId, timeMin, feet, result ) {
+
 		this.escort = null;
-		this.changedTargets.add( target.targetKey );
-		this.mechanicResults.push( result );
+		if ( result ) this.mechanicResults.push( result );
 		this.#releaseFollower( npcId, timeMin, feet );
 
 	}

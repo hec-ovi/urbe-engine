@@ -123,7 +123,9 @@ export class NpcContinuity {
 	/**
 	 * Reprojects every visible materialization and virtualizes distant
 	 * schedule-controlled bodies. A walk home out of sight is finished by the
-	 * schedule it was walking back to.
+	 * schedule it was walking back to, and stays out of sight for that update
+	 * even when its schedule place is near, so a renderer lets go of the body
+	 * before the schedule shows it again.
 	 */
 	updateVisible( request ) {
 
@@ -139,7 +141,8 @@ export class NpcContinuity {
 				continue;
 
 			}
-			if ( this.holds.has( npcId ) || ( this.returns.has( npcId ) && near( actor ) ) ) {
+			const returning = this.returns.has( npcId );
+			if ( this.holds.has( npcId ) || ( returning && near( actor ) ) ) {
 
 				actor.visible = near( actor );
 				states.push( clone( actor ) );
@@ -150,7 +153,7 @@ export class NpcContinuity {
 			try {
 
 				const scheduled = this.#scheduledActor( npcId, request.timeMin );
-				scheduled.visible = near( scheduled );
+				scheduled.visible = ! returning && near( scheduled );
 				this.actors.set( npcId, scheduled );
 				states.push( clone( scheduled ) );
 
@@ -298,14 +301,14 @@ export class NpcContinuity {
 
 		}
 		try { this.#living( actor.npcId ); }
-		catch ( error ) { return this.#releaseInvalid( 'E_NPC_UNAVAILABLE', messageOf( error ), request.timeMin ); }
-		if ( this.#lost( actor, request ) ) {
+		catch {
 
-			this.#giveUp( actor, request.timeMin );
+			this.#giveUp( actor, request.timeMin, 'unavailable' );
 			return this.#actorOut( actor );
 
 		}
-		if ( this.follow.mode === 'following' ) this.#advanceFollowing( actor, request );
+		if ( this.#lost( actor, request ) ) this.#giveUp( actor, request.timeMin, 'player-lost' );
+		else if ( this.follow.mode === 'following' ) this.#advanceFollowing( actor, request );
 		else this.#advanceLeading( actor, request );
 		return this.#actorOut( actor );
 
@@ -320,14 +323,7 @@ export class NpcContinuity {
 		const actor = this.actors.get( this.follow.npcId );
 		this.#resume( actor.npcId, request.timeMin );
 		this.follow = null;
-		try { return this.#startResume( actor, request.timeMin ); }
-		catch {
-
-			actor.mode = 'released';
-			actor.animation = 'idle';
-			return this.#actorOut( actor );
-
-		}
+		return this.#walkHome( actor, request.timeMin );
 
 	}
 
@@ -590,7 +586,7 @@ export class NpcContinuity {
 
 		const follow = this.follow;
 		const route = this.#plan( follow, actor, request.playerPosition, FOLLOW_REPLAN );
-		if ( ! route ) return this.#releaseInvalid( 'E_NPC_PATH', `NPC ${actor.npcId} cannot reach the player`, request.timeMin );
+		if ( ! route ) return this.#giveUp( actor, request.timeMin, 'unreachable' );
 		const remaining = route.distanceMeters - route.cursor;
 		const toGo = Math.max( 0, remaining - STOPPING_DISTANCE );
 		const speed = remaining > RUN_DISTANCE ? RUN_SPEED : toGo > EPSILON ? WALK_SPEED : 0;
@@ -604,30 +600,34 @@ export class NpcContinuity {
 	/**
 	 * Walks ahead of the player to the destination at the player's pace: full
 	 * speed with the player close or ahead on the path, slower as the player
-	 * lags, then stopped and facing them until they catch up. At the end it
-	 * stays arrived, facing the player, until released.
+	 * lags, then stopped and facing them until they catch up. Arrival is
+	 * final: the leader stays where it stands, even where a conversation moved
+	 * it, facing the player until released.
 	 */
 	#advanceLeading( actor, request ) {
 
 		const lead = this.follow;
-		const route = this.#plan( lead, actor, lead.route.destination, ARRIVAL_DISTANCE );
-		if ( ! route ) return this.#releaseInvalid( 'E_NPC_PATH', `NPC ${actor.npcId} cannot reach the escort destination`, request.timeMin );
 		const player = request.playerPosition;
+		actor.mode = 'leading';
+		if ( lead.phase === 'arrived' ) {
+
+			actor.heading = headingTo( actor.position, player, actor.heading );
+			actor.animation = 'idle';
+			return;
+
+		}
+		const route = this.#plan( lead, actor, lead.route.destination, ARRIVAL_DISTANCE );
+		if ( ! route ) return this.#giveUp( actor, request.timeMin, 'unreachable' );
+		const gap = distance( actor.position, player );
 		let speed = 0;
-		if ( lead.phase !== 'arrived' ) {
+		if ( gap <= LEAD_SLOW_FROM ) speed = WALK_SPEED;
+		else if ( playerAhead( route, player ) ) speed = gap > RUN_DISTANCE ? RUN_SPEED : WALK_SPEED;
+		else if ( gap <= ( lead.phase === 'waiting' ? LEAD_RESUME_WITHIN : LEAD_WAIT_BEYOND ) ) {
 
-			const gap = distance( actor.position, player );
-			if ( gap <= LEAD_SLOW_FROM ) speed = WALK_SPEED;
-			else if ( playerAhead( route, player ) ) speed = gap > RUN_DISTANCE ? RUN_SPEED : WALK_SPEED;
-			else if ( gap <= ( lead.phase === 'waiting' ? LEAD_RESUME_WITHIN : LEAD_WAIT_BEYOND ) ) {
-
-				speed = WALK_SPEED - ( WALK_SPEED - SLOW_SPEED ) * Math.min( 1, ( gap - LEAD_SLOW_FROM ) / ( LEAD_WAIT_BEYOND - LEAD_SLOW_FROM ) );
-
-			}
+			speed = WALK_SPEED - ( WALK_SPEED - SLOW_SPEED ) * Math.min( 1, ( gap - LEAD_SLOW_FROM ) / ( LEAD_WAIT_BEYOND - LEAD_SLOW_FROM ) );
 
 		}
 		this.#walk( actor, route, Math.min( route.distanceMeters - route.cursor, speed * request.deltaSeconds ) );
-		actor.mode = 'leading';
 		if ( route.distanceMeters - route.cursor <= ARRIVAL_DISTANCE ) {
 
 			if ( lead.destination ) actor.place = clone( lead.destination );
@@ -717,17 +717,30 @@ export class NpcContinuity {
 
 	}
 
-	#giveUp( actor, timeMin ) {
+	/**
+	 * Ends the companion on its own: the host hears why through a 'gave-up'
+	 * event, the simulation resumes, and the body walks back into its day
+	 * when it can.
+	 */
+	#giveUp( actor, timeMin, reason ) {
 
 		const { npcId, mode } = this.follow;
-		this.#resume( npcId, timeMin );
 		this.follow = null;
-		this.events.push( { npcId, mode, phase: 'gave-up', timeMin, reason: 'player-lost' } );
-		try { this.#startResume( actor, timeMin ); }
+		this.events.push( { npcId, mode, phase: 'gave-up', timeMin, reason } );
+		try { this.simulation.resume( npcId, timeMin ); } catch {}
+		this.#walkHome( actor, timeMin );
+
+	}
+
+	/** Starts the walk back into the day, or leaves the body released where it stands when it has none. */
+	#walkHome( actor, timeMin ) {
+
+		try { return this.#startResume( actor, timeMin ); }
 		catch {
 
 			actor.mode = 'released';
 			actor.animation = 'idle';
+			return this.#actorOut( actor );
 
 		}
 
@@ -1029,20 +1042,6 @@ export class NpcContinuity {
 
 		try { this.simulation.resume( npcId, timeMin ); }
 		catch ( error ) { throw new NpcContinuityError( 'E_NPC_UNAVAILABLE', messageOf( error ) ); }
-
-	}
-
-	/** Ends the companion when it died or lost its way: the simulation resumes and the host hears it gave up. */
-	#releaseInvalid( code, message, timeMin ) {
-
-		const { npcId, mode } = this.follow;
-		const actor = this.actors.get( npcId );
-		try { this.simulation.resume( npcId, timeMin ); } catch {}
-		this.follow = null;
-		this.events.push( { npcId, mode, phase: 'gave-up', timeMin, reason: code === 'E_NPC_PATH' ? 'unreachable' : 'unavailable' } );
-		actor.mode = 'released';
-		actor.animation = 'idle';
-		return this.#actorOut( actor );
 
 	}
 
