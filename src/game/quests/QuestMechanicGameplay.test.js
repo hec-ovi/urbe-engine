@@ -145,6 +145,20 @@ describe( 'live measured quest mechanic hosts', () => {
 
 	} );
 
+	it( 'says why an escort the continuity will not start did not start, and offers it again', () => {
+
+		const harness = setup( [ escortDefinition( 'lead-player' ) ] );
+		harness.continuity.startLead.mockImplementationOnce( () => { throw new Error( 'NPC npc.witness cannot reach the escort destination' ); } );
+		const candidate = harness.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 1.3, -2 ] ) )[ 0 ];
+		expect( harness.gameplay.perform( { targetKey: candidate.interaction.targetKey, bindingAction: 'interact', timeMin: TIME } ) ).toMatchObject( {
+			ok: false, code: 'runtime_rejected', eventKind: 'escorted', progressed: false, message: 'NPC npc.witness cannot reach the escort destination'
+		} );
+		expect( harness.gameplay.serializeEscort() ).toBeNull();
+		expect( startEscort( harness ).interaction.targetKey ).toBe( candidate.interaction.targetKey );
+		expect( harness.gameplay.serializeEscort() ).toMatchObject( { stepId: 'escort', mode: 'lead-player' } );
+
+	} );
+
 	it( 'sends the player where an escort goes once it is under way', () => {
 
 		const harness = setup( [ escortDefinition( 'lead-player' ) ] );

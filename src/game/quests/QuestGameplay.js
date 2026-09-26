@@ -537,7 +537,12 @@ export class QuestGameplay {
 				this.escort = { targetKey: target.targetKey, target };
 				return null;
 
-			} catch { return null; }
+			} catch ( error ) {
+
+				// The continuity would not walk them: the player reads why, and may ask again.
+				return this.mechanics.reject( mechanicRequest( target, timeMin ), messageOf( error ) );
+
+			}
 
 		}
 		const request = mechanicRequest( target, timeMin );
