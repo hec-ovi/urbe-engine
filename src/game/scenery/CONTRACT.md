@@ -13,19 +13,19 @@ Purpose: stands what a quest leaves in the world (a body on a floor, blood besid
   - `investigationSceneId` names the 1.2 investigation scene that shows its evidence on this scene's elements, and that investigation links this scene back. The bundle and the director refuse a link either side leaves out.
 - Saved lifecycles: [schema/saved-scenery.schema.json](schema/saved-scenery.schema.json), one [scene state](schema/scene-state.schema.json) per scene: its status, the minutes it staged and retired, and while staged the resolved place and people.
 - `SceneryDirector.create({ specs, session, sim, world, missionAssets, interiors, overlay, animation, saved, theme, ...renderer })`: the QuestSession, the simulation (`getNPC`), `world` as `{ buildings, doors, atlas, obstacles }` (the building sources, the main entrances, the Atlas plan, and the solid fixtures the game stands on the street as `[{ footprint, bottom, top }]`, the shape street dressing reserves: lamp posts, street features, props and trees), the bundle's mission assets (`get(assetId)`), the interior stream (`floorShown`), the investigation gameplay as `overlay`, the Pro animation library, the saved states and the Materials theme. It builds its renderer from `poser`, `materialFactory`, `physics`, `playerCollider`, `lighting` and `warmup`, or takes `renderer`.
-- `update({ timeMin, feet }, delta)` every frame; `refresh()` after a quest moves.
+- `update({ timeMin, feet }, delta)` every frame; `refresh(timeMin)` after a quest moves.
 
 ## Outputs
 
 - `group`: the scenes standing around the player.
 - `serialize()`: [saved scenery](schema/saved-scenery.schema.json), every spec's state in scene id order, then any saved state no spec names, unchanged.
-- `isStaged(sceneId)`, `sceneFor(sceneId)` (spec, status, failure code, resolution, staging request and [staging assembly](schema/staging-assembly.schema.json)) and `stagedPlaces()` (`{ sceneId, questId, purpose, place }` of every scene standing, for a companion to lead to).
+- `isStaged(sceneId)`, `sceneFor(sceneId)` (spec, status, failure code, resolution, staging request and [staging assembly](schema/staging-assembly.schema.json)) and `stagedPlaces()` (`{ sceneId, questId, purpose, place, notes }` of every scene standing, for a companion to lead to). `notes` are plain sentences from [notes.md](notes.md), one for the scene's purpose, then one for each body, prop and decal in spec order that an overlay has not taken out; they say what shows there, never who someone is or what happened.
 - [capabilities.json](capabilities.json), valid against [schema/capabilities.schema.json](schema/capabilities.schema.json): the place kinds, poses, prop kinds, lighting presets and limits the engine stages. It is what the engine declares to Quests as `hostCapabilities.scenery`.
 - `StagingAssembler.js`: the placement geometry investigation scenes and scenery share (`validateStaging`, `placeEntities`, `placeDecals`, `reachableApproaches`, `publicEntity`).
 
 ## Events
 
-- A scene is `dormant` until its `activeWhen` holds, then `staged`, then `retired` once its `retireWhen` holds; a dormant scene whose `retireWhen` already holds retires without standing. Conditions are read every 0.5 s and at the update after `refresh()`.
+- A scene is `dormant` until its `activeWhen` holds, then `staged`, then `retired` once its `retireWhen` holds; a dormant scene whose `retireWhen` already holds retires without standing. Conditions are read at the first update, every 0.5 s after it, and at once on `refresh(timeMin)`, so a save made right after a quest moves holds that move's transitions.
 - Staging takes each cast corpse from the quest cast, and the simulation must report that person dead. It resolves the place and compiles the spec into a staging assembly: the people as the audited Source body of their gender in their crowd look (`dressed-appearance`), mission assets as built, decals on the frame's floor, every element placed by the shared staging geometry. An investigation standing over the scene proves its own evidence reachable when it stages.
 - A staged scene stands while the player is within 120 m of its frame (it goes past 140 m) and, indoors, while its floor is shown. Standing builds its bodies through CharacterPoser, its mission-asset primitives and decals with resolved materials, warms them, and adds one box collider for each body and fixed prop. Going, retiring or failing removes every visual and collider and hands the bodies back to the poser.
 - Restoring a staged scene resolves its saved place again and compiles it with its saved people, so it stands with the same transforms whoever the cast names now.
@@ -33,7 +33,7 @@ Purpose: stands what a quest leaves in the world (a body on a floor, blood besid
 
 ## Errors
 
-- `E_SCENERY_INPUT`: a spec list, a saved list or the capabilities do not match their schema, or a spec repeats an element id.
+- `E_SCENERY_INPUT`: a spec list, a saved list or the capabilities do not match their schema, a spec repeats an element id, or the notes document lacks the sentence of a purpose, pose, decal kind or mission asset family, or names a key that is none of them.
 - `E_SCENERY_OUTPUT`: a staging assembly or saved list does not match its schema.
 - `E_SCENERY_BINDING`: a spec names a quest, step, flag, role, mission asset or element that is not there, or a link that does not agree.
 - `E_SCENERY_PLACE`: the place names a parcel, interior, floor, room, story slot or entrance the world does not publish.

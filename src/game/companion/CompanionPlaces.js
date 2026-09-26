@@ -70,7 +70,10 @@ export class CompanionPlaces {
 
 			if ( ! place ) return;
 			const known = candidates.get( keyOf( place ) );
-			if ( ! known || RANK[ relation ] < RANK[ known.relation ] ) candidates.set( keyOf( place ), { place, relation, ...extra } );
+			const kept = ! known || RANK[ relation ] < RANK[ known.relation ] ? { place, relation, ...extra } : known;
+			// What a scene shows stays with its place, whatever else the place is to the person.
+			const notes = [ ...( known?.notes ?? [] ), ...( extra.notes ?? [] ) ];
+			candidates.set( keyOf( place ), notes.length ? { ...kept, notes } : kept );
 
 		};
 		for ( const target of quests ) add( leadPlace( target.place ), 'quest', { questId: target.questId, stepId: target.stepId } );

@@ -5,17 +5,25 @@ import { QuestSession } from './quests/QuestSession.js';
 import { npc, quest, role, simulation, step } from './quests/quest.test-fixtures.js';
 import { InvestigationGameplay } from './investigation/InvestigationGameplay.js';
 import interior from './investigation/fixtures/interior-incident.json';
-import { SceneryDirector } from './scenery/SceneryDirector.js';
+import { CompanionBoundary } from './companion/CompanionBoundary.js';
 import { assets, crimeScene } from './scenery/scenery.test-fixtures.js';
+import { companionScenes, questScenery } from './GameApp.js';
 
 /**
  * A crime scene as the game stands it: the quest session, the scenery
- * director with its own renderer and the investigation layer over it, wired
- * as GameApp wires them, in a furnished building Interior generates. Only the
- * poser, the materials and the floor stream are stand-ins.
+ * director with its own renderer and the investigation layer over it, built
+ * and read through GameApp's own wiring, in a furnished building Interior
+ * generates. Only the poser, the materials and the floor stream are
+ * stand-ins.
  */
 
 const SCENE = 'courier-found';
+const SEEN = {
+	crime: 'It looks like a crime scene.', body: 'A body lies on the ground.',
+	blood: 'There is a pool of blood on the ground.', drive: 'A data drive lies there.'
+};
+/** How the companion names the flat. */
+const PLACES = { name: ( place ) => ( place.id === 'p47' ? 'the flat on the corner' : null ) };
 const EVIDENCE = [
 	[ 'inspect-body-position', 'body-position', 'body-fact', 'body-found', 'courier' ],
 	[ 'inspect-blood-direction', 'blood-direction', 'blood-fact', 'blood-found', 'pool' ],
@@ -33,7 +41,7 @@ beforeAll( async () => {
 
 describe( 'a quest crime scene in the game', () => {
 
-	it( 'stands the dead cast person, the blood and the evidence case in a room once its step is active, offers the evidence there, and clears it all when the quest ends', async () => {
+	it( 'stands the dead cast person, the blood and the drive in a room once its step is active, offers the evidence there, tells a companion what shows there, and clears it all when the quest ends', async () => {
 
 		const game = await playing();
 		const { session, director, investigations } = game;
@@ -42,15 +50,21 @@ describe( 'a quest crime scene in the game', () => {
 		expect( director.group.children ).toHaveLength( 0 );
 		expect( director.stagedPlaces() ).toEqual( [] );
 
-		// Arriving kills the courier and opens the first inspection: the scene stands.
+		// Arriving kills the courier and opens the first inspection: the scene
+		// stands at once, so the save that follows the move holds it.
 		expect( session.advanceFor( interior.questId, { kind: 'arrivedAt', parcelId: 'p47' }, 601 ) ).toHaveLength( 1 );
-		director.refresh();
-		director.update( { timeMin: 601, feet: game.feet } );
+		director.refresh( 601 );
 		expect( director.isStaged( SCENE ) ).toBe( true );
+		expect( director.serialize() ).toMatchObject( [ { sceneId: SCENE, status: 'staged', stagedAtMin: 601 } ] );
 		const staged = director.sceneFor( SCENE );
 		expect( staged.resolved.actors ).toEqual( [ { actorId: 'courier', npcId: 'npc-courier', gender: 'male', appearanceSeed: 4711 } ] );
 		expect( staged.resolved.place ).toMatchObject( { parcelId: 'p47', floor: 1 } );
-		expect( director.stagedPlaces() ).toEqual( [ { sceneId: SCENE, questId: interior.questId, purpose: 'crime-scene', place: staged.resolved.place } ] );
+		// A person may lead the player there, and their talk on arrival is told what shows there.
+		const scenes = new CompanionBoundary().input( 'scenes', companionScenes( director.stagedPlaces(), PLACES ) );
+		expect( scenes ).toEqual( [ {
+			place: { kind: 'parcel', id: 'p47' }, name: 'the flat on the corner', relation: 'scene', notes: [ SEEN.crime, SEEN.body, SEEN.blood, SEEN.drive ]
+		} ] );
+		director.update( { timeMin: 601, feet: game.feet } );
 		await vi.waitFor( () => expect( director.renderer.isRealized( SCENE ) ).toBe( true ) );
 		const drawn = director.group.children[ 0 ];
 		expect( drawn.children.map( ( object ) => object.name ) ).toEqual( [ 'scenery-entity:courier', 'scenery-entity:drive', 'scenery-decal:pool' ] );
@@ -71,11 +85,11 @@ describe( 'a quest crime scene in the game', () => {
 		// The drive is taken out of the scene; the body and the blood stay while the quest runs.
 		expect( drawn.getObjectByName( 'scenery-entity:drive' ).visible ).toBe( false );
 		expect( director.isStaged( SCENE ) ).toBe( true );
+		expect( companionScenes( director.stagedPlaces(), PLACES )[ 0 ].notes ).toEqual( [ SEEN.crime, SEEN.body, SEEN.blood ] );
 
 		// The last evidence ended the quest: the scene retires for good, and nothing is offered there.
 		expect( session.snapshot()[ 0 ].state.endingId ).toBe( 'scene-resolved' );
-		director.refresh();
-		director.update( { timeMin: 603, feet: game.feet } );
+		director.refresh( 603 );
 		expect( director.isStaged( SCENE ) ).toBe( false );
 		expect( director.group.children ).toHaveLength( 0 );
 		expect( game.poser.release ).toHaveBeenCalledOnce();
@@ -95,7 +109,7 @@ describe( 'a quest crime scene in the game', () => {
 		const assembly = first.director.sceneFor( SCENE ).assembly;
 
 		const again = await playing( {
-			progress: first.session.persistenceView(), scenery: first.director.serialize(), investigations: first.investigations.serialize(), dead: true
+			game: { quests: first.session.persistenceView(), scenery: first.director.serialize() }, investigations: first.investigations.serialize(), dead: true
 		} );
 		expect( again.director.isStaged( SCENE ) ).toBe( true );
 		expect( JSON.stringify( again.director.sceneFor( SCENE ).assembly ) ).toBe( JSON.stringify( assembly ) );
@@ -110,23 +124,23 @@ describe( 'a quest crime scene in the game', () => {
 
 } );
 
-/** The parts GameApp wires for quest scenery, around one questline whose arrival kills the courier. */
-async function playing( { progress = [], scenery = [], investigations: saved = [], dead = false } = {} ) {
+/** The parts GameApp wires for quest scenery from a saved `game`, around one questline whose arrival kills the courier. */
+async function playing( { game = null, investigations: saved = [], dead = false } = {} ) {
 
 	const courier = { ...npc( 'npc-courier', 'courier', 'p47' ), gender: 'male', appearanceSeed: 4711 };
 	courier.flags.dead = dead;
 	const sim = simulation( new Map( [ [ courier.npcId, courier ] ] ) );
-	const session = QuestSession.create( [ crimeQuest() ], sim, 600, progress );
+	const session = QuestSession.create( [ crimeQuest() ], sim, 600, game?.quests ?? [] );
 	const poser = { still: vi.fn( async () => body() ), release: vi.fn() };
 	const investigations = await InvestigationGameplay.create( { requests: [ linkedInvestigation() ], session, renderer: { group: new THREE.Group() }, saved } );
-	const director = SceneryDirector.create( {
+	const director = questScenery( {
 		specs: [ crimeScene( {
 			place: { kind: 'room', parcelId: 'p47', floor: 1, roomKinds: [ 'living', 'bedroom' ] },
 			activeWhen: { kind: 'stepActive', stepId: 'inspect-body-position' },
 			investigationSceneId: interior.sceneId
 		} ) ],
-		session, sim, world: { buildings }, missionAssets: assets, interiors: { floorShown: () => true }, overlay: investigations,
-		saved: scenery, poser, materialFactory: { build: ( key ) => new THREE.MeshStandardMaterial( { name: key } ) }
+		game, session, sim, investigations, world: { buildings }, missionAssets: assets, interiors: { floorShown: () => true },
+		poser, materialFactory: { build: ( key ) => new THREE.MeshStandardMaterial( { name: key } ) }
 	} );
 	return { session, poser, investigations, director, feet: { x: 0, y: 0, z: 0 } };
 

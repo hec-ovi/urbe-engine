@@ -24,7 +24,7 @@ describe( 'companion places', () => {
 
 	} );
 
-	it( 'ranks quest, scene, work, home and haunt, keeps the best reason for one place, and offers four within reach', () => {
+	it( 'ranks quest, scene, work, home and haunt, keeps the best reason for one place with what a scene shows there, and offers four within reach', () => {
 
 		const places = setup();
 		const npc = {
@@ -42,13 +42,16 @@ describe( 'companion places', () => {
 				{ questId: 'q', stepId: 'b', place: { kind: 'station', id: 's1' } },
 				{ questId: 'q', stepId: 'c', place: { kind: 'district', id: 'd1' } }
 			],
-			scenes: [ { place: { kind: 'parcel', id: 'p2' }, name: 'the kitchen', relation: 'scene' } ]
+			scenes: [
+				{ place: { kind: 'parcel', id: 'p2' }, name: 'the kitchen', relation: 'scene' },
+				{ place: { kind: 'parcel', id: 'p5' }, name: 'the back room', relation: 'scene', notes: [ 'A body lies on the ground.' ] }
+			]
 		} );
-		expect( found.map( ( entry ) => [ entry.place.id, entry.relation, entry.name, entry.distance ] ) ).toEqual( [
-			[ 'p5', 'quest', 'the clinic', 500 ],
-			[ 'p2', 'scene', 'the kitchen', 200 ],
-			[ 'p3', 'home', 'the apartment block', 300 ],
-			[ 'p1', 'haunt', 'the coffee shop', 100 ]
+		expect( found.map( ( entry ) => [ entry.place.id, entry.relation, entry.name, entry.distance, entry.notes ] ) ).toEqual( [
+			[ 'p5', 'quest', 'the clinic', 500, [ 'A body lies on the ground.' ] ],
+			[ 'p2', 'scene', 'the kitchen', 200, undefined ],
+			[ 'p3', 'home', 'the apartment block', 300, undefined ],
+			[ 'p1', 'haunt', 'the coffee shop', 100, undefined ]
 		] );
 
 	} );

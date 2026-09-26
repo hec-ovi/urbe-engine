@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { GameApp, occupiedBuildingFootprints, localObjectivePlace, currentObjectiveView, questPlayerPlaces } from './GameApp.js';
+import { GameApp, companionScenes, occupiedBuildingFootprints, localObjectivePlace, currentObjectiveView, questPlayerPlaces } from './GameApp.js';
 import { Locator } from './world/Locator.js';
 
 describe( 'GameApp quest NPC control', () => {
@@ -15,6 +15,27 @@ describe( 'GameApp quest NPC control', () => {
 		expect( app.questNpcControl( { kind: 'start-follow', npcId: 'cast-a' } ) ).toMatchObject( {
 			ok: true, kind: 'start-follow', npcId: 'cast-a', timeMin: 725, playerPosition: { x: 4, y: 5, z: 6 }
 		} );
+
+	} );
+
+} );
+
+describe( 'staged quest scenes as companion places', () => {
+
+	it( 'makes one place of the scenes a parcel holds, with all their notes, and leaves out a parcel the companion cannot name', () => {
+
+		const staged = [
+			{ sceneId: 'q.body', place: { parcelId: 'p47', floor: 1, roomId: 'r2' }, notes: [ 'A body lies on the ground.' ] },
+			{ sceneId: 'q.alley', place: { parcelId: 'p9' }, notes: [ 'Tyre marks streak the ground.' ] },
+			{ sceneId: 'q.guard', place: { parcelId: 'p47', floor: 0, roomId: 'r0' }, notes: [ 'Someone stands there on guard.' ] }
+		];
+		const places = { name: ( place ) => ( place.id === 'p47' ? 'the flat on the corner' : null ) };
+
+		expect( companionScenes( staged, places ) ).toEqual( [ {
+			place: { kind: 'parcel', id: 'p47' }, name: 'the flat on the corner', relation: 'scene',
+			notes: [ 'A body lies on the ground.', 'Someone stands there on guard.' ]
+		} ] );
+		expect( staged[ 0 ].notes ).toEqual( [ 'A body lies on the ground.' ] );
 
 	} );
 

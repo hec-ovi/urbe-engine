@@ -64,7 +64,7 @@ describe('explicit quest dialogue through the playable UI',()=>{
   const choice=chat.getByRole('button',{name:'I will find Kip and ask what he saw.'});await user.click(choice);choice.click();
 	 expect(document.activeElement).toBe(chat.getByRole('button',{name:'End conversation'}));
   expect(state().completedStepIds).toEqual(['ask']);expect(state().activeStepIds).toEqual(['visit']);
-  expect(app.scenery.refresh).toHaveBeenCalledOnce();
+  expect(app.scenery.refresh).toHaveBeenCalledExactlyOnceWith(1260);
   expect(app.quests.inventoryView()).toHaveLength(1);
   expect(chat.getByText(/Look for him at the market/)).toBeTruthy();
   expect(chat.getByRole('status').textContent).toContain('Journal updated:');

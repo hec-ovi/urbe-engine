@@ -67,8 +67,10 @@ describe( 'scenery renderer', () => {
 		physics.step( 1 / 60 );
 		expect( visuals.unobstructed( eye, focus, 'courier' ) ).toBe( false );
 
+		expect( renderer.taken( 'courier-found' ) ).toEqual( new Set() );
 		visuals.collect( 'drive' );
 		expect( visuals.focus( 'drive' ) ).toBeNull();
+		expect( renderer.taken( 'courier-found' ) ).toEqual( new Set( [ 'drive' ] ) );
 		renderer.unrealize( 'courier-found' );
 		expect( visuals.focus( 'courier' ) ).toBeNull();
 		await renderer.realize( assembly );

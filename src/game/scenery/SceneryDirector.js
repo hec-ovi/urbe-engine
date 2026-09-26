@@ -1,12 +1,13 @@
 import { assertPoseClips } from './PoseCatalog.js';
 import { evaluate, unknownReferences } from './SceneConditions.js';
+import { SceneNotes } from './SceneNotes.js';
 import { ScenePlaceResolver } from './ScenePlaceResolver.js';
 import { SceneryBoundary } from './SceneryBoundary.js';
 import { SceneryCompiler } from './SceneryCompiler.js';
 import { SceneryError } from './SceneryError.js';
 import { SceneryRenderer } from './SceneryRenderer.js';
 
-/** Real seconds between lifecycle passes; `refresh()` asks for one at the next update. */
+/** Real seconds between the lifecycle passes updates run; `refresh()` runs one at once. */
 const LIFECYCLE_SECONDS = 0.5;
 /** A staged scene stands within this distance of the player, and goes past the second. */
 const STAGE_RADIUS = 120;
@@ -67,12 +68,13 @@ export class SceneryDirector {
 		this.resolver = new ScenePlaceResolver( world );
 		this.compiler = new SceneryCompiler( { boundary, missionAssets, theme } );
 		this.renderer = renderer ?? new SceneryRenderer( adapter );
+		this.notes = SceneNotes.standard();
 		this.group = this.renderer.group;
 		this.scenes = new Map();
 		this.gates = [];
 		this.foreign = [];
-		this.elapsed = 0;
-		this.dirty = true;
+		// The first update runs a pass.
+		this.elapsed = LIFECYCLE_SECONDS;
 
 		for ( const spec of [ ...specs ].sort( ( left, right ) => left.sceneId.localeCompare( right.sceneId ) ) ) {
 
@@ -85,10 +87,15 @@ export class SceneryDirector {
 
 	}
 
-	/** Asks for a lifecycle pass at the next update, after a quest has moved. */
-	refresh() {
+	/**
+	 * Runs a lifecycle pass now, after a quest has moved, so a save made
+	 * right after it holds the transitions that move makes.
+	 * @param timeMin the simulation minute a transition is recorded at
+	 */
+	refresh( timeMin ) {
 
-		this.dirty = true;
+		this.elapsed = 0;
+		this.#lifecycle( timeMin );
 
 	}
 
@@ -100,10 +107,9 @@ export class SceneryDirector {
 	update( { timeMin, feet }, delta = 0 ) {
 
 		this.elapsed += delta;
-		if ( this.dirty || this.elapsed >= LIFECYCLE_SECONDS ) {
+		if ( this.elapsed >= LIFECYCLE_SECONDS ) {
 
 			this.elapsed = 0;
-			this.dirty = false;
 			this.#lifecycle( timeMin );
 
 		}
@@ -134,12 +140,19 @@ export class SceneryDirector {
 
 	}
 
-	/** Where the scenes standing now are, for a companion to lead the player to. */
+	/**
+	 * Where the scenes standing now are, for a companion to lead the player
+	 * to, and what each shows there: `notes`, plain sentences for its purpose
+	 * and each element not taken out of it.
+	 */
 	stagedPlaces() {
 
 		return [ ...this.scenes.values() ]
 			.filter( ( scene ) => scene.status === 'staged' && ! scene.failed )
-			.map( ( { spec, resolved } ) => ( { sceneId: spec.sceneId, questId: spec.questId, purpose: spec.purpose, place: { ...resolved.place } } ) );
+			.map( ( { spec, resolved, compiled } ) => ( {
+				sceneId: spec.sceneId, questId: spec.questId, purpose: spec.purpose, place: { ...resolved.place },
+				notes: this.notes.of( spec, compiled.assembly, this.renderer.taken( spec.sceneId ) )
+			} ) );
 
 	}
 

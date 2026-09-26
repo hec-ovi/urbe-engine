@@ -597,7 +597,7 @@ export class GameApp {
 		this.probe?.exclude( this.questGameplay.group );
 		this.companion = new CompanionGameplay( {
 			continuity: this.npcContinuity, sim: this.sim, routes, places: continuityPlaces, atlas,
-			quests: this.questGameplay, scenes: () => this.#stagedScenes(), crowd: this.crowd
+			quests: this.questGameplay, scenes: () => companionScenes( this.scenery.stagedPlaces(), this.companion.places ), crowd: this.crowd
 		} );
 		// After the continuity and with no conversation open: the escort first,
 		// then the companion, which lets go a follower neither of them owns.
@@ -620,12 +620,11 @@ export class GameApp {
 		this.probe?.exclude( this.investigations.group );
 		// What the quests leave standing, while they call for it; it also
 		// decides when each investigation scene stands.
-		this.scenery = SceneryDirector.create( {
-			specs: scenery, session: this.quests, sim: this.sim,
+		this.scenery = questScenery( {
+			specs: scenery, game, session: this.quests, sim: this.sim, investigations: this.investigations,
 			world: { buildings, doors: city.entrances, atlas, obstacles: [ ...obstacles, ...DressingObstacles.fromPlacements( props.placements ) ] },
 			missionAssets: { get: ( assetId ) => this.missionItems.asset( assetId ) },
-			interiors: this.stream, overlay: this.investigations, saved: game?.scenery ?? [],
-			animation: assets.animation, theme: THEME, poser: this.hero.poser, lighting: actorLighting,
+			interiors: this.stream, animation: assets.animation, theme: THEME, poser: this.hero.poser, lighting: actorLighting,
 			materialFactory: factory, physics: this.physics, playerCollider: this.body.collider
 		} );
 		this.scene.add( this.scenery.group );
@@ -1258,17 +1257,6 @@ export class GameApp {
 		this.#observe( 'said', { conversation: { npcId, instance }, line: null, text } );
 	}
 
-	/** Places the scenery stages now, as places a person may lead the player to. */
-	#stagedScenes() {
-		const scenes = [];
-		for ( const staged of this.scenery.stagedPlaces() ) {
-			const place = { kind: 'parcel', id: staged.place.parcelId };
-			const name = this.companion.places.name( place );
-			if ( name ) scenes.push( { place, name, relation: 'scene' } );
-		}
-		return scenes;
-	}
-
 	#selectDialogue( { questId, stepId } ) {
 		const conversation = this.interactor?.conversation;
 		if ( ! conversation?.npcId ) return;
@@ -1587,10 +1575,10 @@ export class GameApp {
 
 	}
 
-	/** A quest has moved: the journal, objective, inventory and route follow at once, and the scenery at its next update. */
+	/** A quest has moved: the scenery, journal, objective, inventory and route follow at once. */
 	#refreshQuestState() {
 
-		this.scenery.refresh();
+		this.scenery.refresh( this.clock.timeMin );
 		this.view.quests.setQuests( this.quests.view( this.clock.timeMin ) );
 		this.#refreshCurrentObjective();
 		this.#refreshInventory();
@@ -2079,6 +2067,45 @@ function placesOf( doors, buildings ) {
 		heading: Math.atan2( door.normal.x, door.normal.z ),
 		anchors: groundAnchors( buildings.get( door.parcelId )?.npc, door.inside.y, buildings.get( door.parcelId )?.interior )
 	} ] ) );
+
+}
+
+/**
+ * The quest scenery a game stands: its scene specs over the quest session,
+ * with the save's scene states and the investigations as the overlay whose
+ * scenes it stages. The other options go to SceneryDirector as they are.
+ */
+export function questScenery( { game, investigations, ...options } ) {
+
+	return SceneryDirector.create( { ...options, overlay: investigations, saved: game?.scenery ?? [] } );
+
+}
+
+/**
+ * Staged scenes as places a companion may lead to: each scene's parcel, named
+ * as the companion names it, with what stands there. Scenes that share a
+ * parcel are one place with all their notes.
+ * @param staged the director's `stagedPlaces()`
+ * @param places the companion's places, for `name(place)`
+ */
+export function companionScenes( staged, places ) {
+
+	const scenes = new Map();
+	for ( const { place: { parcelId }, notes } of staged ) {
+
+		const known = scenes.get( parcelId );
+		if ( known ) {
+
+			known.notes.push( ...notes );
+			continue;
+
+		}
+		const place = { kind: 'parcel', id: parcelId };
+		const name = places.name( place );
+		if ( name ) scenes.set( parcelId, { place, name, relation: 'scene', notes: [ ...notes ] } );
+
+	}
+	return [ ...scenes.values() ];
 
 }
 

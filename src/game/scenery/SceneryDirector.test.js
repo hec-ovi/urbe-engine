@@ -40,19 +40,23 @@ describe( 'scenery lifecycle', () => {
 		expect( staged.resolved.place ).toMatchObject( { parcelId: 'p47', floor: 1 } );
 		expect( staged.assembly.entities.map( ( entity ) => entity.entityId ) ).toEqual( [ 'courier', 'drive' ] );
 		expect( renderer.realize ).toHaveBeenCalledExactlyOnceWith( staged.assembly );
+		const notes = [ 'It looks like a crime scene.', 'A body lies on the ground.', 'There is a pool of blood on the ground.', 'A data drive lies there.' ];
 		expect( director.stagedPlaces() ).toEqual( [ {
-			sceneId: 'courier-found', questId: 'quest-missing-courier', purpose: 'crime-scene', place: staged.resolved.place
+			sceneId: 'courier-found', questId: 'quest-missing-courier', purpose: 'crime-scene', place: staged.resolved.place, notes
 		} ] );
+		// What was taken out of the scene is gone from its notes.
+		renderer.taken.mockReturnValue( new Set( [ 'drive' ] ) );
+		expect( director.stagedPlaces()[ 0 ].notes ).toEqual( notes.slice( 0, 3 ) );
+		expect( renderer.taken ).toHaveBeenCalledWith( 'courier-found' );
 
 		// Flags that turn back never unstage it.
 		quest.state.completedStepIds = [];
-		director.refresh();
-		director.update( { timeMin: 13, feet: NEAR } );
+		director.refresh( 13 );
 		expect( director.isStaged( 'courier-found' ) ).toBe( true );
 
+		// A quest that moves retires it at once, at that minute.
 		quest.state.endingId = 'done';
-		director.refresh();
-		director.update( { timeMin: 20, feet: NEAR } );
+		director.refresh( 20 );
 		expect( director.isStaged( 'courier-found' ) ).toBe( false );
 		expect( director.stagedPlaces() ).toEqual( [] );
 		expect( renderer.isRealized( 'courier-found' ) ).toBe( false );
@@ -60,8 +64,7 @@ describe( 'scenery lifecycle', () => {
 
 		delete quest.state.endingId;
 		quest.state.completedStepIds = [ 'kill' ];
-		director.refresh();
-		director.update( { timeMin: 21, feet: NEAR } );
+		director.refresh( 21 );
 		expect( director.sceneFor( 'courier-found' ).status ).toBe( 'retired' );
 
 	} );
@@ -75,8 +78,7 @@ describe( 'scenery lifecycle', () => {
 		director.update( { timeMin: 5, feet: NEAR } );
 		// Already ended before it ever stood: a scene that never retires still stages.
 		expect( director.isStaged( 'courier-found' ) ).toBe( true );
-		director.refresh();
-		director.update( { timeMin: 900, feet: NEAR } );
+		director.refresh( 900 );
 		expect( director.isStaged( 'courier-found' ) ).toBe( true );
 
 	} );
@@ -172,15 +174,13 @@ describe( 'scenery lifecycle', () => {
 		expect( overlay.stage ).not.toHaveBeenCalled();
 
 		quest.state.activeStepIds.push( 'read' );
-		director.refresh();
-		director.update( { timeMin: 2, feet: FAR } );
+		director.refresh( 2 );
 		await Promise.resolve();
 		expect( overlay.stage ).toHaveBeenCalledExactlyOnceWith( 'ledger', null );
 
 		quest.state.completedStepIds.push( 'kill' );
 		kill( 'npc-courier' );
-		director.refresh();
-		director.update( { timeMin: 3, feet: FAR } );
+		director.refresh( 3 );
 		expect( overlay.stage ).toHaveBeenCalledWith( 'evidence', {
 			request: director.sceneFor( 'courier-found' ).request,
 			visuals: renderer.visuals.mock.results[ 0 ].value
@@ -188,8 +188,7 @@ describe( 'scenery lifecycle', () => {
 		expect( renderer.visuals ).toHaveBeenCalledWith( 'courier-found' );
 
 		quest.state.endingId = 'done';
-		director.refresh();
-		director.update( { timeMin: 4, feet: FAR } );
+		director.refresh( 4 );
 		expect( overlay.retire.mock.calls.map( ( [ sceneId ] ) => sceneId ).sort() ).toEqual( [ 'evidence', 'ledger' ] );
 
 	} );
@@ -274,7 +273,8 @@ function fakeRenderer() {
 		unrealize: vi.fn( ( sceneId ) => realized.delete( sceneId ) ),
 		isRealized: ( sceneId ) => realized.has( sceneId ),
 		isPending: () => false,
-		visuals: vi.fn( ( sceneId ) => ( { sceneId } ) )
+		visuals: vi.fn( ( sceneId ) => ( { sceneId } ) ),
+		taken: vi.fn( () => new Set() )
 	};
 
 }

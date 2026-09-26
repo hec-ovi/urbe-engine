@@ -50,6 +50,13 @@ export class SceneryRenderer {
 
 	}
 
+	/** The ids of the elements an overlay took out of one scene. */
+	taken( sceneId ) {
+
+		return new Set( this.collected.get( sceneId ) );
+
+	}
+
 	/** Builds, warms and shows one scene; resolves false when it was unrealized meanwhile. */
 	async realize( assembly ) {
 
