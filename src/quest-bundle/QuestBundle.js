@@ -285,9 +285,9 @@ function assertScenery( catalogs, assets ) {
 		if ( ! request?.scenery ) continue;
 		const spec = scenes.get( request.scenery.sceneId );
 		if ( ! spec || spec.questId !== request.questId ) fail( `investigation ${request.sceneId} links unknown scene ${request.scenery.sceneId}` );
-		if ( spec.investigationSceneId !== undefined && spec.investigationSceneId !== request.sceneId ) {
+		if ( spec.investigationSceneId !== request.sceneId ) {
 
-			fail( `investigation ${request.sceneId} links scene ${spec.sceneId}, which names ${spec.investigationSceneId}` );
+			fail( `investigation ${request.sceneId} links scene ${spec.sceneId}, which names ${spec.investigationSceneId ?? 'no investigation'} back` );
 
 		}
 		const elements = new Set( [ ...( spec.actors ?? [] ).map( ( actor ) => actor?.actorId ), ...( spec.props ?? [] ).map( ( prop ) => prop?.propId ) ] );

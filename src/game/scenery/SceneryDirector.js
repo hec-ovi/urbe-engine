@@ -196,9 +196,9 @@ export class SceneryDirector {
 					throw new SceneryError( 'E_SCENERY_BINDING', `investigation ${gate.sceneId} links to unknown scene ${gate.scenerySceneId} of quest ${gate.questId}` );
 
 				}
-				if ( scene.spec.investigationSceneId !== undefined && scene.spec.investigationSceneId !== gate.sceneId ) {
+				if ( scene.spec.investigationSceneId !== gate.sceneId ) {
 
-					throw new SceneryError( 'E_SCENERY_BINDING', `scene ${gate.scenerySceneId} links investigation ${scene.spec.investigationSceneId}, not ${gate.sceneId}` );
+					throw new SceneryError( 'E_SCENERY_BINDING', `investigation ${gate.sceneId} links scene ${gate.scenerySceneId}, which names ${scene.spec.investigationSceneId ?? 'no investigation'} back` );
 
 				}
 				scene.links.push( gate.sceneId );
@@ -213,6 +213,16 @@ export class SceneryDirector {
 				status: 'dormant',
 				failed: null
 			} );
+
+		}
+		for ( const scene of this.scenes.values() ) {
+
+			const named = scene.spec.investigationSceneId;
+			if ( named !== undefined && ! scene.links.includes( named ) ) {
+
+				throw new SceneryError( 'E_SCENERY_BINDING', `scene ${scene.spec.sceneId} names investigation ${named}, which does not link it` );
+
+			}
 
 		}
 

@@ -202,7 +202,7 @@ describe( 'scenery lifecycle', () => {
 			stage: vi.fn( async () => { throw Object.assign( new Error( 'evidence ghost has no element' ), { code: 'E_INVESTIGATION_BINDING' } ); } ),
 			retire: vi.fn()
 		};
-		const { director, quest, kill } = setup( [ spec() ], { overlay } );
+		const { director, quest, kill } = setup( [ spec( { investigationSceneId: 'evidence' } ) ], { overlay } );
 		quest.state.completedStepIds.push( 'kill' );
 		kill( 'npc-courier' );
 		director.update( { timeMin: 3, feet: FAR } );
@@ -222,6 +222,16 @@ describe( 'scenery lifecycle', () => {
 		expect( () => setup( [ spec( { actors: [ { ...spec().actors[ 0 ], pose: 'grieving' } ] } ) ] ) ).toThrowError( expect.objectContaining( { code: 'E_SCENERY_INPUT' } ) );
 		expect( () => setup( [ spec() ], { animation: { animations: [ new THREE.AnimationClip( 'Death01', 1, [] ) ] } } ) )
 			.toThrowError( expect.objectContaining( { code: 'E_SCENERY_ASSET', message: expect.stringMatching( /Death02/ ) } ) );
+
+		// A linked investigation and its scene name each other.
+		const linking = ( scenerySceneId ) => ( {
+			lifecycles: () => [ { sceneId: 'evidence', questId: 'quest-missing-courier', stepIds: [ 'inspect' ], scenerySceneId } ],
+			stage: vi.fn(), retire: vi.fn()
+		} );
+		expect( () => setup( [ spec() ], { overlay: linking( 'courier-found' ) } ) )
+			.toThrowError( expect.objectContaining( { code: 'E_SCENERY_BINDING', message: expect.stringMatching( /names no investigation back/ ) } ) );
+		expect( () => setup( [ spec( { investigationSceneId: 'evidence' } ) ], { overlay: linking( null ) } ) )
+			.toThrowError( expect.objectContaining( { code: 'E_SCENERY_BINDING', message: expect.stringMatching( /names investigation evidence, which does not link it/ ) } ) );
 
 		const blocked = setup( [ spec() ], { blocked: true } );
 		blocked.director.update( { timeMin: 1, feet: NEAR } );

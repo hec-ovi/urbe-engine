@@ -204,6 +204,8 @@ describe( 'quest scenery in the bundle', () => {
 		reject( ( catalogs ) => { catalogs.scenery[ 1 ].sceneId = 'scene.main'; }, /repeats or omits scene scene.main/ );
 		reject( ( catalogs ) => { catalogs.investigations[ 0 ].evidenceVisuals[ 0 ].entityId = 'ghost'; }, /elements scene scene.main lacks: ghost/ );
 		reject( ( catalogs ) => { catalogs.investigations[ 0 ].scenery.sceneId = 'scene.side'; }, /links unknown scene scene.side|which does not link it/ );
+		reject( ( catalogs ) => { delete catalogs.scenery[ 0 ].investigationSceneId; }, /links scene scene.main, which names no investigation back/ );
+		reject( ( catalogs ) => { catalogs.scenery[ 1 ].investigationSceneId = 'evidence.main'; }, /scene scene.side names investigation evidence.main, which does not link it/ );
 
 	} );
 
