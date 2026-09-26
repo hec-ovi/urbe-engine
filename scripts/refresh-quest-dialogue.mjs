@@ -10,7 +10,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { QuestlineSetValidator, QuestlineStateValidator } from '../../quests/dist/runtime.js';
 import { createLibrary } from '../src/library/index.js';
-import { QUEST_BUNDLE_FILES, questBundle as publicQuestBundle, questBundleManifest } from '../src/quest-bundle/index.js';
+import { questBundle as publicQuestBundle, questBundleFiles, questBundleManifest } from '../src/quest-bundle/index.js';
 
 const engineRoot = fileURLToPath( new URL( '..', import.meta.url ) );
 const questsRoot = resolve( engineRoot, '../quests' );
@@ -27,7 +27,7 @@ const recording = resolve( options.find( option => option.startsWith( '--recordi
 const gameDir = join( outDir, 'games', gameId );
 const library = createLibrary( { outDir } );
 const game = await library.loadGame( { id: gameId } );
-if ( ! game.questBundle?.uri.endsWith( '/quest-bundle.json' ) ) throw new Error( 'Game must carry a v1.1 quest bundle.' );
+if ( ! game.questBundle?.uri.endsWith( '/quest-bundle.json' ) ) throw new Error( 'Game must carry a quest bundle.' );
 const gameFile = join( gameDir, 'game.json' );
 const descriptorBytes = await readFile( gameFile );
 assert.deepEqual( JSON.parse( descriptorBytes ), game, 'Save changed while reading; retry after gameplay has stopped.' );
@@ -41,7 +41,7 @@ const questlinesFile = join( dirname( bundleFile ), carried.manifest.files.quest
 const originalBytes = await readFile( questlinesFile );
 const protectedFiles = new Map();
 for ( const path of [ gameFile, bundleFile, ...[ 'blueprint.json', 'npc-types.json', 'manifest.json' ].map( name => join( gameDir, name ) ),
-	...QUEST_BUNDLE_FILES.filter( name => name !== 'questlines' ).map( name => join( dirname( bundleFile ), carried.manifest.files[ name ] ) ) ] ) {
+	...questBundleFiles( carried.manifest ).filter( name => name !== 'questlines' ).map( name => join( dirname( bundleFile ), carried.manifest.files[ name ] ) ) ] ) {
 	protectedFiles.set( path, digest( await readFile( path ) ) );
 }
 const worldManifest = JSON.parse( await readFile( join( gameDir, 'manifest.json' ), 'utf8' ) );
@@ -143,7 +143,7 @@ async function assertProtectedFiles() {
 
 async function readBundle( file ) {
 	const manifest = questBundleManifest( JSON.parse( await readFile( file, 'utf8' ) ) );
-	const catalogs = Object.fromEntries( await Promise.all( QUEST_BUNDLE_FILES.map( async name => [
+	const catalogs = Object.fromEntries( await Promise.all( questBundleFiles( manifest ).map( async name => [
 		name, JSON.parse( await readFile( join( dirname( file ), manifest.files[ name ] ), 'utf8' ) )
 	] ) ) );
 	return publicQuestBundle( manifest, catalogs );

@@ -10,7 +10,7 @@ Plays assembled city artifacts in a continuous first-person scene with physics, 
 - [World Archive](../world-archive/CONTRACT.md) validates bounded part hashes and counts. With prepared Connections, runtime reads omit optional Atlas construction planning proofs.
 - [Building sources](data/schema/world-buildings.d.ts): Exterior blueprint for every listed parcel, with a GLB for a shell parcel and a placement table plus the parcel's own sign `word` for a kit one; NPC data, the Interior building manifest and its three placement layouts only for manifest interiors. Source documents and plan blueprints share eight concurrent requests, and a plan's blueprint is read once for the city whether a parcel or the kit runtime asks for it. A world with a shell catalog loads all interiors plus sources within 250 m of the player (or the first interior); a world without a catalog loads every listed source.
 - [Materials](../../../materials/CONTRACT.md) catalogs under `/materials`, character and vehicle assets under `/models`, and optional Naming NPC types beside the world. Missing NPC types use Simulation's built-in set.
-- [Quest Bundle](../quest-bundle/CONTRACT.md) validates the Quests handoff. A catalog descriptor with `questBundle: null` loads no quest or investigation files. Direct previews also accept standalone questlines. Every questline is stamped from the city at load (venue names on its places, the hour its text names on its steps) and cast against the Naming types through the Quests story venues, one person per character across the set.
+- [Quest Bundle](../quest-bundle/CONTRACT.md) validates the Quests handoff. A catalog descriptor with `questBundle: null` loads no quest, investigation or scenery files. Direct previews also accept standalone questlines, investigations and scene specs. Every questline is stamped from the city at load (venue names on its places, the hour its text names on its steps) and cast against the Naming types through the Quests story venues, one person per character across the set.
 
 ## Output
 
@@ -38,6 +38,7 @@ Game composes native ordinary streets with retained ground, highways and station
 | Persistent identities and physical NPC representation | [Simulation adapter](sim/CONTRACT.md), [Agents](agents/CONTRACT.md) |
 | One person asked along to follow or lead the player, and the talk at the place | [Companion](companion/CONTRACT.md) |
 | Validated story actions and evidence state | [Quests](quests/CONTRACT.md), [Investigations](investigation/CONTRACT.md) |
+| What a quest leaves standing in the world, while its conditions hold | [Scenery](scenery/CONTRACT.md) |
 | Semantic animation, objective paths and water surfaces | [Animation](animation/CONTRACT.md), [Routes](routes/CONTRACT.md), [Hydrology](hydro/CONTRACT.md) |
 | Fixture lighting, pipeline preparation and diagnostics | [Light](light/CONTRACT.md), [Look](look/CONTRACT.md), [Debug](debug/CONTRACT.md) |
 

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:scenery:staging-assembly",
+  "title": "One staged scene placed in its measured frame",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "sceneId", "questId", "place", "frame", "entities", "decals", "actors", "approaches"],
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "sceneId": { "$ref": "urn:urbe:engine:scenery:values#/$defs/id" },
+    "questId": { "$ref": "urn:urbe:engine:scenery:values#/$defs/id" },
+    "place": { "$ref": "urn:urbe:engine:scenery:values#/$defs/resolvedPlace" },
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "origin", "yawRadians", "width", "depth"],
+      "properties": {
+        "kind": { "enum": ["interior", "street"] },
+        "origin": { "$ref": "urn:urbe:engine:investigation:values#/$defs/vector3" },
+        "yawRadians": { "type": "number" },
+        "width": { "type": "number", "minimum": 3 },
+        "depth": { "type": "number", "minimum": 3 }
+      }
+    },
+    "entities": { "type": "array", "items": { "$ref": "urn:urbe:engine:investigation:values#/$defs/entityPlacement" } },
+    "decals": { "type": "array", "items": { "$ref": "urn:urbe:engine:investigation:values#/$defs/decalPlacement" } },
+    "actors": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["actorId", "gender", "appearanceSeed", "poseId", "clip", "at"],
+        "properties": {
+          "actorId": { "$ref": "urn:urbe:engine:scenery:values#/$defs/id" },
+          "npcId": { "$ref": "urn:urbe:engine:scenery:values#/$defs/id" },
+          "gender": { "$ref": "urn:urbe:engine:scenery:values#/$defs/gender" },
+          "appearanceSeed": { "$ref": "urn:urbe:engine:scenery:values#/$defs/uint32" },
+          "poseId": { "$ref": "urn:urbe:engine:scenery:values#/$defs/poseId" },
+          "clip": { "type": "string", "minLength": 1 },
+          "at": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "approaches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entityId", "point"],
+        "properties": {
+          "entityId": { "$ref": "urn:urbe:engine:scenery:values#/$defs/id" },
+          "point": { "$ref": "urn:urbe:engine:investigation:values#/$defs/vector3" }
+        }
+      }
+    }
+  }
+}

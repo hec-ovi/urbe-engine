@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:scenery:capabilities",
+  "title": "Scenery the engine stages",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "placeKinds", "poses", "propKinds", "lightingPresets", "limits"],
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "placeKinds": { "type": "array", "uniqueItems": true, "items": { "enum": ["room", "story-slot", "parcel-entry", "street"] } },
+    "poses": { "type": "array", "uniqueItems": true, "items": { "$ref": "urn:urbe:engine:scenery:values#/$defs/poseId" } },
+    "propKinds": { "type": "array", "uniqueItems": true, "items": { "enum": ["blood-pool", "tyre-marks", "mission-asset"] } },
+    "lightingPresets": { "type": "array", "uniqueItems": true, "items": { "const": "none" } },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actors", "props"],
+      "properties": {
+        "actors": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "props": { "type": "integer", "minimum": 0, "maximum": 16 }
+      }
+    }
+  }
+}

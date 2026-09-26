@@ -4,17 +4,14 @@ import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { assertRigCompatibility } from '../agents/CharacterCatalog.js';
 import { InvestigationError } from './InvestigationError.js';
 import { assertProductionBody } from './ProductionMedia.js';
+import { decalQuaternion } from '../scenery/SceneryRenderer.js';
 
-/** Three.js/Rapier adapter for already validated, renderer-neutral assemblies. */
+/**
+ * Three.js/Rapier adapter for already validated, renderer-neutral assemblies.
+ * A scene is drawn from `realize` until `release`; an entity collected stays
+ * out whenever its scene is drawn again.
+ */
 export class InvestigationSceneRenderer {
-
-	static async create( options ) {
-
-		const renderer = new InvestigationSceneRenderer( options );
-		for ( const assembly of options.assemblies ) await renderer.#addScene( assembly );
-		return renderer;
-
-	}
 
 	constructor( { materialFactory, physics, playerCollider = null, animation = null, loadGltf = defaultLoad } ) {
 
@@ -27,6 +24,65 @@ export class InvestigationSceneRenderer {
 		this.group.name = 'investigation-scenes';
 		this.visuals = new Map();
 		this.colliders = new Map();
+		this.scenes = new Map();
+		this.collected = new Set();
+
+	}
+
+	/** Builds one scene's bodies, props, decals and colliders and shows them; false when released meanwhile. */
+	async realize( assembly ) {
+
+		if ( this.scenes.has( assembly.sceneId ) ) return false;
+		const scene = {
+			group: new THREE.Group(),
+			entityIds: [ ...assembly.entities, ...assembly.decals ].map( ( item ) => item.entityId )
+		};
+		scene.group.name = `investigation:${assembly.sceneId}`;
+		this.scenes.set( assembly.sceneId, scene );
+		try {
+
+			await this.#addScene( assembly, scene.group );
+
+		} catch ( error ) {
+
+			this.release( assembly.sceneId );
+			throw error;
+
+		}
+		if ( this.scenes.get( assembly.sceneId ) !== scene ) {
+
+			this.#drop( scene );
+			return false;
+
+		}
+		this.group.add( scene.group );
+		for ( const entityId of scene.entityIds ) if ( this.collected.has( entityId ) ) this.#hide( entityId );
+		return true;
+
+	}
+
+	/** Removes one scene's visuals and colliders. */
+	release( sceneId ) {
+
+		const scene = this.scenes.get( sceneId );
+		if ( ! scene ) return;
+		this.scenes.delete( sceneId );
+		this.#drop( scene );
+
+	}
+
+	#drop( scene ) {
+
+		this.group.remove( scene.group );
+		for ( const entityId of scene.entityIds ) {
+
+			for ( const handle of this.colliders.get( entityId ) ?? [] ) this.physics?.remove?.( handle );
+			this.colliders.delete( entityId );
+			const visual = this.visuals.get( entityId );
+			if ( visual?.owned ) visual.object.traverse( ( node ) => node.geometry?.dispose() );
+			this.visuals.delete( entityId );
+
+		}
 
 	}
 
@@ -57,6 +113,13 @@ export class InvestigationSceneRenderer {
 
 	collect( entityId ) {
 
+		this.collected.add( entityId );
+		this.#hide( entityId );
+
+	}
+
+	#hide( entityId ) {
+
 		const visual = this.visuals.get( entityId );
 		if ( visual ) visual.object.visible = false;
 		for ( const handle of this.colliders.get( entityId ) ?? [] ) this.physics?.remove?.( handle );
@@ -64,11 +127,8 @@ export class InvestigationSceneRenderer {
 
 	}
 
-	async #addScene( assembly ) {
+	async #addScene( assembly, scene ) {
 
-		const scene = new THREE.Group();
-		scene.name = `investigation:${assembly.sceneId}`;
-		this.group.add( scene );
 		for ( const entity of assembly.entities ) {
 
 			const object = entity.role === 'body' ? await this.#body( entity ) : this.#missionProp( entity );
@@ -81,7 +141,7 @@ export class InvestigationSceneRenderer {
 				entity.transform.position.y + Math.max( 0.03, entity.dimensions.height * 0.5 ),
 				entity.transform.position.z
 			);
-			this.visuals.set( entity.entityId, { object, focus } );
+			this.visuals.set( entity.entityId, { object, focus, owned: entity.role !== 'body' } );
 			if ( entity.blocksMovement ) this.#collide( entity );
 
 		}
@@ -91,13 +151,10 @@ export class InvestigationSceneRenderer {
 			const geometry = new THREE.PlaneGeometry( decal.width, decal.height );
 			const mesh = new THREE.Mesh( geometry, material );
 			mesh.name = `investigation-decal:${decal.entityId}`;
-			const u = vector( decal.transform.uAxis );
-			const v = vector( decal.transform.vAxis );
-			const normal = vector( decal.transform.normal );
-			mesh.quaternion.setFromRotationMatrix( new THREE.Matrix4().makeBasis( u, v, normal ) );
+			mesh.quaternion.copy( decalQuaternion( decal.transform ) );
 			mesh.position.copy( vector( decal.transform.position ) );
 			scene.add( mesh );
-			this.visuals.set( decal.entityId, { object: mesh, focus: mesh.position.clone() } );
+			this.visuals.set( decal.entityId, { object: mesh, focus: mesh.position.clone(), owned: true } );
 
 		}
 
@@ -132,6 +189,7 @@ export class InvestigationSceneRenderer {
 		try {
 
 			assertProductionBody( entity );
+			if ( entity.sourceMaterialPolicy === 'dressed-appearance' ) throw new Error( 'a dressed body stands through its scenery scene' );
 			if ( ! this.animation ) throw new Error( 'the audited Pro animation library is unavailable' );
 			const model = await this.loadGltf( entity.asset.uri );
 			assertRigCompatibility( model.scene, this.animation.scene );

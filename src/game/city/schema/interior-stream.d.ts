@@ -39,6 +39,8 @@ export interface InteriorStreamPort {
 	/** Room views consumed by RoomLights, per Light's contract. */
 	rooms: Parameters<RoomLights['update']>[0];
 	readonly liveInteriors: number;
+	/** Whether one floor of a furnished building is drawn and solid now. */
+	floorShown(parcelId: string, floor: number): boolean;
 	register(buildings: Map<string, { interior: InteriorSource | null; hasInterior?: boolean }>, centers: Map<string, { x: number; z: number }>): void;
 	/** Returns whether room memory or scene membership changed. */
 	update(feet: { x: number; y: number; z: number }): boolean;

@@ -339,7 +339,8 @@ function optional( url ) {
 	return url.endsWith( '/npc-types.json' )
 		|| url.endsWith( '/quests/quest-bundle.json' )
 		|| url.endsWith( '/quests/questlines.json' )
-		|| url.endsWith( '/quests/investigations.json' );
+		|| url.endsWith( '/quests/investigations.json' )
+		|| url.endsWith( '/quests/scenery.json' );
 
 }
 

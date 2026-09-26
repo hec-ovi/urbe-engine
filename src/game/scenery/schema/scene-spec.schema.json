@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:scenery:scene-spec",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "sceneId", "questId", "seed", "purpose", "place", "actors", "props", "activeWhen"],
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "sceneId": { "$ref": "urn:urbe:engine:scenery:values#/$defs/id" },
+    "questId": { "$ref": "urn:urbe:engine:scenery:values#/$defs/id" },
+    "seed": { "$ref": "urn:urbe:engine:scenery:values#/$defs/uint32" },
+    "purpose": { "enum": ["crime-scene", "aftermath", "wake", "stakeout", "ambient"] },
+    "place": { "$ref": "urn:urbe:engine:scenery:values#/$defs/place" },
+    "actors": { "type": "array", "maxItems": 4, "items": { "$ref": "urn:urbe:engine:scenery:values#/$defs/actor" } },
+    "props": { "type": "array", "maxItems": 16, "items": { "$ref": "urn:urbe:engine:scenery:values#/$defs/prop" } },
+    "lighting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["preset"],
+      "properties": { "preset": { "const": "none" } }
+    },
+    "activeWhen": { "$ref": "urn:urbe:engine:scenery:values#/$defs/condition" },
+    "retireWhen": { "$ref": "urn:urbe:engine:scenery:values#/$defs/condition" },
+    "investigationSceneId": { "$ref": "urn:urbe:engine:scenery:values#/$defs/id" }
+  }
+}

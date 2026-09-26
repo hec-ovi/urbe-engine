@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:scenery:values",
+  "$defs": {
+    "id": { "$ref": "urn:urbe:engine:investigation:values#/$defs/id" },
+    "uint32": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "gender": { "enum": ["male", "female"] },
+    "poseId": {
+      "enum": ["death-a", "death-b", "wounded-crawl", "ground-sit", "kneel-examine", "crouch-examine", "search-torch", "grieving", "standing-guard"]
+    },
+    "corpsePoseId": { "enum": ["death-a", "death-b"] },
+    "roomKind": {
+      "enum": [
+        "corridor", "elevator_lobby", "concourse", "reception", "lounge", "office_open", "office_private", "meeting",
+        "executive_office", "dining_area", "kitchen", "counter_area", "bar", "sales_floor", "bedroom", "living",
+        "studio_main", "bathroom", "toilets", "gym_floor", "locker_room", "storage", "mechanical_room", "terrace_open",
+        "parking_area"
+      ]
+    },
+    "condition": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false, "required": ["all"],
+          "properties": { "all": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/condition" } } }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["any"],
+          "properties": { "any": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/condition" } } }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["not"],
+          "properties": { "not": { "$ref": "#/$defs/condition" } }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "stepId"],
+          "properties": { "kind": { "enum": ["stepActive", "stepDone"] }, "stepId": { "$ref": "#/$defs/id" } }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "flag"],
+          "properties": { "kind": { "enum": ["flagSet", "flagNotSet"] }, "flag": { "$ref": "#/$defs/id" } }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "roleId"],
+          "properties": { "kind": { "const": "roleDead" }, "roleId": { "$ref": "#/$defs/id" } }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind"],
+          "properties": { "kind": { "enum": ["questStarted", "questEnded", "never"] } }
+        }
+      ]
+    },
+    "place": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "parcelId", "floor"],
+          "properties": {
+            "kind": { "enum": ["room", "story-slot"] },
+            "parcelId": { "$ref": "#/$defs/id" },
+            "floor": { "type": "integer" },
+            "roomId": { "$ref": "#/$defs/id" },
+            "roomKinds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/roomKind" } }
+          },
+          "oneOf": [
+            { "properties": { "roomId": {} }, "required": ["roomId"] },
+            { "properties": { "roomKinds": {} }, "required": ["roomKinds"] }
+          ]
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "parcelId"],
+          "properties": { "kind": { "const": "parcel-entry" }, "parcelId": { "$ref": "#/$defs/id" } }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "parcelId"],
+          "properties": {
+            "kind": { "const": "street" },
+            "parcelId": { "$ref": "#/$defs/id" },
+            "width": { "type": "number", "minimum": 3, "maximum": 24 },
+            "depth": { "type": "number", "minimum": 3, "maximum": 24 }
+          }
+        }
+      ]
+    },
+    "placement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zone"],
+      "properties": {
+        "zone": { "enum": ["center", "perimeter", "incident", "entry-side"] },
+        "nearEntityId": { "$ref": "#/$defs/id" },
+        "maxDistanceMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "preferredYawRadians": { "type": "number" }
+      }
+    },
+    "identity": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "roleId"],
+          "properties": { "kind": { "const": "cast" }, "roleId": { "$ref": "#/$defs/id" } }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "gender", "appearanceSeed"],
+          "properties": {
+            "kind": { "const": "anonymous" },
+            "gender": { "$ref": "#/$defs/gender" },
+            "appearanceSeed": { "$ref": "#/$defs/uint32" }
+          }
+        }
+      ]
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actorId", "role", "identity", "pose", "placement"],
+      "properties": {
+        "actorId": { "$ref": "#/$defs/id" },
+        "role": { "enum": ["victim", "witness", "suspect", "officer", "bystander"] },
+        "identity": { "$ref": "#/$defs/identity" },
+        "pose": { "$ref": "#/$defs/poseId" },
+        "placement": { "$ref": "#/$defs/placement" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "identity": { "type": "object", "properties": { "kind": { "const": "cast" } }, "required": ["kind"] } },
+            "required": ["identity"]
+          },
+          "then": { "properties": { "pose": { "$ref": "#/$defs/corpsePoseId" } } }
+        }
+      ]
+    },
+    "prop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["propId", "kind"],
+      "properties": {
+        "propId": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["blood-pool", "tyre-marks", "mission-asset"] },
+        "assetId": { "$ref": "#/$defs/id" },
+        "zone": { "enum": ["center", "perimeter", "incident", "entry-side"] },
+        "nearActorId": { "$ref": "#/$defs/id" },
+        "nearPropId": { "$ref": "#/$defs/id" },
+        "size": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height"],
+          "properties": {
+            "width": { "type": "number", "minimum": 0.2, "maximum": 4 },
+            "height": { "type": "number", "minimum": 0.2, "maximum": 4 }
+          }
+        }
+      },
+      "not": { "properties": { "nearActorId": {}, "nearPropId": {} }, "required": ["nearActorId", "nearPropId"] },
+      "oneOf": [
+        {
+          "properties": { "kind": { "const": "mission-asset" }, "assetId": {}, "size": {} },
+          "required": ["kind", "assetId"],
+          "not": { "properties": { "size": {} }, "required": ["size"] }
+        },
+        {
+          "properties": { "kind": { "enum": ["blood-pool", "tyre-marks"] }, "assetId": {}, "zone": {} },
+          "required": ["kind"],
+          "not": { "anyOf": [ { "properties": { "assetId": {} }, "required": ["assetId"] }, { "properties": { "zone": {} }, "required": ["zone"] } ] }
+        }
+      ]
+    },
+    "resolvedPlace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parcelId"],
+      "properties": {
+        "parcelId": { "$ref": "#/$defs/id" },
+        "floor": { "type": "integer" },
+        "roomId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "resolvedActor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actorId", "gender", "appearanceSeed"],
+      "properties": {
+        "actorId": { "$ref": "#/$defs/id" },
+        "npcId": { "$ref": "#/$defs/id" },
+        "gender": { "$ref": "#/$defs/gender" },
+        "appearanceSeed": { "$ref": "#/$defs/uint32" }
+      }
+    }
+  }
+}

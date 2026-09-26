@@ -20,7 +20,8 @@ Read `CONTRACT.md` and the exact schemas before constructing a request.
 6. Declare evidence prerequisites and consequence events from the authored quest branch. Do not infer clues or outcomes from asset appearance.
 7. Call `SceneAssembler.assemble`. Treat geometry or no-fit errors as adaptation failures that require a different measured location or authored layout.
 8. Add one version 1.1 quest binding per evidence item. Copy the exact quest step id, scene id, evidence id and parcel or district, and declare whether inspect or take completes it.
-9. Load the request through `InvestigationGameplay.create`. It checks the quest definition, renders through the PBR and character asset adapters, and exposes only focused, reached, unobstructed active targets to the shared interactor.
-10. Save `InvestigationGameplay.serialize()` with the catalog game. Do not forward a raw renderer interaction to the quest runtime or reconstruct evidence state from quest flags.
+9. Load the request through `InvestigationGameplay.create`. It checks the quest definition; once the scenery director stages the scene it renders through the PBR and character asset adapters and exposes only focused, reached, unobstructed active targets to the shared interactor.
+10. When a scenery scene already lays out the incident, write a 1.2 request instead: the scene's `scenery.sceneId`, one `evidenceVisuals` entry per evidence naming that scene's actor or prop, and the evidence and bindings as above.
+11. Save `InvestigationGameplay.serialize()` with the catalog game. Do not forward a raw renderer interaction to the quest runtime or reconstruct evidence state from quest flags.
 
 Run all investigation tests after a change. The scene is ready only when every evidence target is reachable, the exact request reproduces the exact assembly, surface details fit, unavailable assets fail closed, and save restoration cannot award a consequence twice.

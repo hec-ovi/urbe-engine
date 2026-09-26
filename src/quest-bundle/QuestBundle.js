@@ -1,15 +1,26 @@
 import Ajv2020 from 'ajv/dist/2020.js';
 import manifestSchema from './schema/manifest.schema.json' with { type: 'json' };
+import sceneryCapabilities from '../game/scenery/capabilities.json' with { type: 'json' };
+import { unknownReferences } from '../game/scenery/SceneConditions.js';
 import { QuestBundleError } from './QuestBundleError.js';
 
 export const QUEST_BUNDLE_CATALOGS = Object.freeze( [
-	'questlines', 'objectives', 'investigations', 'mechanicTargetBindings', 'missionAssetRequests', 'missionItemBindings'
+	'questlines', 'objectives', 'investigations', 'mechanicTargetBindings', 'missionAssetRequests', 'missionItemBindings', 'scenery'
 ] );
-export const QUEST_BUNDLE_FILES = Object.freeze( [ ...QUEST_BUNDLE_CATALOGS, 'hostCapabilities' ] );
 
 const validateManifest = new Ajv2020( { allErrors: true, strict: true } ).compile( manifestSchema );
 
-/** Validates the complete Quests v0.8.2 engine handoff as one atomic unit. */
+/** The files one manifest names, host capabilities last: a 1.1 manifest names no scenery. */
+export function questBundleFiles( manifest ) {
+
+	return [ ...QUEST_BUNDLE_CATALOGS.filter( ( name ) => Object.hasOwn( manifest.files, name ) ), 'hostCapabilities' ];
+
+}
+
+/**
+ * Validates the complete Quests engine handoff as one atomic unit. A 1.1
+ * bundle carries no scenery and stands with an empty scenery catalog.
+ */
 export function questBundle( manifest, catalogs ) {
 
 	questBundleManifest( manifest );
@@ -18,25 +29,31 @@ export function questBundle( manifest, catalogs ) {
 		throw new QuestBundleError( 'E_QUEST_BUNDLE_FILES', 'quest bundle catalogs must be one object' );
 
 	}
+	const complete = Object.hasOwn( manifest.files, 'scenery' ) ? { ...catalogs } : { ...catalogs, scenery: catalogs.scenery ?? [] };
+	if ( ! Object.hasOwn( manifest.files, 'scenery' ) && complete.scenery.length ) {
+
+		throw new QuestBundleError( 'E_QUEST_BUNDLE_FILES', `a ${manifest.contractVersion} bundle carries no scenery` );
+
+	}
 	for ( const name of QUEST_BUNDLE_CATALOGS ) {
 
-		if ( ! Array.isArray( catalogs[ name ] ) ) {
+		if ( ! Array.isArray( complete[ name ] ) ) {
 
-			throw new QuestBundleError( 'E_QUEST_BUNDLE_FILES', `${manifest.files[ name ]} must contain an array` );
+			throw new QuestBundleError( 'E_QUEST_BUNDLE_FILES', `${manifest.files[ name ] ?? name} must contain an array` );
 
 		}
-		if ( catalogs[ name ].length !== manifest.counts[ name ] ) {
+		if ( Object.hasOwn( manifest.counts, name ) && complete[ name ].length !== manifest.counts[ name ] ) {
 
 			throw new QuestBundleError(
-				'E_QUEST_BUNDLE_COUNT', `${manifest.files[ name ]} has ${catalogs[ name ].length} records, expected ${manifest.counts[ name ]}`
+				'E_QUEST_BUNDLE_COUNT', `${manifest.files[ name ]} has ${complete[ name ].length} records, expected ${manifest.counts[ name ]}`
 			);
 
 		}
 
 	}
-	assertHostCapabilities( catalogs.hostCapabilities );
-	assertContent( catalogs );
-	return { manifest, ...catalogs };
+	assertHostCapabilities( complete.hostCapabilities );
+	assertContent( complete );
+	return { manifest, ...complete };
 
 }
 
@@ -46,7 +63,7 @@ export function questBundleManifest( manifest ) {
 	if ( ! validateManifest( manifest ) ) {
 
 		throw new QuestBundleError(
-			'E_QUEST_BUNDLE_INPUT', 'quest-bundle.json does not match the v1.1 contract',
+			'E_QUEST_BUNDLE_INPUT', 'quest-bundle.json does not match the v1.1 or v1.2 contract',
 			( validateManifest.errors ?? [] ).map( ( error ) => ( {
 				path: error.instancePath || '/', keyword: error.keyword, message: error.message ?? 'invalid value'
 			} ) )
@@ -79,11 +96,15 @@ export function selectQuestBundle( bundle, questIds, questlinesFile = 'questline
 	const investigations = checked.investigations.filter( ( request ) => selected.has( request.questId ) );
 	const mechanicTargetBindings = checked.mechanicTargetBindings.filter( ( binding ) => selected.has( binding.questId ) );
 	const missionItemBindings = checked.missionItemBindings.filter( ( binding ) => selected.has( binding.questId ) );
-	const assetIds = new Set( [ ...missionItemBindings, ...mechanicTargetBindings ].map( ( binding ) => binding.assetId ) );
+	const scenery = checked.scenery.filter( ( spec ) => selected.has( spec.questId ) );
+	const assetIds = new Set( [
+		...[ ...missionItemBindings, ...mechanicTargetBindings ].map( ( binding ) => binding.assetId ),
+		...scenery.flatMap( sceneryAssetIds )
+	] );
 	const missionAssetRequests = checked.missionAssetRequests.filter( ( request ) => assetIds.has( request.assetId ) );
 	const catalogs = {
 		questlines, objectives, investigations, mechanicTargetBindings, missionAssetRequests,
-		missionItemBindings, hostCapabilities: checked.hostCapabilities
+		missionItemBindings, scenery, hostCapabilities: checked.hostCapabilities
 	};
 	const manifest = manifestFor( catalogs, questlinesFile );
 	return questBundle( manifest, catalogs );
@@ -93,7 +114,7 @@ export function selectQuestBundle( bundle, questIds, questlinesFile = 'questline
 export function manifestFor( catalogs, questlinesFile = 'questlines.json' ) {
 
 	return {
-		contractVersion: '1.1',
+		contractVersion: '1.2',
 		files: {
 			questlines: questlinesFile,
 			objectives: 'objectives.json',
@@ -101,6 +122,7 @@ export function manifestFor( catalogs, questlinesFile = 'questlines.json' ) {
 			mechanicTargetBindings: 'mechanic-target-bindings.json',
 			missionAssetRequests: 'mission-assets.json',
 			missionItemBindings: 'mission-item-bindings.json',
+			scenery: 'scenery.json',
 			hostCapabilities: 'host-capabilities.json'
 		},
 		counts: Object.fromEntries( QUEST_BUNDLE_CATALOGS.map( ( name ) => [ name, catalogs[ name ]?.length ?? - 1 ] ) )
@@ -130,6 +152,7 @@ function assertContent( catalogs ) {
 
 	}
 	const assets = uniqueIds( catalogs.missionAssetRequests, 'assetId', 'mission asset requests' );
+	assertScenery( catalogs, assets );
 	const assetById = new Map( catalogs.missionAssetRequests.map( ( request ) => [ request.assetId, request ] ) );
 	const bindingKeys = new Set();
 	for ( const binding of catalogs.missionItemBindings ) {
@@ -172,8 +195,8 @@ function assertContent( catalogs ) {
 
 function assertHostCapabilities( value ) {
 
-	if ( ! value || typeof value !== 'object' || Array.isArray( value )
-		|| Object.keys( value ).length !== 1 || ! Array.isArray( value.transportationModes ) ) {
+	if ( ! value || typeof value !== 'object' || Array.isArray( value ) || ! Array.isArray( value.transportationModes )
+		|| Object.keys( value ).some( ( key ) => key !== 'transportationModes' && key !== 'scenery' ) ) {
 
 		throw new QuestBundleError( 'E_QUEST_BUNDLE_FILES', 'host-capabilities.json must contain one host capability object' );
 
@@ -184,6 +207,100 @@ function assertHostCapabilities( value ) {
 		fail( 'host transportation modes must be the measured Engine capability public-transit' );
 
 	}
+	if ( value.scenery === undefined ) return;
+	const declared = value.scenery;
+	if ( declared?.contractVersion !== sceneryCapabilities.contractVersion ) fail( 'host scenery capability names another contract version' );
+	for ( const list of [ 'placeKinds', 'poses', 'propKinds', 'lightingPresets' ] ) {
+
+		const beyond = ( Array.isArray( declared[ list ] ) ? declared[ list ] : [ null ] ).filter( ( item ) => ! sceneryCapabilities[ list ].includes( item ) );
+		if ( beyond.length ) fail( `host scenery ${list} name what Engine does not stage: ${beyond.join( ', ' )}` );
+
+	}
+	for ( const limit of [ 'actors', 'props' ] ) {
+
+		if ( ! Number.isInteger( declared.limits?.[ limit ] ) || declared.limits[ limit ] > sceneryCapabilities.limits[ limit ] ) {
+
+			fail( `host scenery ${limit} limit exceeds Engine's ${sceneryCapabilities.limits[ limit ]}` );
+
+		}
+
+	}
+
+}
+
+/**
+ * Scene specs stand only on what the bundle's host capability declares, name
+ * steps, flags and roles their questline has and assets the bundle builds,
+ * and link investigations of their own quest both ways.
+ */
+function assertScenery( catalogs, assets ) {
+
+	const scenes = new Map();
+	for ( const spec of catalogs.scenery ) {
+
+		if ( typeof spec?.sceneId !== 'string' || scenes.has( spec.sceneId ) ) fail( `scenery repeats or omits scene ${spec?.sceneId}` );
+		scenes.set( spec.sceneId, spec );
+
+	}
+	const declared = catalogs.hostCapabilities.scenery;
+	if ( scenes.size && ! declared ) fail( 'scenery needs the host scenery capability' );
+	const investigations = new Map( catalogs.investigations.map( ( request ) => [ request?.sceneId, request ] ) );
+	for ( const spec of scenes.values() ) {
+
+		const definition = catalogs.questlines.find( ( candidate ) => candidate.id === spec.questId );
+		if ( ! definition ) fail( `scene ${spec.sceneId} names unknown quest ${spec.questId}` );
+		const actors = Array.isArray( spec.actors ) ? spec.actors : [];
+		const props = Array.isArray( spec.props ) ? spec.props : [];
+		const unknown = [
+			...( spec.activeWhen ? unknownReferences( spec.activeWhen, definition ) : [ 'activeWhen' ] ),
+			...( spec.retireWhen ? unknownReferences( spec.retireWhen, definition ) : [] ),
+			...actors.filter( ( actor ) => actor?.identity?.kind === 'cast' && ! definition.roles.some( ( role ) => role.roleId === actor.identity.roleId ) )
+				.map( ( actor ) => `roleId ${actor.identity.roleId}` ),
+			...props.filter( ( prop ) => prop?.kind === 'mission-asset' && ! assets.has( prop.assetId ) ).map( ( prop ) => `asset ${prop.assetId}` )
+		];
+		if ( unknown.length ) fail( `scene ${spec.sceneId} names what quest ${spec.questId} lacks: ${unknown.join( ', ' )}` );
+		const beyond = [
+			...( declared.placeKinds.includes( spec.place?.kind ) ? [] : [ `place ${spec.place?.kind}` ] ),
+			...actors.filter( ( actor ) => ! declared.poses.includes( actor?.pose ) ).map( ( actor ) => `pose ${actor?.pose}` ),
+			...props.filter( ( prop ) => ! declared.propKinds.includes( prop?.kind ) ).map( ( prop ) => `prop ${prop?.kind}` ),
+			...( spec.lighting && ! declared.lightingPresets.includes( spec.lighting.preset ) ? [ `lighting ${spec.lighting.preset}` ] : [] ),
+			...( actors.length > declared.limits.actors ? [ `${actors.length} actors` ] : [] ),
+			...( props.length > declared.limits.props ? [ `${props.length} props` ] : [] )
+		];
+		if ( beyond.length ) fail( `scene ${spec.sceneId} asks for what the host does not declare: ${beyond.join( ', ' )}` );
+		if ( spec.investigationSceneId !== undefined ) {
+
+			const linked = investigations.get( spec.investigationSceneId );
+			if ( linked?.scenery?.sceneId !== spec.sceneId || linked.questId !== spec.questId ) {
+
+				fail( `scene ${spec.sceneId} names investigation ${spec.investigationSceneId}, which does not link it` );
+
+			}
+
+		}
+
+	}
+	for ( const request of catalogs.investigations ) {
+
+		if ( ! request?.scenery ) continue;
+		const spec = scenes.get( request.scenery.sceneId );
+		if ( ! spec || spec.questId !== request.questId ) fail( `investigation ${request.sceneId} links unknown scene ${request.scenery.sceneId}` );
+		if ( spec.investigationSceneId !== undefined && spec.investigationSceneId !== request.sceneId ) {
+
+			fail( `investigation ${request.sceneId} links scene ${spec.sceneId}, which names ${spec.investigationSceneId}` );
+
+		}
+		const elements = new Set( [ ...( spec.actors ?? [] ).map( ( actor ) => actor?.actorId ), ...( spec.props ?? [] ).map( ( prop ) => prop?.propId ) ] );
+		const missing = ( request.evidenceVisuals ?? [] ).filter( ( visual ) => ! elements.has( visual?.entityId ) );
+		if ( missing.length ) fail( `investigation ${request.sceneId} shows evidence on elements scene ${spec.sceneId} lacks: ${missing.map( ( visual ) => visual?.entityId ).join( ', ' )}` );
+
+	}
+
+}
+
+function sceneryAssetIds( spec ) {
+
+	return ( spec.props ?? [] ).filter( ( prop ) => prop.kind === 'mission-asset' ).map( ( prop ) => prop.assetId );
 
 }
 

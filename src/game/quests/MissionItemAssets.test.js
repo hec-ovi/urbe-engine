@@ -28,6 +28,8 @@ describe( 'mission item asset binding', () => {
 		} );
 		expect( assets.get( 'quest.other', 'item.file' ) ).toBe( null );
 		expect( assets.get( 'quest.case', 'item.other' ) ).toBe( null );
+		expect( assets.asset( request.assetId ) ).toBe( assets.get( 'quest.case', 'item.file' ) );
+		expect( assets.asset( 'asset.other' ) ).toBeNull();
 
 		const fixed = new MissionItemAssets( {
 			requests: [ request ], bindings: [],

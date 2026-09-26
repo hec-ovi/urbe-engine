@@ -136,20 +136,48 @@
         "zone": { "enum": ["center", "perimeter", "incident", "entry-side"] },
         "nearEntityId": { "$ref": "#/$defs/id" },
         "maxDistanceMeters": { "$ref": "#/$defs/positive" },
-        "preferredYawRadians": { "$ref": "#/$defs/finite" }
+        "preferredYawRadians": { "$ref": "#/$defs/finite" },
+        "point": { "$ref": "#/$defs/vector2" }
+      }
+    },
+    "appearance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gender", "appearanceSeed"],
+      "properties": {
+        "gender": { "enum": ["male", "female"] },
+        "appearanceSeed": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      }
+    },
+    "sourceMaterials": {
+      "type": "object",
+      "if": {
+        "properties": { "sourceMaterialPolicy": { "const": "dressed-appearance" } },
+        "required": ["sourceMaterialPolicy"]
+      },
+      "then": {
+        "properties": { "appearance": {}, "materials": {} },
+        "required": ["appearance"],
+        "not": { "properties": { "materials": {} }, "required": ["materials"] }
+      },
+      "else": {
+        "properties": { "appearance": {}, "materials": {} },
+        "required": ["materials"],
+        "not": { "properties": { "appearance": {} }, "required": ["appearance"] }
       }
     },
     "body": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["entityId", "asset", "dimensions", "poseId", "placement", "materials"],
+      "required": ["entityId", "asset", "dimensions", "poseId", "placement"],
       "properties": {
         "entityId": { "$ref": "#/$defs/id" },
         "asset": { "$ref": "#/$defs/assetRef" },
         "dimensions": { "$ref": "#/$defs/dimensions" },
         "poseId": { "$ref": "#/$defs/id" },
         "animationAsset": { "$ref": "#/$defs/animationRef" },
-        "sourceMaterialPolicy": { "const": "original-source-textures" },
+        "sourceMaterialPolicy": { "enum": ["original-source-textures", "dressed-appearance"] },
+        "appearance": { "$ref": "#/$defs/appearance" },
         "placement": { "$ref": "#/$defs/placementHint" },
         "materials": {
           "type": "array",
@@ -157,7 +185,8 @@
           "items": { "$ref": "#/$defs/material" }
         },
         "evidenceId": { "$ref": "#/$defs/id" }
-      }
+      },
+      "$ref": "#/$defs/sourceMaterials"
     },
     "prop": {
       "type": "object",
@@ -275,7 +304,7 @@
     "entityPlacement": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["entityId", "role", "dimensions", "transform", "footprint", "materials", "blocksMovement"],
+      "required": ["entityId", "role", "dimensions", "transform", "footprint", "blocksMovement"],
       "properties": {
         "entityId": { "$ref": "#/$defs/id" },
         "role": { "enum": ["body", "prop"] },
@@ -284,7 +313,8 @@
         "dimensions": { "$ref": "#/$defs/dimensions" },
         "poseId": { "$ref": "#/$defs/id" },
         "animationAsset": { "$ref": "#/$defs/animationRef" },
-        "sourceMaterialPolicy": { "const": "original-source-textures" },
+        "sourceMaterialPolicy": { "enum": ["original-source-textures", "dressed-appearance"] },
+        "appearance": { "$ref": "#/$defs/appearance" },
         "transform": {
           "type": "object",
           "additionalProperties": false,
@@ -304,6 +334,7 @@
         "portable": { "type": "boolean" },
         "evidenceId": { "$ref": "#/$defs/id" }
       },
+      "$ref": "#/$defs/sourceMaterials",
       "oneOf": [
         {
           "properties": { "asset": {}, "missionAsset": {} },

@@ -4,8 +4,9 @@ Purpose: fits and renders authored incident elements in a measured interior or s
 
 ## Inputs
 
-- Scene request: [schema/scene-request.schema.json](schema/scene-request.schema.json). Version 1.0 remains valid for isolated assembly. Live version 1.1 also carries one exact quest step, evidence, place, and completion action binding per evidence target. Its bodies use audited Source media and Pro `Death01` or `Death02`; props carry full mission-asset assemblies.
-- Live scene requests: [schema/scene-requests.schema.json](schema/scene-requests.schema.json). The complete authored list loaded from `quests/investigations.json`.
+- Scene request: [schema/scene-request.schema.json](schema/scene-request.schema.json). Version 1.0 remains valid for isolated assembly. Live version 1.1 also carries one exact quest step, evidence, place, and completion action binding per evidence target. Its bodies use audited Source media, either with original textures in Pro `Death01` or `Death02`, or wearing a crowd person's `appearance` (`dressed-appearance`) in a [scenery](../scenery/CONTRACT.md) pose; props carry full mission-asset assemblies. A placement `point` is the frame point an element is placed nearest.
+- Linked scene request: [schema/linked-scene-request.schema.json](schema/linked-scene-request.schema.json), version 1.2. It carries the incident, bindings and evidence of a 1.1 request, the scenery scene it stands over (`scenery.sceneId`) and one element of that scene per evidence (`evidenceVisuals`), and no frame or elements of its own.
+- Live scene requests: [schema/scene-requests.schema.json](schema/scene-requests.schema.json). The complete authored list loaded from `quests/investigations.json` or the quest bundle.
 - Scene assembly passed to the runtime: [schema/scene-assembly.schema.json](schema/scene-assembly.schema.json). Only an assembly already validated by this layer is accepted.
 - Target query: [schema/target-query.schema.json](schema/target-query.schema.json). It carries the complete persisted scene state.
 - Interaction request: [schema/interaction-request.schema.json](schema/interaction-request.schema.json). The host supplies the selected target, action, saved state, and measured focus facts.
@@ -30,9 +31,10 @@ Shared ids, coordinates, asset envelopes, material assignments, evidence definit
 - `SceneAssembler.assemble(request)` validates the scene, places bodies and props, fits decals to receiving surfaces, verifies every evidence target has a reachable approach, and returns the assembly.
 - `InvestigationRuntime.targets({ state })` projects current evidence availability without mutating state.
 - `InvestigationRuntime.perform(request)` applies `inspect` or `take`, then emits only consequence events authored on that evidence and transition.
-- `InvestigationGameplay.create(options)` accepts only version 1.1 scenes whose quest, step, scene, evidence, and place match the loaded quest definition exactly.
+- `InvestigationGameplay.create(options)` accepts only version 1.1 and 1.2 scenes whose quest, step, scene, evidence, and place match the loaded quest definition exactly. A 1.1 scene is assembled at creation; a 1.2 scene when it stages.
+- The scenery director stages and retires every scene (`lifecycles()`, `stage(sceneId, link)`, `retire(sceneId)`); a scene offers candidates only while staged. A 1.1 scene is drawn by this layer from staging until retirement. A 1.2 scene is the 1.1 request its scenery scene's staging request makes (the same frame, seed and elements in the same order, each evidence on the element `evidenceVisuals` names), so its placement is exactly that scene's; its focus, occlusion and collection go through that scene's visuals.
 - `InvestigationGameplay.perform(request)` emits `{ kind: "investigated", sceneId, evidenceId, place }` only after `InvestigationRuntime` accepts the authored completion action. The exact selected quest must accept that event before scene state changes.
-- `InvestigationSceneRenderer.create(options)` builds mission primitives and fitted decals with resolved PBR materials. It loads an audited Source body, preserves its original textures, applies the final frame of the named Pro death pose, and fails if any required body, pose, or texture is unavailable. Its occlusion query excludes the selected entity's own collider and the player collider while retaining every other world collider.
+- `InvestigationSceneRenderer` `realize(assembly)` builds one scene's mission primitives and fitted decals with resolved PBR materials. It loads an audited Source body, preserves its original textures, applies the final frame of the named Pro death pose, and fails if any required body, pose, or texture is unavailable; a dressed body stands only through its scenery scene. `release(sceneId)` removes that scene's visuals and colliders. Its occlusion query excludes the selected entity's own collider and the player collider while retaining every other world collider.
 
 ## Errors
 
@@ -41,7 +43,7 @@ Shared ids, coordinates, asset envelopes, material assignments, evidence definit
 - `E_INVESTIGATION_GEOMETRY`: ids, references, surface frames, material slots, portable status, or prerequisite graphs disagree.
 - `E_INVESTIGATION_NO_FIT`: an entity, decal, or reachable evidence approach cannot fit the measured location.
 - `E_INVESTIGATION_STATE`: persisted evidence or emitted transition state disagrees with the assembled scene.
-- `E_INVESTIGATION_BINDING`: a live scene does not exactly match its quest definition, or the exact quest rejects an accepted scene completion.
+- `E_INVESTIGATION_BINDING`: a live scene does not exactly match its quest definition, a 1.2 scene does not name one element per evidence or stages without its scenery scene, or the exact quest rejects an accepted scene completion.
 - `E_INVESTIGATION_ASSET`: a required Source body, rig, texture, or Pro final pose cannot load.
 - `E_INVESTIGATION_MATERIAL`: a mission prop or decal material key cannot resolve.
 - Interaction result codes are `unknown-target`, `wrong-scene`, `wrong-action`, `prerequisite`, `not-visible`, `occluded`, `out-of-reach`, `inspect-first`, and `already-resolved`.
@@ -53,6 +55,7 @@ Shared ids, coordinates, asset envelopes, material assignments, evidence definit
 - Character assets, through the audited Source body and Pro animation public APIs.
 - Materials, through PBR keys and optional variants in [schema/values.schema.json](schema/values.schema.json). Material resolution remains outside this layer and must fail closed on an unavailable key.
 - Three.js, the host Rapier adapter, and the PBR material factory, inside the renderer adapter only.
+- [Scenery](../scenery/CONTRACT.md): its staging geometry places every scene, its director stages every scene, and a 1.2 scene stands over one of its scenes.
 
 ## Invariants
 
@@ -67,4 +70,5 @@ Shared ids, coordinates, asset envelopes, material assignments, evidence definit
 - Consequence events come only from the authored evidence definition and emit once. Reloading preserves discoveries, collected props, and emitted transition ids.
 - Asset media crosses by reference with URI, media type, byte size and SHA-256 checksum. Materials cross as PBR database keys, never as anonymous colors.
 - The renderer never substitutes an untextured body or anonymous prop. Every visible mission primitive and decal resolves its authored MaterialFactory key; Source bodies retain their original mapped materials.
-- Collection hides the exact rendered entity and removes its collider. Save restoration repeats that world change before the first interaction frame.
+- Collection hides the exact rendered entity and removes its collider. Staging a restored scene repeats that world change before its first interaction frame.
+- A scene's visuals and colliders exist only while it is staged.

@@ -1,0 +1,8 @@
+{
+  "contractVersion": "1.0",
+  "placeKinds": ["room", "story-slot", "parcel-entry", "street"],
+  "poses": ["death-a", "death-b", "wounded-crawl", "ground-sit", "kneel-examine", "crouch-examine", "search-torch", "grieving", "standing-guard"],
+  "propKinds": ["blood-pool", "tyre-marks", "mission-asset"],
+  "lightingPresets": ["none"],
+  "limits": { "actors": 4, "props": 16 }
+}

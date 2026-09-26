@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["contractVersion", "files", "counts"],
   "properties": {
-    "contractVersion": { "const": "1.1" },
+    "contractVersion": { "enum": ["1.1", "1.2"] },
     "files": {
       "type": "object",
       "additionalProperties": false,
@@ -17,6 +17,7 @@
         "mechanicTargetBindings": { "const": "mechanic-target-bindings.json" },
         "missionAssetRequests": { "const": "mission-assets.json" },
         "missionItemBindings": { "const": "mission-item-bindings.json" },
+        "scenery": { "const": "scenery.json" },
         "hostCapabilities": { "const": "host-capabilities.json" }
       }
     },
@@ -30,8 +31,22 @@
         "investigations": { "$ref": "#/$defs/count" },
         "mechanicTargetBindings": { "$ref": "#/$defs/count" },
         "missionAssetRequests": { "$ref": "#/$defs/count" },
-        "missionItemBindings": { "$ref": "#/$defs/count" }
+        "missionItemBindings": { "$ref": "#/$defs/count" },
+        "scenery": { "$ref": "#/$defs/count" }
       }
+    }
+  },
+  "if": { "properties": { "contractVersion": { "const": "1.2" } }, "required": ["contractVersion"] },
+  "then": {
+    "properties": {
+      "files": { "type": "object", "properties": { "scenery": {} }, "required": ["scenery"] },
+      "counts": { "type": "object", "properties": { "scenery": {} }, "required": ["scenery"] }
+    }
+  },
+  "else": {
+    "properties": {
+      "files": { "type": "object", "not": { "properties": { "scenery": {} }, "required": ["scenery"] } },
+      "counts": { "type": "object", "not": { "properties": { "scenery": {} }, "required": ["scenery"] } }
     }
   },
   "$defs": {

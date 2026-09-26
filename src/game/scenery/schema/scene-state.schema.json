@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:scenery:scene-state",
+  "title": "Saved lifecycle of one staged scene",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "sceneId", "status"],
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "sceneId": { "$ref": "#/$defs/id" },
+    "status": { "enum": ["dormant", "staged", "retired"] },
+    "stagedAtMin": { "type": "number", "minimum": 0 },
+    "retiredAtMin": { "type": "number", "minimum": 0 },
+    "resolved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["place", "actors"],
+      "properties": {
+        "place": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["parcelId"],
+          "properties": {
+            "parcelId": { "$ref": "#/$defs/id" },
+            "floor": { "type": "integer" },
+            "roomId": { "$ref": "#/$defs/id" }
+          }
+        },
+        "actors": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["actorId", "gender", "appearanceSeed"],
+            "properties": {
+              "actorId": { "$ref": "#/$defs/id" },
+              "npcId": { "$ref": "#/$defs/id" },
+              "gender": { "enum": ["male", "female"] },
+              "appearanceSeed": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+            }
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "dormant" } }, "required": ["status"] },
+      "then": { "not": { "anyOf": [
+        { "properties": { "stagedAtMin": {} }, "required": ["stagedAtMin"] },
+        { "properties": { "retiredAtMin": {} }, "required": ["retiredAtMin"] },
+        { "properties": { "resolved": {} }, "required": ["resolved"] }
+      ] } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "staged" } }, "required": ["status"] },
+      "then": {
+        "properties": { "stagedAtMin": {}, "resolved": {} },
+        "required": ["stagedAtMin", "resolved"],
+        "not": { "properties": { "retiredAtMin": {} }, "required": ["retiredAtMin"] }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "retired" } }, "required": ["status"] },
+      "then": {
+        "properties": { "retiredAtMin": {} },
+        "required": ["retiredAtMin"],
+        "not": { "properties": { "resolved": {} }, "required": ["resolved"] }
+      }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 160 }
+  }
+}

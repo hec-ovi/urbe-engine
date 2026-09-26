@@ -1,0 +1,11 @@
+{
+  "death-a": { "clip": "Death01", "at": 1, "corpse": true, "dimensions": { "width": 1.1, "height": 0.35, "depth": 2.2 } },
+  "death-b": { "clip": "Death02", "at": 1, "corpse": true, "dimensions": { "width": 1.05, "height": 0.35, "depth": 1.95 } },
+  "wounded-crawl": { "clip": "Crawl_Idle_Loop", "at": 0, "corpse": false, "dimensions": { "width": 0.95, "height": 0.5, "depth": 1.95 } },
+  "ground-sit": { "clip": "GroundSit_Idle_Loop", "at": 0, "corpse": false, "dimensions": { "width": 0.95, "height": 0.95, "depth": 1.1 } },
+  "kneel-examine": { "clip": "Fixing_Kneeling", "at": 0.5, "corpse": false, "dimensions": { "width": 0.75, "height": 1.0, "depth": 1.35 } },
+  "crouch-examine": { "clip": "Crouch_Idle_Loop", "at": 0, "corpse": false, "dimensions": { "width": 0.85, "height": 1.05, "depth": 0.9 } },
+  "search-torch": { "clip": "Idle_Torch_Loop", "at": 0, "corpse": false, "dimensions": { "width": 0.65, "height": 1.85, "depth": 1.0 } },
+  "grieving": { "clip": "Crying", "at": 0.5, "corpse": false, "dimensions": { "width": 0.65, "height": 1.65, "depth": 0.8 } },
+  "standing-guard": { "clip": "Idle_Loop", "at": 0, "corpse": false, "dimensions": { "width": 0.7, "height": 1.85, "depth": 0.7 } }
+}

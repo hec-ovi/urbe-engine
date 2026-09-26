@@ -9,6 +9,8 @@ import { InvestigationGameplay } from './InvestigationGameplay.js';
 import { InvestigationSceneRenderer } from './InvestigationSceneRenderer.js';
 import { SceneAssembler } from './SceneAssembler.js';
 import { Physics } from '../physics/Physics.js';
+import { SceneryCompiler } from '../scenery/SceneryCompiler.js';
+import { assets, courier, crimeScene, frame } from '../scenery/scenery.test-fixtures.js';
 
 describe( 'InvestigationGameplay live integration', () => {
 
@@ -18,6 +20,9 @@ describe( 'InvestigationGameplay live integration', () => {
 		const renderer = rendererStub();
 		const gameplay = await InvestigationGameplay.create( { requests: [ interior ], session, renderer } );
 		const frame = aimedFrame();
+		expect( gameplay.candidates( frame ) ).toEqual( [] );
+		expect( await gameplay.stage( interior.sceneId, null ) ).toBe( true );
+		expect( renderer.realize ).toHaveBeenCalledOnce();
 
 		expect( gameplay.candidates( { ...frame, playerPlaces: [ { kind: 'parcel', id: 'elsewhere' } ] } ) ).toEqual( [] );
 		// The player stands at transit places too, and a frame there is a frame.
@@ -55,6 +60,7 @@ describe( 'InvestigationGameplay live integration', () => {
 
 		const session = questSession();
 		const first = await InvestigationGameplay.create( { requests: [ interior ], session, renderer: rendererStub() } );
+		await first.stage( interior.sceneId, null );
 		completeScene( first );
 		const saved = first.serialize();
 		const restoredSession = QuestSession.create( [ questDefinition() ], simulation(), 0, session.persistenceView() );
@@ -63,6 +69,8 @@ describe( 'InvestigationGameplay live integration', () => {
 			requests: [ interior ], session: restoredSession, renderer: restoredRenderer, saved
 		} );
 		expect( restored.serialize() ).toEqual( saved );
+		expect( restoredRenderer.collect ).not.toHaveBeenCalled();
+		await restored.stage( interior.sceneId, null );
 		expect( restoredRenderer.collect ).toHaveBeenCalledExactlyOnceWith( 'dropped-access-card' );
 		expect( restored.candidates( aimedFrame() ) ).toEqual( [] );
 
@@ -83,16 +91,81 @@ describe( 'InvestigationGameplay live integration', () => {
 
 } );
 
+describe( 'InvestigationGameplay over a scenery scene', () => {
+
+	const staging = new SceneryCompiler( { missionAssets: assets } ).compile( crimeScene(), frame, courier );
+	const linked = {
+		contractVersion: '1.2', sceneId: interior.sceneId, questId: interior.questId, incident: interior.incident,
+		questBindings: interior.questBindings, scenery: { sceneId: 'courier-found' },
+		evidenceVisuals: [
+			{ evidenceId: 'body-position', entityId: 'courier' },
+			{ evidenceId: 'blood-direction', entityId: 'pool' },
+			{ evidenceId: 'access-card', entityId: 'drive' }
+		],
+		evidence: interior.evidence
+	};
+
+	it( 'places its evidence exactly on the scenery scene\'s elements and acts through that scene\'s visuals', async () => {
+
+		const renderer = rendererStub();
+		const gameplay = await InvestigationGameplay.create( { requests: [ linked ], session: questSession(), renderer } );
+		expect( gameplay.lifecycles() ).toEqual( [ {
+			sceneId: interior.sceneId, questId: interior.questId,
+			stepIds: [ 'inspect-body-position', 'inspect-blood-direction', 'take-access-drive' ], scenerySceneId: 'courier-found'
+		} ] );
+		await expect( gameplay.stage( interior.sceneId, null ) ).rejects.toMatchObject( { code: 'E_INVESTIGATION_BINDING' } );
+
+		const visuals = rendererStub();
+		expect( await gameplay.stage( interior.sceneId, { request: staging.request, visuals } ) ).toBe( true );
+		expect( renderer.realize ).not.toHaveBeenCalled();
+		const placed = gameplay.scenes.get( interior.sceneId ).assembly;
+		const where = ( items ) => items.map( ( item ) => [ item.entityId, item.transform ] );
+		expect( where( placed.entities ) ).toEqual( where( staging.assembly.entities ) );
+		expect( where( placed.decals ) ).toEqual( where( staging.assembly.decals ) );
+		expect( placed.targets.map( ( target ) => target.entityId ) ).toEqual( [ 'courier', 'pool', 'drive' ] );
+
+		completeScene( gameplay );
+		expect( visuals.collect ).toHaveBeenCalledExactlyOnceWith( 'drive' );
+		gameplay.retire( interior.sceneId );
+		expect( gameplay.candidates( aimedFrame() ) ).toEqual( [] );
+		expect( renderer.release ).not.toHaveBeenCalled();
+
+	} );
+
+	it( 'takes a collected element out again when a saved scene stands, and refuses evidence without one element each', async () => {
+
+		const first = await InvestigationGameplay.create( { requests: [ linked ], session: questSession(), renderer: rendererStub() } );
+		await first.stage( interior.sceneId, { request: staging.request, visuals: rendererStub() } );
+		completeScene( first );
+		const saved = first.serialize();
+		const restored = await InvestigationGameplay.create( { requests: [ linked ], session: questSession(), renderer: rendererStub(), saved } );
+		const visuals = rendererStub();
+		await restored.stage( interior.sceneId, { request: staging.request, visuals } );
+		expect( visuals.collect ).toHaveBeenCalledExactlyOnceWith( 'drive' );
+		expect( restored.serialize() ).toEqual( saved );
+
+		const doubled = { ...linked, evidenceVisuals: [ ...linked.evidenceVisuals.slice( 0, 2 ), { evidenceId: 'access-card', entityId: 'pool' } ] };
+		await expect( InvestigationGameplay.create( { requests: [ doubled ], session: questSession(), renderer: rendererStub() } ) )
+			.rejects.toMatchObject( { code: 'E_INVESTIGATION_BINDING' } );
+		const stranger = { ...linked, evidenceVisuals: [ ...linked.evidenceVisuals.slice( 0, 2 ), { evidenceId: 'access-card', entityId: 'ghost' } ] };
+		const unplaced = await InvestigationGameplay.create( { requests: [ stranger ], session: questSession(), renderer: rendererStub() } );
+		await expect( unplaced.stage( interior.sceneId, { request: staging.request, visuals: rendererStub() } ) )
+			.rejects.toMatchObject( { code: 'E_INVESTIGATION_BINDING', message: expect.stringMatching( /ghost/ ) } );
+
+	} );
+
+} );
+
 describe( 'InvestigationSceneRenderer production failures', () => {
 
 	it( 'ignores the selected entity collider while retaining real world occlusion', async () => {
 
 		const scene = new SceneAssembler().assemble( street );
 		const physics = await Physics.create();
-		const renderer = await InvestigationSceneRenderer.create( {
-			assemblies: [ scene ], physics,
-			materialFactory: { build: ( key ) => new THREE.MeshStandardMaterial( { name: key } ) }
+		const renderer = new InvestigationSceneRenderer( {
+			physics, materialFactory: { build: ( key ) => new THREE.MeshStandardMaterial( { name: key } ) }
 		} );
+		await renderer.realize( scene );
 		physics.step( 1 / 60 );
 		const entityId = 'broken-control-module';
 		const focus = renderer.focus( entityId ).position;
@@ -114,25 +187,30 @@ describe( 'InvestigationSceneRenderer production failures', () => {
 		const scene = new SceneAssembler().assemble( interior );
 		const materialFactory = { build: ( key ) => new THREE.MeshStandardMaterial( { name: key } ) };
 		const animation = { scene: rig(), animations: [ new THREE.AnimationClip( 'Death02', 1, [] ) ] };
-		const renderer = await InvestigationSceneRenderer.create( {
-			assemblies: [ scene ], materialFactory, animation, loadGltf: async () => ( { scene: rig() } )
-		} );
+		const renderer = new InvestigationSceneRenderer( { materialFactory, animation, loadGltf: async () => ( { scene: rig() } ) } );
+		await renderer.realize( scene );
 		const body = renderer.visuals.get( 'courier-body' ).object;
 		const authored = scene.entities.find( ( entity ) => entity.entityId === 'courier-body' ).transform.position;
 		expect( body.position.toArray() ).toEqual( [ authored.x, authored.y, authored.z ] );
 		expect( body.children[ 0 ].position.y ).toBeGreaterThan( 0 );
 		expect( body.userData.finalPose ).toBe( 'Death02' );
+		// The fixture's floor frame is left-handed; the stain still faces up.
+		const stain = renderer.group.getObjectByName( 'investigation-decal:directional-blood-stain' );
+		expect( new THREE.Vector3( 0, 0, 1 ).applyQuaternion( stain.quaternion ).y ).toBeCloseTo( 1, 6 );
 
-		await expect( InvestigationSceneRenderer.create( {
-			assemblies: [ new SceneAssembler().assemble( street ) ],
+		renderer.release( scene.sceneId );
+		expect( renderer.group.children ).toHaveLength( 0 );
+		expect( renderer.focus( 'courier-body' ) ).toBeNull();
+
+		await expect( new InvestigationSceneRenderer( {
 			materialFactory: { build: ( key ) => ( { name: 'unresolved:' + key } ) }
-		} ) ).rejects.toMatchObject( { code: 'E_INVESTIGATION_MATERIAL' } );
+		} ).realize( new SceneAssembler().assemble( street ) ) ).rejects.toMatchObject( { code: 'E_INVESTIGATION_MATERIAL' } );
 
-		await expect( InvestigationSceneRenderer.create( {
-			assemblies: [ scene ], materialFactory,
+		await expect( new InvestigationSceneRenderer( {
+			materialFactory,
 			animation: { scene: new THREE.Group(), animations: [] },
 			loadGltf: async () => { throw new Error( '404' ); }
-		} ) ).rejects.toMatchObject( { code: 'E_INVESTIGATION_ASSET' } );
+		} ).realize( scene ) ).rejects.toMatchObject( { code: 'E_INVESTIGATION_ASSET' } );
 
 	} );
 
@@ -154,6 +232,8 @@ function rendererStub() {
 
 	return {
 		group: new THREE.Group(),
+		realize: vi.fn( async () => true ),
+		release: vi.fn(),
 		focus: vi.fn( () => ( { position: new THREE.Vector3( 0, 0.2, 1 ), visible: true } ) ),
 		unobstructed: vi.fn( () => true ),
 		collect: vi.fn()

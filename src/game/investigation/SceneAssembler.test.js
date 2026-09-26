@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import interior from './fixtures/interior-incident.json';
 import street from './fixtures/street-incident.json';
+import interiorAssembly from './fixtures/interior-incident.assembly.json';
+import streetAssembly from './fixtures/street-incident.assembly.json';
 import { SceneAssembler } from './SceneAssembler.js';
 
 describe( 'SceneAssembler', () => {
@@ -18,6 +20,14 @@ describe( 'SceneAssembler', () => {
 		] );
 		expect( first.entities ).toHaveLength( interior.bodies.length + interior.props.length );
 		expect( first.decals ).toHaveLength( interior.decals.length );
+
+	} );
+
+	it( 'places the authored fixtures byte for byte as the recorded assemblies', () => {
+
+		const assembler = new SceneAssembler();
+		expect( JSON.stringify( assembler.assemble( interior ) ) ).toBe( JSON.stringify( interiorAssembly ) );
+		expect( JSON.stringify( assembler.assemble( street ) ) ).toBe( JSON.stringify( streetAssembly ) );
 
 	} );
 

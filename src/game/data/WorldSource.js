@@ -4,9 +4,7 @@ import { PlanBlueprints } from './PlanBlueprints.js';
 import { ReadBudget } from './ReadBudget.js';
 import { initialBuildingIds, loadShellCatalog } from './WorldShellCatalog.js';
 import { loadWorldConnections } from './WorldConnections.js';
-import {
-	QUEST_BUNDLE_FILES, questBundle, questBundleManifest
-} from '../../quest-bundle/index.js';
+import { questBundle, questBundleFiles, questBundleManifest } from '../../quest-bundle/index.js';
 import { worldManifestErrors } from './WorldManifest.js';
 import { openNativeStreetSource } from '../ground/native/NativeStreetSource.js';
 
@@ -19,6 +17,7 @@ const QUESTLINES_FILE = 'quests/questlines.json';
 const SHARED_BASE = '/out/shared';
 const QUEST_BUNDLE_FILE = 'quests/quest-bundle.json';
 const INVESTIGATIONS_FILE = 'quests/investigations.json';
+const SCENERY_FILE = 'quests/scenery.json';
 
 /** Loads source-bound world documents and manifest-owned building sources. */
 export class WorldSource {
@@ -181,12 +180,12 @@ export class WorldSource {
 
 	}
 
-	/** Loads a v1.1 bundle atomically, with a legacy questline fallback for older worlds. */
+	/** Loads a v1.1 or v1.2 bundle atomically, with a legacy questline fallback for older worlds. */
 	async #quests( game ) {
 
 		if ( game?.questBundle === null ) return {
 			questBundle: null, questlines: [], objectives: [], investigations: [],
-			mechanicTargetBindings: [], missionAssetRequests: [], missionItemBindings: [],
+			mechanicTargetBindings: [], missionAssetRequests: [], missionItemBindings: [], scenery: [],
 			hostCapabilities: { transportationModes: [] }
 		};
 
@@ -203,11 +202,11 @@ export class WorldSource {
 			const checked = questBundleManifest( manifest );
 			const slash = manifestUri.lastIndexOf( '/' );
 			const directory = slash < 0 ? '' : manifestUri.slice( 0, slash + 1 );
-			const catalogs = Object.fromEntries( await Promise.all( QUEST_BUNDLE_FILES.map( async ( name ) => [
+			const catalogs = Object.fromEntries( await Promise.all( questBundleFiles( checked ).map( async ( name ) => [
 				name, await this.#json( `${this.outBase}/${directory}${checked.files[ name ]}` )
 			] ) ) );
 			const complete = questBundle( checked, catalogs );
-			return { questBundle: complete, ...catalogs };
+			return { questBundle: complete, ...catalogs, scenery: complete.scenery };
 
 		}
 
@@ -220,6 +219,7 @@ export class WorldSource {
 			mechanicTargetBindings: [],
 			missionAssetRequests: [],
 			missionItemBindings: [],
+			scenery: await this.#optionalJson( `${this.outBase}/${SCENERY_FILE}`, [] ),
 			hostCapabilities: { transportationModes: [] }
 		};
 

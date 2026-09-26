@@ -2,6 +2,7 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import interactionRequest from './schema/interaction-request.schema.json';
 import interactionResult from './schema/interaction-result.schema.json';
 import interactionTargets from './schema/interaction-targets.schema.json';
+import linkedSceneRequest from './schema/linked-scene-request.schema.json';
 import gameplayCandidates from './schema/gameplay-candidates.schema.json';
 import gameplayFrame from './schema/gameplay-frame.schema.json';
 import gameplayPerform from './schema/gameplay-perform.schema.json';
@@ -22,6 +23,7 @@ const SCHEMAS = [
 	missionAssetAssembly,
 	values,
 	sceneRequest,
+	linkedSceneRequest,
 	sceneAssembly,
 	sceneState,
 	targetQuery,

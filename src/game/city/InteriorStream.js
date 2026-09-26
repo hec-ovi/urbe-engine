@@ -107,6 +107,13 @@ export class InteriorStream {
 
 	}
 
+	/** Whether one floor of a building is drawn and solid now. */
+	floorShown( parcelId, floor ) {
+
+		return this.live.get( parcelId )?.bands.some( ( band ) => band.floor === floor && band.live ) === true;
+
+	}
+
 	/**
 	 * One pass over what should be open, what should be built and what should
 	 * be in the scene. Cheap to call every frame: a hypot per building and a
