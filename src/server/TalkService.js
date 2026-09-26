@@ -1,85 +1,166 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
 import { Converse, DialogContextService, QuestlineRuntime } from '../../../quests/dist/index.js';
 import { DEFAULT_TYPE_SET } from '../../../simulation/dist/index.js';
+import { Sentences } from './Sentences.js';
 import { SnapshotPort } from './SnapshotPort.js';
 
-const FALLBACK_NAMING = { theme: 'a night city', namedAt: '' };
+const FALLBACK_THEME = 'a night city';
+/** The files a world's dialogue is built from; a change to any of them builds it again. */
+const WORLD_FILES = [ 'blueprint.json', 'npc-types.json', join( 'quests', 'questlines.json' ) ];
 
 /**
- * One NPC reply per player line, over the quests dialog layers. Each assembled
- * world (its `out` directory: blueprint.json, npc-types.json, quests/questlines.json) keeps one context
- * service, so what an NPC has been told stays remembered for the session.
+ * One NPC reply per player line, over the quests dialog layers. Each served
+ * world (its `out` directory) keeps one dialogue state for the session, so what
+ * an NPC has been told stays remembered, until the world's files change or the
+ * directory is made again.
  */
 export class TalkService {
 
+	/** Served directory -> { stamp, world: Promise<TalkWorld> }. */
 	#worlds = new Map();
 
-	/** @param llm the quests LLMPort; @param outRoot the directory the browser's out paths are served from */
+	/** @param llm the quests StreamingLLMPort; @param outRoot the directory the browser's out paths are served from */
 	constructor( llm, outRoot ) {
 
 		this.llm = llm;
+		this.converse = new Converse( llm );
 		this.outRoot = resolve( outRoot );
 
 	}
 
+	/** @returns the NPC's whole reply, see `stream` */
+	async reply( request, options ) {
+
+		for await ( const event of this.stream( request, options ) ) if ( event.type === 'done' ) return event.reply;
+
+	}
+
 	/**
-	 * @param out the world's out path as the browser sees it (`/out/small`)
-	 * @param npc the simulation's NPCInstance the player is talking to
-	 * @param behavior its BehaviorState right now
-	 * @param quests the browser's questlines as they stand: [{ id, cast, state }], so this person knows their part
-	 * @returns the NPC's reply
+	 * The NPC's reply as it is spoken: `delta` text pieces, each `sentence` as it
+	 * completes, then any `offer`, then `done` with the whole reply. A completed
+	 * exchange is remembered before `done`; a failed or aborted one is not.
+	 * @param request a checked talk request: out, npc, behavior, line, timeMin, quests?, offers?, guide?
+	 * @param options.signal aborting it ends the model request
 	 */
-	async reply( { out, npc, behavior, line, timeMin, quests = [] } ) {
+	async *stream( { out, npc, behavior, line, timeMin, quests = [], offers, guide }, { signal } = {} ) {
 
 		const world = await this.#world( out );
-		world.port.set( npc, behavior );
+		const context = world.contextFor( npc, behavior, quests, timeMin, guide );
+		const name = `${npc.name.given} ${npc.name.family}`;
+		const sentences = new Sentences();
+		let index = 0;
+		for await ( const event of this.converse.replyStream( { context, name, line, offers, signal } ) ) {
 
-		for ( const quest of quests ) {
+			if ( event.type === 'delta' ) {
 
-			const definition = world.definitions.get( quest.id );
-			if ( definition ) world.context.attachQuestline( QuestlineRuntime.restore( definition, quest.cast, world.port, quest.state ) );
+				yield event;
+				for ( const text of sentences.push( event.text ) ) yield { type: 'sentence', index: index ++, text };
+				continue;
+
+			}
+			for ( const text of sentences.end() ) yield { type: 'sentence', index: index ++, text };
+			if ( event.type === 'offer' ) {
+
+				yield event;
+
+			} else {
+
+				world.remember( npc.npcId, { line, reply: event.reply, atMin: timeMin } );
+				yield { type: 'done', reply: event.reply };
+
+			}
 
 		}
-
-		const name = `${npc.name.given} ${npc.name.family}`;
-		const context = world.context.contextFor( npc.npcId, timeMin );
-		await world.context.recordTurn( npc.npcId, { speaker: 'player', text: line, atMin: timeMin } );
-		const reply = await world.converse.reply( { context, name, line } );
-		await world.context.recordTurn( npc.npcId, { speaker: 'npc', text: reply, atMin: timeMin } );
-		return reply;
 
 	}
 
 	async #world( out ) {
 
-		const servedWorlds = join( this.outRoot, 'out' );
+		const served = join( this.outRoot, 'out' );
 		const dir = resolve( this.outRoot, `.${out}` );
-		if ( ! dir.startsWith( servedWorlds + sep ) ) throw new Error( `out path outside the served worlds: ${out}` );
+		if ( ! dir.startsWith( served + sep ) ) throw new Error( `out path outside the served worlds: ${out}` );
 
-		let world = this.#worlds.get( dir );
-		if ( world ) return world;
+		const stamp = ( await Promise.all( WORLD_FILES.map( ( file ) => stat( join( dir, file ) ).then(
+			( s ) => `${s.ino}:${s.size}:${s.mtimeMs}`, () => '-' ) ) ) ).join( '|' );
+		let entry = this.#worlds.get( dir );
+		if ( entry?.stamp !== stamp ) {
 
-		const blueprint = JSON.parse( await readFile( join( dir, 'blueprint.json' ), 'utf8' ) );
-		const types = await readFile( join( dir, 'npc-types.json' ), 'utf8' ).then( JSON.parse ).catch( () => DEFAULT_TYPE_SET );
-		const questlines = await readFile( join( dir, 'quests', 'questlines.json' ), 'utf8' ).then( JSON.parse ).catch( () => [] );
-		const port = new SnapshotPort();
-		const context = new DialogContextService( { world: named( blueprint ), types, sim: port, llm: this.llm } );
-		world = { port, context, converse: new Converse( this.llm ), definitions: new Map( questlines.map( ( d ) => [ d.id, d ] ) ) };
-		this.#worlds.set( dir, world );
-		return world;
+			entry = { stamp, world: TalkWorld.load( dir, this.llm ) };
+			this.#worlds.set( dir, entry );
+			entry.world.catch( () => this.#worlds.get( dir ) === entry && this.#worlds.delete( dir ) );
+
+		}
+		return entry.world;
 
 	}
 
 }
 
-/** A blueprint as the dialog layers read it: every district carries a name, the meta a naming theme. */
-function named( blueprint ) {
+/** One world's dialogue state: the NPC the browser shows, its questlines and every NPC's memory. */
+class TalkWorld {
 
-	return {
-		...blueprint,
-		meta: { ...blueprint.meta, naming: blueprint.meta.naming ?? FALLBACK_NAMING },
-		districts: blueprint.districts.map( ( d ) => ( { ...d, name: d.name ?? d.id } ) )
-	};
+	port = new SnapshotPort();
+	#attached = new Set();
+
+	static async load( dir, llm ) {
+
+		const blueprint = JSON.parse( await readFile( join( dir, 'blueprint.json' ), 'utf8' ) );
+		const types = await readJson( join( dir, 'npc-types.json' ), DEFAULT_TYPE_SET );
+		const questlines = await readJson( join( dir, 'quests', 'questlines.json' ), [] );
+		const naming = blueprint.meta.naming ?? { theme: ( await readJson( join( dir, 'game.json' ), {} ) ).theme ?? FALLBACK_THEME };
+		// Districts and places without names stay unnamed: the dialog layers describe them by kind.
+		const world = { meta: { naming }, districts: blueprint.districts, parcels: blueprint.parcels, transit: blueprint.transit };
+		return new TalkWorld( { world, types, questlines }, llm );
+
+	}
+
+	constructor( { world, types, questlines }, llm ) {
+
+		this.input = { world, types, sim: this.port, llm };
+		this.definitions = new Map( questlines.map( ( d ) => [ d.id, d ] ) );
+		this.context = new DialogContextService( this.input );
+
+	}
+
+	/**
+	 * The NPC's context with exactly the questlines the browser holds now. A
+	 * questline the request no longer carries leaves with a fresh context service
+	 * that keeps every NPC's memory.
+	 */
+	contextFor( npc, behavior, quests, timeMin, guide ) {
+
+		this.port.set( npc, behavior );
+		const held = quests.filter( ( quest ) => this.definitions.has( quest.id ) );
+		const ids = new Set( held.map( ( quest ) => quest.id ) );
+		if ( [ ...this.#attached ].some( ( id ) => ! ids.has( id ) ) ) {
+
+			const memory = this.context.serializeMemory();
+			this.context = new DialogContextService( this.input );
+			this.context.restoreMemory( memory );
+
+		}
+		this.#attached = ids;
+		for ( const quest of held ) {
+
+			this.context.attachQuestline( QuestlineRuntime.restore( this.definitions.get( quest.id ), quest.cast, this.port, quest.state ) );
+
+		}
+		return this.context.contextFor( npc.npcId, timeMin, guide ? { guide } : {} );
+
+	}
+
+	/** Stores the exchange now; a memory fold it starts runs off the reply path. */
+	remember( npcId, exchange ) {
+
+		this.context.recordExchange( npcId, exchange ).catch( ( error ) => console.warn( 'dialog memory:', error.message ) );
+
+	}
+
+}
+
+function readJson( path, fallback ) {
+
+	return readFile( path, 'utf8' ).then( JSON.parse, () => fallback );
 
 }

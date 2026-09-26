@@ -2,10 +2,11 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import requestSchema from './schema/talk-request.schema.json' with { type: 'json' };
 import responseSchema from './schema/talk-response.schema.json' with { type: 'json' };
 import errorSchema from './schema/talk-error.schema.json' with { type: 'json' };
+import eventSchema from './schema/talk-stream-event.schema.json' with { type: 'json' };
 
-const schemas = { request: requestSchema, response: responseSchema, error: errorSchema };
+const schemas = { request: requestSchema, response: responseSchema, error: errorSchema, event: eventSchema };
 
-/** Exact JSON boundary for the development NPC dialogue route. */
+/** Exact JSON boundary for the development NPC dialogue routes. */
 export class TalkBoundary {
 
 	constructor() {
@@ -30,6 +31,13 @@ export class TalkBoundary {
 	error( value ) {
 
 		return this.#validate( 'error', value, 'E_TALK_OUTPUT' );
+
+	}
+
+	/** One line of the streamed reply. */
+	event( value ) {
+
+		return this.#validate( 'event', value, 'E_TALK_OUTPUT' );
 
 	}
 

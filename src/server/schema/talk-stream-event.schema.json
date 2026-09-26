@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:server:talk-stream-event",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "text"],
+      "properties": {
+        "type": { "const": "delta" },
+        "text": { "type": "string", "minLength": 1 }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "index", "text"],
+      "properties": {
+        "type": { "const": "sentence" },
+        "index": { "type": "integer", "minimum": 0 },
+        "text": { "type": "string", "minLength": 1 }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "kind"],
+      "properties": {
+        "type": { "const": "offer" },
+        "kind": { "const": "follow" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "kind", "placeId", "name"],
+      "properties": {
+        "type": { "const": "offer" },
+        "kind": { "const": "lead" },
+        "placeId": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "reply"],
+      "properties": {
+        "type": { "const": "done" },
+        "reply": { "type": "string", "minLength": 1 }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "error"],
+      "properties": {
+        "type": { "const": "error" },
+        "error": { "type": "string", "minLength": 1 }
+      }
+    }
+  ]
+}

@@ -13,6 +13,36 @@
     "quests": {
       "type": "array",
       "items": { "$ref": "#/$defs/quest" }
+    },
+    "offers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "follow": { "type": "boolean" },
+        "places": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["placeId", "name"],
+            "properties": {
+              "placeId": { "$ref": "#/$defs/id" },
+              "name": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "guide": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["placeId", "kind"],
+      "properties": {
+        "placeId": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["parcel", "stop"] },
+        "name": { "type": "string", "minLength": 1 },
+        "notes": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
     }
   },
   "$defs": {
@@ -157,6 +187,13 @@
         "npcId": { "$ref": "#/$defs/id" },
         "name": { "$ref": "#/$defs/name" },
         "gender": { "enum": ["male", "female"] },
+        "age": { "type": "integer", "minimum": 0 },
+        "traits": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "maxItems": 8
+        },
         "appearanceSeed": { "type": "integer" },
         "type": { "$ref": "#/$defs/id" },
         "home": {

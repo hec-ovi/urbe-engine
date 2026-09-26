@@ -1,6 +1,6 @@
 # Development server contract
 
-Contract version: 1.0
+Contract version: 1.1
 
 ## Purpose
 
@@ -16,7 +16,7 @@ Expose checked development HTTP routes for world builds, the launcher and NPC di
 - `POST /api/exteriors`: [exact displayed blueprint envelope](schema/exterior-build-request.schema.json).
 - `GET /api/exteriors/<id>`: job id returned by POST.
 - `POST /api/launcher`: [schema/launcher-request.schema.json](schema/launcher-request.schema.json).
-- `POST /api/talk`: [schema/talk-request.schema.json](schema/talk-request.schema.json). `quests` is the optional exact `QuestSession.snapshot()` sent by `GameApp`.
+- `POST /api/talk` and `POST /api/talk/stream`: [schema/talk-request.schema.json](schema/talk-request.schema.json). `npc` is the Simulation NPCInstance the browser shows, including its optional `age`, `traits` and `transitJob`. `quests` is the optional exact `QuestSession.snapshot()`. Optional `offers` (`follow`, `places`) is what this NPC may propose, answered only on the stream; optional `guide` is the place it has led the player to.
 
 ## Outputs
 
@@ -25,19 +25,23 @@ Expose checked development HTTP routes for world builds, the launcher and NPC di
 - Exterior POST: HTTP 202 [job](schema/exterior-build-job.schema.json); polling returns HTTP 200 with the same shape.
 - Launcher success: the selected result in [the launcher contract](../launcher/CONTRACT.md).
 - Talk success: HTTP 200 [schema/talk-response.schema.json](schema/talk-response.schema.json).
+- Talk stream: HTTP 200 `application/x-ndjson`, one [event](schema/talk-stream-event.schema.json) per line, in order: `delta` pieces of the cleaned reply; `sentence` with `index` from 0 each time a sentence completes, for per-sentence voice; `offer` for each companion action the NPC proposed from `offers`; `done` with the whole reply.
 
 ## Errors
 
 - Building failures use [schema/building-build-error.schema.json](schema/building-build-error.schema.json).
 - Exterior errors: [schema/exterior-build-error.schema.json](schema/exterior-build-error.schema.json). Invalid JSON/envelope/duplicate parcel ids return 400, uploads over 128 MiB return 413, unavailable runtime 503, four retained jobs return 429 `E_BUSY`, absent job 404, storage failure 500. Background failures remain visible in the failed job.
 - Launcher failures use `E_INVALID_REQUEST`, the closed library and creation errors, or `E_LAUNCHER` for an internal failure.
-- Talk invalid JSON or request values return HTTP 400 [schema/talk-error.schema.json](schema/talk-error.schema.json). World, dialogue, model and invalid output failures return the same shape with HTTP 502.
+- Talk invalid JSON or request values return HTTP 400 [schema/talk-error.schema.json](schema/talk-error.schema.json) on both routes. World, dialogue, model and invalid output failures return the same shape with HTTP 502. On the stream, a failure after the first event ends it with one `error` event instead.
 
 ## Invariants
 
 - A route invokes its service only after its request passes the public boundary.
-- Talk uses the visible NPC, current behavior and current quest snapshot supplied by `GameApp`. An empty `LLM_MODEL` selects the first model advertised by `LLM_BASE_URL`. The talk port tallies the prompt and completion tokens the server reports, and the dev server logs the running totals after each reply.
-- Routes return JSON with no undeclared fields.
+- Talk uses the visible NPC, current behavior and current quest snapshot supplied by `GameApp`. A test checks real Simulation NPCs and behaviors against the request schema.
+- The talk model is an OpenAI-compatible server: `LLM_BASE_URL` (default `http://localhost:8080/v1`), `LLM_MODEL` (empty: the first model the server lists), `LLM_API_KEY` (optional bearer token) and `LLM_TIMEOUT_MS` (default 60000). Every model request streams; one fails once the server sends nothing for the timeout, and a steady stream is never cut. The port passes text through as written; the Quests reply cleaner drops think blocks and template tokens. The port tallies the tokens the server reports, and the dev server logs the running totals after each reply.
+- A completed exchange is remembered for that NPC; a failed or abandoned one is not. A browser that disconnects aborts the model request.
+- Each served world directory keeps one dialogue state (every NPC's memory) for the session. It is built again when `blueprint.json`, `npc-types.json` or `quests/questlines.json` change or the directory is made again. Each turn holds exactly the questlines the request carries; one that leaves takes its knowledge along and memory stays. Districts and places without names reach the dialog layers unnamed. The theme is the blueprint's naming theme, else the game's `game.json` theme, else `a night city`.
+- Routes return JSON, or NDJSON lines on the talk stream, with no undeclared fields.
 - Filesystem services keep every resolved path inside the configured output root. Talk world paths contain no `.` or `..` segment.
 - Building `out` accepts `/out` and nested output folders, including `/out/games/<id>`. Each segment starts with a letter or digit and contains at most 64 letters, digits, dots, underscores or hyphens. Existing sources are returned without rebuilding; missing sources use the carried blueprint or a named Atlas sample.
 - Exterior jobs create a unique direct child of Engine `out`, reject a symbolic-link output root, and never replace existing worlds. They carry the supplied blueprint unchanged, without seed lookup or regeneration, and run public `assemble-city --interiors 0`. Connections remains a mandatory gate.
@@ -45,6 +49,10 @@ Expose checked development HTTP routes for world builds, the launcher and NPC di
 - Jobs run in submission order, one city batch at a time. They report complete nonempty regular shell/blueprint file pairs. Success additionally requires a schema-valid manifest matching every requested parcel, seed and Atlas version, no interiors, and an unchanged carried blueprint. Partial results never enable opening a completed city. Job state lives until server restart; generated files remain on disk.
 - A declared manifest `connections` reference follows [Assembly's artifact contract](../assembly/CONTRACT.md). Final admission requires its nonempty regular file, the published Connections output schema, both source seeds and SHA-256 over the exact artifact and carried blueprint bytes. Missing or invalid declared data fails with `E_BUILD_INCOMPLETE`; a manifest with no `connections` field is accepted.
 - Capability checks current local prerequisites; POST checks again. Four jobs are retained per server session, including terminal jobs, with no replacement. Terminal jobs release their full input blueprint from memory. The upload limit bounds input storage, not generated shell size.
+
+## Browser client
+
+`TalkClient` ([../game/talk/TalkClient.js](../game/talk/TalkClient.js)) posts the request for `GameApp`. `say(conversation, line, timeMin, quests?, { signal?, guide? })` resolves to the whole reply. `stream(conversation, line, timeMin, quests?, { signal?, guide?, offers? })` is an async iterator over the stream events up to `done`; leaving it early or aborting `signal` ends the reply on the server. Failures throw an `Error` whose `status` is the HTTP status, 502 for an `error` event or a stream that ends before `done`.
 
 ## Dependencies
 
