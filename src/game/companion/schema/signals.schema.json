@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:companion:signals",
+  "type": "array",
+  "items": {
+    "oneOf": [
+      {
+        "description": "The person has come along.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "npcId", "mode"],
+        "properties": {
+          "kind": { "const": "started" },
+          "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
+          "mode": { "$ref": "urn:urbe:engine:companion:values#/$defs/kind" }
+        }
+      },
+      {
+        "description": "An accepted offer could not start after all; the person says why.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "npcId", "code", "line"],
+        "properties": {
+          "kind": { "const": "refused" },
+          "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
+          "code": { "$ref": "urn:urbe:engine:companion:values#/$defs/reason" },
+          "line": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" }
+        }
+      },
+      {
+        "description": "Something the companion says on the way, outside a conversation.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "npcId", "line"],
+        "properties": {
+          "kind": { "const": "line" },
+          "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
+          "line": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" }
+        }
+      },
+      {
+        "description": "The player has caught up with a leader at its destination: the host opens the conversation with this guide.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "npcId", "guide", "relation", "ask", "line"],
+        "properties": {
+          "kind": { "const": "arrival" },
+          "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
+          "guide": { "$ref": "urn:urbe:engine:companion:values#/$defs/guide" },
+          "relation": { "$ref": "urn:urbe:engine:companion:values#/$defs/relation" },
+          "ask": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" },
+          "line": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" }
+        }
+      },
+      {
+        "description": "The companion has gone back to its day.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "npcId", "reason"],
+        "properties": {
+          "kind": { "const": "ended" },
+          "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
+          "reason": { "enum": ["dismissed", "gave-up", "done", "left", "lost"] },
+          "notice": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" }
+        }
+      }
+    ]
+  }
+}

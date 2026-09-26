@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:companion:offers",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["offerId", "kind", "label", "available"],
+    "properties": {
+      "offerId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
+      "kind": { "enum": ["follow", "lead", "dismiss"] },
+      "label": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" },
+      "available": { "type": "boolean" },
+      "reason": { "$ref": "urn:urbe:engine:companion:values#/$defs/reason" },
+      "destination": { "$ref": "urn:urbe:engine:companion:values#/$defs/destination" }
+    },
+    "allOf": [
+      {
+        "if": { "properties": { "available": { "const": true } } },
+        "then": { "properties": { "reason": false } },
+        "else": { "properties": { "reason": true }, "required": ["reason"] }
+      },
+      {
+        "if": { "properties": { "kind": { "const": "lead" } } },
+        "then": { "properties": { "destination": true }, "required": ["destination"] },
+        "else": { "properties": { "destination": false } }
+      }
+    ]
+  }
+}

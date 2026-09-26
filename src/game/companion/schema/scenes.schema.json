@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:companion:scenes",
+  "description": "Staged scenery places from the injected provider.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["place", "name", "relation"],
+    "properties": {
+      "place": { "$ref": "urn:urbe:engine:companion:values#/$defs/place" },
+      "name": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" },
+      "relation": { "const": "scene" },
+      "notes": { "$ref": "urn:urbe:engine:companion:values#/$defs/notes" }
+    }
+  }
+}

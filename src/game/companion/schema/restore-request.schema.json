@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:companion:restore-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["timeMin", "state"],
+  "properties": {
+    "timeMin": { "$ref": "urn:urbe:engine:companion:values#/$defs/time" },
+    "state": { "$ref": "urn:urbe:engine:companion:state" }
+  }
+}

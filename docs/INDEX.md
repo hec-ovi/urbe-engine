@@ -36,6 +36,7 @@
 | `sim` | Narrow Simulation adapter | [Contract and schemas](../src/game/sim/CONTRACT.md) |
 | `agents` | Nearby characters and cars from Simulation and Connections | [Contract and schemas](../src/game/agents/CONTRACT.md) |
 | `animation` | Accepted action clip sequences for Agents | [Contract and schemas](../src/game/animation/CONTRACT.md) |
+| `companion` | One person asked along to follow or lead the player, and the talk at the place | [Contract and schemas](../src/game/companion/CONTRACT.md), [lines](../src/game/companion/lines.md) |
 | `quests` | Exact story action, target and progress coordination | [Contract and schemas](../src/game/quests/CONTRACT.md) |
 | `investigation` | Authored evidence scenes and saved discoveries | [Contract and schemas](../src/game/investigation/CONTRACT.md) |
 | `routes` | Objective paths over Connections, carried on to the parcel's door | [Contract and schemas](../src/game/routes/CONTRACT.md) |

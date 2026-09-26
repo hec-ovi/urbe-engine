@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:companion:talk-offers",
+  "description": "What a talk request lets the person propose: the server's talk-request `offers`, or null when nothing is available.",
+  "oneOf": [
+    { "type": "null" },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "follow": { "const": true },
+        "places": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["placeId", "name"],
+            "properties": {
+              "placeId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
+              "name": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

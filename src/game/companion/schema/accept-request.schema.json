@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:companion:accept-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["npcId", "offerId", "timeMin", "playerPosition", "playerPlaces"],
+  "properties": {
+    "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
+    "offerId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
+    "timeMin": { "$ref": "urn:urbe:engine:companion:values#/$defs/time" },
+    "playerPosition": { "$ref": "urn:urbe:engine:companion:values#/$defs/vec3" },
+    "playerPlaces": { "$ref": "urn:urbe:engine:companion:values#/$defs/playerPlaces" }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:companion:accept-result",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "npcId", "offerId", "kind", "line"],
+      "properties": {
+        "ok": { "const": true },
+        "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
+        "offerId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
+        "kind": { "enum": ["follow", "lead", "dismiss"] },
+        "line": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "npcId", "code", "line"],
+      "properties": {
+        "ok": { "const": false },
+        "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
+        "code": { "$ref": "urn:urbe:engine:companion:values#/$defs/reason" },
+        "line": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" }
+      }
+    }
+  ]
+}

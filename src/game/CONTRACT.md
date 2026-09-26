@@ -36,6 +36,7 @@ Game composes native ordinary streets with retained ground, highways and station
 | Authored bridges, ducts, tunnels and wires | [Links](links/CONTRACT.md) |
 | Scheduled transit and destination terminals | [Transit](transit/CONTRACT.md) |
 | Persistent identities and physical NPC representation | [Simulation adapter](sim/CONTRACT.md), [Agents](agents/CONTRACT.md) |
+| One person asked along to follow or lead the player, and the talk at the place | [Companion](companion/CONTRACT.md) |
 | Validated story actions and evidence state | [Quests](quests/CONTRACT.md), [Investigations](investigation/CONTRACT.md) |
 | Semantic animation, objective paths and water surfaces | [Animation](animation/CONTRACT.md), [Routes](routes/CONTRACT.md), [Hydrology](hydro/CONTRACT.md) |
 | Fixture lighting, pipeline preparation and diagnostics | [Light](light/CONTRACT.md), [Look](look/CONTRACT.md), [Debug](debug/CONTRACT.md) |

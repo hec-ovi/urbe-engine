@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:companion:values",
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "text": { "type": "string", "minLength": 1 },
+    "time": { "type": "number", "minimum": 0 },
+    "vec3": {
+      "type": "array",
+      "prefixItems": [{ "type": "number" }, { "type": "number" }, { "type": "number" }],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "place": {
+      "description": "A place a companion can lead to: a parcel, or a stop or station as its stop.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "enum": ["parcel", "stop"] },
+        "id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "worldPlace": {
+      "description": "A place the player stands in, as the quest layer names it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "enum": ["district", "parcel", "station", "stop", "edge", "route"] },
+        "id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "playerPlaces": { "type": "array", "items": { "$ref": "#/$defs/worldPlace" } },
+    "relation": {
+      "description": "Why this person knows the way: where they work, live or spend free time, an open quest place, or a staged scene.",
+      "enum": ["work", "home", "haunt", "quest", "scene"]
+    },
+    "notes": { "type": "array", "items": { "$ref": "#/$defs/text" } },
+    "destination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["place", "name", "relation"],
+      "properties": {
+        "place": { "$ref": "#/$defs/place" },
+        "name": { "$ref": "#/$defs/text" },
+        "relation": { "$ref": "#/$defs/relation" },
+        "questId": { "$ref": "#/$defs/id" },
+        "stepId": { "$ref": "#/$defs/id" },
+        "notes": { "$ref": "#/$defs/notes" }
+      }
+    },
+    "kind": { "enum": ["follow", "lead"] },
+    "reason": {
+      "description": "Why a person will not come: dead, fallen or aboard, somebody else is with the player, a story needs them where they are, at work, due at work, or no such offer.",
+      "enum": ["unavailable", "conflict", "busy", "on_duty", "no_time", "unknown"]
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "npcId", "kind", "startedAtMin", "phase"],
+      "properties": {
+        "version": { "const": "1" },
+        "npcId": { "$ref": "#/$defs/id" },
+        "kind": { "$ref": "#/$defs/kind" },
+        "startedAtMin": { "$ref": "#/$defs/time" },
+        "phase": { "enum": ["walking", "waiting", "arrived", "ready", "talking"] },
+        "destination": { "$ref": "#/$defs/destination" },
+        "readyAtMin": { "$ref": "#/$defs/time" },
+        "lineAtMin": { "$ref": "#/$defs/time" }
+      },
+      "if": { "properties": { "kind": { "const": "lead" } } },
+      "then": { "properties": { "destination": true }, "required": ["destination"] },
+      "else": { "properties": { "phase": { "enum": ["walking", "waiting"] }, "destination": false, "readyAtMin": false } }
+    },
+    "guide": {
+      "description": "The talk request's guide: the place a leader brought the player to, by the name the player sees.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["placeId", "kind", "name"],
+      "properties": {
+        "placeId": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["parcel", "stop"] },
+        "name": { "$ref": "#/$defs/text" },
+        "notes": { "$ref": "#/$defs/notes" }
+      }
+    }
+  }
+}

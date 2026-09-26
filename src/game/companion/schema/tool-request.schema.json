@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:companion:tool-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["npcId", "kind", "timeMin", "playerPosition", "playerPlaces"],
+  "properties": {
+    "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
+    "kind": { "enum": ["follow", "lead"] },
+    "placeId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
+    "timeMin": { "$ref": "urn:urbe:engine:companion:values#/$defs/time" },
+    "playerPosition": { "$ref": "urn:urbe:engine:companion:values#/$defs/vec3" },
+    "playerPlaces": { "$ref": "urn:urbe:engine:companion:values#/$defs/playerPlaces" }
+  },
+  "if": { "properties": { "kind": { "const": "lead" } } },
+  "then": { "properties": { "placeId": true }, "required": ["placeId"] },
+  "else": { "properties": { "placeId": false } }
+}
