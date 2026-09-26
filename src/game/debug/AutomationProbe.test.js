@@ -618,6 +618,39 @@ describe( 'story fast-forward', () => {
 
 	} );
 
+	it( 'stands the player a few steps back between the people a listen names, until E listens rather than talks', async () => {
+
+		const { game, walker } = playing();
+		walker.npcId = 'giver';
+		game.crowd.members.set( 'p2', { ...walker, id: 'p2', npcId: 'guard', position: new THREE.Vector3( 12, 0.2, 5 ) } );
+		const sim = simulation( new Map( [ [ 'giver', npc( 'giver', 'vendor', 'p1' ) ], [ 'guard', npc( 'guard', 'guard', 'p1' ) ] ] ) );
+		const definition = quest( 'q_hear', {
+			roles: [ role( 'giver', 'vendor' ), role( 'guard', 'guard' ) ],
+			steps: [ step( 's_hear', { kind: 'listen', roleIds: [ 'giver', 'guard' ], atParcelId: 'p1' }, { endingId: 'done' } ) ]
+		} );
+		Object.assign( game, {
+			sim, quests: QuestSession.create( [ definition ], sim, 600 ), questGameplay: { staticMarks: new Map(), escort: null },
+			stream: { pending: new Map(), live: new Map() }, companion: { active: null, places: { positions: new Map( [ [ 'parcel:p1', [ 11, 0.2, 9 ] ] ] ) } }
+		} );
+		game.clock.timeMin = 600;
+		// Close up, the crosshair is on one of them and E talks; four metres back it is between them and E listens.
+		game.placePlayer.mockImplementation( ( feet ) => {
+
+			game.body.feet.set( feet.x, feet.y, feet.z );
+			game.interactor.target = Math.hypot( feet.x - 11, feet.z - 5 ) > 4
+				? { kind: 'quest', interaction: { targetKey: 'quest:q_hear:s_hear' } }
+				: { kind: 'npc', person: walker };
+			return true;
+
+		} );
+		const probe = new AutomationProbe( game );
+		expect( await probe.reach( { questId: 'q_hear', stepId: 's_hear' } ) ).toMatchObject( { placed: true, member: 'p1', offered: true } );
+		const [ feet, aim ] = game.placePlayer.mock.lastCall;
+		expect( Math.hypot( feet.x - 11, feet.z - 5 ) ).toBeCloseTo( 4.5 );
+		expect( aim ).toEqual( { x: 11, y: expect.closeTo( 1.5 ), z: 5 } );
+
+	} );
+
 	it( 'stands the player at the approach of a staged scene\'s evidence aimed at it, and reads a quest escort as the companion', async () => {
 
 		const { game } = storied();

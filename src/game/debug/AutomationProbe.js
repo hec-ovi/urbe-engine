@@ -44,6 +44,8 @@ const WAITABLE = new Set( [ 'outside_window', 'off_duty', 'not_present' ] );
 const PROP_MARGIN = 0.3;
 /** How far from a mission prop the player tries to stand, nearest first: all well inside the pickup reach. */
 const PROP_DISTANCES = [ 1, 1.4, 1.9 ];
+/** How far from the people a listen names the player stands, looking between them: close enough to hear, back enough not to talk to one. */
+const LISTEN_DISTANCES = [ 3, 4.5, 6 ];
 
 /**
  * A driver's hands in a read-only preview (`?mode=game&out=...&automation`).
@@ -565,7 +567,8 @@ export class AutomationProbe {
 
 	/**
 	 * Stands the player where E does active step `stepId`: before the first
-	 * person it names (at its venue, else where continuity has them), beside a
+	 * person it names (at its venue, else where continuity has them), a few
+	 * steps back from the people a listen names looking between them, beside a
 	 * mission prop or on the mark at the parcel's door, at the approach of a
 	 * staged scene's evidence aimed at it, or at the place a go or observe step
 	 * names. After two frames: `{ placed, place, member, target, offered, ms }`,
@@ -603,6 +606,28 @@ export class AutomationProbe {
 				key = evidence.targetKey;
 				const { x, y, z } = evidence.approachPoint;
 				while ( ! ( placed = this.#standOn( [ x, y, z ], shown.position ) ) && waiting() ) await frames( 1 );
+
+			}
+
+		} else if ( kind === 'listen' ) {
+
+			// Overhearing is looking between the people who talk, from a few steps back.
+			const npcIds = castIds( step.target, runtime );
+			let members = [];
+			while ( ( members = npcIds.map( ( npcId ) => this.game.crowd.memberForNpc( npcId ) ) ).some( ( each ) => ! each ) && waiting() ) await frames( 1 );
+			if ( members.every( Boolean ) ) {
+
+				member = members[ 0 ];
+				const [ x, y, z ] = [ 'x', 'y', 'z' ].map( ( axis ) => members.reduce( ( sum, each ) => sum + each.position[ axis ], 0 ) / members.length );
+				const between = { x, y: y + CHEST, z };
+				for ( const spot of this.#spots( { position: { x, y, z } }, between, PERSON_RADIUS, LISTEN_DISTANCES, EYE_HEIGHT ) ) {
+
+					if ( ! this.game.placePlayer( spot, between ) ) continue;
+					placed = true;
+					await frames( 2 );
+					if ( targetOf( this.game.interactor.target )?.key === key ) break;
+
+				}
 
 			}
 
