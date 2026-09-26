@@ -144,6 +144,25 @@ describe( 'NPC speech HTTP boundary', () => {
 
 	} );
 
+	it( 'drops a prefetch group at Voice and refuses a group outside the contract before Voice sees it', async () => {
+
+		const voice = await fakeVoice();
+		const origin = await serve( new VoicePort( voice.url ) );
+		const cancel = async ( encoded, at = origin ) => {
+
+			const response = await fetch( `${at}/api/voice/prefetch/${encoded}`, { method: 'DELETE' } );
+			return [ response.status, response.status === 204 ? await response.text() : ( await response.json() ).code ];
+
+		};
+		expect( await cancel( encodeURIComponent( 'dialogue/1 a' ) ) ).toEqual( [ 204, '' ] );
+		expect( voice.cancelled ).toEqual( [ 'dialogue/1 a' ] );
+		expect( await cancel( 'x'.repeat( 129 ) ) ).toEqual( [ 400, 'E_INVALID_REQUEST' ] );
+		expect( await cancel( '%E0%A4%A' ) ).toEqual( [ 400, 'E_INVALID_REQUEST' ] );
+		expect( voice.cancelled ).toHaveLength( 1 );
+		expect( await cancel( 'dialogue', await serve( new VoicePort( '' ) ) ) ).toEqual( [ 503, 'E_UNAVAILABLE' ] );
+
+	} );
+
 	function speak( origin, line, signal ) {
 
 		return post( origin, '/api/voice', JSON.stringify( line ), signal );
@@ -174,15 +193,15 @@ describe( 'NPC speech HTTP boundary', () => {
 	}
 
 	/**
-	 * A Voice box whose line text picks the answer: `stream` sends the header and
-	 * a frame, then its last frame once released, and notes when its client
-	 * leaves; `hit` a whole file; `break` drops the connection mid-body; `queue`
-	 * never answers and notes when its client leaves; an error code answers with
-	 * that Voice error.
+	 * A Voice box that notes each prefetch group cancelled and whose line text
+	 * picks the answer: `stream` sends the header and a frame, then its last
+	 * frame once released, and notes when its client leaves; `hit` a whole
+	 * file; `break` drops the connection mid-body; `queue` never answers and
+	 * notes when its client leaves; an error code answers with that Voice error.
 	 */
 	async function fakeVoice() {
 
-		const voice = { health: 'ok', lines: [], prefetched: [] };
+		const voice = { health: 'ok', lines: [], prefetched: [], cancelled: [] };
 		let release;
 		const released = new Promise( ( resolve ) => release = resolve );
 		let waiting, left, streamLeft;
@@ -193,6 +212,12 @@ describe( 'NPC speech HTTP boundary', () => {
 		voice.url = await listen( async ( request, response ) => {
 
 			if ( request.url === '/health' ) return json( response, 200, { status: voice.health } );
+			if ( request.method === 'DELETE' ) {
+
+				voice.cancelled.push( decodeURIComponent( request.url.slice( '/v1/prefetch/'.length ) ) );
+				return response.writeHead( 204 ).end();
+
+			}
 			const body = JSON.parse( ( await Array.fromAsync( request ) ).join( '' ) );
 			if ( request.url === '/v1/prefetch' ) {
 

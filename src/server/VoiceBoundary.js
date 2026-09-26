@@ -7,7 +7,7 @@ import errorSchema from './schema/voice-error.schema.json' with { type: 'json' }
 import { VoiceError } from './VoicePort.js';
 
 const SCHEMAS = { line: requestSchema, prefetch: prefetchSchema, keys: keysSchema, capability: capabilitySchema, error: errorSchema };
-const INPUTS = new Set( [ 'line', 'prefetch' ] );
+const INPUTS = new Set( [ 'line', 'prefetch', 'group' ] );
 
 /** Exact JSON boundary of the voice routes. */
 export class VoiceBoundary {
@@ -16,13 +16,14 @@ export class VoiceBoundary {
 
 		const ajv = new Ajv2020( { allErrors: true, strict: true, schemas: Object.values( SCHEMAS ) } );
 		this.validators = Object.fromEntries( Object.entries( SCHEMAS ).map( ( [ kind, schema ] ) => [ kind, ajv.getSchema( schema.$id ) ] ) );
+		this.validators.group = ajv.compile( { $ref: `${prefetchSchema.$id}#/properties/group` } );
 
 	}
 
 	/**
-	 * `value` when it matches the `kind` schema: `line`, `prefetch`, `keys`,
-	 * `capability` or `error`. A request that does not throws with status 400,
-	 * anything the route answers with 502.
+	 * `value` when it matches the `kind` schema: `line`, `prefetch`, `group`
+	 * (a prefetch request's group), `keys`, `capability` or `error`. A request
+	 * that does not throws with status 400, anything the route answers with 502.
 	 */
 	check( kind, value ) {
 

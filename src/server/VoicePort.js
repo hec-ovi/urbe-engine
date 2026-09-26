@@ -27,7 +27,8 @@ export class VoiceError extends Error {
 
 /**
  * HTTP client of the Voice box (voice/CONTRACT.md): its health, streamed
- * speech and prefetch. `VOICE_BASE_URL` names it; empty turns voice off.
+ * speech, prefetch and prefetch cancel. `VOICE_BASE_URL` names it; empty
+ * turns voice off.
  */
 export class VoicePort {
 
@@ -67,25 +68,32 @@ export class VoicePort {
 	 */
 	speak( line, { signal } = {} ) {
 
-		return this.#post( '/v1/speak', line, signal );
+		return this.#send( 'POST', '/v1/speak', line, signal );
 
 	}
 
 	/** `{ keys }` once the lines are queued. */
 	async prefetch( batch, { signal } = {} ) {
 
-		return ( await this.#post( '/v1/prefetch', batch, signal ) ).json();
+		return ( await this.#send( 'POST', '/v1/prefetch', batch, signal ) ).json();
 
 	}
 
-	async #post( path, body, signal ) {
+	/** Resolves once Voice has dropped what `group` still has queued or rendering. */
+	async cancel( group ) {
+
+		await this.#send( 'DELETE', `/v1/prefetch/${encodeURIComponent( group )}` );
+
+	}
+
+	async #send( method, path, body, signal ) {
 
 		if ( ! this.baseUrl ) throw VoiceError.unavailable( 'voice is off: VOICE_BASE_URL is empty' );
 		let response;
 		try {
 
 			response = await fetch( `${this.baseUrl}${path}`, {
-				method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( body ), signal
+				method, signal, ...( body && { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( body ) } )
 			} );
 
 		} catch ( error ) {

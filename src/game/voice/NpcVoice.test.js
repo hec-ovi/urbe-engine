@@ -12,6 +12,7 @@ const SPEAKER = {
 	category: 'vendor', label: 'Barista', persona: 'Runs the docks with a hard hand.'
 };
 const conversation = ( instance = MARA ) => ( { npcId: instance?.npcId, instance } );
+const upstreamFailure = () => Object.assign( new Error( 'voice 502 E_UPSTREAM: maya1 is down' ), { status: 502, code: 'E_UPSTREAM' } );
 /** Half a second of Voice audio. */
 const HALF_SECOND = new Array( 12000 ).fill( 1000 );
 
@@ -34,7 +35,8 @@ function fakeClient( status = 'ok' ) {
 			client.lines.push( request );
 
 		} ) ),
-		prefetch: vi.fn( async ( group, items ) => { client.prefetched.push( { group, items } ); } )
+		prefetch: vi.fn( async ( group, items ) => { client.prefetched.push( { group, items } ); } ),
+		cancel: vi.fn( async () => {} )
 	};
 	return client;
 
@@ -186,6 +188,35 @@ describe( 'NpcVoice', () => {
 
 	} );
 
+	it( 'rests Voice like a 503 once two lines in a row fail with 502', async () => {
+
+		const { voice, client, clock } = rig();
+		const say = async ( id ) => {
+
+			voice.said( { conversation: conversation(), line: { id }, text: `Line ${id}.` } );
+			await flush();
+
+		};
+		await say( 'a' );
+		client.lines[ 0 ].reject( upstreamFailure() );
+		await say( 'b' );
+		answer( client.lines[ 1 ] );
+		await say( 'c' );
+		client.lines[ 2 ].reject( upstreamFailure() );
+		await say( 'd' );
+		expect( client.lines ).toHaveLength( 4 );
+		client.lines[ 3 ].reject( upstreamFailure() );
+		await say( 'e' );
+		expect( client.speak ).toHaveBeenCalledTimes( 4 );
+		expect( voice.report() ).toMatchObject( { status: 'degraded', failed: 3 } );
+
+		clock.ms = 30000;
+		await say( 'f' );
+		expect( client.capability ).toHaveBeenCalledTimes( 2 );
+		expect( client.speak ).toHaveBeenCalledTimes( 5 );
+
+	} );
+
 	it( 'replays a line heard whole from the session cache and asks again for one that broke off, playing what came', async () => {
 
 		const { voice, client, marks, context } = rig();
@@ -251,6 +282,29 @@ describe( 'NpcVoice', () => {
 		voice.silenced();
 		await flush();
 		expect( client.prefetch ).toHaveBeenCalledOnce();
+
+	} );
+
+	it( 'cancels the group at Voice once silenced after a batch went out, after Voice has it, once', async () => {
+
+		const { voice, client } = rig();
+		let queued;
+		client.prefetch.mockImplementationOnce( () => new Promise( ( resolve ) => queued = resolve ) );
+		voice.silenced();
+		await voice.upcoming( { conversation: conversation(), texts: [ 'Reply A.' ] } );
+		voice.silenced();
+		voice.silenced();
+		await flush();
+		expect( client.prefetch ).toHaveBeenCalledOnce();
+		expect( client.cancel ).not.toHaveBeenCalled();
+		queued();
+		await flush();
+		expect( client.cancel ).toHaveBeenCalledExactlyOnceWith( voice.group );
+
+		await voice.upcoming( { conversation: conversation(), texts: [ 'Reply B.' ] } );
+		voice.setEnabled( false );
+		await flush();
+		expect( client.cancel ).toHaveBeenCalledTimes( 2 );
 
 	} );
 

@@ -10,13 +10,14 @@ const PASSED_HEADERS = [ 'content-length', 'x-voice-key', 'x-voice-cache' ];
 /**
  * Vite plugin for NPC speech over the Voice box. GET /api/voice says whether
  * lines can be spoken now, POST /api/voice streams one line's WAV through as
- * it renders, POST /api/voice/prefetch queues lines the player may hear next.
+ * it renders, POST /api/voice/prefetch queues lines the player may hear next
+ * and DELETE /api/voice/prefetch/<group> drops those a group still has.
  * Every request is checked before it reaches Voice.
  */
 export function voiceRoute( port = VoicePort.fromEnv() ) {
 
 	const boundary = new VoiceBoundary();
-	const routes = { 'GET /': capability, 'POST /': speak, 'POST /prefetch': prefetch };
+	const routes = { 'GET /': capability, 'POST /': speak, 'POST /prefetch': prefetch, 'DELETE /prefetch/': cancel };
 
 	return {
 		name: 'voice-route',
@@ -24,9 +25,11 @@ export function voiceRoute( port = VoicePort.fromEnv() ) {
 
 			server.middlewares.use( '/api/voice', ( req, res, next ) => {
 
-				const route = routes[ `${req.method} ${new URL( req.url, 'http://voice' ).pathname}` ];
+				const { pathname } = new URL( req.url, 'http://voice' );
+				const group = pathname.match( /^\/prefetch\/([^/]+)$/ )?.[ 1 ];
+				const route = routes[ `${req.method} ${group ? '/prefetch/' : pathname}` ];
 				if ( ! route ) return next();
-				route( req, res ).catch( ( error ) => fail( res, error ) );
+				route( req, res, group ).catch( ( error ) => fail( res, error ) );
 
 			} );
 
@@ -66,6 +69,17 @@ export function voiceRoute( port = VoicePort.fromEnv() ) {
 		const batch = await admit( req, 'prefetch' );
 		const keys = await port.prefetch( batch, { signal: closing( res ) } );
 		sendJson( res, 202, boundary.check( 'keys', keys ) );
+
+	}
+
+	/** `encoded` is the group as the path carries it. The cancel goes through even when the browser leaves. */
+	async function cancel( _req, res, encoded ) {
+
+		let group;
+		try { group = decodeURIComponent( encoded ); }
+		catch ( error ) { throw new VoiceError( 400, 'E_INVALID_REQUEST', `voice group is not URL-encoded: ${messageOf( error )}` ); }
+		await port.cancel( boundary.check( 'group', group ) );
+		res.writeHead( 204 ).end();
 
 	}
 

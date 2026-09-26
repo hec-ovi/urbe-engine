@@ -14,6 +14,8 @@ const PERSONA_MAX = 4000;
 const RECHECK_MS = 30000;
 /** Voice queues at most this many prefetched lines. */
 const PREFETCH_MAX = 8;
+/** Lines failing in a row with 502 (Voice answers, its model server does not) before Voice is rested like a 503. */
+const UPSTREAM_FAILURES = 2;
 const GENDERS = new Set( [ 'male', 'female' ] );
 /** A line with a letter or digit outside its [cue] tags has something to say. */
 const SPOKEN = /[\p{L}\p{N}]/u;
@@ -25,10 +27,10 @@ const CUE_TAGS = /\[[^\]]*\]/g;
  * order, so one person speaks at a time and never over themselves. The text
  * is already on screen; the audio follows. A streamed line starts once enough
  * has arrived to play through (VoicePlayer). `silenced()` stops the audio and
- * drops the queue. A person without identity, age or gender is not voiced.
- * Lines the player may hear next are rendered ahead once the lines said
- * before them have loaded. Voice being off, down or failing leaves the
- * conversation silent and otherwise untouched.
+ * drops the queue and the lines rendered ahead. A person without identity,
+ * age or gender is not voiced. Lines the player may hear next are rendered
+ * ahead once the lines said before them have loaded. Voice being off, down
+ * or failing leaves the conversation silent and otherwise untouched.
  */
 export class NpcVoice {
 
@@ -40,8 +42,14 @@ export class NpcVoice {
 	#loading = Promise.resolve();
 	/** Counts silences: a prefetch asked for before the latest one is dropped unsent. */
 	#silences = 0;
+	/** Requests on the prefetch group, each sent once the one before is answered, so Voice sees them in order. */
+	#groupRequests = Promise.resolve();
+	/** Whether a batch went out since the last silence, so Voice may hold lines of the group. */
+	#batched = false;
 	#checking = null;
 	#retryAt = 0;
+	/** Lines failed in a row with 502. */
+	#upstreamFailures = 0;
 	/** Utterances still to finish per chat line, which is marked speaking until none are left. */
 	#lines = new Map();
 
@@ -96,7 +104,7 @@ export class NpcVoice {
 
 	}
 
-	/** Line observer: stops what is playing and drops what is queued, prefetches not yet sent included. */
+	/** Line observer: stops what is playing and drops what is queued, and what is rendered ahead, sent or not. */
 	silenced() {
 
 		this.#silences ++;
@@ -108,6 +116,9 @@ export class NpcVoice {
 		}
 		this.#utterances.clear();
 		this.#tail = null;
+		if ( ! this.#batched ) return;
+		this.#batched = false;
+		this.#toGroup( 'cancel', () => this.client.cancel( this.group ) );
 
 	}
 
@@ -220,6 +231,7 @@ export class NpcVoice {
 			}
 			this.stats.requested ++;
 			const response = await this.client.speak( { text, speaker }, { signal: controller.signal } );
+			this.#upstreamFailures = 0;
 			const decoder = new PcmStreamDecoder();
 			const whole = [];
 			const reader = response.body.getReader();
@@ -240,6 +252,7 @@ export class NpcVoice {
 			this.stats.failed ++;
 			this.stats.error = error.message;
 			if ( error.status === 503 ) this.#unavailable( error.code === 'E_LOADING' ? 'loading' : 'unreachable' );
+			else if ( error.status === 502 && ++ this.#upstreamFailures >= UPSTREAM_FAILURES ) this.#unavailable( 'degraded' );
 			console.warn( 'voice:', error.message );
 
 		} finally {
@@ -256,7 +269,15 @@ export class NpcVoice {
 		const items = texts.flatMap( ( text ) => pieces( text ) ).filter( ( text ) => ! this.cache.has( keyOf( speaker, text ) ) )
 			.slice( 0, PREFETCH_MAX ).map( ( text ) => ( { text, speaker } ) );
 		if ( ! items.length || ! ( await this.#available() ) || silences !== this.#silences ) return;
-		this.client.prefetch( this.group, items ).catch( ( error ) => console.warn( 'voice prefetch:', error.message ) );
+		this.#batched = true;
+		this.#toGroup( 'prefetch', () => this.client.prefetch( this.group, items ) );
+
+	}
+
+	/** Sends a request on the prefetch group once the one before it is answered; a failure is logged. */
+	#toGroup( what, send ) {
+
+		this.#groupRequests = this.#groupRequests.then( send ).catch( ( error ) => console.warn( `voice ${what}:`, error.message ) );
 
 	}
 
@@ -280,6 +301,7 @@ export class NpcVoice {
 
 		this.status = status;
 		this.#retryAt = this.now() + RECHECK_MS;
+		this.#upstreamFailures = 0;
 
 	}
 
