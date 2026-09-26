@@ -204,6 +204,11 @@ export class PbrMaterialFactory {
 			texture.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
 			texture.wrapS = texture.wrapT = tiled ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
 			texture.repeat.set( repeat[ 0 ], repeat[ 1 ] );
+			// The repeat is fixed from here on, and a map's node otherwise rebuilds
+			// its uv matrix for every object that draws with it, every pass. A
+			// caller that moves a map afterwards calls updateMatrix itself.
+			texture.matrixAutoUpdate = false;
+			texture.updateMatrix();
 			texture.anisotropy = this.textureAnisotropy;
 			texture.channel = 0;
 
