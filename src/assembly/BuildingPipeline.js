@@ -1,23 +1,21 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { AssemblyError } from './RequestAssembler.js';
+import { replaceFile } from './JsonFile.js';
 import { runInterior, runCoreFeasibility } from './interiorRunner.js';
 import { validateExteriorRequest, validateInteriorRequest } from './validators.js';
 
-const EXTERIOR_DIR = fileURLToPath( new URL( '../../../exterior/', import.meta.url ) );
-
 /**
  * The per-parcel chain shared by the single and city CLIs: assemble and
- * validate the exterior request, run exterior's CLI, then optionally gate on
- * interior core feasibility (walkup parcels re-pick floors inside the cap and
- * regenerate the shell) and furnish it. A building that already stands is
- * furnished on its own through `furnish`. Failures throw AssemblyError; nothing
- * here exits the process.
+ * validate the exterior request, generate it on an Exterior worker, then
+ * optionally gate on interior core feasibility (walkup parcels re-pick floors
+ * inside the cap and regenerate the shell) and furnish it. A building that
+ * already stands is furnished on its own through `furnish`. Failures throw
+ * AssemblyError; nothing here exits the process.
  */
 export class BuildingPipeline {
 
+	/** @param exterior the ExteriorWorkers every shell is generated on */
 	constructor( assembler, { exterior = null } = {} ) {
 
 		this.assembler = assembler;
@@ -115,35 +113,11 @@ export class BuildingPipeline {
 
 	}
 
-	async #generateExterior( request, outDir ) {
+	#generateExterior( request, outDir ) {
 
-		const requestPath = join( outDir, `${request.buildingId}.request.json` );
-		writeFileSync( requestPath, JSON.stringify( request, null, 2 ) + '\n' );
-		if ( this.exterior ) return this.exterior.run( request, outDir );
+		replaceFile( join( outDir, `${request.buildingId}.request.json` ), JSON.stringify( request, null, 2 ) + '\n' );
 
-		const { status, output } = await new Promise( ( resolvePromise ) => {
-
-			const child = spawn( 'npm', [ 'run', 'generate', '--silent', '--', requestPath, outDir, '--keys-only' ], {
-				cwd: EXTERIOR_DIR,
-				stdio: [ 'ignore', 'pipe', 'pipe' ]
-			} );
-
-			let output = '';
-			child.stdout.on( 'data', ( d ) => { output += d; } );
-			child.stderr.on( 'data', ( d ) => { output += d; } );
-			child.on( 'close', ( status ) => resolvePromise( { status, output } ) );
-
-		} );
-
-		if ( status !== 0 ) {
-
-			const line = output.split( '\n' ).find( ( l ) => l.includes( 'E_' ) ) ?? output.trim().slice( 0, 300 );
-
-			throw new AssemblyError( 'E_EXTERIOR_FAILED', line.trim() );
-
-		}
-
-		return JSON.parse( readFileSync( join( outDir, `${request.buildingId}.blueprint.json` ), 'utf8' ) );
+		return this.exterior.run( request, outDir );
 
 	}
 

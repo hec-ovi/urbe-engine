@@ -4,6 +4,7 @@ import { hashJson, writeWorldArchive } from '../world-archive/index.js';
 import { sha256, writeJsonFile } from './JsonFile.js';
 import { buildStreetArtifacts, shareStreetKit } from './StreetArtifacts.js';
 import { AssemblyError } from './RequestAssembler.js';
+import { linkUnchanged } from './WorldClone.js';
 
 /** Prepares world documents before replacing any published file or manifest. */
 export class WorldFiles {
@@ -92,7 +93,11 @@ export class WorldFiles {
 
 	}
 
-	/** Roll back document replacements if publication cannot finish. */
+	/**
+	 * Roll back document replacements if publication cannot finish. A document
+	 * whose bytes did not change stays the file it was, shared with every world
+	 * cloned from this one.
+	 */
 	publish( manifest ) {
 
 		const pending = join( this.stage, 'manifest.json' );
@@ -100,6 +105,7 @@ export class WorldFiles {
 		const replaced = [];
 		try {
 
+			for ( const name of this.names ) linkUnchanged( join( this.stage, name ), join( this.directory, name ) );
 			for ( const name of this.names ) {
 
 				const destination = join( this.directory, name );

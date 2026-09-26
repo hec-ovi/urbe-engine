@@ -1,6 +1,7 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, utimesSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
+import { AssemblyError } from './RequestAssembler.js';
 import { PLAN_INDEX_FILE } from './kit/KitFiles.js';
 
 /** Where every world's shared resources stand, one copy per distinct set. */
@@ -11,10 +12,18 @@ export const OUT_DIR = fileURLToPath( new URL( '../../out/', import.meta.url ) )
 const PREFIX = 16;
 /** One set's folder under its kind, and nothing else in the store is one. */
 const ENTRY = /^[0-9a-f]{16}$/;
+/** Where a batch draws plans before they enter the store. */
+export const STAGING = '.staging';
 /** What a world on disk is found by; `OutDir` is what writes it. */
 const MANIFEST_FILE = 'manifest.json';
 /** Standalone paired previews bind their room/furniture resources here. */
 const PREVIEW_FILE = 'preview.json';
+/**
+ * How long a set a batch used is spared by a sweep that finds no world naming
+ * it: a batch names its sets in its manifest only when it ends, and none takes
+ * anywhere near a day. Staging a batch left behind waits as long.
+ */
+export const SWEEP_GRACE_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Resources a world references instead of carrying.
@@ -52,7 +61,7 @@ export function share( kind, sha256, source, { move = false } = {} ) {
 	const path = sharedPath( kind, sha256 );
 	const destination = join( sharedRoot(), path );
 
-	if ( existsSync( destination ) ) {
+	if ( markUsed( destination ) ) {
 
 		if ( move ) rmSync( source, { recursive: true, force: true } );
 		return path;
@@ -63,6 +72,28 @@ export function share( kind, sha256, source, { move = false } = {} ) {
 	take( source, destination, move );
 
 	return path;
+
+}
+
+/**
+ * Marks one set used now, so a sweep spares it until the manifest that will
+ * name it is written. A set another user owns stands but keeps its time.
+ * @returns whether the set stands
+ */
+export function markUsed( directory ) {
+
+	const now = new Date();
+
+	try {
+
+		utimesSync( directory, now, now );
+		return true;
+
+	} catch {
+
+		return existsSync( directory );
+
+	}
 
 }
 
@@ -90,15 +121,22 @@ export function take( source, destination, move = true ) {
  * A rebuild publishes what it drew under fresh hashes, so a night of them
  * leaves a store many times the size of the cities standing on disk. A sweep
  * reads every world manifest and paired preview under the worlds root, keeps
- * their sets and the plan sets their kit index names, and deletes the rest. Nothing outside the
- * store is read for deletion and nothing outside it is touched.
+ * their sets and the plan sets their kit index names, and deletes the rest.
+ * Nothing outside the store is read for deletion and nothing outside it is
+ * touched. A manifest, preview or plan index that cannot be read stops the
+ * sweep before anything goes, because the sets it names cannot be known.
  *
  * @param root where worlds stand, each one a folder holding a manifest.json
  * @param worlds extra world folders, for a build published outside root
- * @returns `{ removed, kept }`, each the set paths and what they weigh in bytes
+ * @param options.grace milliseconds a set used that recently is spared, named or not
+ * @param options.dryRun report what would go and delete nothing
+ * @returns `{ removed, kept, failed }`, each the set paths and what they weigh
+ * in bytes; `failed` holds the sets the sweep could not delete (another owner's)
+ * @throws AssemblyError E_SWEEP_UNREADABLE, having removed nothing
  */
-export function collect( root = OUT_DIR, worlds = [] ) {
+export function collect( root = OUT_DIR, worlds = [], { grace = 0, dryRun = false } = {} ) {
 
+	const now = Date.now();
 	const store = sharedRoot();
 	const live = new Set();
 
@@ -112,24 +150,38 @@ export function collect( root = OUT_DIR, worlds = [] ) {
 
 	const removed = { entries: [], bytes: 0 };
 	const kept = { entries: [], bytes: 0 };
-
-	for ( const entry of entries( store ) ) {
+	const failed = { entries: [], bytes: 0 };
+	const sweep = ( entry, spared ) => {
 
 		const path = join( store, entry );
-		const side = live.has( entry ) ? kept : removed;
+		const bytes = dirBytes( path );
+		let side = spared ? kept : removed;
 
+		if ( ! spared && ! dryRun ) {
+
+			try { rmSync( path, { recursive: true, force: true } ); } catch { side = failed; }
+
+		}
 		side.entries.push( entry );
-		side.bytes += dirBytes( path );
-		if ( side === removed ) rmSync( path, { recursive: true, force: true } );
+		side.bytes += bytes;
+
+	};
+
+	for ( const entry of entries( store ) ) sweep( entry, live.has( entry ) || ( grace > 0 && usedSince( join( store, entry ), now - grace ) ) );
+
+	// Staging a batch left behind when it stopped: it is no set, so only its age tells.
+	for ( const entry of leftovers( store ) ) {
+
+		if ( ! usedSince( join( store, entry ), now - SWEEP_GRACE_MS ) ) sweep( entry, false );
 
 	}
 
-	return { removed, kept };
+	return { removed, kept, failed };
 
 }
 
 /** One line for a sweep: what it dropped, what stands, and of what kind. */
-export function sweepLine( { removed, kept } ) {
+export function sweepLine( { removed, kept, failed }, { dryRun = false } = {} ) {
 
 	const kinds = new Map();
 
@@ -141,32 +193,31 @@ export function sweepLine( { removed, kept } ) {
 	}
 
 	const standing = [ ...kinds ].sort().map( ( [ kind, count ] ) => `${count} ${kind}` ).join( ', ' );
+	const stuck = failed.entries.length ? `; could not remove ${failed.entries.length}, ${megabytes( failed.bytes )}` : '';
 
-	return `shared store: removed ${removed.entries.length} sets, ${megabytes( removed.bytes )}; `
-		+ `kept ${kept.entries.length}, ${megabytes( kept.bytes )}${standing ? ` (${standing})` : ''}`;
+	return `shared store: ${dryRun ? 'would remove' : 'removed'} ${removed.entries.length} sets, ${megabytes( removed.bytes )}; `
+		+ `kept ${kept.entries.length}, ${megabytes( kept.bytes )}${standing ? ` (${standing})` : ''}${stuck}`;
 
 }
 
-/** What one directory weighs on disk. */
-export function dirBytes( dir ) {
+/** What one file or directory weighs on disk. */
+export function dirBytes( path ) {
+
+	const stat = statSync( path );
+
+	if ( ! stat.isDirectory() ) return stat.size;
 
 	let total = 0;
 
-	for ( const name of readdirSync( dir ) ) {
-
-		const path = join( dir, name );
-		const stat = statSync( path );
-		total += stat.isDirectory() ? dirBytes( path ) : stat.size;
-
-	}
+	for ( const name of readdirSync( path ) ) total += dirBytes( join( path, name ) );
 
 	return total;
 
 }
 
 /**
- * Every set on disk: one folder per kind, one folder per hash under it. A
- * staging directory is not a set and is never swept.
+ * Every set on disk: one folder per kind, one folder per hash under it.
+ * Staging is not a set and is never one of them.
  */
 function* entries( store ) {
 
@@ -183,6 +234,28 @@ function* entries( store ) {
 		}
 
 	}
+
+}
+
+/** What batches stage into: the folders under `.staging` and every other dot folder of the store. */
+function* leftovers( store ) {
+
+	if ( ! existsSync( store ) ) return;
+
+	for ( const entry of readdirSync( store, { withFileTypes: true } ) ) {
+
+		if ( ! entry.isDirectory() || ! entry.name.startsWith( '.' ) ) continue;
+		if ( entry.name !== STAGING ) yield entry.name;
+		else for ( const staged of readdirSync( join( store, STAGING ) ) ) yield `${STAGING}/${staged}`;
+
+	}
+
+}
+
+/** Whether a folder was written or marked used after `since`. */
+function usedSince( path, since ) {
+
+	return statSync( path ).mtimeMs > since;
 
 }
 
@@ -214,7 +287,11 @@ function referenced( manifest ) {
 
 }
 
-/** The plan sets a kit index names, which a world reaches only through it. */
+/**
+ * The plan sets a kit index names, which a world reaches only through it. A
+ * kit set this store does not hold names nothing here: its world draws from
+ * another store, or cannot draw its kit at all.
+ */
 function planSets( store, entry ) {
 
 	const index = readJson( join( store, entry, PLAN_INDEX_FILE ) );
@@ -228,15 +305,18 @@ function planSets( store, entry ) {
 
 const megabytes = ( bytes ) => `${( bytes / 1e6 ).toFixed( 1 )} MB`;
 
+/** A JSON file, or null when there is none; one that cannot be read stops the sweep. */
 function readJson( path ) {
+
+	if ( ! existsSync( path ) ) return null;
 
 	try {
 
 		return JSON.parse( readFileSync( path, 'utf8' ) );
 
-	} catch {
+	} catch ( error ) {
 
-		return null;
+		throw new AssemblyError( 'E_SWEEP_UNREADABLE', `${path} cannot be read, so the sets it names are unknown: ${error.message}` );
 
 	}
 

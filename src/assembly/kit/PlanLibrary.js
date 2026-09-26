@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { AssemblyError } from '../RequestAssembler.js';
 import { writeJsonFile, sha256 } from '../JsonFile.js';
-import { share, sharedPath, sharedRoot } from '../SharedResources.js';
+import { markUsed, share, sharedPath, sharedRoot, STAGING } from '../SharedResources.js';
 import { dressingClass, drawnAs, lettered } from './DressingClass.js';
 import { BAY, PITCH } from './Families.js';
 import { PLAN_INDEX_FILE, planBlueprintFile, planGlbFile, PLANS_KIND } from './KitFiles.js';
@@ -42,7 +42,7 @@ export class PlanLibrary {
 	 * @param version the Exterior package version the shells are drawn by
 	 * @param stage a scratch directory shells are generated into before sharing
 	 */
-	constructor( { workers, version = exteriorVersion(), seed = PLAN_SEED, stage = join( sharedRoot(), '.staging' ) } ) {
+	constructor( { workers, version = exteriorVersion(), seed = PLAN_SEED, stage = join( sharedRoot(), STAGING ) } ) {
 
 		this.workers = workers;
 		this.version = version;
@@ -122,7 +122,8 @@ export class PlanLibrary {
 
 			try {
 
-				if ( standing( plan ) ) reused ++;
+				// Marked first, so a sweep beside this batch spares it from here on.
+				if ( markUsed( join( sharedRoot(), plan.shared ) ) && standing( plan ) ) reused ++;
 				else {
 
 					await this.#generate( plan );
@@ -213,7 +214,7 @@ export class PlanLibrary {
 
 		const place = this.#place( id );
 
-		if ( ! standing( place ) ) return null;
+		if ( ! markUsed( join( sharedRoot(), place.shared ) ) || ! standing( place ) ) return null;
 
 		const glb = join( this.folder( id ), planGlbFile( id ) );
 

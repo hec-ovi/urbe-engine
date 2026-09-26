@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { link, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ExteriorWorkers } from './ExteriorWorkers.js';
@@ -35,6 +35,17 @@ describe( 'persistent Exterior producer workers', () => {
 				expect( await readFile( join( root, 'b', file ) ) ).toEqual( bytes );
 
 			}
+			// Only programs read a blueprint: it is written compact.
+			expect( await readFile( join( root, 'a', 'p1.blueprint.json' ), 'utf8' ) ).toBe( JSON.stringify( a ) + '\n' );
+
+			// A shell replaces its names whole, so a world that shares the old file by a hard link keeps it.
+			const shared = join( root, 'shared.glb' );
+			await writeFile( shared, 'the shell another world stands on' );
+			await mkdir( join( root, 'e' ) );
+			await link( shared, join( root, 'e', 'p1.glb' ) );
+			await pool.run( request, join( root, 'e' ) );
+			expect( await readFile( shared, 'utf8' ) ).toBe( 'the shell another world stands on' );
+			expect( await readFile( join( root, 'e', 'p1.glb' ) ) ).toEqual( await readFile( join( root, 'a', 'p1.glb' ) ) );
 
 			const unfinished = Promise.allSettled( [ pool.run( request, join( root, 'c' ) ), pool.run( request, join( root, 'd' ) ) ] );
 

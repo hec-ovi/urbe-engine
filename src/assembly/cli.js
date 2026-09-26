@@ -13,6 +13,7 @@ import { join, resolve } from 'node:path';
 import { RequestAssembler } from './RequestAssembler.js';
 import { runConnections } from './connectionsRunner.js';
 import { BuildingPipeline } from './BuildingPipeline.js';
+import { ExteriorWorkers } from './ExteriorWorkers.js';
 import { loadBlueprint } from './BlueprintInput.js';
 
 const ATLAS_SAMPLE = fileURLToPath( new URL( '../../../atlas/samples/city-urbe.json', import.meta.url ) );
@@ -64,7 +65,8 @@ if ( ! args ) {
 
 const { atlas } = await loadBlueprint( args.blueprint );
 const connections = await runConnections( atlas, { seed: atlas.meta.seed } );
-const pipeline = new BuildingPipeline( new RequestAssembler( atlas, connections ) );
+const exterior = new ExteriorWorkers( 1 );
+const pipeline = new BuildingPipeline( new RequestAssembler( atlas, connections ), { exterior } );
 const outDir = resolve( args.out );
 
 try {
@@ -76,6 +78,6 @@ try {
 	console.error( `${error.code ?? 'ERROR'}: ${error.message}` );
 	process.exit( 1 );
 
-}
+} finally { await exterior.close(); }
 
 listFiles( outDir );

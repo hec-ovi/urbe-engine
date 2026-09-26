@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,6 +8,7 @@ import { readWorldArchive } from '../world-archive/index.js';
 import { shellBlueprint } from './shell-blueprints.fixture.js';
 import { BuildingBlueprints } from './BuildingBlueprints.js';
 import { PlanLibrary } from './kit/index.js';
+import { cloneWorld } from './WorldClone.js';
 
 const ENGINE_ROOT = resolve( dirname( fileURLToPath( import.meta.url ) ), '../..' );
 const BLUEPRINT = fileURLToPath( new URL( './native-city.fixture.json', import.meta.url ) );
@@ -87,7 +88,23 @@ describe( 'assemble-city CLI', () => {
 		expect( manifest.streets.file ).toBe( 'streets/manifest.json' );
 		expect( manifest.streets.blueprintSha256 ).toBe( manifest.connections.blueprintSha256 );
 
-	}, 20_000 );
+		// A draft cloned from this world republishes the same documents and keeps sharing them.
+		const draft = join( mkdtempSync( join( tmpdir(), 'urbe-city-draft-' ) ), 'draft' );
+		try {
+
+			await cloneWorld( root, draft );
+			const again = cityCli( draft, [ '--reuse-shells', 'true', '--interiors', '0' ] );
+
+			expect( again.status, again.stderr || again.stdout ).toBe( 0 );
+			for ( const file of [ 'blueprint.json', 'connections.json', 'streets/manifest.json', 'streets/placements.json', 'shells/index.json' ] ) {
+
+				expect( statSync( join( draft, file ) ).ino, file ).toBe( statSync( join( root, file ) ).ino );
+
+			}
+
+		} finally { rmSync( dirname( draft ), { recursive: true, force: true } ); }
+
+	}, 40_000 );
 
 	it( 'plans the links against the facade a kit building stands on, not the lot Atlas drew', async () => {
 

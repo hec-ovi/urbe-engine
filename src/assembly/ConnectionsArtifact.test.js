@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -56,7 +56,8 @@ describe( 'assembled Connections artifact', () => {
 			blueprintSha256: sha256( blueprintBytes )
 		} );
 		expect( validateWorldManifest( manifest ) ).toEqual( [] );
-		expect( existsSync( join( dir, '.manifest.json.tmp' ) ) ).toBe( false );
+		// every document replaced its name whole, leaving no pending file behind
+		expect( readdirSync( dir ).filter( ( name ) => name.startsWith( '.' ) ) ).toEqual( [] );
 
 	} );
 

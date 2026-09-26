@@ -1,6 +1,6 @@
 /** Assembles source-bound city artifacts and optional selected interiors through producer APIs. */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { RequestAssembler, AssemblyError } from './RequestAssembler.js';
 import { runConnections, runRooftopSpans } from './connectionsRunner.js';
@@ -16,7 +16,8 @@ import { KitAssembler, PlanLibrary, worldExteriorVersion } from './kit/index.js'
 import { BuildingBlueprints } from './BuildingBlueprints.js';
 import { StandingBuildings } from './StandingBuildings.js';
 import { InteriorModules } from './InteriorModules.js';
-import { dirBytes } from './SharedResources.js';
+import { collect, dirBytes, OUT_DIR, SWEEP_GRACE_MS, sweepLine } from './SharedResources.js';
+import { replaceFile } from './JsonFile.js';
 
 const args = parseCityArgs( process.argv.slice( 2 ) );
 
@@ -454,7 +455,7 @@ const totals = {
 	bytes: results.reduce( ( sum, r ) => sum + ( r.bytes ?? 0 ), 0 )
 };
 
-writeFileSync( join( outDir, 'qa-report.json' ), JSON.stringify( {
+replaceFile( join( outDir, 'qa-report.json' ), JSON.stringify( {
 	blueprint: resolve( args.blueprint ),
 	seed: atlas.meta.seed,
 	totals,
@@ -485,8 +486,18 @@ console.log( `qa report: ${join( outDir, 'qa-report.json' )}` );
 const naming = manifest.named ? `, named${manifest.namingTheme ? `: ${manifest.namingTheme}` : ''}` : '';
 console.log( `manifest: ${join( outDir, MANIFEST_FILE )} (${manifest.parcels.length} buildings, ${kitParcels.length} from the kit, ${manifest.interiors.length} interiors, ${manifest.rooftopSpans.spans.length} rooftop spans, atlas ${manifest.atlasVersion}${naming})` );
 
-// The batch stands: every set this world names is bound by the manifest, so
-// what the store holds beyond the worlds on disk is last night's rebuilds.
+// Every set this world uses is named by its manifest now, so what no world
+// names is swept, all but the sets a batch used within the grace: one drawing
+// beside this batch names its own only when it ends.
+try {
+
+	console.log( sweepLine( collect( OUT_DIR, [ outDir ], { grace: SWEEP_GRACE_MS } ) ) );
+
+} catch ( error ) {
+
+	console.log( `shared store not swept: ${error.message}` );
+
+}
 
 // The manifest is published: the city stands, whatever single lots it is missing.
 process.exit( 0 );

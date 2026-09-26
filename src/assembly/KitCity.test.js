@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,8 @@ import { collectShellArtifacts } from './ShellArtifacts.js';
 import { validateExteriorBlueprint } from './validators.js';
 import { BuildingBlueprints } from './BuildingBlueprints.js';
 import { PlanLibrary } from './kit/PlanLibrary.js';
+import { cloneWorld } from './WorldClone.js';
+import { sha256 } from './JsonFile.js';
 import { blueprintFile, placementsFile, planGlbFile, PLAN_INDEX_FILE, schemaMessage, validateKitPlacements } from './kit/index.js';
 
 const ENGINE_ROOT = resolve( dirname( fileURLToPath( import.meta.url ) ), '../..' );
@@ -213,6 +215,24 @@ describe( 'assemble-city kit path', () => {
 
 	}, 120_000 );
 
+	it( 'furnishes a hard-linked clone of a world, as a draft is, and leaves the world it came from as it was', async () => {
+
+		const { root } = city();
+		const draft = join( scratch(), 'draft' );
+		await cloneWorld( root, draft );
+		const before = files( root );
+
+		const { report } = assembleCity( draft, { options: [ '--reuse-shells', 'true', '--interior-parcels', 'p0,p1' ] } );
+
+		expect( report.totals.interiorsReady ).toBeGreaterThan( 0 );
+		expect( new OutDir( draft ).interiors( PARCELS ).length ).toBe( report.totals.interiorsReady );
+		expect( files( root ) ).toEqual( before );
+		expect( existsSync( join( root, 'p1', 'interior' ) ) ).toBe( false );
+		// What the draft did not write it still shares with the city.
+		expect( statSync( join( draft, 'p1', placementsFile( 'p1' ) ) ).ino ).toBe( statSync( join( root, 'p1', placementsFile( 'p1' ) ) ).ino );
+
+	}, 300_000 );
+
 	it( 'keeps the building closed and standing when its interior fails', () => {
 
 		const modulesDir = scratch();
@@ -231,3 +251,12 @@ describe( 'assemble-city kit path', () => {
 	}, 120_000 );
 
 } );
+
+/** Every file under a world with the hash of its bytes, by path. */
+function files( dir, prefix = '' ) {
+
+	return Object.fromEntries( readdirSync( dir, { withFileTypes: true } ).flatMap( ( entry ) => entry.isDirectory()
+		? Object.entries( files( join( dir, entry.name ), `${prefix}${entry.name}/` ) )
+		: [ [ `${prefix}${entry.name}`, sha256( readFileSync( join( dir, entry.name ) ) ) ] ] ) );
+
+}

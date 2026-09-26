@@ -1,9 +1,9 @@
-import { copyFileSync, existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { hashJson } from '../world-archive/index.js';
 import { validateShellCatalog, validateWorldManifest } from './validators.js';
 import { WorldFiles } from './WorldFiles.js';
-import { writeJsonFile } from './JsonFile.js';
+import { replaceFile, writeJsonFile } from './JsonFile.js';
 import { AssemblyError } from './RequestAssembler.js';
 import { blueprintFile, placementsFile } from './kit/KitFiles.js';
 import { NPC_FILE } from './interiorRunner.js';
@@ -181,10 +181,10 @@ export class OutDir {
 	carryTypes( blueprintPath ) {
 
 		const source = join( dirname( blueprintPath ), NPC_TYPES_FILE );
+		const target = join( this.dir, NPC_TYPES_FILE );
 
 		if ( ! existsSync( source ) ) return false;
-
-		copyFileSync( source, join( this.dir, NPC_TYPES_FILE ) );
+		if ( resolve( source ) !== resolve( target ) ) replaceFile( target, readFileSync( source ) );
 
 		return true;
 
@@ -201,9 +201,7 @@ export class OutDir {
 		const manifest = this.#manifest( atlas, parcelIds, interiorIds, rooftopSpans, references );
 		writeJsonFile( join( this.dir, BLUEPRINT_FILE ), atlas );
 		connectionsArtifact?.write( this.dir );
-		const pendingManifest = join( this.dir, `.${MANIFEST_FILE}.tmp` );
-		writeFileSync( pendingManifest, JSON.stringify( manifest, null, 2 ) + '\n' );
-		renameSync( pendingManifest, join( this.dir, MANIFEST_FILE ) );
+		replaceFile( join( this.dir, MANIFEST_FILE ), JSON.stringify( manifest, null, 2 ) + '\n' );
 		return manifest;
 
 	}

@@ -90,7 +90,8 @@ function mount( name, prefix, dir ) {
 
 export default defineConfig( ( { mode } ) => ( {
 	// Tests, like batches, take a quarter of the machine: a full pool pins the package near 100 C.
-	test: { maxWorkers: TEST_WORKERS },
+	// They publish into a shared store of their own, never engine/out/shared.
+	test: { maxWorkers: TEST_WORKERS, globalSetup: [ 'src/assembly/test-store.js' ] },
 	plugins: [
 		hitchReportPlugin( join( ROOT, 'out', 'diagnostics' ) ),
 		mount( 'serve-materials-bindings', '/materials/bindings', BINDINGS_DIR ),

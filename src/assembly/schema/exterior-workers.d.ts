@@ -4,7 +4,7 @@ export type ExteriorRequest = Record<string, unknown>;
 export type ExteriorBlueprint = Record<string, unknown>;
 export declare class ExteriorWorkers {
   constructor(count?: number);
-  /** Writes keys-only GLB and blueprint into the supplied directory. */
+  /** Writes the keys-only GLB and the compact blueprint into the supplied directory, each replacing its name whole. */
   run(request: ExteriorRequest, outDir: string): Promise<ExteriorBlueprint>;
   /** Cancels unfinished work and releases producer workers. */
   close(): Promise<void>;

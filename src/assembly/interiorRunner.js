@@ -4,8 +4,8 @@
  * TypeScript, so this module must run under a TS-capable loader (tsx).
  */
 
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 // The sibling checkout by default; URBE_INTERIOR_DIR names another checkout of
 // the Interior box (a pinned worktree while its main tree is mid-edit).
@@ -21,7 +21,9 @@ export const NPC_FILE = 'npc.json';
  * (ground, middle, crown) and writes them itself; `expandBuilding` turns them
  * into the building's own per-floor identities, elevations and connectors,
  * which is what `npc.json` carries. Geometry stays in the shared module set the
- * city publishes once, so a building ships as JSON alone.
+ * city publishes once, so a building ships as JSON alone. The folder is written
+ * beside `interiorDir` and renamed over it whole: a failed build leaves the
+ * folder that stood, and a world cloned by hard links never sees the write.
  *
  * @returns the BuildingManifest interior wrote to `building.json`
  */
@@ -29,10 +31,18 @@ export async function runInterior( request, interiorDir ) {
 
 	const { generate, writePlacements, expandBuilding } = await import( INTERIOR_ENTRY );
 	const result = await generate( request );
+	mkdirSync( dirname( interiorDir ), { recursive: true } );
+	const staged = mkdtempSync( join( dirname( interiorDir ), `.${basename( interiorDir )}-` ) );
 
-	await writePlacements( result, interiorDir );
-	const { npc } = expandBuilding( result );
-	writeFileSync( join( interiorDir, NPC_FILE ), JSON.stringify( npc ) + '\n' );
+	try {
+
+		await writePlacements( result, staged );
+		const { npc } = expandBuilding( result );
+		writeFileSync( join( staged, NPC_FILE ), JSON.stringify( npc ) + '\n' );
+		rmSync( interiorDir, { recursive: true, force: true } );
+		renameSync( staged, interiorDir );
+
+	} finally { rmSync( staged, { recursive: true, force: true } ); }
 
 	return result.building;
 
