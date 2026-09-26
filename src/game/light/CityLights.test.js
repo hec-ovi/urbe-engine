@@ -60,6 +60,18 @@ describe( 'CityLights', () => {
 
 	} );
 
+	it( 'lights a street lamp across the road before a room strip inside the building the player stands by', () => {
+
+		// The strip is six metres off, the lamp fifteen: flux, not distance, decides.
+		const lamp = { position: new THREE.Vector3( 14, 8, 0 ), lumens: 24000, color: new THREE.Color(), range: 26 };
+		const strip = { position: new THREE.Vector3( 0, 4, 5.5 ), lumens: 2400, color: new THREE.Color(), range: 12 };
+		const lights = new CityLights( [ strip, lamp ], 1 );
+		lights.update( new THREE.Vector3( 0, 1.6, 0 ), 1 );
+
+		expect( lights.lights[ 0 ].power ).toBe( lamp.lumens );
+
+	} );
+
 	it( 'replaces streamed fixtures in the same slots and keeps per-fixture dimming', () => {
 
 		const a = fixture( 0, 1000 ), b = fixture( 10, 2000 ), c = fixture( 20, 3000 );
@@ -90,6 +102,44 @@ describe( 'CityLights', () => {
 		expect( air.color.r ).toBeGreaterThan( air.color.b );
 		expect( air.lux ).toBeGreaterThan( 0 );
 		expect( lights.airColor( new THREE.Vector3( 500, 0, 0 ) ).lux ).toBe( 0 );
+
+	} );
+
+	it( 'gives the slots to the fixtures lighting the point most, picking what a whole-city scan picks from the cells around it', () => {
+
+		let seed = 7;
+		const random = () => ( seed = ( seed * 16807 ) % 2147483647 ) / 2147483647;
+		const fixtures = Array.from( { length: 600 }, () => ( {
+			position: new THREE.Vector3( random() * 1000 - 100, random() * 30, random() * 1000 - 100 ),
+			lumens: 200 + random() * 5000,
+			color: new THREE.Color( random(), random(), random() ),
+			range: 15
+		} ) );
+
+		for ( const [ x, z ] of [ [ 0, 0 ], [ 480, 510 ], [ 899, 1 ], [ 2000, 2000 ] ] ) {
+
+			const at = new THREE.Vector3( x, 1.6, z );
+			const lights = new CityLights( fixtures, 24, { streamed: true } );
+			lights.update( at, 1 );
+			const brightest = fixtures.map( ( fixture, index ) => ( { index, light: fixture.lumens / Math.max( 4, fixture.position.distanceToSquared( at ) ) } ) )
+				.sort( ( a, b ) => b.light - a.light || a.index - b.index ).slice( 0, 24 ).map( ( entry ) => entry.index );
+			expect( lights.selection ).toEqual( brightest );
+
+			let r = 0, total = 0;
+			for ( const fixture of fixtures ) {
+
+				const d2 = fixture.position.distanceToSquared( at );
+				if ( d2 > 45 * 45 ) continue;
+				const weight = fixture.lumens / Math.max( 4, d2 );
+				r += fixture.color.r * weight;
+				total += weight;
+
+			}
+			const air = lights.airColor( at );
+			expect( air.lux ).toBeCloseTo( total / ( 4 * Math.PI ), 9 );
+			expect( air.color.r ).toBeCloseTo( total ? r / total : 0, 9 );
+
+		}
 
 	} );
 
