@@ -72,6 +72,23 @@ function withMast( plan ) {
 
 }
 
+/** The same plan with a lit room behind its first upper window, its light inside the footprint. */
+function withRoomLight( plan ) {
+
+	const ring = plan.bounds.footprint;
+	const x = ring.reduce( ( sum, point ) => sum + point[ 0 ], 0 ) / ring.length;
+	const z = ring.reduce( ( sum, point ) => sum + point[ 1 ], 0 ) / ring.length;
+	const lit = plan.floors.find( ( floor ) => floor.elevation > 0 && floor.openings.some( ( opening ) => opening.kind === 'window' ) );
+	const window = lit.openings.find( ( opening ) => opening.kind === 'window' );
+	const scenery = { nodeId: `scenery:${lit.index}`, depth: 1, lightLayout: 'strips', state: 'lit',
+		lights: [ { position: [ x, lit.elevation + 3, z ], color: '#99fff0', lumens: 2400, range: 12 } ] };
+
+	return { ...plan, floors: plan.floors.map( ( floor ) => floor !== lit ? floor : {
+		...floor, openings: floor.openings.map( ( opening ) => opening === window ? { ...opening, scenery } : opening )
+	} ) };
+
+}
+
 /** One parcel standing a plan in the frame given, as KitAssembler records it. */
 function placed( parcel, plan, frame ) {
 
@@ -222,7 +239,30 @@ describe( 'kit assembly', () => {
 
 	} );
 
-	it( 'generates a plan once and lets every parcel of it stand on that one shell', () => {
+	it( 'lights the rooms behind a parcel\'s windows where that parcel stands', () => {
+
+		const plan = withRoomLight( plans.blueprint( kit.candidate( 'p1' ).plan.id ) );
+		const record = placed( 'p1', plan, { origin: [ 300, 0, 120 ], rotationY: - Math.PI / 2 } );
+		const frame = new PlanFrame( record );
+		const composed = parcelBlueprint( plan, record );
+		const lights = ( blueprint ) => blueprint.floors.flatMap( ( floor ) => floor.openings.flatMap( ( opening ) => opening.scenery?.lights ?? [] ) );
+
+		expect( lights( plan ).length ).toBeGreaterThan( 0 );
+		expect( schemaMessage( validateExteriorBlueprint( composed ) ) ).toBe( '' );
+		expect( lights( composed ) ).toEqual( lights( plan ).map( ( light ) => ( { ...light, position: frame.point3( light.position ) } ) ) );
+		// The city lights its streets with them, so each stands inside this building.
+		for ( const { position: [ x, , z ] } of lights( composed ) ) {
+
+			expect( x ).toBeGreaterThanOrEqual( record.bounds.min[ 0 ] );
+			expect( x ).toBeLessThanOrEqual( record.bounds.max[ 0 ] );
+			expect( z ).toBeGreaterThanOrEqual( record.bounds.min[ 2 ] );
+			expect( z ).toBeLessThanOrEqual( record.bounds.max[ 2 ] );
+
+		}
+
+	} );
+
+	it( 'generates a plan once and lets every parcel of it stand on that one shell', async () => {
 
 		for ( const id of plans.plans.keys() ) {
 
@@ -232,7 +272,7 @@ describe( 'kit assembly', () => {
 		}
 
 		// A second run over the same buildings draws nothing at all.
-		expect( plans.draw() ).resolves.toMatchObject( { drawn: 0 } );
+		await expect( plans.draw() ).resolves.toMatchObject( { drawn: 0 } );
 
 	} );
 

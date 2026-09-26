@@ -13,6 +13,8 @@
  *
  * A floor's room envelope and its construction lattice move with it: the plan
  * fitted them on its own lot, and a copy stands that same lot somewhere else.
+ * So do the lights of the rooms behind its windows, which are points in space
+ * where an opening is an edge and an offset along it.
  */
 
 /**
@@ -121,12 +123,28 @@ export class PlanFrame {
 /** One storey of the plan, standing where this parcel stands. */
 function composeFloor( floor, frame ) {
 
-	const { outline, roomEnvelope, ...rest } = floor;
+	const { outline, roomEnvelope, openings, ...rest } = floor;
 
 	return {
 		...rest,
 		outline: frame.ring( outline ),
-		...( roomEnvelope ? { roomEnvelope: composeEnvelope( roomEnvelope, frame ) } : {} )
+		...( roomEnvelope ? { roomEnvelope: composeEnvelope( roomEnvelope, frame ) } : {} ),
+		...( openings ? { openings: openings.map( ( opening ) => composeOpening( opening, frame ) ) } : {} )
+	};
+
+}
+
+/** An opening keeps its edge and offset; the room behind it moves its lights. */
+function composeOpening( opening, frame ) {
+
+	if ( ! opening.scenery?.lights ) return opening;
+
+	return {
+		...opening,
+		scenery: {
+			...opening.scenery,
+			lights: opening.scenery.lights.map( ( light ) => ( { ...light, position: frame.point3( light.position ) } ) )
+		}
 	};
 
 }
