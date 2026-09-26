@@ -8,7 +8,7 @@ Records frame gaps, subsystem costs and renderer allocations for a running city,
 - `RenderWork(renderer.info)`: listens to the renderer's own `createProgram`, `destroyProgram`, `createTexture` and `destroyTexture` accounting from construction on.
 - `FrameReports(send, snapshot)`: a send callback and a callback returning the snapshot fields in the [report schema](report.schema.json). `frame(now, gapMs, notes)` records a frame and its preceding work.
 - `hitchReportPlugin(outputDirectory)`: the Vite development server and the `urbe:performance` event carrying a report.
-- `AutomationProbe(game)`: the playing `GameApp`. Game installs it as `window.urbe.automation` once the city plays, only when the query carries `automation` on an `out` preview ([settings](../data/schema/game-config.d.ts)); a catalog `game` saves, so it gets none. It acts through the player's own paths: `placePlayer`, `pressAction`, `sayLine` ([Game](../CONTRACT.md)) and the chat's action buttons, and reads the [companion](../companion/CONTRACT.md) and [continuity](../agents/CONTRACT.md) to report what they do.
+- `AutomationProbe(game)`: the playing `GameApp`. Game installs it as `window.urbe.automation` once the city plays, only when the query carries `automation` on an `out` preview ([settings](../data/schema/game-config.d.ts)); a catalog `game` saves, so it gets none. It acts through the player's own paths: `placePlayer`, `pressAction`, `sayLine` ([Game](../CONTRACT.md)) and the chat's action buttons, and reads the [companion](../companion/CONTRACT.md), [continuity](../agents/CONTRACT.md) and [scenery](../scenery/CONTRACT.md) to report what they do.
 
 ## Output
 
@@ -32,11 +32,13 @@ Records frame gaps, subsystem costs and renderer allocations for a running city,
   - `person(npcId)`: that person as continuity holds them, `{npcId, id, mode, visible, position, distance}` with `id` their crowd member, or null.
   - `standAway(npcId, {min = 12, max = 20})`: stands the player on a walk graph sidewalk that far from the person, trying spots a metre apart nearest the middle of that band first, on ground a step from the sidewalk, aimed at their chest. After two frames: `{placed, distance}`.
   - `trail(npcId, {timeoutMs = 360000})`: keeps the player 2.5 m behind the companion on the path it walks (`placePlayer` once they are more than 4 m apart) until a conversation opens, the companion ends or the time passes, sampling `companion()` each second: `{samples: [{ms, ...companion}], conversation, companion, ms}`.
+  - `scenes()`: the quest scenes the director knows, in scene id order, `{sceneId, questId, purpose, status, failed, place, frame, elements, standing}`: `status` dormant, staged or retired, `failed` the code a scene failed with for the session or null; while staged, `place` its resolved place, `frame` `{kind, origin, width, depth}` and `elements` the ids of its bodies, props and decals, else null, null and empty; `standing` whether they stand around the player now.
+  - `visitScene(sceneId, {timeoutMs = 20000})`: stands the player 0.4 m inside the edge of a staged scene's frame, at the first of its entries with ground within a step of the frame's floor, aimed 0.3 m over its first element, and waits for the scene to stand. For an indoor scene the player first stands at the parcel's door until the frame's floor is solid; the interior stream loads the floors next to the player's, so a scene two floors or more above the door is not reached. After two more frames: `{placed, standing, shown, target, ms}`, `shown` the ids of the elements drawn and `target` what E reaches. A scene that is not staged gives `placed` false; an unknown id rejects.
 
 ## Errors
 
-Invalid reports are discarded. Transport or storage failures report a warning and do not interrupt gameplay. `approach` rejects an unknown member id. The probe never saves: a preview has no persistence.
+Invalid reports are discarded. Transport or storage failures report a warning and do not interrupt gameplay. `approach` rejects an unknown member id and `visitScene` an unknown scene id. The probe never saves: a preview has no persistence.
 
 ## Dependencies
 
-[Game](../CONTRACT.md), [Agents](../agents/CONTRACT.md) for the crowd models and the continuity, [Companion](../companion/CONTRACT.md), [Physics](../physics/CONTRACT.md) and [Player](../player/CONTRACT.md) for the body measures, [Vite custom events](https://vite.dev/guide/api-plugin#client-server-communication).
+[Game](../CONTRACT.md), [Agents](../agents/CONTRACT.md) for the crowd models and the continuity, [Companion](../companion/CONTRACT.md), [Scenery](../scenery/CONTRACT.md) for the scenes and their frames, [Physics](../physics/CONTRACT.md) and [Player](../player/CONTRACT.md) for the body measures, [Vite custom events](https://vite.dev/guide/api-plugin#client-server-communication).

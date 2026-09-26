@@ -2,6 +2,7 @@ import { CROWD_MODELS } from '../agents/CharacterCatalog.js';
 import { PERSON_RADIUS } from '../physics/ImpactWorld.js';
 import { STEP_HEIGHT } from '../physics/PlayerBody.js';
 import { CHEST } from '../player/Interactor.js';
+import { localToWorld } from '../scenery/StagingAssembler.js';
 
 /** How far from a person the player stands to talk: well inside the talk range. */
 const FACE_DISTANCE = 1.3;
@@ -22,6 +23,9 @@ const TRAIL_STEP = 0.5;
  * each way, since a ray down the seam between two ground cuboids meets neither.
  */
 const GROUND_PROBES = [ [ 0, 0 ], [ 0.15, 0 ], [ - 0.15, 0 ], [ 0, 0.15 ], [ 0, - 0.15 ] ];
+/** A visited scene is watched from this far inside its frame's edge, aimed this high over its first element. */
+const SCENE_INSET = 0.4;
+const SCENE_AIM = 0.3;
 
 /**
  * A driver's hands in a read-only preview (`?mode=game&out=...&automation`).
@@ -305,8 +309,7 @@ export class AutomationProbe {
 		spots.sort( ( a, b ) => a.off - b.off || a.x - b.x || a.z - b.z );
 		for ( const { x, y, z } of spots ) {
 
-			const ground = this.#ground( x, y, z );
-			if ( ground === null || ! this.game.placePlayer( { x, y: ground + FOOTING, z }, { x: at[ 0 ], y: at[ 1 ] + CHEST, z: at[ 2 ] } ) ) continue;
+			if ( ! this.#standOn( [ x, y, z ], chestOf( at ) ) ) continue;
 			await frames( 2 );
 			return { placed: true, distance: round( spread( this.game.body.feet.toArray(), at ), 2 ) };
 
@@ -336,9 +339,7 @@ export class AutomationProbe {
 			if ( this.game.interactor.conversation || this.game.companion.active?.npcId !== npcId || body?.npcId !== npcId ) break;
 			const at = body.position;
 			if ( ! path.length || spread( path.at( - 1 ), at ) >= TRAIL_STEP ) path.push( at );
-			const spot = spread( this.game.body.feet.toArray(), at ) > TRAIL_BEHIND + TRAIL_SLACK ? behind( path, TRAIL_BEHIND ) : null;
-			const ground = spot ? this.#ground( ...spot ) : null;
-			if ( ground !== null ) this.game.placePlayer( { x: spot[ 0 ], y: ground + FOOTING, z: spot[ 2 ] }, { x: at[ 0 ], y: at[ 1 ] + CHEST, z: at[ 2 ] } );
+			if ( spread( this.game.body.feet.toArray(), at ) > TRAIL_BEHIND + TRAIL_SLACK ) this.#standOn( behind( path, TRAIL_BEHIND ), chestOf( at ) );
 			if ( performance.now() - sampled >= 1000 ) {
 
 				sampled = performance.now();
@@ -349,6 +350,99 @@ export class AutomationProbe {
 		}
 
 		return { samples, conversation: this.#conversation(), companion: this.companion(), ms: round( performance.now() - started, 0 ) };
+
+	}
+
+	/**
+	 * The quest scenes the game knows, in scene id order: `{ sceneId, questId,
+	 * purpose, status, failed, place, frame, elements, standing }`. `status`
+	 * is dormant, staged or retired and `failed` the code a scene failed with
+	 * for the session, else null. While a scene is staged, `place` is where it
+	 * resolved, `frame` `{ kind, origin, width, depth }` its measured frame and
+	 * `elements` the ids of the bodies, props and decals it lays out; `standing`
+	 * is whether they stand around the player now.
+	 */
+	scenes() {
+
+		const { scenery } = this.game;
+
+		return scenery.serialize().flatMap( ( { sceneId } ) => {
+
+			const scene = scenery.sceneFor( sceneId );
+			return scene ? [ sceneOf( sceneId, scene, scenery.renderer ) ] : [];
+
+		} );
+
+	}
+
+	/**
+	 * Stands the player just inside the edge of staged scene `sceneId`, at
+	 * the first of its frame's entries with ground under it, aimed at its
+	 * first element, and waits up to `timeoutMs` for the scene to stand
+	 * around them. For an indoor scene the player waits at the parcel's door
+	 * until the frame's floor is solid, which the interior stream loads for
+	 * the floors next to the player's. After two more frames: `{ placed,
+	 * standing, shown, target, ms }`, `shown` the ids of the elements drawn
+	 * and `target` what E reaches.
+	 */
+	async visitScene( sceneId, { timeoutMs = 20000 } = {} ) {
+
+		const { scenery, companion } = this.game;
+		const scene = scenery.sceneFor( sceneId );
+		if ( ! scene ) throw new Error( `no scene ${sceneId}` );
+		const started = performance.now();
+		const waiting = () => performance.now() - started < timeoutMs;
+		const location = scene.status === 'staged' && ! scene.failed ? scene.request.location : null;
+		let placed = false;
+		if ( location ) {
+
+			const door = location.kind === 'interior' ? companion.places.positions.get( `parcel:${scene.assembly.place.parcelId}` ) ?? null : null;
+			const aim = scene.assembly.entities[ 0 ]?.transform.position ?? location.origin;
+			const target = { x: aim.x, y: aim.y + SCENE_AIM, z: aim.z };
+			let atDoor = ! door;
+			while ( ! ( placed = this.#standInFrame( location, target ) ) && waiting() ) {
+
+				atDoor ||= this.#standOn( door, target );
+				await frames( 1 );
+
+			}
+			while ( placed && ! scenery.renderer.isRealized( sceneId ) && waiting() ) await frames( 1 );
+			await frames( 2 );
+
+		}
+		const visuals = scenery.renderer.visuals( sceneId );
+
+		return {
+			placed,
+			standing: scenery.renderer.isRealized( sceneId ),
+			shown: elementsOf( scene.assembly ).filter( ( entityId ) => visuals.focus( entityId ) ),
+			target: targetOf( this.game.interactor.target ),
+			ms: round( performance.now() - started, 0 )
+		};
+
+	}
+
+	/** Stands the player at the first frame entry, moved in from the edge, that has ground under it; whether one had. */
+	#standInFrame( location, target ) {
+
+		for ( const { position } of location.entries ) {
+
+			const reach = Math.hypot( position.x, position.z );
+			const inward = reach > SCENE_INSET ? 1 - SCENE_INSET / reach : 0;
+			const spot = localToWorld( location, { x: position.x * inward, z: position.z * inward } );
+			if ( this.#standOn( [ spot.x, location.origin.y, spot.z ], target ) ) return true;
+
+		}
+
+		return false;
+
+	}
+
+	/** Stands the player on the ground within a step of `[x, y, z]`, aimed at `target`; whether there was ground. */
+	#standOn( [ x, y, z ], target ) {
+
+		const ground = this.#ground( x, y, z );
+		return ground !== null && this.game.placePlayer( { x, y: ground + FOOTING, z }, target );
 
 	}
 
@@ -540,6 +634,28 @@ function lookValues( look ) {
 
 }
 
+/** One scene as the director holds it, in plain JSON. */
+function sceneOf( sceneId, { spec, status, failed, resolved, assembly }, renderer ) {
+
+	const frame = assembly?.frame;
+
+	return {
+		sceneId, questId: spec.questId, purpose: spec.purpose, status, failed,
+		place: resolved ? { ...resolved.place } : null,
+		frame: frame ? { kind: frame.kind, origin: point( frame.origin ), width: frame.width, depth: frame.depth } : null,
+		elements: elementsOf( assembly ),
+		standing: renderer.isRealized( sceneId )
+	};
+
+}
+
+/** The ids of a staged scene's bodies, props and decals, or none. */
+function elementsOf( assembly ) {
+
+	return assembly ? [ ...assembly.entities, ...assembly.decals ].map( ( element ) => element.entityId ) : [];
+
+}
+
 function targetOf( target ) {
 
 	return target ? { kind: target.kind, person: target.person?.id ?? null } : null;
@@ -549,6 +665,13 @@ function targetOf( target ) {
 function nameOf( instance ) {
 
 	return instance?.name ? `${instance.name.given} ${instance.name.family}` : null;
+
+}
+
+/** The chest of a person standing at `[x, y, z]`, as a crosshair target. */
+function chestOf( [ x, y, z ] ) {
+
+	return { x, y: y + CHEST, z };
 
 }
 

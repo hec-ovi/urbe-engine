@@ -8,6 +8,8 @@ import { look } from '../agents/Appearance.js';
 import { HeroCharacter } from '../agents/HeroCharacter.js';
 import { animation, rig } from '../agents/HeroCharacter.test-fixtures.js';
 import { ActorLighting } from '../light/ActorLighting.js';
+import { SceneryCompiler } from '../scenery/SceneryCompiler.js';
+import { assets, courier, crimeScene, frame } from '../scenery/scenery.test-fixtures.js';
 
 const SEED = 3207466384;
 
@@ -305,6 +307,67 @@ describe( 'automation probe', () => {
 		expect( placed.at( - 1 ).feet ).toBe( - 2.5 );
 		expect( game.body.feet.z ).toBe( 5 );
 		expect( 20 - game.body.feet.x ).toBeLessThanOrEqual( 4 );
+
+	} );
+
+	it( 'lists the quest scenes, and stands the player at the edge of a staged one inside once its floor is solid, aimed at its first element', async () => {
+
+		const { game } = playing();
+		const staging = new SceneryCompiler( { missionAssets: assets } ).compile( crimeScene(), frame, courier );
+		const drawn = new Set();
+		let asked = 0;
+		game.scenery = {
+			serialize: () => [ 'courier-found', 'wake', 'old-scene' ].map( ( sceneId ) => ( { sceneId } ) ),
+			sceneFor: ( sceneId ) => ( {
+				'courier-found': { spec: crimeScene(), status: 'staged', failed: null, resolved: { place: staging.assembly.place, actors: courier }, request: staging.request, assembly: staging.assembly },
+				wake: { spec: crimeScene( { sceneId: 'wake', purpose: 'wake' } ), status: 'dormant', failed: 'E_SCENERY_NO_FIT', resolved: null, request: null, assembly: null }
+			} )[ sceneId ] ?? null,
+			renderer: {
+				// The scene stands a few frames after the player comes near.
+				isRealized: ( sceneId ) => sceneId === 'courier-found' && drawn.size > 0 && ++ asked > 3,
+				visuals: () => ( { focus: ( entityId ) => drawn.has( entityId ) ? { position: new THREE.Vector3(), visible: true } : null } )
+			}
+		};
+		game.companion = { places: { positions: new Map( [ [ 'parcel:p47', [ 10, 0.2, 12 ] ] ] ) } };
+		// The flat's floor, 2.4 m up over the frame, is solid once the player has stood at the door.
+		let solid = false;
+		game.physics.world.castRay = ( { origin, dir }, length ) => {
+
+			const floor = solid && Math.abs( origin.x - 10 ) <= 4 && Math.abs( origin.z - 20 ) <= 3.5 ? 2.4 : 0.2;
+			const drop = origin.y - floor;
+			return dir.y === - 1 && drop >= 0 && drop <= length ? { timeOfImpact: drop } : null;
+
+		};
+		game.placePlayer.mockImplementation( ( feet ) => {
+
+			game.body.feet.set( feet.x, feet.y, feet.z );
+			solid = true;
+			for ( const entityId of [ 'courier', 'pool' ] ) drawn.add( entityId );
+			return true;
+
+		} );
+		const probe = new AutomationProbe( game );
+
+		expect( probe.scenes() ).toEqual( [
+			{
+				sceneId: 'courier-found', questId: 'quest-missing-courier', purpose: 'crime-scene', status: 'staged', failed: null,
+				place: { parcelId: 'p47', floor: 0, roomId: 'f0-r1' }, frame: { kind: 'interior', origin: [ 10, 2.4, 20 ], width: 8, depth: 7 },
+				elements: [ 'courier', 'drive', 'pool' ], standing: false
+			},
+			{ sceneId: 'wake', questId: 'quest-missing-courier', purpose: 'wake', status: 'dormant', failed: 'E_SCENERY_NO_FIT', place: null, frame: null, elements: [], standing: false }
+		] );
+
+		const visit = await probe.visitScene( 'courier-found' );
+		expect( visit ).toMatchObject( { placed: true, standing: true, shown: [ 'courier', 'pool' ], target: null } );
+		const [ [ door ], [ edge, aim ] ] = game.placePlayer.mock.calls;
+		expect( door ).toEqual( { x: 10, y: expect.closeTo( 0.25 ), z: 12 } );
+		// The door entry of the frame, 0.4 m in from its edge, on the flat's floor, aimed over the body.
+		expect( edge ).toEqual( { x: 10, y: expect.closeTo( 2.45 ), z: expect.closeTo( 16.9 ) } );
+		const body = staging.assembly.entities[ 0 ].transform.position;
+		expect( aim ).toEqual( { x: body.x, y: body.y + 0.3, z: body.z } );
+
+		expect( await probe.visitScene( 'wake' ) ).toMatchObject( { placed: false, standing: false, shown: [] } );
+		await expect( probe.visitScene( 'ghost' ) ).rejects.toThrow( 'no scene ghost' );
 
 	} );
 
