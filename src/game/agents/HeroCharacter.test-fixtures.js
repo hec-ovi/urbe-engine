@@ -40,7 +40,7 @@ export function rig( name = 'body', { eyebrows = false } = {} ) {
 
 }
 
-/** The talk, sit and sprint clips a focused rig plays, on the test rig's skeleton. */
+/** The talk, sit and sprint clips a focused rig plays and a death a still lies in, on the test rig's skeleton. */
 export function animation() {
 
 	const scene = rig();
@@ -54,7 +54,9 @@ export function animation() {
 			new THREE.AnimationClip( 'Sitting_Talking_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
 			new THREE.AnimationClip( 'Idle_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
 			new THREE.AnimationClip( 'Sprint_Enter', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
-			new THREE.AnimationClip( 'Sprint_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] )
+			new THREE.AnimationClip( 'Sprint_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
+			// Falls a quarter turn about +X over its second, as a body lies down.
+			new THREE.AnimationClip( 'Death01', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, [ 0, 0, 0, 1, Math.SQRT1_2, 0, 0, Math.SQRT1_2 ] ) ] )
 		]
 	};
 

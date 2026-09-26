@@ -150,8 +150,8 @@ describe( 'focused character', () => {
 		expect( loaded ).toHaveLength( 2 );
 		// The prepared root's materials were handed back and are what this
 		// person wears, tinted hairstyle and eyebrows included.
-		expect( hero.models.size ).toBe( 2 );
-		expect( ( await hero.models.get( 'regular-male:Hairstyles/Rigged to Head Bone/Male/Hair_SimpleParted.gltf' ) ).wardrobe ).toHaveLength( 1 );
+		expect( hero.poser.models.size ).toBe( 2 );
+		expect( ( await hero.poser.models.get( 'regular-male:Hairstyles/Rigged to Head Bone/Male/Hair_SimpleParted.gltf' ) ).wardrobe ).toHaveLength( 1 );
 		const worn = [];
 		hero.active.root.traverse( ( node ) => { if ( node.isMesh ) worn.push( node ); } );
 		expect( worn.filter( ( mesh ) => mesh.userData.hair ) ).toHaveLength( 2 );
@@ -192,7 +192,7 @@ describe( 'focused character', () => {
 
 		}
 		// Each is the pack's own hair map times the person's tint, as in the crowd.
-		const source = await hero.models.values().next().value;
+		const source = await hero.poser.models.values().next().value;
 		const maps = [];
 		source.scene.traverse( ( node ) => { if ( node.userData.hair ) maps.push( node.material.map ); } );
 		expect( vi.mocked( hairColorNode ).mock.calls ).toEqual( maps.map( ( map ) => [ map, dressed.look.hair ] ) );
