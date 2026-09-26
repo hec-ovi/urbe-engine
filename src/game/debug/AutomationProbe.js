@@ -379,11 +379,11 @@ export class AutomationProbe {
 	 * Stands the player just inside the edge of staged scene `sceneId`, at
 	 * the first of its frame's entries with ground under it, aimed at its
 	 * first element, and waits up to `timeoutMs` for the scene to stand
-	 * around them. For an indoor scene the player waits at the parcel's door
-	 * until the frame's floor is solid, which the interior stream loads for
-	 * the floors next to the player's. After two more frames: `{ placed,
-	 * standing, shown, target, ms }`, `shown` the ids of the elements drawn
-	 * and `target` what E reaches.
+	 * around them. While no entry has ground, as on an indoor floor not yet
+	 * loaded, the player stands at the parcel's door and it tries again each
+	 * frame; the interior stream loads the floors next to the player's.
+	 * After two more frames: `{ placed, standing, shown, target, ms }`,
+	 * `shown` the ids of the elements drawn and `target` what E reaches.
 	 */
 	async visitScene( sceneId, { timeoutMs = 20000 } = {} ) {
 
