@@ -1,5 +1,7 @@
 # Changelog
 
+0.30.0: NPC chat streams over `POST /api/talk/stream` (NDJSON deltas, sentences, companion offers, done) through one OpenAI-compatible model port that also serves tool calls; the talk request admits the simulation's age, traits and transit job, and a rebuilt world never serves stale names or memory. One paced companion (follow or lead, waiting for the player, arriving, giving up) runs beside independent walks home, so talking to a bystander never drops a follower; quest escorts arrive by phase, map stations to stops and survive saves. An out preview opened with `&automation` exposes `window.urbe.automation` for read-only scripted play (`compose/play-probe.mjs`).
+
 0.29.3: cached character and room materials bind the currently drawn mesh’s live room-fill texture, including replaced and grown channels. Reusing a focused model after warm-up or another conversation no longer leaves its body reading a disposed black lighting texture.
 
 0.29.2: conversations retain the clicked NPC body when an older identity exists elsewhere. Ordinary workers and seated visitors return to their exact post, facing and posture after chat, saving and streaming, until their schedule occurrence changes. An unreachable return route no longer makes a saved speaker disappear or aborts loading. Exterior window scenery is retained on furnished buildings and hidden from their actual interior view. Scene-wide fog uniforms prevent stale indoor colour washing exterior shells white; ordinary interiors now have clear air.
