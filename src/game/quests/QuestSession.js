@@ -15,7 +15,7 @@ export class QuestSession {
 	 * @param blocked questlines the cast could not fill, kept for the log with
 	 * their reason: a job that vanishes from the menu reads as a broken game.
 	 */
-	constructor( entries, sim, blocked = [], presence = { read: null } ) {
+	constructor( entries, sim, blocked = [], presence = { read: null, assumed: null } ) {
 
 		this.entries = entries;
 		this.sim = sim;
@@ -46,7 +46,7 @@ export class QuestSession {
 		const taken = new Set();
 		const characters = new Map();
 		const saved = new Map( persisted.map( ( entry ) => [ entry.id, entry ] ) );
-		const presence = { read: null };
+		const presence = { read: null, assumed: null };
 		const runtimeSim = physicalSimulation( sim, presence );
 		const stamped = definitions.map( ( carried ) => stamp ? stamp.definition( carried ) : carried );
 		const restored = new Map();
@@ -272,11 +272,39 @@ export class QuestSession {
 
 	}
 
+	/**
+	 * Whether the story may stand a step's people where it meets them now,
+	 * whatever their rota says: a talk or listen at its parcel, and an escort
+	 * at the parcel it sets out from. The step's hour, items and conditions
+	 * still hold, and its people must be alive; only where the rota has them
+	 * is set aside. An escort is asked of the runtime as if its person stood
+	 * at its start.
+	 */
+	placement( questId, stepId, timeMin ) {
+
+		const entry = this.entries.find( ( candidate ) => candidate.definition.id === questId );
+		if ( ! entry ) return { available: false, reason: 'condition' };
+		const { runtime } = entry;
+		const step = runtime.activeSteps().find( ( candidate ) => candidate.stepId === stepId );
+		const from = step?.target.kind === 'escort' ? step.target.from.parcelId : undefined;
+		if ( from === undefined ) return runtime.stepPlacementAvailability( stepId, timeMin );
+		this.presence.assumed = { npcId: runtime.cast[ step.target.roleId ], place: { kind: 'parcel', id: from }, activity: 'leisure' };
+		try {
+
+			return runtime.stepAvailability( stepId, timeMin );
+
+		} finally {
+
+			this.presence.assumed = null;
+
+		}
+
+	}
+
 	/** A parcel appointment can be staffed before schedule-based presence is true. */
 	canPlaceCast( questId, stepId, timeMin ) {
 
-		const entry = this.entries.find( ( candidate ) => candidate.definition.id === questId );
-		return entry?.runtime.stepPlacementAvailability( stepId, timeMin ).available ?? false;
+		return this.placement( questId, stepId, timeMin ).available;
 
 	}
 
@@ -551,7 +579,8 @@ function castBlockReason( block ) {
 }
 
 /** Keep the simulation authoritative for identities, routines and consequences;
- * the host's exact, retained body is authoritative for where a conversation is.
+ * the host's exact, retained body is authoritative for where a conversation is,
+ * and `presence.assumed` is where one person is taken to stand for one question.
  */
 function physicalSimulation( sim, presence ) {
 
@@ -561,7 +590,7 @@ function physicalSimulation( sim, presence ) {
 			if ( key === 'behaviorAt' ) return ( npcId, timeMin ) => {
 
 				const routine = sim.behaviorAt( npcId, timeMin );
-				const actual = presence.read?.( npcId );
+				const actual = presence.assumed?.npcId === npcId ? presence.assumed : presence.read?.( npcId );
 				if ( ! actual || ! routine ) return routine;
 				return { ...routine, place: { ...actual.place }, mode: 'interior', activity: actual.activity, interrupted: true };
 

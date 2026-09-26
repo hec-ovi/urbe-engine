@@ -51,3 +51,23 @@ function distance( from, to ) {
 	return Math.hypot( to[ 0 ] - from[ 0 ], to[ 1 ] - from[ 1 ] );
 
 }
+
+/**
+ * A footprint's extents along the axes a plate is fitted on: `across` along the
+ * axis at `angle`, where Exterior puts face 0, and `deep` a quarter turn from it.
+ * @param angle radians from +X toward +Z
+ */
+export function plateSides( footprint, angle ) {
+
+	const extent = ( [ ux, uz ] ) => {
+
+		const along = footprint.map( ( [ x, z ] ) => x * ux + z * uz );
+
+		return Math.max( ...along ) - Math.min( ...along );
+
+	};
+	const [ cos, sin ] = [ Math.cos( angle ), Math.sin( angle ) ];
+
+	return { across: extent( [ cos, sin ] ), deep: extent( [ - sin, cos ] ) };
+
+}

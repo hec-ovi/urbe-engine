@@ -1,7 +1,7 @@
 import { pickInt } from './hash.js';
 import { landmarkFamilies } from './kit/Families.js';
 import { chooseFamily } from './kit/FamilyChoice.js';
-import { lotRectangle } from './kit/LotRectangle.js';
+import { lotRectangle, plateSides } from './kit/LotRectangle.js';
 import { loadFloorConstants, constantsForType, feasibleFloorRange, feasibleBasementRange } from './floorFeasibility.js';
 import { signText } from './signText.js';
 import { marqueeTextLimit } from './validators.js';
@@ -130,14 +130,16 @@ export class RequestAssembler {
 	 */
 	#architecture( parcel, floors, apertures ) {
 
-		if ( ! parcel.landmark ) return AUTO;
-
-		const sides = lotRectangle( parcel.footprint );
-
-		if ( ! sides ) return AUTO;
+		if ( ! parcel.landmark || ! lotRectangle( parcel.footprint ) ) return AUTO;
 
 		const fixedFaces = apertures.some( ( aperture ) => aperture.base >= 0 );
-		const fitting = landmarkFamilies( sides, floors, parcel, { fixedFaces } );
+		// Exterior fits a family on the building grid, or on the footprint as it
+		// stands when a connection pins its faces or no grid is published, and
+		// puts face 0 along that first axis.
+		const [ from, to ] = parcel.footprint;
+		const angle = fixedFaces || ! this.buildingGrid
+			? Math.atan2( to[ 1 ] - from[ 1 ], to[ 0 ] - from[ 0 ] ) : this.buildingGrid.angle;
+		const fitting = landmarkFamilies( plateSides( parcel.footprint, angle ), floors, parcel, { fixedFaces } );
 
 		return LANDMARK_FIRST.find( ( id ) => fitting.includes( id ) )
 			?? chooseFamily( fitting, this.worldSeed, parcel.id ) ?? AUTO;

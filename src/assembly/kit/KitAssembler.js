@@ -6,6 +6,7 @@ import { lotBays } from './BayCount.js';
 import { lotRectangle } from './LotRectangle.js';
 import { chooseFamily } from './FamilyChoice.js';
 import { MIN_FLOORS, fittingFamilies, floorRange } from './Families.js';
+import { entranceFace, facing, streetPaths } from './Entrance.js';
 import { BlockTemplates } from './BlockTemplates.js';
 import { TemplateDressing } from './TemplateDressing.js';
 import { PlanFrame } from './PlanBlueprint.js';
@@ -43,8 +44,7 @@ export class KitAssembler {
 
 		this.worldSeed = atlas.meta.seed;
 		this.parcels = new Map( atlas.parcels.map( ( parcel ) => [ parcel.id, parcel ] ) );
-		/** edge id -> street centreline, the run a lot's entrance face fronts */
-		this.streets = new Map( atlas.streets.edges.map( ( edge ) => [ edge.id, edge.path ] ) );
+		this.streets = streetPaths( atlas );
 		this.assembler = assembler;
 		this.plans = plans;
 		this.templates = new BlockTemplates( atlas );
@@ -121,8 +121,8 @@ export class KitAssembler {
 		if ( ! floors ) return this.#skip( parcelId, 'envelope is shorter than a shared building' );
 		this.reasons.delete( parcelId );
 
-		const face = this.#entranceFace( rectangle.footprint, parcel.access );
-		const oriented = face % 2 === 0 ? bays : { across: bays.deep, deep: bays.across };
+		const face = entranceFace( rectangle.footprint, parcel.access, this.streets );
+		const oriented = facing( bays, face );
 		const fitting = covered.map( ( standing ) => fittingFamilies( oriented, floors, standing ) )
 			.reduce( ( kept, fits ) => kept.filter( ( id ) => fits.includes( id ) ) );
 		const family = this.#family( dressed, fitting, parcelId );
@@ -210,38 +210,6 @@ export class KitAssembler {
 	}
 
 	/**
-	 * Which lot face fronts the street: the face whose middle stands nearest the
-	 * access edge's centreline. The access point alone cannot say: Atlas puts it
-	 * on a corner of a corner lot, equally near the front and the side, and a
-	 * door decided by that tie opens into the alley.
-	 */
-	#entranceFace( footprint, access ) {
-
-		const street = this.streets.get( access.edgeId ) ?? [ access.point ];
-		let nearest = 0;
-		let best = Infinity;
-
-		for ( let face = 0; face < 4; face ++ ) {
-
-			const from = footprint[ face ];
-			const to = footprint[ ( face + 1 ) % 4 ];
-			const middle = [ ( from[ 0 ] + to[ 0 ] ) / 2, ( from[ 1 ] + to[ 1 ] ) / 2 ];
-			const distance = toPolyline( middle, street );
-
-			if ( distance < best ) {
-
-				best = distance;
-				nearest = face;
-
-			}
-
-		}
-
-		return nearest;
-
-	}
-
-	/**
 	 * Where the plan stands: its origin is the lot corner the entrance face runs
 	 * from, and its face 0 is that face, so one plan serves every parcel of the
 	 * same building whichever street it fronts.
@@ -292,34 +260,5 @@ export class KitAssembler {
 		return document;
 
 	}
-
-}
-
-/** How far a point stands from a street's centreline; a single point is a run of no length. */
-function toPolyline( point, path ) {
-
-	let best = Infinity;
-
-	for ( let index = 0; index < Math.max( 1, path.length - 1 ); index ++ ) {
-
-		best = Math.min( best, toSegment( point, path[ index ], path[ Math.min( index + 1, path.length - 1 ) ] ) );
-
-	}
-
-	return best;
-
-}
-
-/** How far a point stands from one segment. */
-function toSegment( point, from, to ) {
-
-	const dx = to[ 0 ] - from[ 0 ];
-	const dz = to[ 1 ] - from[ 1 ];
-	const length = dx * dx + dz * dz;
-	const along = length > 0
-		? Math.max( 0, Math.min( 1, ( ( point[ 0 ] - from[ 0 ] ) * dx + ( point[ 1 ] - from[ 1 ] ) * dz ) / length ) )
-		: 0;
-
-	return Math.hypot( point[ 0 ] - ( from[ 0 ] + dx * along ), point[ 1 ] - ( from[ 1 ] + dz * along ) );
 
 }

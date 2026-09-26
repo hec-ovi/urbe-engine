@@ -59,9 +59,13 @@ export class QuestGameplay {
 		this.session?.setPresenceSource?.( ( npcId ) => {
 
 			const member = this.crowd.memberForNpc?.( npcId );
+			const activity = [ 'home', 'working', 'shopping', 'leisure' ].includes( member?.activity ) ? member.activity : 'leisure';
+			// The escort's person walks with the player from where the story met
+			// them: to the story they are still met there until it completes.
+			const escort = this.escort?.target;
+			if ( escort?.actorIds[ 0 ] === npcId && escort.target.from.parcelId ) return { place: { kind: 'parcel', id: escort.target.from.parcelId }, activity };
 			if ( ! member || member.fallen || member.retiring || ! member.parcelId ) return null;
 			if ( ! [ 'posing', 'conversation' ].includes( member.controlMode ) && ! ( member.quest && member.stationary && ! member.continuity ) ) return null;
-			const activity = [ 'home', 'working', 'shopping', 'leisure' ].includes( member.activity ) ? member.activity : 'leisure';
 			return { place: { kind: 'parcel', id: member.parcelId }, activity };
 
 		} );
@@ -199,7 +203,10 @@ export class QuestGameplay {
 		this.#advanceEscort( mechanics, { timeMin, playerPlaces, feet } );
 		this.#advanceTransit( mechanics, { timeMin, playerPlaces, feet } );
 		this.#materializePassiveCast( mechanics, { timeMin, playerPlaces, feet } );
-		this.#materializePlaceCast( [ ...places, ...targets.filter( ( target ) => target.kind === 'listen' ) ], { timeMin, feet, eye } );
+		this.#materializePlaceCast( [
+			...places, ...targets.filter( ( target ) => target.kind === 'listen' ),
+			...mechanics.filter( ( target ) => target.kind === 'escort' && this.escort?.targetKey !== target.targetKey )
+		], { timeMin, feet, eye } );
 		// Posting updates physical presence. Project it in this frame so the
 		// interaction, quest log and map all agree with the body just created.
 		targets = this.actions.targets( { timeMin } );
@@ -612,7 +619,9 @@ export class QuestGameplay {
 	 * Every person an open talk step sends the player to stands at that parcel
 	 * while its hour is open, whatever the rota says, and wears a mark over
 	 * their head: a side job's venue is otherwise an empty room with nobody in
-	 * it, and a room with ten people in it is nobody in particular.
+	 * it, and a room with ten people in it is nobody in particular. An escort
+	 * not yet under way meets its person the same way, at the parcel it sets
+	 * out from.
 	 */
 	#materializePlaceCast( places, { timeMin, feet, eye } ) {
 
@@ -625,7 +634,7 @@ export class QuestGameplay {
 		// moving it back and forth in the same frame.
 		for ( const target of [ ...places ].sort( ( left, right ) => distance( left ) - distance( right ) ) ) {
 
-			if ( ! [ 'talk', 'listen' ].includes( target.kind ) || target.place?.kind !== 'parcel' ) continue;
+			if ( ! [ 'talk', 'listen', 'escort' ].includes( target.kind ) || target.place?.kind !== 'parcel' ) continue;
 			// A pinned meeting may differ from the cast's ordinary workplace.
 			// Check its authored hour and quest state before posting, then let
 			// the runtime verify the body's actual presence before advancing.

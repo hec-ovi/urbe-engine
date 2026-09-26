@@ -10,9 +10,12 @@
  *
  * The minima are each family's published free-standing dimensions in metres
  * (../../../../exterior/src/families/<id>/CONTRACT.md), since a plan is drawn on
- * an open rectangle with no fixed face. A kit lot is whole 8 m bays, so those
- * metres round up to the bay count that clears them: white grid's 17.5 m and
- * balcony grid's 20.5 m both ask for three bays, which is 24 m.
+ * an open rectangle with no fixed face. They are oriented: `across` runs along
+ * face 0, the entrance face, and `deep` away from it, because Exterior fits a
+ * family on the plate as it is turned and never swaps its axes. A kit lot is
+ * whole 8 m bays, so those metres round up to the bay count that clears them:
+ * white grid's 17.5 m and balcony grid's 20.5 m both ask for three bays, which
+ * is 24 m, and mirror shutters' 29 by 19 m asks for four across and three deep.
  */
 
 /** The bay every Atlas lot edge is a whole number of. */
@@ -25,17 +28,19 @@ export const PITCH = 4.5;
 const LUXURY = new Set( [ 'rich', 'high_rich' ] );
 
 const FAMILIES = [
-	{ id: 'balcony-grid', short: 20.5, long: 20.5, floors: 2, accepts: luxury },
-	{ id: 'corporate-sectors', short: 35, long: 35, floors: 12, accepts: corporate },
-	{ id: 'faceted-bays', short: 16.5, long: 16.5, floors: 2, accepts: luxury },
-	// A landmark design: it tapers, so its front grows with the height it rises.
-	{ id: 'garden-taper', short: 25, long: 35, floors: 3, taper: 0.9, fixedFaces: false, landmark: true, accepts: always },
+	{ id: 'balcony-grid', across: 20.5, deep: 20.5, floors: 2, accepts: luxury },
+	{ id: 'corporate-sectors', across: 35, deep: 35, floors: 12, accepts: corporate },
+	{ id: 'faceted-bays', across: 16.5, deep: 16.5, floors: 2, accepts: luxury },
+	// A landmark design: it fronts its longer axis whichever way the plate is
+	// turned, and tapers, so that front grows with the height it rises.
+	{ id: 'garden-taper', across: 35, deep: 25, floors: 3, taper: 0.9, longFront: true, fixedFaces: false, landmark: true, accepts: always },
 	// Its own minimum is 12 m, but the plate the 2 m forecourt leaves on a two-bay
 	// lot carries no vertical core (measured: E_CORE_PLATE, compact_depth), so it
 	// takes three bays like the rest.
-	{ id: 'mirror-frame', short: 20, long: 20, floors: 2, accepts: luxury },
-	{ id: 'mirror-shutters', short: 19, long: 29, floors: 2, accepts: luxury },
-	{ id: 'white-grid', short: 17.5, long: 17.5, floors: 4, accepts: luxury }
+	{ id: 'mirror-frame', across: 20, deep: 20, floors: 2, accepts: luxury },
+	// A 24 by 14 m shell with 2.5 m of clearance on each free face.
+	{ id: 'mirror-shutters', across: 29, deep: 19, floors: 2, accepts: luxury },
+	{ id: 'white-grid', across: 17.5, deep: 17.5, floors: 4, accepts: luxury }
 ];
 
 /** The luxury families stand on rich and high rich streets. */
@@ -62,7 +67,8 @@ function always() {
 /**
  * The families a kit lot may wear, sorted. Landmark designs are not among them:
  * a shared building is a repeated one.
- * @param bays `{ across, deep }` of the lot
+ * @param bays `{ across, deep }` of the lot as the building sees it: across its
+ * entrance face and deep from it
  * @param floors the floor count the parcel is going to stand
  * @param use `{ type, tier }` from the Atlas parcel
  */
@@ -75,13 +81,14 @@ export function fittingFamilies( bays, floors, use ) {
 
 /**
  * The families one unique building may wear, sorted, landmark designs included.
- * @param sides the two sides of its footprint rectangle, in metres
+ * @param sides `{ across, deep }` of its footprint rectangle in metres, along
+ * the axes Exterior fits the plate on
  * @param fixedFaces whether a connection cut above ground pins its faces, which
  * the landmark design does not take
  */
 export function landmarkFamilies( sides, floors, use, { fixedFaces = false } = {} ) {
 
-	return fitting( sides.width, sides.depth, floors, use )
+	return fitting( sides.across, sides.deep, floors, use )
 		.filter( ( family ) => ! fixedFaces || family.fixedFaces !== false ).map( ( family ) => family.id );
 
 }
@@ -157,13 +164,19 @@ function popularFloors( parcels ) {
 }
 
 /** Every family whose published dimensions, height and use this building meets. */
-function fitting( first, second, floors, use ) {
+function fitting( across, deep, floors, use ) {
 
-	const short = Math.min( first, second );
-	const long = Math.max( first, second );
-
-	return FAMILIES.filter( ( family ) => short >= family.short
-		&& long >= family.long + ( family.taper ?? 0 ) * floors * PITCH
+	return FAMILIES.filter( ( family ) => clears( family, across, deep, floors )
 		&& floors >= family.floors && family.accepts( use ) );
+
+}
+
+/** Whether a plate this wide across its front and this deep holds the family. */
+function clears( family, across, deep, floors ) {
+
+	const [ front, side ] = family.longFront
+		? [ Math.max( across, deep ), Math.min( across, deep ) ] : [ across, deep ];
+
+	return front >= family.across + ( family.taper ?? 0 ) * floors * PITCH && side >= family.deep;
 
 }

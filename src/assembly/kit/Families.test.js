@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { RequestAssembler } from '../RequestAssembler.js';
 import { KitAssembler } from './KitAssembler.js';
 import { PlanLibrary } from './PlanLibrary.js';
-import { fittingFamilies } from './Families.js';
+import { fittingFamilies, landmarkFamilies } from './Families.js';
+import { plateSides } from './LotRectangle.js';
 
 /** What a storey costs in height, so an envelope's floors are the ones it allows. */
 const PITCH = 4.5;
@@ -84,10 +85,14 @@ describe( 'the approved families a lot may wear', () => {
 		// 16.5 m and white grid's 17.5 m; mirror shutters wants 29 m across.
 		expect( fittingFamilies( bays( 3, 3 ), 6, rich ) )
 			.toEqual( [ 'balcony-grid', 'faceted-bays', 'mirror-frame', 'white-grid' ] );
-		expect( fittingFamilies( bays( 3, 4 ), 6, rich ) ).toContain( 'mirror-shutters' );
+		// Its minima are oriented: 29 m along the entrance face and 19 m deep,
+		// so four bays across and three deep, never the other way round.
+		expect( fittingFamilies( bays( 4, 3 ), 6, rich ) ).toContain( 'mirror-shutters' );
+		expect( fittingFamilies( bays( 3, 4 ), 6, rich ) ).not.toContain( 'mirror-shutters' );
+		expect( fittingFamilies( bays( 4, 2 ), 6, rich ) ).not.toContain( 'mirror-shutters' );
 		// White grid asks for four floors, every other family for two.
-		expect( fittingFamilies( bays( 3, 4 ), 3, rich ) ).not.toContain( 'white-grid' );
-		expect( fittingFamilies( bays( 3, 4 ), 2, rich ) )
+		expect( fittingFamilies( bays( 4, 3 ), 3, rich ) ).not.toContain( 'white-grid' );
+		expect( fittingFamilies( bays( 4, 3 ), 2, rich ) )
 			.toEqual( [ 'balcony-grid', 'faceted-bays', 'mirror-frame', 'mirror-shutters' ] );
 		// Corporate sectors is a big rich lot's tower: 35 m on both sides and
 		// twelve floors, on a corporate parcel or the top tier.
@@ -99,6 +104,68 @@ describe( 'the approved families a lot may wear', () => {
 		// design is never one a repeated building may wear.
 		for ( const tier of [ 'mid', 'poor' ] ) expect( fittingFamilies( bays( 7, 7 ), 20, { type: 'offices', tier } ) ).toEqual( [] );
 		expect( fittingFamilies( bays( 7, 7 ), 20, rich ) ).not.toContain( 'garden-taper' );
+
+	} );
+
+	it( 'reads a lot across the face its entrance takes, alone and on a template slot', () => {
+
+		// Rich lots on the street along z = -2, each on a block of its own.
+		const lots = ( prefix, size ) => Array.from( { length: 24 }, ( _, n ) => ( {
+			id: `${prefix}${n}`, type: 'offices', tier: 'rich', low: 4, high: 8, block: `b${n}`, at: [ n * 36, 0 ], size
+		} ) );
+		const worn = ( atlas ) => {
+
+			const city0 = plan( atlas );
+			return atlas.parcels.map( ( parcel ) => city0.of( parcel.id ) );
+
+		};
+		const narrow = worn( city( lots( 'narrow', [ 24, 32 ] ) ) );
+		const wide = worn( city( lots( 'wide', [ 32, 24 ] ) ) );
+
+		// A three-bay front never stands mirror shutters; a four-bay one does.
+		expect( narrow.map( ( built ) => built.family ) ).not.toContain( 'mirror-shutters' );
+		expect( wide.map( ( built ) => built.family ) ).toContain( 'mirror-shutters' );
+		expect( [ narrow[ 0 ].baysAcross, narrow[ 0 ].baysDeep ] ).toEqual( [ 3, 4 ] );
+		expect( [ wide[ 0 ].baysAcross, wide[ 0 ].baysDeep ] ).toEqual( [ 4, 3 ] );
+
+		// A template slot reads each lot standing in it the same way. These are
+		// 32 m along x and 24 m along z, fronting a street along x = -2, one
+		// template per block so each slot is its own pick: every lot wears its
+		// slot's family, and none of them mirror shutters.
+		const templated = city( lots( 'side', [ 32, 24 ] ).map( ( spec, n ) => ( { ...spec, at: [ 0, n * 36 ] } ) ) );
+		templated.streets.edges.push( { id: 'e1', path: [ [ - 2, - 100 ], [ - 2, 1000 ] ] } );
+		templated.meta.blockTemplates = templated.blocks.map( ( block ) => ( {
+			id: `bt-${block.id}`, lots: [ { offset: [ 0, 0 ], width: 32, depth: 24 } ]
+		} ) );
+		for ( const block of templated.blocks ) block.template = `bt-${block.id}`;
+		for ( const parcel of templated.parcels ) parcel.access = { edgeId: 'e1', point: [ - 2, parcel.lot[ 0 ][ 1 ] + 12 ] };
+		const sided = plan( templated );
+
+		for ( const { id } of templated.parcels ) {
+
+			expect( sided.of( id ).family, id ).toBe( sided.kit.dressing.of( id ).family );
+			expect( sided.of( id ).family, id ).not.toBe( 'mirror-shutters' );
+			expect( sided.of( id ).baysAcross, id ).toBe( 3 );
+
+		}
+
+	} );
+
+	it( 'fits a unique building on the axis Exterior fronts it on', () => {
+
+		const rich = { type: 'offices', tier: 'rich' };
+		const lot = [ [ 0, 0 ], [ 24, 0 ], [ 24, 40 ], [ 0, 40 ] ];
+		const turned = plateSides( lot, Math.PI / 2 );
+
+		expect( plateSides( lot, 0 ) ).toEqual( { across: 24, deep: 40 } );
+		expect( turned.across ).toBeCloseTo( 40 );
+		expect( turned.deep ).toBeCloseTo( 24 );
+		expect( landmarkFamilies( plateSides( lot, 0 ), 6, rich ) ).not.toContain( 'mirror-shutters' );
+		expect( landmarkFamilies( turned, 6, rich ) ).toContain( 'mirror-shutters' );
+		// The landmark design fronts its longer axis whichever way it is turned.
+		const park = [ [ 0, 0 ], [ 44, 0 ], [ 44, 90 ], [ 0, 90 ] ];
+		expect( landmarkFamilies( plateSides( park, 0 ), 6, rich ) ).toContain( 'garden-taper' );
+		expect( landmarkFamilies( plateSides( park, Math.PI / 2 ), 6, rich ) ).toContain( 'garden-taper' );
 
 	} );
 

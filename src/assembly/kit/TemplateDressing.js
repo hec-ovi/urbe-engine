@@ -4,6 +4,7 @@ import { sharedUse } from './DressingClass.js';
 import { chooseFamily } from './FamilyChoice.js';
 import { fittingFamilies, floorRange } from './Families.js';
 import { slotKey } from './BlockTemplates.js';
+import { entranceFace, facing, streetPaths } from './Entrance.js';
 
 /** Atlas publishes block and lot metres on a millimetre grid. */
 const TOLERANCE = 0.001;
@@ -39,6 +40,7 @@ export class TemplateDressing {
 		this.worldSeed = atlas.meta.seed;
 		this.templates = templates;
 		this.parcels = new Map( atlas.parcels.map( ( parcel ) => [ parcel.id, parcel ] ) );
+		this.streets = streetPaths( atlas );
 		this.slots = new Map();
 		/** `${templateId}#${first}+${second}` -> the building a merge of those slots stands */
 		this.merges = new Map();
@@ -53,7 +55,7 @@ export class TemplateDressing {
 
 	/**
 	 * How this parcel is dressed:
-	 * `{ family, floors, bays, use, lot }` for a building, `use` being the class
+	 * `{ family, floors, use, lot }` for a building, `use` being the class
 	 * it is drawn for and `lot` the ground it covers, which spans two lots when
 	 * the block's variation merged them; `{ absorbedBy }` for the neighbour a
 	 * merge took over; null when the parcel is not on a templated block and
@@ -65,7 +67,7 @@ export class TemplateDressing {
 
 	}
 
-	/** One slot's family, floors and bays, shared by every block of the template. */
+	/** One slot's family, floors and class, shared by every block of the template. */
 	slot( templateId, index ) {
 
 		const key = slotKey( templateId, index );
@@ -75,7 +77,7 @@ export class TemplateDressing {
 
 		const lot = this.templates.templates.get( templateId ).lots[ index ];
 		const parcels = this.#parcelsIn( key );
-		const choice = this.#choose( key, lot.width, lot.depth, floorRange( parcels ), use( parcels ) );
+		const choice = this.#choose( key, lot, floorRange( parcels ), parcels );
 
 		this.slots.set( key, choice );
 
@@ -99,10 +101,8 @@ export class TemplateDressing {
 		const template = this.templates.templates.get( templateId );
 		const lot = joined( template.lots[ first ], template.lots[ second ] );
 		const parcels = [ first, second ].flatMap( ( index ) => this.#parcelsIn( slotKey( templateId, index ) ) );
-		const choice = lot && parcels.length
-			? this.#choose( key, lot.width, lot.depth, floorRange( parcels ), use( parcels ) )
-			: null;
-		const option = choice ? { kind: 'merge', slots: [ first, second ], lot, ...choice } : null;
+		const choice = lot && parcels.length ? this.#choose( key, lot, floorRange( parcels ), parcels ) : null;
+		const option = choice ? { kind: 'merge', slots: [ first, second ], ...choice } : null;
 
 		this.merges.set( key, option );
 
@@ -113,22 +113,36 @@ export class TemplateDressing {
 	/**
 	 * One slot's building: its family, its floor count and the class it is drawn
 	 * for. The floor count stands inside every one of the slot's envelopes; the
-	 * family is the one the most of the slot's lots accept, and is null only when
-	 * none of them accepts any; the class is the one the most of the lots that
-	 * stand that family carry, since the rest take a building of their own.
+	 * family is the one the most of the slot's lots accept, each read the way
+	 * its own entrance turns the building, and is null only when none of them
+	 * accepts any; the class is the one the most of the lots that stand that
+	 * family carry, since the rest take a building of their own.
+	 * @param lot the template lot, `{ offset, width, depth }`, that every block
+	 * of the template stands this building on
 	 */
-	#choose( key, width, depth, range, uses ) {
+	#choose( key, lot, range, parcels ) {
 
-		const bays = lotBays( width, depth );
-
-		if ( ! bays ) return null;
+		if ( ! lotBays( lot.width, lot.depth ) ) return null;
 
 		const floors = pickInt( `${this.worldSeed}:kit-floors:${key}`, range.low, range.high );
-		const fits = uses.map( ( parcel ) => fittingFamilies( bays, floors, parcel ) );
+		const fits = parcels.map( ( parcel ) => this.#fits( lot, floors, parcel ) );
 		const family = chooseFamily( widest( fits ), this.worldSeed, key );
-		const standing = uses.filter( ( parcel, at ) => family === null || fits[ at ].includes( family ) );
+		const standing = parcels.filter( ( parcel, at ) => family === null || fits[ at ].includes( family ) );
 
-		return { family, bays, floors, range, use: sharedUse( standing ) };
+		return { family, floors, range, lot, use: sharedUse( standing.map( useOf ) ) };
+
+	}
+
+	/**
+	 * The families one parcel accepts on a template lot of its block: the lot as
+	 * the building sees it from the face the parcel's entrance takes.
+	 */
+	#fits( lot, floors, parcel ) {
+
+		const { blockId } = this.templates.slotOf.get( parcel.id );
+		const face = entranceFace( ringOf( this.templates.blocks.get( blockId ).corner, lot ), parcel.access, this.streets );
+
+		return fittingFamilies( facing( lotBays( lot.width, lot.depth ), face ), floors, parcel );
 
 	}
 
@@ -154,7 +168,6 @@ export class TemplateDressing {
 
 			this.dressed.set( parcelId, {
 				family: choice.family,
-				bays: choice.bays,
 				// Every slot but the one the variation picked stands the template's
 				// own building, so a block reads as a copy of its template plus one
 				// deliberate difference.
@@ -171,7 +184,6 @@ export class TemplateDressing {
 
 		this.dressed.set( host, {
 			family: chosen.family,
-			bays: chosen.bays,
 			floors: chosen.floors,
 			use: chosen.use,
 			lot: ringOf( corner, chosen.lot ),
@@ -216,7 +228,7 @@ export class TemplateDressing {
 		if ( floors < choice.range.low || floors > choice.range.high ) return false;
 		if ( ! choice.family ) return true;
 
-		return fittingFamilies( choice.bays, floors, parcel ).includes( choice.family );
+		return this.#fits( choice.lot, floors, parcel ).includes( choice.family );
 
 	}
 
@@ -269,10 +281,10 @@ export class TemplateDressing {
 
 }
 
-/** What a slot's parcels are used for, which is what a family accepts. */
-function use( parcels ) {
+/** What a parcel is used for, which is what a family accepts and a plan is drawn for. */
+function useOf( { type, tier } ) {
 
-	return parcels.map( ( parcel ) => ( { type: parcel.type, tier: parcel.tier } ) );
+	return { type, tier };
 
 }
 

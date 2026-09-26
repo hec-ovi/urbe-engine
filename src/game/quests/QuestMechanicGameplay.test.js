@@ -251,6 +251,38 @@ describe( 'live measured quest mechanic hosts', () => {
 
 	} );
 
+	it( 'meets an escort\'s person at its start whatever their rota says, and holds them met there until the escort completes', () => {
+
+		// The witness's day keeps them at p9: the runtime alone finds them off duty at the escort's start.
+		const harness = setup( [ escortDefinition( 'lead-player' ) ], { behaviorPlace: { kind: 'parcel', id: 'p9' } } );
+		const runtime = harness.session.entries[ 0 ].runtime;
+		expect( runtime.stepAvailability( 'escort', TIME ) ).toEqual( { available: false, reason: 'off_duty' } );
+		expect( harness.session.placement( 'escort-lead-player', 'escort', TIME ) ).toEqual( { available: true } );
+		expect( harness.session.presence.assumed ).toBeNull();
+		expect( harness.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 1.3, -2 ] ) ) ).toEqual( [] );
+		expect( harness.crowd.castMember ).toHaveBeenCalledWith( 'npc.witness', TIME, expect.any( THREE.Vector3 ), 'p4' );
+
+		// Posted there, they are present, and E offers the escort.
+		const candidate = startEscort( harness );
+		expect( candidate.interaction.prompt ).toContain( 'escort' );
+		harness.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 1.3, -2 ] ) );
+		expect( harness.crowd.castMember ).toHaveBeenCalledTimes( 2 );
+
+		// Walking with the player, they are still where the escort set out, so it completes on arrival.
+		harness.control.actor.position = [ 10, 0, -2 ];
+		harness.control.phase = 'arrived';
+		harness.gameplay.candidates( frame( P7, [ 10, 0, 0 ], [ 10, 1.3, -2 ] ) );
+		expect( harness.gameplay.drainMechanicResults()[ 0 ] ).toMatchObject( { ok: true, eventKind: 'escorted', progressed: true } );
+
+		// Nobody is posted for an escort the step no longer wants, or one whose person is dead.
+		const dead = setup( [ escortDefinition( 'lead-player' ) ], { behaviorPlace: { kind: 'parcel', id: 'p9' } } );
+		dead.people.get( 'npc.witness' ).flags.dead = true;
+		expect( dead.session.placement( 'escort-lead-player', 'escort', TIME ) ).toEqual( { available: false, reason: 'role_dead' } );
+		dead.gameplay.candidates( frame( P4, [ 0, 0, 0 ], [ 0, 1.3, -2 ] ) );
+		expect( dead.crowd.castMember ).not.toHaveBeenCalled();
+
+	} );
+
 	it( 'keeps the passenger from parcel to boarding and from disembarkation to the authored destination only', () => {
 
 		const harness = setup( [ transportDefinition() ] );
@@ -433,7 +465,18 @@ function setup( definitions, options = {} ) {
 
 		} )
 	};
+	const posted = new Map();
 	const crowd = {
+		// The story posts a cast person at a parcel: held there, posing.
+		castMember: vi.fn( ( npcId, timeMin, player, parcelId ) => {
+
+			const body = find( npcId ) ?? actor( npcId );
+			if ( ! control.actors.includes( body ) ) control.actors.push( body );
+			posted.set( npcId, { id: `body:${npcId}`, npcId, parcelId, controlMode: 'posing', activity: 'working', position: new THREE.Vector3().fromArray( body.position ) } );
+			return posted.get( npcId );
+
+		} ),
+		memberForNpc: ( npcId ) => posted.get( npcId ) ?? null,
 		questMember: vi.fn( ( npcId ) => {
 
 			let present = control.actors.find( ( value ) => value.npcId === npcId );
