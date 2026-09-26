@@ -22,7 +22,7 @@ const args = parseCityArgs( process.argv.slice( 2 ) );
 
 if ( ! args ) {
 
-	console.error( 'usage: npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--interiors N] [--parcel <id,id,...>] [--reuse-shells true] [--interior-parcels <id,id,...>]' );
+	console.error( 'usage: npm run assemble-city -- --blueprint <path> --out <dir> [--workers N] [--interiors N] [--parcel <id,id,...>] [--reuse-shells true] [--interior-parcels <id,id,...> | --interior-priority <id,id,...>]' );
 	process.exit( 2 );
 
 }

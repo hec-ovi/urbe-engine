@@ -6,34 +6,27 @@ export const QUEST_CAPABLE_TYPES = new Set( [
 ] );
 
 /**
- * All interior candidates in deterministic priority order. Parcels referenced
- * by carried questlines come first, in the order the questlines name them,
- * then other venue parcels by a stable hash.
+ * All interior candidates in deterministic priority order: the caller's
+ * priority parcels in its order, then parcels referenced by carried
+ * questlines in the order the questlines name them, then other venue parcels
+ * by a stable hash.
  */
-export function interiorCandidates( atlas, questlines = [], available = null ) {
+export function interiorCandidates( atlas, questlines = [], available = null, priority = [] ) {
 
 	const known = new Map( atlas.parcels.map( ( parcel ) => [ parcel.id, parcel ] ) );
 	const allowed = available ? new Set( available ) : new Set( known.keys() );
-	const referenced = questParcelIds( questlines ).filter( ( id ) => known.has( id ) && allowed.has( id ) );
-	const referenceSet = new Set( referenced );
-	const venues = atlas.parcels
-		.filter( ( parcel ) => allowed.has( parcel.id ) && QUEST_CAPABLE_TYPES.has( parcel.type ) && ! referenceSet.has( parcel.id ) )
-		.map( ( parcel ) => parcel.id );
-	const rank = ( ids, group ) => [ ...new Set( ids ) ].sort(
-		( a, b ) => fnv1a( `${atlas.meta.seed}:interior:${group}:${a}` )
-			- fnv1a( `${atlas.meta.seed}:interior:${group}:${b}` ) || a.localeCompare( b )
-	);
-
+	const usable = ( id ) => known.has( id ) && allowed.has( id );
 	// Quest locations keep the story's own order (the main line first), so a
 	// count that only covers the main line opens exactly its places.
-	return [ ...new Set( referenced ), ...rank( venues, 'venue' ) ];
+	const first = [ ...new Set( [ ...priority.filter( usable ), ...questParcelIds( questlines ).filter( usable ) ] ) ];
+	const ranked = new Set( first );
+	const venues = atlas.parcels
+		.filter( ( parcel ) => allowed.has( parcel.id ) && QUEST_CAPABLE_TYPES.has( parcel.type ) && ! ranked.has( parcel.id ) )
+		.map( ( parcel ) => parcel.id )
+		.sort( ( a, b ) => fnv1a( `${atlas.meta.seed}:interior:venue:${a}` )
+			- fnv1a( `${atlas.meta.seed}:interior:venue:${b}` ) || a.localeCompare( b ) );
 
-}
-
-/** The first requested candidate ids, mostly useful to callers that need no retry. */
-export function selectInteriors( atlas, questlines = [], count = 5, available = null ) {
-
-	return interiorCandidates( atlas, questlines, available ).slice( 0, Math.max( 0, count ) );
+	return [ ...first, ...venues ];
 
 }
 
