@@ -36,6 +36,6 @@ Purpose: calculates a repeatable route from the player's current feet to an obje
 - Route geometry is composed only from `path3`; flat compatibility paths are never used.
 - Parcel routes finish on an `entry` node, then on the parcel's door when the places carry one; station routes on a station node, and bus routes on a stop node with the matching `ref`. When a place has several entrances, the least-cost reachable destination wins; equal costs use node id order.
 - Equal-cost choices resolve by edge and node id, so identical inputs produce identical output.
-- The current feet lead to the nearest graph node and count toward the displayed distance.
+- The current feet lead to the nearest graph node and count toward the displayed distance. A piece of the graph made only of `link-portal` nodes is a building link whose ends stand inside the buildings it joins, off the walk graph, so the feet never lead there.
 - The guide never calls the router every frame. It retains one validated result between bounded reroutes.
 - A failed route attempt clears the presented route and retries only after the same cadence and movement threshold.

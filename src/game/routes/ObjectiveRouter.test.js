@@ -51,6 +51,19 @@ describe( 'ObjectiveRouter', () => {
 
 	} );
 
+	it( 'leads the feet past a skybridge the walk graph does not join, to the nearest node it does', () => {
+
+		const graph = network();
+		// A building link overhead: its portals stand inside the buildings, off the pavement.
+		graph.nodes.push( node( 'portal-a', - 1, 1, 0, 'link-portal', 'l1' ), node( 'portal-b', - 1, 1, 8, 'link-portal', 'l1' ) );
+		graph.edges.push( edge( 'bridge', 'portal-a', 'portal-b', [ [ - 1, 1, 0 ], [ - 1, 1, 8 ] ], 'link' ) );
+		const route = new ObjectiveRouter( graph ).route( { from: [ - 1.5, 0.5, 0 ], destination: { kind: 'parcel', id: 'p9' } } );
+
+		expect( route.nodeIds ).toEqual( [ 'a', 'b', 'entry-p9' ] );
+		expect( route.path3[ 0 ] ).toEqual( [ - 1.5, 0.5, 0 ] );
+
+	} );
+
 	it( 'fails closed for off-contract, invalid, missing, and disconnected data', () => {
 
 		expect( () => new ObjectiveRouter( { nodes: [], edges: [ { id: 'bad' } ] } ) ).toThrowError( ObjectiveRouteError );

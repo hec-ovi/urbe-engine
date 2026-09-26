@@ -43,6 +43,7 @@ export class ObjectiveRouter {
 		}
 
 		for ( const links of this.adjacency.values() ) links.sort( compareLinks );
+		this.starts = startNodes( this.nodes, this.adjacency );
 
 	}
 
@@ -50,7 +51,7 @@ export class ObjectiveRouter {
 	route( request ) {
 
 		this.boundary.input( 'route-request', request );
-		const start = nearestNode( [ ...this.nodes.values() ], request.from );
+		const start = nearestNode( this.starts, request.from );
 		const destinations = destinationNodes( this.nodes, request.destination );
 
 		if ( ! destinations.size ) {
@@ -145,6 +146,34 @@ function destinationNodes( nodes, destination ) {
 	return new Set( [ ...nodes.values() ]
 		.filter( ( node ) => node.kind === kind && node.ref === destination.id )
 		.map( node => node.id ) );
+
+}
+
+/**
+ * The nodes the feet may lead to. A piece of the graph made only of building
+ * link portals is a skybridge whose ends stand inside the buildings it joins,
+ * which the walk graph does not reach, so no walk starts there.
+ */
+function startNodes( nodes, adjacency ) {
+
+	const starts = [];
+	const seen = new Set();
+	for ( const node of nodes.values() ) {
+
+		if ( seen.has( node.id ) ) continue;
+		const piece = [ node ];
+		seen.add( node.id );
+		for ( let index = 0; index < piece.length; index ++ ) for ( const { to } of adjacency.get( piece[ index ].id ) ) {
+
+			if ( seen.has( to ) ) continue;
+			seen.add( to );
+			piece.push( nodes.get( to ) );
+
+		}
+		if ( piece.some( ( member ) => member.kind !== 'link-portal' ) ) starts.push( ...piece );
+
+	}
+	return starts;
 
 }
 
