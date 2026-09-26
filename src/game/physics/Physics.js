@@ -45,6 +45,18 @@ export class Physics {
 
 	}
 
+	/**
+	 * One fixed step now, whatever the accumulator holds: colliders admitted
+	 * or enabled since the last step then answer queries. For a world that
+	 * holds still before anything dynamic moves in it, as a game does while
+	 * it opens paused.
+	 */
+	refresh() {
+
+		this.world.step();
+
+	}
+
 	/** The solid below an infinite horizontal plane. */
 	addHalfSpace( elevation ) {
 

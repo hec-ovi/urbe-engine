@@ -8,6 +8,7 @@ Purpose: speaks the lines NPCs say in the chat, in each person's own voice from 
 - `new NpcVoice({ dialog, types, persona, hold, speaking, enabled, volume, client, player, cache })` takes the type definitions (`types`), `persona(npcId)`, `hold(conversation, seconds)` and `speaking(conversation, speech)` directly, plus the Voice client, Web Audio player and session cache.
 - As GameApp's line observer ([Game](../CONTRACT.md)): `said({ conversation, line, text })` queues the raw text, cues included, `silenced()` stops and drops what is rendered ahead, `upcoming({ conversation, texts })` renders the replies the player's choices would bring ahead through `/api/voice/prefetch`.
 - `setEnabled(boolean)` and `setVolume(0..1)` from the settings. Off also lets the audio clock rest; on asks it to run again.
+- `setPaused(boolean)` from the game's pause (`VoicePlayer.setPaused`): paused, the audio clock stops where it is and no line starts; unpaused, both go on. Voice turned off during the pause stays at rest, and presses during it do not start the clock.
 
 ## Outputs
 

@@ -2,6 +2,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
+import Ajv from 'ajv/dist/2020.js';
+import layout from './chat-layout.json' with { type: 'json' };
+import schema from './chat-layout.schema.json' with { type: 'json' };
 import { ChatPanel } from './ChatPanel.js';
 
 const ADA = { name: 'Ada Vance', role: 'office worker' };
@@ -31,6 +34,13 @@ describe( 'ChatPanel', () => {
 
 	} );
 
+	it( 'reads its labels from a layout that meets its schema', () => {
+
+		const validate = new Ajv( { allErrors: true, strict: true } ).compile( schema );
+		expect( validate( layout ), JSON.stringify( validate.errors ) ).toBe( true );
+
+	} );
+
 	it( 'opens an accessible conversation named as it is told, with the role only when given', () => {
 
 		expect( screen.getByRole( 'dialog', { name: 'Ada Vance' } ) ).toBeTruthy();
@@ -39,6 +49,8 @@ describe( 'ChatPanel', () => {
 		expect( screen.getByRole( 'log', { name: 'Conversation' } ).getAttribute( 'aria-live' ) ).toBe( 'polite' );
 		expect( screen.queryByRole( 'button', { name: 'Open journal' } ) ).toBeNull();
 		expect( document.activeElement ).toBe( screen.getByRole( 'textbox', { name: 'say something' } ) );
+		expect( screen.getByRole( 'textbox' ).placeholder ).toBe( 'Say anything to Ada Vance' );
+		expect( screen.getByText( 'Free talk' ) ).toBeTruthy();
 		panel.show( { name: 'Someone passing by' } );
 		expect( screen.getByRole( 'dialog', { name: 'Someone passing by' } ) ).toBeTruthy();
 		expect( panel.role.hidden ).toBe( true );
@@ -111,6 +123,17 @@ describe( 'ChatPanel', () => {
 
 	} );
 
+	it( 'tags lines of the story and of free talk, leaving the text as it is', () => {
+
+		const greeting = panel.addMessage( { from: 'npc', name: 'Ada', text: 'Hello.' } );
+		const opening = panel.addMessage( { from: 'npc', name: 'Ada', text: 'The report is gone.', kind: 'story' } );
+		const typed = panel.addMessage( { from: 'player', text: 'What report?', kind: 'talk' } );
+		const reply = panel.beginMessage( { from: 'npc', name: 'Ada', kind: 'talk' } );
+		expect( [ greeting, opening, typed, reply.line ].map( ( line ) => line.dataset.tag ) ).toEqual( [ undefined, 'story', 'free talk', 'free talk' ] );
+		expect( opening.textContent ).toBe( 'AdaThe report is gone.' );
+
+	} );
+
 	it( 'returns each shown line and marks how it is voiced only while it is shown', () => {
 
 		const line = panel.addMessage( { from: 'npc', name: 'Ada', text: 'Down the steps.' } );
@@ -129,12 +152,18 @@ describe( 'ChatPanel', () => {
 
 	} );
 
-	it( 'offers suggested actions apart from story replies and reports only their ids', async () => {
+	it( 'offers asking along apart from story replies, folded while replies are offered, and reports only their ids', async () => {
 
 		const user = userEvent.setup();
 		panel.setActions( [ { id: 'follow', label: 'Bring Ada along' }, { id: 'lead:p9', label: 'Go with Ada to the Blue Lantern' } ] );
+		expect( panel.asks.open ).toBe( true );
 		panel.setChoices( CHOICES );
-		const actions = within( screen.getByRole( 'group', { name: 'Suggested actions' } ) );
+		expect( panel.asks.open ).toBe( false );
+		await user.click( screen.getByText( 'Ask Ada Vance along' ) );
+		expect( panel.asks.open ).toBe( true );
+		panel.setChoices( CHOICES );
+		expect( panel.asks.open ).toBe( true );
+		const actions = within( screen.getByRole( 'group', { name: 'Ask Ada Vance along' } ) );
 		expect( actions.getAllByRole( 'button' ).map( ( button ) => button.dataset.action ) ).toEqual( [ 'follow', 'lead:p9' ] );
 		await user.click( actions.getByRole( 'button', { name: 'Go with Ada to the Blue Lantern' } ) );
 		expect( onAction ).toHaveBeenCalledExactlyOnceWith( 'lead:p9' );
@@ -142,7 +171,7 @@ describe( 'ChatPanel', () => {
 		panel.setChoices( [] );
 		actions.getByRole( 'button', { name: 'Bring Ada along' } ).focus();
 		panel.setActions( [] );
-		expect( screen.queryByRole( 'group', { name: 'Suggested actions' } ) ).toBeNull();
+		expect( screen.queryByRole( 'group', { name: 'Ask Ada Vance along' } ) ).toBeNull();
 		expect( document.activeElement ).toBe( screen.getByRole( 'textbox', { name: 'say something' } ) );
 
 	} );
@@ -164,8 +193,8 @@ describe( 'ChatPanel', () => {
 		panel.setStory( STORY );
 		panel.setChoices( CHOICES, true );
 		expect( screen.getByText( STORY.title ) ).toBeTruthy();
-		expect( screen.getByText( STORY.objective ) ).toBeTruthy();
-		const replies = within( screen.getByRole( 'group', { name: 'Your replies' } ) );
+		expect( screen.getByText( STORY.objective ).previousElementSibling.textContent ).toBe( 'Your goal' );
+		const replies = within( screen.getByRole( 'group', { name: 'Story replies' } ) );
 		const first = replies.getByRole( 'button', { name: 'Who needs the report?' } );
 		expect( document.activeElement ).toBe( first );
 		const user = userEvent.setup();
@@ -173,6 +202,13 @@ describe( 'ChatPanel', () => {
 		expect( onChoice ).toHaveBeenCalledExactlyOnceWith( CHOICES[ 0 ].value );
 		await user.click( replies.getByRole( 'button', { name: /I will get the report/ } ) );
 		expect( onChoice.mock.calls ).toEqual( [ [ CHOICES[ 0 ].value ], [ CHOICES[ 1 ].value ] ] );
+		// A number key picks that reply, except while the text box is in use.
+		await user.keyboard( '2' );
+		expect( onChoice.mock.calls.at( - 1 ) ).toEqual( [ CHOICES[ 1 ].value ] );
+		await user.click( screen.getByRole( 'textbox' ) );
+		await user.keyboard( '1' );
+		expect( onChoice ).toHaveBeenCalledTimes( 3 );
+		expect( screen.getByRole( 'textbox' ).value ).toBe( '1' );
 		expect( onSend ).not.toHaveBeenCalled();
 		await user.click( screen.getByRole( 'button', { name: 'Open journal' } ) );
 		expect( onJournal ).toHaveBeenCalledTimes( 1 );
@@ -298,8 +334,8 @@ describe( 'ChatPanel', () => {
 		expect( screen.getByRole( 'dialog', { name: 'Kip Thorn' } ) ).toBeTruthy();
 		expect( screen.getByText( 'vendor' ) ).toBeTruthy();
 		expect( screen.queryByText( 'The old conversation.' ) ).toBeNull();
-		expect( screen.queryByRole( 'group', { name: 'Your replies' } ) ).toBeNull();
-		expect( screen.queryByRole( 'group', { name: 'Suggested actions' } ) ).toBeNull();
+		expect( screen.queryByRole( 'group', { name: 'Story replies' } ) ).toBeNull();
+		expect( screen.queryByRole( 'group', { name: 'Ask Kip Thorn along' } ) ).toBeNull();
 		expect( screen.queryByRole( 'button', { name: 'Retry reply' } ) ).toBeNull();
 		expect( screen.queryByRole( 'button', { name: 'The report' } ) ).toBeNull();
 		expect( screen.getByRole( 'textbox' ).value ).toBe( '' );

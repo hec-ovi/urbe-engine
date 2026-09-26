@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Game menu labels: the pause menu, the tab bar and the free pointer line",
+  "type": "object",
+  "required": ["entries", "tabs", "pause", "free"],
+  "additionalProperties": false,
+  "properties": {
+    "entries": {
+      "description": "Every menu entry by id: resume, save, LEAVE and the panel names.",
+      "type": "object",
+      "required": ["resume", "QUESTS", "MAP", "INVENTORY", "CODEX", "SETTINGS", "CONTROLS", "save", "LEAVE"],
+      "additionalProperties": false,
+      "properties": {
+        "resume": { "$ref": "#/$defs/entry" },
+        "QUESTS": { "$ref": "#/$defs/entry" },
+        "MAP": { "$ref": "#/$defs/entry" },
+        "INVENTORY": { "$ref": "#/$defs/entry" },
+        "CODEX": { "$ref": "#/$defs/entry" },
+        "SETTINGS": { "$ref": "#/$defs/entry" },
+        "CONTROLS": { "$ref": "#/$defs/entry" },
+        "save": { "$ref": "#/$defs/entry" },
+        "LEAVE": { "$ref": "#/$defs/entry" }
+      }
+    },
+    "tabs": {
+      "description": "Panels in tab bar order; LEAVE follows them.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["QUESTS", "MAP", "INVENTORY", "CODEX", "SETTINGS", "CONTROLS"] }
+    },
+    "pause": {
+      "type": "object",
+      "required": ["title", "note", "sections", "keys", "save"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "$ref": "#/$defs/text" },
+        "note": { "$ref": "#/$defs/text" },
+        "sections": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["title", "entries"],
+            "additionalProperties": false,
+            "properties": {
+              "title": { "$ref": "#/$defs/text" },
+              "entries": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "enum": ["resume", "save", "LEAVE", "QUESTS", "MAP", "INVENTORY", "CODEX", "SETTINGS", "CONTROLS"] }
+              }
+            }
+          }
+        },
+        "keys": {
+          "description": "The reminder line under the menu: keys and what they do.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["keys", "action"],
+            "additionalProperties": false,
+            "properties": {
+              "keys": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/text" } },
+              "action": { "$ref": "#/$defs/text" }
+            }
+          }
+        },
+        "save": {
+          "description": "The Save entry's detail line in each state.",
+          "type": "object",
+          "required": ["ready", "saving", "saved", "failed", "unavailable"],
+          "additionalProperties": false,
+          "properties": {
+            "ready": { "$ref": "#/$defs/text" },
+            "saving": { "$ref": "#/$defs/text" },
+            "saved": { "$ref": "#/$defs/text" },
+            "failed": { "$ref": "#/$defs/text" },
+            "unavailable": { "$ref": "#/$defs/text" }
+          }
+        }
+      }
+    },
+    "free": { "description": "Shown while the pointer is free and the world plays on.", "$ref": "#/$defs/text" }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 },
+    "entry": {
+      "type": "object",
+      "required": ["label", "detail"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "$ref": "#/$defs/text" },
+        "detail": { "$ref": "#/$defs/text" },
+        "key": { "description": "The key the game binds to it, shown as a label.", "$ref": "#/$defs/text" }
+      }
+    }
+  }
+}

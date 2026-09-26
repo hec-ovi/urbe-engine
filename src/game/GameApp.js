@@ -64,6 +64,7 @@ import { FrameBudget } from '../app/FrameBudget.js';
 import { Input } from './player/Input.js';
 import { PlayerController } from './player/PlayerController.js';
 import { Interactor } from './player/Interactor.js';
+import { PauseState } from './player/PauseState.js';
 import { CharacterAssets } from './agents/CharacterAssets.js';
 import { HeroCharacter } from './agents/HeroCharacter.js';
 import { GameplayAnimationDirector } from './GameplayAnimationDirector.js';
@@ -105,14 +106,14 @@ const BINDINGS = [
 	{ action: 'hold zoom', keys: [ 'Right mouse' ] },
 	{ action: 'interact, board, leave transit, take, inspect, listen, steal, work, deliver', keys: [ 'E' ] },
 	{ action: 'read quest document', keys: [ 'R' ] },
-	{ action: 'quests', keys: [ 'J' ] },
+	{ action: 'journal', keys: [ 'J' ] },
 	{ action: 'map', keys: [ 'M' ] },
 	{ action: 'inventory', keys: [ 'I' ] },
 	{ action: 'codex', keys: [ 'X' ] },
 	{ action: 'settings', keys: [ 'O' ] },
 	{ action: 'controls', keys: [ '?' ] },
-	{ action: 'leave', keys: [ 'N' ] },
-	{ action: 'pause, close a panel', keys: [ 'Esc' ] }
+	{ action: 'pause menu', keys: [ 'Esc', 'N' ] },
+	{ action: 'close the chat or a panel', keys: [ 'Esc' ] }
 ];
 
 /** Standing still: this close to one spot for this long. */
@@ -176,20 +177,23 @@ export class GameApp {
 		this.dialogueActions = new Map();
 		/** A leader's arrival while it opens its conversation, or null. */
 		this.arriving = null;
+		/** Whether the player plays, has paused, or has the pointer free while the world plays on. */
+		this.pauseState = new PauseState();
 		this.talk = new TalkClient( config.outBase );
 		this.view = new GameView( {
 			onResume: () => this.input?.requestLock(),
+			onSave: () => this.#saveFromPause(),
 			onCloseDialog: () => {
 				this.#closeConversation();
 				if ( this.view.summary.element.hidden ) this.input?.requestLock();
 			},
 			// A click on the card takes the pointer back; Escape leaves it free, where the game stood.
 			onSummaryClose: ( { pointer } ) => { if ( pointer ) this.input?.requestLock(); },
-			onSummaryOpen: () => { this.input?.exitLock(); this.view.setPaused( false ); },
+			onSummaryOpen: () => { this.#release(); this.view.setPaused( false ); },
 			onSend: ( text ) => this.#say( text ),
 			onOpen: ( name ) => {
 
-				this.input?.exitLock();
+				this.#release();
 				if ( name === 'QUESTS' ) this.#refreshQuestState();
 
 			},
@@ -200,7 +204,8 @@ export class GameApp {
 			onDialogueAction: id => this.#dialogueAction( id ),
 			onDialogueRetry: () => this.#say( this.failedDialogueLine, { retry: true } ),
 			onDialogueJournal: () => { this.#closeConversation(); this.view.open( 'QUESTS' ); },
-			onClose: () => this.input?.requestLock(),
+			// A panel opened from the pause menu goes back to it.
+			onClose: () => { if ( ! this.pauseState.paused ) this.input?.requestLock(); },
 			onLeave: () => this.#leave(),
 			onSettingChange: ( change ) => this.#setting( change ),
 			onTransitSelect: ( service ) => this.#selectTransit( service ),
@@ -523,6 +528,8 @@ export class GameApp {
 			crowd: this.crowd,
 			hero: this.hero
 		} );
+		/** Each NPC type's label, which the chat shows as the person's role. */
+		this.npcTypeLabels = new Map( ( npcTypes?.types ?? [] ).map( ( { type, label } ) => [ type, label ] ) );
 		if ( ! this.lineObserver ) {
 
 			this.lineObserver = this.voice = NpcVoice.forGame( {
@@ -685,6 +692,8 @@ export class GameApp {
 		this.input.onLockChange = ( locked ) => {
 
 			this.controller.frozen = ! locked;
+			if ( locked ) this.pauseState.held();
+			else this.pauseState.lost( playableModalOpen( this.view, this.interactor ) );
 
 		};
 
@@ -713,6 +722,11 @@ export class GameApp {
 		// first to ask for.
 		progress.step( 'preparing the first frame' );
 		this.playStartedAt = performance.now();
+		/** Seconds the world has played, which stand still while it holds. */
+		this.playSeconds = 0;
+		// The world opens paused and steps no physics until play starts: what
+		// loading admitted answers queries from the first frame all the same.
+		this.physics.refresh();
 		this.tick( 0 );
 		if ( this.probe ) {
 
@@ -727,6 +741,7 @@ export class GameApp {
 		await remembering;
 		this.hitches.notes.length = 0;
 		this.view.setPaused( true );
+		this.view.pause.setSave( this.persistence ? 'ready' : 'unavailable' );
 		this.view.ready();
 		progress.finish();
 		const opening = openingCard( this.persistence, this.quests );
@@ -775,7 +790,7 @@ export class GameApp {
 		this.#interrupt( { silence: Boolean( conversation ) || ! this.#comingAlong( leaving ) } );
 		this.failedDialogueLine = null;
 		this.activeDialogue = null;
-		const speaker = conversation && speakerOf( conversation );
+		const speaker = conversation && speakerOf( conversation, this.npcTypeLabels );
 		this.view.dialog.show( speaker );
 		this.view.avatar.setVisible( Boolean( conversation ) );
 
@@ -796,7 +811,7 @@ export class GameApp {
 		else {
 
 			const recap = this.quests.conversationRecap( conversation.npcId );
-			this.view.dialog.setStory( recap ? { title: recap.title, objective: 'Previous conversation' } : null );
+			this.view.dialog.setStory( recap ? { title: recap.title, objective: this.questGameplay.objective( this.clock.timeMin, recap.questId )?.text } : null );
 			this.#npcSays( conversation, recap?.reply ?? ( conversation.instance ? 'What can I do for you?' : PASSER_BY.greeting ) );
 			if ( recap ) {
 
@@ -815,7 +830,7 @@ export class GameApp {
 
 		// The chat takes the mouse: the input wants focus and the panel a click.
 		this.view.avatar.setAvatar( { name: speaker.name, bar: 1 } );
-		this.input.exitLock();
+		this.#release();
 
 	}
 
@@ -842,9 +857,14 @@ export class GameApp {
 	 */
 	tick( delta ) {
 
+		// Paused, or with a panel open, the world holds still: no time passes for it.
+		this.pauseState.update( { locked: this.input.locked } );
+		const holding = this.pauseState.holds( this.view.panels.current );
+		if ( holding !== this.holding ) this.voice?.setPaused( this.holding = holding );
+		if ( holding ) delta = 0;
 		this.controller.frozen = ! this.input.locked || playableModalOpen( this.view, this.interactor );
 		this.clock.advance( delta );
-		this.hydrology.update( Math.max( 0, ( performance.now() - this.playStartedAt ) / 1000 ) );
+		this.hydrology.update( this.playSeconds += delta );
 
 		const day = this.sky.day;
 		this.night.set( day.lampsOn );
@@ -958,11 +978,16 @@ export class GameApp {
 		if ( free ) {
 
 			for ( const [ code, panel ] of PANEL_KEYS ) if ( this.input.consume( code ) ) this.view.toggle( panel );
-			if ( this.input.consume( 'KeyN' ) || ( this.input.consume( 'Escape' ) && this.input.locked ) ) this.input.exitLock();
+			// Escape pauses; one that closed a panel this frame was spent on it.
+			const escape = this.input.consume( 'Escape' ) && this.wasFree;
+			if ( this.input.consume( 'KeyN' ) || escape && this.input.locked ) this.input.exitLock();
+			else if ( escape ) this.pauseState.update( { locked: false, escape } );
 
 		}
+		this.wasFree = free;
 
-		this.view.setPaused( ! this.input.locked && free );
+		this.view.setPaused( this.pauseState.paused && free );
+		this.view.setPointerFree( this.pauseState.free( { locked: this.input.locked, open: ! free } ) );
 		this.#updateObjectiveRoute( delta );
 		// The clock opens and closes places while the player stands still, so
 		// the objective line is asked again on its own cadence.
@@ -1101,9 +1126,9 @@ export class GameApp {
 	 * not type (a story choice, a recap question, a chat action) goes with the
 	 * next typed line. Returns the new turn.
 	 */
-	#playerSays( text, { typed = false } = {} ) {
+	#playerSays( text, { typed = false, kind = typed ? 'talk' : null } = {} ) {
 		const turn = this.#interrupt();
-		if ( text ) this.view.dialog.addMessage( { from: 'player', name: 'You', text } );
+		if ( text ) this.view.dialog.addMessage( { from: 'player', name: 'You', text, kind } );
 		if ( text && ! typed ) this.talk.said( this.interactor.conversation.npcId, 'player', text, this.clock.timeMin );
 		return turn;
 	}
@@ -1157,8 +1182,8 @@ export class GameApp {
 	 * `hear(sentence)` as each sentence completes, then `finish()`, or
 	 * `discard()` for a reply that never completed.
 	 */
-	#npcSays( conversation, text, { streaming = false } = {} ) {
-		const speaker = { from: 'npc', name: speakerOf( conversation ).name };
+	#npcSays( conversation, text, { streaming = false, kind = streaming ? 'talk' : null } = {} ) {
+		const speaker = { from: 'npc', name: speakerOf( conversation ).name, kind };
 		const heard = ( line, words ) => {
 			this.lineHeard = true;
 			this.#observe( 'said', { conversation, line, text: words } );
@@ -1288,7 +1313,7 @@ export class GameApp {
 		} ) ), questId + '/' + stepId );
 		if ( changed ) {
 			this.#interrupt();
-			this.#npcSays( conversation, dialogue.opening );
+			this.#npcSays( conversation, dialogue.opening, { kind: 'story' } );
 		}
 		const unavailable = ! dialogue.availability.available;
 		this.view.dialog.setChoices( dialogue.choices.map( choice => ( {
@@ -1311,8 +1336,8 @@ export class GameApp {
 				? { text: 'Remind me what we agreed.', reply: memory.reply }
 				: memory.questions.find( choice => choice.id === choiceId );
 			if ( ! question ) return;
-			this.#playerSays( question.text );
-			this.#npcSays( conversation, question.reply );
+			this.#playerSays( question.text, { kind: 'story' } );
+			this.#npcSays( conversation, question.reply, { kind: 'story' } );
 			return;
 
 		}
@@ -1330,8 +1355,8 @@ export class GameApp {
 		// A story decision also settles a free-chat line that failed.
 		this.failedDialogueLine = null;
 		this.view.dialog.setStatus( '' );
-		this.#playerSays( choice.text );
-		this.#npcSays( conversation, result.reply );
+		this.#playerSays( choice.text, { kind: 'story' } );
+		this.#npcSays( conversation, result.reply, { kind: 'story' } );
 		if ( ! result.change ) return;
 		this.activeDialogue = null;
 		this.followedQuestId = questId;
@@ -1340,14 +1365,13 @@ export class GameApp {
 		this.#refreshQuestState();
 		const ending = result.change.ending;
 		const next = this.questGameplay.objective( this.clock.timeMin, questId );
-		this.view.dialog.setStory( { title: result.change.definition.title, objective: ending ? 'Decision recorded' : 'Lead recorded', journal: ! ending } );
+		this.view.dialog.setStory( { title: result.change.definition.title, objective: ending ? null : next?.text, journal: ! ending } );
 		const remaining = this.quests.dialoguesFor( conversation.npcId, this.clock.timeMin );
 		this.view.dialog.setTopics( remaining.map( topic => ( {
 			key: topic.questlineId + '/' + topic.stepId, title: topic.title,
 			value: { questId: topic.questlineId, stepId: topic.stepId }
 		} ) ) );
-		this.view.dialog.setStatus( ending ? 'Decision recorded. End the conversation to see the outcome.'
-			: next ? 'Journal updated: ' + next.text : 'Journal updated.' );
+		this.view.dialog.setStatus( ending ? 'Decision recorded. End the conversation to see the outcome.' : 'Journal updated.' );
 		if ( ending ) {
 			this.pendingDialogueEnding = { title: ending.title, text: ending.epilogue, outcome: 'done' };
 		}
@@ -1491,7 +1515,7 @@ export class GameApp {
 			this.view.transit.choose( action.destinations.map( destination => ( {
 				id: destination.destinationId, label: `${destination.stationName} · ${destination.lineId}`, value: destination
 			} ) ), 'destination' );
-			this.input.exitLock();
+			this.#release();
 			return;
 
 		}
@@ -1502,7 +1526,7 @@ export class GameApp {
 				label: transitServiceLabel( service ),
 				value: service
 			} ) ) );
-			this.input.exitLock();
+			this.#release();
 			return;
 
 		}
@@ -1691,6 +1715,34 @@ export class GameApp {
 		this.view.minimap.setRoute( route );
 		this.view.map.setRoute( route );
 		this.#refreshCurrentObjective();
+
+	}
+
+	/** The game takes the pointer from the player for a chat, panel or chooser of its own; the world plays on behind a chat or chooser. */
+	#release() {
+
+		if ( ! this.input ) return;
+		this.pauseState.release( this.input.locked );
+		this.input.exitLock();
+
+	}
+
+	/** Saves from the pause menu, which says how it went. */
+	async #saveFromPause() {
+
+		if ( ! this.persistence ) return;
+		this.view.pause.setSave( 'saving' );
+		try {
+
+			await this.#saveCurrent();
+			this.view.pause.setSave( 'saved' );
+
+		} catch ( error ) {
+
+			console.error( error );
+			this.view.pause.setSave( 'failed' );
+
+		}
 
 	}
 
@@ -2400,11 +2452,11 @@ export function localObjectivePlace( active, { locator, crowd, session, feet, ro
 
 }
 
-/** How the chat names the person in a conversation; a passer-by has no identity. */
-function speakerOf( { instance } ) {
+/** How the chat names the person in a conversation, and their role: their type's label from `labels`, else the type written out. A passer-by has no identity. */
+function speakerOf( { instance }, labels = null ) {
 
 	if ( ! instance ) return { name: 'Someone passing by', role: '' };
-	return { name: TalkClient.nameOf( instance ), role: ( instance.type ?? '' ).replace( /^quest[ _]/i, '' ).replace( /_/g, ' ' ) };
+	return { name: TalkClient.nameOf( instance ), role: labels?.get( instance.type ) ?? ( instance.type ?? '' ).replace( /^quest[ _]/i, '' ).replace( /_/g, ' ' ) };
 
 }
 

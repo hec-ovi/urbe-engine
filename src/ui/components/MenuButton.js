@@ -1,7 +1,8 @@
 import { el } from './dom.js';
+import { keyCap } from './KeyCap.js';
 
-/** Launcher action with one visual treatment and a real disabled explanation. */
-export function menuButton( { label, detail = '', primary = false, disabled = false, onClick = () => {} } ) {
+/** Menu action with one visual treatment and a real disabled explanation; `key` shows the key that also does it. */
+export function menuButton( { label, detail = '', key = '', primary = false, disabled = false, onClick = () => {} } ) {
 
 	const button = el( 'button', {
 		type: 'button',
@@ -14,7 +15,7 @@ export function menuButton( { label, detail = '', primary = false, disabled = fa
 			el( 'span', { className: 'menu-action-label', textContent: label } ),
 			detail ? el( 'span', { className: 'menu-action-detail', textContent: detail } ) : ''
 		),
-		el( 'span', { className: 'menu-action-chevron', textContent: '\u203a', ariaHidden: 'true' } )
+		key ? keyCap( key ) : el( 'span', { className: 'menu-action-chevron', textContent: '›', ariaHidden: 'true' } )
 	);
 	button.addEventListener( 'click', onClick );
 	return button;

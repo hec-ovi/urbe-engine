@@ -6,7 +6,9 @@
 	display: none !important;
 }
 
-.main-menu {
+/* The pause menu shares the front door's menu actions and palette. */
+.main-menu,
+.hud-pause {
 	--menu-ground: #071114;
 	--menu-ground-raised: #0a171b;
 	--menu-ground-hover: #0e2025;
@@ -18,6 +20,9 @@
 	--menu-good: #84f5ac;
 	--menu-bad: #ff9a91;
 	--menu-font: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+
+.main-menu {
 	position: fixed;
 	inset: 0;
 	z-index: 300;

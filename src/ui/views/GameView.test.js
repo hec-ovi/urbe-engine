@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen } from '@testing-library/dom';
+import { screen, within } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
 import { stubCanvas } from '../test-helpers/canvas.js';
 import { GameView } from './GameView.js';
@@ -22,33 +22,43 @@ describe( 'GameView', () => {
 
 	} );
 
-	it( 'routes tabs and names to one panel, keeps the bar up only while paused or open, and opens QUESTS from the objective', async () => {
+	it( 'opens panels from the pause menu, keeps the bar up only while one is open, and opens QUESTS from the objective', async () => {
 
 		const user = userEvent.setup();
 		expect( view.tabs.element.hidden ).toBe( true );
 
-		// The bar is reached from the pause screen.
+		// The panels are reached from the pause menu; the bar comes up with one of them.
 		view.setPaused( true );
-		expect( view.tabs.element.hidden ).toBe( false );
-		const tab = screen.getByRole( 'button', { name: /^MAP/ } );
-
-		await user.click( tab );
+		expect( view.pause.element.hidden ).toBe( false );
+		expect( view.tabs.element.hidden ).toBe( true );
+		await user.click( screen.getByRole( 'button', { name: 'Map' } ) );
 		expect( view.map.element.hidden ).toBe( false );
+		expect( view.pause.element.hidden ).toBe( true );
+		expect( view.tabs.element.hidden ).toBe( false );
+		const tab = within( view.tabs.element ).getByRole( 'button', { name: /^Map/ } );
 		expect( tab.classList.contains( 'is-active' ) ).toBe( true );
 		expect( onOpen ).toHaveBeenCalledWith( 'MAP' );
 
 		await user.click( tab );
 		expect( tab.classList.contains( 'is-active' ) ).toBe( false );
 		expect( onClose ).toHaveBeenCalledOnce();
+		expect( view.pause.element.hidden ).toBe( false );
+		expect( view.tabs.element.hidden ).toBe( true );
 
 		view.setPaused( false );
-		expect( view.tabs.element.hidden ).toBe( true );
+		expect( view.pause.element.hidden ).toBe( true );
 		view.open( 'INVENTORY' );
 		expect( view.inventory.element.hidden ).toBe( false );
 		expect( view.tabs.element.hidden ).toBe( false );
 		view.close();
 		expect( view.panels.current ).toBeNull();
 		expect( view.tabs.element.hidden ).toBe( true );
+
+		view.setPointerFree( true );
+		expect( view.free.hidden ).toBe( false );
+		expect( view.free.textContent ).toBe( 'Click the view to look around. Esc opens the menu.' );
+		view.setPointerFree( false );
+		expect( view.free.hidden ).toBe( true );
 
 		view.setObjective( { title: 'Salt Wharf', objective: 'Check the freight ledger', state: 'active' } );
 		await user.click( screen.getByRole( 'button', { name: /Open current quest: Salt Wharf/ } ) );
@@ -71,7 +81,7 @@ describe( 'GameView', () => {
 
 		view.setLibrary( { games: [ { id: 'g1', name: 'Night run', playable: true } ] } );
 		view.setPaused( true );
-		await userEvent.setup().click( view.tabs.element.querySelector( '.is-leave' ) );
+		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Leave' } ) );
 		expect( view.mainMenu.element.hidden ).toBe( false );
 		expect( view.gameplayElements.every( ( element ) => element.inert ) ).toBe( true );
 		expect( screen.getByRole( 'heading', { name: 'Night run' } ) ).toBeTruthy();

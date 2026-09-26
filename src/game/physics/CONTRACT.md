@@ -4,7 +4,7 @@ Purpose: resolves world and player collision, measures vehicle contacts, and tur
 
 ## Inputs
 
-- `Physics.create()`: loads the pinned Rapier runtime and creates the fixed-step world.
+- `Physics.create()`: loads the pinned Rapier runtime and creates the fixed-step world. `step(delta)` runs the fixed 1/60 s steps the elapsed seconds add up to, at most four; colliders admitted or enabled since the last step answer queries only after one. `refresh()` runs one step at once, for a world held still before anything dynamic moves: the game runs it as it opens paused.
 - Static geometry: `Physics.addTrimesh(geometry, {enabled: true})` and `WorldColliders` accept generated Three.js geometry in world coordinates. Omitted options enable collision; disabled bodies stay out of simulation and queries.
 - `WorldColliders.addStaticsAsync(geometries, {sliceMs: 8, release: false})` prepares labelled or unlabelled static sources in bounded disabled pieces. Complete sources enable after preparation; `release` disposes staging geometry. `addPostsAsync(posts)` yields during fixed-post installation. Both resolve when installation completes.
 - Streamed floors: `WorldColliders.addBand(id, geometry)` accepts borrowed exact triangles through the [band schema](schema/band-admission.d.ts). `new WorldColliders(physics, { hitches? })` names each cooked piece (`collision cook`) and each cuboid compound (`cuboids <id>`) in that [HitchLog](../debug/CONTRACT.md).

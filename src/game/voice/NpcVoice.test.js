@@ -125,6 +125,23 @@ describe( 'NpcVoice', () => {
 
 	} );
 
+	it( 'starts no line while the game is paused and speaks it once the game plays on', async () => {
+
+		const { voice, client, context } = rig();
+		voice.setPaused( true );
+		voice.said( { conversation: conversation(), line: { id: 'a' }, text: 'Hello there.' } );
+		await flush();
+		expect( client.lines ).toHaveLength( 0 );
+		voice.setPaused( false );
+		await flush();
+		expect( client.lines ).toHaveLength( 1 );
+		answer( client.lines[ 0 ] );
+		await flush();
+		expect( context().state ).toBe( 'running' );
+		expect( context().sources ).toHaveLength( 1 );
+
+	} );
+
 	it( 'tells the host whose voice plays, with each line\'s own seed and the loudness of what is heard, until it ends or stops', async () => {
 
 		const { voice, client, speaking, context } = rig();

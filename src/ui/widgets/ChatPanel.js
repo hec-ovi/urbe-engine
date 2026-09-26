@@ -1,25 +1,34 @@
 import { el } from '../components/dom.js';
 import { icon } from '../components/Icon.js';
 import { PanelHeader } from '../components/PanelHeader.js';
+import layout from './chat-layout.json' with { type: 'json' };
 
 const SPEAKING = new Set( [ 'pending', 'playing', 'idle' ] );
 
 /**
  * Conversation presentation. The caller hands it names, lines, replies and
  * actions as plain values and hears the player's intents through callbacks.
+ * Under the transcript each way to answer has its own labelled section:
+ * story replies, asking the person along, and free talk. Labels come from
+ * [chat-layout.json](chat-layout.json).
  */
 export class ChatPanel {
 
 	constructor( { onSend, onClose, onChoice = () => {}, onTopic = () => {}, onAction = () => {}, onRetry = () => {}, onJournal = () => {} } ) {
 		Object.assign( this, { onSend, onChoice, onTopic, onAction } );
+		/** Text nodes and attributes that name the person, refilled by setNpc. */
+		this.named = [];
 		this.header = new PanelHeader( { title: '', onClose } );
 		this.header.title.id = 'conversation-name';
 		this.role = el( 'div', { className: 'chat-role' } );
+		this.journal = el( 'button', { type: 'button', className: 'chat-journal', textContent: layout.story.journal } );
+		this.journal.addEventListener( 'click', onJournal );
 		this.story = el( 'div', { className: 'chat-story' } );
-		this.topics = group( 'chat-topics', 'Conversation topics' );
+		this.topics = this.#group( 'chat-topics', layout.topics.title );
+		this.topicSection = this.#section( layout.topics, this.topics );
 		this.transcript = el( 'div', { className: 'chat-transcript' } );
 		this.transcript.setAttribute( 'role', 'log' );
-		this.transcript.setAttribute( 'aria-label', 'Conversation' );
+		this.transcript.setAttribute( 'aria-label', layout.log );
 		this.transcript.setAttribute( 'aria-live', 'polite' );
 		/** Lines still growing; the log is busy for assistive technology until each finishes. */
 		this.streaming = new Set();
@@ -36,28 +45,33 @@ export class ChatPanel {
 			} );
 			this.transcriptResize.observe( this.transcript );
 		}
-		this.actions = group( 'chat-actions', 'Suggested actions' );
-		this.choices = group( 'chat-choices', 'Your replies' );
+		this.choices = this.#group( 'chat-choices', layout.choices.title );
+		this.choiceSection = this.#section( layout.choices, this.choices );
+		this.actions = this.#group( 'chat-actions', layout.actions.title );
+		const summary = this.#head( 'summary', layout.actions );
+		summary.addEventListener( 'click', () => { this.asksChosen = true; } );
+		this.asks = el( 'details', { className: 'chat-section chat-asks' }, summary, this.actions );
 		this.status = el( 'div', { className: 'chat-status' } );
 		this.status.setAttribute( 'role', 'status' );
-		this.retry = el( 'button', { type: 'button', className: 'chat-retry', textContent: 'Retry reply' } );
+		this.retry = el( 'button', { type: 'button', className: 'chat-retry', textContent: layout.retry } );
 		this.retry.addEventListener( 'click', onRetry );
 		this.feedback = el( 'div', { className: 'chat-feedback' }, this.status, this.retry );
-		this.input = el( 'input', { className: 'chat-input', type: 'text', placeholder: 'Ask something else…', maxLength: 2000 } );
-		this.input.setAttribute( 'aria-label', 'say something' );
+		this.input = el( 'input', { className: 'chat-input', type: 'text', maxLength: 2000 } );
+		this.input.setAttribute( 'aria-label', layout.free.input );
+		this.#name( this.input, 'placeholder', layout.free.placeholder );
 		this.send = el( 'button', { className: 'chat-send', type: 'submit' }, icon( 'send' ) );
-		this.send.setAttribute( 'aria-label', 'send' );
+		this.send.setAttribute( 'aria-label', layout.free.send );
 		this.compose = el( 'form', { className: 'chat-compose' }, this.input, this.send );
 		this.compose.addEventListener( 'submit', event => { event.preventDefault(); this.#send(); } );
 		this.composeNote = el( 'div', { className: 'chat-compose-note' } );
-		this.journal = el( 'button', { type: 'button', className: 'chat-journal', textContent: 'Open journal' } );
-		this.journal.addEventListener( 'click', onJournal );
-		this.leave = el( 'button', { type: 'button', className: 'chat-leave', textContent: 'End conversation' } );
+		this.freeSection = this.#section( layout.free, this.compose, this.composeNote );
+		this.freeHint = this.freeSection.querySelector( '.chat-section-hint' );
+		this.leave = el( 'button', { type: 'button', className: 'chat-leave', textContent: layout.leave } );
 		this.leave.addEventListener( 'click', onClose );
 		this.card = el( 'div', { className: 'chat' },
-			this.header.element, this.role, this.story, this.topics, this.transcript,
-			this.actions, this.choices, this.feedback, this.compose, this.composeNote,
-			el( 'div', { className: 'chat-footer' }, this.journal, this.leave )
+			this.header.element, this.role, this.story, this.topicSection, this.transcript,
+			this.feedback, this.choiceSection, this.asks, this.freeSection,
+			el( 'div', { className: 'chat-footer' }, this.leave )
 		);
 		this.element = el( 'section', { className: 'chat-layer' }, this.card );
 		this.element.tabIndex = - 1;
@@ -67,15 +81,7 @@ export class ChatPanel {
 		this.element.setAttribute( 'role', 'dialog' );
 		this.element.setAttribute( 'aria-modal', 'true' );
 		this.element.setAttribute( 'aria-labelledby', 'conversation-name' );
-		this.element.addEventListener( 'keydown', event => {
-			if ( event.key === 'Escape' ) { event.preventDefault(); event.stopPropagation(); onClose(); }
-			if ( event.key !== 'Tab' ) return;
-			const controls = [ ...this.element.querySelectorAll( 'button, input' ) ].filter( node => ! node.disabled && ! node.closest( '[hidden]' ) );
-			const first = controls[ 0 ], last = controls.at( -1 );
-			if ( document.activeElement === this.element ) { event.preventDefault(); ( event.shiftKey ? last : first )?.focus(); }
-			else if ( event.shiftKey && document.activeElement === first ) { event.preventDefault(); last?.focus(); }
-			else if ( ! event.shiftKey && document.activeElement === last ) { event.preventDefault(); first?.focus(); }
-		} );
+		this.element.addEventListener( 'keydown', event => this.#key( event, onClose ) );
 		this.setStatus( '' );
 		this.setStory( null );
 		this.setTopics( [] );
@@ -89,21 +95,28 @@ export class ChatPanel {
 		this.header.setTitle( name );
 		this.role.textContent = role;
 		this.role.hidden = ! role;
+		for ( const [ set, template ] of this.named ) set( template.replaceAll( '{name}', name ) );
 	}
 
+	/** `{ title, objective?, journal? }`: the story this conversation is part of and the player's goal in it; null hides it. */
 	setStory( story ) {
 		this.story.hidden = ! story;
 		this.journal.hidden = ! story || story.journal === false;
 		this.story.replaceChildren( ...( story ? [
+			el( 'div', { className: 'chat-quest-kicker', textContent: layout.story.kicker } ),
 			el( 'div', { className: 'chat-quest-title', textContent: story.title } ),
-			...( story.objective ? [ el( 'div', { className: 'chat-quest-objective', textContent: story.objective } ) ] : [] )
+			...( story.objective ? [ el( 'div', { className: 'chat-quest-goal' },
+				el( 'span', { className: 'chat-quest-label', textContent: layout.story.goal } ),
+				el( 'span', { className: 'chat-quest-objective', textContent: story.objective } )
+			) ] : [] ),
+			this.journal
 		] : [] ) );
 		this.#latest();
 	}
 
 	setTopics( topics, active = null ) {
 		const heldFocus = this.topics.contains( document.activeElement );
-		this.topics.hidden = topics.length === 0 || topics.length === 1 && active !== null;
+		this.topicSection.hidden = topics.length === 0 || topics.length === 1 && active !== null;
 		this.topics.replaceChildren( ...topics.map( topic => {
 			const button = el( 'button', { type: 'button', className: 'chat-topic', textContent: topic.title } );
 			button.setAttribute( 'aria-pressed', String( topic.key === active ) );
@@ -111,29 +124,35 @@ export class ChatPanel {
 			return button;
 		} ) );
 		if ( heldFocus ) {
-			if ( ! this.topics.hidden ) ( this.topics.querySelector( '[aria-pressed="true"]' ) ?? this.topics.querySelector( 'button' ) )?.focus();
+			if ( ! this.topicSection.hidden ) ( this.topics.querySelector( '[aria-pressed="true"]' ) ?? this.topics.querySelector( 'button' ) )?.focus();
 			else this.#focusFallback();
 		}
 		this.#latest();
 	}
 
-	/** One button per `{ id, label }`, carrying its id as `data-action`, reported through `onAction(id)`; an empty list hides the row. */
+	/**
+	 * One button per `{ id, label }`, carrying its id as `data-action`, reported
+	 * through `onAction(id)`; an empty list hides the section. It stays folded
+	 * while story replies are offered, unless the player opened it.
+	 */
 	setActions( actions ) {
 		const heldFocus = this.actions.contains( document.activeElement );
-		this.actions.hidden = actions.length === 0;
+		this.asks.hidden = actions.length === 0;
 		this.actions.replaceChildren( ...actions.map( ( { id, label } ) => {
 			const button = el( 'button', { type: 'button', className: 'chat-action', textContent: label } );
 			button.dataset.action = id;
 			button.addEventListener( 'click', () => this.onAction( id ) );
 			return button;
 		} ) );
+		this.#fold();
 		if ( heldFocus ) this.#focusFallback();
 		this.#latest();
 	}
 
+	/** Story replies, numbered: the number keys pick them while the text box is not in use. */
 	setChoices( choices, focus = false ) {
 		const heldFocus = this.choices.contains( document.activeElement );
-		this.choices.hidden = choices.length === 0;
+		this.choiceSection.hidden = choices.length === 0;
 		this.choices.replaceChildren( ...choices.map( choice => {
 			const button = el( 'button', { type: 'button', className: 'chat-choice', disabled: Boolean( choice.disabled ) },
 				el( 'span', { textContent: choice.text } ),
@@ -142,6 +161,7 @@ export class ChatPanel {
 			button.addEventListener( 'click', () => this.onChoice( choice.value ?? choice.id ) );
 			return button;
 		} ) );
+		this.#fold();
 		if ( focus || heldFocus ) ( this.choices.querySelector( 'button:not(:disabled)' ) ?? this.leave ).focus();
 		this.#latest();
 	}
@@ -175,14 +195,15 @@ export class ChatPanel {
 	setFreeChat( available, note = '' ) {
 		const composerFocused = this.compose.contains( document.activeElement );
 		this.compose.hidden = ! available;
+		this.freeHint.hidden = ! available;
 		this.composeNote.textContent = available ? '' : note;
 		this.composeNote.hidden = ! this.composeNote.textContent;
 		if ( ! available && composerFocused ) this.#focusFallback();
 	}
 
-	/** Appends a whole line and returns its element. */
-	addMessage( { from, name, text } ) {
-		const line = this.#line( from, name );
+	/** Appends a whole line and returns its element; `kind` tags a line of the story (`story`) or of free talk (`talk`). */
+	addMessage( { from, name, text, kind } ) {
+		const line = this.#line( from, name, kind );
 		line.lastElementChild.textContent = text;
 		return line;
 	}
@@ -193,8 +214,8 @@ export class ChatPanel {
 	 * of the transcript. Calls after it finished, was discarded or left the
 	 * transcript do nothing.
 	 */
-	beginMessage( { from, name } ) {
-		const line = this.#line( from, name );
+	beginMessage( { from, name, kind } ) {
+		const line = this.#line( from, name, kind );
 		const text = line.lastElementChild.appendChild( document.createTextNode( '' ) );
 		line.classList.add( 'is-streaming' );
 		this.#stream( line, true );
@@ -243,6 +264,7 @@ export class ChatPanel {
 		this.element.hidden = ! npc;
 		if ( ! npc ) return;
 		this.setNpc( npc );
+		this.asksChosen = false;
 		this.setTranscript( [] );
 		this.setStory( null );
 		this.setTopics( [] );
@@ -257,11 +279,36 @@ export class ChatPanel {
 
 	setVisible( visible ) { this.element.hidden = ! visible; }
 
-	#line( from, name ) {
+	/** Escape closes, Tab stays inside, and a number key picks that story reply while the text box is not in use. */
+	#key( event, onClose ) {
+		if ( event.key === 'Escape' ) { event.preventDefault(); event.stopPropagation(); onClose(); return; }
+		const reply = /^[1-9]$/.test( event.key ) && event.target !== this.input && ! event.ctrlKey && ! event.metaKey && ! event.altKey
+			? this.choices.children[ Number( event.key ) - 1 ] : null;
+		if ( reply ) {
+			event.preventDefault();
+			if ( ! reply.disabled ) reply.click();
+			return;
+		}
+		if ( event.key !== 'Tab' ) return;
+		const controls = [ ...this.element.querySelectorAll( 'button, input, summary' ) ].filter( node => ! node.disabled && ! node.closest( '[hidden]' ) &&
+			( node.tagName === 'SUMMARY' || ! node.closest( 'details:not([open])' ) ) );
+		const first = controls[ 0 ], last = controls.at( -1 );
+		if ( document.activeElement === this.element ) { event.preventDefault(); ( event.shiftKey ? last : first )?.focus(); }
+		else if ( event.shiftKey && document.activeElement === first ) { event.preventDefault(); last?.focus(); }
+		else if ( ! event.shiftKey && document.activeElement === last ) { event.preventDefault(); first?.focus(); }
+	}
+
+	/** Asking along is folded away while story replies are offered, unless the player opened or closed it. */
+	#fold() {
+		if ( ! this.asksChosen ) this.asks.open = this.choiceSection.hidden;
+	}
+
+	#line( from, name, kind ) {
 		const line = el( 'div', { className: 'chat-line is-' + from },
-			el( 'div', { className: 'chat-line-from', textContent: name ?? ( from === 'player' ? 'You' : '' ) } ),
+			el( 'div', { className: 'chat-line-from', textContent: name ?? ( from === 'player' ? layout.you : '' ) } ),
 			el( 'div', { className: 'chat-line-text' } )
 		);
+		if ( layout.tags[ kind ] ) line.dataset.tag = layout.tags[ kind ];
 		this.transcript.append( line );
 		this.#latest();
 		return line;
@@ -285,7 +332,8 @@ export class ChatPanel {
 
 	#focusFallback() {
 		const composing = ! this.compose.hidden && ! this.input.disabled;
-		( this.choices.querySelector( 'button:not(:disabled)' ) ?? this.actions.querySelector( 'button' ) ?? ( composing ? this.input : this.leave ) ).focus();
+		( this.choices.querySelector( 'button:not(:disabled)' ) ?? ( this.asks.open ? this.actions.querySelector( 'button' ) : null ) ??
+			( composing ? this.input : this.leave ) ).focus();
 	}
 
 	#send() {
@@ -294,11 +342,32 @@ export class ChatPanel {
 		this.input.value = '';
 		this.onSend( text );
 	}
-}
 
-function group( className, label ) {
-	const row = el( 'div', { className } );
-	row.setAttribute( 'role', 'group' );
-	row.setAttribute( 'aria-label', label );
-	return row;
+	/** Sets `node[key]`, or its `aria-` attribute, from `template` with the person's name, at each setNpc. */
+	#name( node, key, template ) {
+		const set = key.startsWith( 'aria-' ) ? ( value ) => node.setAttribute( key, value ) : ( value ) => { node[ key ] = value; };
+		this.named.push( [ set, template ] );
+		set( template.replaceAll( '{name}', '' ).trim() );
+	}
+
+	/** A group of buttons named by its section's title. */
+	#group( className, title ) {
+		const row = el( 'div', { className } );
+		row.setAttribute( 'role', 'group' );
+		this.#name( row, 'aria-label', title );
+		return row;
+	}
+
+	/** A section's heading: its title and a one-line hint. */
+	#head( tag, { title, hint } ) {
+		const heading = el( 'span', { className: 'chat-section-title' } );
+		const note = el( 'span', { className: 'chat-section-hint' } );
+		this.#name( heading, 'textContent', title );
+		this.#name( note, 'textContent', hint );
+		return el( tag, { className: 'chat-section-head' }, heading, note );
+	}
+
+	#section( labels, ...content ) {
+		return el( 'div', { className: 'chat-section' }, this.#head( 'div', labels ), ...content );
+	}
 }

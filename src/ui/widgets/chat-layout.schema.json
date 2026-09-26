@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Conversation panel labels; {name} stands for the person talked to",
+  "type": "object",
+  "required": ["log", "you", "story", "topics", "choices", "actions", "free", "tags", "retry", "leave"],
+  "additionalProperties": false,
+  "properties": {
+    "log": { "description": "Accessible name of the transcript.", "$ref": "#/$defs/text" },
+    "you": { "description": "Name over the player's lines.", "$ref": "#/$defs/text" },
+    "story": {
+      "type": "object",
+      "required": ["kicker", "goal", "journal"],
+      "additionalProperties": false,
+      "properties": { "kicker": { "$ref": "#/$defs/text" }, "goal": { "$ref": "#/$defs/text" }, "journal": { "$ref": "#/$defs/text" } }
+    },
+    "topics": { "$ref": "#/$defs/section" },
+    "choices": { "$ref": "#/$defs/section" },
+    "actions": { "$ref": "#/$defs/section" },
+    "free": {
+      "type": "object",
+      "required": ["title", "hint", "placeholder", "input", "send"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "$ref": "#/$defs/text" },
+        "hint": { "$ref": "#/$defs/text" },
+        "placeholder": { "$ref": "#/$defs/text" },
+        "input": { "description": "Accessible name of the text box.", "$ref": "#/$defs/text" },
+        "send": { "description": "Accessible name of the send button.", "$ref": "#/$defs/text" }
+      }
+    },
+    "tags": {
+      "description": "Tag on a transcript line by where it comes from.",
+      "type": "object",
+      "required": ["story", "talk"],
+      "additionalProperties": false,
+      "properties": { "story": { "$ref": "#/$defs/text" }, "talk": { "$ref": "#/$defs/text" } }
+    },
+    "retry": { "$ref": "#/$defs/text" },
+    "leave": { "$ref": "#/$defs/text" }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 },
+    "section": {
+      "type": "object",
+      "required": ["title", "hint"],
+      "additionalProperties": false,
+      "properties": { "title": { "$ref": "#/$defs/text" }, "hint": { "$ref": "#/$defs/text" } }
+    }
+  }
+}

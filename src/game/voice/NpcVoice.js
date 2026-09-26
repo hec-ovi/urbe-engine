@@ -167,6 +167,13 @@ export class NpcVoice {
 
 	}
 
+	/** Paused, what is playing stops where it is and no line starts; unpaused, both go on. */
+	setPaused( paused ) {
+
+		this.player.setPaused( paused );
+
+	}
+
 	/** 0 to 1. */
 	setVolume( volume ) {
 

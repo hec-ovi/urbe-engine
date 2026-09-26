@@ -1,18 +1,10 @@
 import { el } from '../components/dom.js';
 import { icon } from '../components/Icon.js';
-
-/** Every entry in bar order: the panel name it opens and the key that opens it. */
-export const TABS = [
-	[ 'QUESTS', 'J' ],
-	[ 'MAP', 'M' ],
-	[ 'INVENTORY', 'I' ],
-	[ 'CODEX', 'X' ],
-	[ 'SETTINGS', 'O' ],
-	[ 'CONTROLS', '?' ]
-];
+import menu from '../views/game-menu.json' with { type: 'json' };
 
 /**
- * The bottom bar: six panel tabs and LEAVE on the far right. The keys are
+ * The bottom bar: one tab per panel in [menu](../views/game-menu.json) order
+ * with the key that opens it, and Leave on the far right. The keys are
  * labels; the game binds them and calls open( name ).
  * props: { onSelect( name ), onLeave() }
  */
@@ -23,8 +15,8 @@ export class TabBar {
 		this.tabs = new Map();
 
 		this.element = el( 'nav', { className: 'tabbar', ariaLabel: 'Game panels' },
-			...TABS.map( ( [ name, key ] ) => this.#tab( name, key, () => onSelect( name ) ) ),
-			this.#tab( 'LEAVE', 'N', onLeave, 'is-leave' )
+			...menu.tabs.map( ( name ) => this.#tab( name, () => onSelect( name ) ) ),
+			this.#tab( 'LEAVE', onLeave, 'is-leave' )
 		);
 
 	}
@@ -42,12 +34,13 @@ export class TabBar {
 
 	}
 
-	#tab( name, key, onClick, extra = '' ) {
+	#tab( name, onClick, extra = '' ) {
 
+		const { label, key } = menu.entries[ name ];
 		const tab = el( 'button', { className: `tab ${extra}`.trim(), type: 'button' },
 			icon( name.toLowerCase() ),
-			el( 'span', { className: 'tab-label', textContent: name } ),
-			el( 'span', { className: 'tab-key', textContent: key } )
+			el( 'span', { className: 'tab-label', textContent: label } ),
+			...( key ? [ el( 'span', { className: 'tab-key', textContent: key } ) ] : [] )
 		);
 		if ( name !== 'LEAVE' ) tab.setAttribute( 'aria-pressed', 'false' );
 		tab.addEventListener( 'click', onClick );

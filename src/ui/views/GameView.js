@@ -28,6 +28,7 @@ import { CodexView } from './CodexView.js';
 import { SettingsView } from './SettingsView.js';
 import { ControlsView } from './ControlsView.js';
 import { MainMenuView } from './MainMenuView.js';
+import menuLabels from './game-menu.json' with { type: 'json' };
 
 const noop = () => {};
 
@@ -40,7 +41,7 @@ const noop = () => {};
 export class GameView {
 
 	constructor( {
-		onResume = noop, onCloseDialog = noop, onSend = noop, onOpen = noop, onClose = noop,
+		onResume = noop, onSave = noop, onCloseDialog = noop, onSend = noop, onOpen = noop, onClose = noop,
 		onLeave = noop, onSettingChange = noop, onHangUp = noop, onSummaryClose = noop, onSummaryOpen = noop,
 		onTransitSelect = noop, onTransitCancel = noop, onQuestSelect = noop, onQuestTrack = noop, onQuestWait = noop,
 		onDialogueChoice = noop, onDialogueTopic = noop, onDialogueAction = noop, onDialogueRetry = noop, onDialogueJournal = noop,
@@ -48,6 +49,12 @@ export class GameView {
 	} = {} ) {
 
 		const close = () => this.close();
+		const leave = () => {
+
+			this.showMainMenu();
+			onLeave();
+
+		};
 
 		this.clock = new HudClock();
 		this.prompt = new InteractPrompt();
@@ -62,7 +69,9 @@ export class GameView {
 			onChoice: onDialogueChoice, onTopic: onDialogueTopic, onAction: onDialogueAction, onRetry: onDialogueRetry, onJournal: onDialogueJournal } );
 		this.summary = new MissionSummary( { onOpen: onSummaryOpen, onClose: ( close ) => { this.summary.setVisible( false ); onSummaryClose( close ); } } );
 		this.transit = new TransitHud( { onSelect: onTransitSelect, onCancel: onTransitCancel } );
-		this.pause = new PauseMenu( { onResume } );
+		this.pause = new PauseMenu( { onResume, onOpen: ( name ) => this.open( name ), onSave, onLeave: leave } );
+		this.free = el( 'div', { className: 'hud-free', textContent: menuLabels.free } );
+		this.free.hidden = true;
 
 		this.map = new Map3DView( { onClose: close } );
 		this.inventory = new InventoryView( { onClose: close } );
@@ -72,15 +81,7 @@ export class GameView {
 		this.controls = new ControlsView( { onClose: close } );
 
 		this.mainMenu = new MainMenuView( menu );
-		this.tabs = new TabBar( {
-			onSelect: ( name ) => this.toggle( name ),
-			onLeave: () => {
-
-				this.showMainMenu();
-				onLeave();
-
-			}
-		} );
+		this.tabs = new TabBar( { onSelect: ( name ) => this.toggle( name ), onLeave: leave } );
 		this.panels = new PanelHost( {
 			views: {
 				QUESTS: this.quests,
@@ -93,14 +94,14 @@ export class GameView {
 			onOpen: ( name ) => {
 
 				this.tabs.setActive( name );
-				this.tabs.element.hidden = false;
+				this.#overlays();
 				onOpen( name );
 
 			},
 			onClose: () => {
 
 				this.tabs.setActive( null );
-				this.tabs.element.hidden = ! this.paused;
+				this.#overlays();
 				onClose();
 
 			}
@@ -129,6 +130,7 @@ export class GameView {
 			this.summary.element,
 			this.transit.element,
 			this.pause.element,
+			this.free,
 			this.panels.element,
 			this.tabs.element,
 			this.loading,
@@ -137,20 +139,26 @@ export class GameView {
 		this.gameplayElements = [ ...this.element.children ].filter( ( element ) => element !== this.mainMenu.element );
 
 		this.paused = false;
-		this.tabs.element.hidden = true;
-		this.pause.setVisible( false );
+		this.#overlays();
 
 	}
 
 	/**
-	 * Paused is the only time the bar is up: the mouse is captured while
-	 * playing, so the panels are reached from the pause screen or their keys.
+	 * The pause menu, under any panel, chat or summary opened over it. The
+	 * panels are reached from it or by their keys; the tab bar is up only
+	 * while one of them is open, to move between them.
 	 */
 	setPaused( paused ) {
 
 		this.paused = paused;
-		this.pause.setVisible( paused && this.summary.element.hidden && this.dialog.element.hidden );
-		this.tabs.element.hidden = ! ( paused || this.panels.current );
+		this.#overlays();
+
+	}
+
+	/** The pointer is free while the world plays on: a line says how to take it back. */
+	setPointerFree( free ) {
+
+		this.free.hidden = ! free;
 
 	}
 
@@ -231,6 +239,13 @@ export class GameView {
 	setObjective( objective ) {
 
 		this.objective.setObjective( objective );
+
+	}
+
+	#overlays() {
+
+		this.pause.setVisible( this.paused && ! this.panels.current && this.summary.element.hidden && this.dialog.element.hidden );
+		this.tabs.element.hidden = ! this.panels.current;
 
 	}
 

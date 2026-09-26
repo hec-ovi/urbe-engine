@@ -155,6 +155,32 @@ describe( 'VoicePlayer', () => {
 
 	} );
 
+	it( 'stops the clock where it is while paused, starts no line and runs on after, unless voice was turned off meanwhile', async () => {
+
+		const { player, context } = rig();
+		expect( await player.ready() ).toBe( true );
+		player.setPaused( true );
+		await settled();
+		expect( context().state ).toBe( 'suspended' );
+		let ready = null;
+		player.ready().then( ( value ) => { ready = value; } );
+		player.resume();
+		await settled();
+		expect( context().state ).toBe( 'suspended' );
+		expect( ready ).toBeNull();
+		player.setPaused( false );
+		await settled();
+		expect( context().state ).toBe( 'running' );
+		expect( ready ).toBe( true );
+
+		player.setPaused( true );
+		player.suspend();
+		player.setPaused( false );
+		await settled();
+		expect( context().state ).toBe( 'suspended' );
+
+	} );
+
 	it( 'measures the loudness of what the lines play before the volume, in one buffer for the session', async () => {
 
 		const { player, context } = rig();

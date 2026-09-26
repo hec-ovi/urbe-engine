@@ -1,0 +1,37 @@
+{
+  "entries": {
+    "resume": { "label": "Resume", "detail": "Back to the street. Click the view to look around." },
+    "QUESTS": { "label": "Journal", "key": "J", "detail": "Your stories, your current goal and where it is." },
+    "MAP": { "label": "Map", "key": "M", "detail": "The city, where you stand and the way to your goal." },
+    "INVENTORY": { "label": "Inventory", "key": "I", "detail": "What you carry." },
+    "CODEX": { "label": "Codex", "key": "X", "detail": "Notes you have collected." },
+    "SETTINGS": { "label": "Settings", "key": "O", "detail": "Picture quality, crowd size and NPC voices." },
+    "CONTROLS": { "label": "Controls", "key": "?", "detail": "Every key and what it does." },
+    "save": { "label": "Save", "detail": "Keep your progress now." },
+    "LEAVE": { "label": "Leave", "detail": "Back to the main menu. A saved game saves first." }
+  },
+  "tabs": ["QUESTS", "MAP", "INVENTORY", "CODEX", "SETTINGS", "CONTROLS"],
+  "pause": {
+    "title": "Paused",
+    "note": "The city waits. Nothing moves until you resume.",
+    "sections": [
+      { "title": "Play", "entries": ["resume"] },
+      { "title": "Your story", "entries": ["QUESTS", "MAP", "INVENTORY"] },
+      { "title": "Game", "entries": ["SETTINGS", "CONTROLS", "save", "LEAVE"] }
+    ],
+    "keys": [
+      { "keys": ["W", "A", "S", "D"], "action": "walk" },
+      { "keys": ["Shift"], "action": "run" },
+      { "keys": ["E"], "action": "talk, open, use" },
+      { "keys": ["Esc"], "action": "this menu" }
+    ],
+    "save": {
+      "ready": "Keep your progress now.",
+      "saving": "Saving…",
+      "saved": "Saved.",
+      "failed": "Could not save. Try again.",
+      "unavailable": "A preview is not saved."
+    }
+  },
+  "free": "Click the view to look around. Esc opens the menu."
+}

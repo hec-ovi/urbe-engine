@@ -1,0 +1,18 @@
+{
+  "log": "Conversation",
+  "you": "You",
+  "story": { "kicker": "Story", "goal": "Your goal", "journal": "Open journal" },
+  "topics": { "title": "Topics", "hint": "Each one is a different matter with {name}." },
+  "choices": { "title": "Story replies", "hint": "Pick one to answer. Your pick moves the story." },
+  "actions": { "title": "Ask {name} along", "hint": "They walk with you or show you a place." },
+  "free": {
+    "title": "Free talk",
+    "hint": "Say anything. It does not change the story.",
+    "placeholder": "Say anything to {name}",
+    "input": "say something",
+    "send": "send"
+  },
+  "tags": { "story": "story", "talk": "free talk" },
+  "retry": "Retry reply",
+  "leave": "End conversation"
+}

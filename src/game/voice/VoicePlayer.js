@@ -38,6 +38,8 @@ export class VoicePlayer {
 	#analyser = null;
 	/** The analyser's latest samples, read into one buffer for the session. */
 	#window = null;
+	/** While the game is paused: `{ promise, resolve, running }`, `running` whether the clock runs on after it. */
+	#pause = null;
 	#gain = null;
 	#volume = 1;
 	/** Seconds of audio per second of arrival, learned from the lines that arrived whole. */
@@ -108,7 +110,7 @@ export class VoicePlayer {
 		const done = () => UNLOCKS.forEach( ( type ) => target.removeEventListener( type, unlock, CAPTURE ) );
 		const unlock = () => {
 
-			if ( ! wanted() ) return;
+			if ( ! wanted() || this.#pause ) return;
 			const context = this.context;
 			if ( context.state === 'running' ) return done();
 			context.resume().then( () => context.state === 'running' && done(), () => {} );
@@ -118,17 +120,40 @@ export class VoicePlayer {
 
 	}
 
-	/** Lets the audio clock rest, once there is one. */
+	/** Lets the audio clock rest, once there is one; while paused, it stays at rest after the pause. */
 	suspend() {
 
+		if ( this.#pause ) this.#pause.running = false;
 		this.#context?.suspend().catch( () => {} );
 
 	}
 
-	/** Asks a resting audio clock to run; from a press or a setting change the browser allows it. */
+	/** Asks a resting audio clock to run; from a press or a setting change the browser allows it. While paused, it runs after the pause. */
 	resume() {
 
-		this.#context?.resume().catch( () => {} );
+		if ( this.#pause ) this.#pause.running = true;
+		else this.#context?.resume().catch( () => {} );
+
+	}
+
+	/**
+	 * The game's pause: paused, the audio clock stops where it is and no line
+	 * starts; unpaused, a clock that was running runs on and waiting lines start.
+	 */
+	setPaused( paused ) {
+
+		if ( paused === Boolean( this.#pause ) ) return;
+		if ( paused ) {
+
+			this.#pause = { ...Promise.withResolvers(), running: this.#context?.state === 'running' };
+			this.#context?.suspend().catch( () => {} );
+			return;
+
+		}
+		const { resolve, running } = this.#pause;
+		this.#pause = null;
+		if ( running ) this.resume();
+		resolve();
 
 	}
 
@@ -140,10 +165,11 @@ export class VoicePlayer {
 
 	}
 
-	/** Whether the audio clock runs once asked to; false while the browser still holds audio back. */
+	/** Whether the audio clock runs once asked to, after any pause; false while the browser still holds audio back. */
 	async ready() {
 
 		if ( ! this.supported ) return false;
+		await this.#pause?.promise;
 		const context = this.context;
 		if ( context.state !== 'running' ) {
 

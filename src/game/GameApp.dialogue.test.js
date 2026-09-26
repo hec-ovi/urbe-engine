@@ -58,6 +58,8 @@ describe('explicit quest dialogue through the playable UI',()=>{
   app.talk=new TalkClient('/out/t');vi.spyOn(app.talk,'said');open();
   const chat=within(app.view.dialog.element);
   expect(chat.getByText(/My brother never came home/)).toBeTruthy();
+  expect(chat.getByText(/My brother never came home/).closest('.chat-line').dataset.tag).toBe('story');
+  expect(chat.getByText('Complete ask.').previousElementSibling.textContent).toBe('Your goal');
   expect(chat.queryByText(/working @ parcel/)).toBeNull();
   const initial=structuredClone(state());
   await user.click(chat.getByRole('button',{name:'Tell me about your brother.'}));
@@ -78,7 +80,8 @@ describe('explicit quest dialogue through the playable UI',()=>{
   expect(app.scenery.refresh).toHaveBeenCalledExactlyOnceWith(1260);
   expect(app.quests.inventoryView()).toHaveLength(1);
   expect(chat.getByText(/Look for him at the market/)).toBeTruthy();
-  expect(chat.getByRole('status').textContent).toContain('Journal updated:');
+  expect(chat.getByRole('status').textContent).toBe('Journal updated.');
+  expect(chat.getByText('Complete visit.').previousElementSibling.textContent).toBe('Your goal');
   expect(app.view.objective.element.textContent).toContain('visit');
   expect(app.view.quests.quests[0].steps.find(s=>s.stepId==='visit').state).toBe('active');
   await user.click(chat.getByRole('button',{name:'End conversation'}));expect(state().completedStepIds).toEqual(['ask']);
@@ -145,7 +148,7 @@ describe('explicit quest dialogue through the playable UI',()=>{
 
  it('lets a new topic overtake a typed reply still arriving, and reopening the same topic changes nothing',async()=>{
   const {app,open,log}=fixture({errand:true});open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
-  const topics=within(chat.getByRole('group',{name:'Conversation topics'}));log.length=0;
+  const topics=within(chat.getByRole('group',{name:'Topics'}));log.length=0;
   const release=await typeHalfReply(app,chat,user);
   await user.click(topics.getByRole('button',{name:'missing_person'}));
   expect(app.talk.stream.mock.calls.at(-1)[4].signal.aborted).toBe(false);
@@ -162,14 +165,14 @@ describe('explicit quest dialogue through the playable UI',()=>{
   await vi.waitFor(()=>expect(chat.getByText('I wish I had more to tell you.')).toBeTruthy());
   expect(chat.queryByRole('button',{name:'Retry reply'})).toBeNull();
   await user.click(chat.getByRole('button',{name:'I will find Kip and ask what he saw.'}));
-  expect(state().completedStepIds).toEqual(['ask']);expect(chat.getByRole('status').textContent).toContain('Journal updated:');
+  expect(state().completedStepIds).toEqual(['ask']);expect(chat.getByRole('status').textContent).toBe('Journal updated.');
   expect(error).toHaveBeenCalledWith('line observer said:',expect.any(TypeError));expect(error).toHaveBeenCalledWith('line observer silenced:',expect.any(TypeError));
  });
 
  const CRANES='[sigh] He worked the cranes. He always came home before dawn.',MARKET='Look for him at the market. Tell him Petra sent you.';
  it('tells an observer that listens for them which replies each newly opened topic may bring, once per topic',async()=>{
   const {app,open,observer}=fixture({errand:true});observer.upcoming=vi.fn();open();
-  const user=userEvent.setup();const chat=within(app.view.dialog.element);const topics=within(chat.getByRole('group',{name:'Conversation topics'}));
+  const user=userEvent.setup();const chat=within(app.view.dialog.element);const topics=within(chat.getByRole('group',{name:'Topics'}));
   expect(observer.upcoming).toHaveBeenCalledExactlyOnceWith({conversation:app.interactor.conversation,texts:[CRANES,MARKET]});
   await user.click(topics.getByRole('button',{name:'missing_person'}));
   await user.click(chat.getByRole('button',{name:'Tell me about your brother.'}));
@@ -201,7 +204,7 @@ describe('explicit quest dialogue through the playable UI',()=>{
   companion.talkOffers.mockReturnValue({places:[{placeId:'p2',name:'Market'}]});
   companion.acceptFromTool.mockImplementation(()=>{companion.accepted.mockReturnValue(true);return{ok:true,npcId:'person',offerId:'lead:parcel:p2',kind:'lead',line:'Follow me to Market.'};});
   open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
-  expect(within(chat.getByRole('group',{name:'Suggested actions'})).getAllByRole('button').map(button=>button.textContent)).toEqual(['Come with me','Show me Market']);
+  expect(within(chat.getByRole('group',{name:'Ask Petra Moss along'})).getAllByRole('button').map(button=>button.textContent)).toEqual(['Come with me','Show me Market']);
   expect(companion.offers).toHaveBeenLastCalledWith({npcId:'person',timeMin:1260,playerPlaces:[]});
   let release;const rest=new Promise(done=>{release=done;});
   app.talk.stream.mockImplementationOnce(()=>talkStream([{type:'delta',text:'Kip drinks '},rest,{type:'sentence',index:0,text:'Kip drinks [sigh] at the market.'},
@@ -226,7 +229,7 @@ describe('explicit quest dialogue through the playable UI',()=>{
 
  it('answers a chat action by the companion rules: a refusal is said in the chat, an agreement closes it on the person\'s words and keeps them there',async()=>{
   const {app,open,log,companion}=fixture();companion.offers.mockReturnValue(OFFERS);open();
-  const user=userEvent.setup();const chat=within(app.view.dialog.element);const actions=()=>within(chat.getByRole('group',{name:'Suggested actions'}));
+  const user=userEvent.setup();const chat=within(app.view.dialog.element);const actions=()=>within(chat.getByRole('group',{name:'Ask Petra Moss along'}));
   companion.accept.mockReturnValueOnce({ok:false,npcId:'person',code:'on_duty',line:'I\'m working. Not now.'});
   await user.click(actions().getByRole('button',{name:'Come with me'}));
   expect(companion.accept).toHaveBeenLastCalledWith({npcId:'person',offerId:'follow',timeMin:1260,playerPlaces:[]});
