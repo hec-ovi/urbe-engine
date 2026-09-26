@@ -32,13 +32,15 @@ const STAGE_INPUTS = {
 	generateInstances: 'generate-instances', generateQuests: 'generate-quests', importStory: 'import-story',
 	createGame: 'create-game'
 };
+/** The parcel kind people live in; a named city's story needs one open. */
+const HOME = 'residential';
 /**
  * A named city opens a home first, then one building of each kind that hires,
  * round after round, so the story written for it has somewhere to live and a
  * spread of places to meet people.
  */
 const SPREAD = [
-	'residential', 'commerce', 'restaurant', 'clinic', 'police', 'corpo', 'coffee_shop',
+	HOME, 'commerce', 'restaurant', 'clinic', 'police', 'corpo', 'coffee_shop',
 	'offices', 'hotel', 'hospital', 'mall', 'factory', 'military'
 ];
 
@@ -91,19 +93,14 @@ export class WorldCreation {
 		this.boundary.assert( 'generate-city', input );
 		const template = new CityTemplate( input );
 		const id = safeId( template.input.name, template.input.seed );
-		const target = join( this.outDir, 'plans', id );
-		if ( await exists( target ) || await exists( join( this.outDir, 'cities', id ) ) ) {
-
-			throw new CreationError( 'E_EXISTS', `city ${id} is already planned or built`, 409 );
-
-		}
+		await this.#vacant( id );
 		const temporary = await this.#temporary( 'plan-' );
 		try {
 
 			const atlas = await this.#atlas( this.#runner( progress ), template, temporary );
 			const plan = this.boundary.assert( 'plan-result', await planDescriptor( temporary, id, template.input, atlas, this.clock() ) );
 			await writeJson( join( temporary, 'plan.json' ), plan );
-			await publish( target, temporary, 'city plan' );
+			await publish( join( this.outDir, 'plans', id ), temporary, 'city plan' );
 			return plan;
 
 		} finally {
@@ -140,7 +137,7 @@ export class WorldCreation {
 			const theme = input.named ? await this.#named( plan, JSON.parse( bytes ), input.named, temporary ) : null;
 			if ( ! input.named ) await writeFile( join( temporary, 'blueprint.json' ), bytes );
 			const city = await this.#build( this.#runner( progress ), plan.id, plan, temporary, theme );
-			await rm( planDir, { recursive: true, force: true } );
+			await retirePlan( planDir, join( this.outDir, 'cities', plan.id ) );
 			return city;
 
 		} finally {
@@ -157,7 +154,7 @@ export class WorldCreation {
 		this.boundary.assert( 'generate-city', input );
 		const template = new CityTemplate( input );
 		const id = safeId( template.input.name, template.input.seed );
-		if ( await exists( join( this.outDir, 'cities', id ) ) ) throw new CreationError( 'E_EXISTS', `city ${id} already exists`, 409 );
+		await this.#vacant( id );
 		const run = this.#runner( progress );
 		const temporary = await this.#temporary( 'city-' );
 		try {
@@ -203,7 +200,8 @@ export class WorldCreation {
 			// A draft shares every file it does not change with its city, and a game with its draft.
 			await cloneWorld( join( this.outDir, 'cities', city.id ), world );
 			await rm( join( world, 'city.json' ), { force: true } );
-			const named = ( await json( join( world, 'manifest.json' ), 'city manifest' ) ).named === true;
+			const cityManifest = await json( join( world, 'manifest.json' ), 'city manifest' );
+			const named = cityManifest.named === true;
 			// An unnamed city plays the recorded story's people.
 			const types = join( world, 'npc-types.json' );
 			if ( ! named && ! existsSync( types ) ) await cp( join( this.questsRoot, NPC_TYPES ), types );
@@ -211,12 +209,17 @@ export class WorldCreation {
 			// city opens a spread of kinds for the story written against them;
 			// an unnamed one opens the places of its recorded story, in story order.
 			let priority = [];
-			if ( ! manual ) {
+			let homes = new Set();
+			if ( ! manual && named ) {
 
-				const order = named
-					? venueSpread( await json( join( world, 'blueprint.json' ), 'city blueprint' ) )
-					: questParcelIds( ( await this.#materialize( run, city, world, join( temporary, 'ranking' ), join( this.questsRoot, RECORDED ) ) ).questlines );
-				priority = [ ...new Set( [ ...input.buildingIds, ...order ] ) ];
+				const atlas = await json( join( world, 'blueprint.json' ), 'city blueprint' );
+				homes = new Set( atlas.parcels.filter( ( parcel ) => parcel.type === HOME ).map( ( parcel ) => parcel.id ) );
+				priority = nextHomeAfter( [ ...new Set( [ ...input.buildingIds, ...venueSpread( atlas, cityManifest.sources ) ] ) ], homes, input.count );
+
+			} else if ( ! manual ) {
+
+				const story = await this.#materialize( run, city, world, join( temporary, 'ranking' ), join( this.questsRoot, RECORDED ) );
+				priority = [ ...new Set( [ ...input.buildingIds, ...questParcelIds( story.questlines ) ] ) ];
 
 			}
 
@@ -241,6 +244,14 @@ export class WorldCreation {
 				throw new CreationError( 'E_QUEST_LOCATIONS', `city ${city.id} opens ${manifest.interiors.length} interiors, the main story needs ${MAIN_LOCATION_COUNT}` );
 
 			}
+			if ( homes.size && ! manifest.interiors.some( ( id ) => homes.has( id ) ) ) {
+
+				throw new CreationError( 'E_QUEST_LOCATIONS', `city ${city.id} opened no home for the people its story is written for: name one that opens in buildingIds` );
+
+			}
+			// What a story's author records against: the world, its people, the
+			// opened interiors and, here, what the game plays and stands.
+			await handoffInput( join( world, 'quests' ) );
 			await writeJson( join( world, 'draft.json' ), {
 				contractVersion: '1.0.0', cityId: city.id, interiorIds: manifest.interiors, questId: null
 			} );
@@ -294,6 +305,7 @@ export class WorldCreation {
 
 		}
 		const { city, draft, draftDir } = await this.#storyStage( input.cityId );
+		await checkAuthored( recording, input.recording, city.size );
 		return this.#story( this.#runner( progress ), city, draft, draftDir, recording, input.sideJobs, 'story' );
 
 	}
@@ -318,10 +330,10 @@ export class WorldCreation {
 		try {
 
 			await cloneWorld( join( this.outDir, needsDraft ? 'drafts' : 'cities', city.id ), world );
-			// A game carries its bundle alone: what the story was made from,
-			// the unselected definitions and the creation stages stay in the draft.
+			// A game carries its bundle alone: what its names and story were made
+			// from, the unselected definitions and the creation stages stay behind.
 			for ( const path of [
-				'city.json', 'draft.json', 'story', ...( hasQuests ? [] : [ 'quests' ] ),
+				'city.json', 'draft.json', 'naming', 'story', ...( hasQuests ? [] : [ 'quests' ] ),
 				'quests/all.questlines.json', 'quests/questlines.meta.json', 'quests/handoff-input.json'
 			] ) await rm( join( world, path ), { recursive: true, force: true } );
 			const atlas = await json( join( world, 'blueprint.json' ), 'game blueprint' );
@@ -552,6 +564,17 @@ export class WorldCreation {
 
 	}
 
+	/** A plan's id is its city's: neither may be taken already. */
+	async #vacant( id ) {
+
+		for ( const [ folder, state ] of [ [ 'plans', 'planned' ], [ 'cities', 'built' ] ] ) {
+
+			if ( await exists( join( this.outDir, folder, id ) ) ) throw new CreationError( 'E_EXISTS', `city ${id} is already ${state}`, 409 );
+
+		}
+
+	}
+
 	async #plan( id ) {
 
 		const path = join( this.outDir, 'plans', id, 'plan.json' );
@@ -632,11 +655,16 @@ async function handoffInput( questsDir ) {
 
 }
 
-/** Every building a named city can open, a home first, then one of each kind that hires, round after round. */
-function venueSpread( atlas ) {
+/**
+ * Every standing building a named city can open, a home first, then one of
+ * each kind that hires, round after round.
+ * @param sources the city manifest's source of each parcel; an empty lot opens nothing
+ */
+function venueSpread( atlas, sources ) {
 
 	const rank = ( a, b ) => fnv1a( `${atlas.meta.seed}:spread:${a}` ) - fnv1a( `${atlas.meta.seed}:spread:${b}` ) || a.localeCompare( b );
-	const kinds = SPREAD.map( ( type ) => atlas.parcels.filter( ( parcel ) => parcel.type === type ).map( ( parcel ) => parcel.id ).sort( rank ) );
+	const standing = atlas.parcels.filter( ( parcel ) => sources?.[ parcel.id ] !== 'empty' );
+	const kinds = SPREAD.map( ( type ) => standing.filter( ( parcel ) => parcel.type === type ).map( ( parcel ) => parcel.id ).sort( rank ) );
 	const spread = [];
 	for ( let round = 0; kinds.some( ( ids ) => round < ids.length ); round ++ ) {
 
@@ -644,6 +672,67 @@ function venueSpread( atlas ) {
 
 	}
 	return spread;
+
+}
+
+/**
+ * Moves the second home of an automatic order to right after the count, when
+ * the first home is within it: the assembler reaches past the count only for a
+ * building Interior cannot furnish, so a first home that cannot be furnished
+ * gives its place to the next home before any other building.
+ */
+function nextHomeAfter( order, homes, count ) {
+
+	const [ first, next ] = order.filter( ( id ) => homes.has( id ) );
+	if ( next === undefined || order.indexOf( first ) >= count || order.indexOf( next ) <= count ) return order;
+	const rest = order.filter( ( id ) => id !== next );
+	return [ ...rest.slice( 0, count ), next, ...rest.slice( count ) ];
+
+}
+
+/**
+ * Takes a built plan out of `out/plans`: what an author wrote beside the plan,
+ * the Naming outputs and author dir among it, goes into the city as `naming/`.
+ */
+async function retirePlan( planDir, cityDir ) {
+
+	const naming = join( cityDir, 'naming' );
+	try {
+
+		await rename( planDir, naming );
+		await Promise.all( [ 'plan.json', 'blueprint.json' ].map( ( name ) => rm( join( naming, name ), { force: true } ) ) );
+		if ( ! ( await readdir( naming ) ).length ) await rm( naming, { recursive: true, force: true } );
+
+	} catch ( error ) {
+
+		throw new CreationError( 'E_STORAGE', `city ${basename( cityDir )} stands, but its plan cannot be retired: ${error.message}` );
+
+	}
+
+}
+
+/**
+ * Refuses a recording an author run left unfinished or cast for another city
+ * size: its `meta.json` must carry the bundle, and the profile its people were
+ * cast with must be the size the engine replays it with. A directory without
+ * `meta.json` is a bare recording and replays as it is.
+ */
+async function checkAuthored( dir, label, profile ) {
+
+	const bytes = await readFile( join( dir, 'meta.json' ), 'utf8' ).catch( ( error ) => {
+
+		if ( error.code === 'ENOENT' ) return null;
+		throw new CreationError( 'E_INVALID_REQUEST', `${label}/meta.json cannot be read: ${error.message}` );
+
+	} );
+	if ( bytes === null ) return;
+	const meta = parse( bytes, `${label}/meta.json` );
+	if ( ! meta?.bundle ) throw new CreationError( 'E_INVALID_REQUEST', `${label} holds no finished story: its meta.json has no bundle` );
+	if ( meta.profile !== profile ) {
+
+		throw new CreationError( 'E_INVALID_REQUEST', `${label} was cast with profile ${meta.profile}, a ${profile} city replays it with profile ${profile}: record it with --profile ${profile}` );
+
+	}
 
 }
 

@@ -11,7 +11,13 @@ Engine loads city artifacts into a first-person game with streaming, physics, NP
 
 Run `npm run play -- --port 5306` from the repository. Use `POST /api/launcher` for catalog operations, then open the returned play URL. Creation and single-building assembly are separate calls described in [CONTRACT.md](CONTRACT.md). A creation stage builds for minutes, so submit it to `POST /api/creation-jobs` with the same `{method, input}` and read `GET /api/creation-jobs/<id>` until it settles ([server contract](src/server/CONTRACT.md)).
 
-Creation asks no model. A named story game is authored outside the engine: `planCity` writes the Atlas plan to `out/plans/<id>/blueprint.json`; an author names it with the Naming box and passes the named blueprint and NPC types to `buildCity` as `named`; `generateInstances` opens interiors; the author writes a Quests recording against the opened interiors and `importStory` plays it; `createGame` makes the game. Paths are resolved against this checkout ([creation contract](src/creation/CONTRACT.md)).
+Creation asks no model. A named story game is authored by an agent through the Naming and Quests external author modes, and paths are resolved against this checkout ([creation contract](src/creation/CONTRACT.md)):
+
+1. `planCity {size}` writes the Atlas plan to `out/plans/<id>/blueprint.json`.
+2. The author names it in place with the Naming box's external author mode, `npm --prefix ../naming run --silent world -- out/plans/<id> --theme "<theme>" --external out/plans/<id>/author` from this checkout (the coordinator's `naming` tool service runs it in Compose), answering each request until exit 0.
+3. `buildCity {cityId, named: {blueprint: "out/plans/<id>/blueprint.named.json", types: "out/plans/<id>/npc-types.json"}}` builds it; the naming work moves into the city's `naming/`. `generateInstances` opens interiors, a home among them.
+4. The author writes the story with Quests' `npm run author` against the draft `out/drafts/<id>`: `--world` its `blueprint.json`, `--types` its `npc-types.json`, `--handoff` its `quests/handoff-input.json`, `--parcels` the opened interiors, `--profile` the city size, `--mechanics` the creation's `PLAYABLE_MECHANICS`, `--external` an author dir and `--out` a story folder.
+5. `importStory {cityId, recording: <story folder>, sideJobs}` replays it against the opened interiors, and `createGame` makes the game.
 
 Launcher JSON has `method` (required, no default) and `input` (omitted only for `catalog`). `continueGame`, `exportGame` and `exportCity` take an existing ID. `importGame` takes a game descriptor; `saveCurrent` takes a live save payload. All creation fields and defaults are linked from the [request schema](src/server/schema/launcher-request.schema.json).
 

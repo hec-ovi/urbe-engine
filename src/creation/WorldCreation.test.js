@@ -7,6 +7,8 @@ import { createWorldCreation, CreationError } from './index.js';
 import { HOST_CAPABILITIES } from './src/WorldCreation.js';
 
 const NOW = new Date( '2026-09-03T12:30:00Z' );
+/** The fixture city's homes. */
+const HOMES = [ 'p3', 'p9' ];
 const THEMES = fileURLToPath( new URL( '../../../materials/themes', import.meta.url ) );
 
 describe( 'playable world creation contract', () => {
@@ -141,6 +143,10 @@ describe( 'playable world creation contract', () => {
 		} ), 'E_CITY_NOT_FOUND' );
 		await expectCode( creation.generateCity( { name: 'Strict City', seed: 'strict', size: 'medium' } ), 'E_EXISTS' );
 		await expectCode( creation.planCity( { name: 'Strict City', seed: 'strict', size: 'medium' } ), 'E_EXISTS' );
+		// A template city cannot take the id of a plan waiting for its build.
+		await creation.planCity( { name: 'Held Ward', seed: 'held', size: 'small' } );
+		await expectCode( creation.generateCity( { name: 'Held Ward', seed: 'held', size: 'small' } ), 'E_EXISTS' );
+		expect( await readJson( join( fixture.config.outDir, 'plans/held-ward/plan.json' ) ) ).toMatchObject( { id: 'held-ward' } );
 		await expectCode( creation.buildCity( { cityId: 'strict-city' } ), 'E_PLAN_NOT_FOUND' );
 		await expectCode( creation.generateQuests( {
 			cityId: city.id, interiorIds: parcelIds().slice( 0, 9 ), mainBrief: '', sideJobs: 3
@@ -205,6 +211,9 @@ describe( 'playable world creation contract', () => {
 		await expectCode( creation.buildCity( { cityId: plan.id, named: { ...paths, blueprint: '../authoring/themeless.named.json' } } ), 'E_INVALID_REQUEST' );
 		await expectCode( creation.buildCity( { cityId: plan.id, named: { ...paths, types: '../authoring/missing.json' } } ), 'E_INVALID_REQUEST' );
 
+		// What the author wrote beside the plan outlives it, in the city.
+		await writeJson( join( planDir, 'businesses.json' ), [ { brandName: 'Salt Line', businessKind: 'commerce', tier: 'mid' } ] );
+		await writeJson( join( planDir, 'author/naming-districts-1.json' ), { charter: {} } );
 		const city = await creation.buildCity( { cityId: plan.id, named: paths } );
 		// The world is built from the named blueprint's own bytes, which it binds.
 		const shells = fixture.calls.at( - 1 );
@@ -215,16 +224,27 @@ describe( 'playable world creation contract', () => {
 		const cityDir = join( fixture.config.outDir, 'cities/salt-ward' );
 		expect( await readJson( join( cityDir, 'npc-types.json' ) ) ).toMatchObject( { types: [ { type: 'dock_hand' } ] } );
 		expect( await readJson( join( cityDir, 'manifest.json' ) ) ).toMatchObject( { named: true, namingTheme: 'salt-stained harbour' } );
-		await expect( readFile( join( planDir, 'plan.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+		await expect( lstat( planDir ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+		expect( await readJson( join( cityDir, 'naming/businesses.json' ) ) ).toEqual( [ { brandName: 'Salt Line', businessKind: 'commerce', tier: 'mid' } ] );
+		expect( await readJson( join( cityDir, 'naming/author/naming-districts-1.json' ) ) ).toEqual( { charter: {} } );
+		for ( const planned of [ 'plan.json', 'blueprint.json' ] ) {
+
+			await expect( lstat( join( cityDir, 'naming', planned ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+
+		}
 		await expectCode( creation.buildCity( { cityId: plan.id } ), 'E_PLAN_NOT_FOUND' );
 
 		// A named city opens the buildings asked for first, then a home and a spread of the kinds that hire.
 		const instances = await creation.generateInstances( { cityId: city.id, mode: 'automatic', count: 9, buildingIds: [ 'p4' ] } );
 		const opened = fixture.calls.at( - 1 );
 		expect( opened.kind ).toBe( 'interiors' );
-		expect( valueAfter( opened.args, '--interior-priority' ).split( ',' ).slice( 0, 3 ) ).toEqual( [ 'p4', 'p9', expect.any( String ) ] );
-		expect( instances.ids.slice( 0, 2 ) ).toEqual( [ 'p4', 'p9' ] );
+		const priority = valueAfter( opened.args, '--interior-priority' ).split( ',' );
+		expect( priority[ 0 ] ).toBe( 'p4' );
+		expect( HOMES ).toContain( priority[ 1 ] );
+		expect( instances.ids.slice( 0, 2 ) ).toEqual( priority.slice( 0, 2 ) );
 		expect( fixture.calls.map( ( call ) => call.kind ) ).not.toContain( 'materialize' );
+		// The draft holds what a story's author records against, the game's capabilities among it.
+		expect( await readJson( join( fixture.config.outDir, 'drafts/salt-ward/quests/handoff-input.json' ) ) ).toEqual( { hostCapabilities: HOST_CAPABILITIES } );
 		await expectCode( creation.generateQuests( { cityId: city.id, interiorIds: instances.ids, mainBrief: '', sideJobs: 1 } ), 'E_STAGE_MISMATCH' );
 
 		const quests = await creation.importStory( { cityId: city.id, recording: '../authoring/story', sideJobs: 3 } );
@@ -241,6 +261,7 @@ describe( 'playable world creation contract', () => {
 		// The draft keeps what the story was made from and what it left out.
 		expect( await readJson( join( draft, 'story/recording.json' ) ) ).toMatchObject( { fixture: 'written' } );
 		expect( await readFile( join( draft, 'story/script.md' ), 'utf8' ) ).toBe( '# The Salt Line\n' );
+		expect( await readJson( join( draft, 'story/meta.json' ) ) ).toMatchObject( { profile: 'small', bundle: {} } );
 		expect( await readJson( join( draft, 'story/left-out.json' ) ) ).toEqual( [
 			{ questId: 'written-side-c', reason: 'has steps the game does not play: assassinate' }
 		] );
@@ -250,7 +271,7 @@ describe( 'playable world creation contract', () => {
 
 		const game = await creation.createGame( { cityId: city.id, interiorIds: instances.ids, questId: quests.id } );
 		expect( game ).toMatchObject( { quests: [ { id: 'written-main', totalSteps: 10 } ], sideJobs: [ {}, {} ] } );
-		for ( const absent of [ 'story', 'quests/handoff-input.json', 'quests/all.questlines.json', 'draft.json' ] ) {
+		for ( const absent of [ 'naming', 'story', 'quests/handoff-input.json', 'quests/all.questlines.json', 'draft.json' ] ) {
 
 			await expect( lstat( join( fixture.config.outDir, 'games', game.id, absent ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
 
@@ -260,7 +281,20 @@ describe( 'playable world creation contract', () => {
 		// A main story with a step the game cannot play is refused, leaving the draft's story as it was.
 		await writeJson( join( authoring, 'unplayable/recording.json' ), { fixture: 'unplayable' } );
 		await expectCode( creation.importStory( { cityId: city.id, recording: '../authoring/unplayable', sideJobs: 0 } ), 'E_INVALID_REQUEST' );
+		// An author run's story is finished only with its bundle, and casts its people with the city's size.
+		for ( const [ name, meta ] of [
+			[ 'unfinished', { profile: 'small', needs: [ { stage: 'script', file: 'script.md' } ] } ],
+			[ 'failed', { profile: 'small', failed: { stage: 'script', message: 'no title' } } ],
+			[ 'elsewhere', { profile: 'author', bundle: { path: 'bundle/questlines.json' } } ]
+		] ) {
+
+			await writeJson( join( authoring, name, 'recording.json' ), { fixture: 'written' } );
+			await writeJson( join( authoring, name, 'meta.json' ), meta );
+			await expectCode( creation.importStory( { cityId: city.id, recording: `../authoring/${name}`, sideJobs: 0 } ), 'E_INVALID_REQUEST' );
+
+		}
 		expect( await readJson( join( draft, 'draft.json' ) ) ).toMatchObject( { questId: quests.id } );
+		expect( fixture.calls.filter( ( call ) => call.kind === 'materialize' ) ).toHaveLength( 2 );
 
 	} );
 
@@ -280,6 +314,44 @@ describe( 'playable world creation contract', () => {
 		const cityDir = join( fixture.config.outDir, 'cities/bare-ward' );
 		expect( await readJson( join( cityDir, 'manifest.json' ) ) ).toMatchObject( { named: false } );
 		await expect( readFile( join( cityDir, 'npc-types.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+		expect( await readJson( join( cityDir, 'naming/npc-types.json' ) ) ).toEqual( { types: [ { type: 'stray' } ] } );
+
+		// A plan with nothing beside it leaves nothing behind.
+		const clean = await creation.planCity( { name: 'Clean Ward', seed: 'clean', size: 'small' } );
+		await creation.buildCity( { cityId: clean.id } );
+		await expect( lstat( join( fixture.config.outDir, 'cities/clean-ward/naming' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+		await expect( lstat( join( fixture.config.outDir, 'plans/clean-ward' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+
+	} );
+
+	it( 'opens a home in a named city when its first home cannot be furnished, and fails a pick that opens none', async () => {
+
+		const fixture = await setup();
+		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
+		const plan = await creation.planCity( { name: 'Home Ward', seed: 'home', size: 'small' } );
+		// The author names the plan in its own folder, where the Naming CLI writes beside the blueprint.
+		const planDir = join( fixture.config.outDir, 'plans/home-ward' );
+		await writeJson( join( planDir, 'blueprint.named.json' ), namedWorld( await readJson( join( planDir, 'blueprint.json' ) ), 'tidal flats' ) );
+		await writeJson( join( planDir, 'npc-types.json' ), { contractVersion: '1.0.0', types: [ { type: 'tide_keeper' } ] } );
+		const city = await creation.buildCity( { cityId: plan.id, named: {
+			blueprint: 'out/plans/home-ward/blueprint.named.json', types: 'out/plans/home-ward/npc-types.json'
+		} } );
+		expect( await readJson( join( fixture.config.outDir, 'cities/home-ward/naming/npc-types.json' ) ) ).toMatchObject( { types: [ { type: 'tide_keeper' } ] } );
+
+		// Six other buildings asked for first leave the first home the count's last place,
+		// and the next home waits right after it, for the place of any building that does not open.
+		const pick = { cityId: city.id, mode: 'automatic', count: 7, buildingIds: [ 'p0', 'p1', 'p2', 'p4', 'p6', 'p7' ] };
+		const opened = await creation.generateInstances( pick );
+		const priority = valueAfter( fixture.calls.at( - 1 ).args, '--interior-priority' ).split( ',' );
+		const [ first, next ] = priority.filter( ( id ) => HOMES.includes( id ) );
+		expect( priority.slice( 0, 8 ) ).toEqual( [ ...pick.buildingIds, first, next ] );
+		expect( opened.ids ).toEqual( [ ...pick.buildingIds, first ] );
+		fixture.unfurnishable.add( first );
+		expect( ( await creation.generateInstances( pick ) ).ids ).toEqual( [ ...pick.buildingIds, next ] );
+
+		fixture.unfurnishable.add( next );
+		await expectCode( creation.generateInstances( pick ), 'E_QUEST_LOCATIONS' );
+		expect( ( await readJson( join( fixture.config.outDir, 'drafts/home-ward/draft.json' ) ) ).interiorIds ).toEqual( [ ...pick.buildingIds, next ] );
 
 	} );
 
@@ -327,8 +399,9 @@ describe( 'playable world creation contract', () => {
 		const story = join( root, 'authoring/story' );
 		await writeJson( join( story, 'recording.json' ), { fixture: 'written' } );
 		await writeFile( join( story, 'script.md' ), '# The Salt Line\n' );
+		await writeJson( join( story, 'meta.json' ), { profile: 'small', bundle: { path: 'bundle/questlines.json', questlines: 4 } } );
 		await writeJson( join( story, 'world.json' ), { meta: {} } );
-		const fixture = { root, config, calls: [], recording: '../authoring/story' };
+		const fixture = { root, config, calls: [], recording: '../authoring/story', unfurnishable: new Set() };
 		fixture.run = processPort( fixture );
 		return fixture;
 
@@ -382,11 +455,13 @@ function processCommand( fixture ) {
 			const source = valueAfter( args, '--blueprint' );
 			const blueprint = await readJson( source );
 			// The assembler opens an exact manual pick, or an automatic count with
-			// the priority parcels first, in their order.
+			// the priority parcels first, in their order, where a building
+			// Interior cannot furnish gives its place to the next.
 			const priority = args.includes( '--interior-priority' ) ? valueAfter( args, '--interior-priority' ).split( ',' ) : [];
 			const selected = args.includes( '--interior-parcels' )
 				? valueAfter( args, '--interior-parcels' ).split( ',' )
-				: [ ...new Set( [ ...priority, ...blueprint.parcels.map( ( parcel ) => parcel.id ) ] ) ].slice( 0, Number( valueAfter( args, '--interiors' ) ) );
+				: [ ...new Set( [ ...priority, ...blueprint.parcels.map( ( parcel ) => parcel.id ) ] ) ]
+					.filter( ( id ) => ! fixture.unfurnishable.has( id ) ).slice( 0, Number( valueAfter( args, '--interiors' ) ) );
 			calls.push( { kind: selected.length ? 'interiors' : 'shells', command, args, source: await readFile( source ) } );
 			// Like the assembler, it writes beside a name and renames over it, and keeps every shell it reuses.
 			await publishJson( join( world, 'blueprint.json' ), blueprint );
@@ -455,7 +530,7 @@ function atlas() {
 		version: '0.14.0', seed: 'fixture', districts: [ { id: 'd0' } ],
 		meta: { seed: 'fixture' }, stats: { population: 120, parcelCounts: {}, perDistrict: [] },
 		parcels: parcelIds().map( ( id, index ) => ( {
-			id, type: index === 9 ? 'residential' : index % 2 ? 'commerce' : 'clinic',
+			id, type: HOMES.includes( id ) ? 'residential' : index % 2 ? 'commerce' : 'clinic',
 			access: { point: [ 10 + index * 8, 20 + index * 4 ] }
 		} ) )
 	};
