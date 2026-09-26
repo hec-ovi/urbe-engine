@@ -167,6 +167,40 @@ describe( 'RequestAssembler', () => {
 
 	} );
 
+	it( 'measures a unique building along the axis Exterior fits it on', () => {
+
+		// 24 m along X and 40 m along Z, its first edge running up Z: mirror
+		// shutters takes it fronting that 40 m edge and not the 24 m one.
+		const tower = {
+			id: 'p7', type: 'offices', tier: 'rich', landmark: true,
+			footprint: [ [ 24, 0 ], [ 24, 40 ], [ 0, 40 ], [ 0, 0 ] ],
+			access: { edgeId: 'e1', point: [ 12, - 2 ] },
+			envelope: { minFloors: 4, maxFloors: 9, floorHeight: 4.5, maxHeight: 45 }
+		};
+		const grid = { origin: [ 0, 0 ], angle: 0, spacing: 0.5 };
+		// The designs it wears over many worlds, so the seeded pick meets every one it may take.
+		const designs = ( { buildingGrid, apertures = [] } ) => new Set( Array.from( { length: 32 }, ( _, n ) => {
+
+			const atlas = atlasWith( tower );
+			atlas.meta.seed = `urbe-${n}`;
+			if ( buildingGrid ) atlas.meta.buildingGrid = buildingGrid;
+			return new RequestAssembler( atlas, { apertures } ).assemble( 'p7' ).options.architecture;
+
+		} ) );
+
+		// On the building grid it fronts X, 24 m across.
+		const onGrid = designs( { buildingGrid: grid } );
+		expect( onGrid ).not.toContain( 'mirror-shutters' );
+		expect( onGrid ).not.toContain( 'auto' );
+		// With no grid, or with a connection pinning its faces, it fronts its first edge.
+		expect( designs( {} ) ).toContain( 'mirror-shutters' );
+		expect( designs( { buildingGrid: grid, apertures: [ bridgeAperture ] } ) ).toContain( 'mirror-shutters' );
+		// An anchor from just below ground to just above it pins them too, as Exterior reads it.
+		const anchor = aperture( 'grade', 'wire-anchor', - 0.05, 0.1 );
+		expect( designs( { buildingGrid: grid, apertures: [ anchor ] } ) ).toContain( 'mirror-shutters' );
+
+	} );
+
 	it( 'signs a venue with its name lettered for the marquee, steps down to the word, then to nothing', () => {
 
 		const sign = ( atlas, parcelId, options ) => new RequestAssembler( atlas, connections ).assemble( parcelId, options ).options.signage;

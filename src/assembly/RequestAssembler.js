@@ -125,15 +125,17 @@ export class RequestAssembler {
 	 * Which design this building is drawn as. A unique building wears an approved
 	 * family whenever its own footprint, height and street take one: the landmark
 	 * design first, then the corporate tower, then a seeded pick of the rest. A
-	 * connection above ground pins its face, including an uncut cable anchor:
-	 * a tapered facade cannot leave an attachment at the old parcel plane.
+	 * connection reaching above ground pins its face, including an uncut cable
+	 * anchor: a tapered facade cannot leave an attachment at the old parcel plane.
 	 * Everything else is Exterior's own choice for the programme.
 	 */
 	#architecture( parcel, floors, apertures ) {
 
 		if ( ! parcel.landmark || ! lotRectangle( parcel.footprint ) ) return AUTO;
 
-		const fixedFaces = apertures.some( ( aperture ) => aperture.base >= 0 );
+		// Exterior's own test (src/layout/sectionMassing.ts): an opening pins its
+		// face once any of it stands above ground, wherever its bottom is.
+		const fixedFaces = apertures.some( ( aperture ) => aperture.base >= 0 || aperture.base + aperture.height > 0 );
 		// Exterior fits a family on the building grid, or on the footprint as it
 		// stands when a connection pins its faces or no grid is published, and
 		// puts face 0 along that first axis.
