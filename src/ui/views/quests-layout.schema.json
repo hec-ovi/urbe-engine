@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Quest log labels; {name} stands for the value the view puts there",
+  "type": "object",
+  "required": ["title", "key", "empty", "status", "follow", "sections", "step", "endings"],
+  "additionalProperties": false,
+  "properties": {
+    "title": { "description": "Panel title.", "$ref": "#/$defs/text" },
+    "key": { "description": "The key that opens the panel.", "$ref": "#/$defs/text" },
+    "empty": {
+      "description": "What the list and the detail say with nothing in them.",
+      "type": "object",
+      "required": ["list", "detail"],
+      "additionalProperties": false,
+      "properties": { "list": { "$ref": "#/$defs/text" }, "detail": { "$ref": "#/$defs/text" } }
+    },
+    "status": {
+      "description": "Badge per quest state.",
+      "type": "object",
+      "required": ["available", "active", "blocked", "done", "failed"],
+      "additionalProperties": false,
+      "properties": {
+        "available": { "$ref": "#/$defs/text" },
+        "active": { "$ref": "#/$defs/text" },
+        "blocked": { "$ref": "#/$defs/text" },
+        "done": { "$ref": "#/$defs/text" },
+        "failed": { "$ref": "#/$defs/text" }
+      }
+    },
+    "follow": {
+      "type": "object",
+      "required": ["quest", "following", "on", "off", "lead", "leading"],
+      "additionalProperties": false,
+      "properties": {
+        "quest": { "$ref": "#/$defs/text" },
+        "following": { "$ref": "#/$defs/text" },
+        "on": { "$ref": "#/$defs/text" },
+        "off": { "$ref": "#/$defs/text" },
+        "lead": { "$ref": "#/$defs/text" },
+        "leading": { "$ref": "#/$defs/text" }
+      }
+    },
+    "sections": {
+      "description": "`history` takes {count}.",
+      "type": "object",
+      "required": ["current", "prologue", "premise", "outcome", "history"],
+      "additionalProperties": false,
+      "properties": {
+        "current": { "$ref": "#/$defs/text" },
+        "prologue": { "$ref": "#/$defs/text" },
+        "premise": { "$ref": "#/$defs/text" },
+        "outcome": { "$ref": "#/$defs/text" },
+        "history": { "$ref": "#/$defs/text" }
+      }
+    },
+    "step": {
+      "description": "`commit` takes {text}, `wait` {label}, `hours` {label}, {start} and {end}.",
+      "type": "object",
+      "required": ["states", "closed", "cancelled", "commit", "wait", "waitNote", "hours"],
+      "additionalProperties": false,
+      "properties": {
+        "states": {
+          "type": "object",
+          "required": ["active", "locked", "done", "cancelled"],
+          "additionalProperties": false,
+          "properties": {
+            "active": { "$ref": "#/$defs/text" },
+            "locked": { "$ref": "#/$defs/text" },
+            "done": { "$ref": "#/$defs/text" },
+            "cancelled": { "$ref": "#/$defs/text" }
+          }
+        },
+        "closed": { "$ref": "#/$defs/text" },
+        "cancelled": { "$ref": "#/$defs/text" },
+        "commit": { "$ref": "#/$defs/text" },
+        "wait": { "$ref": "#/$defs/text" },
+        "waitNote": { "$ref": "#/$defs/text" },
+        "hours": { "$ref": "#/$defs/text" }
+      }
+    },
+    "endings": {
+      "type": "object",
+      "required": ["title", "note", "tracking", "or"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "$ref": "#/$defs/text" },
+        "note": { "$ref": "#/$defs/text" },
+        "tracking": { "$ref": "#/$defs/text" },
+        "or": { "$ref": "#/$defs/text" }
+      }
+    }
+  },
+  "$defs": { "text": { "type": "string", "minLength": 1 } }
+}

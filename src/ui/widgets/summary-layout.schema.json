@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Story card labels, one set per kind of card",
+  "type": "object",
+  "required": ["label", "kinds"],
+  "additionalProperties": false,
+  "properties": {
+    "label": { "description": "Accessible name of the card when it has no title.", "$ref": "#/$defs/text" },
+    "kinds": {
+      "type": "object",
+      "required": ["outcome", "prologue"],
+      "additionalProperties": { "$ref": "#/$defs/kind" },
+      "properties": {
+        "outcome": { "description": "The card that closes a mission; its outcome badge stands where a kicker would.", "$ref": "#/$defs/kind" },
+        "prologue": { "description": "The prologue a new game opens on.", "$ref": "#/$defs/kind" }
+      }
+    }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 },
+    "kind": {
+      "type": "object",
+      "required": ["action"],
+      "additionalProperties": false,
+      "properties": {
+        "kicker": { "description": "The line over the text, in place of the outcome badge.", "$ref": "#/$defs/text" },
+        "action": { "description": "The button that closes the card.", "$ref": "#/$defs/text" }
+      }
+    }
+  }
+}

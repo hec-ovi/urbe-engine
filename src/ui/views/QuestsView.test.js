@@ -2,6 +2,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
+import Ajv from 'ajv/dist/2020.js';
+import layout from './quests-layout.json' with { type: 'json' };
+import schema from './quests-layout.schema.json' with { type: 'json' };
 import { QuestsView } from './QuestsView.js';
 
 const QUESTS = [
@@ -11,6 +14,13 @@ const QUESTS = [
 
 /** The quest log: empty wording, the list, and the picked quest's steps. */
 describe( 'QuestsView', () => {
+
+	it( 'reads its labels from a layout that meets its schema', () => {
+
+		const validate = new Ajv( { allErrors: true, strict: true } ).compile( schema );
+		expect( validate( layout ), JSON.stringify( validate.errors ) ).toBe( true );
+
+	} );
 
 	it( 'says no quest yet, then lists quests, opens the first and marks steps done', async () => {
 

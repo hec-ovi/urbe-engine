@@ -183,7 +183,8 @@ export class GameApp {
 				this.#closeConversation();
 				if ( this.view.summary.element.hidden ) this.input?.requestLock();
 			},
-			onSummaryClose: () => this.input?.requestLock(),
+			// A click on the card takes the pointer back; Escape leaves it free, where the game stood.
+			onSummaryClose: ( { pointer } ) => { if ( pointer ) this.input?.requestLock(); },
 			onSummaryOpen: () => { this.input?.exitLock(); this.view.setPaused( false ); },
 			onSend: ( text ) => this.#say( text ),
 			onOpen: ( name ) => {
@@ -728,9 +729,8 @@ export class GameApp {
 		this.view.setPaused( true );
 		this.view.ready();
 		progress.finish();
-		// A new game opens on its story's prologue; Begin or Escape hands over the mouse.
-		const prologue = this.persistence?.unplayed ? this.quests.prologue() : null;
-		if ( prologue ) this.view.summary.show( { kind: 'prologue', ...prologue } );
+		const opening = openingCard( this.persistence, this.quests );
+		if ( opening ) this.view.summary.show( opening );
 
 		this.renderer.domElement.addEventListener( 'click', () => {
 			if ( ! playableModalOpen( this.view, this.interactor ) ) this.input.requestLock();
@@ -1601,6 +1601,7 @@ export class GameApp {
 	/** A quest has moved: the scenery, journal, objective, inventory and route follow at once. */
 	#refreshQuestState() {
 
+		for ( const job of this.quests.newlyOffered() ) this.view.toast.show( { title: job.title, text: 'New job in your journal.' } );
 		this.scenery.refresh( this.clock.timeMin );
 		this.view.quests.setQuests( this.quests.view( this.clock.timeMin ) );
 		this.#refreshCurrentObjective();
@@ -2404,6 +2405,14 @@ function speakerOf( { instance } ) {
 
 	if ( ! instance ) return { name: 'Someone passing by', role: '' };
 	return { name: TalkClient.nameOf( instance ), role: ( instance.type ?? '' ).replace( /^quest[ _]/i, '' ).replace( /_/g, ' ' ) };
+
+}
+
+/** A new game opens on its story's prologue card: the main questline's, while the save has no play time; else null. */
+export function openingCard( persistence, quests ) {
+
+	const prologue = persistence?.unplayed ? quests.prologue() : null;
+	return prologue ? { kind: 'prologue', ...prologue } : null;
 
 }
 

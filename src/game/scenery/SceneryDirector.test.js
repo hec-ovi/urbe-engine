@@ -86,6 +86,20 @@ describe( 'scenery lifecycle', () => {
 
 	} );
 
+	it( 'stands nothing of a side job the main story has not put on offer yet', () => {
+
+		const world = setup( [ spec( { activeWhen: { kind: 'stepActive', stepId: 'arrive' } } ) ] );
+		world.kill( 'npc-courier' );
+		world.quest.offered = false;
+		world.director.update( { timeMin: 10, feet: NEAR } );
+		expect( world.director.isStaged( 'courier-found' ) ).toBe( false );
+
+		world.quest.offered = true;
+		world.director.refresh( 11 );
+		expect( world.director.isStaged( 'courier-found' ) ).toBe( true );
+
+	} );
+
 	it( 'keeps a scene that never retires as lasting world state', () => {
 
 		const { director, quest, kill } = setup( [ spec( { retireWhen: { kind: 'never' } } ) ] );
@@ -259,16 +273,15 @@ describe( 'scenery lifecycle', () => {
 
 function setup( specs, { saved = [], overlay = null, animation = null, blocked = false } = {} ) {
 
-	const quest = { cast: { courier: 'npc-courier' }, state: { activeStepIds: [ 'arrive' ], completedStepIds: [], flags: [] } };
+	const quest = { cast: { courier: 'npc-courier' }, state: { activeStepIds: [ 'arrive' ], completedStepIds: [], flags: [] }, offered: true };
 	const definition = {
 		id: 'quest-missing-courier',
 		steps: [ 'arrive', 'kill', 'inspect', 'read' ].map( ( stepId ) => ( { stepId } ) ),
 		flags: [], roles: [ { roleId: 'courier' } ]
 	};
 	const runtime = { cast: quest.cast, serialize: () => structuredClone( quest.state ) };
-	const session = blocked
-		? { entries: [], blocked: [ { id: definition.id } ] }
-		: { entries: [ { definition, side: false, runtime } ], blocked: [] };
+	const all = blocked ? [] : [ { definition, side: false, runtime } ];
+	const session = { all, offered: () => quest.offered, blocked: blocked ? [ { id: definition.id } ] : [] };
 	const dead = new Set();
 	const sim = { getNPC: ( npcId ) => ( { npcId, gender: 'male', appearanceSeed: 314, flags: { dead: dead.has( npcId ) } } ) };
 	const world = { quest, kill: ( npcId ) => dead.add( npcId ), shown: true, renderer: fakeRenderer() };

@@ -1,0 +1,36 @@
+{
+  "title": "Quests",
+  "key": "J",
+  "empty": { "list": "no quest yet", "detail": "ask around: somebody in the city has work for you" },
+  "status": { "available": "available", "active": "in progress", "blocked": "unavailable", "done": "completed", "failed": "failed" },
+  "follow": {
+    "quest": "Follow quest",
+    "following": "Following",
+    "on": "This quest is followed on your HUD and map.",
+    "off": "Follow this quest to show its objective on your HUD and map.",
+    "lead": "Follow this lead",
+    "leading": "Following this lead"
+  },
+  "sections": {
+    "current": "Current objectives",
+    "prologue": "Prologue",
+    "premise": "About this quest",
+    "outcome": "Outcome",
+    "history": "Quest history ({count})"
+  },
+  "step": {
+    "states": { "active": "Current", "locked": "Unavailable", "done": "Completed", "cancelled": "Cancelled" },
+    "closed": "This objective is unavailable right now.",
+    "cancelled": "This path closed when the quest ended.",
+    "commit": "Commit by choosing: “{text}”",
+    "wait": "Wait until {label}",
+    "waitNote": "Advances the world clock; quest progress is unchanged.",
+    "hours": "Open {label}, {start} to {end}"
+  },
+  "endings": {
+    "title": "Choose how this ends",
+    "note": "These are alternatives. Committing to one ending closes the other paths.",
+    "tracking": "Follow a lead to mark its destination. Your decision happens in the conversation.",
+    "or": "OR"
+  }
+}

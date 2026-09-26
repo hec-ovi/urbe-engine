@@ -184,7 +184,7 @@ export class SceneryDirector {
 		const ids = [ ...spec.actors.map( ( actor ) => actor.actorId ), ...spec.props.map( ( prop ) => prop.propId ) ];
 		const repeated = ids.find( ( id, index ) => ids.indexOf( id ) !== index );
 		if ( repeated ) throw new SceneryError( 'E_SCENERY_INPUT', `scene ${spec.sceneId} repeats element ${repeated}` );
-		scene.entry = this.session.entries.find( ( entry ) => entry.definition.id === spec.questId ) ?? null;
+		scene.entry = this.session.all.find( ( entry ) => entry.definition.id === spec.questId ) ?? null;
 		if ( ! scene.entry ) {
 
 			if ( ! this.session.blocked?.some( ( entry ) => entry.id === spec.questId ) ) {
@@ -230,7 +230,7 @@ export class SceneryDirector {
 				continue;
 
 			}
-			const entry = this.session.entries.find( ( candidate ) => candidate.definition.id === gate.questId ) ?? null;
+			const entry = this.session.all.find( ( candidate ) => candidate.definition.id === gate.questId ) ?? null;
 			this.gates.push( {
 				sceneId: gate.sceneId,
 				entry,
@@ -292,9 +292,10 @@ export class SceneryDirector {
 			return contexts.get( entry );
 
 		};
+		// A side job not on offer yet stands nothing of its story.
 		for ( const scene of this.scenes.values() ) {
 
-			if ( scene.failed || scene.unavailable || scene.status === 'retired' ) continue;
+			if ( scene.failed || scene.unavailable || scene.status === 'retired' || ! this.session.offered( scene.entry ) ) continue;
 			const now = context( scene.entry );
 			const retire = evaluate( scene.spec.retireWhen ?? QUEST_ENDED, now );
 			if ( scene.status === 'dormant' && ! retire && evaluate( scene.spec.activeWhen, now ) ) this.#stage( scene, timeMin );
@@ -303,7 +304,7 @@ export class SceneryDirector {
 		}
 		for ( const gate of this.gates ) {
 
-			if ( gate.failed || ! gate.entry || gate.status === 'retired' ) continue;
+			if ( gate.failed || ! gate.entry || gate.status === 'retired' || ! this.session.offered( gate.entry ) ) continue;
 			const now = context( gate.entry );
 			if ( evaluate( QUEST_ENDED, now ) ) {
 

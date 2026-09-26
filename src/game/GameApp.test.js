@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { GameApp, companionScenes, occupiedBuildingFootprints, localObjectivePlace, currentObjectiveView, questPlayerPlaces } from './GameApp.js';
+import { GameApp, companionScenes, occupiedBuildingFootprints, localObjectivePlace, currentObjectiveView, openingCard, questPlayerPlaces } from './GameApp.js';
 import { Locator } from './world/Locator.js';
 
 describe( 'GameApp quest NPC control', () => {
@@ -15,6 +15,20 @@ describe( 'GameApp quest NPC control', () => {
 		expect( app.questNpcControl( { kind: 'start-follow', npcId: 'cast-a' } ) ).toMatchObject( {
 			ok: true, kind: 'start-follow', npcId: 'cast-a', timeMin: 725, playerPosition: { x: 4, y: 5, z: 6 }
 		} );
+
+	} );
+
+} );
+
+describe( 'the card a game opens on', () => {
+
+	it( 'is the story\'s prologue while the save has no play time, and nothing once played, unsaved or without one', () => {
+
+		const quests = { prologue: () => ( { title: 'Undertow', text: 'You owe the House.' } ) };
+		expect( openingCard( { unplayed: true }, quests ) ).toEqual( { kind: 'prologue', title: 'Undertow', text: 'You owe the House.' } );
+		expect( openingCard( { unplayed: false }, quests ) ).toBeNull();
+		expect( openingCard( null, quests ) ).toBeNull();
+		expect( openingCard( { unplayed: true }, { prologue: () => null } ) ).toBeNull();
 
 	} );
 

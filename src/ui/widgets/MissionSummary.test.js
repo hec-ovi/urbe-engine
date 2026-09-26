@@ -2,10 +2,25 @@
 import { describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
+import Ajv from 'ajv/dist/2020.js';
+import layout from './summary-layout.json' with { type: 'json' };
+import schema from './summary-layout.schema.json' with { type: 'json' };
 import { MissionSummary } from './MissionSummary.js';
 
 /** The card that closes a mission: what it says and how it goes away. */
 describe( 'MissionSummary', () => {
+
+	it( 'reads its labels from a layout that meets its schema, and shows a kind it lacks as an outcome', () => {
+
+		const validate = new Ajv( { allErrors: true, strict: true } ).compile( schema );
+		expect( validate( layout ), JSON.stringify( validate.errors ) ).toBe( true );
+
+		const summary = new MissionSummary( { onClose: vi.fn() } );
+		document.body.replaceChildren( summary.element );
+		summary.show( { kind: 'epilogue', title: 'Salt Wharf', text: 'The crates went inland.' } );
+		expect( screen.getByRole( 'button', { name: layout.kinds.outcome.action } ) ).toBeTruthy();
+
+	} );
 
 	it( 'keeps epilogue clicks inside the dialog for Escape and keyboard navigation', async () => {
 
@@ -24,7 +39,7 @@ describe( 'MissionSummary', () => {
 		expect( document.activeElement ).toBe( summary.done );
 		await user.click( text );
 		await user.keyboard( '{Escape}' );
-		expect( onClose ).toHaveBeenCalledOnce();
+		expect( onClose ).toHaveBeenCalledExactlyOnceWith( { pointer: false } );
 
 	} );
 
@@ -51,8 +66,10 @@ describe( 'MissionSummary', () => {
 		const button = screen.getByRole( 'button', { name: 'continue' } );
 		expect( document.activeElement ).toBe( button );
 		await user.click( button );
+		await user.click( summary.header.close );
 		await user.keyboard( '{Escape}' );
-		expect( onClose ).toHaveBeenCalledTimes( 2 );
+		// A click may take the pointer back at once; Escape leaves it free.
+		expect( onClose.mock.calls ).toEqual( [ [ { pointer: true } ], [ { pointer: true } ], [ { pointer: false } ] ] );
 
 	} );
 
@@ -73,7 +90,7 @@ describe( 'MissionSummary', () => {
 		expect( onOpen ).toHaveBeenCalledOnce();
 
 		await userEvent.setup().keyboard( '{Escape}' );
-		expect( onClose ).toHaveBeenCalledOnce();
+		expect( onClose ).toHaveBeenCalledExactlyOnceWith( { pointer: false } );
 
 		summary.show( { title: 'Salt Wharf', text: 'The crates went inland.' } );
 		expect( screen.getByRole( 'button', { name: 'continue' } ) ).toBeTruthy();

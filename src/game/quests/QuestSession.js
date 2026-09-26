@@ -1,4 +1,4 @@
-import { CastResolver, QuestlineRuntime, StepStamp, StoryVenues } from '../../../../quests/dist/runtime.js';
+import { CastResolver, QuestlineRuntime, StepStamp, StoryVenues, isOffered } from '../../../../quests/dist/runtime.js';
 import { castIds, castRole, characterName } from './QuestCast.js';
 import { stepLine, stepView } from './QuestStepView.js';
 
@@ -6,21 +6,57 @@ import { stepLine, stepView } from './QuestStepView.js';
  * The questlines of a world, running against the game's own simulation
  * (../../../../quests/CONTRACT.md): every role is cast here at load, so the
  * people the story needs are the people walking this city. Player events go to
- * every questline; what each one completes comes back for the HUD.
+ * every questline on offer; what each one completes comes back for the HUD.
+ * A side job that waits for a main story step (`offeredAfter`) is cast and
+ * saved with the rest, and kept out of play until the main story reaches it.
  */
 export class QuestSession {
 
+	/** The questlines on offer when this session was made or last said which are new. */
+	#announced;
+
 	/**
-	 * @param entries [{ definition, side, runtime }]
+	 * @param entries [{ definition, side, runtime }], every questline cast, on offer or not
 	 * @param blocked questlines the cast could not fill, kept for the log with
 	 * their reason: a job that vanishes from the menu reads as a broken game.
 	 */
 	constructor( entries, sim, blocked = [], presence = { read: null, assumed: null } ) {
 
-		this.entries = entries;
+		this.all = entries;
 		this.sim = sim;
 		this.blocked = blocked;
 		this.presence = presence;
+		this.#announced = new Set( this.entries.map( ( { definition } ) => definition.id ) );
+
+	}
+
+	/**
+	 * The questlines in play: the main story, and each side job once the main
+	 * story has done the step it waits for (quests `isOffered`). Everything the
+	 * player sees, meets or does goes through these; a job not on offer yet has
+	 * no mark, no talk and takes no event.
+	 */
+	get entries() {
+
+		if ( ! this.all.some( ( { definition } ) => definition.offeredAfter ) ) return this.all;
+		const main = this.all.find( ( entry ) => ! entry.side )?.runtime.serialize();
+		return this.all.filter( ( { definition, runtime } ) => isOffered( definition, runtime.serialize(), main ) );
+
+	}
+
+	/** Whether this questline is on offer now. */
+	offered( entry ) {
+
+		return this.entries.includes( entry );
+
+	}
+
+	/** Side jobs the main story has put on offer since the last call, each told once: [{ id, title }]. */
+	newlyOffered() {
+
+		const fresh = this.entries.filter( ( { definition } ) => ! this.#announced.has( definition.id ) );
+		for ( const { definition } of fresh ) this.#announced.add( definition.id );
+		return fresh.map( ( { definition } ) => ( { id: definition.id, title: definition.title } ) );
 
 	}
 
@@ -229,7 +265,7 @@ export class QuestSession {
 
 	get empty() {
 
-		return this.entries.length === 0;
+		return this.all.length === 0;
 
 	}
 
@@ -239,10 +275,10 @@ export class QuestSession {
 
 	}
 
-	/** Story-facing name, without mutating the simulation's person or any bystander. */
+	/** Story-facing name, without mutating the simulation's person or any bystander; a person keeps it before their job is on offer. */
 	characterName( npcId ) {
 
-		for ( const { runtime } of this.entries ) {
+		for ( const { runtime } of this.all ) {
 
 			const name = characterName( runtime, npcId );
 			if ( name ) return { ...name };
@@ -255,7 +291,7 @@ export class QuestSession {
 	/** The persona of the role this exact identity plays in the first questline that casts it, or null. */
 	persona( npcId ) {
 
-		for ( const { runtime } of this.entries ) {
+		for ( const { runtime } of this.all ) {
 
 			const persona = castRole( runtime, npcId )?.persona;
 			if ( persona ) return persona;
@@ -423,17 +459,17 @@ export class QuestSession {
 
 	}
 
-	/** Every questline as it stands, for whoever else needs to know its part: [{ id, cast, state }]. */
+	/** Every questline on offer as it stands, for whoever else needs to know its part: [{ id, cast, state }]. */
 	snapshot() {
 
 		return this.entries.map( ( { definition, runtime } ) => ( { id: definition.id, cast: runtime.cast, state: runtime.serialize() } ) );
 
 	}
 
-	/** Game-descriptor progress records, including the complete restorable runtime. */
+	/** Game-descriptor progress records, including the complete restorable runtime, for every questline cast. */
 	persistenceView( timeMin = 0 ) {
 
-		return this.entries.map( ( entry ) => {
+		return this.all.map( ( entry ) => {
 
 			const { definition, runtime } = entry;
 			const state = runtime.serialize();
@@ -537,7 +573,7 @@ export class QuestSession {
 	/** What a new game opens on: the main questline's prologue as `{ title, text }`, or null when it has none. */
 	prologue() {
 
-		const main = this.entries.find( ( entry ) => ! entry.side )?.definition;
+		const main = this.all.find( ( entry ) => ! entry.side )?.definition;
 		return main?.prologue ? { title: main.title, text: main.prologue } : null;
 
 	}

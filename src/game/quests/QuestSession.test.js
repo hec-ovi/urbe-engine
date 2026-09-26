@@ -88,6 +88,32 @@ describe( 'QuestSession', () => {
 
 	} );
 
+	it( 'keeps a side job out of play until the main story does the step it waits for, then tells it once', () => {
+
+		const side = { ...quest( 'q2', {
+			roles: [ role( 'barista', 'barista' ) ],
+			steps: [ step( 's_open', talk, { hint: 'Ask the barista about the other job.', endingId: 'done' } ) ]
+		} ), offeredAfter: 's_talk' };
+		const session = QuestSession.create( [ definition, side ], sim(), 600 );
+		const ids = ( list ) => list.map( ( entry ) => entry.id ?? entry.questlineId ?? entry.definition.id );
+
+		expect( ids( session.view( 600 ) ) ).toEqual( [ 'q1' ] );
+		expect( ids( session.snapshot() ) ).toEqual( [ 'q1' ] );
+		expect( ids( session.dialoguesFor( 'n1', 600 ) ) ).toEqual( [ 'q1' ] );
+		expect( session.advanceFor( 'q2', { kind: 'talkedTo', npcId: 'n1' }, 600 ) ).toEqual( [] );
+		expect( ids( session.persistenceView( 600 ) ) ).toEqual( [ 'q1', 'q2' ] );
+		expect( session.newlyOffered() ).toEqual( [] );
+
+		// The one conversation moves the main story only, and puts the side job on offer.
+		expect( ids( session.advance( { kind: 'talkedTo', npcId: 'n1' }, 601 ) ) ).toEqual( [ 'q1' ] );
+		expect( ids( session.view( 601 ) ) ).toEqual( [ 'q1', 'q2' ] );
+		expect( session.view( 601 )[ 1 ].state ).toBe( 'available' );
+		expect( session.newlyOffered() ).toEqual( [ { id: 'q2', title: 'q2' } ] );
+		expect( session.newlyOffered() ).toEqual( [] );
+		expect( QuestSession.create( [ definition, side ], sim(), 602, session.persistenceView( 601 ) ).newlyOffered() ).toEqual( [] );
+
+	} );
+
 	it( 'offers the next appointment even while its living cast is away from the venue', () => {
 
 		const timed = structuredClone( definition );
