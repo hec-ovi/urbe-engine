@@ -175,6 +175,8 @@ export class GameApp {
 		this.dialogueActions = new Map();
 		/** A leader's arrival while it opens its conversation, or null. */
 		this.arriving = null;
+		/** The loaded save's dialogue memory until the dialogue server holds it, else null. */
+		this.unrestoredMemory = null;
 		this.talk = new TalkClient( config.outBase );
 		this.view = new GameView( {
 			onResume: () => this.input?.requestLock(),
@@ -266,9 +268,8 @@ export class GameApp {
 		this.persistence = game ? new GamePersistence( { game, gameId: config.gameId } ) : null;
 		// What people remember of talking with the player is the save's: the
 		// dialogue server takes it back beside the load.
-		const remembering = game
-			? this.talk.restoreMemory( game.dialogueMemory ?? [] ).catch( ( error ) => console.warn( 'dialogue memory:', error.message ) )
-			: null;
+		this.unrestoredMemory = game ? game.dialogueMemory ?? [] : null;
+		const remembering = this.#restoreMemory();
 		const stationAccess = new StationAccess( atlas );
 		this.locator = new Locator( atlas, transitRoutes, stationAccess.entrances, {
 			buildingFootprints: occupiedBuildingFootprints( shellCatalog, buildings )
@@ -859,17 +860,17 @@ export class GameApp {
 
 		this.lights.update( this.camera.position, delta );
 		const playerPlaces = this.playerPlaces = questPlayerPlaces( this.locator, feet, this.standing?.parcelId ?? null );
-		const companionSignals = this.hitches.time( 'crowd', () => {
+		const room = this.standing;
+		const playerPosition = feet.toArray();
+		this.hitches.time( 'follow', () => this.npcContinuity.updateFollow( {
+			timeMin: this.clock.timeMin,
+			deltaSeconds: delta,
+			playerPosition,
+			...( room ? { playerPlace: { kind: 'parcel', id: room.parcelId, floor: room.floor } } : {} )
+		} ) );
+		this.updateCompanion( playerPosition, playerPlaces );
+		this.hitches.time( 'crowd', () => {
 
-			const room = this.standing;
-			const playerPosition = feet.toArray();
-			this.npcContinuity.updateFollow( {
-				timeMin: this.clock.timeMin,
-				deltaSeconds: delta,
-				playerPosition,
-				...( room ? { playerPlace: { kind: 'parcel', id: room.parcelId, floor: room.floor } } : {} )
-			} );
-			const signals = this.companion.update( { timeMin: this.clock.timeMin, playerPosition, playerPlaces } );
 			const actors = this.npcContinuity.updateVisible( {
 				timeMin: this.clock.timeMin,
 				playerPosition,
@@ -878,10 +879,8 @@ export class GameApp {
 			this.crowd.syncActors( actors, feet );
 			this.animations.update( actors, delta );
 			this.crowd.update( delta, feet, this.clock );
-			return signals;
 
 		} );
-		this.#companionSignals( companionSignals );
 		this.hero.update( delta );
 		this.hitches.time( 'traffic', () => this.traffic.update( delta, feet, this.clock.daySeconds ) );
 		this.impactWorld.sync( {
@@ -1195,8 +1194,16 @@ export class GameApp {
 		this.input?.requestLock();
 	}
 
-	/** What the companion reports this frame: words on the way, a refusal, the arrival and a notice when it ends. */
-	#companionSignals( signals ) {
+	/**
+	 * The companion's frame, right after the continuity follows the player
+	 * (tick runs it): the arrival waits while the player has anything open,
+	 * and what the companion reports shows: words on the way, a refusal, the
+	 * arrival and a notice when it ends.
+	 */
+	updateCompanion( playerPosition, playerPlaces ) {
+		const signals = this.hitches.time( 'companion', () => this.companion.update( {
+			timeMin: this.clock.timeMin, playerPosition, playerPlaces, busy: playableModalOpen( this.view, this.interactor )
+		} ) );
 		for ( const signal of signals ) {
 			if ( signal.kind === 'arrival' ) this.#arrival( signal );
 			else if ( signal.kind === 'line' || signal.kind === 'refused' ) this.#companionSays( signal.npcId, signal.line );
@@ -1683,16 +1690,12 @@ export class GameApp {
 	/**
 	 * Saves the game as it stands. What people remember of talking with the
 	 * player is read from the dialogue server first; when it cannot be read,
-	 * the save keeps the memory it holds.
+	 * or the server does not hold the loaded save's memory yet, the save keeps
+	 * the memory it holds.
 	 */
 	async #saveCurrent() {
 
-		const dialogueMemory = await this.talk.memory().catch( ( error ) => {
-
-			console.warn( 'dialogue memory not saved:', error.message );
-			return null;
-
-		} );
+		const dialogueMemory = await this.#dialogueMemory();
 		const feet = this.body.feet;
 		this.currentLocation = this.locator.location( feet.x, feet.z, this.standing?.parcelId ?? null );
 		this.discoveredLocations.set( this.currentLocation.id, this.currentLocation );
@@ -1719,6 +1722,42 @@ export class GameApp {
 			...( dialogueMemory ? { dialogueMemory } : {} ),
 			elapsedSeconds: Math.max( 0, ( performance.now() - this.playStartedAt ) / 1000 )
 		} );
+
+	}
+
+	/** What people remember for a save, or null while the server does not hold the loaded memory or cannot give it. */
+	async #dialogueMemory() {
+
+		if ( ! await this.#restoreMemory() ) return null;
+		return this.talk.memory().catch( ( error ) => {
+
+			console.warn( 'dialogue memory not saved:', error.message );
+			return null;
+
+		} );
+
+	}
+
+	/**
+	 * Hands the loaded save's dialogue memory to the server while it does not
+	 * hold it: at load, and again before each save until it takes it. True
+	 * once the server holds it.
+	 */
+	async #restoreMemory() {
+
+		if ( ! this.unrestoredMemory ) return true;
+		try {
+
+			await this.talk.restoreMemory( this.unrestoredMemory );
+			this.unrestoredMemory = null;
+			return true;
+
+		} catch ( error ) {
+
+			console.warn( 'dialogue memory not restored:', error.message );
+			return false;
+
+		}
 
 	}
 

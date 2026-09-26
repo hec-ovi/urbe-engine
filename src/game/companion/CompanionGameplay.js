@@ -295,11 +295,11 @@ export class CompanionGameplay {
 	/**
 	 * Follows the companion: a follower until it is dismissed or gives up; a
 	 * leader calls out while it waits, arrives, and once the player has caught
-	 * up with no other conversation open asks the host for the conversation
+	 * up with nothing else open asks the host for the conversation
 	 * about the place, then goes back to its day when that conversation
 	 * closes, the player walks off or nobody talks to it.
 	 */
-	#advance( { timeMin, playerPosition, playerPlaces }, events, signals ) {
+	#advance( { timeMin, playerPosition, playerPlaces, busy = false }, events, signals ) {
 
 		const state = this.state;
 		const { npcId } = state;
@@ -330,8 +330,8 @@ export class CompanionGameplay {
 		const destination = state.destination;
 		const near = distance( playerPosition, companion.position );
 		const atPlace = standsIn( playerPlaces, destination.place );
-		// A conversation with anybody else holds the arrival: the host could not open this one.
-		if ( state.phase === 'arrived' && ( talking || ( ! this.continuity.conversation && ( near <= CATCH_UP || atPlace ) ) ) ) {
+		// A conversation with anybody else, or anything else the player has open, holds the arrival: the host could not open this one.
+		if ( state.phase === 'arrived' && ( talking || ( ! busy && ! this.continuity.conversation && ( near <= CATCH_UP || atPlace ) ) ) ) {
 
 			state.phase = 'ready';
 			state.readyAtMin = timeMin;

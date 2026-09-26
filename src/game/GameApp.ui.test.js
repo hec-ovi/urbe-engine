@@ -38,26 +38,8 @@ describe( 'playable game navigation', () => {
 	it( 'saves the quest escort, the companion and what people remember beside the continuity, and keeps the saved memory when it cannot be read', async () => {
 
 		const navigate = vi.fn();
-		const app = new GameApp( {}, { navigate } );
-		const memory = [ { npcId: 'npc-ada', memory: { digest: [ 'Asked about the quay.' ], turns: [] } } ];
-		const escort = { questId: 'q1', stepId: 's1', npcId: 'npc-kip', mode: 'lead-player' };
-		const companion = { version: '1', npcId: 'npc-ada', kind: 'follow', startedAtMin: 700, phase: 'walking' };
-		app.persistence = { game: { quests: [], sideJobs: [] }, save: vi.fn( async () => ( {} ) ) };
-		app.body = { feet: { x: 1, y: 2, z: 3 } };
-		app.controller = { yaw: 0.5 };
-		app.clock = { timeMin: 725 };
-		app.locator = { location: () => ( { id: 'p1', name: 'Quay' } ) };
-		app.discoveredLocations = new Map();
-		app.savedInventory = [];
-		app.questItemIds = [];
-		app.quests = { persistenceView: () => [], inventoryView: () => [] };
-		app.transitGameplay = { state: null };
-		app.questGameplay = { serializeTransit: () => null, serializeEscort: () => escort };
-		app.investigations = { serialize: () => [] };
-		app.sim = { serialize: () => ( { sim: true } ) };
-		app.npcContinuity = { serialize: () => ( { continuity: true } ) };
-		app.companion = { serialize: () => companion };
-		app.talk = { memory: vi.fn( async () => memory ) };
+		const { app, escort, companion } = savingApp( { navigate } );
+		app.talk = { memory: vi.fn( async () => MEMORY ) };
 		app.view.setPaused( true );
 		const user = userEvent.setup();
 
@@ -65,16 +47,40 @@ describe( 'playable game navigation', () => {
 		await vi.waitFor( () => expect( navigate ).toHaveBeenCalledWith( '/' ) );
 		expect( app.persistence.save.mock.calls[ 0 ][ 0 ] ).toMatchObject( {
 			npcState: { timeMin: 725, simulation: { sim: true }, continuity: { continuity: true }, questEscort: escort, companion },
-			dialogueMemory: memory
+			dialogueMemory: MEMORY
 		} );
 
 		app.talk.memory.mockRejectedValueOnce( new Error( 'talk 502' ) );
 		vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
-		app.questGameplay.control = () => ( { ok: true } );
 		app.questNpcControl( { kind: 'start-follow', npcId: 'npc-kip' } );
 		await vi.waitFor( () => expect( app.persistence.save ).toHaveBeenCalledTimes( 2 ) );
 		expect( app.persistence.save.mock.calls[ 1 ][ 0 ] ).not.toHaveProperty( 'dialogueMemory' );
 		expect( console.warn ).toHaveBeenCalledWith( 'dialogue memory not saved:', 'talk 502' );
+
+	} );
+
+	it( 'hands the loaded memory to the dialogue server again before each save until it takes it, and saves no other memory meanwhile', async () => {
+
+		const { app } = savingApp();
+		const later = [ ...MEMORY, { npcId: 'npc-kip', memory: { digest: [], turns: [ { speaker: 'npc', text: 'Keep up.', atMin: 730 } ] } } ];
+		// The load's hand-off failed: the server holds none of the save's memory.
+		app.unrestoredMemory = MEMORY;
+		app.talk = { restoreMemory: vi.fn().mockRejectedValueOnce( new Error( 'talk 502' ) ).mockResolvedValue(), memory: vi.fn( async () => later ) };
+		vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		const save = async ( times ) => {
+
+			app.questNpcControl( { kind: 'start-follow', npcId: 'npc-kip' } );
+			await vi.waitFor( () => expect( app.persistence.save ).toHaveBeenCalledTimes( times ) );
+			return app.persistence.save.mock.calls[ times - 1 ][ 0 ];
+
+		};
+
+		expect( await save( 1 ) ).not.toHaveProperty( 'dialogueMemory' );
+		expect( app.talk.memory ).not.toHaveBeenCalled();
+		expect( console.warn ).toHaveBeenCalledWith( 'dialogue memory not restored:', 'talk 502' );
+		expect( await save( 2 ) ).toMatchObject( { dialogueMemory: later } );
+		expect( await save( 3 ) ).toMatchObject( { dialogueMemory: later } );
+		expect( app.talk.restoreMemory.mock.calls ).toEqual( [ [ MEMORY ], [ MEMORY ] ] );
 
 	} );
 
@@ -138,6 +144,33 @@ describe( 'playable game navigation', () => {
 	} );
 
 } );
+
+const MEMORY = [ { npcId: 'npc-ada', memory: { digest: [ 'Asked about the quay.' ], turns: [] } } ];
+
+/** A game that saves: its parts give what the save carries, and a quest control saves it. */
+function savingApp( options ) {
+
+	const app = new GameApp( {}, options );
+	const escort = { questId: 'q1', stepId: 's1', npcId: 'npc-kip', mode: 'lead-player' };
+	const companion = { version: '1', npcId: 'npc-ada', kind: 'follow', startedAtMin: 700, phase: 'walking' };
+	app.persistence = { game: { quests: [], sideJobs: [] }, save: vi.fn( async () => ( {} ) ) };
+	app.body = { feet: { x: 1, y: 2, z: 3 } };
+	app.controller = { yaw: 0.5 };
+	app.clock = { timeMin: 725 };
+	app.locator = { location: () => ( { id: 'p1', name: 'Quay' } ) };
+	app.discoveredLocations = new Map();
+	app.savedInventory = [];
+	app.questItemIds = [];
+	app.quests = { persistenceView: () => [], inventoryView: () => [] };
+	app.transitGameplay = { state: null };
+	app.questGameplay = { serializeTransit: () => null, serializeEscort: () => escort, control: () => ( { ok: true } ) };
+	app.investigations = { serialize: () => [] };
+	app.sim = { serialize: () => ( { sim: true } ) };
+	app.npcContinuity = { serialize: () => ( { continuity: true } ) };
+	app.companion = { serialize: () => companion };
+	return { app, escort, companion };
+
+}
 
 function dialogueApp() {
 

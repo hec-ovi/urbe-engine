@@ -7,6 +7,7 @@
   "properties": {
     "timeMin": { "$ref": "urn:urbe:engine:companion:values#/$defs/time" },
     "playerPosition": { "$ref": "urn:urbe:engine:companion:values#/$defs/vec3" },
-    "playerPlaces": { "$ref": "urn:urbe:engine:companion:values#/$defs/playerPlaces" }
+    "playerPlaces": { "$ref": "urn:urbe:engine:companion:values#/$defs/playerPlaces" },
+    "busy": { "type": "boolean", "description": "The player has something open that a conversation would cover: a panel, a chooser, a summary or a conversation." }
   }
 }

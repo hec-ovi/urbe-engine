@@ -160,7 +160,7 @@ describe( 'a companion under way', () => {
 
 	} );
 
-	it( 'holds the arrival while the player talks to somebody else, then goes back to its day when nobody talks to it', () => {
+	it( 'holds the arrival while the player talks to somebody else or has something open, then goes back to its day when nobody talks to it', () => {
 
 		const game = setup();
 		const mira = game.start( 'lead:parcel:p_rest' );
@@ -171,9 +171,12 @@ describe( 'a companion under way', () => {
 		expect( game.companion.active.phase ).toBe( 'arrived' );
 
 		game.continuity.endConversation( { timeMin: AFTERNOON + 4 } );
-		expect( game.frame( AFTERNOON + 4, beside ).map( ( signal ) => signal.kind ) ).toEqual( [ 'arrival' ] );
-		expect( game.frame( AFTERNOON + 5, beside ) ).toEqual( [] );
-		expect( game.frame( AFTERNOON + 6, beside ) ).toEqual( [ { kind: 'ended', npcId: mira.npcId, reason: 'done' } ] );
+		// A panel open over the game holds it as long, whatever the clock does.
+		for ( let timeMin = AFTERNOON + 4; timeMin <= AFTERNOON + 8; timeMin ++ ) expect( game.frame( timeMin, beside, [ SCENE.place ], true ) ).toEqual( [] );
+		expect( game.companion.active.phase ).toBe( 'arrived' );
+		expect( game.frame( AFTERNOON + 8, beside ).map( ( signal ) => signal.kind ) ).toEqual( [ 'arrival' ] );
+		expect( game.frame( AFTERNOON + 9, beside ) ).toEqual( [] );
+		expect( game.frame( AFTERNOON + 10, beside ) ).toEqual( [ { kind: 'ended', npcId: mira.npcId, reason: 'done' } ] );
 		expect( game.continuity.companion ).toBeNull();
 
 	} );
@@ -368,10 +371,10 @@ function setup( quests = {}, crowd = null, restored = null ) {
 			return actor;
 
 		},
-		frame( timeMin, playerPosition, playerPlaces = [] ) {
+		frame( timeMin, playerPosition, playerPlaces = [], busy = false ) {
 
 			continuity.updateFollow( { timeMin, deltaSeconds: 1, playerPosition } );
-			return companion.update( { timeMin, playerPosition, playerPlaces } );
+			return companion.update( { timeMin, playerPosition, playerPlaces, busy } );
 
 		},
 		/** Walks a second a frame a step behind the companion until `done`, returning the signals on the way. */

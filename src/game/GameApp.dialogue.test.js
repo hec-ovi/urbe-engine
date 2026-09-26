@@ -7,6 +7,7 @@ import { GameApp } from './GameApp.js';
 import { QuestSession } from './quests/QuestSession.js';
 import { QuestActions } from './quests/QuestActions.js';
 import { GameClock } from './time/GameClock.js';
+import { HitchLog } from './debug/HitchLog.js';
 import { npc, quest, role, simulation, step } from './quests/quest.test-fixtures.js';
 import { replyEvents, talkError, talkStream } from './talk/talk.test-fixtures.js';
 
@@ -27,14 +28,17 @@ function fixture( { ending = false, errand = false } = {} ) {
  const sim=simulation(new Map([[person.npcId,person]]));
  const log=[];const observer={said:vi.fn(heard=>log.push('said: '+heard.text)),silenced:vi.fn(()=>log.push('silenced'))};
  const app=new GameApp({},{lineObserver:observer});app.clock={timeMin:1260};app.quests=QuestSession.create(definitions,sim,1260);
+ app.sim=sim;app.hitches=new HitchLog();
  const actions=new QuestActions(app.quests);
- app.questGameplay={objective:(timeMin,questId)=>actions.objective({timeMin,...(questId?{questId}:{})})};
+ app.questGameplay={objective:(timeMin,questId)=>actions.objective({timeMin,...(questId?{questId}:{})}),characterName:()=>null};
  app.venues={setObjective:()=>false,nameOf:()=> 'Market'};
  app.savedInventory=[];app.questItemIds=['lead'];app.input={exitLock:vi.fn(),requestLock:vi.fn()};
  app.animations={npcDialogueTurn:vi.fn(),playerDialogueTurn:vi.fn(),completeDialogueTurn:vi.fn()};
  app.talk={stream:vi.fn(()=>talkStream(replyEvents('I wish I had more to tell you.')))};
  const companion=app.companion={offers:vi.fn(()=>[]),talkOffers:vi.fn(()=>null),guide:vi.fn(()=>null),accepted:vi.fn(()=>false),accept:vi.fn(),acceptFromTool:vi.fn()};
- app.interactor={conversation:null,close:vi.fn(function(){this.conversation=null;app.presentConversation(null);})};
+ // As Interactor.talkTo: the person's body, while it has one, opens a conversation when none is open.
+ app.interactor={conversation:null,close:vi.fn(function(){this.conversation=null;app.presentConversation(null);}),
+  talkTo:vi.fn(function(npcId){if(this.conversation||person.gone)return null;this.conversation={npcId,instance:person,behavior:null};app.presentConversation(this.conversation);return this.conversation;})};
  const open=()=>{app.interactor.conversation={npcId:person.npcId,instance:person,behavior:null};app.presentConversation(app.interactor.conversation);};
  const state=()=>app.quests.snapshot()[0].state;
  return{app,open,state,observer,log,companion,person};
@@ -230,26 +234,55 @@ describe('explicit quest dialogue through the playable UI',()=>{
   expect(log).toEqual(['silenced','said: Follow me to Market.']);
  });
 
- it('lets a person who has led the player here talk about the place unasked, and say their own line when the model cannot',async()=>{
-  const {app,log,companion,person}=fixture();app.quests.dialoguesFor=()=>[];
-  const guide={placeId:'p2',kind:'parcel',name:'Market'};companion.guide.mockReturnValue(guide);
+ const GUIDE={placeId:'p2',kind:'parcel',name:'Market'};
+ const ARRIVAL={kind:'arrival',npcId:'person',guide:GUIDE,relation:'quest',ask:'So this is Market. Tell me about it.',line:'Here it is: Market.'};
+ /** One companion frame reporting `signals`, as tick runs it; returns what the companion was asked. */
+ const frame=(app,...signals)=>{app.companion.update=vi.fn(()=>signals);app.updateCompanion([4,0,2],[]);return app.companion.update.mock.calls[0][0];};
+ const toasts=(app)=>[...app.view.toast.element.children].map(toast=>toast.textContent);
+
+ it('opens the talk by itself when a leader arrives: the person talks about the place unasked, or says their own line when the model cannot',async()=>{
+  const {app,log,companion}=fixture();app.quests.dialoguesFor=()=>[];companion.guide.mockReturnValue(GUIDE);
   // The arrival's question is not the player's words: it proposes nothing.
   companion.talkOffers.mockReturnValue({follow:true});
-  const arrival={kind:'arrival',npcId:'person',guide,relation:'quest',ask:'So this is Market. Tell me about it.',line:'Here it is: Market.'};
-  // As Interactor.talkTo opens it while the arrival is handled.
-  const talk=(signal)=>{app.arriving=signal;app.interactor.conversation={npcId:person.npcId,instance:person,behavior:null};app.presentConversation(app.interactor.conversation);app.arriving=null;};
   app.talk.stream.mockImplementationOnce(()=>talkStream(replyEvents('The market never sleeps.')));
-  talk(arrival);
+  expect(frame(app,ARRIVAL)).toEqual({timeMin:1260,playerPosition:[4,0,2],playerPlaces:[],busy:false});
+  expect(app.interactor.talkTo).toHaveBeenCalledExactlyOnceWith('person',app.clock);expect(app.arriving).toBeNull();
   await vi.waitFor(()=>expect(lines(app)).toEqual(['The market never sleeps.']));
   expect(app.talk.stream.mock.calls.at(-1).slice(1,3)).toEqual(['So this is Market. Tell me about it.',1260]);
-  expect(app.talk.stream.mock.calls.at(-1)[4]).toEqual({signal:expect.any(AbortSignal),guide});
+  expect(app.talk.stream.mock.calls.at(-1)[4]).toEqual({signal:expect.any(AbortSignal),guide:GUIDE});
+  expect(toasts(app)).toEqual([]);
   app.interactor.close();log.length=0;
 
   app.talk.stream.mockImplementationOnce(()=>talkStream([],talkError('model unavailable',502)));
-  talk(arrival);
+  frame(app,ARRIVAL);
   await vi.waitFor(()=>expect(lines(app)).toEqual(['Here it is: Market.']));
   expect(within(app.view.dialog.element).queryByRole('button',{name:'Retry reply'})).toBeNull();
   expect(log).toEqual(['said: Here it is: Market.']);
+ });
+
+ it('says the companion\'s words outside a conversation as toasts heard with no chat line, holds the arrival while anything is open, and shows a notice when it ends',()=>{
+  const {app,open,log,observer,person}=fixture();
+  // Nothing is said over a conversation, and the companion hears the player is busy.
+  open();log.length=0;
+  expect(frame(app,{kind:'line',npcId:'person',line:'This way.'},{kind:'refused',npcId:'person',line:'I cannot come.'})).toMatchObject({busy:true});
+  expect(log).toEqual([]);expect(toasts(app)).toEqual([]);
+  app.interactor.close();
+  app.view.open('CONTROLS');expect(frame(app)).toMatchObject({busy:true});
+  app.view.close();expect(frame(app)).toMatchObject({busy:false});
+
+  frame(app,{kind:'line',npcId:'person',line:'[laugh] Keep up.'});
+  expect(toasts(app)).toEqual(['Petra MossKeep up.']);
+  expect(observer.said).toHaveBeenLastCalledWith({conversation:{npcId:'person',instance:person},line:null,text:'[laugh] Keep up.'});
+
+  // A leader with no body to talk to says its arrival line on the street.
+  person.gone=true;
+  frame(app,ARRIVAL);
+  expect(app.interactor.talkTo).toHaveBeenCalledExactlyOnceWith('person',app.clock);expect(app.arriving).toBeNull();
+  expect(app.view.dialog.element.hidden).toBe(true);
+  expect(toasts(app).at(-1)).toBe('Petra MossHere it is: Market.');expect(log.at(-1)).toBe('said: Here it is: Market.');
+
+  frame(app,{kind:'ended',npcId:'person',reason:'gave-up',notice:'Petra Moss lost you and went back.'},{kind:'ended',npcId:'person',reason:'done'});
+  expect(toasts(app).slice(2)).toEqual(['CompanionPetra Moss lost you and went back.']);
  });
 
  it('drops a failed half reply, silencing what was heard of it, and offers Retry, but says a refused line cannot be retried',async()=>{
