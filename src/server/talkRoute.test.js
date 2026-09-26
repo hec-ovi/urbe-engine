@@ -148,7 +148,8 @@ describe( 'NPC dialogue HTTP boundary', () => {
 		expect( service.restoreMemory ).toHaveBeenCalledExactlyOnceWith( out, memory );
 
 		for ( const body of [ '{', JSON.stringify( { out: '/out/../src', memory } ), JSON.stringify( { out, memory: [ { npcId: 'x', memory: { turns: [] } } ] } ),
-			JSON.stringify( { out, memory: Array.from( { length: 201 }, ( _, at ) => ( { npcId: `n${at}`, memory: { digest: [], turns: [] } } ) ) } ) ] ) {
+			JSON.stringify( { out, memory: Array.from( { length: 201 }, ( _, at ) => ( { npcId: `n${at}`, memory: { digest: [], turns: [] } } ) ) } ),
+			JSON.stringify( { out, memory: [ { npcId: 'x', memory: { digest: [], turns: Array( 25 ).fill( memory[ 0 ].memory.turns[ 0 ] ) } } ] } ) ] ) {
 
 			const refused = await put( body );
 			expect( refused.status ).toBe( 400 );

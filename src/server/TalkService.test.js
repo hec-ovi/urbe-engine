@@ -199,14 +199,16 @@ describe( 'TalkService', () => {
 			{ speaker: 'player', text: 'Where is the lift?', atMin: 600 }, { speaker: 'npc', text: 'Hm.', atMin: 600 }
 		] } } ] );
 
+		// Turns a failed fold left pile up verbatim: they are bounded like the notes.
 		const notes = Array.from( { length: 30 }, ( _, at ) => `note ${at}` );
-		const person = ( npcId, atMin ) => ( { npcId, memory: { digest: notes, turns: [ { speaker: 'npc', text: 'Hi.', atMin } ] } } );
+		const person = ( npcId, atMin ) => ( { npcId, memory: { digest: notes, turns: notes.map( ( text ) => ( { speaker: 'npc', text, atMin } ) ) } } );
 		const crowd = Array.from( { length: 201 }, ( _, at ) => person( `p${String( at ).padStart( 3, '0' )}`, at ) );
 		await service.restoreMemory( '/out/w', [ ...crowd, { npcId: 'n1', memory: { digest: [ 'Told of a debt.' ], turns: [] } }, { npcId: 'silent', memory: { digest: [], turns: [] } } ] );
 		const kept = await service.memory( '/out/w' );
 		expect( kept ).toHaveLength( 200 );
 		expect( kept.map( ( record ) => record.npcId ) ).toEqual( crowd.slice( 1 ).map( ( record ) => record.npcId ) );
 		expect( kept[ 0 ].memory.digest ).toEqual( notes.slice( 6 ) );
+		expect( kept[ 0 ].memory.turns.map( ( turn ) => turn.text ) ).toEqual( notes.slice( 6 ) );
 
 		await service.restoreMemory( '/out/w', [ { npcId: 'n1', memory: { digest: [ 'Told of a debt.' ], turns: [] } } ] );
 		await say( service, 'Remember me?' );

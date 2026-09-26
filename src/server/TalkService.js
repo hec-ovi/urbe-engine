@@ -8,8 +8,9 @@ import { SnapshotPort } from './SnapshotPort.js';
 const FALLBACK_THEME = 'a night city';
 /** A save keeps what this many people remember, those talked to last, */
 const MEMORY_PEOPLE = 200;
-/** and at most this many of each one's folded notes, the newest. */
+/** and at most this many of each one's folded notes and of their turns, the newest. */
 const MEMORY_NOTES = 24;
+const MEMORY_TURNS = 24;
 /** The files a world's dialogue is built from; a change to any of them builds it again. */
 const WORLD_FILES = [ 'blueprint.json', 'npc-types.json', join( 'quests', 'questlines.json' ) ];
 
@@ -172,7 +173,7 @@ class TalkWorld {
 	/**
 	 * Every person's memory as `[{ npcId, memory: { digest, turns } }]` by
 	 * npcId, bounded: the MEMORY_PEOPLE people spoken with last, each with
-	 * their MEMORY_NOTES newest notes and their recent turns.
+	 * their MEMORY_NOTES newest notes and MEMORY_TURNS newest turns.
 	 */
 	memory() {
 
@@ -196,14 +197,18 @@ class TalkWorld {
 
 }
 
-/** The people spoken with last and each one's newest notes, sorted by npcId; nobody who remembers nothing. */
+/**
+ * The people spoken with last and each one's newest notes and turns, sorted
+ * by npcId; nobody who remembers nothing. Turns a failed fold left stay
+ * verbatim, so the turns are bounded too.
+ */
 function bounded( records ) {
 
 	const last = ( { memory } ) => memory.turns.at( - 1 )?.atMin ?? - Infinity;
 	return records.filter( ( { memory } ) => memory.digest.length || memory.turns.length )
 		.sort( ( a, b ) => last( b ) - last( a ) || a.npcId.localeCompare( b.npcId ) )
 		.slice( 0, MEMORY_PEOPLE )
-		.map( ( { npcId, memory } ) => ( { npcId, memory: { digest: memory.digest.slice( - MEMORY_NOTES ), turns: memory.turns } } ) )
+		.map( ( { npcId, memory } ) => ( { npcId, memory: { digest: memory.digest.slice( - MEMORY_NOTES ), turns: memory.turns.slice( - MEMORY_TURNS ) } } ) )
 		.sort( ( a, b ) => a.npcId.localeCompare( b.npcId ) );
 
 }
