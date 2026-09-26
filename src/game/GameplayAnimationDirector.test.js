@@ -1,6 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
+import * as THREE from 'three/webgpu';
 import { REQUIRED_CLIPS } from './animation/index.js';
 import { GameplayAnimationDirector } from './GameplayAnimationDirector.js';
+import { CLIP } from './agents/CharacterAssets.js';
+import { crowdClipForName } from './agents/Crowd.js';
+import { HeroCharacter } from './agents/HeroCharacter.js';
+import { animation as library, outfit, rig as body, rootTurn } from './agents/HeroCharacter.test-fixtures.js';
+
+const CATALOG = Object.freeze( {
+	assetId: 'quaternius-universal-animation-library-pro', edition: 'Pro',
+	sourceSha256: 'a'.repeat( 64 ), availableClips: REQUIRED_CLIPS
+} );
 
 describe( 'live gameplay animation composition', () => {
 
@@ -264,7 +274,95 @@ describe( 'live gameplay animation composition', () => {
 
 	} );
 
+	it( 'hands a new focused rig the pose its crowd body shows, and gives the body its clip once the rig has the slot', async () => {
+
+		// A walker a quarter into its stride goes still to talk: the rig starts
+		// in the walk where the body is and blends into standing.
+		const walking = focusedRig( CLIP.WALK );
+		walking.director.update( [ actor( { animation: 'walk' } ) ], 0 );
+		walking.director.beginConversation( { npcId: 'npc-1' }, actor( { mode: 'conversation' } ) );
+		expect( walking.person.clip ).toBe( CLIP.WALK );
+		await vi.waitFor( () => expect( walking.person.clip ).toBe( CLIP.IDLE ) );
+		expect( walking.switched.at( - 1 ) ).toEqual( [ 'Idle_Loop', true ] );
+		walking.hero.update( 0 );
+		expect( rootTurn( walking.hero.active.root ) ).toBeCloseTo( - 0.75, 6 );
+		walking.hero.update( 0.2 );
+		expect( rootTurn( walking.hero.active.root ) ).toBeCloseTo( 0, 6 );
+
+		// A standing body asked to crouch: the rig stands where the body stands
+		// and plays the whole entry down, not the crouch it ends in first.
+		const standing = focusedRig( CLIP.IDLE );
+		standing.director.npcControl( { kind: 'start-crouch' }, actor( { animation: 'crouch', mode: 'posing' } ) );
+		expect( standing.person.clip ).toBe( CLIP.IDLE );
+		await vi.waitFor( () => expect( standing.person.clip ).toBe( CLIP.CROUCH ) );
+		expect( standing.switched.at( - 1 ) ).toEqual( [ 'Crouch_Idle_Loop', true ] );
+		const turns = [];
+		standing.hero.update( 0 );
+		turns.push( rootTurn( standing.hero.active.root ) );
+		for ( let frame = 1; frame <= 30; frame ++ ) {
+
+			standing.hero.update( 1 / 60 );
+			turns.push( rootTurn( standing.hero.active.root ) );
+
+		}
+		expect( turns[ 0 ] ).toBeCloseTo( 0, 6 );
+		turns.forEach( ( turn, frame ) => expect( turn ).toBeLessThanOrEqual( frame / 60 + 1e-6 ) );
+
+	} );
+
+	it( 'gives a focused body a clip a later render sets over the one it was to take after the rig load', async () => {
+
+		const rig = setup( [ member( 'npc-1', 1 ) ] );
+		const loads = [];
+		rig.hero.show.mockImplementation( () => new Promise( ( resolve ) => loads.push( resolve ) ) );
+		rig.director.npcControl( { kind: 'start-crouch' }, actor( { animation: 'crouch', mode: 'posing' } ) );
+		rig.director.npcControl( { kind: 'release-crouch' }, actor( { animation: 'sit', mode: 'resuming' } ) );
+		expect( rig.crowd.setAnimationClip ).not.toHaveBeenCalledWith( 'npc-1', 'Crouch_Idle_Loop' );
+		expect( rig.crowd.setAnimationClip ).not.toHaveBeenCalledWith( 'npc-1', 'Sitting_Idle_Loop' );
+
+		// The body walks on, unfocused, before either load has finished.
+		rig.director.update( [ actor( { animation: 'walk' } ) ], 0.1 );
+		expect( rig.crowd.setAnimationClip ).toHaveBeenLastCalledWith( 'npc-1', 'Walk_Loop' );
+		for ( const loaded of loads ) loaded( true );
+		await new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
+		expect( rig.crowd.setAnimationClip ).toHaveBeenLastCalledWith( 'npc-1', 'Walk_Loop' );
+
+	} );
+
 } );
+
+/**
+ * A director over a real focused rig and one crowd body a quarter into its
+ * clip (frame 8). Walking leans the root back from one radian to none over
+ * the loop, the crouch entry bends it a radian forward over its second and
+ * everything else stands upright. `switched` records each clip the body is
+ * given and whether the rig had its slot by then.
+ */
+function focusedRig( clip ) {
+
+	const animation = library( {
+		...Object.fromEntries( REQUIRED_CLIPS.map( ( name ) => [ name, [ 0, 0 ] ] ) ),
+		Walk_Loop: [ - 1, 0 ], Crouch_Enter: [ 0, 1 ], Crouch_Idle_Loop: [ 1, 1 ]
+	} );
+	const hero = new HeroCharacter( { animation, loadModel: () => ( { scene: body( 'body' ) } ) } );
+	const person = {
+		npcId: 'npc-1', gender: 'male', variant: 0, appearanceSeed: 3, clip, frame: 8, hero: false,
+		position: new THREE.Vector3(), heading: 0, look: outfit()
+	};
+	const switched = [];
+	const crowd = {
+		memberForNpc: ( npcId ) => npcId === person.npcId ? person : null,
+		setAnimationClip: ( npcId, clipName ) => {
+
+			switched.push( [ clipName, hero.active?.person === person ] );
+			person.clip = crowdClipForName( clipName );
+
+		}
+	};
+	const director = new GameplayAnimationDirector( { catalog: CATALOG, animation, crowd, hero } );
+	return { director, hero, person, switched };
+
+}
 
 function setup( members = [ member( 'npc-1', 3 ) ] ) {
 
@@ -275,13 +373,7 @@ function setup( members = [ member( 'npc-1', 3 ) ] ) {
 	};
 	const hero = { show: vi.fn( () => true ), hide: vi.fn(), speak: vi.fn() };
 	const animation = { animations: REQUIRED_CLIPS.map( ( name ) => ( { name, duration: 0.5 } ) ) };
-	const director = new GameplayAnimationDirector( {
-		catalog: {
-			assetId: 'quaternius-universal-animation-library-pro', edition: 'Pro',
-			sourceSha256: 'a'.repeat( 64 ), availableClips: [ ...REQUIRED_CLIPS ]
-		},
-		animation, crowd, hero
-	} );
+	const director = new GameplayAnimationDirector( { catalog: CATALOG, animation, crowd, hero } );
 	return { director, crowd, hero };
 
 }

@@ -16,7 +16,9 @@ const QUEST_VARIANT = Object.freeze( {
 /**
  * Game composition for the schema-validated animation coordinator. It turns
  * live continuity and accepted quest events into exact Pro clip transitions,
- * then projects every transition onto Crowd and the one focused armature.
+ * then projects every transition onto Crowd and the one focused armature. The
+ * focused person's crowd body takes its new clip only once the armature has
+ * its slot, so the armature starts from the pose that body shows.
  */
 export class GameplayAnimationDirector {
 
@@ -34,6 +36,8 @@ export class GameplayAnimationDirector {
 		this.conversationActors = new Map();
 		this.timed = new Map();
 		this.physicsActors = new Set();
+		/** npcId → the clip its crowd body takes once the focused rig has its slot. */
+		this.pendingClips = new Map();
 		this.focus = null;
 		this.coordinator = new AnimationCoordinator( {
 			version: '1', catalog,
@@ -423,19 +427,38 @@ export class GameplayAnimationDirector {
 
 	#render( result, focusNpcId, focusKind ) {
 
+		const person = focusNpcId ? this.crowd.memberForNpc( focusNpcId ) : null;
+		const focused = person
+			? result.transitions.find( ( candidate ) => this.actualIds.get( candidate.actorId ) === focusNpcId )
+			: null;
 		for ( const transition of result.transitions ) {
 
 			const npcId = this.actualIds.get( transition.actorId );
-			if ( npcId ) this.crowd.setAnimationClip( npcId, transition.terminalClip );
+			if ( npcId && transition !== focused ) this.#crowdClip( npcId, transition.terminalClip );
 
 		}
-		if ( ! focusNpcId ) return;
-		const transition = result.transitions.find( ( candidate ) => this.actualIds.get( candidate.actorId ) === focusNpcId );
-		const person = this.crowd.memberForNpc( focusNpcId );
-		if ( ! transition || ! person ) return;
+		if ( ! focused ) return;
 		this.focus = { npcId: focusNpcId, kind: focusKind };
-		Promise.resolve( this.hero.show( person, transition.segments ) )
-			.catch( ( error ) => console.warn( 'focused character:', error.message ) );
+		// The focused body shows what it shows until the rig has its slot, so
+		// the rig starts from that pose and plays its segments whole. The body
+		// takes the terminal clip then, unless a later render gave it one.
+		const pending = { clipName: focused.terminalClip };
+		this.pendingClips.set( focusNpcId, pending );
+		Promise.resolve( this.hero.show( person, focused.segments ) )
+			.catch( ( error ) => console.warn( 'focused character:', error.message ) )
+			.then( () => {
+
+				if ( this.pendingClips.get( focusNpcId ) === pending ) this.#crowdClip( focusNpcId, pending.clipName );
+
+			} );
+
+	}
+
+	/** Gives a crowd body its clip now, over one it was to take once a rig had its slot. */
+	#crowdClip( npcId, clipName ) {
+
+		this.pendingClips.delete( npcId );
+		this.crowd.setAnimationClip( npcId, clipName );
 
 	}
 

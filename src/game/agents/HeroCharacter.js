@@ -62,7 +62,11 @@ export class HeroCharacter {
 
 	}
 
-	/** Loads and swaps one crowd member without ever exposing an unready mesh. */
+	/**
+	 * Loads and swaps one crowd member without ever exposing an unready mesh.
+	 * A new rig starts from what the crowd body shows when it takes the slot,
+	 * so the caller leaves that body's clip as it is until this resolves.
+	 */
 	async show( person, segments = null, onFinished = null ) {
 
 		const request = ++ this.request;

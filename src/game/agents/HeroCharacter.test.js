@@ -9,7 +9,7 @@ import { StreetBodies } from './StreetBodies.js';
 import { Physics } from '../physics/index.js';
 import { ActorLighting } from '../light/ActorLighting.js';
 import { FillChannel } from '../city/kit/FillChannel.js';
-import { animation, rig } from './HeroCharacter.test-fixtures.js';
+import { animation, outfit, rig, rootTurn } from './HeroCharacter.test-fixtures.js';
 
 // Which map and which tint each hair material multiplies, as the crowd's HairMesh does.
 vi.mock( './HairMesh.js', async ( original ) => {
@@ -315,6 +315,41 @@ describe( 'focused character', () => {
 
 	} );
 
+	it( 'plays an entry on a new rig from the pose the crowd body shows, never from where the entry ends', async () => {
+
+		// Standing upright, the entry bends the root a radian over its second and the crouch holds it there.
+		const hero = new HeroCharacter( {
+			animation: animation( { Crouch_Enter: [ 0, 1 ], Crouch_Idle_Loop: [ 1, 1 ] } ),
+			loadModel: () => ( { scene: rig( 'body' ) } )
+		} );
+		const person = {
+			npcId: 'n1', gender: 'male', variant: 0, appearanceSeed: 3, clip: 1, frame: 8, hero: false,
+			position: new THREE.Vector3(), heading: 0, look: outfit()
+		};
+		await hero.show( person, [ { clipName: 'Crouch_Enter', loop: false }, { clipName: 'Crouch_Idle_Loop', loop: true } ] );
+		const turns = [];
+		hero.update( 0 );
+		turns.push( rootTurn( hero.active.root ) );
+		for ( let frame = 1; frame <= 90; frame ++ ) {
+
+			hero.update( 1 / 60 );
+			turns.push( rootTurn( hero.active.root ) );
+
+		}
+
+		// The first frame stands as the crowd body stood; the entry then bends
+		// the body down, never ahead of its own time and never back up.
+		expect( turns[ 0 ] ).toBeCloseTo( 0, 6 );
+		turns.forEach( ( turn, frame ) => {
+
+			expect( turn ).toBeLessThanOrEqual( frame / 60 + 1e-6 );
+			if ( frame > 0 ) expect( turn ).toBeGreaterThanOrEqual( turns[ frame - 1 ] - 1e-6 );
+
+		} );
+		expect( turns.at( - 1 ) ).toBeCloseTo( 1, 3 );
+
+	} );
+
 	it( 'moves the head of the person whose voice plays over the clip, and hands it back to the clip once the voice ends', async () => {
 
 		const hero = new HeroCharacter( { animation: animation(), loadModel: () => ( { scene: rig( 'body' ) } ) } );
@@ -475,18 +510,5 @@ function namedBone( name, position ) {
 	value.name = name;
 	value.position.fromArray( position );
 	return value;
-
-}
-
-function outfit() {
-
-	return {
-		skin: new THREE.Color( 0xffffff ),
-		shirt: new THREE.Color( 0x446688 ),
-		trousers: new THREE.Color( 0x222833 ),
-		hair: new THREE.Color( 0x2e1f16 ),
-		sleeve: 0.55,
-		hem: 0.88
-	};
 
 }
