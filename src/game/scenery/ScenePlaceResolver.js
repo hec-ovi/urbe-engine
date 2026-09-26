@@ -1,5 +1,5 @@
 import { buildingFloors } from '../city/InteriorLayouts.js';
-import { SIDEWALK_HEIGHT } from '../ground/GroundMeshBuilder.js';
+import { area, intersectionArea } from '../props/Footprints.js';
 import { hash32, rotate2, round } from './StagingAssembler.js';
 import { SceneryError } from './SceneryError.js';
 
@@ -8,8 +8,10 @@ const WALL_MARGIN = 0.15;
 /** The smallest frame side the staging contract measures. */
 const MIN_SIDE = 3;
 const DOOR_CLEARANCE = { min: 0.6, max: 5 };
-/** A street scene's default frame: along the sidewalk, and across it. */
+/** A street scene's default frame: along the lot line, and from it toward the curb. */
 const STREET = { width: 6, depth: 3 };
+/** A street fixture is in the way when it stands within this height over the pavement. */
+const BODY_HEIGHT = 2.2;
 const EPSILON = 1e-6;
 
 /**
@@ -17,7 +19,8 @@ const EPSILON = 1e-6;
  * from what the world publishes and nothing else: a furnished floor's rooms,
  * doors, furniture and holes (Interior's layouts, drawn at the building
  * floor's elevation), the story slots Interior reserves in its rooms, a
- * parcel's main entrance, and a parcel's street access point.
+ * parcel's main entrance, and the sidewalk in front of a parcel's access
+ * point (Atlas lot lines and ground covers, and the fixtures standing there).
  *
  * A room frame is the largest rectangle inside the room's outline in the
  * room's own orientation, kept off the walls; its doors are entries, and its
@@ -29,13 +32,19 @@ export class ScenePlaceResolver {
 	/**
 	 * @param buildings Map<parcelId, { interior: { building, layouts } | null, npc }>, as the building source reads them
 	 * @param doors the main entrances, `{ id, parcelId, inside: { x, y, z } }`
-	 * @param atlas the Atlas blueprint, for parcel lots and access points
+	 * @param atlas the Atlas blueprint: parcel lots and access points, ground
+	 * covers, subway entrance bays and highway supports
+	 * @param obstacles the solid fixtures the game stands on the street,
+	 * `[{ footprint: [[x, z]], bottom, top }]` as street dressing reserves them
+	 * (lamp posts, street features, props and trees)
 	 */
-	constructor( { buildings = new Map(), doors = [], atlas = null } = {} ) {
+	constructor( { buildings = new Map(), doors = [], atlas = null, obstacles = [] } = {} ) {
 
 		this.buildings = buildings;
 		this.doors = doors;
 		this.atlas = atlas;
+		this.obstacles = obstacles;
+		this.street = null;
 
 	}
 
@@ -110,8 +119,7 @@ export class ScenePlaceResolver {
 
 		} else {
 
-			const door = this.doors.filter( ( candidate ) => candidate.parcelId === place.parcelId )
-				.sort( ( left, right ) => String( left.id ).localeCompare( String( right.id ) ) )[ 0 ];
+			const door = this.#mainDoor( place.parcelId );
 			if ( ! door ) throw placeError( `${place.parcelId} has no main entrance` );
 			room = roomAt( floor.record.rooms, { x: door.inside.x, z: door.inside.z } );
 
@@ -122,34 +130,101 @@ export class ScenePlaceResolver {
 
 	}
 
-	/** The sidewalk at the parcel's access point, local +z away from the building. */
+	/**
+	 * The sidewalk in front of the parcel's access point: the frame's back
+	 * edge on the lot side the point stands on, local +z out toward the curb.
+	 * It lies whole on sidewalk ground of one height, which is its floor; the
+	 * fixtures standing on it are blocked zones, and the main door's apron on
+	 * the lot line is an entry.
+	 */
 	#street( place ) {
 
 		const parcel = this.atlas?.parcels?.find( ( candidate ) => candidate.id === place.parcelId );
 		if ( ! parcel ) throw placeError( `the city has no parcel ${place.parcelId}` );
 		const [ x, z ] = parcel.access.point;
-		const lot = parcel.footprint ?? parcel.lot;
-		const center = lot.reduce( ( sum, [ px, pz ] ) => ( { x: sum.x + px / lot.length, z: sum.z + pz / lot.length } ), { x: 0, z: 0 } );
-		const yaw = round( Math.atan2( x - center.x, z - center.z ) );
+		const outward = frontageNormal( parcel.lot, { x, z } );
+		const yaw = zeroed( round( Math.atan2( outward.x, outward.z ) ) );
 		const width = place.width ?? STREET.width;
 		const depth = place.depth ?? STREET.depth;
-		const origin = { x: round( x ), y: SIDEWALK_HEIGHT, z: round( z ) };
-		const location = {
-			kind: 'street',
-			placeId: place.parcelId,
-			origin,
-			yawRadians: yaw,
-			width,
-			depth,
-			entries: [
-				{ entryId: 'doorway', position: { x: 0, z: -depth / 2 }, clearanceRadius: 1.1 },
-				{ entryId: 'sidewalk-left', position: { x: -width / 2, z: 0 }, clearanceRadius: DOOR_CLEARANCE.min },
-				{ entryId: 'sidewalk-right', position: { x: width / 2, z: 0 }, clearanceRadius: DOOR_CLEARANCE.min }
-			],
-			blockedZones: [],
-			receivingSurfaces: [ floorSurface( origin, yaw, width, depth, [] ) ]
-		};
+		const frame = { origin: { x: round( x + outward.x * depth / 2 ), z: round( z + outward.z * depth / 2 ) }, yawRadians: yaw, width, depth };
+		const ring = frameRing( frame );
+		const floorY = this.#pavement( ring );
+		if ( floorY === null ) throw noFit( `the sidewalk in front of ${place.parcelId} has no level ${width} by ${depth} m of pavement` );
+
+		const origin = { x: frame.origin.x, y: floorY, z: frame.origin.z };
+		const location = { kind: 'street', placeId: place.parcelId, origin, yawRadians: yaw, width, depth };
+		const half = { x: width / 2, z: depth / 2 };
+		const door = this.#mainDoor( place.parcelId );
+		const doorway = door ? frameLocal( location, { x: door.inside.x, z: door.inside.z } ).x : 0;
+		const blockers = this.#fixtures( ring, floorY )
+			.map( ( footprint ) => bounds( footprint.map( ( [ px, pz ] ) => frameLocal( location, { x: px, z: pz } ) ) ) )
+			.filter( ( zone ) => overlap( zone, { center: { x: 0, z: 0 }, width, depth } ) )
+			.map( ( zone, index ) => ( { blockerId: `fixture:${index}`, ...zone } ) );
+		location.entries = [
+			{ entryId: 'doorway', position: { x: round( clamp( doorway, -half.x, half.x ) ), z: -half.z }, clearanceRadius: 1.1 },
+			{ entryId: 'sidewalk-left', position: { x: -half.x, z: 0 }, clearanceRadius: DOOR_CLEARANCE.min },
+			{ entryId: 'sidewalk-right', position: { x: half.x, z: 0 }, clearanceRadius: DOOR_CLEARANCE.min }
+		];
+		location.blockedZones = blockers;
+		location.receivingSurfaces = [ floorSurface( origin, yaw, width, depth, blockers ) ];
 		return { location, place: { parcelId: place.parcelId }, anchor: null };
+
+	}
+
+	/** The height of the sidewalk covering the whole ring at one height, or null. */
+	#pavement( ring ) {
+
+		const box = ringBox( ring );
+		const target = area( ring );
+		const covered = new Map();
+		for ( const cover of this.#streetIndex().sidewalks ) {
+
+			if ( ! boxesMeet( cover.box, box ) ) continue;
+			covered.set( cover.top, ( covered.get( cover.top ) ?? 0 ) + intersectionArea( cover.polygon, ring ) );
+
+		}
+		for ( const [ top, value ] of covered ) if ( Math.abs( target - value ) <= target * 1e-6 + EPSILON ) return top;
+		return null;
+
+	}
+
+	/** Footprints of the fixtures that stand in the ring at a body's height over the floor. */
+	#fixtures( ring, floorY ) {
+
+		const box = ringBox( ring );
+		return this.#streetIndex().fixtures
+			.filter( ( fixture ) => fixture.bottom < floorY + BODY_HEIGHT && fixture.top > floorY - EPSILON && boxesMeet( fixture.box, box ) )
+			.map( ( fixture ) => fixture.footprint );
+
+	}
+
+	/** Sidewalk covers and street fixtures, each with its bounding box, read once. */
+	#streetIndex() {
+
+		if ( ! this.street ) {
+
+			const boxed = ( item ) => ( { ...item, box: ringBox( item.footprint ?? item.polygon ) } );
+			const atlas = this.atlas;
+			this.street = {
+				sidewalks: ( atlas.volumetric?.ground ?? [] ).filter( ( cover ) => cover.surface === 'sidewalk' ).map( boxed ),
+				fixtures: [
+					...this.obstacles,
+					...( atlas.transit?.subwayStations ?? [] ).flatMap( ( station ) => ( station.entranceBays ?? [] )
+						.map( ( bay ) => ( { footprint: bay.footprint, bottom: -Infinity, top: Infinity } ) ) ),
+					...( atlas.streets?.highwayStructures ?? [] ).flatMap( ( structure ) => structure.supports )
+				].map( boxed )
+			};
+
+		}
+		return this.street;
+
+	}
+
+	/** The parcel's first main entrance by id, or null. */
+	#mainDoor( parcelId ) {
+
+		return this.doors.filter( ( candidate ) => candidate.parcelId === parcelId )
+			.sort( ( left, right ) => String( left.id ).localeCompare( String( right.id ) ) )[ 0 ] ?? null;
 
 	}
 
@@ -303,8 +378,78 @@ function frameYaw( outline ) {
 	}
 	const angle = Math.atan2( -longest.z, longest.x );
 	const quarter = Math.PI / 2;
-	const yaw = round( angle - quarter * Math.round( angle / quarter ) );
-	return Object.is( yaw, -0 ) ? 0 : yaw;
+	return zeroed( round( angle - quarter * Math.round( angle / quarter ) ) );
+
+}
+
+/**
+ * The unit normal of the lot side nearest the access point, pointing out of
+ * the lot: Atlas stands the point on the side that fronts its street.
+ */
+function frontageNormal( lot, point ) {
+
+	const outline = lot.map( ( [ x, z ] ) => ( { x, z } ) );
+	let nearest = null;
+	for ( let index = 0; index < outline.length; index ++ ) {
+
+		const a = outline[ index ];
+		const b = outline[ ( index + 1 ) % outline.length ];
+		const distance = distanceToSegment( point, a, b );
+		if ( ! nearest || distance < nearest.distance - EPSILON ) nearest = { a, b, distance };
+
+	}
+	const length = Math.hypot( nearest.b.x - nearest.a.x, nearest.b.z - nearest.a.z );
+	const normal = { x: ( nearest.b.z - nearest.a.z ) / length, z: -( nearest.b.x - nearest.a.x ) / length };
+	const middle = { x: ( nearest.a.x + nearest.b.x ) / 2, z: ( nearest.a.z + nearest.b.z ) / 2 };
+	const inward = containsPoint( outline, { x: middle.x + normal.x * 0.01, z: middle.z + normal.z * 0.01 } );
+	return inward ? { x: -normal.x, z: -normal.z } : normal;
+
+}
+
+/** A frame's corners in world [x, z], counter-clockwise as the clipping helpers want them. */
+function frameRing( frame ) {
+
+	const ring = [ [ -1, -1 ], [ 1, -1 ], [ 1, 1 ], [ -1, 1 ] ].map( ( [ sx, sz ] ) => {
+
+		const offset = rotate2( { x: sx * frame.width / 2, z: sz * frame.depth / 2 }, frame.yawRadians );
+		return [ frame.origin.x + offset.x, frame.origin.z + offset.z ];
+
+	} );
+	return signedArea( ring ) < 0 ? ring.reverse() : ring;
+
+}
+
+function signedArea( ring ) {
+
+	let sum = 0;
+	for ( let index = 0; index < ring.length; index ++ ) {
+
+		const [ ax, az ] = ring[ index ];
+		const [ bx, bz ] = ring[ ( index + 1 ) % ring.length ];
+		sum += ax * bz - bx * az;
+
+	}
+	return sum / 2;
+
+}
+
+function ringBox( ring ) {
+
+	const xs = ring.map( ( point ) => point[ 0 ] );
+	const zs = ring.map( ( point ) => point[ 1 ] );
+	return { minX: Math.min( ...xs ), maxX: Math.max( ...xs ), minZ: Math.min( ...zs ), maxZ: Math.max( ...zs ) };
+
+}
+
+function boxesMeet( left, right ) {
+
+	return left.minX < right.maxX && right.minX < left.maxX && left.minZ < right.maxZ && right.minZ < left.maxZ;
+
+}
+
+function zeroed( value ) {
+
+	return Object.is( value, -0 ) ? 0 : value;
 
 }
 

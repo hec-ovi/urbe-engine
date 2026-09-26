@@ -36,7 +36,7 @@ export class SceneryDirector {
 	 * @param specs the scene specs (`quests/scenery.json` or the bundle's)
 	 * @param session the QuestSession the scenes follow
 	 * @param sim the simulation port, for `getNPC`
-	 * @param world `{ buildings, doors, atlas }` the places resolve against
+	 * @param world `{ buildings, doors, atlas, obstacles }` the places resolve against (ScenePlaceResolver)
 	 * @param missionAssets `{ get(assetId) }`, the bundle's mission asset assemblies
 	 * @param interiors `{ floorShown(parcelId, floor) }`, the interior stream
 	 * @param overlay the investigation layer: `lifecycles()`, `stage(sceneId, link)`, `retire(sceneId)`

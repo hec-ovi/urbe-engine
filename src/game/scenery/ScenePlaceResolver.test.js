@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { generate, expandBuilding, makePlacementFixture } from '../../../../interior/src/index.ts';
 import { buildingFloors } from '../city/InteriorLayouts.js';
-import { SIDEWALK_HEIGHT } from '../ground/GroundMeshBuilder.js';
 import { ScenePlaceResolver } from './ScenePlaceResolver.js';
+import { SceneryCompiler } from './SceneryCompiler.js';
 import { rotate2 } from './StagingAssembler.js';
 
 let interior;
@@ -99,16 +99,70 @@ describe( 'scene places', () => {
 
 	} );
 
-	it( 'lays a street scene along the sidewalk at the access point, facing away from the building', () => {
+	it( 'lays a street scene on the sidewalk in front of the access point, its back on the lot line and its fixtures blocked', () => {
 
-		const atlas = { parcels: [ { id: 'p9', lot: [ [ 0, 0 ], [ 20, 0 ], [ 20, 20 ], [ 0, 20 ] ], access: { edgeId: 'e1', point: [ 10, 22 ] } } ] };
-		const { location, place, anchor } = resolver( { interior, npc }, { atlas } ).resolve( { kind: 'street', parcelId: 'p9', width: 8 }, 1 );
-		expect( place ).toEqual( { parcelId: 'p9' } );
+		const door = { id: 'p5:main', parcelId: 'p5', inside: { x: 37.8, y: 0.2, z: 145.3 } };
+		const { location, place, anchor } = resolver( { interior, npc }, { atlas: STREET_ATLAS, obstacles: LAMP, doors: [ door ] } ).resolve( { kind: 'street', parcelId: 'p5' }, 1 );
+		expect( place ).toEqual( { parcelId: 'p5' } );
 		expect( anchor ).toBeNull();
-		expect( location.origin ).toEqual( { x: 10, y: SIDEWALK_HEIGHT, z: 22 } );
-		expect( location.yawRadians ).toBe( 0 );
-		expect( [ location.width, location.depth ] ).toEqual( [ 8, 3 ] );
-		expect( location.entries.find( ( entry ) => entry.entryId === 'doorway' ).position ).toEqual( { x: 0, z: -1.5 } );
+		// Local +z runs out of the lot toward the curb; the floor is the sidewalk's own top.
+		expect( location.origin ).toEqual( { x: 32.2, y: 0.2, z: 144.5 } );
+		expect( rotate2( { x: 0, z: 1 }, location.yawRadians ).x ).toBeCloseTo( -1, 6 );
+		expect( [ location.width, location.depth ] ).toEqual( [ 6, 3 ] );
+		for ( const corner of corners( location ) ) {
+
+			expect( corner[ 0 ] ).toBeLessThanOrEqual( 33.7 + 1e-6 );
+			expect( inside( SIDEWALK, shrink( corner, location ) ) ).toBe( true );
+
+		}
+		const doorway = location.entries.find( ( entry ) => entry.entryId === 'doorway' );
+		expect( doorway.position.z ).toBe( -1.5 );
+		expect( doorway.position.x ).toBeCloseTo( rotate2( { x: 0, z: 145.3 - 144.5 }, -location.yawRadians ).x, 5 );
+		// The lamp post stands in the frame; its head, overhead, does not.
+		expect( location.blockedZones ).toEqual( [ { blockerId: 'fixture:0', center: { x: -0.4, z: 1.2 }, width: 0.28, depth: 0.28 } ] );
+		expect( location.receivingSurfaces[ 0 ].blockedRegions ).toHaveLength( 1 );
+
+	} );
+
+	it( 'keeps every element of a street scene on the sidewalk, out of the lot and clear of its fixtures', () => {
+
+		const place = { kind: 'street', parcelId: 'p5', width: 8 };
+		const spec = {
+			contractVersion: '1.0', sceneId: 'hit', questId: 'q', seed: 5, purpose: 'crime-scene', place,
+			actors: [
+				{ actorId: 'victim', role: 'victim', identity: { kind: 'anonymous', gender: 'male', appearanceSeed: 1 }, pose: 'death-a', placement: { zone: 'center' } },
+				...[ 0, 1, 2 ].map( ( index ) => ( {
+					actorId: `guard-${index}`, role: 'officer', identity: { kind: 'anonymous', gender: 'female', appearanceSeed: index },
+					pose: 'standing-guard', placement: { zone: 'perimeter' }
+				} ) )
+			],
+			props: [ { propId: 'pool', kind: 'blood-pool', nearActorId: 'victim' } ],
+			activeWhen: { kind: 'questStarted' }
+		};
+		const resolved = resolver( { interior, npc }, { atlas: STREET_ATLAS, obstacles: LAMP } ).resolve( place, 1 );
+		const people = spec.actors.map( ( actor, index ) => ( { actorId: actor.actorId, gender: index ? 'female' : 'male', appearanceSeed: index } ) );
+		const { assembly } = new SceneryCompiler().compile( spec, resolved, people );
+		const post = [ 31, 144.1 ];
+		for ( const entity of assembly.entities ) {
+
+			const footprint = corners( { origin: entity.footprint.center, yawRadians: entity.footprint.yawRadians, width: entity.footprint.width, depth: entity.footprint.depth } );
+			for ( const corner of footprint ) {
+
+				expect( corner[ 0 ] ).toBeLessThan( 33.7 );
+				expect( inside( SIDEWALK, corner ) ).toBe( true );
+
+			}
+			expect( inside( footprint, post ) ).toBe( false );
+			expect( entity.transform.position.y ).toBeCloseTo( 0.2 - ( entity.asset?.groundContact?.y ?? 0 ), 6 );
+
+		}
+
+	} );
+
+	it( 'refuses a street frame deeper than the sidewalk', () => {
+
+		expect( () => resolver( { interior, npc }, { atlas: STREET_ATLAS } ).resolve( { kind: 'street', parcelId: 'p5', depth: 5 }, 1 ) )
+			.toThrowError( expect.objectContaining( { code: 'E_SCENERY_NO_FIT', message: expect.stringMatching( /no level 6 by 5 m of pavement/ ) } ) );
 
 	} );
 
@@ -196,3 +250,32 @@ function turnedInterior( turn ) {
 	return copy;
 
 }
+
+/** A frame corner pulled a millimetre inside, so a corner on the sidewalk's own edge reads as on it. */
+function shrink( [ x, z ], location ) {
+
+	return [ x + Math.sign( location.origin.x - x ) * 1e-3, z + Math.sign( location.origin.z - z ) * 1e-3 ];
+
+}
+
+/** Parcel p5 of a generated small city: its lot, footprint and access point, the sidewalk and curb in front of it. */
+const SIDEWALK = [ [ 33.7, 110.5 ], [ 33.7, 160.5 ], [ 29.5, 160.5 ], [ 29.5, 110.5 ] ];
+const STREET_ATLAS = {
+	parcels: [ {
+		id: 'p5',
+		lot: [ [ 33.7, 128.5 ], [ 57.7, 128.5 ], [ 57.7, 160.5 ], [ 33.7, 160.5 ] ],
+		footprint: [ [ 36, 130.5 ], [ 55.5, 130.5 ], [ 55.5, 158.5 ], [ 36, 158.5 ] ],
+		access: { edgeId: 'e12', point: [ 33.7, 144.5 ] }
+	} ],
+	volumetric: { ground: [
+		{ surface: 'block', bottom: 0, top: 0.2, polygon: [ [ 33.7, 128.5 ], [ 57.7, 128.5 ], [ 57.7, 160.5 ], [ 33.7, 160.5 ] ] },
+		{ surface: 'sidewalk', bottom: 0, top: 0.2, polygon: SIDEWALK },
+		{ surface: 'curb', bottom: 0, top: 0.2, polygon: [ [ 29.5, 110.5 ], [ 29.5, 160.5 ], [ 29.3, 160.5 ], [ 29.3, 110.5 ] ] },
+		{ surface: 'roadway', bottom: 0, top: 0, polygon: [ [ 14.8, 100 ], [ 28.8, 100 ], [ 28.8, 170 ], [ 14.8, 170 ] ] }
+	] }
+};
+/** That street's lamp post in front of p5, as street dressing reserves it: the post, and its head overhead. */
+const LAMP = [
+	{ footprint: [ [ 30.86, 143.96 ], [ 31.14, 143.96 ], [ 31.14, 144.24 ], [ 30.86, 144.24 ] ], bottom: 0.12, top: 6.095 },
+	{ footprint: [ [ 30.3, 143.9 ], [ 31, 143.9 ], [ 31, 144.3 ], [ 30.3, 144.3 ] ], bottom: 5.8, top: 6.0 }
+];
