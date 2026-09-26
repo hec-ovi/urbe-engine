@@ -4,6 +4,12 @@ import { PropBatches } from './PropBatches.js';
 import { propTriangles } from './PropTriangles.js';
 
 let serial = 0;
+/**
+ * Metres of distance per metre of height at which a prop still stands two
+ * pixels tall on a 1080-line screen at the game's 72 degree view. A bag or a
+ * carton past that is a speck, so it is not drawn, whatever the window's radius.
+ */
+const REACH_PER_METRE = 372;
 
 /** Placement ownership is permanent; instance and physics residency follow the player. */
 export class PropStream {
@@ -36,7 +42,9 @@ export class PropStream {
 			if ( changed ) {
 				this.settings = settings; this.version ++;
 				const point = { x: position.x, z: position.z };
-				this.window = { cell, placements: this.cells.items( this.cells.near( point, settings.radius ) ), collision: this.cells.near( point, settings.collisionRadius ) };
+				const margin = this.cells.cellSize * Math.SQRT2;
+				const placements = this.cells.items( this.cells.near( point, settings.radius ) ).filter( item => seen( item, point, margin ) );
+				this.window = { cell, placements, collision: this.cells.near( point, settings.collisionRadius ) };
 				this.#dropObsolete();
 			}
 			if ( ! this.pending && this.completed !== this.version ) {
@@ -83,6 +91,16 @@ export class PropStream {
 	}
 }
 
+/**
+ * Whether a prop is seen from anywhere in the cell the window was drawn from:
+ * it stands within its reach of the point, give or take the cell's diagonal,
+ * because the window is drawn again only when the player leaves that cell.
+ */
+function seen( item, point, margin ) {
+	const reach = ( item.top - item.bottom ) * REACH_PER_METRE + margin;
+	const dx = item.matrix.elements[ 12 ] - point.x, dz = item.matrix.elements[ 14 ] - point.z;
+	return dx * dx + dz * dz <= reach * reach;
+}
 function validateWindow( point, options ) {
 	if ( ! Number.isFinite( point?.x ) || ! Number.isFinite( point?.z ) ) throw invalid( 'position must have finite x and z' );
 	if ( ! options || typeof options !== 'object' || Array.isArray( options ) || Object.keys( options ).some( key => ! [ 'radius', 'collisionRadius', 'prepare', 'collision' ].includes( key ) ) ) throw invalid( 'unsupported window settings' );

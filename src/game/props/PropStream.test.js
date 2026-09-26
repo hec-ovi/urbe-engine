@@ -43,8 +43,10 @@ it( 'preserves global placements and exact nearby render/collision triangles thr
 	for ( const id of nearBands ) expect( geometry.parts.has( id ) ).toBe( false );
 	await stream.update( { x: 0, z: 0 } );
 	expect( identities( stream.group ) ).toEqual( nearIds );
+	// A window over the whole city still leaves out the props a kilometre off:
+	// a metre-tall rail is a speck there.
 	await stream.update( { x: 0, z: 0 }, { radius: 2000 } );
-	expect( stream.stats.resident ).toBe( 36 );
+	expect( identities( stream.group ) ).toEqual( nearIds );
 	expect( stream.stats.draws ).toBeLessThan( complete.group.children.length );
 	expect( stream.stats.draws ).toBeLessThanOrEqual( 9 );
 	expect( loadAsset ).toHaveBeenCalledTimes( 5 );
@@ -79,10 +81,10 @@ it( 'prepares a model and finish once for the city, however many cells stand it'
 	const batches = prepare.mock.calls.length;
 	expect( batches ).toBeGreaterThan( 0 );
 	expect( new Set( prepared ).size ).toBe( batches );
-	// A window over the whole city rebuilds those batches with room for every
-	// copy: same geometry, same materials, nothing left to prepare.
-	await stream.update( { x: 0, z: 0 }, { radius: 2000, prepare } );
-	expect( stream.stats.resident ).toBe( 36 );
+	// The same models across town stand in batches rebuilt for them: same
+	// geometry, same materials, nothing left to prepare.
+	await stream.update( { x: 1000, z: 0 }, { radius: 100, prepare } );
+	expect( stream.stats.resident ).toBe( 18 );
 	expect( prepare ).toHaveBeenCalledTimes( batches );
 	stream.dispose();
 } );
