@@ -65,7 +65,7 @@ Shared ids, coordinates, asset envelopes, material assignments, evidence definit
 - Model origin is calculated from the asset's declared ground contact. A lying body or fallen prop touches the measured ground plane at that point.
 - Decal axes come from an orthonormal receiving-surface frame. Width and height fit that surface, avoid its blocked regions, and use an explicit 0.002 m to 0.02 m normal offset to prevent coincident-surface flicker.
 - Every evidence item has exactly one visible body, prop, or decal. Portable evidence must be a portable prop; a body or decal can never enter inventory.
-- At least one entrance reaches an unobstructed point within 2.25 m of every evidence target on the navigation grid. Assembly fails if this cannot be proven.
+- At least one entrance reaches an unobstructed point within 2.25 m of every evidence target on the navigation grid. Assembly fails if this cannot be proven. The player stands clear of each body, fixed prop and blocker by their radius; the line from that point to the evidence is hidden by those things themselves, blocked zones included, never by the room the player keeps around them.
 - Inspect and take require visible, unobstructed focus inside the target's measured reach. A rejection does not mutate state.
 - Consequence events come only from the authored evidence definition and emit once. Reloading preserves discoveries, collected props, and emitted transition ids.
 - Asset media crosses by reference with URI, media type, byte size and SHA-256 checksum. Materials cross as PBR database keys, never as anonymous colors.
