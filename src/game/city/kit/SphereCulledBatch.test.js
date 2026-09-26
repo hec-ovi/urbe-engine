@@ -46,6 +46,8 @@ describe( 'a batch that keeps each copy\'s sphere', () => {
 
 		expect( drawList( kept, camera ) ).toEqual( drawList( three, camera ) );
 		expect( drawList( kept, camera ).map( ( [ copy ] ) => copy ) ).toEqual( [ 0, 1 ] );
+		// Worked out over each geometry's vertices, a sphere is the one three works out through its index.
+		for ( const id of [ 0, 1 ] ) expect( kept.getBoundingSphereAt( id, new THREE.Sphere() ) ).toEqual( three.getBoundingSphereAt( id, new THREE.Sphere() ) );
 
 		for ( const batch of [ three, kept ] ) {
 

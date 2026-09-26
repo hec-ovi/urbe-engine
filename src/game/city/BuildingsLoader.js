@@ -267,8 +267,8 @@ export class BuildingsLoader {
 		);
 		if ( isSceneryNode( node ) ) {
 
-			const geometry = shellScenery( node, this.factory, { key, scenic } );
-			if ( geometry ) push( hasInterior ? windowScenery : exterior, surface, geometry );
+			const [ geometry ] = shellScenery( node, this.factory, { key, scenic } );
+			push( hasInterior ? windowScenery : exterior, surface, geometry );
 			return;
 
 		}

@@ -1,4 +1,4 @@
-import { BatchedMesh, Frustum, Matrix4, Sphere, Vector3 } from 'three/webgpu';
+import { BatchedMesh, Box3, Frustum, Matrix4, Sphere, Vector3 } from 'three/webgpu';
 
 /** A copy that draws its own geometry at every distance. */
 export const NEAR_ONLY = - 1;
@@ -9,6 +9,7 @@ const _frustum = new Frustum();
 const _matrix = new Matrix4();
 const _sphere = new Sphere();
 const _point = new Vector3();
+const _vertex = new Vector3();
 
 /**
  * A BatchedMesh whose copies stand still, so each copy's bounding sphere is
@@ -21,6 +22,12 @@ const _point = new Vector3();
  * here is six plane tests per copy against the sphere kept for it. The draw
  * list it writes is exactly the one three writes for an opaque batch; a batch
  * that sorts, or a camera three culls differently, takes three's own path.
+ *
+ * A geometry's own sphere is worked out once, the first time a copy of it is
+ * placed, over its run of the batch's vertices. Three reads the same points
+ * through the index, twice over for the shared ones; every geometry a city
+ * batch holds draws every vertex it carries ([BatchGeometry.js](BatchGeometry.js)),
+ * so the run is exactly the points the index reaches.
  *
  * The same pass picks each copy's level: a copy of a geometry that has a far
  * geometry (`setFarOf`) draws that one instead once its sphere lies wholly past
@@ -70,6 +77,31 @@ export class SphereCulledBatch extends BatchedMesh {
 		this.#keep( instanceId );
 
 		return instanceId;
+
+	}
+
+	getBoundingSphereAt( geometryId, target ) {
+
+		const info = this._geometryInfo[ geometryId ];
+		if ( info && info.boundingSphere === null ) {
+
+			const position = this.geometry.getAttribute( 'position' );
+			const end = info.vertexStart + info.vertexCount;
+			if ( info.boundingBox === null ) {
+
+				info.boundingBox = new Box3();
+				for ( let vertex = info.vertexStart; vertex < end; vertex ++ ) info.boundingBox.expandByPoint( _vertex.fromBufferAttribute( position, vertex ) );
+
+			}
+			const sphere = info.boundingSphere = new Sphere();
+			info.boundingBox.getCenter( sphere.center );
+			let reach = 0;
+			for ( let vertex = info.vertexStart; vertex < end; vertex ++ ) reach = Math.max( reach, sphere.center.distanceToSquared( _vertex.fromBufferAttribute( position, vertex ) ) );
+			sphere.radius = Math.sqrt( reach );
+
+		}
+
+		return super.getBoundingSphereAt( geometryId, target );
 
 	}
 

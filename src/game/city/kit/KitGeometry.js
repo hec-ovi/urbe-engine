@@ -83,10 +83,9 @@ export async function readShell( scene, factory, blueprint, slice, hitches = new
 
 				// A shared shell is drawn as a closed building, so the fake rooms
 				// behind its glass stand with the room's own light baked in.
-				const geometry = shellScenery( node, factory, { key, scenic } );
-				if ( ! geometry ) return;
+				const [ geometry, far ] = shellScenery( node, factory, { key, scenic, cells: [ 1, FAR_ROOM_CELL ] } );
 				push( windowScenery, bucket, geometry );
-				if ( ScenicSurface.supports( key ) ) push( farScenery, bucket, shellScenery( node, factory, { key, scenic, cell: FAR_ROOM_CELL } ) );
+				if ( far ) push( farScenery, bucket, far );
 				return;
 
 			}

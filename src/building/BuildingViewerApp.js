@@ -342,11 +342,10 @@ export class BuildingViewerApp {
 			if ( isSceneryNode( node ) ) {
 
 				// Scenery bakes to world space, so it is rehung on the model root.
-				const geometry = shellScenery( node, factory, {
+				const [ geometry ] = shellScenery( node, factory, {
 					key: node.material?.name ?? '', scenic
 				} );
 				node.removeFromParent();
-				if ( ! geometry ) continue;
 
 				const base = dress( node.material );
 				if ( geometry.hasAttribute( 'scenicRadiance' ) && ! baked.has( base ) ) {
