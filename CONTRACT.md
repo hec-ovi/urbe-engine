@@ -13,6 +13,7 @@ Version 0.27.5. Loads assembled city artifacts into a first-person game and expo
 | `POST /api/building` | [Building request](src/server/schema/building-build-request.schema.json) | [Building result](src/server/schema/building-build-result.schema.json) |
 | `POST /api/talk` | [NPC, behavior, line, time and optional quests](src/server/schema/talk-request.schema.json) | [Reply](src/server/schema/talk-response.schema.json) |
 | `POST /api/talk/stream` | Same request as `/api/talk` | NDJSON [talk stream events](src/server/schema/talk-stream-event.schema.json): deltas, sentences, companion offers, done |
+| `GET /api/talk/memory?out=`, `PUT /api/talk/memory` | [World out and dialogue memory](src/server/schema/talk-memory.schema.json): at most 200 people, 24 notes and 24 turns each | `{ out, memory }` or 204 |
 | `GET /api/voice`, `POST /api/voice`, `POST /api/voice/prefetch` | [Speaker facts, text and priority](src/server/schema/voice-request.schema.json) | Capability, then streamed WAV PCM16 24 kHz from the Voice box; `enabled:false` when Voice is not running ([server contract](src/server/CONTRACT.md)) |
 | `/api/exteriors` | [Capability and exact-blueprint jobs](src/server/CONTRACT.md) | [Capability](src/server/schema/exterior-capability.schema.json) or [job](src/server/schema/exterior-build-job.schema.json) |
 
