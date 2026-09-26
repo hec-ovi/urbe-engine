@@ -4,6 +4,8 @@ import { PanelHeader } from '../components/PanelHeader.js';
 import layout from './chat-layout.json' with { type: 'json' };
 
 const SPEAKING = new Set( [ 'pending', 'playing', 'idle' ] );
+/** Space kept above the first line of the newest turn when the transcript stops there. */
+const TURN_MARGIN = 12;
 
 /**
  * Conversation presentation. The caller hands it names, lines, replies and
@@ -328,6 +330,8 @@ export class ChatPanel {
 			el( 'div', { className: 'chat-line-text' } )
 		);
 		if ( layout.tags[ kind ] ) line.dataset.tag = layout.tags[ kind ];
+		// A turn starts with the player's line, a scene or the first line; the person's lines carry it on.
+		if ( from !== 'npc' || ! this.transcript.children.length ) this.turn = line;
 		this.transcript.append( line );
 		this.#latest();
 		return line;
@@ -340,13 +344,24 @@ export class ChatPanel {
 
 	/** Shows the newest text unless the player scrolled up to read earlier lines. */
 	#follow() {
-		if ( this.followLatest ) this.transcript.scrollTop = this.transcript.scrollHeight;
+		if ( this.followLatest ) this.transcript.scrollTop = this.#newest();
 	}
 
 	#latest() {
 		this.followLatest = true;
-		this.transcript.scrollTop = this.transcript.scrollHeight;
+		this.transcript.scrollTop = this.#newest();
 		this.transcriptHeight = this.transcript.clientHeight;
+	}
+
+	/**
+	 * Where the newest text shows: the end, unless the newest turn is taller
+	 * than the view, which then stops at the turn's first line so it reads
+	 * from its start. A player already past that line reads on to the end.
+	 */
+	#newest() {
+		const end = Math.max( 0, this.transcript.scrollHeight - this.transcript.clientHeight );
+		const start = this.turn?.parentNode === this.transcript ? this.turn.offsetTop - this.transcript.offsetTop - TURN_MARGIN : end;
+		return this.transcript.scrollTop > start ? end : Math.max( 0, Math.min( end, start ) );
 	}
 
 	#focusFallback() {

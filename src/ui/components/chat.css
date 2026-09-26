@@ -30,7 +30,8 @@
 .chat-quest-goal { color: #c0cfdb; font-size: 12px; margin-top: 4px; }
 .chat-quest-label { color: var(--ui-mute); margin-right: 6px; }
 .chat-quest-label::after { content: ':'; }
-.chat-story .chat-journal { grid-column: 2; grid-row: 1 / span 3; }
+.chat-story .chat-quest-goal { grid-column: 1 / -1; }
+.chat-story .chat-journal { grid-column: 2; grid-row: 1 / span 2; }
 .chat-section { padding: 10px 18px 0; }
 .chat-section-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 7px; }
 .chat-section-title { color: var(--ui-accent); font: 600 10px var(--ui-mono); letter-spacing: .12em; text-transform: uppercase; }

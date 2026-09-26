@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
 import Ajv from 'ajv/dist/2020.js';
@@ -33,6 +33,8 @@ describe( 'ChatPanel', () => {
 		panel.show( ADA );
 
 	} );
+
+	afterEach( () => vi.restoreAllMocks() );
 
 	it( 'reads its labels from a layout that meets its schema', () => {
 
@@ -190,6 +192,36 @@ describe( 'ChatPanel', () => {
 		panel.show( ADA );
 		expect( screen.queryByText( 'This passer-by has no time to chat.' ) ).toBeNull();
 		expect( document.activeElement ).toBe( screen.getByRole( 'textbox', { name: 'say something' } ) );
+
+	} );
+
+	it( 'reads a turn taller than the view from its first line, and follows the end once the player reads past it', () => {
+
+		const box = panel.transcript;
+		const size = ( scrollHeight ) => Object.defineProperties( box, {
+			scrollHeight: { value: scrollHeight, configurable: true }, clientHeight: { value: 100, configurable: true }
+		} );
+		const tops = { 'is-scene': 150, 'is-player': 520 };
+		vi.spyOn( HTMLElement.prototype, 'offsetTop', 'get' ).mockImplementation( function () {
+			return Object.entries( tops ).find( ( [ className ] ) => this.classList.contains( className ) )?.[ 1 ] ?? 0;
+		} );
+		size( 80 );
+		panel.addMessage( { from: 'npc', name: 'Ada', text: 'Evening.' } );
+		expect( box.scrollTop ).toBe( 0 );
+		// The scene and the opening overflow the view: it stops above the scene.
+		size( 400 );
+		panel.addMessage( { from: 'scene', text: 'The office is dark but for one lamp.' } );
+		panel.addMessage( { from: 'npc', name: 'Ada', text: 'The report is gone.', kind: 'story' } );
+		expect( box.scrollTop ).toBe( 138 );
+		// Read past the turn's start, the view follows the end.
+		box.scrollTop = 300;
+		size( 460 );
+		panel.beginMessage( { from: 'npc', name: 'Ada' } );
+		expect( box.scrollTop ).toBe( 360 );
+		// The player's line starts the next turn.
+		size( 700 );
+		panel.addMessage( { from: 'player', text: 'Who took it?' } );
+		expect( box.scrollTop ).toBe( 508 );
 
 	} );
 
