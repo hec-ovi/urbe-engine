@@ -1,8 +1,10 @@
 /**
  * The browser side of a conversation: the player's line, the person they are
  * facing and what that person is doing go to the dev server's
- * /api/talk/stream, and the NPC's words come back as they are spoken. A
- * failure throws an Error whose `status` is the HTTP status the server gave.
+ * /api/talk/stream, and the NPC's words come back as they are spoken. The
+ * world's dialogue memory is read for a save and replaced from one through
+ * /api/talk/memory. A failure throws an Error whose `status` is the HTTP
+ * status the server gave.
  */
 export class TalkClient {
 
@@ -63,6 +65,27 @@ export class TalkClient {
 
 	}
 
+	/** What people in this world remember of talking with the player, for the save: `[{ npcId, memory }]`. */
+	async memory() {
+
+		const response = await fetch( `/api/talk/memory?out=${encodeURIComponent( this.out )}` );
+		if ( ! response.ok ) throw await failure( response );
+		return ( await response.json() ).memory;
+
+	}
+
+	/** Makes a save's `memory` all that people in this world remember. */
+	async restoreMemory( memory ) {
+
+		const response = await fetch( '/api/talk/memory', {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify( { out: this.out, memory } )
+		} );
+		if ( ! response.ok ) throw await failure( response );
+
+	}
+
 	async #post( { conversation, line, timeMin, quests, guide, offers }, signal ) {
 
 		const response = await fetch( '/api/talk/stream', {
@@ -75,12 +98,19 @@ export class TalkClient {
 			} )
 		} );
 		if ( response.ok ) return response;
-		const text = await response.text().catch( () => '' );
-		let message = null;
-		try { message = JSON.parse( text ).error; } catch { /* not the route's JSON error */ }
-		throw talkError( message || `talk ${response.status}`, response.status );
+		throw await failure( response );
 
 	}
+
+}
+
+/** The Error for a refused talk route, with the route's own message when it sent one. */
+async function failure( response ) {
+
+	const text = await response.text().catch( () => '' );
+	let message = null;
+	try { message = JSON.parse( text ).error; } catch { /* not the route's JSON error */ }
+	return talkError( message || `talk ${response.status}`, response.status );
 
 }
 

@@ -6,6 +6,10 @@ import { Sentences } from './Sentences.js';
 import { SnapshotPort } from './SnapshotPort.js';
 
 const FALLBACK_THEME = 'a night city';
+/** A save keeps what this many people remember, those talked to last, */
+const MEMORY_PEOPLE = 200;
+/** and at most this many of each one's folded notes, the newest. */
+const MEMORY_NOTES = 24;
 /** The files a world's dialogue is built from; a change to any of them builds it again. */
 const WORLD_FILES = [ 'blueprint.json', 'npc-types.json', join( 'quests', 'questlines.json' ) ];
 
@@ -13,7 +17,8 @@ const WORLD_FILES = [ 'blueprint.json', 'npc-types.json', join( 'quests', 'quest
  * One NPC reply per player line, over the quests dialog layers. Each served
  * world (its `out` directory) keeps one dialogue state for the session, so what
  * an NPC has been told stays remembered, until the world's files change or the
- * directory is made again.
+ * directory is made again. A game hands its save's memory back at load and
+ * reads it again for each save.
  */
 export class TalkService {
 
@@ -72,6 +77,20 @@ export class TalkService {
 			}
 
 		}
+
+	}
+
+	/** What people remember of talking with the player in the world at `out`, as a save keeps it: see TalkWorld.memory. */
+	async memory( out ) {
+
+		return ( await this.#world( out ) ).memory();
+
+	}
+
+	/** Makes `memory`, a save's, all that people remember in the world at `out`. */
+	async restoreMemory( out, memory ) {
+
+		( await this.#world( out ) ).restoreMemory( memory );
 
 	}
 
@@ -150,12 +169,42 @@ class TalkWorld {
 
 	}
 
+	/**
+	 * Every person's memory as `[{ npcId, memory: { digest, turns } }]` by
+	 * npcId, bounded: the MEMORY_PEOPLE people spoken with last, each with
+	 * their MEMORY_NOTES newest notes and their recent turns.
+	 */
+	memory() {
+
+		return bounded( Object.entries( this.context.serializeMemory() ).map( ( [ npcId, memory ] ) => ( { npcId, memory } ) ) );
+
+	}
+
+	/** Replaces every person's memory with `memory`, bounded the same way. */
+	restoreMemory( memory ) {
+
+		this.context.restoreMemory( Object.fromEntries( bounded( memory ).map( ( { npcId, memory: kept } ) => [ npcId, kept ] ) ) );
+
+	}
+
 	/** Stores the exchange now; a memory fold it starts runs off the reply path. */
 	remember( npcId, exchange ) {
 
 		this.context.recordExchange( npcId, exchange ).catch( ( error ) => console.warn( 'dialog memory:', error.message ) );
 
 	}
+
+}
+
+/** The people spoken with last and each one's newest notes, sorted by npcId; nobody who remembers nothing. */
+function bounded( records ) {
+
+	const last = ( { memory } ) => memory.turns.at( - 1 )?.atMin ?? - Infinity;
+	return records.filter( ( { memory } ) => memory.digest.length || memory.turns.length )
+		.sort( ( a, b ) => last( b ) - last( a ) || a.npcId.localeCompare( b.npcId ) )
+		.slice( 0, MEMORY_PEOPLE )
+		.map( ( { npcId, memory } ) => ( { npcId, memory: { digest: memory.digest.slice( - MEMORY_NOTES ), turns: memory.turns } } ) )
+		.sort( ( a, b ) => a.npcId.localeCompare( b.npcId ) );
 
 }
 

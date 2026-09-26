@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:server:talk-memory",
+  "title": "What people remember of talking with the player in one served world",
+  "description": "The body of PUT /api/talk/memory and the answer to GET /api/talk/memory: the world's out path and a save's dialogue memory, at most 200 people.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["out", "memory"],
+  "properties": {
+    "out": { "$ref": "urn:urbe:engine:server:talk-request#/properties/out" },
+    "memory": { "$ref": "urn:urbe:engine:library:dialogue-memory", "type": "array", "maxItems": 200 }
+  }
+}

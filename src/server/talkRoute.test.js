@@ -128,6 +128,44 @@ describe( 'NPC dialogue HTTP boundary', () => {
 
 	} );
 
+	it( 'reads and replaces one world\'s dialogue memory, checked both ways', async () => {
+
+		const memory = [ { npcId: 'npc.mara', memory: { digest: [ 'The player asked about the quay.' ], turns: [
+			{ speaker: 'player', text: 'Where is the witness?', atMin: 600 }, { speaker: 'npc', text: 'Upstairs.', atMin: 600 }
+		] } } ];
+		const service = { memory: vi.fn( async () => memory ), restoreMemory: vi.fn( async () => {} ) };
+		const origin = await serve( service );
+		const out = '/out/games/night-shift';
+
+		const read = await fetch( `${origin}/api/talk/memory?out=${encodeURIComponent( out )}` );
+		expect( read.status ).toBe( 200 );
+		expect( await read.json() ).toEqual( { out, memory } );
+		expect( service.memory ).toHaveBeenCalledExactlyOnceWith( out );
+
+		const put = ( body ) => fetch( `${origin}/api/talk/memory`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body } );
+		const replaced = await put( JSON.stringify( { out, memory } ) );
+		expect( replaced.status ).toBe( 204 );
+		expect( service.restoreMemory ).toHaveBeenCalledExactlyOnceWith( out, memory );
+
+		for ( const body of [ '{', JSON.stringify( { out: '/out/../src', memory } ), JSON.stringify( { out, memory: [ { npcId: 'x', memory: { turns: [] } } ] } ),
+			JSON.stringify( { out, memory: Array.from( { length: 201 }, ( _, at ) => ( { npcId: `n${at}`, memory: { digest: [], turns: [] } } ) ) } ) ] ) {
+
+			const refused = await put( body );
+			expect( refused.status ).toBe( 400 );
+			expect( await refused.json() ).toEqual( { error: expect.any( String ) } );
+
+		}
+		for ( const query of [ '', '?out=%2Fetc' ] ) expect( ( await fetch( `${origin}/api/talk/memory${query}` ) ).status ).toBe( 400 );
+		expect( service.restoreMemory ).toHaveBeenCalledOnce();
+		expect( service.memory ).toHaveBeenCalledOnce();
+
+		const failing = await serve( { memory: vi.fn( async () => { throw new Error( 'no world at /out/games/night-shift' ); } ) } );
+		const failed = await fetch( `${failing}/api/talk/memory?out=${encodeURIComponent( out )}` );
+		expect( failed.status ).toBe( 502 );
+		expect( await failed.json() ).toEqual( { error: 'no world at /out/games/night-shift' } );
+
+	} );
+
 	it( 'leaves other methods and paths to the next middleware', async () => {
 
 		const origin = await serve( { reply: vi.fn(), stream: vi.fn() } );

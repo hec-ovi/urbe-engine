@@ -9,14 +9,16 @@ const NDJSON = { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-C
  * Vite plugin for NPC dialogue. POST /api/talk answers with the NPC's whole
  * reply, POST /api/talk/stream with one JSON event per line as the reply is
  * spoken. Both check the browser's dialogue snapshot first; the model server
- * comes from the LLM_* environment (OpenAIPort.fromEnv).
+ * comes from the LLM_* environment (OpenAIPort.fromEnv). GET and PUT
+ * /api/talk/memory read and replace what people remember in one world, for
+ * the game save.
  */
 export function talkRoute( outRoot, providedService = null ) {
 
 	let service = providedService;
 	const boundary = new TalkBoundary();
 	const talk = () => service ??= new TalkService( OpenAIPort.fromEnv(), outRoot );
-	const routes = { '/': reply, '/stream': stream };
+	const routes = { 'POST /': reply, 'POST /stream': stream, 'GET /memory': memory, 'PUT /memory': restoreMemory };
 
 	return {
 		name: 'talk-route',
@@ -24,7 +26,7 @@ export function talkRoute( outRoot, providedService = null ) {
 
 			server.middlewares.use( '/api/talk', ( req, res, next ) => {
 
-				const route = req.method === 'POST' && routes[ new URL( req.url, 'http://talk' ).pathname ];
+				const route = routes[ `${req.method} ${new URL( req.url, 'http://talk' ).pathname}` ];
 				if ( ! route ) return next();
 				route( req, res ).catch( next );
 
@@ -32,6 +34,58 @@ export function talkRoute( outRoot, providedService = null ) {
 
 		}
 	};
+
+	/** 200 with the world's memory, as `{ out, memory }`. */
+	async function memory( req, res ) {
+
+		let out;
+		try {
+
+			out = boundary.out( new URL( req.url, 'http://talk' ).searchParams.get( 'out' ) );
+
+		} catch ( error ) {
+
+			return sendJson( res, 400, boundary.error( { error: messageOf( error ) } ) );
+
+		}
+		try {
+
+			sendJson( res, 200, boundary.memory( { out, memory: await talk().memory( out ) }, 'E_TALK_OUTPUT' ) );
+
+		} catch ( error ) {
+
+			sendJson( res, 502, boundary.error( { error: messageOf( error ) } ) );
+
+		}
+
+	}
+
+	/** 204 once the world's memory is the one sent. */
+	async function restoreMemory( req, res ) {
+
+		let request;
+		try {
+
+			request = boundary.memory( await readJson( req, 'talk memory' ) );
+
+		} catch ( error ) {
+
+			return sendJson( res, 400, boundary.error( { error: messageOf( error ) } ) );
+
+		}
+		try {
+
+			await talk().restoreMemory( request.out, request.memory );
+			res.statusCode = 204;
+			res.end();
+
+		} catch ( error ) {
+
+			sendJson( res, 502, boundary.error( { error: messageOf( error ) } ) );
+
+		}
+
+	}
 
 	async function reply( req, res ) {
 

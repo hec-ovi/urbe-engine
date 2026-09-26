@@ -189,6 +189,32 @@ describe( 'TalkService', () => {
 
 	} );
 
+	it( 'gives a save what people remember, bounded, and takes a save\'s memory back as all they remember', async () => {
+
+		const model = fakeModel();
+		const service = new TalkService( model, ( await servedWorld() ).root );
+
+		await say( service, 'Where is the lift?' );
+		expect( await service.memory( '/out/w' ) ).toEqual( [ { npcId: 'n1', memory: { digest: [], turns: [
+			{ speaker: 'player', text: 'Where is the lift?', atMin: 600 }, { speaker: 'npc', text: 'Hm.', atMin: 600 }
+		] } } ] );
+
+		const notes = Array.from( { length: 30 }, ( _, at ) => `note ${at}` );
+		const person = ( npcId, atMin ) => ( { npcId, memory: { digest: notes, turns: [ { speaker: 'npc', text: 'Hi.', atMin } ] } } );
+		const crowd = Array.from( { length: 201 }, ( _, at ) => person( `p${String( at ).padStart( 3, '0' )}`, at ) );
+		await service.restoreMemory( '/out/w', [ ...crowd, { npcId: 'n1', memory: { digest: [ 'Told of a debt.' ], turns: [] } }, { npcId: 'silent', memory: { digest: [], turns: [] } } ] );
+		const kept = await service.memory( '/out/w' );
+		expect( kept ).toHaveLength( 200 );
+		expect( kept.map( ( record ) => record.npcId ) ).toEqual( crowd.slice( 1 ).map( ( record ) => record.npcId ) );
+		expect( kept[ 0 ].memory.digest ).toEqual( notes.slice( 6 ) );
+
+		await service.restoreMemory( '/out/w', [ { npcId: 'n1', memory: { digest: [ 'Told of a debt.' ], turns: [] } } ] );
+		await say( service, 'Remember me?' );
+		expect( model.system( 1 ) ).toContain( 'Told of a debt.' );
+		expect( model.system( 1 ) ).not.toContain( 'Where is the lift?' );
+
+	} );
+
 	it( 'grounds an unnamed world in its game theme and describes places without ids', async () => {
 
 		const model = fakeModel();

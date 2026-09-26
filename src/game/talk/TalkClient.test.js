@@ -99,4 +99,24 @@ describe( 'TalkClient', () => {
 
 	} );
 
+	it( 'reads the world\'s dialogue memory for a save and replaces it from one', async () => {
+
+		const memory = [ { npcId: 'n1', memory: { digest: [], turns: [ { speaker: 'npc', text: 'Hi.', atMin: 1 } ] } } ];
+		const fetch = vi.fn( async ( _url, init ) => init ? new Response( null, { status: 204 } ) : Response.json( { out: '/out/games/g 1', memory } ) );
+		vi.stubGlobal( 'fetch', fetch );
+		const client = new TalkClient( '/out/games/g 1' );
+
+		expect( await client.memory() ).toEqual( memory );
+		expect( fetch.mock.calls[ 0 ] ).toEqual( [ '/api/talk/memory?out=%2Fout%2Fgames%2Fg%201' ] );
+		await client.restoreMemory( memory );
+		expect( fetch.mock.calls[ 1 ][ 0 ] ).toBe( '/api/talk/memory' );
+		expect( fetch.mock.calls[ 1 ][ 1 ].method ).toBe( 'PUT' );
+		expect( JSON.parse( fetch.mock.calls[ 1 ][ 1 ].body ) ).toEqual( { out: '/out/games/g 1', memory } );
+
+		vi.stubGlobal( 'fetch', async () => Response.json( { error: 'talk memory does not match its contract' }, { status: 400 } ) );
+		await expect( client.restoreMemory( memory ) ).rejects.toMatchObject( { message: 'talk memory does not match its contract', status: 400 } );
+		await expect( client.memory() ).rejects.toMatchObject( { status: 400 } );
+
+	} );
+
 } );
