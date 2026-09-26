@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:creation:plan-result",
+  "title": "City plan",
+  "type": "object",
+  "required": ["contractVersion", "id", "name", "size", "seed", "plannedAt", "blueprint", "stats"],
+  "properties": {
+    "contractVersion": { "const": "1.0.0" },
+    "id": { "$ref": "urn:urbe:engine:library:city-descriptor#/$defs/id" },
+    "name": { "type": "string", "minLength": 1 },
+    "size": { "enum": ["small", "medium", "large"] },
+    "seed": { "type": "string", "minLength": 1 },
+    "plannedAt": { "$ref": "urn:urbe:engine:library:city-descriptor#/$defs/timestamp" },
+    "blueprint": {
+      "description": "The Atlas plan, `blueprint.json` beside this descriptor in `out/plans/<id>`, and the bytes a build checks it still is.",
+      "$ref": "urn:urbe:engine:library:city-descriptor#/$defs/resource"
+    },
+    "stats": {
+      "description": "The plan's Atlas statistics: population estimate, parcel counts per type and per district.",
+      "type": "object",
+      "required": ["population", "parcelCounts", "perDistrict"],
+      "properties": {
+        "population": { "type": "number", "minimum": 0 },
+        "parcelCounts": { "type": "object" },
+        "perDistrict": { "type": "array" }
+      }
+    }
+  },
+  "additionalProperties": false
+}

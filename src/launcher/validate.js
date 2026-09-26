@@ -143,10 +143,9 @@ export function continueResult( value ) {
 export function cityInput( value ) {
 
 	object( value, 'city input' );
-	keys( value, [ 'name', 'seed', 'size', 'theme' ], 'city input' );
+	keys( value, [ 'name', 'seed', 'size' ], 'city input' );
 	if ( value.name !== undefined ) text( value.name, 'city input.name' );
 	if ( value.seed !== undefined ) text( value.seed, 'city input.seed' );
-	if ( value.theme !== undefined && text( value.theme, 'city input.theme' ).length > 400 ) throw new TypeError( 'city input.theme must be at most 400 characters.' );
 	if ( ! [ 'small', 'medium', 'large' ].includes( value.size ) ) throw new TypeError( 'city input.size must be small, medium or large.' );
 	return value;
 

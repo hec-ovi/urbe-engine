@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:creation:build-city",
+  "type": "object",
+  "required": ["cityId"],
+  "properties": {
+    "cityId": { "$ref": "#/$defs/id" },
+    "named": {
+      "description": "The plan as an external author named it with the Naming box: its named blueprint and NPC types, as paths the engine resolves against its checkout.",
+      "type": "object",
+      "required": ["blueprint", "types"],
+      "properties": {
+        "blueprint": { "type": "string", "minLength": 1 },
+        "types": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": { "id": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$" } }
+}

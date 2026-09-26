@@ -4,8 +4,8 @@ const READ_ATTEMPTS = 5;
 /**
  * Browser transport for the development launcher's closed JSON endpoints.
  * Creation stages run as server jobs: the stage is submitted, then its job is
- * read until it settles, so a stage that runs for most of an hour holds no
- * request open.
+ * read until it settles, so a stage that builds for minutes holds no request
+ * open.
  */
 export class HttpLauncherApi {
 

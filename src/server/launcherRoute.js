@@ -1,12 +1,11 @@
 import { LibraryError } from '../library/index.js';
 import { CreationError } from '../creation/index.js';
-import { CreationJobs } from './CreationJobs.js';
+import { CREATION_METHODS, CreationJobs } from './CreationJobs.js';
 import { LauncherService, LauncherServiceError } from './LauncherService.js';
 import { BodyError, readJson, sendJson } from './routeHttp.js';
 
 const METHODS = new Set( [
-	'catalog', 'continueGame', 'exportGame', 'importGame', 'exportCity',
-	'generateCity', 'generateInstances', 'generateQuests', 'createGame', 'saveCurrent'
+	'catalog', 'continueGame', 'exportGame', 'importGame', 'exportCity', 'saveCurrent', ...CREATION_METHODS
 ] );
 /** The largest launcher or creation request body: an imported game descriptor. */
 const MAX_BYTES = 128 * 1024 * 1024;

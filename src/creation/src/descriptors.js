@@ -2,6 +2,18 @@ import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
+/** A planned city: its identity, the Atlas plan's bytes it is bound to, and the plan's statistics. */
+export async function planDescriptor( root, id, input, atlas, now ) {
+
+	return {
+		contractVersion: '1.0.0', id, name: input.name, size: input.size, seed: input.seed,
+		plannedAt: now.toISOString(),
+		blueprint: await resource( root, 'blueprint.json', 'application/json' ),
+		stats: atlas.stats
+	};
+
+}
+
 export async function cityDescriptor( root, id, input, atlas, now ) {
 
 	return {
@@ -66,14 +78,16 @@ function spawnLocation( atlas ) {
 
 }
 
+export function checksum( bytes ) {
+
+	return `sha256:${createHash( 'sha256' ).update( bytes ).digest( 'hex' )}`;
+
+}
+
 async function resource( root, uri, mediaType ) {
 
 	const path = join( root, uri );
-	const data = await readFile( path );
-	return {
-		uri, mediaType, byteSize: ( await stat( path ) ).size,
-		checksum: `sha256:${createHash( 'sha256' ).update( data ).digest( 'hex' )}`
-	};
+	return { uri, mediaType, byteSize: ( await stat( path ) ).size, checksum: checksum( await readFile( path ) ) };
 
 }
 

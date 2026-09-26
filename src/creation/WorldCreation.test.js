@@ -1,14 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createWorldCreation, CreationError } from './index.js';
-import { HOST_CAPABILITIES, PLAYABLE_MECHANICS } from './src/WorldCreation.js';
+import { HOST_CAPABILITIES } from './src/WorldCreation.js';
 
 const NOW = new Date( '2026-09-03T12:30:00Z' );
 const THEMES = fileURLToPath( new URL( '../../../materials/themes', import.meta.url ) );
-const MODEL = { baseUrl: 'http://models.test/v1' };
 
 describe( 'playable world creation contract', () => {
 
@@ -67,6 +66,11 @@ describe( 'playable world creation contract', () => {
 			save: { revision: 1, playTimeSeconds: 0, createdAt: NOW.toISOString() }
 		} );
 		expect( await readJson( join( fixture.config.outDir, 'games/canal-ward/game.json' ) ) ).toEqual( game );
+		// The draft and the game share each file they do not change with the city, one copy on disk.
+		const inode = async ( world ) => ( await stat( join( fixture.config.outDir, world, 'p0/p0.blueprint.json' ) ) ).ino;
+		expect( await inode( 'drafts/canal-ward' ) ).toBe( await inode( 'cities/canal-ward' ) );
+		expect( await inode( 'games/canal-ward' ) ).toBe( await inode( 'cities/canal-ward' ) );
+		expect( await readJson( join( fixture.config.outDir, 'cities/canal-ward/manifest.json' ) ) ).toMatchObject( { interiors: [] } );
 		const bundleDir = join( fixture.config.outDir, 'games/canal-ward/quests' );
 		expect( await readJson( join( bundleDir, 'quest-bundle.json' ) ) ).toMatchObject( {
 			files: { questlines: 'questlines.json' },
@@ -115,13 +119,12 @@ describe( 'playable world creation contract', () => {
 	it( 'fails closed on every stage request it cannot serve, leaving the city shell-only', async () => {
 
 		const fixture = await setup();
-		const { model, ...unmodelled } = fixture.config;
-		expect( model ).toEqual( MODEL );
-		const creation = createWorldCreation( unmodelled, { run: fixture.run, clock: () => NOW } );
-		await expectCode( creation.generateCity( { size: 'small', theme: 'salt-stained harbour' } ), 'E_NAMING_UNAVAILABLE' );
-		await expectCode( creation.generateCity( { size: 'small', theme: '   ' } ), 'E_INVALID_REQUEST' );
+		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
+		await expectCode( creation.generateCity( { size: 'small', theme: 'salt-stained harbour' } ), 'E_INVALID_REQUEST' );
+		await expectCode( creation.generateCity( { size: 'small', name: '   ' } ), 'E_INVALID_REQUEST' );
 		expect( () => creation.check( 'generateCity', { size: 'tiny' } ) ).toThrow( CreationError );
 		expect( () => creation.check( 'catalog', {} ) ).toThrow( 'catalog is no creation stage' );
+		expect( () => creation.check( 'importStory', { cityId: 'x', sideJobs: 1 } ) ).toThrow( CreationError );
 		const city = await creation.generateCity( { name: 'Strict City', seed: 'strict', size: 'medium' } );
 
 		await expectCode( creation.generateInstances( {
@@ -137,6 +140,8 @@ describe( 'playable world creation contract', () => {
 			cityId: 'absent-city', mode: 'manual', count: 1, buildingIds: [ 'p0' ]
 		} ), 'E_CITY_NOT_FOUND' );
 		await expectCode( creation.generateCity( { name: 'Strict City', seed: 'strict', size: 'medium' } ), 'E_EXISTS' );
+		await expectCode( creation.planCity( { name: 'Strict City', seed: 'strict', size: 'medium' } ), 'E_EXISTS' );
+		await expectCode( creation.buildCity( { cityId: 'strict-city' } ), 'E_PLAN_NOT_FOUND' );
 		await expectCode( creation.generateQuests( {
 			cityId: city.id, interiorIds: parcelIds().slice( 0, 9 ), mainBrief: '', sideJobs: 3
 		} ), 'E_DRAFT_NOT_FOUND' );
@@ -151,6 +156,8 @@ describe( 'playable world creation contract', () => {
 		await expectCode( creation.generateQuests( {
 			cityId: city.id, interiorIds: instances.ids.slice( 0, 8 ), mainBrief: '', sideJobs: 3
 		} ), 'E_STAGE_MISMATCH' );
+		await expectCode( creation.importStory( { cityId: city.id, recording: 'nowhere', sideJobs: 1 } ), 'E_INVALID_REQUEST' );
+		await expectCode( creation.importStory( { cityId: city.id, recording: fixture.recording, sideJobs: 4 } ), 'E_SIDE_JOB_LIMIT' );
 		await expectCode( creation.createGame( {
 			cityId: city.id, interiorIds: instances.ids, questId: 'not-the-stage'
 		} ), 'E_STAGE_MISMATCH' );
@@ -159,72 +166,120 @@ describe( 'playable world creation contract', () => {
 		} ), 'E_STAGE_MISMATCH' );
 
 		expect( await readJson( join( fixture.config.outDir, 'cities/strict-city/manifest.json' ) ) ).toMatchObject( { interiors: [] } );
+		// Creation runs Atlas, the assembler and Quests' replay, and nothing that writes.
+		expect( new Set( fixture.calls.map( ( call ) => call.kind ) ) ).toEqual( new Set( [ 'atlas', 'shells', 'materialize', 'interiors' ] ) );
 
 	} );
 
-	it( 'names a themed city before building it and writes its story through the model against the interiors it opened', async () => {
+	it( 'plans a city, builds it from the plan as an author named it and plays a story written outside the engine', async () => {
 
 		const fixture = await setup();
 		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
 
 		const told = [];
-		const city = await creation.generateCity(
-			{ name: 'Salt Ward', seed: 'salt-3', size: 'small', theme: ' salt-stained harbour ' }, { progress: ( line ) => told.push( line ) }
-		);
-		expect( told ).toEqual( [ 'atlas done', 'naming done', 'shells done' ] );
-		const [ atlasCall, naming, shells ] = fixture.calls;
-		expect( [ atlasCall.kind, naming.kind, shells.kind ] ).toEqual( [ 'atlas', 'naming', 'shells' ] );
-		expect( naming.args.slice( 0, 3 ) ).toEqual( [ 'run', 'world', '--' ] );
-		expect( naming.args.slice( 4 ) ).toEqual( [ '--theme', 'salt-stained harbour' ] );
-		expect( naming.options ).toMatchObject( { cwd: fixture.config.namingRoot, env: { LLM_BASE_URL: MODEL.baseUrl } } );
-		expect( naming.options.env ).not.toHaveProperty( 'LLM_MODEL' );
-		expect( valueAfter( shells.args, '--blueprint' ) ).toBe( join( naming.args[ 3 ], 'blueprint.named.json' ) );
-		expect( city.buildings.find( ( building ) => building.id === 'p9' ) ).toMatchObject( { label: 'Harbour Home p9', type: 'residential' } );
-		expect( await readJson( join( fixture.config.outDir, 'cities/salt-ward/manifest.json' ) ) ).toMatchObject( {
-			named: true, namingTheme: 'salt-stained harbour'
+		const plan = await creation.planCity( { name: 'Salt Ward', seed: 'salt-3', size: 'small' }, { progress: ( line ) => told.push( line ) } );
+		expect( told ).toEqual( [ 'atlas done' ] );
+		const planDir = join( fixture.config.outDir, 'plans/salt-ward' );
+		expect( plan ).toMatchObject( {
+			id: 'salt-ward', name: 'Salt Ward', size: 'small', seed: 'salt-3', plannedAt: NOW.toISOString(),
+			blueprint: { uri: 'blueprint.json', mediaType: 'application/json' }, stats: { population: 120 }
 		} );
+		expect( await readJson( join( planDir, 'plan.json' ) ) ).toEqual( plan );
+		expect( fixture.calls.map( ( call ) => call.kind ) ).toEqual( [ 'atlas' ] );
+		await expectCode( creation.planCity( { name: 'Salt Ward', seed: 'other', size: 'small' } ), 'E_EXISTS' );
+		await expect( creation.library.loadCity( { id: 'salt-ward' } ) ).rejects.toMatchObject( { code: 'E_CITY_NOT_FOUND' } );
 
-		// A named city opens a home first, then a spread of the kinds that hire; its story is not the recorded one.
-		const instances = await creation.generateInstances( { cityId: city.id, mode: 'automatic', count: 9, buildingIds: [] } );
+		// An author names the plan outside the engine, as the Naming box writes it.
+		const atlasPlan = await readJson( join( planDir, 'blueprint.json' ) );
+		const named = namedWorld( atlasPlan, 'salt-stained harbour' );
+		const authoring = join( fixture.root, 'authoring' );
+		await writeJson( join( authoring, 'blueprint.named.json' ), named );
+		await writeJson( join( authoring, 'npc-types.json' ), { contractVersion: '1.0.0', types: [ { type: 'dock_hand' } ] } );
+		const namedBytes = await readFile( join( authoring, 'blueprint.named.json' ) );
+		// Paths resolve against the engine checkout.
+		const paths = { blueprint: '../authoring/blueprint.named.json', types: '../authoring/npc-types.json' };
+
+		await writeJson( join( authoring, 'other.named.json' ), { ...named, districts: [ { id: 'd9' } ] } );
+		await expectCode( creation.buildCity( { cityId: plan.id, named: { ...paths, blueprint: '../authoring/other.named.json' } } ), 'E_STAGE_MISMATCH' );
+		await writeJson( join( authoring, 'themeless.named.json' ), { ...named, meta: { seed: 'fixture' } } );
+		await expectCode( creation.buildCity( { cityId: plan.id, named: { ...paths, blueprint: '../authoring/themeless.named.json' } } ), 'E_INVALID_REQUEST' );
+		await expectCode( creation.buildCity( { cityId: plan.id, named: { ...paths, types: '../authoring/missing.json' } } ), 'E_INVALID_REQUEST' );
+
+		const city = await creation.buildCity( { cityId: plan.id, named: paths } );
+		// The world is built from the named blueprint's own bytes, which it binds.
+		const shells = fixture.calls.at( - 1 );
+		expect( shells.kind ).toBe( 'shells' );
+		expect( shells.source ).toEqual( namedBytes );
+		expect( city ).toMatchObject( { id: 'salt-ward', name: 'Salt Ward', seed: 'salt-3', size: 'small' } );
+		expect( city.buildings.find( ( building ) => building.id === 'p9' ) ).toMatchObject( { label: 'Harbour Home p9', type: 'residential' } );
+		const cityDir = join( fixture.config.outDir, 'cities/salt-ward' );
+		expect( await readJson( join( cityDir, 'npc-types.json' ) ) ).toMatchObject( { types: [ { type: 'dock_hand' } ] } );
+		expect( await readJson( join( cityDir, 'manifest.json' ) ) ).toMatchObject( { named: true, namingTheme: 'salt-stained harbour' } );
+		await expect( readFile( join( planDir, 'plan.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+		await expectCode( creation.buildCity( { cityId: plan.id } ), 'E_PLAN_NOT_FOUND' );
+
+		// A named city opens the buildings asked for first, then a home and a spread of the kinds that hire.
+		const instances = await creation.generateInstances( { cityId: city.id, mode: 'automatic', count: 9, buildingIds: [ 'p4' ] } );
 		const opened = fixture.calls.at( - 1 );
 		expect( opened.kind ).toBe( 'interiors' );
-		expect( valueAfter( opened.args, '--interior-priority' ).split( ',' ).slice( 0, 3 ) ).toEqual( [ 'p9', expect.any( String ), expect.any( String ) ] );
+		expect( valueAfter( opened.args, '--interior-priority' ).split( ',' ).slice( 0, 3 ) ).toEqual( [ 'p4', 'p9', expect.any( String ) ] );
+		expect( instances.ids.slice( 0, 2 ) ).toEqual( [ 'p4', 'p9' ] );
 		expect( fixture.calls.map( ( call ) => call.kind ) ).not.toContain( 'materialize' );
-		expect( instances.ids[ 0 ] ).toBe( 'p9' );
+		await expectCode( creation.generateQuests( { cityId: city.id, interiorIds: instances.ids, mainBrief: '', sideJobs: 1 } ), 'E_STAGE_MISMATCH' );
 
-		const quests = await creation.generateQuests( {
-			cityId: city.id, interiorIds: instances.ids, mainBrief: '  A courier vanishes on the night shift.  ', sideJobs: 3
-		} );
+		const quests = await creation.importStory( { cityId: city.id, recording: '../authoring/story', sideJobs: 3 } );
 		expect( quests ).toEqual( { id: 'salt-ward-story-2', mainSteps: 10, sideJobs: 2 } );
-		const author = fixture.calls.at( - 1 );
-		expect( author.kind ).toBe( 'author' );
-		expect( author.options ).toMatchObject( { cwd: fixture.config.questsRoot, env: { LLM_BASE_URL: MODEL.baseUrl } } );
-		expect( valueAfter( author.args, '--mechanics' ) ).toBe( PLAYABLE_MECHANICS.join( ',' ) );
-		expect( valueAfter( author.args, '--profile' ) ).toBe( 'small' );
-		expect( valueAfter( author.args, '--world' ) ).toBe( join( fixture.config.outDir, 'drafts/salt-ward/blueprint.json' ) );
-		expect( valueAfter( author.args, '--types' ) ).toBe( join( fixture.config.outDir, 'drafts/salt-ward/npc-types.json' ) );
-		expect( author.parcels ).toEqual( instances.ids );
-		expect( author.prompt ).toBe( 'A courier vanishes on the night shift.\n' );
-		expect( author.handoff ).toEqual( { hostCapabilities: HOST_CAPABILITIES } );
-		expect( PLAYABLE_MECHANICS ).not.toContain( 'assassinate' );
+		const replay = fixture.calls.at( - 1 );
+		expect( replay.kind ).toBe( 'materialize' );
 		const draft = join( fixture.config.outDir, 'drafts/salt-ward' );
-		expect( await readJson( join( draft, 'story/recording.json' ) ) ).toMatchObject( { model: 'fixture-model' } );
-		expect( await readJson( join( draft, 'quests/quest-bundle.json' ) ) ).toMatchObject( { counts: { questlines: 3 } } );
+		expect( replay.args.slice( 3, 8 ) ).toEqual( [
+			join( fixture.root, 'authoring/story/recording.json' ), 'small', join( draft, 'blueprint.json' ), join( draft, 'npc-types.json' ),
+			expect.stringMatching( /quests\/all\.questlines\.json$/ )
+		] );
+		expect( replay.args.at( - 1 ) ).toBe( `--parcels=${instances.ids.join( ',' )}` );
+		expect( replay.handoff ).toEqual( { hostCapabilities: HOST_CAPABILITIES } );
+		// The draft keeps what the story was made from and what it left out.
+		expect( await readJson( join( draft, 'story/recording.json' ) ) ).toMatchObject( { fixture: 'written' } );
+		expect( await readFile( join( draft, 'story/script.md' ), 'utf8' ) ).toBe( '# The Salt Line\n' );
+		expect( await readJson( join( draft, 'story/left-out.json' ) ) ).toEqual( [
+			{ questId: 'written-side-c', reason: 'has steps the game does not play: assassinate' }
+		] );
+		await expect( readFile( join( draft, 'story/world.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+		expect( ( await readJson( join( draft, 'quests/questlines.json' ) ) ).map( ( definition ) => definition.id ) )
+			.toEqual( [ 'written-main', 'written-side-a', 'written-side-b' ] );
 
 		const game = await creation.createGame( { cityId: city.id, interiorIds: instances.ids, questId: quests.id } );
-		expect( game ).toMatchObject( { quests: [ { totalSteps: 10 } ], sideJobs: [ {}, {} ] } );
-		for ( const absent of [ 'story', 'quests/handoff-input.json', 'quests/all.questlines.json' ] ) {
+		expect( game ).toMatchObject( { quests: [ { id: 'written-main', totalSteps: 10 } ], sideJobs: [ {}, {} ] } );
+		for ( const absent of [ 'story', 'quests/handoff-input.json', 'quests/all.questlines.json', 'draft.json' ] ) {
 
-			await expect( readFile( join( fixture.config.outDir, 'games', game.id, absent ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
+			await expect( lstat( join( fixture.config.outDir, 'games', game.id, absent ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
 
 		}
+		expect( new Set( fixture.calls.map( ( call ) => call.kind ) ) ).toEqual( new Set( [ 'atlas', 'shells', 'interiors', 'materialize' ] ) );
 
-		// A story the model cannot finish keeps what it said in the draft, beside the story before it.
-		fixture.failAuthor = true;
-		await expectCode( creation.generateQuests( { cityId: city.id, interiorIds: instances.ids, mainBrief: '', sideJobs: 1 } ), 'E_COMMAND_FAILED' );
-		expect( await readJson( join( draft, 'story/meta.json' ) ) ).toMatchObject( { failed: { stage: 'script' } } );
+		// A main story with a step the game cannot play is refused, leaving the draft's story as it was.
+		await writeJson( join( authoring, 'unplayable/recording.json' ), { fixture: 'unplayable' } );
+		await expectCode( creation.importStory( { cityId: city.id, recording: '../authoring/unplayable', sideJobs: 0 } ), 'E_INVALID_REQUEST' );
 		expect( await readJson( join( draft, 'draft.json' ) ) ).toMatchObject( { questId: quests.id } );
-		expect( fixture.calls.at( - 1 ).args.some( ( arg ) => String( arg ).startsWith( '--prompt' ) ) ).toBe( false );
+
+	} );
+
+	it( 'builds an unnamed plan into the city the template makes', async () => {
+
+		const fixture = await setup();
+		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
+		const plan = await creation.planCity( { name: 'Bare Ward', seed: 'bare', size: 'medium' } );
+		// A folder beside the plan holds no people the build would take up.
+		await writeJson( join( fixture.config.outDir, 'plans/bare-ward/npc-types.json' ), { types: [ { type: 'stray' } ] } );
+		await writeFile( join( fixture.config.outDir, 'plans/bare-ward/blueprint.json' ), '{}' );
+		await expectCode( creation.buildCity( { cityId: plan.id } ), 'E_STAGE_MISMATCH' );
+		await writeJson( join( fixture.config.outDir, 'plans/bare-ward/blueprint.json' ), atlas() );
+
+		const city = await creation.buildCity( { cityId: plan.id } );
+		expect( city ).toMatchObject( { id: 'bare-ward', seed: 'bare', size: 'medium' } );
+		const cityDir = join( fixture.config.outDir, 'cities/bare-ward' );
+		expect( await readJson( join( cityDir, 'manifest.json' ) ) ).toMatchObject( { named: false } );
+		await expect( readFile( join( cityDir, 'npc-types.json' ) ) ).rejects.toMatchObject( { code: 'ENOENT' } );
 
 	} );
 
@@ -248,6 +303,8 @@ describe( 'playable world creation contract', () => {
 		expect( checked ).toEqual( [ { world: join( fixture.config.outDir, 'drafts/scene-ward' ), questlines: 4 } ] );
 		expect( ( await readJson( join( fixture.config.outDir, 'drafts/scene-ward/quests/questlines.json' ) ) ).map( ( definition ) => definition.id ) )
 			.toEqual( [ 'main-line', 'side-two', 'side-three' ] );
+		expect( await readJson( join( fixture.config.outDir, 'drafts/scene-ward/story/left-out.json' ) ) )
+			.toEqual( [ { questId: 'side-one', reason: blocked.get( 'side-one' ) } ] );
 
 		await creation.generateInstances( { cityId: city.id, mode: 'automatic', count: 9, buildingIds: [] } );
 		blocked.set( 'main-line', 'scene main in p1: E_SCENERY_PLACE p1 floor 0 has no bedroom room' );
@@ -261,11 +318,17 @@ describe( 'playable world creation contract', () => {
 		roots.push( root );
 		const config = {
 			engineRoot: join( root, 'engine' ), atlasRoot: join( root, 'atlas' ), questsRoot: join( root, 'quests' ),
-			namingRoot: join( root, 'naming' ), themesDir: THEMES, outDir: join( root, 'engine/out' ), model: MODEL
+			themesDir: THEMES, outDir: join( root, 'engine/out' )
 		};
-		await mkdir( join( config.questsRoot, 'creation/fixtures' ), { recursive: true } );
-		await writeJson( join( config.questsRoot, 'creation/samples/urbe-small/npc-types.json' ), { contractVersion: '1.0.0', types: [] } );
-		const fixture = { config, calls: [], failAuthor: false };
+		const sample = join( config.questsRoot, 'creation/samples/urbe-small' );
+		await writeJson( join( sample, 'npc-types.json' ), { contractVersion: '1.0.0', types: [] } );
+		await writeJson( join( sample, 'recording.json' ), { model: 'recorded' } );
+		// A story an author wrote outside the engine, as Quests records one.
+		const story = join( root, 'authoring/story' );
+		await writeJson( join( story, 'recording.json' ), { fixture: 'written' } );
+		await writeFile( join( story, 'script.md' ), '# The Salt Line\n' );
+		await writeJson( join( story, 'world.json' ), { meta: {} } );
+		const fixture = { root, config, calls: [], recording: '../authoring/story' };
 		fixture.run = processPort( fixture );
 		return fixture;
 
@@ -299,50 +362,17 @@ function processCommand( fixture ) {
 			return '';
 
 		}
-		if ( args[ 0 ] === 'run' && args[ 1 ] === 'world' ) {
-
-			// Naming writes the named blueprint and its people beside the one it read.
-			calls.push( { kind: 'naming', command, args, options } );
-			const folder = args[ 3 ];
-			const plan = await readJson( join( folder, 'blueprint.json' ) );
-			await writeJson( join( folder, 'blueprint.named.json' ), {
-				...plan, meta: { ...plan.meta, naming: { theme: valueAfter( args, '--theme' ), model: 'fixture-model', namedAt: NOW.toISOString() } },
-				parcels: plan.parcels.map( ( parcel ) => ( { ...parcel, name: `Harbour ${parcel.type === 'residential' ? 'Home' : 'Venue'} ${parcel.id}` } ) )
-			} );
-			await writeJson( join( folder, 'npc-types.json' ), { contractVersion: '1.0.0', types: [ { id: 'dock_hand' } ] } );
-			return '';
-
-		}
-		if ( args.includes( 'author' ) ) {
-
-			const parcels = await readJson( args.find( ( arg ) => arg.startsWith( '--parcels=@' ) ).slice( 11 ) );
-			const prompt = args.find( ( arg ) => arg.startsWith( '--prompt=@' ) );
-			calls.push( {
-				kind: 'author', command, args, options, parcels, handoff: await readJson( valueAfter( args, '--handoff' ) ),
-				prompt: prompt ? await readFile( prompt.slice( 10 ), 'utf8' ) : null
-			} );
-			const story = valueAfter( args, '--out' );
-			if ( fixture.failAuthor ) {
-
-				await writeJson( join( story, 'meta.json' ), { failed: { stage: 'script', message: 'E_LLM unusable script' } } );
-				throw new CreationError( 'E_COMMAND_FAILED', 'author failed at script: E_LLM unusable script', 500 );
-
-			}
-			await writeJson( join( story, 'recording.json' ), { model: 'fixture-model' } );
-			await writeBundle( valueAfter( args, '--questlines' ), [
-				quest( 'written-main', 'Written main', 10, parcels.slice( 0, 7 ) ),
-				quest( 'written-side-a', 'Written side A', 4, [ parcels[ 7 ] ] ),
-				quest( 'written-side-b', 'Written side B', 4, [ parcels[ 8 ] ] )
-			] );
-			return '';
-
-		}
 		if ( args.includes( 'materialize' ) ) {
 
-			calls.push( { kind: 'materialize', command, args } );
-			// Output is the fifth positional CLI argument; trailing selection
-			// flags must never become filenames in the checkout running the test.
-			await writeBundle( args[ args.indexOf( '--' ) + 5 ], definitions() );
+			// Positional after `--`: recording, profile, world, types, output, handoff.
+			const at = args.indexOf( '--' );
+			const recording = await readJson( args[ at + 1 ] );
+			const parcels = args.find( ( arg ) => arg.startsWith( '--parcels=' ) )?.slice( 10 ).split( ',' ) ?? parcelIds();
+			calls.push( { kind: 'materialize', command, args, handoff: await readJson( args[ at + 6 ] ) } );
+			// Trailing selection flags must never become filenames in the checkout running the test.
+			await writeBundle( args[ at + 5 ], recording.fixture === 'written' ? written( parcels )
+				: recording.fixture === 'unplayable' ? [ quest( 'lethal-main', 'Lethal main', 8, parcels.slice( 0, 7 ), 'assassinate' ) ]
+					: definitions() );
 			return '';
 
 		}
@@ -357,16 +387,17 @@ function processCommand( fixture ) {
 			const selected = args.includes( '--interior-parcels' )
 				? valueAfter( args, '--interior-parcels' ).split( ',' )
 				: [ ...new Set( [ ...priority, ...blueprint.parcels.map( ( parcel ) => parcel.id ) ] ) ].slice( 0, Number( valueAfter( args, '--interiors' ) ) );
-			calls.push( { kind: selected.length ? 'interiors' : 'shells', command, args } );
-			await writeJson( join( world, 'blueprint.json' ), blueprint );
+			calls.push( { kind: selected.length ? 'interiors' : 'shells', command, args, source: await readFile( source ) } );
+			// Like the assembler, it writes beside a name and renames over it, and keeps every shell it reuses.
+			await publishJson( join( world, 'blueprint.json' ), blueprint );
 			const types = join( dirname( source ), 'npc-types.json' );
-			if ( dirname( source ) !== world && await readFile( types ).catch( () => null ) ) await writeJson( join( world, 'npc-types.json' ), await readJson( types ) );
-			for ( const parcel of blueprint.parcels ) {
+			if ( dirname( source ) !== world && await readFile( types ).catch( () => null ) ) await publishJson( join( world, 'npc-types.json' ), await readJson( types ) );
+			if ( ! args.includes( '--reuse-shells' ) ) {
 
-				await writeJson( join( world, parcel.id, `${ parcel.id }.blueprint.json` ), { id: parcel.id } );
+				for ( const parcel of blueprint.parcels ) await publishJson( join( world, parcel.id, `${ parcel.id }.blueprint.json` ), { id: parcel.id } );
 
 			}
-			await writeJson( join( world, 'manifest.json' ), {
+			await publishJson( join( world, 'manifest.json' ), {
 				contractVersion: '1.0.0', seed: blueprint.seed, atlasVersion: blueprint.version,
 				named: blueprint.parcels.some( ( parcel ) => parcel.name ), namingTheme: blueprint.meta?.naming?.theme ?? null,
 				parcels: blueprint.parcels.map( ( parcel ) => parcel.id ),
@@ -422,7 +453,7 @@ function atlas() {
 
 	return {
 		version: '0.14.0', seed: 'fixture', districts: [ { id: 'd0' } ],
-		meta: { seed: 'fixture' },
+		meta: { seed: 'fixture' }, stats: { population: 120, parcelCounts: {}, perDistrict: [] },
 		parcels: parcelIds().map( ( id, index ) => ( {
 			id, type: index === 9 ? 'residential' : index % 2 ? 'commerce' : 'clinic',
 			access: { point: [ 10 + index * 8, 20 + index * 4 ] }
@@ -442,14 +473,36 @@ function definitions() {
 
 }
 
-function quest( id, title, count, locations ) {
+/** The story the author wrote: a main line over seven opened buildings, three side jobs, one with a step the game does not play. */
+function written( parcels ) {
+
+	return [
+		quest( 'written-main', 'Written main', 10, parcels.slice( 0, 7 ) ),
+		quest( 'written-side-a', 'Written side A', 4, [ parcels[ 7 ] ] ),
+		quest( 'written-side-c', 'Written side C', 4, [ parcels[ 8 ] ], 'assassinate' ),
+		quest( 'written-side-b', 'Written side B', 4, [ parcels[ 8 ] ] )
+	];
+
+}
+
+/** The plan as the Naming box names it: every parcel named, the naming recorded, nothing else touched. */
+function namedWorld( plan, theme ) {
+
+	return {
+		...plan, meta: { ...plan.meta, naming: { theme, model: 'external author', namedAt: NOW.toISOString() } },
+		parcels: plan.parcels.map( ( parcel ) => ( { ...parcel, name: `Harbour ${parcel.type === 'residential' ? 'Home' : 'Venue'} ${parcel.id}` } ) )
+	};
+
+}
+
+function quest( id, title, count, locations, lastKind = 'goto' ) {
 
 	return {
 		id, title, premise: `${ title } premise`, items: [ { itemId: `${id}-item` } ],
 		steps: Array.from( { length: count }, ( _, index ) => ( {
 			stepId: `${ id}-step-${ index + 1 }`,
 			narrative: { playerHint: `${ title } objective ${ index + 1 }` },
-			target: { parcelId: locations[ index % locations.length ] }
+			target: { kind: index === count - 1 ? lastKind : 'goto', parcelId: locations[ index % locations.length ] }
 		} ) )
 	};
 
@@ -483,6 +536,13 @@ async function writeJson( path, value ) {
 
 	await mkdir( dirname( path ), { recursive: true } );
 	await writeFile( path, JSON.stringify( value, null, 2 ) + '\n' );
+
+}
+
+async function publishJson( path, value ) {
+
+	await writeJson( `${path}.next`, value );
+	await rename( `${path}.next`, path );
 
 }
 

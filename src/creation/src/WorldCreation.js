@@ -1,9 +1,11 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { cp, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { fnv1a } from '../../assembly/hash.js';
+import { cloneWorld } from '../../assembly/WorldClone.js';
 import { questParcelIds } from '../../assembly/InteriorSelection.js';
 import sceneryCapabilities from '../../game/scenery/capabilities.json' with { type: 'json' };
 import { createLibrary, LibraryError } from '../../library/index.js';
@@ -13,25 +15,27 @@ import {
 import { Boundary } from './Boundary.js';
 import { CreationError } from './CreationError.js';
 import { CityTemplate } from './CityTemplate.js';
-import { cityDescriptor, gameDescriptor } from './descriptors.js';
+import { checksum, cityDescriptor, gameDescriptor, planDescriptor } from './descriptors.js';
 import { SceneryPreflight } from './SceneryPreflight.js';
 
 const SIDE_JOB_LIMIT = 3;
 const MAIN_LOCATION_COUNT = 7;
 /** How much of a failed command's output its error carries. */
 const FAILURE_LINES = 40;
-const NPC_TYPES = 'creation/samples/urbe-small/npc-types.json';
-const RECORDING = 'creation/samples/urbe-small/recording.json';
+/** The recorded story a template city plays, and the people it was written for. */
+const RECORDED = 'creation/samples/urbe-small';
+const NPC_TYPES = `${RECORDED}/npc-types.json`;
 /** The Materials theme the game and its buildings wear. */
 const THEME = 'cyberpunk';
 const STAGE_INPUTS = {
-	generateCity: 'generate-city', generateInstances: 'generate-instances',
-	generateQuests: 'generate-quests', createGame: 'create-game'
+	planCity: 'generate-city', buildCity: 'build-city', generateCity: 'generate-city',
+	generateInstances: 'generate-instances', generateQuests: 'generate-quests', importStory: 'import-story',
+	createGame: 'create-game'
 };
 /**
  * A named city opens a home first, then one building of each kind that hires,
- * round after round, so an authored story has somewhere to live and a spread
- * of places to meet people.
+ * round after round, so the story written for it has somewhere to live and a
+ * spread of places to meet people.
  */
 const SPREAD = [
 	'residential', 'commerce', 'restaurant', 'clinic', 'police', 'corpo', 'coffee_shop',
@@ -39,10 +43,11 @@ const SPREAD = [
 ];
 
 /**
- * The step kinds the game plays whole, in the Quests catalog order. Left out:
- * assassination, whose only lethal path is traffic the player does not drive;
- * rescue, access, hacking and sabotage, whose fixed targets creation does not
- * bind; transportation, whose journey needs a transit line the story cannot see.
+ * The step kinds the game plays whole, in the Quests catalog order; a story
+ * uses no other. Left out: assassination, whose only lethal path is traffic the
+ * player does not drive; rescue, access, hacking and sabotage, whose fixed
+ * targets creation does not bind; transportation, whose journey needs a transit
+ * line the story cannot see.
  */
 export const PLAYABLE_MECHANICS = Object.freeze( [
 	'goto', 'observe', 'talk', 'listen', 'pickup', 'deliver', 'steal', 'work', 'investigation', 'escort'
@@ -61,9 +66,7 @@ export class WorldCreation {
 		this.engineRoot = resolve( config.engineRoot );
 		this.atlasRoot = resolve( config.atlasRoot );
 		this.questsRoot = resolve( config.questsRoot );
-		this.namingRoot = config.namingRoot ? resolve( config.namingRoot ) : null;
 		this.outDir = resolve( config.outDir );
-		this.model = config.model ?? null;
 		this.preflight = preflight ?? new SceneryPreflight( { themesDir: resolve( config.themesDir ), theme: THEME } );
 		this.run = run;
 		this.clock = clock;
@@ -79,68 +82,88 @@ export class WorldCreation {
 
 	}
 
-	async generateCity( input, { progress = null } = {} ) {
+	/**
+	 * Plans a city with Atlas and keeps the plan in `out/plans/<id>` for an
+	 * author to name before `buildCity` builds it.
+	 */
+	async planCity( input, { progress = null } = {} ) {
 
-		const run = this.#runner( progress );
 		this.boundary.assert( 'generate-city', input );
 		const template = new CityTemplate( input );
-		input = template.input;
-		if ( input.theme && ! ( this.namingRoot && this.model ) ) {
+		const id = safeId( template.input.name, template.input.seed );
+		const target = join( this.outDir, 'plans', id );
+		if ( await exists( target ) || await exists( join( this.outDir, 'cities', id ) ) ) {
 
-			throw new CreationError( 'E_NAMING_UNAVAILABLE', 'a themed city is named through the model server: set LLM_BASE_URL', 503 );
+			throw new CreationError( 'E_EXISTS', `city ${id} is already planned or built`, 409 );
 
 		}
-		const id = safeId( input.name, input.seed );
-		const target = join( this.outDir, 'cities', id );
-		if ( await exists( target ) ) throw new CreationError( 'E_EXISTS', `city ${id} already exists`, 409 );
-
-		const temporary = await this.#temporary( 'city-' );
-		const blueprint = join( temporary, 'blueprint.json' );
-		const world = join( temporary, 'world' );
-
+		const temporary = await this.#temporary( 'plan-' );
 		try {
 
-			await run( 'npm', template.command( blueprint ), { cwd: this.atlasRoot } );
-			// Names go in before anything is built: the world binds its blueprint's
-			// bytes, and every sign and quest place reads its names from them.
-			if ( input.theme ) {
+			const atlas = await this.#atlas( this.#runner( progress ), template, temporary );
+			const plan = this.boundary.assert( 'plan-result', await planDescriptor( temporary, id, template.input, atlas, this.clock() ) );
+			await writeJson( join( temporary, 'plan.json' ), plan );
+			await publish( target, temporary, 'city plan' );
+			return plan;
 
-				await run( 'npm', [ 'run', 'world', '--', temporary, '--theme', input.theme ], { cwd: this.namingRoot, env: this.#modelEnv() } );
+		} finally {
 
-			}
-			await run( 'npm', [
-				'run', 'assemble-city', '--', '--blueprint', input.theme ? join( temporary, 'blueprint.named.json' ) : blueprint,
-				'--out', world, '--interiors', '0'
-			], { cwd: this.engineRoot } );
-			const atlas = await json( join( world, 'blueprint.json' ), 'generated city blueprint' );
-			const manifest = await json( join( world, 'manifest.json' ), 'generated city manifest' );
-			// Every parcel stands, is a shell, or is an empty lot on purpose; none is unaccounted for.
-			const sources = manifest.sources ?? {};
-			if ( atlas.parcels.some( ( parcel ) => ! [ 'kit', 'shell', 'empty' ].includes( sources[ parcel.id ] ) ) || manifest.interiors.length !== 0 ) {
+			await rm( temporary, { recursive: true, force: true } );
 
-				throw new CreationError( 'E_OUTPUT_INVALID', 'city stage must account for every parcel and hold no interiors' );
+		}
 
-			}
-			if ( input.theme && ( manifest.named !== true || manifest.namingTheme !== input.theme || ! existsSync( join( world, 'npc-types.json' ) ) ) ) {
+	}
 
-				throw new CreationError( 'E_OUTPUT_INVALID', 'city stage did not assemble the named world with its people' );
+	/**
+	 * Builds a planned city, from the plan or from the plan as an author named
+	 * it. The world binds the blueprint it was built from, so a named city binds
+	 * the named one, which must be its plan with names and nothing else.
+	 */
+	async buildCity( input, { progress = null } = {} ) {
 
-			}
+		this.boundary.assert( 'build-city', input );
+		const plan = await this.#plan( input.cityId );
+		const planDir = join( this.outDir, 'plans', plan.id );
+		if ( await exists( join( this.outDir, 'cities', plan.id ) ) ) throw new CreationError( 'E_EXISTS', `city ${plan.id} already exists`, 409 );
+		const bytes = await readFile( join( planDir, 'blueprint.json' ) ).catch( () => null );
+		if ( ! bytes || checksum( bytes ) !== plan.blueprint.checksum ) {
 
-			await mkdir( join( this.outDir, 'cities' ), { recursive: true } );
-			await rename( world, target );
-			const city = await cityDescriptor( target, id, input, atlas, this.clock() );
-			try {
+			throw new CreationError( 'E_STAGE_MISMATCH', `plan ${plan.id} holds another blueprint than the one it was planned with` );
 
-				await this.library.saveCity( city );
+		}
 
-			} catch ( error ) {
+		// The assembler takes the NPC types found beside the blueprint, so the
+		// source folder holds the blueprint alone, or the named one with its people.
+		const temporary = await this.#temporary( 'city-' );
+		try {
 
-				await rm( target, { recursive: true, force: true } );
-				throw error;
+			const theme = input.named ? await this.#named( plan, JSON.parse( bytes ), input.named, temporary ) : null;
+			if ( ! input.named ) await writeFile( join( temporary, 'blueprint.json' ), bytes );
+			const city = await this.#build( this.#runner( progress ), plan.id, plan, temporary, theme );
+			await rm( planDir, { recursive: true, force: true } );
+			return city;
 
-			}
-			return this.boundary.assert( 'city-result', city );
+		} finally {
+
+			await rm( temporary, { recursive: true, force: true } );
+
+		}
+
+	}
+
+	/** Plans and builds a template city in one stage, unnamed. */
+	async generateCity( input, { progress = null } = {} ) {
+
+		this.boundary.assert( 'generate-city', input );
+		const template = new CityTemplate( input );
+		const id = safeId( template.input.name, template.input.seed );
+		if ( await exists( join( this.outDir, 'cities', id ) ) ) throw new CreationError( 'E_EXISTS', `city ${id} already exists`, 409 );
+		const run = this.#runner( progress );
+		const temporary = await this.#temporary( 'city-' );
+		try {
+
+			await this.#atlas( run, template, temporary );
+			return await this.#build( run, id, template.input, temporary, null );
 
 		} finally {
 
@@ -177,18 +200,25 @@ export class WorldCreation {
 		const world = join( temporary, 'world' );
 		try {
 
-			await cp( join( this.outDir, 'cities', city.id ), world, { recursive: true } );
+			// A draft shares every file it does not change with its city, and a game with its draft.
+			await cloneWorld( join( this.outDir, 'cities', city.id ), world );
 			await rm( join( world, 'city.json' ), { force: true } );
 			const named = ( await json( join( world, 'manifest.json' ), 'city manifest' ) ).named === true;
 			// An unnamed city plays the recorded story's people.
 			const types = join( world, 'npc-types.json' );
 			if ( ! named && ! existsSync( types ) ) await cp( join( this.questsRoot, NPC_TYPES ), types );
-			// A named city's story is written once its interiors are open, so it
-			// opens a spread of kinds. The recorded story is written for the whole
-			// city first and its places open first, in story order.
-			const priority = manual ? [] : named
-				? venueSpread( await json( join( world, 'blueprint.json' ), 'city blueprint' ) )
-				: questParcelIds( ( await this.#materialize( run, city, world, join( temporary, 'ranking' ) ) ).questlines );
+			// An automatic pick opens the buildings it names first. Then a named
+			// city opens a spread of kinds for the story written against them;
+			// an unnamed one opens the places of its recorded story, in story order.
+			let priority = [];
+			if ( ! manual ) {
+
+				const order = named
+					? venueSpread( await json( join( world, 'blueprint.json' ), 'city blueprint' ) )
+					: questParcelIds( ( await this.#materialize( run, city, world, join( temporary, 'ranking' ), join( this.questsRoot, RECORDED ) ) ).questlines );
+				priority = [ ...new Set( [ ...input.buildingIds, ...order ] ) ];
+
+			}
 
 			// A manual pick is exact. An automatic one hands the assembler the
 			// count and lets it open candidates in its order, skipping a building
@@ -227,81 +257,44 @@ export class WorldCreation {
 
 	}
 
+	/** Plays the recorded story in an unnamed city's opened interiors. */
 	async generateQuests( input, { progress = null } = {} ) {
 
-		const run = this.#runner( progress );
 		this.boundary.assert( 'generate-quests', input );
-		if ( input.sideJobs > SIDE_JOB_LIMIT ) {
+		this.#sideJobs( input.sideJobs );
+		if ( input.mainBrief.trim() ) {
 
-			throw new CreationError( 'E_SIDE_JOB_LIMIT', `a game carries at most ${SIDE_JOB_LIMIT} side jobs` );
+			throw new CreationError( 'E_STORY_BRIEF_UNAVAILABLE', 'the engine writes no story: a story written outside it comes in through importStory' );
 
 		}
-		const city = await this.#city( input.cityId );
-		const draftDir = join( this.outDir, 'drafts', input.cityId );
-		const draft = await this.#draft( input.cityId );
+		const { city, draft, draftDir } = await this.#storyStage( input.cityId );
 		if ( ! sameIds( draft.interiorIds, input.interiorIds ) ) {
 
 			throw new CreationError( 'E_STAGE_MISMATCH', 'quest input does not match the current interior stage' );
 
 		}
-		const brief = input.mainBrief.trim();
-		const authored = brief !== '' || ( await json( join( draftDir, 'manifest.json' ), 'draft manifest' ) ).named === true;
-		if ( authored && ! this.model ) {
+		if ( ( await json( join( draftDir, 'manifest.json' ), 'draft manifest' ) ).named === true ) {
 
-			throw new CreationError( 'E_STORY_BRIEF_UNAVAILABLE', 'a written story needs the model server: set LLM_BASE_URL', 503 );
+			throw new CreationError( 'E_STAGE_MISMATCH', `city ${city.id} is named and has its own people: its story comes in through importStory` );
 
 		}
+		return this.#story( this.#runner( progress ), city, draft, draftDir, join( this.questsRoot, RECORDED ), input.sideJobs, 'quests' );
 
-		const temporary = await this.#temporary( 'quests-' );
-		try {
+	}
 
-			const questsDir = join( temporary, 'quests' );
-			const storyDir = join( temporary, 'story' );
-			// The assembler skips any building Interior cannot furnish, so either
-			// story is written against the interiors that opened. Without this a
-			// story can name a building the player cannot walk into.
-			const all = authored
-				? await this.#author( run, city, draftDir, draft, brief, temporary, questsDir, storyDir ).catch( async ( error ) => {
+	/** Plays a story an author wrote outside the engine, as a Quests recording, in the city's opened interiors. */
+	async importStory( input, { progress = null } = {} ) {
 
-					// A failed story keeps what the model said and where it stopped.
-					if ( await exists( storyDir ) ) await publish( join( draftDir, 'story' ), storyDir, 'failed story' );
-					throw error;
+		this.boundary.assert( 'import-story', input );
+		this.#sideJobs( input.sideJobs );
+		const recording = resolve( this.engineRoot, input.recording );
+		if ( ! ( await lstat( join( recording, 'recording.json' ) ).catch( () => null ) )?.isFile() ) {
 
-				} )
-				: await this.#materialize( run, city, draftDir, questsDir, draft.interiorIds );
-			// A scene that cannot stand leaves its investigation unfinishable: a
-			// side job with one is left out, and the main story fails here.
-			const blocked = await this.#standScenery( draftDir, all );
-			const [ main, ...sides ] = all.questlines;
-			if ( blocked.has( main.id ) ) {
-
-				throw new CreationError( 'E_QUEST_LOCATIONS', `the main story cannot stand in city ${city.id}: ${blocked.get( main.id )}` );
-
-			}
-			const definitions = [ main, ...sides.filter( ( definition ) => ! blocked.has( definition.id ) ).slice( 0, input.sideJobs ) ];
-			const missing = questParcelIds( definitions ).filter( ( id ) => ! input.interiorIds.includes( id ) );
-			if ( missing.length ) {
-
-				throw new CreationError( 'E_QUEST_LOCATIONS', `quests need interiors not selected in stage 2: ${missing.join( ', ' )}` );
-
-			}
-			const selected = bundleOperation( () => selectQuestBundle(
-				all, definitions.map( ( definition ) => definition.id )
-			), 'quest bundle selection' );
-			await writeQuestBundle( questsDir, selected );
-			await publish( join( draftDir, 'quests' ), questsDir, 'quest stage' );
-			if ( authored ) await publish( join( draftDir, 'story' ), storyDir, 'quest stage' );
-			const questId = `${input.cityId}-${authored ? 'story' : 'quests'}-${definitions.length - 1}`;
-			await writeJson( join( draftDir, 'draft.json' ), { ...draft, questId } );
-			const result = { id: questId, mainSteps: main.steps.length, sideJobs: definitions.length - 1 };
-			this.boundary.assert( 'quests-result', result );
-			return result;
-
-		} finally {
-
-			await rm( temporary, { recursive: true, force: true } );
+			throw new CreationError( 'E_INVALID_REQUEST', `${input.recording} holds no recording.json` );
 
 		}
+		const { city, draft, draftDir } = await this.#storyStage( input.cityId );
+		return this.#story( this.#runner( progress ), city, draft, draftDir, recording, input.sideJobs, 'story' );
 
 	}
 
@@ -324,8 +317,8 @@ export class WorldCreation {
 		const world = join( temporary, 'world' );
 		try {
 
-			await cp( join( this.outDir, needsDraft ? 'drafts' : 'cities', city.id ), world, { recursive: true } );
-			// A game carries its bundle alone: what the story was written from,
+			await cloneWorld( join( this.outDir, needsDraft ? 'drafts' : 'cities', city.id ), world );
+			// A game carries its bundle alone: what the story was made from,
 			// the unselected definitions and the creation stages stay in the draft.
 			for ( const path of [
 				'city.json', 'draft.json', 'story', ...( hasQuests ? [] : [ 'quests' ] ),
@@ -364,42 +357,176 @@ export class WorldCreation {
 
 	}
 
-	/**
-	 * Replays the recorded story over a world into a bundle in `questsDir`,
-	 * against what the game plays and stands.
-	 * @param within the parcels the story may use, or nothing for the whole city.
-	 * A venue that cannot stand inside the set moves to a compatible parcel that
-	 * is in it, so every place the story names is a building the player opens.
-	 */
-	async #materialize( run, city, world, questsDir, within = null ) {
+	/** Writes the Atlas plan for a template into `dir/blueprint.json`. @returns the plan */
+	async #atlas( run, template, dir ) {
 
-		await run( 'npm', [
-			'run', 'materialize', '--', join( this.questsRoot, RECORDING ), city.size,
-			join( world, 'blueprint.json' ), join( world, 'npc-types.json' ), join( questsDir, 'all.questlines.json' ),
-			await handoffInput( questsDir ), ...( within ? [ `--parcels=${within.join( ',' )}` ] : [] )
-		], { cwd: this.questsRoot } );
-		return readQuestBundle( questsDir, 'materialized quest bundle' );
+		const blueprint = join( dir, 'blueprint.json' );
+		await run( 'npm', template.command( blueprint ), { cwd: this.atlasRoot } );
+		return json( blueprint, 'city plan' );
 
 	}
 
 	/**
-	 * Writes a story with the model server against the draft's opened
-	 * interiors, in the step kinds the game plays, into a bundle in
-	 * `questsDir`. What the model said and each stage it wrote land in `storyDir`.
+	 * Puts an author's naming of `plan` in `dir` as the assembler reads it: the
+	 * named blueprint's bytes and its NPC types beside it.
+	 * @returns the naming theme
 	 */
-	async #author( run, city, draftDir, draft, brief, temporary, questsDir, storyDir ) {
+	async #named( plan, atlas, named, dir ) {
 
-		const parcels = join( temporary, 'parcels.json' );
-		await writeJson( parcels, draft.interiorIds );
-		const prompt = join( temporary, 'brief.txt' );
-		if ( brief ) await writeFile( prompt, brief + '\n' );
+		const [ blueprint, types ] = await Promise.all( [ named.blueprint, named.types ].map( ( path ) =>
+			readFile( resolve( this.engineRoot, path ) ).catch( ( error ) => {
+
+				throw new CreationError( 'E_INVALID_REQUEST', `${path} cannot be read: ${error.message}` );
+
+			} ) ) );
+		const world = parse( blueprint, named.blueprint );
+		const theme = world.meta?.naming?.theme;
+		if ( typeof theme !== 'string' || ! theme.trim() ) throw new CreationError( 'E_INVALID_REQUEST', `${named.blueprint} records no naming theme` );
+		// Naming changes names and records itself; anything else is another city.
+		if ( ! isDeepStrictEqual( unnamed( world ), unnamed( atlas ) ) ) {
+
+			throw new CreationError( 'E_STAGE_MISMATCH', `${named.blueprint} is not plan ${plan.id} with names` );
+
+		}
+		const people = parse( types, named.types );
+		if ( ! Array.isArray( people.types ) || people.types.length === 0 ) throw new CreationError( 'E_INVALID_REQUEST', `${named.types} holds no NPC types` );
+		await writeFile( join( dir, 'blueprint.json' ), blueprint );
+		await writeFile( join( dir, 'npc-types.json' ), types );
+		return theme;
+
+	}
+
+	/**
+	 * Builds every shell of the blueprint in `dir` and publishes the city as
+	 * `id`. A named city (`theme`) must come out named in it, with its people.
+	 */
+	async #build( run, id, identity, dir, theme ) {
+
+		const target = join( this.outDir, 'cities', id );
+		const world = join( dir, 'world' );
 		await run( 'npm', [
-			'run', 'author', '--', '--world', join( draftDir, 'blueprint.json' ), '--types', join( draftDir, 'npc-types.json' ),
-			'--out', storyDir, '--questlines', join( questsDir, 'all.questlines.json' ), `--parcels=@${parcels}`,
-			'--mechanics', PLAYABLE_MECHANICS.join( ',' ), '--handoff', await handoffInput( questsDir ), '--profile', city.size,
-			...( brief ? [ `--prompt=@${prompt}` ] : [] )
-		], { cwd: this.questsRoot, env: this.#modelEnv() } );
-		return readQuestBundle( questsDir, 'written quest bundle' );
+			'run', 'assemble-city', '--', '--blueprint', join( dir, 'blueprint.json' ), '--out', world, '--interiors', '0'
+		], { cwd: this.engineRoot } );
+		const atlas = await json( join( world, 'blueprint.json' ), 'generated city blueprint' );
+		const manifest = await json( join( world, 'manifest.json' ), 'generated city manifest' );
+		// Every parcel stands, is a shell, or is an empty lot on purpose; none is unaccounted for.
+		const sources = manifest.sources ?? {};
+		if ( atlas.parcels.some( ( parcel ) => ! [ 'kit', 'shell', 'empty' ].includes( sources[ parcel.id ] ) ) || manifest.interiors.length !== 0 ) {
+
+			throw new CreationError( 'E_OUTPUT_INVALID', 'city stage must account for every parcel and hold no interiors' );
+
+		}
+		if ( theme !== null && ( manifest.named !== true || manifest.namingTheme !== theme || ! existsSync( join( world, 'npc-types.json' ) ) ) ) {
+
+			throw new CreationError( 'E_OUTPUT_INVALID', 'city stage did not assemble the named world with its people' );
+
+		}
+
+		await mkdir( join( this.outDir, 'cities' ), { recursive: true } );
+		await rename( world, target );
+		const city = await cityDescriptor( target, id, identity, atlas, this.clock() );
+		try {
+
+			await this.library.saveCity( city );
+
+		} catch ( error ) {
+
+			await rm( target, { recursive: true, force: true } );
+			throw error;
+
+		}
+		return this.boundary.assert( 'city-result', city );
+
+	}
+
+	#sideJobs( count ) {
+
+		if ( count > SIDE_JOB_LIMIT ) throw new CreationError( 'E_SIDE_JOB_LIMIT', `a game carries at most ${SIDE_JOB_LIMIT} side jobs` );
+
+	}
+
+	async #storyStage( cityId ) {
+
+		const city = await this.#city( cityId );
+		const draft = await this.#draft( cityId );
+		return { city, draft, draftDir: join( this.outDir, 'drafts', cityId ) };
+
+	}
+
+	/**
+	 * Replays a recording against the draft's opened interiors, keeps the
+	 * questlines the game can play and stand, and publishes their bundle with
+	 * what the story was made from in `story/`.
+	 * @param kind names the questId: `quests` for the recorded story, `story` for an imported one
+	 */
+	async #story( run, city, draft, draftDir, recording, sideJobs, kind ) {
+
+		const temporary = await this.#temporary( 'quests-' );
+		try {
+
+			const questsDir = join( temporary, 'quests' );
+			const storyDir = join( temporary, 'story' );
+			// The assembler skips any building Interior cannot furnish, so the
+			// story is replayed against the interiors that opened. Without this a
+			// story can name a building the player cannot walk into.
+			const all = await this.#materialize( run, city, draftDir, questsDir, recording, draft.interiorIds );
+			const [ main, ...sides ] = all.questlines;
+			const unplayable = unplayableSteps( all.questlines );
+			if ( unplayable.has( main.id ) ) throw new CreationError( 'E_INVALID_REQUEST', `the main story ${unplayable.get( main.id )}` );
+			// A scene that cannot stand leaves its investigation unfinishable: a
+			// side job with one is left out, and the main story fails here.
+			const blocked = await this.#standScenery( draftDir, all );
+			if ( blocked.has( main.id ) ) {
+
+				throw new CreationError( 'E_QUEST_LOCATIONS', `the main story cannot stand in city ${city.id}: ${blocked.get( main.id )}` );
+
+			}
+			const leftOut = sides.filter( ( definition ) => unplayable.has( definition.id ) || blocked.has( definition.id ) );
+			const definitions = [ main, ...sides.filter( ( definition ) => ! leftOut.includes( definition ) ).slice( 0, sideJobs ) ];
+			const missing = questParcelIds( definitions ).filter( ( id ) => ! draft.interiorIds.includes( id ) );
+			if ( missing.length ) {
+
+				throw new CreationError( 'E_QUEST_LOCATIONS', `quests need interiors not selected in stage 2: ${missing.join( ', ' )}` );
+
+			}
+			const selected = bundleOperation( () => selectQuestBundle(
+				all, definitions.map( ( definition ) => definition.id )
+			), 'quest bundle selection' );
+			await writeQuestBundle( questsDir, selected );
+			await keepStory( recording, storyDir, leftOut.map( ( definition ) => ( {
+				questId: definition.id, reason: unplayable.get( definition.id ) ?? blocked.get( definition.id )
+			} ) ) );
+			await publish( join( draftDir, 'quests' ), questsDir, 'quest stage' );
+			await publish( join( draftDir, 'story' ), storyDir, 'quest stage' );
+			const questId = `${city.id}-${kind}-${definitions.length - 1}`;
+			await writeJson( join( draftDir, 'draft.json' ), { ...draft, questId } );
+			const result = { id: questId, mainSteps: main.steps.length, sideJobs: definitions.length - 1 };
+			this.boundary.assert( 'quests-result', result );
+			return result;
+
+		} finally {
+
+			await rm( temporary, { recursive: true, force: true } );
+
+		}
+
+	}
+
+	/**
+	 * Replays a recording over a world into a bundle in `questsDir`, against
+	 * what the game plays and stands.
+	 * @param within the parcels the story may use, or nothing for the whole city.
+	 * A venue that cannot stand inside the set moves to a compatible parcel that
+	 * is in it, so every place the story names is a building the player opens.
+	 */
+	async #materialize( run, city, world, questsDir, recording, within = null ) {
+
+		await run( 'npm', [
+			'run', 'materialize', '--', join( recording, 'recording.json' ), city.size,
+			join( world, 'blueprint.json' ), join( world, 'npc-types.json' ), join( questsDir, 'all.questlines.json' ),
+			await handoffInput( questsDir ), ...( within ? [ `--parcels=${within.join( ',' )}` ] : [] )
+		], { cwd: this.questsRoot } );
+		return readQuestBundle( questsDir, 'materialized quest bundle' );
 
 	}
 
@@ -425,13 +552,11 @@ export class WorldCreation {
 
 	}
 
-	/** The model server for a child command: its address, and its model when one is named, else the first it serves. */
-	#modelEnv() {
+	async #plan( id ) {
 
-		const env = { ...process.env, LLM_BASE_URL: this.model.baseUrl };
-		if ( this.model.model ) env.LLM_MODEL = this.model.model;
-		else delete env.LLM_MODEL;
-		return env;
+		const path = join( this.outDir, 'plans', id, 'plan.json' );
+		if ( ! await exists( path ) ) throw new CreationError( 'E_PLAN_NOT_FOUND', `city ${id} has no plan`, 404 );
+		return json( path, 'city plan' );
 
 	}
 
@@ -519,6 +644,66 @@ function venueSpread( atlas ) {
 
 	}
 	return spread;
+
+}
+
+/** A blueprint without its names and naming record: what naming leaves as it found it. */
+function unnamed( value, field = null ) {
+
+	if ( Array.isArray( value ) ) return value.map( ( entry ) => unnamed( entry ) );
+	if ( ! value || typeof value !== 'object' ) return value;
+	return Object.fromEntries( Object.entries( value )
+		.filter( ( [ key ] ) => key !== 'name' && ! ( field === 'meta' && key === 'naming' ) )
+		.map( ( [ key, entry ] ) => [ key, unnamed( entry, key ) ] ) );
+
+}
+
+/** @returns Map of questId to the step kinds it uses that the game does not play */
+function unplayableSteps( definitions ) {
+
+	const unplayable = new Map();
+	for ( const definition of definitions ) {
+
+		const kinds = [ ...new Set( definition.steps.map( ( step ) => step.target?.kind ) ) ].filter( ( kind ) => ! PLAYABLE_MECHANICS.includes( kind ) );
+		if ( kinds.length ) unplayable.set( definition.id, `has steps the game does not play: ${kinds.join( ', ' )}` );
+
+	}
+	return unplayable;
+
+}
+
+/**
+ * Keeps what a story was made from beside the draft's quests: the recording,
+ * the author's notes on the run and its Markdown stages, and the questlines
+ * creation left out with why.
+ */
+async function keepStory( recording, storyDir, leftOut ) {
+
+	await mkdir( storyDir, { recursive: true } );
+	for ( const entry of await readdir( recording, { withFileTypes: true } ) ) {
+
+		if ( entry.isFile() && ( [ 'recording.json', 'meta.json' ].includes( entry.name ) || entry.name.endsWith( '.md' ) ) ) {
+
+			await cp( join( recording, entry.name ), join( storyDir, entry.name ) );
+
+		}
+
+	}
+	await writeJson( join( storyDir, 'left-out.json' ), leftOut );
+
+}
+
+function parse( bytes, label ) {
+
+	try {
+
+		return JSON.parse( bytes );
+
+	} catch ( error ) {
+
+		throw new CreationError( 'E_INVALID_REQUEST', `${label} is no JSON: ${error.message}` );
+
+	}
 
 }
 

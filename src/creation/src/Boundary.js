@@ -5,8 +5,8 @@ import { CreationError } from './CreationError.js';
 
 const Ajv2020 = AjvModule.default ?? AjvModule;
 const NAMES = [
-	'config', 'generate-city', 'generate-instances', 'generate-quests', 'create-game',
-	'city-result', 'instances-result', 'quests-result', 'game-result'
+	'config', 'generate-city', 'build-city', 'generate-instances', 'generate-quests', 'import-story', 'create-game',
+	'plan-result', 'city-result', 'instances-result', 'quests-result', 'game-result'
 ];
 
 export class Boundary {

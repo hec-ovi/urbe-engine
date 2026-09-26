@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import AjvModule from 'ajv/dist/2020.js';
 import { cpSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -6,12 +7,18 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HttpLauncherApi } from '../launcher/HttpLauncherApi.js';
 import { CreationError } from '../creation/index.js';
-import { CreationJobs } from './CreationJobs.js';
+import { CREATION_METHODS, CreationJobs } from './CreationJobs.js';
 import { LauncherService } from './LauncherService.js';
 import { launcherRoute } from './launcherRoute.js';
 import { GamePersistence } from '../game/persistence/index.js';
+import { DESCRIPTOR_SCHEMAS } from '../library/src/DescriptorSchemas.js';
+import persistenceValues from '../game/persistence/schema/values.schema.json' with { type: 'json' };
+import saveCurrentPayload from '../game/persistence/schema/save-current-payload.schema.json' with { type: 'json' };
 
 const FIXTURE = fileURLToPath( new URL( '../library/fixtures/out', import.meta.url ) );
+const Ajv2020 = AjvModule.default ?? AjvModule;
+const schemaAt = ( path ) => JSON.parse( readFileSync( new URL( path, import.meta.url ), 'utf8' ) );
+const validateJob = new Ajv2020( { strict: true } ).compile( schemaAt( './schema/creation-job.schema.json' ) );
 
 describe( 'launcher HTTP boundary', () => {
 
@@ -136,7 +143,7 @@ describe( 'launcher HTTP boundary', () => {
 		const creation = {
 			check( method, input ) {
 
-				if ( ! input?.size ) throw new CreationError( 'E_INVALID_REQUEST', '/ must have required property size' );
+				if ( method.endsWith( 'City' ) && method !== 'buildCity' && ! input?.size ) throw new CreationError( 'E_INVALID_REQUEST', '/ must have required property size' );
 
 			},
 			async generateCity( input, { progress } ) {
@@ -147,7 +154,10 @@ describe( 'launcher HTTP boundary', () => {
 				if ( input.name === 'broken' ) throw new CreationError( 'E_COMMAND_FAILED', 'atlas exited 1', 500 );
 				return { id: input.name, name: input.name, size: input.size, seed: 's', buildings: [], districtCount: 1 };
 
-			}
+			},
+			planCity: async ( input ) => ( { id: 'planned', size: input.size } ),
+			buildCity: async ( input ) => ( { id: input.cityId, name: 'Planned', size: 'small', seed: 's', buildings: [], districtCount: 1 } ),
+			importStory: async ( input ) => ( { id: `${input.cityId}-story-1`, mainSteps: 8, sideJobs: 1 } )
 		};
 		const outDir = mkdtempSync( join( tmpdir(), 'urbe-jobs-' ) );
 		cleanups.push( () => rmSync( outDir, { recursive: true, force: true } ) );
@@ -181,6 +191,47 @@ describe( 'launcher HTTP boundary', () => {
 		expect( await read( second.body.id ) ).toMatchObject( { error: { code: 'E_COMMAND_FAILED', message: 'atlas exited 1' }, result: null } );
 		const missing = await fetch( `${base}/api/creation-jobs/creation-00000000-0000-0000-0000-000000000000` );
 		expect( [ missing.status, ( await missing.json() ).code ] ).toEqual( [ 404, 'E_JOB_NOT_FOUND' ] );
+
+		// The external authoring stages answer as their launcher methods do.
+		const settled = async ( body ) => {
+
+			const { id } = ( await post( body ) ).body;
+			await vi.waitFor( async () => expect( ( await read( id ) ).state ).toBe( 'succeeded' ) );
+			return read( id );
+
+		};
+		expect( ( await settled( { method: 'planCity', input: { size: 'small' } } ) ).result ).toEqual( { plan: { id: 'planned', size: 'small' } } );
+		const built = await settled( { method: 'buildCity', input: { cityId: 'planned' } } );
+		expect( built ).toMatchObject( { method: 'buildCity', result: { city: { id: 'planned', status: 'ready' }, catalog: { games: [], cities: [] } } } );
+		expect( validateJob( built ) ).toBe( true );
+		expect( ( await settled( { method: 'importStory', input: { cityId: 'planned', recording: 'story', sideJobs: 1 } } ) ).result )
+			.toEqual( { quests: { id: 'planned-story-1', mainSteps: 8, sideJobs: 1 } } );
+
+	} );
+
+	it( 'declares every creation stage in the launcher request and creation job schemas', () => {
+
+		const ajv = new Ajv2020( { allErrors: true, strict: true } );
+		for ( const schema of [ ...DESCRIPTOR_SCHEMAS, persistenceValues, saveCurrentPayload ] ) ajv.addSchema( schema );
+		for ( const path of [
+			'../library/schema/city-descriptor.schema.json', '../library/schema/game-descriptor.schema.json',
+			...[ 'generate-city', 'build-city', 'generate-instances', 'generate-quests', 'import-story', 'create-game' ]
+				.map( ( name ) => `../creation/schema/${name}.schema.json` )
+		] ) ajv.addSchema( schemaAt( path ) );
+		const request = ajv.compile( schemaAt( './schema/launcher-request.schema.json' ) );
+
+		expect( schemaAt( './schema/creation-job.schema.json' ).properties.method.enum ).toEqual( [ ...CREATION_METHODS ] );
+		for ( const body of [
+			{ method: 'planCity', input: { size: 'small', seed: 'harbour' } },
+			{ method: 'buildCity', input: { cityId: 'harbour', named: { blueprint: 'out/plans/harbour/blueprint.named.json', types: 'out/plans/harbour/npc-types.json' } } },
+			{ method: 'buildCity', input: { cityId: 'harbour' } },
+			{ method: 'importStory', input: { cityId: 'harbour', recording: '../quests/creation/samples/urbe-small', sideJobs: 2 } }
+		] ) expect( request( body ), JSON.stringify( request.errors ) ).toBe( true );
+		for ( const body of [
+			{ method: 'generateCity', input: { size: 'small', theme: 'harbour' } },
+			{ method: 'buildCity', input: { cityId: 'harbour', named: { blueprint: 'a.json' } } },
+			{ method: 'importStory', input: { cityId: 'harbour', sideJobs: 2 } }
+		] ) expect( request( body ) ).toBe( false );
 
 	} );
 

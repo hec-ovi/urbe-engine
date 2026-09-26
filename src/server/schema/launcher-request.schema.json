@@ -31,8 +31,17 @@
       "type": "object",
       "required": ["method", "input"],
       "properties": {
-        "method": { "const": "generateCity" },
+        "method": { "enum": ["planCity", "generateCity"] },
         "input": { "$ref": "urn:urbe:engine:creation:generate-city" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["method", "input"],
+      "properties": {
+        "method": { "const": "buildCity" },
+        "input": { "$ref": "urn:urbe:engine:creation:build-city" }
       },
       "additionalProperties": false
     },
@@ -51,6 +60,15 @@
       "properties": {
         "method": { "const": "generateQuests" },
         "input": { "$ref": "urn:urbe:engine:creation:generate-quests" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["method", "input"],
+      "properties": {
+        "method": { "const": "importStory" },
+        "input": { "$ref": "urn:urbe:engine:creation:import-story" }
       },
       "additionalProperties": false
     },

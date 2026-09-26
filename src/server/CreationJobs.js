@@ -2,14 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { LauncherServiceError } from './LauncherService.js';
 
 /** The launcher methods that build, which a creation job runs. */
-export const CREATION_METHODS = Object.freeze( [ 'generateCity', 'generateInstances', 'generateQuests', 'createGame' ] );
+export const CREATION_METHODS = Object.freeze( [
+	'planCity', 'buildCity', 'generateCity', 'generateInstances', 'generateQuests', 'importStory', 'createGame'
+] );
 
 /**
- * Creation stages in the background. A stage can run for most of an hour (a
- * city named and a story written through the model server), so a client
- * submits it, gets its job at once and reads the job until it settles. Jobs
- * run one at a time in submission order: every stage reads and writes the
- * shared catalog, and the stages of one game depend on the ones before.
+ * Creation stages in the background. Building a city or opening its
+ * interiors runs for minutes, a Big city's for longer, so a client submits a
+ * stage, gets its job at once and reads the job until it settles. Jobs run one
+ * at a time in submission order: every stage reads and writes the shared
+ * catalog, and the stages of one game depend on the ones before.
  */
 export class CreationJobs {
 

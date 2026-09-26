@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:creation:import-story",
+  "type": "object",
+  "required": ["cityId", "recording", "sideJobs"],
+  "properties": {
+    "cityId": { "$ref": "#/$defs/id" },
+    "recording": {
+      "description": "A Quests recording directory an external author wrote, holding recording.json, as a path the engine resolves against its checkout.",
+      "type": "string",
+      "minLength": 1
+    },
+    "sideJobs": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": false,
+  "$defs": { "id": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$" } }
+}

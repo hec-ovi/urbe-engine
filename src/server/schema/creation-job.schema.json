@@ -7,7 +7,7 @@
   "required": ["id", "method", "state", "submittedAt", "startedAt", "finishedAt", "progress", "result", "error"],
   "properties": {
     "id": { "type": "string", "pattern": "^creation-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
-    "method": { "enum": ["generateCity", "generateInstances", "generateQuests", "createGame"] },
+    "method": { "enum": ["planCity", "buildCity", "generateCity", "generateInstances", "generateQuests", "importStory", "createGame"] },
     "state": { "enum": ["queued", "running", "succeeded", "failed"] },
     "submittedAt": { "$ref": "#/$defs/instant" },
     "startedAt": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/instant" }] },

@@ -69,10 +69,21 @@ export class LauncherService {
 	}
 
 	/** Creation stages take `{ progress }`, told each line the stage's commands print. */
-	async generateCity( input, options ) {
+	async planCity( input, options ) {
 
-		const city = await this.#creation( 'generateCity', input, options );
-		return { city: presentCity( city ), catalog: await this.catalog() };
+		return { plan: await this.#creation( 'planCity', input, options ) };
+
+	}
+
+	buildCity( input, options ) {
+
+		return this.#city( 'buildCity', input, options );
+
+	}
+
+	generateCity( input, options ) {
+
+		return this.#city( 'generateCity', input, options );
 
 	}
 
@@ -85,6 +96,12 @@ export class LauncherService {
 	async generateQuests( input, options ) {
 
 		return { quests: await this.#creation( 'generateQuests', input, options ) };
+
+	}
+
+	async importStory( input, options ) {
+
+		return { quests: await this.#creation( 'importStory', input, options ) };
 
 	}
 
@@ -130,6 +147,13 @@ export class LauncherService {
 		assertProgressIdentity( current.sideJobs, game.sideJobs, 'side jobs' );
 
 		return ( await this.library.saveGame( { game, expectedRevision: current.save.revision } ) ).game;
+
+	}
+
+	async #city( method, input, options ) {
+
+		const city = await this.#creation( method, input, options );
+		return { city: presentCity( city ), catalog: await this.catalog() };
 
 	}
 

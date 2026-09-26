@@ -7,18 +7,8 @@
     "engineRoot": { "type": "string", "minLength": 1 },
     "atlasRoot": { "type": "string", "minLength": 1 },
     "questsRoot": { "type": "string", "minLength": 1 },
-    "namingRoot": { "type": "string", "minLength": 1 },
     "themesDir": { "type": "string", "minLength": 1 },
-    "outDir": { "type": "string", "minLength": 1 },
-    "model": {
-      "type": "object",
-      "required": ["baseUrl"],
-      "properties": {
-        "baseUrl": { "type": "string", "minLength": 1 },
-        "model": { "type": "string", "minLength": 1 }
-      },
-      "additionalProperties": false
-    }
+    "outDir": { "type": "string", "minLength": 1 }
   },
   "additionalProperties": false
 }

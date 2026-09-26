@@ -54,8 +54,8 @@ describe( 'HttpLauncherApi', () => {
 
 		const failing = new HttpLauncherApi( ( url ) => url === '/api/creation-jobs'
 			? answer( { ...job, state: 'queued' }, 202 )
-			: answer( { ...job, state: 'failed', error: { code: 'E_COMMAND_FAILED', message: 'author failed at script' } } ), { wait } );
-		await expect( failing.generateCity( { size: 'small' } ) ).rejects.toThrow( 'author failed at script' );
+			: answer( { ...job, state: 'failed', error: { code: 'E_COMMAND_FAILED', message: 'atlas exited 1' } } ), { wait } );
+		await expect( failing.generateCity( { size: 'small' } ) ).rejects.toThrow( 'atlas exited 1' );
 
 	} );
 
