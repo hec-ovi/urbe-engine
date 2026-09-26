@@ -5,7 +5,7 @@ Purpose: hosts the simulation library for the playable engine without duplicatin
 ## Inputs
 
 - `SimBridge.create(atlas, connections, buildings, params, npcTypes, save)` receives the Atlas blueprint, Connections output, loaded interior NPC support, simulation parameters, optional Naming type set and optional [simulation-save.schema.json](../../../../simulation/src/schemas/simulation-save.schema.json) described by [the simulation input contract](../../../../simulation/CONTRACT.md).
-- `instantiate(crowdId, timeMin)`, `getNPC`, `findNPCs`, `getNPCVendor`, `reserveNPC`, `applyFlag`, `behaviorAt`, `interrupt` and `resume` pass through the corresponding simulation APIs.
+- `instantiate(crowdId, timeMin, appearanceSeed?)`, `getNPC`, `findNPCs`, `getNPCVendor`, `reserveNPC`, `applyFlag`, `behaviorAt`, `interrupt` and `resume` pass through the corresponding simulation APIs. `appearanceSeed` is the seed the body on screen is drawn with; a person the call newly establishes takes it. An absent or null seed sends no hint.
 - `continuityAt(npcId, timeMin)` takes an already-instanced NPC identity and simulation time.
 
 ## Outputs
@@ -31,6 +31,6 @@ The bridge adds no error codes. Methods other than the nullable crowd-handle ada
 
 ## Invariants
 
-- The engine does not infer a second NPC type, role, home, schedule, appearance seed or current place.
+- The engine does not infer a second NPC type, role, home, schedule, appearance seed or current place. The only seed it offers is the one a crowd body already wears.
 - A waiter or barista returned through this bridge is the exact worker selected by the simulation for that interior post.
 - Continuity data is not flattened or rewritten.

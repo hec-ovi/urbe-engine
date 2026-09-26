@@ -9,11 +9,6 @@ import { Interactor, pick } from './Interactor.js';
  * E always took the person and the door became impossible to open. What decides
  * now is where the crosshair points, not who is closer.
  */
-/**
- * The playtest failure this replaces: with a person and a door both in reach,
- * E always took the person and the door became impossible to open. What decides
- * now is where the crosshair points, not who is closer.
- */
 it( 'takes whichever target the centre of the screen is on, and the door when the aim is too close to call', () => {
 
 	const eye = new THREE.Vector3( 0, 1.7, 0 );
@@ -256,6 +251,77 @@ it( 'keeps a quest cast in place after the talk, faces the player throughout, an
 
 const CLOCK = { timeMin: 780, daySeconds: 46800 };
 
+/**
+ * A walker outlives the trip they were sampled on: the next refresh hands the
+ * same body a later handle and it walks on in the look it had. Talking to it
+ * must establish the person in that look, whether its handle still answers or
+ * the crowd has to find it another one.
+ */
+it.each( [ 'its own handle', 'a handle the crowd finds' ] )( 'names a re-handled walker in the look it walks in, through %s', ( route ) => {
+
+	const trip = ( crowdId, appearanceSeed, fields = {} ) => ( {
+		crowdId, type: 'shop_clerk', gender: 'female', appearanceSeed, activity: 'commuting',
+		place: { kind: 'edge', id: 'e1' }, progress: 0.5, direction: 1, ...fields
+	} );
+	const byEdge = new Map( [ [ 'e1', [ trip( 'trip-1', 123 ) ] ], [ 'e2', [] ] ] );
+	const sim = establishing( byEdge );
+	const { interactor, crowd } = street( null, null, sim );
+	const body = [ ...crowd.members.values() ][ 0 ];
+
+	byEdge.set( 'e1', [ trip( 'trip-2', 456 ) ] );
+	crowd.update( 3, new THREE.Vector3(), CLOCK );
+	expect( body ).toMatchObject( { crowdId: 'trip-2', appearanceSeed: 123 } );
+	const walked = { variant: body.variant, gender: body.gender, look: body.look };
+	if ( route === 'a handle the crowd finds' ) {
+
+		// trip-2 is over before the next refresh; the street now holds an
+		// established person, a man and one free woman.
+		byEdge.set( 'e1', [ trip( 'known', 9, { npcId: 'n0' } ), trip( 'his', 8, { gender: 'male' } ), trip( 'hers', 789 ) ] );
+
+	}
+
+	// The walk carried them past the crosshair; the press is on them.
+	interactor.target = { kind: 'npc', person: body };
+	interactor.activate( CLOCK );
+
+	const handle = route === 'its own handle' ? 'trip-2' : 'hers';
+	expect( sim.instantiated ).toEqual( [ ...( handle === 'hers' ? [ [ 'trip-2', CLOCK.timeMin, 123 ] ] : [] ), [ handle, CLOCK.timeMin, 123 ] ] );
+	expect( interactor.conversation.person ).toBe( body );
+	expect( body ).toMatchObject( { crowdId: handle, npcId: 'n1', appearanceSeed: 123, ...walked } );
+	expect( body.look ).toBe( walked.look );
+
+	interactor.close( CLOCK );
+	crowd.update( 3, new THREE.Vector3(), CLOCK );
+	expect( crowd.memberForNpc( 'n1' ) ).toBe( body );
+	expect( body.look ).toBe( walked.look );
+
+} );
+
+it( 'talks to a stress copy and to somebody retiring as nobody, and gives neither an identity', () => {
+
+	const sim = establishing( new Map( [ [ 'e1', [ { ...AGENT, gender: 'female', appearanceSeed: 5 } ] ], [ 'e2', [] ] ] ) );
+	const { interactor, crowd } = street( null, null, sim, { stress: 1, capacity: 4 } );
+	const [ walker, copy ] = [ ...crowd.members.values() ];
+	expect( copy ).toMatchObject( { copy: true, crowdId: null } );
+
+	sim.agents.length = 0;
+	crowd.update( 3, new THREE.Vector3(), CLOCK );
+	expect( walker ).toMatchObject( { retiring: true, crowdId: null } );
+
+	for ( const person of [ copy, walker ] ) {
+
+		const seed = person.appearanceSeed;
+		interactor.target = { kind: 'npc', person };
+		interactor.activate( CLOCK );
+		expect( interactor.conversation ).toMatchObject( { person, npcId: null, instance: null } );
+		interactor.close( CLOCK );
+		expect( person ).toMatchObject( { npcId: null, crowdId: null, appearanceSeed: seed, frozen: false } );
+
+	}
+	expect( sim.instantiated ).toEqual( [] );
+
+} );
+
 it( 'keeps a seated speaker aligned with their furniture while the player circles the chair', () => {
 
 	let controlled;
@@ -286,13 +352,12 @@ it( 'keeps a seated speaker aligned with their furniture while the player circle
 } );
 
 /** One walker on one edge, with the player standing on top of them. */
-function street( continuity = null, animations = null ) {
+function street( continuity = null, animations = null, sim = simulation( new Map( [ [ 'e1', [ { ...AGENT } ] ], [ 'e2', [] ] ] ) ), options = {} ) {
 
-	const sim = simulation( new Map( [ [ 'e1', [ { ...AGENT } ] ], [ 'e2', [] ] ] ) );
 	const crowd = new Crowd( {
-		assets: { variants: [ {} ], durations: [ 1, 1, 1 ], meshesOf: () => [] },
+		assets: { variants: [ {}, {} ], durations: [ 1, 1, 1 ], meshesOf: () => [] },
 		routes: routes(), signals: { green: () => true }, sim,
-		places: new Map(), capacity: 4
+		places: new Map(), capacity: 4, ...options
 	} );
 
 	crowd.update( 1 / 60, new THREE.Vector3(), CLOCK );
@@ -375,6 +440,49 @@ function simulation( byEdge ) {
 	};
 
 	return sim;
+
+}
+
+/**
+ * The simulation's crowd establishment as the talk sees it through SimBridge:
+ * a handle it reports becomes a new person of the handle's type and gender in
+ * the hinted seed, a bound handle stays that person, and samples name bound
+ * handles with the person's own seed.
+ */
+function establishing( byEdge ) {
+
+	const people = new Map();
+	const bound = new Map();
+	const instantiated = [];
+	const named = ( agent ) => bound.has( agent.crowdId )
+		? { ...agent, npcId: bound.get( agent.crowdId ), appearanceSeed: people.get( bound.get( agent.crowdId ) ).appearanceSeed } : agent;
+
+	return {
+		agents: byEdge.get( 'e1' ),
+		instantiated,
+		crowd: ( timeMin, scope ) => ( {
+			agents: ( scope.kind === 'radius' ? [ ...byEdge.values() ].flat() : byEdge.get( scope.id ) ?? [] ).map( named )
+		} ),
+		instantiate: ( crowdId, timeMin, appearanceSeed ) => {
+
+			instantiated.push( [ crowdId, timeMin, appearanceSeed ] );
+			if ( bound.has( crowdId ) ) return people.get( bound.get( crowdId ) );
+			const agent = [ ...byEdge.values() ].flat().find( ( candidate ) => candidate.crowdId === crowdId && ! candidate.npcId );
+			if ( ! agent ) return null;
+			const npc = {
+				npcId: `n${people.size + 1}`, name: { given: 'Mina', family: 'Costa' },
+				type: agent.type, gender: agent.gender, appearanceSeed: appearanceSeed ?? agent.appearanceSeed
+			};
+			people.set( npc.npcId, npc );
+			bound.set( crowdId, npc.npcId );
+			return npc;
+
+		},
+		getNPC: ( npcId ) => people.get( npcId ),
+		behaviorAt: () => null,
+		interrupt: () => {},
+		resume: () => {}
+	};
 
 }
 

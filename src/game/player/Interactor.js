@@ -208,45 +208,39 @@ export class Interactor {
 			spot: person.spot, activity: person.activity
 		};
 
-		if ( ! person.npcId ) {
+		// A body with no handle, a stress copy or somebody retiring, is nobody
+		// the simulation reports: the talk stays anonymous and gives it no
+		// identity. Everybody else becomes the person the simulation has out
+		// there, established in the look the player is looking at.
+		if ( ! person.npcId && person.crowdId ) {
 
 			// A street handle only answers for the epoch it was sampled in and
 			// people walk the pavement long after that, so a refusal means
 			// asking the crowd who the simulation has out there now.
 			let handle = person.crowdId;
-			let instance = this.sim.instantiate( handle, timeMin );
+			let instance = this.sim.instantiate( handle, timeMin, person.appearanceSeed );
 
 			if ( ! instance ) {
 
 				handle = this.crowd.handleFor( person, timeMin );
-				instance = handle ? this.sim.instantiate( handle, timeMin ) : null;
+				instance = handle ? this.sim.instantiate( handle, timeMin, person.appearanceSeed ) : null;
 
 			}
 
 			if ( instance ) {
 
 				person.crowdId = handle;
-				if ( this.crowd.identify ) {
+				const canonical = this.crowd.identify( person, instance );
+				if ( canonical !== person ) {
 
-					const canonical = this.crowd.identify( person, instance ) ?? person;
-					if ( canonical !== person ) {
-
-						// An alias cannot move an active escort or an explicitly
-						// controlled body. The duplicate has still been retired.
-						if ( protectedPlacement( canonical, this.continuity ) ) return;
-						canonical.position.copy( position );
-						Object.assign( canonical, placement );
-
-					}
-					person = canonical;
+					// An alias cannot move an active escort or an explicitly
+					// controlled body. The duplicate has still been retired.
+					if ( protectedPlacement( canonical, this.continuity ) ) return;
+					canonical.position.copy( position );
+					Object.assign( canonical, placement );
 
 				}
-				else {
-
-					person.npcId = instance.npcId;
-					person.instance = instance;
-
-				}
+				person = canonical;
 
 			}
 

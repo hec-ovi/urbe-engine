@@ -7,8 +7,8 @@ import { CHEST } from '../player/Interactor.js';
 const FACE_DISTANCE = 1.3;
 /** Feet land this far above the measured ground, as a spawn does, so the capsule never starts inside it. */
 const FOOTING = 0.05;
-/** A person's look, by the names the crowd bakes and the focused body is dressed with. */
-const LOOK_FIELDS = [ 'skin', 'shirt', 'trousers', 'hair', 'sleeve', 'hem' ];
+/** A person's look, by the names the crowd bakes and the focused body is dressed with; the eyebrows wear the hair tint. */
+const LOOK_FIELDS = [ 'skin', 'shirt', 'trousers', 'hair', 'eyebrows', 'sleeve', 'hem' ];
 
 /**
  * A driver's hands in a read-only preview (`?mode=game&out=...&automation`).
@@ -112,18 +112,29 @@ export class AutomationProbe {
 	}
 
 	/**
-	 * The open conversation's person as the crowd baked them and as the focused
-	 * body wears them, in one shape. Waits up to `timeoutMs` for that body;
-	 * `hero` stays null when it never showed.
+	 * One person as the crowd baked them and as the focused body wears them, in
+	 * one shape: the open conversation's person, waiting up to `timeoutMs` for
+	 * their focused body, or crowd member `id` as they stand now. `hero` is null
+	 * when no focused body shows them.
 	 */
-	async appearance( { timeoutMs = 20000 } = {} ) {
+	async appearance( { id = null, timeoutMs = 20000 } = {} ) {
 
-		const conversation = this.game.interactor.conversation;
-		if ( ! conversation ) return null;
+		const person = id ? this.game.crowd.members.get( id ) : this.game.interactor.conversation?.person;
+		if ( ! person ) return null;
 		const started = performance.now();
-		while ( ! this.#focused( conversation.person ) && performance.now() - started < timeoutMs ) await frames( 1 );
+		while ( ! id && ! this.#focused( person ) && performance.now() - started < timeoutMs ) await frames( 1 );
 
-		return { crowd: crowdLook( conversation.person ), hero: heroLook( this.#focused( conversation.person ) ) };
+		return { crowd: crowdLook( person ), hero: heroLook( this.#focused( person ) ) };
+
+	}
+
+	/** Leaves the open conversation by the chat's own leave button; settles after two frames. */
+	async leave() {
+
+		if ( this.game.interactor.conversation ) this.game.view.dialog.leave.click();
+		await frames( 2 );
+
+		return { conversation: this.#conversation() };
 
 	}
 
@@ -261,30 +272,52 @@ function personOf( member, feet ) {
 
 }
 
-/** The body, hairstyle and colours the mass crowd bakes for one member. */
+/** The body, hairstyle and colours the mass crowd bakes for one member; its hair draw carries the eyebrows. */
 function crowdLook( member ) {
 
 	const model = CROWD_MODELS[ member.variant ];
+	const look = member.look ?? {};
 
 	return {
 		seed: member.appearanceSeed ?? null,
 		body: model?.id ?? null,
 		hairStyle: model?.hair ?? null,
-		...lookValues( member.look ?? {} )
+		...lookValues( { ...look, eyebrows: look.hair } )
 	};
 
 }
 
-/** The focused body's model, hairstyles and the uniforms it is dressed with; a field it is not dressed with is null. */
+/**
+ * The focused body's model, hairstyles and the look its meshes actually paint
+ * with: the outfit when the body wears the dressed surface, the hair tint when
+ * every hairstyle mesh, and the eyebrows, wear the dressed hair. The room
+ * lighting may wear a copy of a dressed material; the copy paints with the
+ * same colour node. A field the body is not dressed with is null.
+ */
 function heroLook( active ) {
 
 	if ( ! active ) return null;
-	const dressed = active.root.userData.dressed?.look ?? {};
+	const meshes = [];
+	active.root.traverse( ( node ) => { if ( node.isMesh ) meshes.push( node ); } );
+	const dressed = active.root.userData.dressed ?? null;
+	const worn = dressed?.look ?? {};
+	const outfit = Boolean( dressed ) && meshes.some( ( mesh ) => mesh.material.colorNode === dressed.material.colorNode );
+	const tints = new Set( [ ...( dressed?.hairs.values() ?? [] ) ].map( ( material ) => material.colorNode ) );
+	const tinted = ( eyebrows ) => {
+
+		const hair = meshes.filter( ( mesh ) => mesh.userData.hair && /eyebrows/i.test( mesh.name ) === eyebrows );
+		return hair.length > 0 && hair.every( ( mesh ) => tints.has( mesh.material.colorNode ) ) ? worn.hair.value : null;
+
+	};
 
 	return {
 		body: active.descriptor.id,
 		hairStyle: active.descriptor.hairs.join( '+' ),
-		...lookValues( Object.fromEntries( LOOK_FIELDS.map( ( field ) => [ field, dressed[ field ]?.value ] ) ) )
+		...lookValues( {
+			...Object.fromEntries( LOOK_FIELDS.map( ( field ) => [ field, outfit ? worn[ field ]?.value : null ] ) ),
+			hair: tinted( false ),
+			eyebrows: tinted( true )
+		} )
 	};
 
 }

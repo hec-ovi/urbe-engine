@@ -4,6 +4,9 @@ import { cos, float, instancedBufferAttribute, int, mix, sin, transformNormalToV
 import { FRAMES } from './VatBaker.js';
 import { PoseBuffer } from './PoseBuffer.js';
 
+/** How every crowd surface answers light; a focused rig wears the same, so the swap does not show. */
+export const CROWD_SURFACE = { roughness: 0.78, metalness: 0 };
+
 /**
  * One instanced draw call for an entire crowd of animated characters. The pose
  * comes out of the baked pose buffers, indexed by the vertex id and a
@@ -78,7 +81,7 @@ export class CrowdMesh {
 		}
 		geometry.boundingSphere = new THREE.Sphere( new THREE.Vector3(), 1e6 );
 
-		const material = new MeshStandardNodeMaterial( { roughness: 0.78, metalness: 0 } );
+		const material = new MeshStandardNodeMaterial( CROWD_SURFACE );
 		material.positionNode = turn( pose ).add( aOrigin );
 		// normalNode is consumed in view space. The baked vector first follows
 		// the same per-person heading as the position. Sample in the vertex

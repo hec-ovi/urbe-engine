@@ -56,12 +56,18 @@ export class SimBridge {
 
 	}
 
-	/** Turns a crowd handle into a persistent NPC. Returns null if it went stale. */
-	instantiate( crowdId, timeMin ) {
+	/**
+	 * Turns a crowd handle into a persistent NPC. Returns null if it went stale
+	 * or was refused.
+	 *
+	 * @param appearanceSeed the seed the body on screen is drawn with; a person
+	 * this call establishes takes it, so naming a body never changes its look
+	 */
+	instantiate( crowdId, timeMin, appearanceSeed = null ) {
 
 		try {
 
-			return this.simulation.instantiate( { crowdId, timeMin } );
+			return this.simulation.instantiate( { crowdId, timeMin, ...( appearanceSeed == null ? {} : { appearanceSeed } ) } );
 
 		} catch {
 

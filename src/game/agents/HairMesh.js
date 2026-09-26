@@ -12,7 +12,7 @@ export class HairMesh extends CrowdMesh {
 
 		this.hair = this.attribute( 3 );
 
-		return vec4( texture( map ).rgb.mul( instancedBufferAttribute( this.hair, 'vec3' ) ), 1 );
+		return hairColorNode( map, instancedBufferAttribute( this.hair, 'vec3' ) );
 
 	}
 
@@ -21,5 +21,12 @@ export class HairMesh extends CrowdMesh {
 		this.hair.setXYZ( slot, look.hair.r, look.hair.g, look.hair.b );
 
 	}
+
+}
+
+/** The same tinted hair for the baked crowd and for one focused rig's hairstyle and eyebrows. */
+export function hairColorNode( map, tint ) {
+
+	return vec4( texture( map ).rgb.mul( tint ), 1 );
 
 }

@@ -11,8 +11,6 @@ import {
 	assertRigCompatibility
 } from './CharacterCatalog.js';
 
-export { bodyFor } from './CharacterCatalog.js';
-
 // Clip order matches CharacterCatalog.CROWD_CLIP_NAMES.
 export const CLIP = { WALK: 0, IDLE: 1, TALK: 2, SIT: 3, SIT_TALK: 4, RUN: 5, CROUCH: 6 };
 

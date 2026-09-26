@@ -59,7 +59,8 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - `Crowd.castMember(npcId, timeMin, player, parcelId)` is the body of one cast NPC the story wants at a parcel now, whatever its routine says: the body that npcId already owns while it is at that parcel, else an anonymous body there that resolves to it, else that identity posted within 45 m of the player at the interior's first free counter anchor, then work anchor, then a lobby spot just inside the door. With continuity the posting is a `hold`, so the next schedule pass leaves it standing instead of walking it home. Null beyond that reach, when the crowd is full, or while the owned body is fallen.
 - Adopting an existing cast body also acquires its continuity hold; merely finding the right identity does not let its next schedule update take it away. A stationary body retains its actual anchor reservation through continuity updates, so separate cast members never receive the same counter/work anchor. Hosts without continuity freeze the exact retained body instead of duplicating it.
 - `Crowd.castMember(..., { meeting: true })` places listening partners together in the published entrance circulation space, 1.3 m apart and facing each other. This keeps a multi-person appointment in listening reach even when a floor's counter and work anchors are far apart. An existing conversation retains control until it closes.
-- `Crowd.questMember` and `castMember` name only the anonymous handle the simulation resolves to the requested npcId. A candidate they look at and reject keeps its own identity, its own look and its right to be evicted.
+- `Crowd.questMember` and `castMember` name only the anonymous body holding the handle the crowd sample reports as the requested npcId. Reading the sample establishes nobody, so every other body keeps its own identity, its own look and its right to be evicted.
+- `Crowd.handleFor(member, timeMin)` offers a body whose handle stopped answering another reported handle of the body's own gender that is not established and that no other body holds, or null.
 
 ## Errors
 
@@ -73,7 +74,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 
 ## Dependencies
 
-- Simulation public NPC and continuity APIs.
+- Simulation 0.11 public NPC, crowd and continuity APIs: crowd samples name established people with their own seed, and a crowd instantiate takes the seed a body is drawn with.
 - Connections walk graph and transit route output.
 - [Ground](../ground/CONTRACT.md) for the shared raised-pavement datum.
 - Character asset catalog for the audited animation clips.
@@ -85,9 +86,10 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 - Interior headings are +Y yaw in degrees, zero toward +Z. Seat rendering resolves the exact furniture placement instead of the navigation approach beside it, compensates the purchased sitting clip's 0.34 m rearward pelvis offset and fits the shared chair, sofa, stool and bench support planes at their published scales. Seated conversations retain the furniture heading when the player moves around the chair.
 - One npcId owns one rendered body. Resolving a cast worker already present at a parcel post converts that body to continuity control without adding another body.
 - A measured physics impact freezes the exact rendered identity and removes it from interaction and pushback. A rejected impact restores its prior control state. Accepted dynamic body assembly belongs to the game physics contract.
-- Appearance comes from the instance's persistent `appearanceSeed`, including after unload, save restore and reappearance.
+- Appearance comes from the instance's persistent `appearanceSeed`, including after unload, save restore and reappearance. A body wears the mesh its gender picks, and a body of unknown gender carries the gender of its mesh.
+- A body keeps its mesh, skin, clothes, sleeves, hems, hair and eyebrows while anybody looks at it. A body handed a later handle keeps the look it walks in; naming it offers that seed to the simulation, which establishes the person in it. An established person's sample is drawn in that person's own look, and never re-dresses an anonymous body in another one.
 - Source geometry, skin weights, UVs and authored normals remain intact. Baked normals interpolate across each triangle on WebGPU and WebGL.
-- Pro clips transfer rotations and scaled pelvis motion onto the body's original bone lengths. Crowd, focused dialogue and impact poses use the same transferred clips and the same body and hairstyle. A focused shape is read once for the run with its maps downscaled to the tier's texture size, wears a dressed material its model keeps and hands back, and `HeroCharacter.prepare(onProgress)` reads and warms both shapes at load, so a conversation or a fall uploads and links nothing.
+- Pro clips transfer rotations and scaled pelvis motion onto the body's original bone lengths. Crowd, focused dialogue and impact poses use the same transferred clips and the same body and hairstyle. The focused and fallen rigs wear the crowd body's variant, its painted outfit, its hair tint on the hairstyle and the eyebrows, and the crowd's surface (roughness 0.78, metalness 0, no normal or roughness map); a resident focused rig wears a new look as soon as its person has one. A focused shape is read once for the run with its maps downscaled to the tier's texture size, wears a dressed material its model keeps and hands back, and `HeroCharacter.prepare(onProgress)` reads and warms both shapes at load, so a conversation or a fall uploads and links nothing.
 - Scheduled and follow movement samples only Connections `path3`; flat compatibility paths never position a body.
 - Walkers of one reported group stand at least 1.2 m apart along their lane, keep their own side of it through turns, and come no nearer than 0.6 m to another body, at spawn and walking. A group its segment cannot hold carries on to the next one. Each walks at its own pace between 0.9 and 1.3 m/s, on its own footfall.
 - A car eases down for anybody in its lane within 8 m, standing, walking or lying, and holds 1.5 m short. Only somebody who steps in inside its braking distance is hit.
@@ -107,7 +109,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 
 ## Dialogue ownership
 
-A statistical sample carrying an established `npcId` reuses the canonical named body. A sampled handle already owned by a quest/continuity actor cannot spawn another anonymous copy; later identity resolution also merges a pre-existing alias. Stress copies never inherit persistent identity. During dialogue, continuity owns position and the animation director keeps the standing/seated posture, speaking and listening clips while rejecting schedule locomotion. Ending a conversation releases the interruption or retains the next quest appointment. The host closes a restored conversation when its UI was not restored.
+A statistical sample carrying an established `npcId` reuses the canonical named body. A sampled handle already owned by a quest/continuity actor cannot spawn another anonymous copy; later identity resolution also merges a pre-existing alias. Stress copies never inherit persistent identity: they carry no handle and a look of their own, and a copy or a retiring body is talked to as nobody. During dialogue, continuity owns position and the animation director keeps the standing/seated posture, speaking and listening clips while rejecting schedule locomotion. Ending a conversation releases the interruption or retains the next quest appointment. The host closes a restored conversation when its UI was not restored.
 
 ## Conversation placement and scheduled posts
 

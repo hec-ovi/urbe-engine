@@ -4,10 +4,12 @@ import { uniform, vec2 } from 'three/tsl';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import {
-	ANIMATION_URL, CHARACTER_ROOT, CROWD_CLIP_NAMES,
+	ANIMATION_URL, CHARACTER_ROOT, CROWD_CLIP_NAMES, CROWD_MODELS,
 	assertRigCompatibility, avatarFor
 } from './CharacterCatalog.js';
 import { dressedColorNode } from './BodyMesh.js';
+import { CROWD_SURFACE } from './CrowdMesh.js';
+import { hairColorNode } from './HairMesh.js';
 import { garments } from './Garments.js';
 import { FRAMES } from './VatBaker.js';
 import { CharacterAnimations } from './CharacterAnimations.js';
@@ -19,16 +21,20 @@ const SIT_TALK = 'Sitting_Talking_Loop';
 const BLEND_MS = 160;
 /** The maps' side when the tier names none. */
 const TEXTURE_SIZE = 1024;
-/** What a prepared shape wears while its programs are built. */
-const PLAIN_LOOK = {
-	skin: new THREE.Color( 1, 1, 1 ), shirt: new THREE.Color( 1, 1, 1 ), trousers: new THREE.Color( 1, 1, 1 ), sleeve: 0, hem: 0
-};
+const WHITE = new THREE.Color( 1, 1, 1 );
+/** What a prepared shape wears while its programs are built: every channel a person's look has. */
+const PLAIN_LOOK = { skin: WHITE, shirt: WHITE, trousers: WHITE, hair: WHITE, sleeve: 0, hem: 0 };
 
 /**
  * One full-quality skinned person while the player is talking to them. The
  * mass-crowd instance stays authoritative until this model is loaded and its
  * shaders are warm; then that one slot is hidden. There is never more than one
  * focused armature or AnimationMixer updating in the city.
+ *
+ * The rig is the crowd body the person walks in: the same variant, the same
+ * painted outfit, the same hair tint on hairstyle and eyebrows and the same
+ * surface response, so the swap is not seen. A look that changes while the rig
+ * is resident is worn at once.
  *
  * A shape read once stays for the run: its maps come in downscaled to the
  * tier's texture size, its dressed materials are kept and worn again, and
@@ -68,18 +74,21 @@ export class HeroCharacter {
 
 		const request = ++ this.request;
 		const sequence = this.#resolveSegments( segments ?? defaultSegments( person ) );
-		if ( samePerson( this.active?.person, person ) ) {
+		const descriptor = avatarFor( person.variant );
+		if ( samePerson( this.active?.person, person ) && this.active.key === modelKey( descriptor ) ) {
 
 			this.active.person = person;
+			this.#wear();
 			this.#play( sequence, onFinished );
 			return true;
 
 		}
-		const descriptor = avatarFor( person.gender, person.appearanceSeed ?? 0 );
 		const source = await this.#model( descriptor );
 
 		if ( request !== this.request ) return false;
 
+		// A look that changes while the rig warms is worn on the next update.
+		const look = person.look;
 		const root = characterRoot( source, person, `focused-${descriptor.id}` );
 		this.lighting?.attachRoot( root, person.position );
 		root.visible = false;
@@ -102,7 +111,7 @@ export class HeroCharacter {
 		person.hero = true;
 		root.visible = true;
 		this.active = {
-			person, root, mixer, descriptor, key: modelKey( descriptor ),
+			person, look, root, mixer, descriptor, key: modelKey( descriptor ),
 			motions: source.motions,
 			playback: null, sequence: 0, currentAction: null, currentClip: null
 		};
@@ -121,7 +130,7 @@ export class HeroCharacter {
 	 */
 	async prepare( onProgress = () => {} ) {
 
-		const shapes = [ 'male', 'female' ].map( ( gender ) => avatarFor( gender, 0 ) );
+		const shapes = CROWD_MODELS.map( ( _, variant ) => avatarFor( variant ) );
 
 		for ( const [ index, descriptor ] of shapes.entries() ) {
 
@@ -146,7 +155,7 @@ export class HeroCharacter {
 
 		if ( this.fallen || this.fallPending ) return false;
 		this.fallPending = true;
-		const descriptor = avatarFor( person.gender, person.appearanceSeed ?? 0 );
+		const descriptor = avatarFor( person.variant );
 		let root = null;
 		let ragdoll = null;
 
@@ -199,6 +208,7 @@ export class HeroCharacter {
 		if ( ! this.active ) return;
 
 		const { person, root, mixer } = this.active;
+		if ( person.look !== this.active.look ) this.#wear();
 		root.position.copy( person.position );
 		root.rotation.y = person.heading;
 		this.lighting?.writeRoot( root, person.position );
@@ -246,6 +256,16 @@ export class HeroCharacter {
 
 		this.request ++;
 		this.#dropActive();
+
+	}
+
+	/** Writes the active person's current look into the uniforms its rig is dressed with. */
+	#wear() {
+
+		const active = this.active;
+		active.look = active.person.look;
+		const dressed = active.root.userData.dressed;
+		if ( dressed && active.look ) wear( dressed, active.look );
 
 	}
 
@@ -344,10 +364,12 @@ export class HeroCharacter {
 				assertRigCompatibility( model.scene, this.animation.scene );
 				model.motions = new CharacterAnimations( model.scene, this.animation.scene );
 				model.wardrobe = [];
+				// The glTF's eyebrows and every hairstyle wear the person's hair tint.
+				model.scene.traverse( ( node ) => { if ( node.isSkinnedMesh && node.name.toLowerCase() === 'eyebrows' ) node.userData.hair = true; } );
 				for ( const hair of modelHairs( model ) ) {
 
 					assertRigCompatibility( hair.scene, this.animation.scene );
-					attachHair( model.scene, hair.scene );
+					attachHair( model.scene, hair.scene ).userData.hair = true;
 
 				}
 				return model;
@@ -491,6 +513,7 @@ function attachHair( bodyRoot, hairRoot ) {
 	const rigid = new THREE.Mesh( geometry, hair.material );
 	rigid.name = hair.name;
 	head.add( rigid );
+	return rigid;
 
 }
 
@@ -514,10 +537,13 @@ function skinnedMesh( root ) {
 }
 
 /**
- * Paints the focused bare base with the same outfit the baked slot wore, in a
- * dressed material the model keeps: one is sewn the first time a root needs
- * it and worn again by the next, its look written into uniforms, so a person
- * shown or fallen never builds a material or drops one.
+ * Paints the focused bare base with the same outfit the baked slot wore, and
+ * tints its hairstyle and eyebrows with the same hair colour, in dressed
+ * materials the model keeps: a set is sewn the first time a root needs it and
+ * worn again by the next, its look written into uniforms, so a person shown
+ * or fallen never builds a material or drops one. Like the crowd's, these
+ * surfaces carry no normal or roughness map: a painted shirt over the bare
+ * body's relief would not be the shirt the street saw.
  */
 function dress( root, model, look ) {
 
@@ -529,13 +555,27 @@ function dress( root, model, look ) {
 	if ( ! body.geometry.hasAttribute( 'cloth' ) ) body.geometry.setAttribute( 'cloth', garments( body ) );
 	const dressed = model.wardrobe.find( ( entry ) => ! entry.worn ) ?? sew( model, body.geometry, source );
 	dressed.worn = true;
-	dressed.look.skin.value.copy( look.skin );
-	dressed.look.shirt.value.copy( look.shirt );
-	dressed.look.trousers.value.copy( look.trousers );
-	dressed.look.sleeve.value = look.sleeve;
-	dressed.look.hem.value = look.hem;
 	body.material = dressed.material;
+	root.traverse( ( node ) => {
+
+		if ( node.userData.hair && node.material?.map ) node.material = tinted( dressed, node.material );
+
+	} );
+	wear( dressed, look );
 	root.userData.dressed = dressed;
+
+}
+
+/** Writes one person's look into a dressed set's uniforms. */
+function wear( dressed, look ) {
+
+	const { skin, shirt, trousers, hair, sleeve, hem } = dressed.look;
+	skin.value.copy( look.skin );
+	shirt.value.copy( look.shirt );
+	trousers.value.copy( look.trousers );
+	hair.value.copy( look.hair );
+	sleeve.value = look.sleeve;
+	hem.value = look.hem;
 
 }
 
@@ -543,20 +583,30 @@ function sew( model, geometry, source ) {
 
 	const look = {
 		skin: uniform( new THREE.Color() ), shirt: uniform( new THREE.Color() ), trousers: uniform( new THREE.Color() ),
-		sleeve: uniform( 0 ), hem: uniform( 0 )
+		hair: uniform( new THREE.Color() ), sleeve: uniform( 0 ), hem: uniform( 0 )
 	};
-	const material = new MeshStandardNodeMaterial( {
-		roughness: source.roughness ?? 0.78,
-		metalness: source.metalness ?? 0,
-		normalMap: source.normalMap ?? null,
-		roughnessMap: source.roughnessMap ?? null
-	} );
+	const material = new MeshStandardNodeMaterial( CROWD_SURFACE );
 	material.colorNode = dressedColorNode( geometry, source.map, {
 		skin: look.skin, shirt: look.shirt, trousers: look.trousers, cut: vec2( look.sleeve, look.hem )
 	} );
-	const dressed = { material, look, worn: false };
+	const dressed = { material, look, hairs: new Map(), worn: false };
 	model.wardrobe.push( dressed );
 
 	return dressed;
+
+}
+
+/** The dressed set's tinted stand-in for one of the pack's hair materials, sewn once. */
+function tinted( dressed, source ) {
+
+	let material = dressed.hairs.get( source );
+	if ( ! material ) {
+
+		material = new MeshStandardNodeMaterial( CROWD_SURFACE );
+		material.colorNode = hairColorNode( source.map, dressed.look.hair );
+		dressed.hairs.set( source, material );
+
+	}
+	return material;
 
 }

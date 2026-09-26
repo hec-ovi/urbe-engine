@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { SIDEWALK_HEIGHT } from '../ground/GroundBuilder.js';
-import { CLIP, bodyFor, clipForNpcAnimation } from './CharacterAssets.js';
+import { CLIP, clipForNpcAnimation } from './CharacterAssets.js';
+import { CROWD_MODELS, bodyFor } from './CharacterCatalog.js';
 import { FRAMES } from './VatBaker.js';
 import { look } from './Appearance.js';
 import { spreadOnLanes, LANE_SPACING } from './LaneSpread.js';
@@ -465,8 +466,9 @@ export class Crowd {
 	 * has stopped answering: a street handle names a sampled agent for one
 	 * epoch of that pavement, and people walk on long after it. The answer is
 	 * whoever the simulation reports out on the street they are standing in
-	 * now, of their own type where it has one, and never somebody another
-	 * person in the crowd is already being.
+	 * now, of the body's own gender, of their own type where it has one, and
+	 * never somebody another person in the crowd is already being or somebody
+	 * the simulation has already established.
 	 *
 	 * @returns a crowdId, or null where the simulation has nobody out there
 	 */
@@ -523,10 +525,10 @@ export class Crowd {
 	}
 
 	/**
-	 * Which of these agents this person is: their own gender always (a body is
-	 * for life), their own type where the sample has one, nobody else in the
-	 * crowd is already holding, standing closest to how far along the pavement
-	 * they are.
+	 * Which of these agents this person is: the gender of the body they walk in
+	 * always (a body is for life), their own type where the sample has one,
+	 * nobody established and nobody else in the crowd is already holding,
+	 * standing closest to how far along the pavement they are.
 	 */
 	#pick( agents, member, progress ) {
 
@@ -535,7 +537,7 @@ export class Crowd {
 		for ( const other of this.members.values() ) if ( other !== member ) taken.add( other.crowdId );
 
 		const free = agents.filter( ( agent ) =>
-			! taken.has( agent.crowdId ) && ( ! member.gender || ! agent.gender || agent.gender === member.gender ) );
+			! agent.npcId && ! taken.has( agent.crowdId ) && agent.gender === member.gender );
 		const pool = narrow( free, member.type );
 
 		let best = null;
@@ -727,8 +729,10 @@ export class Crowd {
 
 	/**
 	 * An anonymous body already standing where the quest wants its person, when
-	 * the simulation says that handle is that person. Only the match is named:
-	 * a passer-by the search walked past keeps being a passer-by.
+	 * the simulation says that handle is that person. The crowd sample names an
+	 * established person on every handle that is theirs, and reading it
+	 * establishes nobody, so only the match is named: a passer-by the search
+	 * walked past keeps being a passer-by, in their own look.
 	 */
 	#adoptQuestHandle( npc, timeMin, place ) {
 
@@ -739,21 +743,14 @@ export class Crowd {
 			return owned;
 
 		}
-		const candidates = [ ...this.members.values() ]
-			.filter( ( member ) => ! member.copy && ! member.retiring && ! member.fallen && ! member.npcId && member.crowdId )
-			.filter( ( member ) => member.type === npc.type && memberAt( member, place ) )
-			.sort( ( left, right ) => left.id.localeCompare( right.id ) );
+		const scope = place?.kind === 'parcel' || place?.kind === 'edge' ? { kind: place.kind, id: place.id } : null;
+		const handle = scope && this.#agentsIn( timeMin, scope, this.capacity ).find( ( agent ) => agent.npcId === npc.npcId );
+		const member = handle && [ ...this.members.values() ].find( ( candidate ) =>
+			candidate.crowdId === handle.crowdId && ! candidate.npcId && ! candidate.copy && ! candidate.fallen && memberAt( candidate, place ) );
+		if ( ! member ) return null;
+		identify( member, npc );
 
-		for ( const member of candidates ) {
-
-			const instance = this.sim.instantiate( member.crowdId, timeMin );
-			if ( instance?.npcId !== npc.npcId ) continue;
-			identify( member, instance );
-			return member;
-
-		}
-
-		return null;
+		return member;
 
 	}
 
@@ -974,16 +971,15 @@ export class Crowd {
 
 			const { agent, direction, distance } = street[ index % street.length ];
 			const seed = hash( `${agent.crowdId}#${index}` );
+			// A copy walks like its agent and is nobody: no handle, no identity, a look of its own.
+			const nobody = { type: agent.type, gender: agent.gender, activity: agent.activity, crowdId: null };
 			const copy = this.#place(
-				{ agent, edge: spread[ seed % spread.length ], direction, distance }, seed
+				{ agent: nobody, edge: spread[ seed % spread.length ], direction, distance }, seed
 			);
 
 			if ( ! copy ) return;
 
 			copy.copy = true;
-			copy.crowdId = null;
-			copy.npcId = null;
-			copy.instance = null;
 
 		}
 
@@ -1174,6 +1170,7 @@ export class Crowd {
 
 	}
 
+	/** A new body for one sampled agent: an established person's own body and look, else the given seed's. */
 	#base( agent, seed ) {
 
 		const instance = agent.npcId ? this.sim.getNPC( agent.npcId ) : null;
@@ -1181,15 +1178,12 @@ export class Crowd {
 			id: null,
 			crowdId: agent.crowdId,
 			type: agent.type,
-			gender: agent.gender ?? null,
 			activity: agent.activity,
 			npcId: instance?.npcId ?? null,
 			instance,
 			parcelId: null,
 			spot: null,
-			variant: bodyFor( agent.gender, seed ),
-			look: look( seed ),
-			appearanceSeed: seed,
+			...wearing( null, instance?.gender ?? agent.gender, instance?.appearanceSeed ?? seed ),
 			frame: seed % FRAMES,
 			frozen: false,
 			retiring: false,
@@ -1419,19 +1413,35 @@ function identityPriority( member ) {
 
 }
 
+/** Makes a body this simulation person: their type, and the body and look their gender and seed give. */
 function identify( member, instance ) {
 
 	member.npcId = instance.npcId;
 	member.instance = instance;
 	member.type = instance.type;
-	member.gender = instance.gender ?? member.gender;
-	member.appearanceSeed = instance.appearanceSeed ?? member.appearanceSeed;
-	if ( instance.appearanceSeed !== undefined ) {
+	Object.assign( member, wearing( member, instance.gender ?? member.gender, instance.appearanceSeed ?? member.appearanceSeed ) );
 
-		member.variant = bodyFor( member.gender, instance.appearanceSeed );
-		member.look = look( instance.appearanceSeed );
+}
 
-	}
+/**
+ * The body and look one gender and seed give: a known gender picks its mesh,
+ * and a body of unknown gender carries the gender of the mesh the seed picks,
+ * so a body is always one gender. The look is built again only when the seed
+ * or the mesh changes, so a person keeps one look object for as long as it is
+ * theirs.
+ *
+ * @param member the body wearing them now, or null for a new one
+ */
+function wearing( member, gender, seed ) {
+
+	const variant = bodyFor( gender, seed );
+	const same = member?.look && member.appearanceSeed === seed && member.variant === variant;
+	return {
+		gender: gender ?? CROWD_MODELS[ variant ].gender,
+		variant,
+		appearanceSeed: seed,
+		look: same ? member.look : look( seed )
+	};
 
 }
 
@@ -1544,6 +1554,9 @@ function fitTo( free, agent, at ) {
 		// A named person may hold only the crowd trip that established that
 		// identity. Later statistical handles cannot rename or relocate them.
 		if ( member.npcId && member.crowdId !== agent.crowdId ) continue;
+		// An established person is drawn in their own look: a passer-by in
+		// another one is never re-dressed as them.
+		if ( agent.npcId && ! member.npcId && member.appearanceSeed !== agent.appearanceSeed ) continue;
 
 		const typed = member.type === agent.type ? 0 : 1;
 		const gap = ( at.x - member.position.x ) ** 2 + ( at.z - member.position.z ) ** 2;

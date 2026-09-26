@@ -3,16 +3,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { AutomationProbe } from './AutomationProbe.js';
 import { ChatPanel } from '../../ui/widgets/ChatPanel.js';
-import { CROWD_MODELS, avatarFor } from '../agents/CharacterCatalog.js';
+import { CROWD_MODELS } from '../agents/CharacterCatalog.js';
 import { look } from '../agents/Appearance.js';
+import { HeroCharacter } from '../agents/HeroCharacter.js';
+import { animation, rig } from '../agents/HeroCharacter.test-fixtures.js';
+import { ActorLighting } from '../light/ActorLighting.js';
 
 const SEED = 3207466384;
 
 /**
  * A playing game as far as the probe reads it: one walker on ground at 0.2 m,
- * with no ground past `edge` on x; E opens a talk and a line gets an answer.
+ * with no ground past `edge` on x; E opens a talk that shows them on a real
+ * focused rig, the chat's leave button ends it, and a line gets an answer.
  */
-function playing( { dressHair = false, reachable = true, edge = Infinity } = {} ) {
+function playing( { reachable = true, edge = Infinity } = {} ) {
 
 	const walker = {
 		id: 'p1', crowdId: 'c|edge|we319|0|630', npcId: null, type: 'street', gender: 'male',
@@ -20,8 +24,12 @@ function playing( { dressHair = false, reachable = true, edge = Infinity } = {} 
 		position: new THREE.Vector3( 10, 0.2, 5 )
 	};
 	const members = new Map( [ [ walker.id, walker ] ] );
-	const dialog = new ChatPanel( { onSend: () => {}, onClose: () => {} } );
-	const uniforms = ( values ) => Object.fromEntries( Object.entries( values ).map( ( [ key, value ] ) => [ key, { value } ] ) );
+	const dialog = new ChatPanel( { onSend: () => {}, onClose: () => { game.interactor.conversation = null; } } );
+	// The room lighting wears its own copy of each dressed material, as in the game.
+	const hero = new HeroCharacter( {
+		animation: animation(), lighting: new ActorLighting( { spots: [], strips: [] }, () => [] ),
+		loadModel: () => ( { scene: rig( 'body', { eyebrows: true } ), hairs: [ { scene: rig( 'hair' ) } ] } )
+	} );
 	const game = {
 		stats: { backend: 'webgl', tier: 'low', drawCalls: 380, frameMs: 20 },
 		input: { locked: false },
@@ -39,7 +47,7 @@ function playing( { dressHair = false, reachable = true, edge = Infinity } = {} 
 			within: ( feet, radius ) => [ ...members.values() ].filter( ( member ) => member.position.distanceTo( feet ) < radius )
 		},
 		interactor: { target: null, conversation: null },
-		hero: { active: null },
+		hero,
 		view: { dialog },
 		placePlayer: vi.fn( ( feet ) => {
 
@@ -55,11 +63,7 @@ function playing( { dressHair = false, reachable = true, edge = Infinity } = {} 
 			game.interactor.conversation = {
 				person: walker, npcId: 'a301', controlled: true, instance: { name: { given: 'Hugo', family: 'Duarte' }, type: 'retiree' }
 			};
-			const { skin, shirt, trousers, hair, sleeve, hem } = walker.look;
-			game.hero.active = {
-				person: walker, descriptor: avatarFor( 'male', SEED ),
-				root: { visible: true, userData: { dressed: { look: uniforms( { skin, shirt, trousers, sleeve, hem, ...( dressHair ? { hair } : {} ) } ) } } }
-			};
+			hero.show( walker );
 
 		} ),
 		sayLine: vi.fn( async ( text ) => {
@@ -104,23 +108,27 @@ describe( 'automation probe', () => {
 
 	} );
 
-	it( 'reports the crowd look and the focused body in one shape, a field the body is not dressed with as null', async () => {
+	it( 'reports the crowd look and the focused body in one shape, a tint a mesh does not wear as null, and the person after the talk', async () => {
 
-		const plain = playing();
-		const probe = new AutomationProbe( plain.game );
+		const { game } = playing();
+		const probe = new AutomationProbe( game );
 		await probe.converse( 'p1' );
-		const undressed = await probe.appearance();
-		expect( undressed.hero ).toMatchObject( { body: 'regular-male', hairStyle: CROWD_MODELS[ 0 ].hair, hair: null } );
-		expect( undressed.hero.shirt ).toBe( undressed.crowd.shirt );
-		expect( undressed.crowd.hair ).not.toBeNull();
-
-		const dressed = playing( { dressHair: true } );
-		const next = new AutomationProbe( dressed.game );
-		await next.converse( 'p1' );
-		const { crowd, hero } = await next.appearance();
+		const { crowd, hero } = await probe.appearance();
 		const { seed, ...worn } = crowd;
 		expect( seed ).toBe( SEED );
+		expect( worn ).toMatchObject( { body: 'regular-male', hairStyle: CROWD_MODELS[ 0 ].hair, eyebrows: worn.hair } );
+		expect( worn.hair ).toMatch( /^#[0-9a-f]{6}$/ );
 		expect( hero ).toEqual( worn );
+
+		// Eyebrows left in the pack's own material wear no tint, whatever the uniforms hold.
+		game.hero.active.root.getObjectByName( 'Eyebrows' ).material = new THREE.MeshStandardMaterial();
+		expect( ( await probe.appearance() ).hero ).toMatchObject( { hair: worn.hair, eyebrows: null } );
+
+		// The chat's own leave button ends it; the resident rig still shows the person.
+		expect( await probe.leave() ).toEqual( { conversation: null } );
+		expect( await probe.appearance() ).toBeNull();
+		expect( ( await probe.appearance( { id: 'p1' } ) ).crowd ).toEqual( crowd );
+		expect( await probe.appearance( { id: 'p9' } ) ).toBeNull();
 
 	} );
 

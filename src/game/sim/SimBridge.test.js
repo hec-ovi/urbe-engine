@@ -68,6 +68,23 @@ describe( 'SimBridge', () => {
 
 	} );
 
+	it( 'establishes a crowd person in the look their body is drawn in, and keeps it through restore', () => {
+
+		const bridge = SimBridge.create( FIXTURE_BLUEPRINT, { networks: undefined }, buildings );
+		const TIME = 9 * 60;
+		const [ drawn, plain ] = bridge.crowd( TIME, { kind: 'city' }, { maxAgents: 2 } ).agents;
+		const person = bridge.instantiate( drawn.crowdId, TIME, 777 );
+
+		expect( person.appearanceSeed ).toBe( 777 );
+		expect( bridge.instantiate( drawn.crowdId, TIME, 888 ) ).toBe( person );
+		expect( bridge.instantiate( plain.crowdId, TIME ).appearanceSeed ).toBe( plain.appearanceSeed );
+		expect( bridge.instantiate( 'c|edge|e0|0|99999', TIME, 5 ) ).toBeNull();
+
+		const restored = SimBridge.create( FIXTURE_BLUEPRINT, { networks: undefined }, buildings, {}, null, bridge.serialize() );
+		expect( restored.getNPC( person.npcId ).appearanceSeed ).toBe( 777 );
+
+	} );
+
 } );
 
 function errorCode( run ) {

@@ -1,10 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { HeroCharacter } from './HeroCharacter.js';
+import { hairColorNode } from './HairMesh.js';
+import { look } from './Appearance.js';
+import { CROWD_SURFACE } from './CrowdMesh.js';
 import { StreetBodies } from './StreetBodies.js';
 import { Physics } from '../physics/index.js';
 import { ActorLighting } from '../light/ActorLighting.js';
 import { FillChannel } from '../city/kit/FillChannel.js';
+import { animation, rig } from './HeroCharacter.test-fixtures.js';
+
+// Which map and which tint each hair material multiplies, as the crowd's HairMesh does.
+vi.mock( './HairMesh.js', async ( original ) => {
+
+	const module = await original();
+	return { ...module, hairColorNode: vi.fn( module.hairColorNode ) };
+
+} );
 
 describe( 'focused character', () => {
 
@@ -17,7 +29,7 @@ describe( 'focused character', () => {
 			loadModel: () => ( { scene: rig( 'body' ), hairs: [ { scene: rig( 'hair' ) } ] } )
 		} );
 		await hero.prepare();
-		const person = { gender: 'male', appearanceSeed: 3, clip: 3, hero: false, position: new THREE.Vector3( 1, 0, 1 ), heading: 0, look: outfit() };
+		const person = { gender: 'male', variant: 0, appearanceSeed: 3, clip: 3, hero: false, position: new THREE.Vector3( 1, 0, 1 ), heading: 0, look: outfit() };
 		await hero.show( person );
 		const root = hero.active.root;
 		const meshes = [];
@@ -63,7 +75,7 @@ describe( 'focused character', () => {
 			}
 		} );
 		const person = {
-			gender: 'female', appearanceSeed: 7, clip: 2, hero: false,
+			gender: 'female', variant: 1, appearanceSeed: 7, clip: 2, hero: false,
 			position: new THREE.Vector3( 4, 0, 8 ), heading: 1.2, look: outfit()
 		};
 
@@ -107,10 +119,22 @@ describe( 'focused character', () => {
 
 		const loaded = [];
 		const warmed = [];
+		const built = new Set();
 		const hero = new HeroCharacter( {
 			animation: animation(),
-			warmup: { warm: async ( root ) => { warmed.push( root.name ); return 0; } },
-			loadModel: ( descriptor ) => { loaded.push( descriptor.gender ); return { scene: rig( 'body' ), hairs: [ { scene: rig( 'hair' ) } ] }; }
+			warmup: { warm: async ( root ) => {
+
+				warmed.push( root.name );
+				root.traverse( ( node ) => { if ( node.isMesh ) built.add( node.material ); } );
+				return 0;
+
+			} },
+			loadModel: ( descriptor ) => {
+
+				loaded.push( descriptor.gender );
+				return { scene: rig( 'body', { eyebrows: true } ), hairs: [ { scene: rig( 'hair' ) } ] };
+
+			}
 		} );
 		const progress = [];
 
@@ -121,12 +145,119 @@ describe( 'focused character', () => {
 		expect( progress ).toEqual( [ [ 1, 2 ], [ 2, 2 ] ] );
 		expect( hero.group.children ).toHaveLength( 0 );
 
-		const person = { gender: 'male', appearanceSeed: 3, clip: 1, hero: false, position: new THREE.Vector3(), heading: 0, look: outfit() };
+		const person = { gender: 'male', variant: 0, appearanceSeed: 3, clip: 1, hero: false, position: new THREE.Vector3(), heading: 0, look: outfit() };
 		expect( await hero.show( person ) ).toBe( true );
 		expect( loaded ).toHaveLength( 2 );
-		// The prepared root's material was handed back and is what this person wears.
+		// The prepared root's materials were handed back and are what this
+		// person wears, tinted hairstyle and eyebrows included.
 		expect( hero.models.size ).toBe( 2 );
 		expect( ( await hero.models.get( 'regular-male:Hairstyles/Rigged to Head Bone/Male/Hair_SimpleParted.gltf' ) ).wardrobe ).toHaveLength( 1 );
+		const worn = [];
+		hero.active.root.traverse( ( node ) => { if ( node.isMesh ) worn.push( node ); } );
+		expect( worn.filter( ( mesh ) => mesh.userData.hair ) ).toHaveLength( 2 );
+		expect( worn.every( ( mesh ) => built.has( mesh.material ) ) ).toBe( true );
+
+	} );
+
+	it( 'wears every channel of the crowd look, the hair tint on hairstyle and eyebrows, over the crowd surface', async () => {
+
+		vi.mocked( hairColorNode ).mockClear();
+		const hero = new HeroCharacter( {
+			animation: animation(),
+			loadModel: () => ( { scene: rig( 'body', { eyebrows: true } ), hairs: [ { scene: rig( 'hair' ) } ] } )
+		} );
+		const seed = 2754811393;
+		const person = {
+			npcId: 'n1', gender: 'female', variant: 1, appearanceSeed: seed, clip: 1, hero: false,
+			position: new THREE.Vector3(), heading: 0, look: look( seed )
+		};
+		await hero.show( person );
+		const { root } = hero.active;
+		const dressed = root.userData.dressed;
+		for ( const [ channel, value ] of Object.entries( person.look ) ) {
+
+			const worn = dressed.look[ channel ]?.value;
+			expect( { channel, worn: worn?.isColor ? worn.getHex() : worn } ).toEqual( { channel, worn: value.isColor ? value.getHex() : value } );
+
+		}
+
+		const meshes = [];
+		root.traverse( ( node ) => { if ( node.isMesh ) meshes.push( node ); } );
+		const hairs = meshes.filter( ( mesh ) => mesh.userData.hair );
+		expect( hairs.map( ( mesh ) => mesh.name ).sort() ).toEqual( [ 'Eyebrows', 'hair' ] );
+		for ( const mesh of [ ...hairs, meshes.find( ( node ) => node.name === 'body' ) ] ) {
+
+			expect( mesh.material ).toBeInstanceOf( THREE.MeshStandardNodeMaterial );
+			expect( mesh.material ).toMatchObject( { ...CROWD_SURFACE, normalMap: null, roughnessMap: null } );
+
+		}
+		// Each is the pack's own hair map times the person's tint, as in the crowd.
+		const source = await hero.models.values().next().value;
+		const maps = [];
+		source.scene.traverse( ( node ) => { if ( node.userData.hair ) maps.push( node.material.map ); } );
+		expect( vi.mocked( hairColorNode ).mock.calls ).toEqual( maps.map( ( map ) => [ map, dressed.look.hair ] ) );
+		expect( new Set( hairs.map( ( mesh ) => mesh.material ) ) ).toEqual( new Set( dressed.hairs.values() ) );
+
+		// The next person of that shape wears the same materials in their own colour.
+		hero.hide();
+		const other = 97531;
+		await hero.show( { ...person, npcId: 'n2', appearanceSeed: other, look: look( other ) } );
+		const again = [];
+		hero.active.root.traverse( ( node ) => { if ( node.userData.hair ) again.push( node.material ); } );
+		expect( again ).toEqual( hairs.map( ( mesh ) => mesh.material ) );
+		expect( dressed.look.hair.value.getHex() ).toBe( look( other ).hair.getHex() );
+		expect( hairColorNode ).toHaveBeenCalledTimes( 2 );
+
+	} );
+
+	it( 'wears the crowd body the person walks in, and swaps it only when that body changes', async () => {
+
+		const loaded = [];
+		const hero = new HeroCharacter( {
+			animation: animation(),
+			loadModel: ( descriptor ) => { loaded.push( descriptor.id ); return { scene: rig( 'body' ), hairs: [] }; }
+		} );
+		// Gender and seed alone would pick the other body.
+		const person = {
+			npcId: 'n1', gender: null, variant: 0, appearanceSeed: 3, clip: 1, hero: false,
+			position: new THREE.Vector3(), heading: 0, look: outfit()
+		};
+		await hero.show( person );
+		expect( loaded ).toEqual( [ 'regular-male' ] );
+
+		await hero.show( person );
+		expect( loaded ).toEqual( [ 'regular-male' ] );
+		await hero.show( { ...person, variant: 1 } );
+		expect( loaded ).toEqual( [ 'regular-male', 'regular-female' ] );
+		expect( hero.active.descriptor.id ).toBe( 'regular-female' );
+
+	} );
+
+	it( 'wears a new look on the resident rig as soon as its person has one', async () => {
+
+		const hero = new HeroCharacter( {
+			animation: animation(),
+			loadModel: () => ( { scene: rig( 'body', { eyebrows: true } ), hairs: [ { scene: rig( 'hair' ) } ] } )
+		} );
+		const person = {
+			npcId: 'n1', gender: 'male', variant: 0, appearanceSeed: 11, clip: 1, hero: false,
+			position: new THREE.Vector3(), heading: 0, look: look( 11 )
+		};
+		await hero.show( person );
+		const { root } = hero.active;
+		const worn = () => ( {
+			shirt: root.userData.dressed.look.shirt.value.getHex(),
+			hair: root.userData.dressed.look.hair.value.getHex()
+		} );
+		const wearing = ( seed ) => ( { shirt: look( seed ).shirt.getHex(), hair: look( seed ).hair.getHex() } );
+
+		person.look = look( 2754811393 );
+		hero.update( 0 );
+		expect( worn() ).toEqual( wearing( 2754811393 ) );
+
+		await hero.show( { ...person, look: look( 97531 ) } );
+		expect( hero.active.root ).toBe( root );
+		expect( worn() ).toEqual( wearing( 97531 ) );
 
 	} );
 
@@ -137,7 +268,7 @@ describe( 'focused character', () => {
 			loadModel: () => ( { scene: rig( 'body' ) } )
 		} );
 		const person = {
-			npcId: 'npc-follower', gender: 'female', appearanceSeed: 7, clip: 0, hero: false,
+			npcId: 'npc-follower', gender: 'female', variant: 1, appearanceSeed: 7, clip: 0, hero: false,
 			position: new THREE.Vector3(), heading: 0, look: outfit()
 		};
 		await hero.show( person, [
@@ -169,7 +300,7 @@ describe( 'focused character', () => {
 		const physics = await Physics.create();
 		physics.addTrimesh( new THREE.BoxGeometry( 20, 0.1, 20 ).translate( 0, - 0.05, 0 ) );
 		const person = {
-			id: 'p1', npcId: 'npc-impact', gender: 'female', appearanceSeed: 7,
+			id: 'p1', npcId: 'npc-impact', gender: 'female', variant: 1, appearanceSeed: 7,
 			clip: 0, frame: 16, hero: false, position: new THREE.Vector3(), heading: 0
 		};
 		street.enter( person );
@@ -271,55 +402,15 @@ function namedBone( name, position ) {
 
 }
 
-function rig( name = 'body' ) {
-
-	const root = new THREE.Group();
-	const bone = new THREE.Bone();
-	bone.name = 'root';
-	const head = new THREE.Bone();
-	head.name = 'Head';
-	bone.add( head );
-	const geometry = new THREE.BufferGeometry();
-	geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [ 0, 0, 0 ], 3 ) );
-	geometry.setAttribute( 'skinIndex', new THREE.Uint16BufferAttribute( [ 0, 0, 0, 0 ], 4 ) );
-	geometry.setAttribute( 'skinWeight', new THREE.Float32BufferAttribute( [ 1, 0, 0, 0 ], 4 ) );
-	const mesh = new THREE.SkinnedMesh( geometry, new THREE.MeshStandardMaterial( { map: new THREE.Texture() } ) );
-	mesh.name = name;
-	mesh.add( bone );
-	mesh.bind( new THREE.Skeleton( [ bone, head ] ) );
-	root.add( mesh );
-
-	return root;
-
-}
-
 function outfit() {
 
 	return {
 		skin: new THREE.Color( 0xffffff ),
 		shirt: new THREE.Color( 0x446688 ),
 		trousers: new THREE.Color( 0x222833 ),
+		hair: new THREE.Color( 0x2e1f16 ),
 		sleeve: 0.55,
 		hem: 0.88
-	};
-
-}
-
-function animation() {
-
-	const scene = rig();
-	const times = [ 0, 1 ];
-	const values = [ 0, 0, 0, 1, 0, 0, 0, 1 ];
-
-	return {
-		scene,
-		animations: [
-			new THREE.AnimationClip( 'Idle_Talking_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
-			new THREE.AnimationClip( 'Sitting_Talking_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
-			new THREE.AnimationClip( 'Idle_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
-			new THREE.AnimationClip( 'Sprint_Enter', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] ),
-			new THREE.AnimationClip( 'Sprint_Loop', 1, [ new THREE.QuaternionKeyframeTrack( 'root.quaternion', times, values ) ] )
-		]
 	};
 
 }

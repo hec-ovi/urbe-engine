@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Crowd, crowdClipForName } from './Crowd.js';
 import { CLIP } from './CharacterAssets.js';
+import { look } from './Appearance.js';
 import { StreetBodies } from './StreetBodies.js';
 import { WalkRoutes } from './WalkRoutes.js';
 import { SIDEWALK_HEIGHT } from '../ground/GroundBuilder.js';
@@ -148,6 +149,7 @@ describe( 'persistent NPC projection', () => {
 		const body = { variant: first.variant, look: first.look };
 		const updated = crowd.syncActor( { ...actor, animation: 'run', position: [ 3, 0, 0 ] }, player );
 		expect( updated ).toBe( first );
+		expect( updated.look ).toBe( body.look );
 		expect( updated.position.toArray() ).toEqual( [ 3, 0, 0 ] );
 		expect( updated.clip ).toBe( CLIP.RUN );
 		expect( crowd.count ).toBe( 1 );
@@ -218,7 +220,7 @@ describe( 'persistent NPC projection', () => {
 			position: inside.toArray(), animation: 'idle', mode: 'schedule'
 		};
 		const continuity = { appear: vi.fn( () => actor ) };
-		const handle = {
+		let handle = {
 			crowdId: 'staff-handle', type: 'barista', gender: 'male', appearanceSeed: 44,
 			activity: 'working', place: { kind: 'parcel', id: 'cafe' }
 		};
@@ -234,6 +236,8 @@ describe( 'persistent NPC projection', () => {
 		const anonymous = [ ...crowd.members.values() ][ 0 ];
 		expect( anonymous ).toMatchObject( { crowdId: 'staff-handle', npcId: null } );
 
+		// The story establishes the worker; the post's sample names them from then on.
+		handle = { ...handle, npcId: instance.npcId };
 		const named = crowd.questMember( instance.npcId, 600, inside, { kind: 'parcel', id: 'cafe' } );
 		expect( continuity.appear ).toHaveBeenCalledWith( { npcId: instance.npcId, timeMin: 600 } );
 		expect( named ).toBe( anonymous );
@@ -253,7 +257,7 @@ describe( 'persistent NPC projection', () => {
 			expect( named.position.equals( position ) ).toBe( true );
 
 		}
-		expect( sim.instantiate ).toHaveBeenCalledTimes( 1 );
+		expect( sim.instantiate ).not.toHaveBeenCalled();
 
 		// a body the schedule puts somewhere else is never the cast NPC's
 		expect( crowd.questMember( instance.npcId, 601, inside, { kind: 'edge', id: 'e1' } ) ).toBeNull();
@@ -312,6 +316,8 @@ describe( 'persistent NPC projection', () => {
 		const copies = [ ...crowd.members.values() ].filter( member => member.copy );
 		expect( copies ).toHaveLength( 2 );
 		expect( copies.every( member => member.npcId === null && member.instance === null && member.crowdId === null ) ).toBe( true );
+		// Each wears a look of its own, never the person it walks like.
+		expect( copies.every( member => member.appearanceSeed !== instance.appearanceSeed ) ).toBe( true );
 		expect( [ ...crowd.members.values() ].filter( member => member.npcId === instance.npcId ) ).toHaveLength( 1 );
 
 	} );
@@ -477,7 +483,6 @@ describe( 'Crowd bodies', () => {
 		const sim = {
 			crowd: () => ( { agents } ),
 			getNPC: () => npc,
-			instantiate: () => npc,
 			continuityAt: () => ( { movement: { current: { edgeId: 'e2', progress: 0.5 } } } )
 		};
 		const crowd = new Crowd( {
@@ -486,6 +491,7 @@ describe( 'Crowd bodies', () => {
 		} );
 		const clock = { timeMin: 780, daySeconds: 46800 };
 		crowd.update( 0, PLAYER, clock );
+		agents = [ { ...agents[ 0 ], npcId: npc.npcId } ];
 		const named = crowd.questMember( npc.npcId, clock.timeMin, PLAYER, { kind: 'edge', id: 'e2' } );
 		expect( named ).toMatchObject( { npcId: 'a17', crowdId: 'first-trip', appearanceSeed: 123 } );
 
@@ -499,6 +505,58 @@ describe( 'Crowd bodies', () => {
 		crowd.update( 3, PLAYER, clock );
 		expect( named.npcId ).toBe( 'a17' );
 		expect( [ ...crowd.members.values() ].find( ( member ) => member.crowdId === 'later-trip' ) ).not.toBe( named );
+
+	} );
+
+	it( 'hands a body only a free handle of its own gender that nobody already is', () => {
+
+		const walker = {
+			crowdId: 'first-trip', type: 'courier', gender: 'female', appearanceSeed: 123,
+			activity: 'commuting', place: { kind: 'edge', id: 'e2' }, progress: 0.5, direction: 1
+		};
+		let agents = [ walker ];
+		const crowd = new Crowd( {
+			assets: testAssets(), routes: pavement(), signals: { green: () => true },
+			sim: { crowd: () => ( { agents } ) }, places: new Map(), capacity: 4
+		} );
+		crowd.update( 0, PLAYER, { timeMin: 780, daySeconds: 46800 } );
+		const body = [ ...crowd.members.values() ][ 0 ];
+		const on = ( crowdId, fields = {} ) => ( { ...walker, crowdId, ...fields } );
+
+		agents = [ on( 'established', { npcId: 'a9' } ), on( 'his-trip', { gender: 'male' } ) ];
+		expect( crowd.handleFor( body, 781 ) ).toBeNull();
+		agents.push( on( 'her-trip' ) );
+		expect( crowd.handleFor( body, 781 ) ).toBe( 'her-trip' );
+
+	} );
+
+	it( 'draws an established person in their own look and never re-dresses a passer-by as them', () => {
+
+		const passer = {
+			crowdId: 'passer', type: 'courier', gender: 'female', appearanceSeed: 123,
+			activity: 'commuting', place: { kind: 'edge', id: 'e2' }, progress: 0.5, direction: 1
+		};
+		const person = { npcId: 'a17', type: 'courier', gender: 'female', appearanceSeed: 456, flags: { dead: false } };
+		let agents = [ passer ];
+		const crowd = new Crowd( {
+			assets: testAssets(), routes: pavement(), signals: { green: () => true },
+			sim: { crowd: () => ( { agents } ), getNPC: () => person }, places: new Map(), capacity: 4
+		} );
+		const clock = { timeMin: 780, daySeconds: 46800 };
+		crowd.update( 0, PLAYER, clock );
+		const body = [ ...crowd.members.values() ][ 0 ];
+		const walked = body.look;
+
+		// Only the established person is out there now, on a sample that still
+		// carries its trip's seed: the person is drawn from their own.
+		agents = [ { ...passer, crowdId: 'their-trip', npcId: person.npcId, appearanceSeed: 999 } ];
+		crowd.update( 3, PLAYER, clock );
+		const named = crowd.memberForNpc( person.npcId );
+		expect( named ).not.toBe( body );
+		expect( named ).toMatchObject( { appearanceSeed: 456, gender: 'female' } );
+		expect( named.look ).toEqual( look( 456 ) );
+		expect( body ).toMatchObject( { npcId: null, appearanceSeed: 123, retiring: true } );
+		expect( body.look ).toBe( walked );
 
 	} );
 
@@ -652,14 +710,14 @@ describe( 'Crowd cast at a quest parcel', () => {
 
 		const instance = { npcId: 'npc-denna', name: { given: 'River', family: 'Nakamura' }, type: 'receptionist', gender: 'female', appearanceSeed: 7 };
 		const inside = new THREE.Vector3( 10, 0, 10 );
-		const bystander = { npcId: 'npc-passer', name: { given: 'Wen', family: 'Ito' }, type: 'receptionist', gender: 'male', appearanceSeed: 12 };
-		const handle = ( crowdId ) => ( {
-			crowdId, type: 'receptionist', gender: 'female', activity: 'working', place: { kind: 'parcel', id: 'p17' }
+		const handle = ( crowdId, appearanceSeed ) => ( {
+			crowdId, type: 'receptionist', gender: 'female', appearanceSeed, activity: 'working', place: { kind: 'parcel', id: 'p17' }
 		} );
+		let agents = [ handle( 'h1', 12 ), handle( 'h2', 7 ) ];
 		const sim = {
 			getNPC: () => instance,
-			crowd: ( timeMin, scope ) => ( { agents: scope.kind === 'parcel' ? [ handle( 'h1' ), handle( 'h2' ) ] : [] } ),
-			instantiate: ( crowdId ) => crowdId === 'h2' ? instance : bystander
+			crowd: ( timeMin, scope ) => ( { agents: scope.kind === 'parcel' ? agents : [] } ),
+			instantiate: vi.fn()
 		};
 		const hold = vi.fn( ( request ) => ( {
 			...persistentActor( instance ), place: { ...request.place }, position: [ ...request.position ],
@@ -671,10 +729,18 @@ describe( 'Crowd cast at a quest parcel', () => {
 			continuity: controlled ? { hold } : null
 		} );
 		crowd.update( 0, inside, { timeMin: 1264, daySeconds: 36000 } );
+		const passer = [ ...crowd.members.values() ].find( ( member ) => member.crowdId === 'h1' );
+		const passerLook = passer.look;
 
+		// The story establishes River; the sample names her handle and nobody else's.
+		agents = [ agents[ 0 ], { ...agents[ 1 ], npcId: instance.npcId } ];
 		const cast = crowd.castMember( 'npc-denna', 1264, inside, 'p17' );
 		expect( cast.npcId ).toBe( 'npc-denna' );
 		expect( [ ...crowd.members.values() ].filter( ( member ) => member.npcId ) ).toEqual( [ cast ] );
+		// Looking at a passer-by establishes nobody and leaves them as they were.
+		expect( sim.instantiate ).not.toHaveBeenCalled();
+		expect( passer ).toMatchObject( { npcId: null, crowdId: 'h1', appearanceSeed: 12 } );
+		expect( passer.look ).toBe( passerLook );
 		expect( cast ).toMatchObject( { quest: true, frozen: true } );
 		if ( controlled ) expect( hold ).toHaveBeenCalledWith( expect.objectContaining( {
 			npcId: 'npc-denna', place: { kind: 'parcel', id: 'p17' }, position: cast.position.toArray()

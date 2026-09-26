@@ -73,11 +73,11 @@ export function bodyFor( gender, seed ) {
 
 }
 
-/** A focused or fallen NPC keeps the exact body and hairstyle visible in the crowd. */
-export function avatarFor( gender, seed ) {
+/** The body and hairstyle of one crowd variant, which a focused or fallen person keeps wearing. */
+export function avatarFor( variant ) {
 
-	const value = Number.isInteger( seed ) ? seed >>> 0 : 0;
-	const shape = CROWD_MODELS[ bodyFor( gender, value ) ];
+	const shape = CROWD_MODELS[ variant ];
+	if ( ! shape ) throw new Error( `no crowd body ${variant}` );
 	return { ...shape, hairs: [ shape.hair ] };
 
 }
