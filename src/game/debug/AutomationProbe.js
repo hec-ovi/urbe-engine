@@ -531,12 +531,13 @@ export class AutomationProbe {
 	 * Stands the player at a place `{ kind, id }`: a parcel's door, just
 	 * inside where it has one, a station or stop, or the door nearest the
 	 * player inside a district, and waits up to `timeoutMs` for the room at a
-	 * parcel with an interior. A floor the interior stream has not loaded yet
-	 * has no ground: the player stands outside the parcel's door meanwhile
-	 * (where objective routes end) and steps in once it is solid, or stays
-	 * there. After two frames: `{ placed, places, room }`, `places` the quest
-	 * places the player stands in and `room` the parcel of the room they stand
-	 * in, or null.
+	 * parcel with an interior. Ground far from the player, and a floor the
+	 * interior stream has not loaded, is not solid yet: the player stands
+	 * outside the parcel's door meanwhile (where objective routes end), or at
+	 * the place itself, and steps onto it once it is solid, or stays there.
+	 * After two frames: `{ placed, places, room }`, `places` the quest places
+	 * the player stands in and `room` the parcel of the room they stand in,
+	 * or null.
 	 */
 	async visit( { kind, id }, { timeoutMs = 10000 } = {} ) {
 
@@ -544,11 +545,11 @@ export class AutomationProbe {
 		const started = performance.now();
 		const waiting = () => performance.now() - started < timeoutMs;
 		let placed = Boolean( door ) && this.#standOn( door );
-		const outside = ! placed && door && kind === 'parcel' ? this.game.objectiveGuide?.router.doors.get( id ) : null;
-		if ( outside && this.#standOn( outside ) ) {
+		if ( ! placed && door ) {
 
-			placed = true;
-			while ( ! this.#standOn( door ) && waiting() ) await frames( 1 );
+			const [ x, y, z ] = ( kind === 'parcel' && this.game.objectiveGuide?.router.doors.get( id ) ) || door;
+			placed = this.game.placePlayer( { x, y: y + FOOTING, z } );
+			while ( placed && ! this.#standOn( door ) && waiting() ) await frames( 1 );
 
 		}
 		if ( placed && kind === 'parcel' && this.#interior( id ) ) {

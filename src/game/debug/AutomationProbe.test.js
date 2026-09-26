@@ -545,20 +545,22 @@ describe( 'story fast-forward', () => {
 		const probe = new AutomationProbe( game );
 		expect( await probe.visit( { kind: 'parcel', id: 'p2' } ) ).toMatchObject( { placed: true, room: 'p2' } );
 		expect( game.body.feet.toArray() ).toEqual( [ 40, expect.closeTo( 0.25 ), 5 ] );
-		// p1's floor is not solid until the interior stream has loaded it: the player waits outside its door, then steps in.
+		// Nothing at p1 is solid until the player stands at its door outside and it loads: the player waits there, then steps in.
 		const cast = game.physics.world.castRay;
 		let loaded = false;
-		game.physics.world.castRay = ( ray, ...rest ) => {
+		game.physics.world.castRay = ( ray, ...rest ) => loaded ? cast( ray, ...rest ) : null;
+		const placing = game.placePlayer.getMockImplementation();
+		game.placePlayer.mockImplementation( ( feet, target ) => {
 
-			if ( Math.abs( ray.origin.x - 12 ) < 0.5 && ! loaded ) return null;
-			if ( Math.abs( ray.origin.z - 8 ) < 0.5 ) loaded = true;
-			return cast( ray, ...rest );
+			loaded ||= feet.z === 8;
+			return placing( feet, target );
 
-		};
+		} );
 		game.objectiveGuide.router.doors = new Map( [ [ 'p1', [ 13, 0.2, 8 ] ] ] );
 		expect( await probe.visit( { kind: 'parcel', id: 'p1' } ) ).toMatchObject( { placed: true, room: 'p1' } );
-		expect( game.placePlayer.mock.calls.slice( - 2 ).map( ( [ feet ] ) => feet.z ) ).toEqual( [ 8, 5 ] );
+		expect( game.placePlayer.mock.calls.slice( - 2 ).map( ( [ feet ] ) => [ feet.x, feet.z ] ) ).toEqual( [ [ 13, 8 ], [ 12, 5 ] ] );
 		game.physics.world.castRay = cast;
+		game.placePlayer.mockImplementation( placing );
 
 		// The door nearest the player inside d1.
 		game.body.feet.set( 20, 0.2, 5 );
