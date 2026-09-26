@@ -1,7 +1,7 @@
 import { Group } from 'three/webgpu';
 import { prepare } from './BatchGeometry.js';
 import { MaterialBatch } from './MaterialBatch.js';
-import { HIDDEN_FAR, NEAR_ONLY } from './SphereCulledBatch.js';
+import { HIDDEN_FAR } from './SphereCulledBatch.js';
 
 /**
  * One kit's whole vocabulary, drawn as one batch per material.
@@ -19,6 +19,8 @@ import { HIDDEN_FAR, NEAR_ONLY } from './SphereCulledBatch.js';
  *
  * A surface may also carry `far`, the geometry it draws past `lod.distance`
  * from `lod.point`; a far geometry with no triangles draws nothing out there.
+ * One that arrives after its entry was added joins through `addFar`, and the
+ * copies already standing draw it from then on.
  */
 export class MaterialBatches {
 
@@ -139,15 +141,42 @@ export class MaterialBatches {
 
 				const batch = this.batches.get( surface.bucket );
 				const geometryId = batch.addGeometry( surface.geometry );
-				const far = ! surface.far ? NEAR_ONLY : hasTriangles( surface.far ) ? batch.addGeometry( surface.far ) : HIDDEN_FAR;
+				if ( surface.far ) batch.setFar( geometryId, farId( batch, surface.far ) );
 
-				return { batch, geometryId, far };
+				return { batch, geometryId };
 
 			} ) );
 
 		}
 
 		return this;
+
+	}
+
+	/**
+	 * The far geometry an entry's surfaces carry now and did not when it was
+	 * added, each joining the batch its near surface draws from. Every copy of
+	 * the entry, standing or still to come, draws it past the far distance. A far
+	 * geometry that cannot join its batch throws before any batch is touched.
+	 *
+	 * @param surfaces the entry's surfaces, in the order `add` took them
+	 */
+	addFar( id, surfaces ) {
+
+		const parts = this.entries.get( id );
+		const joining = surfaces.flatMap( ( surface, index ) => ( surface.far ? [ [ parts[ index ], surface ] ] : [] ) );
+
+		for ( const [ { batch }, surface ] of joining ) {
+
+			if ( hasTriangles( surface.far ) ) [ surface.far ] = prepare( [ surface.far ], batch.layout );
+
+		}
+		for ( const [ { batch, geometryId }, surface ] of joining ) {
+
+			if ( hasTriangles( surface.far ) ) batch.reserveGeometry( surface.far.getAttribute( 'position' ).count, surface.far.getIndex()?.count ?? 0 );
+			batch.setFar( geometryId, farId( batch, surface.far ) );
+
+		}
 
 	}
 
@@ -174,7 +203,7 @@ export class MaterialBatches {
 		const parts = this.entries.get( id );
 		const instances = [];
 
-		for ( const { batch, geometryId, far } of parts ) instances.push( batch.add( geometryId, matrix, color, fill, uvRepeat, far ) );
+		for ( const { batch, geometryId } of parts ) instances.push( batch.add( geometryId, matrix, color, fill, uvRepeat ) );
 		this.copies ++;
 
 		return { parts, instances };
@@ -215,6 +244,13 @@ function drawn( surfaces ) {
 function total( surfaces, of ) {
 
 	return drawn( surfaces ).reduce( ( sum, [ surface, field ] ) => sum + of( surface[ field ] ), 0 );
+
+}
+
+/** The id a far geometry draws under in its batch, added there, or HIDDEN_FAR for one with no triangles. */
+function farId( batch, far ) {
+
+	return hasTriangles( far ) ? batch.addGeometry( far ) : HIDDEN_FAR;
 
 }
 

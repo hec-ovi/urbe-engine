@@ -3,7 +3,7 @@ import { FrameBudget } from '../../../app/FrameBudget.js';
 import { HitchLog } from '../../debug/HitchLog.js';
 import { cityGltfLoader } from '../../data/CityGltfLoader.js';
 import { ReadBudget } from '../../data/ReadBudget.js';
-import { FAR_DISTANCE, FarSimplifier } from './FarSurfaces.js';
+import { FAR_DISTANCE, FarSimplifier, farShells } from './FarSurfaces.js';
 import { MaterialBatches } from './MaterialBatches.js';
 import { decodePlan, pieceError, readPlanFile } from './PlanFile.js';
 
@@ -35,6 +35,8 @@ const PLATES = ( planId ) => `${planId}/plates`;
  * A copy farther than FAR_DISTANCE from the point `focus` last named draws its
  * far surfaces: facades simplified on a worker and window rooms lit on a coarser
  * grid ([FarSurfaces.js](FarSurfaces.js)). Nothing is far before a focus is named.
+ * A plan stands without waiting for its far facades: they join the batches when
+ * the worker answers, and every copy of the plan draws them from then on.
  *
  * A plan whose files are missing or corrupt never stands. It is recorded with
  * its `E_KIT_PIECES` cause and the parcels that are copies of it stay empty
@@ -297,6 +299,7 @@ export class KitPieces {
 			if ( plan.plateSurfaces.length ) entries.push( { id: PLATES( plan.id ), surfaces: plan.plateSurfaces } );
 			this.hitches.time( 'plan batches', () => this.batches.add( entries, { castShadow: true } ) );
 			this.plans.set( planId, plan );
+			this.#farther( plan );
 
 		} catch ( error ) {
 
@@ -306,6 +309,34 @@ export class KitPieces {
 		// The file is in the draws now, or it never will be; either way the city
 		// no longer holds its bytes.
 		this.files.delete( planId );
+
+	}
+
+	/**
+	 * A standing plan's facades simplified on the worker and handed to the
+	 * batches under the frame budget. A plan the city let go of meanwhile drops
+	 * them, and one whose far facades cannot join stays near at every distance.
+	 */
+	async #farther( plan ) {
+
+		try {
+
+			await farShells( plan.surfaces, this.simplifier );
+			await this.slice.step();
+			if ( this.plans.get( plan.id ) !== plan ) throw new Error( 'the city let it go' );
+			this.hitches.time( 'plan far', () => this.batches.addFar( plan.id, plan.surfaces ) );
+
+		} catch ( error ) {
+
+			for ( const surface of plan.surfaces ) {
+
+				surface.far?.dispose();
+				delete surface.far;
+
+			}
+			if ( this.plans.has( plan.id ) ) console.warn( `far facades of ${plan.id}: ${error.message}; it draws near at every distance` );
+
+		}
 
 	}
 

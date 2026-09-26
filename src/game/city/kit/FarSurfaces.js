@@ -1,5 +1,4 @@
 import { BufferAttribute, BufferGeometry } from 'three/webgpu';
-import { compact } from './BatchGeometry.js';
 import { simplifyFar } from './FarSimplify.js';
 
 /**
@@ -37,7 +36,8 @@ export class FarSimplifier {
 	 * @param index the surface's triangles, a copy the call may keep
 	 * @param count its vertices
 	 * @param attributes copies of its attributes, positions first ([FarSimplify.js](FarSimplify.js))
-	 * @returns the kept triangles over the same vertices, or null when there is no far surface
+	 * @returns `{ index, attributes }`, the kept triangles over only the vertices
+	 *   they draw ([FarSimplify.js](FarSimplify.js)), or null when there is no far surface
 	 */
 	simplify( index, count, attributes ) {
 
@@ -83,7 +83,7 @@ export class FarSimplifier {
 
 			const resolve = this.calls.get( data.id );
 			this.calls.delete( data.id );
-			resolve?.( data.error ? null : data.index );
+			resolve?.( data.error ? null : data.far );
 
 		};
 		worker.onerror = ( event ) => {
@@ -124,9 +124,9 @@ export async function farShells( surfaces, simplifier ) {
 }
 
 /**
- * The far surface of one surface: the same vertices under the simplifier's
- * triangles, compacted, indexed whether the surface is or not. A glowing
- * surface has none, because a lit strip is what a far building shows at night,
+ * The far surface of one surface: the vertices the simplifier's triangles draw,
+ * with every attribute the surface wears, indexed whether the surface is or
+ * not. A glowing surface has none, because a lit strip is what a far building shows at night,
  * and neither does one the simplifier cannot take far enough to be worth it. A
  * far surface with no triangles hides that surface past the distance.
  *
@@ -139,21 +139,19 @@ export async function farSurface( geometry, material, simplifier ) {
 
 	const index = geometry.getIndex();
 	const triangles = index ? Uint32Array.from( index.array.subarray( 0, index.count ) ) : Uint32Array.from( { length: position.count }, ( unused, vertex ) => vertex );
-	const kept = await simplifier.simplify( triangles, position.count, copies( geometry ) ).catch( () => null );
-	if ( ! kept || kept.length > ( index?.count ?? position.count ) * WORTH ) return null;
+	const far = await simplifier.simplify( triangles, position.count, copies( geometry ) ).catch( () => null );
+	if ( ! far || far.index.length > ( index?.count ?? position.count ) * WORTH ) return null;
 
-	return farGeometry( geometry, kept );
+	const surface = new BufferGeometry();
+	names( geometry ).forEach( ( name, at ) => {
 
-}
+		const { itemSize, normalized } = geometry.getAttribute( name );
+		surface.setAttribute( name, new BufferAttribute( far.attributes[ at ], itemSize, normalized ) );
 
-/** A geometry drawing `index` over another geometry's vertices, holding only the ones it draws. */
-export function farGeometry( geometry, index ) {
+	} );
+	surface.setIndex( new BufferAttribute( far.index, 1 ) );
 
-	const view = new BufferGeometry();
-	for ( const [ name, attribute ] of Object.entries( geometry.attributes ) ) view.setAttribute( name, attribute );
-	view.setIndex( new BufferAttribute( index, 1 ) );
-
-	return compact( view );
+	return surface;
 
 }
 
@@ -165,9 +163,8 @@ export function farGeometry( geometry, index ) {
 function copies( geometry ) {
 
 	const count = geometry.getAttribute( 'position' ).count;
-	const names = [ 'position', ...Object.keys( geometry.attributes ).filter( ( name ) => name !== 'position' ) ];
 
-	return names.map( ( name ) => {
+	return names( geometry ).map( ( name ) => {
 
 		const attribute = geometry.getAttribute( name );
 		const stride = attribute.isInterleavedBufferAttribute ? attribute.data.stride : attribute.itemSize;
@@ -176,6 +173,13 @@ function copies( geometry ) {
 		return { array: attribute.array.slice( 0, count * stride ), itemSize: attribute.itemSize, stride, offset };
 
 	} );
+
+}
+
+/** The attribute names, positions first, in the order the simplifier takes and answers them. */
+function names( geometry ) {
+
+	return [ 'position', ...Object.keys( geometry.attributes ).filter( ( name ) => name !== 'position' ) ];
 
 }
 

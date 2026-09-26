@@ -18,6 +18,7 @@ import { PlanBlueprints } from '../../data/PlanBlueprints.js';
 import { ReadBudget } from '../../data/ReadBudget.js';
 import { CHARSET } from '../../../assembly/signText.js';
 import { KitPieces } from './KitPieces.js';
+import { NEAR_ONLY } from './SphereCulledBatch.js';
 import { KitCellLoader } from './KitCells.js';
 import { KitSigns, signField } from './KitSigns.js';
 
@@ -51,7 +52,7 @@ let index = null;
 let blueprints = null;
 
 /** The world's plan index, read exactly as the runtime reads it from a world. */
-function openWorld( { mutate = ( document ) => document, slice, hitches, skipUnnamed = false } = {} ) {
+function openWorld( { mutate = ( document ) => document, slice, hitches, skipUnnamed = false, simplifier } = {} ) {
 
 	const reads = [];
 	const blueprintReads = [];
@@ -99,7 +100,7 @@ function openWorld( { mutate = ( document ) => document, slice, hitches, skipUnn
 	}
 
 	const pieces = new KitPieces( {
-		kit, baseUrl: sharedRoot(), factory, blueprints, slice, hitches, loader,
+		kit, baseUrl: sharedRoot(), factory, blueprints, slice, hitches, loader, simplifier,
 		readBinary: async ( url ) => {
 
 			reads.push( url );
@@ -374,6 +375,58 @@ describe( 'the city draws every building from its shared plan', () => {
 
 		hidden.disposeModelInstances();
 		expect( live( pieces ) ).toBe( 0 );
+
+	} );
+
+	it( 'stands a plan before its far facades are back, and the copies standing then draw them once they are', async () => {
+
+		// A worker that answers only when told to, with the first triangle of each facade.
+		const answers = [];
+		const firstTriangle = ( index, attributes ) => ( {
+			index: Uint32Array.of( 0, 1, 2 ),
+			attributes: attributes.map( ( { array, itemSize, stride, offset } ) => array.constructor.from(
+				[ ...index.subarray( 0, 3 ) ].flatMap( ( vertex ) => [ ...array.subarray( vertex * stride + offset, vertex * stride + offset + itemSize ) ] )
+			) )
+		} );
+		const simplifier = {
+			simplify: ( index, count, attributes ) => new Promise( ( resolve ) => answers.push( () => resolve( firstTriangle( index, attributes ) ) ) ),
+			dispose() {}
+		};
+		const { pieces } = openWorld( { simplifier } );
+		const record = building( 'p1' );
+		const loader = new KitCellLoader( { pieces, factory, readJson: serving( [ record ] ) } );
+		const cell = await shown( loader, [ source( record, false ) ] );
+		const facades = pieces.batches.entries.get( PLANS[ 0 ] );
+		const farOf = ( { batch, geometryId } ) => batch.mesh.farOf[ geometryId ];
+
+		expect( live( pieces ) ).toBeGreaterThan( 0 );
+		expect( answers.length ).toBeGreaterThan( 0 );
+		expect( facades.every( ( part ) => farOf( part ) === NEAR_ONLY ) ).toBe( true );
+
+		for ( const answer of answers ) answer();
+		await vi.waitFor( () => expect( facades.some( ( part ) => farOf( part ) >= 0 ) ).toBe( true ) );
+		for ( const part of facades.filter( ( part ) => farOf( part ) >= 0 ) ) {
+
+			expect( part.batch.mesh.getGeometryRangeAt( farOf( part ) ).count ).toBe( 3 );
+
+		}
+
+		// A city let go before the worker answers keeps nothing of the answer.
+		const second = openWorld( { simplifier } );
+		answers.length = 0;
+		const other = await shown( new KitCellLoader( { pieces: second.pieces, factory, readJson: serving( [ record ] ) } ), [ source( record, false ) ] );
+		const plan = second.pieces.plans.get( PLANS[ 0 ] );
+		releaseShell( other );
+		second.pieces.dispose();
+		const warn = vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		for ( const answer of answers ) answer();
+		await new Promise( ( resolve ) => setTimeout( resolve, 50 ) );
+		expect( plan.surfaces.some( ( surface ) => surface.far ) ).toBe( false );
+		expect( warn ).not.toHaveBeenCalled();
+		warn.mockRestore();
+
+		releaseShell( cell );
+		pieces.dispose();
 
 	} );
 

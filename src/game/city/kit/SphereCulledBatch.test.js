@@ -38,7 +38,7 @@ function drawList( batch, camera ) {
 
 describe( 'a batch that keeps each copy\'s sphere', () => {
 
-	it( 'draws exactly what three draws, copy for copy, as the copies grow, move and hide', () => {
+	it( 'draws exactly what three draws, copy for copy, as the copies grow, move and hide and their geometry changes', () => {
 
 		const camera = new THREE.PerspectiveCamera( 70, 1, 0.2, 900 );
 		camera.updateMatrixWorld();
@@ -54,6 +54,10 @@ describe( 'a batch that keeps each copy\'s sphere', () => {
 			batch.setGeometryIdAt( 2, 1 );
 			batch.setMatrixAt( 2, new THREE.Matrix4().makeTranslation( 5, 0, - 5 ) );
 			batch.setVisibleAt( 0, false );
+			// A geometry replaced under a standing copy moves its sphere too: this
+			// one stands below the view until its box grows up into it.
+			batch.setMatrixAt( batch.addInstance( 0 ), new THREE.Matrix4().makeTranslation( 0, - 40, - 20 ) );
+			batch.setGeometryAt( 0, new THREE.BoxGeometry( 2, 60, 2 ).translate( 0, 30, 0 ) );
 
 		}
 		camera.position.set( 1, 2, 3 );
@@ -61,42 +65,41 @@ describe( 'a batch that keeps each copy\'s sphere', () => {
 		camera.updateMatrixWorld();
 
 		expect( drawList( kept, camera ) ).toEqual( drawList( three, camera ) );
-		expect( drawList( kept, camera ).map( ( [ copy ] ) => copy ).sort() ).toEqual( [ 1, 2, 3 ] );
+		expect( drawList( kept, camera ).map( ( [ copy ] ) => copy ).sort() ).toEqual( [ 1, 2, 3, 4 ] );
 
 	} );
 
-	it( 'draws a copy\'s far geometry, or nothing, once its whole sphere lies past the far distance', () => {
+	it( 'draws a copy\'s far geometry, or nothing, once its whole sphere lies past the far distance, whenever the far geometry arrived', () => {
 
 		const material = new THREE.MeshStandardMaterial();
-		const batch = new SphereCulledBatch( 4, 400, 800, material );
+		const batch = new SphereCulledBatch( 4, 600, 2000, material );
 		batch.sortObjects = false;
-		const near = batch.addGeometry( new THREE.BoxGeometry( 2, 2, 2, 4, 4, 4 ) );
-		const far = batch.addGeometry( new THREE.BoxGeometry( 2, 2, 2 ) );
-		const copies = [ 20, 60, 100 ].map( ( z ) => {
+		const detailed = new THREE.BoxGeometry( 2, 2, 2, 4, 4, 4 );
+		const [ simplified, hidden, near ] = [ detailed, detailed.clone(), detailed.clone() ].map( ( geometry ) => batch.addGeometry( geometry ) );
+		[ [ simplified, 20 ], [ simplified, 60 ], [ hidden, 100 ], [ near, 60 ] ].forEach( ( [ geometry, z ] ) => {
 
-			const copy = batch.addInstance( near );
-			batch.setMatrixAt( copy, new THREE.Matrix4().makeTranslation( 0, 0, - z ) );
-
-			return copy;
+			batch.setMatrixAt( batch.addInstance( geometry ), new THREE.Matrix4().makeTranslation( 0, 0, - z ) );
 
 		} );
-		batch.setFarAt( copies[ 1 ], far );
-		batch.setFarAt( copies[ 2 ], HIDDEN_FAR );
+		// The far geometries arrive after the copies stand, as a worker answers.
+		const far = batch.addGeometry( new THREE.BoxGeometry( 2, 2, 2 ) );
+		batch.setFarOf( simplified, far );
+		batch.setFarOf( hidden, HIDDEN_FAR );
 		const camera = new THREE.PerspectiveCamera( 70, 1, 0.2, 900 );
 		camera.updateMatrixWorld();
 		const counts = () => drawList( batch, camera ).map( ( [ copy, , count ] ) => [ copy, count ] );
-		const whole = batch.getGeometryRangeAt( near ).count;
+		const whole = batch.getGeometryRangeAt( simplified ).count;
 		const simple = batch.getGeometryRangeAt( far ).count;
 
 		// No point named yet: every copy is near.
-		expect( counts() ).toEqual( [ [ 0, whole ], [ 1, whole ], [ 2, whole ] ] );
+		expect( counts() ).toEqual( [ [ 0, whole ], [ 1, whole ], [ 2, whole ], [ 3, whole ] ] );
 
 		batch.lod = { point: new THREE.Vector3(), distance: 40 };
-		expect( counts() ).toEqual( [ [ 0, whole ], [ 1, simple ] ] );
+		expect( counts() ).toEqual( [ [ 0, whole ], [ 1, simple ], [ 3, whole ] ] );
 
 		// Measured from the point, not from the camera drawing the pass.
 		batch.lod.point.set( 0, 0, - 80 );
-		expect( counts() ).toEqual( [ [ 0, whole ], [ 1, whole ], [ 2, whole ] ] );
+		expect( counts() ).toEqual( [ [ 0, simple ], [ 1, whole ], [ 2, whole ], [ 3, whole ] ] );
 
 	} );
 

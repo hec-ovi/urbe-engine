@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { MaterialBatches } from './MaterialBatches.js';
+import { HIDDEN_FAR, NEAR_ONLY } from './SphereCulledBatch.js';
 
 /** A loader style primitive: its own draw range over a buffer it shares with a neighbour. */
 function shared( { vertices, drawn, offset = 0 } ) {
@@ -117,6 +118,37 @@ describe( 'the batching class takes primitives as a loader publishes them', () =
 		expect( batch.mesh.getMatrixAt( standing.instances[ 0 ], new THREE.Matrix4() ).elements[ 12 ] ).toBeCloseTo( 4, 5 );
 		expect( batch.mesh.getGeometryRangeAt( standing.parts[ 0 ].geometryId ).vertexCount ).toBe( 3 );
 		expect( batch.mesh.getGeometryRangeAt( later.parts[ 0 ].geometryId ).vertexCount ).toBe( 30 );
+		batches.dispose();
+
+	} );
+
+	it( 'hands far geometry arriving after its entry to the copies standing and to those still to come', () => {
+
+		const material = new THREE.MeshStandardMaterial();
+		const facade = { bucket: 'stone', geometry: shared( { vertices: 6, drawn: 12 } ), material };
+		const sill = { bucket: 'metal', geometry: shared( { vertices: 3, drawn: 3 } ), material: new THREE.MeshStandardMaterial() };
+		const batches = new MaterialBatches( 'far' ).add( [ { id: 'a', surfaces: [ facade, sill ] } ] );
+		const standing = batches.admit( 'a', new THREE.Matrix4() );
+		const [ stone, metal ] = standing.parts;
+
+		// A far geometry the batch cannot hold leaves every batch as it was.
+		facade.far = shared( { vertices: 3, drawn: 3 } );
+		facade.far.setAttribute( 'uv', new THREE.BufferAttribute( new Float32Array( 6 ), 2 ) );
+		expect( () => batches.addFar( 'a', [ facade, sill ] ) ).toThrow( /uv/ );
+		expect( stone.batch.vertices ).toBe( 3 );
+		expect( stone.batch.mesh.farOf[ stone.geometryId ] ).toBe( NEAR_ONLY );
+
+		facade.far = shared( { vertices: 3, drawn: 3 } );
+		sill.far = new THREE.BufferGeometry().setAttribute( 'position', new THREE.BufferAttribute( new Float32Array( 0 ), 3 ) );
+		batches.addFar( 'a', [ facade, sill ] );
+		const later = batches.admit( 'a', new THREE.Matrix4().setPosition( 9, 0, 0 ) );
+
+		// Both copies draw the facade's far geometry, and nothing of the sill, out there.
+		const far = stone.batch.mesh.farOf[ stone.geometryId ];
+		expect( stone.batch.mesh.getGeometryRangeAt( far ).count ).toBe( 3 );
+		expect( metal.batch.mesh.farOf[ metal.geometryId ] ).toBe( HIDDEN_FAR );
+		expect( later.parts.map( ( { batch, geometryId } ) => batch.mesh.farOf[ geometryId ] ) ).toEqual( [ far, HIDDEN_FAR ] );
+		expect( stone.batch.vertices ).toBe( 6 );
 		batches.dispose();
 
 	} );

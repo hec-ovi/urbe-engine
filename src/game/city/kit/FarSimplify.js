@@ -8,15 +8,19 @@ export const FAR_ERROR = 0.1;
  * merged, collapses may cross a seam between faces, and parts smaller than the
  * error (a bolt, a sill, a mullion's end) are dropped. A producer writes each
  * face with vertices of its own, so vertices that agree on every attribute are
- * welded first, or no face could merge into its neighbour. The result indexes
- * the surface's own vertices, so the far surface wears its normals and uvs.
+ * welded first, or no face could merge into its neighbour. The result draws
+ * the surface's own vertices, so the far surface wears its normals and uvs,
+ * and holds only the ones it draws, so the thread asking has nothing to sort.
  *
  * @param index Uint32Array or Uint16Array of triangles
  * @param count how many vertices the surface has
  * @param attributes every attribute the surface carries, the first its
  *   positions in metres (a Float32Array), each as `{ array, itemSize, stride, offset }`:
  *   component c of vertex i is `array[ i * stride + offset + c ]`
- * @returns Uint32Array of the kept triangles, empty when nothing is worth drawing
+ * @returns `{ index, attributes }`: the kept triangles (a Uint32Array, empty
+ *   when nothing is worth drawing) over only the vertices they draw, and each
+ *   attribute's values for those vertices, in the order given, packed
+ *   `itemSize` to a vertex in an array of the attribute's own type
  */
 export async function simplifyFar( index, count, attributes ) {
 
@@ -44,7 +48,38 @@ export async function simplifyFar( index, count, attributes ) {
 
 	const simplified = MeshoptSimplifier.simplify( welded, points, 3, 0, FAR_ERROR, [ 'ErrorAbsolute', 'Prune', 'Permissive' ] )[ 0 ];
 
-	return simplified.map( ( vertex ) => kept[ vertex ] );
+	return drawnOnly( simplified.map( ( vertex ) => kept[ vertex ] ), attributes );
+
+}
+
+/** Triangles over the surface's vertices renumbered to only the ones they draw, in first use, with those vertices' values. */
+function drawnOnly( triangles, attributes ) {
+
+	const moved = new Map();
+	const index = new Uint32Array( triangles.length );
+	for ( let i = 0; i < triangles.length; i ++ ) {
+
+		const vertex = triangles[ i ];
+		if ( ! moved.has( vertex ) ) moved.set( vertex, moved.size );
+		index[ i ] = moved.get( vertex );
+
+	}
+
+	return {
+		index,
+		attributes: attributes.map( ( { array, itemSize, stride, offset } ) => {
+
+			const values = new array.constructor( moved.size * itemSize );
+			for ( const [ vertex, at ] of moved ) {
+
+				for ( let c = 0; c < itemSize; c ++ ) values[ at * itemSize + c ] = array[ vertex * stride + offset + c ];
+
+			}
+
+			return values;
+
+		} )
+	};
 
 }
 

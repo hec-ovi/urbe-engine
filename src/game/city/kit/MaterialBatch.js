@@ -1,6 +1,6 @@
 import { Vector4 } from 'three/webgpu';
 import { FillChannel } from './FillChannel.js';
-import { NEAR_ONLY, SphereCulledBatch } from './SphereCulledBatch.js';
+import { SphereCulledBatch } from './SphereCulledBatch.js';
 import { UvRepeatChannel } from './UvRepeatChannel.js';
 
 /** Enough copies for a first cell; a cell that wants more grows it. */
@@ -30,7 +30,7 @@ export class MaterialBatch {
 	 * @param indices their total index count, or 0 when the geometry is not indexed
 	 * @param instances copies to make room for before the first cell stands
 	 * @param fill whether each copy carries a fill light (FillChannel)
-	 * @param lod `{ point, distance }` a copy past which draws its far geometry
+	 * @param lod `{ point, distance }` a copy past which draws its primitive's far geometry
 	 */
 	constructor( name, material, { vertices, indices = 0, instances = FIRST_CAPACITY, castShadow = false, fill = false, uvRepeat = false, hitches = null, lod = null } ) {
 
@@ -152,17 +152,22 @@ export class MaterialBatch {
 	}
 
 	/**
-	 * Draws one more copy of one primitive.
-	 * @param far the geometry id it draws past the far distance, or NEAR_ONLY or HIDDEN_FAR
-	 * @returns the instance to hand back
+	 * What every copy of a primitive draws past the far distance, from now on.
+	 * @param far another primitive's geometry id, or NEAR_ONLY or HIDDEN_FAR
 	 */
-	add( geometryId, matrix, color = null, fill = null, uvRepeat = [ 1, 1 ], far = NEAR_ONLY ) {
+	setFar( geometryId, far ) {
+
+		this.mesh.setFarOf( geometryId, far );
+
+	}
+
+	/** Draws one more copy of one primitive. @returns the instance to hand back */
+	add( geometryId, matrix, color = null, fill = null, uvRepeat = [ 1, 1 ] ) {
 
 		this.reserve( 1 );
 
 		const instance = this.mesh.addInstance( geometryId );
 		this.mesh.setMatrixAt( instance, matrix );
-		this.mesh.setFarAt( instance, far );
 		this.fill?.set( instance, fill ?? NO_FILL );
 		this.uvRepeat?.set( instance, uvRepeat );
 		if ( color ) {

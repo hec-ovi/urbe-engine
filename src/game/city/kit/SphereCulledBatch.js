@@ -22,41 +22,63 @@ const _point = new Vector3();
  * list it writes is exactly the one three writes for an opaque batch; a batch
  * that sorts, or a camera three culls differently, takes three's own path.
  *
- * The same pass picks each copy's level: a copy with a far geometry
- * (`setFarAt`) whose sphere lies wholly past `lod.distance` from `lod.point`
- * draws that geometry instead, or nothing for HIDDEN_FAR. Every pass measures
- * from the one point, so a shadow and a probe face draw what the view does.
+ * The same pass picks each copy's level: a copy of a geometry that has a far
+ * geometry (`setFarOf`) draws that one instead once its sphere lies wholly past
+ * `lod.distance` from `lod.point`, or nothing for HIDDEN_FAR. The far geometry
+ * belongs to the geometry, so copies placed before it arrived draw it too. Every
+ * pass measures from the one point, so a shadow and a probe face draw what the
+ * view does.
  */
 export class SphereCulledBatch extends BatchedMesh {
+
+	#adding = false;
 
 	constructor( maxInstanceCount, maxVertexCount, maxIndexCount, material ) {
 
 		super( maxInstanceCount, maxVertexCount, maxIndexCount, material );
 		/** Per copy: centre x, y, z and radius, in the batch's own frame. */
 		this.spheres = new Float32Array( maxInstanceCount * 4 );
-		/** Per copy: the geometry it draws far away, NEAR_ONLY or HIDDEN_FAR. */
-		this.far = new Int32Array( maxInstanceCount ).fill( NEAR_ONLY );
+		/** Per geometry: the geometry its copies draw far away, NEAR_ONLY or HIDDEN_FAR. */
+		this.farOf = [];
 		/** `{ point: Vector3 | null, distance }`, or null for a batch with no far geometry. */
 		this.lod = null;
+
+	}
+
+	addGeometry( geometry, reservedVertexCount, reservedIndexCount ) {
+
+		// A geometry being added has no copies yet, so its write keeps no sphere.
+		this.#adding = true;
+		try {
+
+			const geometryId = super.addGeometry( geometry, reservedVertexCount, reservedIndexCount );
+			this.farOf[ geometryId ] = NEAR_ONLY;
+
+			return geometryId;
+
+		} finally {
+
+			this.#adding = false;
+
+		}
 
 	}
 
 	addInstance( geometryId ) {
 
 		const instanceId = super.addInstance( geometryId );
-		this.far[ instanceId ] = NEAR_ONLY;
 		this.#keep( instanceId );
 
 		return instanceId;
 
 	}
 
-	/** The geometry this copy draws past the far distance, NEAR_ONLY or HIDDEN_FAR. */
-	setFarAt( instanceId, far ) {
+	/** The geometry every copy of this one draws past the far distance, NEAR_ONLY or HIDDEN_FAR. */
+	setFarOf( geometryId, far ) {
 
-		this.validateInstanceId( instanceId );
+		this.validateGeometryId( geometryId );
 		if ( far >= 0 ) this.validateGeometryId( far );
-		this.far[ instanceId ] = far;
+		this.farOf[ geometryId ] = far;
 
 		return this;
 
@@ -83,7 +105,7 @@ export class SphereCulledBatch extends BatchedMesh {
 	setGeometryAt( geometryId, geometry ) {
 
 		super.setGeometryAt( geometryId, geometry );
-		this._instanceInfo.forEach( ( instance, instanceId ) => {
+		if ( ! this.#adding ) this._instanceInfo.forEach( ( instance, instanceId ) => {
 
 			if ( instance.active && instance.geometryIndex === geometryId ) this.#keep( instanceId );
 
@@ -99,9 +121,6 @@ export class SphereCulledBatch extends BatchedMesh {
 		const spheres = new Float32Array( maxInstanceCount * 4 );
 		spheres.set( this.spheres.subarray( 0, Math.min( this.spheres.length, spheres.length ) ) );
 		this.spheres = spheres;
-		const far = new Int32Array( maxInstanceCount ).fill( NEAR_ONLY );
-		far.set( this.far.subarray( 0, Math.min( this.far.length, far.length ) ) );
-		this.far = far;
 
 	}
 
@@ -121,7 +140,7 @@ export class SphereCulledBatch extends BatchedMesh {
 
 		const planes = _frustum.planes;
 		const spheres = this.spheres;
-		const farIds = this.far;
+		const farOf = this.farOf;
 		const point = this.lod?.point ? _point.copy( this.lod.point ).applyMatrix4( _matrix.copy( this.matrixWorld ).invert() ) : null;
 		const distance = this.lod?.distance ?? 0;
 		const instances = this._instanceInfo;
@@ -137,7 +156,7 @@ export class SphereCulledBatch extends BatchedMesh {
 			if ( ! instance.visible || ! instance.active || ! inside( planes, spheres, instanceId * 4 ) ) continue;
 
 			let geometryIndex = instance.geometryIndex;
-			const far = farIds[ instanceId ];
+			const far = farOf[ geometryIndex ];
 			if ( far !== NEAR_ONLY && point !== null && beyond( spheres, instanceId * 4, point, distance ) ) {
 
 				if ( far === HIDDEN_FAR ) continue;
