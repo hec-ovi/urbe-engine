@@ -85,7 +85,7 @@ export function shareStreetKit( published, kitSha256 ) {
 
 		}
 
-		return share( 'streets-kit', kitSha256, staged, { move: true } );
+		return share( 'streets-kit', kitSha256, staged );
 
 	} finally { rmSync( staged, { recursive: true, force: true } ); }
 

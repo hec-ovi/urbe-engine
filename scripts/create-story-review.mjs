@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Use the same creation boundary as the launcher. Existing games are preserved;
 // creation gives each new playthrough a fresh id when one already exists.
+// --quests-only replays the story over the draft's opened interiors again.
 // node scripts/create-story-review.mjs [existing-city-id]
 // node scripts/create-story-review.mjs --fresh [city-name] [seed]
 // node scripts/create-story-review.mjs --quests-only <existing-city-id>
-import { spawn } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join, resolve } from 'node:path';
@@ -37,19 +37,9 @@ if ( cityId === '--fresh' ) {
 
 let interiors;
 if ( questsOnly ) {
-	const draftRoot = join( engineRoot, 'out/drafts', cityId );
-	const draft = JSON.parse( await readFile( join( draftRoot, 'draft.json' ), 'utf8' ) );
-	const city = JSON.parse( await readFile( join( engineRoot, 'out/cities', cityId, 'city.json' ), 'utf8' ) );
-	const questsRoot = resolve( engineRoot, '../quests' );
-	await new Promise( ( done, reject ) => {
-		const child = spawn( 'npm', [ 'run', 'materialize', '--',
-			join( questsRoot, 'creation/samples/urbe-small/recording.json' ), city.size,
-			join( draftRoot, 'blueprint.json' ), join( draftRoot, 'npc-types.json' ),
-			join( draftRoot, 'quests/all.questlines.json' ), `--parcels=${draft.interiorIds.join( ',' )}`
-		], { cwd: questsRoot, stdio: 'inherit' } );
-		child.once( 'error', reject );
-		child.once( 'exit', code => code === 0 ? done() : reject( new Error( `Quest materialization exited ${code}` ) ) );
-	} );
+	// The quest stage replays the story into a folder of its own and publishes it
+	// whole, so a game made from this draft keeps the story it was made with.
+	const draft = JSON.parse( await readFile( join( engineRoot, 'out/drafts', cityId, 'draft.json' ), 'utf8' ) );
 	interiors = { ids: draft.interiorIds, count: draft.interiorIds.length };
 } else {
 	console.log( `Opening nine story locations in ${cityId}` );

@@ -3,8 +3,9 @@
  * first, so the game finds its story beside the city:
  *   npm run carry-quests -- --from <creation run dir> --out <world out dir>
  */
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { replaceFile } from './JsonFile.js';
 
 const QUESTLINE_SUFFIX = '.questline.json';
 
@@ -25,5 +26,6 @@ const definitions = files.map( ( file ) => JSON.parse( readFileSync( join( args.
 const target = join( args.out, 'quests' );
 
 mkdirSync( target, { recursive: true } );
-writeFileSync( join( target, 'questlines.json' ), JSON.stringify( definitions, null, 2 ) + '\n' );
+// A world cloned from another shares this file until one of them replaces it.
+replaceFile( join( target, 'questlines.json' ), JSON.stringify( definitions, null, 2 ) + '\n' );
 console.log( `${definitions.length} questlines (${files.join( ', ' )}) -> ${join( target, 'questlines.json' )}` );

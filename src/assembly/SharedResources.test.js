@@ -1,8 +1,17 @@
-import { afterEach, beforeEach, expect, it } from 'vitest';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import * as fs from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { collect, markUsed, share, SHARED_DIR, SWEEP_GRACE_MS, sweepLine } from './SharedResources.js';
+import { collect, dirBytes, markUsed, share, SHARED_DIR, SWEEP_GRACE_MS, sweepLine } from './SharedResources.js';
+
+// Pass-through, so a test can act as another sweep at the moment this one reads or renames.
+vi.mock( 'node:fs', async ( importOriginal ) => {
+
+	const actual = await importOriginal();
+	return { ...actual, renameSync: vi.fn( actual.renameSync ), statSync: vi.fn( actual.statSync ) };
+
+} );
 
 const previous = process.env.URBE_SHARED_DIR;
 let root = null;
@@ -134,7 +143,7 @@ it( 'spares a set a batch used within the grace until a manifest names it, and s
 	expect( markUsed( join( root, 'shared', 'plans/4444444444444444' ) ) ).toBe( false );
 	age( 'plans/3333333333333333', 2 * DAY );
 	const source = mkdtempSync( join( root, 'source-' ) );
-	expect( share( 'plans', '3333333333333333ffff', source, { move: true } ) ).toBe( 'plans/3333333333333333' );
+	expect( share( 'plans', '3333333333333333ffff', source ) ).toBe( 'plans/3333333333333333' );
 	expect( existsSync( source ) ).toBe( false );
 	expect( Date.now() - statSync( join( root, 'shared', 'plans/3333333333333333' ) ).mtimeMs ).toBeLessThan( DAY );
 
@@ -201,5 +210,94 @@ it( 'reports a set it could not delete and carries on with the rest', () => {
 		expect( sweepLine( result ) ).toMatch( /could not remove 1, / );
 
 	} finally { chmodSync( join( root, 'shared', 'plans/1111111111111111' ), 0o755 ); }
+
+} );
+
+it( 'deletes a set only after renaming it out of its name, and finishes a delete a stopped sweep left', () => {
+
+	set( 'plans/1111111111111111', { 'a.glb': 'abc' } );
+	// A sweep stopped after the rename: the set is out of its name, its bytes still on disk.
+	set( '.swept-plans-2222222222222222-0', { 'b.glb': 'b' } );
+
+	const { removed, kept } = collect( root );
+
+	expect( removed.entries.sort() ).toEqual( [ '.swept-plans-2222222222222222-0', 'plans/1111111111111111' ] );
+	expect( removed.bytes ).toBe( 4 );
+	expect( kept.entries ).toEqual( [] );
+	expect( readdirSync( join( root, 'shared' ) ) ).toEqual( [ 'plans' ] );
+	expect( readdirSync( join( root, 'shared', 'plans' ) ) ).toEqual( [] );
+	expect( dirBytes( join( root, 'shared', 'plans/1111111111111111' ) ) ).toBe( 0 );
+
+} );
+
+it( 'replaces a set that lost files with a whole drawing, keeps one that stands and drops the drawing', () => {
+
+	const drawing = ( body ) => {
+
+		const source = mkdtempSync( join( root, 'drawing-' ) );
+		writeFileSync( join( source, 'plan.glb' ), body );
+		writeFileSync( join( source, 'plan.blueprint.json' ), '{}' );
+		return source;
+
+	};
+	const stands = ( dir ) => [ 'plan.glb', 'plan.blueprint.json' ].every( ( name ) => existsSync( join( dir, name ) ) );
+	const at = join( root, 'shared', 'plans/1111111111111111' );
+
+	// Half a set, as a hand or a delete from before sweeps renamed first leaves one.
+	set( 'plans/1111111111111111', { 'plan.blueprint.json': '{}' } );
+	const first = drawing( 'whole' );
+	expect( share( 'plans', '1111111111111111ffff', first, { stands } ) ).toBe( 'plans/1111111111111111' );
+	expect( readFileSync( join( at, 'plan.glb' ), 'utf8' ) ).toBe( 'whole' );
+	expect( existsSync( first ) ).toBe( false );
+
+	const second = drawing( 'again' );
+	share( 'plans', '1111111111111111ffff', second, { stands } );
+	expect( readFileSync( join( at, 'plan.glb' ), 'utf8' ) ).toBe( 'whole' );
+	expect( existsSync( second ) ).toBe( false );
+	expect( readdirSync( join( root, 'shared' ) ) ).toEqual( [ 'plans' ] );
+
+} );
+
+it( 'passes over what another sweep takes while it runs, and throws for none of it', async () => {
+
+	const actual = await vi.importActual( 'node:fs' );
+	const shared = ( path ) => join( root, 'shared', path );
+	for ( const name of [ '1111111111111111', '2222222222222222', '3333333333333333' ] ) {
+
+		set( `plans/${name}`, { 'plan.glb': 'glb', 'plan.blueprint.json': '{}' } );
+
+	}
+
+	// The other sweep takes 2222 before this one reads its age, 3333 before
+	// this one renames it, and one file of 1111 while this one weighs it.
+	vi.mocked( fs.statSync ).mockImplementation( ( path, ...rest ) => {
+
+		if ( [ shared( 'plans/2222222222222222' ), shared( 'plans/1111111111111111/plan.glb' ) ].includes( path ) ) rmSync( path, { recursive: true } );
+		return actual.statSync( path, ...rest );
+
+	} );
+	vi.mocked( fs.renameSync ).mockImplementation( ( from, to ) => {
+
+		if ( from === shared( 'plans/3333333333333333' ) ) rmSync( from, { recursive: true } );
+		return actual.renameSync( from, to );
+
+	} );
+
+	try {
+
+		const { removed, kept, failed } = collect( root );
+
+		expect( removed ).toEqual( { entries: [ 'plans/1111111111111111' ], bytes: 2 } );
+		expect( kept.entries ).toEqual( [] );
+		expect( failed.entries ).toEqual( [] );
+		expect( readdirSync( shared( '' ) ) ).toEqual( [ 'plans' ] );
+		expect( readdirSync( shared( 'plans' ) ) ).toEqual( [] );
+
+	} finally {
+
+		vi.mocked( fs.statSync ).mockImplementation( actual.statSync );
+		vi.mocked( fs.renameSync ).mockImplementation( actual.renameSync );
+
+	}
 
 } );

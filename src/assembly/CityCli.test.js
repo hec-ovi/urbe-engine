@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,10 +13,31 @@ import { cloneWorld } from './WorldClone.js';
 const ENGINE_ROOT = resolve( dirname( fileURLToPath( import.meta.url ) ), '../..' );
 const BLUEPRINT = fileURLToPath( new URL( './native-city.fixture.json', import.meta.url ) );
 
-function cityCli( root, options ) {
+const DAY = 24 * 60 * 60 * 1000;
+
+function cityCli( root, options, env = {} ) {
 
 	return spawnSync( process.execPath, [ '--import', 'tsx', 'src/assembly/city-cli.js',
-		'--blueprint', BLUEPRINT, '--out', root, ...options ], { cwd: ENGINE_ROOT, encoding: 'utf8' } );
+		'--blueprint', BLUEPRINT, '--out', root, ...options ], { cwd: ENGINE_ROOT, encoding: 'utf8', env: { ...process.env, ...env } } );
+
+}
+
+/** A shell standing on every parcel of the fixture, so `--reuse-shells` builds the world around them. */
+function standingShells( root ) {
+
+	const atlas = JSON.parse( readFileSync( BLUEPRINT, 'utf8' ) );
+
+	for ( const parcel of atlas.parcels ) {
+
+		const dir = join( root, parcel.id );
+		mkdirSync( dir, { recursive: true } );
+		writeFileSync( join( dir, `${parcel.id}.request.json` ), JSON.stringify( { parcel: { footprint: parcel.footprint } } ) );
+		writeFileSync( join( dir, `${parcel.id}.blueprint.json` ), JSON.stringify( shellBlueprint( parcel ) ) );
+		writeFileSync( join( dir, `${parcel.id}.glb` ), 'glb' );
+
+	}
+
+	return atlas;
 
 }
 
@@ -58,18 +79,7 @@ describe( 'assemble-city CLI', () => {
 	it( 'publishes the world the shells it kept stand in: catalog, connections and native streets', async () => {
 
 		root = mkdtempSync( join( tmpdir(), 'urbe-city-stage-' ) );
-		const atlas = JSON.parse( readFileSync( BLUEPRINT, 'utf8' ) );
-
-		for ( const parcel of atlas.parcels ) {
-
-			const dir = join( root, parcel.id );
-			mkdirSync( dir, { recursive: true } );
-			writeFileSync( join( dir, `${parcel.id}.request.json` ), JSON.stringify( { parcel: { footprint: parcel.footprint } } ) );
-			writeFileSync( join( dir, `${parcel.id}.blueprint.json` ), JSON.stringify( shellBlueprint( parcel ) ) );
-			writeFileSync( join( dir, `${parcel.id}.glb` ), 'glb' );
-
-		}
-
+		const atlas = standingShells( root );
 		const run = cityCli( root, [ '--reuse-shells', 'true', '--interiors', '0' ] );
 
 		expect( run.status, run.stderr || run.stdout ).toBe( 0 );
@@ -105,6 +115,43 @@ describe( 'assemble-city CLI', () => {
 		} finally { rmSync( dirname( draft ), { recursive: true, force: true } ); }
 
 	}, 40_000 );
+
+	it( 'ends with a sweep that spares this world\'s sets and a set drawn beside it, and still exits 0 when a world cannot be read', () => {
+
+		root = mkdtempSync( join( tmpdir(), 'urbe-city-sweep-' ) );
+		const store = join( root, 'store' );
+		const city = join( root, 'city' );
+		const orphan = join( store, 'plans/1111111111111111' );
+		const beside = join( store, 'plans/2222222222222222' );
+		const old = new Date( Date.now() - 2 * DAY );
+		standingShells( city );
+		for ( const dir of [ orphan, beside ] ) {
+
+			mkdirSync( dir, { recursive: true } );
+			writeFileSync( join( dir, 'plan.glb' ), 'glb' );
+
+		}
+		utimesSync( orphan, old, old );
+
+		const run = cityCli( city, [ '--reuse-shells', 'true', '--interiors', '0' ], { URBE_SHARED_DIR: store } );
+
+		expect( run.status, run.stderr || run.stdout ).toBe( 0 );
+		expect( run.stdout ).toMatch( /^shared store: removed 1 sets, 0\.0 MB; kept \d+, [\d.]+ MB \(.*1 plans.*\)$/m );
+		expect( existsSync( orphan ) ).toBe( false );
+		expect( existsSync( join( beside, 'plan.glb' ) ) ).toBe( true );
+		const { streets } = JSON.parse( readFileSync( join( city, 'manifest.json' ), 'utf8' ) );
+		expect( existsSync( join( store, streets.sharedKit, 'kit.json' ) ) ).toBe( true );
+
+		// A world the sweep cannot read leaves the whole store standing, and the build still succeeds.
+		utimesSync( beside, old, old );
+		writeFileSync( join( city, 'preview.json' ), '{' );
+		const again = cityCli( city, [ '--reuse-shells', 'true', '--interiors', '0' ], { URBE_SHARED_DIR: store } );
+
+		expect( again.status, again.stderr || again.stdout ).toBe( 0 );
+		expect( again.stdout ).toMatch( /^shared store not swept: .*preview\.json cannot be read/m );
+		expect( existsSync( join( beside, 'plan.glb' ) ) ).toBe( true );
+
+	}, 60_000 );
 
 	it( 'plans the links against the facade a kit building stands on, not the lot Atlas drew', async () => {
 

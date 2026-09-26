@@ -1,6 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, utimesSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { AssemblyError } from './RequestAssembler.js';
 import { PLAN_INDEX_FILE } from './kit/KitFiles.js';
 
@@ -14,6 +15,8 @@ const PREFIX = 16;
 const ENTRY = /^[0-9a-f]{16}$/;
 /** Where a batch draws plans before they enter the store. */
 export const STAGING = '.staging';
+/** What a set being deleted is renamed to first, so its name never holds half of one. */
+const SWEPT = '.swept-';
 /** What a world on disk is found by; `OutDir` is what writes it. */
 const MANIFEST_FILE = 'manifest.json';
 /** Standalone paired previews bind their room/furniture resources here. */
@@ -51,27 +54,72 @@ export function sharedPath( kind, sha256 ) {
 }
 
 /**
- * Puts one directory in the store under the hash of what it holds, once. A set
- * that is already there is left exactly as it stands.
- * @param move true to take the source directory rather than copy it
+ * Moves one directory into the store under the hash of what it holds, once. A
+ * set that already stands is left exactly as it is and the source is dropped.
+ * A set enters its name whole, by one rename, so a batch never finds half of one.
+ * @param options.stands whether the set already at the name is whole; one
+ * that is not (files lost by hand) gives way to this one
  * @returns its path under the store, which is what the manifest names
  */
-export function share( kind, sha256, source, { move = false } = {} ) {
+export function share( kind, sha256, source, { stands = () => true } = {} ) {
 
 	const path = sharedPath( kind, sha256 );
 	const destination = join( sharedRoot(), path );
 
 	if ( markUsed( destination ) ) {
 
-		if ( move ) rmSync( source, { recursive: true, force: true } );
-		return path;
+		if ( stands( destination ) ) {
+
+			rmSync( source, { recursive: true, force: true } );
+			return path;
+
+		}
+		// A set that lost files by hand gives way to the whole one.
+		const condemned = condemn( destination );
+		if ( condemned ) rmSync( condemned, { recursive: true, force: true } );
 
 	}
 
 	mkdirSync( dirname( destination ), { recursive: true } );
-	take( source, destination, move );
+	const entering = join( sharedRoot(), `.entering-${randomUUID()}` );
+
+	try {
+
+		take( source, entering );
+		renameSync( entering, destination );
+
+	} catch ( error ) {
+
+		// Another batch published the same bytes first.
+		if ( error.code !== 'EEXIST' && error.code !== 'ENOTEMPTY' ) throw error;
+
+	} finally { rmSync( entering, { recursive: true, force: true } ); }
 
 	return path;
+
+}
+
+/**
+ * Renames one set out of its name, into a `.swept-` folder of the store, before
+ * it is deleted: no batch then finds half of it, and a stopped delete leaves a
+ * folder the next sweep finishes.
+ * @returns where it went, or null when it was gone already
+ */
+function condemn( directory ) {
+
+	const condemned = join( sharedRoot(), `${SWEPT}${basename( dirname( directory ) )}-${basename( directory )}-${randomUUID()}` );
+
+	try {
+
+		renameSync( directory, condemned );
+		return condemned;
+
+	} catch ( error ) {
+
+		if ( error.code === 'ENOENT' ) return null;
+		throw error;
+
+	}
 
 }
 
@@ -97,17 +145,16 @@ export function markUsed( directory ) {
 
 }
 
-/** Moves or copies one path, falling back to a copy across filesystems. */
-export function take( source, destination, move = true ) {
+/** Moves one path, copying it across filesystems. */
+export function take( source, destination ) {
 
 	try {
 
-		if ( move ) renameSync( source, destination );
-		else cpSync( source, destination, { recursive: true } );
+		renameSync( source, destination );
 
 	} catch ( error ) {
 
-		if ( ! move || error.code !== 'EXDEV' ) throw error;
+		if ( error.code !== 'EXDEV' ) throw error;
 		cpSync( source, destination, { recursive: true } );
 		rmSync( source, { recursive: true, force: true } );
 
@@ -124,7 +171,9 @@ export function take( source, destination, move = true ) {
  * their sets and the plan sets their kit index names, and deletes the rest.
  * Nothing outside the store is read for deletion and nothing outside it is
  * touched. A manifest, preview or plan index that cannot be read stops the
- * sweep before anything goes, because the sets it names cannot be known.
+ * sweep before anything goes, because the sets it names cannot be known. Each
+ * set leaves its name before it is deleted, so a stopped sweep leaves no half
+ * set behind, and a set another sweep took first is passed over.
  *
  * @param root where worlds stand, each one a folder holding a manifest.json
  * @param worlds extra world folders, for a build published outside root
@@ -151,28 +200,49 @@ export function collect( root = OUT_DIR, worlds = [], { grace = 0, dryRun = fals
 	const removed = { entries: [], bytes: 0 };
 	const kept = { entries: [], bytes: 0 };
 	const failed = { entries: [], bytes: 0 };
-	const sweep = ( entry, spared ) => {
+	const count = ( side, entry, bytes ) => {
 
-		const path = join( store, entry );
-		const bytes = dirBytes( path );
-		let side = spared ? kept : removed;
-
-		if ( ! spared && ! dryRun ) {
-
-			try { rmSync( path, { recursive: true, force: true } ); } catch { side = failed; }
-
-		}
 		side.entries.push( entry );
 		side.bytes += bytes;
 
 	};
+	const remove = ( entry ) => {
 
-	for ( const entry of entries( store ) ) sweep( entry, live.has( entry ) || ( grace > 0 && usedSince( join( store, entry ), now - grace ) ) );
+		let doomed = join( store, entry );
+		const bytes = dirBytes( doomed );
 
-	// Staging a batch left behind when it stopped: it is no set, so only its age tells.
+		try {
+
+			// A set leaves its name first; staging and swept folders are no set a batch reads.
+			if ( ! entry.startsWith( '.' ) ) doomed = condemn( doomed );
+			if ( doomed ) rmSync( doomed, { recursive: true, force: true } );
+
+		} catch { return count( failed, entry, bytes ); }
+
+		// A set another sweep took first is neither side's.
+		if ( doomed ) count( removed, entry, bytes );
+
+	};
+	const sweep = ( entry, spared ) => {
+
+		if ( spared || dryRun ) count( spared ? kept : removed, entry, dirBytes( join( store, entry ) ) );
+		else remove( entry );
+
+	};
+
+	for ( const entry of entries( store ) ) {
+
+		const used = lastUsed( join( store, entry ) );
+		if ( used !== null ) sweep( entry, live.has( entry ) || ( grace > 0 && used > now - grace ) );
+
+	}
+
+	// What a stopped sweep had condemned goes now. Staging a stopped batch left
+	// behind is no set, so only its age tells.
 	for ( const entry of leftovers( store ) ) {
 
-		if ( ! usedSince( join( store, entry ), now - SWEEP_GRACE_MS ) ) sweep( entry, false );
+		const used = lastUsed( join( store, entry ) );
+		if ( used !== null && ( entry.startsWith( SWEPT ) || used <= now - SWEEP_GRACE_MS ) ) sweep( entry, false );
 
 	}
 
@@ -200,18 +270,22 @@ export function sweepLine( { removed, kept, failed }, { dryRun = false } = {} ) 
 
 }
 
-/** What one file or directory weighs on disk. */
+/** What one file or directory weighs on disk; what another sweep deleted meanwhile weighs nothing. */
 export function dirBytes( path ) {
 
-	const stat = statSync( path );
+	try {
 
-	if ( ! stat.isDirectory() ) return stat.size;
+		const stat = statSync( path );
 
-	let total = 0;
+		if ( ! stat.isDirectory() ) return stat.size;
+		return readdirSync( path ).reduce( ( total, name ) => total + dirBytes( join( path, name ) ), 0 );
 
-	for ( const name of readdirSync( path ) ) total += dirBytes( join( path, name ) );
+	} catch ( error ) {
 
-	return total;
+		if ( error.code === 'ENOENT' ) return 0;
+		throw error;
+
+	}
 
 }
 
@@ -237,7 +311,7 @@ function* entries( store ) {
 
 }
 
-/** What batches stage into: the folders under `.staging` and every other dot folder of the store. */
+/** What batches stage into and sweeps condemn: the folders under `.staging` and every other dot folder of the store. */
 function* leftovers( store ) {
 
 	if ( ! existsSync( store ) ) return;
@@ -252,10 +326,19 @@ function* leftovers( store ) {
 
 }
 
-/** Whether a folder was written or marked used after `since`. */
-function usedSince( path, since ) {
+/** When a folder was last written or marked used, or null once another sweep took it. */
+function lastUsed( path ) {
 
-	return statSync( path ).mtimeMs > since;
+	try {
+
+		return statSync( path ).mtimeMs;
+
+	} catch ( error ) {
+
+		if ( error.code === 'ENOENT' ) return null;
+		throw error;
+
+	}
 
 }
 

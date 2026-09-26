@@ -85,7 +85,7 @@ export class InteriorModules {
 			const identity = bundleHash( staged );
 			const destination = join( sharedRoot(), sharedPath( MODULES_KIND, identity ) );
 			if ( existsSync( destination ) ) repairBundle( staged, destination );
-			const shared = share( MODULES_KIND, identity, staged, { move: true } );
+			const shared = share( MODULES_KIND, identity, staged );
 
 			this.references = {
 				modules: { ...modules.reference, shared },

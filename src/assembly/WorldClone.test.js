@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { cloneWorld, linkUnchanged } from './WorldClone.js';
 import { replaceFile, writeJsonFile } from './JsonFile.js';
 import { OutDir } from './OutDir.js';
 
+const ENGINE_ROOT = resolve( dirname( fileURLToPath( import.meta.url ) ), '../..' );
 let root = null;
 
 afterEach( () => {
@@ -105,6 +108,27 @@ describe( 'cloneWorld', () => {
 		expect( contents( game ) ).toEqual( game0 );
 
 	} );
+
+	it( 'leaves a game as it was when quests are carried into the draft it was cloned from', async () => {
+
+		const draft = world();
+		const game = join( root, 'game' );
+		const run = join( root, 'run' );
+		mkdirSync( join( draft, 'quests' ) );
+		writeFileSync( join( draft, 'quests', 'questlines.json' ), '[{"id":"draft story"}]\n' );
+		mkdirSync( run );
+		writeFileSync( join( run, 'main.questline.json' ), JSON.stringify( { definition: { id: 'new story' } } ) );
+		await cloneWorld( draft, game );
+		const before = contents( game );
+
+		const carried = spawnSync( process.execPath, [ '--import', 'tsx', 'src/assembly/quests-cli.js', '--from', run, '--out', draft ],
+			{ cwd: ENGINE_ROOT, encoding: 'utf8' } );
+
+		expect( carried.status, carried.stderr ).toBe( 0 );
+		expect( JSON.parse( readFileSync( join( draft, 'quests', 'questlines.json' ), 'utf8' ) ) ).toEqual( [ { id: 'new story' } ] );
+		expect( contents( game ) ).toEqual( before );
+
+	}, 20_000 );
 
 	it( 'copies a file it cannot link, as across filesystems', async () => {
 

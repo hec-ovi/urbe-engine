@@ -188,7 +188,7 @@ export class PlanLibrary {
 		writeJsonFile( file, index );
 		const hash = sha256( readFileSync( file ) );
 
-		return { file: PLAN_INDEX_FILE, sha256: hash, shared: share( 'kit', hash, directory, { move: true } ) };
+		return { file: PLAN_INDEX_FILE, sha256: hash, shared: share( 'kit', hash, directory ) };
 
 	}
 
@@ -236,7 +236,8 @@ export class PlanLibrary {
 
 		rmSync( directory, { recursive: true, force: true } );
 		await this.workers.run( plan.request, directory );
-		share( PLANS_KIND, plan.hash, directory, { move: true } );
+		// A set that lost its shell or blueprint gives way to this drawing.
+		share( PLANS_KIND, plan.hash, directory, { stands: () => standing( plan ) } );
 
 	}
 
