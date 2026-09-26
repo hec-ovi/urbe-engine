@@ -14,6 +14,7 @@ const view = new GameView( {
 	onHangUp: () => view.call.setVisible( false ),
 	onSummaryClose: () => view.summary.setVisible( false ),
 	onCloseDialog: () => view.dialog.setVisible( false ),
+	onDialogueAction: ( id ) => console.log( 'dialogue action', id ),
 	menu: {
 		onContinue: ( id ) => console.log( 'continue', id ),
 		onSave: ( id ) => console.log( 'save', id ),
@@ -155,10 +156,10 @@ view.avatar.setAvatar( { name: 'Ada Vance', canvas: portrait, bar: 0.8 } );
 view.dialog.setNpc( { name: 'Ada Vance', role: 'office worker' } );
 view.dialog.setStory( { title: 'The night ledger', objective: 'Ask Ada about the containers.' } );
 view.dialog.setChoices( [ { id: 'ledger', text: 'Where can I find the ledger?' }, { id: 'sign', text: 'Who signs for the night containers?' } ] );
-view.dialog.setTranscript( [
-	{ from: 'npc', name: 'Ada', text: 'The ledger is in the back office. Nobody reads it but me.' },
-	{ from: 'player', text: 'Who signs for the night containers?' }
-] );
+view.dialog.setSpeaking( view.dialog.addMessage( { from: 'npc', name: 'Ada', text: 'The ledger is in the back office. Nobody reads it but me.' } ), 'playing' );
+view.dialog.addMessage( { from: 'player', text: 'Who signs for the night containers?' } );
+view.dialog.beginMessage( { from: 'npc', name: 'Ada' } ).update( 'The night clerk. I can take you to' );
+view.dialog.setActions( [ { id: 'lead:quay', label: 'Go with Ada to the Quay Office' } ] );
 view.dialog.setVisible( true );
 
 view.call.setName( 'Nadir' );

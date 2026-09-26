@@ -33,31 +33,19 @@ async function collect( iterable ) {
 
 describe( 'TalkClient', () => {
 
-	it( 'posts the line with the person and their state, and returns the reply', async () => {
+	it( 'posts the line with the person, their state and the questlines, and names the person', async () => {
 
-		const fetch = vi.fn( async () => Response.json( { reply: 'Not now.' } ) );
+		const fetch = vi.fn( async () => streamed( '{"type":"delta","text":"Not now."}\n{"type":"done","reply":"Not now."}\n' ) );
 		vi.stubGlobal( 'fetch', fetch );
+		const quests = [ { id: 'q1', cast: {}, state: {} } ];
 
-		const reply = await new TalkClient( '/out/w' ).say( conversation, 'Hello', 42, [ { id: 'q1', cast: {}, state: {} } ] );
+		await collect( new TalkClient( '/out/w' ).stream( conversation, 'Hello', 42, quests ) );
 
-		expect( reply ).toBe( 'Not now.' );
-		expect( fetch.mock.calls[ 0 ][ 0 ] ).toBe( '/api/talk' );
+		expect( fetch.mock.calls[ 0 ][ 0 ] ).toBe( '/api/talk/stream' );
 		expect( JSON.parse( fetch.mock.calls[ 0 ][ 1 ].body ) ).toEqual( {
-			out: '/out/w', npc: conversation.instance, behavior: conversation.behavior, line: 'Hello', timeMin: 42, quests: [ { id: 'q1', cast: {}, state: {} } ]
+			out: '/out/w', npc: conversation.instance, behavior: conversation.behavior, line: 'Hello', timeMin: 42, quests
 		} );
 		expect( TalkClient.nameOf( conversation.instance ) ).toBe( 'Mara Voss' );
-
-	} );
-
-	it( 'throws the server error with its HTTP status', async () => {
-
-		vi.stubGlobal( 'fetch', async () => Response.json( { error: 'talk request does not match its contract: /npc/mood' }, { status: 400 } ) );
-		await expect( new TalkClient( '/out/w' ).say( conversation, 'Hello', 0 ) ).rejects.toMatchObject( {
-			message: 'talk request does not match its contract: /npc/mood', status: 400
-		} );
-
-		vi.stubGlobal( 'fetch', async () => new Response( '<html>gateway</html>', { status: 504 } ) );
-		await expect( new TalkClient( '/out/w' ).say( conversation, 'Hello', 0 ) ).rejects.toMatchObject( { message: 'talk 504', status: 504 } );
 
 	} );
 
@@ -82,7 +70,15 @@ describe( 'TalkClient', () => {
 
 	} );
 
-	it( 'throws a failed stream with a status', async () => {
+	it( 'throws a refused or failed request with its HTTP status, and a failed stream with 502', async () => {
+
+		vi.stubGlobal( 'fetch', async () => Response.json( { error: 'talk request does not match its contract: /npc/mood' }, { status: 400 } ) );
+		await expect( collect( new TalkClient( '/out/w' ).stream( conversation, 'Hello', 0 ) ) ).rejects.toMatchObject( {
+			message: 'talk request does not match its contract: /npc/mood', status: 400
+		} );
+
+		vi.stubGlobal( 'fetch', async () => new Response( '<html>gateway</html>', { status: 504 } ) );
+		await expect( collect( new TalkClient( '/out/w' ).stream( conversation, 'Hello', 0 ) ) ).rejects.toMatchObject( { message: 'talk 504', status: 504 } );
 
 		vi.stubGlobal( 'fetch', async () => streamed( '{"type":"delta","text":"Meet"}\n{"type":"error","error":"model server 500 at x"}\n' ) );
 		const seen = [];

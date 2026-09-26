@@ -34,10 +34,8 @@ const noop = () => {};
 /**
  * The whole game overlay: the always-on HUD, the tab bar, one panel at a
  * time over the game, and the chat, avatar, call and mission widgets.
- * Presentation only: it is handed values and reports intents through props.
- * props (all optional): { onResume, onCloseDialog, onSend, onOpen, onClose,
-	 *   onLeave, onSettingChange, onHangUp, onSummaryClose, onTransitSelect,
-	 *   onTransitCancel, onQuestSelect }
+ * Presentation only: it is handed values and reports intents through props,
+ * all optional and listed in the UI contract.
  */
 export class GameView {
 
@@ -45,7 +43,7 @@ export class GameView {
 		onResume = noop, onCloseDialog = noop, onSend = noop, onOpen = noop, onClose = noop,
 		onLeave = noop, onSettingChange = noop, onHangUp = noop, onSummaryClose = noop, onSummaryOpen = noop,
 		onTransitSelect = noop, onTransitCancel = noop, onQuestSelect = noop, onQuestTrack = noop, onQuestWait = noop,
-		onDialogueChoice = noop, onDialogueTopic = noop, onDialogueRetry = noop, onDialogueJournal = noop,
+		onDialogueChoice = noop, onDialogueTopic = noop, onDialogueAction = noop, onDialogueRetry = noop, onDialogueJournal = noop,
 		menu = {}
 	} = {} ) {
 
@@ -61,7 +59,7 @@ export class GameView {
 		this.call = new VideoCallPanel( { onHangUp } );
 		this.toast = new MissionToast();
 		this.dialog = new ChatPanel( { onSend, onClose: onCloseDialog,
-			onChoice: onDialogueChoice, onTopic: onDialogueTopic, onRetry: onDialogueRetry, onJournal: onDialogueJournal } );
+			onChoice: onDialogueChoice, onTopic: onDialogueTopic, onAction: onDialogueAction, onRetry: onDialogueRetry, onJournal: onDialogueJournal } );
 		this.summary = new MissionSummary( { onOpen: onSummaryOpen, onClose: () => { this.summary.setVisible( false ); onSummaryClose(); } } );
 		this.transit = new TransitHud( { onSelect: onTransitSelect, onCancel: onTransitCancel } );
 		this.pause = new PauseMenu( { onResume } );

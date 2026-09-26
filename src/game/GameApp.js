@@ -4,6 +4,7 @@ import { MaterialResolver } from '../building/MaterialResolver.js';
 import { TextureSource } from '../building/TextureSource.js';
 import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
+import { stripCues } from '../../../quests/dist/runtime.js';
 import { QuestSession } from './quests/QuestSession.js';
 import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
 import { QuestActions } from './quests/QuestActions.js';
@@ -114,6 +115,15 @@ const STILL_RADIUS = 0.1;
 const STILL_SECONDS = 1;
 /** How often the HUD asks the runtime again, so a closed venue opens on the line. */
 const OBJECTIVE_INTERVAL = 4;
+/**
+ * A reply that sends nothing for this long is given up. It outlasts the talk
+ * server's default model timeout (LLM_TIMEOUT_MS, 60 s), so a stalled model
+ * reports its own error first.
+ */
+const REPLY_IDLE_MS = 90000;
+const REPLY_FAILED = 'The reply could not be reached. Retry, or use a story reply below.';
+const REPLY_REFUSED = 'The dialogue service refused this line because the game sent a request it does not accept. Retry would not help.';
+const PASSER_BY_CHAT = 'This passer-by has no time to chat.';
 
 /** The camera's depth range, which is also how far the world streams. */
 const NEAR_PLANE = LOOK.near;
@@ -127,11 +137,19 @@ const FAR_PLANE = LOOK.far;
 export class GameApp {
 
 	constructor( config, {
-		navigate = ( path ) => window.location.assign( path )
+		navigate = ( path ) => window.location.assign( path ),
+		lineObserver = null
 	} = {} ) {
 
 		this.config = config;
 		this.navigate = navigate;
+		/**
+		 * Hears every NPC line the chat shows, or null: `said({ conversation,
+		 * line, text })` for a whole line, or for each sentence of a streamed
+		 * reply as it completes, with `line` its chat element; `silenced()` once
+		 * what was said stops mattering.
+		 */
+		this.lineObserver = lineObserver;
 		/** The questline the player is following; null means the main story. */
 		this.followedQuestId = null;
 		this.followedStepId = null;
@@ -158,6 +176,7 @@ export class GameApp {
 			onQuestWait: ( questId, stepId ) => this.#waitForQuest( questId, stepId ),
 			onDialogueChoice: choice => this.#chooseDialogue( choice ),
 			onDialogueTopic: topic => this.#selectDialogue( topic ),
+			onDialogueAction: id => this.#dialogueAction( id ),
 			onDialogueRetry: () => this.#say( this.failedDialogueLine, true ),
 			onDialogueJournal: () => { this.interactor?.close( this.clock ); this.view.open( 'QUESTS' ); },
 			onClose: () => this.input?.requestLock(),
@@ -683,7 +702,10 @@ export class GameApp {
 		this.dialoguePending = false;
 		this.failedDialogueLine = null;
 		this.activeDialogue = null;
-		this.view.dialog.show( conversation );
+		this.dialogueOffers = null;
+		this.lineObserver?.silenced();
+		const speaker = conversation && speakerOf( conversation );
+		this.view.dialog.show( speaker );
 		this.view.avatar.setVisible( Boolean( conversation ) );
 
 		if ( ! conversation ) {
@@ -693,6 +715,7 @@ export class GameApp {
 			return;
 
 		}
+		if ( ! conversation.instance ) this.view.dialog.setFreeChat( false, PASSER_BY_CHAT );
 		const topics = this.quests.dialoguesFor( conversation.npcId, this.clock.timeMin );
 		const preferred = topics.find( topic => topic.questlineId === this.followedQuestId ) ?? topics[ 0 ];
 		if ( preferred ) this.#selectDialogue( { questId: preferred.questlineId, stepId: preferred.stepId } );
@@ -700,8 +723,7 @@ export class GameApp {
 
 			const recap = this.quests.conversationRecap( conversation.npcId );
 			this.view.dialog.setStory( recap ? { title: recap.title, objective: 'Previous conversation' } : null );
-			this.view.dialog.addMessage( { from: 'npc', name: conversation.instance ? TalkClient.nameOf( conversation.instance ) : '',
-				text: recap?.reply ?? 'What can I do for you?' } );
+			this.#npcSays( conversation, recap?.reply ?? 'What can I do for you?' );
 			if ( recap ) {
 
 				this.view.dialog.setStatus( 'Your current lead is in the journal.' );
@@ -716,10 +738,7 @@ export class GameApp {
 		}
 
 		// The chat takes the mouse: the input wants focus and the panel a click.
-		this.view.avatar.setAvatar( {
-			name: conversation.instance ? TalkClient.nameOf( conversation.instance ) : 'someone passing by',
-			bar: 1
-		} );
+		this.view.avatar.setAvatar( { name: speaker.name, bar: 1 } );
 		this.input.exitLock();
 
 	}
@@ -906,41 +925,110 @@ export class GameApp {
 
 	}
 
-	/** Typed chat is optional. It never substitutes for an explicit quest reply. */
+	/**
+	 * Typed chat is optional. It never substitutes for an explicit quest reply.
+	 * The reply streams into one NPC line that shows with its first text; a
+	 * reply that fails, goes quiet or is overtaken leaves no part of it behind.
+	 */
 	async #say( text, retry = false ) {
 		const conversation = this.interactor?.conversation;
 		if ( ! conversation?.instance || this.dialoguePending || ! text?.trim() ) return;
 		this.dialoguePending = true;
 		const turn = this.dialogueTurn = ( this.dialogueTurn ?? 0 ) + 1;
+		const current = () => this.interactor.conversation === conversation && turn === this.dialogueTurn;
 		const controller = this.dialogueAbort = new AbortController();
-		const timeout = setTimeout( () => controller.abort(), 30000 );
-		if ( ! retry ) this.view.dialog.addMessage( { from: 'player', name: 'You', text } );
+		let quiet = 0;
+		const listen = () => {
+			clearTimeout( quiet );
+			quiet = setTimeout( () => controller.abort( new Error( `no reply for ${REPLY_IDLE_MS / 1000} s` ) ), REPLY_IDLE_MS );
+		};
+		this.#playerSays( retry ? null : text );
 		this.view.dialog.setSending( true );
 		this.view.dialog.setStatus( 'Waiting for a reply… Your story choices remain available.' );
 		this.animations.playerDialogueTurn( conversation );
-		const name = TalkClient.nameOf( conversation.instance );
+		let reply = null, done = false;
+		const offers = [];
 		try {
-			const reply = await this.talk.say( conversation, text, this.clock.timeMin, this.quests.snapshot(), { signal: controller.signal } );
-			if ( this.interactor.conversation !== conversation || turn !== this.dialogueTurn ) return;
+			listen();
+			for await ( const event of this.talk.stream( conversation, text, this.clock.timeMin, this.quests.snapshot(), { signal: controller.signal } ) ) {
+				if ( ! current() ) return;
+				listen();
+				if ( event.type === 'delta' && reply ) reply.append( event.text );
+				else if ( event.type === 'delta' ) {
+					this.view.dialog.setStatus( '' );
+					reply = this.#npcSays( conversation, event.text, { streaming: true } );
+				} else if ( event.type === 'sentence' ) reply?.hear( event.text );
+				else if ( event.type === 'offer' ) offers.push( event );
+			}
+			if ( ! current() ) return;
+			if ( ! reply ) throw new Error( 'the reply ended without a word' );
+			reply.finish();
+			done = true;
 			this.failedDialogueLine = null;
-			this.animations.completeDialogueTurn( conversation );
-			this.view.dialog.addMessage( { from: 'npc', name, text: reply } );
-			this.view.dialog.setStatus( '' );
-			this.animations.npcDialogueTurn( conversation );
+			this.#showOffers( conversation, offers );
 		} catch ( error ) {
-			if ( this.interactor.conversation !== conversation || turn !== this.dialogueTurn ) return;
+			if ( ! current() ) return;
 			console.warn( 'talk:', error.message );
+			this.lineObserver?.silenced();
 			this.animations.completeDialogueTurn( conversation );
-			this.failedDialogueLine = text;
-			this.view.dialog.setStatus( 'The reply could not be reached. Retry, or use a story reply below.', { error: true, retry: true } );
+			const refused = error.status === 400;
+			this.failedDialogueLine = refused ? null : text;
+			this.view.dialog.setStatus( refused ? REPLY_REFUSED : REPLY_FAILED, { error: true, retry: ! refused } );
 		} finally {
-			clearTimeout( timeout );
+			clearTimeout( quiet );
+			if ( ! done ) reply?.discard();
 			if ( turn === this.dialogueTurn ) {
 				this.dialoguePending = false;
 				this.dialogueAbort = null;
 				this.view.dialog.setSending( false );
 			}
 		}
+	}
+
+	/** The player's turn: their line shows, and what the NPC said and offered lapses. */
+	#playerSays( text ) {
+		this.lineObserver?.silenced();
+		this.dialogueOffers = null;
+		this.view.dialog.setActions( [] );
+		if ( text ) this.view.dialog.addMessage( { from: 'player', name: 'You', text } );
+	}
+
+	/**
+	 * Every NPC line enters the chat here: it shows without its inline cues,
+	 * the person takes the speaking turn and the line observer hears the raw
+	 * text, cues and all. A whole line is heard at once. `{ streaming: true }`
+	 * opens the line with its first text and returns it to grow: `append(text)`,
+	 * `hear(sentence)` as each sentence completes, then `finish()`, or
+	 * `discard()` for a reply that never completed.
+	 */
+	#npcSays( conversation, text, { streaming = false } = {} ) {
+		const speaker = { from: 'npc', name: speakerOf( conversation ).name };
+		const heard = ( line, words ) => this.lineObserver?.said( { conversation, line, text: words } );
+		this.animations.npcDialogueTurn( conversation );
+		if ( ! streaming ) {
+			heard( this.view.dialog.addMessage( { ...speaker, text: stripCues( text ) } ), text );
+			return null;
+		}
+		const message = this.view.dialog.beginMessage( speaker );
+		let spoken = '';
+		const append = ( piece ) => message.update( stripCues( spoken += piece ) );
+		append( text );
+		return { append, hear: ( sentence ) => heard( message.line, sentence ), finish: message.finish, discard: message.discard };
+	}
+
+	/** Each offer in the NPC's reply becomes one chat action. */
+	#showOffers( conversation, offers ) {
+		const given = conversation.instance.name.given;
+		this.dialogueOffers = new Map( offers.map( ( offer ) => [ offer.kind === 'lead' ? `lead:${offer.placeId}` : offer.kind, offer ] ) );
+		this.view.dialog.setActions( [ ...this.dialogueOffers ].map( ( [ id, offer ] ) => ( {
+			id, label: offer.kind === 'lead' ? `Go with ${given} to ${offer.name}` : `Bring ${given} along`
+		} ) ) );
+	}
+
+	/** Nothing takes an offer up yet: the choice is only logged. */
+	#dialogueAction( id ) {
+		const offer = this.dialogueOffers?.get( id );
+		if ( offer ) console.info( 'dialogue offer chosen, not acted on:', offer );
 	}
 
 	#selectDialogue( { questId, stepId } ) {
@@ -961,7 +1049,7 @@ export class GameApp {
 			key: topic.questlineId + '/' + topic.stepId, title: topic.title,
 			value: { questId: topic.questlineId, stepId: topic.stepId }
 		} ) ), questId + '/' + stepId );
-		if ( changed ) this.view.dialog.addMessage( { from: 'npc', name: TalkClient.nameOf( conversation.instance ), text: dialogue.opening } );
+		if ( changed ) this.#npcSays( conversation, dialogue.opening );
 		const unavailable = ! dialogue.availability.available;
 		this.view.dialog.setChoices( dialogue.choices.map( choice => ( {
 			text: choice.text, disabled: unavailable,
@@ -980,9 +1068,8 @@ export class GameApp {
 				? { text: 'Remind me what we agreed.', reply: memory.reply }
 				: memory.questions.find( choice => choice.id === choiceId );
 			if ( ! question ) return;
-			this.view.dialog.addMessage( { from: 'player', name: 'You', text: question.text } );
-			this.view.dialog.addMessage( { from: 'npc', name: TalkClient.nameOf( conversation.instance ), text: question.reply } );
-			this.animations.npcDialogueTurn( conversation );
+			this.#playerSays( question.text );
+			this.#npcSays( conversation, question.reply );
 			return;
 
 		}
@@ -1005,9 +1092,8 @@ export class GameApp {
 		this.failedDialogueLine = null;
 		this.view.dialog.setSending( false );
 		this.view.dialog.setStatus( '' );
-		this.view.dialog.addMessage( { from: 'player', name: 'You', text: choice.text } );
-		this.view.dialog.addMessage( { from: 'npc', name: TalkClient.nameOf( conversation.instance ), text: result.reply } );
-		this.animations.npcDialogueTurn( conversation );
+		this.#playerSays( choice.text );
+		this.#npcSays( conversation, result.reply );
 		if ( ! result.change ) return;
 		this.activeDialogue = null;
 		this.followedQuestId = questId;
@@ -1995,6 +2081,14 @@ export function localObjectivePlace( active, { locator, crowd, session, feet, ro
 	const level = Math.abs( member.position.y ) < 1 ? 'Ground floor'
 		: member.position.y - feet.y > 2 ? 'Upstairs' : feet.y - member.position.y > 2 ? 'Downstairs' : 'On this floor';
 	return { label: `Inside · ${person} · ${level}`, distanceMeters: Math.round( feet.distanceTo( member.position ) ) };
+
+}
+
+/** How the chat names the person in a conversation; a passer-by has no identity. */
+function speakerOf( { instance } ) {
+
+	if ( ! instance ) return { name: 'Someone passing by', role: '' };
+	return { name: TalkClient.nameOf( instance ), role: ( instance.type ?? '' ).replace( /^quest[ _]/i, '' ).replace( /_/g, ' ' ) };
 
 }
 

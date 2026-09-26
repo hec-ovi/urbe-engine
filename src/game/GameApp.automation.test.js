@@ -5,6 +5,7 @@ import { stubCanvas } from '../ui/test-helpers/canvas.js';
 import { GameApp, playablePress } from './GameApp.js';
 import { Input } from './player/Input.js';
 import { PlayerController } from './player/PlayerController.js';
+import { replyEvents, talkStream } from './talk/talk.test-fixtures.js';
 
 describe( 'driving the player through its own paths', () => {
 
@@ -73,11 +74,11 @@ describe( 'driving the player through its own paths', () => {
 		app.clock = { timeMin: 1260 };
 		app.quests = { snapshot: () => [] };
 		app.animations = { playerDialogueTurn: vi.fn(), completeDialogueTurn: vi.fn(), npcDialogueTurn: vi.fn() };
-		app.talk = { say: vi.fn( async () => 'Mostly I watch the cranes.' ) };
+		app.talk = { stream: vi.fn( () => talkStream( replyEvents( 'Mostly I watch ', 'the cranes.' ) ) ) };
 		app.interactor = { conversation: { npcId: 'a301', instance: { name: { given: 'Hugo', family: 'Duarte' } }, behavior: null } };
 
 		await app.sayLine( 'What do you do around here?' );
-		expect( app.talk.say ).toHaveBeenCalledWith( app.interactor.conversation, 'What do you do around here?', 1260, [], expect.any( Object ) );
+		expect( app.talk.stream ).toHaveBeenCalledWith( app.interactor.conversation, 'What do you do around here?', 1260, [], expect.any( Object ) );
 		expect( [ ...app.view.dialog.transcript.children ].map( ( line ) => line.textContent ) ).toEqual( [
 			'YouWhat do you do around here?', 'Hugo DuarteMostly I watch the cranes.'
 		] );

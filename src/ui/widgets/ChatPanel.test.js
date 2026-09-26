@@ -4,20 +4,7 @@ import { screen, within } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
 import { ChatPanel } from './ChatPanel.js';
 
-const CONVERSATION = {
-	instance: {
-		npcId: 'n1',
-		name: { given: 'Ada', family: 'Vance' },
-		type: 'quest_office_worker',
-		home: { parcelId: 'p12', unit: 3 },
-		job: { parcelId: 'p40', role: 'clerk', shift: { startMin: 540, endMin: 1020, kind: 'day' } },
-		routine: Array.from( { length: 120 }, ( _, index ) => ( {
-			days: [ index % 7 ], startMin: 540, endMin: 1020,
-			activity: 'working', place: { kind: 'parcel', id: `diagnostic-parcel-${index}` }
-		} ) )
-	},
-	behavior: { activity: 'working', mode: 'indoors', place: { kind: 'parcel', id: 'p40' }, interrupted: true }
-};
+const ADA = { name: 'Ada Vance', role: 'office worker' };
 
 const STORY = { title: 'The missing report', objective: 'Hear Ada out about the report.' };
 const CHOICES = [
@@ -27,7 +14,7 @@ const CHOICES = [
 
 describe( 'ChatPanel', () => {
 
-	let panel, onSend, onClose, onChoice, onTopic, onRetry, onJournal;
+	let panel, onSend, onClose, onChoice, onTopic, onAction, onRetry, onJournal;
 
 	beforeEach( () => {
 
@@ -35,26 +22,26 @@ describe( 'ChatPanel', () => {
 		onClose = vi.fn();
 		onChoice = vi.fn();
 		onTopic = vi.fn();
+		onAction = vi.fn();
 		onRetry = vi.fn();
 		onJournal = vi.fn();
-		panel = new ChatPanel( { onSend, onClose, onChoice, onTopic, onRetry, onJournal } );
+		panel = new ChatPanel( { onSend, onClose, onChoice, onTopic, onAction, onRetry, onJournal } );
 		document.body.replaceChildren( panel.element );
-		panel.show( CONVERSATION );
+		panel.show( ADA );
 
 	} );
 
-	it( 'opens an accessible named conversation without exposing even a long simulation schedule', () => {
+	it( 'opens an accessible conversation named as it is told, with the role only when given', () => {
 
 		expect( screen.getByRole( 'dialog', { name: 'Ada Vance' } ) ).toBeTruthy();
 		expect( screen.getByRole( 'heading', { name: 'Ada Vance' } ) ).toBeTruthy();
 		expect( screen.getByText( 'office worker' ) ).toBeTruthy();
-		expect( panel.element.textContent ).not.toMatch( /diagnostic-parcel|p12|p40|paused for you|quest_office_worker|09:00/ );
-		expect( panel.element.querySelector( '.chat-profile' ) ).toBeNull();
 		expect( screen.getByRole( 'log', { name: 'Conversation' } ).getAttribute( 'aria-live' ) ).toBe( 'polite' );
 		expect( screen.queryByRole( 'button', { name: 'Open journal' } ) ).toBeNull();
 		expect( document.activeElement ).toBe( screen.getByRole( 'textbox', { name: 'say something' } ) );
-		panel.show( { instance: null } );
+		panel.show( { name: 'Someone passing by' } );
 		expect( screen.getByRole( 'dialog', { name: 'Someone passing by' } ) ).toBeTruthy();
+		expect( panel.role.hidden ).toBe( true );
 
 	} );
 
@@ -76,6 +63,98 @@ describe( 'ChatPanel', () => {
 		await user.click( screen.getByRole( 'button', { name: 'send' } ) );
 		expect( onSend.mock.calls ).toEqual( [ [ 'where is the quay?' ], [ 'thanks' ] ] );
 		expect( onChoice ).not.toHaveBeenCalled();
+
+	} );
+
+	it( 'streams a line as it arrives, finishes or discards it, and ignores calls on a line that is done', () => {
+
+		const log = screen.getByRole( 'log' );
+		const reply = panel.beginMessage( { from: 'npc', name: 'Ada' } );
+		reply.update( 'Down the ' );
+		expect( log.getAttribute( 'aria-busy' ) ).toBe( 'true' );
+		expect( reply.line.classList.contains( 'is-streaming' ) ).toBe( true );
+		reply.update( 'Down the steps.' );
+		reply.finish();
+		reply.update( 'Down the steps. Ignored.' );
+		reply.discard();
+		expect( within( log ).getByText( 'Down the steps.' ).closest( '.chat-line' ) ).toBe( reply.line );
+		expect( reply.line.classList.contains( 'is-streaming' ) ).toBe( false );
+		expect( log.getAttribute( 'aria-busy' ) ).toBe( 'false' );
+
+		const failed = panel.beginMessage( { from: 'npc', name: 'Ada' } );
+		failed.update( 'Half a' );
+		failed.discard();
+		failed.update( 'Half a sentence.' );
+		expect( panel.transcript.children ).toHaveLength( 1 );
+		expect( log.getAttribute( 'aria-busy' ) ).toBe( 'false' );
+
+		const overtaken = panel.beginMessage( { from: 'npc', name: 'Ada' } );
+		panel.show( { name: 'Kip Thorn' } );
+		overtaken.update( 'Too late.' );
+		overtaken.finish();
+		expect( panel.transcript.children ).toHaveLength( 0 );
+		expect( log.getAttribute( 'aria-busy' ) ).toBe( 'false' );
+
+	} );
+
+	it( 'gives the composer its focus back after a pending line unless the player moved on', () => {
+
+		const input = screen.getByRole( 'textbox', { name: 'say something' } );
+		panel.setSending( true );
+		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'End conversation' } ) );
+		panel.setSending( false );
+		expect( document.activeElement ).toBe( input );
+		panel.setSending( true );
+		screen.getByRole( 'button', { name: 'close' } ).focus();
+		panel.setSending( false );
+		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'close' } ) );
+
+	} );
+
+	it( 'returns each shown line and marks how it is voiced only while it is shown', () => {
+
+		const line = panel.addMessage( { from: 'npc', name: 'Ada', text: 'Down the steps.' } );
+		expect( line.textContent ).toBe( 'AdaDown the steps.' );
+		expect( panel.setSpeaking( line, 'pending' ) ).toBe( true );
+		expect( line.dataset.speaking ).toBe( 'pending' );
+		panel.setSpeaking( line, 'playing' );
+		expect( line.dataset.speaking ).toBe( 'playing' );
+		panel.setSpeaking( line, 'idle' );
+		expect( 'speaking' in line.dataset ).toBe( false );
+		expect( () => panel.setSpeaking( line, 'loud' ) ).toThrow( 'unknown speaking state: loud' );
+		panel.setTranscript( [] );
+		expect( panel.setSpeaking( line, 'playing' ) ).toBe( false );
+		expect( panel.setSpeaking( null, 'playing' ) ).toBe( false );
+		expect( 'speaking' in line.dataset ).toBe( false );
+
+	} );
+
+	it( 'offers suggested actions apart from story replies and reports only their ids', async () => {
+
+		const user = userEvent.setup();
+		panel.setActions( [ { id: 'follow', label: 'Bring Ada along' }, { id: 'lead:p9', label: 'Go with Ada to the Blue Lantern' } ] );
+		panel.setChoices( CHOICES );
+		const actions = within( screen.getByRole( 'group', { name: 'Suggested actions' } ) );
+		await user.click( actions.getByRole( 'button', { name: 'Go with Ada to the Blue Lantern' } ) );
+		expect( onAction ).toHaveBeenCalledExactlyOnceWith( 'lead:p9' );
+		expect( onChoice ).not.toHaveBeenCalled();
+		panel.setChoices( [] );
+		actions.getByRole( 'button', { name: 'Bring Ada along' } ).focus();
+		panel.setActions( [] );
+		expect( screen.queryByRole( 'group', { name: 'Suggested actions' } ) ).toBeNull();
+		expect( document.activeElement ).toBe( screen.getByRole( 'textbox', { name: 'say something' } ) );
+
+	} );
+
+	it( 'withdraws free chat with a note saying why, and offers it again in the next conversation', () => {
+
+		panel.setFreeChat( false, 'This passer-by has no time to chat.' );
+		expect( screen.queryByRole( 'textbox' ) ).toBeNull();
+		expect( screen.getByText( 'This passer-by has no time to chat.' ) ).toBeTruthy();
+		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'End conversation' } ) );
+		panel.show( ADA );
+		expect( screen.queryByText( 'This passer-by has no time to chat.' ) ).toBeNull();
+		expect( document.activeElement ).toBe( screen.getByRole( 'textbox', { name: 'say something' } ) );
 
 	} );
 
@@ -209,15 +288,17 @@ describe( 'ChatPanel', () => {
 		panel.setStory( STORY );
 		panel.setChoices( CHOICES );
 		panel.setTopics( [ { key: 'report', title: 'The report', value: 'report' } ] );
+		panel.setActions( [ { id: 'follow', label: 'Bring Ada along' } ] );
 		panel.addMessage( { from: 'npc', text: 'The old conversation.' } );
 		panel.setStatus( 'Old failure', { error: true, retry: true } );
 		panel.setSending( true );
 		panel.input.value = 'old draft';
-		panel.show( { instance: { name: { given: 'Kip', family: 'Thorn' }, type: 'quest_vendor' } } );
+		panel.show( { name: 'Kip Thorn', role: 'vendor' } );
 		expect( screen.getByRole( 'dialog', { name: 'Kip Thorn' } ) ).toBeTruthy();
 		expect( screen.getByText( 'vendor' ) ).toBeTruthy();
 		expect( screen.queryByText( 'The old conversation.' ) ).toBeNull();
 		expect( screen.queryByRole( 'group', { name: 'Your replies' } ) ).toBeNull();
+		expect( screen.queryByRole( 'group', { name: 'Suggested actions' } ) ).toBeNull();
 		expect( screen.queryByRole( 'button', { name: 'Retry reply' } ) ).toBeNull();
 		expect( screen.queryByRole( 'button', { name: 'The report' } ) ).toBeNull();
 		expect( screen.getByRole( 'textbox' ).value ).toBe( '' );

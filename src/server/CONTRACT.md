@@ -52,7 +52,7 @@ Expose checked development HTTP routes for world builds, the launcher and NPC di
 
 ## Browser client
 
-`TalkClient` ([../game/talk/TalkClient.js](../game/talk/TalkClient.js)) posts the request for `GameApp`. `say(conversation, line, timeMin, quests?, { signal?, guide? })` resolves to the whole reply. `stream(conversation, line, timeMin, quests?, { signal?, guide?, offers? })` is an async iterator over the stream events up to `done`; leaving it early or aborting `signal` ends the reply on the server. Failures throw an `Error` whose `status` is the HTTP status, 502 for an `error` event or a stream that ends before `done`.
+`TalkClient` ([../game/talk/TalkClient.js](../game/talk/TalkClient.js)) posts the request for `GameApp` to `/api/talk/stream`. `stream(conversation, line, timeMin, quests?, { signal?, guide?, offers? })` is an async iterator over the stream events up to `done`; leaving it early or aborting `signal` ends the reply on the server. Failures throw an `Error` whose `status` is the HTTP status, 502 for an `error` event or a stream that ends before `done`.
 
 ## Dependencies
 

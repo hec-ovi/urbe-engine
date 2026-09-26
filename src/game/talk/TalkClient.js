@@ -1,15 +1,14 @@
 /**
  * The browser side of a conversation: the player's line, the person they are
- * facing and what that person is doing go to the dev server's /api/talk, the
- * NPC's words come back whole (`say`) or as they are spoken (`stream`). A
+ * facing and what that person is doing go to the dev server's
+ * /api/talk/stream, and the NPC's words come back as they are spoken. A
  * failure throws an Error whose `status` is the HTTP status the server gave.
  */
 export class TalkClient {
 
-	constructor( out, endpoint = '/api/talk' ) {
+	constructor( out ) {
 
 		this.out = out;
-		this.endpoint = endpoint;
 
 	}
 
@@ -20,28 +19,18 @@ export class TalkClient {
 	}
 
 	/**
-	 * @param conversation Interactor's { instance, behavior }
-	 * @param quests the questlines as they stand, QuestSession.snapshot()
-	 * @param options.guide the place this person has led the player to, { placeId, kind, name?, notes? }
-	 * @returns the NPC's whole reply
-	 */
-	async say( conversation, line, timeMin, quests = [], { signal, guide } = {} ) {
-
-		const response = await this.#post( this.endpoint, { conversation, line, timeMin, quests, guide }, signal );
-		return ( await response.json() ).reply;
-
-	}
-
-	/**
 	 * The reply as it is spoken, one event at a time: `{ type: 'delta', text }`,
 	 * `{ type: 'sentence', index, text }`, `{ type: 'offer', kind, placeId?, name? }`
 	 * and last `{ type: 'done', reply }`. An `error` event throws with status 502.
 	 * Leaving the loop early, or aborting `signal`, ends the reply on the server.
+	 * @param conversation Interactor's { instance, behavior }
+	 * @param quests the questlines as they stand, QuestSession.snapshot()
+	 * @param options.guide the place this person has led the player to, { placeId, kind, name?, notes? }
 	 * @param options.offers what this person may propose, { follow?, places?: [{ placeId, name }] }
 	 */
 	async *stream( conversation, line, timeMin, quests = [], { signal, guide, offers } = {} ) {
 
-		const response = await this.#post( `${this.endpoint}/stream`, { conversation, line, timeMin, quests, guide, offers }, signal );
+		const response = await this.#post( { conversation, line, timeMin, quests, guide, offers }, signal );
 		const reader = response.body.getReader();
 		const decoder = new TextDecoder();
 		let buffer = '';
@@ -74,11 +63,11 @@ export class TalkClient {
 
 	}
 
-	async #post( url, { conversation, line, timeMin, quests, guide, offers }, signal ) {
+	async #post( { conversation, line, timeMin, quests, guide, offers }, signal ) {
 
-		const response = await fetch( url, {
+		const response = await fetch( '/api/talk/stream', {
 			method: 'POST',
-			...( signal ? { signal } : {} ),
+			signal,
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify( {
 				out: this.out, npc: conversation.instance, behavior: conversation.behavior, line, timeMin, quests,
