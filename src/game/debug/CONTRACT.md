@@ -8,7 +8,7 @@ Records frame gaps, subsystem costs and renderer allocations for a running city,
 - `RenderWork(renderer.info)`: listens to the renderer's own `createProgram`, `destroyProgram`, `createTexture` and `destroyTexture` accounting from construction on.
 - `FrameReports(send, snapshot)`: a send callback and a callback returning the snapshot fields in the [report schema](report.schema.json). `frame(now, gapMs, notes)` records a frame and its preceding work.
 - `hitchReportPlugin(outputDirectory)`: the Vite development server and the `urbe:performance` event carrying a report.
-- `AutomationProbe(game)`: the playing `GameApp`. Game installs it as `window.urbe.automation` once the city plays, only when the query carries `automation` on an `out` preview ([settings](../data/schema/game-config.d.ts)); a catalog `game` saves, so it gets none. It acts through the player's own paths: `placePlayer`, `pressAction` and `sayLine` ([Game](../CONTRACT.md)).
+- `AutomationProbe(game)`: the playing `GameApp`. Game installs it as `window.urbe.automation` once the city plays, only when the query carries `automation` on an `out` preview ([settings](../data/schema/game-config.d.ts)); a catalog `game` saves, so it gets none. It acts through the player's own paths: `placePlayer`, `pressAction`, `sayLine` ([Game](../CONTRACT.md)) and the chat's action buttons, and reads the [companion](../companion/CONTRACT.md) and [continuity](../agents/CONTRACT.md) to report what they do.
 
 ## Output
 
@@ -17,7 +17,7 @@ Records frame gaps, subsystem costs and renderer allocations for a running city,
 - FrameReports sends one report per second, with frame median, p95, maximum and up to 20 hitch records. Snapshot collection occurs only when sending. Missing development transport creates no reporter.
 - The plugin validates reports and stores the latest 60 in `performance.json` under its configured directory. Writes are serialized. Reports contain the game id, rendering settings, counters, position and timing only.
 - The probe holds pointer capture (`input.locked`), which a headless browser never grants, so prompts, movement and the unpaused view are the player's own. Its methods answer plain JSON; colours are `#rrggbb`, positions `[x, y, z]`.
-  - `state()`: backend, tier, draw calls, fps, feet, yaw, pitch, clock, crowd size, E target `{kind, person}`, conversation `{npcId, name, type, controlled, person}` and chat `{open, lines: [{from, name, text, speaking}], status, error, sending}`, where `speaking` is how the line is voiced (`pending`, `playing`) or null.
+  - `state()`: backend, tier, draw calls, fps, feet, yaw, pitch, clock, crowd size, E target `{kind, person}`, conversation `{npcId, name, type, controlled, person}` and chat `{open, lines: [{from, name, text, speaking}], actions: [{id, label}], status, error, sending}`, where `speaking` is how the line is voiced (`pending`, `playing`) or null and `actions` the chat's action row.
   - `people({radius = 90, limit = 8})`: crowd members nearest first, `{id, crowdId, npcId, name, type, gender, distance, position, look}`.
   - `approach(id)`: stands the player 1.3 m from member `id`, their front first, on ground within a step of theirs (`STEP_HEIGHT`) with nothing solid between that spot and their body (`PERSON_RADIUS`) at chest height (`CHEST`), aimed at the chest. After two frames: `{placed, person, target}`; `placed` is false when no spot qualifies.
   - `press(action = 'interact')`: E, or R for `secondary-interact`, on the next tick. After two frames: `{target, conversation}`.
@@ -26,7 +26,12 @@ Records frame gaps, subsystem costs and renderer allocations for a running city,
   - `leave()`: ends the open conversation by the chat's own leave button. After two frames: `{conversation}`.
   - `say(text)`: `{ms, reply, added, status, error}` once the reply or its failure shows.
   - `voice({started = 0, played = 0, timeoutMs = 60000})`: the game's own NPC voice report (`NpcVoice.report()`, [Voice](../voice/CONTRACT.md)) once `started` lines have begun to play and `played` have played to their end, one more line has failed, the voice finds the server's voice unavailable or `timeoutMs` passes; null when a caller observes the lines instead.
-  - `follow()`, `lead()`: `{supported: false, reason}`.
+  - `act(id)`: clicks the chat action with that offer id. After two frames: `{clicked, conversation, chat}`.
+  - `offers()`: what the open conversation's person offers now, in the chat's order, `{offerId, kind, label, available, reason, destination: {name, relation} | null, distance}`, `distance` the straight metres from the person to a lead's place; empty without a person with identity.
+  - `companion()`: the person walking with the player, `{npcId, kind, phase, mode, walk, distance, position, destination: {name, relation, distance} | null}`, `phase` the companion's, `mode` and `walk` the continuity's control mode and phase, `distance` metres from the player; null when nobody is.
+  - `person(npcId)`: that person as continuity holds them, `{npcId, id, mode, visible, position, distance}` with `id` their crowd member, or null.
+  - `standAway(npcId, {min = 12, max = 20})`: stands the player on a walk graph sidewalk that far from the person, trying spots a metre apart nearest the middle of that band first, on ground a step from the sidewalk, aimed at their chest. After two frames: `{placed, distance}`.
+  - `trail(npcId, {timeoutMs = 360000})`: keeps the player 2.5 m behind the companion on the path it walks (`placePlayer` once they are more than 4 m apart) until a conversation opens, the companion ends or the time passes, sampling `companion()` each second: `{samples: [{ms, ...companion}], conversation, companion, ms}`.
 
 ## Errors
 
@@ -34,4 +39,4 @@ Invalid reports are discarded. Transport or storage failures report a warning an
 
 ## Dependencies
 
-[Game](../CONTRACT.md), [Agents](../agents/CONTRACT.md) for the crowd models, [Physics](../physics/CONTRACT.md) and [Player](../player/CONTRACT.md) for the body measures, [Vite custom events](https://vite.dev/guide/api-plugin#client-server-communication).
+[Game](../CONTRACT.md), [Agents](../agents/CONTRACT.md) for the crowd models and the continuity, [Companion](../companion/CONTRACT.md), [Physics](../physics/CONTRACT.md) and [Player](../player/CONTRACT.md) for the body measures, [Vite custom events](https://vite.dev/guide/api-plugin#client-server-communication).

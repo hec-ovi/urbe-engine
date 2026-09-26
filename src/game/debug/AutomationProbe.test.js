@@ -44,7 +44,8 @@ function playing( { reachable = true, edge = Infinity } = {} ) {
 		clock: { label: 'Mon 21:00', timeMin: 1260 },
 		crowd: {
 			members,
-			within: ( feet, radius ) => [ ...members.values() ].filter( ( member ) => member.position.distanceTo( feet ) < radius )
+			within: ( feet, radius ) => [ ...members.values() ].filter( ( member ) => member.position.distanceTo( feet ) < radius ),
+			memberForNpc: ( npcId ) => [ ...members.values() ].find( ( member ) => member.npcId === npcId ) ?? null
 		},
 		interactor: { target: null, conversation: null },
 		hero,
@@ -206,11 +207,104 @@ describe( 'automation probe', () => {
 
 	} );
 
-	it( 'reports follow and lead as not driven yet', () => {
+	it( 'clicks a chat action by its label and reports what the person offers, the companion under way and the person as continuity holds them', async () => {
 
-		const probe = new AutomationProbe( playing().game );
-		expect( probe.follow() ).toEqual( { supported: false, reason: 'follow is not driven yet' } );
-		expect( probe.lead() ).toEqual( { supported: false, reason: 'lead is not driven yet' } );
+		const { game } = playing();
+		const probe = new AutomationProbe( game );
+		await probe.converse();
+		const bar = { place: { kind: 'parcel', id: 'p9' }, name: 'the bar', relation: 'haunt' };
+		game.playerPlaces = [ { kind: 'parcel', id: 'p1' } ];
+		game.companion = {
+			active: null,
+			places: { positions: new Map( [ [ 'parcel:p9', [ 40, 0.2, 5 ] ] ] ) },
+			offers: vi.fn( () => [
+				{ offerId: 'follow', kind: 'follow', label: 'Come with me', available: true },
+				{ offerId: 'lead:parcel:p9', kind: 'lead', label: 'Show me the bar', available: false, reason: 'no_time', destination: bar }
+			] )
+		};
+		game.npcContinuity = { companion: null, actor: ( npcId ) => npcId === 'a301' ? { position: [ 10, 0.2, 5 ], mode: 'conversation', visible: true } : null };
+		expect( probe.offers() ).toEqual( [
+			{ offerId: 'follow', kind: 'follow', label: 'Come with me', available: true, reason: null, destination: null, distance: null },
+			{ offerId: 'lead:parcel:p9', kind: 'lead', label: 'Show me the bar', available: false, reason: 'no_time', destination: { name: 'the bar', relation: 'haunt' }, distance: 30 }
+		] );
+		expect( game.companion.offers ).toHaveBeenCalledWith( { npcId: 'a301', timeMin: 1260, playerPlaces: game.playerPlaces } );
+
+		const chosen = [];
+		game.view.dialog.onAction = ( id ) => chosen.push( id );
+		game.view.dialog.setActions( [ { id: 'follow', label: 'Come with me' } ] );
+		expect( probe.state().chat.actions ).toEqual( [ { id: 'follow', label: 'Come with me' } ] );
+		expect( await probe.act( 'follow' ) ).toMatchObject( { clicked: true, conversation: { npcId: 'a301' } } );
+		expect( ( await probe.act( 'lead:parcel:p9' ) ).clicked ).toBe( false );
+		expect( chosen ).toEqual( [ 'follow' ] );
+
+		expect( probe.companion() ).toBeNull();
+		game.companion.active = { npcId: 'a301', kind: 'lead', phase: 'walking', destination: bar };
+		game.npcContinuity.companion = { npcId: 'a301', mode: 'leading', phase: 'waiting', position: [ 13, 0.2, 9 ] };
+		game.body.feet.set( 10, 0.2, 5 );
+		expect( probe.companion() ).toEqual( {
+			npcId: 'a301', kind: 'lead', phase: 'walking', mode: 'leading', walk: 'waiting', distance: 5, position: [ 13, 0.2, 9 ],
+			destination: { name: 'the bar', relation: 'haunt', distance: 27.3 }
+		} );
+		expect( probe.person( 'a301' ) ).toEqual( { npcId: 'a301', id: 'p1', mode: 'conversation', visible: true, position: [ 10, 0.2, 5 ], distance: 0 } );
+		expect( probe.person( 'a999' ) ).toBeNull();
+
+	} );
+
+	it( 'stands the player on the pavement a set distance from a person, and walks them behind a leader on its own path until the talk opens', async () => {
+
+		const { game } = playing();
+		const probe = new AutomationProbe( game );
+		const leader = { x: 10 };
+		game.npcContinuity = {
+			// A crossing 16 m away, and a sidewalk running away from the person from 10 m out.
+			routes: {
+				edges: new Map( [
+					[ 'road', { id: 'road', kind: 'crossing', length: 4, from: [ 26, 0, 3 ], to: [ 26, 0, 7 ] } ],
+					[ 'kerb', { id: 'kerb', kind: 'sidewalk', length: 30, from: [ 10, 0, 15 ], to: [ 10, 0, 45 ] } ]
+				] ),
+				pointAt: ( edge, along ) => ( { x: edge.from[ 0 ], y: 0, z: edge.from[ 2 ] + ( edge.to[ 2 ] - edge.from[ 2 ] ) * along / edge.length } )
+			},
+			actor: () => ( { position: [ leader.x, 0.2, 5 ] } ),
+			get companion() { return { npcId: 'a301', mode: 'leading', phase: 'walking', position: [ leader.x, 0.2, 5 ] }; }
+		};
+		game.companion = { active: { npcId: 'a301', kind: 'lead', phase: 'walking' }, places: { positions: new Map() } };
+		// The sidewalk runs down the seam of two ground cuboids at x = 10: a ray right on it meets neither.
+		const cast = game.physics.world.castRay;
+		game.physics.world.castRay = ( ray, ...rest ) => ray.origin.x === 10 ? null : cast( ray, ...rest );
+
+		expect( await probe.standAway( 'a301', { min: 12, max: 20 } ) ).toEqual( { placed: true, distance: 16 } );
+		const [ stood, aimed ] = game.placePlayer.mock.lastCall;
+		expect( stood ).toEqual( { x: 10, y: expect.closeTo( 0.25 ), z: 21 } );
+		expect( aimed ).toEqual( { x: 10, y: 1.5, z: 5 } );
+		expect( await probe.standAway( 'a301', { min: 50, max: 60 } ) ).toEqual( { placed: false, distance: null } );
+
+		// Each frame the leader walks half a metre on; at x = 20 it has arrived and its talk opens.
+		game.body.feet.set( 8.5, 0.25, 5 );
+		game.placePlayer.mockClear();
+		const placed = [];
+		game.placePlayer.mockImplementation( ( feet, target ) => {
+
+			placed.push( { feet: feet.x - leader.x, target: target.x - leader.x } );
+			game.body.feet.set( feet.x, feet.y, feet.z );
+			return true;
+
+		} );
+		vi.stubGlobal( 'requestAnimationFrame', ( callback ) => setTimeout( () => {
+
+			leader.x = Math.min( 20, leader.x + 0.5 );
+			if ( leader.x === 20 ) game.interactor.conversation = { person: null, npcId: 'a301', controlled: true, instance: { name: { given: 'Hugo', family: 'Duarte' } } };
+			callback();
+
+		}, 0 ) );
+		const trailed = await probe.trail( 'a301' );
+		expect( trailed.conversation ).toMatchObject( { npcId: 'a301', name: 'Hugo Duarte' } );
+		expect( trailed.samples[ 0 ] ).toMatchObject( { ms: expect.any( Number ), npcId: 'a301', kind: 'lead', mode: 'leading' } );
+		expect( placed.length ).toBeGreaterThan( 2 );
+		// On the leader's path, 2.5 m behind it, or where it started while its path is shorter.
+		for ( const move of placed ) expect( move ).toEqual( { feet: expect.toSatisfy( ( back ) => back >= - 2.5 && back <= - 2 ), target: 0 } );
+		expect( placed.at( - 1 ).feet ).toBe( - 2.5 );
+		expect( game.body.feet.z ).toBe( 5 );
+		expect( 20 - game.body.feet.x ).toBeLessThanOrEqual( 4 );
 
 	} );
 

@@ -117,12 +117,13 @@ export class ChatPanel {
 		this.#latest();
 	}
 
-	/** One button per `{ id, label }`, reported through `onAction(id)`; an empty list hides the row. */
+	/** One button per `{ id, label }`, carrying its id as `data-action`, reported through `onAction(id)`; an empty list hides the row. */
 	setActions( actions ) {
 		const heldFocus = this.actions.contains( document.activeElement );
 		this.actions.hidden = actions.length === 0;
 		this.actions.replaceChildren( ...actions.map( ( { id, label } ) => {
 			const button = el( 'button', { type: 'button', className: 'chat-action', textContent: label } );
+			button.dataset.action = id;
 			button.addEventListener( 'click', () => this.onAction( id ) );
 			return button;
 		} ) );

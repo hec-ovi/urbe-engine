@@ -9,11 +9,25 @@ const FACE_DISTANCE = 1.3;
 const FOOTING = 0.05;
 /** A person's look, by the names the crowd bakes and the focused body is dressed with; the eyebrows wear the hair tint. */
 const LOOK_FIELDS = [ 'skin', 'shirt', 'trousers', 'hair', 'eyebrows', 'sleeve', 'hem' ];
+/** Walk edges a player may be stood on, and how far apart the spots tried along them are. */
+const PAVEMENT = 'sidewalk';
+const PAVEMENT_STEP = 1;
+/** A trailing player keeps to the path this far behind the person, and is moved up once this much further back. */
+const TRAIL_BEHIND = 2.5;
+const TRAIL_SLACK = 1.5;
+/** A leader's path is kept as points at least this far apart. */
+const TRAIL_STEP = 0.5;
+/**
+ * Where ground is looked for around a point: the point, then a hand's width
+ * each way, since a ray down the seam between two ground cuboids meets neither.
+ */
+const GROUND_PROBES = [ [ 0, 0 ], [ 0.15, 0 ], [ - 0.15, 0 ], [ 0, 0.15 ], [ 0, - 0.15 ] ];
 
 /**
  * A driver's hands in a read-only preview (`?mode=game&out=...&automation`).
  * It acts only through the player's own paths: placing the body, the E and R
- * presses and the chat line. Every answer is plain JSON.
+ * presses, the chat line and the chat's action buttons. It reads the
+ * companion and continuity to report what they do. Every answer is plain JSON.
  */
 export class AutomationProbe {
 
@@ -176,17 +190,186 @@ export class AutomationProbe {
 
 	}
 
-	/** Following a person is not driven yet. */
-	follow() {
+	/**
+	 * Clicks the chat action with id `id` (an offer id), as the player would;
+	 * settles after two frames with whether it was there, the conversation and
+	 * the chat.
+	 */
+	async act( id ) {
 
-		return unsupported( 'follow' );
+		const button = [ ...this.game.view.dialog.actions.children ].find( ( action ) => action.dataset.action === id );
+		button?.click();
+		await frames( 2 );
+
+		return { clicked: Boolean( button ), conversation: this.#conversation(), chat: this.#chat() };
 
 	}
 
-	/** Being led by a person is not driven yet. */
-	lead() {
+	/**
+	 * What the open conversation's person offers now, in the chat's order:
+	 * `{ offerId, kind, label, available, reason, destination, distance }`,
+	 * `destination` `{ name, relation }` and `distance` the straight metres
+	 * from the person to it for a lead. Empty without a person to ask.
+	 */
+	offers() {
 
-		return unsupported( 'lead' );
+		const { companion, npcContinuity, interactor, clock, playerPlaces } = this.game;
+		const npcId = interactor.conversation?.npcId;
+		if ( ! npcId || ! interactor.conversation.instance ) return [];
+		const from = npcContinuity.actor( npcId )?.position ?? null;
+
+		return companion.offers( { npcId, timeMin: clock.timeMin, playerPlaces } ).map( ( offer ) => {
+
+			const where = offer.destination && this.#placeAt( offer.destination.place );
+			return {
+				offerId: offer.offerId, kind: offer.kind, label: offer.label, available: offer.available, reason: offer.reason ?? null,
+				destination: offer.destination ? { name: offer.destination.name, relation: offer.destination.relation } : null,
+				distance: where && from ? round( flat( from, where ), 1 ) : null
+			};
+
+		} );
+
+	}
+
+	/**
+	 * The person walking with the player, or null: `{ npcId, kind, phase,
+	 * mode, walk, distance, position, destination }`. `phase` is the
+	 * companion's, `mode` and `walk` the continuity's control mode and phase,
+	 * `distance` metres from the player's feet and `destination`, for a lead,
+	 * `{ name, relation, distance }` with the straight metres from the person.
+	 */
+	companion() {
+
+		const active = this.game.companion.active;
+		if ( ! active ) return null;
+		const body = this.game.npcContinuity.companion;
+		const at = body?.npcId === active.npcId ? body.position : null;
+		const where = active.destination && this.#placeAt( active.destination.place );
+
+		return {
+			npcId: active.npcId, kind: active.kind, phase: active.phase,
+			mode: at ? body.mode : null, walk: at ? body.phase : null,
+			distance: at ? round( spread( this.game.body.feet.toArray(), at ), 2 ) : null,
+			position: at ? at.map( ( value ) => round( value, 2 ) ) : null,
+			destination: active.destination ? {
+				name: active.destination.name, relation: active.destination.relation,
+				distance: where && at ? round( flat( at, where ), 1 ) : null
+			} : null
+		};
+
+	}
+
+	/**
+	 * One person as continuity holds them: `{ npcId, id, mode, visible,
+	 * position, distance }`, `id` their crowd member, or null when continuity
+	 * does not hold them.
+	 */
+	person( npcId ) {
+
+		const actor = this.game.npcContinuity.actor( npcId );
+		if ( ! actor ) return null;
+
+		return {
+			npcId, id: this.game.crowd.memberForNpc( npcId )?.id ?? null, mode: actor.mode, visible: actor.visible,
+			position: actor.position.map( ( value ) => round( value, 2 ) ),
+			distance: round( spread( this.game.body.feet.toArray(), actor.position ), 2 )
+		};
+
+	}
+
+	/**
+	 * Stands the player on the pavement of the walk graph between `min` and
+	 * `max` metres from person `npcId`, a spot a metre apart along its
+	 * sidewalks nearest the middle of that band first, aimed at their chest.
+	 * After two frames: `{ placed, distance }`.
+	 */
+	async standAway( npcId, { min = 12, max = 20 } = {} ) {
+
+		const at = this.game.npcContinuity.actor( npcId )?.position;
+		if ( ! at ) return { placed: false, distance: null };
+		const routes = this.game.npcContinuity.routes;
+		const middle = ( min + max ) / 2;
+		const spots = [];
+		for ( const edge of routes.edges.values() ) {
+
+			if ( edge.kind !== PAVEMENT ) continue;
+			for ( let along = 0; along <= edge.length; along += PAVEMENT_STEP ) {
+
+				const { x, y, z } = routes.pointAt( edge, along, 1 );
+				const distance = flat( [ x, y, z ], at );
+				if ( distance >= min && distance <= max ) spots.push( { x, y, z, off: Math.abs( distance - middle ) } );
+
+			}
+
+		}
+		spots.sort( ( a, b ) => a.off - b.off || a.x - b.x || a.z - b.z );
+		for ( const { x, y, z } of spots ) {
+
+			const ground = this.#ground( x, y, z );
+			if ( ground === null || ! this.game.placePlayer( { x, y: ground + FOOTING, z }, { x: at[ 0 ], y: at[ 1 ] + CHEST, z: at[ 2 ] } ) ) continue;
+			await frames( 2 );
+			return { placed: true, distance: round( spread( this.game.body.feet.toArray(), at ), 2 ) };
+
+		}
+
+		return { placed: false, distance: null };
+
+	}
+
+	/**
+	 * Walks the player behind the companion `npcId` along the path it has
+	 * walked, TRAIL_BEHIND metres back, until a conversation opens, the
+	 * companion ends or `timeoutMs` passes; each move is `placePlayer`.
+	 * Samples `companion()` once a second, with `ms` since the start.
+	 * `{ samples, conversation, companion, ms }`.
+	 */
+	async trail( npcId, { timeoutMs = 360000 } = {} ) {
+
+		const path = [];
+		const samples = [];
+		const started = performance.now();
+		let sampled = - Infinity;
+		while ( performance.now() - started < timeoutMs ) {
+
+			await frames( 1 );
+			const body = this.game.npcContinuity.companion;
+			if ( this.game.interactor.conversation || this.game.companion.active?.npcId !== npcId || body?.npcId !== npcId ) break;
+			const at = body.position;
+			if ( ! path.length || spread( path.at( - 1 ), at ) >= TRAIL_STEP ) path.push( at );
+			const spot = spread( this.game.body.feet.toArray(), at ) > TRAIL_BEHIND + TRAIL_SLACK ? behind( path, TRAIL_BEHIND ) : null;
+			const ground = spot ? this.#ground( ...spot ) : null;
+			if ( ground !== null ) this.game.placePlayer( { x: spot[ 0 ], y: ground + FOOTING, z: spot[ 2 ] }, { x: at[ 0 ], y: at[ 1 ] + CHEST, z: at[ 2 ] } );
+			if ( performance.now() - sampled >= 1000 ) {
+
+				sampled = performance.now();
+				samples.push( { ms: round( sampled - started, 0 ), ...this.companion() } );
+
+			}
+
+		}
+
+		return { samples, conversation: this.#conversation(), companion: this.companion(), ms: round( performance.now() - started, 0 ) };
+
+	}
+
+	/** The height of the ground under a point near `y`, within a step of it, or null. */
+	#ground( x, y, z ) {
+
+		for ( const [ dx, dz ] of GROUND_PROBES ) {
+
+			const drop = this.#ray( { x: x + dx, y: y + CHEST, z: z + dz }, { x: 0, y: - 1, z: 0 }, CHEST + STEP_HEIGHT );
+			if ( drop !== null ) return y + CHEST - drop;
+
+		}
+
+		return null;
+
+	}
+
+	/** Where a companion stops at a place, as `[x, y, z]`, or null. */
+	#placeAt( place ) {
+
+		return this.game.companion.places.positions.get( `${place.kind}:${place.id}` ) ?? null;
 
 	}
 
@@ -269,6 +452,7 @@ export class AutomationProbe {
 				text: line.lastElementChild?.textContent ?? '',
 				speaking: line.dataset.speaking ?? null
 			} ) ),
+			actions: [ ...dialog.actions.children ].map( ( action ) => ( { id: action.dataset.action, label: action.textContent } ) ),
 			status: dialog.status.textContent,
 			error: dialog.feedback.classList.contains( 'is-error' ),
 			sending: dialog.input.disabled
@@ -368,9 +552,36 @@ function nameOf( instance ) {
 
 }
 
-function unsupported( scenario ) {
+/** The point `metres` back along a walked path from its end, or its start when it is shorter. */
+function behind( path, metres ) {
 
-	return { supported: false, reason: `${scenario} is not driven yet` };
+	let left = metres;
+	for ( let at = path.length - 1; at > 0; at -- ) {
+
+		const step = spread( path[ at ], path[ at - 1 ] );
+		if ( step >= left ) {
+
+			const t = left / step;
+			return path[ at ].map( ( value, axis ) => value + ( path[ at - 1 ][ axis ] - value ) * t );
+
+		}
+		left -= step;
+
+	}
+
+	return path[ 0 ] ?? null;
+
+}
+
+function spread( a, b ) {
+
+	return Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ], b[ 2 ] - a[ 2 ] );
+
+}
+
+function flat( a, b ) {
+
+	return Math.hypot( b[ 0 ] - a[ 0 ], b[ 2 ] - a[ 2 ] );
 
 }
 

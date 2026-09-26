@@ -135,6 +135,7 @@ describe( 'ChatPanel', () => {
 		panel.setActions( [ { id: 'follow', label: 'Bring Ada along' }, { id: 'lead:p9', label: 'Go with Ada to the Blue Lantern' } ] );
 		panel.setChoices( CHOICES );
 		const actions = within( screen.getByRole( 'group', { name: 'Suggested actions' } ) );
+		expect( actions.getAllByRole( 'button' ).map( ( button ) => button.dataset.action ) ).toEqual( [ 'follow', 'lead:p9' ] );
 		await user.click( actions.getByRole( 'button', { name: 'Go with Ada to the Blue Lantern' } ) );
 		expect( onAction ).toHaveBeenCalledExactlyOnceWith( 'lead:p9' );
 		expect( onChoice ).not.toHaveBeenCalled();
