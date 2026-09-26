@@ -5,7 +5,7 @@ Purpose: restores one cataloged game and saves its live player and quest state t
 ## Inputs
 
 - Loaded game descriptor: [schema/game-state.schema.json](schema/game-state.schema.json). The id must equal the `game` URL parameter.
-- Live state at save time: [schema/live-state.schema.json](schema/live-state.schema.json). Position is the player's foot point in world metres, elapsed time is seconds since this run became playable, optional `transitJourney` is the exact timetable state, optional `questTransit` is the quest-side approach, aboard or arrival state, optional `npcState` is the exact simulation replay, continuity save and optional active quest escort (`questEscort`) at the same world minute, and optional `investigations` contains complete evidence, collection, and one-shot transition state.
+- Live state at save time: [schema/live-state.schema.json](schema/live-state.schema.json). Position is the player's foot point in world metres, elapsed time is seconds since this run became playable, optional `transitJourney` is the exact timetable state, optional `questTransit` is the quest-side approach, aboard or arrival state, optional `npcState` is the exact simulation replay, continuity save, optional active quest escort (`questEscort`) and optional [companion](../companion/CONTRACT.md) (`companion`) at the same world minute, optional `investigations` contains complete evidence, collection, and one-shot transition state, optional `scenery` is the [saved scenery](../scenery/schema/saved-scenery.schema.json) lifecycle of every quest scene, and optional `dialogueMemory` is what each person remembers of talking with the player ([schema](../../library/schema/dialogue-memory.schema.json)).
 
 ## Outputs
 
@@ -14,7 +14,7 @@ Purpose: restores one cataloged game and saves its live player and quest state t
 
 ## Events
 
-- `save(liveState)` posts one `saveCurrent` request to `/api/launcher`. Saves are serialized so a later request uses the revision returned by the previous one.
+- `save(liveState)` posts one `saveCurrent` request to `/api/launcher`. Saves are serialized so a later request uses the revision returned by the previous one. An optional field the live state leaves out is sent as the loaded or last returned descriptor holds it ([SavedFields.js](SavedFields.js)), the same rule the launcher applies to what it stores.
 
 ## Errors
 
@@ -39,3 +39,4 @@ Purpose: restores one cataloged game and saves its live player and quest state t
 - Optional quest transit progress is validated against the quest schema, sent and returned unchanged, then cross-checked against the restored quest, cast, follower and timetable journey. A descriptor may omit it.
 - Optional NPC state is validated through the simulation and NPC agent schemas, sent and returned unchanged, and restored before the first live frame. A descriptor may omit it.
 - Optional investigation state is validated, sent and returned unchanged. The investigation blackbox validates every saved scene and evidence id against current authored scenes before rendering. A descriptor may omit it.
+- Optional scenery state and dialogue memory are validated, sent and returned unchanged. A save made before either existed loads, and saves keep the last value until the game sends a new one.

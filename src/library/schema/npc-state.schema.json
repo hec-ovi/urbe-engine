@@ -13,6 +13,7 @@
         { "type": "null" },
         { "$ref": "urn:urbe:engine:quest-actions:values#/$defs/escort" }
       ]
-    }
+    },
+    "companion": { "$ref": "urn:urbe:engine:companion:state" }
   }
 }

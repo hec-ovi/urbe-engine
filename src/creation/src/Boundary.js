@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import AjvModule from 'ajv/dist/2020.js';
+import { DESCRIPTOR_SCHEMAS } from '../../library/src/DescriptorSchemas.js';
 import { CreationError } from './CreationError.js';
 
 const Ajv2020 = AjvModule.default ?? AjvModule;
@@ -13,14 +14,7 @@ export class Boundary {
 	constructor() {
 
 		const ajv = new Ajv2020( { allErrors: true, strict: true } );
-		for ( const url of [
-			new URL( '../../game/agents/schema/values.schema.json', import.meta.url ),
-			new URL( '../../game/agents/schema/continuity-save.schema.json', import.meta.url ),
-			new URL( '../../game/quests/schema/values.schema.json', import.meta.url ),
-			new URL( '../../game/quests/schema/transit-state.schema.json', import.meta.url ),
-			new URL( '../../../../simulation/src/schemas/simulation-save.schema.json', import.meta.url ),
-			new URL( '../../library/schema/npc-state.schema.json', import.meta.url )
-		] ) ajv.addSchema( JSON.parse( readFileSync( url, 'utf8' ) ) );
+		for ( const schema of DESCRIPTOR_SCHEMAS ) ajv.addSchema( schema );
 		for ( const name of [ 'city-descriptor', 'game-descriptor' ] ) {
 
 			ajv.addSchema( JSON.parse( readFileSync( new URL( `../../library/schema/${name}.schema.json`, import.meta.url ), 'utf8' ) ) );

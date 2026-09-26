@@ -74,6 +74,8 @@ describe( 'launcher HTTP boundary', () => {
 			evidence: [ { evidenceId: 'body-position', status: 'discovered' } ],
 			emittedTransitionIds: [ 'unlock-blood-reading' ]
 		} ];
+		const scenery = [ { contractVersion: '1.0', sceneId: 'courier-found', status: 'retired', stagedAtMin: 1500, retiredAtMin: 1550 } ];
+		const dialogueMemory = [ { npcId: 'npc.witness', memory: { digest: [], turns: [ { speaker: 'npc', text: 'Not here.', atMin: 1561 } ] } } ];
 		const saved = await api.saveCurrent( {
 			gameId: exported.id,
 			expectedRevision: exported.save.revision,
@@ -87,7 +89,9 @@ describe( 'launcher HTTP boundary', () => {
 			transitJourney,
 			questTransit,
 			npcState,
-			investigations
+			investigations,
+			scenery,
+			dialogueMemory
 		} );
 		expect( saved ).toMatchObject( {
 			id: 'night-shift', player: { position: { x: 16, y: 0.12, z: -2 } },
@@ -95,10 +99,19 @@ describe( 'launcher HTTP boundary', () => {
 			transitJourney,
 			questTransit,
 			npcState,
-			investigations
+			investigations,
+			scenery,
+			dialogueMemory
 		} );
 		expect( JSON.parse( readFileSync( join( outDir, 'games', 'night-shift', 'game.json' ), 'utf8' ) ) )
-			.toMatchObject( { transitJourney, questTransit, npcState, investigations } );
+			.toMatchObject( { transitJourney, questTransit, npcState, investigations, scenery, dialogueMemory } );
+		// A later save that leaves them out keeps them.
+		const kept = await api.saveCurrent( {
+			gameId: saved.id, expectedRevision: saved.save.revision, updatedAt: '2026-09-03T12:05:00Z',
+			playTimeSeconds: saved.save.playTimeSeconds + 1, player: saved.player, quests: saved.quests, sideJobs: saved.sideJobs,
+			currentLocation: saved.currentLocation, discoveredLocations: saved.discoveredLocations
+		} );
+		expect( kept ).toMatchObject( { investigations, scenery, dialogueMemory } );
 		await expect( api.saveCurrent( { gameId: 'night-shift' } ) ).rejects.toThrow( 'saveCurrent request is invalid' );
 
 		const imported = { ...exported, id: 'imported-night', name: 'Imported Night', save: { ...exported.save, revision: 5 } };

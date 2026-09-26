@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:library:dialogue-memory",
+  "title": "What each person remembers of talking with the player",
+  "description": "One record per person, as Quests' dialog memory serializes it: folded notes, oldest first, then the recent turns verbatim.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["npcId", "memory"],
+    "properties": {
+      "npcId": { "type": "string", "minLength": 1 },
+      "memory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["digest", "turns"],
+        "properties": {
+          "digest": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "turns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["speaker", "text", "atMin"],
+              "properties": {
+                "speaker": { "enum": ["player", "npc"] },
+                "text": { "type": "string" },
+                "atMin": { "type": "number", "minimum": 0 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

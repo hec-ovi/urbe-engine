@@ -1,4 +1,5 @@
 import { PersistenceError } from './PersistenceError.js';
+import { carriedFields } from './SavedFields.js';
 import { SchemaBoundary } from './SchemaBoundary.js';
 
 /** A loaded catalog game plus its revision-safe browser save transport. */
@@ -45,18 +46,7 @@ export class GamePersistence {
 			sideJobs: live.sideJobs,
 			currentLocation: live.currentLocation,
 			discoveredLocations: uniqueLocations( [ ...live.discoveredLocations, live.currentLocation ] ),
-			...( Object.hasOwn( live, 'transitJourney' )
-				? { transitJourney: live.transitJourney }
-				: Object.hasOwn( this.game, 'transitJourney' ) ? { transitJourney: this.game.transitJourney } : {} ),
-			...( Object.hasOwn( live, 'questTransit' )
-				? { questTransit: live.questTransit }
-				: Object.hasOwn( this.game, 'questTransit' ) ? { questTransit: this.game.questTransit } : {} ),
-			...( Object.hasOwn( live, 'npcState' )
-				? { npcState: live.npcState }
-				: Object.hasOwn( this.game, 'npcState' ) ? { npcState: this.game.npcState } : {} ),
-			...( Object.hasOwn( live, 'investigations' )
-				? { investigations: live.investigations }
-				: Object.hasOwn( this.game, 'investigations' ) ? { investigations: this.game.investigations } : {} )
+			...carriedFields( live, this.game )
 		};
 		this.boundary.assert( 'save-current-payload', payload, 'E_SAVE_PAYLOAD', 'saveCurrent payload' );
 

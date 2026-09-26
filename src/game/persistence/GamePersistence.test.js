@@ -30,13 +30,27 @@ const npcState = {
 	timeMin: 780,
 	simulation: { version: '1', seed: 'fixture-seed', events: [] },
 	continuity: { version: '2', actors: [], follow: null, returns: [], conversation: null },
-	questEscort: { questId: 'main', stepId: 'escort-witness', npcId: 'npc-1', mode: 'lead-player' }
+	questEscort: { questId: 'main', stepId: 'escort-witness', npcId: 'npc-1', mode: 'lead-player' },
+	companion: { version: '1', npcId: 'npc-2', kind: 'follow', startedAtMin: 770, phase: 'walking' }
 };
 
 const investigations = [ {
 	contractVersion: '1.0', sceneId: 'scene-apartment-47', revision: 2,
 	evidence: [ { evidenceId: 'access-card', status: 'collected' } ],
 	emittedTransitionIds: [ 'record-card-owner' ]
+} ];
+
+const scenery = [
+	{ contractVersion: '1.0', sceneId: 'courier-found', status: 'retired', stagedAtMin: 700, retiredAtMin: 760 },
+	{
+		contractVersion: '1.0', sceneId: 'roof-wake', status: 'staged', stagedAtMin: 775,
+		resolved: { place: { parcelId: 'p3', floor: 1, roomId: 'f1-r2' }, actors: [ { actorId: 'mourner', gender: 'female', appearanceSeed: 91 } ] }
+	}
+];
+
+const dialogueMemory = [ {
+	npcId: 'npc-1',
+	memory: { digest: [ 'The player asked about the roof.' ], turns: [ { speaker: 'player', text: 'Who was up there?', atMin: 779 } ] }
 } ];
 
 const liveState = ( elapsedSeconds = 12.5 ) => ( {
@@ -51,6 +65,8 @@ const liveState = ( elapsedSeconds = 12.5 ) => ( {
 	questTransit,
 	npcState,
 	investigations,
+	scenery,
+	dialogueMemory,
 	elapsedSeconds
 } );
 
@@ -76,6 +92,8 @@ describe( 'playable game persistence', () => {
 				questTransit: input.questTransit,
 				npcState: input.npcState,
 				investigations: input.investigations,
+				scenery: input.scenery,
+				dialogueMemory: input.dialogueMemory,
 				save: {
 					...gameFixture.save,
 					revision: input.expectedRevision + 1,
@@ -102,7 +120,9 @@ describe( 'playable game persistence', () => {
 				transitJourney: activeJourney,
 				questTransit,
 				npcState,
-				investigations
+				investigations,
+				scenery,
+				dialogueMemory
 			}
 		} );
 		expect( requests[ 0 ].input.discoveredLocations ).toEqual( [
@@ -113,6 +133,37 @@ describe( 'playable game persistence', () => {
 		expect( saved.questTransit ).toEqual( questTransit );
 		expect( saved.npcState ).toEqual( npcState );
 		expect( saved.investigations ).toEqual( investigations );
+		expect( saved.scenery ).toEqual( scenery );
+		expect( saved.dialogueMemory ).toEqual( dialogueMemory );
+
+	} );
+
+	it( 'loads a save made before scenery and dialogue memory, and carries saved ones a live state leaves out', async () => {
+
+		const sent = [];
+		const fetcher = vi.fn( async ( _url, options ) => {
+
+			const input = JSON.parse( options.body ).input;
+			sent.push( input );
+			const { gameId, expectedRevision, updatedAt, playTimeSeconds, ...fields } = input;
+			return response( 200, {
+				...gameFixture, ...fields,
+				save: { ...gameFixture.save, revision: expectedRevision + 1, updatedAt, playTimeSeconds }
+			} );
+
+		} );
+		const { scenery: droppedScenery, dialogueMemory: droppedMemory, ...earlier } = liveState();
+		expect( droppedScenery && droppedMemory ).toBeTruthy();
+		const persistence = new GamePersistence( { game: structuredClone( gameFixture ), gameId: 'night-shift', fetcher } );
+		await persistence.save( earlier );
+		expect( sent[ 0 ] ).not.toHaveProperty( 'scenery' );
+		expect( sent[ 0 ] ).not.toHaveProperty( 'dialogueMemory' );
+
+		const resumed = new GamePersistence( { game: { ...structuredClone( gameFixture ), scenery, dialogueMemory }, gameId: 'night-shift', fetcher } );
+		await resumed.save( earlier );
+		expect( sent[ 1 ] ).toMatchObject( { scenery, dialogueMemory } );
+		await expect( resumed.save( { ...earlier, scenery: [ { contractVersion: '1.0', sceneId: 'roof-wake', status: 'staged' } ] } ) )
+			.rejects.toMatchObject( { code: 'E_LIVE_STATE' } );
 
 	} );
 
@@ -131,6 +182,8 @@ describe( 'playable game persistence', () => {
 				questTransit: input.questTransit,
 				npcState: input.npcState,
 				investigations: input.investigations,
+				scenery: input.scenery,
+				dialogueMemory: input.dialogueMemory,
 				save: { ...gameFixture.save, revision: input.expectedRevision + 1, updatedAt: input.updatedAt, playTimeSeconds: input.playTimeSeconds }
 			} );
 

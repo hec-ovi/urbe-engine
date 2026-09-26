@@ -138,6 +138,8 @@
       "type": "array",
       "items": { "$ref": "#/$defs/investigationState" }
     },
+    "scenery": { "$ref": "urn:urbe:engine:scenery:saved-scenery" },
+    "dialogueMemory": { "$ref": "urn:urbe:engine:library:dialogue-memory" },
     "save": {
       "type": "object",
       "required": ["revision", "createdAt", "updatedAt", "playTimeSeconds"],
