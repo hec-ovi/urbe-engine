@@ -4,8 +4,8 @@ Purpose: lets the player ask one person along, to follow them or to lead them to
 
 ## Inputs
 
-- `new CompanionGameplay({ continuity, sim, routes, places, atlas, quests?, scenes?, crowd?, lines? })`. `continuity` is the game's NpcContinuity, `sim` the simulation (`getNPC`, `behaviorAt`), `routes` its WalkRoutes, `places` the same continuity places array (`{ kind, id, position }`) and `atlas` the city plan, for place names. `quests` is `{ holdsCast(npcId), places(timeMin), characterName(npcId) }` as QuestGameplay offers them. `scenes` is a function returning staged scenery places, [schema/scenes.schema.json](schema/scenes.schema.json). `crowd` is `{ memberForNpc(npcId) }`. `lines` is a [CompanionLines](CompanionLines.js) document, [lines.md](lines.md) by default.
-- Offers request: [schema/offers-request.schema.json](schema/offers-request.schema.json). The person, the clock, the player's feet and the places the player stands in.
+- `new CompanionGameplay({ continuity, sim, routes, places, atlas, quests?, scenes?, crowd?, lines? })`. `continuity` is the game's NpcContinuity, `sim` the simulation (`getNPC`, `behaviorAt`), `routes` its WalkRoutes, `places` the same continuity places array (`{ kind, id, position }`) and `atlas` the city plan, for place names. `quests` is `{ holdsCast(npcId), escorts(npcId), places(timeMin), characterName(npcId) }` as QuestGameplay offers them. `scenes` is a function returning staged scenery places, [schema/scenes.schema.json](schema/scenes.schema.json). `crowd` is `{ memberForNpc(npcId) }`. `lines` is a [CompanionLines](CompanionLines.js) document, [lines.md](lines.md) by default.
+- Offers request: [schema/offers-request.schema.json](schema/offers-request.schema.json). The person, the clock and the places the player stands in.
 - Accept request: [schema/accept-request.schema.json](schema/accept-request.schema.json). The same, plus the chosen `offerId`.
 - Tool request: [schema/tool-request.schema.json](schema/tool-request.schema.json). The same, plus a talk stream offer event: `kind` `follow`, or `lead` with its `placeId`.
 - Update request: [schema/update-request.schema.json](schema/update-request.schema.json). The clock, the player's feet and places.
@@ -30,23 +30,23 @@ Purpose: lets the player ask one person along, to follow them or to lead them to
 ## Flow
 
 - `accept(request)` recomputes the offers and accepts only an available offer with that exact id; `acceptFromTool(request)` maps a talk stream offer to the follow offer or to the lead offer for that `placeId`. A typed request the person agreed to is the player's consent. Anything else is refused with `unknown` or the offer's reason.
-- An accepted offer starts on the first `update` with no conversation open, once its person's has closed: follow or lead with a give-up pace of 60 m for 3 minutes, from the body where it stands. A host that holds the body on close while `accepted(npcId)` keeps its interruption; otherwise the walk home the close began is taken over. A dismissal lets the companion go at that point.
-- `update(request)` runs right after the continuity's `updateFollow` and drains its control events. A follower mirrors the continuity phase until it is dismissed or gives up. A waiting leader calls out a `lead-waiting` line at most every 0.75 minutes. Once a leader has arrived and the player is within 4 m of it, at the destination or talking to it, one `arrival` signal asks the host to open the conversation with its `guide` and `ask`; a conversation already open takes the guide for its next turn. The companion then goes back to its day (`stopFollow`, from where it stands) when that conversation closes (`done`), when nobody talks to it for 2 minutes (`done`) or when the player is 15 m away (`left`).
-- A continuity give-up ends the companion with `gave-up`: `player-lost` and `unreachable` carry a notice naming the person; the continuity has already sent the body home. A continuity companion that is no longer this person in this mode ends it with `lost`.
-- `restore({ timeMin, state })` takes the saved companion back only when the restored continuity companion is the same person in the same mode, and lets that person go when the mode differs. A leader saved while its place talk was ready or under way is restored as arrived, so the talk comes again when the player is near. An accepted offer is not saved.
+- An accepted offer starts on the first `update` with no conversation open, once its person's has closed: follow or lead with a give-up pace of 60 m for 3 minutes, from the body where it stands. A host that holds the body on close while `accepted(npcId)` keeps its interruption; otherwise the walk home the close began is taken over. A dismissal lets the companion go at that point. An offer the continuity refuses to start becomes a `refused` signal, and a body held for it walks back into its day.
+- `update(request)` runs right after the continuity's `updateFollow` and drains its control events. A follower mirrors the continuity phase until it is dismissed or gives up. A waiting leader calls out a `lead-waiting` line at most once a clock minute. Once a leader has arrived, no conversation with anybody else is open, and the player is within 4 m of it, at the destination or talking to it, one `arrival` signal asks the host to open the conversation with its `guide` and `ask`; a conversation already open with the leader takes the guide for its next turn. The companion then goes back to its day (`stopFollow`, from where it stands) when that conversation closes (`done`), when nobody talks to it for 2 minutes after the signal (`done`) or when the player is outside the destination and more than 15 m from the leader (`left`).
+- A continuity give-up ends the companion with `gave-up`: `player-lost` and `unreachable` carry a notice naming the person; the continuity has already sent the body home. When the continuity has no companion, or another person or mode, the companion ends with `lost`.
+- `restore({ timeMin, state })` runs after the continuity and the quest escort are restored, with no conversation open. It takes the saved companion back only when the restored continuity companion is the same person in the same mode. A continuity companion that is neither that nor the quest escort's person (`quests.escorts`) is let go, so no follower is left that the player cannot dismiss. A leader saved while its place talk was ready or under way is restored as arrived, so the talk comes again when the player is near. An accepted offer is not saved.
 
 ## Errors
 
 - `E_COMPANION_INPUT`: a request, a restore state or the scenes provider's output does not match its schema.
 - `E_COMPANION_OUTPUT`: an offer list, result, signal list or state does not match its schema.
 - `E_COMPANION_LINES`: a lines document lacks a key, names an unknown `{field}`, or a line is asked for without a value it names.
-- A continuity refusal when an accepted offer starts becomes a `refused` signal: `conflict` for another control, `unknown` for no way there, else `unavailable`.
+- A continuity refusal when an accepted offer starts becomes a `refused` signal: `conflict` for another control, `unknown` for no way there, else `unavailable`. A body held for that offer is released; a release that finds no way back is logged, and the schedule takes the body.
 
 ## Dependencies
 
-- [NPC continuity](../agents/CONTRACT.md): `companion`, `conversation`, `actor`, `startFollow`, `startLead` (including the companion changing mode), `stopFollow` and `drainEvents`.
+- [NPC continuity](../agents/CONTRACT.md): `companion`, `conversation`, `actor`, `startFollow`, `startLead` (including the companion changing mode), `stopFollow`, `heldNpcIds`, `releaseHold` and `drainEvents`.
 - [Simulation](../../../../simulation/CONTRACT.md) instances, routines and behavior; WalkRoutes over Connections path3.
-- Quests `VENUES` venue words from the browser runtime entry; [QuestGameplay](../quests/CONTRACT.md) for `holdsCast`, `places` and `characterName`.
+- Quests `VENUES` venue words from the browser runtime entry; [QuestGameplay](../quests/CONTRACT.md) for `holdsCast`, `escorts`, `places` and `characterName`.
 - The scenery director for staged places, through the injected `scenes` provider.
 
 ## Invariants

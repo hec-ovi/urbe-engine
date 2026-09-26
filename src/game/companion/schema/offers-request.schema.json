@@ -3,11 +3,10 @@
   "$id": "urn:urbe:engine:companion:offers-request",
   "type": "object",
   "additionalProperties": false,
-  "required": ["npcId", "timeMin", "playerPosition", "playerPlaces"],
+  "required": ["npcId", "timeMin", "playerPlaces"],
   "properties": {
     "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
     "timeMin": { "$ref": "urn:urbe:engine:companion:values#/$defs/time" },
-    "playerPosition": { "$ref": "urn:urbe:engine:companion:values#/$defs/vec3" },
     "playerPlaces": { "$ref": "urn:urbe:engine:companion:values#/$defs/playerPlaces" }
   }
 }

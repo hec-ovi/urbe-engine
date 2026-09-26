@@ -180,8 +180,10 @@ describe( 'live measured quest mechanic hosts', () => {
 
 		const reloaded = setup( [ escortDefinition( 'lead-player' ) ] );
 		reloaded.control.follow = { npcId: 'npc.witness', mode: 'leading' };
+		expect( reloaded.gameplay.escorts( 'npc.witness' ) ).toBe( false );
 		expect( reloaded.gameplay.restoreEscort( { timeMin: TIME, state } ) ).toBe( true );
 		expect( reloaded.gameplay.serializeEscort() ).toEqual( state );
+		expect( reloaded.gameplay.escorts( 'npc.witness' ) ).toBe( true );
 		reloaded.control.actor.position = [ 10, 0, -2 ];
 		reloaded.control.phase = 'arrived';
 		reloaded.gameplay.candidates( frame( P7, [ 10, 0, 0 ], [ 10, 1.3, -2 ] ) );

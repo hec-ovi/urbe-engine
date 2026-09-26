@@ -171,6 +171,13 @@ export class QuestGameplay {
 
 	}
 
+	/** Whether the escort under way walks with this person. */
+	escorts( npcId ) {
+
+		return this.escort?.target.actorIds[ 0 ] === npcId;
+
+	}
+
 	/** The same authored cast label used by the objective and dialogue prompt. */
 	characterName( npcId ) {
 

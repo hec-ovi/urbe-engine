@@ -12,11 +12,11 @@ const ARRIVAL_TALK_MIN = 5;
 const FOLLOW_FREE_MIN = 15;
 /** The player has caught up with an arrived leader within this many metres. */
 const CATCH_UP = 4;
-/** A leader nobody talks to at the place goes back to its day after this many minutes, or once the player is this far. */
+/** A leader nobody talks to at the place goes back to its day this many minutes after the arrival, or once the player is this far from it and outside the place. */
 const READY_MIN = 2;
 const LEAVE_DISTANCE = 15;
-/** Minutes between the things a waiting leader calls out. */
-const WAIT_LINE_MIN = 0.75;
+/** Minutes between the things a waiting leader calls out; the host clock counts whole minutes. */
+const WAIT_LINE_MIN = 1;
 const DAY = 1440;
 const MODE = { follow: 'following', lead: 'leading' };
 
@@ -30,10 +30,10 @@ const MODE = { follow: 'following', lead: 'leading' };
 export class CompanionGameplay {
 
 	/**
-	 * @param continuity NpcContinuity: `companion`, `conversation`, `actor`, `startFollow`, `startLead`, `stopFollow`, `drainEvents`
+	 * @param continuity NpcContinuity: `companion`, `conversation`, `actor`, `startFollow`, `startLead`, `stopFollow`, `heldNpcIds`, `releaseHold`, `drainEvents`
 	 * @param sim the simulation: `getNPC`, `behaviorAt`
 	 * @param routes WalkRoutes, places the continuity places and atlas the city plan, for CompanionPlaces
-	 * @param quests optional `{ holdsCast(npcId), places(timeMin), characterName(npcId) }`
+	 * @param quests optional `{ holdsCast(npcId), escorts(npcId), places(timeMin), characterName(npcId) }`
 	 * @param scenes optional provider of staged scenery places `[{ place, name, relation: 'scene', notes? }]`
 	 * @param crowd optional `{ memberForNpc(npcId) }`, whose fallen bodies cannot come
 	 */
@@ -160,8 +160,10 @@ export class CompanionGameplay {
 
 	/**
 	 * Takes a saved companion back when the restored continuity companion is
-	 * the same person in the same mode. A companion saved in the other mode is
-	 * let go; one whose place talk was under way arrives again.
+	 * the same person in the same mode; one whose place talk was under way
+	 * arrives again. Runs after the quest escort is restored, with no
+	 * conversation open: a continuity companion that is neither this saved
+	 * companion nor the quest escort's person is let go.
 	 */
 	restore( request ) {
 
@@ -170,8 +172,8 @@ export class CompanionGameplay {
 		this.pending = null;
 		const saved = request.state;
 		const companion = this.continuity.companion;
-		if ( ! saved || companion?.npcId !== saved.npcId ) return false;
-		if ( companion.mode !== MODE[ saved.kind ] ) {
+		if ( ! companion || this.quests?.escorts( companion.npcId ) ) return false;
+		if ( companion.npcId !== saved?.npcId || companion.mode !== MODE[ saved.kind ] ) {
 
 			this.continuity.stopFollow( { timeMin: request.timeMin } );
 			return false;
@@ -269,6 +271,7 @@ export class CompanionGameplay {
 
 		} catch ( error ) {
 
+			this.#letGo( npcId, timeMin );
 			const code = error?.code === 'E_NPC_CONFLICT' ? 'conflict' : error?.code === 'E_NPC_PATH' ? 'unknown' : 'unavailable';
 			signals.push( { kind: 'refused', npcId, code, line: this.lines.say( `refuse-${code}`, {}, `${npcId}|${Math.floor( timeMin )}` ) } );
 			return;
@@ -279,12 +282,22 @@ export class CompanionGameplay {
 
 	}
 
+	/** A body held for an accepted offer that cannot start walks back into its day. */
+	#letGo( npcId, timeMin ) {
+
+		if ( ! this.continuity.heldNpcIds.includes( npcId ) ) return;
+		// The hold is gone even when no way back is found; the schedule takes the body on the next visible update.
+		try { this.continuity.releaseHold( { npcId, timeMin } ); }
+		catch ( error ) { console.warn( `companion ${npcId} could not return to its routine: ${error?.message ?? error}` ); }
+
+	}
+
 	/**
 	 * Follows the companion: a follower until it is dismissed or gives up; a
 	 * leader calls out while it waits, arrives, and once the player has caught
-	 * up asks the host for the conversation about the place, then goes back to
-	 * its day when that conversation closes, the player walks off or nobody
-	 * talks to it.
+	 * up with no other conversation open asks the host for the conversation
+	 * about the place, then goes back to its day when that conversation
+	 * closes, the player walks off or nobody talks to it.
 	 */
 	#advance( { timeMin, playerPosition, playerPlaces }, events, signals ) {
 
@@ -316,7 +329,9 @@ export class CompanionGameplay {
 		}
 		const destination = state.destination;
 		const near = distance( playerPosition, companion.position );
-		if ( state.phase === 'arrived' && ( talking || near <= CATCH_UP || standsIn( playerPlaces, destination.place ) ) ) {
+		const atPlace = standsIn( playerPlaces, destination.place );
+		// A conversation with anybody else holds the arrival: the host could not open this one.
+		if ( state.phase === 'arrived' && ( talking || ( ! this.continuity.conversation && ( near <= CATCH_UP || atPlace ) ) ) ) {
 
 			state.phase = 'ready';
 			state.readyAtMin = timeMin;
@@ -330,7 +345,7 @@ export class CompanionGameplay {
 		if ( state.phase === 'ready' ) {
 
 			if ( talking ) state.phase = 'talking';
-			else if ( near > LEAVE_DISTANCE ) this.#end( 'left', timeMin, signals );
+			else if ( near > LEAVE_DISTANCE && ! atPlace ) this.#end( 'left', timeMin, signals );
 			else if ( timeMin - state.readyAtMin >= READY_MIN ) this.#end( 'done', timeMin, signals );
 
 		} else if ( state.phase === 'talking' && ! talking ) this.#end( 'done', timeMin, signals );
