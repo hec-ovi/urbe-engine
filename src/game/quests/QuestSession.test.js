@@ -127,7 +127,7 @@ describe( 'QuestSession', () => {
 			availability: { available: false, reason: 'outside_window' },
 			wait: { timeMin: 1920, label: 'Tue 08:00' }
 		} );
-		expect( session.view( 600 )[ 0 ].steps[ 0 ].availability.reason ).toBe( 'off_duty' );
+		expect( session.view( 600 )[ 0 ].steps[ 0 ].availability ).toEqual( { available: true } );
 		people.people.get( 'n1' ).flags.dead = true;
 		expect( session.view( 1260 )[ 0 ].steps[ 0 ].availability.reason ).toBe( 'role_dead' );
 		expect( session.view( 1260 )[ 0 ].steps[ 0 ].wait ).toBeUndefined();

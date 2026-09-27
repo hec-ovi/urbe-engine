@@ -23,11 +23,12 @@ export function stepView( { step, runtime, sim = null, timeMin = 0, done = false
 
 	const window = step.window ?? null;
 	const physical = runtime.stepAvailability( step.stepId, timeMin );
-	// A closed appointment often has nobody at its venue yet. Explain the
-	// authored opening before that temporary absence so the player can wait.
+	// An appointment the host can arrange reads as open: its person is placed
+	// at the venue when the player arrives, even if nobody stands there yet.
+	// A closed one explains its authored opening so the player can wait.
 	// This changes presentation only; interaction still requires live presence.
 	const placement = runtime.stepPlacementAvailability( step.stepId, timeMin );
-	const availability = placement.reason === 'outside_window' ? placement : physical;
+	const availability = placement.available || placement.reason === 'outside_window' ? placement : physical;
 
 	return {
 		stepId: step.stepId,
