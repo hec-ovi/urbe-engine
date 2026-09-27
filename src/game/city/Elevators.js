@@ -39,7 +39,8 @@ const CAB_EMISSIVE = 120;
  * shaft a placement belongs to is decided by where it stands, not by a
  * convention about edge numbering.
  *
- * Riding is a call and a choice: E at a landing brings the cab and opens it, Page Up and Page Down select a served floor inside; E confirms it. While the cab moves it carries
+ * E at a landing calls the cab. Page Up and Page Down select a served floor
+ * inside; E confirms it. While the cab moves it carries
  * whoever is standing in it, because the player is a character controller and
  * not something a moving collider can push.
  *
@@ -205,6 +206,9 @@ class Shaft {
 		this.car = null;
 		/** Where the cab floor is standing solid, or null while the cab travels. */
 		this.floorAt = null;
+		this.floorReady = false;
+		this.rider = null;
+		this.riderOffset = new THREE.Vector3();
 
 	}
 
@@ -248,7 +252,8 @@ class Shaft {
 
 		this.colliders?.drop( `lift:${this.id}/cab` );
 		this.floorAt = this.at;
-		this.colliders?.solid( `lift:${this.id}/cab`, [ {
+		const at = this.at;
+		const ready = this.colliders?.solid( `lift:${this.id}/cab`, [ {
 			center: [ this.centre.x, this.at - CAB_FLOOR / 2, this.centre.z ],
 			halfExtents: [
 				Math.max( 0.1, this.rect.w / 2 - CAB_CLEARANCE ),
@@ -257,12 +262,19 @@ class Shaft {
 			],
 			rotationY: 0
 		} ] );
+		this.floorReady = ! ready?.then;
+		if ( ready?.then ) ready.then( result => {
+
+			if ( this.floorAt === at ) this.floorReady = result !== false;
+
+		} ).catch( error => console.warn( `lift ${this.id} floor: ${error.message}` ) );
 
 	}
 
 	/** Nothing of this shaft stays solid once its building is let go. */
 	clear() {
 
+		this.#releaseRider();
 		this.colliders?.drop( `lift:${this.id}/cab` );
 		this.floorAt = null;
 		for ( const stop of this.stops ) stop.release();
@@ -382,13 +394,14 @@ class Shaft {
 		// The doors are shut whenever the cab is not standing at that landing.
 		for ( const stop of this.stops ) {
 
-			stop.setOpen( this.called && this.ready && ! this.moving && Math.abs( stop.elevation - this.at ) < 0.05, delta );
+			stop.setOpen( this.called && this.ready && this.floorReady && ! this.moving && Math.abs( stop.elevation - this.at ) < 0.05, delta );
 
 		}
 
 		if ( ! this.moving ) {
 
 			this.#standFloor();
+			if ( this.ready && this.floorReady ) this.#releaseRider();
 			if ( this.ready && ! this.holds( body.feet ) ) this.stream?.releaseFloor( this.parcelId );
 			return;
 
@@ -396,25 +409,47 @@ class Shaft {
 
 		if ( this.stops.some( stop => stop.open > 0 ) ) return;
 
+		if ( ! this.rider && ! body.carried && this.holds( body.feet ) ) {
+
+			this.rider = body;
+			this.riderOffset.copy( body.feet ).sub( this.cab.position );
+			body.beginCarry?.( body.feet );
+
+		}
 		// Travelling: the rider is carried, so the cab floor is not standing in
 		// the shaft while it passes the floors between.
 		if ( this.floorAt !== null ) {
 
 			this.colliders?.drop( `lift:${this.id}/cab` );
 			this.floorAt = null;
+			this.floorReady = false;
 
 		}
 
 		const step = Math.sign( this.target - this.at ) * this.speed * delta;
 		const dy = Math.abs( step ) >= Math.abs( this.target - this.at ) ? this.target - this.at : step;
-		const riding = this.holds( body.feet );
 
 		this.at += dy;
 		this.cab.position.y = this.at;
 
-		// A character controller is not pushed by a moving collider, so the
-		// floor moving under the player has to be applied to the player.
-		if ( riding ) body.teleport( _lift.copy( body.feet ).setY( body.feet.y + dy ) );
+		// Carry at a fixed cab offset so gravity cannot accumulate between frames.
+		if ( this.rider ) {
+
+			_lift.copy( this.cab.position ).add( this.riderOffset );
+			if ( this.rider.carryTo ) this.rider.carryTo( _lift );
+			else this.rider.teleport( _lift );
+
+		}
+
+	}
+
+	#releaseRider() {
+
+		if ( ! this.rider ) return;
+		_lift.copy( this.cab.position ).add( this.riderOffset );
+		if ( this.rider.endCarry ) this.rider.endCarry( _lift );
+		else this.rider.teleport( _lift );
+		this.rider = null;
 
 	}
 

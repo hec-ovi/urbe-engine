@@ -19,14 +19,20 @@ export function vehiclePresence( meshes, capacity ) {
 	attribute.setUsage( THREE.DynamicDrawUsage );
 	for ( const mesh of meshes.filter( Boolean ) ) {
 
-		const source = mesh.material;
-		const material = source.isNodeMaterial ? source.clone() : Object.assign(
-			source.isMeshBasicMaterial ? new THREE.MeshBasicNodeMaterial() : new THREE.MeshStandardNodeMaterial(), source
-		);
-		mesh.material = presenceMaterial( material, instancedBufferAttribute( attribute, 'float' ) );
+		mesh.material = coveredMaterial( mesh.material, instancedBufferAttribute( attribute, 'float' ) );
 
 	}
 	return attribute;
+
+}
+
+/** Preserve every authored surface while giving it the shared coverage. */
+export function coveredMaterial( source, node ) {
+
+	const material = source.isNodeMaterial ? source.clone() : Object.assign(
+		source.isMeshBasicMaterial ? new THREE.MeshBasicNodeMaterial() : new THREE.MeshStandardNodeMaterial(), source
+	);
+	return presenceMaterial( material, node );
 
 }
 

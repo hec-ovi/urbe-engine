@@ -43,8 +43,8 @@ const ADAPT = 0.6;
  * it lifts the darks by the right amount at any exposure.
  *
  * Height fog pools in the street and thins over the roofs. Enclosed rooms have
- * clear air by default: crossing a doorway fades the street medium away rather
- * than covering the room in its fixtures' colour. An explicit indoorDensity
+ * clear air by default: crossing a doorway clears fragments inside that room
+ * while outdoor fragments retain the street medium. An explicit indoorDensity
  * can add a uniform medium where one is wanted. The transition uses uniforms,
  * so crossing the threshold never rebuilds a shader.
  */
@@ -88,7 +88,7 @@ export class NightFog {
 
 	/**
 	 * @param air { color, lux } the light filling the air where the player is
-	 * @param indoor whether that air is a room's rather than the street's
+	 * @param room the occupied room with world bounds and elevation, or null
 	 */
 	update( air, room, delta = 0 ) {
 

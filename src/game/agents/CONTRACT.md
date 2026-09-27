@@ -90,7 +90,7 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 
 Street samples stay deterministic. A visible unmatched pedestrian searches up to 40 m upstream on the walk graph for a hidden entry, otherwise waits for a later refresh. Rendered population may temporarily trail the sample or retain retiring bodies, always within capacity. Cars enter at least 25 m away and rotate lane admission. Removal requires concealment beyond the normal radius plus margin; bodies still visible at the hard bounds fade. Retiring walkers use the same hysteresis as other walkers. Fallen dead people remain down until hidden. Occupants require a solid floor and a valid room anchor or bounded lobby position.
 
-Presence rises over 0.8 s and falls over 0.6 s. Crowd pose packs frame, clip and presence into three components in the existing vertex buffer. Vehicle parts share one presence attribute. Opaque ordered dither masks cover colour, depth and shadows on WebGPU and WebGL2. Capacity eviction prefers hidden anonymous bodies and defers while a visible victim fades. Named actors receive fractional clock minutes; visible schedule corrections converge at walking speed.
+Presence rises over 0.8 s and falls over 0.6 s. Crowd pose packs frame, clip and presence into three components in the existing vertex buffer. Vehicle parts share one presence attribute. Focused rigs share render-group coverage across body, hair and eyes. Opaque ordered dither masks cover colour, depth and shadows on WebGPU and WebGL2. Capacity eviction prefers hidden anonymous bodies and defers while a visible victim fades. Named actors receive fractional clock minutes; visible schedule corrections converge at walking speed.
 
 ## Invariants
 

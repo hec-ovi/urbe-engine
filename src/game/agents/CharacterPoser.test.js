@@ -67,3 +67,20 @@ function quarterTurns( root ) {
 	return 2 * Math.acos( Math.min( 1, Math.abs( bone.quaternion.w ) ) ) / ( Math.PI / 2 );
 
 }
+
+it( 'fades the focused eyes with the body and hair through one render-group coverage', async () => {
+	const poser = new CharacterPoser( { animation: animation(), loadModel: () => {
+		const scene = rig( 'body' );
+		const eyes = new THREE.Mesh( new THREE.SphereGeometry( 0.1 ), new THREE.MeshStandardMaterial( { color: 0xffffff } ) );
+		eyes.name = 'eyes';
+		scene.add( eyes );
+		return { scene, hairs: [ { scene: rig( 'hair' ) } ] };
+	} } );
+	const person = await poser.still( { gender: 'female', appearanceSeed: 123 }, 'Death01', 0 );
+	person.userData.dressed.presence.value = 0;
+	const eyes = person.getObjectByName( 'eyes' );
+	expect( eyes.material.maskNode ).toBeTruthy();
+	expect( eyes.material.maskShadowNode ).toBe( eyes.material.maskNode );
+	expect( person.userData.dressed.others.size ).toBe( 1 );
+	expect( person.userData.dressed.presence.groupNode.name ).toBe( 'render' );
+} );

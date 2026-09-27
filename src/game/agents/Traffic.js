@@ -33,8 +33,8 @@ const PERSON_CLEARANCE = 0.5;
  * never jumped. Cars keep a following gap on the line they share, and spawn
  * into a gap wide enough for one, so two never stand in the same place.
  *
- * A car leaves past the spawning radius plus 30 metres, or when its lane
- * has no turn connection, the edge of the road network.
+ * A car leaves unseen past the spawning radius plus 30 metres. Visible network
+ * ends and the hard distance bound retire it through a short coverage fade.
  */
 export class Traffic {
 

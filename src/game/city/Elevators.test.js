@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
+import { Physics } from '../physics/Physics.js';
+import { PlayerBody } from '../physics/PlayerBody.js';
 import { Elevators } from './Elevators.js';
 
 /** Two floors of one shaft, as the interior box publishes them. */
@@ -138,7 +140,7 @@ it( 'selects any served floor without wrapping, waits for closed doors and a loa
 	shaft.press( { inside: true } );
 	const body = playerAt( 11.25, 0.05, 21.25 );
 	for ( let i = 0; i < 240; i ++ ) elevators.update( 0.1, body );
-	expect( shaft.at ).toBe( 103.5 );
+	expect( shaft.at ).toBeCloseTo( 103.5, 6 );
 	expect( body.feet.y ).toBeCloseTo( 103.55 );
 	expect( shaft.stops[ 23 ].wanted ).toBe( 0 );
 	ready = true;
@@ -152,4 +154,34 @@ it( 'selects any served floor without wrapping, waits for closed doors and a loa
 	expect( shaft.floorAt ).toBe( at );
 	for ( let i = 0; i < 40; i ++ ) elevators.update( 0.1, body );
 	expect( shaft.at ).toBe( 99 );
+} );
+
+it( 'carries a real physics capsule up a tower without accumulating gravity, then restores landing collision', async () => {
+	const physics = await Physics.create();
+	const solids = new Map();
+	const colliders = {
+		solid: ( id, boxes ) => { solids.set( id, physics.addBoxes( boxes ) ); },
+		drop: id => { const solid = solids.get( id ); if ( solid ) physics.world.removeRigidBody( solid.body ); solids.delete( id ); }
+	};
+	const elevators = new Elevators( factory, colliders );
+	const tower = Array.from( { length: 24 }, ( _, floor ) => ( { floor, elevation: floor * 4.5, height: 4.5, core: { elevators: [ LIFT() ] } } ) );
+	const [ shaft ] = elevators.add( 'p1', tower, new THREE.Group() );
+	const body = new PlayerBody( physics, new THREE.Vector3( 11.25, 0.05, 21.25 ) );
+	shaft.select( 100 ); shaft.press( { inside: true } );
+	let offset;
+	for ( let frame = 0; frame < 650; frame ++ ) {
+		physics.step( 1 / 30 );
+		body.move( new THREE.Vector3(), 1 / 30 );
+		elevators.update( 1 / 30, body );
+		if ( shaft.moving ) {
+			offset ??= body.feet.y - shaft.at;
+			expect( body.carried ).toBe( true );
+			expect( body.feet.y - shaft.at ).toBeCloseTo( offset, 5 );
+		}
+	}
+	expect( shaft.at ).toBeCloseTo( 103.5, 6 );
+	expect( body.feet.y ).toBeGreaterThan( 103.4 );
+	expect( body.carried ).toBe( false );
+	expect( body.collider.isEnabled() ).toBe( true );
+	physics.world.free();
 } );

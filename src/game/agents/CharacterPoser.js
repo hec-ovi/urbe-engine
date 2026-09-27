@@ -1,12 +1,12 @@
 import * as THREE from 'three/webgpu';
 import { ImageBitmapLoader, MeshStandardNodeMaterial } from 'three/webgpu';
-import { uniform, vec2 } from 'three/tsl';
+import { uniform, vec2, renderGroup } from 'three/tsl';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { CHARACTER_ROOT, assertRigCompatibility, avatarFor, bodyFor } from './CharacterCatalog.js';
 import { look } from './Appearance.js';
 import { dressedColorNode } from './BodyMesh.js';
-import { presenceMaterial } from './Presence.js';
+import { presenceMaterial, coveredMaterial } from './Presence.js';
 import { dressSurface } from './Fabric.js';
 import { CROWD_SURFACE } from './CrowdMesh.js';
 import { hairColorNode } from './HairMesh.js';
@@ -250,6 +250,17 @@ function dress( root, model, personLook ) {
 	root.traverse( ( node ) => {
 
 		if ( node.userData.hair && node.material?.map ) node.material = tinted( dressed, node.material );
+		else if ( node.isMesh && node !== body ) {
+
+			const cover = source => {
+
+				if ( ! dressed.others.has( source ) ) dressed.others.set( source, coveredMaterial( source, dressed.presence ) );
+				return dressed.others.get( source );
+
+			};
+			node.material = Array.isArray( node.material ) ? node.material.map( cover ) : cover( node.material );
+
+		}
 
 	} );
 	wear( dressed, personLook );
@@ -276,13 +287,13 @@ function sew( model, geometry, source ) {
 		skin: uniform( new THREE.Color() ), shirt: uniform( new THREE.Color() ), trousers: uniform( new THREE.Color() ),
 		hair: uniform( new THREE.Color() ), sleeve: uniform( 0 ), hem: uniform( 0 )
 	};
-	const presence = uniform( 1 );
+	const presence = uniform( 1 ).setGroup( renderGroup );
 	const material = presenceMaterial( new MeshStandardNodeMaterial( CROWD_SURFACE ), presence );
 	material.colorNode = dressedColorNode( geometry, source.map, {
 		skin: uniforms.skin, shirt: uniforms.shirt, trousers: uniforms.trousers, cut: vec2( uniforms.sleeve, uniforms.hem )
 	} );
 	dressSurface( material, vec2( uniforms.sleeve, uniforms.hem ) );
-	const dressed = { material, presence, look: uniforms, hairs: new Map(), worn: false };
+	const dressed = { material, presence, look: uniforms, hairs: new Map(), others: new Map(), worn: false };
 	model.wardrobe.push( dressed );
 
 	return dressed;
