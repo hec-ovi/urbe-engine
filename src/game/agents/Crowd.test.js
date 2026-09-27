@@ -107,6 +107,23 @@ describe( 'Crowd walking surface', () => {
 
 	} );
 
+	it( 'reads the cover under a walker\'s feet: a crossing leaves the kerb at the pavement top and crosses on the carriageway', () => {
+
+		// Where no cover lay, a crossing would run clear of its grade (0.02) from end to end.
+		const routes = new WalkRoutes( { walk: {
+			nodes: [ { id: 'kerb', x: 0, y: 0, z: - 1, kind: 'crossing' }, { id: 'far', x: 0, y: 0, z: 9, kind: 'crossing' } ],
+			edges: [ { id: 'x', from: 'kerb', to: 'far', kind: 'crossing', path: [ [ 0, - 1 ], [ 0, 9 ] ], path3: [ [ 0, 0, - 1 ], [ 0, 0, 9 ] ] } ]
+		} } );
+		const agents = [ [ 'leaving', 0.05 ], [ 'crossing', 0.6 ] ].map( ( [ crowdId, progress ] ) => ( {
+			crowdId, type: 'commuter', activity: 'commuting', place: { kind: 'edge', id: 'x' }, progress, direction: 1
+		} ) );
+		const crowd = crowdOn( { routes, sim: { crowd: () => ( { agents } ) } } );
+		crowd.update( 0, new THREE.Vector3(), { timeMin: 600, daySeconds: 36000 } );
+		const y = Object.fromEntries( [ ...crowd.members.values() ].map( ( walker ) => [ walker.crowdId, walker.position.y ] ) );
+		expect( y ).toEqual( { leaving: 0.2, crossing: 0 } );
+
+	} );
+
 	it( 'stands somebody continuity walks at grade on the pavement, and a talk leaves them there', () => {
 
 		const crowd = crowdOn();
