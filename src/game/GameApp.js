@@ -78,6 +78,7 @@ import { CarModels } from './agents/CarModels.js';
 import { Traffic } from './agents/Traffic.js';
 import { SimBridge } from './sim/SimBridge.js';
 import { Rain } from './look/Rain.js';
+import { recoverDeviceLoss } from './look/DeviceLoss.js';
 import { SpawnVisibility } from './agents/SpawnVisibility.js';
 import { interiorOccupancy } from './city/InteriorOccupancy.js';
 import { storyStartMinute } from './time/StoryStart.js';
@@ -299,6 +300,10 @@ export class GameApp {
 
 		progress.step( 'starting the renderer' );
 		this.renderer = await rendering;
+		recoverDeviceLoss( this.renderer, {
+			save: () => this.persistence && this.body && this.controller && this.quests ? this.#saveCurrent() : null,
+			notify: () => this.view.toast.show( { title: 'Graphics reset', text: 'The GPU was reset. Saving the game and reloading.' } )
+		} );
 		// After init, because that is when the WebGPU-to-WebGL2 fallback has
 		// already happened and the tier is a choice about cost, not backend.
 		const backend = RendererFactory.actualBackend( this.renderer );
