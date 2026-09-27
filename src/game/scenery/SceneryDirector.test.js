@@ -59,7 +59,8 @@ describe( 'scenery lifecycle', () => {
 		expect( renderer.realize ).toHaveBeenCalledExactlyOnceWith( staged.assembly );
 		const notes = [ 'It looks like a crime scene.', 'A body lies on the ground.', 'There is a pool of blood on the ground.', 'A data drive lies there.' ];
 		expect( director.stagedPlaces() ).toEqual( [ {
-			sceneId: 'courier-found', questId: 'quest-missing-courier', purpose: 'crime-scene', place: staged.resolved.place, notes
+			sceneId: 'courier-found', questId: 'quest-missing-courier', purpose: 'crime-scene', place: staged.resolved.place, stagedAtMin: 12,
+			frame: { kind: 'interior', origin: staged.assembly.frame.origin }, notes
 		} ] );
 		// What was taken out of the scene is gone from its notes.
 		renderer.taken.mockReturnValue( new Set( [ 'drive' ] ) );

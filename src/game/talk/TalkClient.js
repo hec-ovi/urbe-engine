@@ -7,9 +7,9 @@ const LINE_CHARS = 4000;
  * The browser side of a conversation: the player's line, the person they are
  * facing, what that person is doing and the lines already said to them go to
  * the dev server's /api/talk/stream, and the NPC's words come back as they
- * are spoken. The world's dialogue memory is read for a save and replaced
- * from one through /api/talk/memory. A failure throws an Error whose
- * `status` is the HTTP status the server gave.
+ * are spoken. The world's dialogue memory is read for a save or for one
+ * person, and a save's is handed back, through /api/talk/memory. A failure
+ * throws an Error whose `status` is the HTTP status the server gave.
  */
 export class TalkClient {
 
@@ -63,12 +63,13 @@ export class TalkClient {
 	 * @param quests the questlines as they stand, QuestSession.snapshot()
 	 * @param options.guide the place this person has led the player to, { placeId, kind, name?, notes? }
 	 * @param options.offers what this person may propose, { follow?, places?: [{ placeId, name }] }
+	 * @param options.events what happened around this person, RecentEvents.around
 	 */
-	async *stream( conversation, line, timeMin, quests = [], { signal, guide, offers } = {} ) {
+	async *stream( conversation, line, timeMin, quests = [], { signal, guide, offers, events } = {} ) {
 
 		await this.#handOver();
 		const prior = this.#prior.npcId === conversation.instance.npcId ? this.#prior.lines : [];
-		const response = await this.#post( { conversation, line, timeMin, quests, guide, offers, prior }, signal );
+		const response = await this.#post( { conversation, line, timeMin, quests, guide, offers, events, prior }, signal );
 		const reader = response.body.getReader();
 		const decoder = new TextDecoder();
 		let buffer = '';
@@ -103,20 +104,34 @@ export class TalkClient {
 	}
 
 	/** What people in this world remember of talking with the player, for the save: `[{ npcId, memory }]`. */
-	async memory() {
+	memory() {
+
+		return this.#read();
+
+	}
+
+	/** The turns `npcId` remembers of talking with the player, oldest first: `[{ speaker, text, atMin }]`. */
+	async remembered( npcId ) {
+
+		return ( await this.#read( npcId ) )[ 0 ]?.memory.turns ?? [];
+
+	}
+
+	async #read( npcId = null ) {
 
 		await this.#handOver();
-		const response = await fetch( `/api/talk/memory?out=${encodeURIComponent( this.out )}` );
+		const person = npcId ? `&npcId=${encodeURIComponent( npcId )}` : '';
+		const response = await fetch( `/api/talk/memory?out=${encodeURIComponent( this.out )}${person}` );
 		if ( ! response.ok ) throw await failure( response );
 		return ( await response.json() ).memory;
 
 	}
 
 	/**
-	 * Makes a save's `memory` all that people in this world remember. Until
-	 * the server has taken it, `stream` and `memory` hand it over first and
-	 * throw when they cannot, so the server never remembers an exchange
-	 * without it and a late hand-over never replaces one.
+	 * Hands a save's `memory` to the server, where each person keeps the
+	 * newer of what the game and the save remember. Until the server has
+	 * taken it, `stream`, `memory` and `remembered` hand it over first and
+	 * throw when they cannot, so no exchange and no save goes without it.
 	 */
 	restoreMemory( memory ) {
 
@@ -143,7 +158,7 @@ export class TalkClient {
 
 	}
 
-	async #post( { conversation, line, timeMin, quests, guide, offers, prior }, signal ) {
+	async #post( { conversation, line, timeMin, quests, guide, offers, events, prior }, signal ) {
 
 		const response = await fetch( '/api/talk/stream', {
 			method: 'POST',
@@ -151,7 +166,7 @@ export class TalkClient {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify( {
 				out: this.out, npc: conversation.instance, behavior: conversation.behavior, line, timeMin, quests,
-				...( guide ? { guide } : {} ), ...( offers ? { offers } : {} ), ...( prior.length ? { prior } : {} )
+				...( guide ? { guide } : {} ), ...( offers ? { offers } : {} ), ...( events?.length ? { events } : {} ), ...( prior.length ? { prior } : {} )
 			} )
 		} );
 		if ( response.ok ) return response;

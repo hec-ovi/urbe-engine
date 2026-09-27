@@ -56,6 +56,7 @@
 .chat-line[data-tag]::before { content: attr(data-tag); position: absolute; top: 12px; right: 14px; color: var(--ui-mute); font: 9px var(--ui-mono); letter-spacing: .1em; text-transform: uppercase; }
 .chat-line[data-tag] .chat-line-from { padding-right: 76px; }
 .chat-line.is-npc[data-tag=story] { border-left: 2px solid var(--ui-accent-dim); }
+.chat-line.is-earlier { opacity: .6; }
 .chat-line.is-scene { max-width: 100%; padding: 0 0 0 12px; background: none; border: 0; border-left: 2px solid var(--ui-line); color: #b3c3cf; font-size: 13px; font-style: italic; }
 .chat-line-from { margin-bottom: 5px; font: 10px var(--ui-mono); letter-spacing: .1em; text-transform: uppercase; color: #90a9bb; }
 .chat-line-text { white-space: pre-line; }

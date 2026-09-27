@@ -107,7 +107,7 @@ describe( 'NPC dialogue HTTP boundary', () => {
 
 	} );
 
-	it( 'reads and replaces one world\'s dialogue memory, checked both ways', async () => {
+	it( 'reads one world\'s dialogue memory or one person\'s and hands it a save\'s, checked both ways', async () => {
 
 		const memory = [ { npcId: 'npc.mara', memory: { digest: [ 'The player asked about the quay.' ], turns: [
 			{ speaker: 'player', text: 'Where is the witness?', atMin: 600 }, { speaker: 'npc', text: 'Upstairs.', atMin: 600 }
@@ -119,11 +119,14 @@ describe( 'NPC dialogue HTTP boundary', () => {
 		const read = await fetch( `${origin}/api/talk/memory?out=${encodeURIComponent( out )}` );
 		expect( read.status ).toBe( 200 );
 		expect( await read.json() ).toEqual( { out, memory } );
-		expect( service.memory ).toHaveBeenCalledExactlyOnceWith( out );
+		expect( service.memory ).toHaveBeenCalledExactlyOnceWith( out, null );
+		const person = await fetch( `${origin}/api/talk/memory?out=${encodeURIComponent( out )}&npcId=npc.mara` );
+		expect( await person.json() ).toEqual( { out, memory } );
+		expect( service.memory ).toHaveBeenLastCalledWith( out, 'npc.mara' );
 
 		const put = ( body ) => fetch( `${origin}/api/talk/memory`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body } );
-		const replaced = await put( JSON.stringify( { out, memory } ) );
-		expect( replaced.status ).toBe( 204 );
+		const handed = await put( JSON.stringify( { out, memory } ) );
+		expect( handed.status ).toBe( 204 );
 		expect( service.restoreMemory ).toHaveBeenCalledExactlyOnceWith( out, memory );
 
 		// A save may hold more than the server keeps: it takes the whole and keeps its bounded part.
@@ -143,7 +146,7 @@ describe( 'NPC dialogue HTTP boundary', () => {
 		expect( await oversized.json() ).toEqual( { error: 'talk memory request is over 33554432 bytes' } );
 		for ( const query of [ '', '?out=%2Fetc' ] ) expect( ( await fetch( `${origin}/api/talk/memory${query}` ) ).status ).toBe( 400 );
 		expect( service.restoreMemory ).toHaveBeenCalledTimes( 2 );
-		expect( service.memory ).toHaveBeenCalledOnce();
+		expect( service.memory ).toHaveBeenCalledTimes( 2 );
 
 		const beyond = await serve( { memory: vi.fn( async () => long ) } );
 		const unkept = await fetch( `${beyond}/api/talk/memory?out=${encodeURIComponent( out )}` );

@@ -4,6 +4,7 @@ import { MaterialResolver } from '../building/MaterialResolver.js';
 import { TextureSource } from '../building/TextureSource.js';
 import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
+import { RecentEvents } from './talk/RecentEvents.js';
 import { NpcVoice } from './voice/NpcVoice.js';
 import { stripCues } from '../../../quests/dist/runtime.js';
 import { findPath } from '../../../interior/dist/nav.js';
@@ -278,12 +279,13 @@ export class GameApp {
 			atlas, routes: transitRoutes, ...( game?.transitJourney ? { state: game.transitJourney } : {} )
 		} );
 		this.persistence = game ? new GamePersistence( { game, gameId: config.gameId } ) : null;
-		// What people remember of talking with the player is the save's: the
-		// dialogue server takes it back beside the load, or before the first
-		// talk or save that finds it has not.
+		// The dialogue server keeps what people remember in the game as each
+		// talk completes; the save's memory joins it beside the load, or before
+		// the first talk or save that finds it has not.
 		const remembering = game && this.talk.restoreMemory( game.dialogueMemory ?? [] )
 			.catch( ( error ) => console.warn( 'dialogue memory not restored yet:', error.message ) );
 		const stationAccess = new StationAccess( atlas );
+		this.recentEvents = new RecentEvents( atlas.parcels );
 		this.locator = new Locator( atlas, transitRoutes, stationAccess.entrances, {
 			buildingFootprints: occupiedBuildingFootprints( shellCatalog, buildings )
 		} );
@@ -835,6 +837,7 @@ export class GameApp {
 
 		}
 		if ( ! conversation.instance ) this.view.dialog.setFreeChat( false, PASSER_BY.note );
+		else this.#recallTalk( conversation );
 		const topics = this.quests.dialoguesFor( conversation.npcId, this.clock.timeMin );
 		const preferred = topics.find( topic => topic.questlineId === this.followedQuestId ) ?? topics[ 0 ];
 		const arrival = this.arriving?.npcId === conversation.npcId ? this.arriving : null;
@@ -1134,11 +1137,20 @@ export class GameApp {
 		if ( done && offer ) this.#takeOffer( conversation, offer, whole );
 	}
 
-	/** What the talk request adds for this person: the place they have led the player to and, when `proposing`, the companion offers they may make. */
+	/**
+	 * What the talk request adds for this person: the place they have led the
+	 * player to, what happened around them and, when `proposing`, the
+	 * companion offers they may make.
+	 */
 	#talkContext( { npcId }, proposing ) {
 		const offers = proposing ? this.companion.talkOffers( this.#offers( npcId ) ) : null;
 		const guide = this.companion.guide( npcId );
-		return { ...( offers ? { offers } : {} ), ...( guide ? { guide } : {} ) };
+		// Known once the world has loaded.
+		const events = this.recentEvents?.around( {
+			position: this.body.feet, timeMin: this.clock.timeMin, npcId, down: ( id ) => Boolean( this.crowd.member( id )?.fallen ),
+			scenes: this.scenery.stagedPlaces(), parcelId: this.standing?.parcelId ?? null, guided: guide?.kind === 'parcel' ? guide.placeId : null
+		} ) ?? [];
+		return { ...( offers ? { offers } : {} ), ...( guide ? { guide } : {} ), ...( events.length ? { events } : {} ) };
 	}
 
 	/**
@@ -1232,6 +1244,15 @@ export class GameApp {
 		const append = ( piece ) => message.update( stripCues( spoken += piece ) );
 		append( text );
 		return { append, hear: ( sentence ) => heard( message.line, sentence ), finish: message.finish, discard: message.discard };
+	}
+
+	/** What this person remembers saying with the player shows above the conversation's lines, set apart as earlier. */
+	#recallTalk( conversation ) {
+		const name = speakerOf( conversation ).name;
+		this.talk.remembered( conversation.npcId ).then( ( turns ) => {
+			if ( this.conversationShown !== conversation || ! turns.length ) return;
+			this.view.dialog.recall( turns.map( ( { speaker, text } ) => ( { from: speaker, ...( speaker === 'npc' ? { name } : {} ), text } ) ) );
+		}, ( error ) => console.warn( 'dialogue memory not shown:', error.message ) );
 	}
 
 	/** What the player may ask of this person now, available or not: the companion's offers. */
@@ -1606,6 +1627,7 @@ export class GameApp {
 
 				if ( accepted ) {
 
+					this.recentEvents.struck( { personId: impact.personId, npcId: person.npcId, point: impact.point, hard: impact.fatal, atMin: this.clock.timeMin } );
 					const result = this.questGameplay.fatalImpact( impact, person.npcId, this.clock.timeMin );
 					if ( result ) this.questActionResult( result );
 					return;

@@ -273,6 +273,20 @@ export class ChatPanel {
 		return true;
 	}
 
+	/**
+	 * Puts what was said with this person before, `[{ from, name?, text }]`
+	 * oldest first, above the conversation's lines, each set apart as earlier.
+	 */
+	recall( messages ) {
+		this.transcript.prepend( ...messages.map( ( { from, name, text } ) => {
+			const line = lineOf( from, name, 'earlier' );
+			line.classList.add( 'is-earlier' );
+			line.lastElementChild.textContent = text;
+			return line;
+		} ) );
+		this.#latest();
+	}
+
 	setTranscript( messages ) {
 		this.streaming.clear();
 		this.#stream( null, false );
@@ -325,11 +339,7 @@ export class ChatPanel {
 	}
 
 	#line( from, name, kind ) {
-		const line = el( 'div', { className: 'chat-line is-' + from },
-			el( 'div', { className: 'chat-line-from', textContent: name ?? layout.from[ from ] ?? '' } ),
-			el( 'div', { className: 'chat-line-text' } )
-		);
-		if ( layout.tags[ kind ] ) line.dataset.tag = layout.tags[ kind ];
+		const line = lineOf( from, name, kind );
 		// A turn starts with the player's line, a scene or the first line; the person's lines carry it on.
 		if ( from !== 'npc' || ! this.transcript.children.length ) this.turn = line;
 		this.transcript.append( line );
@@ -404,4 +414,14 @@ export class ChatPanel {
 	#section( labels, ...content ) {
 		return el( 'div', { className: 'chat-section' }, this.#head( 'div', labels ), ...content );
 	}
+}
+
+/** A transcript line from `from`, named `name` or by who it is from, tagged by `kind`. */
+function lineOf( from, name, kind ) {
+	const line = el( 'div', { className: 'chat-line is-' + from },
+		el( 'div', { className: 'chat-line-from', textContent: name ?? layout.from[ from ] ?? '' } ),
+		el( 'div', { className: 'chat-line-text' } )
+	);
+	if ( layout.tags[ kind ] ) line.dataset.tag = layout.tags[ kind ];
+	return line;
 }

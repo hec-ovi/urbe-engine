@@ -142,15 +142,17 @@ export class SceneryDirector {
 
 	/**
 	 * Where the scenes standing now are, for a companion to lead the player
-	 * to, and what each shows there: `notes`, plain sentences for its purpose
-	 * and each element not taken out of it.
+	 * to and a conversation near one to speak of, since when and what each
+	 * shows there: `notes`, plain sentences for its purpose and each element
+	 * not taken out of it. `frame` is its kind and origin.
 	 */
 	stagedPlaces() {
 
 		return [ ...this.scenes.values() ]
 			.filter( ( scene ) => scene.status === 'staged' && ! scene.failed )
-			.map( ( { spec, resolved, compiled } ) => ( {
-				sceneId: spec.sceneId, questId: spec.questId, purpose: spec.purpose, place: { ...resolved.place },
+			.map( ( { spec, resolved, compiled, stagedAtMin } ) => ( {
+				sceneId: spec.sceneId, questId: spec.questId, purpose: spec.purpose, place: { ...resolved.place }, stagedAtMin,
+				frame: { kind: compiled.assembly.frame.kind, origin: { ...compiled.assembly.frame.origin } },
 				notes: this.notes.of( spec, compiled.assembly, this.renderer.taken( spec.sceneId ) )
 			} ) );
 

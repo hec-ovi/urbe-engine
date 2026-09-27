@@ -13,8 +13,8 @@ const MEMORY_BYTES = 32 * 1024 * 1024;
  * Vite plugin for NPC dialogue. POST /api/talk/stream answers with one JSON
  * event per line as the reply is spoken, after checking the browser's
  * dialogue snapshot; the model server comes from the LLM_* environment
- * (OpenAIPort.fromEnv). GET and PUT /api/talk/memory read and replace what
- * people remember in one world, for the game save.
+ * (OpenAIPort.fromEnv). GET /api/talk/memory reads what people remember in
+ * one world, or one person, and PUT hands it the save's at load.
  */
 export function talkRoute( outRoot, providedService = null ) {
 
@@ -38,13 +38,14 @@ export function talkRoute( outRoot, providedService = null ) {
 		}
 	};
 
-	/** 200 with the world's memory, as `{ out, memory }`. */
+	/** 200 with the world's memory, or one person's, as `{ out, memory }`. */
 	async function memory( req, res ) {
 
+		const query = new URL( req.url, 'http://talk' ).searchParams;
 		let out;
 		try {
 
-			out = boundary.out( new URL( req.url, 'http://talk' ).searchParams.get( 'out' ) );
+			out = boundary.out( query.get( 'out' ) );
 
 		} catch ( error ) {
 
@@ -53,7 +54,7 @@ export function talkRoute( outRoot, providedService = null ) {
 		}
 		try {
 
-			sendJson( res, 200, boundary.kept( { out, memory: await talk().memory( out ) } ) );
+			sendJson( res, 200, boundary.kept( { out, memory: await talk().memory( out, query.get( 'npcId' ) || null ) } ) );
 
 		} catch ( error ) {
 
@@ -63,7 +64,7 @@ export function talkRoute( outRoot, providedService = null ) {
 
 	}
 
-	/** 204 once the world's memory is the one sent. */
+	/** 204 once the world has joined the memory sent to its own. */
 	async function restoreMemory( req, res ) {
 
 		const request = await admit( req, res, 'talk memory', MEMORY_BYTES, ( value ) => boundary.memory( value ) );

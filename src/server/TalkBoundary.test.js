@@ -67,7 +67,7 @@ describe( 'talk request contract', () => {
 
 	} );
 
-	it( 'closes the npc, offers, guide and prior shapes', () => {
+	it( 'closes the npc, offers, guide, events and prior shapes', () => {
 
 		const sim = createSimulation( { seed: 'talk-drift', blueprint: FIXTURE_BLUEPRINT, interiors: FIXTURE_INTERIORS } );
 		const npc = sim.getNPCVendor( { parcelId: 'p_cafe', timeMin: 540 } );
@@ -75,9 +75,15 @@ describe( 'talk request contract', () => {
 		expect( boundary.input( { ...request,
 			offers: { follow: true, places: [ { placeId: 'p_rest', name: 'The Rusty Anchor' } ] },
 			guide: { placeId: 'p_rest', kind: 'parcel', name: 'The Rusty Anchor', notes: [ 'A police line crosses the door.' ] },
-			prior: [ { speaker: 'npc', text: '[sigh] The file closes at nothing.', atMin: 530 }, { speaker: 'player', text: 'x'.repeat( 4000 ), atMin: 531 } ]
+			prior: [ { speaker: 'npc', text: '[sigh] The file closes at nothing.', atMin: 530 }, { speaker: 'player', text: 'x'.repeat( 4000 ), atMin: 531 } ],
+			events: [
+				{ kind: 'struck', atMin: 535, parcelId: 'p_rest', metres: 12, hard: true, down: true },
+				{ kind: 'struck', atMin: 536, parcelId: 'p_rest', metres: 0, self: true },
+				{ kind: 'scene', atMin: 500, parcelId: 'p_cafe', metres: 40, notes: [ 'A body lies on the ground.' ] }
+			]
 		} ) ).toBeTruthy();
 		const said = { speaker: 'npc', text: 'Hm.', atMin: 530 };
+		const struck = { kind: 'struck', atMin: 535, parcelId: 'p_rest', metres: 12 };
 		for ( const invalid of [
 			{ ...request, npc: { ...npc, mood: 'tired' } },
 			{ ...request, npc: { ...npc, traits: [ 'calm', 'calm' ] } },
@@ -92,7 +98,14 @@ describe( 'talk request contract', () => {
 			{ ...request, prior: [ { ...said, text: 'x'.repeat( 4001 ) } ] },
 			{ ...request, prior: [ { speaker: 'npc', text: 'Hm.' } ] },
 			{ ...request, prior: [ { ...said, atMin: '530' } ] },
-			{ ...request, prior: [ { ...said, heard: true } ] }
+			{ ...request, prior: [ { ...said, heard: true } ] },
+			{ ...request, events: Array( 9 ).fill( struck ) },
+			{ ...request, events: [ { ...struck, kind: 'fight' } ] },
+			{ ...request, events: [ { ...struck, metres: - 1 } ] },
+			{ ...request, events: [ { ...struck, notes: [ 'A body.' ] } ] },
+			{ ...request, events: [ { ...struck, kind: 'scene' } ] },
+			{ ...request, events: [ { ...struck, kind: 'scene', notes: [] } ] },
+			{ ...request, events: [ { kind: 'struck', atMin: 535, metres: 12 } ] }
 		] ) expect( () => boundary.input( invalid ) ).toThrow( /does not match its contract/ );
 		expect( boundary.input( { ...request, line: 'x'.repeat( 2000 ) } ) ).toBeTruthy();
 

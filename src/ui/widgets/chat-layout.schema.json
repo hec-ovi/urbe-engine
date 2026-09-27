@@ -51,9 +51,9 @@
     "tags": {
       "description": "Tag on a transcript line by where it comes from.",
       "type": "object",
-      "required": ["story", "talk"],
+      "required": ["story", "talk", "earlier"],
       "additionalProperties": false,
-      "properties": { "story": { "$ref": "#/$defs/text" }, "talk": { "$ref": "#/$defs/text" } }
+      "properties": { "story": { "$ref": "#/$defs/text" }, "talk": { "$ref": "#/$defs/text" }, "earlier": { "description": "A line said before this conversation.", "$ref": "#/$defs/text" } }
     },
     "retry": { "$ref": "#/$defs/text" },
     "leave": { "$ref": "#/$defs/text" }

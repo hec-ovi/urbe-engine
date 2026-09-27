@@ -57,10 +57,42 @@
         "name": { "type": "string", "minLength": 1 },
         "notes": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 2000 } }
       }
-    }
+    },
+    "events": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/event" } }
   },
   "$defs": {
     "id": { "type": "string", "minLength": 1 },
+    "event": {
+      "description": "Something the game saw happen near the conversation: a car hitting someone by a building, or a quest scene standing there.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "atMin", "parcelId", "metres"],
+          "properties": {
+            "kind": { "const": "struck" },
+            "atMin": { "type": "number", "minimum": 0 },
+            "parcelId": { "$ref": "#/$defs/id" },
+            "metres": { "type": "number", "minimum": 0 },
+            "hard": { "type": "boolean" },
+            "self": { "type": "boolean" },
+            "down": { "type": "boolean" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "atMin", "parcelId", "metres", "notes"],
+          "properties": {
+            "kind": { "const": "scene" },
+            "atMin": { "type": "number", "minimum": 0 },
+            "parcelId": { "$ref": "#/$defs/id" },
+            "metres": { "type": "number", "minimum": 0 },
+            "notes": { "type": "array", "minItems": 1, "maxItems": 24, "items": { "type": "string", "minLength": 1, "maxLength": 2000 } }
+          }
+        }
+      ]
+    },
     "name": {
       "type": "object",
       "additionalProperties": false,

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:urbe:engine:server:talk-memory",
   "title": "What people remember of talking with the player in one served world",
-  "description": "The body of PUT /api/talk/memory: the world's out path and a save's dialogue memory, which the server keeps bounded as #/$defs/kept. The answer to GET /api/talk/memory is #/$defs/kept: at most 200 people with at most 24 notes and 24 turns each.",
+  "description": "The body of PUT /api/talk/memory: the world's out path and a save's dialogue memory, which the server joins to its own, each person keeping the newer, bounded as #/$defs/kept. The answer to GET /api/talk/memory is #/$defs/kept: at most 200 people with at most 24 notes and 24 turns each.",
   "type": "object",
   "additionalProperties": false,
   "required": ["out", "memory"],

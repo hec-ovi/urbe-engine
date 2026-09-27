@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { describe, expect, it, vi } from 'vitest';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import { DEFAULT_TYPE_SET } from '../../../simulation/dist/index.js';
@@ -212,7 +212,7 @@ describe( 'TalkService', () => {
 
 	} );
 
-	it( 'gives a save what people remember, bounded, and takes a save\'s memory back as all they remember', async () => {
+	it( 'gives a save what people remember, bounded, and joins a save\'s memory, each person keeping the newer', async () => {
 
 		const model = fakeModel();
 		const service = new TalkService( model, ( await servedWorld() ).root );
@@ -225,18 +225,67 @@ describe( 'TalkService', () => {
 		// Turns a failed fold left pile up verbatim: they are bounded like the notes.
 		const notes = Array.from( { length: 30 }, ( _, at ) => `note ${at}` );
 		const person = ( npcId, atMin ) => ( { npcId, memory: { digest: notes, turns: notes.map( ( text ) => ( { speaker: 'npc', text, atMin } ) ) } } );
-		const crowd = Array.from( { length: 201 }, ( _, at ) => person( `p${String( at ).padStart( 3, '0' )}`, at ) );
-		await service.restoreMemory( '/out/w', [ ...crowd, { npcId: 'n1', memory: { digest: [ 'Told of a debt.' ], turns: [] } }, { npcId: 'silent', memory: { digest: [], turns: [] } } ] );
+		const crowd = Array.from( { length: 200 }, ( _, at ) => person( `p${String( at ).padStart( 3, '0' )}`, at ) );
+		// A save older than the talk leaves it; the people spoken with last stay.
+		const older = { npcId: 'n1', memory: { digest: [ 'Told of a debt.' ], turns: [ { speaker: 'npc', text: 'Pay up.', atMin: 500 } ] } };
+		await service.restoreMemory( '/out/w', [ ...crowd, older, { npcId: 'silent', memory: { digest: [], turns: [] } } ] );
 		const kept = await service.memory( '/out/w' );
 		expect( kept ).toHaveLength( 200 );
-		expect( kept.map( ( record ) => record.npcId ) ).toEqual( crowd.slice( 1 ).map( ( record ) => record.npcId ) );
-		expect( kept[ 0 ].memory.digest ).toEqual( notes.slice( 6 ) );
-		expect( kept[ 0 ].memory.turns.map( ( turn ) => turn.text ) ).toEqual( notes.slice( 6 ) );
+		expect( kept.map( ( record ) => record.npcId ) ).toEqual( [ 'n1', ...crowd.slice( 1 ).map( ( record ) => record.npcId ) ] );
+		expect( kept[ 0 ].memory.turns.map( ( turn ) => turn.text ) ).toEqual( [ 'Where is the lift?', 'Hm.' ] );
+		expect( kept[ 1 ].memory.digest ).toEqual( notes.slice( 6 ) );
+		expect( kept[ 1 ].memory.turns.map( ( turn ) => turn.text ) ).toEqual( notes.slice( 6 ) );
+		expect( await service.memory( '/out/w', 'n1' ) ).toEqual( [ kept[ 0 ] ] );
+		expect( await service.memory( '/out/w', 'nobody' ) ).toEqual( [] );
 
-		await service.restoreMemory( '/out/w', [ { npcId: 'n1', memory: { digest: [ 'Told of a debt.' ], turns: [] } } ] );
+		// A save newer than the talk replaces what that person remembers.
+		await service.restoreMemory( '/out/w', [ { ...older, memory: { ...older.memory, turns: [ { speaker: 'npc', text: 'Pay up.', atMin: 700 } ] } } ] );
 		await say( service, 'Remember me?' );
 		expect( model.system( 1 ) ).toContain( 'Told of a debt.' );
 		expect( model.system( 1 ) ).not.toContain( 'Where is the lift?' );
+
+	} );
+
+	it( 'keeps a game\'s memory in its directory as each exchange completes, and takes it back when the server starts again', async () => {
+
+		const model = fakeModel();
+		const { root, dir } = await servedWorld( { 'game.json': { theme: 'noir' } } );
+		const city = join( root, 'out', 'c' );
+		await write( city, { 'blueprint.json': blueprint } );
+		const kept = async () => JSON.parse( await readFile( join( dir, 'dialogue-memory.json' ), 'utf8' ) );
+
+		await say( new TalkService( model, root ), 'Where is the lift?' );
+		expect( await kept() ).toEqual( [ { npcId: 'n1', memory: { digest: [], turns: [
+			{ speaker: 'player', text: 'Where is the lift?', atMin: 600 }, { speaker: 'npc', text: 'Hm.', atMin: 600 }
+		] } } ] );
+
+		// The window closed without a save, and the server started again: the save's older memory joins it.
+		const service = new TalkService( model, root );
+		await service.restoreMemory( '/out/w', [] );
+		await say( service, 'Remember me?' );
+		expect( model.system( 1 ) ).toContain( 'Player: Where is the lift?' );
+		expect( ( await kept() )[ 0 ].memory.turns ).toHaveLength( 4 );
+
+		// Another world never hears it, and a world that is not a game keeps nothing on disk.
+		await say( service, 'Who are you?', { out: '/out/c' } );
+		expect( model.system( 2 ) ).not.toContain( 'Where is the lift?' );
+		expect( await readdir( city ) ).toEqual( [ 'blueprint.json' ] );
+
+		// A fold is kept once its note is written.
+		for ( let at = 0; at < 5; at ++ ) await say( service, `Line ${at}.` );
+		await vi.waitFor( async () => expect( ( await kept() )[ 0 ].memory.digest ).toEqual( [ 'A note.' ] ) );
+		expect( ( await readdir( dir ) ).filter( ( name ) => name.endsWith( '.tmp' ) ) ).toEqual( [] );
+
+	} );
+
+	it( 'tells the NPC what happened near where it stands', async () => {
+
+		const model = fakeModel();
+		const service = new TalkService( model, ( await servedWorld() ).root );
+
+		await say( service, 'Did you see that?', { events: [ { kind: 'struck', atMin: 599, parcelId: 'p1', metres: 22, hard: true, down: true } ] } );
+		expect( model.system( 0 ) ).toContain( 'What has happened around you lately' );
+		expect( model.system( 0 ) ).toContain( '- A car ran someone down at speed in the street by The Rusty Anchor in Old Port, about 20 metres from where you stand, a moment ago. They still lie there.' );
 
 	} );
 

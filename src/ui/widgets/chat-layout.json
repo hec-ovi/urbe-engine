@@ -16,7 +16,7 @@
     "input": "say something",
     "send": "send"
   },
-  "tags": { "story": "story", "talk": "free talk" },
+  "tags": { "story": "story", "talk": "free talk", "earlier": "earlier" },
   "retry": "Retry reply",
   "leave": "End conversation"
 }

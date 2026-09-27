@@ -2,6 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
 import { Converse, DialogContextService, QuestlineRuntime } from '../../../quests/dist/index.js';
 import { DEFAULT_TYPE_SET } from '../../../simulation/dist/index.js';
+import { replaceFile } from '../assembly/JsonFile.js';
 import { Sentences } from './Sentences.js';
 import { SnapshotPort } from './SnapshotPort.js';
 
@@ -13,13 +14,17 @@ const MEMORY_NOTES = 24;
 const MEMORY_TURNS = 24;
 /** The files a world's dialogue is built from; a change to any of them builds it again. */
 const WORLD_FILES = [ 'blueprint.json', 'npc-types.json', join( 'quests', 'questlines.json' ) ];
+/** Where a game keeps what people remember, beside its save, as each exchange completes. */
+const MEMORY_FILE = 'dialogue-memory.json';
 
 /**
  * One NPC reply per player line, over the quests dialog layers. Each served
- * world (its `out` directory) keeps one dialogue state for the session, so what
- * an NPC has been told stays remembered, until the world's files change or the
- * directory is made again. A game hands its save's memory back at load and
- * reads it again for each save.
+ * world (its `out` directory) keeps one dialogue state, so what an NPC has
+ * been told stays remembered: a game (a world with `game.json`) keeps it in
+ * its own directory as each exchange completes and reads it back when the
+ * world is built, while any other world keeps it for the session only, until
+ * the world's files change or the directory is made again. A game's save
+ * joins its memory at load and reads it again for each save.
  */
 export class TalkService {
 
@@ -41,13 +46,13 @@ export class TalkService {
 	 * `prior` lines said since the last exchange carry the conversation on up
 	 * to `line`. A completed exchange is remembered, after its prior lines,
 	 * before `done`; a failed or aborted one is not.
-	 * @param request a checked talk request: out, npc, behavior, line, timeMin, quests?, offers?, guide?, prior?
+	 * @param request a checked talk request: out, npc, behavior, line, timeMin, quests?, offers?, guide?, events?, prior?
 	 * @param options.signal aborting it ends the model request
 	 */
-	async *stream( { out, npc, behavior, line, timeMin, quests = [], offers, guide, prior = [] }, { signal } = {} ) {
+	async *stream( { out, npc, behavior, line, timeMin, quests = [], offers, guide, events, prior = [] }, { signal } = {} ) {
 
 		const world = await this.#world( out );
-		const context = world.contextFor( npc, behavior, quests, timeMin, { guide, prior } );
+		const context = world.contextFor( npc, behavior, quests, timeMin, { guide, events, prior } );
 		const name = `${npc.name.given} ${npc.name.family}`;
 		const sentences = new Sentences();
 		let index = 0;
@@ -76,14 +81,18 @@ export class TalkService {
 
 	}
 
-	/** What people remember of talking with the player in the world at `out`, as a save keeps it: see TalkWorld.memory. */
-	async memory( out ) {
+	/** What people remember of talking with the player in the world at `out`, as a save keeps it (see TalkWorld.memory), or `npcId` alone. */
+	async memory( out, npcId = null ) {
 
-		return ( await this.#world( out ) ).memory();
+		const memory = ( await this.#world( out ) ).memory();
+		return npcId ? memory.filter( ( record ) => record.npcId === npcId ) : memory;
 
 	}
 
-	/** Makes `memory`, a save's, all that people remember in the world at `out`. */
+	/**
+	 * Takes a save's `memory` back into the world at `out`: each person keeps
+	 * the newer of what the world and the save remember of them.
+	 */
 	async restoreMemory( out, memory ) {
 
 		( await this.#world( out ) ).restoreMemory( memory );
@@ -101,6 +110,8 @@ export class TalkService {
 		let entry = this.#worlds.get( dir );
 		if ( entry?.stamp !== stamp ) {
 
+			// A world built again reads the memory back; the one it replaces keeps nothing more.
+			entry?.world.then( ( world ) => world.retire(), () => {} );
 			entry = { stamp, world: TalkWorld.load( dir, this.llm ) };
 			this.#worlds.set( dir, entry );
 			entry.world.catch( () => this.#worlds.get( dir ) === entry && this.#worlds.delete( dir ) );
@@ -117,6 +128,9 @@ class TalkWorld {
 
 	port = new SnapshotPort();
 	#attached = new Set();
+	/** The game's memory file, or null for a world that keeps memory for the session only, and the text it holds. */
+	#file;
+	#written = null;
 
 	static async load( dir, llm ) {
 
@@ -126,15 +140,19 @@ class TalkWorld {
 		const naming = blueprint.meta.naming ?? { theme: ( await readJson( join( dir, 'game.json' ), {} ) ).theme ?? FALLBACK_THEME };
 		// Districts and places without names stay unnamed: the dialog layers describe them by kind.
 		const world = { meta: { naming }, districts: blueprint.districts, parcels: blueprint.parcels, transit: blueprint.transit };
-		return new TalkWorld( { world, types, questlines }, llm );
+		const game = await stat( join( dir, 'game.json' ) ).then( () => true, () => false );
+		const talk = new TalkWorld( { world, types, questlines, file: game ? join( dir, MEMORY_FILE ) : null }, llm );
+		if ( game ) talk.#recall( await readJson( join( dir, MEMORY_FILE ), [] ) );
+		return talk;
 
 	}
 
-	constructor( { world, types, questlines }, llm ) {
+	constructor( { world, types, questlines, file = null }, llm ) {
 
 		this.input = { world, types, sim: this.port, llm };
 		this.definitions = new Map( questlines.map( ( d ) => [ d.id, d ] ) );
 		this.context = new DialogContextService( this.input );
+		this.#file = file;
 
 	}
 
@@ -144,7 +162,7 @@ class TalkWorld {
 	 * questline the request no longer carries leaves with a fresh context service
 	 * that keeps every NPC's memory.
 	 */
-	contextFor( npc, behavior, quests, timeMin, { guide, prior } ) {
+	contextFor( npc, behavior, quests, timeMin, { guide, events, prior } ) {
 
 		this.port.set( npc, behavior );
 		const held = quests.filter( ( quest ) => this.definitions.has( quest.id ) );
@@ -162,7 +180,7 @@ class TalkWorld {
 			this.context.attachQuestline( QuestlineRuntime.restore( this.definitions.get( quest.id ), quest.cast, this.port, quest.state ) );
 
 		}
-		return this.context.contextFor( npc.npcId, timeMin, { ...( guide ? { guide } : {} ), prior } );
+		return this.context.contextFor( npc.npcId, timeMin, { ...( guide ? { guide } : {} ), ...( events ? { events } : {} ), prior } );
 
 	}
 
@@ -177,17 +195,79 @@ class TalkWorld {
 
 	}
 
-	/** Replaces every person's memory with `memory`, bounded the same way. */
+	/**
+	 * Joins a save's `memory` to what the world remembers: of each person the
+	 * memory whose latest turn is later stays, the world's on a tie, bounded
+	 * the same way.
+	 */
 	restoreMemory( memory ) {
 
-		this.context.restoreMemory( Object.fromEntries( bounded( memory ).map( ( { npcId, memory: kept } ) => [ npcId, kept ] ) ) );
+		this.#join( memory );
+		this.#keep();
 
 	}
 
-	/** Stores the exchange now; a memory fold it starts runs off the reply path. */
+	/** Stores the exchange and keeps it now; a memory fold it starts runs off the reply path and is kept once written. */
 	remember( npcId, exchange ) {
 
-		this.context.recordExchange( npcId, exchange ).catch( ( error ) => console.warn( 'dialog memory:', error.message ) );
+		this.context.recordExchange( npcId, exchange )
+			.then( () => this.#keep(), ( error ) => console.warn( 'dialog memory:', error.message ) );
+		this.#keep();
+
+	}
+
+	/** A world built again in this one's place: it writes the memory file no more. */
+	retire() {
+
+		this.#file = null;
+
+	}
+
+	#join( memory ) {
+
+		const people = new Map( this.memory().map( ( record ) => [ record.npcId, record ] ) );
+		for ( const record of memory ) {
+
+			const known = people.get( record.npcId );
+			if ( ! known || lastAt( record ) > lastAt( known ) ) people.set( record.npcId, record );
+
+		}
+		this.context.restoreMemory( Object.fromEntries( bounded( [ ...people.values() ] ).map( ( { npcId, memory: kept } ) => [ npcId, kept ] ) ) );
+
+	}
+
+	/** Takes back what the game's file kept; a file it cannot read leaves the save's memory to join an empty one. */
+	#recall( memory ) {
+
+		try {
+
+			this.#join( memory );
+			this.#written = fileText( this.memory() );
+
+		} catch ( error ) {
+
+			console.warn( 'dialog memory file not read:', error.message );
+
+		}
+
+	}
+
+	/** Writes a game's memory whole over its file when it changed; a world kept for the session writes nothing. */
+	#keep() {
+
+		if ( ! this.#file ) return;
+		const text = fileText( this.memory() );
+		if ( text === this.#written ) return;
+		try {
+
+			replaceFile( this.#file, text );
+			this.#written = text;
+
+		} catch ( error ) {
+
+			console.warn( 'dialog memory not kept:', error.message );
+
+		}
 
 	}
 
@@ -200,12 +280,20 @@ class TalkWorld {
  */
 function bounded( records ) {
 
-	const last = ( { memory } ) => memory.turns.at( - 1 )?.atMin ?? - Infinity;
 	return records.filter( ( { memory } ) => memory.digest.length || memory.turns.length )
-		.sort( ( a, b ) => last( b ) - last( a ) || a.npcId.localeCompare( b.npcId ) )
+		.sort( ( a, b ) => lastAt( b ) - lastAt( a ) || a.npcId.localeCompare( b.npcId ) )
 		.slice( 0, MEMORY_PEOPLE )
 		.map( ( { npcId, memory } ) => ( { npcId, memory: { digest: memory.digest.slice( - MEMORY_NOTES ), turns: memory.turns.slice( - MEMORY_TURNS ) } } ) )
 		.sort( ( a, b ) => a.npcId.localeCompare( b.npcId ) );
+
+}
+
+const fileText = ( memory ) => `${JSON.stringify( memory )}\n`;
+
+/** The minute of a person's latest remembered turn. */
+function lastAt( { memory } ) {
+
+	return memory.turns.at( - 1 )?.atMin ?? - Infinity;
 
 }
 

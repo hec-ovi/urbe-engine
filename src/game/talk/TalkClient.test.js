@@ -62,9 +62,10 @@ describe( 'TalkClient', () => {
 			vi.stubGlobal( 'fetch', fetch );
 			const guide = { placeId: 'p1', kind: 'parcel' };
 			const offers = { places: [ { placeId: 'p1', name: 'The Rusty Anchor' } ] };
-			expect( await collect( new TalkClient( '/out/w' ).stream( conversation, 'Hello', 42, [], { guide, offers } ) ) ).toEqual( events );
+			const nearby = [ { kind: 'struck', atMin: 40, parcelId: 'p1', metres: 12, down: true } ];
+			expect( await collect( new TalkClient( '/out/w' ).stream( conversation, 'Hello', 42, [], { guide, offers, events: nearby } ) ) ).toEqual( events );
 			expect( fetch.mock.calls[ 0 ][ 0 ] ).toBe( '/api/talk/stream' );
-			expect( JSON.parse( fetch.mock.calls[ 0 ][ 1 ].body ) ).toMatchObject( { line: 'Hello', guide, offers } );
+			expect( JSON.parse( fetch.mock.calls[ 0 ][ 1 ].body ) ).toMatchObject( { line: 'Hello', guide, offers, events: nearby } );
 
 		}
 
@@ -135,7 +136,7 @@ describe( 'TalkClient', () => {
 
 	} );
 
-	it( 'reads the world\'s dialogue memory for a save and replaces it from one', async () => {
+	it( 'reads the world\'s dialogue memory for a save and hands it a save\'s', async () => {
 
 		const memory = [ { npcId: 'n1', memory: { digest: [], turns: [ { speaker: 'npc', text: 'Hi.', atMin: 1 } ] } } ];
 		const fetch = vi.fn( async ( _url, init ) => init ? new Response( null, { status: 204 } ) : Response.json( { out: '/out/games/g 1', memory } ) );
@@ -149,8 +150,16 @@ describe( 'TalkClient', () => {
 		expect( fetch.mock.calls[ 1 ][ 1 ].method ).toBe( 'PUT' );
 		expect( JSON.parse( fetch.mock.calls[ 1 ][ 1 ].body ) ).toEqual( { out: '/out/games/g 1', memory } );
 
+		// One person's turns, for the chat that opens with them.
+		fetch.mockImplementationOnce( async () => Response.json( { out: '/out/games/g 1', memory } ) );
+		expect( await client.remembered( 'n1' ) ).toEqual( memory[ 0 ].memory.turns );
+		expect( fetch.mock.calls[ 2 ] ).toEqual( [ '/api/talk/memory?out=%2Fout%2Fgames%2Fg%201&npcId=n1' ] );
+		fetch.mockImplementationOnce( async () => Response.json( { out: '/out/games/g 1', memory: [] } ) );
+		expect( await client.remembered( 'stranger' ) ).toEqual( [] );
+
 		vi.stubGlobal( 'fetch', async () => Response.json( { error: 'no world at /out/games/g 1' }, { status: 502 } ) );
 		await expect( client.memory() ).rejects.toMatchObject( { message: 'no world at /out/games/g 1', status: 502 } );
+		await expect( client.remembered( 'n1' ) ).rejects.toMatchObject( { status: 502 } );
 
 	} );
 

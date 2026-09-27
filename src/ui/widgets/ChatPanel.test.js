@@ -141,6 +141,20 @@ describe( 'ChatPanel', () => {
 
 	} );
 
+	it( 'puts what was said before above the conversation, set apart as earlier, and the next conversation starts without it', () => {
+
+		panel.addMessage( { from: 'npc', name: 'Ada', text: 'What can I do for you?' } );
+		panel.recall( [ { from: 'player', text: 'Where is the report?' }, { from: 'npc', name: 'Ada', text: 'Gone with the courier.' } ] );
+		const lines = [ ...panel.transcript.children ];
+		expect( lines.map( ( line ) => line.textContent ) ).toEqual( [ 'YouWhere is the report?', 'AdaGone with the courier.', 'AdaWhat can I do for you?' ] );
+		expect( lines.map( ( line ) => [ line.classList.contains( 'is-earlier' ), line.dataset.tag ] ) ).toEqual( [ [ true, 'earlier' ], [ true, 'earlier' ], [ false, undefined ] ] );
+		expect( lines[ 0 ].classList.contains( 'is-player' ) ).toBe( true );
+
+		panel.show( ADA );
+		expect( panel.transcript.children ).toHaveLength( 0 );
+
+	} );
+
 	it( 'returns each shown line and marks how it is voiced only while it is shown', () => {
 
 		const line = panel.addMessage( { from: 'npc', name: 'Ada', text: 'Down the steps.' } );

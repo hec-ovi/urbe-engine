@@ -11,6 +11,7 @@ import { HitchLog } from './debug/HitchLog.js';
 import { npc, quest, role, simulation, step } from './quests/quest.test-fixtures.js';
 import { replyEvents, talkError, talkStream } from './talk/talk.test-fixtures.js';
 import { TalkClient } from './talk/TalkClient.js';
+import { RecentEvents } from './talk/RecentEvents.js';
 
 function fixture( { ending = false, errand = false } = {} ) {
  const opening = step('ask', { kind:'talk', roleId:'giver', atParcelId:'p1' }, { gives:['lead'], next:[{toStepId:'visit',when:[]}] });
@@ -35,9 +36,11 @@ function fixture( { ending = false, errand = false } = {} ) {
  app.venues={setObjective:()=>false,nameOf:()=> 'Market'};
  app.savedInventory=[];app.questItemIds=['lead'];app.input={exitLock:vi.fn(),requestLock:vi.fn()};
  app.animations={npcDialogueTurn:vi.fn(),playerDialogueTurn:vi.fn(),completeDialogueTurn:vi.fn()};
- app.talk={stream:vi.fn(()=>talkStream(replyEvents('I wish I had more to tell you.'))),said:vi.fn()};
+ app.talk={stream:vi.fn(()=>talkStream(replyEvents('I wish I had more to tell you.'))),said:vi.fn(),remembered:vi.fn(async()=>[])};
  const companion=app.companion={offers:vi.fn(()=>[]),talkOffers:vi.fn(()=>null),guide:vi.fn(()=>null),accepted:vi.fn(()=>false),accept:vi.fn(),acceptFromTool:vi.fn()};
- app.scenery={refresh:vi.fn()};
+ app.scenery={refresh:vi.fn(),stagedPlaces:vi.fn(()=>[])};
+ app.body={feet:{x:0,y:0,z:0}};app.crowd={member:vi.fn(()=>null)};
+ app.recentEvents=new RecentEvents([{id:'p1',access:{point:[0,0]}},{id:'p2',access:{point:[60,0]}}]);
  // As Interactor.talkTo: the person's body, while it has one, opens a conversation when none is open.
  app.interactor={conversation:null,close:vi.fn(function(){this.conversation=null;app.presentConversation(null);}),
   talkTo:vi.fn(function(npcId){if(this.conversation||person.gone)return null;this.conversation={npcId,instance:person,behavior:null};app.presentConversation(this.conversation);return this.conversation;})};
@@ -232,6 +235,37 @@ describe('explicit quest dialogue through the playable UI',()=>{
   // The person goes on saying it as they set off: the close silences nothing.
   expect(log.at(-1)).toBe('said: Kip drinks [sigh] at the market.');
   expect(state()).toEqual(initial);
+ });
+
+ it('shows what the person remembers saying with the player above a conversation that opens again, and nothing of it once another has opened',async()=>{
+  const {app,open}=fixture();app.quests.dialoguesFor=()=>[];
+  app.talk.remembered.mockResolvedValueOnce([{speaker:'player',text:'Where is Kip?',atMin:1200},{speaker:'npc',text:'At the market, most nights.',atMin:1200}]);
+  open();
+  await vi.waitFor(()=>expect(lines(app)).toEqual(['Where is Kip?','At the market, most nights.','What can I do for you?']));
+  expect(app.talk.remembered).toHaveBeenCalledExactlyOnceWith('person');
+  const earlier=[...app.view.dialog.transcript.children].filter(line=>line.classList.contains('is-earlier'));
+  expect(earlier.map(line=>line.firstElementChild.textContent)).toEqual(['You','Petra Moss']);
+  expect(app.talk.said).not.toHaveBeenCalledWith('person',expect.anything(),'Where is Kip?',expect.anything());
+  // Memory that arrives after its conversation closed shows nowhere.
+  let answer;app.talk.remembered.mockReturnValueOnce(new Promise(done=>{answer=done;}));
+  app.interactor.close();open();app.interactor.close();
+  answer([{speaker:'npc',text:'Late.',atMin:1200}]);await new Promise(done=>setTimeout(done,0));
+  expect(app.view.dialog.transcript.textContent).not.toContain('Late.');
+ });
+
+ it('tells a typed talk what happened around the person: a car that hit someone nearby, still down, and a scene in the street',async()=>{
+  const {app,open}=fixture();app.quests.dialoguesFor=()=>[];open();
+  app.recentEvents.struck({personId:'crowd-7',point:{x:4,y:1,z:3},hard:true,atMin:1250});
+  app.recentEvents.struck({personId:'crowd-8',point:{x:900,y:1,z:0},atMin:1255});
+  app.crowd.member.mockImplementation(id=>id==='crowd-7'?{fallen:true}:null);
+  const notes=['It looks like a crime scene.'];
+  app.scenery.stagedPlaces.mockReturnValue([{sceneId:'s',place:{parcelId:'p2'},frame:{kind:'street',origin:{x:58,y:0,z:4}},stagedAtMin:1200,notes}]);
+  await userEvent.setup().type(within(app.view.dialog.element).getByRole('textbox'),'What happened?{Enter}');
+  await vi.waitFor(()=>expect(app.talk.stream).toHaveBeenCalled());
+  expect(app.talk.stream.mock.calls.at(-1)[4].events).toEqual([
+   {kind:'struck',atMin:1250,parcelId:'p1',metres:5,hard:true,down:true},
+   {kind:'scene',atMin:1200,parcelId:'p2',metres:58,notes}
+  ]);
  });
 
  it('answers a chat action by the companion rules: a refusal is said in the chat, an agreement closes it on the person\'s words and keeps them there',async()=>{
