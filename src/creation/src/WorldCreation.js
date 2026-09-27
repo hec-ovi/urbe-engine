@@ -252,7 +252,7 @@ export class WorldCreation {
 			}
 			if ( manifest.interiors.length < MAIN_LOCATION_COUNT ) {
 
-				throw new CreationError( 'E_QUEST_LOCATIONS', `city ${city.id} opens ${manifest.interiors.length} interiors, the main story needs ${MAIN_LOCATION_COUNT}${manual ? '' : ': an automatic pick opens only buildings standing in a proven design, so name others in buildingIds'}` );
+				throw new CreationError( 'E_QUEST_LOCATIONS', `city ${city.id} opens ${manifest.interiors.length} interiors, the main story needs ${MAIN_LOCATION_COUNT}${manual ? '' : ': an automatic pick adds venues only where a building stands in a proven design, so name others in buildingIds'}` );
 
 			}
 			if ( homes.size && ! manifest.interiors.some( ( id ) => homes.has( id ) ) ) {
