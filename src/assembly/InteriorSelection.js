@@ -9,22 +9,23 @@ export const QUEST_CAPABLE_TYPES = new Set( [
  * All interior candidates in deterministic priority order: the caller's
  * priority parcels in its order, then parcels referenced by carried
  * questlines in the order the questlines name them, then other venue parcels
- * by a stable hash. The priority is the caller's to vouch for; given `proven`,
- * the parcels whose building stands in a proven design, the picks made here
- * are only those.
+ * by a stable hash. The priority and a carried story's places open whatever
+ * they stand in, since the story is already bound to them; given `proven`,
+ * the parcels whose building stands in a proven design, the venues picked
+ * here are only those.
  */
 export function interiorCandidates( atlas, questlines = [], available = null, priority = [], proven = null ) {
 
 	const known = new Map( atlas.parcels.map( ( parcel ) => [ parcel.id, parcel ] ) );
 	const allowed = available ? new Set( available ) : new Set( known.keys() );
 	const usable = ( id ) => known.has( id ) && allowed.has( id );
-	const picked = ( id ) => usable( id ) && ( ! proven || proven.has( id ) );
 	// Quest locations keep the story's own order (the main line first), so a
 	// count that only covers the main line opens exactly its places.
-	const first = [ ...new Set( [ ...priority.filter( usable ), ...questParcelIds( questlines ).filter( picked ) ] ) ];
+	const first = [ ...new Set( [ ...priority, ...questParcelIds( questlines ) ].filter( usable ) ) ];
 	const ranked = new Set( first );
 	const venues = atlas.parcels
-		.filter( ( parcel ) => picked( parcel.id ) && QUEST_CAPABLE_TYPES.has( parcel.type ) && ! ranked.has( parcel.id ) )
+		.filter( ( parcel ) => usable( parcel.id ) && ( ! proven || proven.has( parcel.id ) )
+			&& QUEST_CAPABLE_TYPES.has( parcel.type ) && ! ranked.has( parcel.id ) )
 		.map( ( parcel ) => parcel.id )
 		.sort( ( a, b ) => fnv1a( `${atlas.meta.seed}:interior:venue:${a}` )
 			- fnv1a( `${atlas.meta.seed}:interior:venue:${b}` ) || a.localeCompare( b ) );

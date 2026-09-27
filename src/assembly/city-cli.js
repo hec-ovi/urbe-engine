@@ -337,8 +337,9 @@ function classify( ids ) {
 
 }
 
-// Any standing building can open, from its pieces or from its own GLB; what
-// an automatic pick adds beyond the priority stands in a proven design.
+// Any standing building can open, from its pieces or from its own GLB; the
+// venues an automatic pick adds past the priority and a carried story stand
+// in a proven design.
 const { candidates, target: interiorTarget, unavailable: unavailableInteriors } = interiorPlan(
 	atlas, questlines, shells, args, args.interiorParcels || ! args.interiors ? null : await provenParcels( outDir, shells )
 );

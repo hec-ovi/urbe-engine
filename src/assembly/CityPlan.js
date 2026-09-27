@@ -41,8 +41,8 @@ export function parseCityArgs( argv ) {
 
 /**
  * Resolve automatic or exact manual interior candidates against the reusable
- * shells. `proven` holds the parcels an automatic pick may open beyond the
- * priority; a manual pick is exact.
+ * shells. `proven` holds the venues an automatic pick may add past the
+ * priority and a carried story; a manual pick is exact.
  */
 export function interiorPlan( atlas, questlines, shells, args, proven = null ) {
 

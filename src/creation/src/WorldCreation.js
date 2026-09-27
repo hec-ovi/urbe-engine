@@ -7,7 +7,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { fnv1a } from '../../assembly/hash.js';
 import { cloneWorld } from '../../assembly/WorldClone.js';
 import { questParcelIds } from '../../assembly/InteriorSelection.js';
-import { provenParcels } from '../../assembly/ProvenInteriors.js';
+import { provenParcels, provenStandIns } from '../../assembly/ProvenInteriors.js';
 import sceneryCapabilities from '../../game/scenery/capabilities.json' with { type: 'json' };
 import { createLibrary, LibraryError } from '../../library/index.js';
 import {
@@ -210,22 +210,27 @@ export class WorldCreation {
 			// An automatic pick opens the buildings it names first. Then a named
 			// city opens a spread of kinds for the story written against them;
 			// an unnamed one opens the places of its recorded story, in story order.
-			// Past the names, it opens only buildings standing in a proven design.
+			// Past the names, it opens buildings standing in a proven design, where
+			// one of the kind the story or the spread needs stands.
 			let priority = [];
 			let homes = new Set();
-			if ( ! manual && named ) {
+			if ( ! manual ) {
 
 				const atlas = await json( join( world, 'blueprint.json' ), 'city blueprint' );
-				homes = new Set( atlas.parcels.filter( ( parcel ) => parcel.type === HOME ).map( ( parcel ) => parcel.id ) );
 				const proven = await provenParcels( world, atlas.parcels.map( ( parcel ) => parcel.id ) );
-				priority = nextHomeAfter( [ ...new Set( [ ...input.buildingIds, ...venueSpread( atlas, proven ) ] ) ], homes, input.count );
+				if ( named ) {
 
-			} else if ( ! manual ) {
+					homes = new Set( atlas.parcels.filter( ( parcel ) => parcel.type === HOME ).map( ( parcel ) => parcel.id ) );
+					priority = nextHomeAfter( [ ...new Set( [ ...input.buildingIds, ...venueSpread( atlas, proven ) ] ) ], homes, input.count );
 
-				const story = await this.#materialize( run, city, world, join( temporary, 'ranking' ), join( this.questsRoot, RECORDED ) );
-				const places = questParcelIds( story.questlines );
-				const proven = await provenParcels( world, places );
-				priority = [ ...new Set( [ ...input.buildingIds, ...places.filter( ( id ) => proven.has( id ) ) ] ) ];
+				} else {
+
+					// generateQuests replays the story in what opened, moving each place onto its stand-in.
+					const story = await this.#materialize( run, city, world, join( temporary, 'ranking' ), join( this.questsRoot, RECORDED ) );
+					const places = provenStandIns( atlas, questParcelIds( story.questlines ), proven );
+					priority = [ ...new Set( [ ...input.buildingIds, ...places ] ) ];
+
+				}
 
 			}
 

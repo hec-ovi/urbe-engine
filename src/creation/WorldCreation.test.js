@@ -118,15 +118,20 @@ describe( 'playable world creation contract', () => {
 
 	} );
 
-	it( 'ranks past the buildings asked for only those standing in a proven design', async () => {
+	it( 'opens the buildings asked for as given and ranks a proven stand-in of its kind for a plain place of the recorded story', async () => {
 
 		const fixture = await setup();
-		fixture.plain.add( 'p1' ).add( 'p5' );
+		// The recorded story meets its people at the clinics p0 and p2, the market p1 and the home p3.
+		fixture.story = [ quest( 'main-line', 'Main line', 10, [ 'p0', 'p1', 'p2', 'p3' ] ) ];
+		// Every clinic stands plain, as the market p1 does.
+		for ( const id of [ 'p0', 'p1', 'p2', 'p4', 'p6', 'p8' ] ) fixture.plain.add( id );
 		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
 		const city = await creation.generateCity( { name: 'Plain Ward', seed: 'plain', size: 'small' } );
-		await creation.generateInstances( { cityId: city.id, mode: 'automatic', count: 7, buildingIds: [ 'p5' ] } );
-		// p5 is asked for and opens first although it stands plain; the recorded story's plain p1 is not ranked.
-		expect( valueAfter( fixture.calls.find( ( call ) => call.kind === 'interiors' ).args, '--interior-priority' ) ).toBe( 'p5,p0,p2,p3,p4,p6,p7,p8' );
+		const { ids } = await creation.generateInstances( { cityId: city.id, mode: 'automatic', count: 7, buildingIds: [ 'p8' ] } );
+		// p8 is asked for and opens first although it stands plain. The market p1 gives its turn to p5,
+		// the first proven market; no clinic stands proven, so p0 and p2 keep theirs and the story stays playable.
+		expect( valueAfter( fixture.calls.find( ( call ) => call.kind === 'interiors' ).args, '--interior-priority' ) ).toBe( 'p8,p0,p5,p2,p3' );
+		expect( ids ).toEqual( expect.arrayContaining( [ 'p0', 'p2', 'p5' ] ) );
 
 	} );
 
@@ -543,7 +548,7 @@ function processCommand( fixture ) {
 			// Trailing selection flags must never become filenames in the checkout running the test.
 			await writeBundle( args[ at + 5 ], recording.fixture === 'written' ? written( parcels )
 				: recording.fixture === 'unplayable' ? [ quest( 'lethal-main', 'Lethal main', 8, parcels.slice( 0, 7 ), 'assassinate' ) ]
-					: definitions() );
+					: fixture.story ?? definitions() );
 			return '';
 
 		}

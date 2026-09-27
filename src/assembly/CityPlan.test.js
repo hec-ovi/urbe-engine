@@ -29,13 +29,13 @@ describe( 'city interior plan', () => {
 
 	} );
 
-	it( 'opens the priority as given and picks only proven buildings beyond it, while a manual pick stays exact', () => {
+	it( 'opens the priority and the carried story as given and picks only proven venues past them, while a manual pick stays exact', () => {
 
 		const questlines = [ { steps: [ { target: { parcelId: 'p4' } } ] } ];
 		const proven = new Set( [ 'p2', 'p5' ] );
 		const automatic = interiorPlan( atlas, questlines, shells, args( '--interiors', '3', '--interior-priority', 'p3' ), proven );
-		// p3 was asked for; the story's p4 and the venues p1 stand in no proven design.
-		expect( automatic.candidates ).toEqual( [ 'p3', 'p2' ] );
+		// p3 was asked for and the carried story is bound to p4; the venue p1 stands in no proven design.
+		expect( automatic.candidates ).toEqual( [ 'p3', 'p4', 'p2' ] );
 		expect( interiorPlan( atlas, questlines, shells, args( '--interior-parcels', 'p1,p4' ), null ).candidates ).toEqual( [ 'p1', 'p4' ] );
 
 	} );
