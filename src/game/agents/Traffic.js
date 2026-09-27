@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { Rng } from '../../city/Rng.js';
 import { measure, sample } from './Polyline.js';
 import { streetBodies } from './StreetBodies.js';
+import { stepPresence } from './Presence.js';
 
 const SPAWN_RADIUS = 110;
 const DESPAWN_MARGIN = 30;
@@ -38,11 +39,14 @@ const PERSON_CLEARANCE = 0.5;
 export class Traffic {
 
 	/** @param seed the world's seed; any string or number, one traffic stream per world. */
-	constructor( { networks, models, signals, capacity, spawnRadius = SPAWN_RADIUS, seed = 1, street = streetBodies } ) {
+	constructor( { networks, models, signals, capacity, spawnRadius = SPAWN_RADIUS, seed = 1, street = streetBodies, visibility = null } ) {
 
 		this.push = new THREE.Vector3();
 
 		this.street = street;
+		this.visibility = visibility;
+		this.laneCursor = 0;
+		this.crossings = ( networks.walk?.edges ?? [] ).filter( edge => edge.kind === 'crossing' );
 		this.models = models;
 		this.signals = signals;
 		this.capacity = capacity;
@@ -91,7 +95,13 @@ export class Traffic {
 
 		const traffic = this.#byLine();
 
-		for ( const car of this.cars ) this.#drive( car, delta, daySeconds, traffic, player );
+		for ( const car of this.cars ) {
+
+			if ( ! car.leaving ) this.#drive( car, delta, daySeconds, traffic, player );
+			car.presence = stepPresence( car.presence ?? 1, car.leaving, delta );
+			if ( car.leaving && car.presence === 0 ) car.gone = true;
+
+		}
 
 		this.cars = this.cars.filter( ( car ) => ! car.gone );
 
@@ -122,7 +132,15 @@ export class Traffic {
 
 	#reconcile( player ) {
 
-		this.cars = this.cars.filter( ( car ) => car.position.distanceTo( player ) < this.spawnRadius + DESPAWN_MARGIN );
+		for ( const car of this.cars ) {
+
+			const distance = car.position.distanceTo( player );
+			if ( distance <= this.spawnRadius + DESPAWN_MARGIN ) continue;
+			if ( this.#hidden( car.position ) ) car.gone = true;
+			else if ( distance > this.spawnRadius + 140 ) car.leaving = true;
+
+		}
+		this.cars = this.cars.filter( car => ! car.gone );
 
 		if ( this.cars.length >= this.capacity ) return;
 
@@ -138,18 +156,34 @@ export class Traffic {
 
 		}
 
-		for ( const lane of this.lanes.values() ) {
+		const lanes = [ ...this.lanes.values() ];
+		const start = this.laneCursor;
+		for ( let index = 0; index < lanes.length; index ++ ) {
 
 			if ( this.cars.length >= this.capacity ) return;
+			const lane = lanes[ ( start + index ) % lanes.length ];
+			this.laneCursor = ( start + index + 1 ) % lanes.length;
 			if ( lane.length < MIN_SPAWN_LANE ) continue;
 
 			const distance = Math.hypot( lane.mid[ 0 ] - player.x, lane.mid[ 2 ] - player.z );
 
-			if ( distance > this.spawnRadius || distance < 12 ) continue;
+			if ( distance > this.spawnRadius + lane.length / 2 ) continue;
 
 			const spawnIndex = this.spawned ++;
 			const rng = new Rng( mix( this.seed, spawnIndex ) );
-			const at = freeSlot( lane.length, taken.get( lane.id ) ?? [], rng );
+			const occupied = taken.get( lane.id ) ?? [];
+			let at = null;
+			for ( let attempt = 0; attempt < 12; attempt ++ ) {
+
+				const candidate = attempt === 0 ? freeSlot( lane.length, occupied, rng ) : lane.length * ( attempt - 1 ) / 11;
+				if ( candidate === null || occupied.some( value => Math.abs( value - candidate ) < MIN_GAP ) ) continue;
+				const point = sample( lane, candidate, 1 );
+				const gap = Math.hypot( point.x - player.x, point.y - player.y, point.z - player.z );
+				if ( gap > this.spawnRadius || gap < ( this.visibility ? 25 : 6 ) || ! this.#hidden( point ) || ! this.#clear( point, player ) ) continue;
+				at = candidate;
+				break;
+
+			}
 
 			if ( at === null ) continue;
 
@@ -167,12 +201,43 @@ export class Traffic {
 				distance: at,
 				speed: lane.speed,
 				gone: false,
+				presence: 0,
+				leaving: false,
 				position: new THREE.Vector3(),
 				heading: 0,
 				pitch: 0
 			} );
 
 		}
+
+	}
+
+	#hidden( point ) {
+
+		return this.visibility?.hidden( point, 3 ) ?? true;
+
+	}
+
+	#clear( point, player ) {
+
+		let clear = Math.abs( point.y - player.y ) > 2 || Math.hypot( point.x - player.x, point.z - player.z ) > 4;
+		this.street.forEachNear( point, 4, body => { if ( Math.abs( body.position.y - point.y ) < 2 ) clear = false; } );
+		if ( ! clear ) return false;
+		for ( const edge of this.crossings ) {
+
+			const path = edge.path3;
+			for ( let index = 1; index < path.length; index ++ ) {
+
+				const a = path[ index - 1 ], b = path[ index ];
+				const dx = b[ 0 ] - a[ 0 ], dz = b[ 2 ] - a[ 2 ];
+				const t = THREE.MathUtils.clamp( ( ( point.x - a[ 0 ] ) * dx + ( point.z - a[ 2 ] ) * dz ) / ( dx * dx + dz * dz || 1 ), 0, 1 );
+				if ( Math.abs( point.y - ( a[ 1 ] + ( b[ 1 ] - a[ 1 ] ) * t ) ) < 2 &&
+					Math.hypot( point.x - a[ 0 ] - dx * t, point.z - a[ 2 ] - dz * t ) < CAR_LENGTH / 2 + ( edge.width ?? 3 ) / 2 ) return false;
+
+			}
+
+		}
+		return true;
 
 	}
 
@@ -304,7 +369,7 @@ export class Traffic {
 
 			if ( ! next ) {
 
-				car.gone = true;
+				car.leaving = true;
 				return;
 
 			}
@@ -320,7 +385,7 @@ export class Traffic {
 
 		if ( ! car.turn ) {
 
-			car.gone = true;
+			car.leaving = true;
 			return;
 
 		}
@@ -359,7 +424,7 @@ export class Traffic {
 			this.rotation.set( - car.pitch, car.heading, 0, 'YXZ' );
 			this.quaternion.setFromEuler( this.rotation );
 			this.matrix.compose( this.position, this.quaternion, this.scale );
-			this.models.setInstance( car.model, slot, this.matrix );
+			this.models.setInstance( car.model, slot, this.matrix, car.presence );
 			counts[ car.model ] = slot + 1;
 
 		}

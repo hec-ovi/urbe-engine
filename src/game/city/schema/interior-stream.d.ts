@@ -20,7 +20,7 @@ export interface InteriorSource {
 /** What one floor's modules and furniture are to the physics world. */
 export interface FloorSolid {
 	boxes: Array<{ center: [number, number, number]; halfExtents: [number, number, number]; rotationY: number }>;
-	/** Borrowed world-space furniture triangles, packed xyz. */
+	/** Reserved triangle port; catalog furniture uses boxes. */
 	positions: Float32Array[];
 }
 
@@ -41,6 +41,9 @@ export interface InteriorStreamPort {
 	readonly liveInteriors: number;
 	/** Whether one floor of a furnished building is drawn and solid now. */
 	floorShown(parcelId: string, floor: number): boolean;
+	prepare(feet: { x: number; y: number; z: number }): Promise<void>;
+	requestFloor(parcelId: string, floor: number): boolean;
+	releaseFloor(parcelId: string): void;
 	register(buildings: Map<string, { interior: InteriorSource | null; hasInterior?: boolean }>, centers: Map<string, { x: number; z: number }>): void;
 	/** Returns whether room memory or scene membership changed. */
 	update(feet: { x: number; y: number; z: number }): boolean;

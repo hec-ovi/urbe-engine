@@ -84,3 +84,5 @@ General unresolved material keys render magenta and are counted; bound mission a
 [Atlas](../../../atlas/CONTRACT.md), [Connections](../../../connections/CONTRACT.md), [Exterior](../../../exterior/CONTRACT.md), [Interior](../../../interior/CONTRACT.md), [Materials](../../../materials/CONTRACT.md), [Simulation](../../../simulation/CONTRACT.md), [Naming](../../../naming/CONTRACT.md), [Quests](../../../quests/CONTRACT.md), [Assembly](../assembly/CONTRACT.md), [Library](../library/CONTRACT.md) and the runtime interfaces above.
 
 Native tree-grate receivers share Atlas median tree anchors with Props. Their bodies remain in native collision; dressing admission permits their matching tree to occupy the receiver.
+
+New story sessions choose an available first appointment during the actual client's working schedule. Explicit URL hours and saved clocks take precedence. The simulation crowd reads integer minutes; continuity movement reads fractional minutes. Nearby interior floors prepare under the loading screen before play.

@@ -124,7 +124,13 @@ describe( 'live quest target projection', () => {
 		expect( crowd.castMember ).toHaveBeenCalledWith( 'npc-denna', 600, expect.objectContaining( { x: 0, z: 0 } ), 'p9' );
 		const [ mark ] = gameplay.actorMarks.get( 'quest:q_side:talk' );
 		expect( mark.position.toArray() ).toEqual( [ 1, 2.15, - 2 ] );
-		expect( mark.material.depthTest ).toBe( false );
+		expect( mark.material.depthTest ).toBe( true );
+		expect( mark.geometry.parameters.outerRadius ).toBeLessThanOrEqual( 0.06 );
+		expect( mark.material.opacity ).toBeLessThanOrEqual( 0.6 );
+		expect( mark.material.color.getHex() ).toBe( 0x8baeb8 );
+		member.position.set( 1, 0, - 100 );
+		gameplay.candidates( frame( pointLook( 0, 0.2, - 2 ) ) );
+		expect( mark.scale.x ).toBeLessThanOrEqual( 1.6 );
 		expect( mark.renderOrder ).toBeGreaterThan( 1 );
 
 		actions.places.mockReturnValue( [ place( 'q_side', 'talk', [ 'npc-denna' ], { available: false, reason: 'outside_window' } ) ] );

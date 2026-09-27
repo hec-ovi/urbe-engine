@@ -72,11 +72,11 @@ export class Transit {
 	 * @param player the player's feet, in world metres
 	 * @param daySeconds seconds since midnight, the clock's own unit
 	 */
-	update( player, daySeconds ) {
+	update( player, daySeconds, delta = 1, visibility = null ) {
 
-		this.buses.update( player, daySeconds );
-		this.trains.update( player, daySeconds );
-		this.subways.update( player, daySeconds );
+		this.buses.update( player, daySeconds, delta, visibility );
+		this.trains.update( player, daySeconds, delta, visibility );
+		this.subways.update( player, daySeconds, delta, visibility );
 
 	}
 

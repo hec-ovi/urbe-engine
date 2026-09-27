@@ -934,3 +934,52 @@ function crowdOn( routes, agents, options = {} ) {
 	} );
 
 }
+
+describe( 'Crowd visibility admission', () => {
+	const clock = { timeMin: 600, daySeconds: 36000 };
+	it( 'defers a reported visible pedestrian, then starts upstream out of sight without changing the sample', () => {
+		const agents = [ { crowdId: 'h1', type: 'worker', activity: 'commuting', place: { kind: 'edge', id: 'e3' }, progress: 0.5, direction: 1 } ];
+		const crowd = crowdOn( pavement(), agents );
+		crowd.visibility = { hidden: () => false };
+		crowd.update( 0, new THREE.Vector3(), clock );
+		expect( crowd.count ).toBe( 0 );
+		expect( crowd.sampled ).toBe( 1 );
+		crowd.visibility.hidden = p => p.x < - 5;
+		crowd.update( 3, new THREE.Vector3(), clock );
+		expect( crowd.count ).toBe( 1 );
+		expect( [ ...crowd.members.values() ][ 0 ].position.x ).toBeLessThan( 0 );
+		expect( agents[ 0 ].progress ).toBe( 0.5 );
+	} );
+
+	it( 'keeps a retiring visible body through the old 60 and 115 metre cutoffs, then fades at the hard bound', () => {
+		const crowd = crowdOn( corner(), group( 1 ) );
+		crowd.update( 1, PLAYER, clock );
+		const member = [ ...crowd.members.values() ][ 0 ];
+		member.retiring = true;
+		member.stationary = true;
+		member.position.set( 120, 0, 0 );
+		crowd.visibility = { hidden: () => false };
+		crowd.update( 3, new THREE.Vector3(), clock );
+		expect( crowd.members.has( member.id ) ).toBe( true );
+		member.position.x = 170;
+		crowd.timer = 3;
+		crowd.update( 0.3, new THREE.Vector3(), clock );
+		expect( member.presence ).toBeCloseTo( 0.5 );
+		crowd.update( 0.3, new THREE.Vector3(), clock );
+		expect( crowd.members.has( member.id ) ).toBe( false );
+	} );
+
+	it( 'admits occupants only after their floor is solid and keeps lobby overflow inside the room', () => {
+		const inside = new THREE.Vector3();
+		let ready = false;
+		const crowd = new Crowd( { assets: testAssets(), routes: pavement(), signals: {}, capacity: 2,
+			floorShown: () => ready, places: new Map( [ [ 'p1', { inside, heading: 0, lobby: [ new THREE.Vector3( 0, 0, 2 ) ] } ] ] ),
+			sim: { crowd: ( t, scope ) => ( { agents: scope.kind === 'parcel' ? [ 1, 2 ].map( i => ( { crowdId: `staff${i}`, activity: 'working', place: { kind: 'parcel', id: 'p1' } } ) ) : [] } ) } } );
+		crowd.update( 0, inside, clock );
+		expect( crowd.count ).toBe( 0 );
+		ready = true;
+		crowd.update( 3, inside, clock );
+		expect( crowd.count ).toBe( 1 );
+		expect( [ ...crowd.members.values() ][ 0 ].position.toArray() ).toEqual( [ 0, 0, 2 ] );
+	} );
+} );

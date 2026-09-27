@@ -10,7 +10,7 @@ const PITCH = { min: 0.25, max: 1.45, start: 0.95 };
 const COLORS = {
 	sky: 0x0a0e14, roadway: 0x2f4358, sidewalk: 0x1b2430, block: 0x141a22, open: 0x1a2a24,
 	building: 0x27313f, edge: 0x5a6d84, player: 0xcfe6ff, venueOpen: 0xffc46b, venueShut: 0x4a4136,
-	bus: 0xffb84d, train: 0x78f06f, subway: 0xa788ff, route: 0x69f4ff, objective: 0xff5fa8
+	bus: 0xffb84d, train: 0x78f06f, subway: 0xa788ff, route: 0x69f4ff, objective: 0x8baeb8
 };
 const LEGEND = [
 	[ 'you', COLORS.player ], [ 'venue open', COLORS.venueOpen ], [ 'venue shut', COLORS.venueShut ],
@@ -74,7 +74,7 @@ export class Map3DView {
 		this.venueMarks = new THREE.Group();
 		this.routeLine = null;
 		this.objectiveMark = new THREE.Mesh(
-			new THREE.OctahedronGeometry( 3 ),
+			new THREE.OctahedronGeometry( 0.9 ),
 			new THREE.MeshBasicMaterial( { color: COLORS.objective } )
 		);
 		this.objectiveMark.visible = false;
@@ -202,7 +202,7 @@ export class Map3DView {
 			);
 			this.routeLine.name = 'objective-route';
 			this.scene.add( this.routeLine );
-			this.objectiveMark.position.copy( points.at( - 1 ) ).setY( 4 );
+			this.objectiveMark.position.copy( points.at( - 1 ) ).setY( 1.6 );
 			this.objectiveMark.visible = true;
 
 		}

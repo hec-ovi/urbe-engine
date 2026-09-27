@@ -17,6 +17,7 @@ export class StreetLampClearance {
 		this.trees = new StreetFixtureIndex();
 		this.highways = new StreetFixtureIndex();
 		this.walk = new StreetFixtureIndex();
+		this.landings = new StreetFixtureIndex();
 		this.source = { atlas, walk };
 
 	}
@@ -30,8 +31,47 @@ export class StreetLampClearance {
 			this.highways.add( highway, [ ...highway.path, ...highway.supports.flatMap( support => support.footprint ) ], highway.width / 2 );
 			yield;
 		}
-		for ( const edge of walk?.edges ?? [] ) { this.walk.add( edge, edge.path3?.map( point => [ point[ 0 ], point[ 2 ] ] ) ?? edge.path ); yield; }
+		for ( const edge of walk?.edges ?? [] ) { this.walk.add( edge, edge.path3?.map( point => [ point[ 0 ], point[ 2 ] ] ) ?? edge.path, ( edge.width ?? 1.2 ) / 2 ); yield; }
+		for ( const junction of atlas.streets.construction?.junctions ?? [] ) for ( const approach of junction.approaches ) {
+
+			for ( const polygon of [ ...Object.values( approach.landings ?? {} ), ...Object.values( approach.walkingLandings ?? {} ) ] ) {
+
+				this.landings.add( polygon, polygon );
+				yield;
+
+			}
+
+		}
+		for ( const edge of atlas.streets.construction?.planningReservations?.edges ?? [] ) for ( const side of Object.values( edge.sides ?? {} ) ) {
+
+			for ( const polygon of side.walking ?? [] ) { this.landings.add( polygon, polygon ); yield; }
+
+		}
 		this.source = null;
+
+	}
+
+	/** A furnishing seat must also leave crossing landings and walking ribbons clear. */
+	allowsBase( x, z, radius ) {
+
+		for ( const ring of this.landings.near( x, z, radius ) ) {
+
+			if ( segmentToRing( [ [ x, z ], [ x, z ] ], ring ) < radius ) return false;
+
+		}
+		for ( const edge of this.walk.near( x, z, radius + 3 ) ) {
+
+			const path = edge.path3 ?? edge.path.map( ( [ px, pz ] ) => [ px, edge.level ?? 0, pz ] );
+			for ( let index = 1; index < path.length; index ++ ) {
+
+				const a = path[ index - 1 ], b = path[ index ];
+				if ( Math.min( a[ 1 ], b[ 1 ] ) > 2 || Math.max( a[ 1 ], b[ 1 ] ) < - 1 ) continue;
+				if ( pointToSegment( [ x, z ], [ a[ 0 ], a[ 2 ] ], [ b[ 0 ], b[ 2 ] ] ) < radius + ( edge.width ?? 1.2 ) / 2 ) return false;
+
+			}
+
+		}
+		return true;
 
 	}
 

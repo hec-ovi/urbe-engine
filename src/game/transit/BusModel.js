@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { vehiclePresence } from '../agents/Presence.js';
 import { box, tube, merge } from './Shapes.js';
 
 // A twelve metre city bus, in the dimensions one is built in: 11.9 m over the
@@ -79,19 +80,24 @@ export class BusModel {
 			instanced( merge( tyres ), factory.build( TYRE_KEY ), capacity, 'bus:tyres' )
 		];
 
+		this.presence = vehiclePresence( this.meshes, capacity );
 		this.group = new THREE.Group();
 		this.group.name = 'buses';
 		this.group.add( ...this.meshes );
 
 	}
 
-	setInstance( slot, matrix ) {
+	setInstance( slot, matrix, presence = 1 ) {
+
+		this.presence.setX( slot, presence );
 
 		for ( const mesh of this.meshes ) mesh.setMatrixAt( slot, matrix );
 
 	}
 
 	commit( count ) {
+
+		this.presence.needsUpdate = true;
 
 		for ( const mesh of this.meshes ) {
 

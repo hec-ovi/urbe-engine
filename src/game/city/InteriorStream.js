@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { buildingFloors, floorPlacements } from './InteriorLayouts.js';
+import { furnitureBoxes } from './FurnitureBoxes.js';
 import { floorBoxes } from './InteriorBoxes.js';
 import { moduleError } from './InteriorModules.js';
 import { floorFill, floorOrphans, roomsOf } from './InteriorRooms.js';
@@ -9,8 +10,9 @@ import { Haze } from '../light/Haze.js';
 const LOAD_RADIUS = 70;
 /** And the building is let go past this, with hysteresis so a boundary cannot thrash. */
 const DROP_RADIUS = 95;
-/** One floor at a time: the frame gets one landing. */
-const CONCURRENCY = 1;
+/** Builds may await assets while another floor is admitted. */
+const BUILD_CONCURRENCY = 2;
+const ADMISSION_CONCURRENCY = 2;
 /** Floors above and below the one the player is on that are in the scene. */
 const BAND_REACH = 1;
 /** One floor further stays built, so a landing halfway up the stairs never rebuilds. */
@@ -73,7 +75,10 @@ export class InteriorStream {
 		if ( props ) this.group.add( props.group );
 		this.pending = new Map();
 		this.live = new Map();
-		this.loading = 0;
+		this.building = 0;
+		this.admitting = 0;
+		this.requests = new Map();
+		if ( elevators ) elevators.stream = this;
 		this.rooms = [];
 		this.onColliderBand = null;
 		this.onDropBand = null;
@@ -93,8 +98,35 @@ export class InteriorStream {
 			this.pending.set( parcelId, {
 				parcelId,
 				floors: buildingFloors( parcelId, building.interior ),
-				center: centers.get( parcelId )
+				center: centers.get( parcelId ),
+				bounds: footprintBounds( building.blueprint?.bounds?.footprint ?? building.interior.layouts.ground?.floor.rooms.flatMap( room => room.polygon ) )
 			} );
+
+		}
+
+	}
+
+	get loading() { return this.building + this.admitting; }
+
+	/** A lift keeps its destination and both neighbouring bands requested. */
+	requestFloor( parcelId, floor ) {
+
+		if ( ! this.pending.has( parcelId ) ) return false;
+		this.requests.set( parcelId, floor );
+		return true;
+
+	}
+
+	releaseFloor( parcelId ) { this.requests.delete( parcelId ); }
+
+	/** Loading-screen preparation of the floors visible from the starting point. */
+	async prepare( feet ) {
+
+		for ( ;; ) {
+
+			this.update( feet );
+			if ( ! this.loading ) break;
+			await new Promise( resolve => setTimeout( resolve, 0 ) );
 
 		}
 
@@ -127,7 +159,7 @@ export class InteriorStream {
 
 		for ( const entry of this.pending.values() ) {
 
-			if ( ! this.live.has( entry.parcelId ) && ground( entry.center, feet ) < LOAD_RADIUS ) this.#open( entry );
+			if ( ! this.live.has( entry.parcelId ) && ground( entry, feet ) < LOAD_RADIUS ) this.#open( entry );
 
 		}
 
@@ -135,7 +167,7 @@ export class InteriorStream {
 
 		for ( const [ parcelId, interior ] of this.live ) {
 
-			const distance = ground( interior.center, feet );
+			const distance = ground( interior, feet );
 
 			if ( distance > DROP_RADIUS ) {
 
@@ -152,7 +184,7 @@ export class InteriorStream {
 
 		}
 
-		if ( next && this.loading < CONCURRENCY ) this.#load( next.interior, next.band );
+		if ( next && this.building < BUILD_CONCURRENCY ) this.#load( next.interior, next.band );
 
 		return this.changed;
 
@@ -219,7 +251,9 @@ export class InteriorStream {
 
 		for ( const band of interior.bands ) {
 
-			const away = Math.abs( band.floor - standing );
+			const requested = this.requests.get( interior.parcelId );
+			const away = Math.min( Math.abs( band.floor - standing ), requested === undefined ? Infinity : Math.abs( band.floor - requested ) );
+			if ( away <= BAND_REACH && ! band.live ) this.#placeholder( band );
 
 			if ( away > KEEP_REACH ) {
 
@@ -233,7 +267,7 @@ export class InteriorStream {
 
 				if ( ! want || away < Math.abs( want.floor - standing ) ) want = band;
 
-			} else if ( band.state === LOADED && ! band.live && ! band.admission && ! this.loading ) {
+			} else if ( band.state === LOADED && ! band.live && ! band.admission && this.admitting < ADMISSION_CONCURRENCY ) {
 
 				this.#show( interior, band );
 
@@ -245,17 +279,48 @@ export class InteriorStream {
 
 	}
 
+	/** Real module slabs hold the floor while furniture and light programs load. */
+	#placeholder( band ) {
+
+		if ( band.placeholder || band.state === FAILED ) return;
+		const token = { handles: [] };
+		band.placeholder = token;
+		const placements = floorPlacements( band.record ).filter( one => one.module?.startsWith( 'floor-' ) );
+		const boxes = floorBoxes( placements, band.elevation, id => this.modules.boundsOf( id ) );
+		this.admitting ++;
+		Promise.resolve( this.onColliderBand?.( `${band.id}/floor`, { boxes, positions: [] } ) ).then( ready => {
+
+			if ( band.placeholder !== token || ready === false ) return;
+			this.modules.reserve?.( placements.map( one => one.module ) );
+			for ( const placement of placements ) token.handles.push( this.modules.admit( placement.module,
+				matrixOf( placement, band.elevation ), new THREE.Vector4( 0, 0, 0, 0 ), placement.uvRepeat ) );
+
+		} ).catch( error => { console.warn( `floor ${band.id} support: ${error.message}` ); this.#dropPlaceholder( band ); } )
+			.finally( () => { this.admitting --; } );
+
+	}
+
+	#dropPlaceholder( band ) {
+
+		if ( ! band.placeholder ) return;
+		for ( const handle of band.placeholder.handles ) this.modules.release( handle );
+		band.placeholder = null;
+		this.onDropBand?.( `${band.id}/floor` );
+
+	}
+
 	/** A floor stays out of the draws and out of the scene until it is solid. */
 	async #show( interior, band ) {
 
 		const admission = {};
 		band.admission = admission;
-		this.loading ++;
+		this.admitting ++;
 		const t = performance.now();
 		try {
 
 			const ready = await this.onColliderBand?.( band.id, band.solid );
 			if ( band.admission !== admission || band.state !== LOADED || ready === false ) return;
+			this.#dropPlaceholder( band );
 			band.live = true;
 			band.group.parent.visible = true;
 			band.show();
@@ -271,7 +336,7 @@ export class InteriorStream {
 		} finally {
 
 			if ( band.admission === admission ) band.admission = null;
-			this.loading --;
+			this.admitting --;
 			this.hitches?.note( `band ${band.id} collider admission elapsed`, performance.now() - t );
 
 		}
@@ -303,6 +368,7 @@ export class InteriorStream {
 		}
 
 		this.roomLights?.releaseRooms?.( band.rooms );
+		this.#dropPlaceholder( band );
 		this.elevators?.release( interior.parcelId, band.floor );
 		band.clear();
 
@@ -310,7 +376,7 @@ export class InteriorStream {
 
 	async #load( interior, band ) {
 
-		this.loading ++;
+		this.building ++;
 		band.state = LOADING;
 
 		try {
@@ -334,7 +400,7 @@ export class InteriorStream {
 
 		} finally {
 
-			this.loading --;
+			this.building --;
 
 		}
 
@@ -426,8 +492,9 @@ export class InteriorStream {
 		return {
 			content, rooms, copies,
 			solid: {
-				boxes: floorBoxes( floorPlacements( record ), record.elevation, ( id ) => this.modules.boundsOf( id ) ),
-				positions: propTriangles( floorPlacements( record ), record.elevation, this.props )
+				boxes: [ ...floorBoxes( floorPlacements( record ), record.elevation, ( id ) => this.modules.boundsOf( id ) ),
+					...furnitureBoxes( floorPlacements( record ), record.elevation, this.props ) ],
+				positions: []
 			}
 		};
 
@@ -438,10 +505,11 @@ export class InteriorStream {
 /** One building open around the player: its floors as bands, lowest first. */
 class Interior {
 
-	constructor( { parcelId, floors, center } ) {
+	constructor( { parcelId, floors, center, bounds } ) {
 
 		this.parcelId = parcelId;
 		this.center = center;
+		this.bounds = bounds;
 		this.floors = floors;
 		this.group = new THREE.Group();
 		this.group.name = `interior:${parcelId}`;
@@ -574,43 +642,6 @@ function matrixOf( { position, rotationY, scale }, elevation ) {
 }
 
 /**
- * Furniture keeps the exact collision the street props have: its own triangles
- * in world space, one borrowed array per material part per copy.
- */
-function propTriangles( placements, elevation, props ) {
-
-	const positions = [];
-
-	if ( ! props ) return positions;
-
-	for ( const placement of placements ) {
-
-		if ( ! placement.prop ) continue;
-
-		const matrix = matrixOf( placement, elevation );
-
-		for ( const { geometry } of props.surfacesOf( placement.prop ) ) {
-
-			const source = geometry.getAttribute( 'position' );
-			const moved = new Float32Array( source.count * 3 );
-
-			for ( let vertex = 0; vertex < source.count; vertex ++ ) {
-
-				_point.fromBufferAttribute( source, vertex ).applyMatrix4( matrix ).toArray( moved, vertex * 3 );
-
-			}
-
-			positions.push( moved );
-
-		}
-
-	}
-
-	return positions;
-
-}
-
-/**
  * The floor whose slab-to-slab band holds `y`, or the nearest one when the
  * player is outside the building altogether, which is the usual case: standing
  * on the pavement puts you on floor 0 and its neighbours.
@@ -641,12 +672,20 @@ export function floorAt( bands, y ) {
 
 }
 
-function ground( center, point ) {
+function footprintBounds( outline ) {
 
-	return Math.hypot( center.x - point.x, center.z - point.z );
+	if ( ! outline?.length ) return null;
+	const xs = outline.map( p => p[ 0 ] ), zs = outline.map( p => p[ 1 ] );
+	return { x0: Math.min( ...xs ), x1: Math.max( ...xs ), z0: Math.min( ...zs ), z1: Math.max( ...zs ) };
+
+}
+
+function ground( { center, bounds }, point ) {
+
+	if ( ! bounds ) return Math.hypot( center.x - point.x, center.z - point.z );
+	return Math.hypot( Math.max( bounds.x0 - point.x, 0, point.x - bounds.x1 ), Math.max( bounds.z0 - point.z, 0, point.z - bounds.z1 ) );
 
 }
 
 const _rotation = new THREE.Matrix4();
 const _scale = new THREE.Matrix4();
-const _point = new THREE.Vector3();

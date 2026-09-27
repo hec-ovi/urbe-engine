@@ -41,11 +41,11 @@ export class StreetLampPlan {
 		const occupied = new StreetFixtureIndex( MIN_GAP );
 		const accept = source => {
 			if ( alleys.near( source.x, source.z ).some( edge => onPavementOf( source, edge ) ) ) return;
-			const spot = offAsphalt( road, source, seats );
+			const spot = offAsphalt( road, source, seats, clearance );
 			if ( ! spot || occupied.near( spot.x, spot.z, MIN_GAP ).some( other => Math.hypot( other.x - spot.x, other.z - spot.z ) < MIN_GAP ) ) return;
-			occupied.add( spot, [ [ spot.x, spot.z ] ] );
 			const { post, glow } = streetLampDescriptor( spot );
 			if ( ! clearance.allows( post.head ) ) return;
+			occupied.add( spot, [ [ spot.x, spot.z ] ] );
 			this.records.push( { id: `lamp:${this.records.length}`, kind: 'post', ...spot, post, glow } );
 			this.posts.push( post ); this.glows.push( glow );
 		};
@@ -292,14 +292,14 @@ const KERB_STEP = 0.5;
  * The spot itself when it stands clear of the asphalt, else the first point
  * behind it (away from the road its arm faces) that does, else null.
  */
-function offAsphalt( roadway, spot, seats ) {
+function offAsphalt( roadway, spot, seats, clearance ) {
 
 	for ( let back = 0; back <= KERB_SEARCH; back += KERB_STEP ) {
 
 		const x = spot.x - spot.ax * back;
 		const z = spot.z - spot.az * back;
 
-		if ( ! roadway.covers( x, z ) && seats.allows( x, z, POLE_COLLIDER_RADIUS ) ) return back ? { ...spot, x, z } : spot;
+		if ( ! roadway.covers( x, z ) && seats.allows( x, z, POLE_COLLIDER_RADIUS ) && clearance.allowsBase( x, z, POLE_COLLIDER_RADIUS ) ) return back ? { ...spot, x, z } : spot;
 
 	}
 

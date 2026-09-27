@@ -22,6 +22,9 @@ export class GameClock {
 
 	}
 
+	/** Fractional minutes for continuous schedule projection. */
+	get exactMin() { return this.seconds / 60; }
+
 	/** Integer minutes since the world epoch, the simulation's `timeMin`. */
 	get timeMin() {
 

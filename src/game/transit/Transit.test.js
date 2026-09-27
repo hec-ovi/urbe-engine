@@ -192,3 +192,24 @@ function stubFactory( built = [] ) {
 	};
 
 }
+
+it( 'retains a trip through the draw rim and fades a visible timetable departure', () => {
+	const route = busRoute();
+	const transit = new Transit( { atlas: city(), networks: { transit: { routes: [ route ] } }, factory: stubFactory(), capacity: 1 } );
+	const player = new THREE.Vector3( 60, 0, 50 );
+	const visibility = { hidden: () => false };
+	transit.update( player, 30060, 0.1, visibility );
+	const model = transit.buses.models;
+	expect( model.presence.getX( 0 ) ).toBeCloseTo( 0.125 );
+	transit.update( player, 30060, 0.7, visibility );
+	expect( model.presence.getX( 0 ) ).toBe( 1 );
+	const vehicle = [ ...transit.buses.residents.values() ][ 0 ];
+	player.set( vehicle.vehicle.position[ 0 ] + 330, 0, vehicle.vehicle.position[ 2 ] );
+	transit.update( player, 30060, 0.1, visibility );
+	expect( transit.buses.count ).toBe( 1 );
+	const closed = route.service[ 0 ].end + 600;
+	transit.update( player, closed, 0.3, visibility );
+	expect( model.presence.getX( 0 ) ).toBeCloseTo( 0.5 );
+	transit.update( player, closed, 0.3, visibility );
+	expect( transit.buses.count ).toBe( 0 );
+} );

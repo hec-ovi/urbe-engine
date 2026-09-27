@@ -123,3 +123,33 @@ function playerAt( x, y, z ) {
 	return { feet, teleport: ( point ) => feet.copy( point ) };
 
 }
+
+it( 'selects any served floor without wrapping, waits for closed doors and a loaded landing', () => {
+	let ready = false;
+	const stream = { requestFloor: () => true, releaseFloor() {}, floorShown: () => ready };
+	const elevators = new Elevators( factory );
+	elevators.stream = stream;
+	const tower = Array.from( { length: 24 }, ( _, floor ) => ( { floor, elevation: floor * 4.5, height: 4.5, core: { elevators: [ LIFT() ] } } ) );
+	const [ shaft ] = elevators.add( 'p1', tower, new THREE.Group() );
+	shaft.select( 100 );
+	expect( shaft.selected ).toBe( 23 );
+	shaft.select( 1 );
+	expect( shaft.selected ).toBe( 23 );
+	shaft.press( { inside: true } );
+	const body = playerAt( 11.25, 0.05, 21.25 );
+	for ( let i = 0; i < 240; i ++ ) elevators.update( 0.1, body );
+	expect( shaft.at ).toBe( 103.5 );
+	expect( body.feet.y ).toBeCloseTo( 103.55 );
+	expect( shaft.stops[ 23 ].wanted ).toBe( 0 );
+	ready = true;
+	elevators.update( 0.2, body );
+	expect( shaft.stops[ 23 ].wanted ).toBe( 1 );
+	shaft.select( - 1 );
+	shaft.press( { inside: true } );
+	const at = shaft.at;
+	elevators.update( 0.05, body );
+	expect( shaft.at ).toBe( at );
+	expect( shaft.floorAt ).toBe( at );
+	for ( let i = 0; i < 40; i ++ ) elevators.update( 0.1, body );
+	expect( shaft.at ).toBe( 99 );
+} );

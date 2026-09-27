@@ -11,11 +11,11 @@ const MIN_AIM = 0.76;
 const CHEST = 1.3;
 /** Where a quest mark floats: clear of the tallest head, still inside a room. */
 const HEAD = 2.15;
-/** Drawn over the room it stands in, so a person indoors is found from the door. */
+/** Draw after opaque scenery, retaining ordinary depth occlusion. */
 const MARK_RENDER_ORDER = 12;
 /** A mark holds its screen size out to this reach, then stops growing. */
-const MARK_REFERENCE = 5;
-const MARK_MAX_SCALE = 5;
+const MARK_REFERENCE = 16;
+const MARK_MAX_SCALE = 1.6;
 const FIXED_KINDS = new Set( [ 'rescue', 'access', 'hacking', 'sabotage' ] );
 /** Steps that send the player somewhere and read as nothing there without a mark. */
 const PLACE_KINDS = new Set( [ 'goto', 'talk' ] );
@@ -1091,7 +1091,7 @@ export class QuestGameplay {
 	/**
 	 * One mark over the head of every person an open step is about, turned to
 	 * the eye, grown with the distance so it still reads across a room, and
-	 * drawn over the walls between.
+	 * depth tested against the walls between.
 	 */
 	#markActors( target, members, eye ) {
 
@@ -1111,7 +1111,7 @@ export class QuestGameplay {
 			mark.position.copy( members[ index ].position ).add( new THREE.Vector3( 0, HEAD, 0 ) );
 			mark.lookAt( eye );
 			const reach = mark.position.distanceTo( eye );
-			mark.scale.setScalar( Math.min( MARK_MAX_SCALE, Math.max( 1, reach / MARK_REFERENCE ) ) );
+			mark.scale.setScalar( Math.min( MARK_MAX_SCALE, Math.max( 0.65, reach / MARK_REFERENCE ) ) );
 
 		} );
 
@@ -1302,8 +1302,8 @@ function missionMark( target, anchor, assembly, materialFactory, interactionId )
 
 	}
 	const icon = new THREE.Mesh(
-		new THREE.OctahedronGeometry( 0.16 ),
-		new THREE.MeshBasicMaterial( { color: 0xff5fa8 } )
+		new THREE.OctahedronGeometry( 0.08 ),
+		new THREE.MeshBasicMaterial( { color: 0x8baeb8 } )
 	);
 	icon.position.y = assembly.dimensions.height + 0.45;
 	group.add( icon );
@@ -1357,21 +1357,12 @@ function areaMark( target, anchor ) {
 
 }
 
-/** The quest marker: a pennant that points down at the person under it. */
+/** A small hollow diamond over an objective person, occluded by the world. */
 function actorMark() {
 
-	const shape = new THREE.Shape();
-	shape.moveTo( 0, - 0.26 );
-	shape.lineTo( 0.19, 0.06 );
-	shape.lineTo( 0.07, 0.06 );
-	shape.lineTo( 0.07, 0.28 );
-	shape.lineTo( - 0.07, 0.28 );
-	shape.lineTo( - 0.07, 0.06 );
-	shape.lineTo( - 0.19, 0.06 );
-	shape.closePath();
-	const mark = new THREE.Mesh( new THREE.ShapeGeometry( shape ), new THREE.MeshBasicMaterial( {
-		color: 0xff5fa8, side: THREE.DoubleSide, transparent: true, opacity: 0.95,
-		depthTest: false, depthWrite: false
+	const mark = new THREE.Mesh( new THREE.RingGeometry( 0.038, 0.06, 4 ), new THREE.MeshBasicMaterial( {
+		color: 0x8baeb8, side: THREE.DoubleSide, transparent: true, opacity: 0.6,
+		depthTest: true, depthWrite: false
 	} ) );
 	mark.renderOrder = MARK_RENDER_ORDER;
 	mark.name = 'quest-actor-mark';

@@ -6,7 +6,7 @@ const MOVE_KEYS = {
 };
 
 const RUN_MULTIPLIERS = { Digit1: 1, Digit2: 2, Digit4: 4, Numpad1: 1, Numpad2: 2, Numpad4: 4 };
-const GAME_KEYS = new Set( [ ...Object.keys( MOVE_KEYS ), ...Object.keys( RUN_MULTIPLIERS ), 'Space', 'KeyC', 'KeyE', 'KeyR', 'ShiftLeft', 'ShiftRight' ] );
+const GAME_KEYS = new Set( [ ...Object.keys( MOVE_KEYS ), ...Object.keys( RUN_MULTIPLIERS ), 'Space', 'KeyC', 'KeyE', 'KeyR', 'PageUp', 'PageDown', 'ShiftLeft', 'ShiftRight' ] );
 
 /**
  * Keyboard and pointer state, and nothing more. Mouse deltas accumulate

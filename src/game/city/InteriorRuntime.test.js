@@ -570,8 +570,9 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		expect( model.solid.has( landing( 0 ) ) ).toBe( true );
 		expect( model.solid.get( landing( 0 ) ).boxes[ 0 ].halfExtents.every( ( half ) => half > 0 ) ).toBe( true );
 
-		// Standing at that landing opens its leaves, and only then is the
+		// Calling at that landing opens its leaves, and only then is the
 		// doorway walked through; the cab is there to be stood on.
+		shaft.press( { inside: false, stop: shaft.stopAt( 0 ) } );
 		elevators.update( 2, { feet: feetOn( 0 ) } );
 		expect( model.solid.has( landing( 0 ) ) ).toBe( false );
 		expect( model.solid.has( cab ) ).toBe( true );
@@ -580,6 +581,8 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		shaft.press( { inside: false, stop: shaft.stopAt( 1 ) } );
 		elevators.update( 0.1, { feet: feetOn( 0 ), teleport: () => {} } );
 		expect( model.solid.has( landing( 0 ) ) ).toBe( true );
+		expect( model.solid.has( cab ) ).toBe( true );
+		elevators.update( 2, { feet: feetOn( 0 ), teleport: () => {} } );
 		expect( model.solid.has( cab ) ).toBe( false );
 
 		model.dispose();
@@ -661,3 +664,34 @@ function copyOf( model, band, placement ) {
 	return band.copies[ at - before ];
 
 }
+
+it( 'prefetches a lift destination with neighbours while preserving the departure floor', async () => {
+	const model = await stream();
+	model.requestFloor( 'p1', 4 );
+	await model.prepare( feetOn( 0 ) );
+	for ( const floor of [ 0, 1, 3, 4 ] ) expect( model.floorShown( 'p1', floor ) ).toBe( true );
+	for ( const floor of [ 0, 1, 3, 4 ] ) expect( model.solid.get( `p1:${floor}` ).positions ).toEqual( [] );
+	model.releaseFloor( 'p1' );
+	await model.prepare( feetOn( 0 ) );
+	expect( model.floorShown( 'p1', 4 ) ).toBe( false );
+	model.dispose();
+} );
+
+it( 'stands solid module slabs while furniture is pending and cancels stale admissions', async () => {
+	const model = await stream();
+	let release;
+	const pending = new Promise( resolve => { release = resolve; } );
+	model.props.prepare = () => pending;
+	model.update( feetOn( 0 ) );
+	await tick();
+	expect( model.floorShown( 'p1', 0 ) ).toBe( false );
+	expect( model.solid.get( 'p1:0/floor' ).boxes.length ).toBeGreaterThan( 0 );
+	expect( model.modules.copyCount ).toBeGreaterThan( 0 );
+	model.update( { x: 400, y: 0, z: 400 } );
+	release();
+	await tick();
+	expect( model.liveInteriors ).toBe( 0 );
+	expect( model.modules.copyCount ).toBe( 0 );
+	expect( model.solid.size ).toBe( 0 );
+	model.dispose();
+} );

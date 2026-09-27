@@ -16,6 +16,8 @@ export class HairMesh extends CrowdMesh {
 
 	}
 
+	surface( material ) { material.roughness = 0.96; }
+
 	setLook( slot, look ) {
 
 		this.hair.setXYZ( slot, look.hair.r, look.hair.g, look.hair.b );

@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { fog, uniform, renderGroup, exponentialHeightFogFactor, densityFogFactor } from 'three/tsl';
+import { fog, uniform, renderGroup, exponentialHeightFogFactor, densityFogFactor, positionWorld, vec3, mix } from 'three/tsl';
 import { luminance } from '../light/Color.js';
 
 /** Where the street's haze thins out. Above it a tower stands clear of it. */
@@ -67,14 +67,20 @@ export class NightFog {
 		this.base = uniform( 0 ).setGroup( renderGroup );
 		this.outdoor = uniform( 1 ).setGroup( renderGroup );
 		this.indoor = 0;
+		this.roomMin = uniform( new THREE.Vector3( 0, - 1e6, 0 ) ).setGroup( renderGroup );
+		this.roomMax = uniform( new THREE.Vector3( 0, - 1e6, 0 ) ).setGroup( renderGroup );
+		this.room = null;
 
-		const outside = exponentialHeightFogFactor( this.density, this.height ).mul( this.outdoor );
-		const inside = densityFogFactor( this.base );
+		const local = positionWorld.greaterThanEqual( this.roomMin ).all().and( positionWorld.lessThanEqual( this.roomMax ).all() );
+		const share = local.select( this.outdoor.oneMinus(), 0 );
+		const outside = exponentialHeightFogFactor( this.density, this.height ).mul( share.oneMinus() );
+		const inside = densityFogFactor( this.base ).mul( share );
+		const airColor = mix( vec3( this.sky ), this.color, share );
 
 		// The environment probe bakes at street range, where the sky dome is
 		// past the far plane, so the background is what stands in for the sky
 		// glow in every reflection. It carries the same radiance as the air.
-		scene.fogNode = fog( this.color, outside.oneMinus().mul( inside.oneMinus() ).oneMinus() );
+		scene.fogNode = fog( airColor, outside.oneMinus().mul( inside.oneMinus() ).oneMinus() );
 		scene.background = this.sky.clone();
 		this.scene = scene;
 
@@ -84,7 +90,22 @@ export class NightFog {
 	 * @param air { color, lux } the light filling the air where the player is
 	 * @param indoor whether that air is a room's rather than the street's
 	 */
-	update( air, indoor, delta = 0 ) {
+	update( air, room, delta = 0 ) {
+
+		const indoor = Boolean( room );
+		this.room = room?.bounds ? room : null;
+		if ( this.room ) {
+
+			const { bounds, elevation, height } = this.room;
+			this.roomMin.value.set( bounds.x0, elevation - 0.2, bounds.z0 );
+			this.roomMax.value.set( bounds.x1, elevation + height, bounds.z1 );
+
+		} else {
+
+			this.roomMin.value.set( 0, - 1e6, 0 );
+			this.roomMax.value.copy( this.roomMin.value );
+
+		}
 
 		const step = delta > 0 ? delta / ADAPT : 1;
 		const target = indoor ? 1 : 0;
@@ -109,6 +130,18 @@ export class NightFog {
 			this.sky.b * floor + ( hue > 0 ? air.color.b / hue * lit : 0 ),
 			THREE.LinearSRGBColorSpace
 		);
+
+	}
+
+	/** Same outdoor extinction as the fragment shader, for whole-body admission. */
+	visibilityAt( point, depth, radius = 0 ) {
+
+		const low = this.roomMin.value, high = this.roomMax.value;
+		const local = point.x - radius >= low.x && point.x + radius <= high.x &&
+			point.y - radius >= low.y && point.y + radius <= high.y && point.z - radius >= low.z && point.z + radius <= high.z;
+		const outdoors = local ? this.outdoor.value : 1;
+		const density = this.density.value * Math.max( 0, this.height.value - point.y - radius );
+		return 1 - ( 1 - Math.exp( - ( ( density * depth ) ** 2 ) ) ) * outdoors;
 
 	}
 

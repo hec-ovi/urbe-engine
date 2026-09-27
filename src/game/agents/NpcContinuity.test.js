@@ -6,6 +6,7 @@ import { CLIP, clipForNpcAnimation } from './CharacterAssets.js';
 import { NpcContinuity, selectNpcAnimation } from './NpcContinuity.js';
 import { NpcContinuityError } from './NpcContinuityError.js';
 import { WalkRoutes } from './WalkRoutes.js';
+import { GameClock } from '../time/GameClock.js';
 import { Crowd } from './Crowd.js';
 
 const MON_9 = 9 * 60;
@@ -1105,3 +1106,21 @@ function code( run ) {
 	catch ( error ) { return error instanceof NpcContinuityError ? error.code : `unexpected:${error}`; }
 
 }
+
+it( 'moves a real scheduled commuter on every fractional clock update inside one minute', () => {
+	const { bridge, controller } = setup();
+	const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+	const commute = npc.routine.find( entry => entry.days.includes( 0 ) && entry.walk?.to.id === 'p_cafe' );
+	const clock = new GameClock( { startHour: commute.startMin / 60 } );
+	const start = controller.appear( { npcId: npc.npcId, timeMin: clock.exactMin } );
+	let prior = new Vector3( ...start.position );
+	for ( let i = 0; i < 20; i ++ ) {
+		clock.advance( 0.25 );
+		const [ actor ] = controller.updateVisible( { timeMin: clock.exactMin, playerPosition: start.position, maxDistance: 200 } );
+		const next = new Vector3( ...actor.position );
+		expect( next.distanceTo( prior ) ).toBeGreaterThan( 0 );
+		expect( next.distanceTo( prior ) ).toBeLessThan( 1 );
+		prior = next;
+	}
+	expect( clock.timeMin ).toBe( commute.startMin );
+} );

@@ -2,10 +2,11 @@ import * as THREE from 'three/webgpu';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
 import { cos, float, instancedBufferAttribute, int, mix, sin, transformNormalToView, varying, vec3, vertexIndex } from 'three/tsl';
 import { FRAMES } from './VatBaker.js';
+import { presenceMaterial } from './Presence.js';
 import { PoseBuffer } from './PoseBuffer.js';
 
 /** How every crowd surface answers light; a focused rig wears the same, so the swap does not show. */
-export const CROWD_SURFACE = { roughness: 0.78, metalness: 0 };
+export const CROWD_SURFACE = { roughness: 0.9, metalness: 0 };
 
 /**
  * One instanced draw call for an entire crowd of animated characters. The pose
@@ -38,15 +39,15 @@ export class CrowdMesh {
 
 		// Every attribute is one vertex buffer on WebGPU, which allows eight per
 		// pipeline, so the per-instance data is packed: where a person stands
-		// and faces in one vec4, which frame of which clip in one vec2.
+		// and faces in one vec4, which frame of which clip in one vec3 with presence.
 		this.motion = this.attribute( 4 );
-		this.pose = this.attribute( 2 );
+		this.pose = this.attribute( 3 );
 
 		const positions = new PoseBuffer( baked.position, baked.vertexCount, baked.rows, storageCapable );
 		const normals = new PoseBuffer( baked.normal, baked.vertexCount, baked.rows, storageCapable );
 
 		const aMotion = instancedBufferAttribute( this.motion, 'vec4' );
-		const aPose = instancedBufferAttribute( this.pose, 'vec2' );
+		const aPose = instancedBufferAttribute( this.pose, 'vec3' );
 		const aFrame = aPose.x;
 		const aClip = aPose.y;
 		const aOrigin = aMotion.xyz;
@@ -81,13 +82,14 @@ export class CrowdMesh {
 		}
 		geometry.boundingSphere = new THREE.Sphere( new THREE.Vector3(), 1e6 );
 
-		const material = new MeshStandardNodeMaterial( CROWD_SURFACE );
+		const material = presenceMaterial( new MeshStandardNodeMaterial( CROWD_SURFACE ), aPose.z );
 		material.positionNode = turn( pose ).add( aOrigin );
 		// normalNode is consumed in view space. The baked vector first follows
 		// the same per-person heading as the position. Sample in the vertex
 		// stage so its float normal interpolates across the triangle.
 		material.normalNode = transformNormalToView( varying( turn( normal ) ) ).normalize();
 		material.colorNode = this.colorNode( geometry, paint );
+		this.surface?.( material );
 
 		// An InstancedMesh binds its identity instanceMatrix even though this
 		// shader replaces it, taking a ninth vertex buffer on devices whose limit
@@ -132,10 +134,10 @@ export class CrowdMesh {
 	 */
 	setLook() {}
 
-	setInstance( slot, position, heading, frame, clip, look ) {
+	setInstance( slot, position, heading, frame, clip, look, presence = 1 ) {
 
 		this.motion.setXYZW( slot, position.x, position.y, position.z, heading );
-		this.pose.setXY( slot, frame, clip );
+		this.pose.setXYZ( slot, frame, clip, presence );
 		this.setLook( slot, look );
 
 	}

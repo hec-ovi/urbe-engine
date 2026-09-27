@@ -220,6 +220,7 @@ export class HeroCharacter {
 		if ( ! this.active ) return;
 
 		const { person, root, mixer, gesture } = this.active;
+		if ( root.userData.dressed?.presence ) root.userData.dressed.presence.value = person.presence ?? 1;
 		if ( person.look !== this.active.look ) this.#wear();
 		root.position.copy( person.position );
 		root.rotation.y = person.heading;
@@ -247,7 +248,7 @@ export class HeroCharacter {
 		if ( ! ragdoll.settled ) return;
 
 		this.street.rest( person.id );
-		this.clearFall();
+		if ( ! person.fallen ) this.clearFall();
 
 	}
 

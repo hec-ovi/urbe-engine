@@ -33,7 +33,7 @@ const FACE = 1.55;
  */
 export class Interactor {
 
-	constructor( { crowd, doors, sim, controller, elevators, quests, investigations = null, continuity = null, animations = null, doorColliders = null } ) {
+	constructor( { crowd, doors, sim, controller, elevators, quests, investigations = null, continuity = null, animations = null, doorColliders = null, interiors = null } ) {
 
 		this.crowd = crowd;
 		this.doors = doors;
@@ -45,6 +45,7 @@ export class Interactor {
 		this.continuity = continuity;
 		this.animations = animations;
 		this.doorColliders = doorColliders;
+		this.interiors = interiors;
 		this.target = null;
 		this.conversation = null;
 		this.onConversation = null;
@@ -74,6 +75,12 @@ export class Interactor {
 			[ ...this.#candidates( 'quests', questState ), ...this.#candidates( 'investigations', questState ) ]
 		);
 
+		if ( this.target?.kind === 'elevator' && this.target.inside && this.controller.input?.locked ) {
+
+			if ( this.controller.input.consume( 'PageUp' ) ) this.target.shaft.select( 1 );
+			if ( this.controller.input.consume( 'PageDown' ) ) this.target.shaft.select( - 1 );
+
+		}
 		return this.target ? prompt( this.target, this.quests ) : null;
 
 	}
@@ -132,6 +139,12 @@ export class Interactor {
 		if ( this.target.kind === 'door' ) {
 
 			this.target.door.wanted = this.target.door.wanted > 0.5 ? 0 : 1;
+			if ( this.target.door.wanted ) {
+
+				this.target.door.loadingFloor = true;
+				this.interiors?.requestFloor( this.target.door.parcelId, this.target.door.floor ?? 0 );
+
+			}
 
 			return;
 
@@ -187,7 +200,7 @@ export class Interactor {
 			const hold = keep || Boolean( this.quests?.holdsCast?.( npcId ) );
 			try {
 
-				actor = this.continuity.endConversation( { timeMin: clock.timeMin, ...( hold ? { hold } : {} ) } );
+				actor = this.continuity.endConversation( { timeMin: clock.exactMin ?? clock.timeMin, ...( hold ? { hold } : {} ) } );
 				person = this.crowd.syncActor( actor, this.controller.body.feet ) ?? person;
 
 			} catch ( error ) {
@@ -279,7 +292,7 @@ export class Interactor {
 
 				controlledActor = this.continuity.beginConversation( {
 					npcId: person.npcId,
-					timeMin,
+					timeMin: clock.exactMin ?? timeMin,
 					position: position.toArray(),
 					heading: sitting ? placement.heading : headingTo( this.controller.body.feet, position ),
 					place,
@@ -337,7 +350,10 @@ export class Interactor {
 
 	#moveDoor( door, delta ) {
 
-		const wanted = door.wanted ?? 0;
+		const requested = door.wanted ?? 0;
+		const ready = ! this.interiors?.pending.has( door.parcelId ) || this.interiors.floorShown( door.parcelId, door.floor ?? 0 );
+		const wanted = ready ? requested : 0;
+		if ( ready && door.loadingFloor ) { this.interiors?.releaseFloor( door.parcelId ); door.loadingFloor = false; }
 
 		if ( door.open === wanted ) return;
 

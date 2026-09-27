@@ -6,8 +6,7 @@ import { kelvinColor } from '../light/Color.js';
 const CAR_MODULE = 'lift-car';
 /** How far outside its shaft a door leaf may sit and still belong to it. */
 const DOOR_REACH = 0.5;
-/** Cab travel, in metres a second: a real lift in a low-rise building. */
-const SPEED = 1.6;
+
 /** And how long its doors take to run open or shut. */
 const DOOR_TIME = 1.4;
 /** Where the call panel floats: a pace out from the door, at hand height. */
@@ -40,8 +39,7 @@ const CAB_EMISSIVE = 120;
  * shaft a placement belongs to is decided by where it stands, not by a
  * convention about edge numbering.
  *
- * Riding is a call and a choice: E at a landing brings the cab and opens it, E
- * inside takes the next floor the shaft serves. While the cab moves it carries
+ * Riding is a call and a choice: E at a landing brings the cab and opens it, Page Up and Page Down select a served floor inside; E confirms it. While the cab moves it carries
  * whoever is standing in it, because the player is a character controller and
  * not something a moving collider can push.
  *
@@ -87,7 +85,7 @@ export class Elevators {
 
 			for ( const lift of floor.core?.elevators ?? [] ) {
 
-				if ( ! shafts.has( lift.id ) ) shafts.set( lift.id, new Shaft( parcelId, lift, this.factory, this.colliders ) );
+				if ( ! shafts.has( lift.id ) ) shafts.set( lift.id, new Shaft( parcelId, lift, this.factory, this.colliders, this.stream ) );
 
 				shafts.get( lift.id ).serve( floor );
 
@@ -188,9 +186,12 @@ export class Elevators {
 /** One lift: its cab, its landings, and where the cab is right now. */
 class Shaft {
 
-	constructor( parcelId, lift, factory, colliders = null ) {
+	constructor( parcelId, lift, factory, colliders = null, stream = null ) {
 
 		this.parcelId = parcelId;
+		this.stream = stream;
+		this.selected = 1;
+		this.called = false;
 		this.colliders = colliders;
 		this.id = `${parcelId}:${lift.id}`;
 		// A core rect is published by its minimum corner; the shaft is its middle.
@@ -226,6 +227,8 @@ class Shaft {
 		// The cab waits where people come in: the ground floor when the shaft serves it, else its lowest stop.
 		this.at = ( this.stops.find( ( stop ) => stop.floor === 0 ) ?? this.stops[ 0 ] )?.elevation ?? 0;
 		this.target = this.at;
+		this.speed = THREE.MathUtils.clamp( ( this.stops.at( - 1 ).elevation - this.stops[ 0 ].elevation ) / 18, 1.6, 6 );
+		this.selected = Math.min( 1, this.stops.length - 1 );
 
 		const group = new THREE.Group();
 		group.name = `elevator:${this.id}`;
@@ -337,22 +340,23 @@ class Shaft {
 
 	}
 
-	/** E on a landing calls the cab; E inside takes the next floor served. */
+	/** Floor selection is bounded, so the top never wraps to the ground. */
+	select( direction ) {
+
+		if ( this.moving ) return;
+		this.selected = THREE.MathUtils.clamp( this.selected + direction, 0, this.stops.length - 1 );
+
+	}
+
+	/** E on a landing calls; E inside confirms the selected floor. */
 	press( target ) {
 
 		if ( this.moving ) return;
-
-		if ( target.inside ) {
-
-			const here = this.stops.findIndex( ( stop ) => Math.abs( stop.elevation - this.at ) < 0.05 );
-
-			this.target = this.stops[ ( here + 1 ) % this.stops.length ].elevation;
-
-		} else {
-
-			this.target = target.stop.elevation;
-
-		}
+		const stop = target.inside ? this.stops[ this.selected ] : target.stop;
+		if ( ! stop || ! this.stops.includes( stop ) ) return;
+		this.target = stop.elevation;
+		this.called = true;
+		this.stream?.requestFloor( this.parcelId, stop.floor );
 
 	}
 
@@ -361,7 +365,15 @@ class Shaft {
 
 		if ( this.moving ) return 'the lift is moving';
 
-		return target.inside ? 'E  next floor' : 'E  call the lift';
+		if ( this.called && ! this.ready ) return 'waiting for the landing';
+		return target.inside ? `PgUp / PgDn  floor ${this.stops[ this.selected ].floor}    E  go` : 'E  call the lift';
+
+	}
+
+	get ready() {
+
+		const stop = this.stops.find( one => Math.abs( one.elevation - this.at ) < 0.05 );
+		return Boolean( stop ) && ( this.stream?.floorShown( this.parcelId, stop.floor ) ?? true );
 
 	}
 
@@ -370,16 +382,19 @@ class Shaft {
 		// The doors are shut whenever the cab is not standing at that landing.
 		for ( const stop of this.stops ) {
 
-			stop.setOpen( ! this.moving && Math.abs( stop.elevation - this.at ) < 0.05, delta );
+			stop.setOpen( this.called && this.ready && ! this.moving && Math.abs( stop.elevation - this.at ) < 0.05, delta );
 
 		}
 
 		if ( ! this.moving ) {
 
 			this.#standFloor();
+			if ( this.ready && ! this.holds( body.feet ) ) this.stream?.releaseFloor( this.parcelId );
 			return;
 
 		}
+
+		if ( this.stops.some( stop => stop.open > 0 ) ) return;
 
 		// Travelling: the rider is carried, so the cab floor is not standing in
 		// the shaft while it passes the floors between.
@@ -390,7 +405,7 @@ class Shaft {
 
 		}
 
-		const step = Math.sign( this.target - this.at ) * SPEED * delta;
+		const step = Math.sign( this.target - this.at ) * this.speed * delta;
 		const dy = Math.abs( step ) >= Math.abs( this.target - this.at ) ? this.target - this.at : step;
 		const riding = this.holds( body.feet );
 

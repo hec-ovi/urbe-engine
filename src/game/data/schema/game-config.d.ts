@@ -7,7 +7,7 @@ export interface GameQuery {
   /** Defaults to /out/city-tiny; game selects /out/games/<id> instead. */ out?: string;
   /** Only webgl selects the fallback; otherwise webgpu. */ backend?: string;
   /** low, medium, high or ultra; unknown/absent follows backend. */ quality?: string;
-  /** Integer 0-23, default 21. */ hour?: string;
+  /** Integer 0-23; absent, a new story starts during its first client appointment, else 21. */ hour?: string;
   /** Integer 0-600, default 0. */ crowd?: string;
   /** Integer 0-600, default 0. */ cars?: string;
   /** Metres 1-10000, default 90. */ crowdRadius?: string;
@@ -32,6 +32,7 @@ export interface GameConfig {
   backend: 'webgpu' | 'webgl';
   quality: 'low' | 'medium' | 'high' | 'ultra' | null;
   startHour: number;
+  explicitHour: boolean;
   lightingHour: 21;
   timeScale: 1;
   maxCrowd: number;

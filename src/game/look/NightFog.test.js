@@ -136,3 +136,16 @@ describe( 'NightFog', () => {
 	} );
 
 } );
+
+it( 'keeps street extinction through a clear room window and evaluates the fragment volume', () => {
+	const fog = new NightFog( new THREE.Scene(), { density: 0.0003, color: 0x8899aa } );
+	const room = { bounds: { x0: -5, x1: 5, z0: -5, z1: 5 }, elevation: 0, height: 3 };
+	const street = { x: 0, y: 1, z: -90 };
+	const before = fog.visibilityAt( street, 90 );
+	fog.update( { color: new THREE.Color( 1, 1, 1 ), lux: 200 }, room, 1 );
+	expect( fog.visibilityAt( street, 90 ) ).toBe( before );
+	expect( before ).toBeLessThan( 0.02 );
+	expect( fog.visibilityAt( { x: 0, y: 1, z: 0 }, 5 ) ).toBe( 1 );
+	fog.density.value = 0;
+	expect( fog.visibilityAt( street, 90 ) ).toBe( 1 );
+} );

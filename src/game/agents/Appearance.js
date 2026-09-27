@@ -11,8 +11,8 @@ const SKIN = [
 // under a lamp and lighter reads as a hi-vis vest. None of them is anywhere
 // near a skin tone, which is what keeps a shirt from reading as a bare chest.
 const SHIRT = [
-	0x4f5d75, 0x6b2f45, 0x3f6b57, 0x5d4a7a, 0x3c5a6e, 0x546374,
-	0x7a4470, 0x36657a, 0x6b6f52, 0x4a4f57, 0x8a8f99, 0x2f3b4a
+	0x4a535f, 0x493e50, 0x374c46, 0x4b465d, 0x384955, 0x4b555d,
+	0x544756, 0x354e59, 0x484e48, 0x41464d, 0x747c84, 0x2d3743
 ];
 
 const TROUSERS = [

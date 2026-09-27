@@ -95,3 +95,5 @@ One panel over the game at a time.
 
 ## Depends on
 Nothing outside this folder. The game (`src/game/CONTRACT.md`) is the caller.
+
+Objective map marks use muted blue-grey: a 6 px diamond on the minimap and a 0.9 m octahedron at 1.6 m height on the city map. Lift prompts expose Page Up and Page Down selection and E confirmation.

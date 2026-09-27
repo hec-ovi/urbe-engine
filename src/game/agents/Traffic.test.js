@@ -220,3 +220,43 @@ function stubModels() {
 	return { count: 1, setInstance: () => {}, commit: () => {} };
 
 }
+
+it( 'admits actual hidden lane points with clearance and retains a visible car past the rim', () => {
+	let hidden = false;
+	const street = new StreetBodies();
+	const networks = corner( 120 );
+	networks.walk = { edges: [ { kind: 'crossing', width: 3, path3: [ [ 50, 0, -10 ], [ 50, 0, 10 ] ] } ] };
+	street.place( { position: new THREE.Vector3( 70, 0, 0 ) } );
+	const traffic = new Traffic( { networks, models: stubModels(), signals: { green: () => true }, capacity: 2,
+		street, visibility: { hidden: p => hidden && p.x > 30 } } );
+	const player = new THREE.Vector3( 0, 0, 10 );
+	traffic.update( 0, player, 0 );
+	expect( traffic.count ).toBe( 0 );
+	hidden = true;
+	traffic.update( 1.5, player, 0 );
+	expect( traffic.count ).toBeGreaterThan( 0 );
+	for ( const car of traffic.cars ) {
+		expect( car.position.x ).toBeGreaterThan( 30 );
+		expect( car.position.distanceTo( player ) ).toBeGreaterThan( 25 );
+		expect( Math.abs( car.position.x - 50 ) ).toBeGreaterThan( 3.8 );
+		expect( car.position.distanceTo( new THREE.Vector3( 70, 0, 0 ) ) ).toBeGreaterThan( 4 );
+	}
+	const car = traffic.cars[ 0 ];
+	hidden = false;
+	traffic.update( 0, new THREE.Vector3( -100, 0, 10 ), 0 );
+	traffic.timer = 2;
+	traffic.update( 0, new THREE.Vector3( -100, 0, 10 ), 0 );
+	expect( traffic.cars ).toContain( car );
+} );
+
+it( 'rotates lane admission under capacity pressure', () => {
+	const lanes = [ 0, 1, 2 ].map( i => ( { id: `L${i}`, speed: 0, next: [], path3: [ [ 30, 0, i * 10 ], [ 90, 0, i * 10 ] ] } ) );
+	const traffic = new Traffic( { networks: { road: { lanes } }, models: stubModels(), signals: {}, capacity: 1 } );
+	const admitted = [];
+	for ( let i = 0; i < 6; i ++ ) {
+		traffic.cars = [];
+		traffic.update( 2, new THREE.Vector3(), 0 );
+		admitted.push( traffic.cars[ 0 ].lane.id );
+	}
+	expect( admitted ).toEqual( [ 'L0', 'L1', 'L2', 'L0', 'L1', 'L2' ] );
+} );

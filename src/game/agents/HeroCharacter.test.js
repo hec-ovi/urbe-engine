@@ -189,7 +189,7 @@ describe( 'focused character', () => {
 		for ( const mesh of [ ...hairs, meshes.find( ( node ) => node.name === 'body' ) ] ) {
 
 			expect( mesh.material ).toBeInstanceOf( THREE.MeshStandardNodeMaterial );
-			expect( mesh.material ).toMatchObject( { ...CROWD_SURFACE, normalMap: null, roughnessMap: null } );
+			expect( mesh.material ).toMatchObject( { ...CROWD_SURFACE, roughness: mesh.userData.hair ? 0.96 : CROWD_SURFACE.roughness, normalMap: null, roughnessMap: null } );
 
 		}
 		// Each is the pack's own hair map times the person's tint, as in the crowd.

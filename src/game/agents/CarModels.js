@@ -2,6 +2,8 @@ import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
+import { vehiclePresence } from './Presence.js';
+
 const BASE = '/models/cars';
 const FILES = [
 	'NormalCar1.glb', 'NormalCar2.glb', 'SUV.glb', 'Taxi.glb',
@@ -48,7 +50,9 @@ export class CarModels {
 
 	}
 
-	setInstance( model, slot, matrix ) {
+	setInstance( model, slot, matrix, presence = 1 ) {
+
+		this.models[ model ].presence.setX( slot, presence );
 
 		this.models[ model ].body.setMatrixAt( slot, matrix );
 		this.models[ model ].lights?.setMatrixAt( slot, matrix );
@@ -60,6 +64,7 @@ export class CarModels {
 		for ( let i = 0; i < this.models.length; i ++ ) {
 
 			const model = this.models[ i ];
+			model.presence.needsUpdate = true;
 			model.body.count = counts[ i ];
 			model.body.instanceMatrix.needsUpdate = true;
 
@@ -135,7 +140,7 @@ function build( gltf, name, capacity ) {
 
 	bodyGeometry.computeBoundingBox();
 
-	return { body, lights, length: bodyGeometry.boundingBox.max.z - bodyGeometry.boundingBox.min.z };
+	return { body, lights, presence: vehiclePresence( [ body, lights ], capacity ), length: bodyGeometry.boundingBox.max.z - bodyGeometry.boundingBox.min.z };
 
 }
 

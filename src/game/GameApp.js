@@ -76,6 +76,10 @@ import { CompanionGameplay } from './companion/CompanionGameplay.js';
 import { CarModels } from './agents/CarModels.js';
 import { Traffic } from './agents/Traffic.js';
 import { SimBridge } from './sim/SimBridge.js';
+import { Rain } from './look/Rain.js';
+import { SpawnVisibility } from './agents/SpawnVisibility.js';
+import { interiorOccupancy } from './city/InteriorOccupancy.js';
+import { storyStartMinute } from './time/StoryStart.js';
 import { GameClock } from './time/GameClock.js';
 import { stopsFor } from './time/DayCycle.js';
 import { Locator } from './world/Locator.js';
@@ -98,6 +102,7 @@ const PANEL_KEYS = [
 	[ 'KeyX', 'CODEX' ], [ 'KeyO', 'SETTINGS' ], [ 'Slash', 'CONTROLS' ]
 ];
 const BINDINGS = [
+	{ keys: [ 'PgUp', 'PgDn' ], action: 'Select lift floor; E to travel' },
 	{ action: 'walk', keys: [ 'W', 'A', 'S', 'D' ] },
 	{ action: 'jump', keys: [ 'Space' ] },
 	{ action: 'crouch', keys: [ 'C' ] },
@@ -425,6 +430,14 @@ export class GameApp {
 		this.sky = this.look.sky;
 		this.fog = this.look.fog;
 		this.probe = this.look.probe;
+		this.rain = this.tier.rainDrops ? new Rain( this.tier.rainDrops ) : null;
+		if ( this.rain ) {
+
+			this.scene.add( this.rain.mesh );
+			this.probe?.exclude( this.rain.mesh );
+			this.rainCheck = 0;
+
+		}
 		// Emitting surfaces share the scene's fixed night setting.
 		this.night = new NightSwitch( this.lights )
 			.addGroup( neon.group ).addGroup( lamps.group ).addGroup( city.group ).addGroup( this.transit.group ).addGroup( props.group );
@@ -445,8 +458,7 @@ export class GameApp {
 		await this.colliders.addStaticsAsync( [ [ 'building links', links.colliderGeometry ] ], { release: true } );
 		await this.colliders.addStaticsAsync( this.transit.colliders );
 		await this.colliders.addPostsAsync( lamps.posts );
-		// A floor's modules are cuboids and become solid at once; its furniture
-		// keeps the exact triangles the street props use and cooks across frames.
+		// Floor modules and catalog furniture enter through the cuboid path.
 		this.stream.onColliderBand = ( id, { boxes, positions } ) => {
 
 			if ( boxes.length ) this.colliders.addBoxes( `interior:${id}`, boxes );
@@ -482,7 +494,20 @@ export class GameApp {
 		this.view.quests.setQuests( this.quests.view( this.clock.timeMin ) );
 		this.signals = new Signals( connections.networks );
 		const routes = new WalkRoutes( connections.networks );
+		if ( ! game?.npcState && ! config.explicitHour ) this.clock.seconds = storyStartMinute( this.quests, this.sim, this.clock.timeMin ) * 60;
 		const crowdPlaces = placesOf( city.entrances, buildings );
+		this.spawnVisibility = new SpawnVisibility( this.camera, {
+			fog: this.fog,
+			occluded: ( eye, point ) => {
+
+				const direction = new THREE.Vector3( point.x - eye.x, point.y - eye.y, point.z - eye.z );
+				const distance = direction.length();
+				direction.normalize();
+				return Boolean( this.physics.world.castRay( new this.physics.rapier.Ray( eye, direction ), Math.max( 0, distance - 1 ), true,
+					undefined, undefined, undefined, undefined, collider => ! collider.isSensor() && collider.parent()?.isFixed() ) );
+
+			}
+		} );
 		const continuityPlaces = npcContinuityPlaces( atlas, city.entrances, buildings, transitRoutes );
 		this.npcContinuity = new NpcContinuity( {
 			simulation: this.sim,
@@ -508,6 +533,8 @@ export class GameApp {
 		this.probe?.exclude( assets.group );
 		this.crowd = new Crowd( {
 			assets, routes, sim: this.sim, signals: this.signals,
+			visibility: this.spawnVisibility,
+			floorShown: ( parcel, floor ) => this.stream.floorShown( parcel, floor ),
 			places: crowdPlaces,
 			capacity: config.maxCrowd,
 			spawnRadius: config.crowdRadius,
@@ -547,7 +574,7 @@ export class GameApp {
 			networks: connections.networks, models: carModels,
 			signals: this.signals, capacity: config.maxCars,
 			spawnRadius: config.carRadius,
-			seed: atlas.meta.seed
+			seed: atlas.meta.seed, visibility: this.spawnVisibility
 		} );
 
 		progress.step( 'stepping outside' );
@@ -688,7 +715,7 @@ export class GameApp {
 			investigations: this.investigations,
 			continuity: this.npcContinuity,
 			animations: this.animations,
-			doorColliders: this.doorColliders
+			doorColliders: this.doorColliders, interiors: this.stream
 		} );
 		this.interactor.onConversation = ( conversation ) => this.presentConversation( conversation );
 
@@ -723,6 +750,9 @@ export class GameApp {
 		// six times into its resident environment, its graphs and faces each
 		// counted, and a last pass pins whatever program that frame was the
 		// first to ask for.
+		progress.step( 'preparing nearby floors' );
+		await this.stream.prepare( spawn.point );
+		this.roomView.setRooms( this.stream.rooms );
 		progress.step( 'preparing the first frame' );
 		this.playStartedAt = performance.now();
 		/** Seconds the world has played, which stand still while it holds. */
@@ -890,6 +920,7 @@ export class GameApp {
 		for ( const impact of this.impactWorld.drain() ) this.#ragdoll( impact );
 
 		const feet = this.body.feet;
+		this.spawnVisibility.update();
 		this.safetyGround.update( this.camera );
 		this.shellScene?.update( feet );
 		this.groundStream?.update( feet ).catch( error => console.error( 'ground streaming', error ) );
@@ -906,7 +937,7 @@ export class GameApp {
 		const room = this.standing;
 		const playerPosition = feet.toArray();
 		this.hitches.time( 'follow', () => this.npcContinuity.updateFollow( {
-			timeMin: this.clock.timeMin,
+			timeMin: this.clock.exactMin,
 			deltaSeconds: delta,
 			playerPosition,
 			...( room ? { playerPlace: { kind: 'parcel', id: room.parcelId, floor: room.floor } } : {} )
@@ -915,11 +946,11 @@ export class GameApp {
 		this.hitches.time( 'crowd', () => {
 
 			const actors = this.npcContinuity.updateVisible( {
-				timeMin: this.clock.timeMin,
+				timeMin: this.clock.exactMin,
 				playerPosition,
 				maxDistance: NPC_VISIBLE_RADIUS
 			} );
-			this.crowd.syncActors( actors, feet );
+			this.crowd.syncActors( actors, feet, delta );
 			this.animations.update( actors, delta );
 			this.crowd.update( delta, feet, this.clock );
 
@@ -931,7 +962,7 @@ export class GameApp {
 			people: [ ...this.crowd.members.values() ],
 			vehicles: this.traffic.cars
 		} );
-		this.transit.update( feet, this.clock.daySeconds );
+		this.transit.update( feet, this.clock.daySeconds, delta, this.spawnVisibility );
 		this.elevators.update( delta, this.body );
 		this.venues.update( delta, feet, this.clock.timeMin, this.sim, this.lights );
 		this.hitches.time( 'relight', () => this.#relight( feet, delta ) );
@@ -1891,6 +1922,19 @@ export class GameApp {
 		const room = this.#inside( visible, feet );
 
 		this.standing = room;
+		if ( this.rain ) {
+
+			this.rainCheck -= delta;
+			if ( this.rainCheck <= 0 ) {
+
+				this.rainCheck = 0.25;
+				this.rainSheltered = Boolean( this.physics.world.castRay( new this.physics.rapier.Ray( this.camera.position,
+					{ x: 0, y: 1, z: 0 } ), 80, true, undefined, undefined, undefined, undefined, collider => ! collider.isSensor() && collider.parent()?.isFixed() ) );
+
+			}
+			this.rain.update( this.camera, Boolean( room ) || this.rainSheltered );
+
+		}
 		this.#arrive( room ? this.locator.refs( feet.x, feet.z, room.parcelId ).find( ( place ) => place.kind === 'parcel' )?.id ?? null : null );
 
 		// Crossing the threshold is what changes everything around the camera;
@@ -1900,7 +1944,7 @@ export class GameApp {
 		this.indoors = Boolean( room );
 
 		this.rooms.update( visible, feet, delta );
-		this.fog.update( room ? roomAir( room ) : this.lights.airColor( this.camera.position ), Boolean( room ), delta );
+		this.fog.update( room ? roomAir( room ) : this.lights.airColor( this.camera.position ), room ?? null, delta );
 		this.probe?.update( feet, this.#still( feet, delta ) );
 		this.exposure.enter( room ? 'interior' : 'exterior' );
 		this.exposure.update( delta );
@@ -2122,6 +2166,7 @@ function placesOf( doors, buildings ) {
 
 	return new Map( doors.map( ( door ) => [ door.parcelId, {
 		inside: door.inside.clone(),
+		...interiorOccupancy( buildings.get( door.parcelId )?.interior, door.inside ),
 		heading: Math.atan2( door.normal.x, door.normal.z ),
 		anchors: groundAnchors( buildings.get( door.parcelId )?.npc, door.inside.y, buildings.get( door.parcelId )?.interior )
 	} ] ) );

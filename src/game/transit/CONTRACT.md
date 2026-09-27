@@ -32,7 +32,7 @@ Purpose: renders public transport, short station stairs and destination terminal
 
 ## Events
 
-- `Transit.update(player, daySeconds)` places every visible vehicle directly from `transitVehiclesAt`. It takes no delta and integrates no position.
+- `Transit.update(player, daySeconds, delta, visibility)` places vehicles directly from `transitVehiclesAt`. Delta advances presence only. Scheduled departure identities retain their slots through a 320/350 m hysteresis band; visible departures fade over 0.6 s, with a 380 m hard bound. Body, glazing and running gear share opaque dither coverage on both backends.
 - `TransitJourney.listBoardable(request)` lists services currently dwelling at the requested published place and within 3 m of the player. Being outside reach is a valid empty list.
 - `TransitJourney.board(request)` enters one exact scheduled trip while it dwells at the selected stop occurrence and the player is within 3 m.
 - `TransitJourney.update(request)` recomputes an aboard player location from route shape and service elapsed time, and lists current or future stops.
@@ -64,7 +64,7 @@ Renderer construction throws no transit error. Empty optional collections build 
 ## Cost
 
 - Bus stops use three city-wide instanced meshes. Station entrance surfaces merge by material across the city.
-- Each active vehicle mode uses three instanced meshes for body, glazing and running gear. Capacity is bounded per mode, nearest vehicles win, and vehicles farther than 320 m use no instance.
+- Each active vehicle mode uses three instanced meshes for body, glazing and running gear. Capacity is bounded per mode, resident trips retain their slots and free slots admit the nearest trips within 320 m.
 - Empty vehicle modes allocate no mesh or draw call. The maximum vehicle cost is nine draw calls across bus, train and subway.
 
 ## Dependencies

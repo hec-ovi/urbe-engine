@@ -560,3 +560,16 @@ it( 'puts down an authored source that throws and keeps answering the rest of th
 	error.mockRestore();
 
 } );
+
+it( 'keeps an entrance sealed until the requested floor is shown', () => {
+	let ready = false;
+	const door = { parcelId: 'p1', center: new THREE.Vector3( 0, 0, -2 ), open: 0, wanted: 1, motion: { apply: vi.fn() }, pivots: [] };
+	const interactor = new Interactor( { doors: [ door ], crowd: { within: () => [] }, sim: {},
+		controller: { body: { feet: new THREE.Vector3() }, eye: new THREE.Vector3( 0, 1.7, 0 ), look: new THREE.Vector3( 0, 0, -1 ) },
+		interiors: { pending: new Map( [ [ 'p1', {} ] ] ), floorShown: () => ready, releaseFloor() {} } } );
+	interactor.update( 1 );
+	expect( door.open ).toBe( 0 );
+	ready = true;
+	interactor.update( 1 );
+	expect( door.open ).toBeGreaterThan( 0 );
+} );

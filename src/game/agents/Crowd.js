@@ -6,15 +6,14 @@ import { FRAMES } from './VatBaker.js';
 import { look } from './Appearance.js';
 import { spreadOnLanes, LANE_SPACING } from './LaneSpread.js';
 import { streetBodies } from './StreetBodies.js';
+import { stepPresence } from './Presence.js';
+import { hiddenWalkEntry } from './SpawnVisibility.js';
 
 /** How fast people walk. Everyone has their own pace inside this range. */
 const WALK_SLOWEST = 0.9;
 const WALK_FASTEST = 1.3;
 const SPAWN_RADIUS = 90;
 const DESPAWN_MARGIN = 25;
-/** How far off somebody the simulation no longer reports may leave the world:
- *  far enough back that nobody is ever seen going out. */
-const RETIRE_RADIUS = 60;
 const REFRESH_INTERVAL = 3;
 const PARCEL_RADIUS = 45;
 /** People the simulation may report on one sidewalk edge. A 40 m edge never
@@ -69,7 +68,7 @@ export class Crowd {
 	 * @param blockers what walkers keep out of now: a function returning solid
 	 * footprints on the pavement, `[{ center: { x, z }, width, depth, yawRadians }]`
 	 */
-	constructor( { assets, routes, signals, sim, places, capacity, spawnRadius = SPAWN_RADIUS, stress = 0, continuity = null, street = streetBodies, lighting = null, blockers = () => [] } ) {
+	constructor( { assets, routes, signals, sim, places, capacity, spawnRadius = SPAWN_RADIUS, stress = 0, continuity = null, street = streetBodies, lighting = null, blockers = () => [], visibility = null, floorShown = () => true } ) {
 
 		this.assets = assets;
 		this.street = street;
@@ -83,6 +82,9 @@ export class Crowd {
 		this.continuity = continuity;
 		this.lighting = lighting;
 		this.blockers = blockers;
+		this.visibility = visibility;
+		this.floorShown = floorShown;
+		this.delta = 0;
 		if ( lighting ) for ( let variant = 0; variant < assets.variants.length; variant ++ ) {
 
 			for ( const mesh of assets.meshesOf( variant ) ) lighting.attach( mesh.mesh, capacity );
@@ -112,7 +114,18 @@ export class Crowd {
 		if ( member?.fallen ) return null;
 		if ( ! actor.visible ) {
 
-			if ( member?.continuity ) this.members.delete( member.id );
+			if ( member?.continuity ) {
+
+				if ( this.#hidden( member.position ) || member.position.distanceTo( player ) > this.spawnRadius + 70 ) this.#remove( member );
+				else if ( member.edge ) { member.frozen = false; member.retiring = true; }
+
+			}
+			return null;
+
+		}
+		if ( actor.place.kind === 'parcel' && ! this.floorShown( actor.place.id, actor.place.floor ?? 0 ) ) {
+
+			if ( member ) this.#remove( member );
 			return null;
 
 		}
@@ -148,7 +161,12 @@ export class Crowd {
 		member.quest = true;
 		member.frozen = true;
 		member.retiring = false;
-		member.position.copy( position );
+		const gap = member.position.distanceTo( position );
+		if ( actor.mode === 'schedule' && gap > Math.max( 0.05, this.delta * 1.8 ) && ! this.#hidden( member.position ) ) {
+
+			member.position.lerp( position, Math.min( 1, this.delta * 1.8 / gap ) );
+
+		} else member.position.copy( position );
 		member.heading = actor.heading;
 		member.restClip = clipForNpcAnimation( actor.animation );
 		member.clip = member.animationOverride !== undefined
@@ -170,8 +188,9 @@ export class Crowd {
 
 	}
 
-	syncActors( actors, player ) {
+	syncActors( actors, player, delta = 0 ) {
 
+		this.delta = delta;
 		return actors.map( ( actor ) => this.syncActor( actor, player ) ).filter( Boolean );
 
 	}
@@ -185,7 +204,7 @@ export class Crowd {
 		let priority = - 1;
 		for ( const member of this.members.values() ) {
 
-			if ( member.npcId !== npcId ) continue;
+			if ( member.leaving || member.npcId !== npcId ) continue;
 			const rank = identityPriority( member );
 			if ( rank > priority ) {
 
@@ -233,8 +252,7 @@ export class Crowd {
 			if ( ( canonical.npcId && member.npcId === canonical.npcId ) ||
 				( canonical.crowdId && member.crowdId === canonical.crowdId ) ) {
 
-				this.street.leave( id );
-				this.members.delete( id );
+				this.#remove( member );
 
 			}
 
@@ -283,6 +301,7 @@ export class Crowd {
 
 	update( delta, player, clock ) {
 
+		this.delta = delta;
 		this.#settle( delta );
 		this.timer += delta;
 
@@ -296,7 +315,9 @@ export class Crowd {
 		const blocked = this.blockers();
 		for ( const member of this.members.values() ) {
 
-			this.#advance( member, delta, clock.daySeconds, blocked );
+			member.presence = stepPresence( member.presence ?? 1, member.leaving, delta );
+			if ( member.leaving && member.presence === 0 ) { this.members.delete( member.id ); this.street.leave( member.id ); continue; }
+			if ( ! member.leaving ) this.#advance( member, delta, clock.daySeconds, blocked );
 
 		}
 
@@ -326,6 +347,7 @@ export class Crowd {
 	 */
 	#rise( member ) {
 
+		if ( ! this.#alive( member ) && ! this.#hidden( member.position ) ) return null;
 		this.street.leave( member.id );
 		member.fallen = false;
 		member.frozen = Boolean( member.frozenBeforeImpact );
@@ -333,7 +355,7 @@ export class Crowd {
 
 		if ( ! this.#alive( member ) ) {
 
-			this.members.delete( member.id );
+			this.#remove( member );
 			return null;
 
 		}
@@ -345,7 +367,7 @@ export class Crowd {
 
 		if ( ! spot ) {
 
-			this.members.delete( member.id );
+			this.#remove( member );
 			return null;
 
 		}
@@ -689,7 +711,7 @@ export class Crowd {
 		}
 
 		const place = this.places.get( parcelId );
-		if ( ! place || place.inside.distanceTo( player ) > PARCEL_RADIUS ) return null;
+		if ( ! place || place.inside.distanceTo( player ) > PARCEL_RADIUS || ! this.floorShown( parcelId, 0 ) ) return null;
 
 		const npc = this.sim.getNPC( npcId );
 		if ( ! owned ) {
@@ -705,6 +727,7 @@ export class Crowd {
 			? { position: present.position, heading: present.heading, spot: present.spot }
 			: this.#anchorAt( place, this.#spotsAt( parcelId ), POSTS, seed );
 
+		if ( ! spot ) return null;
 		if ( this.continuity ) {
 
 			try {
@@ -796,10 +819,11 @@ export class Crowd {
 		for ( const [ id, member ] of this.members ) {
 
 			if ( member.frozen ) continue;
+			if ( member.stationary && member.retiring && this.#hidden( member.position ) ) { this.#remove( member ); continue; }
 
-			const reach = member.retiring ? RETIRE_RADIUS : this.spawnRadius + DESPAWN_MARGIN;
-
-			if ( member.position.distanceTo( player ) > reach ) this.members.delete( id );
+			const distance = member.position.distanceTo( player );
+			if ( distance > this.spawnRadius + DESPAWN_MARGIN && ( this.#hidden( member.position ) || distance > this.spawnRadius + 70 ) ) this.#remove( member );
+			if ( member.parcelId && ! this.floorShown( member.parcelId, 0 ) ) this.#remove( member );
 
 		}
 
@@ -862,7 +886,7 @@ export class Crowd {
 
 		for ( const member of this.members.values() ) {
 
-			if ( ! member.stationary && ! member.copy && ! member.continuity && ! member.frozen ) out.push( member );
+			if ( ! member.leaving && ! member.stationary && ! member.copy && ! member.continuity && ! member.frozen ) out.push( member );
 
 		}
 
@@ -951,7 +975,7 @@ export class Crowd {
 
 		for ( const [ parcelId, place ] of this.places ) {
 
-			if ( place.inside.distanceTo( player ) > PARCEL_RADIUS ) continue;
+			if ( place.inside.distanceTo( player ) > PARCEL_RADIUS || ! this.floorShown( parcelId, 0 ) ) continue;
 
 			const entries = this.#agentsIn( timeMin, { kind: 'parcel', id: parcelId }, PARCEL_AGENTS )
 				.map( ( agent ) => ( { agent, at: place.inside } ) );
@@ -1013,11 +1037,19 @@ export class Crowd {
 	#place( { agent, edge, direction, distance, slot }, seed = agent.appearanceSeed ?? hash( agent.crowdId ) ) {
 
 		if ( this.members.size >= this.capacity ) return null;
+		if ( this.visibility ) {
 
+			const entry = hiddenWalkEntry( this.routes, { agent, edge, direction, distance }, at => this.#hidden( at ) );
+			if ( ! entry ) return null;
+			( { edge, direction, distance } = entry );
+
+		}
 		const rng = mulberry( seed );
 		const spot = this.#freeSpot(
 			edge, Math.min( distance, edge.length ), direction, laneOffset( slot ?? seed, edge )
 		);
+		const at = standing( edge, this.routes.pointAt( edge, spot.distance, direction ), spot.offset );
+		if ( ! this.#hidden( at ) || this.#roomAt( at ) < PERSONAL_SPACE ) return null;
 		const member = this.#add( {
 			...this.#base( agent, seed ),
 			stationary: false,
@@ -1097,12 +1129,13 @@ export class Crowd {
 		if ( this.members.size >= this.capacity ) return null;
 
 		const seed = agent.appearanceSeed ?? hash( agent.crowdId );
-
+		const anchor = this.#anchorAt( place, taken, agent.activity === 'working' ? POSTS : SEATS, seed );
+		if ( ! anchor || ! this.#hidden( anchor.position ) ) return null;
 		return this.#add( {
 			...this.#base( agent, seed ),
 			stationary: true,
 			parcelId,
-			...this.#anchorAt( place, taken, agent.activity === 'working' ? POSTS : SEATS, seed )
+			...anchor
 		} );
 
 	}
@@ -1126,6 +1159,12 @@ export class Crowd {
 	#meetingAt( place, taken ) {
 
 		const index = firstFree( taken, 'meeting' );
+		if ( place.lobby ) {
+
+			const position = place.lobby[ index * 2 ];
+			return position ? { spot: `meeting:${index}`, position: position.clone(), heading: place.heading + ( index % 2 ? - Math.PI / 2 : Math.PI / 2 ) } : null;
+
+		}
 		const side = index % 2 === 0 ? - 0.65 : 0.65;
 		const inward = 0.8 + Math.floor( index / 2 ) * 1.1;
 		return {
@@ -1149,7 +1188,7 @@ export class Crowd {
 
 		for ( const kind of kinds ) {
 
-			const anchors = place.anchors?.[ kind ] ?? [];
+			const anchors = ( place.anchors?.[ kind ] ?? [] ).filter( anchor => ! place.contains || place.contains( anchor.position ) );
 			const index = firstFree( taken, kind );
 
 			if ( index >= anchors.length ) continue;
@@ -1166,6 +1205,7 @@ export class Crowd {
 		}
 
 		const spot = firstFree( taken, 'lobby' );
+		if ( place.lobby && ! place.lobby[ spot ] ) return null;
 		taken.add( `lobby:${spot}` );
 		const angle = ( spot * 2.399 ) + ( seed % 100 ) / 100;
 		const offset = 0.9 + ( spot % 3 ) * 0.8;
@@ -1173,7 +1213,7 @@ export class Crowd {
 		return {
 			spot: `lobby:${spot}`,
 			clip: CLIP.IDLE,
-			position: new THREE.Vector3(
+			position: place.lobby?.[ spot ]?.clone() ?? new THREE.Vector3(
 				place.inside.x + Math.sin( angle ) * offset,
 				place.inside.y,
 				place.inside.z + Math.cos( angle ) * offset
@@ -1186,6 +1226,7 @@ export class Crowd {
 	#add( member ) {
 
 		member.id = `p${ this.spawns ++ }`;
+		member.presence = 0;
 		this.members.set( member.id, member );
 
 		return member;
@@ -1228,8 +1269,10 @@ export class Crowd {
 			const parcel = this.places.get( place.id );
 			const anchor = parcel?.inside ?? fallbackAnchor;
 			if ( ! anchor || anchor.distanceTo( player ) > PARCEL_RADIUS ) return null;
-			const angle = ( seed % 6283 ) / 1000;
-			position = anchor.clone().add( new THREE.Vector3( Math.sin( angle ) * 0.8, 0, Math.cos( angle ) * 0.8 ) );
+			if ( ! this.floorShown( place.id, 0 ) ) return null;
+			const post = parcel ? this.#anchorAt( parcel, this.#spotsAt( place.id ), POSTS, seed ) : { position: anchor.clone() };
+			if ( ! post ) return null;
+			position = post.position;
 			parcelId = place.id;
 
 		} else if ( place?.kind === 'edge' ) {
@@ -1272,17 +1315,42 @@ export class Crowd {
 		while ( this.members.size >= this.capacity ) {
 
 			const victim = [ ...this.members.values() ]
-				.filter( ( member ) => ! member.quest && ! member.frozen && ! member.hero && ! member.npcId )
+				.filter( ( member ) => ! member.leaving && ! member.quest && ! member.frozen && ! member.hero && ! member.npcId )
 				.sort( ( left, right ) =>
-					Number( Boolean( left.npcId ) ) - Number( Boolean( right.npcId ) ) ||
+					Number( this.#hidden( right.position ) ) - Number( this.#hidden( left.position ) ) ||
 					right.position.distanceToSquared( player ) - left.position.distanceToSquared( player ) ||
 					left.id.localeCompare( right.id )
 				)[ 0 ];
 			if ( ! victim ) return false;
-			this.members.delete( victim.id );
+			this.#remove( victim );
+			if ( this.members.has( victim.id ) ) return false;
 
 		}
 		return true;
+
+	}
+
+	#hidden( point ) {
+
+		return this.visibility?.hidden( point, 1 ) ?? true;
+
+	}
+
+	#remove( member ) {
+
+		if ( this.#hidden( member.position ) ) {
+
+			this.members.delete( member.id );
+			this.street.leave( member.id );
+
+		} else {
+
+			member.leaving = true;
+			member.retiring = true;
+			member.frozen = true;
+			member.crowdId = null;
+
+		}
 
 	}
 
@@ -1442,7 +1510,7 @@ export class Crowd {
 
 			for ( const mesh of this.assets.meshesOf( member.variant ) ) {
 
-				mesh.setInstance( slot, member.position, member.heading, member.frame, member.clip, member.look );
+				mesh.setInstance( slot, member.position, member.heading, member.frame, member.clip, member.look, member.presence );
 				this.lighting?.write( mesh.mesh, slot, fill );
 
 			}

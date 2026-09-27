@@ -1,4 +1,5 @@
 import { attribute, float, instancedBufferAttribute, max, mix, smoothstep, step, texture, vec2, vec4 } from 'three/tsl';
+import { dressSurface, fabricDetail } from './Fabric.js';
 import { CrowdMesh } from './CrowdMesh.js';
 
 /** How wide a hem or a cuff fades, in limb-length units: about two centimetres. */
@@ -38,14 +39,17 @@ export class BodyMesh extends CrowdMesh {
 		const aSkinCut = instancedBufferAttribute( this.skins, 'vec4' );
 		const aShirtCut = instancedBufferAttribute( this.shirts, 'vec4' );
 
+		this.cut = vec2( aSkinCut.w, aShirtCut.w );
 		return dressedColorNode( geometry, map, {
 			skin: aSkinCut.xyz,
 			shirt: aShirtCut.xyz,
 			trousers: instancedBufferAttribute( this.trousers, 'vec3' ),
-			cut: vec2( aSkinCut.w, aShirtCut.w )
+			cut: this.cut
 		}, eyeMap );
 
 	}
+
+	surface( material ) { dressSurface( material, this.cut, material.normalNode ); }
 
 	setLook( slot, look ) {
 
@@ -67,8 +71,12 @@ export function dressedColorNode( geometry, map, { skin, shirt, trousers, cut },
 	const leg = float( 1 ).sub( smoothstep( cut.y.sub( EDGE ), cut.y.add( EDGE ), aCloth.z ) );
 	const torso = smoothstep( TORSO_IN, TORSO_OUT, aCloth.x );
 	const bare = texture( map ).rgb.mul( skin );
-	const dressed = mix( bare, trousers, leg );
-	const top = mix( dressed, shirt, max( torso, sleeve ) );
+	const { thread } = fabricDetail();
+	const seam = max( float( 1 ).sub( smoothstep( 0.005, 0.025, aCloth.y.sub( cut.x ).abs() ) ),
+		float( 1 ).sub( smoothstep( 0.005, 0.025, aCloth.z.sub( cut.y ).abs() ) ) );
+	const weave = thread.mul( 0.025 ).add( 1 ).sub( seam.mul( 0.12 ) );
+	const dressed = mix( bare, trousers.mul( weave ), leg );
+	const top = mix( dressed, shirt.mul( weave ), max( torso, sleeve ) );
 
 	const body = mix( top, trousers.mul( SHOE_SHADE ), aCloth.w );
 	const surface = eyeMap ? mix( texture( eyeMap ).rgb, body, step( 0, aCloth.x ) ) : body;

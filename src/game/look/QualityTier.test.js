@@ -22,6 +22,9 @@ describe( 'QualityTier', () => {
 
 		// low is the fallback backend's tier: no bloom chain, but a room fill is on; haze quads are off on every tier.
 		expect( low.bloom.strength ).toBe( 0 );
+		expect( low.roomShadow ).toBe( 0 );
+		expect( low.rainDrops ).toBe( 0 );
+		expect( low.filmGrain ).toBe( false );
 		expect( low.haze ).toBe( false );
 		// Enough slots that one live floor's rooms are lit from their own fixtures.
 		expect( low.roomSlots ).toBe( QualityTier.describe( 'medium' ).roomSlots );

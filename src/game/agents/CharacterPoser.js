@@ -6,6 +6,8 @@ import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { CHARACTER_ROOT, assertRigCompatibility, avatarFor, bodyFor } from './CharacterCatalog.js';
 import { look } from './Appearance.js';
 import { dressedColorNode } from './BodyMesh.js';
+import { presenceMaterial } from './Presence.js';
+import { dressSurface } from './Fabric.js';
 import { CROWD_SURFACE } from './CrowdMesh.js';
 import { hairColorNode } from './HairMesh.js';
 import { garments } from './Garments.js';
@@ -243,6 +245,7 @@ function dress( root, model, personLook ) {
 	if ( ! body.geometry.hasAttribute( 'cloth' ) ) body.geometry.setAttribute( 'cloth', garments( body ) );
 	const dressed = model.wardrobe.find( ( entry ) => ! entry.worn ) ?? sew( model, body.geometry, source );
 	dressed.worn = true;
+	dressed.presence.value = 1;
 	body.material = dressed.material;
 	root.traverse( ( node ) => {
 
@@ -273,11 +276,13 @@ function sew( model, geometry, source ) {
 		skin: uniform( new THREE.Color() ), shirt: uniform( new THREE.Color() ), trousers: uniform( new THREE.Color() ),
 		hair: uniform( new THREE.Color() ), sleeve: uniform( 0 ), hem: uniform( 0 )
 	};
-	const material = new MeshStandardNodeMaterial( CROWD_SURFACE );
+	const presence = uniform( 1 );
+	const material = presenceMaterial( new MeshStandardNodeMaterial( CROWD_SURFACE ), presence );
 	material.colorNode = dressedColorNode( geometry, source.map, {
 		skin: uniforms.skin, shirt: uniforms.shirt, trousers: uniforms.trousers, cut: vec2( uniforms.sleeve, uniforms.hem )
 	} );
-	const dressed = { material, look: uniforms, hairs: new Map(), worn: false };
+	dressSurface( material, vec2( uniforms.sleeve, uniforms.hem ) );
+	const dressed = { material, presence, look: uniforms, hairs: new Map(), worn: false };
 	model.wardrobe.push( dressed );
 
 	return dressed;
@@ -290,8 +295,9 @@ function tinted( dressed, source ) {
 	let material = dressed.hairs.get( source );
 	if ( ! material ) {
 
-		material = new MeshStandardNodeMaterial( CROWD_SURFACE );
+		material = presenceMaterial( new MeshStandardNodeMaterial( CROWD_SURFACE ), dressed.presence );
 		material.colorNode = hairColorNode( source.map, dressed.look.hair );
+		material.roughness = 0.96;
 		dressed.hairs.set( source, material );
 
 	}

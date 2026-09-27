@@ -75,6 +75,7 @@ export class GameConfig {
 			outBase: gameId ? `/out/games/${gameId}` : q.get( 'out' ) ?? DEFAULTS.out,
 			backend: q.get( 'backend' ) === 'webgl' ? 'webgl' : DEFAULTS.backend,
 			startHour: int( 'hour', DEFAULTS.startHour, 0, 23 ),
+			explicitHour: q.has( 'hour' ),
 			lightingHour: DEFAULTS.lightingHour,
 			timeScale: DEFAULTS.timeScale,
 			maxCrowd: int( 'crowd', gameId ? DEFAULTS.playCrowd : DEFAULTS.crowd, 0, 600 ),

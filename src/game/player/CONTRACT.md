@@ -13,4 +13,4 @@ Purpose: converts captured input into first-person movement and aimed interactio
 
 ## Invariants
 
-Capture refusal leaves controls released and produces no unhandled promise rejection. Movement and camera follow the physical body. Door pivots and colliders follow the same published travel. Aim selects the target in reach; near-equal aim favors the door.
+Capture refusal leaves controls released and produces no unhandled promise rejection. Movement and camera follow the physical body. Door pivots and colliders follow the same published travel. Optional `interiors` gates entrance opening on `floorShown` and requests a pending floor on E. Inside a lift, Page Up and Page Down select a floor and E confirms it; selection does not wrap. Aim selects the target in reach; near-equal aim favors the door.

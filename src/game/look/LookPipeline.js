@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { texture, mrt, output, emissive, vec4, screenCoordinate, float } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import { noirGrade } from './NoirGrade.js';
 import { bayer16 } from 'three/addons/tsl/math/Bayer.js';
 
 /** One code value of dither, which is all it takes to break an 8-bit ramp. */
@@ -56,7 +57,7 @@ export class LookPipeline {
 		this.pipeline.outputColorTransform = false;
 		const sceneTexture = texture( this.renderTarget.texture );
 		const lit = blooming ? sceneTexture.add( bloomPass ) : sceneTexture;
-		this.pipeline.outputNode = lit.renderOutput().add( dither );
+		this.pipeline.outputNode = noirGrade( lit, { grain: tier.filmGrain !== false } ).add( dither );
 
 		this.bloom = bloomPass;
 

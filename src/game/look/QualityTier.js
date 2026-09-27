@@ -4,6 +4,8 @@ const TIERS = [ 'low', 'medium', 'high', 'ultra' ];
 const MATERIAL_MAPS = Object.freeze( [ 'basecolor', 'normal', 'roughness', 'metallic', 'ao', 'emission' ] );
 const PRESETS = {
 	low: {
+		filmGrain: false,
+		rainDrops: 0,
 		textureMaxSize: 1024,
 		bloom: { strength: 0, radius: 0.0 },
 		haze: false,
@@ -16,7 +18,7 @@ const PRESETS = {
 		// a shadow, which is why a wall panel's relief reads flat. One spot on
 		// the room the player stands in casts; the tiers that run on WebGL2 pay
 		// for a whole extra depth pass for it, so they do not.
-		roomShadow: 512,
+		roomShadow: 0,
 		clusteredLights: 512,
 		batchedLights: 32,
 		// Glossy ground and metals need something to reflect on every tier;
@@ -27,6 +29,8 @@ const PRESETS = {
 		textureAnisotropy: 4
 	},
 	medium: {
+		filmGrain: true,
+		rainDrops: 400,
 		textureMaxSize: 1024,
 		bloom: { strength: 0.35, radius: 0.03 },
 		haze: false,
@@ -42,6 +46,8 @@ const PRESETS = {
 		textureAnisotropy: 4
 	},
 	high: {
+		filmGrain: true,
+		rainDrops: 700,
 		textureMaxSize: 2048,
 		bloom: { strength: 0.35, radius: 0.04 },
 		haze: false,
@@ -57,6 +63,8 @@ const PRESETS = {
 		textureAnisotropy: 8
 	},
 	ultra: {
+		filmGrain: true,
+		rainDrops: 1000,
 		textureMaxSize: 4096,
 		bloom: { strength: 0.4, radius: 0.06 },
 		haze: false,

@@ -9,7 +9,7 @@ export const MAP_COLORS = {
 	bus: '#ffb84d',
 	train: '#78f06f',
 	subway: '#a788ff',
-	marker: '#ff5fa8',
+	marker: '#8baeb8',
 	route: '#69f4ff'
 };
 
@@ -111,10 +111,10 @@ export class MapPainter {
 
 		ctx.fillStyle = MAP_COLORS.marker;
 		ctx.beginPath();
-		ctx.moveTo( x, y - 6 );
-		ctx.lineTo( x + 6, y );
-		ctx.lineTo( x, y + 6 );
-		ctx.lineTo( x - 6, y );
+		ctx.moveTo( x, y - 3 );
+		ctx.lineTo( x + 3, y );
+		ctx.lineTo( x, y + 3 );
+		ctx.lineTo( x - 3, y );
 		ctx.closePath();
 		ctx.fill();
 
