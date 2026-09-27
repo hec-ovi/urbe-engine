@@ -12,6 +12,16 @@ const CROUCH_HALF_HEIGHT = 0.255;
 const GRAVITY = - 20;
 const TERMINAL = - 45;
 const UP = { x: 0, y: 0, z: 0, w: 1 };
+/** The gap the character controller keeps between the capsule and what it touches: feet at rest stand this far above the floor. */
+const SKIN = 0.02;
+/**
+ * The shortest translation the character controller is asked for. With a
+ * half space in the world (the safety ground) Rapier answers a translation of
+ * a few micrometres, a still frame's zero above all, by lifting the capsule
+ * half its height, every time it is asked: a world holding still would carry
+ * the player up into the sky.
+ */
+const MIN_MOVE = 1e-3;
 
 /**
  * The player as Rapier sees them: one capsule collider driven by the kinematic
@@ -38,7 +48,7 @@ export class PlayerBody {
 				.setTranslation( this.position.x, this.position.y, this.position.z )
 		);
 
-		this.controller = world.createCharacterController( 0.02 );
+		this.controller = world.createCharacterController( SKIN );
 		this.controller.setUp( { x: 0, y: 1, z: 0 } );
 		// A tread is 0.28 m (interior STAIR.tread), and the width the step test
 		// asks for stays under it so every tread counts.
@@ -102,7 +112,11 @@ export class PlayerBody {
 
 	}
 
-	/** @param horizontal desired XZ movement this step, in metres. */
+	/**
+	 * @param horizontal desired XZ movement this step, in metres. A step
+	 * shorter than MIN_MOVE, as every step is while the world holds still,
+	 * moves nothing and keeps the fall state.
+	 */
 	move( horizontal, delta ) {
 
 		if ( this.carried ) return;
@@ -113,6 +127,7 @@ export class PlayerBody {
 			y: this.velocityY * delta,
 			z: horizontal.z
 		};
+		if ( Math.hypot( desired.x, desired.y, desired.z ) < MIN_MOVE ) return;
 
 		this.controller.computeColliderMovement( this.collider, desired );
 		const movement = this.controller.computedMovement();
@@ -141,7 +156,7 @@ export class PlayerBody {
 	 */
 	push( offset ) {
 
-		if ( this.carried || ( offset.x === 0 && offset.z === 0 ) ) return;
+		if ( this.carried || Math.hypot( offset.x, offset.z ) < MIN_MOVE ) return;
 
 		this.controller.computeColliderMovement( this.collider, { x: offset.x, y: 0, z: offset.z } );
 		const movement = this.controller.computedMovement();
@@ -172,6 +187,24 @@ export class PlayerBody {
 	get centreOffset() {
 
 		return BODY_RADIUS + this.halfHeight;
+
+	}
+
+	/**
+	 * Stands the feet on the solid under them: the first surface a ray meets
+	 * from a step above the feet down to a step below them. A saved or
+	 * authored spawn a little inside the pavement, or a little above it,
+	 * starts standing. False when nothing solid lies within that reach.
+	 */
+	settle() {
+
+		const { rapier, world } = this.physics;
+		const feet = this.feet;
+		const hit = world.castRay(
+			new rapier.Ray( { x: feet.x, y: feet.y + STEP_HEIGHT, z: feet.z }, { x: 0, y: - 1, z: 0 } ), STEP_HEIGHT * 2, true,
+			rapier.QueryFilterFlags.EXCLUDE_SENSORS | rapier.QueryFilterFlags.EXCLUDE_DYNAMIC, undefined, this.collider
+		);
+		return Boolean( hit ) && this.teleport( { x: feet.x, y: feet.y + STEP_HEIGHT - hit.timeOfImpact + SKIN, z: feet.z } );
 
 	}
 

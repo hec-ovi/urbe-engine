@@ -80,6 +80,56 @@ describe( 'PlayerBody against street furniture', () => {
 
 	} );
 
+	it( 'holds still while the world holds, over the safety ground half space too', async () => {
+
+		// Rapier lifts a character asked for a vanishing translation by half its
+		// capsule whenever a half space is in the world: a held frame asks for none.
+		const { physics, body } = await world();
+		physics.addHalfSpace( - 14 );
+		physics.refresh();
+		const feet = body.feet.toArray();
+
+		for ( let frame = 0; frame < 120; frame ++ ) {
+
+			physics.step( 0 );
+			body.push( new THREE.Vector3( 1e-6, 0, 0 ) );
+			body.move( new THREE.Vector3(), 0 );
+
+		}
+		expect( body.feet.toArray() ).toEqual( feet );
+
+		step( physics, body, 120 );
+		expect( body.feet.y ).toBeCloseTo( 0.02, 3 );
+		expect( body.grounded ).toBe( true );
+
+	} );
+
+	it( 'settles a spawn a little inside the pavement, or above it, onto its surface', async () => {
+
+		const physics = await Physics.create();
+		physics.addBoxes( [ { center: [ 0, 0.1, 0 ], halfExtents: [ 10, 0.1, 10 ] } ] );
+		physics.addHalfSpace( - 14 );
+		physics.refresh();
+
+		for ( const start of [ 0.15, 0.2, 0.45 ] ) {
+
+			const body = new PlayerBody( physics, new THREE.Vector3( 1, start, 2 ) );
+			expect( body.settle() ).toBe( true );
+			expect( body.feet.x ).toBe( 1 );
+			expect( body.feet.y ).toBeCloseTo( 0.22 );
+			expect( body.feet.z ).toBe( 2 );
+			step( physics, body, 60 );
+			expect( body.feet.y ).toBeCloseTo( 0.22, 3 );
+			physics.world.removeCollider( body.collider, false );
+
+		}
+		// Nothing solid within a step: the spawn stays where it was put.
+		const high = new PlayerBody( physics, new THREE.Vector3( 1, 3, 2 ) );
+		expect( high.settle() ).toBe( false );
+		expect( high.feet.y ).toBeCloseTo( 3 );
+
+	} );
+
 	it( 'leaves collision while carried and restores it at the published destination', async () => {
 
 		const { body } = await world();

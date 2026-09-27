@@ -765,8 +765,10 @@ export class GameApp {
 		/** Seconds the world has played, which stand still while it holds. */
 		this.playSeconds = 0;
 		// The world opens paused and steps no physics until play starts: what
-		// loading admitted answers queries from the first frame all the same.
+		// loading admitted answers queries from the first frame all the same,
+		// and the player starts standing on the ground there.
 		this.physics.refresh();
+		this.body.settle();
 		this.tick( 0 );
 		if ( this.probe ) {
 
