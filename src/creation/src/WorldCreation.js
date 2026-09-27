@@ -217,9 +217,8 @@ export class WorldCreation {
 
 				const atlas = await json( join( world, 'blueprint.json' ), 'city blueprint' );
 				homes = new Set( atlas.parcels.filter( ( parcel ) => parcel.type === HOME ).map( ( parcel ) => parcel.id ) );
-				const spread = venueSpread( atlas, cityManifest.sources );
-				const proven = await provenParcels( world, spread );
-				priority = nextHomeAfter( [ ...new Set( [ ...input.buildingIds, ...spread.filter( ( id ) => proven.has( id ) ) ] ) ], homes, input.count );
+				const proven = await provenParcels( world, atlas.parcels.map( ( parcel ) => parcel.id ) );
+				priority = nextHomeAfter( [ ...new Set( [ ...input.buildingIds, ...venueSpread( atlas, proven ) ] ) ], homes, input.count );
 
 			} else if ( ! manual ) {
 
@@ -670,14 +669,14 @@ async function handoffInput( questsDir ) {
 }
 
 /**
- * Every standing building a named city can open, a home first, then one of
+ * Every proven building a named city can open, a home first, then one of
  * each kind that hires, round after round.
- * @param sources the city manifest's source of each parcel; an empty lot opens nothing
+ * @param proven the parcels whose building stands in a proven design; an empty lot is none
  */
-function venueSpread( atlas, sources ) {
+function venueSpread( atlas, proven ) {
 
 	const rank = ( a, b ) => fnv1a( `${atlas.meta.seed}:spread:${a}` ) - fnv1a( `${atlas.meta.seed}:spread:${b}` ) || a.localeCompare( b );
-	const standing = atlas.parcels.filter( ( parcel ) => sources?.[ parcel.id ] !== 'empty' );
+	const standing = atlas.parcels.filter( ( parcel ) => proven.has( parcel.id ) );
 	const kinds = SPREAD.map( ( type ) => standing.filter( ( parcel ) => parcel.type === type ).map( ( parcel ) => parcel.id ).sort( rank ) );
 	const spread = [];
 	for ( let round = 0; kinds.some( ( ids ) => round < ids.length ); round ++ ) {

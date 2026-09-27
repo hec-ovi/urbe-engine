@@ -430,6 +430,27 @@ describe( 'playable world creation contract', () => {
 
 	} );
 
+	it( 'spreads a named city\'s automatic pick over the kinds among its proven buildings alone', async () => {
+
+		const fixture = await setup();
+		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
+		const plan = await creation.planCity( { name: 'Proof Ward', seed: 'proof', size: 'small' } );
+		const planDir = join( fixture.config.outDir, 'plans/proof-ward' );
+		await writeJson( join( planDir, 'blueprint.named.json' ), namedWorld( await readJson( join( planDir, 'blueprint.json' ) ), 'tidal flats' ) );
+		await writeJson( join( planDir, 'npc-types.json' ), { contractVersion: '1.0.0', types: [ { type: 'tide_keeper' } ] } );
+		// p5 is the first market the spread ranks; it stands plain, so the round's market is p7.
+		fixture.plain.add( 'p5' );
+		const city = await creation.buildCity( { cityId: plan.id, named: {
+			blueprint: 'out/plans/proof-ward/blueprint.named.json', types: 'out/plans/proof-ward/npc-types.json'
+		} } );
+		await creation.generateInstances( { cityId: city.id, mode: 'automatic', count: 7, buildingIds: [] } );
+		const priority = valueAfter( fixture.calls.at( - 1 ).args, '--interior-priority' ).split( ',' );
+		expect( HOMES ).toContain( priority[ 0 ] );
+		expect( priority.slice( 1, 3 ) ).toEqual( [ 'p7', 'p4' ] );
+		expect( priority ).not.toContain( 'p5' );
+
+	} );
+
 	it( 'leaves out a side job whose scene cannot stand and fails a main story whose scene cannot', async () => {
 
 		const fixture = await setup();
