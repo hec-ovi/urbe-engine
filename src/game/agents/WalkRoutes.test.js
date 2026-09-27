@@ -17,6 +17,24 @@ describe( 'walk routes', () => {
 
 	} );
 
+	it( 'finds where a place\'s access path meets the pavement, whichever way the path runs', () => {
+
+		const node = ( id, x, z, kind, ref ) => ( { id, x, y: 0, z, kind, ...( ref ? { ref } : {} ) } );
+		const edge = ( id, from, to, kind, path3 ) => ( { id, from, to, kind, path3 } );
+		const routes = new WalkRoutes( { walk: {
+			nodes: [ node( 'a', 0, 0, 'sidewalk' ), node( 'b', 20, 0, 'sidewalk' ), node( 'shop', 4, 1.2, 'entry', 'p1' ), node( 'flat', 16, 1.2, 'entry', 'p2' ) ],
+			edges: [
+				edge( 'pave', 'a', 'b', 'sidewalk', [ [ 0, 0, 0 ], [ 20, 0, 0 ] ] ),
+				edge( 'in', 'shop', 'a', 'access', [ [ 4, 0, 1.2 ], [ 0, 0, 0 ] ] ),
+				edge( 'out', 'b', 'flat', 'access', [ [ 20, 0, 0 ], [ 16, 0, 1.2 ] ] )
+			]
+		} } );
+		expect( routes.pavementEnd( 'p1' ) ).toEqual( [ 0, 0, 0 ] );
+		expect( routes.pavementEnd( 'p2' ) ).toEqual( [ 20, 0, 0 ] );
+		expect( routes.pavementEnd( 'p3' ) ).toBeNull();
+
+	} );
+
 	it( 'refuses a compatibility-only walk edge', () => {
 
 		const input = network();

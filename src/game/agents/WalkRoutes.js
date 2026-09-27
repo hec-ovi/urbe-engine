@@ -93,6 +93,29 @@ export class WalkRoutes {
 
 	}
 
+	/**
+	 * Where the place `ref` meets the pavement: the far end of the access path
+	 * from its entry node, `[x, y, z]` at grade, or null. The entry itself lies
+	 * on the lot line, where the building may stand.
+	 */
+	pavementEnd( ref ) {
+
+		for ( const node of this.nodes.values() ) {
+
+			if ( node.kind !== 'entry' || node.ref !== ref ) continue;
+			for ( const id of this.adjacency.get( node.id ) ) {
+
+				const edge = this.edges.get( id );
+				const end = edge.kind === 'access' && this.nodes.get( edge.from === node.id ? edge.to : edge.from );
+				if ( end ) return [ end.x, end.y, end.z ];
+
+			}
+
+		}
+		return null;
+
+	}
+
 	/** The node an agent reaches at the end of an edge in its direction. */
 	exitNode( edge, direction ) {
 

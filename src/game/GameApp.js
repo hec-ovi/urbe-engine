@@ -516,7 +516,7 @@ export class GameApp {
 
 			}
 		} );
-		const continuityPlaces = npcContinuityPlaces( atlas, city.entrances, buildings, transitRoutes );
+		const continuityPlaces = npcContinuityPlaces( atlas, city.entrances, buildings, routes, transitRoutes );
 		this.npcContinuity = new NpcContinuity( {
 			simulation: this.sim,
 			routes,
@@ -2253,8 +2253,11 @@ export function companionScenes( staged, places ) {
 
 }
 
-/** Every scheduled parcel position in the controller's validated JSON shape. */
-export function npcContinuityPlaces( atlas, doors, buildings, transitRoutes = [] ) {
+/**
+ * Every scheduled parcel position in the controller's validated JSON shape.
+ * `routes`, the WalkRoutes, give a parcel without a door its doorstep.
+ */
+export function npcContinuityPlaces( atlas, doors, buildings, routes, transitRoutes = [] ) {
 
 	const doorByParcel = new Map( doors.map( ( door ) => [ door.parcelId, door ] ) );
 	const parcels = atlas.parcels.map( ( parcel ) => {
@@ -2268,10 +2271,12 @@ export function npcContinuityPlaces( atlas, doors, buildings, transitRoutes = []
 				.flat()
 				.map( ( anchor ) => ( { id: anchor.id, position: anchor.position.toArray(), heading: anchor.heading } ) )
 			: [];
+		// A leader shows the place from outside its entrance, where the player can see them; without a door,
+		// from where its access path meets the pavement, since its access point lies on the lot line the building may fill.
+		const doorstep = door ? door.outside.toArray() : routes.pavementEnd( parcel.id );
 		return {
 			kind: 'parcel', id: parcel.id, position,
-			// A leader shows the place from outside its entrance, where the player can see them.
-			...( door ? { doorstep: door.outside.toArray() } : {} ),
+			...( doorstep ? { doorstep } : {} ),
 			heading: door ? Math.atan2( door.normal.x, door.normal.z ) : 0,
 			anchors
 		};

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { GameApp, companionScenes, occupiedBuildingFootprints, localObjectivePlace, currentObjectiveView, openingCard, questPlayerPlaces, npcContinuityPlaces } from './GameApp.js';
 import { Locator } from './world/Locator.js';
+import { WalkRoutes } from './agents/WalkRoutes.js';
 
 describe( 'GameApp quest NPC control', () => {
 
@@ -105,15 +106,24 @@ it('keeps conversation and outcome modals in control of pointer capture and game
 
 describe( 'continuity places', () => {
 
-	it( 'stands a parcel with a door just inside it, with a doorstep outside where a leader shows it', () => {
+	it( 'gives a leader a doorstep outside a parcel\'s door, or where the access path of one without a door meets the pavement', () => {
 
 		const door = { parcelId: 'p1', inside: new THREE.Vector3( 1, 0, 2 ), outside: new THREE.Vector3( 1, 0, 5.2 ), normal: new THREE.Vector3( 0, 0, 1 ) };
-		const atlas = { parcels: [ { id: 'p1', access: { point: [ 1, 6 ] } }, { id: 'p2', access: { point: [ 9, 6 ] } } ] };
-		const [ entered, open ] = npcContinuityPlaces( atlas, [ door ], new Map() );
+		const atlas = { parcels: [ { id: 'p1', access: { point: [ 1, 6 ] } }, { id: 'p2', access: { point: [ 9, 6 ] } }, { id: 'p3', access: { point: [ 20, 6 ] } } ] };
+		// The pavement runs along z = 7.2; p2's access path leaves its lot line at z = 6.
+		const routes = new WalkRoutes( { walk: {
+			nodes: [ { id: 'a', x: 0, y: 0, z: 7.2, kind: 'sidewalk' }, { id: 'b', x: 9, y: 0, z: 7.2, kind: 'sidewalk' }, { id: 'e2', x: 9, y: 0, z: 6, kind: 'entry', ref: 'p2' } ],
+			edges: [
+				{ id: 'pave', from: 'a', to: 'b', kind: 'sidewalk', path3: [ [ 0, 0, 7.2 ], [ 9, 0, 7.2 ] ] },
+				{ id: 'in', from: 'e2', to: 'b', kind: 'access', path3: [ [ 9, 0, 6 ], [ 9, 0, 7.2 ] ] }
+			]
+		} } );
+		const [ entered, open, lost ] = npcContinuityPlaces( atlas, [ door ], new Map(), routes );
 		expect( entered ).toMatchObject( { kind: 'parcel', id: 'p1', position: [ 1, 0, 2 ], doorstep: [ 1, 0, 5.2 ] } );
-		// Without a door the place already stands out on the pavement, at its access.
-		expect( open.position[ 0 ] ).toBe( 9 );
-		expect( open ).not.toHaveProperty( 'doorstep' );
+		// Without a door the place stands at its access point on the lot line, which the building may fill;
+		// a leader shows it from where its access path meets the pavement.
+		expect( open ).toMatchObject( { position: [ 9, expect.any( Number ), 6 ], doorstep: [ 9, 0, 7.2 ] } );
+		expect( lost ).not.toHaveProperty( 'doorstep' );
 
 	} );
 
