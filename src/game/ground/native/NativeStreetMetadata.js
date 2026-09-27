@@ -1,4 +1,4 @@
-import { area, bounds, fail, hashValue, jsonHash, pathValue, record, strings, unit, vector } from './NativeStreetChecks.js';
+import { bounds, fail, hashValue, jsonHash, pathValue, record, strings, unit, vector } from './NativeStreetChecks.js';
 
 /** Validate the identities and ownership the runtime actually consumes. */
 export async function checkStreetMetadata( manifest, blueprint, blueprintHash ) {
@@ -64,7 +64,6 @@ export async function checkStreetMetadata( manifest, blueprint, blueprintHash ) 
 		strings( placement.ownerIds, 'placement owner IDs' );
 		shaderValues( placement, kit.glyphs.length );
 	}
-	overhangs( manifest.report, placements.placements.length, ids );
 	ids.clear();
 	for ( const feature of manifest.features ) {
 		if ( typeof feature?.id !== 'string' || ! feature.id || ids.has( feature.id ) || ! bounds( feature.bounds ) || ! Array.isArray( feature.footprint )
@@ -81,17 +80,6 @@ function shaderValues( placement, glyphs ) {
 	if ( scan !== undefined && ( ! record( scan ) || ! vector( scan.offset, 2 ) || ! vector( scan.scale, 2 ) || scan.scale.some( value => value <= 0 ) ) ) fail( 'Invalid placement scan' );
 	if ( text !== undefined && ( ! Array.isArray( text )
 		|| text.some( index => ! Number.isSafeInteger( index ) || index < 0 || index >= glyphs ) ) ) fail( 'Invalid placement text' );
-}
-
-/** Overhangs are drawn as they stand; the report is read for its own consistency alone. */
-function overhangs( report, count, pieces ) {
-	const accepted = report?.overhangs?.accepted;
-	if ( ! record( report?.overhangs ) || ! Array.isArray( accepted )
-		|| ! [ 'boundaryArea', 'fringeArea', 'overlapArea' ].every( field => area( report.overhangs[ field ] ) ) ) fail( 'Invalid street overhang report' );
-	for ( const overhang of accepted ) {
-		if ( ! Number.isSafeInteger( overhang?.placement ) || overhang.placement < 0 || overhang.placement >= count
-			|| ! pieces.has( overhang.piece ) || ! area( overhang.boundaryArea ) || ! area( overhang.fringeArea ) ) fail( 'Invalid accepted street overhang' );
-	}
 }
 
 function indices( values, length, field ) {

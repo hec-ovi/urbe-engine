@@ -32,8 +32,7 @@ function fixture( encoding = 'json-file-bytes' ) {
 		placements: { version: '1.2.0', cellSize: 128, placements: [
 			{ piece: 'p0', position: [ 0, 0, 0 ], rotationY: 0, cell: [ 0, 0 ], ownerId: 'a', ownerIds: [ 'a' ],
 				wear: 0.5, tint: [ 1, 0.5, 0.25 ], text: [ 20, 17, 1, 4 ] } ] },
-		report: { overhangs: { accepted: [ { placement: 0, piece: 'p0', boundaryArea: 0.5, fringeArea: 1.5 } ],
-			boundaryArea: 0.5, fringeArea: 1.5, overlapArea: 0 } },
+		report: { profiles: [], degraded: [] },
 		wear: { application: 'instance' },
 		files: { kit: 'streets/kit.json', placements: 'streets/placements.json' },
 		ground: { owners: [ { id: 'g0', ownerId: 'a', sourceIndex: 0 } ], replacements: { groundIndices: [ 0 ], moduleOwnerIds: [ 'a' ] },
@@ -81,14 +80,13 @@ describe( 'saved native street source', () => {
 		expect( data.fetch ).not.toHaveBeenCalled();
 	} );
 
-	it.each( [ 'catalog', 'ownership', 'asset-path', 'shader-value', 'overhang' ] )( 'rejects inconsistent %s metadata even when its outer byte hash is updated', async kind => {
+	it.each( [ 'catalog', 'ownership', 'asset-path', 'shader-value' ] )( 'rejects inconsistent %s metadata even when its outer byte hash is updated', async kind => {
 		const data = fixture();
 		if ( kind === 'catalog' ) data.manifest.meta.nativeCatalogHash = '0'.repeat( 64 );
 		if ( kind === 'ownership' ) data.manifest.delegated.remainingGroundIndices = [ 0 ];
 		if ( kind === 'asset-path' ) data.manifest.kit.pieces[ 0 ].file = '../outside.glb';
-		// A glyph the kit cannot letter and an overhang on a placement that does not exist.
+		// A glyph the kit cannot letter.
 		if ( kind === 'shader-value' ) data.manifest.placements.placements[ 0 ].text = [ 999 ];
-		if ( kind === 'overhang' ) data.manifest.report.overhangs.accepted[ 0 ].placement = 7;
 		data.reference.sha256 = jsonHash( data.manifest );
 		await expect( openNativeStreetSource( data.options ) ).rejects.toMatchObject( { code: 'E_WORLD_STREETS' } );
 		expect( data.fetch ).toHaveBeenCalledOnce();
