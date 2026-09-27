@@ -303,7 +303,7 @@ export class GameApp {
 		this.renderer = await rendering;
 		recoverDeviceLoss( this.renderer, {
 			save: () => this.persistence && this.body && this.controller && this.quests ? this.#saveCurrent() : null,
-			notify: () => this.view.toast.show( { title: 'Graphics reset', text: 'The GPU was reset. Saving the game and reloading.' } )
+			notify: ( message ) => this.view.toast.show( message )
 		} );
 		// After init, because that is when the WebGPU-to-WebGL2 fallback has
 		// already happened and the tier is a choice about cost, not backend.
