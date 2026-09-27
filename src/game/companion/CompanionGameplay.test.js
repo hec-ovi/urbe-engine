@@ -119,7 +119,7 @@ describe( 'a companion under way', () => {
 
 	} );
 
-	it( 'offers two places of one name by the way they lie, and names the chosen one plainly once under way and at the place', () => {
+	it( 'offers two places of one name by the way they lie, tells the player which one the leader sets off for, and names it plainly at the place', () => {
 
 		const twin = { ...SCENE, place: { kind: 'parcel', id: 'p_shop' }, notes: [ 'Glass on the floor.' ] };
 		const game = setup( {}, null, null, [ SCENE, twin ] );
@@ -134,12 +134,21 @@ describe( 'a companion under way', () => {
 		const accepted = game.companion.accept( { ...game.ask( mira ), offerId: 'lead:parcel:p_rest' } );
 		expect( [ 'Follow me to the back room to the west.', 'This way. Keep close.', 'Come on. It isn\'t far.' ] ).toContain( accepted.line );
 		game.continuity.endConversation( { timeMin: AFTERNOON, hold: true } );
-		expect( game.frame( AFTERNOON, mira.position ) ).toEqual( [ { kind: 'started', npcId: mira.npcId, mode: 'lead', notice: 'Mira leads you to the back room.' } ] );
+		expect( game.frame( AFTERNOON, mira.position ) ).toEqual( [ { kind: 'started', npcId: mira.npcId, mode: 'lead', notice: 'Mira leads you to the back room to the west.' } ] );
 		expect( game.companion.active.destination ).toEqual( SCENE );
 
 		const signals = game.walkBeside( AFTERNOON + 1, () => game.companion.active.phase === 'ready' );
-		expect( signals[ 0 ] ).toMatchObject( { kind: 'arrival', guide: { placeId: 'p_rest', name: 'the back room' } } );
+		expect( signals[ 0 ] ).toMatchObject( { kind: 'arrival', guide: { placeId: 'p_rest', name: 'the back room' }, notice: 'Mira has brought you to the back room.' } );
 		expect( [ 'So this is the back room. Tell me about it.', 'We\'re here. What should I know about the back room?' ] ).toContain( signals[ 0 ].ask );
+
+		// The talk tool names the other one by its id: the notice says which, and the leader walks there.
+		const tool = setup( {}, null, null, [ SCENE, twin ] );
+		const asked = tool.talkTo( 'p_cafe', AFTERNOON );
+		expect( tool.companion.acceptFromTool( { ...tool.ask( asked ), kind: 'lead', placeId: 'p_shop' } ) ).toMatchObject( { ok: true, offerId: 'lead:parcel:p_shop' } );
+		tool.continuity.endConversation( { timeMin: AFTERNOON, hold: true } );
+		expect( tool.frame( AFTERNOON, asked.position ) ).toEqual( [ { kind: 'started', npcId: asked.npcId, mode: 'lead', notice: 'Mira leads you to the back room to the east.' } ] );
+		expect( tool.continuity.companion ).toMatchObject( { npcId: asked.npcId, mode: 'leading' } );
+		expect( tool.companion.active.destination.place ).toEqual( twin.place );
 
 	} );
 

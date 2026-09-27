@@ -244,12 +244,13 @@ export class CompanionGameplay {
 			return this.boundary.output( 'accept-result', { ok: false, npcId, code, line: this.lines.say( `refuse-${code}`, {}, seed ) } );
 
 		}
-		// Under way the place goes by its own name: the compass point was from where it was offered.
+		// Under way the place goes by its own name; the start notice, read where it was offered, keeps the compass point.
 		const { offeredAs, ...destination } = chosen.destination ?? {};
-		this.pending = { npcId, kind: chosen.kind, ...( chosen.destination ? { destination } : {} ) };
+		const told = offeredAs ?? destination.name;
+		this.pending = { npcId, kind: chosen.kind, ...( chosen.destination ? { destination, told } : {} ) };
 		return this.boundary.output( 'accept-result', {
 			ok: true, npcId, offerId: chosen.offerId, kind: chosen.kind,
-			line: this.lines.say( `accept-${chosen.kind}`, chosen.destination ? { place: offeredAs ?? destination.name } : {}, seed )
+			line: this.lines.say( `accept-${chosen.kind}`, chosen.destination ? { place: told } : {}, seed )
 		} );
 
 	}
@@ -257,7 +258,7 @@ export class CompanionGameplay {
 	/** Starts, or for a dismissal ends, the accepted offer now no conversation is open. */
 	#settle( { timeMin, playerPosition }, signals ) {
 
-		const { npcId, kind, destination } = this.pending;
+		const { npcId, kind, destination, told } = this.pending;
 		this.pending = null;
 		if ( kind === 'dismiss' ) {
 
@@ -279,8 +280,8 @@ export class CompanionGameplay {
 
 		}
 		this.state = { version: '1', npcId, kind, startedAtMin: timeMin, phase: 'walking', ...( destination ? { destination } : {} ) };
-		// Whatever the person said, the player reads where they are being taken.
-		signals.push( { kind: 'started', npcId, mode: kind, ...( destination ? { notice: this.#told( 'notice-lead', npcId, destination, timeMin ) } : {} ) } );
+		// Whatever the person said, the player reads where they are being taken, as it was offered.
+		signals.push( { kind: 'started', npcId, mode: kind, ...( destination ? { notice: this.#told( 'notice-lead', npcId, told, timeMin ) } : {} ) } );
 
 	}
 
@@ -341,7 +342,7 @@ export class CompanionGameplay {
 				kind: 'arrival', npcId, guide: guideOf( destination ), relation: destination.relation,
 				ask: this.lines.say( 'arrival-ask', { place: destination.name }, seed ),
 				line: this.lines.say( `arrival-${destination.relation}`, { place: destination.name }, seed ),
-				notice: this.#told( 'notice-arrived', npcId, destination, timeMin )
+				notice: this.#told( 'notice-arrived', npcId, destination.name, timeMin )
 			} );
 
 		}
@@ -373,10 +374,10 @@ export class CompanionGameplay {
 
 	}
 
-	/** What the player reads about a leader and its destination, by its plain name. */
-	#told( key, npcId, destination, timeMin ) {
+	/** What the player reads about a leader and the `place` it leads to. */
+	#told( key, npcId, place, timeMin ) {
 
-		return this.lines.say( key, { name: this.#given( npcId ), place: destination.name }, `${npcId}|${Math.floor( timeMin )}` );
+		return this.lines.say( key, { name: this.#given( npcId ), place }, `${npcId}|${Math.floor( timeMin )}` );
 
 	}
 
