@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { vehiclePresence, stepPresence } from './Presence.js';
+import { vehiclePresence, stepPresence, coveredMaterial } from './Presence.js';
 
 it( 'shares opaque dither coverage across vehicle body and lamps', () => {
 
@@ -41,4 +41,12 @@ it.each( [ false, true ] )( 'packs crowd coverage into the pose buffer with stor
 	expect( body.mesh.material.maskShadowNode ).toBe( body.mesh.material.maskNode );
 	expect( body.mesh.material.normalNode ).toBeTruthy();
 	expect( body.mesh.material.roughnessNode ).toBeTruthy();
+} );
+
+it( 'retains transmissive vehicle glazing when installing coverage', async () => {
+	const { uniform } = await import( 'three/tsl' );
+	const material = coveredMaterial( new THREE.MeshPhysicalMaterial( { transmission: 0.7, thickness: 0.15, roughness: 0.2 } ), uniform( 0.5 ) );
+	expect( material ).toBeInstanceOf( THREE.MeshPhysicalNodeMaterial );
+	expect( material ).toMatchObject( { transmission: 0.7, thickness: 0.15, roughness: 0.2 } );
+	expect( material.maskShadowNode ).toBe( material.maskNode );
 } );

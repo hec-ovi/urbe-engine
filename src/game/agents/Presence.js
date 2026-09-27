@@ -1,11 +1,13 @@
 import * as THREE from 'three/webgpu';
-import { instancedBufferAttribute, varying, screenCoordinate } from 'three/tsl';
-import { bayer16 } from 'three/addons/tsl/math/Bayer.js';
+import { instancedBufferAttribute, varying, screenCoordinate, vec2 } from 'three/tsl';
 
 /** Opaque stochastic coverage also used by Three's depth and shadow passes. */
 export function presenceMaterial( material, node ) {
 
-	const mask = varying( node ).greaterThan( bayer16( screenCoordinate ) );
+	const coverage = node.isUniformNode ? node : varying( node );
+	// Scalar interleaved noise keeps texture alpha out of the coverage test.
+	const noise = screenCoordinate.dot( vec2( 0.06711056, 0.00583715 ) ).fract().mul( 52.9829189 ).fract();
+	const mask = coverage.greaterThanEqual( 1 ).or( coverage.greaterThan( noise ) );
 	material.maskNode = material.maskNode ? material.maskNode.and( mask ) : mask;
 	material.maskShadowNode = material.maskNode;
 	return material;
@@ -30,7 +32,8 @@ export function vehiclePresence( meshes, capacity ) {
 export function coveredMaterial( source, node ) {
 
 	const material = source.isNodeMaterial ? source.clone() : Object.assign(
-		source.isMeshBasicMaterial ? new THREE.MeshBasicNodeMaterial() : new THREE.MeshStandardNodeMaterial(), source
+		source.isMeshBasicMaterial ? new THREE.MeshBasicNodeMaterial()
+			: source.isMeshPhysicalMaterial ? new THREE.MeshPhysicalNodeMaterial() : new THREE.MeshStandardNodeMaterial(), source
 	);
 	return presenceMaterial( material, node );
 
