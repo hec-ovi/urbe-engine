@@ -1944,17 +1944,19 @@ export class GameApp {
 		const room = this.#inside( visible, feet );
 
 		this.standing = room;
+		const air = room ? roomAir( room ) : this.lights.airColor( this.camera.position );
 		if ( this.rain ) {
 
 			this.rainCheck -= delta;
 			if ( this.rainCheck <= 0 ) {
 
+				// A canopy, an arcade or an overhang keeps the rain off the player; a skybridge far above does not.
 				this.rainCheck = 0.25;
 				this.rainSheltered = Boolean( this.physics.world.castRay( new this.physics.rapier.Ray( this.camera.position,
-					{ x: 0, y: 1, z: 0 } ), 80, true, undefined, undefined, undefined, undefined, collider => ! collider.isSensor() && collider.parent()?.isFixed() ) );
+					{ x: 0, y: 1, z: 0 } ), 8, true, undefined, undefined, undefined, undefined, collider => ! collider.isSensor() && collider.parent()?.isFixed() ) );
 
 			}
-			this.rain.update( this.camera, Boolean( room ) || this.rainSheltered );
+			this.rain.update( this.camera, { indoors: Boolean( room ), covered: this.rainSheltered }, air, delta );
 
 		}
 		this.#arrive( room ? this.locator.refs( feet.x, feet.z, room.parcelId ).find( ( place ) => place.kind === 'parcel' )?.id ?? null : null );
@@ -1966,7 +1968,7 @@ export class GameApp {
 		this.indoors = Boolean( room );
 
 		this.rooms.update( visible, feet, delta );
-		this.fog.update( room ? roomAir( room ) : this.lights.airColor( this.camera.position ), room ?? null, delta );
+		this.fog.update( air, room ?? null, delta );
 		this.probe?.update( feet, this.#still( feet, delta ) );
 		this.exposure.enter( room ? 'interior' : 'exterior' );
 		this.exposure.update( delta );

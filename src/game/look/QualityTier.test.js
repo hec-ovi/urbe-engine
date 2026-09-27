@@ -23,8 +23,9 @@ describe( 'QualityTier', () => {
 		// low is the fallback backend's tier: no bloom chain, but a room fill is on; haze quads are off on every tier.
 		expect( low.bloom.strength ).toBe( 0 );
 		expect( low.roomShadow ).toBe( 0 );
-		expect( low.rainDrops ).toBe( 0 );
-		expect( low.filmGrain ).toBe( false );
+		// Rain is the night's weather on every tier: one draw of lines costs next to nothing.
+		for ( const name of QualityTier.names() ) expect( QualityTier.describe( name ).rainDrops ).toBeGreaterThan( 0 );
+		expect( low.rainDrops ).toBeLessThanOrEqual( ultra.rainDrops );
 		expect( low.haze ).toBe( false );
 		// Enough slots that one live floor's rooms are lit from their own fixtures.
 		expect( low.roomSlots ).toBe( QualityTier.describe( 'medium' ).roomSlots );

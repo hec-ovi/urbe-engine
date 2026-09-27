@@ -57,7 +57,7 @@ export class LookPipeline {
 		this.pipeline.outputColorTransform = false;
 		const sceneTexture = texture( this.renderTarget.texture );
 		const lit = blooming ? sceneTexture.add( bloomPass ) : sceneTexture;
-		this.pipeline.outputNode = noirGrade( lit, { grain: tier.filmGrain !== false } ).add( dither );
+		this.pipeline.outputNode = noirGrade( lit ).add( dither );
 
 		this.bloom = bloomPass;
 

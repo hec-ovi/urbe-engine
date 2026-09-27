@@ -55,7 +55,7 @@ async function run() {
 	const rain = new Rain( 12 );
 	rain.update( camera, false );
 	scene.add( body.mesh, vehicle, rig, floor, rain.mesh );
-	const pipeline = new LookPipeline( renderer, scene, camera, { bloom: { strength: 0.1, radius: 0.03 }, filmGrain: true } );
+	const pipeline = new LookPipeline( renderer, scene, camera, { bloom: { strength: 0.1, radius: 0.03 } } );
 	const draw = presence => {
 		renderer.info.reset();
 		rigCoverage.value = presence;
