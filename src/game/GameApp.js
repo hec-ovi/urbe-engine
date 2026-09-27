@@ -925,7 +925,7 @@ export class GameApp {
 			this.controller.update( delta );
 
 		} );
-		for ( const impact of this.impactWorld.drain() ) this.#ragdoll( impact );
+		for ( const impact of this.impactWorld.drain() ) this.ragdoll( impact );
 
 		const feet = this.body.feet;
 		this.spawnVisibility.update();
@@ -1618,8 +1618,12 @@ export class GameApp {
 
 	}
 
-	/** Turns one measured vehicle contact into the matching full-body rig. */
-	#ragdoll( impact ) {
+	/**
+	 * Turns one measured vehicle contact into the matching full-body rig; tick
+	 * hands it each contact ImpactWorld measured. A fall taken is news to the
+	 * named people who stood near it.
+	 */
+	ragdoll( impact ) {
 
 		let person = this.crowd.member( impact.personId );
 		if ( ! person ) return;
@@ -1632,7 +1636,10 @@ export class GameApp {
 
 				if ( accepted ) {
 
-					this.recentEvents.struck( { personId: impact.personId, npcId: person.npcId, point: impact.point, hard: impact.fatal, atMin: this.clock.timeMin } );
+					this.recentEvents.struck( {
+						personId: impact.personId, npcId: person.npcId, point: impact.point, hard: impact.fatal, atMin: this.clock.timeMin,
+						people: this.crowd.members.values()
+					} );
 					const result = this.questGameplay.fatalImpact( impact, person.npcId, this.clock.timeMin );
 					if ( result ) this.questActionResult( result );
 					return;

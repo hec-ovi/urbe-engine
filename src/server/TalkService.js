@@ -90,8 +90,9 @@ export class TalkService {
 	}
 
 	/**
-	 * Takes a save's `memory` back into the world at `out`: each person keeps
-	 * the newer of what the world and the save remember of them.
+	 * Takes a save's `memory` back into the world at `out`: the world's memory
+	 * holds all any save holds, so the save's only fills in the people the
+	 * world does not remember (see TalkWorld.restoreMemory).
 	 */
 	async restoreMemory( out, memory ) {
 
@@ -196,9 +197,14 @@ class TalkWorld {
 	}
 
 	/**
-	 * Joins a save's `memory` to what the world remembers: of each person the
-	 * memory whose latest turn is later stays, the world's on a tie, bounded
-	 * the same way.
+	 * Joins a save's `memory` to what the world remembers, bounded the same
+	 * way. Every save reads the world's memory and a game's is kept on disk as
+	 * it changes, so the world's is never older than a save's: each person it
+	 * remembers keeps it, and the save's fills in the people it lacks, as after
+	 * a server restart for a world kept for the session only, or for a game
+	 * saved before its memory file or whose file could not be read. Game
+	 * minutes cannot order the two: a game reopened from its save resumes its
+	 * clock there, before talk the world already remembers.
 	 */
 	restoreMemory( memory ) {
 
@@ -226,12 +232,7 @@ class TalkWorld {
 	#join( memory ) {
 
 		const people = new Map( this.memory().map( ( record ) => [ record.npcId, record ] ) );
-		for ( const record of memory ) {
-
-			const known = people.get( record.npcId );
-			if ( ! known || lastAt( record ) > lastAt( known ) ) people.set( record.npcId, record );
-
-		}
+		for ( const record of memory ) if ( ! people.has( record.npcId ) ) people.set( record.npcId, record );
 		this.context.restoreMemory( Object.fromEntries( bounded( [ ...people.values() ] ).map( ( { npcId, memory: kept } ) => [ npcId, kept ] ) ) );
 
 	}

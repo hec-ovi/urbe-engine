@@ -212,7 +212,7 @@ describe( 'TalkService', () => {
 
 	} );
 
-	it( 'gives a save what people remember, bounded, and joins a save\'s memory, each person keeping the newer', async () => {
+	it( 'gives a save what people remember, bounded, and joins a save\'s memory, taking only the people the world does not remember', async () => {
 
 		const model = fakeModel();
 		const service = new TalkService( model, ( await servedWorld() ).root );
@@ -226,7 +226,7 @@ describe( 'TalkService', () => {
 		const notes = Array.from( { length: 30 }, ( _, at ) => `note ${at}` );
 		const person = ( npcId, atMin ) => ( { npcId, memory: { digest: notes, turns: notes.map( ( text ) => ( { speaker: 'npc', text, atMin } ) ) } } );
 		const crowd = Array.from( { length: 200 }, ( _, at ) => person( `p${String( at ).padStart( 3, '0' )}`, at ) );
-		// A save older than the talk leaves it; the people spoken with last stay.
+		// The save's memory of somebody the world remembers leaves it; the people spoken with last stay.
 		const older = { npcId: 'n1', memory: { digest: [ 'Told of a debt.' ], turns: [ { speaker: 'npc', text: 'Pay up.', atMin: 500 } ] } };
 		await service.restoreMemory( '/out/w', [ ...crowd, older, { npcId: 'silent', memory: { digest: [], turns: [] } } ] );
 		const kept = await service.memory( '/out/w' );
@@ -238,11 +238,45 @@ describe( 'TalkService', () => {
 		expect( await service.memory( '/out/w', 'n1' ) ).toEqual( [ kept[ 0 ] ] );
 		expect( await service.memory( '/out/w', 'nobody' ) ).toEqual( [] );
 
-		// A save newer than the talk replaces what that person remembers.
+		// Even at a later minute: a game reopened from its save resumes its clock there.
 		await service.restoreMemory( '/out/w', [ { ...older, memory: { ...older.memory, turns: [ { speaker: 'npc', text: 'Pay up.', atMin: 700 } ] } } ] );
 		await say( service, 'Remember me?' );
-		expect( model.system( 1 ) ).toContain( 'Told of a debt.' );
-		expect( model.system( 1 ) ).not.toContain( 'Where is the lift?' );
+		expect( model.system( 1 ) ).toContain( 'Where is the lift?' );
+		expect( model.system( 1 ) ).not.toContain( 'Told of a debt.' );
+
+	} );
+
+	it( 'keeps the newest exchange of a game closed twice without a save, though its reopened clock went back', async () => {
+
+		const { root, dir } = await servedWorld( { 'game.json': { theme: 'noir' } } );
+		const players = async ( service ) => ( await service.memory( '/out/w', 'n1' ) )[ 0 ].memory.turns
+			.filter( ( turn ) => turn.speaker === 'player' ).map( ( turn ) => `${turn.text}@${turn.atMin}` );
+
+		// Session one: a talk, an autosave, a talk, and the window closes.
+		let service = new TalkService( fakeModel(), root );
+		await service.restoreMemory( '/out/w', [] );
+		await say( service, 'first', { timeMin: 100 } );
+		const autosave = await service.memory( '/out/w' );
+		await say( service, 'second', { timeMin: 120 } );
+
+		// Session two, on a server started again: the clock resumes at the save's minute 101.
+		service = new TalkService( fakeModel(), root );
+		await service.restoreMemory( '/out/w', autosave );
+		const again = await service.memory( '/out/w' );
+		await say( service, 'third', { timeMin: 105 } );
+
+		// Session three loads the second autosave, whose latest turn is at 120.
+		service = new TalkService( fakeModel(), root );
+		await service.restoreMemory( '/out/w', again );
+		expect( await players( service ) ).toEqual( [ 'first@100', 'second@120', 'third@105' ] );
+		const kept = JSON.parse( await readFile( join( dir, 'dialogue-memory.json' ), 'utf8' ) );
+		expect( kept[ 0 ].memory.turns.filter( ( turn ) => turn.speaker === 'player' ).map( ( turn ) => turn.text ) ).toEqual( [ 'first', 'second', 'third' ] );
+
+		// A game saved before its memory file, or whose file is gone, takes the save's.
+		await rm( join( dir, 'dialogue-memory.json' ) );
+		service = new TalkService( fakeModel(), root );
+		await service.restoreMemory( '/out/w', autosave );
+		expect( await players( service ) ).toEqual( [ 'first@100' ] );
 
 	} );
 

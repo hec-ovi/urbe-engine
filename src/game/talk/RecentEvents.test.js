@@ -37,6 +37,30 @@ describe( 'RecentEvents', () => {
 
 	} );
 
+	it( 'tells the people who stood near an impact, and the person hit, about it wherever they talk later', () => {
+
+		const events = new RecentEvents( parcels );
+		const people = [
+			{ npcId: 'leader', position: { x: 50, y: 0, z: 10 }, fallen: false },
+			{ npcId: 'far', position: { x: 300, y: 0, z: 0 }, fallen: false },
+			{ npcId: 'lying', position: { x: 2, y: 0, z: 0 }, fallen: true },
+			{ npcId: null, position: { x: 1, y: 0, z: 0 }, fallen: false }
+		];
+		events.struck( { personId: 'p1', npcId: 'hit', point: { x: 1, y: 1, z: 0 }, hard: true, atMin: 600, people } );
+		const away = { x: 400, y: 0, z: 0 };
+
+		expect( events.around( { position: away, timeMin: 630, npcId: 'leader', down: () => true } ) ).toEqual( [
+			{ kind: 'struck', atMin: 600, parcelId: 'bar', metres: 399, hard: true, down: true }
+		] );
+		expect( events.around( { position: away, timeMin: 630, npcId: 'hit' } ) ).toEqual( [
+			{ kind: 'struck', atMin: 600, parcelId: 'bar', metres: 399, hard: true, self: true }
+		] );
+		// Somebody too far, or lying on the ground, saw nothing; and the news is old after two hours.
+		for ( const npcId of [ 'far', 'lying', null ] ) expect( events.around( { position: away, timeMin: 630, npcId } ) ).toEqual( [] );
+		expect( events.around( { position: away, timeMin: 721, npcId: 'leader' } ) ).toEqual( [] );
+
+	} );
+
 	it( 'keeps the newest impacts and hands a talk at most eight events, newest first', () => {
 
 		const events = new RecentEvents( parcels );

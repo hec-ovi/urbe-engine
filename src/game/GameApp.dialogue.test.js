@@ -268,6 +268,29 @@ describe('explicit quest dialogue through the playable UI',()=>{
   ]);
  });
 
+ it('tells a talk of a car that hit someone once the fall is taken, and the person who stood by it wherever they talk later',async()=>{
+  const {app,open}=fixture();app.quests.dialoguesFor=()=>[];
+  // The person talked to stood 7 m from the impact; a refused fall is no news.
+  const members=new Map([['crowd-7',{id:'crowd-7',npcId:'walker',position:{x:4,y:0,z:3},fallen:false}],['crowd-9',{id:'crowd-9',npcId:'person',position:{x:10,y:0,z:0},fallen:false}]]);
+  app.crowd={members,member:id=>members.get(id)??null,beginRagdoll:id=>Object.assign(members.get(id),{fallen:true}),cancelRagdoll:id=>Object.assign(members.get(id),{fallen:false})};
+  Object.assign(app.animations,{physicsInterrupt:vi.fn(),physicsResume:vi.fn()});
+  app.impactWorld={release:vi.fn()};app.questGameplay.fatalImpact=vi.fn(()=>null);app.hero={fall:vi.fn(async()=>false)};
+  const impact={personId:'crowd-7',vehicleId:'car-1',impactSpeed:14,fatal:true,point:{x:4,y:1.05,z:3},impulse:{x:0,y:10,z:14}};
+  const talk=async(line)=>{const count=app.talk.stream.mock.calls.length;
+   await userEvent.setup().type(within(app.view.dialog.element).getByRole('textbox'),`${line}{Enter}`);
+   await vi.waitFor(()=>expect(app.talk.stream).toHaveBeenCalledTimes(count+1));
+   await vi.waitFor(()=>expect(app.dialoguePending).toBe(false));return app.talk.stream.mock.calls.at(-1)[4].events;};
+  app.ragdoll(impact);await vi.waitFor(()=>expect(app.impactWorld.release).toHaveBeenCalledWith('crowd-7'));
+  expect(members.get('crowd-7').fallen).toBe(false);
+  open();expect(await talk('Anything happen?')).toBeUndefined();
+  // Taken, it is news to the leader 200 m on, with the body still down, and the person hit knows it was them.
+  app.hero.fall.mockResolvedValueOnce(true);app.ragdoll(impact);
+  await vi.waitFor(()=>expect(app.questGameplay.fatalImpact).toHaveBeenCalledWith(impact,'walker',1260));
+  app.body.feet={x:200,y:0,z:0};
+  expect(await talk('Anything happen?')).toEqual([{kind:'struck',atMin:1260,parcelId:'p1',metres:196,hard:true,down:true}]);
+  expect(app.recentEvents.around({position:app.body.feet,timeMin:1260,npcId:'walker'})).toEqual([{kind:'struck',atMin:1260,parcelId:'p1',metres:196,hard:true,self:true}]);
+ });
+
  it('answers a chat action by the companion rules: a refusal is said in the chat, an agreement closes it on the person\'s words and keeps them there',async()=>{
   const {app,open,log,companion}=fixture();companion.offers.mockReturnValue(OFFERS);open();
   const user=userEvent.setup();const chat=within(app.view.dialog.element);const actions=()=>within(chat.getByRole('group',{name:'Ask Petra Moss along'}));
