@@ -71,6 +71,7 @@ import { HeroCharacter } from './agents/HeroCharacter.js';
 import { GameplayAnimationDirector } from './GameplayAnimationDirector.js';
 import { Crowd } from './agents/Crowd.js';
 import { WalkRoutes } from './agents/WalkRoutes.js';
+import { WalkSurface } from './agents/WalkSurface.js';
 import { NpcContinuity } from './agents/NpcContinuity.js';
 import { InteriorRoutes } from './agents/InteriorRoutes.js';
 import { CompanionGameplay } from './companion/CompanionGameplay.js';
@@ -542,6 +543,7 @@ export class GameApp {
 			assets, routes, sim: this.sim, signals: this.signals,
 			visibility: this.spawnVisibility,
 			floorShown: ( parcel, floor ) => this.stream.floorShown( parcel, floor ),
+			surface: new WalkSurface( atlas.volumetric?.ground ),
 			places: crowdPlaces,
 			capacity: config.maxCrowd,
 			spawnRadius: config.crowdRadius,

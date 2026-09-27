@@ -1,5 +1,4 @@
 import * as THREE from 'three/webgpu';
-import { SIDEWALK_HEIGHT } from '../ground/GroundBuilder.js';
 import { CLIP, clipForNpcAnimation } from './CharacterAssets.js';
 import { CROWD_MODELS, bodyFor } from './CharacterCatalog.js';
 import { FRAMES } from './VatBaker.js';
@@ -8,6 +7,7 @@ import { spreadOnLanes, LANE_SPACING } from './LaneSpread.js';
 import { streetBodies } from './StreetBodies.js';
 import { stepPresence } from './Presence.js';
 import { hiddenWalkEntry } from './SpawnVisibility.js';
+import { WalkSurface } from './WalkSurface.js';
 
 /** How fast people walk. Everyone has their own pace inside this range. */
 const WALK_SLOWEST = 0.9;
@@ -39,6 +39,12 @@ const PERSON_HEIGHT = 2;
 const STREET_REACH = 25;
 /** How near a blocked footprint a walker looks at their next step: more than anybody walks in a frame. */
 const BLOCK_LOOK = 1;
+/** Walk edges at street grade, whose walkers stand on the ground cover under them. */
+const GRADE = new Set( [ 'sidewalk', 'access', 'crossing' ] );
+/** How far feet stand off a level the walk graph carries itself: a station floor, a link or a stair. */
+const CLEARANCE = 0.02;
+/** Continuity control modes the schedule drives, whose bodies stand inside a building only on a floor it shows. */
+const SCHEDULED = new Set( [ 'schedule', 'resuming', 'released' ] );
 
 /**
  * The people in the world, all of them real. Two sources, both the simulation
@@ -67,8 +73,9 @@ export class Crowd {
 	/**
 	 * @param blockers what walkers keep out of now: a function returning solid
 	 * footprints on the pavement, `[{ center: { x, z }, width, depth, yawRadians }]`
+	 * @param surface the WalkSurface outdoor feet stand on
 	 */
-	constructor( { assets, routes, signals, sim, places, capacity, spawnRadius = SPAWN_RADIUS, stress = 0, continuity = null, street = streetBodies, lighting = null, blockers = () => [], visibility = null, floorShown = () => true } ) {
+	constructor( { assets, routes, signals, sim, places, capacity, spawnRadius = SPAWN_RADIUS, stress = 0, continuity = null, street = streetBodies, lighting = null, blockers = () => [], visibility = null, floorShown = () => true, surface = new WalkSurface() } ) {
 
 		this.assets = assets;
 		this.street = street;
@@ -84,6 +91,7 @@ export class Crowd {
 		this.blockers = blockers;
 		this.visibility = visibility;
 		this.floorShown = floorShown;
+		this.surface = surface;
 		this.delta = 0;
 		if ( lighting ) for ( let variant = 0; variant < assets.variants.length; variant ++ ) {
 
@@ -123,13 +131,18 @@ export class Crowd {
 			return null;
 
 		}
-		if ( actor.place.kind === 'parcel' && ! this.floorShown( actor.place.id, actor.place.floor ?? 0 ) ) {
+		// Somebody the schedule has inside a building stands on a floor it shows;
+		// a body under control stands where the control put it.
+		if ( SCHEDULED.has( actor.mode ) && actor.place.kind === 'parcel' && ! this.floorShown( actor.place.id, actor.place.floor ?? 0 ) ) {
 
 			if ( member ) this.#remove( member );
 			return null;
 
 		}
 		const position = new THREE.Vector3( ...actor.position );
+		// Continuity walks the graph at grade: on the street, feet stand on the ground there.
+		const projection = actor.place.kind === 'edge' ? this.routes.project( actor.position ) : null;
+		if ( projection ) position.y = walkY( projection.edge, { x: position.x, y: projection.point[ 1 ], z: position.z }, this.surface );
 		const reservedSpot = member?.parcelId === actor.place.id && member.position.distanceToSquared( position ) < 0.0001
 			? member.spot : null;
 		const reach = actor.place.kind === 'parcel' ? PARCEL_RADIUS : this.spawnRadius;
@@ -179,7 +192,7 @@ export class Crowd {
 		member.parcelId = actor.place.kind === 'parcel' ? actor.place.id : null;
 		member.edge = actor.place.kind === 'edge' ? this.routes.edges.get( actor.place.id ) ?? null : null;
 		member.stationary = ! member.edge;
-		member.distance = member.edge ? this.routes.project( actor.position )?.distance ?? 0 : 0;
+		member.distance = member.edge ? projection?.distance ?? 0 : 0;
 		member.direction = 1;
 		// A saved post keeps its real anchor reserved even when streaming has
 		// removed the old body, so the next staff sample cannot fill its seat.
@@ -1048,7 +1061,7 @@ export class Crowd {
 		const spot = this.#freeSpot(
 			edge, Math.min( distance, edge.length ), direction, laneOffset( slot ?? seed, edge )
 		);
-		const at = standing( edge, this.routes.pointAt( edge, spot.distance, direction ), spot.offset );
+		const at = standing( edge, this.routes.pointAt( edge, spot.distance, direction ), spot.offset, this.surface );
 		if ( ! this.#hidden( at ) || this.#roomAt( at ) < PERSONAL_SPACE ) return null;
 		const member = this.#add( {
 			...this.#base( agent, seed ),
@@ -1091,7 +1104,7 @@ export class Crowd {
 
 				for ( const side of [ offset, - offset, 0 ] ) {
 
-					const gap = this.#roomAt( standing( edge, spot, side ) );
+					const gap = this.#roomAt( standing( edge, spot, side, this.surface ) );
 
 					if ( gap >= PERSONAL_SPACE ) return { distance: along, offset: side };
 					if ( ! best || gap > best.gap ) best = { distance: along, offset: side, gap };
@@ -1283,7 +1296,7 @@ export class Crowd {
 			edge = this.routes.edges.get( current?.edgeId ?? place.id );
 			if ( ! edge ) return null;
 			const at = this.routes.pointAt( edge, edge.length * ( current?.progress ?? 0.5 ), 1 );
-			position = new THREE.Vector3( at.x, walkY( edge, at ), at.z );
+			position = new THREE.Vector3( at.x, walkY( edge, at, this.surface ), at.z );
 			if ( position.distanceTo( player ) > this.spawnRadius ) return null;
 
 		} else return null;
@@ -1399,7 +1412,7 @@ export class Crowd {
 		for ( const footprint of blocked ) {
 
 			if ( ! covers( footprint, member.position, PERSON_RADIUS + BLOCK_LOOK ) || covers( footprint, member.position, PERSON_RADIUS ) ) continue;
-			next ??= standing( member.edge, this.routes.pointAt( member.edge, Math.min( distance, member.edge.length ), member.direction ), member.offset );
+			next ??= standing( member.edge, this.routes.pointAt( member.edge, Math.min( distance, member.edge.length ), member.direction ), member.offset, this.surface );
 			if ( covers( footprint, next, PERSON_RADIUS ) ) return true;
 
 		}
@@ -1465,7 +1478,7 @@ export class Crowd {
 
 		for ( const side of [ own, - own, 0, room, - room ] ) {
 
-			const gap = this.#roomAt( standing( edge, spot, side ), member );
+			const gap = this.#roomAt( standing( edge, spot, side, this.surface ), member );
 
 			if ( gap >= PERSONAL_SPACE ) return side;
 			if ( ! best || gap > best.gap ) best = { side, gap };
@@ -1487,7 +1500,7 @@ export class Crowd {
 			Math.min( member.distance, member.edge.length ),
 			member.direction
 		);
-		const at = standing( member.edge, spot, member.offset );
+		const at = standing( member.edge, spot, member.offset, this.surface );
 
 		member.position.set( at.x, at.y, at.z );
 		member.heading = spot.heading;
@@ -1608,14 +1621,12 @@ function laneRoom( edge ) {
 
 }
 
-/** The world spot a walker stands on: their lane's point, out to their side. */
-function standing( edge, spot, offset ) {
+/** The world spot a walker stands on: their lane's point, out to their side, on the ground there. */
+function standing( edge, spot, offset, surface ) {
 
-	return {
-		x: spot.x + Math.cos( spot.heading ) * offset,
-		y: walkY( edge, spot ),
-		z: spot.z - Math.sin( spot.heading ) * offset
-	};
+	const x = spot.x + Math.cos( spot.heading ) * offset;
+	const z = spot.z - Math.sin( spot.heading ) * offset;
+	return { x, y: walkY( edge, { x, y: spot.y, z }, surface ), z };
 
 }
 
@@ -1640,18 +1651,18 @@ export function crowdClipForName( clipName ) {
 }
 
 /**
- * Connections publishes network grade. The raised city pavement adds its
- * shared surface datum to sidewalk and access edges; station floors and links already
- * carry their absolute level. A stair blends that surface lift away by the
- * bottom landing so both ends meet the rendered station exactly.
+ * Connections publishes network grade. A walker on a street edge stands on the
+ * ground cover under them, the raised pavement or the carriageway, and where
+ * no cover lies on the network grade plus the pavement level (sidewalk and
+ * access) or clear of it (crossing). Station floors and links already carry
+ * their absolute level. A stair blends the pavement lift away by the bottom
+ * landing so both ends meet the rendered station exactly.
  */
-function walkY( edge, spot ) {
+function walkY( edge, spot, surface ) {
 
-	const clearance = 0.02;
+	if ( GRADE.has( edge.kind ) ) return surface.height( spot.x, spot.z ) ?? spot.y + ( edge.kind === 'crossing' ? CLEARANCE : surface.paving );
 
-	if ( edge.kind === 'sidewalk' || edge.kind === 'access' ) return spot.y + SIDEWALK_HEIGHT;
-
-	if ( edge.kind !== 'stairs' ) return spot.y + clearance;
+	if ( edge.kind !== 'stairs' ) return spot.y + CLEARANCE;
 
 	let low = Infinity;
 	let high = - Infinity;
@@ -1665,7 +1676,7 @@ function walkY( edge, spot ) {
 
 	const t = high > low ? THREE.MathUtils.clamp( ( spot.y - low ) / ( high - low ), 0, 1 ) : 0;
 
-	return spot.y + THREE.MathUtils.lerp( clearance, SIDEWALK_HEIGHT, t );
+	return spot.y + THREE.MathUtils.lerp( CLEARANCE, surface.paving, t );
 
 }
 

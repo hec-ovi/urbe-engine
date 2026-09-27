@@ -433,7 +433,7 @@ function routes() {
 	return {
 		edges: new Map( [ [ EDGE.id, EDGE ], [ NEIGHBOUR.id, NEIGHBOUR ] ] ),
 		near: () => [ EDGE, NEIGHBOUR ],
-		project: () => ( { edge: EDGE, distance: EDGE.length / 2 } ),
+		project: ( at ) => ( { edge: EDGE, point: [ at[ 0 ], 0, at[ 2 ] ], distance: EDGE.length / 2 } ),
 		pointAt: ( edge, distance ) => ( { x: distance, y: 0, z: 0, heading: 0 } ),
 		exitNode: () => 'n1',
 		nextFrom: () => ( { edge: EDGE, direction: 1 } )

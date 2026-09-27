@@ -1,3 +1,4 @@
+import { CLIP } from '../agents/CharacterAssets.js';
 import { CROWD_MODELS } from '../agents/CharacterCatalog.js';
 import { PERSON_RADIUS } from '../physics/ImpactWorld.js';
 import { EYE_HEIGHT, STEP_HEIGHT } from '../physics/PlayerBody.js';
@@ -163,6 +164,38 @@ export class AutomationProbe {
 		while ( ! id && ! this.#focused( person ) && performance.now() - started < timeoutMs ) await frames( 1 );
 
 		return { crowd: crowdLook( person ), hero: heroLook( this.#focused( person ) ) };
+
+	}
+
+	/**
+	 * Where feet stand against the solid under them: the player's, or crowd
+	 * member `id`'s. `{ feet, ground, gap, seated }`, ground the first solid a
+	 * ray meets from a step over the feet to a step under them and `gap` the
+	 * metres the feet stand above it (below it when negative), both null where
+	 * the ray meets nothing; null for an unknown member.
+	 */
+	footing( id = null ) {
+
+		const member = id ? this.game.crowd.members.get( id ) : null;
+		const feet = id ? member?.position : this.game.body.feet;
+		if ( ! feet ) return null;
+		// From a step over the feet, so a table or counter a person stands at is not their ground.
+		let ground = null;
+		for ( const [ dx, dz ] of GROUND_PROBES ) {
+
+			const drop = this.#ray( { x: feet.x + dx, y: feet.y + STEP_HEIGHT, z: feet.z + dz }, { x: 0, y: - 1, z: 0 }, STEP_HEIGHT * 2 );
+			if ( drop !== null ) {
+
+				ground = feet.y + STEP_HEIGHT - drop;
+				break;
+
+			}
+
+		}
+		return {
+			feet: point( feet ), ground: ground === null ? null : round( ground ), gap: ground === null ? null : round( feet.y - ground ),
+			seated: Boolean( member ) && [ CLIP.SIT, CLIP.SIT_TALK ].includes( member.clip )
+		};
 
 	}
 

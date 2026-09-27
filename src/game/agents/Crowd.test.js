@@ -5,6 +5,7 @@ import { CLIP } from './CharacterAssets.js';
 import { look } from './Appearance.js';
 import { StreetBodies } from './StreetBodies.js';
 import { WalkRoutes } from './WalkRoutes.js';
+import { WalkSurface } from './WalkSurface.js';
 import { SIDEWALK_HEIGHT } from '../ground/GroundBuilder.js';
 
 /**
@@ -80,6 +81,71 @@ describe( 'Crowd route elevation', () => {
 
 } );
 
+describe( 'Crowd walking surface', () => {
+
+	/** The test pavement along z = 0 on a 0.2 m sidewalk cover, a carriageway beyond z = 2. */
+	const covers = [
+		{ surface: 'sidewalk', polygon: [ [ - 130, - 2 ], [ 130, - 2 ], [ 130, 2 ], [ - 130, 2 ] ], top: 0.2 },
+		{ surface: 'roadway', polygon: [ [ - 130, 2 ], [ 130, 2 ], [ 130, 10 ], [ - 130, 10 ] ], top: 0 }
+	];
+	const instance = { npcId: 'walker', name: { given: 'Ada', family: 'Reis' }, type: 'barista', gender: 'female', appearanceSeed: 7 };
+	const crowdOn = ( options = {} ) => new Crowd( {
+		assets: testAssets(), routes: pavement(), signals: { green: () => true },
+		sim: { getNPC: () => instance, crowd: () => ( { agents: [] } ) },
+		places: new Map(), capacity: 8, surface: new WalkSurface( covers ), ...options
+	} );
+
+	it( 'stands a sampled walker on the pavement cover under them', () => {
+
+		const agents = [ { crowdId: 'passer', type: 'commuter', activity: 'commuting', place: { kind: 'edge', id: 'e3' }, progress: 0.5, direction: 1 } ];
+		const crowd = crowdOn( { sim: { crowd: () => ( { agents } ) } } );
+		crowd.update( 0, new THREE.Vector3(), { timeMin: 600, daySeconds: 36000 } );
+		const [ walker ] = crowd.members.values();
+		expect( walker.position.y ).toBe( 0.2 );
+		crowd.update( 0.5, new THREE.Vector3(), { timeMin: 600, daySeconds: 36000.5 } );
+		expect( walker.position.y ).toBe( 0.2 );
+
+	} );
+
+	it( 'stands somebody continuity walks at grade on the pavement, and a talk leaves them there', () => {
+
+		const crowd = crowdOn();
+		const player = new THREE.Vector3();
+		const walking = crowd.syncActor( { ...persistentActor( instance ), mode: 'resuming', place: { kind: 'edge', id: 'e3' }, position: [ 10, 0, 0.5 ] }, player );
+		expect( walking.position.toArray() ).toEqual( [ 10, 0.2, 0.5 ] );
+		// A conversation starts from the body where it stands: already on the pavement, never raised twice.
+		const talking = crowd.syncActor( { ...persistentActor( instance ), mode: 'conversation', place: { kind: 'edge', id: 'e3' }, position: walking.position.toArray() }, player );
+		expect( talking.position.y ).toBe( 0.2 );
+		const after = crowd.syncActor( { ...persistentActor( instance ), mode: 'resuming', place: { kind: 'edge', id: 'e3' }, position: [ 10.4, 0.1, 0.5 ] }, player );
+		expect( after.position.y ).toBe( 0.2 );
+
+	} );
+
+	it( 'keeps a position continuity holds inside a building as published', () => {
+
+		const crowd = crowdOn();
+		const inside = crowd.syncActor( { ...persistentActor( instance ), mode: 'schedule', place: { kind: 'parcel', id: 'cafe' }, position: [ 4, 0, 1 ] }, new THREE.Vector3() );
+		expect( inside.position.toArray() ).toEqual( [ 4, 0, 1 ] );
+
+	} );
+
+	it( 'hides only somebody the schedule has in a building whose floor is not shown; a body under control stays', () => {
+
+		const crowd = crowdOn( { floorShown: () => false } );
+		const player = new THREE.Vector3();
+		const at = { place: { kind: 'parcel', id: 'shop' }, position: [ 4, 0, 1 ] };
+		for ( const mode of [ 'leading', 'following', 'conversation', 'posing' ] ) {
+
+			expect( crowd.syncActor( { ...persistentActor( instance ), ...at, mode }, player ) ).toMatchObject( { npcId: 'walker', controlMode: mode } );
+
+		}
+		expect( crowd.syncActor( { ...persistentActor( instance ), ...at, mode: 'schedule' }, player ) ).toBeNull();
+		expect( crowd.memberForNpc( 'walker' ) ).toBeNull();
+
+	} );
+
+} );
+
 describe( 'Crowd population window', () => {
 
 	it( 'renders 500 unique simulation handles on their authoritative paths beyond the ordinary window', () => {
@@ -150,7 +216,8 @@ describe( 'persistent NPC projection', () => {
 		const updated = crowd.syncActor( { ...actor, animation: 'run', position: [ 3, 0, 0 ] }, player );
 		expect( updated ).toBe( first );
 		expect( updated.look ).toBe( body.look );
-		expect( updated.position.toArray() ).toEqual( [ 3, 0, 0 ] );
+		// Continuity walks the pavement at grade; the body stands on it.
+		expect( updated.position.toArray() ).toEqual( [ 3, SIDEWALK_HEIGHT, 0 ] );
 		expect( updated.clip ).toBe( CLIP.RUN );
 		expect( crowd.count ).toBe( 1 );
 
@@ -381,7 +448,7 @@ describe( 'persistent NPC projection', () => {
 		expect( crowd.pushback( member.position, 0.32 ).length() ).toBe( 0 );
 		expect( crowd.syncActor( { ...persistentActor( instance ), position: [ 9, 0, 0 ] }, new THREE.Vector3() ) )
 			.toBeNull();
-		expect( member.position.toArray() ).toEqual( [ 0, 0, 0 ] );
+		expect( member.position.toArray() ).toEqual( [ 0, SIDEWALK_HEIGHT, 0 ] );
 
 		expect( crowd.cancelRagdoll( member.id ) ).toBe( member );
 		expect( member ).toMatchObject( { fallen: false, frozen: true } );
