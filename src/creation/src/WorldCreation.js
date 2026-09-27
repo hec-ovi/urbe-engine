@@ -7,6 +7,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { fnv1a } from '../../assembly/hash.js';
 import { cloneWorld } from '../../assembly/WorldClone.js';
 import { questParcelIds } from '../../assembly/InteriorSelection.js';
+import { provenParcels } from '../../assembly/ProvenInteriors.js';
 import sceneryCapabilities from '../../game/scenery/capabilities.json' with { type: 'json' };
 import { createLibrary, LibraryError } from '../../library/index.js';
 import {
@@ -209,18 +210,23 @@ export class WorldCreation {
 			// An automatic pick opens the buildings it names first. Then a named
 			// city opens a spread of kinds for the story written against them;
 			// an unnamed one opens the places of its recorded story, in story order.
+			// Past the names, it opens only buildings standing in a proven design.
 			let priority = [];
 			let homes = new Set();
 			if ( ! manual && named ) {
 
 				const atlas = await json( join( world, 'blueprint.json' ), 'city blueprint' );
 				homes = new Set( atlas.parcels.filter( ( parcel ) => parcel.type === HOME ).map( ( parcel ) => parcel.id ) );
-				priority = nextHomeAfter( [ ...new Set( [ ...input.buildingIds, ...venueSpread( atlas, cityManifest.sources ) ] ) ], homes, input.count );
+				const spread = venueSpread( atlas, cityManifest.sources );
+				const proven = await provenParcels( world, spread );
+				priority = nextHomeAfter( [ ...new Set( [ ...input.buildingIds, ...spread.filter( ( id ) => proven.has( id ) ) ] ) ], homes, input.count );
 
 			} else if ( ! manual ) {
 
 				const story = await this.#materialize( run, city, world, join( temporary, 'ranking' ), join( this.questsRoot, RECORDED ) );
-				priority = [ ...new Set( [ ...input.buildingIds, ...questParcelIds( story.questlines ) ] ) ];
+				const places = questParcelIds( story.questlines );
+				const proven = await provenParcels( world, places );
+				priority = [ ...new Set( [ ...input.buildingIds, ...places.filter( ( id ) => proven.has( id ) ) ] ) ];
 
 			}
 
@@ -242,7 +248,7 @@ export class WorldCreation {
 			}
 			if ( manifest.interiors.length < MAIN_LOCATION_COUNT ) {
 
-				throw new CreationError( 'E_QUEST_LOCATIONS', `city ${city.id} opens ${manifest.interiors.length} interiors, the main story needs ${MAIN_LOCATION_COUNT}` );
+				throw new CreationError( 'E_QUEST_LOCATIONS', `city ${city.id} opens ${manifest.interiors.length} interiors, the main story needs ${MAIN_LOCATION_COUNT}${manual ? '' : ': an automatic pick opens only buildings standing in a proven design, so name others in buildingIds'}` );
 
 			}
 			if ( homes.size && ! manifest.interiors.some( ( id ) => homes.has( id ) ) ) {

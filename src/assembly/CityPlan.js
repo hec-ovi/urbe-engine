@@ -39,8 +39,12 @@ export function parseCityArgs( argv ) {
 
 }
 
-/** Resolve automatic or exact manual interior candidates against the reusable shells. */
-export function interiorPlan( atlas, questlines, shells, args ) {
+/**
+ * Resolve automatic or exact manual interior candidates against the reusable
+ * shells. `proven` holds the parcels an automatic pick may open beyond the
+ * priority; a manual pick is exact.
+ */
+export function interiorPlan( atlas, questlines, shells, args, proven = null ) {
 
 	const known = new Set( atlas.parcels.map( ( parcel ) => parcel.id ) );
 	const available = new Set( shells );
@@ -51,7 +55,7 @@ export function interiorPlan( atlas, questlines, shells, args ) {
 		// and is reported in `unavailable` instead.
 		candidates: args.interiorParcels
 			? requested.filter( ( id ) => available.has( id ) )
-			: interiorCandidates( atlas, questlines, shells, args.interiorPriority ),
+			: interiorCandidates( atlas, questlines, shells, args.interiorPriority, proven ),
 		target: args.interiorParcels ? requested.length : args.interiors,
 		unknown: [ ...requested, ...args.interiorPriority ].filter( ( id ) => ! known.has( id ) ),
 		unavailable: requested.filter( ( id ) => known.has( id ) && ! available.has( id ) )

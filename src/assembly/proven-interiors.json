@@ -1,0 +1,12 @@
+{
+  "description": "Building designs whose furnished interiors were reviewed as pairs of shell and interior. An automatic interior pick opens only a building standing in one of these; a building asked for by id opens whatever it stands in. The plain generator building and the designs Exterior added after the review (industrial-framed, service-storage, paired-rounded, paired-rectangular, rounded-corner, chamfered-corners, terrace-blocks) were never reviewed with an interior.",
+  "designs": {
+    "balcony-grid": "Four-copy review world: one 20.5 x 37.5 m, 7-floor tower at four quarter turns, then the seven-family gallery; Interior 0.35.0 pairs it and tests stair joins across its assembled floors.",
+    "corporate-sectors": "Seven-family gallery at 40 x 40 m, 12 floors; Interior 0.35.0 pairs it with its charcoal panels.",
+    "faceted-bays": "Seven-family gallery at 32 x 24 m, 8 floors; Interior 0.35.0 pairs it.",
+    "mirror-frame": "Seven-family gallery at 32 x 24 m, 8 floors; Interior 0.35.0 pairs it with its graphite panels.",
+    "mirror-shutters": "Seven-family gallery at 32 x 24 m, 8 floors; Interior 0.35.0 pairs it with its charcoal panels.",
+    "white-grid": "Seven-family gallery at 32 x 24 m, 8 floors; Interior 0.35.0 pairs it and climbs its 5 m podium in two 14-riser flights.",
+    "garden-taper": "Seven-family gallery landmark at 52 x 42 m, 4 floors; Interior 0.35.0 pairs it and gives each tapered floor its own layout."
+  }
+}

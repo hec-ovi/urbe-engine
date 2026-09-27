@@ -29,6 +29,17 @@ describe( 'city interior plan', () => {
 
 	} );
 
+	it( 'opens the priority as given and picks only proven buildings beyond it, while a manual pick stays exact', () => {
+
+		const questlines = [ { steps: [ { target: { parcelId: 'p4' } } ] } ];
+		const proven = new Set( [ 'p2', 'p5' ] );
+		const automatic = interiorPlan( atlas, questlines, shells, args( '--interiors', '3', '--interior-priority', 'p3' ), proven );
+		// p3 was asked for; the story's p4 and the venues p1 stand in no proven design.
+		expect( automatic.candidates ).toEqual( [ 'p3', 'p2' ] );
+		expect( interiorPlan( atlas, questlines, shells, args( '--interior-parcels', 'p1,p4' ), null ).candidates ).toEqual( [ 'p1', 'p4' ] );
+
+	} );
+
 	it( 'names a priority parcel the blueprint lacks and refuses a priority beside an exact pick', () => {
 
 		expect( interiorPlan( atlas, [], shells, args( '--interior-priority', 'p9,p1' ) ).unknown ).toEqual( [ 'p9' ] );

@@ -118,6 +118,18 @@ describe( 'playable world creation contract', () => {
 
 	} );
 
+	it( 'ranks past the buildings asked for only those standing in a proven design', async () => {
+
+		const fixture = await setup();
+		fixture.plain.add( 'p1' ).add( 'p5' );
+		const creation = createWorldCreation( fixture.config, { run: fixture.run, clock: () => NOW } );
+		const city = await creation.generateCity( { name: 'Plain Ward', seed: 'plain', size: 'small' } );
+		await creation.generateInstances( { cityId: city.id, mode: 'automatic', count: 7, buildingIds: [ 'p5' ] } );
+		// p5 is asked for and opens first although it stands plain; the recorded story's plain p1 is not ranked.
+		expect( valueAfter( fixture.calls.find( ( call ) => call.kind === 'interiors' ).args, '--interior-priority' ) ).toBe( 'p5,p0,p2,p3,p4,p6,p7,p8' );
+
+	} );
+
 	it( 'fails closed on every stage request it cannot serve, leaving the city shell-only', async () => {
 
 		const fixture = await setup();
@@ -464,7 +476,7 @@ describe( 'playable world creation contract', () => {
 		await writeFile( join( story, 'script.md' ), '# The Salt Line\n' );
 		await writeJson( join( story, 'meta.json' ), { profile: 'small', bundle: { path: 'bundle/questlines.json', questlines: 4 } } );
 		await writeJson( join( story, 'world.json' ), { meta: {} } );
-		const fixture = { root, config, calls: [], recording: '../authoring/story', unfurnishable: new Set() };
+		const fixture = { root, config, calls: [], recording: '../authoring/story', unfurnishable: new Set(), plain: new Set() };
 		fixture.run = processPort( fixture );
 		return fixture;
 
@@ -534,7 +546,13 @@ function processCommand( fixture ) {
 			if ( dirname( source ) !== world && await readFile( types ).catch( () => null ) ) await publishJson( join( world, 'npc-types.json' ), await readJson( types ) );
 			if ( ! args.includes( '--reuse-shells' ) ) {
 
-				for ( const parcel of blueprint.parcels ) await publishJson( join( world, parcel.id, `${ parcel.id }.blueprint.json` ), { id: parcel.id } );
+				// Every shell stands in a reviewed family unless the test stands it plain.
+				for ( const parcel of blueprint.parcels ) {
+
+					await publishJson( join( world, parcel.id, `${ parcel.id }.blueprint.json` ),
+						{ id: parcel.id, ...( fixture.plain.has( parcel.id ) ? {} : { assembly: { architecture: 'balcony-grid' } } ) } );
+
+				}
 
 			}
 			await publishJson( join( world, 'manifest.json' ), {

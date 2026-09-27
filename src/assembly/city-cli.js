@@ -16,6 +16,7 @@ import { KitAssembler, PlanLibrary, worldExteriorVersion } from './kit/index.js'
 import { BuildingBlueprints } from './BuildingBlueprints.js';
 import { StandingBuildings } from './StandingBuildings.js';
 import { InteriorModules } from './InteriorModules.js';
+import { provenParcels } from './ProvenInteriors.js';
 import { collect, dirBytes, OUT_DIR, SWEEP_GRACE_MS, sweepLine } from './SharedResources.js';
 import { replaceFile } from './JsonFile.js';
 
@@ -336,9 +337,10 @@ function classify( ids ) {
 
 }
 
-// Any standing building can open, from its pieces or from its own GLB.
+// Any standing building can open, from its pieces or from its own GLB; what
+// an automatic pick adds beyond the priority stands in a proven design.
 const { candidates, target: interiorTarget, unavailable: unavailableInteriors } = interiorPlan(
-	atlas, questlines, shells, args
+	atlas, questlines, shells, args, args.interiorParcels || ! args.interiors ? null : await provenParcels( outDir, shells )
 );
 
 for ( const id of shells ) out.dropInterior( id );
