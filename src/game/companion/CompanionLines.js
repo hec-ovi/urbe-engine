@@ -11,7 +11,7 @@ const KEYS = [
 	'refuse-unavailable', 'refuse-conflict', 'refuse-busy', 'refuse-on_duty', 'refuse-no_time', 'refuse-unknown',
 	'lead-waiting',
 	'arrival-work', 'arrival-home', 'arrival-haunt', 'arrival-quest', 'arrival-scene', 'arrival-ask',
-	'notice-gave-up-player-lost', 'notice-gave-up-unreachable',
+	'notice-gave-up-player-lost', 'notice-gave-up-unreachable', 'notice-lead', 'notice-arrived',
 	'name-unnamed', 'name-stop', 'name-station',
 	...COMPASS.map( ( point ) => `name-${point}` ), 'name-away'
 ];

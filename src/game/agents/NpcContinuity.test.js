@@ -636,7 +636,8 @@ describe( 'NPC continuity integration', () => {
 		expect( controller.companion.phase ).toBe( 'walking' );
 		expect( actor.animation ).toBe( 'walk' );
 		for ( let index = 0; index < 1000 && controller.companion.phase !== 'arrived'; index ++ ) step( actor.position );
-		expect( actor ).toMatchObject( { mode: 'leading', animation: 'idle', place: destination } );
+		// Arrived, the leader stands on the street at the place, not inside it.
+		expect( actor ).toMatchObject( { mode: 'leading', animation: 'idle', place: { kind: 'edge' } } );
 		for ( let index = 0; index < 5; index ++ ) step( actor.position );
 
 		// A conversation that moves the arrived leader leaves it arrived where it now stands.
@@ -651,6 +652,29 @@ describe( 'NPC continuity integration', () => {
 		expect( events.at( - 1 ) ).toEqual( { npcId: npc.npcId, mode: 'leading', phase: 'arrived', timeMin: MON_9 } );
 		expect( controller.serialize().follow ).toMatchObject( { mode: 'leading', phase: 'arrived', destination } );
 		expect( controller.stopFollow( { timeMin: MON_9 + 1 } ).mode ).toBe( 'resuming' );
+
+	} );
+
+	it( 'leads to the doorstep outside the place, not to where its people stand inside', () => {
+
+		const clinic = FIXTURE_BLUEPRINT.parcels.find( ( parcel ) => parcel.id === 'p_clinic' ).access.point;
+		const inside = [ clinic[ 0 ], 1, clinic[ 1 ] ];
+		// The doorstep is out on the pavement, a few metres from the place position.
+		const doorstep = new WalkRoutes( network() ).project( [ clinic[ 0 ] + 4, 1, clinic[ 1 ] + 4 ] ).point;
+		const { bridge, controller } = setup( null, network(), { doorsteps: { p_clinic: doorstep } } );
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const destination = { kind: 'parcel', id: 'p_clinic' };
+		let actor = controller.startLead( { npcId: npc.npcId, timeMin: MON_9, destination } );
+		for ( let index = 0; index < 1000 && controller.companion.phase !== 'arrived'; index ++ ) {
+
+			actor = controller.updateFollow( { timeMin: MON_9, deltaSeconds: 1, playerPosition: actor.position } );
+
+		}
+		expect( controller.companion.phase ).toBe( 'arrived' );
+		expect( separation( actor.position, doorstep ) ).toBeLessThan( 0.1 );
+		expect( separation( actor.position, inside ) ).toBeGreaterThan( 1 );
+		expect( actor.place.kind ).toBe( 'edge' );
+		expect( controller.serialize().follow.destination ).toEqual( destination );
 
 	} );
 
@@ -936,7 +960,7 @@ describe( 'NPC animation state', () => {
 
 } );
 
-function setup( simulation = null, networks = network(), options = {} ) {
+function setup( simulation = null, networks = network(), { doorsteps = {}, ...options } = {} ) {
 
 	const buildings = new Map( Object.entries( FIXTURE_INTERIORS ).map( ( [ id, npc ] ) => [ id, { npc } ] ) );
 	const bridge = simulation ? new SimBridge( simulation ) : SimBridge.create( FIXTURE_BLUEPRINT, { networks }, buildings );
@@ -945,6 +969,7 @@ function setup( simulation = null, networks = network(), options = {} ) {
 	const places = FIXTURE_BLUEPRINT.parcels.map( ( parcel ) => ( {
 		kind: 'parcel', id: parcel.id,
 		position: [ parcel.access.point[ 0 ], 1, parcel.access.point[ 1 ] ],
+		...( doorsteps[ parcel.id ] ? { doorstep: doorsteps[ parcel.id ] } : {} ),
 		heading: 0,
 		anchors: parcel.id === 'p_cafe' ? cafe.anchors.map( ( anchor ) => ( {
 			id: anchor.id,

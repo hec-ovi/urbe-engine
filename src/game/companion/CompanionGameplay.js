@@ -279,7 +279,8 @@ export class CompanionGameplay {
 
 		}
 		this.state = { version: '1', npcId, kind, startedAtMin: timeMin, phase: 'walking', ...( destination ? { destination } : {} ) };
-		signals.push( { kind: 'started', npcId, mode: kind } );
+		// Whatever the person said, the player reads where they are being taken.
+		signals.push( { kind: 'started', npcId, mode: kind, ...( destination ? { notice: this.#told( 'notice-lead', npcId, destination, timeMin ) } : {} ) } );
 
 	}
 
@@ -339,7 +340,8 @@ export class CompanionGameplay {
 			signals.push( {
 				kind: 'arrival', npcId, guide: guideOf( destination ), relation: destination.relation,
 				ask: this.lines.say( 'arrival-ask', { place: destination.name }, seed ),
-				line: this.lines.say( `arrival-${destination.relation}`, { place: destination.name }, seed )
+				line: this.lines.say( `arrival-${destination.relation}`, { place: destination.name }, seed ),
+				notice: this.#told( 'notice-arrived', npcId, destination, timeMin )
 			} );
 
 		}
@@ -367,8 +369,21 @@ export class CompanionGameplay {
 	#notice( reason, npcId, timeMin ) {
 
 		if ( reason === 'unavailable' ) return null;
-		const name = this.quests?.characterName( npcId )?.given ?? this.sim.getNPC( npcId ).name.given;
-		return this.lines.say( `notice-gave-up-${reason}`, { name }, `${npcId}|${Math.floor( timeMin )}` );
+		return this.lines.say( `notice-gave-up-${reason}`, { name: this.#given( npcId ) }, `${npcId}|${Math.floor( timeMin )}` );
+
+	}
+
+	/** What the player reads about a leader and its destination, by its plain name. */
+	#told( key, npcId, destination, timeMin ) {
+
+		return this.lines.say( key, { name: this.#given( npcId ), place: destination.name }, `${npcId}|${Math.floor( timeMin )}` );
+
+	}
+
+	/** The person's given name, as the story calls them. */
+	#given( npcId ) {
+
+		return this.quests?.characterName( npcId )?.given ?? this.sim.getNPC( npcId ).name.given;
 
 	}
 

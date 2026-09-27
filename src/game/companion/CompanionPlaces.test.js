@@ -56,6 +56,23 @@ describe( 'companion places', () => {
 
 	} );
 
+	it( 'measures the walk to where a leader stops: the doorstep outside a place, else its position', () => {
+
+		const walked = [];
+		const places = setup( ( from, to ) => {
+
+			walked.push( to );
+			return { distanceMeters: Math.abs( to[ 0 ] - from[ 0 ] ) };
+
+		}, { p3: [ 280, 0, 12 ] } );
+		const npc = { job: { parcelId: 'p5' }, transitJob: null, home: { parcelId: 'p3' }, routine: [] };
+		const found = places.destinations( { npc, from: [ 0, 0, 0 ], playerPlaces: [] } );
+		expect( found.map( ( entry ) => [ entry.place.id, entry.distance ] ) ).toEqual( [ [ 'p5', 500 ], [ 'p3', 280 ] ] );
+		expect( walked ).toContainEqual( [ 280, 0, 12 ] );
+		expect( places.positions.get( 'parcel:p3' ) ).toEqual( [ 280, 0, 12 ] );
+
+	} );
+
 	it( 'tells apart offered places that share a name by the way they lie and then the walk, and gives the slot of one that still reads the same to the next place', () => {
 
 		const atlas = { parcels: [ 'c1', 'c2', 'c3', 'c4' ].map( ( id ) => ( { id, type: 'coffee_shop' } ) ).concat( { id: 'p2', type: 'restaurant', name: 'Bar Nadir' } ) };
@@ -102,9 +119,9 @@ describe( 'companion places', () => {
 } );
 
 /** Parcel pN stands N * 100 m east of the origin, except p7 at 900 m; every walk is straight unless `route` says otherwise. */
-function setup( route = ( from, to ) => ( { distanceMeters: Math.abs( to[ 0 ] - from[ 0 ] ) } ) ) {
+function setup( route = ( from, to ) => ( { distanceMeters: Math.abs( to[ 0 ] - from[ 0 ] ) } ), doorsteps = {} ) {
 
-	const places = [ 1, 2, 3, 4, 5, 6 ].map( ( n ) => ( { kind: 'parcel', id: `p${n}`, position: [ n * 100, 0, 0 ] } ) );
+	const places = [ 1, 2, 3, 4, 5, 6 ].map( ( n ) => ( { kind: 'parcel', id: `p${n}`, position: [ n * 100, 0, 0 ], ...( doorsteps[ `p${n}` ] ? { doorstep: doorsteps[ `p${n}` ] } : {} ) } ) );
 	places.push( { kind: 'parcel', id: 'p7', position: [ 900, 0, 0 ] }, { kind: 'stop', id: 's1', position: [ 50, 0, 0 ] } );
 	return new CompanionPlaces( { atlas: ATLAS, places, routes: { route }, lines: CompanionLines.standard() } );
 

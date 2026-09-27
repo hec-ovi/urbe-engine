@@ -1314,7 +1314,8 @@ export class GameApp {
 	 * The companion's frame, right after the continuity follows the player
 	 * (tick runs it): the arrival waits while the player has anything open,
 	 * and what the companion reports shows: words on the way, a refusal, the
-	 * arrival and a notice when it ends.
+	 * arrival, and the notices of where a leader is taking the player, that
+	 * they have arrived and why a companion ended.
 	 */
 	updateCompanion( playerPosition, playerPlaces ) {
 		const signals = this.hitches.time( 'companion', () => this.companion.update( {
@@ -1323,7 +1324,7 @@ export class GameApp {
 		for ( const signal of signals ) {
 			if ( signal.kind === 'arrival' ) this.#arrival( signal );
 			else if ( signal.kind === 'line' || signal.kind === 'refused' ) this.#companionSays( signal.npcId, signal.line );
-			else if ( signal.kind === 'ended' && signal.notice ) this.view.toast.show( { title: 'Companion', text: signal.notice } );
+			if ( signal.notice ) this.view.toast.show( { title: 'Companion', text: signal.notice } );
 		}
 	}
 
@@ -2269,6 +2270,8 @@ export function npcContinuityPlaces( atlas, doors, buildings, transitRoutes = []
 			: [];
 		return {
 			kind: 'parcel', id: parcel.id, position,
+			// A leader shows the place from outside its entrance, where the player can see them.
+			...( door ? { doorstep: door.outside.toArray() } : {} ),
 			heading: door ? Math.atan2( door.normal.x, door.normal.z ) : 0,
 			anchors
 		};

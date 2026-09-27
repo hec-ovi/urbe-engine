@@ -219,7 +219,8 @@ export class NpcContinuity {
 		this.#assertFree( request.npcId );
 		const actor = this.#body( request.npcId, request.timeMin );
 		if ( actor.place.kind === 'route' ) throw new NpcContinuityError( 'E_NPC_PLACE', `NPC ${request.npcId} cannot lead while aboard transit` );
-		const destination = this.#locatePlace( request.destination, null ).position;
+		// A leader stops outside the entrance, where the player sees them arrive.
+		const destination = this.places.get( placeKey( request.destination ) )?.doorstep ?? this.#locatePlace( request.destination, null ).position;
 		const route = this.#plan( null, actor, { position: destination }, ARRIVAL_DISTANCE );
 		if ( ! route ) throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${request.npcId} cannot reach the escort destination` );
 		this.#take( actor, request.timeMin );
@@ -683,7 +684,6 @@ export class NpcContinuity {
 		this.#walk( actor, route, Math.min( route.distanceMeters - route.cursor, speed * request.deltaSeconds ) );
 		if ( route.distanceMeters - route.cursor <= ARRIVAL_DISTANCE ) {
 
-			if ( lead.destination ) actor.place = clone( lead.destination );
 			actor.heading = headingTo( actor.position, player, actor.heading );
 			actor.animation = 'idle';
 			this.#phase( 'arrived', request.timeMin );

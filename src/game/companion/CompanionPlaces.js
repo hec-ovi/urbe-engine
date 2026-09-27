@@ -19,7 +19,8 @@ export class CompanionPlaces {
 
 	/**
 	 * @param atlas the city plan: parcels with their type and optional name, transit stops and stations
-	 * @param places continuity places `{ kind, id, position }`: where a leader stops at each place
+	 * @param places continuity places `{ kind, id, position, doorstep? }`: a leader stops at a
+	 *   place's doorstep, outside its entrance, else at its position
 	 * @param routes the WalkRoutes the walk there is measured on
 	 * @param lines CompanionLines, which name what has no name of its own
 	 */
@@ -27,7 +28,7 @@ export class CompanionPlaces {
 
 		this.routes = routes;
 		this.lines = lines;
-		this.positions = new Map( places.map( ( place ) => [ keyOf( place ), place.position ] ) );
+		this.positions = new Map( places.map( ( place ) => [ keyOf( place ), place.doorstep ?? place.position ] ) );
 		this.parcels = new Map( atlas.parcels.map( ( parcel ) => [ parcel.id, parcel ] ) );
 		const transit = atlas.transit ?? {};
 		this.stops = new Map( [

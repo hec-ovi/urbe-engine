@@ -12,7 +12,8 @@
         "properties": {
           "kind": { "const": "started" },
           "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
-          "mode": { "$ref": "urn:urbe:engine:companion:values#/$defs/kind" }
+          "mode": { "$ref": "urn:urbe:engine:companion:values#/$defs/kind" },
+          "notice": { "description": "For a lead, where the person is taking the player.", "$ref": "urn:urbe:engine:companion:values#/$defs/text" }
         }
       },
       {
@@ -42,14 +43,15 @@
         "description": "The player has caught up with a leader at its destination: the host opens the conversation with this guide.",
         "type": "object",
         "additionalProperties": false,
-        "required": ["kind", "npcId", "guide", "relation", "ask", "line"],
+        "required": ["kind", "npcId", "guide", "relation", "ask", "line", "notice"],
         "properties": {
           "kind": { "const": "arrival" },
           "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
           "guide": { "$ref": "urn:urbe:engine:companion:values#/$defs/guide" },
           "relation": { "$ref": "urn:urbe:engine:companion:values#/$defs/relation" },
           "ask": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" },
-          "line": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" }
+          "line": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" },
+          "notice": { "description": "Where the person has brought the player.", "$ref": "urn:urbe:engine:companion:values#/$defs/text" }
         }
       },
       {

@@ -121,6 +121,14 @@ What a person says, and what the player reads, when they come along, lead the wa
 
 - {name} could not find a way and went back.
 
+## notice-lead
+
+- {name} leads you to {place}.
+
+## notice-arrived
+
+- {name} has brought you to {place}.
+
 ## name-unnamed
 
 - the {word}

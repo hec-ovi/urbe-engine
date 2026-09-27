@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { GameApp, companionScenes, occupiedBuildingFootprints, localObjectivePlace, currentObjectiveView, openingCard, questPlayerPlaces } from './GameApp.js';
+import { GameApp, companionScenes, occupiedBuildingFootprints, localObjectivePlace, currentObjectiveView, openingCard, questPlayerPlaces, npcContinuityPlaces } from './GameApp.js';
 import { Locator } from './world/Locator.js';
 
 describe( 'GameApp quest NPC control', () => {
@@ -102,3 +102,19 @@ it('keeps conversation and outcome modals in control of pointer capture and game
  view.summary.element.hidden=false;expect(playableModalOpen(view,{conversation:null})).toBe(true);
  view.summary.element.hidden=true;view.panels.current='QUESTS';expect(playableModalOpen(view,{conversation:null})).toBe(true);
 });
+
+describe( 'continuity places', () => {
+
+	it( 'stands a parcel with a door just inside it, with a doorstep outside where a leader shows it', () => {
+
+		const door = { parcelId: 'p1', inside: new THREE.Vector3( 1, 0, 2 ), outside: new THREE.Vector3( 1, 0, 5.2 ), normal: new THREE.Vector3( 0, 0, 1 ) };
+		const atlas = { parcels: [ { id: 'p1', access: { point: [ 1, 6 ] } }, { id: 'p2', access: { point: [ 9, 6 ] } } ] };
+		const [ entered, open ] = npcContinuityPlaces( atlas, [ door ], new Map() );
+		expect( entered ).toMatchObject( { kind: 'parcel', id: 'p1', position: [ 1, 0, 2 ], doorstep: [ 1, 0, 5.2 ] } );
+		// Without a door the place already stands out on the pavement, at its access.
+		expect( open.position[ 0 ] ).toBe( 9 );
+		expect( open ).not.toHaveProperty( 'doorstep' );
+
+	} );
+
+} );
