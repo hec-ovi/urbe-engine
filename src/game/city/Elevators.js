@@ -15,6 +15,8 @@ const DOOR_TIME = 1.4;
 /** How hard the cab speeds up and slows down, and the creep it levels at. */
 const ACCELERATION = 1.5;
 const LEVELLING = 0.15;
+/** How long a rider waits at a floor that never stands before the cab takes them back. */
+const FLOOR_WAIT = 45;
 /** The call plate sits proud of the real wall lining, at hand height. */
 const PANEL_OUT = 0.15;
 const PANEL_HEIGHT = 1.1;
@@ -319,6 +321,9 @@ class Shaft {
 		this.riderOffset = new THREE.Vector3();
 		/** The signed speed the cab is travelling at. */
 		this.velocity = 0;
+		/** Where the cab set off from, and how long it has stood at a floor that is not shown. */
+		this.origin = null;
+		this.waited = 0;
 
 	}
 
@@ -600,9 +605,11 @@ class Shaft {
 			return;
 
 		}
+		if ( Math.abs( stop.elevation - this.at ) > 0.05 ) this.origin = this.#standing()?.floor ?? null;
 		this.target = stop.elevation;
 		this.called = true;
 		this.dwell = 0;
+		this.waited = 0;
 		if ( ! target.inside ) {
 
 			this.selected = this.stops.indexOf( stop );
@@ -646,8 +653,44 @@ class Shaft {
 
 	get ready() {
 
-		const stop = this.stops.find( one => Math.abs( one.elevation - this.at ) < 0.05 );
+		const stop = this.#standing();
 		return Boolean( stop ) && ( this.stream?.floorShown( this.parcelId, stop.floor ) ?? true );
+
+	}
+
+	/** The stop the cab stands level with, or null between floors. */
+	#standing() {
+
+		return this.stops.find( one => Math.abs( one.elevation - this.at ) < 0.05 ) ?? null;
+
+	}
+
+	/**
+	 * A rider is never left shut in the shaft: when the floor the cab carried
+	 * them to failed to build, or has not stood for `FLOOR_WAIT` seconds, the cab
+	 * takes them back to the floor they set off from, if that one is still
+	 * standing, and opens there.
+	 */
+	#giveUp( delta ) {
+
+		const stop = this.#standing();
+		if ( ! this.rider || ! this.called || ! stop || this.ready ) return false;
+		this.waited += delta;
+		const failed = this.stream?.floorFailed?.( this.parcelId, stop.floor ) === true;
+		if ( ! failed && this.waited < FLOOR_WAIT ) return false;
+
+		const back = this.stops.find( one => one.floor === this.origin );
+		if ( ! back || back === stop || ! this.stream?.floorShown( this.parcelId, back.floor ) ) return false;
+
+		console.warn( `lift ${this.id}: floor ${stop.floor} ${failed ? 'failed to build' : 'did not stand'}, back to floor ${back.floor}` );
+		this.origin = stop.floor;
+		this.target = back.elevation;
+		this.waited = 0;
+		this.dwell = 0;
+		this.selected = this.stops.indexOf( back );
+		this.updateDisplay();
+		this.stream?.requestFloor( this.parcelId, back.floor );
+		return true;
 
 	}
 
@@ -662,6 +705,8 @@ class Shaft {
 				|| ( this.blocked && stop.open > 0 && stop.obstructed( body.feet ) ), delta );
 
 		}
+
+		if ( ! this.moving && this.#giveUp( delta ) ) return;
 
 		if ( ! this.moving ) {
 

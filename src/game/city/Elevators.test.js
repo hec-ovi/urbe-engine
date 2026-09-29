@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Physics } from '../physics/Physics.js';
 import { PlayerBody } from '../physics/PlayerBody.js';
@@ -228,5 +228,77 @@ it( 'shuts a landing whose leaves were published with a seam between them, and k
 		expect( left.position.x ).toBeCloseTo( - 0.55, 6 );
 
 	}
+
+} );
+
+describe( 'a floor that never stands', () => {
+
+	function ride( failed ) {
+
+		const shown = new Set( [ 0 ] );
+		const stream = {
+			requestFloor: () => true, releaseFloor() {},
+			floorShown: ( parcel, floor ) => shown.has( floor ),
+			floorFailed: ( parcel, floor ) => failed && floor === 1
+		};
+		const elevators = new Elevators( factory );
+		elevators.stream = stream;
+		const [ shaft ] = elevators.add( 'p1', floors, new THREE.Group() );
+		const body = { feet: new THREE.Vector3( 11.25, 0.05, 21.25 ), carried: false,
+			beginCarry() { this.carried = true; }, carryTo( point ) { this.feet.copy( point ); }, endCarry( point ) { this.feet.copy( point ); this.carried = false; } };
+		const warn = vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		shaft.press( elevators.panels( body.feet, 3.2 ).find( ( p ) => p.inside ) );
+		return { shaft, elevators, body, warn };
+
+	}
+
+	it.each( [ [ 'failed to build', true, 10 ], [ 'did not stand', false, 60 ] ] )( 'takes the rider back to the floor they left when the one they chose %s', ( said, failed, seconds ) => {
+
+		const { shaft, elevators, body, warn } = ride( failed );
+
+		try {
+
+			let arrived = false;
+			for ( let t = 0; t < seconds; t += 0.05 ) {
+
+				elevators.update( 0.05, body );
+				arrived ||= shaft.at === 4;
+				// Shut in the shaft, the rider is carried and no landing opens.
+				if ( ! arrived || shaft.moving ) expect( shaft.stops.every( ( stop ) => stop.wanted === 0 ) ).toBe( true );
+
+			}
+			expect( arrived ).toBe( true );
+			expect( shaft.at ).toBe( 0 );
+			expect( shaft.stops[ 0 ].wanted ).toBe( 1 );
+			expect( body.carried ).toBe( false );
+			expect( body.feet.y ).toBeCloseTo( 0.05, 6 );
+			expect( shaft.stops[ shaft.selected ].floor ).toBe( 0 );
+			expect( warn.mock.calls.flat().join( ' ' ) ).toContain( `floor 1 ${said}, back to floor 0` );
+
+		} finally {
+
+			warn.mockRestore();
+
+		}
+
+	} );
+
+	it( 'waits at a floor that is still coming, and a slow one is not given up on early', () => {
+
+		const { shaft, elevators, body, warn } = ride( false );
+
+		try {
+
+			for ( let t = 0; t < 30; t += 0.05 ) elevators.update( 0.05, body );
+			expect( shaft.at ).toBe( 4 );
+			expect( body.carried ).toBe( true );
+
+		} finally {
+
+			warn.mockRestore();
+
+		}
+
+	} );
 
 } );

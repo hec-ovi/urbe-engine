@@ -210,6 +210,13 @@ export class InteriorStream {
 
 	}
 
+	/** Whether one floor of a building failed to build or to stand solid, which is not retried. */
+	floorFailed( parcelId, floor ) {
+
+		return this.live.get( parcelId )?.bands.some( ( band ) => band.floor === floor && band.state === FAILED ) === true;
+
+	}
+
 	/**
 	 * One pass over what should be open, what should be built and what should
 	 * be in the scene. Cheap to call every frame: a hypot per building and a
