@@ -49,6 +49,9 @@ async function decodeTint( url ) {
  * so texture.repeat = 1 / worldSize makes one tile cover worldSize meters.
  * Exact entries keep their 0..1 UVs untouched. Glass uses transmission per the
  * materials contract (KHR_materials_transmission semantics).
+ * A map file is loaded once per way it is sampled (colour space, wrapping,
+ * repeat and the scalar a failed load falls back to), however many keys and
+ * variants wear it; a caller that changes a map's sampling clones it first.
  * Every map loads with flipY off: the geometry that wears these materials comes
  * from glTF, whose UVs put v = 0 at the top of the image, and a flipped V both
  * turns exact art (screens, signs) upside down and mislights every normal map.
@@ -61,6 +64,8 @@ export class PbrMaterialFactory {
 		this.resolver = resolver;
 		this.textures = textures;
 		this.cache = new Map();
+		/** One texture per map file and the way it is sampled, whichever keys and variants wear it. */
+		this.maps = new Map();
 		this.tints = new Map();
 		this.mapBindings = new WeakMap();
 		this.textureBudget = new PbrTextureBudget( profile.textureMaxSize );
@@ -173,13 +178,18 @@ export class PbrMaterialFactory {
 
 			if ( ! image && ! compressed ) return null;
 
+			const imageUrl = image && this.resolver.mapUrl( theme, image );
+			const compressedUrl = compressed && this.resolver.mapUrl( theme, compressed );
+			// Variants of one entry, and entries of one family, often wear the same
+			// file at the same scale: one texture then serves them all, read,
+			// decoded and uploaded once.
+			const sampled = `${imageUrl}|${compressedUrl}|${srgb}|${tiled}|${repeat[ 0 ]},${repeat[ 1 ]}|${scalarFallback}`;
+			if ( this.maps.has( sampled ) ) return this.maps.get( sampled );
+
 			let ready;
 			const loaded = new Promise( ( resolve ) => { ready = resolve; } );
 			const texture = this.textures.load(
-				{
-					image: image && this.resolver.mapUrl( theme, image ),
-					ktx2: compressed && this.resolver.mapUrl( theme, compressed )
-				},
+				{ image: imageUrl, ktx2: compressedUrl },
 				loadedTexture => {
 
 					try {
@@ -211,6 +221,7 @@ export class PbrMaterialFactory {
 			texture.updateMatrix();
 			texture.anisotropy = this.textureAnisotropy;
 			texture.channel = 0;
+			this.maps.set( sampled, texture );
 
 			return texture;
 

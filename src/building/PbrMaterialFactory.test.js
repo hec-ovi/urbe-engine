@@ -91,6 +91,36 @@ describe( 'PbrMaterialFactory', () => {
 
 	} );
 
+	it( 'loads a map file once for every key and variant that wears it the same way, and again only where the sampling differs', () => {
+
+		const asked = [];
+		const factory = new PbrMaterialFactory( fakeResolver( ( key ) => ( {
+			...entry( 1 ),
+			tiling: { worldSize: key.includes( 'wide' ) ? [ 2, 2 ] : [ 1, 1 ] },
+			variants: [
+				{ id: 'dry', maps: { basecolor: 'a.png', normal: 'n.png' } },
+				{ id: 'wet', maps: { basecolor: 'wet.png', normal: 'n.png' } }
+			]
+		} ) ) );
+		factory.textures = fakeTextures( ( url ) => { asked.push( url ); } );
+
+		const dry = factory.build( 'known/road/mid', 'dry' );
+		const wet = factory.build( 'known/road/mid', 'wet' );
+		const kerb = factory.build( 'known/kerb/mid', 'dry' );
+		const wide = factory.build( 'known/wide-road/mid', 'dry' );
+
+		expect( wet.normalMap ).toBe( dry.normalMap );
+		expect( kerb.map ).toBe( dry.map );
+		expect( wet.map ).not.toBe( dry.map );
+		// Another repeat is another texture: the repeat is the texture's own.
+		expect( wide.map ).not.toBe( dry.map );
+		expect( wide.map.repeat.toArray() ).toEqual( [ 0.5, 0.5 ] );
+		expect( dry.map.repeat.toArray() ).toEqual( [ 1, 1 ] );
+		expect( asked.filter( ( url ) => url === '/materials/known/n.png' ) ).toHaveLength( 2 );
+		expect( asked.filter( ( url ) => url === '/materials/known/a.png' ) ).toHaveLength( 2 );
+
+	} );
+
 	it( 'settles readiness on a failed map load and falls back to catalog scalars, including cached tuned copies', async () => {
 
 		const factory = surfaceFactory( { materialMaps: [ 'roughness', 'metallic' ] } );
