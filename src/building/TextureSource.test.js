@@ -55,6 +55,29 @@ describe( 'TextureSource', () => {
 	} );
 
 	/**
+	 * three's renderer books a compressed texture at one byte, so a run on
+	 * KTX2 maps would report its texture memory as nearly nothing and the
+	 * performance report could not tell a compressed city from an empty one.
+	 */
+	it( 'books a compressed map at the bytes of its levels in the renderer\'s memory and leaves every other texture to three', () => {
+
+		const plain = vi.fn( () => 4096 );
+		const info = { _getTextureMemorySize: plain };
+		new TextureSource( { ktx2: loader() } ).detect( { info } );
+		new TextureSource( { ktx2: loader() } ).detect( { info } );
+
+		const map = compressedTexture( 64, 32 );
+		const bytes = map.mipmaps.reduce( ( sum, level ) => sum + level.data.byteLength, 0 );
+		expect( info._getTextureMemorySize( map ) ).toBe( bytes );
+		expect( bytes ).toBe( 2048 + 512 + 128 + 32 + 16 + 16 + 16 );
+
+		const image = new THREE.Texture( { width: 64, height: 32 } );
+		expect( info._getTextureMemorySize( image ) ).toBe( 4096 );
+		expect( plain ).toHaveBeenCalledExactlyOnceWith( image );
+
+	} );
+
+	/**
 	 * WebGPU refuses a block-compressed texture whose first level is not whole
 	 * 4x4 blocks, and the surface then draws with no map at all, although its
 	 * PNG master is right there. Maps like that draw from the master.

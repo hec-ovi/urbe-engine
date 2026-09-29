@@ -25,6 +25,7 @@ export class TextureSource {
 
 		this.ktx2.detectSupport( renderer );
 		if ( renderer?.backend?.isWebGLBackend === true ) dropEmulatedFormats( this.ktx2.workerConfig );
+		countCompressedMemory( renderer?.info );
 		this.compressed = true;
 		return this;
 
@@ -113,5 +114,29 @@ function unalignedBlocks( texture ) {
 	if ( ! texture.isCompressedTexture || texture.format === THREE.RGBAFormat ) return false;
 	const { width, height } = texture.image ?? {};
 	return width % 4 !== 0 || height % 4 !== 0;
+
+}
+
+const COUNTED = Symbol.for( 'urbe.compressed-memory' );
+
+/**
+ * three's renderer counts every compressed texture as one byte, so a run on
+ * compressed maps would report its texture memory as next to nothing. They
+ * are counted at the bytes of their levels instead, which is what the GPU
+ * holds (performance.json and the render-work notes read these numbers).
+ */
+function countCompressedMemory( info ) {
+
+	const size = info?._getTextureMemorySize;
+	if ( typeof size !== 'function' || info[ COUNTED ] ) return;
+	info[ COUNTED ] = true;
+	info._getTextureMemorySize = function ( texture ) {
+
+		if ( ! texture?.isCompressedTexture || ! texture.mipmaps?.length ) return size.call( this, texture );
+		let bytes = 0;
+		for ( const level of texture.mipmaps ) bytes += level?.data?.byteLength ?? 0;
+		return bytes || size.call( this, texture );
+
+	};
 
 }
