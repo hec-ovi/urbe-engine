@@ -18,6 +18,20 @@ const ADMISSION_CONCURRENCY = 2;
 const BAND_REACH = 1;
 /** One floor further stays built, so a landing halfway up the stairs never rebuilds. */
 const KEEP_REACH = BAND_REACH + 1;
+/**
+ * A building the player stands this close to (on the ground, to its
+ * footprint) is the one they are in: its floors are all drawn and cast.
+ */
+const INSIDE = 1;
+/**
+ * Another building's floors are drawn only this close, where its rooms are
+ * seen through the glass and the game lights them (its room view reaches
+ * 32 m), and let go past the second distance so a walk along the boundary
+ * cannot thrash. Further out they stay built and solid, out of the draws:
+ * the loading radius is for walking in, not for looking.
+ */
+const VIEW_RADIUS = 32;
+const VIEW_KEEP = 36;
 /** The module the lifts move themselves, one car per shaft. */
 const LIFT_CAR = 'lift-car';
 /** And the landing leaves they slide open. */
@@ -45,6 +59,9 @@ const FAILED = 'failed';
  * - those same floors are in the scene and in the physics world, one more
  *   above and below stays built, and a floor further away than that drops its
  *   instances. Walking up the stairs moves the window;
+ * - those floors are drawn only in a building within sight of its rooms,
+ *   and cast room shadows only in the building the player is in; further
+ *   out they stay built and solid, so walking in never waits for them;
  * - past a wider radius the whole building is let go.
  *
  * The shells are not here: they load once for the whole city (BuildingsLoader,
@@ -78,6 +95,9 @@ export class InteriorStream {
 		this.live = new Map();
 		this.building = 0;
 		this.admitting = 0;
+		/** Whether the interior draws cast room shadows: only while the player is in a building. */
+		this.casting = true;
+		this.recast = false;
 		this.requests = new Map();
 		if ( elevators ) elevators.stream = this;
 		this.rooms = [];
@@ -167,6 +187,7 @@ export class InteriorStream {
 		}
 
 		let next = null;
+		let inside = false;
 
 		for ( const [ parcelId, interior ] of this.live ) {
 
@@ -179,6 +200,10 @@ export class InteriorStream {
 
 			}
 
+			interior.inside = distance <= INSIDE || this.requests.has( parcelId );
+			interior.near = distance < ( interior.near ? VIEW_KEEP : VIEW_RADIUS );
+			inside ||= interior.inside;
+
 			const want = this.#band( interior, feet );
 
 			// Nearest building first: the one being walked into is the one whose
@@ -188,6 +213,8 @@ export class InteriorStream {
 		}
 
 		if ( next && this.building < BUILD_CONCURRENCY ) this.#load( next.interior, next.band );
+
+		this.#cast( inside );
 
 		return this.changed;
 
@@ -212,6 +239,34 @@ export class InteriorStream {
 			solid: ( id, boxes ) => Promise.resolve( this.onColliderBand?.( id, { boxes, positions: [] } ) ).catch( () => {} ),
 			drop: ( id ) => this.onDropBand?.( id )
 		};
+
+	}
+
+	/**
+	 * Room shadows are cast only while the player is in a building: the one
+	 * caster lights the room they stand in, and from the street it would
+	 * otherwise draw every copy of the shared furniture, most of them in
+	 * other buildings, into a map of somebody else's room. A draw that grew
+	 * since comes back as a new mesh, so the flag is written again after
+	 * anything was admitted.
+	 */
+	#cast( casting ) {
+
+		if ( casting === this.casting && ! ( this.recast && ! casting ) ) {
+
+			this.recast = false;
+			return;
+
+		}
+		this.casting = casting;
+		this.recast = false;
+		this.group.traverse( ( node ) => {
+
+			if ( ! node.isMesh ) return;
+			node.userData.roomCaster ??= node.castShadow;
+			node.castShadow = casting && node.userData.roomCaster;
+
+		} );
 
 	}
 
@@ -254,6 +309,8 @@ export class InteriorStream {
 		let want = null;
 
 		for ( const band of interior.bands ) {
+
+			if ( band.draw( interior.inside || interior.near ) ) this.recast = true;
 
 			const requested = this.requests.get( interior.parcelId );
 			const away = Math.min( Math.abs( band.floor - standing ), requested === undefined ? Infinity : Math.abs( band.floor - requested ) );
@@ -298,6 +355,7 @@ export class InteriorStream {
 			this.modules.reserve?.( placements.map( one => one.module ) );
 			for ( const placement of placements ) token.handles.push( this.modules.admit( placement.module,
 				matrixOf( placement, band.elevation ), new THREE.Vector4( 0, 0, 0, 0 ), placement.uvRepeat ) );
+			this.recast = true;
 
 		} ).catch( error => { console.warn( `floor ${band.id} support: ${error.message}` ); this.#dropPlaceholder( band ); } )
 			.finally( () => { this.admitting --; } );
@@ -330,6 +388,7 @@ export class InteriorStream {
 			band.show();
 			this.apartmentDoors?.show( band.id, band.apartmentDoors );
 			this.changed = true;
+			this.recast = true;
 
 		} catch ( error ) {
 
@@ -523,6 +582,9 @@ class Interior {
 		this.group.name = `interior:${parcelId}`;
 		this.group.visible = false;
 		this.bands = floors.map( ( record ) => new FloorBand( record ) );
+		/** Whether the player is in this building, and whether it is close enough for its rooms to be seen. */
+		this.inside = false;
+		this.near = false;
 
 		for ( const band of this.bands ) this.group.add( band.group );
 
@@ -558,6 +620,9 @@ class FloorBand {
 		/** Its apartment doors, which the stream's registry makes openable while it is shown. */
 		this.apartmentDoors = [];
 		this.admission = null;
+		/** Whether a shown floor is drawn, or stands solid and unseen. */
+		this.shown = false;
+		this.drawn = true;
 
 	}
 
@@ -576,21 +641,54 @@ class FloorBand {
 
 	show() {
 
-		if ( this.handles ) return;
-
-		reserve( this.copies );
-		this.handles = this.copies.map( ( { draws, id, matrix, fill, uvRepeat } ) => ( { draws, handle: draws.admit( id, matrix, fill, uvRepeat ) } ) );
-		this.group.visible = true;
+		this.shown = true;
+		this.#paint();
 
 	}
 
 	hide() {
 
-		this.group.visible = false;
-		if ( ! this.handles ) return;
+		this.shown = false;
+		this.#paint();
 
-		for ( const { draws, handle } of this.handles ) draws.release( handle );
-		this.handles = null;
+	}
+
+	/**
+	 * Whether this floor is seen from where the player is. A floor that is not
+	 * keeps its collider and its table, and only its copies leave the draws.
+	 *
+	 * @returns whether that put copies into the draws
+	 */
+	draw( drawn ) {
+
+		if ( drawn === this.drawn ) return false;
+		this.drawn = drawn;
+
+		return this.#paint();
+
+	}
+
+	/** Copies in the shared draws exactly while the floor is shown and seen. */
+	#paint() {
+
+		const wanted = this.shown && this.drawn;
+		this.group.visible = wanted;
+
+		if ( wanted && ! this.handles ) {
+
+			reserve( this.copies );
+			this.handles = this.copies.map( ( { draws, id, matrix, fill, uvRepeat } ) => ( { draws, handle: draws.admit( id, matrix, fill, uvRepeat ) } ) );
+			return true;
+
+		}
+		if ( ! wanted && this.handles ) {
+
+			for ( const { draws, handle } of this.handles ) draws.release( handle );
+			this.handles = null;
+
+		}
+
+		return false;
 
 	}
 

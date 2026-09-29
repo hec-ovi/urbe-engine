@@ -553,6 +553,50 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 	} );
 
+	it( 'draws a building\'s floors only within sight of its rooms, keeps them solid beyond, and casts room shadows only inside', async () => {
+
+		const model = await stream();
+		// The rooms stand 2.5 m in from the lot's front edge at z = 0.
+		const street = ( z ) => ( { x: 12, y: 0.1, z } );
+		const drawn = () => [ 0, 1 ].map( ( floor ) => bandOf( model, floor ).handles !== null && bandOf( model, floor ).group.visible );
+		const casting = () => [ ...new Set( meshesOf( model.props.group ).map( ( mesh ) => mesh.castShadow ) ) ];
+
+		// 50 m out the floors are built and solid, and nothing of them is drawn.
+		await settle( model, street( - 50 ) );
+		expect( bands( model ) ).toEqual( [ 'p1:0', 'p1:1' ] );
+		expect( model.floorShown( 'p1', 0 ) ).toBe( true );
+		expect( drawn() ).toEqual( [ false, false ] );
+		expect( model.modules.copyCount ).toBe( 0 );
+		expect( propCopies( model ) ).toBe( 0 );
+		await settle( model, street( - 31 ) );
+		expect( drawn() ).toEqual( [ false, false ] );
+
+		// Across the street the rooms behind the glass are drawn, and cast nothing.
+		await settle( model, street( - 10 ) );
+		expect( drawn() ).toEqual( [ true, true ] );
+		expect( model.modules.copyCount ).toBeGreaterThan( 0 );
+		expect( propCopies( model ) ).toBeGreaterThan( 0 );
+		expect( casting() ).toEqual( [ false ] );
+
+		// Inside, the room light's caster has the furniture again.
+		await settle( model, feetOn( 0 ) );
+		expect( drawn() ).toEqual( [ true, true ] );
+		expect( casting() ).toEqual( [ true ] );
+
+		// Walking away keeps them drawn a few metres past where they came in, then lets them go.
+		await settle( model, street( - 31 ) );
+		expect( drawn() ).toEqual( [ true, true ] );
+		expect( casting() ).toEqual( [ false ] );
+		await settle( model, street( - 40 ) );
+		expect( drawn() ).toEqual( [ false, false ] );
+		expect( model.modules.copyCount ).toBe( 0 );
+		expect( propCopies( model ) ).toBe( 0 );
+		expect( bands( model ) ).toEqual( [ 'p1:0', 'p1:1' ] );
+
+		model.dispose();
+
+	}, 30000 );
+
 	it( 'closes the shaft: the shut landings are solid and the cab floor stands where the cab waits', async () => {
 
 		const elevators = new Elevators( factory );
