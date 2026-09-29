@@ -1,25 +1,15 @@
 /**
- * What the renderer builds one program for, read off a renderable the way the
- * renderer itself reads it.
- *
- * Two keys, because two things are cached. The renderer keeps one built node
- * graph per material, vertex layout and, for an instanced or batched draw, per
- * object; `programKey` names that, so a warm-up prepares exactly the graphs a
- * frame will ask for. The backend keeps one compiled program per distinct
- * shader code, which the object's identity never enters; `codeKey` names that,
- * so one keeper can pin a program however many draws wear it.
+ * What the renderer builds one graph for, read off a renderable the way the
+ * renderer itself reads it: one built node graph per material, vertex layout
+ * and, for an instanced or batched draw, per object, so a warm-up prepares
+ * exactly the graphs a frame will ask for. The program each graph compiles to
+ * is cached by its code, which the object never enters (ProgramPins.js).
  */
 export function programKey( node ) {
 
 	const { object, layout } = parts( node );
 
 	return `${layout}|${object}`;
-
-}
-
-export function codeKey( node ) {
-
-	return parts( node ).layout;
 
 }
 

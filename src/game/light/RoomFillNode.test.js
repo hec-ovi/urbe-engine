@@ -65,7 +65,7 @@ describe( 'room fill texture bindings', () => {
 			expect( Array.from( texture.image.data ) ).toEqual( [ 4, 10, 20, 0.5 ] );
 
 		}
-		// A keeper with the same material but no channel receives no room fill.
+		// A draw with the same material but no channel receives no room fill.
 		for ( const texture of graph.draw( new THREE.Mesh( geometry, second.children[ 0 ].material ) ) ) {
 
 			expect( Array.from( texture.image.data ) ).toEqual( [ 0, 0, 0, 0 ] );

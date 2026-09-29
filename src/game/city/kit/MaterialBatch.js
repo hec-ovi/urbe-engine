@@ -132,7 +132,7 @@ export class MaterialBatch {
 	/**
 	 * Drops the draws built against buffers this batch has replaced. The next
 	 * frame that draws the batch builds its graph again, which is the cost the
-	 * note names; its program stays compiled behind the warm-up's keeper.
+	 * note names; its program stays linked, pinned by the warm-up.
 	 */
 	rebuild() {
 

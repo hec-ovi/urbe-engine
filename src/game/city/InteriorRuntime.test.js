@@ -238,8 +238,8 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 		await warmup.warmAll( modules.group, { onProgress: ( done, total ) => progress.push( [ done, total ] ) } );
 
-		// Every module surface in the city, one compile per slot, each pinned behind its keeper.
-		expect( compiled.filter( ( object ) => ! object.name.startsWith( 'keeper:' ) ) ).toHaveLength( modules.batchCount );
+		// Every module surface in the city, one compile per slot and nothing else.
+		expect( compiled ).toHaveLength( modules.batchCount );
 		expect( progress.at( - 1 ) ).toEqual( [ modules.batchCount, modules.batchCount ] );
 		modules.dispose();
 

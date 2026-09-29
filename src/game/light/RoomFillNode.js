@@ -3,7 +3,7 @@ import { drawIndex, instanceIndex, int, ivec2, mix, NodeUpdateType, normalWorld,
 
 /** A draw standing in rooms publishes its per-copy fill here (city/kit/FillChannel.js). */
 const CHANNEL = Symbol.for( 'urbe.fill-channel' );
-/** Warm-up keepers have no room channel and must not borrow another actor's. */
+/** A draw with no room channel, such as a lift car on its own, must not borrow another actor's. */
 const EMPTY = new DataTexture( new Float32Array( 4 ), 1, 1, RGBAFormat, FloatType );
 EMPTY.needsUpdate = true;
 

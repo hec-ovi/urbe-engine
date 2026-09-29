@@ -684,8 +684,11 @@ export class GameApp {
 		// material programs can be warmed against that render context.
 		progress.step( 'warming the renderer' );
 		this.look.compose( this.camera );
+		// Unpaced until the city is drawn: a turn between programs is a pass of
+		// the event loop, not a frame, while nothing is on screen to protect.
 		this.floorWarmup = prepareInteriorStreaming(
-			this.stream, this.renderer, this.scene, this.camera, this.look.pipeline.mrt, this.look.pipeline.renderTarget
+			this.stream, this.renderer, this.scene, this.camera, this.look.pipeline.mrt, this.look.pipeline.renderTarget,
+			{ budget: new FrameBudget( { paced: false } ) }
 		);
 		if ( this.shellScene ) this.shellScene.warmup = this.floorWarmup;
 		// A focused character's model and a scene the quests stand are prepared
@@ -694,9 +697,6 @@ export class GameApp {
 		this.hero.warmup = this.floorWarmup;
 		this.scenery.renderer.warmup = this.floorWarmup;
 		this.investigations.renderer.warmup = this.floorWarmup;
-		// The city is about to be drawn, so admitting a cell from here on gives
-		// the frame its turn instead of holding it.
-		slice.pace();
 		// Every pass counts into the load's own tally, and warms the programs it
 		// is the first to need: one the ground already built costs the street
 		// props nothing, and the city pass ends up with what neither had.
@@ -782,6 +782,10 @@ export class GameApp {
 		await this.floorWarmup.warmAll( this.scene, { onProgress: ( done, total ) => pinning.at( done, total ) } );
 		await remembering;
 		this.hitches.notes.length = 0;
+		// The city is about to be drawn, so admitting a cell or preparing a
+		// program from here on gives the frame its turn instead of holding it.
+		slice.pace();
+		this.floorWarmup.pace();
 		this.view.setPaused( true );
 		this.view.pause.setSave( this.persistence ? 'ready' : 'unavailable' );
 		this.view.ready();
@@ -2152,9 +2156,9 @@ export class GameApp {
 }
 
 /** Keeps streamed floor compilation off the first frame that can draw it. */
-export function prepareInteriorStreaming( stream, renderer, scene, camera, mrt, renderTarget = null ) {
+export function prepareInteriorStreaming( stream, renderer, scene, camera, mrt, renderTarget = null, options = {} ) {
 
-	const warmup = new Warmup( renderer, scene, camera, mrt, renderTarget );
+	const warmup = new Warmup( renderer, scene, camera, mrt, renderTarget, options );
 	stream.warmup = warmup;
 
 	return warmup;

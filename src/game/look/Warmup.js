@@ -1,7 +1,7 @@
 import { ColorManagement, NoToneMapping } from 'three/webgpu';
-import { frameYield } from '../../app/FrameYield.js';
+import { FrameBudget } from '../../app/FrameBudget.js';
 import { programKey } from './ProgramKey.js';
-import { ProgramKeepers } from './ProgramKeepers.js';
+import { ProgramPins, plainDraw } from './ProgramPins.js';
 
 /**
  * Builds pipelines and maps before a frame first draws them.
@@ -13,20 +13,28 @@ import { ProgramKeepers } from './ProgramKeepers.js';
  * What the renderer builds is a graph per material and vertex layout, and per
  * object where the draw is instanced or batched, because the graph binds that
  * object's own textures (ProgramKey.js). One renderable of each is prepared
- * here, the way the renderer would on its first draw, and a keeper wearing a
- * copy of its material holds the compiled program for the life of this warm-up
- * (ProgramKeepers.js), so a batch that grows or a floor that leaves never
- * costs the frame a link again.
+ * here, the way the renderer would on its first draw, and every program that
+ * compile linked is pinned in the renderer's own cache (ProgramPins.js), so a
+ * batch that grows or a floor that leaves never costs the frame a link again.
+ *
+ * Between programs and between map uploads the work asks a frame budget for
+ * its turn: while the game loads there is no frame to protect and the turn is
+ * one pass of the event loop once a few milliseconds are spent; once `pace`
+ * says the city is drawn, it is a frame.
  */
 export class Warmup {
 
 	/**
 	 * @param scene the scene the object lives in or is going to, for its lights
 	 * @param mrt the render pipeline's scene-pass MRT, or null when it has none
-	 * @param uploaded, keepers shared with a sibling warm-up, which prepares
-	 *   the same world for another render target
+	 * @param uploaded, pins, budget shared with a sibling warm-up, which
+	 *   prepares the same world for another render target
+	 * @param budget the FrameBudget asked between programs and uploads; paced
+	 *   (a frame per turn) unless the caller is still loading
 	 */
-	constructor( renderer, scene, camera, mrt = null, renderTarget = null, { uploaded = new WeakSet(), keepers = new ProgramKeepers() } = {} ) {
+	constructor( renderer, scene, camera, mrt = null, renderTarget = null, {
+		uploaded = new WeakSet(), pins = new ProgramPins(), budget = new FrameBudget()
+	} = {} ) {
 
 		this.renderer = renderer;
 		this.scene = scene;
@@ -35,19 +43,30 @@ export class Warmup {
 		this.renderTarget = renderTarget;
 		this.uploaded = uploaded;
 		this.warmed = new Set();
-		this.keepers = keepers;
+		this.pins = pins;
+		this.budget = budget;
 		this.preparing = Promise.resolve();
+
+	}
+
+	/** From now on each turn is a frame: the city is drawn and has something to lose. */
+	pace() {
+
+		this.budget.pace();
 
 	}
 
 	/**
 	 * The same world prepared for another pass: the renderer keeps a graph per
 	 * render target, so a probe's cube faces ask for graphs of their own. Maps
-	 * uploaded and programs pinned are shared, because those are the same.
+	 * uploaded, programs pinned and the budget are shared, because those are
+	 * the same.
 	 */
 	sibling( { camera = this.camera, renderTarget = this.renderTarget, mrt = this.mrt } = {} ) {
 
-		return new Warmup( this.renderer, this.scene, camera, mrt, renderTarget, { uploaded: this.uploaded, keepers: this.keepers } );
+		return new Warmup( this.renderer, this.scene, camera, mrt, renderTarget, {
+			uploaded: this.uploaded, pins: this.pins, budget: this.budget
+		} );
 
 	}
 
@@ -61,13 +80,9 @@ export class Warmup {
 		const started = performance.now();
 		try {
 
-			await this.#prepare( object );
-			for ( const [ node, key ] of this.programsOf( object ) ) {
-
-				this.warmed.add( key );
-				await this.#keep( node );
-
-			}
+			const programs = this.programsOf( object );
+			await this.#prepare( object, programs.every( ( [ node ] ) => plainDraw( node ) ) );
+			for ( const [ , key ] of programs ) this.warmed.add( key );
 
 		} catch ( error ) {
 
@@ -78,32 +93,16 @@ export class Warmup {
 
 	}
 
-	/** Pins the program this renderable was just built with; a keeper that fails is a warning, never a lost floor. */
-	async #keep( node ) {
+	/** @param plain whether every draw in the object keeps its graph across objects, so its graphs are pinned too */
+	async #prepare( object, plain ) {
 
-		const keeper = this.keepers.keep( node );
-		if ( ! keeper ) return;
-		try {
-
-			await this.#prepare( keeper );
-
-		} catch ( error ) {
-
-			console.warn( `warmup: keeper for ${node.name || node.type}: ${error?.message ?? error}` );
-
-		}
-
-	}
-
-	async #prepare( object ) {
-
-		const pending = this.preparing.then( () => this.#compile( object ) );
+		const pending = this.preparing.then( () => this.#compile( object, plain ) );
 		this.preparing = pending.catch( () => {} );
 		return pending;
 
 	}
 
-	async #compile( object ) {
+	async #compile( object, plain ) {
 
 		if ( ! object || ! this.renderer?.compileAsync ) return;
 		let shown = null;
@@ -128,6 +127,7 @@ export class Warmup {
 			this.renderer.setRenderTarget?.( this.renderTarget );
 			this.renderer.setMRT?.( this.mrt );
 			await this.renderer.compileAsync( object, this.camera, this.scene );
+			this.pins.pin( this.renderer, plain );
 
 		} finally {
 
@@ -145,7 +145,7 @@ export class Warmup {
 
 	}
 
-	/** Decodes and uploads each new map once, yielding between individual uploads. */
+	/** Decodes and uploads each new map once, asking the budget between uploads. */
 	async #upload( object ) {
 
 		const textures = texturesOf( object ).filter( ( { texture } ) => ! this.uploaded.has( texture ) );
@@ -159,7 +159,7 @@ export class Warmup {
 			// A map a dropped floor disposes is uploaded again the next time a
 			// floor wears it, not on the frame that first draws it.
 			texture.addEventListener?.( 'dispose', () => this.uploaded.delete( texture ) );
-			await frameYield();
+			await this.budget.step();
 
 		}
 
@@ -168,7 +168,7 @@ export class Warmup {
 	/**
 	 * Warms one representative of every program this object still needs, one at
 	 * a time so the backend never receives an unbounded set in one request, and
-	 * pins each one behind a keeper.
+	 * pins what each one linked.
 	 *
 	 * @param skip subtrees left out, such as the groups a probe never renders
 	 * @returns milliseconds the pass took; `onProgress` counts programs, not
@@ -184,11 +184,10 @@ export class Warmup {
 
 			if ( ! wanted() ) break;
 			const [ node, key ] = wantedPrograms[ index ];
-			await this.#prepare( node );
+			await this.#prepare( node, plainDraw( node ) );
 			this.warmed.add( key );
-			await this.#keep( node );
 			onProgress( index + 1, wantedPrograms.length );
-			if ( index + 1 < wantedPrograms.length ) await frameYield();
+			if ( index + 1 < wantedPrograms.length ) await this.budget.step();
 
 		}
 

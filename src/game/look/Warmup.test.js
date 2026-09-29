@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Warmup } from './Warmup.js';
+import { FrameBudget } from '../../app/FrameBudget.js';
 
 /**
  * The warm-up exists so a first draw is never a first link. Four things it has
@@ -143,16 +144,15 @@ describe( 'Warmup', () => {
 
 		expect( results.map( result => result.status ) ).toEqual( [ 'rejected', 'fulfilled' ] );
 		expect( peak ).toBe( 1 );
-		// The failed cell, the two wanted programs of the other, and a keeper for each of those two.
-		expect( compiled.filter( object => ! object.name.startsWith( 'keeper:' ) ) ).toHaveLength( 3 );
-		expect( compiled.filter( object => object.name.startsWith( 'keeper:' ) ) ).toHaveLength( 2 );
+		// The failed cell and the two wanted programs of the other, and nothing else.
+		expect( compiled ).toHaveLength( 3 );
 		expect( renderer.mrt ).toBe( 'frame' );
 		expect( a.hidden.visible ).toBe( false );
 		expect( b.hidden.visible ).toBe( false );
 
 	} );
 
-	it( 'prepares one graph per material and vertex layout, one per instanced or batched draw, and pins each program behind a keeper the world cannot dispose', async () => {
+	it( 'prepares one graph per material and vertex layout, one per instanced or batched draw, and pins every program it linked without a second compile', async () => {
 
 		const material = new THREE.MeshStandardMaterial();
 		const other = new THREE.MeshStandardMaterial();
@@ -169,46 +169,89 @@ describe( 'Warmup', () => {
 		batch.add( batched );
 		batch.add( new THREE.Mesh( box, other ), new THREE.Mesh( box, other ) );
 
+		// The renderer's own caches, as three keeps them: a pipeline per code
+		// and a graph per key, each counting its draws (ProgramPins.test.js).
+		const pipelines = new Map(), graphs = new Map();
 		const compiled = [];
-		const warmup = new Warmup( fakeRenderer( async ( object ) => compiled.push( object ) ), new THREE.Scene(), new THREE.PerspectiveCamera(), null );
+		const renderer = fakeRenderer( async ( object ) => {
+
+			compiled.push( object );
+			const code = `${object.material.uuid}:${object.isInstancedMesh || object.isBatchedMesh ? 'instanced' : 'plain'}`;
+			const program = () => ( { usedTimes: 0 } );
+			if ( ! pipelines.has( code ) ) pipelines.set( code, { usedTimes: 0, vertexProgram: program(), fragmentProgram: program() } );
+			pipelines.get( code ).usedTimes ++;
+			graphs.set( object.uuid, { usedTimes: 1, plain: ! object.isInstancedMesh && ! object.isBatchedMesh } );
+
+		} );
+		renderer._pipelines = { caches: pipelines };
+		renderer._nodes = { nodeBuilderCache: graphs };
+		const warmup = new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera(), null );
 		const counted = [];
 		await warmup.warmAll( batch, { onProgress: ( done, total ) => counted.push( [ done, total ] ) } );
 
-		const world = compiled.filter( object => ! object.name.startsWith( 'keeper:' ) );
-		const keepers = compiled.filter( object => object.name.startsWith( 'keeper:' ) );
-		expect( world ).toHaveLength( 5 );
+		expect( compiled ).toHaveLength( 5 );
 		expect( counted ).toEqual( [ [ 1, 5 ], [ 2, 5 ], [ 3, 5 ], [ 4, 5 ], [ 5, 5 ] ] );
-		// One keeper per distinct code: the plain, instanced and batched forms of
-		// one material, and the other material.
-		expect( keepers ).toHaveLength( 4 );
-		const keptBatch = keepers.find( object => object.isBatchedMesh );
-		expect( keptBatch._colorsTexture ).not.toBeNull();
-		expect( Object.keys( keptBatch.geometry.attributes ).sort() ).toEqual( Object.keys( batched.geometry.attributes ).sort() );
-		// A keeper's geometry is its own triangle in the world's layout, so a
-		// geometry the world disposes never takes the keeper down with it.
-		const keptInstanced = keepers.find( object => object.isInstancedMesh );
-		expect( keptInstanced.geometry ).not.toBe( box );
-		expect( Object.keys( keptInstanced.geometry.attributes ).sort() ).toEqual( Object.keys( box.attributes ).sort() );
-		expect( keptInstanced.geometry.getAttribute( 'position' ).count ).toBe( 3 );
-		for ( const keeper of keepers ) expect( [ material, other ] ).not.toContain( keeper.material );
+		// One more use on every pipeline and on both its stages: the plain and
+		// instanced forms of one material, and the other material.
+		expect( warmup.pins.size ).toBe( 3 );
+		for ( const pipeline of pipelines.values() ) {
+
+			expect( pipeline.vertexProgram.usedTimes ).toBe( 1 );
+			expect( pipeline.fragmentProgram.usedTimes ).toBe( 1 );
+
+		}
+		// The plain draws' graphs stay for the next draw of that material; an
+		// instanced or batched draw's graph is that object's and leaves with it.
+		for ( const graph of graphs.values() ) expect( graph.usedTimes ).toBe( graph.plain ? 2 : 1 );
 
 		// The city pass finds the same materials standing somewhere else.
 		const elsewhere = new THREE.Group();
 		elsewhere.add( new THREE.Mesh( box, material ), new THREE.Mesh( box, other ) );
 		await warmup.warmAll( elsewhere );
 
-		expect( compiled ).toHaveLength( 9 );
-
-		// A batch that grows disposes its material; the keeper's copy is untouched.
-		const disposed = vi.fn();
-		for ( const keeper of keepers ) keeper.material.addEventListener( 'dispose', disposed );
-		material.dispose();
-
-		expect( disposed ).not.toHaveBeenCalled();
+		expect( compiled ).toHaveLength( 5 );
 
 	} );
 
-	it( 'prepares a sibling pass for another render target with the same uploads and keepers, leaving skipped groups out', async () => {
+	it( 'gives the event loop its turn between programs while the game loads, never a frame, and a frame once the city is drawn', async () => {
+
+		const frames = vi.fn( ( callback ) => setTimeout( callback, 0 ) );
+		vi.stubGlobal( 'requestAnimationFrame', frames );
+		const meshes = ( count ) => {
+
+			const group = new THREE.Group();
+			for ( let i = 0; i < count; i ++ ) group.add( new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial() ) );
+			return group;
+
+		};
+		try {
+
+			// Each compile holds the main thread past a slice, so every step asks for its turn.
+			const renderer = fakeRenderer( async () => {
+
+				const until = performance.now() + 6;
+				while ( performance.now() < until );
+
+			} );
+			const warmup = new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera(), null, null, {
+				budget: new FrameBudget( { paced: false } )
+			} );
+			await warmup.warmAll( meshes( 4 ) );
+			expect( frames ).not.toHaveBeenCalled();
+
+			warmup.pace();
+			await warmup.warmAll( meshes( 2 ) );
+			expect( frames ).toHaveBeenCalled();
+
+		} finally {
+
+			vi.unstubAllGlobals();
+
+		}
+
+	} );
+
+	it( 'prepares a sibling pass for another render target with the same uploads and pins, leaving skipped groups out', async () => {
 
 		const scene = new THREE.Scene();
 		const crowd = new THREE.Group();
@@ -230,14 +273,14 @@ describe( 'Warmup', () => {
 		const probe = frame.sibling( { camera: new THREE.PerspectiveCamera(), renderTarget: cube, mrt: null } );
 		await probe.warmAll( scene, { skip: ( node ) => node === crowd } );
 
-		// The frame pass built both draws and their keepers; the probe pass
-		// built the street alone, against its own target, uploaded nothing
-		// again and made no second keeper.
-		expect( compiled.filter( object => ! object.name.startsWith( 'keeper:' ) ) ).toEqual( [ crowd.children[ 0 ], street, street ] );
+		// The frame pass built both draws; the probe pass built the street
+		// alone, against its own target, uploaded nothing again and shares the
+		// frame's pins and budget.
+		expect( compiled ).toEqual( [ crowd.children[ 0 ], street, street ] );
 		expect( targets.at( - 1 ) ).toBe( cube );
 		expect( renderer.initTexture ).toHaveBeenCalledTimes( 1 );
-		expect( probe.keepers ).toBe( frame.keepers );
-		expect( frame.keepers.size ).toBe( 2 );
+		expect( probe.pins ).toBe( frame.pins );
+		expect( probe.budget ).toBe( frame.budget );
 
 	} );
 
