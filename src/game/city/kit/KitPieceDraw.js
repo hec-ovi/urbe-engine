@@ -113,10 +113,11 @@ export class KitPieceDraw {
 		mesh.count = this.count;
 		mesh.castShadow = true;
 		mesh.receiveShadow = true;
-		// One bounding sphere would have to cover every copy in the city, so a
-		// frustum test on the batch can only ever answer "visible". Skipping it
-		// saves the sphere rebuild on every admission and answers the same.
-		mesh.frustumCulled = false;
+		// Copies stand only on the floors drawn around the player (the interior
+		// stream draws a building's floors within sight of it), so one sphere
+		// around them lets a pass that looks away leave the whole draw out.
+		// Three rebuilds it on the first test after the copies change.
+		mesh.frustumCulled = true;
 
 		return mesh;
 
@@ -153,7 +154,12 @@ export class KitPieceDraw {
 	/** @param slot the one that changed, or -1 when only the count did */
 	#published( slot ) {
 
-		for ( const mesh of this.meshes ) mesh.count = this.count;
+		for ( const mesh of this.meshes ) {
+
+			mesh.count = this.count;
+			mesh.boundingSphere = null;
+
+		}
 		if ( slot < 0 ) return;
 
 		touch( this.matrices, slot * 16, 16, this.count * 16 );
