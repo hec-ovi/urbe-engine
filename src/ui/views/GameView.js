@@ -47,7 +47,7 @@ export class GameView {
 		onResume = noop, onSave = noop, onCloseDialog = noop, onSend = noop, onOpen = noop, onClose = noop,
 		onLeave = noop, onSettingChange = noop, onHangUp = noop, onSummaryClose = noop, onSummaryOpen = noop,
 		onTransitSelect = noop, onTransitCancel = noop, onQuestSelect = noop, onQuestTrack = noop, onQuestWait = noop,
-		onDialogueChoice = noop, onDialogueTopic = noop, onDialogueAction = noop, onDialogueRetry = noop, onDialogueJournal = noop,
+		onDialogueChoice = noop, onDialogueTopic = noop, onDialogueAction = noop, onDialogueRetry = noop, onDialogueJournal = noop, onDialogueVoice = noop,
 		menu = {}
 	} = {} ) {
 
@@ -69,7 +69,7 @@ export class GameView {
 		this.call = new VideoCallPanel( { onHangUp } );
 		this.toast = new MissionToast();
 		this.dialog = new ChatPanel( { onSend, onClose: onCloseDialog,
-			onChoice: onDialogueChoice, onTopic: onDialogueTopic, onAction: onDialogueAction, onRetry: onDialogueRetry, onJournal: onDialogueJournal } );
+			onChoice: onDialogueChoice, onTopic: onDialogueTopic, onAction: onDialogueAction, onRetry: onDialogueRetry, onJournal: onDialogueJournal, onVoice: onDialogueVoice } );
 		this.summary = new MissionSummary( { onOpen: onSummaryOpen, onClose: ( close ) => { this.summary.setVisible( false ); onSummaryClose( close ); } } );
 		this.transit = new TransitHud( { onSelect: onTransitSelect, onCancel: onTransitCancel } );
 		this.pause = new PauseMenu( { onResume, onOpen: ( name ) => this.open( name ), onSave, onLeave: leave } );

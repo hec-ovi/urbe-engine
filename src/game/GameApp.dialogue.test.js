@@ -44,10 +44,14 @@ function fixture( { ending = false, errand = false } = {} ) {
  // As Interactor.talkTo: the person's body, while it has one, opens a conversation when none is open.
  app.interactor={conversation:null,close:vi.fn(function(){this.conversation=null;app.presentConversation(null);}),
   talkTo:vi.fn(function(npcId){if(this.conversation||person.gone)return null;this.conversation={npcId,instance:person,behavior:null};app.presentConversation(this.conversation);return this.conversation;})};
- const open=()=>{app.interactor.conversation={npcId:person.npcId,instance:person,behavior:null};app.presentConversation(app.interactor.conversation);};
+ // The player opens the talk window to talk freely; the story replies stay where they are.
+ const open=()=>{app.interactor.conversation={npcId:person.npcId,instance:person,behavior:null};app.presentConversation(app.interactor.conversation);app.view.dialog.setTalkOpen(true);};
  const state=()=>app.quests.snapshot()[0].state;
  return{app,open,state,observer,log,companion,person};
 }
+
+/** The transcript alone: the subtitle repeats its newest line. */
+const said=(app)=>within(app.view.dialog.transcript);
 
 beforeEach(()=>{document.body.replaceChildren();stubCanvas();vi.spyOn(console,'warn').mockImplementation(()=>{});});
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();});
@@ -60,11 +64,11 @@ describe('explicit quest dialogue through the playable UI',()=>{
    return new Response(replyEvents('I wish I had more to tell you.').map(event=>JSON.stringify(event)+'\n').join(''));});
   app.talk=new TalkClient('/out/t');vi.spyOn(app.talk,'said');open();
   const chat=within(app.view.dialog.element);
-  expect(chat.getByText(/My brother never came home/)).toBeTruthy();
-  expect(chat.getByText(/My brother never came home/).closest('.chat-line').dataset.tag).toBe('story');
+  expect(said(app).getByText(/My brother never came home/)).toBeTruthy();
+  expect(said(app).getByText(/My brother never came home/).closest('.chat-line').dataset.tag).toBe('story');
   // The talk opens on its scene, and the story says why it matters, not to talk to the person already talked to.
-  expect(chat.getByText('ask completed.').closest('.chat-line').nextElementSibling.textContent).toContain('My brother never came home');
-  expect(chat.getByText('ask completed.').closest('.chat-line').classList.contains('is-scene')).toBe(true);
+  expect(said(app).getByText('ask completed.').closest('.chat-line').nextElementSibling.textContent).toContain('My brother never came home');
+  expect(said(app).getByText('ask completed.').closest('.chat-line').classList.contains('is-scene')).toBe(true);
   expect(chat.getByText('The objective remains unresolved otherwise.').previousElementSibling.textContent).toBe('Why it matters');
   expect(chat.queryByText('Complete ask.')).toBeNull();
   // Only the reply that completes the step is marked as moving the story on.
@@ -73,10 +77,10 @@ describe('explicit quest dialogue through the playable UI',()=>{
   expect(chat.queryByText(/working @ parcel/)).toBeNull();
   const initial=structuredClone(state());
   await user.click(chat.getByRole('button',{name:'Tell me about your brother.'}));
-  expect(chat.getByText(/He worked the cranes/)).toBeTruthy();expect(state()).toEqual(initial);
+  expect(said(app).getByText(/He worked the cranes/)).toBeTruthy();expect(state()).toEqual(initial);
   await user.click(chat.getByRole('button',{name:'End conversation'}));expect(state()).toEqual(initial);
   open();await user.type(chat.getByRole('textbox',{name:'say something'}),'hello{Enter}');
-  await vi.waitFor(()=>expect(chat.getByText('I wish I had more to tell you.')).toBeTruthy());expect(state()).toEqual(initial);
+  await vi.waitFor(()=>expect(said(app).getByText('I wish I had more to tell you.')).toBeTruthy());expect(state()).toEqual(initial);
   // Every line shown goes with the next typed one, raw and once, at its minute; the typed line and its streamed reply travel on their own.
   const opening='My brother never came home. Kip found something near the quay.';
   expect(app.talk.said.mock.calls).toEqual([['person','npc',opening,1260],['person','player','Tell me about your brother.',1260],
@@ -89,15 +93,15 @@ describe('explicit quest dialogue through the playable UI',()=>{
   expect(state().completedStepIds).toEqual(['ask']);expect(state().activeStepIds).toEqual(['visit']);
   expect(app.scenery.refresh).toHaveBeenCalledExactlyOnceWith(1260);
   expect(app.quests.inventoryView()).toHaveLength(1);
-  expect(chat.getByText(/Look for him at the market/)).toBeTruthy();
+  expect(said(app).getByText(/Look for him at the market/)).toBeTruthy();
   expect(chat.getByRole('status').textContent).toBe('Journal updated.');
   expect(chat.getByText('Complete visit.').previousElementSibling.textContent).toBe('Your goal');
   expect(app.view.objective.element.textContent).toContain('visit');
   expect(app.view.quests.quests[0].steps.find(s=>s.stepId==='visit').state).toBe('active');
   await user.click(chat.getByRole('button',{name:'End conversation'}));expect(state().completedStepIds).toEqual(['ask']);
-  open();expect(chat.getByText(/Look for him at the market/)).toBeTruthy();
+  open();expect(said(app).getByText(/Look for him at the market/)).toBeTruthy();
   await user.click(chat.getByRole('button',{name:'Tell me about your brother.'}));
-  expect(chat.getByText(/He worked the cranes/)).toBeTruthy();expect(state().completedStepIds).toEqual(['ask']);
+  expect(said(app).getByText(/He worked the cranes/)).toBeTruthy();expect(state().completedStepIds).toEqual(['ask']);
  });
 
  it('serializes typed requests, discards late replies, and keeps offline story choices usable',async()=>{
@@ -108,18 +112,18 @@ describe('explicit quest dialogue through the playable UI',()=>{
   expect(chat.getByRole('button',{name:'I will find Kip and ask what he saw.'}).disabled).toBe(false);
   await user.click(chat.getByRole('button',{name:'I will find Kip and ask what he saw.'}));
   resolve({type:'delta',text:'This delayed reply must not replace the new lead.'});await new Promise(done=>setTimeout(done,0));
-  expect(chat.queryByText(/This delayed reply/)).toBeNull();expect(state().completedStepIds).toEqual(['ask']);
+  expect(said(app).queryByText(/This delayed reply/)).toBeNull();expect(state().completedStepIds).toEqual(['ask']);
   app.talk.stream.mockImplementationOnce(()=>talkStream([],new Error('offline')));
   await user.type(chat.getByRole('textbox'),'thanks{Enter}');
   await vi.waitFor(()=>expect(chat.getByRole('button',{name:'Retry reply'})).toBeTruthy());
-  expect(chat.queryByText('...')).toBeNull();
-  const count=chat.getAllByText('thanks').length;await user.click(chat.getByRole('button',{name:'Retry reply'}));
-  await vi.waitFor(()=>expect(chat.getByText('I wish I had more to tell you.')).toBeTruthy());
-  expect(chat.getAllByText('thanks')).toHaveLength(count);expect(state().completedStepIds).toEqual(['ask']);
+  expect(said(app).queryByText('...')).toBeNull();
+  const count=said(app).getAllByText('thanks').length;await user.click(chat.getByRole('button',{name:'Retry reply'}));
+  await vi.waitFor(()=>expect(said(app).getByText('I wish I had more to tell you.')).toBeTruthy());
+  expect(said(app).getAllByText('thanks')).toHaveLength(count);expect(state().completedStepIds).toEqual(['ask']);
  });
  it('passes every NPC line through one speaking turn and the line observer, silenced whenever the player takes the turn',async()=>{
   const {app,open,observer,log}=fixture();open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
-  expect(chat.getByText('vendor')).toBeTruthy();expect(app.view.dialog.element.textContent).not.toMatch(/p1|working/);
+  expect(app.view.dialog.role.textContent).toBe('vendor');expect(app.view.dialog.element.textContent).not.toMatch(/p1|working/);
   await user.click(chat.getByRole('button',{name:'Tell me about your brother.'}));
   await user.click(chat.getByRole('button',{name:'I will find Kip and ask what he saw.'}));
   await user.click(chat.getByRole('button',{name:'End conversation'}));
@@ -136,7 +140,7 @@ describe('explicit quest dialogue through the playable UI',()=>{
   let release;const rest=new Promise(done=>{release=done;});
   app.talk.stream.mockImplementationOnce(()=>talkStream([{type:'delta',text:'Kip drinks. '},{type:'sentence',index:0,text:'Kip drinks.'},rest,{type:'done',reply:'Kip drinks. He sings.'}]));
   await user.type(chat.getByRole('textbox'),'where is Kip?{Enter}');
-  await vi.waitFor(()=>expect(chat.getByText('Kip drinks.')).toBeTruthy());
+  await vi.waitFor(()=>expect(said(app).getByText('Kip drinks.')).toBeTruthy());
   return async()=>{release({type:'sentence',index:1,text:'He sings.'});await new Promise(done=>setTimeout(done,0));};
  }
  function expectOvertaken(app,chat,log,said){
@@ -172,7 +176,7 @@ describe('explicit quest dialogue through the playable UI',()=>{
   open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
   expect(app.input.exitLock).toHaveBeenCalledOnce();
   await user.type(chat.getByRole('textbox'),'hello{Enter}');
-  await vi.waitFor(()=>expect(chat.getByText('I wish I had more to tell you.')).toBeTruthy());
+  await vi.waitFor(()=>expect(said(app).getByText('I wish I had more to tell you.')).toBeTruthy());
   expect(chat.queryByRole('button',{name:'Retry reply'})).toBeNull();
   await user.click(chat.getByRole('button',{name:'I will find Kip and ask what he saw.'}));
   expect(state().completedStepIds).toEqual(['ask']);expect(chat.getByRole('status').textContent).toBe('Journal updated.');
@@ -200,7 +204,7 @@ describe('explicit quest dialogue through the playable UI',()=>{
   observer.upcoming=vi.fn(async()=>{throw new Error('no prefetch');});open();
   expect(observer.upcoming).toHaveBeenCalledExactlyOnceWith({conversation:app.interactor.conversation,texts:[CRANES]});
   await vi.waitFor(()=>expect(error).toHaveBeenCalledWith('line observer upcoming:',expect.objectContaining({message:'no prefetch'})));
-  expect(chat.getByText(/Look for him at the market/)).toBeTruthy();
+  expect(said(app).getByText(/Look for him at the market/)).toBeTruthy();
  });
 
  const OFFERS=[
@@ -222,7 +226,7 @@ describe('explicit quest dialogue through the playable UI',()=>{
   const initial=structuredClone(state());observer.said.mockClear();
   await user.type(chat.getByRole('textbox'),'take me to Kip{Enter}');
   expect(app.talk.stream.mock.calls.at(-1)[4]).toEqual({signal:expect.any(AbortSignal),offers:{places:[{placeId:'p2',name:'Market'}]}});
-  await vi.waitFor(()=>expect(chat.getByText('Kip drinks')).toBeTruthy());
+  await vi.waitFor(()=>expect(said(app).getByText('Kip drinks')).toBeTruthy());
   expect(chat.getByRole('textbox').disabled).toBe(true);expect(chat.queryByText(/Waiting for a reply/)).toBeNull();
   expect(observer.said).not.toHaveBeenCalled();expect(companion.acceptFromTool).not.toHaveBeenCalled();
   release({type:'delta',text:'[sigh] at the market.'});
@@ -304,7 +308,7 @@ describe('explicit quest dialogue through the playable UI',()=>{
   app.talk.stream.mockImplementationOnce(()=>talkStream([...replyEvents('Sure, this way.').slice(0,-1),{type:'offer',kind:'follow'},{type:'done',reply:'Sure, this way.'}]));
   companion.acceptFromTool.mockReturnValueOnce({ok:false,npcId:'person',code:'on_duty',line:'My shift isn\'t over.'});
   await user.type(chat.getByRole('textbox'),'come with me{Enter}');
-  await vi.waitFor(()=>expect(chat.getByText('My shift isn\'t over.')).toBeTruthy());
+  await vi.waitFor(()=>expect(said(app).getByText('My shift isn\'t over.')).toBeTruthy());
   expect(app.interactor.conversation).not.toBeNull();
 
   companion.accept.mockImplementationOnce(()=>{companion.accepted.mockReturnValue(true);return{ok:true,npcId:'person',offerId:'lead:parcel:p2',kind:'lead',line:'Follow me to Market.'};});
@@ -372,13 +376,13 @@ describe('explicit quest dialogue through the playable UI',()=>{
   log.length=0;
   await user.type(chat.getByRole('textbox'),'hello{Enter}');
   await vi.waitFor(()=>expect(chat.getByRole('button',{name:'Retry reply'})).toBeTruthy());
-  expect(chat.queryByText(/Half a thought/)).toBeNull();expect(chat.getByText(/reply could not be reached/)).toBeTruthy();
+  expect(said(app).queryByText(/Half a thought/)).toBeNull();expect(chat.getByText(/reply could not be reached/)).toBeTruthy();
   expect(log).toEqual(['silenced','said: Half a thought.','silenced']);expect(app.animations.completeDialogueTurn).toHaveBeenCalledOnce();
   app.talk.stream.mockImplementationOnce(()=>talkStream([],talkError('talk request does not match its contract: /npc must NOT have additional properties',400)));
   await user.click(chat.getByRole('button',{name:'Retry reply'}));
   await vi.waitFor(()=>expect(chat.getByText(/refused this line/)).toBeTruthy());
   expect(chat.queryByRole('button',{name:'Retry reply'})).toBeNull();expect(chat.getByRole('textbox').disabled).toBe(false);
-  expect(chat.getAllByText('hello')).toHaveLength(1);expect(app.talk.stream).toHaveBeenCalledTimes(2);expect(log).toHaveLength(3);
+  expect(said(app).getAllByText('hello')).toHaveLength(1);expect(app.talk.stream).toHaveBeenCalledTimes(2);expect(log).toHaveLength(3);
  });
 
  it('lets a passer-by without identity brush the player off, and says plainly that free chat is unavailable',async()=>{
@@ -387,7 +391,7 @@ describe('explicit quest dialogue through the playable UI',()=>{
   expect(screen.getByRole('dialog',{name:'Someone passing by'})).toBeTruthy();
   const chat=within(app.view.dialog.element);
   expect(chat.queryByRole('textbox')).toBeNull();expect(chat.getByText('This passer-by has no time to chat.')).toBeTruthy();
-  expect(chat.getByText('Sorry, I can\'t stop.').closest('.chat-line').firstElementChild.textContent).toBe('Someone passing by');
+  expect(said(app).getByText('Sorry, I can\'t stop.').closest('.chat-line').firstElementChild.textContent).toBe('Someone passing by');
   expect(observer.said).toHaveBeenCalledOnce();
   await app.sayLine('hello');expect(app.talk.stream).not.toHaveBeenCalled();
  });

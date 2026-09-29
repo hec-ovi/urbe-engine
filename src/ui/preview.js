@@ -155,14 +155,25 @@ ctx.fillRect( 55, 30, 40, 40 );
 ctx.fillRect( 40, 80, 70, 68 );
 view.avatar.setAvatar( { name: 'Ada Vance', canvas: portrait, bar: 0.8 } );
 
-view.dialog.setNpc( { name: 'Ada Vance', role: 'office worker' } );
-view.dialog.setStory( { title: 'The night ledger', objective: 'Ask Ada about the containers.' } );
-view.dialog.setChoices( [ { id: 'ledger', text: 'Where can I find the ledger?' }, { id: 'sign', text: 'Who signs for the night containers?' } ] );
-view.dialog.setSpeaking( view.dialog.addMessage( { from: 'npc', name: 'Ada', text: 'The ledger is in the back office. Nobody reads it but me.' } ), 'playing' );
-view.dialog.addMessage( { from: 'player', text: 'Who signs for the night containers?' } );
-view.dialog.beginMessage( { from: 'npc', name: 'Ada' } ).update( 'The night clerk. I can take you to' );
-view.dialog.setActions( [ { id: 'lead:quay', label: 'Go with Ada to the Quay Office' } ] );
-view.dialog.setVisible( true );
+view.dialog.show( { name: 'Ada Vance', role: 'office worker' } );
+view.dialog.setVoice( true );
+view.dialog.setStory( { title: 'The night ledger', stake: 'Without the ledger nobody can prove who emptied container nine.' } );
+view.dialog.addMessage( { from: 'scene', text: 'The quay office is dark but for one lamp over the counter.' } );
+view.dialog.setSpeaking( view.dialog.addMessage( { from: 'npc', name: 'Ada Vance', text: 'The ledger is in the back office. Nobody reads it but me.', kind: 'story' } ), 'playing' );
+view.dialog.addMessage( { from: 'player', text: 'Who signs for the night containers?', kind: 'talk' } );
+view.dialog.beginMessage( { from: 'npc', name: 'Ada Vance', kind: 'talk' } ).update( 'The night clerk, when he bothers to come in. I can take you to' );
+view.dialog.setSending( true );
+view.dialog.setChoices( [
+	{ id: 'ledger', text: 'Where can I find the ledger?' },
+	{ id: 'sign', text: 'Who signs for the night containers?' },
+	{ id: 'take', text: 'I will bring the ledger to the harbour master.', commits: true }
+] );
+view.dialog.setActions( [
+	{ id: 'follow', label: 'Come with me', icon: 'follow' },
+	{ id: 'lead:quay', label: 'Show me the Quay Office', icon: 'lead' }
+] );
+// /src/ui/preview.html?talk opens the talk window over the conversation.
+if ( new URLSearchParams( location.search ).has( 'talk' ) ) view.dialog.setTalkOpen( true );
 
 view.call.setName( 'Nadir' );
 view.call.setVisible( true );
@@ -180,7 +191,14 @@ view.setLibrary( {
 		availableBuildings: [ { id: 'p11', label: 'Quay Office', type: 'office' }, { id: 'p64', label: 'Bar Nadir', type: 'business' } ]
 	} ]
 } );
-// /src/ui/preview.html?prologue opens on the story card a new game starts with.
-if ( new URLSearchParams( location.search ).has( 'prologue' ) ) view.summary.show( { kind: 'prologue', title: 'Salt Wharf', text: PROLOGUE } );
-else view.showMainMenu();
+// ?prologue opens on the story card a new game starts with, ?chat or ?talk on the conversation, ?paused on the pause menu.
+const query = new URLSearchParams( location.search );
+if ( query.has( 'prologue' ) ) view.summary.show( { kind: 'prologue', title: 'Salt Wharf', text: PROLOGUE } );
+else if ( query.has( 'paused' ) ) {
+
+	view.dialog.show( null );
+	view.call.setVisible( false );
+	view.setPaused( true );
+
+} else if ( ! query.has( 'chat' ) && ! query.has( 'talk' ) ) view.showMainMenu();
 window.view = view;

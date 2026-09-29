@@ -3,9 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
 import Ajv from 'ajv/dist/2020.js';
+import { stubCanvas } from '../test-helpers/canvas.js';
 import layout from './chat-layout.json' with { type: 'json' };
 import schema from './chat-layout.schema.json' with { type: 'json' };
 import { ChatPanel } from './ChatPanel.js';
+import { ThinkingOrb } from './ThinkingOrb.js';
 
 const ADA = { name: 'Ada Vance', role: 'office worker' };
 
@@ -17,10 +19,11 @@ const CHOICES = [
 
 describe( 'ChatPanel', () => {
 
-	let panel, onSend, onClose, onChoice, onTopic, onAction, onRetry, onJournal;
+	let panel, onSend, onClose, onChoice, onTopic, onAction, onRetry, onJournal, onVoice;
 
 	beforeEach( () => {
 
+		stubCanvas();
 		onSend = vi.fn();
 		onClose = vi.fn();
 		onChoice = vi.fn();
@@ -28,13 +31,16 @@ describe( 'ChatPanel', () => {
 		onAction = vi.fn();
 		onRetry = vi.fn();
 		onJournal = vi.fn();
-		panel = new ChatPanel( { onSend, onClose, onChoice, onTopic, onAction, onRetry, onJournal } );
+		onVoice = vi.fn();
+		panel = new ChatPanel( { onSend, onClose, onChoice, onTopic, onAction, onRetry, onJournal, onVoice } );
 		document.body.replaceChildren( panel.element );
 		panel.show( ADA );
 
 	} );
 
 	afterEach( () => vi.restoreAllMocks() );
+
+	const talk = () => screen.getByRole( 'button', { name: 'Talk with Ada Vance' } );
 
 	it( 'reads its labels from a layout that meets its schema', () => {
 
@@ -43,30 +49,64 @@ describe( 'ChatPanel', () => {
 
 	} );
 
-	it( 'opens an accessible conversation named as it is told, with the role only when given', () => {
+	it( 'opens an accessible conversation named as it is told, the role only when given, and the talk window closed', () => {
 
 		expect( screen.getByRole( 'dialog', { name: 'Ada Vance' } ) ).toBeTruthy();
 		expect( screen.getByRole( 'heading', { name: 'Ada Vance' } ) ).toBeTruthy();
-		expect( screen.getByText( 'office worker' ) ).toBeTruthy();
-		expect( screen.getByRole( 'log', { name: 'Conversation' } ).getAttribute( 'aria-live' ) ).toBe( 'polite' );
+		expect( panel.role.textContent ).toBe( 'office worker' );
+		expect( panel.role.hidden ).toBe( false );
 		expect( screen.queryByRole( 'button', { name: 'Open journal' } ) ).toBeNull();
-		expect( document.activeElement ).toBe( screen.getByRole( 'textbox', { name: 'say something' } ) );
-		expect( screen.getByRole( 'textbox' ).placeholder ).toBe( 'Say anything to Ada Vance' );
+		// Free talk waits behind its button until the player opens it.
+		expect( screen.queryByRole( 'textbox' ) ).toBeNull();
+		expect( screen.queryByRole( 'log' ) ).toBeNull();
+		expect( document.activeElement ).toBe( talk() );
 		expect( screen.getByText( 'Free talk' ) ).toBeTruthy();
+		expect( panel.input.placeholder ).toBe( 'Say anything to Ada Vance' );
 		panel.show( { name: 'Someone passing by' } );
 		expect( screen.getByRole( 'dialog', { name: 'Someone passing by' } ) ).toBeTruthy();
 		expect( panel.role.hidden ).toBe( true );
 
 	} );
 
+	it( 'opens the talk window from its button or T, takes it back with its close, and moves it by its plate', async () => {
+
+		const user = userEvent.setup();
+		await user.click( talk() );
+		const window = screen.getByRole( 'region', { name: 'Free talk with Ada Vance' } );
+		expect( screen.getByRole( 'log', { name: 'Conversation' } ).getAttribute( 'aria-live' ) ).toBe( 'polite' );
+		expect( document.activeElement ).toBe( screen.getByRole( 'textbox', { name: 'say something' } ) );
+		expect( screen.queryByRole( 'button', { name: 'Talk with Ada Vance' } ) ).toBeNull();
+		await user.click( within( window ).getByRole( 'button', { name: 'Close the talk window' } ) );
+		expect( screen.queryByRole( 'region', { name: 'Free talk with Ada Vance' } ) ).toBeNull();
+		expect( document.activeElement ).toBe( talk() );
+		expect( onClose ).not.toHaveBeenCalled();
+
+		// T opens it again, and is a letter like any other in the text box.
+		await user.keyboard( 't' );
+		expect( panel.talkOpen ).toBe( true );
+		await user.keyboard( 'tea' );
+		expect( panel.input.value ).toBe( 'tea' );
+
+		const plate = screen.getByRole( 'button', { name: layout.talk.move } );
+		plate.focus();
+		const at = [ panel.x, panel.y ];
+		await user.keyboard( '{ArrowDown}' );
+		expect( panel.y ).toBeGreaterThanOrEqual( at[ 1 ] );
+		expect( panel.window.style.transform ).toMatch( /^translate3d\(/ );
+
+	} );
+
 	it( 'puts messages on their own side and sends trimmed free text once through button or Enter, never blanks', async () => {
 
 		const user = userEvent.setup();
+		panel.setTalkOpen( true );
 		panel.addMessage( { from: 'npc', name: 'Ada', text: 'Down the steps.' } );
 		panel.addMessage( { from: 'player', text: 'Got it.' } );
-		expect( screen.getByText( 'Down the steps.' ).closest( '.chat-line' ).classList.contains( 'is-npc' ) ).toBe( true );
-		expect( screen.getByText( 'Got it.' ).closest( '.chat-line' ).classList.contains( 'is-player' ) ).toBe( true );
-		expect( within( screen.getByRole( 'log' ) ).getByText( 'You' ) ).toBeTruthy();
+		const log = within( screen.getByRole( 'log' ) );
+		expect( log.getByText( 'Down the steps.' ).closest( '.chat-line' ).classList.contains( 'is-npc' ) ).toBe( true );
+		expect( log.getByText( 'Down the steps.' ).closest( '.chat-line' ).dataset.initials ).toBe( 'A' );
+		expect( log.getByText( 'Got it.' ).closest( '.chat-line' ).classList.contains( 'is-player' ) ).toBe( true );
+		expect( log.getByText( 'You' ) ).toBeTruthy();
 		// The scene a story talk opens on reads as the scene, never as a person or a tag.
 		const scene = panel.addMessage( { from: 'scene', text: 'The office is dark but for one lamp.' } );
 		expect( scene.classList.contains( 'is-scene' ) ).toBe( true );
@@ -85,9 +125,28 @@ describe( 'ChatPanel', () => {
 
 	} );
 
+	it( 'shows the newest line as the subtitle, growing with a streamed one and falling back when it is discarded', () => {
+
+		expect( panel.subtitle.hidden ).toBe( true );
+		panel.addMessage( { from: 'npc', name: 'Ada', text: 'Evening.' } );
+		expect( panel.said.textContent ).toBe( 'Evening.' );
+		expect( panel.said.dataset.from ).toBe( 'npc' );
+		panel.addMessage( { from: 'player', text: 'Where is the quay?' } );
+		expect( panel.said.textContent ).toBe( 'YouWhere is the quay?' );
+		const reply = panel.beginMessage( { from: 'npc', name: 'Ada' } );
+		reply.update( 'Down the' );
+		expect( panel.said.textContent ).toBe( 'Down the' );
+		reply.discard();
+		expect( panel.said.textContent ).toBe( 'YouWhere is the quay?' );
+		// What was said before stays in the transcript only.
+		panel.recall( [ { from: 'npc', name: 'Ada', text: 'Last week.' } ] );
+		expect( panel.said.textContent ).toBe( 'YouWhere is the quay?' );
+
+	} );
+
 	it( 'streams a line as it arrives, finishes or discards it, and ignores calls on a line that is done', () => {
 
-		const log = screen.getByRole( 'log' );
+		const log = panel.transcript;
 		const reply = panel.beginMessage( { from: 'npc', name: 'Ada' } );
 		reply.update( 'Down the ' );
 		expect( log.getAttribute( 'aria-busy' ) ).toBe( 'true' );
@@ -116,17 +175,66 @@ describe( 'ChatPanel', () => {
 
 	} );
 
+	it( 'turns the thinking orb while a reply is awaited, arrives or is voiced, in the talk window when it is open, and rests it after', () => {
+
+		const orb = panel.orb.element;
+		expect( orb.hidden ).toBe( true );
+		panel.setSending( true );
+		expect( panel.orb.state ).toBe( 'thinking' );
+		expect( orb.hidden ).toBe( false );
+		expect( panel.orbSlot.contains( orb ) ).toBe( true );
+		expect( ThinkingOrb.turning ).toBe( true );
+		panel.setTalkOpen( true );
+		expect( panel.activityRow.contains( orb ) ).toBe( true );
+		expect( panel.activityRow.hidden ).toBe( false );
+		expect( panel.activityRow.textContent ).toBe( 'Thinking' );
+		const reply = panel.beginMessage( { from: 'npc', name: 'Ada' } );
+		expect( panel.orb.state ).toBe( 'streaming' );
+		expect( panel.activityRow.textContent ).toBe( 'Replying' );
+		reply.finish();
+		panel.setSending( false );
+		expect( panel.orb.state ).toBe( 'idle' );
+		expect( panel.activityRow.hidden ).toBe( true );
+		panel.setSpeaking( reply.line, 'playing' );
+		expect( panel.orb.state ).toBe( 'speaking' );
+		panel.setSpeaking( reply.line, 'idle' );
+		expect( panel.orb.state ).toBe( 'idle' );
+		expect( ThinkingOrb.turning ).toBe( false );
+		// A closed conversation rests it whatever was pending.
+		panel.setSending( true );
+		panel.show( null );
+		expect( panel.orb.state ).toBe( 'idle' );
+
+	} );
+
 	it( 'gives the composer its focus back after a pending line unless the player moved on', () => {
 
+		panel.setTalkOpen( true );
 		const input = screen.getByRole( 'textbox', { name: 'say something' } );
+		expect( document.activeElement ).toBe( input );
 		panel.setSending( true );
-		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'End conversation' } ) );
+		expect( document.activeElement ).toBe( panel.plate );
 		panel.setSending( false );
 		expect( document.activeElement ).toBe( input );
 		panel.setSending( true );
-		screen.getByRole( 'button', { name: 'close' } ).focus();
+		screen.getByRole( 'button', { name: 'Close the talk window' } ).focus();
 		panel.setSending( false );
-		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'close' } ) );
+		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'Close the talk window' } ) );
+
+	} );
+
+	it( 'shows the NPC voices setting on the composer and reports the flip, or leaves the toggle out', async () => {
+
+		panel.setTalkOpen( true );
+		expect( screen.queryByRole( 'button', { name: 'NPC voices' } ) ).toBeNull();
+		panel.setVoice( true );
+		const toggle = screen.getByRole( 'button', { name: 'NPC voices', pressed: true } );
+		await userEvent.setup().click( toggle );
+		expect( onVoice ).toHaveBeenCalledExactlyOnceWith( false );
+		panel.setVoice( false );
+		expect( screen.getByRole( 'button', { name: 'NPC voices', pressed: false } ).title ).toBe( layout.voice.off );
+		panel.setVoice( null );
+		expect( screen.queryByRole( 'button', { name: 'NPC voices' } ) ).toBeNull();
 
 	} );
 
@@ -155,6 +263,14 @@ describe( 'ChatPanel', () => {
 
 	} );
 
+	it( 'keeps the newest two hundred lines', () => {
+
+		for ( let index = 0; index < 205; index ++ ) panel.addMessage( { from: index % 2 ? 'player' : 'npc', name: 'Ada', text: `line ${index}` } );
+		expect( panel.transcript.children ).toHaveLength( 200 );
+		expect( panel.transcript.firstElementChild.lastElementChild.textContent ).toBe( 'line 5' );
+
+	} );
+
 	it( 'returns each shown line and marks how it is voiced only while it is shown', () => {
 
 		const line = panel.addMessage( { from: 'npc', name: 'Ada', text: 'Down the steps.' } );
@@ -173,10 +289,10 @@ describe( 'ChatPanel', () => {
 
 	} );
 
-	it( 'offers asking along apart from story replies, folded while replies are offered, and reports only their ids', async () => {
+	it( 'offers asking along apart from story replies, folded while replies are offered, with the same actions in the talk window\'s tray, reporting only their ids', async () => {
 
 		const user = userEvent.setup();
-		panel.setActions( [ { id: 'follow', label: 'Bring Ada along' }, { id: 'lead:p9', label: 'Go with Ada to the Blue Lantern' } ] );
+		panel.setActions( [ { id: 'follow', label: 'Bring Ada along' }, { id: 'lead:p9', label: 'Go with Ada to the Blue Lantern', icon: 'lead' } ] );
 		expect( panel.asks.open ).toBe( true );
 		panel.setChoices( CHOICES );
 		expect( panel.asks.open ).toBe( false );
@@ -185,32 +301,52 @@ describe( 'ChatPanel', () => {
 		panel.setChoices( CHOICES );
 		expect( panel.asks.open ).toBe( true );
 		const actions = within( screen.getByRole( 'group', { name: 'Ask Ada Vance along' } ) );
-		expect( actions.getAllByRole( 'button' ).map( ( button ) => button.dataset.action ) ).toEqual( [ 'follow', 'lead:p9' ] );
+		expect( actions.getAllByRole( 'button' ).map( ( button ) => [ button.dataset.action, button.textContent ] ) )
+			.toEqual( [ [ 'follow', 'Bring Ada along' ], [ 'lead:p9', 'Go with Ada to the Blue Lantern' ] ] );
 		await user.click( actions.getByRole( 'button', { name: 'Go with Ada to the Blue Lantern' } ) );
 		expect( onAction ).toHaveBeenCalledExactlyOnceWith( 'lead:p9' );
+
+		// The tray beside the talk window holds the same actions, and Escape folds it before it ends anything.
+		panel.setTalkOpen( true );
+		const tab = screen.getByRole( 'button', { name: 'Actions', expanded: false } );
+		await user.click( tab );
+		expect( tab.getAttribute( 'aria-expanded' ) ).toBe( 'true' );
+		const tray = within( screen.getByRole( 'group', { name: 'Actions' } ) );
+		expect( document.activeElement ).toBe( tray.getByRole( 'button', { name: 'Bring Ada along' } ) );
+		await user.click( tray.getByRole( 'button', { name: 'Bring Ada along' } ) );
+		expect( onAction.mock.calls.at( - 1 ) ).toEqual( [ 'follow' ] );
+		await user.keyboard( '{Escape}' );
+		expect( screen.queryByRole( 'group', { name: 'Actions' } ) ).toBeNull();
+		expect( document.activeElement ).toBe( tab );
+		expect( onClose ).not.toHaveBeenCalled();
 		expect( onChoice ).not.toHaveBeenCalled();
+
+		panel.setTalkOpen( false );
 		panel.setChoices( [] );
 		actions.getByRole( 'button', { name: 'Bring Ada along' } ).focus();
 		panel.setActions( [] );
 		expect( screen.queryByRole( 'group', { name: 'Ask Ada Vance along' } ) ).toBeNull();
-		expect( document.activeElement ).toBe( screen.getByRole( 'textbox', { name: 'say something' } ) );
+		expect( document.activeElement ).toBe( talk() );
 
 	} );
 
 	it( 'withdraws free chat with a note saying why, and offers it again in the next conversation', () => {
 
 		panel.setFreeChat( false, 'This passer-by has no time to chat.' );
-		expect( screen.queryByRole( 'textbox' ) ).toBeNull();
+		expect( screen.queryByRole( 'button', { name: /Talk with/ } ) ).toBeNull();
 		expect( screen.getByText( 'This passer-by has no time to chat.' ) ).toBeTruthy();
 		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'End conversation' } ) );
+		panel.setTalkOpen( true );
+		expect( panel.talkOpen ).toBe( false );
 		panel.show( ADA );
 		expect( screen.queryByText( 'This passer-by has no time to chat.' ) ).toBeNull();
-		expect( document.activeElement ).toBe( screen.getByRole( 'textbox', { name: 'say something' } ) );
+		expect( document.activeElement ).toBe( talk() );
 
 	} );
 
 	it( 'reads a turn taller than the view from its first line, and follows the end once the player reads past it', () => {
 
+		panel.setTalkOpen( true );
 		const box = panel.transcript;
 		const size = ( scrollHeight ) => Object.defineProperties( box, {
 			scrollHeight: { value: scrollHeight, configurable: true }, clientHeight: { value: 100, configurable: true }
@@ -253,6 +389,7 @@ describe( 'ChatPanel', () => {
 		// Only the reply that commits is marked as moving the story on.
 		expect( replies.getByRole( 'button', { name: 'I will get the report.', description: 'Moves the story on' } ) ).toBeTruthy();
 		expect( replies.getAllByText( 'Moves the story on' ) ).toHaveLength( 1 );
+		expect( first.firstElementChild.textContent ).toBe( 'Who needs the report?' );
 		expect( document.activeElement ).toBe( first );
 		const user = userEvent.setup();
 		await user.keyboard( '{Enter}' );
@@ -262,10 +399,14 @@ describe( 'ChatPanel', () => {
 		// A number key picks that reply, except while the text box is in use.
 		await user.keyboard( '2' );
 		expect( onChoice.mock.calls.at( - 1 ) ).toEqual( [ CHOICES[ 1 ].value ] );
+		panel.setTalkOpen( true );
 		await user.click( screen.getByRole( 'textbox' ) );
 		await user.keyboard( '1' );
 		expect( onChoice ).toHaveBeenCalledTimes( 3 );
 		expect( screen.getByRole( 'textbox' ).value ).toBe( '1' );
+		// A new topic's replies leave the player typing.
+		panel.setChoices( CHOICES, true );
+		expect( document.activeElement ).toBe( screen.getByRole( 'textbox' ) );
 		expect( onSend ).not.toHaveBeenCalled();
 		await user.click( screen.getByRole( 'button', { name: 'Open journal' } ) );
 		expect( onJournal ).toHaveBeenCalledTimes( 1 );
@@ -288,6 +429,7 @@ describe( 'ChatPanel', () => {
 
 	it( 'keeps story replies usable while free chat is pending, then presents a retryable failure without erasing history', async () => {
 
+		panel.setTalkOpen( true );
 		panel.setChoices( CHOICES );
 		panel.addMessage( { from: 'player', text: 'Where did Ada go?' } );
 		panel.setSending( true );
@@ -306,7 +448,7 @@ describe( 'ChatPanel', () => {
 		panel.setSending( false );
 		panel.setStatus( 'The reply could not be loaded. Try again.', { error: true, retry: true } );
 		expect( screen.getByRole( 'textbox' ).disabled ).toBe( false );
-		expect( screen.getByText( 'Where did Ada go?' ) ).toBeTruthy();
+		expect( within( screen.getByRole( 'log' ) ).getByText( 'Where did Ada go?' ) ).toBeTruthy();
 		await user.click( screen.getByRole( 'button', { name: 'Retry reply' } ) );
 		expect( onRetry ).toHaveBeenCalledTimes( 1 );
 		expect( onSend ).not.toHaveBeenCalled();
@@ -320,7 +462,7 @@ describe( 'ChatPanel', () => {
 		const first = { key: 'report', title: 'The missing report', value: { questId: 'report', stepId: 'meet' } };
 		const second = { key: 'cups', title: 'The cups', value: { questId: 'cups', stepId: 'ask' } };
 		panel.setTopics( [ first, second ], first.key );
-		expect( screen.getByRole( 'button', { name: first.title } ).getAttribute( 'aria-pressed' ) ).toBe( 'true' );
+		expect( within( screen.getByRole( 'group', { name: 'Topics' } ) ).getByRole( 'button', { name: first.title } ).getAttribute( 'aria-pressed' ) ).toBe( 'true' );
 		await userEvent.setup().click( screen.getByRole( 'button', { name: second.title } ) );
 		expect( onTopic ).toHaveBeenCalledExactlyOnceWith( second.value );
 		expect( onChoice ).not.toHaveBeenCalled();
@@ -330,18 +472,18 @@ describe( 'ChatPanel', () => {
 
 	} );
 
-	it( 'contains keyboard focus and reports Escape, the header close, and End conversation once without sending or choosing', async () => {
+	it( 'contains keyboard focus and reports Escape and End conversation once without sending or choosing', async () => {
 
 		panel.setStory( STORY );
 		panel.setChoices( CHOICES, true );
 		const user = userEvent.setup();
-		const close = screen.getByRole( 'button', { name: 'close' } );
+		const journal = screen.getByRole( 'button', { name: 'Open journal' } );
 		const end = screen.getByRole( 'button', { name: 'End conversation' } );
-		end.focus();
+		talk().focus();
 		await user.tab();
-		expect( document.activeElement ).toBe( close );
+		expect( document.activeElement ).toBe( journal );
 		await user.tab( { shift: true } );
-		expect( document.activeElement ).toBe( end );
+		expect( document.activeElement ).toBe( talk() );
 		panel.setChoices( CHOICES, true );
 		const bubbled = vi.fn();
 		document.addEventListener( 'keydown', bubbled );
@@ -349,9 +491,8 @@ describe( 'ChatPanel', () => {
 		document.removeEventListener( 'keydown', bubbled );
 		expect( bubbled ).not.toHaveBeenCalled();
 		expect( onClose ).toHaveBeenCalledTimes( 1 );
-		await user.click( close );
 		await user.click( end );
-		expect( onClose ).toHaveBeenCalledTimes( 3 );
+		expect( onClose ).toHaveBeenCalledTimes( 2 );
 		expect( onChoice ).not.toHaveBeenCalled();
 		expect( onSend ).not.toHaveBeenCalled();
 		panel.show( null );
@@ -361,16 +502,17 @@ describe( 'ChatPanel', () => {
 
 	it( 'keeps static transcript clicks inside the dialog for Escape and keyboard navigation', async () => {
 
+		panel.setTalkOpen( true );
 		panel.addMessage( { from: 'npc', text: 'Read this reply before deciding.' } );
-		const reply = screen.getByText( 'Read this reply before deciding.' );
+		const reply = within( panel.transcript ).getByText( 'Read this reply before deciding.' );
 		const user = userEvent.setup();
 		await user.click( reply );
 		expect( document.activeElement ).toBe( panel.element );
 		await user.tab();
-		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'close' } ) );
+		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'End conversation' } ) );
 		await user.click( reply );
 		await user.tab( { shift: true } );
-		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'End conversation' } ) );
+		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'send' } ) );
 		await user.click( reply );
 		await user.keyboard( '{Escape}' );
 		expect( onClose ).toHaveBeenCalledOnce();
@@ -383,21 +525,23 @@ describe( 'ChatPanel', () => {
 		panel.setChoices( CHOICES );
 		panel.setTopics( [ { key: 'report', title: 'The report', value: 'report' } ] );
 		panel.setActions( [ { id: 'follow', label: 'Bring Ada along' } ] );
+		panel.setTalkOpen( true );
 		panel.addMessage( { from: 'npc', text: 'The old conversation.' } );
 		panel.setStatus( 'Old failure', { error: true, retry: true } );
 		panel.setSending( true );
 		panel.input.value = 'old draft';
 		panel.show( { name: 'Kip Thorn', role: 'vendor' } );
 		expect( screen.getByRole( 'dialog', { name: 'Kip Thorn' } ) ).toBeTruthy();
-		expect( screen.getByText( 'vendor' ) ).toBeTruthy();
+		expect( panel.role.textContent ).toBe( 'vendor' );
+		expect( panel.talkOpen ).toBe( false );
 		expect( screen.queryByText( 'The old conversation.' ) ).toBeNull();
 		expect( screen.queryByRole( 'group', { name: 'Story replies' } ) ).toBeNull();
 		expect( screen.queryByRole( 'group', { name: 'Ask Kip Thorn along' } ) ).toBeNull();
 		expect( screen.queryByRole( 'button', { name: 'Retry reply' } ) ).toBeNull();
 		expect( screen.queryByRole( 'button', { name: 'The report' } ) ).toBeNull();
-		expect( screen.getByRole( 'textbox' ).value ).toBe( '' );
-		expect( screen.getByRole( 'textbox' ).disabled ).toBe( false );
-		expect( document.activeElement ).toBe( screen.getByRole( 'textbox' ) );
+		expect( panel.input.value ).toBe( '' );
+		expect( panel.input.disabled ).toBe( false );
+		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'Talk with Kip Thorn' } ) );
 
 	} );
 

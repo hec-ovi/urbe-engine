@@ -16,7 +16,20 @@
     "input": "say something",
     "send": "send"
   },
+  "talk": {
+    "open": "Talk with {name}",
+    "key": "T",
+    "window": "Free talk with {name}",
+    "close": "Close the talk window",
+    "move": "Move the talk window: drag it, or use the arrow keys",
+    "actions": "Actions",
+    "back": "Back to the talk",
+    "empty": "Nothing to ask {name} right now."
+  },
+  "voice": { "label": "NPC voices", "on": "Voices on: click to mute", "off": "Voices muted: click to hear them" },
+  "activity": { "thinking": "Thinking", "streaming": "Replying", "speaking": "Speaking" },
   "tags": { "story": "story", "talk": "free talk", "earlier": "earlier" },
   "retry": "Retry reply",
-  "leave": "End conversation"
+  "leave": "End conversation",
+  "leaveKey": "Esc"
 }

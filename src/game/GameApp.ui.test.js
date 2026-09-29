@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen } from '@testing-library/dom';
+import { fireEvent, screen, within } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
 import { stubCanvas } from '../ui/test-helpers/canvas.js';
 import { GameApp } from './GameApp.js';
@@ -79,7 +79,7 @@ describe( 'playable game navigation', () => {
 		const input = screen.getByRole( 'textbox', { name: 'say something' } );
 		await user.type( input, 'where is the quay?{Enter}' );
 
-		await vi.waitFor( () => expect( screen.getByText( 'Down the steps.' ) ).toBeTruthy() );
+		await vi.waitFor( () => expect( within( app.view.dialog.transcript ).getByText( 'Down the steps.' ) ).toBeTruthy() );
 		expect( app.talk.stream ).toHaveBeenCalledExactlyOnceWith( app.interactor.conversation, 'where is the quay?', 725, [], { signal: expect.any( AbortSignal ) } );
 		expect( app.animations.playerDialogueTurn ).toHaveBeenCalledOnce();
 		expect( app.animations.npcDialogueTurn ).toHaveBeenCalledOnce();
@@ -92,7 +92,7 @@ describe( 'playable game navigation', () => {
 		expect( app.animations.completeDialogueTurn ).toHaveBeenCalledOnce();
 
 		await user.type( input, 'third line{Enter}' );
-		await vi.waitFor( () => expect( screen.getAllByText( 'Down the steps.' ) ).toHaveLength( 2 ) );
+		await vi.waitFor( () => expect( within( app.view.dialog.transcript ).getAllByText( 'Down the steps.' ) ).toHaveLength( 2 ) );
 		expect( app.talk.stream ).toHaveBeenCalledTimes( 3 );
 		expect( input.disabled ).toBe( false );
 
@@ -174,6 +174,7 @@ function dialogueApp() {
 		close: vi.fn( () => { app.interactor.conversation = null; } )
 	};
 	app.view.dialog.show( { name: 'Ada Vance' } );
+	app.view.dialog.setTalkOpen( true );
 	vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
 	return app;
 
