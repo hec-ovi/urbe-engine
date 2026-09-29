@@ -272,10 +272,11 @@ function untile( geometry, material ) {
 }
 
 /**
- * Every module the floors of these buildings place, window returns and lifts
- * included: what the interior stream will ever admit once they are
- * registered. A building whose floors cannot be read answers null, the whole
- * catalog, and leaves the error to the stream that reads them.
+ * Every module the floors of these buildings place, window returns, lifts and
+ * the leaves and fixed parts of apartment entrances included: what the
+ * interior stream will ever admit once they are registered. A building whose
+ * floors cannot be read answers null, the whole catalog, and leaves the error
+ * to the stream that reads them.
  *
  * @param buildings the building sources by parcel id, as the interior stream registers them
  */
@@ -291,6 +292,12 @@ export function placedModules( buildings ) {
 			for ( const floor of buildingFloors( parcelId, building.interior ) ) {
 
 				for ( const placement of floorPlacements( floor ) ) if ( placement.module ) ids.add( placement.module );
+				// Entrances are published beside the layout, per floor, never as placements.
+				for ( const entrance of floor.apartmentEntrances ) {
+
+					for ( const part of [ ...( entrance.leaves ?? [] ), ...( entrance.fixed ?? [] ) ] ) if ( part?.module ) ids.add( part.module );
+
+				}
 
 			}
 

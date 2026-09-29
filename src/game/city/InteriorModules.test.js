@@ -24,6 +24,19 @@ describe( 'InteriorModules', () => {
 
 	} );
 
+	it( 'names the leaves and fixed parts of apartment entrances, which floors publish beside their layout and never place', () => {
+
+		const building = furnished( [ { module: 'wall-a' } ] );
+		building.interior.building.floors[ 0 ].apartmentEntrances = [ {
+			id: 'e1',
+			leaves: [ { module: 'leaf-a' }, { module: 'leaf-b' } ],
+			fixed: [ { module: 'track-a' }, { module: 'digit-1' } ]
+		}, { id: 'e2', leaves: [ { module: 'leaf-a' }, null ] } ];
+
+		expect( [ ...placedModules( new Map( [ [ 'p1', building ] ] ) ) ].sort() ).toEqual( [ 'digit-1', 'leaf-a', 'leaf-b', 'track-a', 'wall-a' ] );
+
+	} );
+
 	it( 'reads only the modules it is asked for, or the whole catalog', async () => {
 
 		const catalog = { modules: [ 'a', 'b', 'c' ].map( ( id ) => ( { id, file: `${id}.glb`, size: [ 1, 1, 1 ], origin: [ 0, 0, 0 ], materialSlots: [] } ) ) };
