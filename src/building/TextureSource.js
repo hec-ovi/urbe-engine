@@ -24,6 +24,7 @@ export class TextureSource {
 	detect( renderer ) {
 
 		this.ktx2.detectSupport( renderer );
+		if ( renderer?.backend?.isWebGLBackend === true ) dropEmulatedFormats( this.ktx2.workerConfig );
 		this.compressed = true;
 		return this;
 
@@ -63,7 +64,15 @@ export class TextureSource {
 
 		};
 
-		if ( this.compressed && ktx2 ) this.ktx2.load( ktx2, adopt, undefined, master );
+		const compressed = ( loaded ) => {
+
+			if ( ! unalignedBlocks( loaded ) ) return adopt( loaded );
+			loaded.dispose();
+			master( new Error( `${ktx2} is not whole 4x4 blocks` ) );
+
+		};
+
+		if ( this.compressed && ktx2 ) this.ktx2.load( ktx2, compressed, undefined, master );
 		else master( new Error( 'map publishes no image master' ) );
 
 		return texture;
@@ -75,5 +84,34 @@ export class TextureSource {
 		this.ktx2.dispose();
 
 	}
+
+}
+
+/**
+ * WebGPURenderer asks its backend what compressed formats there are, and on
+ * WebGL2 that is the extension list. Mesa's AMD and Intel drivers list ETC and
+ * ASTC on desktop Linux and decompress them in the driver, on the main thread,
+ * at every upload. three drops those for its WebGLRenderer but not for this
+ * path; where the BC formats are there too, the maps transcode to those.
+ */
+function dropEmulatedFormats( config ) {
+
+	const navigator = globalThis.navigator;
+	if ( ! config || ! /Linux/.test( navigator?.platform ?? '' ) || /Android/.test( navigator?.userAgent ?? '' ) ) return;
+	if ( ! ( config.astcSupported && config.etc2Supported && config.bptcSupported && config.dxtSupported ) ) return;
+	config.astcSupported = config.etc1Supported = config.etc2Supported = false;
+
+}
+
+/**
+ * A block-compressed texture's first level must be whole 4x4 blocks: WebGPU
+ * refuses any other size, and the surface would then draw with no map. Such
+ * a map is unsupported here, so its PNG master draws instead.
+ */
+function unalignedBlocks( texture ) {
+
+	if ( ! texture.isCompressedTexture || texture.format === THREE.RGBAFormat ) return false;
+	const { width, height } = texture.image ?? {};
+	return width % 4 !== 0 || height % 4 !== 0;
 
 }
