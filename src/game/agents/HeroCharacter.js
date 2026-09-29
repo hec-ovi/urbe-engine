@@ -283,8 +283,8 @@ export class HeroCharacter {
 	 * nearest first: up to CLOSE_RIGS of them wear a rig of their own, built
 	 * while their crowd body still shows and following that body's place, clip
 	 * and frame, so neither swap shows a pose change. Anybody else close gives
-	 * theirs back. The person being talked to and a fallen one are not close:
-	 * their own rigs show them.
+	 * theirs back. The person being talked to counts among them, in the rig
+	 * the talk shows; a fallen one is not close, their own rig shows them.
 	 *
 	 * @param people crowd members, their `hero` left to this
 	 */
