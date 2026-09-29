@@ -73,15 +73,17 @@ export function roomFillValue( mesh, builder ) {
 	const instanced = mesh.isInstancedMesh || mesh.geometry?.isInstancedBufferGeometry;
 	const drawn = mesh.isBatchedMesh && builder.getDrawIndex() !== null ? drawIndex : instanced ? instanceIndex : int( 0 );
 	const id = mesh.isBatchedMesh ? texel( mesh._indirectTexture, drawn ).x : drawn;
-	return varying( texel( new RoomFillTextureNode( channel.texture ), id ) );
+	// The node carries a coordinate of its own from the start: its loads set theirs,
+	// and one it was built without would read the mesh's uv, which a garment
+	// shell or a car part has none of.
+	return varying( texel( new RoomFillTextureNode( channel.texture, ivec2( 0, 0 ) ), id ) );
 
 }
 
 /** One texel per id, in the square layout a batch keeps its per-copy data in. */
 function texel( texture, id ) {
 
-	// The size is the texture's alone: a load with no coordinate of its own
-	// would read the mesh's uv, which a garment shell or a car part has none of.
+	// The size is the texture's alone, read through a load with a coordinate of its own.
 	const size = int( textureSize( textureLoad( texture, ivec2( 0, 0 ) ), 0 ).x );
 	const index = int( id );
 
