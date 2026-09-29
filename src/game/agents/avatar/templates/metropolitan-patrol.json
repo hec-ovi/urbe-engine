@@ -1,0 +1,27 @@
+{
+	"name": "Metropolitan patrol",
+	"crowd": 0.04,
+	"outfit": {
+		"top": "police-jacket",
+		"pants": "pants-patrol",
+		"footwear": "boots-patrol",
+		"fabric": "tech",
+		"colors": {
+			"top": {
+				"primary": "#1b2839",
+				"secondary": "#3a4c61",
+				"accent": "#9ecacc"
+			},
+			"pants": {
+				"primary": "#242f40",
+				"secondary": "#394658",
+				"accent": "#829caa"
+			},
+			"footwear": {
+				"primary": "#171d24",
+				"secondary": "#344152",
+				"accent": "#839eaa"
+			}
+		}
+	}
+}

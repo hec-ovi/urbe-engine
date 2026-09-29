@@ -1,0 +1,27 @@
+{
+	"name": "Night runner",
+	"crowd": 0.03,
+	"outfit": {
+		"top": "tech-top",
+		"pants": "pants-tech",
+		"footwear": "boots-patrol",
+		"fabric": "tech",
+		"colors": {
+			"top": {
+				"primary": "#202c3b",
+				"secondary": "#536377",
+				"accent": "#4de1dc"
+			},
+			"pants": {
+				"primary": "#202937",
+				"secondary": "#465768",
+				"accent": "#4de1dc"
+			},
+			"footwear": {
+				"primary": "#151c25",
+				"secondary": "#374553",
+				"accent": "#4de1dc"
+			}
+		}
+	}
+}
