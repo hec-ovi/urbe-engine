@@ -1043,6 +1043,21 @@ export class GameApp {
 	 * animation loop calls this with real elapsed time; anything that needs to
 	 * drive the game without a display can call it directly.
 	 */
+	/**
+	 * One step of the player's body and view: physics, the crowd and traffic
+	 * pushing it out of anyone it walked into, the lifts carrying it, and then
+	 * the camera placed where all that left it, so no correction shows a frame late
+	 * and a rider's eye stays at one height in the moving car.
+	 */
+	stepPlayer( delta ) {
+
+		this.physics.step( delta );
+		this.body.push( _push.copy( this.crowd.pushback( this.body.feet, BODY_RADIUS ) ).add( this.traffic.pushback( this.body.feet, BODY_RADIUS ) ) );
+		this.elevators.update( delta, this.body );
+		this.controller.update( delta );
+
+	}
+
 	tick( delta ) {
 
 		// Paused, or with a panel open, the world holds still: no time passes for it.
@@ -1064,16 +1079,7 @@ export class GameApp {
 			? this.transitGameplay.update( { daySeconds: this.clock.daySeconds } )
 			: null;
 
-		this.hitches.time( 'physics/player', () => {
-
-			this.physics.step( delta );
-
-			// Out of anyone the crowd walked into last frame before the camera is
-			// placed, so the correction never shows up as a jolt a frame later.
-			this.body.push( _push.copy( this.crowd.pushback( this.body.feet, BODY_RADIUS ) ).add( this.traffic.pushback( this.body.feet, BODY_RADIUS ) ) );
-			this.controller.update( delta );
-
-		} );
+		this.hitches.time( 'physics/player', () => this.stepPlayer( delta ) );
 		for ( const impact of this.impactWorld.drain() ) this.ragdoll( impact );
 
 		const feet = this.body.feet;
@@ -1123,7 +1129,6 @@ export class GameApp {
 			vehicles: this.traffic.cars
 		} );
 		this.transit.update( feet, this.clock.daySeconds, delta, this.spawnVisibility );
-		this.elevators.update( delta, this.body );
 		this.venues.update( delta, feet, this.clock.timeMin, this.sim, this.lights );
 		this.hitches.time( 'relight', () => this.#relight( feet, delta ) );
 

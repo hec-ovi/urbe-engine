@@ -140,3 +140,49 @@ describe( 'continuity places', () => {
 	} );
 
 } );
+
+describe( 'a rider in a lift', () => {
+
+	it( 'sees the car from one height while it travels, because the cab carries the body before the camera is placed', async () => {
+
+		const [ { Physics }, { PlayerBody }, { PlayerController }, { Elevators } ] = await Promise.all( [
+			import( './physics/Physics.js' ), import( './physics/PlayerBody.js' ), import( './player/PlayerController.js' ), import( './city/Elevators.js' )
+		] );
+		const physics = await Physics.create();
+		const material = new THREE.MeshBasicMaterial();
+		const elevators = new Elevators( { build: () => material, variant: () => material } );
+		const tower = Array.from( { length: 12 }, ( _, floor ) => ( { floor, elevation: floor * 4.5, height: 4.5,
+			core: { elevators: [ { id: 'elev-0', rect: { x: 10, z: 20, w: 2.5, d: 2.5 }, doorEdge: 0 } ] } } ) );
+		const [ shaft ] = elevators.add( 'p1', tower, new THREE.Group() );
+		const body = new PlayerBody( physics, new THREE.Vector3( 11.25, 0.05, 21.25 ) );
+		const camera = new THREE.PerspectiveCamera();
+		const input = { locked: true, zooming: false, crouching: false, running: false, axis: () => ( { x: 0, z: 0 } ), consume: () => false, drainLook: () => ( { dx: 0, dy: 0 } ) };
+		const controller = new PlayerController( { body, camera, input } );
+		const app = Object.create( GameApp.prototype );
+		Object.assign( app, { physics, body, elevators, controller, crowd: { pushback: () => new THREE.Vector3() }, traffic: { pushback: () => new THREE.Vector3() } } );
+
+		try {
+
+			shaft.select( 100 );
+			shaft.press( { inside: true } );
+			const heights = [];
+			// Frames as uneven as a busy machine's, up to the game's cap.
+			for ( let frame = 0; frame < 900 && ( ! heights.length || shaft.moving ); frame ++ ) {
+
+				app.stepPlayer( [ 1 / 60, 0.05, 1 / 30, 0.012 ][ frame % 4 ] );
+				if ( shaft.moving && body.carried ) heights.push( camera.position.y - shaft.cab.position.y );
+
+			}
+			expect( heights.length ).toBeGreaterThan( 100 );
+			expect( Math.max( ...heights ) - Math.min( ...heights ) ).toBeLessThan( 1e-6 );
+			expect( shaft.at ).toBeCloseTo( 49.5, 6 );
+
+		} finally {
+
+			physics.world.free();
+
+		}
+
+	} );
+
+} );

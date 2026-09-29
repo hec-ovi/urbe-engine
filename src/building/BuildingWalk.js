@@ -147,8 +147,9 @@ export class BuildingWalk {
         if ( this.input.consume( 'Escape' ) ) this.input.exitLock();
         this.physics.step( delta );
         this.controller.frozen = ! this.input.locked;
-        this.controller.update( delta );
+        // The cab carries its rider before the camera is placed, as in the game.
         this.elevators.update( delta, this.body );
+        this.controller.update( delta );
         const prompt = this.interactor.update( delta );
         this.app.view.setInteraction( prompt );
         if ( this.input.locked && this.input.consume( 'KeyE' ) ) this.interactor.activate( { timeMin: 0 } );
