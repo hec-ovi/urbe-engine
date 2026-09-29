@@ -213,7 +213,10 @@ export class CharacterPoser {
 			WORN.set( mesh, dressed );
 			mesh.name = `sample-${id}`;
 			mesh.bind( body.skeleton, body.bindMatrix );
+			// Cast and received shadows are part of a program: a sample wears a garment's own.
 			mesh.frustumCulled = false;
+			mesh.castShadow = true;
+			mesh.receiveShadow = true;
 			body.parent.add( mesh );
 			samples.push( mesh );
 

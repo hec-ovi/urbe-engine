@@ -572,6 +572,8 @@ export class GameApp {
 			lighting: actorLighting
 		} );
 		this.scene.add( this.hero.group );
+		// The people standing near the player are the crowd's, and the probe reflects the city without them.
+		this.probe?.exclude( this.hero.group );
 		this.animations = new GameplayAnimationDirector( {
 			catalog: assets.animationCatalog,
 			animation: assets.animation,
