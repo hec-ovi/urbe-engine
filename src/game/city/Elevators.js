@@ -12,6 +12,9 @@ const DOOR_REACH = 0.5;
 
 /** And how long its doors take to run open or shut. */
 const DOOR_TIME = 1.4;
+/** How hard the cab speeds up and slows down, and the creep it levels at. */
+const ACCELERATION = 1.5;
+const LEVELLING = 0.15;
 /** The call plate sits proud of the real wall lining, at hand height. */
 const PANEL_OUT = 0.15;
 const PANEL_HEIGHT = 1.1;
@@ -314,6 +317,8 @@ class Shaft {
 		this.floorReady = false;
 		this.rider = null;
 		this.riderOffset = new THREE.Vector3();
+		/** The signed speed the cab is travelling at. */
+		this.velocity = 0;
 
 	}
 
@@ -692,10 +697,16 @@ class Shaft {
 
 		}
 
-		const step = Math.sign( this.target - this.at ) * this.speed * delta;
-		const dy = Math.abs( step ) >= Math.abs( this.target - this.at ) ? this.target - this.at : step;
+		// Speeding up from rest, travelling at the shaft's speed, and slowing so
+		// it levels at the floor rather than stopping dead.
+		const remaining = Math.abs( this.target - this.at );
+		const direction = Math.sign( this.target - this.at );
+		const speed = Math.max( LEVELLING, Math.min( this.speed, Math.abs( this.velocity ) + ACCELERATION * delta, Math.sqrt( 2 * ACCELERATION * remaining ) ) );
+		// Within a millimetre it is level: it arrives on the floor exactly.
+		const arrived = speed * delta >= remaining - 1e-3;
 
-		this.at += dy;
+		this.velocity = arrived ? 0 : direction * speed;
+		this.at = arrived ? this.target : this.at + direction * speed * delta;
 		this.cab.position.y = this.at;
 		this.updateLighting();
 
