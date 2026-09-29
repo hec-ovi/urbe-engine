@@ -110,7 +110,7 @@ export function* fitOutfit( geometry, bones, outfit ) {
 		if ( ! byGarment[ index ].length ) continue;
 		const descriptor = fitted[ index ];
 		const underlayer = index === topIndex && ! descriptor.tucked && pantsIndex >= 0 ? fitted[ pantsIndex ] : null;
-		const shell = createShell( geometry, descriptor, byGarment[ index ], vertices, welded, seamEdges, underlayer );
+		const shell = yield* createShell( geometry, descriptor, byGarment[ index ], vertices, welded, seamEdges, underlayer );
 		garments.push( { id: descriptor.id, slot: descriptor.category, geometry: shell } );
 
 	}
@@ -253,7 +253,7 @@ function bodyGroups( groups, assignments ) {
 
 }
 
-function createShell( body, descriptor, faces, contexts, welded, seamEdges, underlayer ) {
+function* createShell( body, descriptor, faces, contexts, welded, seamEdges, underlayer ) {
 
 	const sourcePosition = body.attributes.position;
 	const sourceIndex = body.attributes.skinIndex;
@@ -384,7 +384,14 @@ function createShell( body, descriptor, faces, contexts, welded, seamEdges, unde
 
 	}
 	alignBoundaryRings( edgeMap, welded, contexts, seamEdges, boundaryPlanes, descriptor );
-	for ( let index = 0; index < faces.length; index += 3 ) indices.push( addVertex( faces[ index ] ), addVertex( faces[ index + 1 ] ), addVertex( faces[ index + 2 ] ) );
+	yield;
+	for ( let index = 0; index < faces.length; index += 3 ) {
+
+		if ( index % ( BATCH * 3 ) === 0 ) yield;
+		indices.push( addVertex( faces[ index ] ), addVertex( faces[ index + 1 ] ), addVertex( faces[ index + 2 ] ) );
+
+	}
+	yield;
 	const collarStart = positions.length / 3;
 	const collarEdges = appendCollar( {
 		descriptor, edgeMap, welded, contexts, sourcePosition, sourceIndex, sourceWeight, outerPosition,
@@ -393,6 +400,7 @@ function createShell( body, descriptor, faces, contexts, welded, seamEdges, unde
 	// The collar's vertices keep their binding source's skin: its ring vertex's
 	// or the neck's (Collars.js).
 	for ( let vertex = collarStart; vertex < positions.length / 3; vertex ++ ) sources.push( - 1 );
+	yield;
 	// A short inward wall closes each cuff, collar, hem and sole against the
 	// body. Welding is only for finding edges, so authored UV seams are no hems.
 	for ( const { a, b, key, count } of edgeMap.values() ) {

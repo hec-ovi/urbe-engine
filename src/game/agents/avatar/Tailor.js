@@ -147,7 +147,7 @@ function* prepareBody( scene ) {
 
 function* tailor( shapes, recipe, key ) {
 
-	const shaped = shapes.shaped( recipe.shape );
+	const shaped = yield* shapes.shaping( recipe.shape );
 	yield;
 	const source = shapes.body.geometry;
 	const body = new BufferGeometry();

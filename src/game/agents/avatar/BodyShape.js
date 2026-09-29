@@ -6,6 +6,7 @@
  */
 import { BufferAttribute, BufferGeometry, Matrix4, Vector3 } from 'three/webgpu';
 import { BODY_SHAPE_KEYS, DEFAULT_SHAPE, FACE_SHAPE_KEYS, SHAPE_LIMITS } from './Recipe.js';
+import { whole } from './Steps.js';
 
 const SURFACE_KEYS = Object.keys( DEFAULT_SHAPE ).filter( ( key ) => key !== 'height' );
 /** Vertices between yields while the bases are measured. */
@@ -60,6 +61,13 @@ export class BodyShapes {
 	 */
 	shaped( shape ) {
 
+		return whole( this.shaping( shape ) );
+
+	}
+
+	/** `shaped` as steps: the body's controls, its normals, the face's eyes and brows. */
+	* shaping( shape ) {
+
 		const amounts = Object.fromEntries( Object.keys( DEFAULT_SHAPE ).map( ( key ) => {
 
 			const [ min, max ] = SHAPE_LIMITS[ key ];
@@ -75,7 +83,9 @@ export class BodyShapes {
 			for ( let i = 0; i < position.length; i ++ ) position[ i ] += delta[ i ] * amount;
 
 		}
+		yield;
 		const normal = SURFACE_KEYS.some( ( key ) => amounts[ key ] ) ? this.#normals( position ) : this.normals.slice();
+		yield;
 		const auxiliaries = new Map( this.auxiliaries.map( ( auxiliary ) => [ auxiliary.name, auxiliaryShape( auxiliary, amounts ) ] ) );
 		return { position, normal, auxiliaries };
 
