@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite';
-import { readFile } from 'node:fs/promises';
-import { extname, join, normalize, sep } from 'node:path';
+import { join, normalize } from 'node:path';
 import { homedir } from 'node:os';
 import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +9,7 @@ import { buildingRoute } from './src/server/buildingRoute.js';
 import { launcherRoute } from './src/server/launcherRoute.js';
 import { createWorldCreation } from './src/creation/index.js';
 import { hitchReportPlugin } from './src/game/debug/hitchReportPlugin.js';
+import { staticMount, TRANSCODER_TYPES } from './src/server/staticMount.js';
 
 // Sibling materials database (../materials/CONTRACT.md), served read-only
 // under /materials/<theme>/... for the building viewer and the game. Path is
@@ -38,62 +38,17 @@ const creation = createWorldCreation( {
 	outDir: join( ROOT, 'out' )
 } );
 
-const TYPES = {
-	'.json': 'application/json',
-	'.png': 'image/png',
-	'.jpg': 'image/jpeg',
-	'.glb': 'model/gltf-binary',
-	'.gltf': 'model/gltf+json',
-	'.bin': 'application/octet-stream'
-};
-
-/** Read-only static mount of one directory under one URL prefix. */
-function mount( name, prefix, dir ) {
-
-	return {
-		name,
-		configureServer( server ) {
-
-			server.middlewares.use( prefix, async ( req, res, next ) => {
-
-				const urlPath = decodeURIComponent( new URL( req.url, 'http://localhost' ).pathname );
-				const filePath = normalize( join( dir, urlPath ) );
-				const type = TYPES[ extname( filePath ) ];
-
-				if ( ! filePath.startsWith( dir + sep ) || ! type ) return next();
-
-				try {
-
-					const data = await readFile( filePath );
-					res.setHeader( 'Content-Type', type );
-					// A material map keeps its file name across releases; never let the browser keep a stale one.
-					res.setHeader( 'Cache-Control', 'no-store' );
-					res.end( data );
-
-				} catch {
-
-					next();
-
-				}
-
-			} );
-
-		}
-	};
-
-}
-
 export default defineConfig( ( { mode } ) => ( {
 	// Tests, like batches, take a quarter of the machine: a full pool pins the package near 100 C.
 	// They publish into a shared store of their own, never engine/out/shared.
 	test: { maxWorkers: TEST_WORKERS, globalSetup: [ 'src/assembly/test-store.js' ] },
 	plugins: [
 		hitchReportPlugin( join( ROOT, 'out', 'diagnostics' ) ),
-		mount( 'serve-materials-bindings', '/materials/bindings', BINDINGS_DIR ),
-		mount( 'serve-materials-themes', '/materials', THEMES_DIR ),
-		mount( 'serve-basis-transcoder', '/basis', BASIS_DIR ),
-		mount( 'serve-atlas-samples', '/atlas', ATLAS_DIR ),
-		mount( 'serve-models', '/models', MODELS_DIR ),
+		staticMount( 'serve-materials-bindings', '/materials/bindings', BINDINGS_DIR ),
+		staticMount( 'serve-materials-themes', '/materials', THEMES_DIR ),
+		staticMount( 'serve-basis-transcoder', '/basis', BASIS_DIR, TRANSCODER_TYPES ),
+		staticMount( 'serve-atlas-samples', '/atlas', ATLAS_DIR ),
+		staticMount( 'serve-models', '/models', MODELS_DIR ),
 		buildingRoute( ROOT, ATLAS_DIR ),
 		launcherRoute( ROOT, creation ),
 		talkRoute( ROOT ),

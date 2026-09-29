@@ -31,9 +31,24 @@ it( 'serves Materials bindings independently of theme maps', async () => {
 		const response = await fetch( `${origin}${route}` );
 		expect( response.status ).toBe( 200 );
 		expect( response.headers.get( 'content-type' ) ).toContain( 'application/json' );
-		expect( response.headers.get( 'cache-control' ) ).toBe( 'no-store' );
+		expect( response.headers.get( 'cache-control' ) ).toBe( 'no-cache' );
+		expect( response.headers.get( 'etag' ) ).toBeTruthy();
 		expect( await response.text() ).toBe( await readFile( new URL( source, import.meta.url ), 'utf8' ) );
 
 	}
+
+} );
+
+it( 'serves three\'s Basis transcoder for compressed maps, and answers 404 for a map that is not on disk', async () => {
+
+	const script = await fetch( `${origin}/basis/basis_transcoder.js` );
+	expect( script.status ).toBe( 200 );
+	expect( script.headers.get( 'content-type' ) ).toBe( 'text/javascript' );
+	const wasm = await fetch( `${origin}/basis/basis_transcoder.wasm` );
+	expect( wasm.status ).toBe( 200 );
+	expect( wasm.headers.get( 'content-type' ) ).toBe( 'application/wasm' );
+	expect( new Uint8Array( await wasm.arrayBuffer() ).subarray( 0, 4 ) ).toEqual( new Uint8Array( [ 0, 0x61, 0x73, 0x6d ] ) );
+
+	expect( ( await fetch( `${origin}/materials/cyberpunk/assets/no-such-map.ktx2` ) ).status ).toBe( 404 );
 
 } );
