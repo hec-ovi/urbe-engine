@@ -47,9 +47,16 @@ export class PoseBuffer {
 	 */
 	sample( row, vertex ) {
 
+		return this.row( row, vertex ).xyz;
+
+	}
+
+	/** The whole vec4 of `vertex` in `row`: a rigid part's matrix rows are one each. */
+	row( row, vertex ) {
+
 		return this.node
-			? this.node.element( row.mul( int( this.vertexCount ) ).add( vertex ) ).xyz
-			: textureLoad( this.texture, ivec2( vertex, row ) ).xyz;
+			? this.node.element( row.mul( int( this.vertexCount ) ).add( vertex ) )
+			: textureLoad( this.texture, ivec2( vertex, row ) );
 
 	}
 

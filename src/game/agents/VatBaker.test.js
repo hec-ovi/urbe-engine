@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { FRAMES, VatBaker } from './VatBaker.js';
+import { CharacterAnimations } from './CharacterAnimations.js';
+import { characterParts, headParts } from './CharacterAssets.js';
+import { EVERYONE, crowdHairstyles } from './HairMesh.js';
+import { SOURCE_PRESENT, animationLibrary, sourceGltf } from './avatar/SourceAssets.test-fixtures.js';
 
 describe( 'VAT surface normals', () => {
 
@@ -150,6 +154,59 @@ describe( 'VAT skinning', () => {
 		// The rig moves: a row late in the bend is not its first.
 		const row = 4 * baked.vertexCount;
 		expect( largestDifference( baked.position.subarray( 0, row ), baked.position.subarray( 20 * row, 21 * row ) ) ).toBeGreaterThan( 0.1 );
+
+	} );
+
+} );
+
+describe.skipIf( ! SOURCE_PRESENT )( 'the crowd\'s rigid head parts', () => {
+
+	it( 'carries the eyebrows and every hairstyle on the baked Head bone where their skin would put them, one matrix a frame', async () => {
+
+		const [ animation, model, mohawk ] = await Promise.all( [
+			animationLibrary(), sourceGltf( 'Regular_Male_FullBody.gltf' ), sourceGltf( 'Hairstyles/Rigged to Head Bone/Male/Hair_Mohawk.gltf' )
+		] );
+		const { body, eyebrows } = characterParts( model.scene );
+		const motions = new CharacterAnimations( model.scene, animation.scene );
+		const clips = [ 'Walk_Loop', 'Idle_Talking_Loop' ].map( ( name ) => motions.clip( THREE.AnimationClip.findByName( animation.animations, name ) ) );
+		const head = await VatBaker.bakeJoint( model.scene, body, 'Head', clips );
+		expect( head.rows ).toBe( clips.length * FRAMES );
+		expect( head.data.length ).toBe( head.rows * 12 );
+		const [ brows ] = await VatBaker.bake( model.scene, [ eyebrows ], clips );
+		const parts = headParts( [ { mesh: eyebrows, style: EVERYONE }, { mesh: mohawk.scene.getObjectByProperty( 'isSkinnedMesh', true ), style: 3 } ] );
+		const local = parts.getAttribute( 'position' );
+		const part = parts.getAttribute( 'hairPart' );
+		expect( [ part.getX( 0 ), part.getY( 0 ) ] ).toEqual( [ EVERYONE, 0 ] );
+		expect( [ part.getX( local.count - 1 ), part.getY( local.count - 1 ) ] ).toEqual( [ 3, 0 ] );
+		// Carried by the baked Head, each brow vertex lands where the brow's own skinning bakes it.
+		const carried = new THREE.Vector3();
+		for ( const row of [ 0, 9, FRAMES + 17 ] ) {
+
+			const matrix = new THREE.Matrix4();
+			const rows = head.data.subarray( row * 12, row * 12 + 12 );
+			matrix.set( ...rows.slice( 0, 4 ), ...rows.slice( 4, 8 ), ...rows.slice( 8, 12 ), 0, 0, 0, 1 );
+			for ( let vertex = 0; vertex < brows.vertexCount; vertex += 29 ) {
+
+				carried.fromBufferAttribute( local, vertex ).applyMatrix4( matrix );
+				const baked = brows.position.subarray( ( row * brows.vertexCount + vertex ) * 4, ( row * brows.vertexCount + vertex ) * 4 + 3 );
+				expect( carried.distanceTo( new THREE.Vector3( ...baked ) ) ).toBeLessThan( 1e-4 );
+
+			}
+
+		}
+
+	} );
+
+	it( 'numbers a gender\'s hairstyles for its merged hair, a teen style as its adult one and anything else as none', () => {
+
+		const male = crowdHairstyles( 'male' );
+		expect( male.paths ).toHaveLength( 10 );
+		expect( male.index( 'Hairstyles/Rigged to Head Bone/Male/Hair_Mohawk.gltf' ) ).toBe( 3 );
+		expect( male.index( 'Hairstyles/Rigged to Head Bone/Male/Hair_Mohawk_Teen.gltf' ) ).toBe( 3 );
+		expect( male.index( 'Hairstyles/Rigged to Head Bone/Male/Hair_Beard.gltf' ) ).toBe( 7 );
+		expect( male.index( '' ) ).toBeLessThan( EVERYONE );
+		expect( male.index( 'Hairstyles/Rigged to Head Bone/Female/Hair_Bob.gltf' ) ).toBeLessThan( EVERYONE );
+		expect( crowdHairstyles( 'female' ).paths ).toHaveLength( 6 );
 
 	} );
 

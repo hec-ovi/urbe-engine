@@ -91,6 +91,51 @@ export class VatBaker {
 
 	}
 
+
+	/**
+	 * One joint's transform in the same frames the bake poses a body in, as the
+	 * top three rows of the matrix that carries the joint's rest space into the
+	 * mesh's: what a part riding only on that joint needs instead of a row per
+	 * vertex. Rows are laid out as a pose buffer of three "vertices" per frame.
+	 *
+	 * @param mesh the skinned mesh whose space the rows carry into
+	 * @returns `{ rows, data }`, data a Float32Array of rows * 3 vec4s
+	 */
+	static async bakeJoint( root, mesh, name, clips, slice = null ) {
+
+		const bone = mesh.skeleton.bones.find( ( entry ) => entry.name === name );
+		if ( ! bone ) throw new Error( `the rig has no ${name} to bake` );
+		const mixer = new THREE.AnimationMixer( root );
+		const actions = clips.map( ( clip ) => mixer.clipAction( clip ) );
+		const rows = clips.length * FRAMES;
+		const data = new Float32Array( rows * 12 );
+		const carry = new THREE.Matrix4();
+
+		for ( let c = 0; c < clips.length; c ++ ) {
+
+			actions.forEach( ( a ) => a.stop() );
+			actions[ c ].reset().play();
+
+			for ( let f = 0; f < FRAMES; f ++ ) {
+
+				mixer.setTime( ( f / FRAMES ) * clips[ c ].duration );
+				root.updateMatrixWorld( true );
+				if ( slice ) await slice.step();
+				// Into the mesh's bind space, as getVertexPosition puts a skinned vertex.
+				carry.multiplyMatrices( mesh.bindMatrixInverse, bone.matrixWorld );
+				const e = carry.elements;
+				const row = ( c * FRAMES + f ) * 12;
+				for ( let r = 0; r < 3; r ++ ) data.set( [ e[ r ], e[ 4 + r ], e[ 8 + r ], e[ 12 + r ] ], row + r * 4 );
+
+			}
+
+		}
+
+		mixer.stopAllAction();
+		return { rows, data };
+
+	}
+
 }
 
 /** A mesh whose shape keys move it; three's own per-vertex read then does the skinning. */

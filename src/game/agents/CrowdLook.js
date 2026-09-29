@@ -65,7 +65,8 @@ export function statureNode( figure ) {
  *   arm as far as its sleeve reaches
  * - `pants`: between its hem and the waist
  * - `shoes`: below the footwear's top
- * - `panel`: where the top shows its second colour, an open front or a yoke
+ * - `panel`: where the top shows its second colour: an open front, a yoke,
+ *   or a yoke and upper sleeves
  *
  * @param lanes the per-instance nodes: `{ cuts, figure }`
  * @param frame the rest body's `{ height, bottom }`, in its own units
@@ -105,8 +106,11 @@ export function crowdGarments( { cuts, figure }, { height, bottom } ) {
 	const front = smoothstep( - 0.03, - 0.01, z );
 	const open = max( float( 1 ).sub( smoothstep( opening.sub( 0.003 ), opening.add( 0.003 ), out ) ).mul( smoothstep( 0.662, 0.67, y ) ).mul( front ), smoothstep( 0.83, 0.838, y ) )
 		.mul( float( 1 ).sub( onArm ) );
-	const yoke = smoothstep( 0.778, 0.786, y.sub( out.mul( 0.12 ) ) ).mul( 0.85 );
-	const panel = open.mul( step( 0.5, style ).mul( step( style, 1.5 ) ) ).add( yoke.mul( step( 1.5, style ) ) );
+	// Across the shoulders of the body, not down the arms; a duty jacket also
+	// takes the second colour on its upper sleeves.
+	const yoke = smoothstep( 0.778, 0.786, y.sub( out.mul( 0.12 ) ) ).mul( float( 1 ).sub( onArm ) ).mul( 0.85 );
+	const sleeves = float( 1 ).sub( smoothstep( 0.178, 0.19, out ) ).mul( onArm ).mul( 0.65 );
+	const panel = open.mul( step( 0.5, style ).mul( step( style, 1.5 ) ) ).add( yoke.mul( step( 1.5, style ) ) ).add( sleeves.mul( step( 2.5, style ) ) );
 	// A cut the look does not make (no top, trousers or shoes) leaves no seam.
 	const across = ( edge, worn ) => float( 1 ).sub( smoothstep( 0.0015, SEAM, y.sub( edge ).abs() ) ).mul( worn );
 	const seam = max( max( across( topHem, step( topHem, 0.99 ) ), across( pantsHem, step( pantsHem, 0.99 ) ) ),

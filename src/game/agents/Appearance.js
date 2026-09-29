@@ -11,11 +11,15 @@ const COLLARS = {
 	'tech-top': 0.864, 'police-jacket': 0.878, 'office-jacket': 0.86, 'top-tee': 0.853, 'top-tank': 0.85,
 	'top-turtleneck': 0.887, 'jacket-cropped': 0.86, 'vest-tailored': 0.85, 'shirt-utility': 0.854, 'jacket-bomber': 0.86
 };
-/** How the crowd paints a top's second colour: not at all, in an open front, across the shoulders. */
-export const TOP_PANELS = { plain: 0, open: 1, yoke: 2 };
+/**
+ * How the crowd paints a top's second colour, as the top's own panels mostly
+ * show it: not at all, in an open front, across the shoulders, or across the
+ * shoulders and down the upper sleeves.
+ */
+export const TOP_PANELS = { plain: 0, open: 1, yoke: 2, sleeved: 3 };
 const PANEL_OF = {
 	'office-jacket': 'open', 'vest-tailored': 'open', 'top-tank': 'plain',
-	'tech-top': 'yoke', 'police-jacket': 'yoke', 'top-tee': 'yoke', 'top-turtleneck': 'yoke',
+	'tech-top': 'yoke', 'police-jacket': 'sleeved', 'top-tee': 'yoke', 'top-turtleneck': 'yoke',
 	'jacket-cropped': 'yoke', 'jacket-bomber': 'yoke', 'shirt-utility': 'yoke'
 };
 /** The tops that go under the trousers' waistband (the patterns' `tucked`). */
@@ -59,7 +63,7 @@ export function recipeFor( { gender, appearanceSeed, npcId = null }, templates =
  *   the main colours of the rest; a slot worn bare takes the skin's
  * - `sleeve`: how far out along the outstretched arm the top reaches
  * - `topHem`, `neck`, `tucked`, `panelStyle`: where the top ends below and
- *   above, whether it goes under the trousers, how its second colour shows
+ *   above, whether it goes under the trousers, how its second colour shows (TOP_PANELS)
  * - `pantsHem`, `waist`, `bootTop`: where the trousers and footwear end
  * - `height`: the recipe's height, a share of its frame's
  * - `hairStyle`: the recipe's hairstyle, '' for none

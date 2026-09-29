@@ -45,9 +45,6 @@ export class CrowdMesh {
 		this.motion = this.attribute( 4 );
 		this.pose = this.attribute( 4 );
 
-		const positions = new PoseBuffer( baked.position, baked.vertexCount, baked.rows, storageCapable );
-		const normals = new PoseBuffer( baked.normal, baked.vertexCount, baked.rows, storageCapable );
-
 		const aMotion = instancedBufferAttribute( this.motion, 'vec4' );
 		const aPose = instancedBufferAttribute( this.pose, 'vec4' );
 		/** The figure lane: height, footwear, collar and top style, read by a subclass's paint. */
@@ -72,17 +69,20 @@ export class CrowdMesh {
 			v.x.mul( s ).negate().add( v.z.mul( c ) )
 		);
 
+		const posed = this.posed( baked, storageCapable, { row0, row1, blend, column } );
 		// A person stands at their recipe's height: the baked body scaled about its feet.
-		const pose = mix( positions.sample( row0, column ), positions.sample( row1, column ), blend ).mul( statureNode( aPose.w ) );
-		const normal = mix( normals.sample( row0, column ), normals.sample( row1, column ), blend );
+		const pose = posed.position.mul( statureNode( aPose.w ) );
+		const normal = posed.normal;
 
 		const geometry = baked.mesh.geometry.clone();
 		// Source exports carry unused secondary UV and colour channels. Position
 		// gives the draw its vertex count and uv samples the body map; every other
-		// source attribute is replaced by the pose buffers or the garment map.
+		// source attribute is replaced by the pose buffers or the garment map,
+		// unless the subclass reads it (`kept`).
+		const kept = new Set( [ 'position', 'uv', ...this.kept() ] );
 		for ( const name of Object.keys( geometry.attributes ) ) {
 
-			if ( name !== 'position' && name !== 'uv' ) geometry.deleteAttribute( name );
+			if ( ! kept.has( name ) ) geometry.deleteAttribute( name );
 
 		}
 		geometry.boundingSphere = new THREE.Sphere( new THREE.Vector3(), 1e6 );
@@ -106,6 +106,30 @@ export class CrowdMesh {
 		this.mesh.frustumCulled = false;
 		this.mesh.castShadow = true;
 		this.mesh.count = 0;
+
+	}
+
+	/**
+	 * Where a vertex stands and faces in this frame of this clip, in the rest
+	 * body's space: by default its own baked row, blended to the next.
+	 *
+	 * @returns `{ position, normal }` nodes
+	 */
+	posed( baked, storageCapable, { row0, row1, blend, column } ) {
+
+		const positions = new PoseBuffer( baked.position, baked.vertexCount, baked.rows, storageCapable );
+		const normals = new PoseBuffer( baked.normal, baked.vertexCount, baked.rows, storageCapable );
+		return {
+			position: mix( positions.sample( row0, column ), positions.sample( row1, column ), blend ),
+			normal: mix( normals.sample( row0, column ), normals.sample( row1, column ), blend )
+		};
+
+	}
+
+	/** Source attributes a subclass reads besides position and uv. */
+	kept() {
+
+		return [];
 
 	}
 

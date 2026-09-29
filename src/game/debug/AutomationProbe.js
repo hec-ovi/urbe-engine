@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { CLIP } from '../agents/CharacterAssets.js';
 import { CROWD_MODELS } from '../agents/CharacterCatalog.js';
+import { crowdHairstyles } from '../agents/HairMesh.js';
 import { COLOR_CHANNELS, SLOTS } from '../agents/avatar/Recipe.js';
 import { FABRIC_FINISHES, panelsOf } from '../agents/avatar/GarmentPanels.js';
 import { TOP_CUTS } from '../agents/avatar/Tops.js';
@@ -1108,11 +1109,14 @@ function crowdLook( member ) {
 
 	const model = CROWD_MODELS[ member.variant ];
 	const look = member.look ?? {};
+	// The style the crowd's merged hair draws: a teen style's adult one, or none.
+	const styles = model ? crowdHairstyles( model.gender ) : null;
+	const style = styles?.index( look.hairStyle ) ?? - 1;
 
 	return {
 		seed: member.appearanceSeed ?? null,
 		body: model?.id ?? null,
-		hairStyle: model?.hair ?? null,
+		hairStyle: styles ? ( style >= 0 ? styles.paths[ style ] : '' ) : null,
 		...lookValues( {
 			skin: look.skin, shirt: look.shirt, trousers: look.trousers, hair: look.hair, eyebrows: look.hair,
 			sleeve: look.sleeve, hem: look.pantsHem

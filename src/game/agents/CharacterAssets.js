@@ -3,7 +3,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VatBaker } from './VatBaker.js';
 import { BodyMesh } from './BodyMesh.js';
-import { HairMesh } from './HairMesh.js';
+import { EVERYONE, HairMesh, crowdHairstyles } from './HairMesh.js';
 import { CharacterAnimations } from './CharacterAnimations.js';
 import { garments } from './Garments.js';
 import {
@@ -29,14 +29,16 @@ const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAA
 
 /**
  * The Source Quaternius character kit turned into four crowd draw calls: the
- * regular male and female body/eye and hair/eyebrow surfaces, posed by the Pro
- * animation library's loops baked into vertex animation textures and dressed
- * by the garment map read off their skeleton (Garments.js, BodyMesh.js).
+ * regular male and female body/eye surfaces, posed by the Pro animation
+ * library's loops baked into vertex animation textures and dressed by the
+ * garment map read off their skeleton (Garments.js, BodyMesh.js), and each
+ * gender's every hairstyle with its eyebrows, carried by the baked Head bone
+ * (HairMesh.js).
  *
  * The packs live in the machine's model store, not the repo (URBE_MODELS_DIR,
  * served under /models by the dev server). Their own 4K PNGs never load: the
- * glTF texture requests are stubbed out. Body, eye and gender-correct hair maps
- * are fetched once and downscaled on the way to the GPU.
+ * glTF texture requests are stubbed out. Body, eye and both hair maps are
+ * fetched once and downscaled on the way to the GPU.
  */
 export class CharacterAssets {
 
@@ -59,16 +61,14 @@ export class CharacterAssets {
 		const [ loaded, manifest ] = await Promise.all( [ Promise.all( [
 			new GLTFLoader().loadAsync( ANIMATION_URL ),
 			Promise.all( CROWD_MODELS.map( ( m ) => loadResizedTexture( `${CHARACTER_ROOT}/${m.skin}`, 1024 ) ) ),
-			Promise.all( CROWD_MODELS.map( ( m ) => loadResizedTexture(
-				`${CHARACTER_ROOT}/T_Hair_${m.gender === 'female' ? 2 : 1}_BaseColor.png`, 512
-			) ) ),
+			Promise.all( [ 1, 2 ].map( ( map ) => loadResizedTexture( `${CHARACTER_ROOT}/T_Hair_${map}_BaseColor.png`, 512 ) ) ),
 			loadResizedTexture( `${CHARACTER_ROOT}/T_Eye_Brown.png`, 256 ),
 			...CROWD_MODELS.map( ( m ) => loader.loadAsync( `${CHARACTER_ROOT}/${m.file}` ) ),
-			...CROWD_MODELS.map( ( m ) => loader.loadAsync( `${CHARACTER_ROOT}/${m.hair}` ) )
+			Promise.all( CROWD_MODELS.map( ( m ) => Promise.all( crowdHairstyles( m.gender ).paths.map( ( path ) => loader.loadAsync( `${CHARACTER_ROOT}/${path}` ) ) ) ) )
 		] ), loadCharacterManifest() ] );
 		const [ animationGltf, skins, hairMaps, eyeMap ] = loaded;
 		const models = loaded.slice( 4, 4 + CROWD_MODELS.length );
-		const hairs = loaded.slice( 4 + CROWD_MODELS.length );
+		const hairs = loaded[ 4 + CROWD_MODELS.length ];
 
 		const clips = CROWD_CLIP_NAMES.map( ( name ) => {
 
@@ -83,12 +83,12 @@ export class CharacterAssets {
 		for ( let i = 0; i < CROWD_MODELS.length; i ++ ) {
 
 			assertRigCompatibility( models[ i ].scene, animationGltf.scene );
-			assertRigCompatibility( hairs[ i ].scene, animationGltf.scene );
+			for ( const hair of hairs[ i ] ) assertRigCompatibility( hair.scene, animationGltf.scene );
 
 		}
 
-		// Two bakes per model, the body's three surfaces and the hair, are the
-		// parts the load counts.
+		// Two bakes per model, the body's two surfaces and the head that
+		// carries the hair, are the parts the load counts.
 		const total = CROWD_MODELS.length * 2;
 		let done = 0;
 		const variants = [];
@@ -96,9 +96,7 @@ export class CharacterAssets {
 		for ( let i = 0; i < CROWD_MODELS.length; i ++ ) {
 
 			const root = models[ i ].scene;
-			const hairRoot = hairs[ i ].scene;
 			const { body, eyes, eyebrows } = characterParts( root );
-			const hair = largestSkinnedMesh( hairRoot );
 			// Read off the skeleton before baking: the pose buffers have no
 			// bones left to ask.
 			const bodyCloth = garments( body );
@@ -108,19 +106,23 @@ export class CharacterAssets {
 			const height = body.geometry.boundingBox.max.y - bottom;
 			const motions = new CharacterAnimations( root, animationGltf.scene );
 			const bodyClips = clips.map( ( clip ) => motions.clip( clip ) );
-			const [ bakedBody, bakedEyes, bakedEyebrows ] = await VatBaker.bake( root, [ body, eyes, eyebrows ], bodyClips, slice );
+			const [ bakedBody, bakedEyes ] = await VatBaker.bake( root, [ body, eyes ], bodyClips, slice );
 			onProgress( ++ done, total );
-			const [ bakedHair ] = await VatBaker.bake( hairRoot, [ hair ], bodyClips, slice );
+			const styles = crowdHairstyles( CROWD_MODELS[ i ].gender );
+			const head = await VatBaker.bakeJoint( root, body, 'Head', bodyClips, slice );
+			const heads = headParts( [
+				{ mesh: eyebrows, style: EVERYONE },
+				...hairs[ i ].flatMap( ( hair, style ) => skinnedMeshes( hair.scene ).map( ( mesh ) => ( { mesh, style } ) ) )
+			] );
 			onProgress( ++ done, total );
 			const baked = mergeBaked( [ bakedBody, bakedEyes ] );
-			const bakedHeadHair = mergeBaked( [ bakedHair, bakedEyebrows ] );
 			const cloth = crowdCloth( bodyCloth, bakedEyes.vertexCount );
 
 			if ( slice ) await slice.step();
 			variants.push( {
 				id: CROWD_MODELS[ i ].id,
 				body: new BodyMesh( baked, capacity, storageCapable, { map: skins[ i ], eyeMap, cloth, height, bottom } ),
-				hair: new HairMesh( bakedHeadHair, capacity, storageCapable, { map: hairMaps[ i ] } )
+				hair: new HairMesh( { mesh: new THREE.Mesh( heads ), rows: head.rows, head: head.data, styles }, capacity, storageCapable, { maps: hairMaps } )
 			} );
 
 		}
@@ -231,22 +233,47 @@ export function characterParts( root ) {
 
 }
 
-/** The hairstyle export has one skinned surface. */
-function largestSkinnedMesh( root ) {
+/** Every skinned surface of an export: long dreads have two. */
+function skinnedMeshes( root ) {
 
 	const meshes = [];
+	root.traverse( ( node ) => { if ( node.isSkinnedMesh ) meshes.push( node ); } );
+	if ( ! meshes.length ) throw new Error( 'hairstyle has no skinned surface' );
+	return meshes;
 
-	root.traverse( ( node ) => {
+}
 
-		if ( node.isSkinnedMesh ) meshes.push( node );
+/**
+ * The parts carried by the Head bone, merged into one geometry in that bone's
+ * rest space: each part's bind pose read through the Head's inverse bind, its
+ * normals turned with it, and each vertex marked with its style and the hair
+ * map its material paints from (`hairPart`: style, 0 or 1).
+ *
+ * @param parts `{ mesh, style }`, a skinned surface all of whose weight is on Head
+ */
+export function headParts( parts ) {
+
+	const geometries = parts.map( ( { mesh, style } ) => {
+
+		const head = mesh.skeleton.bones.findIndex( ( bone ) => bone.name === 'Head' );
+		if ( head < 0 ) throw new Error( `${mesh.name} has no Head bone to ride on` );
+		const intoHead = mesh.skeleton.boneInverses[ head ].clone().multiply( mesh.bindMatrix );
+		const geometry = new THREE.BufferGeometry();
+		const source = mesh.geometry;
+		geometry.setAttribute( 'position', source.getAttribute( 'position' ).clone().applyMatrix4( intoHead ) );
+		geometry.setAttribute( 'normal', source.getAttribute( 'normal' ).clone().applyNormalMatrix( new THREE.Matrix3().getNormalMatrix( intoHead ) ) );
+		geometry.setAttribute( 'uv', source.getAttribute( 'uv' ).clone() );
+		const map = /hair_2/i.test( ( Array.isArray( mesh.material ) ? mesh.material[ 0 ] : mesh.material )?.name ?? '' ) ? 1 : 0;
+		const count = source.getAttribute( 'position' ).count;
+		geometry.setAttribute( 'hairPart', new THREE.BufferAttribute( new Float32Array( count * 2 ).map( ( _, i ) => i % 2 ? map : style ), 2 ) );
+		geometry.setIndex( source.index ? source.index.clone() : null );
+		return geometry;
 
 	} );
-
-	const mesh = largest( meshes );
-
-	if ( ! mesh ) throw new Error( 'character model has no skinned mesh' );
-
-	return mesh;
+	const merged = BufferGeometryUtils.mergeGeometries( geometries, false );
+	geometries.forEach( ( geometry ) => geometry.dispose() );
+	if ( ! merged ) throw new Error( 'the hairstyles cannot be merged' );
+	return merged;
 
 }
 
