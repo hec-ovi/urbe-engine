@@ -28,8 +28,12 @@ const DEFAULT_COLORS = [ '#202c3b', '#536377', '#a9bcb7', '#10151d' ];
  * the same garment rebuilds nothing and compiles nothing, and no image or
  * frame callback is used. The garment's cut picks its panels once, when the
  * material is made.
+ *
+ * @param worn when given, `worn(object)` is the panels (`panelsFor`) of the
+ *   mesh being drawn, read per draw: one material then dresses everybody
+ *   wearing the garment, each in their own colours
  */
-export function createPanelMaterial( id, palette = null, fabric = 'tech' ) {
+export function createPanelMaterial( id, palette = null, fabric = 'tech', { worn = null } = {} ) {
 
 	const material = new MeshStandardNodeMaterial( { side: DoubleSide } );
 	material.name = `fabric-${id}`;
@@ -39,6 +43,12 @@ export function createPanelMaterial( id, palette = null, fabric = 'tech' ) {
 		metalness: uniform( 0.035 ),
 		grain: uniform( 0.014 )
 	};
+	if ( worn ) {
+
+		controls.palette.forEach( ( node, index ) => node.onObjectUpdate( ( { object } ) => worn( object )?.palette[ index ] ) );
+		for ( const key of [ 'roughness', 'metalness', 'grain' ] ) controls[ key ].onObjectUpdate( ( { object } ) => worn( object )?.[ key ] );
+
+	}
 	material.userData.garment = id;
 	CONTROLS.set( material, controls );
 
@@ -95,31 +105,41 @@ export function createPanelMaterial( id, palette = null, fabric = 'tech' ) {
 }
 
 /**
- * Writes a garment's colours and fabric into its material's uniforms.
+ * A garment's colours and finish as its panels paint them: `{ palette, roughness,
+ * metalness, grain }`, the palette its primary, secondary, accent and trim.
  *
  * @param palette `{ primary, secondary, accent }` or four colours; the trim is
  *   the primary deepened when none is given
  */
+export function panelsFor( palette, fabric = 'tech' ) {
+
+	const colors = PANELS.map( ( panel, index ) => palette?.[ index ] ?? palette?.[ panel ] );
+	const finish = typeof fabric === 'string' ? ( FABRIC_FINISHES[ fabric ] ?? FABRIC_FINISHES.tech ) : fabric;
+	const roughness = finish?.roughness ?? FABRIC_FINISHES.tech.roughness;
+	return {
+		palette: PANELS.map( ( _, index ) => index === 3 && colors[ 3 ] === undefined
+			? new Color( colors[ 0 ] ?? DEFAULT_COLORS[ 0 ] ).multiplyScalar( 0.42 )
+			: new Color( colors[ index ] ?? DEFAULT_COLORS[ index ] ) ),
+		roughness,
+		metalness: finish?.metalness ?? FABRIC_FINISHES.tech.metalness,
+		grain: finish?.grain ?? ( roughness > 0.8 ? 0.025 : 0.012 )
+	};
+
+}
+
+/** Writes a garment's colours and fabric into its material's own uniforms. */
 export function updatePanelMaterial( material, palette, fabric = 'tech' ) {
 
 	const controls = CONTROLS.get( material );
 	if ( ! controls ) return;
-	const colors = PANELS.map( ( panel, index ) => palette?.[ index ] ?? palette?.[ panel ] );
-	for ( let index = 0; index < controls.palette.length; index ++ ) {
-
-		if ( index === 3 && colors[ 3 ] === undefined ) controls.palette[ 3 ].value.set( colors[ 0 ] ?? DEFAULT_COLORS[ 0 ] ).multiplyScalar( 0.42 );
-		else controls.palette[ index ].value.set( colors[ index ] ?? DEFAULT_COLORS[ index ] );
-
-	}
-	const finish = typeof fabric === 'string' ? ( FABRIC_FINISHES[ fabric ] ?? FABRIC_FINISHES.tech ) : fabric;
-	const roughness = finish?.roughness ?? FABRIC_FINISHES.tech.roughness;
-	const metalness = finish?.metalness ?? FABRIC_FINISHES.tech.metalness;
-	controls.roughness.value = roughness;
-	controls.metalness.value = metalness;
-	controls.grain.value = finish?.grain ?? ( roughness > 0.8 ? 0.025 : 0.012 );
+	const panels = panelsFor( palette, fabric );
+	panels.palette.forEach( ( color, index ) => controls.palette[ index ].value.copy( color ) );
+	controls.roughness.value = panels.roughness;
+	controls.metalness.value = panels.metalness;
+	controls.grain.value = panels.grain;
 	// Plain material reads (inspection, copies) see the same finish.
-	material.roughness = roughness;
-	material.metalness = metalness;
+	material.roughness = panels.roughness;
+	material.metalness = panels.metalness;
 
 }
 

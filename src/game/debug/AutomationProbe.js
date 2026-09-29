@@ -3,7 +3,7 @@ import { CLIP } from '../agents/CharacterAssets.js';
 import { CROWD_MODELS } from '../agents/CharacterCatalog.js';
 import { crowdHairstyles } from '../agents/HairMesh.js';
 import { COLOR_CHANNELS, SLOTS } from '../agents/avatar/Recipe.js';
-import { FABRIC_FINISHES, panelsOf } from '../agents/avatar/GarmentPanels.js';
+import { FABRIC_FINISHES } from '../agents/avatar/GarmentPanels.js';
 import { TOP_CUTS } from '../agents/avatar/Tops.js';
 import { PANTS_CUTS } from '../agents/avatar/Lower.js';
 import { PERSON_RADIUS } from '../physics/ImpactWorld.js';
@@ -1143,26 +1143,27 @@ function heroLook( active, poser ) {
 	const meshes = [];
 	active.root.traverse( ( node ) => { if ( node.isMesh ) meshes.push( node ); } );
 	const dressed = active.root.userData.dressed ?? null;
-	const wears = ( mesh, material ) => Boolean( material ) && mesh.material.colorNode === material.colorNode;
-	const skin = dressed && meshes.some( ( mesh ) => wears( mesh, dressed.skin ) ) ? dressed.colors.skin.value : null;
-	const tints = new Set( [ ...( dressed?.hairs.values() ?? [] ) ].map( ( material ) => material.colorNode ) );
+	const wardrobe = poser?.wardrobe;
+	// A mesh wears its person when it is dressed as them and paints with the wardrobe's material of its kind.
+	const as = ( mesh, materials ) => Boolean( dressed && wardrobe ) && poser.wears( mesh ) === dressed &&
+		[ ...materials ].some( ( material ) => material?.colorNode === mesh.material.colorNode );
+	const skin = meshes.some( ( mesh ) => as( mesh, wardrobe?.skins.values() ?? [] ) ) ? dressed.colors.skin : null;
 	const tinted = ( eyebrows ) => {
 
 		const hair = meshes.filter( ( mesh ) => mesh.userData.hair && /eyebrows/i.test( mesh.name ) === eyebrows );
-		return hair.length > 0 && hair.every( ( mesh ) => tints.has( mesh.material.colorNode ) ) ? dressed.colors.hair.value : null;
+		return hair.length > 0 && hair.every( ( mesh ) => as( mesh, wardrobe?.hairs.values() ?? [] ) ) ? dressed.colors.hair : null;
 
 	};
 	const worn = {};
 	for ( const mesh of meshes ) {
 
 		const garment = mesh.userData.garment;
-		if ( ! garment || ! dressed ) continue;
-		const material = dressed.garments.get( garment.id );
-		const panels = wears( mesh, material ) ? panelsOf( material ) : null;
+		if ( ! garment ) continue;
+		const panels = as( mesh, [ wardrobe?.garments.get( garment.id ) ] ) ? dressed.panels.get( garment.id ) ?? null : null;
 		worn[ garment.slot ] = { id: garment.id, panels };
 
 	}
-	const main = ( slot ) => worn[ slot ] ? worn[ slot ].panels?.primary ?? null : skin;
+	const main = ( slot ) => worn[ slot ] ? worn[ slot ].panels?.palette[ 0 ] ?? null : skin;
 	// A body at its frame's own height stands on no height rig.
 	const height = poser ? poser.height( active.root )?.height ?? 1 : null;
 
@@ -1176,7 +1177,7 @@ function heroLook( active, poser ) {
 		height: typeof height === 'number' ? round( height ) : null,
 		garments: {
 			...Object.fromEntries( SLOTS.map( ( slot ) => [ slot, worn[ slot ] ? {
-				id: worn[ slot ].id, ...Object.fromEntries( COLOR_CHANNELS.map( ( channel ) => [ channel, hex( worn[ slot ].panels?.[ channel ] ) ] ) )
+				id: worn[ slot ].id, ...Object.fromEntries( COLOR_CHANNELS.map( ( channel, index ) => [ channel, hex( worn[ slot ].panels?.palette[ index ] ) ] ) )
 			} : null ] ) ),
 			fabric: fabricOf( Object.values( worn )[ 0 ]?.panels )
 		}

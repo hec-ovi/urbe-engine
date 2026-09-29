@@ -3,7 +3,6 @@ import * as THREE from 'three/webgpu';
 import { CharacterPoser } from './CharacterPoser.js';
 import { HeroCharacter } from './HeroCharacter.js';
 import { appearance } from './Appearance.js';
-import { panelsOf } from './avatar/GarmentPanels.js';
 import { SLOTS, personRecipe } from './avatar/Recipe.js';
 import { animation, heroRigs, humanoid, plainTailor } from './HeroCharacter.test-fixtures.js';
 import { SOURCE_PRESENT, animationLibrary, sourceLoaders } from './avatar/SourceAssets.test-fixtures.js';
@@ -38,12 +37,13 @@ describe( 'still bodies', () => {
 		const lying = await poser.still( { gender: 'female', appearanceSeed: seed }, 'Death01', 1 );
 		expect( loaded ).toEqual( [ recipe.body ] );
 		const dressed = lying.userData.dressed;
-		expect( [ 'skin', 'hair', 'eyes' ].map( ( channel ) => hex( dressed.colors[ channel ].value ) ) )
+		expect( [ 'skin', 'hair', 'eyes' ].map( ( channel ) => hex( dressed.colors[ channel ] ) ) )
 			.toEqual( [ recipe.colors.skin, recipe.colors.hair, recipe.colors.eyes ] );
 		const garments = [];
 		lying.traverse( ( node ) => { if ( node.userData.garment ) garments.push( node ); } );
 		expect( garments.map( ( mesh ) => mesh.userData.garment.id ) ).toEqual( SLOTS.map( ( slot ) => recipe.outfit[ slot ] ) );
-		expect( hex( panelsOf( garments[ 0 ].material ).primary ) ).toBe( recipe.outfit.colors.top.primary );
+		expect( garments[ 0 ].material ).toBe( poser.wardrobe.garment( recipe.outfit.top ) );
+		expect( hex( dressed.panels.get( recipe.outfit.top ).palette[ 0 ] ) ).toBe( recipe.outfit.colors.top.primary );
 		expect( poser.height( lying )?.height ?? 1 ).toBe( recipe.shape.height );
 		// A clamped action rests one step short of the clip's end.
 		expect( quarterTurns( lying ) ).toBeCloseTo( 1 - 1 / 120, 4 );
@@ -52,16 +52,16 @@ describe( 'still bodies', () => {
 		expect( quarterTurns( standing ) ).toBeCloseTo( 0, 5 );
 		const halfway = await poser.still( { gender: 'female', appearanceSeed: seed }, 'Death01', 0.5 );
 		expect( quarterTurns( halfway ) ).toBeCloseTo( ( 1 - 1 / 120 ) / 2, 2 );
-		// Bodies at once wear dressed sets of their own of the one body, and one fit.
+		// Bodies at once are each their own person in the one wardrobe, over one fit.
 		expect( loaded ).toEqual( [ recipe.body ] );
 		expect( new Set( [ lying, standing, halfway ].map( ( root ) => root.userData.dressed ) ).size ).toBe( 3 );
+		expect( standing.getObjectByName( garments[ 0 ].name ).material ).toBe( garments[ 0 ].material );
 		const fit = poser.fit( lying );
 		expect( fit.users ).toBe( 3 );
 
-		const set = lying.userData.dressed;
 		poser.release( lying );
-		expect( set.worn ).toBe( false );
 		expect( lying.userData.dressed ).toBeNull();
+		expect( poser.wears( garments[ 0 ] ) ).toBeNull();
 		expect( fit.users ).toBe( 2 );
 		expect( poser.height( lying ) ).toBeNull();
 		await expect( poser.still( { gender: 'male', appearanceSeed: 3 }, 'Death99', 1 ) ).rejects.toThrow( 'missing Death99' );
@@ -82,10 +82,13 @@ describe( 'still bodies', () => {
 			loadHair: () => ( { scene: humanoid() } )
 		} ) );
 		await hero.prepare();
-		const prepared = ( await hero.poser.bodies.get( 'regular-male' ) ).wardrobe[ 0 ];
+		const prepared = new Set( [ ...hero.poser.wardrobe.skins.values(), ...hero.poser.wardrobe.garments.values() ] );
 		const still = await hero.poser.still( { gender: 'male', appearanceSeed: 3 }, 'Death01', 1 );
 		expect( loaded ).toEqual( [ 'regular-male', 'regular-female' ] );
-		expect( still.userData.dressed ).toBe( prepared );
+		const worn = [];
+		still.traverse( ( node ) => { if ( ( node.name === 'body' && ! node.userData.hair ) || node.userData.garment ) worn.push( node.material ); } );
+		expect( worn.length ).toBe( 4 );
+		expect( worn.every( ( material ) => prepared.has( material ) ) ).toBe( true );
 
 	} );
 
@@ -110,17 +113,21 @@ it( 'fades the focused eyes, skin, hair and garments through one render-group co
 	} );
 	const person = await poser.still( { gender: 'female', appearanceSeed: 123 }, 'Death01', 0 );
 	const dressed = person.userData.dressed;
-	dressed.presence.value = 0;
+	dressed.presence = 0.25;
 	const meshes = [];
 	person.traverse( ( node ) => { if ( node.isMesh ) meshes.push( node ); } );
-	expect( meshes.find( ( mesh ) => mesh.name === 'Eyes' ).material ).toBe( [ ...dressed.eyes.values() ][ 0 ] );
+	expect( meshes.find( ( mesh ) => mesh.name === 'Eyes' ).material ).toBe( [ ...poser.wardrobe.eyes.values() ][ 0 ] );
+	// Every surface reads the one person's coverage per draw.
+	const { presence } = poser.wardrobe;
 	for ( const mesh of meshes ) {
 
 		expect( mesh.material.maskNode ).toBeTruthy();
 		expect( mesh.material.maskShadowNode ).toBe( mesh.material.maskNode );
+		expect( poser.wears( mesh ) ).toBe( dressed );
+		presence.updateType && presence.update( { object: mesh } );
+		expect( presence.value ).toBe( 0.25 );
 
 	}
-	expect( dressed.presence.groupNode.name ).toBe( 'render' );
 
 } );
 
@@ -135,7 +142,7 @@ describe.skipIf( ! SOURCE_PRESENT )( 'the Source people', () => {
 		const root = poser.dress( source, { position: new THREE.Vector3( 2, 0, 3 ), heading: 1 }, 'person' );
 		const meshes = [];
 		root.traverse( ( node ) => { if ( node.isMesh ) meshes.push( node ); } );
-		const body = meshes.find( ( mesh ) => mesh.material === root.userData.dressed.skin );
+		const body = meshes.find( ( mesh ) => [ ...poser.wardrobe.skins.values() ].includes( mesh.material ) );
 		expect( body.geometry ).toBe( source.fit.body );
 		expect( source.fit.hidden ).toBeGreaterThan( 1000 );
 		const garments = meshes.filter( ( mesh ) => mesh.userData.garment );
@@ -164,10 +171,9 @@ describe.skipIf( ! SOURCE_PRESENT )( 'the Source people', () => {
 		}
 
 		const fit = source.fit;
-		const dressed = root.userData.dressed;
 		poser.release( root );
 		expect( fit.users ).toBe( 0 );
-		expect( dressed.worn ).toBe( false );
+		expect( root.userData.dressed ).toBeNull();
 		// Worn again, the same fit comes back with nothing built.
 		const again = await poser.model( recipe );
 		expect( again.fit ).toBe( fit );

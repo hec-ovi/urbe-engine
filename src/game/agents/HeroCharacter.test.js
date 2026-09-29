@@ -5,7 +5,6 @@ import { CROWD_SURFACE } from './CrowdMesh.js';
 import { SPEECH_LIMITS } from './SpeechGesture.js';
 import { StreetBodies } from './StreetBodies.js';
 import { GARMENTS } from './avatar/Recipe.js';
-import { panelsOf } from './avatar/GarmentPanels.js';
 import { Physics } from '../physics/index.js';
 import { ActorLighting } from '../light/ActorLighting.js';
 import { FillChannel } from '../city/kit/FillChannel.js';
@@ -120,8 +119,8 @@ describe( 'focused character', () => {
 		hero.active.root.traverse( ( node ) => { if ( node.isMesh ) again.push( node ); } );
 		expect( again.find( ( mesh ) => mesh.name === 'body' ).material ).toBe( body.material );
 		expect( again.find( ( mesh ) => mesh.name === 'garment-tech-top' ).material ).toBe( garments[ 0 ].material );
-		expect( hex( hero.active.root.userData.dressed.colors.skin.value ) ).toBe( '#4b3026' );
-		expect( hex( panelsOf( garments[ 0 ].material ).primary ) ).toBe( '#ff0000' );
+		expect( hex( hero.active.root.userData.dressed.colors.skin ) ).toBe( '#4b3026' );
+		expect( hex( hero.active.root.userData.dressed.panels.get( 'tech-top' ).palette[ 0 ] ) ).toBe( '#ff0000' );
 		hero.hide();
 
 	} );
@@ -166,9 +165,8 @@ describe( 'focused character', () => {
 		const person = { gender: 'male', variant: 0, appearanceSeed: 3, clip: 1, hero: false, position: new THREE.Vector3(), heading: 0, look: outfit() };
 		expect( await hero.show( person ) ).toBe( true );
 		expect( loaded ).toHaveLength( 2 );
-		// The prepared root's materials were handed back and are what this
-		// person wears, their garments' and tinted hairstyle and eyebrows included.
-		expect( ( await hero.poser.bodies.get( 'regular-male' ) ).wardrobe ).toHaveLength( 1 );
+		// The prepared root's materials are what this person wears, their
+		// garments' and tinted hairstyle and eyebrows included.
 		const worn = [];
 		hero.active.root.traverse( ( node ) => { if ( node.isMesh ) worn.push( node ); } );
 		expect( worn.filter( ( mesh ) => mesh.userData.hair ) ).toHaveLength( 2 );
@@ -188,16 +186,19 @@ describe( 'focused character', () => {
 		await hero.show( person );
 		const { root } = hero.active;
 		const dressed = root.userData.dressed;
-		expect( [ 'skin', 'hair', 'eyes' ].map( ( channel ) => hex( dressed.colors[ channel ].value ) ) ).toEqual( [ '#895735', '#d2c0a0', '#738ea1' ] );
+		expect( [ 'skin', 'hair', 'eyes' ].map( ( channel ) => hex( dressed.colors[ channel ] ) ) ).toEqual( [ '#895735', '#d2c0a0', '#738ea1' ] );
 		const meshes = [];
 		root.traverse( ( node ) => { if ( node.isMesh ) meshes.push( node ); } );
 		const hairs = meshes.filter( ( mesh ) => mesh.userData.hair );
 		expect( hairs.map( ( mesh ) => mesh.name ).sort() ).toEqual( [ 'Eyebrows', 'hair' ] );
-		expect( new Set( hairs.map( ( mesh ) => mesh.material ) ) ).toEqual( new Set( dressed.hairs.values() ) );
+		expect( new Set( hairs.map( ( mesh ) => mesh.material ) ) ).toEqual( new Set( hero.poser.wardrobe.hairs.values() ) );
+		expect( meshes.every( ( mesh ) => hero.poser.wears( mesh ) === dressed ) ).toBe( true );
 		expect( meshes.find( ( mesh ) => mesh.name === 'body' ).material ).toMatchObject( { ...CROWD_SURFACE, roughness: 0.86, normalMap: null, roughnessMap: null } );
-		const jacket = panelsOf( meshes.find( ( mesh ) => mesh.name === 'garment-office-jacket' ).material );
-		expect( [ jacket.primary, jacket.secondary, jacket.accent ].map( hex ) ).toEqual( [ '#3c4f53', '#dedcd0', '#ac9a76' ] );
-		expect( jacket.roughness ).toBe( 0.9 );
+		const jacket = meshes.find( ( mesh ) => mesh.name === 'garment-office-jacket' );
+		expect( jacket.material ).toBe( hero.poser.wardrobe.garment( 'office-jacket' ) );
+		const panels = dressed.panels.get( 'office-jacket' );
+		expect( panels.palette.slice( 0, 3 ).map( hex ) ).toEqual( [ '#3c4f53', '#dedcd0', '#ac9a76' ] );
+		expect( panels.roughness ).toBe( 0.9 );
 
 	} );
 
@@ -212,7 +213,7 @@ describe( 'focused character', () => {
 
 		await hero.show( { ...person, look: outfit( 'male', { colors: { skin: '#4b3026' } } ) } );
 		expect( hero.active.root ).toBe( root );
-		expect( hex( root.userData.dressed.colors.skin.value ) ).toBe( '#4b3026' );
+		expect( hex( root.userData.dressed.colors.skin ) ).toBe( '#4b3026' );
 		await hero.show( { ...person, look: outfit( 'male', { outfit: { top: 'top-tee' } } ) } );
 		expect( hero.active.root ).not.toBe( root );
 		expect( hero.active.root.getObjectByName( 'garment-top-tee' ) ).toBeTruthy();
@@ -234,7 +235,7 @@ describe( 'focused character', () => {
 		person.look = outfit( 'male', { colors: { hair: '#b68d54' } } );
 		hero.update( 0 );
 		expect( hero.active.root ).toBe( root );
-		expect( hex( root.userData.dressed.colors.hair.value ) ).toBe( '#b68d54' );
+		expect( hex( root.userData.dressed.colors.hair ) ).toBe( '#b68d54' );
 
 		person.look = outfit( 'male', { outfit: { pants: 'pants-shorts' } } );
 		hero.update( 0 );
@@ -261,7 +262,7 @@ describe( 'focused character', () => {
 		const [ first ] = people;
 		const rig = hero.rigOf( first );
 		expect( rig.root.getObjectByName( 'garment-tech-top' ) ).toBeTruthy();
-		expect( hex( rig.root.userData.dressed.colors.skin.value ) ).toBe( '#edc6ac' );
+		expect( hex( rig.root.userData.dressed.colors.skin ) ).toBe( '#edc6ac' );
 
 		// It stands where the body walks, in the body's clip at the body's frame.
 		first.position.set( 5, 0, 5 );

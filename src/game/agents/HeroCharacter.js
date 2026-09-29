@@ -319,7 +319,7 @@ export class HeroCharacter {
 		if ( ! this.active ) return;
 
 		const { person, root, mixer, gesture, height } = this.active;
-		if ( root.userData.dressed?.presence ) root.userData.dressed.presence.value = person.presence ?? 1;
+		if ( root.userData.dressed ) root.userData.dressed.presence = person.presence ?? 1;
 		if ( person.look !== this.active.look ) this.#wear();
 		root.position.copy( person.position );
 		root.rotation.y = person.heading;
@@ -475,7 +475,7 @@ export class HeroCharacter {
 	#follow( close, delta ) {
 
 		const { person, root, mixer, height } = close;
-		if ( root.userData.dressed?.presence ) root.userData.dressed.presence.value = person.presence ?? 1;
+		if ( root.userData.dressed ) root.userData.dressed.presence = person.presence ?? 1;
 		if ( person.look !== close.look ) {
 
 			close.look = person.look;
