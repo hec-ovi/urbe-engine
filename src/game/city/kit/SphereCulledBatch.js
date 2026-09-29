@@ -7,6 +7,7 @@ export const HIDDEN_FAR = - 2;
 
 const _frustum = new Frustum();
 const _matrix = new Matrix4();
+const _inverse = new Matrix4();
 const _sphere = new Sphere();
 const _point = new Vector3();
 const _vertex = new Vector3();
@@ -35,10 +36,22 @@ const _vertex = new Vector3();
  * belongs to the geometry, so copies placed before it arrived draw it too. Every
  * pass measures from the one point, so a shadow and a probe face draw what the
  * view does.
+ *
+ * A pass seen from where the last one was, with nothing edited since, keeps
+ * the last list as it stands: a player standing still re-culls nothing. And
+ * the list reaches the GPU only when it differs from the one already there,
+ * because the indirect texture is uploaded whole every time it is flagged.
  */
 export class SphereCulledBatch extends BatchedMesh {
 
 	#adding = false;
+	/** Whether a copy, a geometry or the far table changed since the last pass culled. */
+	#edited = true;
+	/** What the last pass culled for: its camera, clip matrix, far point and distance. */
+	#camera = null;
+	#clip = new Float64Array( 20 );
+	/** The indirect texture the current draw list was last uploaded into. */
+	#uploaded = null;
 
 	constructor( maxInstanceCount, maxVertexCount, maxIndexCount, material ) {
 
@@ -60,6 +73,7 @@ export class SphereCulledBatch extends BatchedMesh {
 
 			const geometryId = super.addGeometry( geometry, reservedVertexCount, reservedIndexCount );
 			this.farOf[ geometryId ] = NEAR_ONLY;
+			this.#edited = true;
 
 			return geometryId;
 
@@ -75,6 +89,7 @@ export class SphereCulledBatch extends BatchedMesh {
 
 		const instanceId = super.addInstance( geometryId );
 		this.#keep( instanceId );
+		this.#edited = true;
 
 		return instanceId;
 
@@ -111,6 +126,7 @@ export class SphereCulledBatch extends BatchedMesh {
 		this.validateGeometryId( geometryId );
 		if ( far >= 0 ) this.validateGeometryId( far );
 		this.farOf[ geometryId ] = far;
+		this.#edited = true;
 
 		return this;
 
@@ -120,6 +136,7 @@ export class SphereCulledBatch extends BatchedMesh {
 
 		super.setMatrixAt( instanceId, matrix );
 		this.#keep( instanceId );
+		this.#edited = true;
 
 		return this;
 
@@ -129,6 +146,7 @@ export class SphereCulledBatch extends BatchedMesh {
 
 		super.setGeometryIdAt( instanceId, geometryId );
 		this.#keep( instanceId );
+		this.#edited = true;
 
 		return this;
 
@@ -142,6 +160,7 @@ export class SphereCulledBatch extends BatchedMesh {
 			if ( instance.active && instance.geometryIndex === geometryId ) this.#keep( instanceId );
 
 		} );
+		this.#edited = true;
 
 		return geometryId;
 
@@ -153,6 +172,32 @@ export class SphereCulledBatch extends BatchedMesh {
 		const spheres = new Float32Array( maxInstanceCount * 4 );
 		spheres.set( this.spheres.subarray( 0, Math.min( this.spheres.length, spheres.length ) ) );
 		this.spheres = spheres;
+		this.#edited = true;
+
+	}
+
+	setGeometrySize( maxVertexCount, maxIndexCount ) {
+
+		super.setGeometrySize( maxVertexCount, maxIndexCount );
+		this.#edited = true;
+
+	}
+
+	deleteInstance( instanceId ) {
+
+		super.deleteInstance( instanceId );
+		this.#edited = true;
+
+		return this;
+
+	}
+
+	setVisibleAt( instanceId, visible ) {
+
+		super.setVisibleAt( instanceId, visible );
+		this.#edited = true;
+
+		return this;
 
 	}
 
@@ -160,27 +205,41 @@ export class SphereCulledBatch extends BatchedMesh {
 
 		if ( ! this.perObjectFrustumCulled || this.sortObjects || camera.isArrayCamera || material.wireframe ) {
 
+			// Three writes the lists itself, so the next pass of ours starts over.
+			this.#camera = null;
 			super.onBeforeRender( renderer, scene, camera, geometry, material, group );
 			return;
 
 		}
 
+		_matrix.multiplyMatrices( camera.projectionMatrix, camera.matrixWorldInverse ).multiply( this.matrixWorld );
+		const point = this.lod?.point ? _point.copy( this.lod.point ).applyMatrix4( _inverse.copy( this.matrixWorld ).invert() ) : null;
+		const distance = this.lod?.distance ?? 0;
+
+		if ( ! this.#edited && ! this._visibilityChanged && camera === this.#camera && this.#same( point, distance ) ) return;
+
+		this.#camera = camera;
+		this.#clip.set( _matrix.elements );
+		this.#clip[ 16 ] = point ? point.x : NaN;
+		this.#clip[ 17 ] = point ? point.y : NaN;
+		this.#clip[ 18 ] = point ? point.z : NaN;
+		this.#clip[ 19 ] = distance;
+		this.#edited = false;
+
 		const index = geometry.getIndex();
 		const bytesPerElement = index === null ? 1 : index.array.BYTES_PER_ELEMENT;
-		_matrix.multiplyMatrices( camera.projectionMatrix, camera.matrixWorldInverse ).multiply( this.matrixWorld );
 		_frustum.setFromProjectionMatrix( _matrix, camera.coordinateSystem, camera.reversedDepth );
 
 		const planes = _frustum.planes;
 		const spheres = this.spheres;
 		const farOf = this.farOf;
-		const point = this.lod?.point ? _point.copy( this.lod.point ).applyMatrix4( _matrix.copy( this.matrixWorld ).invert() ) : null;
-		const distance = this.lod?.distance ?? 0;
 		const instances = this._instanceInfo;
 		const geometries = this._geometryInfo;
 		const starts = this._multiDrawStarts;
 		const counts = this._multiDrawCounts;
 		const indirect = this._indirectTexture.image.data;
 		let drawn = 0;
+		let changed = this._indirectTexture !== this.#uploaded;
 
 		for ( let instanceId = 0, l = instances.length; instanceId < l; instanceId ++ ) {
 
@@ -197,16 +256,40 @@ export class SphereCulledBatch extends BatchedMesh {
 			}
 
 			const range = geometries[ geometryIndex ];
-			starts[ drawn ] = range.start * bytesPerElement;
-			counts[ drawn ] = range.count;
-			indirect[ drawn ] = instanceId;
+			const start = range.start * bytesPerElement;
+			if ( indirect[ drawn ] !== instanceId || starts[ drawn ] !== start || counts[ drawn ] !== range.count ) {
+
+				starts[ drawn ] = start;
+				counts[ drawn ] = range.count;
+				indirect[ drawn ] = instanceId;
+				changed = true;
+
+			}
 			drawn ++;
 
 		}
 
-		this._indirectTexture.needsUpdate = true;
+		if ( changed || drawn !== this._multiDrawCount ) {
+
+			this._indirectTexture.needsUpdate = true;
+			this.#uploaded = this._indirectTexture;
+
+		}
 		this._multiDrawCount = drawn;
 		this._visibilityChanged = false;
+
+	}
+
+	/** Whether this pass culls for the clip matrix and far point the last one did. */
+	#same( point, distance ) {
+
+		const clip = this.#clip;
+		const elements = _matrix.elements;
+		for ( let i = 0; i < 16; i ++ ) if ( clip[ i ] !== elements[ i ] ) return false;
+
+		return point
+			? clip[ 16 ] === point.x && clip[ 17 ] === point.y && clip[ 18 ] === point.z && clip[ 19 ] === distance
+			: Number.isNaN( clip[ 16 ] ) && clip[ 19 ] === distance;
 
 	}
 

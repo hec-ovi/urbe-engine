@@ -105,4 +105,62 @@ describe( 'a batch that keeps each copy\'s sphere', () => {
 
 	} );
 
+	it( 'keeps the last list for a pass seen from where the last one was, and uploads a list only when it differs', () => {
+
+		const [ , batch ] = pair();
+		const camera = new THREE.PerspectiveCamera( 70, 1, 0.2, 900 );
+		camera.updateMatrixWorld();
+		const texture = () => batch._indirectTexture;
+		// Every copy is culled against its sphere once per pass that culls at all.
+		let tests = 0;
+		const spheres = batch.spheres;
+		batch.spheres = new Proxy( spheres, { get: ( target, key ) => {
+
+			if ( key === '3' || key === 3 ) tests ++;
+			const value = Reflect.get( target, key );
+			return typeof value === 'function' ? value.bind( target ) : value;
+
+		} } );
+
+		const first = drawList( batch, camera );
+		const uploads = texture().version;
+		expect( uploads ).toBeGreaterThan( 0 );
+		expect( first.map( ( [ copy ] ) => copy ) ).toEqual( [ 0, 1 ] );
+
+		// Standing still: nothing is culled again and nothing is uploaded again.
+		const culled = tests;
+		expect( drawList( batch, camera ) ).toEqual( first );
+		expect( tests ).toBe( culled );
+		expect( texture().version ).toBe( uploads );
+
+		// A small turn that keeps the same copies in view culls again and uploads nothing.
+		camera.rotation.y = 0.01;
+		camera.updateMatrixWorld();
+		expect( drawList( batch, camera ) ).toEqual( first );
+		expect( tests ).toBeGreaterThan( culled );
+		expect( texture().version ).toBe( uploads );
+
+		// A copy that moves is an edit: the same view culls again and the new list goes up.
+		batch.spheres = spheres;
+		batch.setMatrixAt( 2, new THREE.Matrix4().makeTranslation( 0, 0, - 30 ) );
+		expect( drawList( batch, camera ).map( ( [ copy ] ) => copy ) ).toEqual( [ 0, 1, 2 ] );
+		expect( texture().version ).toBe( uploads + 1 );
+
+		// Another camera at the same place draws the same list, and a hidden copy leaves it.
+		const other = camera.clone();
+		other.updateMatrixWorld();
+		expect( drawList( batch, other ).map( ( [ copy ] ) => copy ) ).toEqual( [ 0, 1, 2 ] );
+		expect( texture().version ).toBe( uploads + 1 );
+		batch.setVisibleAt( 1, false );
+		expect( drawList( batch, other ).map( ( [ copy ] ) => copy ) ).toEqual( [ 0, 2 ] );
+		expect( texture().version ).toBe( uploads + 2 );
+
+		// A new indirect texture is uploaded whatever it holds.
+		batch.setInstanceCount( 8 );
+		const fresh = texture().version;
+		expect( drawList( batch, other ).map( ( [ copy ] ) => copy ) ).toEqual( [ 0, 2 ] );
+		expect( texture().version ).toBe( fresh + 1 );
+
+	} );
+
 } );
