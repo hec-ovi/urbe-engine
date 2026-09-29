@@ -11,6 +11,12 @@ const _inverse = new Matrix4();
 const _sphere = new Sphere();
 const _point = new Vector3();
 const _vertex = new Vector3();
+/**
+ * How far, in metres, a pass's camera may stand from the last one's and still
+ * keep its list: a player standing still is never quite still, the body
+ * settling a tenth of a millimetre each frame.
+ */
+const SAME_VIEW = 5e-4;
 
 /**
  * A BatchedMesh whose copies stand still, so each copy's bounding sphere is
@@ -38,7 +44,8 @@ const _vertex = new Vector3();
  * view does.
  *
  * A pass seen from where the last one was, with nothing edited since, keeps
- * the last list as it stands: a player standing still re-culls nothing. And
+ * the last list as it stands: a player standing still re-culls nothing, the
+ * settling of their body included (SAME_VIEW). And
  * the list reaches the GPU only when it differs from the one already there,
  * because the indirect texture is uploaded whole every time it is flagged.
  */
@@ -49,7 +56,9 @@ export class SphereCulledBatch extends BatchedMesh {
 	#edited = true;
 	/** What the last pass culled for: its camera, clip matrix, far point and distance. */
 	#camera = null;
-	#clip = new Float64Array( 20 );
+	#view = new Float64Array( 45 );
+	#lodAt = new Vector3();
+	#lod = false;
 	/** The indirect texture the current draw list was last uploaded into. */
 	#uploaded = null;
 
@@ -226,14 +235,10 @@ export class SphereCulledBatch extends BatchedMesh {
 		const point = this.lod?.point ? _point.copy( this.lod.point ).applyMatrix4( _inverse.copy( this.matrixWorld ).invert() ) : null;
 		const distance = this.lod?.distance ?? 0;
 
-		if ( ! this.#edited && ! this._visibilityChanged && camera === this.#camera && this.#same( point, distance ) ) return;
+		if ( ! this.#edited && ! this._visibilityChanged && camera === this.#camera && this.#same( camera, point, distance ) ) return;
 
 		this.#camera = camera;
-		this.#clip.set( _matrix.elements );
-		this.#clip[ 16 ] = point ? point.x : NaN;
-		this.#clip[ 17 ] = point ? point.y : NaN;
-		this.#clip[ 18 ] = point ? point.z : NaN;
-		this.#clip[ 19 ] = distance;
+		this.#keepView( camera, point, distance );
 		this.#edited = false;
 
 		const index = geometry.getIndex();
@@ -290,16 +295,35 @@ export class SphereCulledBatch extends BatchedMesh {
 
 	}
 
-	/** Whether this pass culls for the clip matrix and far point the last one did. */
-	#same( point, distance ) {
+	/**
+	 * What a pass culls for: the camera's projection and turn exactly, its
+	 * position, the batch's own placement, the far point and distance.
+	 */
+	#keepView( camera, point, distance ) {
 
-		const clip = this.#clip;
-		const elements = _matrix.elements;
-		for ( let i = 0; i < 16; i ++ ) if ( clip[ i ] !== elements[ i ] ) return false;
+		const view = this.#view;
+		const world = camera.matrixWorld.elements;
+		view.set( camera.projectionMatrix.elements, 0 );
+		view.set( this.matrixWorld.elements, 16 );
+		for ( let i = 0; i < 3; i ++ ) for ( let j = 0; j < 3; j ++ ) view[ 32 + i * 3 + j ] = world[ i * 4 + j ];
+		view[ 41 ] = world[ 12 ]; view[ 42 ] = world[ 13 ]; view[ 43 ] = world[ 14 ];
+		view[ 44 ] = distance;
+		this.#lod = point !== null;
+		if ( point ) this.#lodAt.copy( point );
 
-		return point
-			? clip[ 16 ] === point.x && clip[ 17 ] === point.y && clip[ 18 ] === point.z && clip[ 19 ] === distance
-			: Number.isNaN( clip[ 16 ] ) && clip[ 19 ] === distance;
+	}
+
+	/** Whether this pass culls for what the last one did, the camera within SAME_VIEW of where it stood. */
+	#same( camera, point, distance ) {
+
+		const view = this.#view;
+		const projection = camera.projectionMatrix.elements, placement = this.matrixWorld.elements, world = camera.matrixWorld.elements;
+		for ( let i = 0; i < 16; i ++ ) if ( view[ i ] !== projection[ i ] || view[ 16 + i ] !== placement[ i ] ) return false;
+		for ( let i = 0; i < 3; i ++ ) for ( let j = 0; j < 3; j ++ ) if ( view[ 32 + i * 3 + j ] !== world[ i * 4 + j ] ) return false;
+		if ( Math.abs( view[ 41 ] - world[ 12 ] ) > SAME_VIEW || Math.abs( view[ 42 ] - world[ 13 ] ) > SAME_VIEW || Math.abs( view[ 43 ] - world[ 14 ] ) > SAME_VIEW ) return false;
+		if ( view[ 44 ] !== distance || ( point !== null ) !== this.#lod ) return false;
+
+		return point === null || point.distanceTo( this.#lodAt ) <= SAME_VIEW;
 
 	}
 

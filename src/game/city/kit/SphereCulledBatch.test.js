@@ -133,6 +133,14 @@ describe( 'a batch that keeps each copy\'s sphere', () => {
 		expect( tests ).toBe( culled );
 		expect( texture().version ).toBe( uploads );
 
+		// A body settling a tenth of a millimetre is standing still.
+		camera.position.y += 1e-4;
+		camera.updateMatrixWorld();
+		expect( drawList( batch, camera ) ).toEqual( first );
+		expect( tests ).toBe( culled );
+		camera.position.y -= 1e-4;
+		camera.updateMatrixWorld();
+
 		// A small turn that keeps the same copies in view culls again and uploads nothing.
 		camera.rotation.y = 0.01;
 		camera.updateMatrixWorld();
