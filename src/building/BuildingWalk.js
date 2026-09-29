@@ -11,6 +11,7 @@ import { InteriorProps } from '../game/city/InteriorProps.js';
 import { InteriorStream } from '../game/city/InteriorStream.js';
 import { RoomView } from '../game/city/RoomView.js';
 import { Elevators } from '../game/city/Elevators.js';
+import { ApartmentDoors } from '../game/city/ApartmentDoors.js';
 import { RoomLights } from '../game/light/RoomLights.js';
 
 /** One building hosted by the same player, collision, doors, lifts and rooms as the game. */
@@ -65,6 +66,9 @@ export class BuildingWalk {
                 baseUrl: this.interior.props.baseUrl, roomLights: this.rooms } );
             await this.modules.ready;
             this.stream = new InteriorStream( { modules: this.modules, props: this.props, roomLights: this.rooms, elevators: this.elevators, haze: null } );
+            // The shown floors' apartment doors open and collide as in the game.
+            this.stream.apartmentDoors = new ApartmentDoors( this.physics );
+            this.interactor.interiors = this.stream;
             this.stream.onColliderBand = ( id, { boxes, positions } ) => {
                 if ( boxes.length ) this.colliders.addBoxes( id, boxes );
                 return positions.length ? this.colliders.addBand( `${id}/props`, positions ) : true;

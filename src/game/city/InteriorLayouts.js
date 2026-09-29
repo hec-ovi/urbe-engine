@@ -41,6 +41,8 @@ function floorOf( parcelId, entry, layout ) {
 		elevation,
 		height: source.height,
 		rooms: source.rooms,
+		// Numbers and entrance ownership vary by floor even when its layout repeats.
+		apartmentEntrances: entry.apartmentEntrances ?? [],
 		core: source.core,
 		coreAngleDeg: source.coreAngleDeg ?? 0,
 		// A layout's fixtures are measured from its own walking surface; a floor's

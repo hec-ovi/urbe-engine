@@ -3,13 +3,15 @@ import type { InteriorModules } from '../InteriorModules.js';
 import type { InteriorProps } from '../InteriorProps.js';
 import type { RoomLights } from '../../light/RoomLights.js';
 import type { Elevators } from '../Elevators.js';
+import type { ApartmentDoors } from '../ApartmentDoors.js';
 
 type InteriorLayoutId = 'ground' | 'middle' | 'crown' | `floor-${number}`;
 
 /** `building.json` and its declared layouts, as BuildingSource reads them. */
 export interface InteriorSource {
 	building: {
-		floors: Array<{ index: number; layout: InteriorLayoutId; elevation: number }>;
+		/** `apartmentEntrances` follows Interior's building.schema.json `apartmentEntrance`. */
+		floors: Array<{ index: number; layout: InteriorLayoutId; elevation: number; apartmentEntrances?: Array<Record<string, unknown>> }>;
 		layouts: Partial<Record<InteriorLayoutId, string>>;
 		[field: string]: unknown;
 	};
@@ -51,5 +53,7 @@ export interface InteriorStreamPort {
 	onColliderBand: ((id: string, solid: FloorSolid) => Promise<boolean | void> | boolean | void) | null;
 	/** Cancels pending admission or removes a ready floor before its instances are released. */
 	onDropBand: ((id: string) => void) | null;
+	/** The registry a shown floor's apartment doors join and a hidden one's leave; null builds them without collision or E. */
+	apartmentDoors: ApartmentDoors | null;
 	dispose(): void;
 }

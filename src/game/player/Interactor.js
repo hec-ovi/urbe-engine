@@ -4,6 +4,7 @@ import { CLIP } from '../agents/CharacterAssets.js';
 const TALK_RANGE = 2.5;
 const DOOR_RANGE = 3.2;
 const DOOR_SPEED = 2.2;
+const NONE = Object.freeze( [] );
 /** Roughly 40 degrees off the crosshair: past that you are not aiming at it. */
 const MIN_AIM = 0.76;
 /**
@@ -49,13 +50,18 @@ export class Interactor {
 		this.target = null;
 		this.conversation = null;
 		this.onConversation = null;
+		/** The doors in reach this frame, gathered into one array kept for every frame. */
+		this.reach = [];
 
 	}
 
 	/** @returns the prompt string, or null. */
 	update( delta, questState ) {
 
+		// The apartment doors of the floors shown now run beside the street doors.
+		const apartments = this.interiors?.apartmentDoors?.doors ?? NONE;
 		for ( const door of this.doors ) this.#moveDoor( door, delta );
+		for ( const door of apartments ) this.#moveDoor( door, delta );
 
 		if ( this.conversation ) {
 
@@ -65,11 +71,15 @@ export class Interactor {
 		}
 
 		const feet = this.controller.body.feet;
+		const reach = this.reach;
+		reach.length = 0;
+		for ( const door of this.doors ) if ( door.center.distanceTo( feet ) <= DOOR_RANGE ) reach.push( door );
+		for ( const door of apartments ) if ( door.center.distanceTo( feet ) <= DOOR_RANGE ) reach.push( door );
 
 		this.target = pick(
 			this.controller.eye,
 			this.controller.look,
-			this.doors.filter( ( door ) => door.center.distanceTo( feet ) <= DOOR_RANGE ),
+			reach,
 			this.crowd.within( feet, TALK_RANGE ),
 			this.elevators?.panels( feet, DOOR_RANGE ) ?? [],
 			[ ...this.#candidates( 'quests', questState ), ...this.#candidates( 'investigations', questState ) ]

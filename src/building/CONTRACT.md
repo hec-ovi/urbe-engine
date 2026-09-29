@@ -32,9 +32,10 @@ are repaired from the producer output before the pair is published.
 in first person. The viewer consumes placement tables through the game's
 InteriorModules, InteriorProps and InteriorStream. BuildingsLoader keeps exterior
 door motion and cuts the shell slabs around the interior's actual floors and wells.
-Physics, PlayerBody, Input, PlayerController, Interactor and Elevators are shared with
-the game. WASD walks, Shift runs, Space jumps, C crouches, E opens doors or operates
-lifts, and Escape releases the pointer. Click the viewport to capture it. `Walk from`
+Physics, PlayerBody, Input, PlayerController, Interactor, Elevators and ApartmentDoors are
+shared with the game, so a door waits for its floor as in the game and the shown floors'
+apartment doors open and collide. WASD walks, Shift runs, Space jumps, C crouches, E opens
+doors or operates lifts, and Escape releases the pointer. Click the viewport to capture it. `Walk from`
 selects the main entrance, any published floor, or Roof when the crown publishes
 a connected roof exit; floor geometry and collision are
 ready before teleporting. Inspection mode retains the free camera and floor slicing.

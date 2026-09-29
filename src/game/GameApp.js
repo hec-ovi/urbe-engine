@@ -29,6 +29,7 @@ import { SafetyGround } from './ground/SafetyGround.js';
 import { HydrologyHost } from './hydro/index.js';
 import { BuildingsLoader } from './city/BuildingsLoader.js';
 import { doorFrames } from './city/DoorGeometry.js';
+import { ApartmentDoors } from './city/ApartmentDoors.js';
 import { ShellScene } from './ShellScene.js';
 import { Links } from './links/Links.js';
 import { Transit } from './transit/Transit.js';
@@ -451,6 +452,7 @@ export class GameApp {
 		} );
 		this.scene.add( this.safetyGround.mesh );
 		this.doorColliders = new DoorColliders( this.physics, city.doors );
+		this.stream.apartmentDoors = new ApartmentDoors( this.physics );
 		this.impactWorld = new ImpactWorld( this.physics );
 		await this.colliders.addStaticsAsync( city.shellColliders, { release: true } );
 		city.shellColliders.clear();

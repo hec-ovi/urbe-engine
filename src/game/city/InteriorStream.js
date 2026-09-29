@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { buildApartmentDoors } from './ApartmentDoors.js';
 import { buildingFloors, floorPlacements } from './InteriorLayouts.js';
 import { furnitureBoxes } from './FurnitureBoxes.js';
 import { floorBoxes } from './InteriorBoxes.js';
@@ -83,6 +84,8 @@ export class InteriorStream {
 		this.onColliderBand = null;
 		this.onDropBand = null;
 		this.changed = false;
+		/** The `ApartmentDoors` registry the shown floors' apartment doors join, once the host has physics. */
+		this.apartmentDoors = null;
 
 	}
 
@@ -232,6 +235,7 @@ export class InteriorStream {
 
 		for ( const band of interior.bands ) this.#unload( interior, band );
 
+		this.apartmentDoors?.forget( parcelId );
 		this.elevators?.remove( parcelId );
 		this.group.remove( interior.group );
 
@@ -324,6 +328,7 @@ export class InteriorStream {
 			band.live = true;
 			band.group.parent.visible = true;
 			band.show();
+			this.apartmentDoors?.show( band.id, band.apartmentDoors );
 			this.changed = true;
 
 		} catch ( error ) {
@@ -345,6 +350,7 @@ export class InteriorStream {
 
 	#hide( band ) {
 
+		this.apartmentDoors?.hide( band.id );
 		band.admission = null;
 		band.live = false;
 		band.hide();
@@ -444,6 +450,8 @@ export class InteriorStream {
 		const copies = [];
 		const content = new THREE.Group();
 		content.name = `interior:${band.id}`;
+		const apartmentGroup = buildApartmentDoors( record, this.modules, { fills, shared } );
+		content.add( apartmentGroup );
 
 		for ( const placement of floorPlacements( record ) ) {
 
@@ -490,7 +498,7 @@ export class InteriorStream {
 		}
 
 		return {
-			content, rooms, copies,
+			content, rooms, copies, apartmentDoors: apartmentGroup.userData.apartmentDoors,
 			solid: {
 				boxes: [ ...floorBoxes( floorPlacements( record ), record.elevation, ( id ) => this.modules.boundsOf( id ) ),
 					...furnitureBoxes( floorPlacements( record ), record.elevation, this.props ) ],
@@ -547,17 +555,20 @@ class FloorBand {
 		this.handles = null;
 		this.rooms = [];
 		this.solid = { boxes: [], positions: [] };
+		/** Its apartment doors, which the stream's registry makes openable while it is shown. */
+		this.apartmentDoors = [];
 		this.admission = null;
 
 	}
 
-	/** Takes what a build made: the floor's own meshes, its rooms, its copies. */
-	take( { content, rooms, copies, solid } ) {
+	/** Takes what a build made: the floor's own meshes, its rooms, its copies, its apartment doors. */
+	take( { content, rooms, copies, solid, apartmentDoors = [] } ) {
 
 		this.content = content;
 		this.rooms = rooms;
 		this.copies = copies;
 		this.solid = solid;
+		this.apartmentDoors = apartmentDoors;
 		this.group.add( content );
 		this.state = LOADED;
 
@@ -599,6 +610,7 @@ class FloorBand {
 		this.copies = [];
 		this.rooms = [];
 		this.solid = { boxes: [], positions: [] };
+		this.apartmentDoors = [];
 		this.state = EMPTY;
 
 	}
@@ -607,7 +619,13 @@ class FloorBand {
 
 function disposeContent( content ) {
 
-	content.traverse( ( node ) => node.geometry?.dispose() );
+	content.traverse( ( node ) => {
+
+		node.geometry?.dispose();
+		// The apartment doors' fill channels are the floor's own, one per door.
+		for ( const channel of node.userData.apartmentFillChannels ?? [] ) channel.dispose();
+
+	} );
 
 }
 
