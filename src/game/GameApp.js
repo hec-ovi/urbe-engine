@@ -39,7 +39,7 @@ import {
 	TransitGameplay, transitErrorMessage, transitServiceLabel, transitStatusLabel
 } from './transit/TransitGameplay.js';
 import { InteriorStream } from './city/InteriorStream.js';
-import { InteriorModules } from './city/InteriorModules.js';
+import { InteriorModules, placedModules } from './city/InteriorModules.js';
 import { InteriorProps } from './city/InteriorProps.js';
 import { Elevators } from './city/Elevators.js';
 import { Neon } from './city/Neon.js';
@@ -375,8 +375,13 @@ export class GameApp {
 		} ).stream() );
 		// The room modules and the furniture are the city's, not any building's:
 		// loaded once, drawn once per surface however many floors are standing.
+		// Of the modules, only those the furnished buildings' floors place: the
+		// stream registers these buildings and no other.
 		this.interiorModules = interiorModules
-			? new InteriorModules( { catalog: interiorModules.document, baseUrl: interiorModules.baseUrl, factory, roomLights: this.rooms } )
+			? new InteriorModules( {
+				catalog: interiorModules.document, baseUrl: interiorModules.baseUrl, factory, roomLights: this.rooms,
+				only: placedModules( buildings )
+			} )
 			: null;
 		this.interiorProps = interiorProps
 			? new InteriorProps( { catalog: interiorProps.document, baseUrl: interiorProps.baseUrl, roomLights: this.rooms } )

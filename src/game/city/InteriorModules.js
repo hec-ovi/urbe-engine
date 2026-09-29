@@ -5,6 +5,7 @@ import { bake, plain } from './GeometryBake.js';
 import { shellMaterial } from './ShellSurface.js';
 import { MaterialBatches } from './kit/MaterialBatches.js';
 import { moduleUvContext } from './kit/UvRepeatChannel.js';
+import { buildingFloors, floorPlacements } from './InteriorLayouts.js';
 
 const LOAD_CONCURRENCY = 8;
 /** A catalog key is theme, kind and tier; a slot is a key and the variant it wears. */
@@ -13,7 +14,8 @@ const KEY = /^[a-z0-9_-]+\/[a-z0-9_-]+\/[a-z0-9_-]+$/;
 const MAPS = [ 'map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap' ];
 
 /**
- * The city's whole room vocabulary, loaded once.
+ * The city's room vocabulary, loaded once: the modules its furnished
+ * buildings place, or the whole catalog.
  *
  * Interior publishes one shared module set for the world, `modules.json` and
  * the GLBs beside it: wall frame pieces, fields, slabs, ceiling bands and
@@ -38,10 +40,12 @@ export class InteriorModules {
 	 * @param factory PbrMaterialFactory, for the material of each published slot
 	 * @param roomLights RoomLights, whose pool lights every slot material
 	 * @param readBinary reads one URL into an ArrayBuffer
+	 * @param only the module ids to load (`placedModules`), or null for the whole catalog
 	 */
-	constructor( { catalog, baseUrl, factory, roomLights, loader = cityGltfLoader(), readBinary = fetchBinary } ) {
+	constructor( { catalog, baseUrl, factory, roomLights, loader = cityGltfLoader(), readBinary = fetchBinary, only = null } ) {
 
 		this.catalog = catalog;
+		this.only = only;
 		this.baseUrl = String( baseUrl ).replace( /\/+$/, '' );
 		this.factory = factory;
 		this.roomLights = roomLights;
@@ -138,7 +142,8 @@ export class InteriorModules {
 
 	async #load() {
 
-		const loaded = await mapConcurrent( this.catalog.modules, LOAD_CONCURRENCY, ( module ) => this.#module( module ) );
+		const modules = this.only ? this.catalog.modules.filter( ( module ) => this.only.has( module.id ) ) : this.catalog.modules;
+		const loaded = await mapConcurrent( modules, LOAD_CONCURRENCY, ( module ) => this.#module( module ) );
 
 		for ( const module of loaded ) this.modules.set( module.id, module );
 		// The room's own caster only has something to cast off where the walls,
@@ -263,6 +268,41 @@ function untile( geometry, material ) {
 	const uv = plain( geometry, 'uv' );
 
 	for ( let i = 0; i < uv.count; i ++ ) uv.setXY( i, uv.getX( i ) / repeat.x, uv.getY( i ) / repeat.y );
+
+}
+
+/**
+ * Every module the floors of these buildings place, window returns and lifts
+ * included: what the interior stream will ever admit once they are
+ * registered. A building whose floors cannot be read answers null, the whole
+ * catalog, and leaves the error to the stream that reads them.
+ *
+ * @param buildings the building sources by parcel id, as the interior stream registers them
+ */
+export function placedModules( buildings ) {
+
+	const ids = new Set();
+
+	for ( const [ parcelId, building ] of buildings ) {
+
+		if ( building.hasInterior === false || ! building.interior ) continue;
+		try {
+
+			for ( const floor of buildingFloors( parcelId, building.interior ) ) {
+
+				for ( const placement of floorPlacements( floor ) ) if ( placement.module ) ids.add( placement.module );
+
+			}
+
+		} catch {
+
+			return null;
+
+		}
+
+	}
+
+	return ids;
 
 }
 
