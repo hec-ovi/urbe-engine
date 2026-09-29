@@ -1,0 +1,149 @@
+/* The Fracture wordmark (FractureLogo.js): one drawing of URBE in several
+   layers over the same box, each clipped to a band and moved sideways. The
+   box is the drawing's 605 × 178 view, so a percentage of it is a fixed part
+   of the letters. Everything that moves is a transform or an opacity step:
+   the compositor runs it while the main thread loads the city. */
+
+.fracture {
+	position: relative;
+	display: inline-block;
+	width: var(--fracture-width, 160px);
+	aspect-ratio: 605 / 178;
+	color: var(--fracture-color, #6de9f5);
+	vertical-align: middle;
+	contain: layout paint style;
+	text-shadow: none;
+}
+
+.fracture-layer,
+.fracture-shift {
+	position: absolute;
+	inset: 0;
+}
+
+.fracture svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+	overflow: visible;
+}
+
+/* Three bands with slits between them; the middle one sits further right. */
+.fracture-band-top { clip-path: inset(0 0 67.98% 0); }
+.fracture-band-mid { clip-path: inset(35.96% 0 41.57% 0); transform: translateX(2.81%); animation: fracture-mid 6.4s steps(1, end) infinite; }
+.fracture-band-bottom { clip-path: inset(62.92% 0 1.12% 0); transform: translateX(-1.16%); }
+
+/* A soft double of the middle band: the blurred part of the mark. */
+.fracture-ghost {
+	clip-path: inset(35.96% 0 41.57% 0);
+	transform: translateX(4.9%);
+	opacity: 0.32;
+	filter: blur(1.2px);
+	color: var(--fracture-ghost, #b7f6fc);
+}
+
+/* Cuts: a thin window that shows now and then, the letters inside it jumping sideways. */
+.fracture-cut {
+	opacity: 0;
+	animation: 6.4s steps(1, end) infinite;
+}
+.fracture.is-backed .fracture-cut { background: var(--fracture-backing, #070a0e); }
+.fracture-cut .fracture-shift { animation: 6.4s steps(1, end) infinite; }
+.fracture-shift-ghost { left: -1.1%; right: 1.1%; opacity: 0.22; }
+
+.fracture-cut-1 { clip-path: inset(11.24% 76.03% 84.83% 2.65%); animation-name: fracture-gate-a; }
+.fracture-cut-2 { clip-path: inset(42.7% 49.59% 52.25% 28.93%); animation-name: fracture-gate-b; }
+.fracture-cut-3 { clip-path: inset(67.98% 37.02% 29.21% 37.52%); animation-name: fracture-gate-c; }
+.fracture-cut-4 { clip-path: inset(17.98% 6.12% 79.21% 73.22%); animation-name: fracture-gate-a; }
+.fracture-cut-5 { clip-path: inset(84.27% 25.62% 12.36% 12.4%); animation-name: fracture-gate-b; }
+.fracture-cut-6 { clip-path: inset(79.21% 53.22% 15.73% 38.84%); animation-name: fracture-gate-c; }
+.fracture-cut-4, .fracture-cut-4 .fracture-shift { animation-delay: 35ms; }
+.fracture-cut-5, .fracture-cut-5 .fracture-shift { animation-delay: 70ms; }
+.fracture-cut-6, .fracture-cut-6 .fracture-shift { animation-delay: 45ms; }
+.fracture-cut-1 .fracture-shift { animation-name: fracture-shift-1; }
+.fracture-cut-2 .fracture-shift { animation-name: fracture-shift-2; }
+.fracture-cut-3 .fracture-shift { animation-name: fracture-shift-3; }
+.fracture-cut-4 .fracture-shift { animation-name: fracture-shift-4; }
+.fracture-cut-5 .fracture-shift { animation-name: fracture-shift-5; }
+.fracture-cut-6 .fracture-shift { animation-name: fracture-shift-6; }
+
+/* A still mark: settled, as on a ready or failed load. */
+.fracture.is-still .fracture-cut { display: none; }
+.fracture.is-still .fracture-band-mid { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+	.fracture-cut { display: none; }
+	.fracture-band-mid { animation: none; }
+}
+
+@keyframes fracture-mid {
+	0% { transform: translateX(2.81%); }
+	33.5% { transform: translateX(3.7%); }
+	34.5% { transform: translateX(2.1%); }
+	35.5% { transform: translateX(2.81%); }
+	80.5% { transform: translateX(1.9%); }
+	81.5% { transform: translateX(2.81%); }
+}
+
+/* Each cut shows in two or three short windows of the 6.4 s cycle. */
+@keyframes fracture-gate-a { 0% { opacity: 0; } 4% { opacity: 1; } 8% { opacity: 0; } 60% { opacity: 1; } 65% { opacity: 0; } }
+@keyframes fracture-gate-b { 0% { opacity: 0; } 34% { opacity: 1; } 37% { opacity: 0; } 80% { opacity: 1; } 83% { opacity: 0; } }
+@keyframes fracture-gate-c { 0% { opacity: 0; } 5% { opacity: 1; } 7% { opacity: 0; } 35% { opacity: 1; } 36% { opacity: 0; } 81% { opacity: 1; } 82% { opacity: 0; } }
+
+/* The letters in a cut: its band's own offset, then the jump and two settling steps. */
+@keyframes fracture-shift-1 {
+	0% { transform: translate(1.82%, -0.56%); }
+	5.3% { transform: translate(-0.82%, 0); }
+	6.6% { transform: translate(0.36%, 0); }
+	8% { transform: translate(0, 0); }
+	60% { transform: translate(-1.18%, -0.56%); }
+	61.4% { transform: translate(0.64%, 0); }
+	63% { transform: translate(0.27%, 0); }
+	65% { transform: translate(0, 0); }
+}
+@keyframes fracture-shift-4 {
+	0% { transform: translateX(-2.15%); }
+	5.3% { transform: translateX(0.97%); }
+	6.6% { transform: translateX(-0.43%); }
+	8% { transform: translateX(0); }
+	60% { transform: translateX(1.4%); }
+	61.4% { transform: translateX(-0.75%); }
+	63% { transform: translateX(-0.32%); }
+	65% { transform: translateX(0); }
+}
+@keyframes fracture-shift-2 {
+	0% { transform: translateX(0.17%); }
+	35% { transform: translateX(3.74%); }
+	36% { transform: translateX(2.41%); }
+	37% { transform: translateX(2.81%); }
+	80% { transform: translateX(4.66%); }
+	81.4% { transform: translateX(2.02%); }
+	83% { transform: translateX(2.81%); }
+}
+@keyframes fracture-shift-5 {
+	0% { transform: translateX(0); }
+	35% { transform: translateX(-1.56%); }
+	36% { transform: translateX(-0.98%); }
+	37% { transform: translateX(-1.16%); }
+	80% { transform: translateX(-1.97%); }
+	81.4% { transform: translateX(-0.81%); }
+	83% { transform: translateX(-1.16%); }
+}
+@keyframes fracture-shift-3 {
+	0% { transform: translate(1.98%, 0.56%); }
+	6% { transform: translate(-2.1%, 0); }
+	7% { transform: translate(-1.16%, 0); }
+	35% { transform: translate(0.41%, 0.56%); }
+	36% { transform: translate(-1.16%, 0); }
+	81% { transform: translate(-3.2%, 0); }
+	82% { transform: translate(-1.16%, 0); }
+}
+@keyframes fracture-shift-6 {
+	0% { transform: translate(-2.65%, 0.56%); }
+	6% { transform: translate(-0.71%, 0); }
+	7% { transform: translate(-1.16%, 0); }
+	35% { transform: translate(-1.9%, 0.56%); }
+	36% { transform: translate(-1.16%, 0); }
+	81% { transform: translate(-0.19%, 0); }
+	82% { transform: translate(-1.16%, 0); }
+}

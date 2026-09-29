@@ -320,6 +320,12 @@
 	font-family: var(--ui-mono);
 }
 
+.hud-pause-brand {
+	margin-bottom: 14px;
+	line-height: 0;
+	--fracture-width: 118px;
+}
+
 .hud-pause-title {
 	margin: 0;
 	font: 24px var(--ui-mono);

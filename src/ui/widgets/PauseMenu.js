@@ -1,12 +1,14 @@
 import { el } from '../components/dom.js';
 import { keyCap } from '../components/KeyCap.js';
 import { menuButton } from '../components/MenuButton.js';
+import { fractureLogo } from '../components/FractureLogo.js';
 import menu from '../views/game-menu.json' with { type: 'json' };
 
 /**
- * The pause screen, up while the world holds: the sections of
- * [game-menu.json](../views/game-menu.json), each entry a button with a line
- * saying what it does and the key that opens it, then the keys to play with.
+ * The pause screen, up while the world holds: the Fracture wordmark over its
+ * title, the sections of [game-menu.json](../views/game-menu.json), each entry
+ * a button with a line saying what it does and the key that opens it, then
+ * the keys to play with.
  * props: { onResume(), onOpen( name ), onSave(), onLeave() }
  */
 export class PauseMenu {
@@ -19,6 +21,7 @@ export class PauseMenu {
 
 		this.element = el( 'div', { className: 'hud-pause' },
 			el( 'div', { className: 'hud-pause-card' },
+				el( 'div', { className: 'hud-pause-brand' }, fractureLogo() ),
 				title,
 				el( 'p', { className: 'hud-pause-note', textContent: menu.pause.note } ),
 				el( 'div', { className: 'hud-pause-sections' }, ...menu.pause.sections.map( ( section ) => el( 'section', { className: 'hud-pause-section' },

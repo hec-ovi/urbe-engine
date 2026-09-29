@@ -5,6 +5,7 @@ import '../components/panels.css';
 import '../components/views.css';
 import '../components/chat.css';
 import '../components/mission.css';
+import '../components/fracture.css';
 import { el } from '../components/dom.js';
 import { HudClock } from '../widgets/HudClock.js';
 import { InteractPrompt } from '../widgets/InteractPrompt.js';
