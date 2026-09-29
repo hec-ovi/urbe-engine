@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { PbrMaterialFactory } from './PbrMaterialFactory.js';
+import { PbrTextureBudget } from './PbrTextureBudget.js';
 import { fakeResolver } from './material-resolver.test-fixtures.js';
 
 const READY = Symbol.for( 'urbe.texture-ready' );
@@ -118,6 +119,49 @@ describe( 'PbrMaterialFactory texture dimensions', () => {
 
 		for ( const textureMaxSize of [ 0, - 1, 2.5, Infinity, null ] ) expect( () => new PbrMaterialFactory( {}, { textureMaxSize } ) )
 			.toThrow( expect.objectContaining( { code: 'E_PBR_TEXTURE_BUDGET' } ) );
+
+	} );
+
+} );
+
+describe( 'PbrTextureBudget on compressed maps', () => {
+
+	const compressedTexture = ( width, height ) => {
+
+		const levels = [];
+		for ( let w = width, h = height; ; w = Math.max( 1, w >> 1 ), h = Math.max( 1, h >> 1 ) ) {
+
+			levels.push( { width: w, height: h, data: new Uint8Array( Math.ceil( w / 4 ) * Math.ceil( h / 4 ) * 16 ) } );
+			if ( w === 1 && h === 1 ) break;
+
+		}
+		return new THREE.CompressedTexture( levels, width, height, THREE.RGBA_BPTC_Format );
+
+	};
+
+	/**
+	 * The quality tier bounds every map's size. A PNG is redrawn smaller; a
+	 * compressed map already carries its smaller levels, so the tier starts it
+	 * at the first level that fits, never at one that is not whole blocks.
+	 */
+	it( 'starts a compressed map at its first level inside the tier\'s size, never at one that is not whole 4x4 blocks', () => {
+
+		const map = compressedTexture( 4096, 2304 );
+		const levels = map.mipmaps;
+		new PbrTextureBudget( 1024 ).fit( map );
+		expect( map.image ).toEqual( { width: 1024, height: 576 } );
+		expect( map.mipmaps ).toEqual( levels.slice( 2 ) );
+
+		const screen = compressedTexture( 1280, 720 );
+		new PbrTextureBudget( 256 ).fit( screen );
+		expect( screen.image ).toEqual( { width: 320, height: 180 } );
+
+		const fitting = compressedTexture( 512, 512 );
+		const version = fitting.version;
+		new PbrTextureBudget( 2048 ).fit( fitting );
+		new PbrTextureBudget().fit( fitting );
+		expect( fitting.mipmaps ).toHaveLength( 10 );
+		expect( fitting.version ).toBe( version );
 
 	} );
 
