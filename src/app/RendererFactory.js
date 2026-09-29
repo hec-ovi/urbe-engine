@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import WebGPU from 'three/addons/capabilities/WebGPU.js';
 import { skipEmptyDraws } from './EmptyDraws.js';
+import { installStaticTextureNodes } from './StaticTextureNodes.js';
 
 /**
  * Builds the unified renderer for the requested backend. WebGPU falls back to
@@ -13,7 +14,10 @@ import { skipEmptyDraws } from './EmptyDraws.js';
  * so a run that will land on WebGL2 never opens them.
  *
  * Objects with nothing to draw in a pass are left out of it before three
- * refreshes their nodes and bindings ([EmptyDraws.js](EmptyDraws.js)).
+ * refreshes their nodes and bindings ([EmptyDraws.js](EmptyDraws.js)), and a
+ * texture that can never be flipped keeps no per-draw update on WebGL2
+ * ([StaticTextureNodes.js](StaticTextureNodes.js)), installed before the
+ * first material is built.
  */
 export class RendererFactory {
 
@@ -25,6 +29,7 @@ export class RendererFactory {
 
 	static async create( backend ) {
 
+		installStaticTextureNodes();
 		const webgpu = backend !== 'webgl' && WebGPU.isAvailable();
 		const renderer = new THREE.WebGPURenderer( {
 			antialias: true,
