@@ -20,8 +20,10 @@ const LIGHT_MATERIALS = [ 'Headlights', 'TailLights' ];
  */
 export class CarModels {
 
+	/** @param capacity how many cars may drive at once; with none, no model is read, built or prepared */
 	static async load( capacity ) {
 
+		if ( ! ( capacity > 0 ) ) return new CarModels( [] );
 		const loader = new GLTFLoader();
 		const gltfs = await Promise.all( FILES.map( ( file ) => loader.loadAsync( `${BASE}/${file}` ) ) );
 
