@@ -166,6 +166,16 @@ export class SphereCulledBatch extends BatchedMesh {
 
 	}
 
+	/**
+	 * Whether a pass can cull this batch ahead of drawing it (EmptyDraws.js):
+	 * calling onBeforeRender twice for one pass culls once.
+	 */
+	get cullsBeforeDraw() {
+
+		return this.perObjectFrustumCulled && ! this.sortObjects;
+
+	}
+
 	setInstanceCount( maxInstanceCount ) {
 
 		super.setInstanceCount( maxInstanceCount );
