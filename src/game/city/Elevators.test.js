@@ -185,3 +185,48 @@ it( 'carries a real physics capsule up a tower without accumulating gravity, the
 	expect( body.collider.isEnabled() ).toBe( true );
 	physics.world.free();
 } );
+
+/** A landing module of two solid leaves, `seam` apart at its zero, as boxes of twelve triangles each. */
+function boxLeaves( seam ) {
+
+	const geometry = new THREE.BufferGeometry();
+	const parts = [ - 1, 1 ].map( ( side ) => {
+
+		const box = new THREE.BoxGeometry( 0.55 - seam / 2, 2.2, 0.06 ).toNonIndexed();
+		box.translate( side * ( 0.55 + seam / 2 ) / 2, 1.1, 0 );
+		return box.getAttribute( 'position' ).array;
+
+	} );
+	geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [ ...parts[ 0 ], ...parts[ 1 ] ], 3 ) );
+	geometry.computeBoundingBox();
+	return { surfacesOf: () => [ { geometry, material: new THREE.MeshBasicMaterial() } ] };
+
+}
+
+it( 'shuts a landing whose leaves were published with a seam between them, and keeps the faces where a pair meets', () => {
+
+	for ( const seam of [ 0.01, 0 ] ) {
+
+		const { elevators } = shafts();
+		elevators.mount( 'p1', 0, doorPlacement(), boxLeaves( seam ), new THREE.Group() );
+		const [ stop ] = elevators.shafts[ 0 ].stops;
+		const [ left, right ] = stop.leaves;
+
+		// Every face of both boxes, the two where the leaves meet included.
+		for ( const leaf of stop.leaves ) expect( leaf.children[ 0 ].geometry.getAttribute( 'position' ).count ).toBe( 36 );
+		// Shut, each leaf stands its seam's half in, so the pair meets at the zero.
+		expect( left.position.x ).toBeCloseTo( seam / 2, 6 );
+		expect( right.position.x ).toBeCloseTo( - seam / 2, 6 );
+
+		// Open, each runs half the pair's width out, eased in and out.
+		stop.setOpen( true, 0.35 );
+		const quarter = right.position.x;
+		expect( quarter ).toBeGreaterThan( - seam / 2 );
+		expect( quarter ).toBeLessThan( - seam / 2 + ( 0.55 + seam / 2 ) / 4 );
+		stop.setOpen( true, 2 );
+		expect( right.position.x ).toBeCloseTo( 0.55, 6 );
+		expect( left.position.x ).toBeCloseTo( - 0.55, 6 );
+
+	}
+
+} );

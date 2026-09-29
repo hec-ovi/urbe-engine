@@ -771,9 +771,9 @@ class Stop {
 	 *
 	 * The module is authored as two leaves meeting at its own zero, so the
 	 * split is that plane: everything left of it runs one way, everything right
-	 * of it the other. Which way the landing faces comes from where it sits
-	 * relative to its shaft, so no convention about the published door edge has
-	 * to be right.
+	 * of it the other, and a pair published with a seam between them closes it
+	 * shut. Which way the landing faces comes from where it sits relative to its
+	 * shaft, so no convention about the published door edge has to be right.
 	 *
 	 * @param placement the `lift-doors` placement, in this floor's frame
 	 * @param surfaces the module's own surfaces, in the module's frame
@@ -794,7 +794,7 @@ class Stop {
 		pivot.scale.set( ...placement.scale );
 
 		const bounds = new THREE.Box3();
-		for ( const { geometry } of surfaces ) bounds.union( geometry.boundingBox ?? new THREE.Box3().setFromBufferAttribute( geometry.getAttribute( 'position' ) ) );
+		for ( const { geometry } of surfaces ) bounds.union( boundsOf( geometry ) );
 		const width = bounds.max.x - bounds.min.x;
 		this.doorWidth = width;
 
@@ -803,22 +803,12 @@ class Stop {
 		this.solid = doorway( placement, bounds, this.elevation );
 		this.#seal( true );
 
-		for ( const side of [ - 1, 1 ] ) {
+		// Lit by this shaft's lens through the landing material every shaft shares.
+		this.leaves = splitLeaves( surfaces, ( material ) => this.shaft.cabs.landing( material ) );
+		for ( const leaf of this.leaves ) {
 
-			const leaf = new THREE.Group();
-			leaf.userData.slide = new THREE.Vector3( side * width / 2, 0, 0 );
-
-			for ( const { geometry, material } of surfaces ) {
-
-				const part = takeTriangles( geometry, halfOf( geometry, side ) );
-				if ( ! part ) continue;
-				// Lit by this shaft's lens through the landing material every shaft shares.
-				const mesh = new THREE.Mesh( part, this.shaft.cabs.landing( material ) );
-				mesh[ CAB ] = this.shaft;
-				leaf.add( mesh );
-
-			}
-			if ( leaf.children.length ) this.leaves.push( leaf );
+			for ( const mesh of leaf.children ) mesh[ CAB ] = this.shaft;
+			placeLeaf( leaf, this.open );
 
 		}
 
@@ -882,7 +872,7 @@ class Stop {
 			? Math.min( 1, this.open + step )
 			: Math.max( 0, this.open - step );
 
-		for ( const leaf of this.leaves ) leaf.position.copy( leaf.userData.slide ).multiplyScalar( this.open );
+		for ( const leaf of this.leaves ) placeLeaf( leaf, this.open );
 		// Collision only clears when the visible leaves have fully opened.
 		if ( this.open >= 0.99 ) this.#seal( false );
 
@@ -890,7 +880,64 @@ class Stop {
 
 }
 
-/** The triangles of one leaf: those whose centroid lies on that side of the module's zero. */
+/**
+ * A centre-opening pair of leaves hung on sliders, from a module authored as
+ * two leaves meeting at its own zero: each leaf runs half the pair's width
+ * outward, which clears the doorway it closes, and a pair published with a seam
+ * between its leaves closes it, each leaf standing shut at the zero.
+ *
+ * @param surfaces the module's surfaces, in its own frame
+ * @param materialFor (material) => the material a leaf wears
+ * @param owned where the cut geometry is listed for disposal, if anywhere
+ * @returns the leaves, each a group with `userData.shut` and `userData.slide`
+ */
+function splitLeaves( surfaces, materialFor, owned = null ) {
+
+	const bounds = new THREE.Box3();
+	for ( const { geometry } of surfaces ) bounds.union( boundsOf( geometry ) );
+	const width = bounds.max.x - bounds.min.x;
+	const leaves = [];
+
+	for ( const side of [ - 1, 1 ] ) {
+
+		const leaf = new THREE.Group();
+		let inner = Infinity;
+
+		for ( const { geometry, material } of surfaces ) {
+
+			const starts = halfOf( geometry, side );
+			const part = takeTriangles( geometry, starts );
+			if ( ! part ) continue;
+			owned?.push( part );
+			const position = part.getAttribute( 'position' );
+			for ( let i = 0; i < position.count; i ++ ) inner = Math.min( inner, Math.abs( position.getX( i ) ) );
+			leaf.add( new THREE.Mesh( part, materialFor( material ) ) );
+
+		}
+		if ( ! leaf.children.length ) continue;
+		leaf.userData.shut = new THREE.Vector3( - side * inner, 0, 0 );
+		leaf.userData.slide = new THREE.Vector3( side * width / 2, 0, 0 );
+		leaves.push( leaf );
+
+	}
+
+	return leaves;
+
+}
+
+/** Where a leaf stands at `open`, 0 shut and 1 open: eased in and out, as a door operator runs it. */
+function placeLeaf( leaf, open ) {
+
+	const t = open * open * ( 3 - 2 * open );
+	leaf.position.lerpVectors( leaf.userData.shut, leaf.userData.slide, t );
+
+}
+
+/**
+ * The triangles of one leaf: those whose centroid lies on that side of the
+ * module's zero, and of the faces standing in the zero plane where the leaves
+ * meet, the one that faces the other leaf.
+ */
 function halfOf( geometry, side ) {
 
 	const position = geometry.getAttribute( 'position' );
@@ -899,11 +946,19 @@ function halfOf( geometry, side ) {
 	for ( let i = 0; i < position.count; i += 3 ) {
 
 		centroidAt( position, i, _centroid, _a, _b, _c );
-		if ( Math.sign( _centroid.x ) === side ) starts.push( i );
+		let at = Math.sign( _centroid.x );
+		if ( Math.abs( _centroid.x ) < 1e-7 ) at = - Math.sign( _b.sub( _a ).cross( _c.sub( _a ) ).x );
+		if ( at === side ) starts.push( i );
 
 	}
 
 	return starts;
+
+}
+
+function boundsOf( geometry ) {
+
+	return geometry.boundingBox ?? new THREE.Box3().setFromBufferAttribute( geometry.getAttribute( 'position' ) );
 
 }
 
