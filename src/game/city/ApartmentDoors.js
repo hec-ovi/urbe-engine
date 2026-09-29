@@ -130,12 +130,19 @@ export class ApartmentDoors {
  * the shared module draws. A door is lit by the fill of the two rooms it
  * stands between, in a channel of its own that goes with the floor too.
  *
+ * An entrance that cannot stand, one that is not a pair of pocket leaves in a
+ * doorway of a door's size or names a module the catalog does not hold, fails
+ * the whole build with `E_APARTMENT_DOOR`, unless `refused` is given: then
+ * that entrance alone is left out, its doorway standing open, `refused` hears
+ * why, and the rest of the floor builds.
+ *
  * @param record the floor record, with the `apartmentEntrances` Interior publishes for it
  * @param modules the city module catalog
  * @param fills Map<roomId, Vector4> the rooms' fills, and `shared` the floor's own
+ * @param refused ( entrance, error ) => void, heard for each entrance left out
  * @returns a group holding the copies; its `userData.apartmentDoors` are the doors
  */
-export function buildApartmentDoors( record, modules, { fills = new Map(), shared = null } = {} ) {
+export function buildApartmentDoors( record, modules, { fills = new Map(), shared = null, refused = null } = {} ) {
 
 	const group = new THREE.Group();
 	group.name = `apartment-doors:${record.id}`;
@@ -148,52 +155,65 @@ export function buildApartmentDoors( record, modules, { fills = new Map(), share
 
 		for ( const entrance of record.apartmentEntrances ?? [] ) {
 
-			validate( entrance );
+			const parts = new THREE.Group();
+			let channel = null;
 
-			const along = new THREE.Vector3( Math.cos( entrance.leaves[ 0 ].rotationY ), 0, - Math.sin( entrance.leaves[ 0 ].rotationY ) );
-			const motion = new DoorMotion( entrance.motion );
-			const commonFill = fills.get( entrance.corridorRoom ) ?? shared;
-			const privateFill = fills.get( entrance.privateRoom ) ?? commonFill;
-			const channel = commonFill ? new FillChannel( 1 ) : null;
+			try {
 
-			if ( channel ) {
+				validate( entrance );
 
-				channel.set( 0, commonFill.clone().add( privateFill ).multiplyScalar( 0.5 ) );
-				channels.push( channel );
+				const along = new THREE.Vector3( Math.cos( entrance.leaves[ 0 ].rotationY ), 0, - Math.sin( entrance.leaves[ 0 ].rotationY ) );
+				const motion = new DoorMotion( entrance.motion );
+				const commonFill = fills.get( entrance.corridorRoom ) ?? shared;
+				const privateFill = fills.get( entrance.privateRoom ) ?? commonFill;
+				channel = commonFill ? new FillChannel( 1 ) : null;
+				channel?.set( 0, commonFill.clone().add( privateFill ).multiplyScalar( 0.5 ) );
+
+				const leaves = entrance.leaves.map( ( part, index ) => {
+
+					const pivot = mount( part, record.elevation, modules, channel );
+					parts.add( pivot );
+					const leaf = { pivot, index };
+					motion.prepare( leaf, along );
+					return leaf;
+
+				} );
+				motion.validateLeaves( leaves );
+
+				for ( const part of entrance.fixed ) parts.add( mount( part, record.elevation, modules, channel ) );
+
+				doors.push( {
+					id: `${record.id}:${entrance.id}`,
+					parcelId: record.parcelId,
+					floor: record.floor,
+					role: 'apartment',
+					kind: 'apartment',
+					unit: entrance.unit,
+					number: entrance.number,
+					name: `apartment ${entrance.number}`,
+					corridorRoom: entrance.corridorRoom,
+					privateRoom: entrance.privateRoom,
+					// At floor level: the Interactor aims at a door's handle height above it.
+					center: new THREE.Vector3( entrance.position[ 0 ], record.elevation, entrance.position[ 1 ] ),
+					motion,
+					pivots: leaves,
+					open: 0,
+					wanted: 0
+				} );
+
+			} catch ( error ) {
+
+				parts.traverse( ( node ) => node.geometry?.dispose() );
+				channel?.dispose();
+				if ( ! refused ) throw error;
+				refused( entrance, error );
+				continue;
 
 			}
 
-			const leaves = entrance.leaves.map( ( part, index ) => {
-
-				const pivot = mount( part, record.elevation, modules, channel );
-				group.add( pivot );
-				const leaf = { pivot, index };
-				motion.prepare( leaf, along );
-				return leaf;
-
-			} );
-			motion.validateLeaves( leaves );
-
-			for ( const part of entrance.fixed ) group.add( mount( part, record.elevation, modules, channel ) );
-
-			doors.push( {
-				id: `${record.id}:${entrance.id}`,
-				parcelId: record.parcelId,
-				floor: record.floor,
-				role: 'apartment',
-				kind: 'apartment',
-				unit: entrance.unit,
-				number: entrance.number,
-				name: `apartment ${entrance.number}`,
-				corridorRoom: entrance.corridorRoom,
-				privateRoom: entrance.privateRoom,
-				// At floor level: the Interactor aims at a door's handle height above it.
-				center: new THREE.Vector3( entrance.position[ 0 ], record.elevation, entrance.position[ 1 ] ),
-				motion,
-				pivots: leaves,
-				open: 0,
-				wanted: 0
-			} );
+			if ( channel ) channels.push( channel );
+			// The parts join the floor's group loose, as the doors' pivots expect.
+			for ( const part of [ ...parts.children ] ) group.add( part );
 
 		}
 

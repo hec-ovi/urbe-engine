@@ -509,7 +509,11 @@ export class InteriorStream {
 		const copies = [];
 		const content = new THREE.Group();
 		content.name = `interior:${band.id}`;
-		const apartmentGroup = buildApartmentDoors( record, this.modules, { fills, shared } );
+		// A door that cannot stand leaves its doorway open; it never fails the floor around it.
+		const apartmentGroup = buildApartmentDoors( record, this.modules, {
+			fills, shared,
+			refused: ( entrance, error ) => console.warn( `floor ${band.id} leaves entrance ${entrance?.id} open: ${error?.message ?? error}` )
+		} );
 		content.add( apartmentGroup );
 
 		for ( const placement of floorPlacements( record ) ) {

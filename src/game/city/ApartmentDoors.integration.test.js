@@ -193,6 +193,28 @@ describe( 'private apartment doors through streaming, interaction and physics', 
 
 	} );
 
+	it( 'leaves an entrance it cannot stand open, and builds the rest of the floor, when told who hears the refusal', () => {
+
+		const [ entrance ] = apartmentEntrances( ROOMS, 1, { 'bay:-2.000:0.000': 1 } );
+		const box = () => [ { geometry: new THREE.BoxGeometry( 0.9, 2.5, 0.06 ), material: new THREE.MeshBasicMaterial() } ];
+		const modules = { surfacesOf: ( id ) => ( id === 'absent' ? [] : box() ) };
+		const record = { id: 'p:1', parcelId: 'p', floor: 1, elevation: 4.5, apartmentEntrances: [
+			{ ...entrance, id: 'broken', fixed: [ ...entrance.fixed, { ...entrance.fixed[ 0 ], module: 'absent' } ] },
+			{ ...entrance, id: 'swing', motion: { kind: 'swing', maxTravel: 95, sign: - 1 } },
+			{ ...entrance, id: 'whole' }
+		] };
+		const heard = [];
+
+		const group = buildApartmentDoors( record, modules, { refused: ( one, error ) => heard.push( [ one.id, error.code ] ) } );
+
+		expect( heard ).toEqual( [ [ 'broken', 'E_APARTMENT_DOOR' ], [ 'swing', 'E_APARTMENT_DOOR' ] ] );
+		expect( group.userData.apartmentDoors.map( ( door ) => door.id ) ).toEqual( [ 'p:1:whole' ] );
+		// Only the standing door's leaves and fixed parts join the floor.
+		expect( group.children ).toHaveLength( 2 + entrance.fixed.length );
+		expect( () => buildApartmentDoors( record, modules ) ).toThrow( /E_APARTMENT_DOOR/ );
+
+	} );
+
 	// Interior alone takes over a minute to furnish this building, so the test
 	// has five minutes where a full suite runs it beside everything else.
 	it( 'walks the numbered entrances on every residential floor of a six-storey balcony-grid building', async () => {
