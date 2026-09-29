@@ -80,7 +80,9 @@ export function roomFillValue( mesh, builder ) {
 /** One texel per id, in the square layout a batch keeps its per-copy data in. */
 function texel( texture, id ) {
 
-	const size = int( textureSize( textureLoad( texture ), 0 ).x );
+	// The size is the texture's alone: a load with no coordinate of its own
+	// would read the mesh's uv, which a garment shell or a car part has none of.
+	const size = int( textureSize( textureLoad( texture, ivec2( 0, 0 ) ), 0 ).x );
 	const index = int( id );
 
 	return textureLoad( texture, ivec2( index.mod( size ), index.div( size ) ) );
