@@ -5,14 +5,22 @@ import { MinimapFrame } from './MinimapFrame.js';
 import layout from './minimap-layout.json' with { type: 'json' };
 
 const SIZE = layout.size;
+/** Under half a pixel of movement, or of turn at the map's corner, repaints nothing a player could see. */
+const STILL_METRES = 0.5 / layout.pixelsPerMetre;
+const STILL_RADIANS = 0.5 / SIZE;
 
 /**
  * Corner map with the player at its centre, forward up. The city is baked once
  * when the map is handed over; every frame turns it with the player and draws
  * the live marks, so the minimap costs one image copy however big the city.
  * Presentation only: it is handed plain [x, z] geometry and a position.
+ * A frame that would paint what is already there, the player standing still
+ * with the same marks, paints nothing.
  */
 export class MinimapView {
+
+	/** What the canvas shows: where from, which way, which venues open; null when it must be painted. */
+	#painted = null;
 
 	constructor() {
 
@@ -33,6 +41,7 @@ export class MinimapView {
 	setMap( map ) {
 
 		this.bake = new CityBake( map, layout.pixelsPerMetre );
+		this.#painted = null;
 
 	}
 
@@ -40,6 +49,7 @@ export class MinimapView {
 	setVenues( venues ) {
 
 		this.venues = venues;
+		this.#painted = null;
 
 	}
 
@@ -47,6 +57,7 @@ export class MinimapView {
 	setRoute( route ) {
 
 		this.route = route;
+		this.#painted = null;
 
 	}
 
@@ -54,6 +65,15 @@ export class MinimapView {
 	update( position, heading ) {
 
 		if ( this.element.hidden || ! this.bake ) return;
+
+		// A venue opens and shuts in place, without being handed over again.
+		let open = 0;
+		for ( let i = 0; i < this.venues.length; i ++ ) if ( this.venues[ i ].open ) open = ( open * 31 + i + 1 ) | 0;
+		const painted = this.#painted;
+		if ( painted && painted.open === open
+			&& Math.abs( painted.x - position.x ) < STILL_METRES && Math.abs( painted.z - position.z ) < STILL_METRES
+			&& Math.abs( painted.heading - heading ) < STILL_RADIANS ) return;
+		this.#painted = { x: position.x, z: position.z, heading, open };
 
 		const ctx = this.context;
 		const c = SIZE / 2;
@@ -102,6 +122,7 @@ export class MinimapView {
 	setVisible( visible ) {
 
 		this.element.hidden = ! visible;
+		this.#painted = null;
 
 	}
 

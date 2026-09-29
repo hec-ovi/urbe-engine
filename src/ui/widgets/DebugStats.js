@@ -45,13 +45,14 @@ export class DebugStats {
 
 	}
 
+	/** Writes a row only where it changed: this runs every frame, and every write is a DOM mutation. */
 	#set( key, text, warn ) {
 
 		const row = this.rows[ key ];
+		const className = warn ? 'hud-stats-warn' : '';
 
 		if ( row.textContent !== text ) row.textContent = text;
-
-		row.className = warn ? 'hud-stats-warn' : '';
+		if ( row.className !== className ) row.className = className;
 
 	}
 

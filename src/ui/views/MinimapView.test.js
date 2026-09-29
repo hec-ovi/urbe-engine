@@ -56,6 +56,40 @@ describe( 'MinimapView', () => {
 
 	} );
 
+	it( 'paints again only when the player moves or turns, a mark changes, or it is shown again', () => {
+
+		const venues = [ { point: { x: 50, z: 50 }, open: false } ];
+		view.setMap( MAP );
+		view.setVenues( venues );
+		view.update( { x: 50, z: 50 }, 0 );
+		const painted = () => { const blits = count( view.context, 'drawImage' ); view.context.calls.length = 0; return blits; };
+		expect( painted() ).toBe( 1 );
+
+		view.update( { x: 50, z: 50 }, 0 );
+		view.update( { x: 50.1, z: 50 }, 0.001 );
+		expect( painted() ).toBe( 0 );
+
+		view.update( { x: 51, z: 50 }, 0 );
+		expect( painted() ).toBe( 1 );
+		view.update( { x: 51, z: 50 }, 0.1 );
+		expect( painted() ).toBe( 1 );
+
+		// A venue opening in place is a change on the map.
+		venues[ 0 ].open = true;
+		view.update( { x: 51, z: 50 }, 0.1 );
+		expect( painted() ).toBe( 1 );
+
+		view.setRoute( { path: [ [ 45, 50 ], [ 60, 55 ] ], label: 'reach p9' } );
+		view.update( { x: 51, z: 50 }, 0.1 );
+		expect( painted() ).toBe( 1 );
+
+		view.toggle();
+		view.toggle();
+		view.update( { x: 51, z: 50 }, 0.1 );
+		expect( painted() ).toBe( 1 );
+
+	} );
+
 	it( 'keeps forward above the player and right to the right, with N on world north', () => {
 
 		// A diagonal heading: nothing lands on an axis by accident.

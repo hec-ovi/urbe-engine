@@ -45,4 +45,26 @@ describe( 'DebugStats', () => {
 
 	} );
 
+	it( 'writes nothing to the page on a frame whose numbers did not change', async () => {
+
+		const stats = new DebugStats();
+		document.body.append( stats.element );
+		stats.update( { ...sample, hitches: 3, worstMs: 120 } );
+		const records = [];
+		const observer = new MutationObserver( ( list ) => records.push( ...list ) );
+		observer.observe( stats.element, { subtree: true, childList: true, attributes: true, characterData: true } );
+
+		stats.update( { ...sample, hitches: 3, worstMs: 120 } );
+		await Promise.resolve();
+		expect( records ).toHaveLength( 0 );
+
+		stats.update( { ...sample, hitches: 0, worstMs: 0 } );
+		await Promise.resolve();
+		expect( records.some( ( record ) => record.attributeName === 'class' ) ).toBe( true );
+		expect( stats.rows.hitches.className ).toBe( '' );
+		observer.disconnect();
+		stats.element.remove();
+
+	} );
+
 } );
