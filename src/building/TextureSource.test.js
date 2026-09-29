@@ -79,8 +79,8 @@ describe( 'TextureSource', () => {
 
 	/**
 	 * WebGPU refuses a block-compressed texture whose first level is not whole
-	 * 4x4 blocks, and the surface then draws with no map at all, although its
-	 * PNG master is right there. Maps like that draw from the master.
+	 * 4x4 blocks and loses every frame that binds it; WebGL2 draws it black.
+	 * Its PNG master is right there, so maps like that draw from the master.
 	 */
 	it( 'draws a compressed map whose first level is not whole 4x4 blocks from its PNG master, and any other compressed map as it is', async () => {
 

@@ -105,9 +105,10 @@ function dropEmulatedFormats( config ) {
 }
 
 /**
- * A block-compressed texture's first level must be whole 4x4 blocks: WebGPU
- * refuses any other size, and the surface would then draw with no map. Such
- * a map is unsupported here, so its PNG master draws instead.
+ * A block-compressed texture's first level must be whole 4x4 blocks. WebGPU
+ * refuses the texture and with it every command buffer that binds it, so the
+ * whole frame is lost; WebGL2 refuses its storage and the surface draws black.
+ * Such a map is unsupported here, so its PNG master draws instead.
  */
 function unalignedBlocks( texture ) {
 
