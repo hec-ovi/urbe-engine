@@ -97,6 +97,14 @@ const LOAD_STEPS = 15;
 /** Past this a room is behind opaque walls and haze, so it is not drawn. */
 const ROOM_VISIBLE_RADIUS = 32;
 const NPC_VISIBLE_RADIUS = 115;
+/**
+ * How near the player's eye a person stands to wear their whole recipe
+ * (HeroCharacter.near), the companion from further off, and how much further
+ * one already wearing it keeps it, so nobody flickers at the edge.
+ */
+const CLOSE_REACH = 6;
+const COMPANION_REACH = 15;
+const CLOSE_SLACK = 1.5;
 /** Air scattering is wide and weak indoors, tight and small on the street. */
 const INDOOR_HAZE = { spread: 0.55, cap: 3 };
 const OUTDOOR_HAZE = { spread: 0.28, cap: 2.4 };
@@ -1013,6 +1021,7 @@ export class GameApp {
 
 		} );
 		this.hitches.time( 'scenery', () => this.scenery.update( { timeMin: this.clock.timeMin, feet }, delta ) );
+		this.hitches.time( 'close people', () => this.hero.near( this.#closePeople() ) );
 		this.hero.update( delta );
 		this.hitches.time( 'traffic', () => this.traffic.update( delta, feet, this.clock.daySeconds ) );
 		this.impactWorld.sync( {
@@ -1106,6 +1115,29 @@ export class GameApp {
 	 * whether the probe needs rebaking, and which exposure the camera is on.
 	 */
 	/** Whether the feet have stayed within a hand's width for the last second. */
+	/**
+	 * The people standing nearest the player's eye, the companion first while
+	 * within its reach: anybody fully there, standing, walking or sitting, and
+	 * not a stress copy, leaving, frozen or down.
+	 */
+	#closePeople() {
+
+		const eye = this.body.eye;
+		const companion = this.npcContinuity.companion?.npcId ?? null;
+		const people = [];
+		for ( const member of this.crowd.members.values() ) {
+
+			if ( member.copy || member.retiring || member.fallen || member.frozen || ( member.presence ?? 1 ) < 1 ) continue;
+			const leading = Boolean( companion && member.npcId === companion );
+			const reach = ( leading ? COMPANION_REACH : CLOSE_REACH ) + ( this.hero.nearby.has( member ) ? CLOSE_SLACK : 0 );
+			const distance = member.position.distanceTo( eye );
+			if ( distance <= reach ) people.push( { member, order: leading ? - 1 : distance } );
+
+		}
+		return people.sort( ( a, b ) => a.order - b.order ).map( ( entry ) => entry.member );
+
+	}
+
 	#still( feet, delta ) {
 
 		if ( ! this.rest ) this.rest = { at: feet.clone(), seconds: 0 };

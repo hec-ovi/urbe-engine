@@ -10,16 +10,23 @@ import { streetBodies } from './StreetBodies.js';
 import { Ragdoll } from '../physics/Ragdoll.js';
 
 const TALK = 'Idle_Talking_Loop';
+/** How many people near the player wear their whole recipe besides the one being talked to. */
+export const CLOSE_RIGS = 2;
+/** How fast a close rig blends into the crowd body's next clip, in seconds. */
+const CLOSE_FADE = 0.25;
 const SIT_TALK = 'Sitting_Talking_Loop';
 const BLEND_MS = 160;
 /** Whose recipe a prepared body wears while its programs are built: anybody's does. */
 const PREPARED_SEED = 1;
 
 /**
- * One full-quality skinned person while the player is talking to them. The
- * mass-crowd instance stays authoritative until this model is built and its
- * shaders are warm; then that one slot is hidden. There is never more than one
- * focused armature or AnimationMixer updating in the city.
+ * One full-quality skinned person while the player is talking to them, and
+ * the few standing nearest the player (`near`). The mass-crowd instance stays
+ * authoritative until a model is built and its shaders are warm; then that
+ * one slot is hidden. There is never more than one focused armature, and
+ * never more than CLOSE_RIGS close ones, updating in the city; a close person
+ * who is talked to hands their rig to the talk, and keeps it after while they
+ * stay close.
  *
  * The rig is the person in their own recipe (avatar/Recipe.js), the one the
  * crowd paints on its baked body: their body frame, shape, face and height,
@@ -61,6 +68,10 @@ export class HeroCharacter {
 		this.group = new THREE.Group();
 		this.group.name = 'focused-character';
 		this.active = null;
+		/** The people near the player in their whole recipe: crowd member to rig. */
+		this.close = new Map();
+		/** Who the host last asked to be close (`near`): the focused rig stays one of them when a talk ends. */
+		this.nearby = new Set();
 		this.fallen = null;
 		this.fallPending = false;
 		this.request = 0;
@@ -83,6 +94,22 @@ export class HeroCharacter {
 
 			this.active.person = person;
 			this.#wear();
+			this.#play( sequence, onFinished );
+			return true;
+
+		}
+		// A person already standing close in this recipe is handed over as they are.
+		const close = this.#closeOf( person );
+		if ( close?.root && close.key === modelKey( recipe ) ) {
+
+			this.close.delete( close.person );
+			this.#dropActive();
+			person.hero = true;
+			this.active = {
+				person, look: person.look, recipe, root: close.root, mixer: close.mixer, gesture: new SpeechGesture( close.root ),
+				descriptor: close.descriptor, key: close.key, height: close.height, motions: close.motions,
+				playback: null, sequence: 0, currentAction: close.action, currentClip: close.clipName
+			};
 			this.#play( sequence, onFinished );
 			return true;
 
@@ -118,6 +145,7 @@ export class HeroCharacter {
 		}
 
 		this.#dropActive();
+		this.#dropClose( person );
 		person.hero = true;
 		root.visible = true;
 		this.active = {
@@ -184,6 +212,7 @@ export class HeroCharacter {
 				return false;
 
 			}
+			this.#dropClose( person );
 			root = this.poser.dress( source, person, `fallen-${recipe.body}` );
 			this.lighting?.attachRoot( root, person.position );
 			poseAtCrowdFrame( root, this.animation, source.motions, person );
@@ -238,9 +267,44 @@ export class HeroCharacter {
 
 	}
 
+	/**
+	 * The people who should stand near the player in their whole recipe now,
+	 * nearest first: up to CLOSE_RIGS of them wear a rig of their own, built
+	 * while their crowd body still shows and following that body's place, clip
+	 * and frame, so neither swap shows a pose change. Anybody else close gives
+	 * theirs back. The person being talked to and a fallen one are not close:
+	 * their own rigs show them.
+	 *
+	 * @param people crowd members, their `hero` left to this
+	 */
+	near( people ) {
+
+		// The person talked to counts among the close, in the rig the talk shows.
+		const chosen = people.filter( ( person ) => ! samePerson( this.fallen?.person, person ) ).slice( 0, CLOSE_RIGS );
+		this.nearby = new Set( chosen );
+		for ( const person of [ ...this.close.keys() ] ) if ( ! this.nearby.has( person ) ) this.#dropClose( person );
+		for ( const person of chosen ) {
+
+			if ( this.close.has( person ) || samePerson( this.active?.person, person ) ) continue;
+			this.#dress( person ).catch( ( error ) => console.warn( 'close character:', error.message ) );
+
+		}
+
+	}
+
+	/** The rig showing a person now, focused or close, or null: `{ root, descriptor }`. */
+	rigOf( person ) {
+
+		if ( samePerson( this.active?.person, person ) ) return this.active;
+		const close = this.#closeOf( person );
+		return close?.root ? close : null;
+
+	}
+
 	update( delta ) {
 
 		if ( this.fallen ) this.#fall( delta );
+		for ( const close of this.close.values() ) if ( close.root ) this.#follow( close, delta );
 		if ( ! this.active ) return;
 
 		const { person, root, mixer, gesture, height } = this.active;
@@ -329,12 +393,126 @@ export class HeroCharacter {
 		if ( ! this.active ) return;
 
 		const { person, root, mixer } = this.active;
+		// A person still close when the talk ends stays in the rig they wore.
+		if ( this.nearby.has( person ) && ! this.close.has( person ) ) {
+
+			const { descriptor, key, height, motions, currentAction: action, currentClip: clipName } = this.active;
+			this.close.set( person, { person, root, mixer, descriptor, key, height, motions, action, clipName, recipe: this.active.recipe } );
+			this.active = null;
+			return;
+
+		}
 		person.hero = false;
 		mixer.stopAllAction();
 		this.group.remove( root );
 		this.lighting?.releaseRoot( root );
 		this.poser.release( root );
 		this.active = null;
+
+	}
+
+	/** A close person's rig, built while their crowd body shows them and swapped in once warm. */
+	async #dress( person ) {
+
+		const recipe = recipeOf( person );
+		const entry = { person, root: null, recipe };
+		this.close.set( person, entry );
+		let source = null;
+		try {
+
+			source = await this.poser.model( recipe );
+
+		} catch ( error ) {
+
+			if ( this.close.get( person ) === entry ) this.close.delete( person );
+			throw error;
+
+		}
+		if ( this.close.get( person ) !== entry || person.hero ) {
+
+			this.poser.drop( source );
+			if ( this.close.get( person ) === entry ) this.close.delete( person );
+			return;
+
+		}
+		const root = this.poser.dress( source, person, `close-${recipe.body}` );
+		this.lighting?.attachRoot( root, person.position );
+		root.visible = false;
+		this.group.add( root );
+		await this.warmup?.warm( root );
+		if ( this.close.get( person ) !== entry || person.hero ) {
+
+			this.group.remove( root );
+			this.lighting?.releaseRoot( root );
+			this.poser.release( root );
+			if ( this.close.get( person ) === entry ) this.close.delete( person );
+			return;
+
+		}
+		Object.assign( entry, {
+			root, mixer: new THREE.AnimationMixer( root ), descriptor: source.descriptor, key: source.key,
+			height: this.poser.height( root ), motions: source.motions, action: null, clipName: null
+		} );
+		entry.mixer.addEventListener( 'finished', ( event ) => this.#finished( entry.mixer, event ) );
+		person.hero = true;
+		root.visible = true;
+		this.#follow( entry, 0 );
+
+	}
+
+	/** A close rig where its crowd body is, in its clip at its frame, blending into a new clip. */
+	#follow( close, delta ) {
+
+		const { person, root, mixer, height } = close;
+		if ( root.userData.dressed?.presence ) root.userData.dressed.presence.value = person.presence ?? 1;
+		if ( person.look !== close.look ) {
+
+			close.look = person.look;
+			if ( modelKey( recipeOf( person ) ) === close.key ) this.poser.wear( root, recipeOf( person ) );
+
+		}
+		root.position.copy( person.position );
+		root.rotation.y = person.heading;
+		this.lighting?.writeRoot( root, person.position );
+		const { name, clip, time } = crowdFrame( this.animation, person );
+		height?.beforePose();
+		if ( close.clipName !== name ) {
+
+			const action = mixer.clipAction( close.motions.clip( clip ) );
+			action.reset().setLoop( THREE.LoopRepeat, Infinity ).play();
+			if ( close.action && close.action !== action ) action.crossFadeFrom( close.action, close.clipName ? CLOSE_FADE : 0, true );
+			close.action = action;
+			close.clipName = name;
+
+		}
+		mixer.update( delta );
+		// The crowd's frame is the clock: the rig shows the pose the body would.
+		close.action.time = time;
+		mixer.update( 0 );
+		height?.afterPose();
+
+	}
+
+	/** Gives a close person's rig back; their crowd body shows them again unless another rig now does. */
+	#dropClose( person ) {
+
+		const close = this.#closeOf( person );
+		if ( ! close ) return;
+		this.close.delete( close.person );
+		if ( ! close.root ) return;
+		close.mixer.stopAllAction();
+		this.group.remove( close.root );
+		this.lighting?.releaseRoot( close.root );
+		this.poser.release( close.root );
+		if ( ! samePerson( this.active?.person, close.person ) ) close.person.hero = false;
+
+	}
+
+	#closeOf( person ) {
+
+		if ( this.close.has( person ) ) return this.close.get( person );
+		for ( const close of this.close.values() ) if ( samePerson( close.person, person ) ) return close;
+		return null;
 
 	}
 

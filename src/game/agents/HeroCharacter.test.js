@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { HeroCharacter } from './HeroCharacter.js';
+import { CLOSE_RIGS, HeroCharacter } from './HeroCharacter.js';
 import { CROWD_SURFACE } from './CrowdMesh.js';
 import { SPEECH_LIMITS } from './SpeechGesture.js';
 import { StreetBodies } from './StreetBodies.js';
@@ -243,6 +243,82 @@ describe( 'focused character', () => {
 		expect( hero.active.person ).toBe( person );
 		// Playing what the rig it replaced played.
 		expect( hero.active.currentClip ).toBe( 'Idle_Talking_Loop' );
+
+	} );
+
+	it( 'dresses the nearest people in their whole recipe, following their crowd body\'s place, clip and frame, and gives the rigs back when they leave', async () => {
+
+		const tailor = heroRigs().tailor;
+		const hero = new HeroCharacter( heroRigs( { tailor } ) );
+		const people = [ 0, 1, 2 ].map( ( index ) => ( {
+			id: `p${index}`, gender: 'male', variant: 0, appearanceSeed: index, clip: 0, frame: 8 * index, hero: false, presence: 1,
+			position: new THREE.Vector3( index, 0, 2 ), heading: 0, look: outfit( 'male', { colors: { skin: [ '#edc6ac', '#895735', '#4b3026' ][ index ] } } )
+		} ) );
+		hero.near( people );
+		await vi.waitFor( () => expect( people.map( ( person ) => person.hero ) ).toEqual( [ true, true, false ] ) );
+		expect( CLOSE_RIGS ).toBe( 2 );
+		expect( hero.group.children ).toHaveLength( 2 );
+		const [ first ] = people;
+		const rig = hero.rigOf( first );
+		expect( rig.root.getObjectByName( 'garment-tech-top' ) ).toBeTruthy();
+		expect( hex( rig.root.userData.dressed.colors.skin.value ) ).toBe( '#edc6ac' );
+
+		// It stands where the body walks, in the body's clip at the body's frame.
+		first.position.set( 5, 0, 5 );
+		first.clip = 1;
+		first.frame = 16;
+		hero.update( 0.1 );
+		expect( rig.root.position.toArray() ).toEqual( [ 5, 0, 5 ] );
+		expect( rig.clipName ).toBe( 'Idle_Loop' );
+		expect( rig.action.time ).toBeCloseTo( 0.5 );
+
+		// Out of reach, the rig goes and the crowd body shows them again.
+		hero.near( people.slice( 1 ) );
+		expect( first.hero ).toBe( false );
+		expect( hero.rigOf( first ) ).toBeNull();
+		await vi.waitFor( () => expect( people[ 2 ].hero ).toBe( true ) );
+		hero.near( [] );
+		expect( people.map( ( person ) => person.hero ) ).toEqual( [ false, false, false ] );
+		expect( hero.group.children ).toHaveLength( 0 );
+		expect( [ ...tailor.fits.values() ].every( ( fit ) => fit.users === 0 ) ).toBe( true );
+
+	} );
+
+	it( 'hands a close person\'s rig to their talk with nothing built, and keeps them in it after while they stay close', async () => {
+
+		const loaded = [];
+		const tailor = heroRigs().tailor;
+		const hero = new HeroCharacter( heroRigs( { tailor, loadModel: ( descriptor ) => { loaded.push( descriptor.id ); return { scene: rig( 'body' ) }; } } ) );
+		const person = { id: 'p1', npcId: 'n1', gender: 'male', variant: 0, appearanceSeed: 3, clip: 0, frame: 4, hero: false, presence: 1, position: new THREE.Vector3(), heading: 0, look: outfit() };
+		hero.near( [ person ] );
+		await vi.waitFor( () => expect( person.hero ).toBe( true ) );
+		const { root } = hero.rigOf( person );
+		const built = tailor.fits.size;
+
+		expect( await hero.show( person ) ).toBe( true );
+		expect( hero.active.root ).toBe( root );
+		expect( hero.close.size ).toBe( 0 );
+		expect( tailor.fits.size ).toBe( built );
+		expect( loaded ).toEqual( [ 'regular-male' ] );
+		hero.update( 0.2 );
+		expect( hero.active.currentClip ).toBe( 'Idle_Talking_Loop' );
+		// Close while talking, the talk's rig is theirs alone.
+		hero.near( [ person ] );
+		expect( hero.close.size ).toBe( 0 );
+
+		hero.hide();
+		expect( hero.active ).toBeNull();
+		expect( person.hero ).toBe( true );
+		expect( hero.rigOf( person ).root ).toBe( root );
+		hero.update( 0.1 );
+		expect( hero.rigOf( person ).clipName ).toBe( 'Walk_Loop' );
+
+		// Talked to away from anybody's reach, the rig goes with the talk.
+		hero.near( [] );
+		await hero.show( person );
+		hero.hide();
+		expect( person.hero ).toBe( false );
+		expect( hero.group.children ).toHaveLength( 0 );
 
 	} );
 

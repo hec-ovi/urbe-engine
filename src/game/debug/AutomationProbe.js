@@ -1034,12 +1034,12 @@ export class AutomationProbe {
 
 	}
 
+	/** The rig showing a person now, focused or close, while it shows; null while the crowd body does. */
 	#focused( person ) {
 
-		const active = this.game.hero.active;
-		const same = active?.person === person || Boolean( person.npcId && active?.person.npcId === person.npcId );
+		const rig = this.game.hero.rigOf?.( person ) ?? null;
 
-		return same && active.root.visible ? active : null;
+		return rig && rig.root.visible ? rig : null;
 
 	}
 
