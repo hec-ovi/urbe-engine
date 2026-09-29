@@ -27,13 +27,13 @@ export class Warmup {
 	/**
 	 * @param scene the scene the object lives in or is going to, for its lights
 	 * @param mrt the render pipeline's scene-pass MRT, or null when it has none
-	 * @param uploaded, pins, budget shared with a sibling warm-up, which
+	 * @param uploaded, pins, queue shared with a sibling warm-up, which
 	 *   prepares the same world for another render target
 	 * @param budget the FrameBudget asked between programs and uploads; paced
 	 *   (a frame per turn) unless the caller is still loading
 	 */
 	constructor( renderer, scene, camera, mrt = null, renderTarget = null, {
-		uploaded = new WeakSet(), pins = new ProgramPins(), budget = new FrameBudget()
+		uploaded = new WeakSet(), pins = new ProgramPins(), budget = new FrameBudget(), queue = { tail: Promise.resolve() }
 	} = {} ) {
 
 		this.renderer = renderer;
@@ -45,7 +45,9 @@ export class Warmup {
 		this.warmed = new Set();
 		this.pins = pins;
 		this.budget = budget;
-		this.preparing = Promise.resolve();
+		// One compile at a time for the whole family: each sets the renderer's
+		// target and outputs for as long as its graph builds.
+		this.queue = queue;
 
 	}
 
@@ -59,13 +61,13 @@ export class Warmup {
 	/**
 	 * The same world prepared for another pass: the renderer keeps a graph per
 	 * render target, so a probe's cube faces ask for graphs of their own. Maps
-	 * uploaded, programs pinned and the budget are shared, because those are
-	 * the same.
+	 * uploaded, programs pinned and the queue are shared, because those are
+	 * the same; the budget too unless the pass brings its own.
 	 */
-	sibling( { camera = this.camera, renderTarget = this.renderTarget, mrt = this.mrt } = {} ) {
+	sibling( { camera = this.camera, renderTarget = this.renderTarget, mrt = this.mrt, budget = this.budget } = {} ) {
 
 		return new Warmup( this.renderer, this.scene, camera, mrt, renderTarget, {
-			uploaded: this.uploaded, pins: this.pins, budget: this.budget
+			uploaded: this.uploaded, pins: this.pins, budget, queue: this.queue
 		} );
 
 	}
@@ -96,8 +98,8 @@ export class Warmup {
 	/** @param plain whether every draw in the object keeps its graph across objects, so its graphs are pinned too */
 	async #prepare( object, plain ) {
 
-		const pending = this.preparing.then( () => this.#compile( object, plain ) );
-		this.preparing = pending.catch( () => {} );
+		const pending = this.queue.tail.then( () => this.#compile( object, plain ) );
+		this.queue.tail = pending.catch( () => {} );
 		return pending;
 
 	}

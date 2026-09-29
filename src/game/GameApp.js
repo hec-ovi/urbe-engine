@@ -63,6 +63,7 @@ import { FrameReports } from './debug/FrameReports.js';
 import { Warmup } from './look/Warmup.js';
 import { Physics, WorldColliders, DoorColliders, PlayerBody, BODY_RADIUS, ImpactWorld } from './physics/index.js';
 import { FrameBudget } from '../app/FrameBudget.js';
+import { frameYield } from '../app/FrameYield.js';
 import { Input } from './player/Input.js';
 import { PlayerController } from './player/PlayerController.js';
 import { Interactor } from './player/Interactor.js';
@@ -754,9 +755,10 @@ export class GameApp {
 		// The first frame is a whole tick, run here under the loading view: what
 		// the first update of the crowd, the lights, the rooms and the streams
 		// brings to the renderer is built now. The probe then renders the city
-		// six times into its resident environment, its graphs and faces each
-		// counted, and a last pass pins whatever program that frame was the
-		// first to ask for.
+		// six times into its resident environment, its faces counted, through
+		// the frame's own render context, so it builds nothing of its own here
+		// (#reflect builds that once the city plays), and a last pass pins
+		// whatever program that frame was the first to ask for.
 		progress.step( 'preparing nearby floors' );
 		await this.stream.prepare( spawn.point );
 		this.roomView.setRooms( this.stream.rooms );
@@ -814,11 +816,47 @@ export class GameApp {
 		this.work = new RenderWork( this.renderer.info );
 		this.last = performance.now();
 		this.renderer.setAnimationLoop( () => this.#frame() );
+		if ( this.probe ) this.#reflect();
 		// A driver's hands on a read-only preview, installed once the city plays.
 		if ( config.automation ) {
 
 			const { AutomationProbe } = await import( './debug/AutomationProbe.js' );
 			this.automation = new AutomationProbe( this );
+
+		}
+
+	}
+
+	/**
+	 * The probe's own graphs, built through the warm-up queue once the city
+	 * plays, then a bake in its own faces where the player stands by then, all
+	 * six in one go: from there on it bakes as it always has, without the
+	 * frame's multisampling the opening bake borrowed (EnvironmentProbe). A
+	 * graph holds the main thread for a good part of a second, so the next
+	 * one, and the bake, only go while nothing on screen needs the frame: the
+	 * world holds (the pause menu a game opens on, a panel) or the player has
+	 * stood still for a moment.
+	 */
+	async #reflect() {
+
+		const calm = {
+			step: async () => {
+
+				do await frameYield(); while ( ! this.holding && ( this.rest?.seconds ?? 0 ) < STILL_SECONDS );
+
+			},
+			pace() {}
+		};
+		try {
+
+			await this.probe.prepare( this.floorWarmup, undefined, { own: true, budget: calm } );
+			await calm.step();
+			this.probe.unshare();
+			this.probe.bake( this.body.feet );
+
+		} catch ( error ) {
+
+			console.warn( `environment probe: ${error?.message ?? error}` );
 
 		}
 

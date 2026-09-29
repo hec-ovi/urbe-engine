@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { texture, uv } from 'three/tsl';
 
 const NEAR = 1;
 const FAR = 320;
@@ -27,6 +28,19 @@ const FACES = 6;
  * the moment the probe is built: black until the first bake, and every bake
  * after writes into it. A material's program is built for the environment it
  * has, so one that changed identity would have every program built again.
+ *
+ * While it shares the frame's scene pass (`share`), a face is drawn with the
+ * frame's outputs into a square target made like the frame's own (the same
+ * attachments, format, type and samples), then copied into the cube by one
+ * small quad. The renderer keeps a graph and a pipeline per material and
+ * render context, and a context is those attachments and outputs, so a face
+ * drawn that way asks for nothing the frame has not already built: there is
+ * no second set of graphs to prepare, and a bake costs its six draws. It is
+ * multisampled as the frame is, though, so a thin and very bright fixture (a
+ * lamp's lens seen edge on) reads at its coverage there and at full strength
+ * in a face of its own; a game bakes that way to open, then prepares the
+ * faces' own graphs and goes back to them (`unshare`). Without a frame to
+ * share, a face renders straight into the cube with graphs of its own.
  */
 export class EnvironmentProbe {
 
@@ -51,7 +65,30 @@ export class EnvironmentProbe {
 		this.cube = new THREE.CubeRenderTarget( this.size, { type: THREE.HalfFloatType } );
 		this.camera = new THREE.CubeCamera( NEAR, FAR, this.cube );
 		this.face = FACES;
+		this.frame = null;
 		this.#prime();
+
+	}
+
+	/**
+	 * Draws the faces in the frame's render context from now on.
+	 * @param frame the LookPipeline: its `renderTarget`, whose make the faces' target copies, and `mrt`
+	 */
+	share( frame ) {
+
+		const made = frame.renderTarget;
+		this.frame = frame;
+		this.face2d = new THREE.RenderTarget( this.size, this.size, {
+			type: made.texture.type, format: made.texture.format, samples: made.samples, count: made.textures.length,
+			depthBuffer: made.depthBuffer, stencilBuffer: made.stencilBuffer
+		} );
+		this.face2d.texture.name = 'probe face';
+		const material = new THREE.NodeMaterial();
+		material.name = 'probe face copy';
+		material.fragmentNode = texture( this.face2d.texture, uv() );
+		material.depthTest = false;
+		material.depthWrite = false;
+		this.copy = new THREE.QuadMesh( material );
 
 	}
 
@@ -124,17 +161,33 @@ export class EnvironmentProbe {
 
 	/**
 	 * Builds the graphs the cube faces draw with, one per program, before a
-	 * face renders them all in one go: the renderer keeps a graph per render
-	 * target, so the faces cannot use the frame's. The excluded groups are
+	 * face renders them all in one go. Faces drawn through the frame's scene
+	 * pass need none: the frame's are theirs, and the copy's one small program
+	 * builds with the first face. Faces drawn straight into the cube do, since
+	 * the renderer keeps a graph per render target; the excluded groups are
 	 * left out, as they are of the faces.
 	 *
-	 * @param warmup the frame's `Warmup`, whose uploads and keepers this shares
+	 * @param warmup the frame's `Warmup`, whose uploads, pins and queue this shares
 	 * @param onProgress receives (done, total) over the graphs
+	 * @param own build the faces' own graphs even while they are drawn through the frame's, for `unshare`
+	 * @param budget what the graphs ask between them, when not the warm-up's own
 	 */
-	prepare( warmup, onProgress = () => {} ) {
+	prepare( warmup, onProgress = () => {}, { own = false, budget } = {} ) {
 
-		return warmup.sibling( { camera: this.camera.children[ 0 ], renderTarget: this.cube, mrt: null } )
+		if ( this.frame && ! own ) return Promise.resolve( 0 );
+
+		return warmup.sibling( { camera: this.camera.children[ 0 ], renderTarget: this.cube, mrt: null, ...( budget ? { budget } : {} ) } )
 			.warmAll( this.scene, { onProgress, skip: ( node ) => this.excluded.includes( node ) } );
+
+	}
+
+	/** Draws the faces straight into the cube from now on, with the graphs `prepare({ own: true })` built. */
+	unshare() {
+
+		if ( ! this.frame ) return;
+		this.frame = null;
+		this.face2d.dispose();
+		this.copy.material.dispose();
 
 	}
 
@@ -196,12 +249,17 @@ export class EnvironmentProbe {
 			for ( const group of shown ) group.visible = false;
 			renderer.xr.enabled = false;
 			this.cube.texture.generateMipmaps = false;
-			renderer.setRenderTarget( this.cube, this.face, 0 );
-			renderer.setMRT( null );
 			renderer.toneMapping = THREE.NoToneMapping;
 			renderer.outputColorSpace = THREE.ColorManagement.workingColorSpace;
-			if ( renderer.reversedDepthBuffer && renderer.autoClear === false ) renderer.clearDepth();
-			renderer.render( this.scene, this.camera.children[ this.face ] );
+			if ( this.frame ) this.#drawThrough( this.camera.children[ this.face ] );
+			else {
+
+				renderer.setRenderTarget( this.cube, this.face, 0 );
+				renderer.setMRT( null );
+				if ( renderer.reversedDepthBuffer && renderer.autoClear === false ) renderer.clearDepth();
+				renderer.render( this.scene, this.camera.children[ this.face ] );
+
+			}
 			this.face ++;
 			if ( ! this.baking ) this.#finish();
 
@@ -216,6 +274,20 @@ export class EnvironmentProbe {
 		}
 
 		this.hitches?.note( this.baking ? `probe face ${this.face}` : 'probe convolve', performance.now() - t );
+
+	}
+
+	/** One face drawn in the frame's render context, then copied into the cube. */
+	#drawThrough( camera ) {
+
+		const renderer = this.renderer;
+		renderer.setRenderTarget( this.face2d );
+		renderer.setMRT( this.frame.mrt );
+		if ( renderer.autoClear === false ) renderer.clear();
+		renderer.render( this.scene, camera );
+		renderer.setRenderTarget( this.cube, this.face, 0 );
+		renderer.setMRT( null );
+		this.copy.render( renderer );
 
 	}
 

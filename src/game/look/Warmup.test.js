@@ -281,6 +281,18 @@ describe( 'Warmup', () => {
 		expect( renderer.initTexture ).toHaveBeenCalledTimes( 1 );
 		expect( probe.pins ).toBe( frame.pins );
 		expect( probe.budget ).toBe( frame.budget );
+		// One queue for the family: a pass that brings its own pacing still
+		// waits for the frame's compiles, since each holds the renderer's target.
+		const own = { step: async () => {}, pace() {} };
+		const paced = frame.sibling( { renderTarget: cube, mrt: null, budget: own } );
+		expect( paced.budget ).toBe( own );
+		expect( paced.queue ).toBe( frame.queue );
+		let active = 0, peak = 0;
+		renderer.compileAsync = async () => { active ++; peak = Math.max( peak, active ); await new Promise( ( resolve ) => setTimeout( resolve, 1 ) ); active --; };
+		const more = new THREE.Group();
+		more.add( new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial() ) );
+		await Promise.all( [ frame.warmAll( more ), paced.warmAll( more ) ] );
+		expect( peak ).toBe( 1 );
 
 	} );
 

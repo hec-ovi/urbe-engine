@@ -93,6 +93,65 @@ describe( 'EnvironmentProbe', () => {
 
 	} );
 
+	it( 'draws each face in the frame\'s render context, into a square target made like the frame\'s, and copies it into the cube, preparing nothing', async () => {
+
+		const scene = new THREE.Scene();
+		const crowd = new THREE.Group();
+		crowd.name = 'crowd';
+		scene.add( crowd );
+		const frame = { renderTarget: new THREE.RenderTarget( 200, 100, { type: THREE.HalfFloatType, samples: 4, count: 2 } ), mrt: { id: 'frame outputs' } };
+		const draws = [];
+		let target = null, mrt = 'frame';
+		const r = {
+			coordinateSystem: THREE.WebGPUCoordinateSystem, xr: { enabled: false }, reversedDepthBuffer: false, autoClear: true,
+			toneMapping: THREE.AgXToneMapping,
+			getRenderTarget: () => target, setRenderTarget: ( next, face ) => { target = next; draws.face = face; },
+			getMRT: () => mrt, setMRT: ( next ) => { mrt = next; },
+			render: ( drawn ) => draws.push( {
+				quad: Boolean( drawn.isQuadMesh ), target, face: draws.face, mrt, crowd: drawn.getObjectByName?.( 'crowd' )?.visible,
+				tone: r.toneMapping
+			} )
+		};
+		const p = new EnvironmentProbe( r, scene, { probeSize: 8, probeInterval: 10 }, null, ( renderer, texture, previous ) => previous ?? { texture: {}, dispose() {} } );
+		p.exclude( crowd );
+		p.share( frame );
+
+		expect( await p.prepare( { sibling: () => { throw new Error( 'a shared probe builds no graphs' ); } } ) ).toBe( 0 );
+		p.bake( new THREE.Vector3( 0, 1, 0 ), - Infinity );
+
+		expect( draws ).toHaveLength( 12 );
+		for ( let face = 0; face < 6; face ++ ) {
+
+			const [ drawn, copied ] = draws.slice( face * 2, face * 2 + 2 );
+			// The face with the frame's outputs, the crowd left out.
+			expect( drawn ).toMatchObject( { quad: false, target: p.face2d, mrt: frame.mrt, crowd: false, tone: THREE.NoToneMapping } );
+			// Then copied into its cube face.
+			expect( copied ).toMatchObject( { quad: true, target: p.cube, face, mrt: null } );
+
+		}
+		// Made like the frame's target, which is what makes the render context the frame's.
+		expect( [ p.face2d.width, p.face2d.height ] ).toEqual( [ 8, 8 ] );
+		expect( p.face2d.samples ).toBe( 4 );
+		expect( p.face2d.textures ).toHaveLength( 2 );
+		expect( p.face2d.texture.type ).toBe( THREE.HalfFloatType );
+		expect( target ).toBeNull();
+		expect( mrt ).toBe( 'frame' );
+		expect( r.toneMapping ).toBe( THREE.AgXToneMapping );
+		expect( crowd.visible ).toBe( true );
+
+		// Its own graphs on request, paced by the caller, then its own faces again.
+		const passes = [];
+		const budget = { step: async () => {} };
+		await p.prepare( { sibling: ( options ) => ( { warmAll: async ( object, { skip } ) => { passes.push( { options, object, skipsCrowd: skip( crowd ) } ); return 1; } } ) }, undefined, { own: true, budget } );
+		expect( passes ).toEqual( [ { options: { camera: p.camera.children[ 0 ], renderTarget: p.cube, mrt: null, budget }, object: scene, skipsCrowd: true } ] );
+		p.unshare();
+		draws.length = 0;
+		p.bake( new THREE.Vector3( 0, 1, 0 ), - Infinity );
+		expect( draws ).toHaveLength( 6 );
+		expect( draws.every( ( drawn ) => drawn.target === p.cube && drawn.mrt === null && ! drawn.quad ) ).toBe( true );
+
+	} );
+
 	it( 'prepares the faces\' own graphs through a sibling of the frame warm-up, against the cube and without the excluded groups', async () => {
 
 		const { p, scene, crowd } = probe();

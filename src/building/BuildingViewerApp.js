@@ -236,6 +236,8 @@ export class BuildingViewerApp {
 		// frame anyway, with the rest compiled as it draws.
 		const prepared = await progress.run( 'preparing surfaces', () => this.#prepare( look, progress ) );
 
+		// The probe's own faces, as a game's reflections read once it plays.
+		look.probe?.unshare();
 		await progress.run( 'baking reflections', async () => look.probe?.bake( this.camera.position ) );
 
 		if ( import.meta.env.DEV ) window.__viewer = this; // headless verification handle

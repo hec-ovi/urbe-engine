@@ -80,6 +80,8 @@ export class NightLook {
 
 		this.camera = camera;
 		this.pipeline = new LookPipeline( this.renderer, this.scene, camera, this.tier );
+		// The probe's faces are drawn in the frame's own context from here on.
+		this.probe?.share( this.pipeline );
 
 		return this;
 
