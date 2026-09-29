@@ -4,6 +4,7 @@ import { ANIMATION_URL, CROWD_CLIP_NAMES, CROWD_MODELS } from './CharacterCatalo
 import { CharacterPoser, modelKey } from './CharacterPoser.js';
 import { recipeFor } from './Appearance.js';
 import { personRecipe } from './avatar/Recipe.js';
+import { Tailor } from './avatar/Tailor.js';
 import { SpeechGesture } from './SpeechGesture.js';
 import { FRAMES } from './VatBaker.js';
 import { streetBodies } from './StreetBodies.js';
@@ -56,9 +57,10 @@ export class HeroCharacter {
 
 	/**
 	 * @param textureSize the side the pack's maps are downscaled to, the tier's texture size
+	 * @param slice the frame budget a person's fit is built under (FrameBudget)
 	 * @param loadModel, loadHair, tailor see CharacterPoser
 	 */
-	constructor( { animation, warmup = null, textureSize, loadModel, loadHair, tailor, street = streetBodies, lighting = null } ) {
+	constructor( { animation, warmup = null, textureSize, slice = null, loadModel, loadHair, tailor = new Tailor( { slice } ), street = streetBodies, lighting = null } ) {
 
 		this.animation = animation;
 		this.street = street;
@@ -162,9 +164,10 @@ export class HeroCharacter {
 	}
 
 	/**
-	 * Reads, refines and measures both crowd bodies and builds their programs
-	 * with every garment's, so the first conversation or fall of the run
-	 * links nothing and prepares no body.
+	 * Reads, refines and measures both crowd bodies, transfers the clips a
+	 * close or talking person plays onto them, and builds their programs with
+	 * every garment's, so the first conversation, close person or fall of the
+	 * run links nothing and prepares no body.
 	 *
 	 * @param onProgress receives (done, total) over the bodies
 	 */
@@ -176,6 +179,12 @@ export class HeroCharacter {
 			const seeded = personRecipe( { gender, appearanceSeed: PREPARED_SEED } );
 			const recipe = { ...seeded, shape: { ...seeded.shape, height: 1 } };
 			const source = await this.poser.model( recipe );
+			for ( const name of [ ...CROWD_CLIP_NAMES, TALK, SIT_TALK ] ) {
+
+				const clip = THREE.AnimationClip.findByName( this.animation.animations, name );
+				if ( clip ) source.motions.clip( clip );
+
+			}
 			const root = this.poser.dress( source, { position: new THREE.Vector3(), heading: 0 }, `prepared-${recipe.body}` );
 			const samples = this.poser.sampleWardrobe( root );
 			this.lighting?.attachRoot( root, root.position );
@@ -218,6 +227,8 @@ export class HeroCharacter {
 			poseAtCrowdFrame( root, this.animation, source.motions, person );
 			// Lengthened before the ragdoll measures its parts off the bones.
 			this.poser.height( root )?.afterPose();
+			// Down, they are nobody's close person: the talk's rig goes, never back to them.
+			this.nearby = new Set( [ ...this.nearby ].filter( ( near ) => ! samePerson( near, person ) ) );
 			if ( samePerson( this.active?.person, person ) ) this.#dropActive();
 			ragdoll = Ragdoll.create( { physics, root, impact } );
 			this.group.add( root );

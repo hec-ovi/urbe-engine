@@ -211,3 +211,29 @@ describe.skipIf( ! SOURCE_PRESENT )( 'the crowd\'s rigid head parts', () => {
 	} );
 
 } );
+
+describe( 'the crowd\'s merged hair', () => {
+
+	it.each( [ false, true ] )( 'stays inside eight vertex buffers and writes each person\'s colour and style (storage=%s)', async ( storage ) => {
+
+		const { HairMesh } = await import( './HairMesh.js' );
+		const { lookOf } = await import( './Appearance.js' );
+		const { defaultRecipe } = await import( './avatar/Recipe.js' );
+		const geometry = new THREE.PlaneGeometry();
+		const count = geometry.getAttribute( 'position' ).count;
+		geometry.setAttribute( 'hairPart', new THREE.Float32BufferAttribute( new Float32Array( count * 2 ), 2 ) );
+		const rows = FRAMES;
+		const hair = new HairMesh( {
+			mesh: new THREE.Mesh( geometry ), rows, head: new Float32Array( rows * 12 ), styles: crowdHairstyles( 'female' )
+		}, 3, storage, { maps: [ new THREE.Texture(), new THREE.Texture() ] } );
+		const recipe = { ...defaultRecipe( 'regular-female' ), hair: 'Hairstyles/Rigged to Head Bone/Female/Hair_Long.gltf' };
+		hair.setInstance( 1, new THREE.Vector3(), 0, 3, 0, lookOf( recipe ), 1 );
+		hair.commit( 2 );
+		expect( hair.attributes.length + Object.keys( hair.mesh.geometry.attributes ).length ).toBeLessThanOrEqual( 8 );
+		expect( Object.keys( hair.mesh.geometry.attributes ).sort() ).toEqual( [ 'hairPart', 'normal', 'position', 'uv' ] );
+		expect( hair.hair.getW( 1 ) ).toBe( 3 );
+		expect( hair.mesh.geometry.instanceCount ).toBe( 2 );
+
+	} );
+
+} );

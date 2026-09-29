@@ -567,6 +567,8 @@ export class GameApp {
 			animation: assets.animation,
 			warmup: null,
 			textureSize: this.tier.textureMaxSize,
+			// A person's garments are fitted a few milliseconds a frame once the city plays.
+			slice,
 			lighting: actorLighting
 		} );
 		this.scene.add( this.hero.group );

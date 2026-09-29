@@ -470,11 +470,16 @@ describe( 'focused character', () => {
 			clip: 0, frame: 16, hero: false, position: new THREE.Vector3(), heading: 0, look: outfit( 'female' )
 		};
 		street.enter( person );
+		// Standing close and talked to when the car hits them.
+		hero.near( [ person ] );
+		await vi.waitFor( () => expect( hero.rigOf( person ) ).toBeTruthy() );
+		await hero.show( person, [ { clipName: 'Walk_Loop', loop: true } ] );
 
 		expect( await hero.fall( person, physics, {
 			point: { x: 0, y: 1.4, z: 0 }, impulse: { x: 18, y: 2, z: 0 }
 		} ) ).toBe( true );
 		expect( person.hero ).toBe( true );
+		expect( hero.rigOf( person ) ).toBeNull();
 		expect( hero.fallen.ragdoll.summary ).toEqual( { bodies: 15, joints: 14, totalMassKg: 70 } );
 		expect( hero.fallen.root.getObjectByName( 'Head' ).quaternion.angleTo( headTurn ) ).toBeLessThan( 1e-3 );
 		expect( hero.group.children ).toEqual( [ hero.fallen.root ] );
