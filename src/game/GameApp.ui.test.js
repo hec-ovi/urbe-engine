@@ -70,6 +70,16 @@ describe( 'playable game navigation', () => {
 		expect( app.voice.setEnabled ).toHaveBeenCalledExactlyOnceWith( false );
 		expect( app.voice.setVolume ).toHaveBeenCalledExactlyOnceWith( 0.3 );
 
+		// The chat's voices toggle shows the same setting and changes it.
+		app.view.close();
+		app.view.dialog.show( { name: 'Ada Vance' } );
+		app.view.dialog.setTalkOpen( true );
+		const toggle = screen.getByRole( 'button', { name: 'NPC voices', pressed: false } );
+		await userEvent.setup().click( toggle );
+		expect( app.voice.setEnabled ).toHaveBeenLastCalledWith( true );
+		expect( toggle.getAttribute( 'aria-pressed' ) ).toBe( 'true' );
+		expect( screen.getByLabelText( 'npc voices', { selector: 'select' } ).value ).toBe( 'on' );
+
 	} );
 
 	it( 'sends a typed line, renders the reply through the dialogue lifecycle, and stays usable after a model failure', async () => {

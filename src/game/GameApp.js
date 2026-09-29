@@ -212,6 +212,7 @@ export class GameApp {
 			onDialogueAction: id => this.#dialogueAction( id ),
 			onDialogueRetry: () => this.#say( this.failedDialogueLine, { retry: true } ),
 			onDialogueJournal: () => { this.#closeConversation(); this.view.open( 'QUESTS' ); },
+			onDialogueVoice: ( on ) => this.#setting( { key: 'voice', value: on ? 'on' : 'off' } ),
 			// A panel opened from the pause menu goes back to it.
 			onClose: () => { if ( ! this.pauseState.paused ) this.input?.requestLock(); },
 			onLeave: () => this.#leave(),
@@ -570,6 +571,8 @@ export class GameApp {
 			} );
 
 		}
+		// The chat's voice toggle stands for the NPC voices setting; a caller's observer has none.
+		this.view.dialog.setVoice( this.voice ? this.voice.enabled : null );
 
 		progress.step( 'loading traffic' );
 		const carModels = await cars;
@@ -1268,7 +1271,7 @@ export class GameApp {
 	#showActions( conversation ) {
 		const offers = conversation.instance ? this.#offers( conversation.npcId ) : [];
 		this.dialogueActions = new Map( offers.map( ( offer ) => [ offer.offerId, offer.label ] ) );
-		this.view.dialog.setActions( offers.map( ( offer ) => ( { id: offer.offerId, label: offer.label } ) ) );
+		this.view.dialog.setActions( offers.map( ( offer ) => ( { id: offer.offerId, label: offer.label, icon: offer.kind } ) ) );
 	}
 
 	/**
@@ -1937,7 +1940,14 @@ export class GameApp {
 		if ( key === 'fog' ) this.fog.density.value = value;
 		else if ( key === 'exposure' ) this.exposure.base = value;
 		else if ( key === 'crowd' ) this.crowd.capacity = value;
-		else if ( key === 'voice' ) this.voice?.setEnabled( value === 'on' );
+		else if ( key === 'voice' ) {
+
+			// The settings and the chat's toggle say the same, whichever the player used.
+			this.voice?.setEnabled( value === 'on' );
+			this.view.settings.setValues( { voice: value } );
+			this.view.dialog.setVoice( this.voice ? value === 'on' : null );
+
+		}
 		else if ( key === 'voiceVolume' ) this.voice?.setVolume( value );
 		else if ( key === 'details' ) this.view.setDetails( this.details = value === 'on' );
 		else if ( key === 'quality' ) {
