@@ -46,16 +46,41 @@ export class TextureSource {
 	 * map is given up on: otherwise a surface whose PNG is perfectly good draws
 	 * with no map at all.
 	 *
+	 * A copy of the placeholder (water clones its normal map to move it on its
+	 * own) shares the image but not the levels, format or compression, which a
+	 * compressed file keeps on the texture itself. A copy made before the file
+	 * arrives is filled with the texture once the caller has fitted it, and one
+	 * made after takes them at once, so it never uploads a bare size as pixels.
+	 *
 	 * @param map `{ image, ktx2 }` URLs, either of which may be absent
 	 */
 	load( { image, ktx2 }, onLoad, onError ) {
 
 		const texture = new THREE.Texture();
+		const waiting = new Set();
+		let decoded = false;
+		texture.clone = function () {
+
+			const copy = THREE.Texture.prototype.clone.call( this );
+			copy.clone = texture.clone;
+			if ( decoded ) carry( texture, copy );
+			else waiting.add( copy );
+			return copy;
+
+		};
 		const adopt = ( loaded ) => {
 
-			for ( const key of DECODED ) if ( loaded[ key ] !== undefined ) texture[ key ] = loaded[ key ];
+			carry( loaded, texture );
 			texture.needsUpdate = true;
+			decoded = true;
 			onLoad( texture );
+			for ( const copy of waiting ) {
+
+				carry( texture, copy );
+				copy.needsUpdate = true;
+
+			}
+			waiting.clear();
 
 		};
 		const master = ( error ) => {
@@ -85,6 +110,13 @@ export class TextureSource {
 		this.ktx2.dispose();
 
 	}
+
+}
+
+/** Moves what a decoded file hands over from one texture to another. */
+function carry( from, to ) {
+
+	for ( const key of DECODED ) if ( from[ key ] !== undefined ) to[ key ] = key === 'mipmaps' ? from.mipmaps.slice( 0 ) : from[ key ];
 
 }
 

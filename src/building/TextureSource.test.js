@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { TextureSource } from './TextureSource.js';
+import { PbrTextureBudget } from './PbrTextureBudget.js';
 
 afterEach( () => { vi.unstubAllGlobals(); } );
 
@@ -99,12 +100,48 @@ describe( 'TextureSource', () => {
 
 		const aligned = await load( { image: 'b.png', ktx2: 'b.ktx2' } );
 		expect( aligned.isCompressedTexture ).toBe( true );
-		expect( aligned.mipmaps ).toBe( transcoded[ 'b.ktx2' ].mipmaps );
+		expect( aligned.mipmaps ).toEqual( transcoded[ 'b.ktx2' ].mipmaps );
 		expect( aligned.format ).toBe( THREE.RGBA_BPTC_Format );
 
 		const unpacked = await load( { image: 'c.png', ktx2: 'c.ktx2' } );
 		expect( unpacked.format ).toBe( THREE.RGBAFormat );
 		expect( asked ).toEqual( [ 'a.ktx2', 'a.png', 'b.ktx2', 'c.ktx2' ] );
+
+	} );
+
+	/**
+	 * Water clones the factory's normal map to move it on its own, right after
+	 * building the material and long before the file arrives. A clone shares
+	 * the image but not the levels, format or compression a KTX2 file keeps on
+	 * the texture itself, so the water's copy would upload a bare size as
+	 * pixels while the original drew compressed.
+	 */
+	it( 'fills a copy of the map, made before or after the file arrives, with the levels the caller kept', async () => {
+
+		let arrive;
+		const map = compressedTexture( 4096, 2304 );
+		const source = new TextureSource( {
+			images: { load() { throw new Error( 'no master wanted' ); } },
+			ktx2: loader( { ...MESA }, ( url, onLoad ) => { arrive = () => onLoad( map ); } )
+		} ).detect( {} );
+		const budget = new PbrTextureBudget( 1024 );
+		const texture = source.load( { image: 'n.png', ktx2: 'n.ktx2' }, ( loaded ) => budget.fit( loaded ), () => {} );
+		const early = texture.clone();
+		const earlier = early.clone();
+		expect( early.isCompressedTexture ).toBeFalsy();
+
+		arrive();
+		const late = texture.clone();
+		for ( const copy of [ early, earlier, late ] ) {
+
+			expect( copy.isCompressedTexture ).toBe( true );
+			expect( copy.format ).toBe( THREE.RGBA_BPTC_Format );
+			expect( copy.image ).toEqual( { width: 1024, height: 576 } );
+			expect( copy.mipmaps ).toEqual( texture.mipmaps );
+			expect( copy.mipmaps[ 0 ] ).toEqual( expect.objectContaining( { width: 1024, height: 576 } ) );
+			expect( copy.version ).toBeGreaterThan( 0 );
+
+		}
 
 	} );
 
