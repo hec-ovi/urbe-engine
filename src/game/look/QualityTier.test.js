@@ -38,4 +38,16 @@ describe( 'QualityTier', () => {
 
 	} );
 
+	it( 'samples the scene pass once and renders at one pixel per CSS pixel below high', () => {
+
+		const sampling = Object.fromEntries( QualityTier.names().map( ( name ) => {
+
+			const { msaa, maxPixelRatio } = QualityTier.describe( name );
+			return [ name, [ msaa, maxPixelRatio ] ];
+
+		} ) );
+		expect( sampling ).toEqual( { low: [ 0, 1 ], medium: [ 0, 1 ], high: [ 4, 1.5 ], ultra: [ 4, 2 ] } );
+
+	} );
+
 } );

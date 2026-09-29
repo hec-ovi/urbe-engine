@@ -1,6 +1,8 @@
 const TIERS = [ 'low', 'medium', 'high', 'ultra' ];
 
 // Tiers bound texture dimensions and lighting cost while retaining authored PBR channels.
+// `msaa` is the scene pass's sample count and `maxPixelRatio` caps the device
+// pixel ratio the frame renders at; GPU time scales with both.
 const MATERIAL_MAPS = Object.freeze( [ 'basecolor', 'normal', 'roughness', 'metallic', 'ao', 'emission' ] );
 const PRESETS = {
 	low: {
@@ -24,7 +26,9 @@ const PRESETS = {
 		probeSize: 32,
 		probeInterval: 120,
 		materialMaps: MATERIAL_MAPS,
-		textureAnisotropy: 4
+		textureAnisotropy: 4,
+		msaa: 0,
+		maxPixelRatio: 1
 	},
 	medium: {
 		textureMaxSize: 1024,
@@ -39,7 +43,9 @@ const PRESETS = {
 		probeSize: 64,
 		probeInterval: 90,
 		materialMaps: MATERIAL_MAPS,
-		textureAnisotropy: 4
+		textureAnisotropy: 4,
+		msaa: 0,
+		maxPixelRatio: 1
 	},
 	high: {
 		textureMaxSize: 2048,
@@ -54,7 +60,9 @@ const PRESETS = {
 		probeSize: 64,
 		probeInterval: 60,
 		materialMaps: MATERIAL_MAPS,
-		textureAnisotropy: 8
+		textureAnisotropy: 8,
+		msaa: 4,
+		maxPixelRatio: 1.5
 	},
 	ultra: {
 		textureMaxSize: 4096,
@@ -69,7 +77,9 @@ const PRESETS = {
 		probeSize: 128,
 		probeInterval: 40,
 		materialMaps: MATERIAL_MAPS,
-		textureAnisotropy: 8
+		textureAnisotropy: 8,
+		msaa: 4,
+		maxPixelRatio: 2
 	}
 };
 

@@ -10,6 +10,20 @@ it( 'draws the world into its prepared context before composition, with and with
 
 } );
 
+it( 'samples the scene pass as the tier says, whatever the canvas does', () => {
+
+	const renderer = { samples: 4, toneMapping: THREE.AgXToneMapping, outputColorSpace: THREE.SRGBColorSpace, getOutputBufferType: () => THREE.HalfFloatType };
+	const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera();
+	for ( const msaa of [ 0, 4 ] ) {
+
+		const look = new LookPipeline( { ...renderer, samples: 4 - msaa }, scene, camera, { bloom: { strength: 0.35, radius: 0.03 }, msaa } );
+		expect( look.renderTarget.samples ).toBe( msaa );
+		look.renderTarget.dispose(); look.pipeline.dispose();
+
+	}
+
+} );
+
 function draws( strength ) {
 
 	const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera();

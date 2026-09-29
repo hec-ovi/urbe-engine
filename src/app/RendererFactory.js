@@ -27,12 +27,17 @@ export class RendererFactory {
 
 	}
 
-	static async create( backend ) {
+	/**
+	 * @param antialias whether the canvas itself is multisampled: a path that
+	 * composes its frame through the look pipeline samples its scene pass by
+	 * tier instead and asks for none here
+	 */
+	static async create( backend, { antialias = true } = {} ) {
 
 		installStaticTextureNodes();
 		const webgpu = backend !== 'webgl' && WebGPU.isAvailable();
 		const renderer = new THREE.WebGPURenderer( {
-			antialias: true,
+			antialias,
 			trackTimestamp: webgpu,
 			forceWebGL: ! webgpu
 		} );

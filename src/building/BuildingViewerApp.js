@@ -152,7 +152,7 @@ export class BuildingViewerApp {
 
 		const look = await progress.run( 'starting the renderer', async () => {
 
-			this.renderer = await RendererFactory.create( backend );
+			this.renderer = await RendererFactory.create( backend, { antialias: false } );
 			this.renderer.setPixelRatio( Math.min( window.devicePixelRatio, MAX_PIXEL_RATIO ) );
 			document.body.prepend( this.renderer.domElement );
 

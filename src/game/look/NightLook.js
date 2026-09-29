@@ -46,6 +46,9 @@ export class NightLook {
 
 		this.renderer = renderer;
 		this.tier = tier;
+		// A high-density display renders at most the tier's share of its pixels.
+		const ratio = Math.min( globalThis.devicePixelRatio ?? 1, tier.maxPixelRatio ?? Infinity );
+		if ( renderer.getPixelRatio?.() !== ratio ) renderer.setPixelRatio?.( ratio );
 		this.lighting = LightingSystem.install( renderer, tier );
 		this.exposure = new Exposure( renderer, exposure );
 

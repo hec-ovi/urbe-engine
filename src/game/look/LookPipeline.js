@@ -33,8 +33,10 @@ export class LookPipeline {
 		const dither = bayer16( screenCoordinate ).sub( 0.5 ).mul( float( DITHER ) );
 		// A tier with no bloom skips the emissive target and the blur chain outright, not a zero-strength pass.
 		const blooming = tier.bloom.strength > 0;
+		// The scene pass carries the tier's multisampling; the canvas it is
+		// composed onto needs none, a full-screen triangle has no edges.
 		this.renderTarget = new THREE.RenderTarget( 1, 1, {
-			type: renderer.getOutputBufferType(), samples: renderer.samples, count: blooming ? 2 : 1
+			type: renderer.getOutputBufferType(), samples: tier.msaa ?? renderer.samples, count: blooming ? 2 : 1
 		} );
 		this.renderTarget.texture.name = 'output';
 		let bloomPass = null;

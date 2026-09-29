@@ -274,7 +274,7 @@ export class GameApp {
 		// the city is being read.
 		const source = new WorldSource( config );
 		const reading = progress.timed( 'world documents', source.load() );
-		const rendering = progress.timed( 'renderer', RendererFactory.create( config.backend ) );
+		const rendering = progress.timed( 'renderer', RendererFactory.create( config.backend, { antialias: false } ) );
 		const resolver = new MaterialResolver();
 		const theme = progress.timed( 'material theme', resolver.loadTheme( THEME ) );
 		const starting = progress.timed( 'physics', Physics.create() );
