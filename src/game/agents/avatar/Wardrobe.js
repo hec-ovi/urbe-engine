@@ -13,8 +13,8 @@ import { SLOTS } from './Recipe.js';
 const GROUPS = [ 'head', 'neck', 'torso', 'pelvis', 'upperarm', 'lowerarm', 'hand', 'thigh', 'calf', 'foot' ];
 const GROUP_INDEX = Object.fromEntries( GROUPS.map( ( group, index ) => [ group, index ] ) );
 const PATTERNS = { top: TOPS, pants: PANTS, footwear: FOOTWEAR };
-/** Triangles between yields while the body is sorted under the garments. */
-const BATCH = 2048;
+/** Triangles, or vertices, between yields: a few milliseconds of the loops below. */
+const BATCH = 1024;
 
 /**
  * A person's outfit fitted to their shaped body at rest.
@@ -59,7 +59,8 @@ export function* fitOutfit( geometry, bones, outfit ) {
 	const bottom = Math.min( 0, geometry.boundingBox.min.y );
 	const height = Math.max( 0.1, geometry.boundingBox.max.y - bottom );
 	const weights = classifyWeights( bones, skinIndex, skinWeight, positions.count );
-	const vertices = vertexContexts( positions, normals, weights, height, bottom );
+	yield;
+	const vertices = yield* vertexContexts( positions, normals, weights, height, bottom );
 	const welded = vertices.map( ( context ) => context.weld );
 	yield;
 	const triangle = makeContext( height );
@@ -98,11 +99,17 @@ export function* fitOutfit( geometry, bones, outfit ) {
 
 	}
 	const groups = bodyGroups( geometry.groups, assignments );
-	const seamEdges = sharedGarmentEdges( byGarment, welded );
 	yield;
+	const seamEdges = yield* sharedGarmentEdges( byGarment, welded );
 	// Fitted surfaces are prepared once: an outer jacket inherits the shaped
 	// seat of the trousers under it before adding its own ease.
-	const fitted = selected.map( ( descriptor, index ) => ( { ...descriptor, ...descriptor.prepare?.( vertices, byGarment[ index ] ) } ) );
+	const fitted = [];
+	for ( const [ index, descriptor ] of selected.entries() ) {
+
+		yield;
+		fitted.push( { ...descriptor, ...descriptor.prepare?.( vertices, byGarment[ index ] ) } );
+
+	}
 	const garments = [];
 	for ( let index = 0; index < selected.length; index ++ ) {
 
@@ -172,11 +179,13 @@ function makeContext( height ) {
  * of body height, its body-part shares, the side it is on, the extent of that
  * side's bare foot and the weld it shares with vertices at the same point.
  */
-function vertexContexts( positions, normals, weights, height, bottom ) {
+function* vertexContexts( positions, normals, weights, height, bottom ) {
 
 	const welds = new Map();
-	const result = Array.from( { length: positions.count }, ( _, vertex ) => {
+	const result = [];
+	for ( let vertex = 0; vertex < positions.count; vertex ++ ) {
 
+		if ( vertex % BATCH === 0 ) yield;
 		const context = makeContext( height );
 		context.x = positions.getX( vertex ) / height;
 		context.y = ( positions.getY( vertex ) - bottom ) / height;
@@ -190,9 +199,9 @@ function vertexContexts( positions, normals, weights, height, bottom ) {
 		const key = `${Math.round( context.x * 1e6 )},${Math.round( context.y * 1e6 )},${Math.round( context.z * 1e6 )}`;
 		if ( ! welds.has( key ) ) welds.set( key, welds.size );
 		context.weld = welds.get( key );
-		return context;
+		result.push( context );
 
-	} );
+	}
 	const feet = {
 		l: { minX: Infinity, maxX: - Infinity, minZ: Infinity, maxZ: - Infinity },
 		r: { minX: Infinity, maxX: - Infinity, minZ: Infinity, maxZ: - Infinity }
@@ -453,7 +462,7 @@ function* createShell( body, descriptor, faces, contexts, welded, seamEdges, und
 }
 
 /** Edges two garments share: a seam between them, which neither closes with a wall. */
-function sharedGarmentEdges( garments, welded ) {
+function* sharedGarmentEdges( garments, welded ) {
 
 	const owners = new Map();
 	const shared = new Set();
@@ -463,6 +472,7 @@ function sharedGarmentEdges( garments, welded ) {
 		const faces = garments[ owner ];
 		for ( let index = 0; index < faces.length; index += 3 ) {
 
+			if ( index % ( BATCH * 3 ) === 0 ) yield;
 			for ( let side = 0; side < 3; side ++ ) {
 
 				const a = welded[ faces[ index + side ] ];
