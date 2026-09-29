@@ -10,7 +10,7 @@ const LIMB_MIN = 0.05;
 // whole body plan.
 const ARM = { clavicle: 0, upperarm: 0.28, lowerarm: 0.66, hand: 0.9, thumb: 1, index: 1, middle: 1, ring: 1, pinky: 1 };
 const LEG = { pelvis: 0, thigh: 0.32, calf: 0.7, foot: 0.92, ball: 1 };
-const TORSO = 'spine';
+const HEAD = 'head';
 const SHOE = [ 'foot', 'ball' ];
 
 /**
@@ -19,7 +19,7 @@ const SHOE = [ 'foot', 'ball' ];
  * it is chest, forearm or shin, on any body and in any pose.
  *
  * The answer is one vec4 per vertex, which the crowd shader reads directly:
- * - x: torso share, 1 on the chest and shoulders, fading out at the neck
+ * - x: head share, 1 on the head and fading down the neck, which no collar reaches
  * - y: how far along the arm, 0 at the shoulder to 1 at the fingertips
  * - z: how far down the leg, 0 at the waist to 1 at the toes
  * - w: foot share, which is where a shoe is
@@ -42,7 +42,7 @@ export function garments( mesh ) {
 
 	for ( let i = 0; i < index.count; i ++ ) {
 
-		let torso = 0;
+		let head = 0;
 		let shoe = 0;
 		let armShare = 0;
 		let arm = 0;
@@ -57,7 +57,7 @@ export function garments( mesh ) {
 
 			const bone = bones[ index.getComponent( i, slot ) ];
 
-			if ( bone === TORSO ) torso += share;
+			if ( bone === HEAD ) head += share;
 			if ( SHOE.includes( bone ) ) shoe += share;
 
 			if ( bone in ARM ) {
@@ -76,7 +76,7 @@ export function garments( mesh ) {
 
 		}
 
-		data[ i * 4 ] = torso;
+		data[ i * 4 ] = head;
 		data[ i * 4 + 1 ] = armShare >= LIMB_MIN ? arm / armShare : OFF_LIMB;
 		data[ i * 4 + 2 ] = legShare >= LIMB_MIN ? leg / legShare : OFF_LIMB;
 		data[ i * 4 + 3 ] = shoe;

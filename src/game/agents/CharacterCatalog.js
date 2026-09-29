@@ -73,15 +73,6 @@ export function bodyFor( gender, seed ) {
 
 }
 
-/** The body and hairstyle of one crowd variant, which a focused or fallen person keeps wearing. */
-export function avatarFor( variant ) {
-
-	const shape = CROWD_MODELS[ variant ];
-	if ( ! shape ) throw new Error( `no crowd body ${variant}` );
-	return { ...shape, hairs: [ shape.hair ] };
-
-}
-
 export function assertRigCompatibility( characterRoot, animationRoot ) {
 
 	const character = skeletonOf( characterRoot );

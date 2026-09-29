@@ -1,86 +1,53 @@
-import { attribute, float, instancedBufferAttribute, max, mix, smoothstep, step, texture, vec2, vec4 } from 'three/tsl';
-import { dressSurface, fabricDetail } from './Fabric.js';
+import { instancedBufferAttribute } from 'three/tsl';
+import { dressSurface } from './Fabric.js';
 import { CrowdMesh } from './CrowdMesh.js';
-
-/** How wide a hem or a cuff fades, in limb-length units: about two centimetres. */
-const EDGE = 0.04;
-/**
- * Where a shirt starts and stops covering the torso, in share of the vertex the
- * spine drives. Bone weights taper over a third of the body, so used raw they
- * smear the shirt into the trousers over 40 cm of blend and the whole figure
- * reads as bare skin under a wash of colour. Thresholded, the garment gets a
- * collar and a waistline.
- */
-const TORSO_IN = 0.2;
-const TORSO_OUT = 0.48;
-/** Shoes are the trousers again, several stops down. */
-const SHOE_SHADE = 0.42;
+import { clothShare, crowdGarments, packLook, paintedColorNode } from './CrowdLook.js';
 
 /**
- * A dressed crowd body. The base characters ship undressed, so the clothes are
- * painted on: the garment map (Garments.js) says which part of the body each
- * vertex belongs to, and every person carries their own skin tone, shirt and
- * trousers plus where their sleeves and their hems end. Nothing is added to the
- * mesh, so a whole city of people still costs one draw call per model.
+ * A dressed crowd body. The bodies are baked undressed, so each person's
+ * recipe is painted on: the garment map (Garments.js) says what drives each
+ * vertex and the rest pose how high it is and how far out along the arm, and
+ * every person carries their own skin, top, trousers and footwear colours, the
+ * top's second colour and where each garment ends, cut as the garment's own
+ * pattern cuts it (CrowdLook.js). Nothing is added to the mesh, so a whole
+ * city of people still costs one draw call per model.
  */
 export class BodyMesh extends CrowdMesh {
 
-	/** @param paint { map: skin base colour, eyeMap: eye colour, cloth: garment/eye marker } */
-	colorNode( geometry, { map, eyeMap, cloth } ) {
+	/**
+	 * @param paint `{ map: skin base colour, eyeMap: eye colour, cloth: garment/eye
+	 *   marker, height, bottom: the rest body's height and lowest point }`
+	 */
+	colorNode( geometry, { map, eyeMap, cloth, height, bottom } ) {
 
 		geometry.setAttribute( 'cloth', cloth );
 
-		// Skin with the sleeve cut, shirt with the hem cut: two vec4s and a
-		// vec3 keep the body inside WebGPU's eight vertex buffers.
+		// Three vec4s keep the body inside WebGPU's eight vertex buffers: each
+		// colour's fourth lane carries packed cuts or a second colour.
 		this.skins = this.attribute( 4 );
 		this.shirts = this.attribute( 4 );
-		this.trousers = this.attribute( 3 );
+		this.trousers = this.attribute( 4 );
 
-		const aSkinCut = instancedBufferAttribute( this.skins, 'vec4' );
-		const aShirtCut = instancedBufferAttribute( this.shirts, 'vec4' );
+		const aSkin = instancedBufferAttribute( this.skins, 'vec4' );
+		const aShirt = instancedBufferAttribute( this.shirts, 'vec4' );
+		const aTrousers = instancedBufferAttribute( this.trousers, 'vec4' );
+		this.garments = crowdGarments( { cuts: aSkin.w, figure: this.figure }, { height, bottom } );
 
-		this.cut = vec2( aSkinCut.w, aShirtCut.w );
-		return dressedColorNode( geometry, map, {
-			skin: aSkinCut.xyz,
-			shirt: aShirtCut.xyz,
-			trousers: instancedBufferAttribute( this.trousers, 'vec3' ),
-			cut: this.cut
-		}, eyeMap );
+		return paintedColorNode( map, {
+			skin: aSkin.xyz, shirt: aShirt.xyz, trousers: aTrousers.xyz, shoes: aShirt.w, panel: aTrousers.w
+		}, this.garments, eyeMap );
 
 	}
 
-	surface( material ) { dressSurface( material, this.cut, material.normalNode ); }
+	surface( material ) { dressSurface( material, clothShare( this.garments ), material.normalNode ); }
 
 	setLook( slot, look ) {
 
-		this.skins.setXYZW( slot, look.skin.r, look.skin.g, look.skin.b, look.sleeve );
-		this.shirts.setXYZW( slot, look.shirt.r, look.shirt.g, look.shirt.b, look.hem );
-		this.trousers.setXYZ( slot, look.trousers.r, look.trousers.g, look.trousers.b );
+		const pack = packLook( look );
+		this.skins.setXYZW( slot, look.skin.r, look.skin.g, look.skin.b, pack.cuts );
+		this.shirts.setXYZW( slot, look.shirt.r, look.shirt.g, look.shirt.b, pack.shoes );
+		this.trousers.setXYZW( slot, look.trousers.r, look.trousers.g, look.trousers.b, pack.panel );
 
 	}
-
-}
-
-/** The same garment surface for a baked crowd body or one focused rig. */
-export function dressedColorNode( geometry, map, { skin, shirt, trousers, cut }, eyeMap = null ) {
-
-	const aCloth = attribute( 'cloth', 'vec4' );
-	// A limb the garment does not reach carries 2, well past any cut, so
-	// these two land on 0 for every vertex that is not on that limb.
-	const sleeve = float( 1 ).sub( smoothstep( cut.x.sub( EDGE ), cut.x.add( EDGE ), aCloth.y ) );
-	const leg = float( 1 ).sub( smoothstep( cut.y.sub( EDGE ), cut.y.add( EDGE ), aCloth.z ) );
-	const torso = smoothstep( TORSO_IN, TORSO_OUT, aCloth.x );
-	const bare = texture( map ).rgb.mul( skin );
-	const { thread } = fabricDetail();
-	const seam = max( float( 1 ).sub( smoothstep( 0.005, 0.025, aCloth.y.sub( cut.x ).abs() ) ),
-		float( 1 ).sub( smoothstep( 0.005, 0.025, aCloth.z.sub( cut.y ).abs() ) ) );
-	const weave = thread.mul( 0.025 ).add( 1 ).sub( seam.mul( 0.12 ) );
-	const dressed = mix( bare, trousers.mul( weave ), leg );
-	const top = mix( dressed, shirt.mul( weave ), max( torso, sleeve ) );
-
-	const body = mix( top, trousers.mul( SHOE_SHADE ), aCloth.w );
-	const surface = eyeMap ? mix( texture( eyeMap ).rgb, body, step( 0, aCloth.x ) ) : body;
-
-	return vec4( surface, 1 );
 
 }

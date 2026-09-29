@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import { CLIP, clipForNpcAnimation } from './CharacterAssets.js';
 import { CROWD_MODELS, bodyFor } from './CharacterCatalog.js';
 import { FRAMES } from './VatBaker.js';
-import { look } from './Appearance.js';
+import { appearance } from './Appearance.js';
 import { spreadOnLanes, LANE_SPACING } from './LaneSpread.js';
 import { streetBodies } from './StreetBodies.js';
 import { stepPresence } from './Presence.js';
@@ -1259,7 +1259,7 @@ export class Crowd {
 			instance,
 			parcelId: null,
 			spot: null,
-			...wearing( null, instance?.gender ?? agent.gender, instance?.appearanceSeed ?? seed ),
+			...wearing( null, instance?.gender ?? agent.gender, instance?.appearanceSeed ?? seed, instance?.npcId ?? null ),
 			frame: seed % FRAMES,
 			frozen: false,
 			retiring: false,
@@ -1555,28 +1555,32 @@ function identify( member, instance ) {
 	member.npcId = instance.npcId;
 	member.instance = instance;
 	member.type = instance.type;
-	Object.assign( member, wearing( member, instance.gender ?? member.gender, instance.appearanceSeed ?? member.appearanceSeed ) );
+	Object.assign( member, wearing( member, instance.gender ?? member.gender, instance.appearanceSeed ?? member.appearanceSeed, instance.npcId ) );
 
 }
 
 /**
- * The body and look one gender and seed give: a known gender picks its mesh,
- * and a body of unknown gender carries the gender of the mesh the seed picks,
- * so a body is always one gender. The look is built again only when the seed
- * or the mesh changes, so a person keeps one look object for as long as it is
- * theirs.
+ * The body and look one gender, seed and identity give: a known gender picks
+ * its mesh, and a body of unknown gender carries the gender of the mesh the
+ * seed picks, so a body is always one gender. The look is the person's recipe
+ * (Appearance.js). It is built again only when the seed, the mesh or the
+ * authored person the identity is changes, so a person keeps one look object
+ * for as long as it is theirs.
  *
  * @param member the body wearing them now, or null for a new one
+ * @param npcId who they are, when the simulation has established them
  */
-function wearing( member, gender, seed ) {
+function wearing( member, gender, seed, npcId = member?.npcId ?? null ) {
 
 	const variant = bodyFor( gender, seed );
-	const same = member?.look && member.appearanceSeed === seed && member.variant === variant;
+	const worn = gender ?? CROWD_MODELS[ variant ].gender;
+	const next = appearance( { gender: worn, appearanceSeed: seed, npcId } );
+	const same = member?.look && member.appearanceSeed === seed && member.variant === variant && member.look.template === next.template;
 	return {
-		gender: gender ?? CROWD_MODELS[ variant ].gender,
+		gender: worn,
 		variant,
 		appearanceSeed: seed,
-		look: same ? member.look : look( seed )
+		look: same ? member.look : next
 	};
 
 }

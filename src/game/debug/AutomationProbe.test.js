@@ -4,9 +4,8 @@ import * as THREE from 'three/webgpu';
 import { AutomationProbe } from './AutomationProbe.js';
 import { ChatPanel } from '../../ui/widgets/ChatPanel.js';
 import { CROWD_MODELS } from '../agents/CharacterCatalog.js';
-import { look } from '../agents/Appearance.js';
 import { HeroCharacter } from '../agents/HeroCharacter.js';
-import { animation, rig } from '../agents/HeroCharacter.test-fixtures.js';
+import { heroRigs, outfit } from '../agents/HeroCharacter.test-fixtures.js';
 import { ActorLighting } from '../light/ActorLighting.js';
 import { SceneryCompiler } from '../scenery/SceneryCompiler.js';
 import { assets, courier, crimeScene, frame } from '../scenery/scenery.test-fixtures.js';
@@ -26,16 +25,13 @@ function playing( { reachable = true, edge = Infinity } = {} ) {
 
 	const walker = {
 		id: 'p1', crowdId: 'c|edge|we319|0|630', npcId: null, type: 'street', gender: 'male',
-		variant: 0, appearanceSeed: SEED, look: look( SEED ), heading: Math.PI / 2,
+		variant: 0, appearanceSeed: SEED, look: outfit(), heading: Math.PI / 2,
 		position: new THREE.Vector3( 10, 0.2, 5 )
 	};
 	const members = new Map( [ [ walker.id, walker ] ] );
 	const dialog = new ChatPanel( { onSend: () => {}, onClose: () => { game.interactor.conversation = null; } } );
 	// The room lighting wears its own copy of each dressed material, as in the game.
-	const hero = new HeroCharacter( {
-		animation: animation(), lighting: new ActorLighting( { spots: [], strips: [] }, () => [] ),
-		loadModel: () => ( { scene: rig( 'body', { eyebrows: true } ), hairs: [ { scene: rig( 'hair' ) } ] } )
-	} );
+	const hero = new HeroCharacter( heroRigs( { lighting: new ActorLighting( { spots: [], strips: [] }, () => [] ) } ) );
 	const game = {
 		stats: { backend: 'webgl', tier: 'low', drawCalls: 380, frameMs: 20 },
 		input: { locked: false },
@@ -123,8 +119,15 @@ describe( 'automation probe', () => {
 		const { crowd, hero } = await probe.appearance();
 		const { seed, ...worn } = crowd;
 		expect( seed ).toBe( SEED );
-		expect( worn ).toMatchObject( { body: 'regular-male', hairStyle: CROWD_MODELS[ 0 ].hair, eyebrows: worn.hair } );
+		expect( worn ).toMatchObject( { body: 'regular-male', hairStyle: CROWD_MODELS[ 0 ].hair, eyebrows: worn.hair, height: 1 } );
 		expect( worn.hair ).toMatch( /^#[0-9a-f]{6}$/ );
+		// Each garment the crowd paints is sewn on the focused body, in the same colours and fabric.
+		expect( worn.garments ).toEqual( {
+			top: { id: 'tech-top', primary: '#202c3b', secondary: '#536377', accent: '#4de1dc' },
+			pants: { id: 'pants-tech', primary: '#202937', secondary: '#465768', accent: '#4de1dc' },
+			footwear: { id: 'boots-patrol', primary: '#151c25', secondary: '#374553', accent: '#4de1dc' },
+			fabric: 'tech'
+		} );
 		expect( hero ).toEqual( worn );
 
 		// Eyebrows left in the pack's own material wear no tint, whatever the uniforms hold.

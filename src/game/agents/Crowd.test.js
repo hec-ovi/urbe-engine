@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Crowd, crowdClipForName } from './Crowd.js';
 import { CLIP } from './CharacterAssets.js';
-import { look } from './Appearance.js';
+import { appearance } from './Appearance.js';
 import { StreetBodies } from './StreetBodies.js';
 import { WalkRoutes } from './WalkRoutes.js';
 import { WalkSurface } from './WalkSurface.js';
@@ -673,7 +673,7 @@ describe( 'Crowd bodies', () => {
 		const named = crowd.memberForNpc( person.npcId );
 		expect( named ).not.toBe( body );
 		expect( named ).toMatchObject( { appearanceSeed: 456, gender: 'female' } );
-		expect( named.look ).toEqual( look( 456 ) );
+		expect( named.look ).toEqual( appearance( { gender: 'female', appearanceSeed: 456, npcId: person.npcId } ) );
 		expect( body ).toMatchObject( { npcId: null, appearanceSeed: 123, retiring: true } );
 		expect( body.look ).toBe( walked );
 

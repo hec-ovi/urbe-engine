@@ -1,5 +1,10 @@
+import * as THREE from 'three/webgpu';
 import { CLIP } from '../agents/CharacterAssets.js';
 import { CROWD_MODELS } from '../agents/CharacterCatalog.js';
+import { COLOR_CHANNELS, SLOTS } from '../agents/avatar/Recipe.js';
+import { FABRIC_FINISHES, panelsOf } from '../agents/avatar/GarmentPanels.js';
+import { TOP_CUTS } from '../agents/avatar/Tops.js';
+import { PANTS_CUTS } from '../agents/avatar/Lower.js';
 import { PERSON_RADIUS } from '../physics/ImpactWorld.js';
 import { EYE_HEIGHT, STEP_HEIGHT } from '../physics/PlayerBody.js';
 import { CHEST } from '../player/Interactor.js';
@@ -15,7 +20,7 @@ import { nextQuestWindow } from '../quests/QuestWait.js';
 const FACE_DISTANCE = 1.3;
 /** Feet land this far above the measured ground, as a spawn does, so the capsule never starts inside it. */
 const FOOTING = 0.05;
-/** A person's look, by the names the crowd bakes and the focused body is dressed with; the eyebrows wear the hair tint. */
+/** A person's look, by the names the crowd paints and the focused body is dressed with; the eyebrows wear the hair colour. */
 const LOOK_FIELDS = [ 'skin', 'shirt', 'trousers', 'hair', 'eyebrows', 'sleeve', 'hem' ];
 /** Walk edges a player may be stood on, and how far apart the spots tried along them are. */
 const PAVEMENT = 'sidewalk';
@@ -163,7 +168,7 @@ export class AutomationProbe {
 		const started = performance.now();
 		while ( ! id && ! this.#focused( person ) && performance.now() - started < timeoutMs ) await frames( 1 );
 
-		return { crowd: crowdLook( person ), hero: heroLook( this.#focused( person ) ) };
+		return { crowd: crowdLook( person ), hero: heroLook( this.#focused( person ), this.game.hero.poser ) };
 
 	}
 
@@ -1095,7 +1100,10 @@ function personOf( member, feet ) {
 
 }
 
-/** The body, hairstyle and colours the mass crowd bakes for one member; its hair draw carries the eyebrows. */
+/**
+ * The body, hairstyle, colours, cuts and garments the mass crowd paints for
+ * one member; its hair draw carries the eyebrows.
+ */
 function crowdLook( member ) {
 
 	const model = CROWD_MODELS[ member.variant ];
@@ -1105,43 +1113,96 @@ function crowdLook( member ) {
 		seed: member.appearanceSeed ?? null,
 		body: model?.id ?? null,
 		hairStyle: model?.hair ?? null,
-		...lookValues( { ...look, eyebrows: look.hair } )
+		...lookValues( {
+			skin: look.skin, shirt: look.shirt, trousers: look.trousers, hair: look.hair, eyebrows: look.hair,
+			sleeve: look.sleeve, hem: look.pantsHem
+		} ),
+		height: typeof look.height === 'number' ? round( look.height ) : null,
+		garments: look.recipe ? garmentsOf( look.recipe.outfit ) : null
 	};
 
 }
 
 /**
- * The focused body's model, hairstyles and the look its meshes actually paint
- * with: the outfit when the body wears the dressed surface, the hair tint when
- * every hairstyle mesh, and the eyebrows, wear the dressed hair. The room
- * lighting may wear a copy of a dressed material; the copy paints with the
- * same colour node. A field the body is not dressed with is null.
+ * The focused body's model, hairstyle and the look its meshes actually paint
+ * with: the skin when the body wears the dressed skin, each garment's colours
+ * when its shell wears that garment's dressed panels, the hair colour when
+ * every hairstyle mesh, and the eyebrows, wear the dressed hair. The shirt and
+ * trousers are the top's and the trousers' main colour, the skin's where the
+ * slot is bare, and the sleeve and hem are the cuts of the garments sewn on.
+ * The room lighting may wear a copy of a dressed material; the copy paints
+ * with the same colour node. A field the body is not dressed with is null.
  */
-function heroLook( active ) {
+function heroLook( active, poser ) {
 
 	if ( ! active ) return null;
 	const meshes = [];
 	active.root.traverse( ( node ) => { if ( node.isMesh ) meshes.push( node ); } );
 	const dressed = active.root.userData.dressed ?? null;
-	const worn = dressed?.look ?? {};
-	const outfit = Boolean( dressed ) && meshes.some( ( mesh ) => mesh.material.colorNode === dressed.material.colorNode );
+	const wears = ( mesh, material ) => Boolean( material ) && mesh.material.colorNode === material.colorNode;
+	const skin = dressed && meshes.some( ( mesh ) => wears( mesh, dressed.skin ) ) ? dressed.colors.skin.value : null;
 	const tints = new Set( [ ...( dressed?.hairs.values() ?? [] ) ].map( ( material ) => material.colorNode ) );
 	const tinted = ( eyebrows ) => {
 
 		const hair = meshes.filter( ( mesh ) => mesh.userData.hair && /eyebrows/i.test( mesh.name ) === eyebrows );
-		return hair.length > 0 && hair.every( ( mesh ) => tints.has( mesh.material.colorNode ) ) ? worn.hair.value : null;
+		return hair.length > 0 && hair.every( ( mesh ) => tints.has( mesh.material.colorNode ) ) ? dressed.colors.hair.value : null;
 
 	};
+	const worn = {};
+	for ( const mesh of meshes ) {
+
+		const garment = mesh.userData.garment;
+		if ( ! garment || ! dressed ) continue;
+		const material = dressed.garments.get( garment.id );
+		const panels = wears( mesh, material ) ? panelsOf( material ) : null;
+		worn[ garment.slot ] = { id: garment.id, panels };
+
+	}
+	const main = ( slot ) => worn[ slot ] ? worn[ slot ].panels?.primary ?? null : skin;
+	// A body at its frame's own height stands on no height rig.
+	const height = poser ? poser.height( active.root )?.height ?? 1 : null;
 
 	return {
 		body: active.descriptor.id,
-		hairStyle: active.descriptor.hairs.join( '+' ),
+		hairStyle: active.root.userData.hairStyle ?? null,
 		...lookValues( {
-			...Object.fromEntries( LOOK_FIELDS.map( ( field ) => [ field, outfit ? worn[ field ]?.value : null ] ) ),
-			hair: tinted( false ),
-			eyebrows: tinted( true )
-		} )
+			skin, shirt: main( 'top' ), trousers: main( 'pants' ), hair: tinted( false ), eyebrows: tinted( true ),
+			sleeve: worn.top ? TOP_CUTS[ worn.top.id ].sleeve : 0, hem: worn.pants ? PANTS_CUTS[ worn.pants.id ].hem : 1
+		} ),
+		height: typeof height === 'number' ? round( height ) : null,
+		garments: {
+			...Object.fromEntries( SLOTS.map( ( slot ) => [ slot, worn[ slot ] ? {
+				id: worn[ slot ].id, ...Object.fromEntries( COLOR_CHANNELS.map( ( channel ) => [ channel, hex( worn[ slot ].panels?.[ channel ] ) ] ) )
+			} : null ] ) ),
+			fabric: fabricOf( Object.values( worn )[ 0 ]?.panels )
+		}
 	};
+
+}
+
+/** A recipe's outfit as the probe reports garments: per slot `{ id, primary, secondary, accent }` or null, and the fabric. */
+function garmentsOf( outfit ) {
+
+	return {
+		...Object.fromEntries( SLOTS.map( ( slot ) => [ slot, outfit[ slot ] && outfit[ slot ] !== 'none' ? {
+			id: outfit[ slot ], ...Object.fromEntries( COLOR_CHANNELS.map( ( channel ) => [ channel, hex( new THREE.Color( outfit.colors[ slot ][ channel ] ) ) ] ) )
+		} : null ] ) ),
+		fabric: outfit.fabric
+	};
+
+}
+
+/** The fabric a garment's panels finish, by its roughness and metalness. */
+function fabricOf( panels ) {
+
+	if ( ! panels ) return null;
+	return Object.entries( FABRIC_FINISHES ).find( ( [ , finish ] ) => finish.roughness === panels.roughness && finish.metalness === panels.metalness )?.[ 0 ] ?? null;
+
+}
+
+function hex( color ) {
+
+	return color?.isColor ? `#${color.getHexString()}` : null;
 
 }
 

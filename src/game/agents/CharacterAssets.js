@@ -102,6 +102,10 @@ export class CharacterAssets {
 			// Read off the skeleton before baking: the pose buffers have no
 			// bones left to ask.
 			const bodyCloth = garments( body );
+			// The rest body's extent, which the painted garments are cut against.
+			body.geometry.computeBoundingBox();
+			const bottom = Math.min( 0, body.geometry.boundingBox.min.y );
+			const height = body.geometry.boundingBox.max.y - bottom;
 			const motions = new CharacterAnimations( root, animationGltf.scene );
 			const bodyClips = clips.map( ( clip ) => motions.clip( clip ) );
 			const [ bakedBody, bakedEyes, bakedEyebrows ] = await VatBaker.bake( root, [ body, eyes, eyebrows ], bodyClips, slice );
@@ -115,7 +119,7 @@ export class CharacterAssets {
 			if ( slice ) await slice.step();
 			variants.push( {
 				id: CROWD_MODELS[ i ].id,
-				body: new BodyMesh( baked, capacity, storageCapable, { map: skins[ i ], eyeMap, cloth } ),
+				body: new BodyMesh( baked, capacity, storageCapable, { map: skins[ i ], eyeMap, cloth, height, bottom } ),
 				hair: new HairMesh( bakedHeadHair, capacity, storageCapable, { map: hairMaps[ i ] } )
 			} );
 

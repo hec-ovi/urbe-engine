@@ -1,7 +1,9 @@
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { ANIMATION_URL, CROWD_CLIP_NAMES, CROWD_MODELS, avatarFor } from './CharacterCatalog.js';
+import { ANIMATION_URL, CROWD_CLIP_NAMES, CROWD_MODELS } from './CharacterCatalog.js';
 import { CharacterPoser, modelKey } from './CharacterPoser.js';
+import { recipeFor } from './Appearance.js';
+import { personRecipe } from './avatar/Recipe.js';
 import { SpeechGesture } from './SpeechGesture.js';
 import { FRAMES } from './VatBaker.js';
 import { streetBodies } from './StreetBodies.js';
@@ -10,28 +12,30 @@ import { Ragdoll } from '../physics/Ragdoll.js';
 const TALK = 'Idle_Talking_Loop';
 const SIT_TALK = 'Sitting_Talking_Loop';
 const BLEND_MS = 160;
-const WHITE = new THREE.Color( 1, 1, 1 );
-/** What a prepared shape wears while its programs are built: every channel a person's look has. */
-const PLAIN_LOOK = { skin: WHITE, shirt: WHITE, trousers: WHITE, hair: WHITE, sleeve: 0, hem: 0 };
+/** Whose recipe a prepared body wears while its programs are built: anybody's does. */
+const PREPARED_SEED = 1;
 
 /**
  * One full-quality skinned person while the player is talking to them. The
- * mass-crowd instance stays authoritative until this model is loaded and its
+ * mass-crowd instance stays authoritative until this model is built and its
  * shaders are warm; then that one slot is hidden. There is never more than one
  * focused armature or AnimationMixer updating in the city.
  *
- * The rig is the crowd body the person walks in: the same variant, the same
- * painted outfit, the same hair tint on hairstyle and eyebrows and the same
- * surface response, and it starts in the crowd's clip at the crowd's frame,
- * blending from there into what it plays, so the swap is not seen. A look that
- * changes while the rig is resident is worn at once. While the person's voice
- * plays (`speak`) the rig's head and neck move to it (SpeechGesture).
+ * The rig is the person in their own recipe (avatar/Recipe.js), the one the
+ * crowd paints on its baked body: their body frame, shape, face and height,
+ * their hairstyle and colours, and their garments sewn on as skinned shells.
+ * It starts in the crowd's clip at the crowd's frame, blending from there into
+ * what it plays. A recipe that changes while the rig is resident is worn at
+ * once when only its colours changed, and built and swapped in otherwise.
+ * While the person's voice plays (`speak`) the rig's head and neck move to it
+ * (SpeechGesture).
  *
- * Its shapes come from the CharacterPoser it shares with the still bodies of
+ * Its bodies come from the CharacterPoser it shares with the still bodies of
  * staged scenes: read once for the run with maps downscaled to the tier's
- * texture size, dressed materials kept and worn again. `prepare` reads and
- * warms the shapes at load, so a conversation, a fall or a laid-out body
- * later uploads nothing and links nothing.
+ * texture size, a person's fit built in steps under the frame budget and kept
+ * for the next time, dressed materials kept and worn again. `prepare` reads,
+ * refines and warms both crowd bodies and every garment's program at load, so
+ * a conversation, a fall or a laid-out body later links nothing.
  */
 export class HeroCharacter {
 
@@ -43,14 +47,17 @@ export class HeroCharacter {
 
 	}
 
-	/** @param textureSize the side the pack's maps are downscaled to, the tier's texture size */
-	constructor( { animation, warmup = null, textureSize, loadModel, street = streetBodies, lighting = null } ) {
+	/**
+	 * @param textureSize the side the pack's maps are downscaled to, the tier's texture size
+	 * @param loadModel, loadHair, tailor see CharacterPoser
+	 */
+	constructor( { animation, warmup = null, textureSize, loadModel, loadHair, tailor, street = streetBodies, lighting = null } ) {
 
 		this.animation = animation;
 		this.street = street;
 		this.lighting = lighting;
 		this.warmup = warmup;
-		this.poser = new CharacterPoser( { animation, textureSize, loadModel } );
+		this.poser = new CharacterPoser( { animation, textureSize, loadModel, loadHair, tailor } );
 		this.group = new THREE.Group();
 		this.group.name = 'focused-character';
 		this.active = null;
@@ -71,8 +78,8 @@ export class HeroCharacter {
 
 		const request = ++ this.request;
 		const sequence = this.#resolveSegments( segments ?? defaultSegments( person ) );
-		const descriptor = avatarFor( person.variant );
-		if ( samePerson( this.active?.person, person ) && this.active.key === modelKey( descriptor ) ) {
+		const recipe = recipeOf( person );
+		if ( samePerson( this.active?.person, person ) && this.active.key === modelKey( recipe ) ) {
 
 			this.active.person = person;
 			this.#wear();
@@ -80,13 +87,18 @@ export class HeroCharacter {
 			return true;
 
 		}
-		const source = await this.poser.model( descriptor );
+		const source = await this.poser.model( recipe );
 
-		if ( request !== this.request ) return false;
+		if ( request !== this.request ) {
+
+			this.poser.drop( source );
+			return false;
+
+		}
 
 		// A look that changes while the rig warms is worn on the next update.
 		const look = person.look;
-		const root = this.poser.dress( source, person, `focused-${descriptor.id}` );
+		const root = this.poser.dress( source, person, `focused-${recipe.body}` );
 		const gesture = new SpeechGesture( root );
 		this.lighting?.attachRoot( root, person.position );
 		root.visible = false;
@@ -109,8 +121,8 @@ export class HeroCharacter {
 		person.hero = true;
 		root.visible = true;
 		this.active = {
-			person, look, root, mixer, gesture, descriptor, key: modelKey( descriptor ),
-			motions: source.motions,
+			person, look, recipe, root, mixer, gesture, descriptor: source.descriptor, key: source.key,
+			height: this.poser.height( root ), motions: source.motions,
 			playback: null, sequence: 0, currentAction: null, currentClip: null
 		};
 		mixer.addEventListener( 'finished', ( event ) => this.#finished( mixer, event ) );
@@ -122,24 +134,28 @@ export class HeroCharacter {
 	}
 
 	/**
-	 * Reads every shape a person can take and builds its programs, so the
-	 * first conversation or fall of the run pays for neither.
+	 * Reads, refines and measures both crowd bodies and builds their programs
+	 * with every garment's, so the first conversation or fall of the run
+	 * links nothing and prepares no body.
 	 *
-	 * @param onProgress receives (done, total) over the shapes
+	 * @param onProgress receives (done, total) over the bodies
 	 */
 	async prepare( onProgress = () => {} ) {
 
-		const shapes = CROWD_MODELS.map( ( _, variant ) => avatarFor( variant ) );
+		for ( const [ index, { gender } ] of CROWD_MODELS.entries() ) {
 
-		for ( const [ index, descriptor ] of shapes.entries() ) {
-
-			const source = await this.poser.model( descriptor );
-			const root = this.poser.dress( source, { position: new THREE.Vector3(), heading: 0, look: PLAIN_LOOK }, `prepared-${descriptor.id}` );
+			// Their height is a rig's, not a program's: the frame's own will do.
+			const seeded = personRecipe( { gender, appearanceSeed: PREPARED_SEED } );
+			const recipe = { ...seeded, shape: { ...seeded.shape, height: 1 } };
+			const source = await this.poser.model( recipe );
+			const root = this.poser.dress( source, { position: new THREE.Vector3(), heading: 0 }, `prepared-${recipe.body}` );
+			const samples = this.poser.sampleWardrobe( root );
 			this.lighting?.attachRoot( root, root.position );
 			await this.warmup?.warm( root );
 			this.lighting?.releaseRoot( root );
+			samples.remove();
 			this.poser.release( root );
-			onProgress( index + 1, shapes.length );
+			onProgress( index + 1, CROWD_MODELS.length );
 
 		}
 
@@ -154,22 +170,30 @@ export class HeroCharacter {
 
 		if ( this.fallen || this.fallPending ) return false;
 		this.fallPending = true;
-		const descriptor = avatarFor( person.variant );
+		const recipe = recipeOf( person );
+		let source = null;
 		let root = null;
 		let ragdoll = null;
 
 		try {
 
-			const source = await this.poser.model( descriptor );
-			if ( this.fallen ) return false;
-			root = this.poser.dress( source, person, `fallen-${descriptor.id}` );
+			source = await this.poser.model( recipe );
+			if ( this.fallen ) {
+
+				this.poser.drop( source );
+				return false;
+
+			}
+			root = this.poser.dress( source, person, `fallen-${recipe.body}` );
 			this.lighting?.attachRoot( root, person.position );
 			poseAtCrowdFrame( root, this.animation, source.motions, person );
+			// Lengthened before the ragdoll measures its parts off the bones.
+			this.poser.height( root )?.afterPose();
 			if ( samePerson( this.active?.person, person ) ) this.#dropActive();
 			ragdoll = Ragdoll.create( { physics, root, impact } );
 			this.group.add( root );
 			person.hero = true;
-			this.fallen = { person, root, ragdoll, descriptor, key: modelKey( descriptor ) };
+			this.fallen = { person, root, ragdoll, descriptor: source.descriptor, key: source.key };
 			this.street.take( person.id );
 			return true;
 
@@ -181,7 +205,7 @@ export class HeroCharacter {
 				this.lighting?.releaseRoot( root );
 				this.poser.release( root );
 
-			}
+			} else if ( source ) this.poser.drop( source );
 			throw error;
 
 		} finally {
@@ -219,14 +243,16 @@ export class HeroCharacter {
 		if ( this.fallen ) this.#fall( delta );
 		if ( ! this.active ) return;
 
-		const { person, root, mixer, gesture } = this.active;
+		const { person, root, mixer, gesture, height } = this.active;
 		if ( root.userData.dressed?.presence ) root.userData.dressed.presence.value = person.presence ?? 1;
 		if ( person.look !== this.active.look ) this.#wear();
 		root.position.copy( person.position );
 		root.rotation.y = person.heading;
 		this.lighting?.writeRoot( root, person.position );
+		height?.beforePose();
 		gesture.rest();
 		mixer.update( delta );
+		height?.afterPose();
 		gesture.update( delta, person.npcId && this.speech?.npcId === person.npcId ? this.speech : null );
 
 	}
@@ -274,12 +300,27 @@ export class HeroCharacter {
 
 	}
 
-	/** Writes the active person's current look into the uniforms its rig is dressed with. */
+	/**
+	 * Wears the active person's current look: its colours on the rig when its
+	 * recipe builds the same body, else a rig of the new recipe, built and
+	 * swapped in playing what this one plays.
+	 */
 	#wear() {
 
 		const active = this.active;
 		active.look = active.person.look;
-		this.poser.wear( active.root, active.look );
+		const recipe = recipeOf( active.person );
+		if ( modelKey( recipe ) === active.key ) {
+
+			active.recipe = recipe;
+			this.poser.wear( active.root, recipe );
+			return;
+
+		}
+		if ( active.rebuilding === recipe ) return;
+		active.rebuilding = recipe;
+		const segments = active.currentClip ? [ { clipName: active.currentClip, loop: true } ] : null;
+		Promise.resolve( this.show( active.person, segments ) ).catch( ( error ) => console.warn( 'focused character:', error.message ) );
 
 	}
 
@@ -383,6 +424,13 @@ export class HeroCharacter {
 		if ( typeof finished === 'function' ) finished();
 
 	}
+
+}
+
+/** The recipe the person walks in on the street, or the one their gender and seed give. */
+function recipeOf( person ) {
+
+	return person.look?.recipe ?? recipeFor( person ).recipe;
 
 }
 

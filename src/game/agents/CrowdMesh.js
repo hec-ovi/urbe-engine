@@ -4,6 +4,7 @@ import { cos, float, instancedBufferAttribute, int, mix, sin, transformNormalToV
 import { FRAMES } from './VatBaker.js';
 import { presenceMaterial } from './Presence.js';
 import { PoseBuffer } from './PoseBuffer.js';
+import { packLook, statureNode } from './CrowdLook.js';
 
 /** How every crowd surface answers light; a focused rig wears the same, so the swap does not show. */
 export const CROWD_SURFACE = { roughness: 0.9, metalness: 0 };
@@ -39,15 +40,18 @@ export class CrowdMesh {
 
 		// Every attribute is one vertex buffer on WebGPU, which allows eight per
 		// pipeline, so the per-instance data is packed: where a person stands
-		// and faces in one vec4, which frame of which clip in one vec3 with presence.
+		// and faces in one vec4, which frame of which clip with presence and
+		// their figure (CrowdLook.packLook) in another.
 		this.motion = this.attribute( 4 );
-		this.pose = this.attribute( 3 );
+		this.pose = this.attribute( 4 );
 
 		const positions = new PoseBuffer( baked.position, baked.vertexCount, baked.rows, storageCapable );
 		const normals = new PoseBuffer( baked.normal, baked.vertexCount, baked.rows, storageCapable );
 
 		const aMotion = instancedBufferAttribute( this.motion, 'vec4' );
-		const aPose = instancedBufferAttribute( this.pose, 'vec3' );
+		const aPose = instancedBufferAttribute( this.pose, 'vec4' );
+		/** The figure lane: height, footwear, collar and top style, read by a subclass's paint. */
+		this.figure = aPose.w;
 		const aFrame = aPose.x;
 		const aClip = aPose.y;
 		const aOrigin = aMotion.xyz;
@@ -68,7 +72,8 @@ export class CrowdMesh {
 			v.x.mul( s ).negate().add( v.z.mul( c ) )
 		);
 
-		const pose = mix( positions.sample( row0, column ), positions.sample( row1, column ), blend );
+		// A person stands at their recipe's height: the baked body scaled about its feet.
+		const pose = mix( positions.sample( row0, column ), positions.sample( row1, column ), blend ).mul( statureNode( aPose.w ) );
 		const normal = mix( normals.sample( row0, column ), normals.sample( row1, column ), blend );
 
 		const geometry = baked.mesh.geometry.clone();
@@ -137,7 +142,7 @@ export class CrowdMesh {
 	setInstance( slot, position, heading, frame, clip, look, presence = 1 ) {
 
 		this.motion.setXYZW( slot, position.x, position.y, position.z, heading );
-		this.pose.setXYZ( slot, frame, clip, presence );
+		this.pose.setXYZW( slot, frame, clip, presence, packLook( look ).figure );
 		this.setLook( slot, look );
 
 	}

@@ -1,124 +1,273 @@
 import * as THREE from 'three/webgpu';
 import { ImageBitmapLoader, MeshStandardNodeMaterial } from 'three/webgpu';
-import { uniform, vec2, renderGroup } from 'three/tsl';
+import { renderGroup, uniform } from 'three/tsl';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
-import { CHARACTER_ROOT, assertRigCompatibility, avatarFor, bodyFor } from './CharacterCatalog.js';
-import { look } from './Appearance.js';
-import { dressedColorNode } from './BodyMesh.js';
-import { presenceMaterial, coveredMaterial } from './Presence.js';
-import { dressSurface } from './Fabric.js';
+import { CHARACTER_MODELS, CHARACTER_ROOT, assertRigCompatibility } from './CharacterCatalog.js';
+import { appearance } from './Appearance.js';
+import { presenceMaterial } from './Presence.js';
 import { CROWD_SURFACE } from './CrowdMesh.js';
-import { hairColorNode } from './HairMesh.js';
-import { garments } from './Garments.js';
 import { CharacterAnimations } from './CharacterAnimations.js';
+import { bodyOf } from './avatar/BodyShape.js';
+import { createPanelMaterial, updatePanelMaterial } from './avatar/GarmentPanels.js';
+import { HeightRig } from './avatar/HeightRig.js';
+import { GARMENTS, SLOTS } from './avatar/Recipe.js';
+import { Tailor, fitKey } from './avatar/Tailor.js';
+import { eyeNode, hairNode, skinNode } from './avatar/Tints.js';
 
 /** The maps' side when the tier names none. */
 const TEXTURE_SIZE = 1024;
 /** The final frame one step short of the clip's end, where a clamped action rests. */
 const FINAL_OFFSET = 1 / 120;
+/** How the focused skin and eyes answer light; hair keeps the crowd's, cloth its fabric's. */
+const SKIN_ROUGHNESS = 0.86;
+const HAIR_ROUGHNESS = 0.96;
+const EYE_ROUGHNESS = 0.3;
 
 /**
- * Full-quality Source people in the crowd's own look: the focused and fallen
- * rigs and the still bodies a staged scene lays out.
+ * Full-quality Source people in their own recipe: the focused and fallen rigs
+ * and the still bodies a staged scene lays out.
  *
- * A shape is read once for the run with its maps downscaled to the tier's
- * texture size, its hairstyle rigged to the head bone, and its Pro clips
- * transferred onto its bone lengths. A dressed root wears one set of the
- * model's dressed materials, sewn the first time a root needs it and worn
- * again by the next, so dressing a person builds no material that a previous
- * person already built.
+ * A body is read once for the run with its maps downscaled to the tier's
+ * texture size, its Pro clips transferred onto its bone lengths and its
+ * tailoring prepared (Tailor). A hairstyle is read once and kept in the head
+ * bone's space. A person is their fit, built when first wanted and kept for
+ * the next time: their shaped body with what their clothes cover hidden,
+ * their face, and a skinned shell per garment on the body's own skeleton,
+ * standing at their height (HeightRig). A dressed root wears one set of its
+ * body's dressed materials, sewn the first time a root needs it and worn
+ * again by the next, its colours written into uniforms, so dressing a person
+ * builds no material that a previous person already built.
  */
 export class CharacterPoser {
 
-	/** @param textureSize the side the pack's maps are downscaled to, the tier's texture size */
-	constructor( { animation, textureSize = TEXTURE_SIZE, loadModel = ( descriptor ) => defaultLoad( descriptor, textureSize ) } ) {
+	/**
+	 * @param textureSize the side the pack's maps are downscaled to, the tier's texture size
+	 * @param loadModel reads a body `{ scene }` from its catalog entry (CharacterCatalog.CHARACTER_MODELS)
+	 * @param loadHair reads a hairstyle `{ scene }` from its path
+	 * @param tailor fits people to their bodies (avatar/Tailor.js)
+	 */
+	constructor( {
+		animation, textureSize = TEXTURE_SIZE,
+		loadModel = ( descriptor ) => loadGltf( `${CHARACTER_ROOT}/${descriptor.file}`, textureSize ),
+		loadHair = ( path ) => loadGltf( `${CHARACTER_ROOT}/${path}`, textureSize ),
+		tailor = new Tailor()
+	} ) {
 
 		this.animation = animation;
 		this.loadModel = loadModel;
-		this.models = new Map();
+		this.loadHair = loadHair;
+		this.tailor = tailor;
+		/** Body models by catalog id, and hairstyles by path, each read once for the run. */
+		this.bodies = new Map();
+		this.hairs = new Map();
+		/** What a dressed root holds: its fit and its height rig, kept off userData, which copies as JSON. */
+		this.worn = new WeakMap();
 
 	}
 
-	/** One crowd shape, read and rigged once for the run. */
-	model( descriptor ) {
+	/** One body, read, rigged and prepared for tailoring once for the run. */
+	body( id ) {
 
-		const key = modelKey( descriptor );
+		if ( ! this.bodies.has( id ) ) {
 
-		if ( ! this.models.has( key ) ) {
-
-			this.models.set( key, Promise.resolve( this.loadModel( descriptor ) ).then( ( model ) => {
+			const descriptor = CHARACTER_MODELS.find( ( entry ) => entry.id === id );
+			if ( ! descriptor ) return Promise.reject( new Error( `no character body ${id}` ) );
+			this.bodies.set( id, Promise.resolve( this.loadModel( descriptor ) ).then( async ( model ) => {
 
 				assertRigCompatibility( model.scene, this.animation.scene );
+				model.descriptor = descriptor;
+				await this.tailor.prepare( model );
 				model.motions = new CharacterAnimations( model.scene, this.animation.scene );
 				model.wardrobe = [];
-				// The glTF's eyebrows and every hairstyle wear the person's hair tint.
-				model.scene.traverse( ( node ) => { if ( node.isSkinnedMesh && node.name.toLowerCase() === 'eyebrows' ) node.userData.hair = true; } );
-				for ( const hair of modelHairs( model ) ) {
+				model.scene.traverse( ( node ) => {
 
-					assertRigCompatibility( hair.scene, this.animation.scene );
-					attachHair( model.scene, hair.scene ).userData.hair = true;
+					if ( ! node.isSkinnedMesh ) return;
+					// The glTF's eyebrows wear the person's hair colour, its eyes their eye colour.
+					if ( /brow/i.test( node.name ) ) node.userData.hair = true;
+					else if ( /eye/i.test( node.name ) ) node.userData.eyes = true;
 
-				}
+				} );
 				return model;
 
 			} ) );
 
 		}
-
-		return this.models.get( key );
+		return this.bodies.get( id );
 
 	}
 
-	/** A copy of the shape standing where the person does, dressed in their look. */
+	/** One hairstyle, read once for the run: its surfaces in the Head bone's space. */
+	hair( path ) {
+
+		if ( ! this.hairs.has( path ) ) {
+
+			this.hairs.set( path, Promise.resolve( this.loadHair( path ) ).then( ( hair ) => {
+
+				assertRigCompatibility( hair.scene, this.animation.scene );
+				return { path, parts: headParts( hair.scene ) };
+
+			} ) );
+
+		}
+		return this.hairs.get( path );
+
+	}
+
+	/**
+	 * Everything a person's recipe is dressed from: their body, hairstyle and
+	 * fit. The fit is held until the root dressed from it is released, or
+	 * `drop` hands it back undressed.
+	 */
+	async model( recipe ) {
+
+		const [ body, hair ] = await Promise.all( [ this.body( recipe.body ), recipe.hair ? this.hair( recipe.hair ) : null ] );
+		const fit = await this.tailor.fit( body, recipe );
+		return { recipe, body, hair, fit, motions: body.motions, key: modelKey( recipe ), descriptor: body.descriptor };
+
+	}
+
+	/** Hands back the fit of a model that was never dressed. */
+	drop( source ) {
+
+		this.tailor.release( source?.fit );
+
+	}
+
+	/** A copy of the person standing where they do, in their recipe, at their height. */
 	dress( source, person, name ) {
 
-		const root = clone( source.scene );
-		dress( root, source, person.look );
+		const root = clone( source.body.scene );
 		root.name = name;
-		root.position.copy( person.position );
-		root.rotation.y = person.heading;
+		const body = bodyOf( root );
+		body.geometry = source.fit.body;
+		root.traverse( ( node ) => {
+
+			if ( node.isSkinnedMesh && source.fit.auxiliaries.has( node.name ) ) node.geometry = source.fit.auxiliaries.get( node.name );
+
+		} );
+		const head = body.skeleton.bones.find( ( bone ) => bone.name === 'Head' );
+		if ( ! head ) throw new Error( 'character rig has no Head bone for its hairstyle' );
+		root.userData.hairStyle = source.hair?.path ?? '';
+		for ( const part of source.hair?.parts ?? [] ) {
+
+			const mesh = new THREE.Mesh( part.geometry, part.material );
+			mesh.name = part.name;
+			mesh.userData.hair = true;
+			head.add( mesh );
+
+		}
+		for ( const garment of source.fit.garments ) {
+
+			const mesh = new THREE.SkinnedMesh( garment.geometry, null );
+			mesh.name = `garment-${garment.id}`;
+			mesh.userData.garment = { id: garment.id, slot: garment.slot };
+			mesh.position.copy( body.position );
+			mesh.quaternion.copy( body.quaternion );
+			mesh.scale.copy( body.scale );
+			mesh.bindMode = body.bindMode;
+			mesh.bind( body.skeleton, body.bindMatrix );
+			mesh.bindMatrixInverse.copy( body.bindMatrixInverse );
+			body.parent.add( mesh );
+
+		}
 		root.traverse( ( node ) => {
 
 			if ( ! node.isMesh ) return;
 			node.castShadow = true;
 			node.receiveShadow = true;
+			// A pose reaches past the rest pose's bounds.
+			if ( node.isSkinnedMesh ) node.frustumCulled = false;
 
 		} );
+		dress( root, source, body );
+		wear( root.userData.dressed, source.recipe );
+		// A person of their frame's own height stands on the rig as authored.
+		const height = source.recipe.shape.height === 1 ? null : new HeightRig( root, source.recipe.shape.height );
+		this.worn.set( root, { fit: source.fit, height } );
+		root.position.copy( person.position );
+		root.rotation.y = person.heading;
 		return root;
 
 	}
 
-	/** Writes a look into the dressed set a root wears. */
-	wear( root, personLook ) {
+	/**
+	 * Every garment of the catalog on a dressed root, over its first garment's
+	 * shell, in its dressed set's materials: what a warm-up builds the
+	 * programs of. `remove()` takes them off again.
+	 */
+	sampleWardrobe( root ) {
 
 		const dressed = root.userData.dressed;
-		if ( dressed && personLook ) wear( dressed, personLook );
+		const body = bodyOf( root );
+		const shell = this.fit( root )?.garments[ 0 ]?.geometry;
+		const worn = new Set();
+		root.traverse( ( node ) => { if ( node.userData.garment ) worn.add( node.userData.garment.id ); } );
+		const samples = [];
+		if ( dressed && shell ) for ( const slot of SLOTS ) for ( const id of GARMENTS[ slot ] ) {
+
+			if ( worn.has( id ) ) continue;
+			const mesh = new THREE.SkinnedMesh( shell, garmentMaterial( dressed, id ) );
+			mesh.name = `sample-${id}`;
+			mesh.bind( body.skeleton, body.bindMatrix );
+			mesh.frustumCulled = false;
+			body.parent.add( mesh );
+			samples.push( mesh );
+
+		}
+		return { meshes: samples, remove: () => samples.forEach( ( mesh ) => mesh.removeFromParent() ) };
 
 	}
 
-	/** Hands the root's dressed set back to its model's wardrobe. */
+	/** Writes a recipe's colours into the dressed set a root wears. */
+	wear( root, recipe ) {
+
+		const dressed = root.userData.dressed;
+		if ( dressed && recipe ) wear( dressed, recipe );
+
+	}
+
+	/** The height rig a dressed root stands on, which lengthens each pose its mixer leaves (HeightRig); null at the frame's own height. */
+	height( root ) {
+
+		return this.worn.get( root )?.height ?? null;
+
+	}
+
+	/** The fit a dressed root wears: its body, face and garment geometry (Tailor). */
+	fit( root ) {
+
+		return this.worn.get( root )?.fit ?? null;
+
+	}
+
+	/** Hands the root's dressed set back to its body's wardrobe and its fit back to the tailor. */
 	release( root ) {
 
 		if ( root.userData.dressed ) root.userData.dressed.worn = false;
 		root.userData.dressed = null;
+		const worn = this.worn.get( root );
+		if ( ! worn ) return;
+		this.worn.delete( root );
+		worn.height?.dispose();
+		this.tailor.release( worn.fit );
 
 	}
 
 	/**
-	 * One person of the crowd held still in a pose: the body, hairstyle and look
-	 * their gender and seed give on the street, posed by the transferred clip.
-	 * The root stands at the origin facing +Z.
+	 * One person held still in a pose: the recipe their gender, seed and
+	 * identity give on the street, posed by the transferred clip at their
+	 * height. The root stands at the origin facing +Z.
 	 *
 	 * @param at how far into the clip the pose is held, 0 its first frame and 1 its final one
 	 */
-	async still( { gender, appearanceSeed }, clipName, at ) {
+	async still( { gender, appearanceSeed, npcId = null }, clipName, at ) {
 
 		const clip = THREE.AnimationClip.findByName( this.animation.animations, clipName );
 		if ( ! clip ) throw new Error( `Pro animation library is missing ${clipName}` );
-		const descriptor = avatarFor( bodyFor( gender, appearanceSeed ) );
-		const source = await this.model( descriptor );
-		const root = this.dress( source, { position: new THREE.Vector3(), heading: 0, look: look( appearanceSeed ) }, `still-${descriptor.id}` );
+		const { recipe } = appearance( { gender, appearanceSeed, npcId } );
+		const source = await this.model( recipe );
+		const root = this.dress( source, { position: new THREE.Vector3(), heading: 0 }, `still-${recipe.body}` );
 		const mixer = new THREE.AnimationMixer( root );
 		const action = mixer.clipAction( source.motions.clip( clip ) );
 		action.setLoop( THREE.LoopOnce, 1 );
@@ -126,6 +275,7 @@ export class CharacterPoser {
 		action.play();
 		mixer.setTime( at * Math.max( 0, clip.duration - FINAL_OFFSET ) );
 		action.paused = true;
+		this.height( root )?.afterPose();
 		root.updateMatrixWorld( true );
 		return root;
 
@@ -133,15 +283,17 @@ export class CharacterPoser {
 
 }
 
-async function defaultLoad( descriptor, textureSize ) {
+/** Which built person a recipe is: its fit and its hairstyle; colours and height are worn, not built. */
+export function modelKey( recipe ) {
+
+	return `${fitKey( recipe )}|${recipe.hair}`;
+
+}
+
+async function loadGltf( url, textureSize ) {
 
 	const loader = new GLTFLoader().register( ( parser ) => new ResizedTextures( parser, textureSize ) );
-	const [ model, ...hairs ] = await Promise.all( [
-		loader.loadAsync( `${CHARACTER_ROOT}/${descriptor.file}` ),
-		...descriptor.hairs.map( ( file ) => loader.loadAsync( `${CHARACTER_ROOT}/${file}` ) )
-	] );
-
-	return { ...model, hairs };
+	return loader.loadAsync( url );
 
 }
 
@@ -171,147 +323,118 @@ class ResizedTextures {
 
 }
 
-export function modelKey( descriptor ) {
-
-	return `${descriptor.id}:${descriptor.hairs.join( '+' )}`;
-
-}
-
-function modelHairs( model ) {
-
-	return model.hairs ?? ( model.hair ? [ model.hair ] : [] );
-
-}
-
 /**
- * The pack's "Rigged to Head Bone" styles only follow Head. Baking the bind
- * pose into Head-local geometry makes that explicit and avoids a second
- * Skeleton update per person.
+ * The pack's "Rigged to Head Bone" styles only follow Head: their bind pose
+ * baked into Head-local geometry, against the hairstyle's own rig, fits any
+ * body's head and costs no second skeleton per person. Long dreads keep both
+ * of their surfaces.
  */
-function attachHair( bodyRoot, hairRoot ) {
+function headParts( hairRoot ) {
 
-	const body = skinnedMesh( bodyRoot );
-	const hair = skinnedMesh( hairRoot );
-	const head = body.skeleton.bones.find( ( bone ) => bone.name === 'Head' );
-
-	if ( ! head ) throw new Error( 'character rig has no Head bone for its hairstyle' );
-
-	bodyRoot.updateMatrixWorld( true );
 	hairRoot.updateMatrixWorld( true );
-	const intoHead = head.matrixWorld.clone().invert().multiply( hair.matrixWorld );
-	const geometry = hair.geometry.clone().applyMatrix4( intoHead );
-	const rigid = new THREE.Mesh( geometry, hair.material );
-	rigid.name = hair.name;
-	head.add( rigid );
-	return rigid;
+	const parts = [];
+	hairRoot.traverse( ( hair ) => {
 
-}
-
-function skinnedMesh( root ) {
-
-	let best = null;
-	let vertices = - 1;
-
-	root.traverse( ( node ) => {
-
-		if ( ! node.isSkinnedMesh ) return;
-		const count = node.geometry.getAttribute( 'position' )?.count ?? 0;
-		if ( count > vertices ) { best = node; vertices = count; }
+		if ( ! hair.isSkinnedMesh ) return;
+		const head = hair.skeleton.getBoneByName( 'Head' );
+		if ( ! head ) throw new Error( 'hairstyle rig has no Head bone' );
+		const geometry = hair.geometry.clone().applyMatrix4( head.matrixWorld.clone().invert().multiply( hair.matrixWorld ) );
+		geometry.deleteAttribute( 'skinIndex' );
+		geometry.deleteAttribute( 'skinWeight' );
+		parts.push( { name: hair.name, geometry, material: hair.material } );
 
 	} );
-
-	if ( ! best ) throw new Error( 'character asset has no skinned mesh' );
-
-	return best;
+	if ( ! parts.length ) throw new Error( 'hairstyle has no skinned surface' );
+	return parts;
 
 }
 
 /**
- * Paints the bare base with the same outfit the baked slot wore, and tints its
- * hairstyle and eyebrows with the same hair colour, in dressed materials the
- * model keeps: a set is sewn the first time a root needs it and worn again by
- * the next, its look written into uniforms, so a person shown, fallen or laid
- * out never builds a material or drops one. Like the crowd's, these surfaces
- * carry no normal or roughness map: a painted shirt over the bare body's
- * relief would not be the shirt the street saw.
+ * Dresses a root in a set of its body's materials that no other root wears,
+ * sewing one first when none is free: the skin over the pack's map in the
+ * person's colour, the eyes' iris, hair and brows in their hair colour, a
+ * panel material per garment, all sharing one render-group presence so the
+ * whole person fades as one. Like the crowd's, the skin carries no normal or
+ * roughness map.
  */
-function dress( root, model, personLook ) {
+function dress( root, source, body ) {
 
-	if ( ! personLook ) return;
-	const body = skinnedMesh( root );
-	const source = Array.isArray( body.material ) ? body.material[ 0 ] : body.material;
-	if ( ! source?.map ) return;
-
-	if ( ! body.geometry.hasAttribute( 'cloth' ) ) body.geometry.setAttribute( 'cloth', garments( body ) );
-	const dressed = model.wardrobe.find( ( entry ) => ! entry.worn ) ?? sew( model, body.geometry, source );
+	const model = source.body;
+	const skin = Array.isArray( body.material ) ? body.material[ 0 ] : body.material;
+	const dressed = model.wardrobe.find( ( entry ) => ! entry.worn ) ?? sew( model, skin );
 	dressed.worn = true;
 	dressed.presence.value = 1;
-	body.material = dressed.material;
 	root.traverse( ( node ) => {
 
-		if ( node.userData.hair && node.material?.map ) node.material = tinted( dressed, node.material );
-		else if ( node.isMesh && node !== body ) {
-
-			const cover = source => {
-
-				if ( ! dressed.others.has( source ) ) dressed.others.set( source, coveredMaterial( source, dressed.presence ) );
-				return dressed.others.get( source );
-
-			};
-			node.material = Array.isArray( node.material ) ? node.material.map( cover ) : cover( node.material );
-
-		}
+		if ( ! node.isMesh ) return;
+		if ( node === body ) node.material = dressed.skin;
+		else if ( node.userData.garment ) node.material = garmentMaterial( dressed, node.userData.garment.id );
+		else if ( node.userData.hair ) node.material = tinted( dressed.hairs, node.material, dressed, ( map ) => hairNode( map, dressed.colors.hair ), HAIR_ROUGHNESS );
+		else if ( node.userData.eyes ) node.material = tinted( dressed.eyes, node.material, dressed, ( map ) => eyeNode( map, dressed.colors.eyes ), EYE_ROUGHNESS );
 
 	} );
-	wear( dressed, personLook );
 	root.userData.dressed = dressed;
 
 }
 
-/** Writes one person's look into a dressed set's uniforms. */
-function wear( dressed, personLook ) {
+function sew( model, source ) {
 
-	const { skin, shirt, trousers, hair, sleeve, hem } = dressed.look;
-	skin.value.copy( personLook.skin );
-	shirt.value.copy( personLook.shirt );
-	trousers.value.copy( personLook.trousers );
-	hair.value.copy( personLook.hair );
-	sleeve.value = personLook.sleeve;
-	hem.value = personLook.hem;
-
-}
-
-function sew( model, geometry, source ) {
-
-	const uniforms = {
-		skin: uniform( new THREE.Color() ), shirt: uniform( new THREE.Color() ), trousers: uniform( new THREE.Color() ),
-		hair: uniform( new THREE.Color() ), sleeve: uniform( 0 ), hem: uniform( 0 )
-	};
 	const presence = uniform( 1 ).setGroup( renderGroup );
-	const material = presenceMaterial( new MeshStandardNodeMaterial( CROWD_SURFACE ), presence );
-	material.colorNode = dressedColorNode( geometry, source.map, {
-		skin: uniforms.skin, shirt: uniforms.shirt, trousers: uniforms.trousers, cut: vec2( uniforms.sleeve, uniforms.hem )
-	} );
-	dressSurface( material, vec2( uniforms.sleeve, uniforms.hem ) );
-	const dressed = { material, presence, look: uniforms, hairs: new Map(), others: new Map(), worn: false };
+	const colors = { skin: uniform( new THREE.Color() ), hair: uniform( new THREE.Color() ), eyes: uniform( new THREE.Color() ) };
+	const skin = presenceMaterial( new MeshStandardNodeMaterial( { ...CROWD_SURFACE, roughness: SKIN_ROUGHNESS } ), presence );
+	skin.name = 'focused-skin';
+	skin.colorNode = source?.map ? skinNode( source.map, colors.skin ) : colors.skin;
+	const dressed = { skin, presence, colors, hairs: new Map(), eyes: new Map(), garments: new Map(), recipe: null, worn: false };
 	model.wardrobe.push( dressed );
-
 	return dressed;
 
 }
 
-/** The dressed set's tinted stand-in for one of the pack's hair materials, sewn once. */
-function tinted( dressed, source ) {
+/** The dressed set's stand-in for one of the pack's maps, sewn once. */
+function tinted( materials, source, dressed, colorNode, roughness ) {
 
-	let material = dressed.hairs.get( source );
+	let material = materials.get( source );
 	if ( ! material ) {
 
-		material = presenceMaterial( new MeshStandardNodeMaterial( CROWD_SURFACE ), dressed.presence );
-		material.colorNode = hairColorNode( source.map, dressed.look.hair );
-		material.roughness = 0.96;
-		dressed.hairs.set( source, material );
+		material = presenceMaterial( new MeshStandardNodeMaterial( { ...CROWD_SURFACE, roughness } ), dressed.presence );
+		material.name = `focused-${source?.name || 'tint'}`;
+		if ( source?.map ) material.colorNode = colorNode( source.map );
+		materials.set( source, material );
 
 	}
 	return material;
+
+}
+
+/** The dressed set's panel material for one garment, sewn the first time it is worn. */
+function garmentMaterial( dressed, id ) {
+
+	let material = dressed.garments.get( id );
+	if ( ! material ) {
+
+		material = presenceMaterial( createPanelMaterial( id ), dressed.presence );
+		dressed.garments.set( id, material );
+		if ( dressed.recipe ) wearGarment( material, dressed.recipe, id );
+
+	}
+	return material;
+
+}
+
+/** Writes one person's recipe into a dressed set's uniforms. */
+function wear( dressed, recipe ) {
+
+	dressed.recipe = recipe;
+	dressed.colors.skin.value.set( recipe.colors.skin );
+	dressed.colors.hair.value.set( recipe.colors.hair );
+	dressed.colors.eyes.value.set( recipe.colors.eyes );
+	for ( const [ id, material ] of dressed.garments ) wearGarment( material, recipe, id );
+
+}
+
+function wearGarment( material, recipe, id ) {
+
+	const slot = [ 'top', 'pants', 'footwear' ].find( ( entry ) => recipe.outfit[ entry ] === id );
+	if ( slot ) updatePanelMaterial( material, recipe.outfit.colors[ slot ], recipe.outfit.fabric );
 
 }

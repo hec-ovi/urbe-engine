@@ -1,9 +1,10 @@
-import { instancedBufferAttribute, texture, vec4 } from 'three/tsl';
+import { instancedBufferAttribute } from 'three/tsl';
 import { CrowdMesh } from './CrowdMesh.js';
+import { hairNode } from './avatar/Tints.js';
 
 /**
- * Hair and eyebrows: the pack's own hair map, tinted per person, so a street
- * is not one haircut in one colour.
+ * Hair and eyebrows: the pack's own hair map in each person's hair colour
+ * (Tints.js), the same as their focused body wears it.
  */
 export class HairMesh extends CrowdMesh {
 
@@ -12,7 +13,7 @@ export class HairMesh extends CrowdMesh {
 
 		this.hair = this.attribute( 3 );
 
-		return hairColorNode( map, instancedBufferAttribute( this.hair, 'vec3' ) );
+		return hairNode( map, instancedBufferAttribute( this.hair, 'vec3' ) );
 
 	}
 
@@ -26,9 +27,3 @@ export class HairMesh extends CrowdMesh {
 
 }
 
-/** The same tinted hair for the baked crowd and for one focused rig's hairstyle and eyebrows. */
-export function hairColorNode( map, tint ) {
-
-	return vec4( texture( map ).rgb.mul( tint ), 1 );
-
-}

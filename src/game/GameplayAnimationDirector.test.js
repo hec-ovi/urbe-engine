@@ -5,7 +5,7 @@ import { GameplayAnimationDirector } from './GameplayAnimationDirector.js';
 import { CLIP } from './agents/CharacterAssets.js';
 import { crowdClipForName } from './agents/Crowd.js';
 import { HeroCharacter } from './agents/HeroCharacter.js';
-import { animation as library, outfit, rig as body, rootTurn } from './agents/HeroCharacter.test-fixtures.js';
+import { animation as library, heroRigs, outfit, rootTurn } from './agents/HeroCharacter.test-fixtures.js';
 
 const CATALOG = Object.freeze( {
 	assetId: 'quaternius-universal-animation-library-pro', edition: 'Pro',
@@ -344,7 +344,7 @@ function focusedRig( clip ) {
 		...Object.fromEntries( REQUIRED_CLIPS.map( ( name ) => [ name, [ 0, 0 ] ] ) ),
 		Walk_Loop: [ - 1, 0 ], Crouch_Enter: [ 0, 1 ], Crouch_Idle_Loop: [ 1, 1 ]
 	} );
-	const hero = new HeroCharacter( { animation, loadModel: () => ( { scene: body( 'body' ) } ) } );
+	const hero = new HeroCharacter( heroRigs( { animation } ) );
 	const person = {
 		npcId: 'npc-1', gender: 'male', variant: 0, appearanceSeed: 3, clip, frame: 8, hero: false,
 		position: new THREE.Vector3(), heading: 0, look: outfit()
