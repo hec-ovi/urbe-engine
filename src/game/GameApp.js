@@ -78,7 +78,6 @@ import { CompanionGameplay } from './companion/CompanionGameplay.js';
 import { CarModels } from './agents/CarModels.js';
 import { Traffic } from './agents/Traffic.js';
 import { SimBridge } from './sim/SimBridge.js';
-import { Rain } from './look/Rain.js';
 import { recoverDeviceLoss } from './look/DeviceLoss.js';
 import { SpawnVisibility } from './agents/SpawnVisibility.js';
 import { interiorOccupancy } from './city/InteriorOccupancy.js';
@@ -438,14 +437,6 @@ export class GameApp {
 		this.sky = this.look.sky;
 		this.fog = this.look.fog;
 		this.probe = this.look.probe;
-		this.rain = this.tier.rainDrops ? new Rain( this.tier.rainDrops ) : null;
-		if ( this.rain ) {
-
-			this.scene.add( this.rain.mesh );
-			this.probe?.exclude( this.rain.mesh );
-			this.rainCheck = 0;
-
-		}
 		// Emitting surfaces share the scene's fixed night setting.
 		this.night = new NightSwitch( this.lights )
 			.addGroup( neon.group ).addGroup( lamps.group ).addGroup( city.group ).addGroup( this.transit.group ).addGroup( props.group );
@@ -1962,20 +1953,6 @@ export class GameApp {
 
 		this.standing = room;
 		const air = room ? roomAir( room ) : this.lights.airColor( this.camera.position );
-		if ( this.rain ) {
-
-			this.rainCheck -= delta;
-			if ( this.rainCheck <= 0 ) {
-
-				// A canopy, an arcade or an overhang keeps the rain off the player; a skybridge far above does not.
-				this.rainCheck = 0.25;
-				this.rainSheltered = Boolean( this.physics.world.castRay( new this.physics.rapier.Ray( this.camera.position,
-					{ x: 0, y: 1, z: 0 } ), 8, true, undefined, undefined, undefined, undefined, collider => ! collider.isSensor() && collider.parent()?.isFixed() ) );
-
-			}
-			this.rain.update( this.camera, { indoors: Boolean( room ), covered: this.rainSheltered }, air, delta );
-
-		}
 		this.#arrive( room ? this.locator.refs( feet.x, feet.z, room.parcelId ).find( ( place ) => place.kind === 'parcel' )?.id ?? null : null );
 
 		// Crossing the threshold is what changes everything around the camera;

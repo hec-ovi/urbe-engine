@@ -4,7 +4,6 @@ const TIERS = [ 'low', 'medium', 'high', 'ultra' ];
 const MATERIAL_MAPS = Object.freeze( [ 'basecolor', 'normal', 'roughness', 'metallic', 'ao', 'emission' ] );
 const PRESETS = {
 	low: {
-		rainDrops: 2400,
 		textureMaxSize: 1024,
 		bloom: { strength: 0, radius: 0.0 },
 		haze: false,
@@ -28,7 +27,6 @@ const PRESETS = {
 		textureAnisotropy: 4
 	},
 	medium: {
-		rainDrops: 3000,
 		textureMaxSize: 1024,
 		bloom: { strength: 0.35, radius: 0.03 },
 		haze: false,
@@ -44,7 +42,6 @@ const PRESETS = {
 		textureAnisotropy: 4
 	},
 	high: {
-		rainDrops: 4000,
 		textureMaxSize: 2048,
 		bloom: { strength: 0.35, radius: 0.04 },
 		haze: false,
@@ -60,7 +57,6 @@ const PRESETS = {
 		textureAnisotropy: 8
 	},
 	ultra: {
-		rainDrops: 5000,
 		textureMaxSize: 4096,
 		bloom: { strength: 0.4, radius: 0.06 },
 		haze: false,

@@ -5,7 +5,6 @@ import { uniform, renderGroup } from 'three/tsl';
 import { vehiclePresence, coveredMaterial } from '../src/game/agents/Presence.js';
 import { NightFog } from '../src/game/look/NightFog.js';
 import { LookPipeline } from '../src/game/look/LookPipeline.js';
-import { RAIN_BOX, Rain, STREAK, dropAt } from '../src/game/look/Rain.js';
 
 /** Tiny real-backend check, served only by a throwaway Engine. */
 async function run() {
@@ -52,10 +51,7 @@ async function run() {
 	rig.castShadow = true;
 	const floor = new THREE.Mesh( new THREE.BoxGeometry( 5, 0.1, 5 ), new THREE.MeshStandardMaterial( { color: 0x707070 } ) );
 	floor.receiveShadow = true;
-	const rain = new Rain( 3000 );
-	const air = { color: new THREE.Color( 1, 0.8, 0.6 ), lux: 100 };
-	rain.update( camera, {}, air, 0.3 );
-	scene.add( body.mesh, vehicle, rig, floor, rain.mesh );
+	scene.add( body.mesh, vehicle, rig, floor );
 	const pipeline = new LookPipeline( renderer, scene, camera, { bloom: { strength: 0.1, radius: 0.03 } } );
 	const draw = presence => {
 		renderer.info.reset();
@@ -72,7 +68,6 @@ async function run() {
 		await new Promise( resolve => requestAnimationFrame( resolve ) );
 		frames.push( { presence, calls: renderer.info.render.drawCalls } );
 	}
-	rain.mesh.visible = false;
 	draw( 0 );
 	const absent = await renderer.readRenderTargetPixelsAsync( pipeline.renderTarget, 0, 0, 320, 240 );
 	body.mesh.visible = vehicle.visible = rig.visible = false;
@@ -91,71 +86,8 @@ async function run() {
 	draw( 0.5 );
 	const partial = await renderer.readRenderTargetPixelsAsync( pipeline.renderTarget, 0, 0, 320, 240 );
 	const partialCoverage = partial.some( ( value, index ) => value !== hidden[ index ] ) && partial.some( ( value, index ) => value !== instances[ index ] );
-	// The rain shader wraps its drops as dropAt does: at two eye positions a stride apart, what it
-	// draws lies on the streaks dropAt places, and the streaks well inside the field all draw.
-	body.mesh.visible = vehicle.visible = rig.visible = false;
-	const rainDraws = [];
-	for ( const x of [ 0, 2.5 ] ) {
-		camera.position.set( x, 2.5, 6 );
-		camera.lookAt( x, 3, 0 );
-		camera.updateMatrixWorld();
-		rain.update( camera, {}, air, 0.2 );
-		rain.mesh.visible = false;
-		draw( 0 );
-		const dry = await renderer.readRenderTargetPixelsAsync( pipeline.renderTarget, 0, 0, 320, 240 );
-		rain.mesh.visible = true;
-		draw( 0 );
-		const wet = await renderer.readRenderTargetPixelsAsync( pipeline.renderTarget, 0, 0, 320, 240 );
-		rainDraws.push( streaks( rain, camera, dry, wet, webgl ) );
-	}
-	camera.position.set( 0, 2.5, 6 );
-	camera.lookAt( 0, 1, 0 );
-	const rainWraps = rainDraws.every( ( { clear, onStreaks, drawn } ) => clear >= 10 && onStreaks >= 0.95 && drawn >= 0.9 );
 	rig.visible = true;
-	window.presenceProbe = { shadowClears, uniformUpdates, instancesShow, partialCoverage, rainWraps, rainDraws, backend: renderer.backend.isWebGPUBackend ? 'webgpu' : 'webgl', frames, draw };
-}
-
-/**
- * How the pixels the rain lit in a 320 x 240 frame agree with the streaks dropAt places:
- * `onStreaks` the share of lit pixels within 2 px of one, `drawn` the share of streaks
- * standing clear of every fade, the frame's edge and the floor that lit a pixel.
- * WebGL reads rows from the bottom (`bottomUp`), WebGPU from the top.
- */
-function streaks( rain, camera, dry, wet, bottomUp ) {
-	const width = 320, height = 240, channels = dry.length / ( width * height );
-	const lit = new Uint8Array( width * height );
-	for ( let pixel = 0; pixel < lit.length; pixel ++ ) {
-		const row = bottomUp ? height - 1 - Math.floor( pixel / width ) : Math.floor( pixel / width );
-		const at = ( row * width + pixel % width ) * channels;
-		for ( let channel = 0; channel < 3; channel ++ ) if ( wet[ at + channel ] !== dry[ at + channel ] ) lit[ pixel ] = 1;
-	}
-	const near = new Uint8Array( lit.length );
-	const origins = rain.mesh.geometry.getAttribute( 'rainOrigin' ).array;
-	const start = new THREE.Vector3(), end = new THREE.Vector3(), point = new THREE.Vector3(), relative = new THREE.Vector3();
-	const half = new THREE.Vector3( RAIN_BOX.width, RAIN_BOX.height, RAIN_BOX.width ).multiplyScalar( 0.5 );
-	let clear = 0, drawn = 0;
-	for ( let index = 0; index < origins.length; index += 6 ) {
-		dropAt( point.fromArray( origins, index ), rain.fallen.value, rain.center.value, start );
-		end.fromArray( STREAK ).add( start );
-		const pixels = [];
-		for ( let step = 0; step <= 16; step ++ ) {
-			point.lerpVectors( start, end, step / 16 ).project( camera );
-			if ( point.z > - 1 && point.z < 1 ) pixels.push( [ ( point.x + 1 ) / 2 * width, ( 1 - point.y ) / 2 * height ] );
-		}
-		let hit = false;
-		for ( const [ x, y ] of pixels ) for ( let v = Math.floor( y ) - 2; v <= Math.floor( y ) + 2; v ++ ) for ( let u = Math.floor( x ) - 2; u <= Math.floor( x ) + 2; u ++ ) {
-			if ( u < 0 || v < 0 || u >= width || v >= height ) continue;
-			near[ v * width + u ] = 1;
-			hit ||= lit[ v * width + u ] === 1;
-		}
-		const inside = pixels.length === 17 && pixels.every( ( [ x, y ] ) => x > 3 && y > 3 && x < width - 3 && y < height - 3 );
-		const standsClear = inside && Math.min( start.y, end.y ) > 0.1 && start.distanceTo( camera.position ) > 4
-			&& relative.copy( start ).sub( rain.center.value ).divide( half ).length() < 0.65;
-		if ( standsClear ) { clear ++; if ( hit ) drawn ++; }
-	}
-	let count = 0, on = 0;
-	for ( let pixel = 0; pixel < lit.length; pixel ++ ) if ( lit[ pixel ] ) { count ++; on += near[ pixel ]; }
-	return { lit: count, onStreaks: count ? on / count : 0, clear, drawn: clear ? drawn / clear : 0 };
+	window.presenceProbe = { shadowClears, uniformUpdates, instancesShow, partialCoverage, backend: renderer.backend.isWebGPUBackend ? 'webgpu' : 'webgl', frames, draw };
 }
 
 run().catch( error => { window.presenceProbe = { error: error.stack }; console.error( error ); } );
