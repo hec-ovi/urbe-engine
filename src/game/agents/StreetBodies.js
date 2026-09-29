@@ -2,6 +2,13 @@ import { FALL_SETTLE_SECONDS } from '../physics/Ragdoll.js';
 
 /** Grid cell in metres. A cell holds the handful of people standing in it. */
 const CELL = 2;
+/**
+ * A cell's key is one number, its column and row each offset into 16 bits:
+ * a car looks through a couple of hundred cells every frame, and a string
+ * key per cell was most of what traffic cost. That spans 65 km a side.
+ */
+const SPAN = 65536;
+const HALF = SPAN / 2;
 
 /**
  * Who is out on the street right now, for whoever has to keep out of them.
@@ -46,6 +53,8 @@ export class StreetBodies {
 	 */
 	forEachNear( position, radius, visit ) {
 
+		if ( this.cells.size === 0 ) return;
+
 		const low = cellIndex( position.x - radius );
 		const high = cellIndex( position.x + radius );
 		const back = cellIndex( position.z - radius );
@@ -55,7 +64,10 @@ export class StreetBodies {
 
 			for ( let z = back; z <= front; z ++ ) {
 
-				for ( const member of this.cells.get( `${x}:${z}` ) ?? [] ) {
+				const here = this.cells.get( key( x, z ) );
+				if ( here === undefined ) continue;
+
+				for ( const member of here ) {
 
 					const distance = Math.hypot( member.position.x - position.x, member.position.z - position.z );
 
@@ -125,7 +137,13 @@ export const streetBodies = new StreetBodies();
 
 function cell( position ) {
 
-	return `${cellIndex( position.x )}:${cellIndex( position.z )}`;
+	return key( cellIndex( position.x ), cellIndex( position.z ) );
+
+}
+
+function key( x, z ) {
+
+	return ( x + HALF ) * SPAN + ( z + HALF );
 
 }
 
