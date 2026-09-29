@@ -15,6 +15,8 @@ const HEAD_OUT = 0.3;
 /** Past this far down the leg a vertex is thigh, which no top covers. */
 const LEG_IN = 0.09;
 const LEG_OUT = 0.13;
+/** Along the garment map's arm, where the arm proper starts: past the clavicle, short of the upper arm. */
+const ARM_FROM = 0.2;
 /** Shoes are the trousers' colour a shade deeper where footwear paints none of its own. */
 const SOLE = 0.85;
 const packs = new WeakMap();
@@ -89,7 +91,10 @@ export function crowdGarments( { cuts, figure }, { height, bottom } ) {
 	const y = positionGeometry.y.sub( bottom ).div( height );
 	const out = positionGeometry.x.abs().div( height );
 	const z = positionGeometry.z.div( height );
-	const onArm = step( cloth.y, 1.5 );
+	// The garment map starts the arm at the clavicle (0); the chest the
+	// clavicle carries is the top's body, and the arm proper begins at the
+	// upper arm (0.28).
+	const onArm = step( ARM_FROM, cloth.y ).mul( step( cloth.y, 1.5 ) );
 	const onLeg = step( cloth.z, 1.5 );
 	const between = ( low, high ) => smoothstep( low.sub( EDGE ), low.add( EDGE ), y ).mul( float( 1 ).sub( smoothstep( high.sub( EDGE ), high.add( EDGE ), y ) ) );
 	const offHead = float( 1 ).sub( smoothstep( HEAD_IN, HEAD_OUT, cloth.x ) );
@@ -104,7 +109,9 @@ export function crowdGarments( { cuts, figure }, { height, bottom } ) {
 	const opening = smoothstep( 0.659, 0.825, y ).mul( 0.046 ).add( 0.01 );
 	// The body faces +Z with its spine about 2 % of its height behind the origin.
 	const front = smoothstep( - 0.03, - 0.01, z );
-	const open = max( float( 1 ).sub( smoothstep( opening.sub( 0.003 ), opening.add( 0.003 ), out ) ).mul( smoothstep( 0.662, 0.67, y ) ).mul( front ), smoothstep( 0.83, 0.838, y ) )
+	// Its collar is the inner shirt's too, round the neck and not over the shoulders.
+	const collar = smoothstep( 0.83, 0.838, y ).mul( float( 1 ).sub( smoothstep( 0.05, 0.065, out ) ) );
+	const open = max( float( 1 ).sub( smoothstep( opening.sub( 0.003 ), opening.add( 0.003 ), out ) ).mul( smoothstep( 0.662, 0.67, y ) ).mul( front ), collar )
 		.mul( float( 1 ).sub( onArm ) );
 	// Across the shoulders of the body, not down the arms; a duty jacket also
 	// takes the second colour on its upper sleeves.
