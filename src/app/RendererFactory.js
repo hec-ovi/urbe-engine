@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import WebGPU from 'three/addons/capabilities/WebGPU.js';
 import { skipEmptyDraws } from './EmptyDraws.js';
 import { installStaticTextureNodes } from './StaticTextureNodes.js';
+import { LightingSystem } from '../game/light/LightingSystem.js';
 
 /**
  * Builds the unified renderer for the requested backend. WebGPU falls back to
@@ -43,6 +44,8 @@ export class RendererFactory {
 		} );
 		renderer.setPixelRatio( window.devicePixelRatio );
 		renderer.setSize( window.innerWidth, window.innerHeight );
+		// The render lists init builds hold the lighting the renderer has now.
+		LightingSystem.prepare( renderer );
 		await renderer.init();
 		skipEmptyDraws( renderer );
 		return renderer;
