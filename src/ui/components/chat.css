@@ -438,6 +438,11 @@
 .hud:has(.chat-layer:not([hidden])) .avatar-card { display: none; }
 .hud:has(.chat-layer:not([hidden])) .hud-minimap { visibility: hidden; }
 
+/* Where the centred answers would reach the corner, the talk button waits at the top instead. */
+@media (max-width: 1100px) {
+	.chat-free { top: 20px; bottom: auto; }
+}
+
 @media (max-height: 640px) {
 	.chat { gap: 6px; }
 	.chat-said { font-size: 17px; }
