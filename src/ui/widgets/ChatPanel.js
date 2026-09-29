@@ -54,8 +54,9 @@ export class ChatPanel {
 		this.sayWho = el( 'span', { className: 'chat-said-who' } );
 		this.sayText = document.createTextNode( '' );
 		this.said = el( 'p', { className: 'chat-said' }, this.sayWho, this.sayText );
+		this.sayScene = el( 'p', { className: 'chat-said-scene' } );
 		this.orbSlot = el( 'span', { className: 'chat-orb-slot' } );
-		this.subtitle = el( 'div', { className: 'chat-subtitle' }, this.orbSlot, this.said );
+		this.subtitle = el( 'div', { className: 'chat-subtitle' }, this.orbSlot, el( 'div', { className: 'chat-said-block' }, this.sayScene, this.said ) );
 		// While the talk window is closed, the subtitle is where the newest line is heard.
 		this.subtitle.setAttribute( 'aria-live', 'polite' );
 		this.status = el( 'div', { className: 'chat-status' } );
@@ -589,13 +590,19 @@ export class ChatPanel {
 		this.subtitle.classList.toggle( 'is-waiting', state === 'thinking' );
 	}
 
-	/** The subtitle shows `line`, the newest of the talk, as it reads now. */
+	/**
+	 * The subtitle shows `line`, the newest of the talk, as it reads now, under
+	 * the scene its turn opened on, if it did.
+	 */
 	#say( line ) {
 		this.sayLine = line;
 		const from = line?.className.match( /\bis-(\w+)/ )?.[ 1 ] ?? '';
 		this.said.dataset.from = from;
 		this.sayWho.textContent = from === 'player' ? layout.from.player : '';
 		this.sayText.data = line?.lastElementChild.textContent ?? '';
+		const scene = from === 'npc' && this.turn !== line && this.turn?.parentNode === this.transcript && this.turn.classList.contains( 'is-scene' );
+		this.sayScene.textContent = scene ? this.turn.lastElementChild.textContent : '';
+		this.sayScene.hidden = ! scene;
 		this.subtitle.hidden = ! line;
 	}
 

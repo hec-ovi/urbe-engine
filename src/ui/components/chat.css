@@ -117,6 +117,8 @@
 .chat-role::first-letter { text-transform: uppercase; }
 
 .chat-subtitle { display: flex; align-items: center; justify-content: center; gap: 12px; max-width: 720px; }
+.chat-said-block { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.chat-said-scene { margin: 0; color: #d3ccb6; font-size: 16px; font-style: italic; }
 .chat-said { margin: 0; color: var(--talk-text); font-size: 20px; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
 .chat-said[data-from=scene] { color: #d3ccb6; font-size: 17px; font-style: italic; }
 .chat-said[data-from=player] { color: var(--talk-muted); font-size: 17px; }

@@ -141,6 +141,14 @@ describe( 'ChatPanel', () => {
 		// What was said before stays in the transcript only.
 		panel.recall( [ { from: 'npc', name: 'Ada', text: 'Last week.' } ] );
 		expect( panel.said.textContent ).toBe( 'YouWhere is the quay?' );
+		// A story talk's scene stands over the person's lines until the player speaks.
+		panel.addMessage( { from: 'scene', text: 'The office is dark but for one lamp.' } );
+		expect( panel.said.dataset.from ).toBe( 'scene' );
+		expect( panel.sayScene.hidden ).toBe( true );
+		panel.addMessage( { from: 'npc', name: 'Ada', text: 'The report is gone.', kind: 'story' } );
+		expect( [ panel.sayScene.hidden, panel.sayScene.textContent, panel.said.textContent ] ).toEqual( [ false, 'The office is dark but for one lamp.', 'The report is gone.' ] );
+		panel.addMessage( { from: 'player', text: 'Who took it?' } );
+		expect( panel.sayScene.hidden ).toBe( true );
 
 	} );
 
