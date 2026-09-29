@@ -566,7 +566,7 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 		// The cab waits at the ground floor, so its floor is solid there and the
 		// landings built around the player are shut over the shaft.
-		expect( model.solid.get( cab ).boxes[ 0 ].center[ 1 ] ).toBeCloseTo( shaft.at - 0.075, 3 );
+		expect( model.solid.get( cab ).boxes[ 0 ].center[ 1 ] ).toBeCloseTo( shaft.at - 0.05 * shaft.carScale.y, 3 );
 		expect( model.solid.has( landing( 0 ) ) ).toBe( true );
 		expect( model.solid.get( landing( 0 ) ).boxes[ 0 ].halfExtents.every( ( half ) => half > 0 ) ).toBe( true );
 

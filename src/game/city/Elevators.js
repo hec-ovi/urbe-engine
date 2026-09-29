@@ -1,6 +1,9 @@
 import * as THREE from 'three/webgpu';
+import { lights } from 'three/tsl';
+import { LIFT_CAR } from '../../../../interior/src/geometry/lift-spec.ts';
 import { takeTriangles, centroidAt } from './Triangles.js';
 import { kelvinColor } from '../light/Color.js';
+import { installAreaLights } from '../light/LightingSystem.js';
 
 /** The published modules the shafts own: the car that rides and the leaves that slide. */
 const CAR_MODULE = 'lift-car';
@@ -9,8 +12,8 @@ const DOOR_REACH = 0.5;
 
 /** And how long its doors take to run open or shut. */
 const DOOR_TIME = 1.4;
-/** Where the call panel floats: a pace out from the door, at hand height. */
-const PANEL_OUT = 0.7;
+/** The call plate sits proud of the real wall lining, at hand height. */
+const PANEL_OUT = 0.15;
 const PANEL_HEIGHT = 1.1;
 /** The call plate: past the jamb, a hand wide, standing a little proud of the wall. */
 const PLATE_OFF = 0.25;
@@ -26,8 +29,14 @@ const CAB_CLEARANCE = 0.05;
 const LEAF_DEPTH = 0.12;
 const CAB_LIGHT_KEY = 'cyberpunk/light-fixture/mid';
 const CAB_KELVIN = 3800;
-/** Looked at directly inside a small box, so it sits above street exposure. */
-const CAB_EMISSIVE = 120;
+/** How far off a cabin button, and a landing's call button, the crosshair may be. */
+const BUTTON_AIM = 0.06;
+const CALL_AIM = 0.15;
+/** How far a car's published size may be off the spec's and still be the authored car. */
+const FIT_TOLERANCE = 0.01;
+/** The car's area light hangs just under its lens, facing the floor. */
+const LENS_DROP = 0.015;
+const FACE_DOWN = new THREE.Quaternion().setFromAxisAngle( new THREE.Vector3( 1, 0, 0 ), - Math.PI / 2 );
 
 /**
  * The lifts, made rideable.
@@ -39,18 +48,27 @@ const CAB_EMISSIVE = 120;
  * shaft a placement belongs to is decided by where it stands, not by a
  * convention about edge numbering.
  *
- * E at a landing calls the cab. Page Up and Page Down select a served floor
- * inside; E confirms it. While the cab moves it carries
- * whoever is standing in it, because the player is a character controller and
- * not something a moving collider can push.
+ * The call button on a landing's plate calls the cab; a call made while it
+ * travels waits until it has arrived and stood unattended for a few seconds.
+ * Inside, the car's own panel is the control, at the coordinates Interior's
+ * `LIFT_CAR` spec authors it: E acts on the button under the crosshair (next
+ * or previous floor, open or close, travel or reset), and Page Up and Page
+ * Down choose a floor anywhere in the car. The car shows the chosen floor. A
+ * body standing in the doorway holds the doors open and the cab where it is.
+ * While the cab moves it carries whoever is standing in it, because the player
+ * is a character controller and not something a moving collider can push.
  *
  * A shaft is also a hole through every floor it serves, and the published
  * modules carry no collision of their own, so the shaft stands its own: the
- * shut leaves of each landing close that floor's opening, and the cab floor
- * stands wherever the cab is waiting. The cab floor goes while the cab is
- * travelling, because then the rider is being carried rather than standing on
- * anything, and a landing's leaves go while they are open, because that is the
- * one moment the shaft is meant to be walked into.
+ * shut leaves of each landing close that floor's opening until they have run
+ * fully open, and the waiting car stands its floor, walls, front cheeks and
+ * roof, in the core's rotation. The car goes while it is travelling, because
+ * then the rider is being carried rather than standing on anything.
+ *
+ * A world assembled with an older, smaller car is read at the size its own
+ * catalog publishes: the spec's walls, floor and roof scale to it, and the
+ * panel, front cheeks and display it never had are left out, so E anywhere in
+ * it travels to the chosen floor as it always did.
  */
 export class Elevators {
 
@@ -80,13 +98,14 @@ export class Elevators {
 	 */
 	add( parcelId, floors, group ) {
 
+		this.remove( parcelId );
 		const shafts = new Map();
 
 		for ( const floor of floors ) {
 
 			for ( const lift of floor.core?.elevators ?? [] ) {
 
-				if ( ! shafts.has( lift.id ) ) shafts.set( lift.id, new Shaft( parcelId, lift, this.factory, this.colliders, this.stream ) );
+				if ( ! shafts.has( lift.id ) ) shafts.set( lift.id, new Shaft( parcelId, lift, this.factory, this.colliders, this.stream, floor.coreAngleDeg ?? 0 ) );
 
 				shafts.get( lift.id ).serve( floor );
 
@@ -143,7 +162,9 @@ export class Elevators {
 
 		const stops = ( this.byBuilding.get( parcelId ) ?? [] )
 			.map( ( shaft ) => shaft.stopAt( floor ) )
-			.filter( ( stop ) => stop?.owns( placement.position ) );
+			.filter( ( stop ) => stop?.owns( placement.position ) )
+			.sort( ( a, b ) => Number( b.shaft.liftId === placement.connector ) - Number( a.shaft.liftId === placement.connector )
+				|| a.distanceTo( placement.position ) - b.distanceTo( placement.position ) );
 
 		if ( ! stops.length ) return false;
 
@@ -175,6 +196,9 @@ export class Elevators {
 
 	}
 
+	/** Cabin membership also lets floor keys work away from its panel. */
+	cabinAt( feet ) { return this.shafts.find( shaft => shaft.holds( feet ) ) ?? null; }
+
 	/** @param body PlayerBody, carried when it is standing in a moving cab. */
 	update( delta, body ) {
 
@@ -187,7 +211,7 @@ export class Elevators {
 /** One lift: its cab, its landings, and where the cab is right now. */
 class Shaft {
 
-	constructor( parcelId, lift, factory, colliders = null, stream = null ) {
+	constructor( parcelId, lift, factory, colliders = null, stream = null, angleDeg = 0 ) {
 
 		this.parcelId = parcelId;
 		this.stream = stream;
@@ -195,6 +219,20 @@ class Shaft {
 		this.called = false;
 		this.colliders = colliders;
 		this.id = `${parcelId}:${lift.id}`;
+		this.liftId = lift.id;
+		this.yaw = - angleDeg * Math.PI / 180;
+		/** Metres in the cab per metre of the authored `LIFT_CAR` spec, per axis. */
+		this.carScale = new THREE.Vector3( 1, 1, 1 );
+		/** Whether the car is the authored one, with its panel, cheeks and display. */
+		this.panelled = false;
+		this.floorVersion = 0;
+		this.blocked = false;
+		this.pendingCalls = [];
+		this.dwell = 0;
+		this.ownedMaterials = [];
+		this.doorMaterials = new Map();
+		this.ownedGeometry = [];
+		this.screen = null;
 		// A core rect is published by its minimum corner; the shaft is its middle.
 		this.rect = lift.rect;
 		this.centre = { x: lift.rect.x + lift.rect.w / 2, z: lift.rect.z + lift.rect.d / 2 };
@@ -245,29 +283,78 @@ class Shaft {
 
 	}
 
-	/** The cab floor, solid where the cab is waiting. */
+	/** The actual rotated car floor and walls are solid at every waiting stop. */
 	#standFloor() {
 
 		if ( this.floorAt === this.at ) return;
-
 		this.colliders?.drop( `lift:${this.id}/cab` );
 		this.floorAt = this.at;
-		const at = this.at;
-		const ready = this.colliders?.solid( `lift:${this.id}/cab`, [ {
-			center: [ this.centre.x, this.at - CAB_FLOOR / 2, this.centre.z ],
-			halfExtents: [
-				Math.max( 0.1, this.rect.w / 2 - CAB_CLEARANCE ),
-				CAB_FLOOR / 2,
-				Math.max( 0.1, this.rect.d / 2 - CAB_CLEARANCE )
-			],
-			rotationY: 0
-		} ] );
+		const version = ++ this.floorVersion;
+		const ready = this.colliders?.solid( `lift:${this.id}/cab`, this.cabBoxes() );
 		this.floorReady = ! ready?.then;
 		if ( ready?.then ) ready.then( result => {
 
-			if ( this.floorAt === at ) this.floorReady = result !== false;
+			if ( this.floorVersion === version && this.floorAt === this.at ) this.floorReady = result !== false;
 
 		} ).catch( error => console.warn( `lift ${this.id} floor: ${error.message}` ) );
+
+	}
+
+	/** Inverse yaw is shared by passenger detection and shaft-module ownership. */
+	localPoint( point, target = new THREE.Vector3() ) {
+
+		return target.set( point.x - this.centre.x, point.y - this.at, point.z - this.centre.z )
+			.applyAxisAngle( _up, - this.yaw );
+
+	}
+
+	/** A point of the authored car, in the world where the cab stands now. */
+	worldPoint( local ) {
+
+		return new THREE.Vector3( ...local ).multiply( this.carScale ).applyAxisAngle( _up, this.yaw )
+			.add( new THREE.Vector3( this.centre.x, this.at, this.centre.z ) );
+
+	}
+
+	/**
+	 * The waiting car's solids, from the spec at the car's own scale: floor,
+	 * both side walls, the back wall and the roof, and the two cheeks beside
+	 * the door on a car that has them. Before the car mounts, a floor slab
+	 * across the shaft.
+	 */
+	cabBoxes() {
+
+		if ( ! this.car ) {
+
+			return [ {
+				center: [ this.centre.x, this.at - CAB_FLOOR / 2, this.centre.z ],
+				halfExtents: [ this.rect.w / 2 - CAB_CLEARANCE, CAB_FLOOR / 2, this.rect.d / 2 - CAB_CLEARANCE ],
+				rotationY: this.yaw
+			} ];
+
+		}
+
+		const { width, depth, wall, floor, ceiling, roof, doorWidth } = LIFT_CAR;
+		const cheek = ( width - 2 * wall - doorWidth ) / 2;
+		const boxes = [
+			[ 0, - floor / 2, 0, width, floor, depth ],
+			[ - width / 2 + wall / 2, ceiling / 2, 0, wall, ceiling, depth ],
+			[ width / 2 - wall / 2, ceiling / 2, 0, wall, ceiling, depth ],
+			[ 0, ceiling / 2, depth / 2 - wall / 2, width - 2 * wall, ceiling, wall ],
+			[ 0, ceiling + roof / 2, 0, width, roof, depth ]
+		];
+
+		if ( this.panelled ) {
+
+			for ( const side of [ - 1, 1 ] ) boxes.push( [ side * ( doorWidth / 2 + cheek / 2 ), ceiling / 2, - depth / 2 + wall / 2, cheek, ceiling, wall ] );
+
+		}
+
+		return boxes.map( ( [ x, y, z, w, h, d ] ) => ( {
+			center: this.worldPoint( [ x, y, z ] ).toArray(),
+			halfExtents: [ w * this.carScale.x / 2, h * this.carScale.y / 2, d * this.carScale.z / 2 ],
+			rotationY: this.yaw
+		} ) );
 
 	}
 
@@ -277,7 +364,11 @@ class Shaft {
 		this.#releaseRider();
 		this.colliders?.drop( `lift:${this.id}/cab` );
 		this.floorAt = null;
+		this.floorVersion ++;
 		for ( const stop of this.stops ) stop.release();
+		this.cab?.removeFromParent();
+		for ( const material of this.ownedMaterials ) material.dispose();
+		for ( const geometry of this.ownedGeometry ) geometry.dispose();
 
 	}
 
@@ -294,19 +385,82 @@ class Shaft {
 		if ( ! bounds || ! surfaces.length ) return;
 
 		const car = new THREE.Group();
-		car.rotation.y = placement.rotationY;
+		this.yaw = placement.rotationY;
+		car.rotation.y = this.yaw;
 		car.scale.set( ...placement.scale );
 
-		for ( const { geometry, material } of surfaces ) car.add( new THREE.Mesh( geometry, material ) );
+		// The spec is the car Interior publishes now. A world assembled with an
+		// older car is read at the size its own catalog gives that car.
+		const fit = carFit( bounds.size );
+		this.panelled = fit.distanceTo( _unit ) < FIT_TOLERANCE;
+		this.carScale.set( ...placement.scale ).multiply( fit );
 
-		const [ width, height, depth ] = bounds.size;
-		car.add( new THREE.Mesh(
-			slab( width * 0.5, 0.04, depth * 0.5, 0, height - 0.16, 0 ),
-			this.factory.variant( CAB_LIGHT_KEY, { emissiveLevel: CAB_EMISSIVE, emissive: kelvinColor( CAB_KELVIN ) } )
-		) );
+		// These lights belong to the cab component, so its materials remain lit
+		// between streamed floors without editing the city's renderer or light pool.
+		// An area light shades with LTC tables, which the lower tiers never
+		// install for their rooms, so the car makes sure of them itself.
+		installAreaLights();
+		const ceiling = new THREE.RectAreaLight( kelvinColor( CAB_KELVIN ), 1, LIFT_CAR.lens.width, LIFT_CAR.lens.depth );
+		const bounce = new THREE.HemisphereLight( kelvinColor( CAB_KELVIN ), 0x77716a, 22 );
+		// Kept outside the scene's light list: only these cab materials use them.
+		this.cabLight = ceiling;
+		this.cabBounce = bounce;
+		const localLights = lights( [ ceiling, bounce ] );
+		for ( const { geometry, material } of surfaces ) {
 
+			const own = material.clone();
+			if ( own.isNodeMaterial && ! own.isMeshBasicNodeMaterial ) own.lightsNode = localLights;
+			this.ownedMaterials.push( own );
+			car.add( new THREE.Mesh( geometry, own ) );
+
+		}
 		this.car = car;
 		this.cab.add( car );
+		this.updateLighting();
+
+		if ( this.panelled ) {
+
+			this.screen = makeDisplay( this.ownedMaterials, this.ownedGeometry );
+			this.screen.position.set( ...LIFT_CAR.panel.screen );
+			car.add( this.screen );
+			this.updateDisplay();
+
+		}
+
+		// Replace the conservative bootstrap floor with the authored cabin bounds.
+		this.floorAt = null;
+		this.#standFloor();
+
+	}
+
+	landingMaterial( material ) {
+
+		if ( ! this.cabLight || ! material.isNodeMaterial || material.isMeshBasicNodeMaterial ) return material;
+		if ( ! this.doorMaterials.has( material ) ) {
+
+			const own = material.clone();
+			own.lightsNode = lights( [ ...( material.lightsNode?.getLights() ?? [] ), this.cabLight ] );
+			this.doorMaterials.set( material, own );
+			this.ownedMaterials.push( own );
+
+		}
+		return this.doorMaterials.get( material );
+
+	}
+
+	/** The car's lights ride with it: the lens facing down under the ceiling, the bounce above the floor. */
+	updateLighting() {
+
+		if ( ! this.cabLight ) return;
+		this.cabLight.position.copy( this.worldPoint( [ 0, LIFT_CAR.lens.center[ 1 ] - LENS_DROP, 0 ] ) );
+		this.cabLight.width = LIFT_CAR.lens.width * this.carScale.x;
+		this.cabLight.height = LIFT_CAR.lens.depth * this.carScale.z;
+		// The lens's lumens, through `power` once the light has its size.
+		this.cabLight.power = LIFT_CAR.lens.lumens;
+		this.cabLight.quaternion.setFromAxisAngle( _up, this.yaw ).multiply( FACE_DOWN );
+		this.cabLight.updateMatrixWorld( true );
+		this.cabBounce.position.set( this.centre.x, this.at + 2, this.centre.z );
+		this.cabBounce.updateMatrixWorld( true );
 
 	}
 
@@ -316,39 +470,54 @@ class Shaft {
 
 	}
 
-	/** Whether a point stands on the cab floor. */
+	/** A point in the rotated passenger enclosure, not its axis-aligned bounds. */
 	holds( point ) {
 
-		return point.y >= this.at - 0.4 && point.y < this.at + CAB_HEIGHT
-			&& Math.abs( point.x - this.centre.x ) < this.rect.w / 2
-			&& Math.abs( point.z - this.centre.z ) < this.rect.d / 2;
+		const local = this.localPoint( point, _local );
+		const halfX = this.car ? LIFT_CAR.width * this.carScale.x / 2 : this.rect.w / 2;
+		const halfZ = this.car ? LIFT_CAR.depth * this.carScale.z / 2 : this.rect.d / 2;
+		return local.y >= - 0.4 && local.y < ( this.car ? LIFT_CAR.ceiling * this.carScale.y : CAB_HEIGHT )
+			&& Math.abs( local.x ) < halfX && Math.abs( local.z ) < halfZ;
 
 	}
 
+	/**
+	 * What the crosshair can press here: inside, each button of the car's
+	 * panel, which has to be aimed at; in a car without one, the car itself at
+	 * hand height, as E anywhere in it; outside, the call button of every
+	 * landing in reach.
+	 */
 	panels( feet, radius ) {
-
-		const out = [];
-
-		for ( const stop of this.stops ) {
-
-			if ( stop.panel && stop.panel.distanceTo( feet ) < radius ) {
-
-				out.push( { kind: 'elevator', shaft: this, stop, center: stop.panel, inside: false } );
-
-			}
-
-		}
 
 		if ( this.holds( feet ) ) {
 
-			out.push( {
-				kind: 'elevator', shaft: this, stop: null, inside: true,
-				center: new THREE.Vector3( this.centre.x, this.at + PANEL_HEIGHT, this.centre.z )
-			} );
+			if ( ! this.panelled ) {
+
+				return [ {
+					kind: 'elevator', shaft: this, stop: null, inside: true,
+					center: new THREE.Vector3( this.centre.x, this.at + PANEL_HEIGHT, this.centre.z )
+				} ];
+
+			}
+
+			return LIFT_CAR.panel.buttons
+				.map( ( button ) => ( {
+					kind: 'elevator', shaft: this, stop: null, inside: true, action: button.action,
+					aimRadius: BUTTON_AIM * this.carScale.x, center: this.worldPoint( button.position )
+				} ) )
+				.filter( ( target ) => target.center.distanceTo( feet ) < radius );
 
 		}
 
-		return out;
+		return this.stops
+			.filter( ( stop ) => stop.panel && stop.panel.distanceTo( feet ) < radius )
+			.map( ( stop ) => ( { kind: 'elevator', shaft: this, stop, center: stop.panel, inside: false, aimRadius: CALL_AIM } ) );
+
+	}
+
+	updateDisplay() {
+
+		if ( this.screen ) showNumber( this.screen, this.stops[ this.selected ]?.floor ?? 0 );
 
 	}
 
@@ -357,28 +526,77 @@ class Shaft {
 
 		if ( this.moving ) return;
 		this.selected = THREE.MathUtils.clamp( this.selected + direction, 0, this.stops.length - 1 );
+		this.updateDisplay();
 
 	}
 
-	/** E on a landing calls; E inside confirms the selected floor. */
+	/** Every button acts on the real selected stop; calls during travel are queued. */
 	press( target ) {
 
-		if ( this.moving ) return;
+		if ( target.inside && target.action === 'up' ) return this.select( 1 );
+		if ( target.inside && target.action === 'down' ) return this.select( - 1 );
+		if ( target.inside && target.action === 'cancel' && ! this.moving ) {
+
+			this.selected = Math.max( 0, this.stops.findIndex( stop => Math.abs( stop.elevation - this.at ) < 0.05 ) );
+			this.updateDisplay();
+			return;
+
+		}
+		if ( target.inside && [ 'open', 'close' ].includes( target.action ) && ! this.moving ) {
+
+			this.called = target.action === 'open';
+			return;
+
+		}
 		const stop = target.inside ? this.stops[ this.selected ] : target.stop;
 		if ( ! stop || ! this.stops.includes( stop ) ) return;
+		if ( this.moving ) {
+
+			if ( ! target.inside && this.target !== stop.elevation && ! this.pendingCalls.includes( stop ) ) this.pendingCalls.push( stop );
+			return;
+
+		}
 		this.target = stop.elevation;
 		this.called = true;
+		this.dwell = 0;
+		if ( ! target.inside ) {
+
+			this.selected = this.stops.indexOf( stop );
+			this.updateDisplay();
+
+		}
 		this.stream?.requestFloor( this.parcelId, stop.floor );
 
 	}
 
-	/** What the prompt says about this lift right now. */
+	/** What the prompt says about the button under the crosshair right now. */
 	label( target ) {
 
-		if ( this.moving ) return 'the lift is moving';
+		if ( this.blocked ) return 'step clear of the lift doorway';
+
+		if ( this.moving ) {
+
+			const destination = this.stops.find( ( stop ) => Math.abs( stop.elevation - this.target ) < 0.05 )?.floor;
+			if ( target.inside ) return `travelling to floor ${destination}`;
+			const coming = this.target === target.stop.elevation || this.pendingCalls.includes( target.stop );
+			return coming ? 'the lift is on its way' : 'E  call the lift';
+
+		}
 
 		if ( this.called && ! this.ready ) return 'waiting for the landing';
-		return target.inside ? `PgUp / PgDn  floor ${this.stops[ this.selected ].floor}    E  go` : 'E  call the lift';
+		if ( ! target.inside ) return `E  ${Math.abs( target.stop.elevation - this.at ) < 0.05 ? 'open' : 'call'} the lift`;
+
+		const floor = this.stops[ this.selected ].floor;
+		switch ( target.action ) {
+
+			case 'up': return `floor ${floor}    E  next floor    PgUp / PgDn  choose`;
+			case 'down': return `floor ${floor}    E  previous floor    PgUp / PgDn  choose`;
+			case 'open': return 'E  open the lift doors';
+			case 'close': return 'E  close the lift doors';
+			case 'cancel': return 'E  back to this floor';
+			default: return `floor ${floor}    PgUp / PgDn  choose    E  go`;
+
+		}
 
 	}
 
@@ -391,10 +609,13 @@ class Shaft {
 
 	update( delta, body ) {
 
+		this.blocked = this.stops.some( stop => stop.open > 0 && stop.obstructed( body.feet ) )
+			&& ( this.moving || ! this.called );
 		// The doors are shut whenever the cab is not standing at that landing.
 		for ( const stop of this.stops ) {
 
-			stop.setOpen( this.called && this.ready && this.floorReady && ! this.moving && Math.abs( stop.elevation - this.at ) < 0.05, delta );
+			stop.setOpen( ( this.called && this.ready && this.floorReady && ! this.moving && Math.abs( stop.elevation - this.at ) < 0.05 )
+				|| ( this.blocked && stop.open > 0 && stop.obstructed( body.feet ) ), delta );
 
 		}
 
@@ -402,7 +623,13 @@ class Shaft {
 
 			this.#standFloor();
 			if ( this.ready && this.floorReady ) this.#releaseRider();
-			if ( this.ready && ! this.holds( body.feet ) ) this.stream?.releaseFloor( this.parcelId );
+			if ( this.ready && ! this.holds( body.feet ) ) {
+
+				this.stream?.releaseFloor( this.parcelId );
+				this.dwell += delta;
+				if ( this.dwell > 4 && this.pendingCalls.length && ! this.blocked ) this.press( { inside: false, stop: this.pendingCalls.shift() } );
+
+			}
 			return;
 
 		}
@@ -431,6 +658,7 @@ class Shaft {
 
 		this.at += dy;
 		this.cab.position.y = this.at;
+		this.updateLighting();
 
 		// Carry at a fixed cab offset so gravity cannot accumulate between frames.
 		if ( this.rider ) {
@@ -469,16 +697,33 @@ class Stop {
 		this.leaves = [];
 		this.pivot = null;
 		this.panel = null;
+		this.sealed = false;
 		/** The shut doorway, solid while the leaves are shut. */
 		this.solid = null;
 
 	}
 
-	/** Whether a placement of this floor stands in or just outside this shaft. */
+	/** Shaft ownership follows the same rotated frame as the published core. */
 	owns( position ) {
 
-		return Math.abs( position[ 0 ] - this.shaft.centre.x ) < this.shaft.rect.w / 2 + DOOR_REACH
-			&& Math.abs( position[ 2 ] - this.shaft.centre.z ) < this.shaft.rect.d / 2 + DOOR_REACH;
+		const local = this.shaft.localPoint( _local.fromArray( position ), _local );
+		return Math.abs( local.x ) < this.shaft.rect.w / 2 + DOOR_REACH
+			&& Math.abs( local.z ) < this.shaft.rect.d / 2 + DOOR_REACH;
+
+	}
+
+	distanceTo( position ) {
+
+		return Math.hypot( position[ 0 ] - this.shaft.centre.x, position[ 2 ] - this.shaft.centre.z );
+
+	}
+
+	obstructed( feet ) {
+
+		if ( ! this.pivot || feet.y < this.elevation - 0.4 || feet.y > this.elevation + 2.2 ) return false;
+		const local = this.pivot.worldToLocal( new THREE.Vector3( feet.x, feet.y, feet.z ) );
+		return Math.abs( local.x ) < this.doorWidth / 2 + 0.32 / this.pivot.scale.x
+			&& Math.abs( local.z ) < 0.42 / this.pivot.scale.z;
 
 	}
 
@@ -498,6 +743,7 @@ class Stop {
 	mount( placement, surfaces ) {
 
 		if ( ! surfaces.length ) return [];
+		this.release();
 
 		const pivot = new THREE.Group();
 		pivot.position.set(
@@ -511,6 +757,7 @@ class Stop {
 		const bounds = new THREE.Box3();
 		for ( const { geometry } of surfaces ) bounds.union( geometry.boundingBox ?? new THREE.Box3().setFromBufferAttribute( geometry.getAttribute( 'position' ) ) );
 		const width = bounds.max.x - bounds.min.x;
+		this.doorWidth = width;
 
 		// Shut, the pair is one panel across the opening. It is a few centimetres
 		// of sheet, so the body stops against something it cannot cross in a step.
@@ -525,7 +772,7 @@ class Stop {
 			for ( const { geometry, material } of surfaces ) {
 
 				const part = takeTriangles( geometry, halfOf( geometry, side ) );
-				if ( part ) leaf.add( new THREE.Mesh( part, material ) );
+				if ( part ) leaf.add( new THREE.Mesh( part, this.shaft.landingMaterial( material ) ) );
 
 			}
 			if ( leaf.children.length ) this.leaves.push( leaf );
@@ -535,24 +782,22 @@ class Stop {
 		// The call plate beside the door: the geometry the prompt points at, a
 		// hand wide on the wall at chest height, past the jamb.
 		const plate = new THREE.Group();
-		plate.position.set( width / 2 + PLATE_OFF, PANEL_HEIGHT - placement.position[ 1 ], PLATE_PROUD );
+		plate.position.set( width / 2 + PLATE_OFF, ( PANEL_HEIGHT - placement.position[ 1 ] ) / placement.scale[ 1 ], PANEL_OUT );
 		plate.add( new THREE.Mesh(
 			new THREE.BoxGeometry( PLATE_WIDTH, PLATE_HEIGHT, PLATE_PROUD * 2 ),
 			surfaces[ 0 ].material
 		) );
+		const button = new THREE.Mesh( new THREE.BoxGeometry( .048, .048, .008 ),
+			this.shaft.factory.variant( CAB_LIGHT_KEY, { emissiveLevel: 10, emissive: kelvinColor( CAB_KELVIN ) } ) );
+		button.position.z = PLATE_PROUD + .004;
+		plate.add( button );
 		pivot.add( plate );
 
 		for ( const leaf of this.leaves ) pivot.add( leaf );
 
-		// Where the prompt floats: a pace out from the leaves, on the side away
-		// from the shaft.
+		// Point at the visible button itself, not an invisible point in mid-air.
 		pivot.updateMatrixWorld( true );
-		const outward = _facing.set( 0, 0, 1 ).applyAxisAngle( _up, placement.rotationY );
-		const sign = Math.sign(
-			( pivot.position.x - this.shaft.centre.x ) * outward.x + ( pivot.position.z - this.shaft.centre.z ) * outward.z
-		) || 1;
-		this.panel = new THREE.Vector3( pivot.position.x, this.elevation + PANEL_HEIGHT, pivot.position.z )
-			.addScaledVector( outward, sign * PANEL_OUT );
+		this.panel = button.getWorldPosition( new THREE.Vector3() );
 		this.pivot = pivot;
 
 		return [ pivot ];
@@ -562,10 +807,14 @@ class Stop {
 	release() {
 
 		this.#seal( false );
+		this.pivot?.traverse( object => { if ( object.isMesh ) object.geometry.dispose(); } );
+		this.pivot?.removeFromParent();
 		this.solid = null;
 		this.leaves = [];
 		this.pivot = null;
 		this.panel = null;
+		this.open = 0;
+		this.wanted = 0;
 
 	}
 
@@ -576,6 +825,8 @@ class Stop {
 
 		const id = `lift:${this.shaft.id}@${this.floor}`;
 
+		if ( shut === this.sealed ) return;
+		this.sealed = shut;
 		if ( shut ) this.shaft.colliders?.solid( id, [ this.solid ] );
 		else this.shaft.colliders?.drop( id );
 
@@ -585,7 +836,7 @@ class Stop {
 
 		const next = wanted ? 1 : 0;
 
-		if ( next !== this.wanted ) this.#seal( next === 0 );
+		if ( next === 0 ) this.#seal( true );
 		this.wanted = next;
 
 		if ( this.open === this.wanted ) return;
@@ -596,6 +847,8 @@ class Stop {
 			: Math.max( 0, this.open - step );
 
 		for ( const leaf of this.leaves ) leaf.position.copy( leaf.userData.slide ).multiplyScalar( this.open );
+		// Collision only clears when the visible leaves have fully opened.
+		if ( this.open >= 0.99 ) this.#seal( false );
 
 	}
 
@@ -645,14 +898,58 @@ function doorway( placement, bounds, elevation ) {
 
 }
 
-/** An axis-aligned slab of geometry, in metres, around the cab's own origin. */
-function slab( w, h, d, x, y, z ) {
+/** A published car's size over the spec's, per axis; the spec where the catalog gives none. */
+function carFit( size ) {
 
-	const box = new THREE.BoxGeometry( w, h, d );
-	box.deleteAttribute( 'uv1' );
-	box.translate( x, y, z );
+	const spec = [ LIFT_CAR.width, LIFT_CAR.floor + LIFT_CAR.ceiling + LIFT_CAR.roof, LIFT_CAR.depth ];
 
-	return box.toNonIndexed();
+	return new THREE.Vector3( ...spec.map( ( length, axis ) => size?.[ axis ] > 0 ? size[ axis ] / length : 1 ) );
+
+}
+
+/** Small geometric digits stay crisp without canvas textures or external font assets. */
+function makeDisplay( materials, geometry ) {
+
+	const group = new THREE.Group();
+	const material = new THREE.MeshBasicMaterial( { color: 0x08202a, toneMapped: false } );
+	materials.push( material );
+	const cells = [];
+	const segments = [ [ 0, .03, true ], [ .015, .015, false ], [ .015, -.015, false ],
+		[ 0, -.03, true ], [ -.015, -.015, false ], [ -.015, .015, false ], [ 0, 0, true ] ];
+	for ( let digit = 0; digit < 4; digit ++ ) {
+
+		const cell = new THREE.Group();
+		cell.position.x = ( digit - 1.5 ) * .041;
+		for ( const [ x, y, horizontal ] of segments ) {
+
+			const shape = new THREE.BoxGeometry( horizontal ? .026 : .004, horizontal ? .004 : .026, .003 );
+			geometry.push( shape );
+			const mesh = new THREE.Mesh( shape, material );
+			mesh.position.set( x, y, 0 );
+			cell.add( mesh );
+
+		}
+		cells.push( cell ); group.add( cell );
+
+	}
+	group.userData.cells = cells;
+	return group;
+
+}
+
+const DIGITS = { '0': [ 0, 1, 2, 3, 4, 5 ], '1': [ 1, 2 ], '2': [ 0, 1, 6, 4, 3 ],
+	'3': [ 0, 1, 2, 3, 6 ], '4': [ 5, 6, 1, 2 ], '5': [ 0, 5, 6, 2, 3 ],
+	'6': [ 0, 5, 6, 4, 3, 2 ], '7': [ 0, 1, 2 ], '8': [ 0, 1, 2, 3, 4, 5, 6 ],
+	'9': [ 0, 1, 2, 3, 5, 6 ], '-': [ 6 ] };
+function showNumber( display, value ) {
+
+	const label = String( value ).slice( - 4 ).padStart( 4, ' ' );
+	display.userData.floor = value;
+	display.userData.cells.forEach( ( cell, index ) => cell.children.forEach( ( segment, bit ) => {
+
+		segment.visible = ( DIGITS[ label[ index ] ] ?? [] ).includes( bit );
+
+	} ) );
 
 }
 
@@ -661,5 +958,6 @@ const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _centroid = new THREE.Vector3();
 const _lift = new THREE.Vector3();
-const _facing = new THREE.Vector3();
 const _up = new THREE.Vector3( 0, 1, 0 );
+const _unit = new THREE.Vector3( 1, 1, 1 );
+const _local = new THREE.Vector3();

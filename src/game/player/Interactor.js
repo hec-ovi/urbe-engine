@@ -75,10 +75,13 @@ export class Interactor {
 			[ ...this.#candidates( 'quests', questState ), ...this.#candidates( 'investigations', questState ) ]
 		);
 
-		if ( this.target?.kind === 'elevator' && this.target.inside && this.controller.input?.locked ) {
+		// Page Up and Page Down choose a floor anywhere inside a car; E still
+		// acts on the button under the crosshair.
+		const cabin = this.elevators?.cabinAt?.( feet ) ?? null;
+		if ( cabin && this.controller.input?.locked ) {
 
-			if ( this.controller.input.consume( 'PageUp' ) ) this.target.shaft.select( 1 );
-			if ( this.controller.input.consume( 'PageDown' ) ) this.target.shaft.select( - 1 );
+			if ( this.controller.input.consume( 'PageUp' ) ) cabin.select( 1 );
+			if ( this.controller.input.consume( 'PageDown' ) ) cabin.select( - 1 );
 
 		}
 		return this.target ? prompt( this.target, this.quests ) : null;
@@ -417,7 +420,12 @@ export function pick( eye, look, doors, people, panels = [], questTargets = [] )
 
 	for ( const panel of panels ) {
 
-		candidates.push( { ...panel, aim: aimAt( eye, look, panel.center, 0 ) } );
+		const aim = aimAt( eye, look, panel.center, 0 );
+		// A lift button is small, so it takes aiming at: the crosshair ray has to
+		// pass within its radius, where the cone a door gets would pick a floor
+		// button while looking straight at the lift doors.
+		if ( panel.aimRadius && ! passesWithin( eye, panel.center, aim, panel.aimRadius ) ) continue;
+		candidates.push( { ...panel, aim } );
 
 	}
 
@@ -450,6 +458,13 @@ export function pick( eye, look, doors, people, panels = [], questTargets = [] )
 	const door = candidates.find( ( c ) => c.kind === 'door' && c.aim > best.aim - TIE );
 
 	return door ?? best;
+
+}
+
+/** Whether the crosshair ray, `aim` the cosine off it, passes within `radius` of a point ahead. */
+function passesWithin( eye, position, aim, radius ) {
+
+	return aim > 0 && eye.distanceToSquared( position ) * Math.max( 0, 1 - aim * aim ) <= radius * radius;
 
 }
 

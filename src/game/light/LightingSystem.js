@@ -36,10 +36,26 @@ export class LightingSystem {
 				maxHemisphereLights: 4
 			} );
 
-		if ( tier.roomStrips > 0 ) THREE.RectAreaLightNode.setLTC( RectAreaLightTexturesLib.init() );
+		if ( tier.roomStrips > 0 ) installAreaLights();
 
 		return { capacity: webgpu ? tier.clusteredLights : tier.batchedLights };
 
 	}
+
+}
+
+let areaLights = false;
+
+/**
+ * Installs the LTC tables every area light shades with, once for the run. A
+ * material lit by a `RectAreaLight` cannot compile without them on either
+ * backend, and the tiers without room strips never install them for rooms, so
+ * whatever lights with one calls this first.
+ */
+export function installAreaLights() {
+
+	if ( areaLights ) return;
+	THREE.RectAreaLightNode.setLTC( RectAreaLightTexturesLib.init() );
+	areaLights = true;
 
 }
