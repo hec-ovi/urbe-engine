@@ -9,11 +9,17 @@
  *
  * Steps are timed. With the debug switch on, the timeline prints when the load
  * ends, which is what a slow load is read from.
+ *
+ * Every report carries the line the loading view shows and the same numbers
+ * as a record, `{ label, step, done, total, part }`: `label` is what runs now
+ * (a step or a pass), `step` the named step it runs under, `done` of `total`
+ * the whole load's units, and `part` the reporting pass's own `{ done, total }`,
+ * null for a step.
  */
 export class LoadProgress {
 
 	/**
-	 * @param report receives the line the loading view shows
+	 * @param report receives the line the loading view shows and its record: `report(text, progress)`
 	 * @param log true to print the step timeline when the load ends
 	 */
 	constructor( report, { log = false, now = () => performance.now() } = {} ) {
@@ -104,7 +110,7 @@ export class LoadProgress {
 
 				}
 				this.label = label;
-				this.#show();
+				this.#show( { done: counted, total: planned } );
 
 			}
 		};
@@ -147,9 +153,12 @@ export class LoadProgress {
 
 	}
 
-	#show() {
+	#show( part = null ) {
 
-		this.report( this.total ? `${this.label} ${Math.min( this.done, this.total )} / ${this.total}` : this.label );
+		const done = Math.min( this.done, this.total );
+		this.report( this.total ? `${this.label} ${done} / ${this.total}` : this.label, {
+			label: this.label, step: this.stepLabel, done, total: this.total, part
+		} );
 
 	}
 

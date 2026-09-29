@@ -1,0 +1,58 @@
+{
+  "title": "urbe",
+  "progress": "Loading progress",
+  "units": "work units",
+  "milestonesLabel": "Loading steps",
+  "starting": "starting",
+  "failed": "could not start",
+  "states": { "done": "complete", "active": "in progress", "pending": "pending" },
+  "milestones": [
+    {
+      "id": "world",
+      "label": "World and buildings",
+      "steps": [
+        "reading the world",
+        { "match": "starting the renderer", "weight": 0.5 },
+        { "match": "resolving materials", "weight": 0.5 },
+        { "match": "laying the ground", "weight": 0.5 },
+        { "match": "loading # buildings", "weight": 9 }
+      ]
+    },
+    {
+      "id": "life",
+      "label": "Light and people",
+      "steps": [
+        { "match": "hanging the neon", "weight": 0.5 },
+        { "match": "lighting the street", "weight": 0.5 },
+        { "match": "raising the sky", "weight": 0.5 },
+        { "match": "building the physics world", "weight": 0.5 },
+        { "match": "waking the population", "weight": 0.5 },
+        { "match": "loading characters", "weight": 5 },
+        { "match": "loading traffic", "weight": 0.5 },
+        { "match": "stepping outside", "weight": 0.5 },
+        "warming the renderer"
+      ]
+    },
+    {
+      "id": "surfaces",
+      "label": "City surfaces",
+      "steps": [
+        { "match": "preparing the ground", "weight": 10 },
+        { "match": "preparing street props", "weight": 10 },
+        { "match": "preparing city surfaces", "weight": 22 }
+      ]
+    },
+    {
+      "id": "frame",
+      "label": "First frame",
+      "steps": [
+        { "match": "preparing the characters", "weight": 3 },
+        "preparing nearby floors",
+        "preparing the first frame",
+        { "match": "preparing the probe", "weight": 4 },
+        { "match": "baking the environment", "weight": 3 },
+        { "match": "pinning the programs", "weight": 3 }
+      ]
+    }
+  ]
+}

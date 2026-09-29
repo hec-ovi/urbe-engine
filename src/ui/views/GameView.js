@@ -6,6 +6,7 @@ import '../components/views.css';
 import '../components/chat.css';
 import '../components/mission.css';
 import '../components/fracture.css';
+import '../components/loading.css';
 import { el } from '../components/dom.js';
 import { HudClock } from '../widgets/HudClock.js';
 import { InteractPrompt } from '../widgets/InteractPrompt.js';
@@ -19,6 +20,7 @@ import { MissionToast } from '../widgets/MissionToast.js';
 import { MissionSummary } from '../widgets/MissionSummary.js';
 import { TransitHud } from '../widgets/TransitHud.js';
 import { PauseMenu } from '../widgets/PauseMenu.js';
+import { LoadingScreen } from '../widgets/LoadingScreen.js';
 import { TabBar } from '../widgets/TabBar.js';
 import { PanelHost } from './PanelHost.js';
 import { MinimapView } from './MinimapView.js';
@@ -108,14 +110,10 @@ export class GameView {
 			}
 		} );
 
-		this.loadingStep = el( 'div', { className: 'hud-loading-step', textContent: 'starting' } );
-		this.loadingError = el( 'div', { className: 'hud-loading-error' } );
-		this.loadingError.hidden = true;
-		this.loading = el( 'div', { className: 'hud-loading' },
-			el( 'div', { className: 'hud-loading-title', textContent: 'urbe' } ),
-			this.loadingStep,
-			this.loadingError
-		);
+		this.loadingScreen = new LoadingScreen();
+		this.loading = this.loadingScreen.element;
+		this.loadingStep = this.loadingScreen.line;
+		this.loadingError = this.loadingScreen.error;
 
 		this.element = el( 'div', { className: 'hud' },
 			this.clock.element,
@@ -196,15 +194,23 @@ export class GameView {
 
 	}
 
-	step( text ) {
+	/** The loader's line and, from LoadProgress, its record `{ label, step, done, total, part }`. */
+	step( text, progress = null ) {
 
-		this.loadingStep.textContent = text;
+		this.loadingScreen.step( text, progress );
+
+	}
+
+	/** The game's name under the loading crystal; null hides it. */
+	setLoadingPlace( name ) {
+
+		this.loadingScreen.setPlace( name );
 
 	}
 
 	ready() {
 
-		this.loading.hidden = true;
+		this.loadingScreen.ready();
 
 	}
 
@@ -260,10 +266,7 @@ export class GameView {
 
 	fail( message ) {
 
-		this.loading.hidden = false;
-		this.loadingStep.textContent = 'could not start';
-		this.loadingError.hidden = false;
-		this.loadingError.textContent = message;
+		this.loadingScreen.fail( message );
 
 	}
 

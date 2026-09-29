@@ -250,7 +250,7 @@ export class GameApp {
 
 		const config = this.config;
 		const progress = this.progress = new LoadProgress(
-			( text ) => this.view.step( text ), { log: import.meta.env.DEV }
+			( text, record ) => this.view.step( text, record ), { log: import.meta.env.DEV }
 		);
 		progress.plan( LOAD_STEPS ).step( 'reading the world' );
 		// Every lump of work the load or the city does is named here, and one
@@ -274,6 +274,8 @@ export class GameApp {
 			mechanicTargetBindings, missionAssetRequests, missionItemBindings, game, shellCatalog, kit,
 			interiorModules, interiorProps, loadBuildings
 		} = await reading;
+		// A catalog game's name stands under the loading crystal.
+		this.view.setLoadingPlace( game?.name ?? null );
 		const spawn = game ? savedSpawn( game ) : pickSpawn( connections.networks, atlas, unbuilt.length ? buildings : undefined );
 		const spatial = Boolean( shellCatalog );
 		const transitRoutes = connections.networks.transit.routes;

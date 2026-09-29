@@ -392,40 +392,6 @@
 	white-space: nowrap;
 }
 
-.hud-loading {
-	position: absolute;
-	inset: 0;
-	pointer-events: auto;
-	background: #070a0e;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: 12px;
-	color: #8fa2b4;
-}
-
-.hud-loading-title {
-	font-family: var(--ui-mono);
-	font-size: 22px;
-	letter-spacing: 0.34em;
-	text-transform: uppercase;
-	color: var(--ui-accent);
-}
-
-.hud-loading-step {
-	font-family: var(--ui-mono);
-	font-size: 12px;
-}
-
-.hud-loading-error {
-	max-width: 560px;
-	color: var(--ui-bad);
-	font-family: var(--ui-mono);
-	font-size: 12px;
-	white-space: pre-wrap;
-}
-
 .hud-minimap {
 	position: absolute;
 	right: 14px;

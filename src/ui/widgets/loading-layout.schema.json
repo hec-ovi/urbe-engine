@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Loading screen labels and the milestones the load's steps fall under",
+  "type": "object",
+  "required": ["title", "progress", "units", "milestonesLabel", "starting", "failed", "states", "milestones"],
+  "additionalProperties": false,
+  "properties": {
+    "title": { "description": "Accessible name of the logo.", "$ref": "#/$defs/text" },
+    "progress": { "description": "Accessible name of the progress bar.", "$ref": "#/$defs/text" },
+    "units": { "description": "Unit after the work count.", "$ref": "#/$defs/text" },
+    "milestonesLabel": { "description": "Accessible name of the milestone row.", "$ref": "#/$defs/text" },
+    "starting": { "description": "Status line before the first report.", "$ref": "#/$defs/text" },
+    "failed": { "description": "Status line of a load that failed.", "$ref": "#/$defs/text" },
+    "states": {
+      "description": "How a milestone's state is read out.",
+      "type": "object",
+      "required": ["done", "active", "pending"],
+      "additionalProperties": false,
+      "properties": { "done": { "$ref": "#/$defs/text" }, "active": { "$ref": "#/$defs/text" }, "pending": { "$ref": "#/$defs/text" } }
+    },
+    "milestones": {
+      "description": "Up to four milestones in load order; each owns the steps and passes that run under it, in order.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "steps"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "label": { "$ref": "#/$defs/text" },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "description": "A step or pass label as the load reports it, # standing for a number; an object gives it a weight other than 1 in the percentage.",
+              "oneOf": [
+                { "$ref": "#/$defs/text" },
+                {
+                  "type": "object",
+                  "required": ["match", "weight"],
+                  "additionalProperties": false,
+                  "properties": { "match": { "$ref": "#/$defs/text" }, "weight": { "type": "number", "exclusiveMinimum": 0 } }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 }
+  }
+}
