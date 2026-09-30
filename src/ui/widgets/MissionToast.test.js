@@ -18,6 +18,17 @@ describe( 'MissionToast', () => {
 
 	afterEach( () => vi.useRealTimers() );
 
+	it( 'bounds bursts to two notices and releases every expiry timer on disposal', () => {
+		for ( let i = 0; i < 5; i ++ ) toast.show( { title: `Update ${i}`, text: `Message ${i}` } );
+		expect( toast.element.children ).toHaveLength( 2 );
+		expect( screen.queryByText( 'Message 0' ) ).toBeNull();
+		expect( vi.getTimerCount() ).toBe( 4 );
+		toast.element.querySelector( 'button' ).click();
+		expect( vi.getTimerCount() ).toBe( 2 );
+		toast.destroy();
+		expect( vi.getTimerCount() ).toBe( 0 );
+	} );
+
 	it( 'show puts the title and text up, then fades it out and removes it', () => {
 
 		toast.show( { title: 'New mission', text: 'Find who moved the crates.' } );

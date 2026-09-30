@@ -23,6 +23,18 @@ describe( 'GameApp quest NPC control', () => {
 
 describe( 'the card a game opens on', () => {
 
+	it( 'routes successful document reads and evidence inspections to the reading card without advancing a read', () => {
+		const app = Object.create( GameApp.prototype );
+		app.view = { inspection: { show: vi.fn() }, toast: { show: vi.fn() } };
+		app.questActionResult( { ok: true, progressed: false, action: 'read', message: 'Read the ledger.', readText: 'The authored entry.', completed: [] } );
+		expect( app.view.inspection.show ).toHaveBeenLastCalledWith( { title: 'Read the ledger.', text: 'The authored entry.' } );
+		app.questActionResult( { ok: true, progressed: false, action: 'inspect', message: 'A broken seal.', completed: [] } );
+		expect( app.view.inspection.show ).toHaveBeenLastCalledWith( { title: 'Evidence inspected', text: 'A broken seal.' } );
+		app.questActionResult( { ok: false, message: 'Move closer.' } );
+		expect( app.view.inspection.show ).toHaveBeenCalledTimes( 2 );
+		expect( app.view.toast.show ).toHaveBeenCalledWith( { title: 'Objective', text: 'Move closer.' } );
+	} );
+
 	it( 'is the story\'s prologue while the save has no play time, and nothing once played, unsaved or without one', () => {
 
 		const quests = { prologue: () => ( { title: 'Undertow', text: 'You owe the House.' } ) };

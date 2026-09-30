@@ -27,6 +27,17 @@ describe( 'MinimapView', () => {
 
 	} );
 
+	it( 'opens the real map on activation and reflects the followed route in its footer', () => {
+		let opened = 0;
+		const map = new MinimapView( { onOpen: () => opened ++ } );
+		map.setRoute( { path: [ [ 0, 0 ], [ 10, 10 ] ], label: 'Market' } );
+		expect( map.routeLabel.textContent ).toBe( 'Market' );
+		map.element.click();
+		expect( opened ).toBe( 1 );
+		map.setRoute( null );
+		expect( map.routeLabel.textContent ).toBe( 'Local area' );
+	} );
+
 	it( 'bakes the city with its transit, blits it once per update with venues and the route, and draws nothing while hidden', () => {
 
 		view.setMap( MAP );

@@ -1104,7 +1104,7 @@ export class GameApp {
 			const district = this.locator.district( feet.x, feet.z );
 			this.currentLocation = this.locator.location( feet.x, feet.z, this.standing?.parcelId ?? null );
 			this.discoveredLocations.set( this.currentLocation.id, this.currentLocation );
-			this.view.clock.update( this.clock.label, district );
+			this.view.clock.update( this.clock.label, district, this.venues.nameOf( this.currentLocation.id ) ?? '' );
 			if ( this.details ) this.view.readout.update( feet, district, this.locator.parcel( feet.x, feet.z, this.standing?.parcelId ?? null ) );
 
 		} );
@@ -1631,7 +1631,10 @@ export class GameApp {
 
 		}
 
-		if ( result.readText ) this.view.toast.show( { title: result.message, text: result.readText } );
+		if ( result.readText || result.action === 'inspect' ) this.view.inspection.show( {
+			title: result.readText ? result.message : 'Evidence inspected',
+			text: result.readText ?? result.message
+		} );
 
 		for ( const completed of result.completed ) {
 
@@ -2645,6 +2648,6 @@ export function openingCard( persistence, quests ) {
 /** A modal owns both pointer capture and game actions until it closes. */
 export function playableModalOpen( view, interactor ) {
 
-	return Boolean( interactor?.conversation || view.panels.current || view.transit.open || ! view.summary.element.hidden );
+	return Boolean( interactor?.conversation || view.panels.current || view.transit.open || ! view.summary.element.hidden || view.inspection && ! view.inspection.element.hidden );
 
 }

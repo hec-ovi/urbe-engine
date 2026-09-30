@@ -1,0 +1,28 @@
+/* Port of game_hud: the host still paints the real city and owns every key. */
+.hud .hud-clock { top: 28px; left: 30px; transform: none; text-align: left; letter-spacing: normal; color: #e6f1ee; font-family: system-ui, sans-serif; text-shadow: 0 2px 8px #03151c; }
+.hud-clock-top { display: flex; align-items: center; gap: 14px; }
+.hud-clock-time { font-size: 40px; font-weight: 300; line-height: 1; letter-spacing: -.065em; font-variant-numeric: tabular-nums; }
+.hud-clock-calendar { display: grid; gap: 5px; padding-left: 12px; border-left: 1px solid #6fe3d556; font: 9px var(--ui-mono); letter-spacing: .09em; color: #a0c0c1; text-transform: uppercase; }
+.hud-clock-phase { color: #73ecdf; }
+.hud-clock-where { display: flex; gap: 9px; margin-top: 20px; }
+.hud-clock-where > span { color: #73ecdf; font: 19px/18px var(--ui-mono); }
+.hud .hud-clock-place { display: block; margin: 0; font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: .03em; color: #e6f1ee; }
+.hud-clock-location { display: block; margin-top: 5px; font-size: 10px; color: #a0c0c1; }
+.hud .hud-minimap { right: 30px; bottom: 26px; width: 216px; height: auto; padding: 0; overflow: hidden; background: #06272a; border: 1px solid #6fe3d556; text-align: left; pointer-events: auto; color: #a0c0c1; cursor: pointer; }
+.hud .hud-minimap-canvas { width: 214px; height: 214px; }
+.hud-minimap-top { position: absolute; left: 11px; top: 10px; padding: 4px; background: #061c21c9; color: #73ecdf; font: 8px var(--ui-mono); letter-spacing: .08em; }
+.hud .hud-minimap-label { display: flex; justify-content: space-between; gap: 8px; padding: 10px 11px; border-top: 1px solid #6fe3d556; font: 8px var(--ui-mono); text-align: left; }
+.hud-minimap-label > span:last-child { flex: none; color: #73ecdf; }
+.hud-minimap-route { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hud-minimap:focus-visible { outline: 2px solid #73ecdf; outline-offset: 4px; }
+.hud-shortcuts { position: absolute; bottom: 26px; left: 30px; display: flex; flex-wrap: wrap; gap: 14px; padding: 8px 10px; background: #04181d8f; border-bottom: 1px solid #6fe3d556; font: 10px system-ui, sans-serif; color: #a0c0c1; }
+.hud-shortcuts > span { display: inline-flex; align-items: center; gap: 6px; }
+.hud-shortcuts .keycap { border-color: #91c8c14a; color: #e6f1ee; font-size: 9px; }
+.hud:has(.chat-layer:not([hidden]), .hud-pause:not([hidden]), .summary-layer:not([hidden]), .inspection-layer:not([hidden]), .hud-tabbar:not([hidden])) .hud-shortcuts { visibility: hidden; }
+.hud .hud-prompt { bottom: auto; top: calc(50% + 46px); max-width: min(460px, calc(100vw - 48px)); padding: 16px 18px; background: linear-gradient(90deg, #05181ce6, #05181cb8); border: 0; border-top: 1px solid #73ecdf70; color: #e6f1ee; font: 13px/1.9 system-ui, sans-serif; white-space: normal; text-align: center; }
+.hud-prompt::before { content: ''; position: absolute; bottom: 100%; left: 50%; height: 20px; width: 1px; background: #73ecdf70; }
+.hud .hud-prompt .keycap { padding: 2px 7px; margin-right: 5px; border-color: #73ecdf85; background: #173c3e; color: #73ecdf; font-size: 11px; }
+.hud .has-target .hud-crosshair { width: 28px; height: 28px; margin: -15px; border: 1px solid #73ecdfb3; background: transparent; transform: rotate(45deg); }
+.hud .has-target .hud-crosshair::after { content: ''; position: absolute; width: 4px; height: 4px; top: 12px; left: 12px; background: #73ecdf; }
+.hud:has(.inspection-layer:not([hidden])) .hud-interaction { visibility: hidden; }
+@media (max-height: 600px) { .hud .hud-clock { top: 18px; } .hud .hud-clock-where { margin-top: 10px; } .hud .hud-minimap { width: 176px; } .hud .hud-minimap-canvas { width: 174px; height: 174px; } }

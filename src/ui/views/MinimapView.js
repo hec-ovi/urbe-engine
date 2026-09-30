@@ -22,13 +22,16 @@ export class MinimapView {
 	/** What the canvas shows: where from, which way, which venues open; null when it must be painted. */
 	#painted = null;
 
-	constructor() {
+	constructor( { onOpen } = {} ) {
 
 		this.canvas = el( 'canvas', { className: 'hud-minimap-canvas', width: SIZE, height: SIZE, ariaLabel: layout.label } );
-		this.element = el( 'div', { className: 'hud-minimap' },
+		this.routeLabel = el( 'span', { className: 'hud-minimap-route', textContent: 'Local area' } );
+		this.element = el( onOpen ? 'button' : 'div', { className: 'hud-minimap', ...( onOpen ? { type: 'button', ariaLabel: 'Open city map' } : {} ) },
+			el( 'span', { className: 'hud-minimap-top', textContent: 'LOCAL NAVIGATION', ariaHidden: 'true' } ),
 			this.canvas,
-			el( 'div', { className: 'hud-minimap-label', textContent: layout.hint } )
+			el( 'span', { className: 'hud-minimap-label' }, this.routeLabel, el( 'span', { textContent: 'M / MAP' } ) )
 		);
+		if ( onOpen ) this.element.addEventListener( 'click', onOpen );
 		this.context = this.canvas.getContext( '2d' );
 		this.bake = null;
 		this.venues = [];
@@ -57,6 +60,7 @@ export class MinimapView {
 	setRoute( route ) {
 
 		this.route = route;
+		this.routeLabel.textContent = route?.label || 'Local area';
 		this.#painted = null;
 
 	}

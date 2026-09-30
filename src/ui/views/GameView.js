@@ -7,9 +7,12 @@ import '../components/chat.css';
 import '../components/mission.css';
 import '../components/fracture.css';
 import '../components/loading.css';
+import '../components/hud-studio.css';
 import { el } from '../components/dom.js';
 import { HudClock } from '../widgets/HudClock.js';
 import { InteractPrompt } from '../widgets/InteractPrompt.js';
+import { HudShortcuts } from '../widgets/HudShortcuts.js';
+import { InspectionCard } from '../widgets/InspectionCard.js';
 import { LocationReadout } from '../widgets/LocationReadout.js';
 import { DebugStats } from '../widgets/DebugStats.js';
 import { CurrentObjective } from '../widgets/CurrentObjective.js';
@@ -61,10 +64,12 @@ export class GameView {
 
 		this.clock = new HudClock();
 		this.prompt = new InteractPrompt();
+		this.shortcuts = new HudShortcuts();
+		this.inspection = new InspectionCard( { onOpen: onSummaryOpen, onClose: onSummaryClose } );
 		this.readout = new LocationReadout();
 		this.stats = new DebugStats();
 		this.objective = new CurrentObjective( { onOpen: () => this.open( 'QUESTS' ) } );
-		this.minimap = new MinimapView();
+		this.minimap = new MinimapView( { onOpen: () => this.open( 'MAP' ) } );
 		this.avatar = new AvatarCard();
 		this.call = new VideoCallPanel( { onHangUp } );
 		this.toast = new MissionToast();
@@ -118,6 +123,8 @@ export class GameView {
 		this.element = el( 'div', { className: 'hud' },
 			this.clock.element,
 			this.prompt.element,
+			this.shortcuts.element,
+			this.inspection.element,
 			this.readout.element,
 			this.stats.element,
 			this.objective.element,
@@ -259,7 +266,7 @@ export class GameView {
 
 	#overlays() {
 
-		this.pause.setVisible( this.paused && ! this.panels.current && this.summary.element.hidden && this.dialog.element.hidden );
+		this.pause.setVisible( this.paused && ! this.panels.current && this.summary.element.hidden && this.inspection.element.hidden && this.dialog.element.hidden );
 		this.tabs.element.hidden = ! this.panels.current;
 
 	}
