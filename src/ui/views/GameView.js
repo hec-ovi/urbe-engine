@@ -3,6 +3,7 @@ import '../components/game.css';
 import '../components/panels.css';
 import '../components/screens.css';
 import '../components/dock.css';
+import '../components/pause.css';
 import '../components/journal.css';
 import '../components/map.css';
 import '../components/inventory.css';
@@ -179,8 +180,8 @@ export class GameView {
 
 	/**
 	 * The pause menu, under any panel, chat or summary opened over it. The
-	 * panels are reached from it or by their keys; the dock is up only while
-	 * one of them is open, to move between them or back to play.
+	 * panels are reached from it, from the dock under it or by their keys; the
+	 * dock is up while the menu or a panel is, to move between them or back to play.
 	 */
 	setPaused( paused ) {
 
@@ -298,8 +299,9 @@ export class GameView {
 
 	#overlays() {
 
-		this.pause.setVisible( this.paused && ! this.panels.current && this.summary.element.hidden && this.inspection.element.hidden && this.dialog.element.hidden );
-		this.dock.element.hidden = ! this.panels.current;
+		const menu = this.paused && ! this.panels.current && this.summary.element.hidden && this.inspection.element.hidden && this.dialog.element.hidden;
+		this.pause.setVisible( menu );
+		this.dock.element.hidden = ! this.panels.current && ! menu;
 
 	}
 

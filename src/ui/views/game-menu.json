@@ -1,6 +1,6 @@
 {
   "entries": {
-    "resume": { "label": "Resume", "detail": "Back to the street. Click the view to look around." },
+    "resume": { "label": "Resume", "key": "Esc", "detail": "Back to the street. Click the view to look around." },
     "play": { "label": "Play", "detail": "Back to the street." },
     "QUESTS": { "label": "Journal", "key": "J", "detail": "Your stories, your current goal and where it is." },
     "MAP": { "label": "Map", "key": "M", "detail": "The city, where you stand and the way to your goal." },

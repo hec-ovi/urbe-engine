@@ -32,16 +32,16 @@ describe( 'GameView', () => {
 		expect( document.activeElement ).toBe( view.inspection.done );
 	} );
 
-	it( 'opens panels from the pause menu, keeps the dock up only while one is open, plays on from it, and opens QUESTS from the objective', async () => {
+	it( 'opens panels from the pause menu, keeps the dock up with the menu or a panel, plays on from it, and opens QUESTS from the objective', async () => {
 
 		const user = userEvent.setup();
 		expect( view.dock.element.hidden ).toBe( true );
 
-		// The panels are reached from the pause menu; the dock comes up with one of them.
+		// The panels are reached from the pause menu and the dock that comes up with it.
 		view.setPaused( true );
 		expect( view.pause.element.hidden ).toBe( false );
-		expect( view.dock.element.hidden ).toBe( true );
-		await user.click( screen.getByRole( 'button', { name: 'Map' } ) );
+		expect( view.dock.element.hidden ).toBe( false );
+		await user.click( within( view.pause.element ).getByRole( 'button', { name: 'Map' } ) );
 		expect( view.map.element.hidden ).toBe( false );
 		expect( view.pause.element.hidden ).toBe( true );
 		expect( view.dock.element.hidden ).toBe( false );
@@ -53,10 +53,11 @@ describe( 'GameView', () => {
 		expect( tab.getAttribute( 'aria-current' ) ).toBe( 'false' );
 		expect( onClose ).toHaveBeenCalledOnce();
 		expect( view.pause.element.hidden ).toBe( false );
-		expect( view.dock.element.hidden ).toBe( true );
+		expect( view.dock.element.hidden ).toBe( false );
 
 		view.setPaused( false );
 		expect( view.pause.element.hidden ).toBe( true );
+		expect( view.dock.element.hidden ).toBe( true );
 		view.open( 'INVENTORY' );
 		expect( view.inventory.element.hidden ).toBe( false );
 		expect( view.dock.element.hidden ).toBe( false );

@@ -42,6 +42,9 @@ describe( 'PauseMenu', () => {
 		pause.setVisible( true );
 		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'Map' } ) );
 		expect( within( dialog ).getByText( 'walk' ) ).toBeTruthy();
+		expect( within( dialog ).getByText( 'Session paused' ) ).toBeTruthy();
+		expect( journal.title ).toBe( 'Your stories, your current goal and where it is.' );
+		expect( journal.getAttribute( 'aria-describedby' ) ).toBe( 'pause-quests-detail' );
 
 	} );
 
@@ -73,8 +76,11 @@ describe( 'PauseMenu', () => {
 		pause.setSave( 'saved' );
 		expect( save.disabled ).toBe( false );
 		expect( save.textContent ).toContain( 'Saved.' );
+		expect( pause.status.textContent ).toBe( 'Saved.' );
+		expect( save.title ).toBe( 'Saved.' );
 		pause.setVisible( true );
 		expect( save.textContent ).toContain( 'Keep your progress now.' );
+		expect( screen.getByRole( 'status' ).textContent ).toBe( 'Keep your progress now.' );
 		expect( () => pause.setSave( 'lost' ) ).toThrow( 'unknown save state: lost' );
 
 	} );
