@@ -56,6 +56,7 @@ export class QuestsView {
 		this.records = el( 'span', { className: 'journal-records' } );
 
 		this.header = new PanelHeader( { title: labels.title, eyebrow: labels.eyebrow, onClose } );
+		this.header.element.prepend( el( 'span', { className: 'journal-symbol', ariaHidden: 'true' }, el( 'span' ) ) );
 		this.header.aside.append( el( 'div', { className: 'journal-summary' },
 			el( 'span', { className: 'journal-summary-line', textContent: labels.subtitle } ),
 			this.records
