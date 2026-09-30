@@ -1,12 +1,12 @@
 import * as THREE from 'three/webgpu';
-import { lights } from 'three/tsl';
 import { LIFT_CAR } from '../../../../interior/src/geometry/lift-spec.ts';
 import { takeTriangles, centroidAt } from './Triangles.js';
+import { CAB, CAB_KELVIN, CabLights, cabLens } from './CabLight.js';
 import { kelvinColor } from '../light/Color.js';
-import { installAreaLights } from '../light/LightingSystem.js';
 
 /** The published modules the shafts own: the car that rides and the leaves that slide. */
 const CAR_MODULE = 'lift-car';
+const DOORS_MODULE = 'lift-doors';
 /** How far outside its shaft a door leaf may sit and still belong to it. */
 const DOOR_REACH = 0.5;
 
@@ -28,7 +28,6 @@ const CAB_CLEARANCE = 0.05;
 /** A landing leaf is a few centimetres of sheet; a body needs more to stop against. */
 const LEAF_DEPTH = 0.12;
 const CAB_LIGHT_KEY = 'cyberpunk/light-fixture/mid';
-const CAB_KELVIN = 3800;
 /** How far off a cabin button, and a landing's call button, the crosshair may be. */
 const BUTTON_AIM = 0.06;
 const CALL_AIM = 0.15;
@@ -82,6 +81,8 @@ export class Elevators {
 		this.colliders = colliders;
 		this.shafts = [];
 		this.byBuilding = new Map();
+		/** What every car and landing is lit and drawn with, one set for the run (CabLight.js). */
+		this.cabs = new CabLights();
 
 	}
 
@@ -105,7 +106,7 @@ export class Elevators {
 
 			for ( const lift of floor.core?.elevators ?? [] ) {
 
-				if ( ! shafts.has( lift.id ) ) shafts.set( lift.id, new Shaft( parcelId, lift, this.factory, this.colliders, this.stream, floor.coreAngleDeg ?? 0 ) );
+				if ( ! shafts.has( lift.id ) ) shafts.set( lift.id, new Shaft( parcelId, lift, this.factory, this.colliders, this.stream, floor.coreAngleDeg ?? 0, this.cabs ) );
 
 				shafts.get( lift.id ).serve( floor );
 
@@ -185,6 +186,61 @@ export class Elevators {
 
 	}
 
+	/** The cars one building's shafts have stood, which ride outside any floor's content. */
+	cars( parcelId ) {
+
+		return ( this.byBuilding.get( parcelId ) ?? [] ).map( ( shaft ) => shaft.car ).filter( Boolean );
+
+	}
+
+	/**
+	 * One of everything a lift draws, detached and lit by no car, for a warm-up
+	 * to prepare before any shaft stands: the car's surfaces, a segment of its
+	 * display, a landing's leaves, its call plate and button. Every car and
+	 * landing wears these same materials (CabLight.js), so once this is
+	 * prepared no shaft builds a graph of its own.
+	 *
+	 * @param modules the city module catalog
+	 * @returns a group, or null when the catalog publishes no lift
+	 */
+	specimen( modules ) {
+
+		if ( ! modules?.has?.( CAR_MODULE ) ) return null;
+		const group = new THREE.Group();
+		group.name = 'elevator:specimen';
+
+		for ( const { geometry, material } of modules.surfacesOf( CAR_MODULE ) ) group.add( new THREE.Mesh( geometry, this.cabs.car( material ) ) );
+		group.add( new THREE.Mesh( this.cabs.display.across, this.cabs.display.material ) );
+
+		// What only a landing draws is cut and built for this, as a landing does.
+		const own = [];
+		const leaves = modules.has( DOORS_MODULE ) ? modules.surfacesOf( DOORS_MODULE ) : [];
+		for ( const { geometry, material } of leaves ) {
+
+			const part = takeTriangles( geometry, halfOf( geometry, 1 ) ) ?? takeTriangles( geometry, halfOf( geometry, - 1 ) );
+			if ( part ) own.push( new THREE.Mesh( part, this.cabs.landing( material ) ) );
+
+		}
+		if ( leaves.length ) own.push( ...callPlate( leaves[ 0 ].material, this.factory ).children );
+		for ( const mesh of own ) mesh.userData.specimen = true;
+		if ( own.length ) group.add( ...own );
+
+		return group;
+
+	}
+
+	/** Lets go of the geometry a specimen cut for itself; what every lift shares stays. */
+	discard( specimen ) {
+
+		specimen?.traverse( ( node ) => {
+
+			if ( node.userData.specimen ) node.geometry.dispose();
+
+		} );
+		specimen?.removeFromParent();
+
+	}
+
 	/** Every landing and cab panel in reach, for the crosshair to choose from. */
 	panels( feet, radius ) {
 
@@ -211,7 +267,7 @@ export class Elevators {
 /** One lift: its cab, its landings, and where the cab is right now. */
 class Shaft {
 
-	constructor( parcelId, lift, factory, colliders = null, stream = null, angleDeg = 0 ) {
+	constructor( parcelId, lift, factory, colliders, stream, angleDeg, cabs ) {
 
 		this.parcelId = parcelId;
 		this.stream = stream;
@@ -229,9 +285,10 @@ class Shaft {
 		this.blocked = false;
 		this.pendingCalls = [];
 		this.dwell = 0;
-		this.ownedMaterials = [];
-		this.doorMaterials = new Map();
-		this.ownedGeometry = [];
+		/** The lifts' shared materials and display strokes, which no shaft owns. */
+		this.cabs = cabs;
+		/** The car's lens, which every surface naming this shaft is lit by (CabLight.js). */
+		this.lens = cabLens();
 		this.screen = null;
 		// A core rect is published by its minimum corner; the shaft is its middle.
 		this.rect = lift.rect;
@@ -367,8 +424,6 @@ class Shaft {
 		this.floorVersion ++;
 		for ( const stop of this.stops ) stop.release();
 		this.cab?.removeFromParent();
-		for ( const material of this.ownedMaterials ) material.dispose();
-		for ( const geometry of this.ownedGeometry ) geometry.dispose();
 
 	}
 
@@ -395,23 +450,14 @@ class Shaft {
 		this.panelled = fit.distanceTo( _unit ) < FIT_TOLERANCE;
 		this.carScale.set( ...placement.scale ).multiply( fit );
 
-		// These lights belong to the cab component, so its materials remain lit
-		// between streamed floors without editing the city's renderer or light pool.
-		// An area light shades with LTC tables, which the lower tiers never
-		// install for their rooms, so the car makes sure of them itself.
-		installAreaLights();
-		const ceiling = new THREE.RectAreaLight( kelvinColor( CAB_KELVIN ), 1, LIFT_CAR.lens.width, LIFT_CAR.lens.depth );
-		const bounce = new THREE.HemisphereLight( kelvinColor( CAB_KELVIN ), 0x77716a, 22 );
-		// Kept outside the scene's light list: only these cab materials use them.
-		this.cabLight = ceiling;
-		this.cabBounce = bounce;
-		const localLights = lights( [ ceiling, bounce ] );
+		// The car is lit by its own lens and bounce and by nothing of the city's,
+		// through materials every car shares: the lens it is lit by is the one
+		// its surfaces name (CabLight.js), so no car builds a graph of its own.
 		for ( const { geometry, material } of surfaces ) {
 
-			const own = material.clone();
-			if ( own.isNodeMaterial && ! own.isMeshBasicNodeMaterial ) own.lightsNode = localLights;
-			this.ownedMaterials.push( own );
-			car.add( new THREE.Mesh( geometry, own ) );
+			const mesh = new THREE.Mesh( geometry, this.cabs.car( material ) );
+			mesh[ CAB ] = this;
+			car.add( mesh );
 
 		}
 		this.car = car;
@@ -420,7 +466,7 @@ class Shaft {
 
 		if ( this.panelled ) {
 
-			this.screen = makeDisplay( this.ownedMaterials, this.ownedGeometry );
+			this.screen = makeDisplay( this.cabs.display );
 			this.screen.position.set( ...LIFT_CAR.panel.screen );
 			car.add( this.screen );
 			this.updateDisplay();
@@ -433,34 +479,17 @@ class Shaft {
 
 	}
 
-	landingMaterial( material ) {
-
-		if ( ! this.cabLight || ! material.isNodeMaterial || material.isMeshBasicNodeMaterial ) return material;
-		if ( ! this.doorMaterials.has( material ) ) {
-
-			const own = material.clone();
-			own.lightsNode = lights( [ ...( material.lightsNode?.getLights() ?? [] ), this.cabLight ] );
-			this.doorMaterials.set( material, own );
-			this.ownedMaterials.push( own );
-
-		}
-		return this.doorMaterials.get( material );
-
-	}
-
-	/** The car's lights ride with it: the lens facing down under the ceiling, the bounce above the floor. */
+	/** The lens rides with the car, facing down just under its ceiling, and is dark until the car stands. */
 	updateLighting() {
 
-		if ( ! this.cabLight ) return;
-		this.cabLight.position.copy( this.worldPoint( [ 0, LIFT_CAR.lens.center[ 1 ] - LENS_DROP, 0 ] ) );
-		this.cabLight.width = LIFT_CAR.lens.width * this.carScale.x;
-		this.cabLight.height = LIFT_CAR.lens.depth * this.carScale.z;
-		// The lens's lumens, through `power` once the light has its size.
-		this.cabLight.power = LIFT_CAR.lens.lumens;
-		this.cabLight.quaternion.setFromAxisAngle( _up, this.yaw ).multiply( FACE_DOWN );
-		this.cabLight.updateMatrixWorld( true );
-		this.cabBounce.position.set( this.centre.x, this.at + 2, this.centre.z );
-		this.cabBounce.updateMatrixWorld( true );
+		if ( ! this.car ) return;
+		const lens = this.lens;
+		lens.position.copy( this.worldPoint( [ 0, LIFT_CAR.lens.center[ 1 ] - LENS_DROP, 0 ] ) );
+		lens.width = LIFT_CAR.lens.width * this.carScale.x;
+		lens.height = LIFT_CAR.lens.depth * this.carScale.z;
+		lens.quaternion.setFromAxisAngle( _up, this.yaw ).multiply( FACE_DOWN );
+		// The lens's lumens over its area, which is what three's `power` makes of a rect light.
+		kelvinColor( CAB_KELVIN, lens.color ).multiplyScalar( LIFT_CAR.lens.lumens / ( lens.width * lens.height * Math.PI ) );
 
 	}
 
@@ -772,7 +801,11 @@ class Stop {
 			for ( const { geometry, material } of surfaces ) {
 
 				const part = takeTriangles( geometry, halfOf( geometry, side ) );
-				if ( part ) leaf.add( new THREE.Mesh( part, this.shaft.landingMaterial( material ) ) );
+				if ( ! part ) continue;
+				// Lit by this shaft's lens through the landing material every shaft shares.
+				const mesh = new THREE.Mesh( part, this.shaft.cabs.landing( material ) );
+				mesh[ CAB ] = this.shaft;
+				leaf.add( mesh );
 
 			}
 			if ( leaf.children.length ) this.leaves.push( leaf );
@@ -781,16 +814,9 @@ class Stop {
 
 		// The call plate beside the door: the geometry the prompt points at, a
 		// hand wide on the wall at chest height, past the jamb.
-		const plate = new THREE.Group();
+		const plate = callPlate( surfaces[ 0 ].material, this.shaft.factory );
 		plate.position.set( width / 2 + PLATE_OFF, ( PANEL_HEIGHT - placement.position[ 1 ] ) / placement.scale[ 1 ], PANEL_OUT );
-		plate.add( new THREE.Mesh(
-			new THREE.BoxGeometry( PLATE_WIDTH, PLATE_HEIGHT, PLATE_PROUD * 2 ),
-			surfaces[ 0 ].material
-		) );
-		const button = new THREE.Mesh( new THREE.BoxGeometry( .048, .048, .008 ),
-			this.shaft.factory.variant( CAB_LIGHT_KEY, { emissiveLevel: 10, emissive: kelvinColor( CAB_KELVIN ) } ) );
-		button.position.z = PLATE_PROUD + .004;
-		plate.add( button );
+		const [ , button ] = plate.children;
 		pivot.add( plate );
 
 		for ( const leaf of this.leaves ) pivot.add( leaf );
@@ -907,12 +933,27 @@ function carFit( size ) {
 
 }
 
-/** Small geometric digits stay crisp without canvas textures or external font assets. */
-function makeDisplay( materials, geometry ) {
+/** A landing's call plate with its button, plate first, for the landing to hang beside its door. */
+function callPlate( material, factory ) {
+
+	const plate = new THREE.Group();
+	plate.add( new THREE.Mesh( new THREE.BoxGeometry( PLATE_WIDTH, PLATE_HEIGHT, PLATE_PROUD * 2 ), material ) );
+	const button = new THREE.Mesh( new THREE.BoxGeometry( .048, .048, .008 ),
+		factory.variant( CAB_LIGHT_KEY, { emissiveLevel: 10, emissive: kelvinColor( CAB_KELVIN ) } ) );
+	button.position.z = PLATE_PROUD + .004;
+	plate.add( button );
+
+	return plate;
+
+}
+
+/**
+ * Small geometric digits stay crisp without canvas textures or external font
+ * assets. Every car's display draws the same two strokes in the same material.
+ */
+function makeDisplay( { material, across, upright } ) {
 
 	const group = new THREE.Group();
-	const material = new THREE.MeshBasicMaterial( { color: 0x08202a, toneMapped: false } );
-	materials.push( material );
 	const cells = [];
 	const segments = [ [ 0, .03, true ], [ .015, .015, false ], [ .015, -.015, false ],
 		[ 0, -.03, true ], [ -.015, -.015, false ], [ -.015, .015, false ], [ 0, 0, true ] ];
@@ -922,9 +963,7 @@ function makeDisplay( materials, geometry ) {
 		cell.position.x = ( digit - 1.5 ) * .041;
 		for ( const [ x, y, horizontal ] of segments ) {
 
-			const shape = new THREE.BoxGeometry( horizontal ? .026 : .004, horizontal ? .004 : .026, .003 );
-			geometry.push( shape );
-			const mesh = new THREE.Mesh( shape, material );
+			const mesh = new THREE.Mesh( horizontal ? across : upright, material );
 			mesh.position.set( x, y, 0 );
 			cell.add( mesh );
 

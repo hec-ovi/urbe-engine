@@ -634,6 +634,41 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 	} );
 
+	it( 'hands a building\'s lift cars to the floor\'s warm-up already prepared', async () => {
+
+		// The game's factory hands out one material per variant, the call button's among them.
+		const variants = new Map();
+		const elevators = new Elevators( { ...factory, variant: ( key, tweaks ) => variants.get( key ) ?? variants.set( key, factory.variant( key, tweaks ) ).get( key ) } );
+		const model = await stream( { props: false, elevators } );
+		// The load prepares one of each lift draw; the floor's warm-up then finds every car prepared.
+		const warmup = new Warmup( null, new THREE.Scene(), new THREE.PerspectiveCamera() );
+		await warmup.warmAll( elevators.specimen( model.modules ) );
+		const handed = [];
+		const warmAll = warmup.warmAll.bind( warmup );
+		model.warmup = { warmAll: ( object, options ) => {
+
+			handed.push( { object, left: warmup.programsOf( object ).length } );
+			return warmAll( object, options );
+
+		} };
+		const street = ( z ) => ( { x: 12, y: 0.1, z } );
+
+		await settle( model, street( - 50 ) );
+		const cars = elevators.cars( 'p1' );
+		expect( cars.length ).toBe( elevators.shafts.length );
+		expect( cars.length ).toBeGreaterThan( 0 );
+		const toCars = handed.filter( ( { object } ) => cars.includes( object ) );
+		expect( new Set( toCars.map( ( { object } ) => object ) ).size ).toBe( cars.length );
+		expect( toCars.every( ( { left } ) => left === 0 ) ).toBe( true );
+		// A landing's leaves, plate and button were prepared with the specimen too.
+		const landings = elevators.shafts.flatMap( ( shaft ) => shaft.stops.flatMap( ( stop ) => stop.pivot?.getObjectsByProperty( 'isMesh', true ) ?? [] ) );
+		expect( landings.length ).toBeGreaterThan( 0 );
+		expect( landings.every( ( mesh ) => warmup.programsOf( mesh ).length === 0 ) ).toBe( true );
+
+		model.dispose();
+
+	}, 30000 );
+
 } );
 
 /** The collider ids of the floor bands alone, in order; the lifts keep their own. */

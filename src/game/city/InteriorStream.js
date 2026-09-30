@@ -551,7 +551,16 @@ export class InteriorStream {
 
 		// The floor's own renderables are the lift leaves and its haze; the
 		// module and furniture draws were compiled once for the whole city.
-		if ( this.warmup ) await this.warmup.warmAll( content, { wanted: () => this.#wanted( interior, band ) } );
+		// The cars ride outside any floor's content and wear the lifts' shared
+		// materials, which the load prepares, so for them this finds nothing
+		// left to do unless the load had no lift to prepare.
+		if ( this.warmup ) {
+
+			const wanted = () => this.#wanted( interior, band );
+			await this.warmup.warmAll( content, { wanted } );
+			for ( const car of this.elevators?.cars?.( interior.parcelId ) ?? [] ) if ( wanted() ) await this.warmup.warmAll( car, { wanted } );
+
+		}
 
 		if ( ! this.#wanted( interior, band ) ) {
 

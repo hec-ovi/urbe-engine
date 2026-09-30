@@ -837,6 +837,16 @@ export class GameApp {
 			await this.probe.bakeAsync( spawn.point, { slice, onProgress: ( done, total ) => baking.at( done, total ) } );
 
 		}
+		// Every lift car and landing wears one set of materials whichever shaft
+		// it stands in, so preparing one of each now leaves no car a graph to
+		// build when a tower's lifts first come into view.
+		const lifts = this.elevators.specimen( this.interiorModules );
+		if ( lifts ) {
+
+			await preparing( 'the lifts' )( lifts );
+			this.elevators.discard( lifts );
+
+		}
 		const pinning = progress.pass( 'pinning the programs' );
 		await this.floorWarmup.warmAll( this.scene, { onProgress: ( done, total ) => pinning.at( done, total ) } );
 		await remembering;

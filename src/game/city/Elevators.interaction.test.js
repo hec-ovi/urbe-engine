@@ -69,9 +69,10 @@ describe( 'a lift ridden through its own controls', () => {
 		expect( shaft.at ).toBe( 4.5 );
 		expect( body.feet.y ).toBeCloseTo( 4.525 );
 		expect( shaft.stopAt( 2 ).open ).toBe( 1 );
-		expect( shaft.cabLight.position.y ).toBeCloseTo( 4.5 + LIFT_CAR.lens.center[ 1 ] - 0.015 );
-		// The car's light never joins the scene's lights.
-		expect( shaft.cabLight.parent ).toBeNull();
+		expect( shaft.lens.position.y ).toBeCloseTo( 4.5 + LIFT_CAR.lens.center[ 1 ] - 0.015 );
+		// The car's lights never join the scene's lights.
+		expect( shaft.cab.getObjectsByProperty( 'isLight', true ) ).toHaveLength( 0 );
+		expect( elevators.cabs.bounce.parent ).toBeNull();
 		expect( shaft.cabBoxes().every( ( box ) => Math.abs( box.rotationY + angle * Math.PI / 180 ) < 1e-8 ) ).toBe( true );
 
 	} );
@@ -217,8 +218,8 @@ describe( 'a lift ridden through its own controls', () => {
 
 	it( 'installs the tables its area light shades with, which a tier without room strips never does', () => {
 
-		const { shaft } = fixture();
-		const node = new THREE.RectAreaLightNode( shaft.cabLight );
+		const { elevators } = fixture();
+		const node = elevators.cabs.lens;
 
 		// Setting up the light reads the installed LTC tables; without them it throws.
 		expect( () => node.setupDirectRectArea( { isAvailable: () => false } ) ).not.toThrow();
