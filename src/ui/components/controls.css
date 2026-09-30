@@ -1,5 +1,5 @@
 /* controls studio: live keyboard bindings, a static guide and a searchable reference. */
-.hud .view-controls { width: min(1180px, 96vw); height: min(760px, 94%); color: #e6f1ee; background: linear-gradient(115deg, #08252af5, #051419f5); font-family: system-ui, sans-serif; }
+.hud .view-controls { width: 100%; height: 100%; border: 0; box-shadow: none; color: #e6f1ee; background: linear-gradient(115deg, #08252af5, #051419f5); font-family: system-ui, sans-serif; }
 .controls-mast { display: flex; justify-content: space-between; gap: 20px; padding: 22px 28px 0; color: #73ecdf; font: 9px var(--ui-mono); letter-spacing: .13em; }
 .view-controls .panel-header { padding: 15px 28px 22px; background: none; border-color: #73ecdf35; }
 .view-controls .panel-title { color: #e6f1ee; font: 400 36px system-ui, sans-serif; letter-spacing: -.045em; border: 0; text-transform: none; }
