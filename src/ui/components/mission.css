@@ -7,7 +7,7 @@
 .toast-close { position: absolute; top: 8px; right: 7px; width: 24px; height: 24px; border: 0; background: transparent; color: #a0c0c1; font-size: 19px; cursor: pointer; }
 .toast-close:focus-visible { outline: 2px solid #73ecdf; }
 .toast.is-out { opacity: 0; transform: translateX(-14px); }
-@media (prefers-reduced-motion: no-preference) { .toast.is-in { animation: notice-arrive .24s ease-out both; } }
+@media (prefers-reduced-motion: no-preference) { .toast.is-in:not(.is-out) { animation: notice-arrive .24s ease-out both; } }
 @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
 @keyframes notice-arrive { from { opacity: 0; translate: -14px 0; } to { opacity: 1; translate: 0; } }
 
