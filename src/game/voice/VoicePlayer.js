@@ -266,6 +266,15 @@ class Playback {
 
 	}
 
+	/** Fraction heard on the audio clock; holds during pause or buffering. Duration is estimated until EOF. */
+	progress() {
+		if ( ! this.started || ! this.#player.context ) return 0;
+		const scheduled = this.#scheduled / SAMPLE_RATE;
+		const elapsed = Math.max( 0, scheduled - Math.max( 0, this.#end - this.#player.context.currentTime ) );
+		const duration = this.#ended ? this.#received / SAMPLE_RATE : Math.max( this.#estimate, this.#received / SAMPLE_RATE );
+		return duration > 0 ? Math.min( 1, elapsed / duration ) : 0;
+	}
+
 	/** Every sample has arrived. */
 	end() {
 

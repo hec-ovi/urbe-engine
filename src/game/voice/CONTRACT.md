@@ -1,6 +1,6 @@
 # CONTRACT: NPC voice
 
-Purpose: speaks the lines NPCs say in the chat, in each person's own voice from the [Voice box](../../../../voice/CONTRACT.md), through the page's Web Audio. The text is on screen first; the audio follows.
+Purpose: speaks the lines NPCs say in the chat, in each person's own voice from the [Voice box](../../../../voice/CONTRACT.md), through the page's Web Audio. The transcript holds the whole line; the subtitle reveals it progressively and follows playback while audio is heard.
 
 ## Inputs
 
@@ -12,7 +12,7 @@ Purpose: speaks the lines NPCs say in the chat, in each person's own voice from 
 
 ## Outputs
 
-- Audio on the page's output. `ChatPanel.setSpeaking(line, state)` marks a line `pending` once queued, `playing` once its audio starts and `idle` when its last piece ends or stops.
+- Audio on the page's output. `ChatPanel.setSpeaking(line, state, progress?)` marks a line `pending` once queued, `playing` once its audio starts and `idle` when its last piece ends or stops. Playing supplies a callback returning the fraction of the complete line heard, composed across its pieces. `VoicePlayer.play()` returns a playback whose `progress()` reads that fraction from scheduled samples and the audio clock, excluding lead time and buffering gaps; duration is estimated until the final samples arrive, then uses their measured length.
 - `speaking(conversation, speech)` as each piece's audio starts, and `speaking(conversation, null)` when that piece ends or stops. `speech` is `{ seed, loudness }`, one object per piece: `seed` a 32-bit number of the person and the words (FNV-1a), so a line heard again has the same, and `loudness()` the loudness of what plays now.
 - `VoicePlayer.loudness()`: the root mean square of the last 1024 samples the lines played, read from an AnalyserNode the lines pass before the volume, so the volume setting leaves it alone. 0 in silence and before the audio clock exists, about 0.1 to 0.3 in Maya1 speech. It reads into one buffer kept for the session and allocates nothing, so it is read every frame.
 - `report()`: `{ enabled, status, queued, requested, started, played, bytes, cached, failed, error }`, where `status` is Voice's state as last known: the last capability read, or `loading`, `unreachable` or `degraded` after lines failed (`unknown` before the first line), `played` counts lines that arrived whole and played to their end unsilenced, `failed` counts lines whose request or read failed, a line that broke off included, and the counts cover the session.

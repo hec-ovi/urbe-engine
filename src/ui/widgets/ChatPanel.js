@@ -1,6 +1,7 @@
 import { el } from '../components/dom.js';
 import { icon } from '../components/Icon.js';
 import { keyCap } from '../components/KeyCap.js';
+import { SubtitleReveal } from './SubtitleReveal.js';
 import { ConversationHint } from './ConversationHint.js';
 import { ThinkingOrb } from './ThinkingOrb.js';
 import layout from './chat-layout.json' with { type: 'json' };
@@ -54,7 +55,17 @@ export class ChatPanel {
 		this.journal = this.hint.journal;
 		this.sayWho = el( 'span', { className: 'chat-said-who' } );
 		this.sayText = document.createTextNode( '' );
-		this.said = el( 'p', { className: 'chat-said' }, this.sayWho, this.sayText );
+		this.sayAccessible = el( 'span', { className: 'chat-sr' } );
+		const visible = el( 'span', { className: 'chat-said-visible' }, this.sayText );
+		visible.setAttribute( 'aria-hidden', 'true' );
+		this.said = el( 'p', { className: 'chat-said' }, this.sayWho, visible, this.sayAccessible );
+		this.reveal = new SubtitleReveal( { node: this.sayText, owner: this.said, charactersPerSecond: layout.reveal.charactersPerSecond,
+			onState: active => {
+				this.said.classList.toggle( 'is-revealing', active );
+				if ( active ) { this.said.tabIndex = 0; this.said.setAttribute( 'role', 'button' ); this.said.setAttribute( 'aria-description', layout.reveal.complete ); }
+				else { this.said.removeAttribute( 'tabindex' ); this.said.removeAttribute( 'role' ); this.said.removeAttribute( 'aria-description' ); }
+			} } );
+		this.said.addEventListener( 'click', () => this.reveal.finish() );
 		this.orbSlot = el( 'span', { className: 'chat-orb-slot' } );
 		this.subtitle = el( 'div', { className: 'chat-subtitle' }, this.orbSlot, el( 'div', { className: 'chat-said-block' }, this.said ) );
 		// While the talk window is closed, the subtitle is where the newest line is heard.
@@ -288,7 +299,7 @@ export class ChatPanel {
 	addMessage( { from, name, text, kind } ) {
 		const line = this.#line( from, name, kind );
 		line.lastElementChild.textContent = text;
-		if ( kind !== 'talk' ) this.#say( line );
+		if ( kind !== 'talk' ) this.#say( line, { animate: from === 'npc' } );
 		return line;
 	}
 
@@ -310,7 +321,7 @@ export class ChatPanel {
 			update: ( shown ) => {
 				if ( ! open() ) return;
 				text.data = shown;
-				if ( this.sayLine === line ) this.sayText.data = shown;
+				if ( this.sayLine === line ) { this.reveal.set( shown ); this.sayAccessible.textContent = shown; }
 				if ( from === 'scene' ) this.hint.setScene( shown );
 				this.hint.place();
 				this.#follow();
@@ -334,9 +345,13 @@ export class ChatPanel {
 	 * made, `playing` while it is heard and `idle` without either. A line no
 	 * longer in the transcript is left alone and false is returned.
 	 */
-	setSpeaking( line, state ) {
+	setSpeaking( line, state, progress ) {
 		if ( ! SPEAKING.has( state ) ) throw new TypeError( `unknown speaking state: ${state}` );
 		if ( line?.parentNode !== this.transcript ) return false;
+		if ( this.sayLine === line ) {
+			if ( state === 'playing' ) this.reveal.sync( progress );
+			else if ( state === 'idle' && this.reveal.progress ) this.reveal.finish();
+		}
 		if ( state === 'idle' ) delete line.dataset.speaking;
 		else line.dataset.speaking = state;
 		this.voiced[ state === 'playing' ? 'add' : 'delete' ]( line );
@@ -371,6 +386,7 @@ export class ChatPanel {
 
 	/** Opens a fresh conversation with `{ name, role? }`, the talk window closed, or closes the panel with null. */
 	show( npc ) {
+		this.reveal.cancel();
 		this.hint.reset();
 		this.element.hidden = ! npc;
 		this.setTalkOpen( false, { focus: false } );
@@ -390,7 +406,7 @@ export class ChatPanel {
 	}
 
 	setVisible( visible ) {
-		if ( ! visible ) this.hint.setOpen( false, { focus: false, immediate: true } );
+		if ( ! visible ) { this.reveal.finish(); this.hint.setOpen( false, { focus: false, immediate: true } ); }
 		this.element.hidden = ! visible;
 		this.#activity();
 	}
@@ -489,6 +505,12 @@ export class ChatPanel {
 		if ( ! typing && plain && event.key?.toUpperCase() === layout.talk.key && this.freeAvailable && ! this.talkOpen ) {
 			event.preventDefault();
 			this.setTalkOpen( true );
+			return;
+		}
+		if ( ! typing && plain && this.reveal.active && ( event.target === this.said && [ ' ', 'Enter' ].includes( event.key ) || event.target === this.element && event.key === ' ' ) ) {
+			event.preventDefault();
+			event.stopPropagation();
+			this.reveal.finish();
 			return;
 		}
 		const reply = /^[1-9]$/.test( event.key ) && ! typing && plain ? this.choices.children[ Number( event.key ) - 1 ] : null;
@@ -595,7 +617,7 @@ export class ChatPanel {
 	}
 
 	/** Scenes belong to the hint; the subtitle carries the latest spoken line. */
-	#say( line ) {
+	#say( line, { animate = false } = {} ) {
 		if ( line?.classList.contains( 'is-scene' ) ) {
 			this.hint.setScene( line.lastElementChild.textContent );
 			this.#resay();
@@ -605,7 +627,10 @@ export class ChatPanel {
 		const from = line?.className.match( /\bis-(\w+)/ )?.[ 1 ] ?? '';
 		this.said.dataset.from = from;
 		this.sayWho.textContent = from === 'player' ? layout.from.player : '';
-		this.sayText.data = line?.lastElementChild.textContent ?? '';
+		const text = line?.lastElementChild.textContent ?? '';
+		this.sayAccessible.textContent = text;
+		this.said.dataset.line = text;
+		this.reveal.set( text, { animate } );
 		this.subtitle.hidden = ! line;
 		this.hint.place();
 	}

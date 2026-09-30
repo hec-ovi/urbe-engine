@@ -103,6 +103,19 @@ describe( 'VoicePlayer', () => {
 
 	} );
 
+	it( 'reports the fraction actually heard, excluding scheduling lead and buffering gaps', async () => {
+		const { player, context } = rig();
+		const line = player.play( { estimate: 10 } );
+		line.push( audio( 2 ) ); line.end(); await settled();
+		expect( line.progress() ).toBe( 0 );
+		context().advance( 1.05 );
+		expect( line.progress() ).toBeCloseTo( .5 );
+		// No audio-clock movement means no subtitle progress, including a pause.
+		expect( line.progress() ).toBeCloseTo( .5 );
+		context().advance( 1 ); await settled();
+		expect( line.progress() ).toBeCloseTo( 1 );
+	} );
+
 	it( 'stops at once, silencing what is scheduled and ignoring what arrives after', async () => {
 
 		const { player, context } = rig();

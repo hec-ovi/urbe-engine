@@ -84,7 +84,13 @@ export class NpcVoice {
 
 		const speaker = this.#speaker( conversation );
 		if ( ! speaker || ! SPOKEN.test( text.replace( CUE_TAGS, '' ) ) ) return;
-		for ( const piece of pieces( text ) ) this.#queue( { conversation, line, speaker, text: piece } );
+		const total = text.replace( CUE_TAGS, '' ).length;
+		let offset = 0;
+		for ( const piece of pieces( text ) ) {
+			const length = piece.replace( CUE_TAGS, '' ).length;
+			this.#queue( { conversation, line, speaker, text: piece, offset, length, total } );
+			offset += length;
+		}
 
 	}
 
@@ -197,7 +203,7 @@ export class NpcVoice {
 
 	}
 
-	#queue( { conversation, line, speaker, text } ) {
+	#queue( { conversation, line, speaker, text, offset, length, total } ) {
 
 		const key = keyOf( speaker, text );
 		const utterance = { speaker, text, key, controller: new AbortController(), reached: Promise.withResolvers() };
@@ -208,7 +214,7 @@ export class NpcVoice {
 			onStart: () => {
 
 				this.stats.started ++;
-				this.dialog.setSpeaking( line, 'playing' );
+				this.dialog.setSpeaking( line, 'playing', () => ( offset + length * ( utterance.playback.progress?.() ?? 0 ) ) / total );
 				this.speaking( conversation, { seed: seedOf( key ), loudness: this.#loudness } );
 
 			},

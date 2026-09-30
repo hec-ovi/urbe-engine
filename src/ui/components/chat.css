@@ -154,8 +154,13 @@
 
 .chat-subtitle { display: flex; align-items: center; justify-content: center; gap: 12px; max-width: 720px; }
 .chat-said-block { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
-.chat-said { max-height: min(7.25em, 25vh); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; margin: 0; color: var(--talk-text); font-size: 20px; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
+.chat-said { position: relative; min-height: 1.45em; max-height: min(7.25em, 25vh); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; margin: 0; color: var(--talk-text); font-size: 20px; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
 .chat-said[data-from=player] { color: var(--talk-muted); font-size: 17px; }
+.chat-said.is-revealing { cursor: pointer; }
+.chat-said.is-revealing::before { content: attr(data-line); visibility: hidden; display: block; }
+.chat-said.is-revealing .chat-said-visible { position: absolute; inset: 0; }
+.chat-said.is-revealing .chat-said-visible::after { content: "▍"; color: var(--talk-accent); }
+.chat-said:focus-visible { outline: 1px solid var(--talk-accent); outline-offset: 4px; }
 .chat-said-who:empty { display: none; }
 .chat-said-who::after { content: ': '; }
 .chat-orb-slot { flex: none; line-height: 0; color: var(--talk-accent); }

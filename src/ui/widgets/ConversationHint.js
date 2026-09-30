@@ -94,7 +94,7 @@ export class ConversationHint {
 			// The anchor moves when its speaker's subtitle changes or its column resizes.
 			if ( typeof ResizeObserver !== 'undefined' ) {
 				this.resize ??= new ResizeObserver( () => this.place() );
-				this.resize.observe( this.anchor?.parentElement ?? this.element );
+				this.resize.observe( this.anchor?.parentElement?.parentElement ?? this.element );
 				this.resize.observe( this.body );
 			}
 			if ( focus ) this.close.focus();

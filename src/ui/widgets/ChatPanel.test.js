@@ -129,32 +129,51 @@ describe( 'ChatPanel', () => {
 
 		expect( panel.subtitle.hidden ).toBe( true );
 		panel.addMessage( { from: 'npc', name: 'Ada', text: 'Evening.' } );
-		expect( panel.said.textContent ).toBe( 'Evening.' );
+		expect( panel.sayAccessible.textContent ).toBe( 'Evening.' );
 		expect( panel.said.dataset.from ).toBe( 'npc' );
 		panel.addMessage( { from: 'player', text: 'Where is the quay?' } );
-		expect( panel.said.textContent ).toBe( 'YouWhere is the quay?' );
+		expect( panel.sayAccessible.textContent ).toBe( 'Where is the quay?' );
 		const reply = panel.beginMessage( { from: 'npc', name: 'Ada' } );
 		reply.update( 'Down the' );
-		expect( panel.said.textContent ).toBe( 'Down the' );
+		expect( panel.sayAccessible.textContent ).toBe( 'Down the' );
 		reply.discard();
-		expect( panel.said.textContent ).toBe( 'YouWhere is the quay?' );
+		expect( panel.sayAccessible.textContent ).toBe( 'Where is the quay?' );
 		// Free talk stays in the talk window: the subtitle keeps the talk's own lines.
 		panel.addMessage( { from: 'player', text: 'Nice haircut.', kind: 'talk' } );
 		const free = panel.beginMessage( { from: 'npc', name: 'Ada', kind: 'talk' } );
 		free.update( 'Cut it myself.' );
-		expect( panel.said.textContent ).toBe( 'YouWhere is the quay?' );
+		expect( panel.sayAccessible.textContent ).toBe( 'Where is the quay?' );
 		free.finish();
 		// What was said before stays in the transcript only.
 		panel.recall( [ { from: 'npc', name: 'Ada', text: 'Last week.' } ] );
-		expect( panel.said.textContent ).toBe( 'YouWhere is the quay?' );
+		expect( panel.sayAccessible.textContent ).toBe( 'Where is the quay?' );
 		// Scene context is available in the hint, while speech stays under the badge.
 		panel.addMessage( { from: 'scene', text: 'The office is dark but for one lamp.' } );
 		expect( panel.said.dataset.from ).toBe( 'player' );
 		expect( panel.hint.sceneText ).toBe( 'The office is dark but for one lamp.' );
 		panel.addMessage( { from: 'npc', name: 'Ada', text: 'The report is gone.', kind: 'story' } );
-		expect( panel.said.textContent ).toBe( 'The report is gone.' );
+		expect( panel.sayAccessible.textContent ).toBe( 'The report is gone.' );
 		expect( panel.hint.open ).toBe( false );
 
+	} );
+
+	it( 'types each complete NPC line, keeps its transcript whole and skips by click or Space without choosing', async () => {
+		const user = userEvent.setup();
+		const line = panel.addMessage( { from: 'npc', text: 'The report is gone.', kind: 'story' } );
+		expect( panel.reveal.active ).toBe( true );
+		expect( panel.sayText.data ).toBe( '' );
+		expect( line.lastElementChild.textContent ).toBe( 'The report is gone.' );
+		expect( panel.sayAccessible.textContent ).toBe( 'The report is gone.' );
+		await user.click( panel.said );
+		expect( panel.sayText.data ).toBe( 'The report is gone.' );
+		expect( panel.reveal.active ).toBe( false );
+		panel.addMessage( { from: 'npc', text: 'Find the courier.', kind: 'story' } );
+		panel.said.focus(); await user.keyboard( ' ' );
+		expect( panel.sayText.data ).toBe( 'Find the courier.' );
+		expect( onChoice ).not.toHaveBeenCalled();
+		panel.addMessage( { from: 'npc', text: 'One more thing.' } );
+		panel.show( null );
+		expect( panel.reveal.active ).toBe( false );
 	} );
 
 	it( 'streams a line as it arrives, finishes or discards it, and ignores calls on a line that is done', () => {
@@ -543,6 +562,7 @@ describe( 'ChatPanel', () => {
 
 		panel.setTalkOpen( true );
 		panel.addMessage( { from: 'npc', text: 'Read this reply before deciding.' } );
+		panel.reveal.finish();
 		const reply = within( panel.transcript ).getByText( 'Read this reply before deciding.' );
 		const user = userEvent.setup();
 		await user.click( reply );

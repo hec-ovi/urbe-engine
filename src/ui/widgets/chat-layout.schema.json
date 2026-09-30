@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Conversation panel labels; {name} stands for the person talked to",
   "type": "object",
-  "required": ["log", "from", "story", "hint", "topics", "choices", "actions", "free", "talk", "voice", "activity", "tags", "retry", "leave", "leaveKey"],
+  "required": ["log", "from", "story", "hint", "topics", "choices", "actions", "free", "talk", "voice", "activity", "tags", "reveal", "retry", "leave", "leaveKey"],
   "additionalProperties": false,
   "properties": {
     "log": { "description": "Accessible name of the transcript.", "$ref": "#/$defs/text" },
@@ -136,6 +136,10 @@
       "required": ["story", "earlier"],
       "additionalProperties": false,
       "properties": { "story": { "$ref": "#/$defs/text" }, "earlier": { "description": "A line said before this conversation.", "$ref": "#/$defs/text" } }
+    },
+    "reveal": {
+      "type": "object", "required": ["charactersPerSecond", "complete"], "additionalProperties": false,
+      "properties": { "charactersPerSecond": { "type": "number", "minimum": 1, "maximum": 120 }, "complete": { "$ref": "#/$defs/text" } }
     },
     "retry": { "$ref": "#/$defs/text" },
     "leave": { "$ref": "#/$defs/text" },
