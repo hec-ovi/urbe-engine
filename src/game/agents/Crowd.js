@@ -8,6 +8,7 @@ import { streetBodies } from './StreetBodies.js';
 import { stepPresence } from './Presence.js';
 import { hiddenWalkEntry } from './SpawnVisibility.js';
 import { WalkSurface } from './WalkSurface.js';
+import { BODY_RADIUS } from '../physics/PlayerBody.js';
 
 /** How fast people walk. Everyone has their own pace inside this range. */
 const WALK_SLOWEST = 0.9;
@@ -39,6 +40,16 @@ const PERSON_HEIGHT = 2;
 const STREET_REACH = 25;
 /** How near a blocked footprint a walker looks at their next step: more than anybody walks in a frame. */
 const BLOCK_LOOK = 1;
+/** How far ahead a walker looks for somebody standing in their line: two seconds of walking. */
+const LOOK_AHEAD = 2.5;
+/** How fast a walker steps across the pavement to pass somebody, metres a second. */
+const STEP_ASIDE = 0.8;
+/** Walkers keep this far from the player's middle: the reach the pushback shoves the player out of. */
+const PLAYER_SPACE = PERSON_RADIUS + BODY_RADIUS;
+/** The pace continuity walks the bodies it controls at, metres a second. */
+const CONTINUITY_WALK = 1.4;
+/** A millimetre: a line this near another's space passes them. */
+const CLEAR = 1e-3;
 /** Walk edges at street grade, whose walkers stand on the ground cover under them. */
 const GRADE = new Set( [ 'sidewalk', 'access', 'crossing' ] );
 /** How far feet stand off a level the walk graph carries itself: a station floor, a link or a stair. */
@@ -107,6 +118,10 @@ export class Crowd {
 		this.spawns = 0;
 
 		this.push = new THREE.Vector3();
+		/** The player's feet this frame, whom walkers keep out of as they keep out of each other. */
+		this.player = null;
+		/** Who stands ahead of the walker being moved, reused every frame. */
+		this.ahead = [];
 
 	}
 
@@ -315,6 +330,7 @@ export class Crowd {
 	update( delta, player, clock ) {
 
 		this.delta = delta;
+		this.player = player;
 		this.#settle( delta );
 		this.timer += delta;
 
@@ -428,9 +444,12 @@ export class Crowd {
 
 	/**
 	 * Nobody walks through anybody. Walkers are not physical bodies, so a
-	 * walker inside somebody else's space gives way itself: across the pavement
-	 * as far as its width allows, and along it for the rest, at a pace that
-	 * reads as stepping aside rather than sliding.
+	 * walker inside somebody else's space, or the player's, gives way itself:
+	 * across the pavement as far as its width allows, and along it for the
+	 * rest, at a pace that reads as stepping aside rather than sliding.
+	 * Somebody straight behind or in front gives no side to step to, so the
+	 * walker takes the side of the pavement with more room, their right when
+	 * both have the same.
 	 */
 	#separate( delta ) {
 
@@ -442,24 +461,35 @@ export class Crowd {
 
 			let along = 0;
 			let across = 0;
+			const away = ( position, space, distance ) => {
+
+				const room = ( space - distance ) / 2;
+				const [ x, z ] = distance > 1e-4
+					? [ ( member.position.x - position.x ) / distance, ( member.position.z - position.z ) / distance ]
+					: [ Math.cos( member.heading ), - Math.sin( member.heading ) ];
+				const aside = x * Math.cos( member.heading ) - z * Math.sin( member.heading );
+
+				along += ( x * Math.sin( member.heading ) + z * Math.cos( member.heading ) ) * room;
+				across += ( Math.abs( aside ) < 0.2 ? ( member.offset < 0 ? 1 : - 1 ) * Math.max( 0.2, Math.abs( aside ) ) : aside ) * room;
+
+			};
 
 			this.street.forEachNear( member.position, PERSONAL_SPACE, ( other, distance ) => {
 
-				if ( other === member ) return;
-
-				const room = ( PERSONAL_SPACE - distance ) / 2;
-				const away = distance > 1e-4
-					? [ ( member.position.x - other.position.x ) / distance, ( member.position.z - other.position.z ) / distance ]
-					: [ Math.cos( member.heading ), - Math.sin( member.heading ) ];
-
-				along += ( away[ 0 ] * Math.sin( member.heading ) + away[ 1 ] * Math.cos( member.heading ) ) * room;
-				across += ( away[ 0 ] * Math.cos( member.heading ) - away[ 1 ] * Math.sin( member.heading ) ) * room;
+				if ( other !== member && outside( other ) && Math.abs( other.position.y - member.position.y ) <= PERSON_HEIGHT ) away( other.position, PERSONAL_SPACE, distance );
 
 			} );
+			const player = this.player;
+			if ( player && Math.abs( player.y - member.position.y ) <= PERSON_HEIGHT ) {
+
+				const distance = Math.hypot( member.position.x - player.x, member.position.z - player.z );
+				if ( distance < PLAYER_SPACE ) away( player, PLAYER_SPACE, distance );
+
+			}
 
 			if ( ! along && ! across ) continue;
 
-			const side = laneRoom( member.edge );
+			const side = laneReach( member.edge );
 			const give = ( amount ) => THREE.MathUtils.clamp( amount, - step, step );
 
 			member.distance = THREE.MathUtils.clamp( member.distance + give( along ), 0, member.edge.length );
@@ -1380,11 +1410,19 @@ export class Crowd {
 			} else {
 
 				member.waiting = false;
-				member.clip = CLIP.WALK;
-				const distance = member.distance + member.speed * delta;
+				const side = member.offset;
+				const way = this.#steer( member, delta );
+				const step = Math.min( member.speed * delta, way );
+				const distance = member.distance + step;
+				// Held up behind somebody with nowhere to step, a walker stands.
+				member.clip = delta > 0 && step < 1e-4 && member.offset === side ? CLIP.IDLE : CLIP.WALK;
 
-				if ( this.#walksInto( member, distance, blocked ) ) this.#turnBack( member );
-				else {
+				if ( way < 0 || this.#walksInto( member, distance, blocked ) ) {
+
+					member.clip = CLIP.WALK;
+					this.#turnBack( member );
+
+				} else {
 
 					member.distance = distance;
 					if ( member.distance >= member.edge.length ) this.#step( member, daySeconds );
@@ -1399,6 +1437,80 @@ export class Crowd {
 
 		const duration = this.assets.durations[ member.clip ] || 1;
 		member.frame = ( member.frame + ( delta / duration ) * FRAMES ) % FRAMES;
+
+	}
+
+	/**
+	 * Keeps a walker out of whoever stands in their line ahead: another body,
+	 * walking or standing, or the player. Within LOOK_AHEAD they step across
+	 * the pavement to the nearest line that passes everybody there, keeping to
+	 * their own right when somebody comes the other way, and walk on no nearer
+	 * than arm's length while they are still in the way. Somebody going the same
+	 * way at least as fast is not in the way.
+	 *
+	 * @returns how far the walker may walk on this frame, or -1 when somebody
+	 * standing fills the whole pavement in front of them and they turn back
+	 */
+	#steer( member, delta ) {
+
+		const ahead = this.#inLine( member, member );
+		const { first, target } = aside( member, ahead );
+		if ( ! first ) return Infinity;
+		if ( target !== null ) member.offset = stepToward( member.offset, target, STEP_ASIDE * delta, laneReach( member.edge ) );
+		if ( Math.abs( member.offset - first.line ) >= first.space - CLEAR ) return Infinity;
+		const way = Math.max( 0, first.ahead - first.space );
+		if ( target === null && first.standing && way <= BLOCK_LOOK / 4 ) return - 1;
+		return way;
+
+	}
+
+	/**
+	 * Everybody alongside a body or ahead of it within LOOK_AHEAD on the
+	 * stretch of pavement it could step across to, besides `self`: `{ ahead,
+	 * line, space, standing, oncoming }`, `ahead` how far in front of it they
+	 * stand (negative alongside), `line` the offset across the pavement their
+	 * middle stands at and `space` how far off it the body keeps. The array is
+	 * reused.
+	 *
+	 * @param body `{ position, heading, offset, edge, speed }`
+	 */
+	#inLine( body, self ) {
+
+		const found = this.ahead;
+		found.length = 0;
+		const { x, y, z } = body.position;
+		const forward = [ Math.sin( body.heading ), Math.cos( body.heading ) ];
+		const across = [ Math.cos( body.heading ), - Math.sin( body.heading ) ];
+		const reach = laneReach( body.edge ) + PLAYER_SPACE;
+		const look = ( position, space, standing, oncoming ) => {
+
+			if ( Math.abs( position.y - y ) > PERSON_HEIGHT ) return;
+			const dx = position.x - x;
+			const dz = position.z - z;
+			const along = dx * forward[ 0 ] + dz * forward[ 1 ];
+			// Somebody alongside is nobody to walk into, but nobody to step across either.
+			if ( along <= - space || along > LOOK_AHEAD ) return;
+			const line = body.offset + dx * across[ 0 ] + dz * across[ 1 ];
+			if ( Math.abs( line ) >= reach ) return;
+			found.push( { ahead: along, line, space, standing, oncoming } );
+
+		};
+
+		this.street.forEachNear( body.position, LOOK_AHEAD, ( other ) => {
+
+			if ( other === self || ! outside( other ) ) return;
+			// Continuity moves the bodies it controls, which the crowd holds frozen.
+			const moving = other.continuity && ! other.fallen
+				? other.clip === CLIP.WALK || other.clip === CLIP.RUN
+				: ! ( other.stationary || other.frozen || other.fallen || other.waiting || ! other.edge );
+			const facing = Math.cos( other.heading - body.heading );
+			// Somebody walking the same way at least as fast only ever gets further ahead.
+			if ( moving && facing > 0 && ( other.continuity ? CONTINUITY_WALK : other.speed ?? 0 ) >= body.speed ) return;
+			look( other.position, PERSONAL_SPACE, ! moving && ! other.waiting, moving && facing < 0 );
+
+		} );
+		if ( this.player ) look( this.player, PLAYER_SPACE, true, false );
+		return found;
 
 	}
 
@@ -1622,6 +1734,64 @@ function covers( { center, width, depth, yawRadians }, point, margin ) {
 function laneRoom( edge ) {
 
 	return edge.width > 0 ? Math.max( 0, Math.min( LANE_HALF, edge.width / 2 - PERSON_RADIUS ) ) : 0;
+
+}
+
+/** How far off the middle of a pavement a walker may step to pass somebody:
+ *  out to its edge, and half an arm's length where the stretch has no width. */
+function laneReach( edge ) {
+
+	return Math.max( edge.width > 0 ? edge.width / 2 - PERSON_RADIUS : 0, PERSONAL_SPACE / 2 );
+
+}
+
+/**
+ * Who a body walks into first, of `ahead` (#inLine), and the offset across its
+ * pavement that passes everybody there and alongside: of the lines just clear
+ * of each of them that pass all of them, their own right-most when the first
+ * comes the other way, else the nearest; as far right as the pavement allows
+ * when nothing passes somebody coming the other way and that clears whoever is
+ * alongside; null otherwise. `first` is null when nobody ahead stands in the
+ * body's line.
+ */
+function aside( body, ahead ) {
+
+	let first = null;
+	for ( const other of ahead ) {
+
+		if ( other.ahead > 0 && Math.abs( body.offset - other.line ) < other.space - CLEAR && ( ! first || other.ahead < first.ahead ) ) first = other;
+
+	}
+	if ( ! first ) return { first, target: null };
+	const reach = laneReach( body.edge );
+	const clears = ( offset ) => ahead.every( ( other ) => Math.abs( offset - other.line ) >= other.space - CLEAR );
+	const gap = ( offset ) => Math.abs( offset - body.offset );
+	let target = null;
+	for ( const other of ahead ) for ( const side of [ other.line - other.space, other.line + other.space ] ) {
+
+		if ( Math.abs( side ) > reach + CLEAR || ! clears( side ) ) continue;
+		const better = target === null || ( first.oncoming
+			? side < target
+			: gap( side ) < gap( target ) - 1e-6 || Math.abs( gap( side ) - gap( target ) ) <= 1e-6 && side < target );
+		if ( better ) target = side;
+
+	}
+	if ( target === null && first.oncoming && clears( - reach ) ) target = - reach;
+	return { first, target };
+
+}
+
+/** Whether somebody is out on the street, not behind the wall of the building they stand in. */
+function outside( member ) {
+
+	return Boolean( member.edge ) || ! member.parcelId;
+
+}
+
+/** `from` moved toward `to` by at most `step`, inside ±`reach`. */
+function stepToward( from, to, step, reach ) {
+
+	return THREE.MathUtils.clamp( from + THREE.MathUtils.clamp( to - from, - step, step ), - reach, reach );
 
 }
 

@@ -1067,3 +1067,132 @@ describe( 'Crowd visibility admission', () => {
 		expect( [ ...crowd.members.values() ][ 0 ].position.toArray() ).toEqual( [ 0, 0, 2 ] );
 	} );
 } );
+
+/**
+ * A person the player talks to stops where they stood on the pavement, and
+ * the player stands there with them. Everybody else walks around them both,
+ * as they walk around each other, rather than into them or to a stop behind them.
+ */
+describe( 'Crowd around somebody in the way', () => {
+
+	const clock = { timeMin: 600, daySeconds: 36000 };
+	/** Nowhere near the pavement. */
+	const AWAY = new THREE.Vector3( 20, 0, 40 );
+	const talker = { npcId: 'talker', name: { given: 'Ada', family: 'Reis' }, type: 'barista', gender: 'female', appearanceSeed: 7 };
+	const walking = ( crowdId, progress, direction ) => ( {
+		crowdId, type: 'commuter', activity: 'commuting', place: { kind: 'edge', id: 'side' }, progress, direction
+	} );
+	const onSidewalk = ( agents, width = 2 ) => new Crowd( {
+		assets: testAssets(), routes: sidewalk( width ), signals: { green: () => true },
+		sim: { crowd: () => ( { agents } ), getNPC: () => talker }, places: new Map(), capacity: agents.length + 2,
+		street: new StreetBodies()
+	} );
+	/** Somebody a conversation holds where they stand. */
+	const standing = ( crowd, position, player ) => crowd.syncActor( {
+		...persistentActor( talker ), mode: 'conversation', animation: 'idle', heading: - Math.PI / 2,
+		place: { kind: 'edge', id: 'side' }, position
+	}, player );
+	/** Frames of 1/60 s; each is handed the frame number, and the longest stretch `walker` did not get on. */
+	const play = ( crowd, player, frames, each = () => {} ) => {
+
+		for ( let frame = 0; frame < frames; frame ++ ) {
+
+			crowd.update( 1 / 60, player, clock );
+			each( frame );
+
+		}
+
+	};
+
+	it( 'steps a walker around somebody talking in their line, without coming close or stopping behind them', () => {
+
+		const crowd = onSidewalk( [ walking( 'passer', 0.2, 1 ) ] );
+		crowd.update( 0, AWAY, clock );
+		const [ passer ] = crowd.members.values();
+		const person = standing( crowd, [ passer.position.x + 4, 0, passer.position.z ], AWAY );
+		let closest = Infinity;
+		let still = 0;
+		let longest = 0;
+		let last = passer.position.x;
+		play( crowd, AWAY, 600, () => {
+
+			closest = Math.min( closest, gap( passer, person ) );
+			still = passer.position.x - last < 1e-4 ? still + 1 : 0;
+			longest = Math.max( longest, still );
+			last = passer.position.x;
+
+		} );
+
+		expect( passer.position.x ).toBeGreaterThan( person.position.x + 2 );
+		expect( closest ).toBeGreaterThanOrEqual( 0.6 - 1e-3 );
+		// Stepping aside can hold them a moment; waiting behind somebody cannot.
+		expect( longest ).toBeLessThan( 60 );
+
+	} );
+
+	it( 'passes two walkers meeting in one line, each keeping to their right', () => {
+
+		const crowd = onSidewalk( [ walking( 'east', 0.3, 1 ), walking( 'west', 0.7, - 1 ) ] );
+		crowd.update( 0, AWAY, clock );
+		const east = [ ...crowd.members.values() ].find( ( member ) => member.crowdId === 'east' );
+		const west = [ ...crowd.members.values() ].find( ( member ) => member.crowdId === 'west' );
+		east.offset = 0;
+		west.offset = 0;
+		let closest = Infinity;
+		play( crowd, AWAY, 720, () => { closest = Math.min( closest, gap( east, west ) ); } );
+
+		expect( east.position.x ).toBeGreaterThan( west.position.x + 2 );
+		expect( closest ).toBeGreaterThanOrEqual( 0.6 - 1e-3 );
+		// Right of their own way: east walks toward +x, so their right is +z; west's is -z.
+		expect( east.offset ).toBeLessThan( 0 );
+		expect( west.offset ).toBeLessThan( 0 );
+
+	} );
+
+	it( 'keeps walkers out of the player standing in their line, so the player is never shoved', () => {
+
+		const crowd = onSidewalk( [ walking( 'passer', 0.2, 1 ) ] );
+		crowd.update( 0, AWAY, clock );
+		const [ passer ] = crowd.members.values();
+		const player = new THREE.Vector3( passer.position.x + 4, passer.position.y, 0 );
+		let closest = Infinity;
+		let shoved = 0;
+		play( crowd, player, 600, () => {
+
+			closest = Math.min( closest, Math.hypot( passer.position.x - player.x, passer.position.z - player.z ) );
+			shoved = Math.max( shoved, crowd.pushback( player, 0.32 ).length() );
+
+		} );
+
+		expect( passer.position.x ).toBeGreaterThan( player.x + 2 );
+		expect( closest ).toBeGreaterThanOrEqual( 0.66 - 1e-3 );
+		expect( shoved ).toBeLessThan( 1e-3 );
+
+	} );
+
+	it( 'turns a walker back before somebody standing where the stretch leaves no room to pass', () => {
+
+		const crowd = onSidewalk( [ walking( 'passer', 0.2, 1 ) ], 0 );
+		crowd.update( 0, AWAY, clock );
+		const [ passer ] = crowd.members.values();
+		const person = standing( crowd, [ passer.position.x + 4, 0, passer.position.z ], AWAY );
+		let closest = Infinity;
+		play( crowd, AWAY, 300, () => { closest = Math.min( closest, gap( passer, person ) ); } );
+
+		expect( passer.direction ).toBe( - 1 );
+		expect( passer.position.x ).toBeLessThan( person.position.x - 1 );
+		expect( closest ).toBeGreaterThanOrEqual( 0.6 );
+
+	} );
+
+} );
+
+/** One straight 40 m sidewalk along +x at z = 0, `width` metres wide. */
+function sidewalk( width ) {
+
+	return new WalkRoutes( { walk: {
+		nodes: [ { id: 's0', x: 0, y: 0, z: 0, kind: 'sidewalk' }, { id: 's1', x: 40, y: 0, z: 0, kind: 'sidewalk' } ],
+		edges: [ { id: 'side', from: 's0', to: 's1', kind: 'sidewalk', width, path3: [ [ 0, 0, 0 ], [ 40, 0, 0 ] ] } ]
+	} } );
+
+}
