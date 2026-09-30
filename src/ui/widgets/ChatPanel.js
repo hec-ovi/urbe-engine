@@ -522,11 +522,11 @@ export class ChatPanel {
 		( this.trayList.querySelector( 'button' ) ?? this.tray.querySelector( '.chat-tray-back' ) ).focus();
 	}
 
-	/** Where the talk window stands: kept where the player left it, else at the left, and always inside the screen. */
+	/** Where the talk window stands: kept where the player left it, else in the top left corner, and always inside the screen. */
 	#place( x = this.x, y = this.y ) {
 		const room = this.element.getBoundingClientRect(), box = this.window.getBoundingClientRect();
 		x ??= 24;
-		y ??= Math.max( 16, ( room.height - box.height ) / 2 - room.height * 0.08 );
+		y ??= 24;
 		this.x = Math.round( Math.max( 8, Math.min( x, room.width - box.width - 8 ) ) ) || 0;
 		this.y = Math.round( Math.max( 8, Math.min( y, room.height - box.height - 8 ) ) ) || 0;
 		this.window.style.transform = `translate3d(${this.x}px,${this.y}px,0)`;
