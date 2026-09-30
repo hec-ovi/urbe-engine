@@ -3,7 +3,7 @@ import { Vector3 } from 'three/webgpu';
 import { FIXTURE_BLUEPRINT, FIXTURE_INTERIORS, restoreSimulation } from '../../../../simulation/dist/index.js';
 import { SimBridge } from '../sim/SimBridge.js';
 import { CLIP, clipForNpcAnimation } from './CharacterAssets.js';
-import { NpcContinuity, selectNpcAnimation } from './NpcContinuity.js';
+import { LINGER_SECONDS, NpcContinuity, selectNpcAnimation } from './NpcContinuity.js';
 import { NpcContinuityError } from './NpcContinuityError.js';
 import { WalkRoutes } from './WalkRoutes.js';
 import { GameClock } from '../time/GameClock.js';
@@ -376,6 +376,93 @@ describe( 'NPC continuity integration', () => {
 		} ).mode ).toBe( 'conversation' );
 		expect( escort.controller.endConversation( { timeMin: MON_9 + 1 } ).mode ).toBe( 'following' );
 		expect( escort.bridge.behaviorAt( walker.npcId, MON_9 + 2 ).interrupted ).toBe( true );
+
+	} );
+
+	it( 'leaves a person the talk is done with standing turned to the player for a moment, through a save, before walking off', () => {
+
+		const { bridge, controller } = setup();
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const visible = [ 560, 1, 250 ];
+		const talk = { npcId: npc.npcId, timeMin: MON_9, position: visible, heading: 0, place: { kind: 'edge', id: 'walk-p_cafe' }, seated: false };
+		controller.beginConversation( talk );
+		const closedAt = MON_9 + 1;
+		expect( controller.endConversation( { timeMin: closedAt, linger: LINGER_SECONDS } ) ).toMatchObject( {
+			position: visible, mode: 'resuming', animation: 'idle'
+		} );
+		expect( bridge.behaviorAt( npc.npcId, closedAt ).interrupted ).toBe( false );
+		expect( controller.serialize().returns ).toEqual( [ expect.objectContaining( { npcId: npc.npcId, lingerUntilMin: closedAt + LINGER_SECONDS / 60 } ) ] );
+
+		// The player steps round them: they stand where the talk left them and keep facing the player.
+		const at = ( second ) => closedAt + second / 60;
+		let actor;
+		for ( const [ second, player ] of [ [ 1, [ 562, 1, 250 ] ], [ 2, [ 560, 1, 252 ] ], [ LINGER_SECONDS - 1, [ 558, 1, 250 ] ] ] ) {
+
+			actor = walkOn( controller, npc.npcId, { timeMin: at( second ), deltaSeconds: 1, playerPosition: player } );
+			expect( actor ).toMatchObject( { position: visible, mode: 'resuming', animation: 'idle' } );
+			expect( actor.heading ).toBeCloseTo( Math.atan2( player[ 0 ] - visible[ 0 ], player[ 2 ] - visible[ 2 ] ) );
+
+		}
+		const save = controller.serialize();
+		const restored = setup( restoreSimulation( simulationInput(), bridge.simulation.serialize() ) ).controller;
+		restored.restore( save );
+		expect( walkOn( restored, npc.npcId, { timeMin: at( LINGER_SECONDS - 0.5 ), deltaSeconds: 0.5, playerPosition: [ 558, 1, 250 ] } ) )
+			.toMatchObject( { position: visible, mode: 'resuming', animation: 'idle' } );
+
+		// Then they walk back into their day, the rest of the way as any walk home.
+		for ( const each of [ controller, restored ] ) {
+
+			actor = walkOn( each, npc.npcId, { timeMin: at( LINGER_SECONDS + 1 ), deltaSeconds: 1, playerPosition: [ 558, 1, 250 ] } );
+			expect( actor ).toMatchObject( { mode: 'resuming', animation: 'walk' } );
+			expect( separation( actor.position, visible ) ).toBeCloseTo( 1.4, 1 );
+			expect( each.serialize().returns[ 0 ].lingerUntilMin ).toBeUndefined();
+			for ( let step = 0; step < 300 && actor.mode === 'resuming'; step ++ ) {
+
+				actor = walkOn( each, npc.npcId, { timeMin: at( LINGER_SECONDS + 1 ), deltaSeconds: 1, playerPosition: [ 558, 1, 250 ] } );
+
+			}
+			expect( actor ).toMatchObject( { mode: 'schedule', place: { kind: 'parcel', id: 'p_cafe' } } );
+
+		}
+
+		// Talked to again while they stand there, the new talk has them where they are.
+		controller.beginConversation( talk );
+		controller.endConversation( { timeMin: closedAt, linger: LINGER_SECONDS } );
+		expect( controller.beginConversation( { ...talk, timeMin: at( 1 ) } ) ).toMatchObject( { position: visible, mode: 'conversation' } );
+		expect( walkingHome( controller ) ).toEqual( [] );
+		// Seated, they stay in their seat facing as they sat.
+		expect( controller.endConversation( { timeMin: at( 2 ), linger: LINGER_SECONDS } ) ).toMatchObject( { mode: 'resuming', animation: 'idle' } );
+		controller.beginConversation( { ...talk, timeMin: at( 3 ), heading: 0.5, seated: true } );
+		controller.endConversation( { timeMin: at( 3 ), linger: LINGER_SECONDS } );
+		expect( walkOn( controller, npc.npcId, { timeMin: at( 4 ), deltaSeconds: 1, playerPosition: [ 562, 1, 250 ] } ) )
+			.toMatchObject( { position: visible, heading: 0.5, mode: 'resuming', animation: 'sit' } );
+
+	} );
+
+	it( 'lets a companion and a held cast go after a moment turned to the player when asked to linger', () => {
+
+		const player = [ 562, 1, 250 ];
+		for ( const letGo of [ 'stopFollow', 'releaseHold' ] ) {
+
+			const { bridge, controller } = setup();
+			const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+			const at = [ 560, 1, 250 ];
+			if ( letGo === 'stopFollow' ) {
+
+				// A few steps out of the cafe behind the player.
+				controller.startFollow( { npcId: npc.npcId, timeMin: MON_9, playerPosition: player } );
+				for ( let second = 0; second < 5; second ++ ) controller.updateFollow( { timeMin: MON_9, deltaSeconds: 1, playerPosition: player } );
+
+			} else controller.hold( { npcId: npc.npcId, timeMin: MON_9, place: { kind: 'edge', id: 'walk-p_cafe' }, position: at, heading: 0 } );
+			const from = controller.actor( npc.npcId ).position;
+			const request = { timeMin: MON_9 + 1, linger: LINGER_SECONDS, ...( letGo === 'releaseHold' ? { npcId: npc.npcId } : {} ) };
+			expect( controller[ letGo ]( request ) ).toMatchObject( { mode: 'resuming', animation: 'idle', position: from } );
+			expect( walkOn( controller, npc.npcId, { timeMin: MON_9 + 1 + ( LINGER_SECONDS - 1 ) / 60, deltaSeconds: 1, playerPosition: player } ) )
+				.toMatchObject( { mode: 'resuming', animation: 'idle', position: from } );
+			expect( walkOn( controller, npc.npcId, { timeMin: MON_9 + 1 + ( LINGER_SECONDS + 1 ) / 60, deltaSeconds: 1, playerPosition: player } ) )
+				.toMatchObject( { mode: 'resuming', animation: 'walk' } );
+
+		}
 
 	} );
 

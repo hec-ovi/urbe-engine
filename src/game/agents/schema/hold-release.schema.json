@@ -6,6 +6,7 @@
   "required": ["npcId", "timeMin"],
   "properties": {
     "npcId": { "type": "string", "minLength": 1 },
-    "timeMin": { "type": "number", "minimum": 0 }
+    "timeMin": { "type": "number", "minimum": 0 },
+    "linger": { "description": "Seconds the body first stands where it is, turned to the player, before walking back into its day.", "type": "number", "minimum": 0, "maximum": 60 }
   }
 }

@@ -25,6 +25,12 @@ const RETURN_REPLAN = 2;
 const DOOR_REACH = 12;
 /** A follower that found no way to the player inside tries again once the player has moved this far. */
 const INDOOR_RETRY = 2;
+/**
+ * How long, in seconds, a person the player has just been with stands where
+ * they were let go, turned to the player, before walking back into their day:
+ * the `linger` hosts pass when a talk closes or a companion is let go.
+ */
+export const LINGER_SECONDS = 5;
 
 /**
  * Persistent materialization and control of actual simulation NPC ids: one
@@ -332,7 +338,10 @@ export class NpcContinuity {
 
 	}
 
-	/** Lets the companion go: the simulation resumes and it walks back into its day from where it stands. */
+	/**
+	 * Lets the companion go: the simulation resumes and it walks back into its
+	 * day from where it stands, after `linger` seconds turned to the player.
+	 */
 	stopFollow( request ) {
 
 		this.boundary.input( 'follow-stop', request );
@@ -341,7 +350,7 @@ export class NpcContinuity {
 		const actor = this.actors.get( this.follow.npcId );
 		this.#resume( actor.npcId, request.timeMin );
 		this.follow = null;
-		return this.#walkHome( actor, request.timeMin );
+		return this.#walkHome( actor, request.timeMin, request.linger );
 
 	}
 
@@ -377,7 +386,7 @@ export class NpcContinuity {
 
 	}
 
-	/** Lets a held identity go: it walks from where it stands back into its day. */
+	/** Lets a held identity go: it walks from where it stands back into its day, after `linger` seconds turned to the player. */
 	releaseHold( request ) {
 
 		this.boundary.input( 'hold-release', request );
@@ -389,7 +398,7 @@ export class NpcContinuity {
 		const actor = this.actors.get( request.npcId );
 		this.holds.delete( request.npcId );
 		this.#resume( actor.npcId, request.timeMin );
-		return this.#startResume( actor, request.timeMin, { keepPost: true } );
+		return this.#startResume( actor, request.timeMin, { keepPost: true, linger: request.linger } );
 
 	}
 
@@ -447,6 +456,7 @@ export class NpcContinuity {
 	 * Closes the conversation. A companion goes back to following or leading;
 	 * anybody else walks back into their day on their own, leaving the
 	 * companion as it was. @param request.hold keeps the body where it stands.
+	 * @param request.linger seconds the body first stands there turned to the player
 	 */
 	endConversation( request ) {
 
@@ -471,7 +481,7 @@ export class NpcContinuity {
 
 		}
 		this.#resume( actor.npcId, request.timeMin );
-		return this.#startResume( actor, request.timeMin, { keepPost: true } );
+		return this.#startResume( actor, request.timeMin, { keepPost: true, linger: request.linger } );
 
 	}
 
@@ -699,6 +709,12 @@ export class NpcContinuity {
 	#advanceReturn( actor, request ) {
 
 		const walk = this.returns.get( actor.npcId );
+		if ( walk.lingerUntilMin !== undefined ) {
+
+			if ( request.timeMin < walk.lingerUntilMin ) return this.#linger( actor, request.playerPosition );
+			delete walk.lingerUntilMin;
+
+		}
 		let scheduled;
 		try { scheduled = this.#resumeTarget( actor, request.timeMin ); }
 		catch { return this.#dropReturn( actor ); }
@@ -716,6 +732,16 @@ export class NpcContinuity {
 			this.#finishResume( actor, scheduled );
 
 		}
+
+	}
+
+	/** A body let go beside the player stands where it is, turned to them unless it sits. */
+	#linger( actor, playerPosition ) {
+
+		actor.mode = 'resuming';
+		if ( actor.animation === 'sit' ) return;
+		actor.animation = 'idle';
+		actor.heading = headingTo( actor.position, playerPosition, actor.heading );
 
 	}
 
@@ -842,9 +868,9 @@ export class NpcContinuity {
 	}
 
 	/** Starts the walk back into the day, or leaves the body released where it stands when it has none. */
-	#walkHome( actor, timeMin ) {
+	#walkHome( actor, timeMin, linger = 0 ) {
 
-		try { return this.#startResume( actor, timeMin ); }
+		try { return this.#startResume( actor, timeMin, { linger } ); }
 		catch {
 
 			actor.mode = 'released';
@@ -867,9 +893,12 @@ export class NpcContinuity {
 	/**
 	 * Hands a released body back to its schedule: straight onto its post, or
 	 * as a walk home of its own that no companion or other walk waits on.
+	 * With `linger` the body first stands where it is for that many seconds,
+	 * turned to the player, as a walk home that has not set off yet.
 	 * @param options.keepPost keeps a parcel body at its post when no way home exists
+	 * @param options.linger seconds to stand before walking
 	 */
-	#startResume( actor, timeMin, { keepPost = false } = {} ) {
+	#startResume( actor, timeMin, { keepPost = false, linger = 0 } = {} ) {
 
 		const keep = keepPost && actor.place.kind === 'parcel';
 		let scheduled;
@@ -880,32 +909,28 @@ export class NpcContinuity {
 			throw error;
 
 		}
-		if ( distance( actor.position, scheduled.position ) <= ARRIVAL_DISTANCE ) {
-
-			// A worker or seated visitor let go at their post, or a cast member
-			// posted where their rota has them, is already back in their day:
-			// a way over the street graph would lead out through a wall and back.
-			this.#finishResume( actor, scheduled );
-			return this.#actorOut( actor );
-
-		}
-		const route = this.#plan( null, actor, scheduledGoal( scheduled ), RETURN_REPLAN );
+		// A worker or seated visitor let go at their post, or a cast member
+		// posted where their rota has them, is already back in their day: a
+		// way over the street graph would lead out through a wall and back.
+		const route = distance( actor.position, scheduled.position ) <= ARRIVAL_DISTANCE
+			? restingRoute( actor.position, scheduled.position )
+			: this.#plan( null, actor, scheduledGoal( scheduled ), RETURN_REPLAN );
 		if ( ! route ) {
 
 			if ( keep ) return this.#keepUnroutablePost( actor, timeMin );
 			throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${actor.npcId} cannot resume its schedule` );
 
 		}
-		if ( route.distanceMeters <= ARRIVAL_DISTANCE ) {
+		if ( ! ( linger > 0 ) && route.distanceMeters <= ARRIVAL_DISTANCE ) {
 
 			this.#finishResume( actor, scheduled );
 			return this.#actorOut( actor );
 
 		}
 		actor.mode = 'resuming';
-		actor.animation = 'walk';
+		actor.animation = ! ( linger > 0 ) ? 'walk' : actor.animation === 'sit' ? 'sit' : 'idle';
 		actor.schedule = scheduled.schedule;
-		this.returns.set( actor.npcId, { npcId: actor.npcId, route } );
+		this.returns.set( actor.npcId, { npcId: actor.npcId, route, ...( linger > 0 ? { lingerUntilMin: timeMin + linger / 60 } : {} ) } );
 		return this.#actorOut( actor );
 
 	}

@@ -4,5 +4,8 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["timeMin"],
-  "properties": { "timeMin": { "type": "number", "minimum": 0 } }
+  "properties": {
+    "timeMin": { "type": "number", "minimum": 0 },
+    "linger": { "description": "Seconds the body first stands where it is, turned to the player, before walking back into its day.", "type": "number", "minimum": 0, "maximum": 60 }
+  }
 }
