@@ -2047,7 +2047,8 @@ export class GameApp {
 			people: this.acquaintances,
 			places: [ ...this.discoveredLocations.values() ].map( ( location ) => this.#placeRecord( location ) ),
 			quests: this.quests.view( this.clock.timeMin ),
-			castOf: cast
+			castOf: cast,
+			personaOf: ( npcId ) => this.quests.persona( npcId )
 		} ) );
 
 	}

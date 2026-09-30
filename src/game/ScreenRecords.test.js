@@ -62,18 +62,24 @@ describe( 'ScreenRecords', () => {
 		const entries = codexEntries( {
 			cards: inventoryCards( [ { id: 'i_drive', name: 'Sable\'s drive', quantity: 1, state: { kind: 'device', questlineIds: [ 'q_main' ] } } ], QUESTS ),
 			people,
-			places: [ { id: 'p5', name: 'clinic', use: 'hospital', district: 'downtown' }, { id: 'd0', name: 'downtown' } ],
+			places: [
+				{ id: 'p5', name: 'clinic', use: 'hospital', district: 'downtown' }, { id: 'd0', name: 'downtown · rich' },
+				{ id: 'p7', name: 'MARKET', use: 'commerce', district: 'downtown' }, { id: 'p9', name: 'MARKET', use: 'commerce', district: 'downtown' }
+			],
 			quests: QUESTS,
-			castOf: ( npcId ) => npcId === 'a2' ? [ 'q_main' ] : []
+			castOf: ( npcId ) => npcId === 'a2' ? [ 'q_main' ] : [],
+			personaOf: ( npcId ) => npcId === 'a2' ? 'Tired, kind and exact. Hides the list.' : null
 		} );
 		expect( entries.map( ( entry ) => [ entry.id, entry.category, entry.title ] ) ).toEqual( [
 			[ 'item:i_drive', 'items', 'Sable\'s drive' ],
 			[ 'person:a2', 'people', 'Mira Chen' ],
-			[ 'place:p5', 'places', 'clinic' ],
-			[ 'place:d0', 'places', 'downtown' ]
+			[ 'place:p5', 'places', 'Clinic' ],
+			[ 'place:d0', 'places', 'Downtown · rich' ],
+			[ 'place:p7', 'places', 'Market · p7' ],
+			[ 'place:p9', 'places', 'Market · p9' ]
 		] );
 		expect( entries[ 0 ].related ).toEqual( [ { quest: 'q_main', title: 'The Weir Line', kind: 'main' } ] );
-		expect( entries[ 1 ] ).toMatchObject( { subtitle: 'doctor', text: 'Mira Chen has a part in The Weir Line.', related: [ { quest: 'q_main', kind: 'main' } ] } );
+		expect( entries[ 1 ] ).toMatchObject( { subtitle: 'doctor', text: 'Tired, kind and exact.\n\nMira Chen has a part in The Weir Line.', related: [ { quest: 'q_main', kind: 'main' } ] } );
 		expect( entries[ 2 ] ).toMatchObject( { text: 'A hospital lot in downtown.', related: [ { quest: 'q_main' } ] } );
 		expect( entries[ 3 ] ).toMatchObject( { text: 'A district of the city.', model: { shape: 'map' }, related: [] } );
 

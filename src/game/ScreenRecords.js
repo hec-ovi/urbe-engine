@@ -138,8 +138,9 @@ export class Acquaintances {
  * @param places [{ id, name, use?, district? }]
  * @param quests the journal's view, whose steps carry `npcName` and `place`
  * @param castOf( npcId ) the quest ids that cast this person
+ * @param personaOf( npcId ) how their story describes them, or null; its first sentence opens their record
  */
-export function codexEntries( { cards = [], people = [], places = [], quests = [], castOf = () => [] } ) {
+export function codexEntries( { cards = [], people = [], places = [], quests = [], castOf = () => [], personaOf = () => null } ) {
 
 	const index = questIndex( quests );
 	const story = ( ids ) => [ ...new Set( ids ) ].filter( ( id ) => index.has( id ) )
@@ -161,13 +162,17 @@ export function codexEntries( { cards = [], people = [], places = [], quests = [
 		related: card.quests.map( ( quest ) => ( { quest: quest.id, title: quest.title, kind: quest.kind } ) )
 	} ) );
 
+	// Two lots under one sign word are told apart by their lot.
+	const names = new Map();
+	for ( const place of places ) names.set( displayName( place.name ), ( names.get( displayName( place.name ) ) ?? 0 ) + 1 );
 	const placeEntries = places.map( ( place ) => {
 
+		const name = displayName( place.name );
 		const here = quests.filter( ( quest ) => quest.steps?.some( ( step ) => step.place?.id === place.id || step.place?.parcelId === place.id ) ).map( ( quest ) => quest.id );
 		return {
 			id: `place:${place.id}`,
 			category: 'places',
-			title: place.name,
+			title: names.get( name ) > 1 && place.use ? `${name} · ${place.id}` : name,
 			summary: [ place.use, place.district ].filter( Boolean ).join( ' · ' ),
 			text: place.district ? `${place.use ? `A ${place.use} lot` : 'A place'} in ${place.district}.` : 'A district of the city.',
 			facts: [
@@ -191,9 +196,12 @@ export function codexEntries( { cards = [], people = [], places = [], quests = [
 			title: person.name,
 			subtitle: person.role,
 			summary: person.role ? `${capital( person.role )}${person.lastPlace ? `, met at ${person.lastPlace}` : ''}` : person.lastPlace,
-			text: cast.length
-				? `${person.name} has a part in ${cast.map( ( id ) => index.get( id )?.title ).filter( Boolean ).join( ' and ' )}.`
-				: `Somebody you have talked with${person.lastPlace ? ` at ${person.lastPlace}` : ''}.`,
+			text: [
+				firstSentence( personaOf( person.npcId ) ),
+				cast.length
+					? `${person.name} has a part in ${cast.map( ( id ) => index.get( id )?.title ).filter( Boolean ).join( ' and ' )}.`
+					: `Somebody you have talked with${person.lastPlace ? ` at ${person.lastPlace}` : ''}.`
+			].filter( Boolean ).join( '\n\n' ),
 			facts: [
 				...( person.role ? [ { label: 'Role', value: person.role } ] : [] ),
 				{ label: 'Talked', value: talks },
@@ -207,6 +215,19 @@ export function codexEntries( { cards = [], people = [], places = [], quests = [
 	} );
 
 	return [ ...items, ...peopleEntries, ...placeEntries ];
+
+}
+
+/** A sign's capitals read as a name; a district's label starts with a capital. */
+function displayName( text = '' ) {
+
+	return capital( /[a-z]/.test( text ) ? text : text.toLowerCase().replace( /\b\w/g, ( letter ) => letter.toUpperCase() ) );
+
+}
+
+function firstSentence( text ) {
+
+	return text ? text.match( /^.*?[.!?](?=\s|$)/ )?.[ 0 ] ?? text : '';
 
 }
 
