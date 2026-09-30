@@ -46,23 +46,37 @@
 .chat-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .chat-layer .icon { stroke-linecap: round; stroke-linejoin: round; }
 
-/* The workflow: story, name, newest line, then the ways to answer. */
+/* The workflow along the bottom: the person, their story and what they say on
+   the left, the ways to answer on the right. */
 .chat {
 	position: absolute;
-	inset: auto var(--talk-right, 0px) max(30px, 6vh) var(--talk-left, 0px);
-	width: min(760px, calc(100% - 48px - var(--talk-left, 0px) - var(--talk-right, 0px)));
+	inset: auto calc(48px + var(--talk-right, 0px)) max(30px, 6vh) calc(48px + var(--talk-left, 0px));
 	max-height: calc(100% - 60px);
-	margin: 0 auto;
 	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 10px;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: 40px;
 	overflow-y: auto;
 	scrollbar-width: none;
-	text-align: center;
+	text-align: left;
 	text-shadow: 0 1px 5px #000, 0 0 2px #000;
 }
-.chat > * { flex-shrink: 0; max-width: 100%; }
+.chat-speaker {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 10px;
+	flex: 0 1 720px;
+	min-width: 0;
+}
+.chat-speaker > * { flex-shrink: 0; max-width: 100%; }
+.chat-speaker .chat-story,
+.chat-speaker .chat-said-block,
+.chat-speaker .chat-section { align-items: flex-start; }
+.chat-speaker .chat-quest-head,
+.chat-speaker .chat-subtitle,
+.chat-speaker .chat-feedback,
+.chat-speaker .chat-topics { justify-content: flex-start; }
 
 .chat-story { display: flex; flex-direction: column; align-items: center; gap: 3px; max-width: 620px; font-size: 14px; color: var(--talk-muted); }
 .chat-quest-head { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 4px 10px; }
@@ -147,7 +161,7 @@
 .chat-topics { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
 
 /* The ways to answer: one list, numbered replies first. */
-.chat-options { display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: max-content; max-width: 100%; margin-top: 2px; text-align: left; }
+.chat-options { display: flex; flex-direction: column; align-items: stretch; gap: 4px; flex: 0 1 auto; width: max-content; max-width: min(460px, 45%); margin-left: auto; text-align: left; }
 .chat-options > .chat-section { align-items: stretch; gap: 4px; }
 .chat-choices,
 .chat-actions { display: flex; flex-direction: column; gap: 4px; counter-reset: reply; }
@@ -261,6 +275,9 @@
 .chat-plate-name { color: var(--talk-accent); font: 600 14px var(--ui-mono); letter-spacing: 0.1em; text-transform: uppercase; }
 .chat-plate-role { color: var(--talk-muted); font-size: 11px; }
 .chat-plate-role:empty { display: none; }
+/* The name and role stand on the badge already: the plate keeps them for assistive technology only. */
+.chat-plate-name, .chat-plate-role, .chat-line.is-npc .chat-line-who { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.chat-line.is-npc .chat-line-from { margin-bottom: 0; }
 .chat-window-close {
 	position: absolute;
 	z-index: 3;

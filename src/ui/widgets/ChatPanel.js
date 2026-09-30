@@ -76,10 +76,12 @@ export class ChatPanel {
 		this.leave = el( 'button', { type: 'button', className: 'chat-leave' }, icon( 'leave' ), el( 'span', { textContent: layout.leave } ), leaveKey );
 		this.leave.setAttribute( 'aria-label', layout.leave );
 		this.leave.addEventListener( 'click', onClose );
+		// The person and what they say on the left, the ways to answer on the right.
 		this.card = el( 'div', { className: 'chat' },
-			this.story,
-			el( 'div', { className: 'chat-badge' }, this.title ), this.role,
-			this.subtitle, this.feedback, this.topicSection,
+			el( 'div', { className: 'chat-speaker' },
+				this.story,
+				el( 'div', { className: 'chat-badge' }, this.title ), this.role,
+				this.subtitle, this.feedback, this.topicSection ),
 			el( 'div', { className: 'chat-options' }, this.choiceSection, this.asks, el( 'div', { className: 'chat-footer' }, this.leave ) )
 		);
 
@@ -697,8 +699,9 @@ export class ChatPanel {
 /** A transcript line from `from`, named `name` or by who it is from, tagged by `kind`; a person's line carries their initials for its portrait. */
 function lineOf( from, name, kind ) {
 	const who = name ?? layout.from[ from ] ?? '';
+	// The person's name is on the plate and the badge already: their bubbles keep it for assistive technology only.
 	const line = el( 'div', { className: 'chat-line is-' + from },
-		el( 'div', { className: 'chat-line-from', textContent: who } ),
+		el( 'div', { className: 'chat-line-from' }, el( 'span', { className: 'chat-line-who', textContent: who } ) ),
 		el( 'div', { className: 'chat-line-text' } )
 	);
 	if ( from === 'npc' ) line.dataset.initials = who.split( /\s+/ ).filter( Boolean ).slice( 0, 2 ).map( ( word ) => word[ 0 ] ).join( '' ).toUpperCase();

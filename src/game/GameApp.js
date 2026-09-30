@@ -914,7 +914,8 @@ export class GameApp {
 
 			const recap = this.quests.conversationRecap( conversation.npcId );
 			this.view.dialog.setStory( recap ? { title: recap.title, objective: this.questGameplay.objective( this.clock.timeMin, recap.questId )?.text } : null );
-			this.#npcSays( conversation, recap?.reply ?? ( conversation.instance ? 'What can I do for you?' : PASSER_BY.greeting ) );
+			// A person speaks first only with something real to say: a recap of their story, or a passer-by's hurry.
+			if ( recap || ! conversation.instance ) this.#npcSays( conversation, recap?.reply ?? PASSER_BY.greeting );
 			if ( recap ) {
 
 				this.view.dialog.setStatus( 'Your current lead is in the journal.' );

@@ -245,7 +245,7 @@ describe('explicit quest dialogue through the playable UI',()=>{
   const {app,open}=fixture();app.quests.dialoguesFor=()=>[];
   app.talk.remembered.mockResolvedValueOnce([{speaker:'player',text:'Where is Kip?',atMin:1200},{speaker:'npc',text:'At the market, most nights.',atMin:1200}]);
   open();
-  await vi.waitFor(()=>expect(lines(app)).toEqual(['Where is Kip?','At the market, most nights.','What can I do for you?']));
+  await vi.waitFor(()=>expect(lines(app)).toEqual(['Where is Kip?','At the market, most nights.']));
   expect(app.talk.remembered).toHaveBeenCalledExactlyOnceWith('person');
   const earlier=[...app.view.dialog.transcript.children].filter(line=>line.classList.contains('is-earlier'));
   expect(earlier.map(line=>line.firstElementChild.textContent)).toEqual(['You','Petra Moss']);
