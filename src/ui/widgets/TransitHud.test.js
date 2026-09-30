@@ -6,6 +6,27 @@ import { TransitHud } from './TransitHud.js';
 
 describe( 'TransitHud', () => {
 
+	it( 'keeps empty choices cancellable, traps focus, and does not let Escape reach the game', async () => {
+		const onCancel = vi.fn(), escaped = vi.fn();
+		const hud = new TransitHud( { onCancel } );
+		document.body.replaceChildren( hud.element );
+		hud.element.addEventListener( 'keydown', escaped );
+		hud.choose( [], 'destination' );
+		expect( document.activeElement ).toBe( hud.cancel );
+		const user = userEvent.setup();
+		await user.tab();
+		expect( document.activeElement ).toBe( hud.cancel );
+		escaped.mockClear();
+		await user.keyboard( '{Escape}' );
+		expect( escaped ).not.toHaveBeenCalled();
+		expect( onCancel ).toHaveBeenCalledOnce();
+		hud.choose( [ { id: 'a', label: 'Market', code: 'B2', value: 2 }, { id: 'b', label: 'Wharf', value: 3 } ] );
+		await user.keyboard( '{ArrowDown}' );
+		expect( document.activeElement.getAttribute( 'aria-label' ) ).toBe( 'Wharf' );
+		await user.keyboard( '{Home}' );
+		expect( document.activeElement.getAttribute( 'aria-label' ) ).toBe( 'Market' );
+	} );
+
 	it( 'offers each candidate as a focused button, sends the value picked, cancels on Escape, and shows or clears the aboard line', async () => {
 
 		const onSelect = vi.fn();

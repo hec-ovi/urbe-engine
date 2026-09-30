@@ -932,7 +932,7 @@ export class GameApp {
 		this.#showActions( conversation );
 
 		// The chat takes the mouse: the input wants focus and the panel a click.
-		this.view.avatar.setAvatar( { name: speaker.name, bar: 1 } );
+		this.view.avatar.setAvatar( { name: speaker.name, role: speaker.role, bar: 1 } );
 		this.#release();
 
 	}
@@ -1665,7 +1665,7 @@ export class GameApp {
 		if ( action.action === 'choose-destination' ) {
 
 			this.view.transit.choose( action.destinations.map( destination => ( {
-				id: destination.destinationId, label: `${destination.stationName} · ${destination.lineId}`, value: destination
+				id: destination.destinationId, label: destination.stationName, code: destination.lineId, detail: destination.lineId, value: destination
 			} ) ), 'destination' );
 			this.#release();
 			return;
@@ -1676,6 +1676,8 @@ export class GameApp {
 			this.view.transit.choose( action.services.map( ( service ) => ( {
 				id: `${service.tripId}:${service.stopIndex}`,
 				label: transitServiceLabel( service ),
+				code: service.lineId,
+				detail: service.kind,
 				value: service
 			} ) ) );
 			this.#release();

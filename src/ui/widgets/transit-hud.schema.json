@@ -1,15 +1,43 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["options"],
+  "required": [
+    "options"
+  ],
   "additionalProperties": false,
   "properties": {
-    "mode": { "enum": ["service", "destination"], "default": "service" },
+    "mode": {
+      "enum": [
+        "service",
+        "destination"
+      ],
+      "default": "service"
+    },
     "options": {
       "type": "array",
       "items": {
-        "type": "object", "required": ["id", "label", "value"], "additionalProperties": false,
-        "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "value": {} }
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "value"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "value": {},
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
       }
     }
   }

@@ -1,0 +1,25 @@
+/* Transit studio choice rows and journey strip; every service is supplied by the game. */
+.hud .hud-transit-chooser { padding: 0; width: min(500px, calc(100vw - 48px)); max-height: calc(100vh - 100px); display: flex; flex-direction: column; border: 1px solid #74e0d542; background: linear-gradient(110deg, #0c2b2ff5, #081d22f5); font-family: system-ui, sans-serif; z-index: 38; }
+.transit-choice-heading { padding: 19px 20px 15px; border-bottom: 1px solid #74e0d542; }
+.transit-eyebrow { color: #73ecdf; font: 9px var(--ui-mono); letter-spacing: .16em; }
+.transit-choice-heading > div { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.hud .hud-transit-title { margin: 9px 0 0; color: #e6f1ee; font: 400 25px system-ui, sans-serif; text-transform: none; letter-spacing: -.025em; }
+.transit-choice-count { color: #a0c0c1; font: 11px var(--ui-mono); }
+.hud .hud-transit-options { display: grid; min-height: 0; overflow: auto; gap: 1px; padding: 7px; margin: 0; scrollbar-width: thin; }
+.hud .hud-transit-option { display: flex; align-items: center; gap: 14px; padding: 14px 12px; border: 1px solid transparent; border-bottom-color: #73ecdf18; background: transparent; color: #e6f1ee; font: 13px/1.5 system-ui, sans-serif; }
+.hud .hud-transit-option:hover, .hud .hud-transit-option:focus-visible { border-color: #73ecdf66; background: linear-gradient(90deg, #73ecdf1b, #73ecdf05); }
+.transit-choice-code { min-width: 36px; max-width: 100px; padding: 7px; flex: none; border: 1px solid #73ecdf55; color: #73ecdf; font: 11px var(--ui-mono); text-align: center; overflow-wrap: anywhere; }
+.transit-choice-copy { display: grid; gap: 6px; min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.transit-choice-detail { color: #a0c0c1; font: 9px var(--ui-mono); text-transform: uppercase; }
+.transit-choice-arrow { color: #73ecdf; font-size: 19px; }
+.transit-choice-footer { display: flex; align-items: center; justify-content: space-between; padding: 13px 18px; gap: 12px; border-top: 1px solid #74e0d542; }
+.transit-choice-footer > span { color: #86a6a3; font: 8px var(--ui-mono); }
+.transit-choice-footer .hud-button { background: transparent; border-color: #73ecdf45; color: #b3ceca; font-size: 10px; }
+.transit-choice-empty { padding: 15px 20px; color: #a0c0c1; }
+.hud .hud-transit-status { top: auto; bottom: 30px; display: flex; align-items: center; gap: 16px; width: min(460px, calc(100vw - 560px)); padding: 16px 20px; border: 1px solid #74e0d542; background: linear-gradient(110deg, #0b2a2ff5, #061c22f5); font-family: system-ui, sans-serif; text-transform: none; letter-spacing: normal; }
+.transit-ride-code { display: grid; place-items: center; flex: none; width: 42px; height: 42px; color: #73ecdf; font: 24px var(--ui-mono); border: 1px solid #73ecdf55; background: #73ecdf08; }
+.transit-ride-copy { display: grid; gap: 8px; min-width: 0; }
+.transit-ride-text { font-size: 13px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+@media (max-width: 1000px) { .hud .hud-transit-status { bottom: 86px; left: 30px; transform: none; width: min(420px, calc(100vw - 320px)); } }
+@media (prefers-reduced-motion: no-preference) { .hud-transit-chooser:not([hidden]) { animation: transit-arrive 180ms ease-out both; } }
+@keyframes transit-arrive { from { opacity: 0; translate: 0 12px; } to { opacity: 1; translate: 0; } }
