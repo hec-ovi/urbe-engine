@@ -634,7 +634,7 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 	} );
 
-	it( 'hands a building\'s lift cars to the floor\'s warm-up already prepared', async () => {
+	it( 'draws a building\'s lift cars while its floors are drawn, and hands them to the floor\'s warm-up already prepared', async () => {
 
 		// The game's factory hands out one material per variant, the call button's among them.
 		const variants = new Map();
@@ -652,11 +652,13 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 		} };
 		const street = ( z ) => ( { x: 12, y: 0.1, z } );
+		const shown = () => elevators.shafts.map( ( shaft ) => shaft.cab.visible );
 
 		await settle( model, street( - 50 ) );
 		const cars = elevators.cars( 'p1' );
 		expect( cars.length ).toBe( elevators.shafts.length );
 		expect( cars.length ).toBeGreaterThan( 0 );
+		expect( shown().every( ( visible ) => visible === false ) ).toBe( true );
 		const toCars = handed.filter( ( { object } ) => cars.includes( object ) );
 		expect( new Set( toCars.map( ( { object } ) => object ) ).size ).toBe( cars.length );
 		expect( toCars.every( ( { left } ) => left === 0 ) ).toBe( true );
@@ -664,6 +666,11 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		const landings = elevators.shafts.flatMap( ( shaft ) => shaft.stops.flatMap( ( stop ) => stop.pivot?.getObjectsByProperty( 'isMesh', true ) ?? [] ) );
 		expect( landings.length ).toBeGreaterThan( 0 );
 		expect( landings.every( ( mesh ) => warmup.programsOf( mesh ).length === 0 ) ).toBe( true );
+
+		await settle( model, street( - 10 ) );
+		expect( shown().every( ( visible ) => visible === true ) ).toBe( true );
+		await settle( model, street( - 40 ) );
+		expect( shown().every( ( visible ) => visible === false ) ).toBe( true );
 
 		model.dispose();
 

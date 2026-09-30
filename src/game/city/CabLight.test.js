@@ -209,7 +209,7 @@ describe( 'the lifts\' shared lighting', () => {
 
 	} );
 
-	it( 'keeps the shared set through a building let go and opened again', () => {
+	it( 'keeps the shared set through a building let go and opened again, and draws its cars only while asked', () => {
 
 		const elevators = new Elevators( factory );
 		const first = tower( elevators, 'p1', 10 );
@@ -218,7 +218,12 @@ describe( 'the lifts\' shared lighting', () => {
 		const disposed = [ ...worn, elevators.cabs.display.material ].map( ( material ) => vi.spyOn( material, 'dispose' ) );
 		const strokes = [ elevators.cabs.display.across, elevators.cabs.display.upright ].map( ( geometry ) => vi.spyOn( geometry, 'dispose' ) );
 
-		expect( other.shaft.car ).not.toBeNull();
+		elevators.draw( 'p1', false );
+		expect( first.shaft.cab.visible ).toBe( false );
+		expect( other.shaft.cab.visible ).toBe( true );
+		elevators.draw( 'p1', true );
+		expect( first.shaft.cab.visible ).toBe( true );
+
 		elevators.remove( 'p1' );
 		expect( elevators.cars( 'p1' ) ).toEqual( [] );
 		expect( disposed.every( ( spy ) => spy.mock.calls.length === 0 ) ).toBe( true );

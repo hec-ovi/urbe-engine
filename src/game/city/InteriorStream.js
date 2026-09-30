@@ -203,6 +203,7 @@ export class InteriorStream {
 			interior.inside = distance <= INSIDE || this.requests.has( parcelId );
 			interior.near = distance < ( interior.near ? VIEW_KEEP : VIEW_RADIUS );
 			inside ||= interior.inside;
+			this.elevators?.draw?.( parcelId, interior.inside || interior.near );
 
 			const want = this.#band( interior, feet );
 

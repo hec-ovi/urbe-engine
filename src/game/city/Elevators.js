@@ -194,6 +194,16 @@ export class Elevators {
 	}
 
 	/**
+	 * A building's cars are drawn while its floors are: a car stands in a
+	 * closed core, so from further out there is nothing of it to see.
+	 */
+	draw( parcelId, drawn ) {
+
+		for ( const shaft of this.byBuilding.get( parcelId ) ?? [] ) if ( shaft.cab ) shaft.cab.visible = drawn;
+
+	}
+
+	/**
 	 * One of everything a lift draws, detached and lit by no car, for a warm-up
 	 * to prepare before any shaft stands: the car's surfaces, a segment of its
 	 * display, a landing's leaves, its call plate and button. Every car and
