@@ -12,7 +12,7 @@ import { QuestSession } from './quests/QuestSession.js';
 import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
 import { QuestActions } from './quests/QuestActions.js';
 import { MissionItemAssets } from './quests/MissionItemAssets.js';
-import { inventoryCards } from './ScreenRecords.js';
+import { Acquaintances, codexEntries, inventoryCards } from './ScreenRecords.js';
 import { InvestigationGameplay } from './investigation/index.js';
 import { ScenePlaceResolver, SceneryDirector } from './scenery/index.js';
 import { ObjectiveRouter } from './routes/ObjectiveRouter.js';
@@ -191,6 +191,8 @@ export class GameApp {
 		this.playerPlaces = [];
 		/** The conversation the chat shows, or null. */
 		this.conversationShown = null;
+		/** The people the player has talked to, for the codex. */
+		this.acquaintances = new Acquaintances();
 		/** The chat's action row: offer id to the label the player says. */
 		this.dialogueActions = new Map();
 		/** A leader's arrival while it opens its conversation, or null. */
@@ -213,6 +215,8 @@ export class GameApp {
 
 				this.#release();
 				if ( name === 'QUESTS' ) this.#refreshQuestState();
+				if ( name === 'CODEX' ) this.#refreshCodex();
+				if ( name === 'MAP' ) this.#refreshMapLocation();
 
 			},
 			onQuestTrack: ( questId, stepId ) => this.#followQuest( questId, stepId ),
@@ -583,6 +587,18 @@ export class GameApp {
 		} );
 		/** Each NPC type's label, which the chat shows as the person's role. */
 		this.npcTypeLabels = new Map( ( npcTypes?.types ?? [] ).map( ( { type, label } ) => [ type, label ] ) );
+		// Whoever the saved game remembers talking to is somebody the codex knows.
+		for ( const { npcId, memory } of game?.dialogueMemory ?? [] ) {
+
+			const npc = rememberedPerson( this.sim, npcId );
+			if ( ! npc?.name ) continue;
+			const name = this.quests.characterName( npcId );
+			this.acquaintances.remember( npcId, memory?.turns ?? [], {
+				name: TalkClient.nameOf( name ? { ...npc, name } : npc ),
+				role: this.npcTypeLabels.get( npc.type ) ?? ''
+			} );
+
+		}
 		if ( ! this.lineObserver ) {
 
 			this.lineObserver = this.voice = NpcVoice.forGame( {
@@ -894,6 +910,7 @@ export class GameApp {
 		this.activeDialogue = null;
 		const speaker = conversation && speakerOf( conversation, this.npcTypeLabels );
 		this.view.dialog.show( speaker );
+		if ( conversation?.instance ) this.acquaintances.met( conversation.npcId, { ...speaker, place: this.#placeName( this.currentLocation ), timeMin: this.clock.timeMin } );
 		this.view.avatar.setVisible( Boolean( conversation ) );
 
 		if ( ! conversation ) {
@@ -1106,7 +1123,7 @@ export class GameApp {
 			this.currentLocation = this.locator.location( feet.x, feet.z, this.standing?.parcelId ?? null );
 			this.discoveredLocations.set( this.currentLocation.id, this.currentLocation );
 			this.view.clock.update( this.clock.label, district, this.venues.nameOf( this.currentLocation.id ) ?? '' );
-			if ( this.view.panels.current === 'MAP' ) this.view.map.setLocation( this.venues.nameOf( this.currentLocation.id ) ?? this.currentLocation.name, district );
+			if ( this.view.panels.current === 'MAP' ) this.view.map.setLocation( this.#placeName( this.currentLocation ), district );
 			if ( this.details ) this.view.readout.update( feet, district, this.locator.parcel( feet.x, feet.z, this.standing?.parcelId ?? null ) );
 
 		} );
@@ -2020,6 +2037,48 @@ export class GameApp {
 
 	}
 
+	/** What the codex holds: the carried items, the people talked to and the places stood in, with their quests. */
+	#refreshCodex() {
+
+		if ( ! this.quests ) return;
+		const cast = ( npcId ) => this.quests.entries.filter( ( { runtime } ) => Object.values( runtime.cast ).includes( npcId ) ).map( ( { definition } ) => definition.id );
+		this.view.codex.setEntries( codexEntries( {
+			cards: this.#inventoryCards(),
+			people: this.acquaintances,
+			places: [ ...this.discoveredLocations.values() ].map( ( location ) => this.#placeRecord( location ) ),
+			quests: this.quests.view( this.clock.timeMin ),
+			castOf: cast
+		} ) );
+
+	}
+
+	#refreshMapLocation() {
+
+		const feet = this.body?.feet;
+		if ( feet && this.currentLocation ) this.view.map.setLocation( this.#placeName( this.currentLocation ), this.locator.district( feet.x, feet.z ) );
+
+	}
+
+	/** A lot's name: the word on its building, else what it is used for and its lot; a district keeps its own. */
+	#placeName( location ) {
+
+		const parcel = this.locator?.parcelById.get( location?.id );
+		if ( ! parcel ) return location?.name ?? '';
+		const word = this.venues?.places.get( parcel.id )?.name;
+		const use = parcel.label.slice( parcel.id.length ).trim();
+		return word ?? `${use ? use[ 0 ].toUpperCase() + use.slice( 1 ) : 'Lot'} · ${parcel.id}`;
+
+	}
+
+	#placeRecord( location ) {
+
+		const parcel = this.locator.parcelById.get( location.id );
+		if ( ! parcel ) return { id: location.id, name: location.name };
+		const [ x, z ] = parcel.ring.reduce( ( sum, [ px, pz ] ) => [ sum[ 0 ] + px / parcel.ring.length, sum[ 1 ] + pz / parcel.ring.length ], [ 0, 0 ] );
+		return { id: parcel.id, name: this.#placeName( location ), use: parcel.label.slice( parcel.id.length ).trim(), district: this.locator.district( x, z ) };
+
+	}
+
 	/** The carried items as the inventory and the codex show them, a quest item with its mission model. */
 	#inventoryCards() {
 
@@ -2647,6 +2706,21 @@ export function openingCard( persistence, quests ) {
 
 	const prologue = persistence?.unplayed ? quests.prologue() : null;
 	return prologue ? { kind: 'prologue', ...prologue } : null;
+
+}
+
+/** The simulation's person a saved memory of talks names, or null when the city has no such person now. */
+function rememberedPerson( sim, npcId ) {
+
+	try {
+
+		return sim.getNPC( npcId );
+
+	} catch {
+
+		return null;
+
+	}
 
 }
 

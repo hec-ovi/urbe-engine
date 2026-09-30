@@ -1,0 +1,22 @@
+{
+  "title": "Codex",
+  "subtitle": "Your notes on the city.",
+  "categories": [
+    { "id": "items", "label": "Items", "text": "Things you have picked up and carry.", "shape": "parcel", "source": "From what you carry now; something you gave away or used up leaves it." },
+    { "id": "people", "label": "People", "text": "The people you have talked to.", "shape": "portrait", "source": "Everyone you have talked with, in this game and before it; somebody you only walked past is not here." },
+    { "id": "places", "label": "Places", "text": "Where you have been.", "shape": "building", "source": "Every lot and district you have stood in, named by its sign or by what it is used for." }
+  ],
+  "tabs": "Codex categories",
+  "entries": "{count} entries",
+  "entriesOne": "1 entry",
+  "results": "{count} of {total} entries",
+  "search": "Search {category}",
+  "placeholder": "Search {category}…",
+  "empty": { "title": "nothing recorded yet", "text": "walk the city, talk to people: what you learn lands here" },
+  "noMatch": { "title": "No matches in {category}", "text": "Try another name, place or detail." },
+  "clear": "Clear search",
+  "source": "Source",
+  "related": "Related",
+  "questKinds": { "main": "Main quest", "side": "Side quest" },
+  "preview": "No preview"
+}

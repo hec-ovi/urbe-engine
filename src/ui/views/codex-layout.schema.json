@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex labels and categories; {name} stands for the value the view puts there",
+  "type": "object",
+  "required": ["title", "subtitle", "categories", "tabs", "entries", "entriesOne", "results", "search", "placeholder", "empty", "noMatch", "clear", "source", "related", "questKinds", "preview"],
+  "additionalProperties": false,
+  "properties": {
+    "title": { "description": "Screen title.", "$ref": "#/$defs/text" },
+    "subtitle": { "$ref": "#/$defs/text" },
+    "categories": {
+      "description": "One view per category, in tab order. An entry naming another category gets a tab of its own after these.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "text", "shape", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/text" },
+          "label": { "$ref": "#/$defs/text" },
+          "text": { "description": "The line under the category's title.", "$ref": "#/$defs/text" },
+          "shape": { "description": "The model an entry is drawn as when it brings none.", "enum": ["scanner", "radio", "card", "book", "map", "key", "battery", "parcel", "portrait", "building", "station"] },
+          "source": { "description": "Where the category's entries come from, shown under its list.", "$ref": "#/$defs/text" }
+        }
+      }
+    },
+    "tabs": { "description": "The category tabs' accessible name.", "$ref": "#/$defs/text" },
+    "entries": { "description": "{count} entries in a category.", "$ref": "#/$defs/text" },
+    "entriesOne": { "$ref": "#/$defs/text" },
+    "results": { "description": "{count} of {total} match the search.", "$ref": "#/$defs/text" },
+    "search": { "$ref": "#/$defs/text" },
+    "placeholder": { "$ref": "#/$defs/text" },
+    "empty": { "$ref": "#/$defs/message" },
+    "noMatch": { "$ref": "#/$defs/message" },
+    "clear": { "$ref": "#/$defs/text" },
+    "source": { "$ref": "#/$defs/text" },
+    "related": { "$ref": "#/$defs/text" },
+    "questKinds": {
+      "type": "object",
+      "required": ["main", "side"],
+      "additionalProperties": false,
+      "properties": { "main": { "$ref": "#/$defs/text" }, "side": { "$ref": "#/$defs/text" } }
+    },
+    "preview": { "description": "Where no model can be drawn.", "$ref": "#/$defs/text" }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 },
+    "message": {
+      "type": "object",
+      "required": ["title", "text"],
+      "additionalProperties": false,
+      "properties": { "title": { "$ref": "#/$defs/text" }, "text": { "$ref": "#/$defs/text" } }
+    }
+  }
+}

@@ -6,6 +6,7 @@ import '../components/dock.css';
 import '../components/journal.css';
 import '../components/map.css';
 import '../components/inventory.css';
+import '../components/codex.css';
 import '../components/chat.css';
 import '../components/mission.css';
 import '../components/fracture.css';
@@ -102,7 +103,7 @@ export class GameView {
 		};
 		this.inventory = new InventoryView( { onClose: close, onQuest: openQuest, preview: this.preview } );
 		this.quests = new QuestsView( { onClose: close, onSelect: onQuestSelect, onTrack: onQuestTrack, onWait: onQuestWait } );
-		this.codex = new CodexView( { onClose: close } );
+		this.codex = new CodexView( { onClose: close, onQuest: openQuest, preview: this.preview } );
 		this.settings = new SettingsView( { onChange: onSettingChange, onClose: close } );
 		this.controls = new ControlsView( { onClose: close } );
 
