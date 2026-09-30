@@ -80,8 +80,7 @@
 .chat-speaker .chat-topics { justify-content: flex-start; }
 
 .chat-identity { display: flex; align-items: center; gap: 10px; position: relative; }
-.chat-identity .chat-role { position: absolute; top: 100%; left: 0; padding: 4px 8px; margin: 3px 0 0; background: var(--talk-hint-surface); opacity: 0; pointer-events: none; z-index: 2; }
-.chat-identity:hover .chat-role, .chat-identity:focus-within .chat-role { opacity: 1; }
+.chat-identity .chat-role { display: none; }
 .chat-story { display: flex; flex-direction: column; gap: 16px; }
 .chat-quest-title { margin: 0; color: var(--talk-accent); font: 600 17px/1.4 var(--ui-mono); overflow-wrap: anywhere; }
 .chat-hint { flex: none; text-shadow: none; }
