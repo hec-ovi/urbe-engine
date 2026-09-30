@@ -914,6 +914,52 @@ describe( 'NPC continuity integration', () => {
 
 	} );
 
+	it( 'lets a cast member go where their rota has them without walking them out through the wall and back', () => {
+
+		// The cafe's counter stands inside, away from the pavement.
+		const counter = [ 300, 1, 256 ];
+		const interiorRoutes = indoorRoutes( [ 'p_cafe' ] );
+		const { bridge, controller } = setup( null, network(), { interiorRoutes, anchorsAt: counter } );
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		const cafe = { kind: 'parcel', id: 'p_cafe' };
+		expect( controller.appear( { npcId: npc.npcId, timeMin: MON_9 } ) ).toMatchObject( { place: cafe, position: counter } );
+
+		const posted = { npcId: npc.npcId, timeMin: MON_9, place: cafe, position: counter, heading: 0.5 };
+		const lettingGo = {
+			// The story posts them at their own counter and the player talks to them there.
+			talk: ( timeMin ) => {
+
+				controller.hold( posted );
+				controller.beginConversation( { ...posted, seated: false } );
+				return controller.endConversation( { timeMin } );
+
+			},
+			// Or the story no longer wants them there.
+			release: ( timeMin ) => {
+
+				controller.hold( posted );
+				return controller.releaseHold( { npcId: npc.npcId, timeMin } );
+
+			}
+		};
+		for ( const letGo of Object.values( lettingGo ) ) {
+
+			expect( letGo( MON_9 + 1 ) ).toMatchObject( { mode: 'schedule', place: cafe, position: counter } );
+			expect( walkingHome( controller ) ).toEqual( [] );
+			for ( let second = 1; second <= 20; second ++ ) {
+
+				const timeMin = MON_9 + 1 + second / 60;
+				controller.updateFollow( { timeMin, deltaSeconds: 1, playerPosition: [ 302, 1, 256 ] } );
+				const [ actor ] = controller.updateVisible( { timeMin, playerPosition: [ 302, 1, 256 ], maxDistance: 45 } );
+				expect( actor ).toMatchObject( { place: cafe, position: counter } );
+
+			}
+			expect( bridge.behaviorAt( npc.npcId, MON_9 + 2 ).interrupted ).toBe( false );
+
+		}
+
+	} );
+
 	it( 'fails closed on unknown, placeless, unavailable and malformed identities', () => {
 
 		const { bridge, controller } = setup();
@@ -960,7 +1006,8 @@ describe( 'NPC animation state', () => {
 
 } );
 
-function setup( simulation = null, networks = network(), { doorsteps = {}, ...options } = {} ) {
+/** @param options.anchorsAt stands every anchor of the cafe at this point instead of at its access point */
+function setup( simulation = null, networks = network(), { doorsteps = {}, anchorsAt = null, ...options } = {} ) {
 
 	const buildings = new Map( Object.entries( FIXTURE_INTERIORS ).map( ( [ id, npc ] ) => [ id, { npc } ] ) );
 	const bridge = simulation ? new SimBridge( simulation ) : SimBridge.create( FIXTURE_BLUEPRINT, { networks }, buildings );
@@ -973,7 +1020,7 @@ function setup( simulation = null, networks = network(), { doorsteps = {}, ...op
 		heading: 0,
 		anchors: parcel.id === 'p_cafe' ? cafe.anchors.map( ( anchor ) => ( {
 			id: anchor.id,
-			position: [ parcel.access.point[ 0 ], 1, parcel.access.point[ 1 ] ],
+			position: anchorsAt ? [ ...anchorsAt ] : [ parcel.access.point[ 0 ], 1, parcel.access.point[ 1 ] ],
 			heading: anchor.facingDeg * Math.PI / 180
 		} ) ) : []
 	} ) );

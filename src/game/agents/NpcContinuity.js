@@ -702,6 +702,7 @@ export class NpcContinuity {
 		let scheduled;
 		try { scheduled = this.#resumeTarget( actor, request.timeMin ); }
 		catch { return this.#dropReturn( actor ); }
+		if ( distance( actor.position, scheduled.position ) <= ARRIVAL_DISTANCE ) return this.#finishResume( actor, scheduled );
 		const route = this.#plan( walk, actor, scheduledGoal( scheduled ), RETURN_REPLAN );
 		if ( ! route ) return this.#dropReturn( actor );
 		walk.route = route;
@@ -879,11 +880,12 @@ export class NpcContinuity {
 			throw error;
 
 		}
-		if ( this.posts.has( actor.npcId ) && distance( actor.position, scheduled.position ) <= ARRIVAL_DISTANCE ) {
+		if ( distance( actor.position, scheduled.position ) <= ARRIVAL_DISTANCE ) {
 
-			// Resuming a worker or seated visitor at their actual post needs no
-			// detour onto the street graph.
-			Object.assign( actor, scheduled, { visible: actor.visible, mode: 'schedule' } );
+			// A worker or seated visitor let go at their post, or a cast member
+			// posted where their rota has them, is already back in their day:
+			// a way over the street graph would lead out through a wall and back.
+			this.#finishResume( actor, scheduled );
 			return this.#actorOut( actor );
 
 		}
