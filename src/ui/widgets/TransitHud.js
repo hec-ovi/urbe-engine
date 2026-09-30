@@ -25,6 +25,7 @@ export class TransitHud {
 		this.chooser = el( 'section', {
 			className: 'hud-transit-chooser',
 			role: 'dialog',
+			tabIndex: -1,
 			ariaModal: 'true',
 			ariaLabel: layout.titles.service
 		}, el( 'header', { className: 'transit-choice-heading' }, el( 'span', { className: 'transit-eyebrow', textContent: 'CITY TRANSIT' } ),
@@ -38,7 +39,10 @@ export class TransitHud {
 			const index = buttons.indexOf( document.activeElement );
 			if ( [ 'ArrowDown', 'ArrowUp', 'Home', 'End', 'Tab' ].includes( event.key ) ) {
 				event.preventDefault();
-				const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : ( index + ( event.key === 'ArrowUp' || event.shiftKey ? -1 : 1 ) + buttons.length ) % buttons.length;
+				const backwards = event.key === 'ArrowUp' || event.shiftKey;
+				const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+					: index < 0 ? ( backwards ? buttons.length - 1 : 0 )
+						: ( index + ( backwards ? -1 : 1 ) + buttons.length ) % buttons.length;
 				buttons[ next ].focus();
 			}
 

@@ -25,6 +25,13 @@ describe( 'TransitHud', () => {
 		expect( document.activeElement.getAttribute( 'aria-label' ) ).toBe( 'Wharf' );
 		await user.keyboard( '{Home}' );
 		expect( document.activeElement.getAttribute( 'aria-label' ) ).toBe( 'Market' );
+		await user.click( hud.title );
+		expect( document.activeElement ).toBe( hud.chooser );
+		await user.tab( { shift: true } );
+		expect( document.activeElement ).toBe( hud.cancel );
+		await user.click( hud.title );
+		await user.keyboard( '{Escape}' );
+		expect( onCancel ).toHaveBeenCalledTimes( 2 );
 	} );
 
 	it( 'offers each candidate as a focused button, sends the value picked, cancels on Escape, and shows or clears the aboard line', async () => {
