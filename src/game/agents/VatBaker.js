@@ -4,10 +4,60 @@ import { skinRows } from './VatSkin.js';
 export const FRAMES = 32;
 
 /**
- * Bakes a skinned mesh's animation loops into vertex animation buffers: one
+ * Where each clip's rows sit in a bake: `{ start, frames, once }` per clip, in
+ * order. A loop's rows sample its first `frames` steps, the next being its
+ * first again; a clip played `once` samples its whole length, its last row
+ * its final pose. Without a layout every clip is a FRAMES-row loop.
+ *
+ * @param layout `[{ frames?, once? }]` per clip, or null
+ */
+export function clipRows( count, layout = null ) {
+
+	let start = 0;
+	return Array.from( { length: count }, ( _, index ) => {
+
+		const frames = layout?.[ index ]?.frames ?? FRAMES;
+		const rows = { start, frames, once: Boolean( layout?.[ index ]?.once ) };
+		start += frames;
+		return rows;
+
+	} );
+
+}
+
+/**
+ * The two rows a pose buffer blends for a clip at `frame` (0 to FRAMES, how
+ * far through the clip, whatever its row count) and how far between them:
+ * written into `out` as `[ first row + blend, second row ]`.
+ */
+export function rowsAt( rows, frame, out ) {
+
+	const { start, frames, once } = rows;
+	let at = frame / FRAMES;
+	if ( once ) {
+
+		at = Math.min( Math.max( at, 0 ), 1 ) * ( frames - 1 );
+		const whole = Math.min( Math.floor( at ), frames - 1 );
+		out[ 0 ] = start + at;
+		out[ 1 ] = start + Math.min( whole + 1, frames - 1 );
+
+	} else {
+
+		at = ( ( at % 1 ) + 1 ) % 1 * frames;
+		const whole = Math.floor( at );
+		out[ 0 ] = start + at;
+		out[ 1 ] = start + ( whole + 1 ) % frames;
+
+	}
+	return out;
+
+}
+
+/**
+ * Bakes a skinned mesh's animation clips into vertex animation buffers: one
  * row per frame, one vec4 per vertex, positions in one buffer and normals in
- * the other. Every clip is baked to the same frame count, so a clip is just a
- * row offset.
+ * the other. Each clip is a run of rows (`clipRows`), as many as its layout
+ * gives it, so a clip is a row offset and a row count.
  *
  * This is what lets the whole crowd render as a single instanced draw with no
  * skeletons and no per-character CPU work at all. Baking happens once at load:
@@ -24,12 +74,15 @@ export class VatBaker {
 	 * @param meshes SkinnedMesh list to bake, all sharing that skeleton
 	 * @param clips AnimationClip list, baked in order
 	 * @param slice the frame budget asked between rows, or null to run whole
+	 * @param layout each clip's rows and whether it plays once (`clipRows`)
+	 * @returns per mesh `{ mesh, vertexCount, rows, position, normal, clips }`, `clips` the `clipRows`
 	 */
-	static async bake( root, meshes, clips, slice = null ) {
+	static async bake( root, meshes, clips, slice = null, layout = null ) {
 
 		const mixer = new THREE.AnimationMixer( root );
 		const actions = clips.map( ( clip ) => mixer.clipAction( clip ) );
-		const rows = clips.length * FRAMES;
+		const runs = clipRows( clips.length, layout );
+		const rows = runs.reduce( ( sum, run ) => sum + run.frames, 0 );
 
 		const targets = meshes.map( ( mesh ) => {
 
@@ -49,16 +102,15 @@ export class VatBaker {
 
 		for ( let c = 0; c < clips.length; c ++ ) {
 
-			const action = actions[ c ];
 			actions.forEach( ( a ) => a.stop() );
-			action.reset().play();
+			play( actions[ c ], runs[ c ] );
 
-			for ( let f = 0; f < FRAMES; f ++ ) {
+			for ( let f = 0; f < runs[ c ].frames; f ++ ) {
 
-				mixer.setTime( ( f / FRAMES ) * clips[ c ].duration );
+				mixer.setTime( sampleTime( runs[ c ], f, clips[ c ].duration ) );
 				root.updateMatrixWorld( true );
 
-				const row = c * FRAMES + f;
+				const row = runs[ c ].start + f;
 
 				if ( slice ) await slice.step();
 
@@ -86,7 +138,8 @@ export class VatBaker {
 			vertexCount: target.count,
 			rows,
 			position: target.position,
-			normal: target.normal
+			normal: target.normal,
+			clips: runs
 		} ) );
 
 	}
@@ -99,32 +152,34 @@ export class VatBaker {
 	 * vertex. Rows are laid out as a pose buffer of three "vertices" per frame.
 	 *
 	 * @param mesh the skinned mesh whose space the rows carry into
-	 * @returns `{ rows, data }`, data a Float32Array of rows * 3 vec4s
+	 * @param layout each clip's rows, as `bake` takes it
+	 * @returns `{ rows, data, clips }`, data a Float32Array of rows * 3 vec4s, clips the `clipRows`
 	 */
-	static async bakeJoint( root, mesh, name, clips, slice = null ) {
+	static async bakeJoint( root, mesh, name, clips, slice = null, layout = null ) {
 
 		const bone = mesh.skeleton.bones.find( ( entry ) => entry.name === name );
 		if ( ! bone ) throw new Error( `the rig has no ${name} to bake` );
 		const mixer = new THREE.AnimationMixer( root );
 		const actions = clips.map( ( clip ) => mixer.clipAction( clip ) );
-		const rows = clips.length * FRAMES;
+		const runs = clipRows( clips.length, layout );
+		const rows = runs.reduce( ( sum, run ) => sum + run.frames, 0 );
 		const data = new Float32Array( rows * 12 );
 		const carry = new THREE.Matrix4();
 
 		for ( let c = 0; c < clips.length; c ++ ) {
 
 			actions.forEach( ( a ) => a.stop() );
-			actions[ c ].reset().play();
+			play( actions[ c ], runs[ c ] );
 
-			for ( let f = 0; f < FRAMES; f ++ ) {
+			for ( let f = 0; f < runs[ c ].frames; f ++ ) {
 
-				mixer.setTime( ( f / FRAMES ) * clips[ c ].duration );
+				mixer.setTime( sampleTime( runs[ c ], f, clips[ c ].duration ) );
 				root.updateMatrixWorld( true );
 				if ( slice ) await slice.step();
 				// Into the mesh's bind space, as getVertexPosition puts a skinned vertex.
 				carry.multiplyMatrices( mesh.bindMatrixInverse, bone.matrixWorld );
 				const e = carry.elements;
-				const row = ( c * FRAMES + f ) * 12;
+				const row = ( runs[ c ].start + f ) * 12;
 				for ( let r = 0; r < 3; r ++ ) data.set( [ e[ r ], e[ 4 + r ], e[ 8 + r ], e[ 12 + r ] ], row + r * 4 );
 
 			}
@@ -132,9 +187,26 @@ export class VatBaker {
 		}
 
 		mixer.stopAllAction();
-		return { rows, data };
+		return { rows, data, clips: runs };
 
 	}
+
+}
+
+/** Starts a clip for baking: a loop repeats, a clip played once holds its final pose at its end. */
+function play( action, run ) {
+
+	action.reset();
+	action.setLoop( run.once ? THREE.LoopOnce : THREE.LoopRepeat, run.once ? 1 : Infinity );
+	action.clampWhenFinished = run.once;
+	action.play();
+
+}
+
+/** The clip time a row samples: a loop's rows stop a step short of its end, which is its start. */
+function sampleTime( run, frame, duration ) {
+
+	return run.once ? ( frame / Math.max( 1, run.frames - 1 ) ) * duration : ( frame / run.frames ) * duration;
 
 }
 

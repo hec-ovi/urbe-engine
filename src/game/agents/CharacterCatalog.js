@@ -48,10 +48,43 @@ export const HAIRSTYLE_FILES = [ ...new Set(
 /** The two geometry-stable bodies used by the mass crowd. */
 export const CROWD_MODELS = CHARACTER_MODELS.slice( 0, 2 );
 
-export const CROWD_CLIP_NAMES = [
-	'Walk_Loop', 'Idle_Loop', 'Idle_Talking_Loop', 'Sitting_Idle_Loop', 'Sitting_Talking_Loop',
-	'Sprint_Loop', 'Crouch_Idle_Loop'
+/**
+ * The clips the crowd's vertex animation carries, in bake order, and the rows
+ * each is baked to: a fast loop keeps 32, a slow idle fewer, which is where
+ * the memory goes (a row is a vec4 position and normal per vertex). A clip
+ * that plays `once` runs from its first row to its last and stops there; a
+ * loop wraps. `Sitting_Drink` is not the library's: LAYERED_CLIPS makes it.
+ * The first seven are the postures; the rest are the idle variety
+ * (IdleVariety.js) and the sitting down and standing up of a seat's turnover.
+ */
+export const CROWD_CLIPS = [
+	{ name: 'Walk_Loop', frames: 32 },
+	{ name: 'Idle_Loop', frames: 16 },
+	{ name: 'Idle_Talking_Loop', frames: 24 },
+	{ name: 'Sitting_Idle_Loop', frames: 12 },
+	{ name: 'Sitting_Talking_Loop', frames: 24 },
+	{ name: 'Sprint_Loop', frames: 24 },
+	{ name: 'Crouch_Idle_Loop', frames: 16 },
+	{ name: 'Idle_LookAround_Loop', frames: 32 },
+	{ name: 'Drink', frames: 24, once: true },
+	{ name: 'Interact', frames: 16, once: true },
+	{ name: 'Sitting_Idle03_Loop', frames: 24 },
+	{ name: 'Sitting_Nodding_Loop', frames: 16 },
+	{ name: 'Sitting_Drink', frames: 24, once: true },
+	{ name: 'Sitting_Enter', frames: 16, once: true },
+	{ name: 'Sitting_Exit', frames: 16, once: true }
 ];
+
+export const CROWD_CLIP_NAMES = CROWD_CLIPS.map( ( clip ) => clip.name );
+
+/**
+ * Clips made of the library's (LayeredClips.js): a base moving the whole
+ * body and layers moving a part of it. A seated sip: the arms and head drink
+ * while the seat holds the rest.
+ */
+export const LAYERED_CLIPS = {
+	Sitting_Drink: { base: 'Sitting_Idle_Loop', layers: [ { part: 'arms', clip: 'Drink' }, { part: 'head', clip: 'Drink' } ] }
+};
 
 export const PLAYER_CLIP_NAMES = {
 	IDLE: 'Idle_Loop',

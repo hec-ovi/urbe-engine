@@ -28,7 +28,9 @@ const GAME_CLIPS = [
 	'Sitting_Idle_Loop', 'Sitting_Talking_Loop',
 	'Crouch_Enter', 'Crouch_Idle_Loop', 'Crouch_Exit',
 	'Jump_Start', 'Jump_Loop', 'Jump_Land',
-	'Sprint_Enter', 'Sprint_Loop', 'Sprint_Exit'
+	'Sprint_Enter', 'Sprint_Loop', 'Sprint_Exit',
+	// The crowd's idle variety and a seat's turnover (CharacterCatalog.CROWD_CLIPS).
+	'Idle_LookAround_Loop', 'Drink', 'Interact', 'Sitting_Idle03_Loop', 'Sitting_Nodding_Loop', 'Sitting_Enter', 'Sitting_Exit'
 ];
 
 await install();

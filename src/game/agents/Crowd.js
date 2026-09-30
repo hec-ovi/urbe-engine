@@ -9,6 +9,7 @@ import { stepPresence } from './Presence.js';
 import { hiddenWalkEntry } from './SpawnVisibility.js';
 import { WalkSurface } from './WalkSurface.js';
 import { BODY_RADIUS } from '../physics/PlayerBody.js';
+import { stepIdle } from './IdleVariety.js';
 
 /** How fast people walk. Everyone has their own pace inside this range. */
 const WALK_SLOWEST = 0.9;
@@ -61,6 +62,8 @@ const GRADE = new Set( [ 'sidewalk', 'access', 'crossing' ] );
 const CLEARANCE = 0.02;
 /** Continuity control modes the schedule drives, whose bodies stand inside a building only on a floor it shows. */
 const SCHEDULED = new Set( [ 'schedule', 'resuming', 'released' ] );
+/** Postures a person rests in with the idle variety of their role (IdleVariety.js). */
+const RESTING = new Set( [ CLIP.IDLE, CLIP.SIT ] );
 
 /**
  * The people in the world, all of them real. Two sources, both the simulation
@@ -1302,7 +1305,8 @@ export class Crowd {
 			parcelId: null,
 			spot: null,
 			...wearing( null, instance?.gender ?? agent.gender, instance?.appearanceSeed ?? seed, instance?.npcId ?? null ),
-			frame: seed % FRAMES,
+			// Nobody rests or walks in step with anybody else: a phase of their own.
+			frame: ( seed % 4093 ) / 4093 * FRAMES,
 			frozen: false,
 			retiring: false,
 			copy: false,
@@ -1447,8 +1451,16 @@ export class Crowd {
 
 		}
 
-		const duration = this.assets.durations[ member.clip ] || 1;
-		member.frame = ( member.frame + ( delta / duration ) * FRAMES ) % FRAMES;
+		// Somebody standing or sitting still rests in their own way; anybody
+		// else plays their posture's clip.
+		if ( member.stationary && RESTING.has( member.clip ) ) stepIdle( member, delta, this.assets.durations );
+		else {
+
+			member.shown = member.clip;
+			const duration = this.assets.durations[ member.clip ] || 1;
+			member.frame = ( member.frame + ( delta / duration ) * FRAMES ) % FRAMES;
+
+		}
 
 	}
 
@@ -1688,7 +1700,7 @@ export class Crowd {
 
 			for ( const mesh of this.assets.meshesOf( member.variant ) ) {
 
-				mesh.setInstance( slot, member.position, member.heading, member.frame, member.clip, member.look, member.presence );
+				mesh.setInstance( slot, member.position, member.heading, member.frame, member.shown ?? member.clip, member.look, member.presence );
 				this.lighting?.write( mesh.mesh, slot, fill );
 
 			}

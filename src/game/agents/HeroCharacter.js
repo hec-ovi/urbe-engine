@@ -1,12 +1,14 @@
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ANIMATION_URL, CROWD_CLIP_NAMES, CROWD_MODELS } from './CharacterCatalog.js';
+import { CLIP } from './CharacterAssets.js';
 import { CharacterPoser, modelKey } from './CharacterPoser.js';
 import { recipeFor } from './Appearance.js';
 import { personRecipe } from './avatar/Recipe.js';
 import { Tailor } from './avatar/Tailor.js';
 import { SpeechGesture } from './SpeechGesture.js';
 import { FRAMES } from './VatBaker.js';
+import { hasClip, transferredClip } from './LayeredClips.js';
 import { streetBodies } from './StreetBodies.js';
 import { Ragdoll } from '../physics/Ragdoll.js';
 
@@ -181,8 +183,7 @@ export class HeroCharacter {
 			const source = await this.poser.model( recipe );
 			for ( const name of [ ...CROWD_CLIP_NAMES, TALK, SIT_TALK ] ) {
 
-				const clip = THREE.AnimationClip.findByName( this.animation.animations, name );
-				if ( clip ) source.motions.clip( clip );
+				if ( hasClip( this.animation.animations, name ) ) transferredClip( this.animation.animations, source.motions, name );
 
 			}
 			const root = this.poser.dress( source, { position: new THREE.Vector3(), heading: 0 }, `prepared-${recipe.body}` );
@@ -485,11 +486,11 @@ export class HeroCharacter {
 		root.position.copy( person.position );
 		root.rotation.y = person.heading;
 		this.lighting?.writeRoot( root, person.position );
-		const { name, clip, time } = crowdFrame( this.animation, person );
+		const { name, clip, time } = crowdFrame( this.animation, close.motions, person );
 		height?.beforePose();
 		if ( close.clipName !== name ) {
 
-			const action = mixer.clipAction( close.motions.clip( clip ) );
+			const action = mixer.clipAction( clip );
 			action.reset().setLoop( THREE.LoopRepeat, Infinity ).play();
 			if ( close.action && close.action !== action ) action.crossFadeFrom( close.action, close.clipName ? CLOSE_FADE : 0, true );
 			close.action = action;
@@ -552,8 +553,8 @@ export class HeroCharacter {
 	 */
 	#handOff( person ) {
 
-		const { name, clip, time } = crowdFrame( this.animation, person );
-		const action = this.active.mixer.clipAction( this.active.motions.clip( clip ) );
+		const { name, clip, time } = crowdFrame( this.animation, this.active.motions, person );
+		const action = this.active.mixer.clipAction( clip );
 		action.play();
 		action.time = time;
 		this.active.currentAction = action;
@@ -626,7 +627,7 @@ function recipeOf( person ) {
 function defaultSegments( person ) {
 
 	return [ {
-		clipName: person.clip === 3 || person.clip === 4 ? SIT_TALK : TALK,
+		clipName: person.clip === CLIP.SIT || person.clip === CLIP.SIT_TALK ? SIT_TALK : TALK,
 		loop: true,
 		blendMs: BLEND_MS
 	} ];
@@ -641,11 +642,15 @@ function samePerson( left, right ) {
 
 }
 
-/** The clip a crowd body plays and how far into it the body is: its baked frame. */
-function crowdFrame( animation, person ) {
+/**
+ * The clip a crowd body shows, transferred onto a rig's body, and how far
+ * into it the body is: its baked frame. What it shows is its idle variety's
+ * clip while it rests (`shown`), else its posture's.
+ */
+function crowdFrame( animation, motions, person ) {
 
-	const name = CROWD_CLIP_NAMES[ person.clip ] ?? CROWD_CLIP_NAMES[ 1 ];
-	const clip = THREE.AnimationClip.findByName( animation.animations, name );
+	const name = CROWD_CLIP_NAMES[ person.shown ?? person.clip ] ?? CROWD_CLIP_NAMES[ 1 ];
+	const clip = transferredClip( animation.animations, motions, name );
 	if ( ! clip ) throw new Error( `Pro animation library is missing ${name}` );
 	return { name, clip, time: ( ( person.frame ?? 0 ) % FRAMES / FRAMES ) * clip.duration };
 
@@ -654,9 +659,9 @@ function crowdFrame( animation, person ) {
 /** Reconstructs the baked person's authored frame before physics owns it. */
 function poseAtCrowdFrame( root, animation, motions, person ) {
 
-	const { clip, time } = crowdFrame( animation, person );
+	const { clip, time } = crowdFrame( animation, motions, person );
 	const mixer = new THREE.AnimationMixer( root );
-	const action = mixer.clipAction( motions.clip( clip ) );
+	const action = mixer.clipAction( clip );
 	action.play();
 	mixer.setTime( time );
 	root.updateWorldMatrix( true, true );

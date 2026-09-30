@@ -3,6 +3,7 @@ import { lookOf } from './Appearance.js';
 import { SLOTS, defaultRecipe } from './avatar/Recipe.js';
 import { bodyOf } from './avatar/BodyShape.js';
 import { fitKey } from './avatar/Tailor.js';
+import { CROWD_CLIP_NAMES, LAYERED_CLIPS } from './CharacterCatalog.js';
 
 const X = new THREE.Vector3( 1, 0, 0 );
 
@@ -60,8 +61,7 @@ export function animation( turns = {}, scene = rig() ) {
 		...new THREE.Quaternion().setFromAxisAngle( X, from ).toArray(), ...new THREE.Quaternion().setFromAxisAngle( X, to ).toArray()
 	] ) ] );
 	const names = new Set( [
-		'Walk_Loop', 'Idle_Loop', 'Idle_Talking_Loop', 'Sitting_Idle_Loop', 'Sitting_Talking_Loop',
-		'Sprint_Loop', 'Crouch_Idle_Loop', 'Sprint_Enter', ...Object.keys( turns )
+		...CROWD_CLIP_NAMES.filter( ( name ) => ! LAYERED_CLIPS[ name ] ), 'Sprint_Enter', ...Object.keys( turns )
 	] );
 
 	return {

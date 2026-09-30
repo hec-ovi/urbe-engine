@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { FRAMES, VatBaker } from './VatBaker.js';
+import { FRAMES, VatBaker, clipRows, rowsAt } from './VatBaker.js';
 import { CharacterAnimations } from './CharacterAnimations.js';
 import { characterParts, headParts } from './CharacterAssets.js';
 import { EVERYONE, crowdHairstyles } from './HairMesh.js';
@@ -154,6 +154,70 @@ describe( 'VAT skinning', () => {
 		// The rig moves: a row late in the bend is not its first.
 		const row = 4 * baked.vertexCount;
 		expect( largestDifference( baked.position.subarray( 0, row ), baked.position.subarray( 20 * row, 21 * row ) ) ).toBeGreaterThan( 0.1 );
+
+	} );
+
+} );
+
+describe( 'VAT clip rows', () => {
+
+	/** One bone rising a metre over each clip's second, a vertex riding it. */
+	const riser = () => {
+
+		const geometry = new THREE.BufferGeometry();
+		geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [ 0, 0, 0 ], 3 ) );
+		geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( [ 0, 1, 0 ], 3 ) );
+		geometry.setAttribute( 'skinIndex', new THREE.Uint16BufferAttribute( [ 0, 0, 0, 0 ], 4 ) );
+		geometry.setAttribute( 'skinWeight', new THREE.Float32BufferAttribute( [ 1, 0, 0, 0 ], 4 ) );
+		const bone = new THREE.Bone();
+		bone.name = 'lift';
+		const mesh = new THREE.SkinnedMesh( geometry, new THREE.MeshBasicMaterial() );
+		const root = new THREE.Group();
+		root.add( bone, mesh );
+		root.updateMatrixWorld( true );
+		mesh.bind( new THREE.Skeleton( [ bone ] ) );
+		const rise = new THREE.VectorKeyframeTrack( 'lift.position', [ 0, 1 ], [ 0, 0, 0, 0, 1, 0 ] );
+		return { root, mesh, clips: [ new THREE.AnimationClip( 'loop', 1, [ rise ] ), new THREE.AnimationClip( 'once', 1, [ rise ] ) ] };
+
+	};
+
+	it( 'bakes each clip to its own rows: a loop stops a step short of its end, a clip played once reaches its final pose', async () => {
+
+		const { root, mesh, clips } = riser();
+		let asked = 0;
+		const layout = [ { frames: 4 }, { frames: 3, once: true } ];
+		const [ baked ] = await VatBaker.bake( root, [ mesh ], clips, { step: async () => { asked ++; } }, layout );
+		const heights = Array.from( { length: baked.rows }, ( _, row ) => baked.position[ row * 4 + 1 ] );
+
+		expect( asked ).toBe( 7 );
+		expect( baked.rows ).toBe( 7 );
+		expect( baked.clips ).toEqual( [ { start: 0, frames: 4, once: false }, { start: 4, frames: 3, once: true } ] );
+		heights.forEach( ( height, row ) => expect( height ).toBeCloseTo( [ 0, 0.25, 0.5, 0.75, 0, 0.5, 1 ][ row ], 5 ) );
+		const head = await VatBaker.bakeJoint( root, mesh, 'lift', clips, null, layout );
+		expect( head.rows ).toBe( 7 );
+		expect( head.clips ).toEqual( baked.clips );
+		// The joint's rows carry the same rise: the translation lane of each matrix.
+		expect( head.data[ 6 * 12 + 7 ] ).toBeCloseTo( 1, 5 );
+
+	} );
+
+	it( 'reads a loop round from its last row to its first and holds a clip played once on its last', () => {
+
+		const [ loop, once ] = clipRows( 2, [ { frames: 16 }, { frames: 5, once: true } ] );
+		const out = [ 0, 0 ];
+
+		expect( rowsAt( loop, 0, out ) ).toEqual( [ 0, 1 ] );
+		// Half-way through a 16-row loop is its ninth row, and the end of it blends back to the first.
+		expect( rowsAt( loop, FRAMES / 2, out ) ).toEqual( [ 8, 9 ] );
+		const [ late, next ] = rowsAt( loop, FRAMES - 0.5, out );
+		expect( late ).toBeCloseTo( 15.75, 5 );
+		expect( next ).toBe( 0 );
+		expect( rowsAt( once, 0, out ) ).toEqual( [ 16, 17 ] );
+		expect( rowsAt( once, FRAMES / 2, out ) ).toEqual( [ 18, 19 ] );
+		expect( rowsAt( once, FRAMES, out ) ).toEqual( [ 20, 20 ] );
+		expect( rowsAt( once, FRAMES * 3, out ) ).toEqual( [ 20, 20 ] );
+		// With no layout every clip is a FRAMES-row loop, as the crowd baked before layouts.
+		expect( clipRows( 3 ).map( ( rows ) => rows.start ) ).toEqual( [ 0, FRAMES, FRAMES * 2 ] );
 
 	} );
 

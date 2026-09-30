@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
-import { cos, float, instancedBufferAttribute, int, mix, sin, transformNormalToView, varying, vec3, vertexIndex } from 'three/tsl';
-import { FRAMES } from './VatBaker.js';
+import { cos, instancedBufferAttribute, int, mix, sin, transformNormalToView, varying, vec3, vertexIndex } from 'three/tsl';
+import { FRAMES, clipRows, rowsAt } from './VatBaker.js';
 import { presenceMaterial } from './Presence.js';
 import { PoseBuffer } from './PoseBuffer.js';
 import { packLook, statureNode } from './CrowdLook.js';
@@ -37,11 +37,14 @@ export class CrowdMesh {
 
 		this.capacity = capacity;
 		this.attributes = [];
+		/** Where each clip's rows sit in the pose buffers (VatBaker.clipRows). */
+		this.clips = baked.clips ?? clipRows( Math.max( 1, Math.round( baked.rows / FRAMES ) ) );
+		this.rows = [ 0, 0 ];
 
 		// Every attribute is one vertex buffer on WebGPU, which allows eight per
 		// pipeline, so the per-instance data is packed: where a person stands
-		// and faces in one vec4, which frame of which clip with presence and
-		// their figure (CrowdLook.packLook) in another.
+		// and faces in one vec4, the two pose rows their frame of their clip
+		// blends with presence and their figure (CrowdLook.packLook) in another.
 		this.motion = this.attribute( 4 );
 		this.pose = this.attribute( 4 );
 
@@ -49,16 +52,16 @@ export class CrowdMesh {
 		const aPose = instancedBufferAttribute( this.pose, 'vec4' );
 		/** The figure lane: height, footwear, collar and top style, read by a subclass's paint. */
 		this.figure = aPose.w;
-		const aFrame = aPose.x;
-		const aClip = aPose.y;
+		// The first row and how far towards the second, then the second: the
+		// clip's own row count and whether it loops are the CPU's (VatBaker.rowsAt).
+		const aRow = aPose.x;
 		const aOrigin = aMotion.xyz;
 		const aHeading = aMotion.w;
 
-		const whole = aFrame.floor();
-		const blend = aFrame.sub( whole );
-		const base = aClip.mul( float( FRAMES ) );
-		const row0 = int( base.add( whole ) );
-		const row1 = int( base.add( whole.add( 1 ).mod( float( FRAMES ) ) ) );
+		const whole = aRow.floor();
+		const blend = aRow.sub( whole );
+		const row0 = int( whole );
+		const row1 = int( aPose.y.add( 0.5 ) );
 		const column = int( vertexIndex );
 
 		const c = cos( aHeading );
@@ -163,10 +166,15 @@ export class CrowdMesh {
 	 */
 	setLook() {}
 
+	/**
+	 * @param frame how far through the clip, 0 to FRAMES whatever its row count
+	 * @param clip the clip's index in the bake
+	 */
 	setInstance( slot, position, heading, frame, clip, look, presence = 1 ) {
 
+		const rows = rowsAt( this.clips[ clip ] ?? this.clips[ 0 ], frame, this.rows );
 		this.motion.setXYZW( slot, position.x, position.y, position.z, heading );
-		this.pose.setXYZW( slot, frame, clip, presence, packLook( look ).figure );
+		this.pose.setXYZW( slot, rows[ 0 ], rows[ 1 ], presence, packLook( look ).figure );
 		this.setLook( slot, look );
 
 	}

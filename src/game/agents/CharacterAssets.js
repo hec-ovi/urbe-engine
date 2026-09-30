@@ -6,13 +6,18 @@ import { BodyMesh } from './BodyMesh.js';
 import { EVERYONE, HairMesh, crowdHairstyles } from './HairMesh.js';
 import { CharacterAnimations } from './CharacterAnimations.js';
 import { garments } from './Garments.js';
+import { hasClip, transferredClip } from './LayeredClips.js';
 import {
-	ANIMATION_URL, CHARACTER_MANIFEST_URL, CHARACTER_ROOT, CROWD_CLIP_NAMES, CROWD_MODELS,
+	ANIMATION_URL, CHARACTER_MANIFEST_URL, CHARACTER_ROOT, CROWD_CLIPS, CROWD_MODELS,
 	assertRigCompatibility
 } from './CharacterCatalog.js';
 
-// Clip order matches CharacterCatalog.CROWD_CLIP_NAMES.
-export const CLIP = { WALK: 0, IDLE: 1, TALK: 2, SIT: 3, SIT_TALK: 4, RUN: 5, CROUCH: 6 };
+// Clip order matches CharacterCatalog.CROWD_CLIPS: the seven postures, then
+// the idle variety and a seat's sitting down and standing up.
+export const CLIP = {
+	WALK: 0, IDLE: 1, TALK: 2, SIT: 3, SIT_TALK: 4, RUN: 5, CROUCH: 6,
+	LOOK_AROUND: 7, DRINK: 8, INTERACT: 9, SIT_FIDGET: 10, SIT_NOD: 11, SIT_DRINK: 12, SIT_DOWN: 13, STAND_UP: 14
+};
 
 export function clipForNpcAnimation( animation ) {
 
@@ -70,15 +75,11 @@ export class CharacterAssets {
 		const models = loaded.slice( 4, 4 + CROWD_MODELS.length );
 		const hairs = loaded[ 4 + CROWD_MODELS.length ];
 
-		const clips = CROWD_CLIP_NAMES.map( ( name ) => {
+		for ( const { name } of CROWD_CLIPS ) {
 
-			const clip = animationGltf.animations.find( ( c ) => c.name === name );
+			if ( ! hasClip( animationGltf.animations, name ) ) throw new Error( `animation library is missing ${name}` );
 
-			if ( ! clip ) throw new Error( `animation library is missing ${name}` );
-
-			return clip;
-
-		} );
+		}
 
 		for ( let i = 0; i < CROWD_MODELS.length; i ++ ) {
 
@@ -105,11 +106,18 @@ export class CharacterAssets {
 			const bottom = Math.min( 0, body.geometry.boundingBox.min.y );
 			const height = body.geometry.boundingBox.max.y - bottom;
 			const motions = new CharacterAnimations( root, animationGltf.scene );
-			const bodyClips = clips.map( ( clip ) => motions.clip( clip ) );
-			const [ bakedBody, bakedEyes ] = await VatBaker.bake( root, [ body, eyes ], bodyClips, slice );
+			const bodyClips = [];
+			// A transfer is tens of milliseconds: the budget is asked between them.
+			for ( const { name } of CROWD_CLIPS ) {
+
+				bodyClips.push( transferredClip( animationGltf.animations, motions, name ) );
+				if ( slice ) await slice.step();
+
+			}
+			const [ bakedBody, bakedEyes ] = await VatBaker.bake( root, [ body, eyes ], bodyClips, slice, CROWD_CLIPS );
 			onProgress( ++ done, total );
 			const styles = crowdHairstyles( CROWD_MODELS[ i ].gender );
-			const head = await VatBaker.bakeJoint( root, body, 'Head', bodyClips, slice );
+			const head = await VatBaker.bakeJoint( root, body, 'Head', bodyClips, slice, CROWD_CLIPS );
 			const heads = headParts( [
 				{ mesh: eyebrows, style: EVERYONE },
 				...hairs[ i ].flatMap( ( hair, style ) => skinnedMeshes( hair.scene ).map( ( mesh ) => ( { mesh, style } ) ) )
@@ -122,14 +130,16 @@ export class CharacterAssets {
 			variants.push( {
 				id: CROWD_MODELS[ i ].id,
 				body: new BodyMesh( baked, capacity, storageCapable, { map: skins[ i ], eyeMap, cloth, height, bottom } ),
-				hair: new HairMesh( { mesh: new THREE.Mesh( heads ), rows: head.rows, head: head.data, styles }, capacity, storageCapable, { maps: hairMaps } )
+				hair: new HairMesh( { mesh: new THREE.Mesh( heads ), rows: head.rows, head: head.data, clips: head.clips, styles }, capacity, storageCapable, { maps: hairMaps } ),
+				bytes: vatBytes( baked, head, storageCapable ),
+				durations: bodyClips.map( ( clip ) => clip.duration )
 			} );
 
 		}
 
 		return new CharacterAssets(
 			variants,
-			clips.map( ( clip ) => clip.duration ),
+			variants[ 0 ].durations,
 			animationGltf,
 			animationCatalog( animationGltf, manifest )
 		);
@@ -139,7 +149,12 @@ export class CharacterAssets {
 	constructor( variants, durations, animation, catalog ) {
 
 		this.variants = variants;
+		/** Seconds each baked clip lasts, in CROWD_CLIPS order. */
 		this.durations = durations;
+		/** Which of them play once rather than loop. */
+		this.once = CROWD_CLIPS.map( ( clip ) => Boolean( clip.once ) );
+		/** What the pose buffers hold on the GPU, in bytes. */
+		this.vatBytes = variants.reduce( ( sum, variant ) => sum + ( variant.bytes ?? 0 ), 0 );
 		this.animation = animation;
 		this.animationCatalog = catalog;
 		this.group = new THREE.Group();
@@ -162,6 +177,18 @@ export class CharacterAssets {
 		return [ variant.body, variant.hair ];
 
 	}
+
+}
+
+/**
+ * The pose buffers of one body on the GPU: its rows of position and normal,
+ * a vec4 per vertex (float on WebGPU, half float in WebGL's textures), and the
+ * three vec4s a row the head carries its hair on.
+ */
+export function vatBytes( baked, head, storageCapable ) {
+
+	const scalar = storageCapable ? 4 : 2;
+	return ( baked.rows * baked.vertexCount * 2 + head.rows * 3 ) * 4 * scalar;
 
 }
 
@@ -331,7 +358,8 @@ export function mergeBaked( parts ) {
 		vertexCount,
 		rows,
 		position: mergeRows( parts, 'position', rows, vertexCount ),
-		normal: mergeRows( parts, 'normal', rows, vertexCount )
+		normal: mergeRows( parts, 'normal', rows, vertexCount ),
+		...( parts[ 0 ].clips ? { clips: parts[ 0 ].clips } : {} )
 	};
 
 }
