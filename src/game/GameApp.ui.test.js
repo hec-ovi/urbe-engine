@@ -65,8 +65,8 @@ describe( 'playable game navigation', () => {
 		const app = new GameApp( {} );
 		app.voice = { setEnabled: vi.fn(), setVolume: vi.fn() };
 		app.view.open( 'SETTINGS' );
-		await userEvent.setup().selectOptions( screen.getByLabelText( 'npc voices' ), 'off' );
-		fireEvent.input( screen.getByLabelText( 'voice volume' ), { target: { value: '0.3' } } );
+		await userEvent.setup().selectOptions( screen.getByLabelText( 'NPC voices', { selector: 'select' } ), 'off' );
+		fireEvent.input( screen.getByLabelText( 'Voice volume' ), { target: { value: '0.3' } } );
 		expect( app.voice.setEnabled ).toHaveBeenCalledExactlyOnceWith( false );
 		expect( app.voice.setVolume ).toHaveBeenCalledExactlyOnceWith( 0.3 );
 
@@ -78,7 +78,7 @@ describe( 'playable game navigation', () => {
 		await userEvent.setup().click( toggle );
 		expect( app.voice.setEnabled ).toHaveBeenLastCalledWith( true );
 		expect( toggle.getAttribute( 'aria-pressed' ) ).toBe( 'true' );
-		expect( screen.getByLabelText( 'npc voices', { selector: 'select' } ).value ).toBe( 'on' );
+		expect( screen.getByLabelText( 'NPC voices', { selector: 'select' } ).value ).toBe( 'on' );
 
 	} );
 

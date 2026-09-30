@@ -7,6 +7,7 @@ import '../components/journal.css';
 import '../components/map.css';
 import '../components/inventory.css';
 import '../components/codex.css';
+import '../components/settings.css';
 import '../components/chat.css';
 import '../components/mission.css';
 import '../components/fracture.css';

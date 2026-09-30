@@ -115,23 +115,23 @@ const PANEL_KEYS = [
 	[ 'KeyX', 'CODEX' ], [ 'KeyO', 'SETTINGS' ], [ 'Slash', 'CONTROLS' ]
 ];
 const BINDINGS = [
-	{ keys: [ 'PgUp', 'PgDn' ], category: 'Interaction', action: 'Select lift floor; E to travel' },
-	{ category: 'Movement', action: 'walk', keys: [ 'W', 'A', 'S', 'D' ] },
-	{ category: 'Movement', action: 'jump', keys: [ 'Space' ] },
-	{ category: 'Movement', action: 'crouch', keys: [ 'C' ] },
-	{ category: 'Movement', action: 'sprint', keys: [ 'Shift' ] },
-	{ category: 'Movement', action: 'running speed: normal / double / quadruple', keys: [ '1', '2', '4' ] },
-	{ category: 'Movement', action: 'hold zoom', keys: [ 'Right mouse' ] },
-	{ category: 'Interaction', action: 'interact, board, leave transit, take, inspect, listen, steal, work, deliver', keys: [ 'E' ] },
-	{ category: 'Interaction', action: 'read quest document', keys: [ 'R' ] },
-	{ category: 'Interface', action: 'journal', keys: [ 'J' ] },
-	{ category: 'Interface', action: 'map', keys: [ 'M' ] },
-	{ category: 'Interface', action: 'inventory', keys: [ 'I' ] },
-	{ category: 'Interface', action: 'codex', keys: [ 'X' ] },
-	{ category: 'Interface', action: 'settings', keys: [ 'O' ] },
-	{ category: 'Interface', action: 'controls', keys: [ '?' ] },
-	{ category: 'Interface', action: 'pause menu', keys: [ 'Esc', 'N' ] },
-	{ category: 'Interface', action: 'close the chat or a panel', keys: [ 'Esc' ] }
+	{ keys: [ 'PgUp', 'PgDn' ], category: 'Interaction', action: 'Select lift floor; E to travel', description: 'In a lift, pick the floor; E takes you there.' },
+	{ category: 'Movement', action: 'walk', keys: [ 'W', 'A', 'S', 'D' ], description: 'Walk the streets and the floors of a building; two keys together walk on the diagonal.' },
+	{ category: 'Movement', action: 'jump', keys: [ 'Space' ], description: 'Hop a kerb or a low step.' },
+	{ category: 'Movement', action: 'crouch', keys: [ 'C' ], description: 'Lower your view while it is held.' },
+	{ category: 'Movement', action: 'sprint', keys: [ 'Shift' ], description: 'Run while it is held.' },
+	{ category: 'Movement', action: 'running speed: normal / double / quadruple', keys: [ '1', '2', '4' ], description: 'How fast you run, for long walks across the city.' },
+	{ category: 'Movement', action: 'hold zoom', keys: [ 'Right mouse' ], description: 'Look closer while the button is held.' },
+	{ category: 'Interaction', action: 'interact, board, leave transit, take, inspect, listen, steal, work, deliver', keys: [ 'E' ], description: 'Talk to the person in front of you, open a door, board or leave a ride, or do what the prompt names.' },
+	{ category: 'Interaction', action: 'read quest document', keys: [ 'R' ], description: 'Read a document a story hands you.' },
+	{ category: 'Interface', action: 'journal', keys: [ 'J' ], description: 'Your stories, the one you follow and where it goes next.' },
+	{ category: 'Interface', action: 'map', keys: [ 'M' ], description: 'The city, where you stand and the way to your objective.' },
+	{ category: 'Interface', action: 'inventory', keys: [ 'I' ], description: 'What you carry, and the stories it belongs to.' },
+	{ category: 'Interface', action: 'codex', keys: [ 'X' ], description: 'The things, people and places you have come across.' },
+	{ category: 'Interface', action: 'settings', keys: [ 'O' ], description: 'Picture, crowd, voices and the developer readouts.' },
+	{ category: 'Interface', action: 'controls', keys: [ '?' ], description: 'This reference.' },
+	{ category: 'Interface', action: 'pause menu', keys: [ 'Esc', 'N' ], description: 'Hold the city still and open the menu.' },
+	{ category: 'Interface', action: 'close the chat or a panel', keys: [ 'Esc' ], description: 'Back to the street, or to the menu a panel was opened from.' }
 ];
 
 /** Standing still: this close to one spot for this long. */

@@ -1,22 +1,56 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Settings panel: its header and the fields it shows, section by section",
+  "title": "Settings screen: its header, the sections as tabs, their groups of fields and the details beside them",
   "type": "object",
-  "required": ["title", "key", "sections"],
+  "required": ["title", "key", "eyebrow", "subtitle", "tabs", "details", "status", "session", "sections"],
   "additionalProperties": false,
   "properties": {
     "title": { "$ref": "#/$defs/text" },
-    "key": { "description": "The key that opens the panel, as its header shows it.", "$ref": "#/$defs/text" },
+    "key": { "description": "The key that opens the panel.", "$ref": "#/$defs/text" },
+    "eyebrow": { "$ref": "#/$defs/text" },
+    "subtitle": { "$ref": "#/$defs/text" },
+    "tabs": { "description": "The section tabs' accessible name.", "$ref": "#/$defs/text" },
+    "details": {
+      "description": "The card beside the form that reads out the setting in focus or under the pointer.",
+      "type": "object",
+      "required": ["eyebrow", "idle"],
+      "additionalProperties": false,
+      "properties": { "eyebrow": { "$ref": "#/$defs/text" }, "idle": { "$ref": "#/$defs/text" } }
+    },
+    "status": { "description": "The line in the form's footer.", "$ref": "#/$defs/text" },
+    "session": {
+      "type": "object",
+      "required": ["eyebrow", "title", "text"],
+      "additionalProperties": false,
+      "properties": { "eyebrow": { "$ref": "#/$defs/text" }, "title": { "$ref": "#/$defs/text" }, "text": { "$ref": "#/$defs/text" } }
+    },
     "sections": {
+      "description": "One tab each.",
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["title", "fields"],
+        "required": ["number", "label", "title", "text", "groups"],
         "additionalProperties": false,
         "properties": {
+          "number": { "$ref": "#/$defs/text" },
+          "label": { "description": "The tab.", "$ref": "#/$defs/text" },
           "title": { "$ref": "#/$defs/text" },
-          "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/field" } }
+          "text": { "$ref": "#/$defs/text" },
+          "groups": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["code", "label", "fields"],
+              "additionalProperties": false,
+              "properties": {
+                "code": { "$ref": "#/$defs/text" },
+                "label": { "$ref": "#/$defs/text" },
+                "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/field" } }
+              }
+            }
+          }
         }
       }
     }
@@ -24,29 +58,42 @@
   "$defs": {
     "text": { "type": "string", "minLength": 1 },
     "field": {
-      "description": "One setting: `key` is what the change reports.",
+      "description": "One setting: `key` is what the change reports; `hint` sits under its label and `text` in the details card.",
       "oneOf": [{ "$ref": "#/$defs/select" }, { "$ref": "#/$defs/scale" }]
     },
     "select": {
-      "description": "A choice between options, each value its own label.",
+      "description": "A choice between options, each a value and its label.",
       "type": "object",
-      "required": ["key", "label", "type", "options"],
+      "required": ["key", "label", "hint", "text", "type", "options"],
       "additionalProperties": false,
       "properties": {
         "key": { "$ref": "#/$defs/text" },
         "label": { "$ref": "#/$defs/text" },
+        "hint": { "$ref": "#/$defs/text" },
+        "text": { "$ref": "#/$defs/text" },
         "type": { "const": "select" },
-        "options": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/text" } }
+        "options": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["value", "label"],
+            "additionalProperties": false,
+            "properties": { "value": { "$ref": "#/$defs/text" }, "label": { "$ref": "#/$defs/text" } }
+          }
+        }
       }
     },
     "scale": {
       "description": "A number between bounds, as a slider (range) or a box (number).",
       "type": "object",
-      "required": ["key", "label", "type", "min", "max", "step"],
+      "required": ["key", "label", "hint", "text", "type", "min", "max", "step"],
       "additionalProperties": false,
       "properties": {
         "key": { "$ref": "#/$defs/text" },
         "label": { "$ref": "#/$defs/text" },
+        "hint": { "$ref": "#/$defs/text" },
+        "text": { "$ref": "#/$defs/text" },
         "type": { "enum": ["range", "number"] },
         "min": { "type": "number" },
         "max": { "type": "number" },

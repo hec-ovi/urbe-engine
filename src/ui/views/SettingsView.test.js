@@ -7,14 +7,14 @@ import layout from './settings-layout.json' with { type: 'json' };
 import schema from './settings-layout.schema.json' with { type: 'json' };
 import { SettingsView } from './SettingsView.js';
 
-/** Seven fields in three sections, values in through setValues, one typed change out per edit. */
+/** Seven fields in three tabbed sections, values in through setValues, one typed change out per edit. */
 describe( 'SettingsView', () => {
 
 	it( 'reads its fields from a layout that meets its schema', () => {
 
 		const validate = new Ajv( { allErrors: true, strict: true } ).compile( schema );
 		expect( validate( layout ), JSON.stringify( validate.errors ) ).toBe( true );
-		expect( validate( { ...layout, sections: [ { title: 'x', fields: [ { key: 'k', label: 'k', type: 'select' } ] } ] } ) ).toBe( false );
+		expect( validate( { ...layout, sections: [ { ...layout.sections[ 0 ], groups: [ { code: 'A', label: 'x', fields: [ { key: 'k', label: 'k', type: 'select' } ] } ] } ] } ) ).toBe( false );
 
 	} );
 
@@ -25,21 +25,30 @@ describe( 'SettingsView', () => {
 		document.body.replaceChildren( view.element );
 
 		view.setValues( { quality: 'ultra', fog: 0.0006, exposure: 0.024, crowd: 200, voice: 'off', voiceVolume: 0.8, details: 'on' } );
-		expect( screen.getByLabelText( 'quality tier' ).value ).toBe( 'ultra' );
-		expect( screen.getByLabelText( 'fog density' ).value ).toBe( '0.0006' );
-		expect( screen.getByLabelText( 'exposure' ).value ).toBe( '0.024' );
-		expect( screen.getByLabelText( 'crowd count' ).value ).toBe( '200' );
-		expect( screen.getByLabelText( 'npc voices' ).value ).toBe( 'off' );
-		expect( screen.getByLabelText( 'voice volume' ).value ).toBe( '0.8' );
-		expect( screen.getByLabelText( /developer details/ ).value ).toBe( 'on' );
-		expect( screen.getAllByRole( 'heading' ).map( ( heading ) => heading.textContent ) ).toEqual( [ 'Settings', 'look and load', 'voices', 'screen' ] );
+		expect( screen.getByLabelText( 'Picture quality' ).value ).toBe( 'ultra' );
+		expect( screen.getByLabelText( 'Fog density' ).value ).toBe( '0.0006' );
+		expect( screen.getByLabelText( 'Exposure' ).value ).toBe( '0.024' );
+		expect( screen.getByLabelText( 'Crowd' ).value ).toBe( '200' );
+		expect( screen.getByLabelText( 'NPC voices' ).value ).toBe( 'off' );
+		expect( screen.getByLabelText( 'Voice volume' ).value ).toBe( '0.8' );
+		expect( screen.getByLabelText( 'Developer details' ).value ).toBe( 'on' );
+		expect( screen.getAllByRole( 'tab' ).map( ( tab ) => tab.textContent ) ).toEqual( [ '01Display', '02Voices', '03Screen' ] );
+		expect( screen.getByRole( 'heading', { name: 'The city, in detail' } ) ).toBeTruthy();
+		expect( screen.queryByRole( 'heading', { name: 'Listen to the people' } ) ).toBeNull();
+		await userEvent.setup().click( screen.getByRole( 'tab', { name: /Voices/ } ) );
+		expect( screen.getByRole( 'heading', { name: 'Listen to the people' } ) ).toBeTruthy();
+		expect( screen.getByRole( 'tab', { name: /Voices/ } ).getAttribute( 'aria-selected' ) ).toBe( 'true' );
 
-		await userEvent.setup().selectOptions( screen.getByLabelText( 'quality tier' ), 'low' );
-		fireEvent.input( screen.getByLabelText( 'fog density' ), { target: { value: '0.001' } } );
-		fireEvent.change( screen.getByLabelText( 'crowd count' ), { target: { value: '350' } } );
-		await userEvent.setup().selectOptions( screen.getByLabelText( 'npc voices' ), 'on' );
-		fireEvent.input( screen.getByLabelText( 'voice volume' ), { target: { value: '0.35' } } );
-		await userEvent.setup().selectOptions( screen.getByLabelText( /developer details/ ), 'off' );
+		// The details card reads out the setting under the pointer.
+		fireEvent.pointerEnter( screen.getByLabelText( 'Voice volume' ).closest( '.field' ) );
+		expect( view.element.querySelector( '.settings-detail-title' ).textContent ).toBe( 'Voice volume' );
+
+		await userEvent.setup().selectOptions( screen.getByLabelText( 'Picture quality' ), 'low' );
+		fireEvent.input( screen.getByLabelText( 'Fog density' ), { target: { value: '0.001' } } );
+		fireEvent.change( screen.getByLabelText( 'Crowd' ), { target: { value: '350' } } );
+		await userEvent.setup().selectOptions( screen.getByLabelText( 'NPC voices' ), 'on' );
+		fireEvent.input( screen.getByLabelText( 'Voice volume' ), { target: { value: '0.35' } } );
+		await userEvent.setup().selectOptions( screen.getByLabelText( 'Developer details' ), 'off' );
 
 		expect( onChange ).toHaveBeenCalledWith( { key: 'quality', value: 'low' } );
 		expect( onChange ).toHaveBeenCalledWith( { key: 'fog', value: 0.001 } );

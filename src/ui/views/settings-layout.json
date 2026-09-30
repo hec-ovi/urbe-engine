@@ -1,27 +1,57 @@
 {
   "title": "Settings",
   "key": "O",
+  "eyebrow": "System / preferences",
+  "subtitle": "A city at your own pace.",
+  "tabs": "Settings sections",
+  "details": { "eyebrow": "Setting details", "idle": "Point at a setting, or move to it, to read what it changes." },
+  "status": "Every change applies at once.",
+  "session": {
+    "eyebrow": "This visit",
+    "title": "Make yourself at home.",
+    "text": "These settings hold until you leave the city. Picture quality reloads the city at the new level."
+  },
   "sections": [
     {
-      "title": "look and load",
-      "fields": [
-        { "key": "quality", "label": "quality tier", "type": "select", "options": ["low", "medium", "high", "ultra"] },
-        { "key": "fog", "label": "fog density", "type": "range", "min": 0, "max": 0.003, "step": 0.0001 },
-        { "key": "exposure", "label": "exposure", "type": "number", "min": 0.001, "max": 1, "step": 0.001 },
-        { "key": "crowd", "label": "crowd count", "type": "number", "min": 0, "max": 2000, "step": 10 }
+      "number": "01", "label": "Display", "title": "The city, in detail", "text": "How much the city draws and how the air and light sit on it.",
+      "groups": [
+        {
+          "code": "A", "label": "Image",
+          "fields": [
+            { "key": "quality", "label": "Picture quality", "hint": "Detail, shadows and textures", "text": "How much of the city is drawn and how finely. Changing it reloads the city at that level.", "type": "select", "options": [ { "value": "low", "label": "Low" }, { "value": "medium", "label": "Medium" }, { "value": "high", "label": "High" }, { "value": "ultra", "label": "Ultra" } ] },
+            { "key": "fog", "label": "Fog density", "hint": "Depth in distant streets", "text": "A veil over the far streets and the building tops; none clears the air.", "type": "range", "min": 0, "max": 0.003, "step": 0.0001 },
+            { "key": "exposure", "label": "Exposure", "hint": "Scene brightness", "text": "How bright the scene reads before the night lights add theirs.", "type": "number", "min": 0.001, "max": 1, "step": 0.001 }
+          ]
+        },
+        {
+          "code": "B", "label": "World",
+          "fields": [
+            { "key": "crowd", "label": "Crowd", "hint": "People on the streets", "text": "How many people walk the streets around you, from none to 2000.", "type": "number", "min": 0, "max": 2000, "step": 10 }
+          ]
+        }
       ]
     },
     {
-      "title": "voices",
-      "fields": [
-        { "key": "voice", "label": "npc voices", "type": "select", "options": ["on", "off"] },
-        { "key": "voiceVolume", "label": "voice volume", "type": "range", "min": 0, "max": 1, "step": 0.05 }
+      "number": "02", "label": "Voices", "title": "Listen to the people", "text": "Whether the people you talk to speak their lines aloud, and how loud.",
+      "groups": [
+        {
+          "code": "A", "label": "Speech",
+          "fields": [
+            { "key": "voice", "label": "NPC voices", "hint": "People speak their lines", "text": "People say their lines aloud as they show. The talk window's voices toggle turns the same setting.", "type": "select", "options": [ { "value": "on", "label": "On" }, { "value": "off", "label": "Off" } ] },
+            { "key": "voiceVolume", "label": "Voice volume", "hint": "How loud people speak", "text": "The loudness of every spoken line, from silent to full.", "type": "range", "min": 0, "max": 1, "step": 0.05 }
+          ]
+        }
       ]
     },
     {
-      "title": "screen",
-      "fields": [
-        { "key": "details", "label": "developer details (position, files, frame stats)", "type": "select", "options": ["off", "on"] }
+      "number": "03", "label": "Screen", "title": "What the screen shows", "text": "The readouts beside the city.",
+      "groups": [
+        {
+          "code": "A", "label": "Readouts",
+          "fields": [
+            { "key": "details", "label": "Developer details", "hint": "Position, files and frame stats", "text": "Where you stand, the files loaded for it and the frame's cost, in the corners of the screen.", "type": "select", "options": [ { "value": "off", "label": "Off" }, { "value": "on", "label": "On" } ] }
+          ]
+        }
       ]
     }
   ]
