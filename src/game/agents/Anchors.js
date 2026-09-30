@@ -40,24 +40,40 @@ export function groundAnchors( npc, y, interior = null ) {
 
 }
 
-// Authored support planes of the shared Interior modules, before placement scale.
-// Catalogue props retain their floor datum when no support plane is published.
-const SEAT_TOP = { 'fit-chair': 0.56, 'fit-sofa': 0.45, 'fit-bench': 0.45, 'fit-stool': 0.65 };
-const SEAT_FORWARD = { 'fit-sofa': 0.105 };
+// The sitting surface of each seat the interiors place, before placement scale:
+// the cushion's top and its back and front edges along the seat's facing (+Z),
+// from the authored zero. Measured on the module and catalogue meshes as their
+// largest upward face under 0.75 m, armrests and plinths set aside.
+const SEATS = {
+	'fit-chair': [ 0.56, - 0.21, 0.21 ], 'fit-sofa': [ 0.45, - 0.19, 0.4 ], 'fit-bench': [ 0.45, - 0.2, 0.2 ],
+	'fit-stool': [ 0.65, - 0.18, 0.18 ], 'fit-office-chair': [ 0.5, - 0.23, 0.27 ],
+	'fit-sofa-luxury': [ 0.49, - 0.15, 0.43 ], 'fit-chair-luxury': [ 0.5, - 0.14, 0.32 ],
+	'fit-corporate-bench': [ 0.48, - 0.28, 0.46 ], 'fit-sofa-corpo': [ 0.42, - 0.33, 0.39 ],
+	'fit-chair-corpo': [ 0.42, - 0.26, 0.31 ], 'fit-damaged-office-chair': [ 0.48, - 0.21, 0.23 ],
+	'office_chair': [ 0.52, - 0.11, 0.25 ]
+};
+/** A seated pelvis rests this far in front of the cushion's back edge... */
+const PELVIS_FROM_BACK = 0.2;
+/** ...but no further from its front edge than this, so the knees clear a deep seat. */
+const PELVIS_FROM_FRONT = 0.35;
 
 /**
  * Navigation snaps a sofa's anchor onto reachable floor beside the furniture.
  * Render its occupant on the actual placement instead. The transferred Source
  * Sitting loops put the pelvis 0.34 m behind the root and the supporting thigh
  * surface about 0.49 m above it; both crowd and focused rigs share that pose.
+ * The thighs rest on the cushion's top and the pelvis near its back, so the
+ * lower legs hang in front of the seat instead of through it. A seat with no
+ * measured surface keeps the root on its floor datum.
  */
 function seatedOrigin( placement, floorY, heading ) {
 
-	const top = SEAT_TOP[ placement.module ];
-	const forward = 0.34 + ( SEAT_FORWARD[ placement.module ] ?? 0 ) * placement.scale[ 2 ];
+	const seat = SEATS[ placement.module ];
+	const pelvis = seat ? Math.max( seat[ 1 ] + PELVIS_FROM_BACK, seat[ 2 ] - PELVIS_FROM_FRONT ) * placement.scale[ 2 ] : 0;
+	const forward = 0.34 + pelvis;
 	return new THREE.Vector3(
 		placement.position[ 0 ] + Math.sin( heading ) * forward,
-		floorY + placement.position[ 1 ] + ( top === undefined ? 0 : top * placement.scale[ 1 ] - 0.49 ),
+		floorY + placement.position[ 1 ] + ( seat ? seat[ 0 ] * placement.scale[ 1 ] - 0.49 : 0 ),
 		placement.position[ 2 ] + Math.cos( heading ) * forward
 	);
 
