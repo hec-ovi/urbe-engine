@@ -5,6 +5,8 @@ import userEvent from '@testing-library/user-event';
 import Ajv from 'ajv/dist/2020.js';
 import layout from './inventory-layout.json' with { type: 'json' };
 import schema from './inventory-layout.schema.json' with { type: 'json' };
+import shapes from './item-shapes.json' with { type: 'json' };
+import shapesSchema from './item-shapes.schema.json' with { type: 'json' };
 import { InventoryView } from './InventoryView.js';
 
 const ITEMS = [
@@ -18,8 +20,11 @@ describe( 'InventoryView', () => {
 
 	it( 'reads its labels and grid from a layout that meets its schema', () => {
 
-		const validate = new Ajv( { allErrors: true, strict: true } ).compile( schema );
+		const ajv = new Ajv( { allErrors: true, strict: true } );
+		const validate = ajv.compile( schema );
 		expect( validate( layout ), JSON.stringify( validate.errors ) ).toBe( true );
+		const validShapes = ajv.compile( shapesSchema );
+		expect( validShapes( shapes ), JSON.stringify( validShapes.errors ) ).toBe( true );
 
 	} );
 

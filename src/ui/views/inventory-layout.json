@@ -11,18 +11,5 @@
   "detail": { "kind": "Kind", "quantity": "Quantity", "found": "Found at", "quests": "Linked quests", "preview": "No preview" },
   "questKinds": { "main": "Main quest", "side": "Side quest" },
   "columns": 4,
-  "rows": 4,
-  "shapes": {
-    "device": "scanner",
-    "radio": "radio",
-    "tool": "radio",
-    "document": "book",
-    "paper": "card",
-    "pass": "card",
-    "card": "card",
-    "information": "map",
-    "map": "map",
-    "key": "key",
-    "power": "battery"
-  }
+  "rows": 4
 }

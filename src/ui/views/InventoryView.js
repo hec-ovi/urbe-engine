@@ -3,6 +3,7 @@ import { PanelHeader } from '../components/PanelHeader.js';
 import { ItemPreview } from '../components/ItemPreview.js';
 import { questMark } from '../components/QuestMark.js';
 import layout from './inventory-layout.json' with { type: 'json' };
+import shapes from './item-shapes.json' with { type: 'json' };
 
 const PAGE = layout.columns * layout.rows;
 
@@ -309,10 +310,10 @@ export class InventoryView {
 
 }
 
-/** The item's own model, else its kind's shape from the layout. */
+/** The item's own model, else its kind's shape from [item-shapes.json](item-shapes.json). */
 function modelOf( item ) {
 
-	return item.model ?? { shape: layout.shapes[ item.kind ] ?? 'parcel' };
+	return item.model ?? { shape: shapes[ item.kind ] ?? 'parcel' };
 
 }
 

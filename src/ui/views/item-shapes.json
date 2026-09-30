@@ -1,0 +1,13 @@
+{
+  "device": "scanner",
+  "radio": "radio",
+  "tool": "radio",
+  "document": "book",
+  "paper": "card",
+  "pass": "card",
+  "card": "card",
+  "information": "map",
+  "map": "map",
+  "key": "key",
+  "power": "battery"
+}

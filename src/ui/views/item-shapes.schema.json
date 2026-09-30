@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "The model an item of each kind is drawn as when the game hands none of its own, in the inventory and the codex; parcel otherwise",
+  "type": "object",
+  "additionalProperties": { "enum": ["scanner", "radio", "card", "book", "map", "key", "battery", "parcel"] }
+}

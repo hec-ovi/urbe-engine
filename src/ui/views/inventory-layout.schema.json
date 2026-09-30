@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Inventory labels and grid; {name} stands for the value the view puts there",
   "type": "object",
-  "required": ["title", "carried", "count", "countOne", "grid", "emptySlot", "empty", "unselected", "pages", "detail", "questKinds", "columns", "rows", "shapes"],
+  "required": ["title", "carried", "count", "countOne", "grid", "emptySlot", "empty", "unselected", "pages", "detail", "questKinds", "columns", "rows"],
   "additionalProperties": false,
   "properties": {
     "title": { "description": "Screen title.", "$ref": "#/$defs/text" },
@@ -44,12 +44,7 @@
       "properties": { "main": { "$ref": "#/$defs/text" }, "side": { "$ref": "#/$defs/text" } }
     },
     "columns": { "type": "integer", "minimum": 1, "maximum": 8 },
-    "rows": { "type": "integer", "minimum": 1, "maximum": 8 },
-    "shapes": {
-      "description": "The model an item of each kind is drawn as when the game hands no model of its own; parcel otherwise.",
-      "type": "object",
-      "additionalProperties": { "enum": ["scanner", "radio", "card", "book", "map", "key", "battery", "parcel"] }
-    }
+    "rows": { "type": "integer", "minimum": 1, "maximum": 8 }
   },
   "$defs": {
     "text": { "type": "string", "minLength": 1 },

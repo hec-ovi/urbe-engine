@@ -149,6 +149,7 @@ export function codexEntries( { cards = [], people = [], places = [], quests = [
 	const items = cards.map( ( card ) => ( {
 		id: `item:${card.id}`,
 		category: 'items',
+		kind: card.kind,
 		title: card.name,
 		summary: card.description || card.kind,
 		text: card.description,

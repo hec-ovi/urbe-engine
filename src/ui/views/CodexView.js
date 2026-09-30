@@ -4,6 +4,7 @@ import { ItemPreview } from '../components/ItemPreview.js';
 import { questMark } from '../components/QuestMark.js';
 import { seedOf } from '../components/itemModels.js';
 import layout from './codex-layout.json' with { type: 'json' };
+import shapes from './item-shapes.json' with { type: 'json' };
 
 /** Records drawn in one category's list; a category holds at most this many cards. */
 const MAX_CARDS = 240;
@@ -72,11 +73,12 @@ export class CodexView {
 	}
 
 	/**
-	 * @param entries [{ id, title, category, text, summary?, subtitle?, tags?: [string],
+	 * @param entries [{ id, title, category, kind?, text, summary?, subtitle?, tags?: [string],
 	 *   facts?: [{ label, value }], location?, quote?, source?, model?,
 	 *   related?: [{ label, title, entry?: id, quest?: questId, kind?: 'main' | 'side' }] }]
 	 * A blank line in `text` starts a paragraph; `model` is the record's own
-	 * preview model, else its category's shape.
+	 * preview model, else an item `kind`'s shape as the inventory draws it,
+	 * else its category's shape.
 	 */
 	setEntries( entries = [] ) {
 
@@ -376,9 +378,10 @@ function categoryOf( entry ) {
 
 }
 
+/** The record's own model, else its item kind's shape as the inventory draws it, else its category's. */
 function modelOf( entry, category ) {
 
-	return entry.model ?? { shape: category?.shape ?? 'parcel', seed: seedOf( entry.id ) };
+	return entry.model ?? ( shapes[ entry.kind ] ? { shape: shapes[ entry.kind ] } : { shape: category?.shape ?? 'parcel', seed: seedOf( entry.id ) } );
 
 }
 
