@@ -1060,6 +1060,8 @@ export class GameApp {
 		} );
 		this.hitches.time( 'scenery', () => this.scenery.update( { timeMin: this.clock.timeMin, feet }, delta ) );
 		this.hitches.time( 'close people', () => this.hero.near( this.#closePeople() ) );
+		// Whoever the player talks to looks at them, seated or standing.
+		this.hero.lookAt( this.interactor.conversation?.person ?? null, this.camera.position );
 		this.hero.update( delta );
 		this.hitches.time( 'traffic', () => this.traffic.update( delta, feet, this.clock.daySeconds ) );
 		this.impactWorld.sync( {

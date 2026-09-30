@@ -7,6 +7,7 @@ import { recipeFor } from './Appearance.js';
 import { personRecipe } from './avatar/Recipe.js';
 import { Tailor } from './avatar/Tailor.js';
 import { SpeechGesture } from './SpeechGesture.js';
+import { LookAt } from './LookAt.js';
 import { FRAMES } from './VatBaker.js';
 import { hasClip, transferredClip } from './LayeredClips.js';
 import { streetBodies } from './StreetBodies.js';
@@ -81,6 +82,9 @@ export class HeroCharacter {
 		this.request = 0;
 		/** Whose voice plays now: `{ npcId, seed, loudness() }`, or null. */
 		this.speech = null;
+		/** Who looks at the player now, and the point they look at (`lookAt`). */
+		this.watched = null;
+		this.watchPoint = null;
 
 	}
 
@@ -110,7 +114,7 @@ export class HeroCharacter {
 			this.#dropActive();
 			person.hero = true;
 			this.active = {
-				person, look: person.look, recipe, root: close.root, mixer: close.mixer, gesture: new SpeechGesture( close.root ),
+				person, look: person.look, recipe, root: close.root, mixer: close.mixer, gesture: new SpeechGesture( close.root ), gaze: close.gaze ?? new LookAt( close.root ),
 				descriptor: close.descriptor, key: close.key, height: close.height, motions: close.motions,
 				playback: null, sequence: 0, currentAction: close.action, currentClip: close.clipName
 			};
@@ -131,6 +135,7 @@ export class HeroCharacter {
 		const look = person.look;
 		const root = this.poser.dress( source, person, `focused-${recipe.body}` );
 		const gesture = new SpeechGesture( root );
+		const gaze = new LookAt( root );
 		this.lighting?.attachRoot( root, person.position );
 		root.visible = false;
 
@@ -153,7 +158,7 @@ export class HeroCharacter {
 		person.hero = true;
 		root.visible = true;
 		this.active = {
-			person, look, recipe, root, mixer, gesture, descriptor: source.descriptor, key: source.key,
+			person, look, recipe, root, mixer, gesture, gaze, descriptor: source.descriptor, key: source.key,
 			height: this.poser.height( root ), motions: source.motions,
 			playback: null, sequence: 0, currentAction: null, currentClip: null
 		};
@@ -267,6 +272,20 @@ export class HeroCharacter {
 	}
 
 	/**
+	 * The person the player talks to looks at `point` (the player's eye, a
+	 * vector the host keeps moving), and nobody does once `person` is null.
+	 * Their focused rig turns its upper spine, neck and head toward it from
+	 * the pose its clip holds (LookAt): round from a chair, and up and down
+	 * to the eye when standing, facing the player already.
+	 */
+	lookAt( person, point = null ) {
+
+		this.watched = point ? person : null;
+		this.watchPoint = point;
+
+	}
+
+	/**
 	 * The person `npcId` is heard: `speech` (`{ seed, loudness() }`) while a
 	 * line of theirs plays, null once it ends. Their focused rig moves its head
 	 * and neck to it.
@@ -319,7 +338,7 @@ export class HeroCharacter {
 		for ( const close of this.close.values() ) if ( close.root ) this.#follow( close, delta );
 		if ( ! this.active ) return;
 
-		const { person, root, mixer, gesture, height } = this.active;
+		const { person, root, mixer, gesture, gaze, height } = this.active;
 		if ( root.userData.dressed ) root.userData.dressed.presence = person.presence ?? 1;
 		if ( person.look !== this.active.look ) this.#wear();
 		root.position.copy( person.position );
@@ -327,8 +346,10 @@ export class HeroCharacter {
 		this.lighting?.writeRoot( root, person.position );
 		height?.beforePose();
 		gesture.rest();
+		gaze.rest();
 		mixer.update( delta );
 		height?.afterPose();
+		gaze.update( delta, samePerson( this.watched, person ) ? this.watchPoint : null );
 		gesture.update( delta, person.npcId && this.speech?.npcId === person.npcId ? this.speech : null );
 
 	}
@@ -408,8 +429,8 @@ export class HeroCharacter {
 		// A person still close when the talk ends stays in the rig they wore.
 		if ( this.nearby.has( person ) && ! this.close.has( person ) ) {
 
-			const { descriptor, key, height, motions, currentAction: action, currentClip: clipName } = this.active;
-			this.close.set( person, { person, root, mixer, descriptor, key, height, motions, action, clipName, recipe: this.active.recipe } );
+			const { descriptor, key, height, motions, gaze, currentAction: action, currentClip: clipName } = this.active;
+			this.close.set( person, { person, root, mixer, descriptor, key, height, motions, gaze, action, clipName, recipe: this.active.recipe } );
 			this.active = null;
 			return;
 
@@ -497,11 +518,14 @@ export class HeroCharacter {
 			close.clipName = name;
 
 		}
+		close.gaze?.rest();
 		mixer.update( delta );
 		// The crowd's frame is the clock: the rig shows the pose the body would.
 		close.action.time = time;
 		mixer.update( 0 );
 		height?.afterPose();
+		// A look a talk left on this rig eases back to the clip.
+		close.gaze?.update( delta, null );
 
 	}
 
