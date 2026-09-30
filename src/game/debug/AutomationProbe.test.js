@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { AutomationProbe } from './AutomationProbe.js';
 import { ChatPanel } from '../../ui/widgets/ChatPanel.js';
+import { InspectionCard } from '../../ui/widgets/InspectionCard.js';
 import { CROWD_MODELS } from '../agents/CharacterCatalog.js';
 import { HeroCharacter } from '../agents/HeroCharacter.js';
 import { heroRigs, outfit } from '../agents/HeroCharacter.test-fixtures.js';
@@ -88,6 +89,20 @@ beforeEach( () => {
 } );
 
 describe( 'automation probe', () => {
+
+	it( 'finishes reading through the inspection action before approaching the next target', async () => {
+		const { game } = playing();
+		const closed = vi.fn();
+		game.view.inspection = new InspectionCard( { onClose: closed } );
+		game.view.inspection.show( { title: 'Read the note.', text: 'The authored evidence.' } );
+		const probe = new AutomationProbe( game );
+		await probe.approach( 'p1' );
+		expect( game.view.inspection.element.hidden ).toBe( true );
+		expect( closed ).toHaveBeenCalledExactlyOnceWith( { pointer: true } );
+		expect( game.pressAction ).not.toHaveBeenCalled();
+		await probe.approach( 'p1' );
+		expect( closed ).toHaveBeenCalledOnce();
+	} );
 
 	it( 'holds pointer capture, stands in front of the nearest walker aimed at the chest, and talks through E', async () => {
 

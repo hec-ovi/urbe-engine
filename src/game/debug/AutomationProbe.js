@@ -111,6 +111,7 @@ export class AutomationProbe {
 
 		const member = this.game.crowd.members.get( id );
 		if ( ! member ) throw new Error( `no crowd member ${id}` );
+		this.#finishReading();
 		const { position } = member;
 		const spot = this.#spotBeside( member );
 		const placed = Boolean( spot ) && this.game.placePlayer( spot, { x: position.x, y: position.y + CHEST, z: position.z } );
@@ -453,6 +454,7 @@ export class AutomationProbe {
 		const { scenery, companion } = this.game;
 		const scene = scenery.sceneFor( sceneId );
 		if ( ! scene ) throw new Error( `no scene ${sceneId}` );
+		this.#finishReading();
 		const started = performance.now();
 		const waiting = () => performance.now() - started < timeoutMs;
 		const location = scene.status === 'staged' && ! scene.failed ? scene.request.location : null;
@@ -582,6 +584,8 @@ export class AutomationProbe {
 	 */
 	async visit( { kind, id }, { timeoutMs = 10000 } = {} ) {
 
+		this.#finishReading();
+
 		const door = kind === 'district' ? this.#doorIn( id ) : this.#placeAt( continuityPlace( kind, id ) );
 		const started = performance.now();
 		const waiting = () => performance.now() - started < timeoutMs;
@@ -618,6 +622,7 @@ export class AutomationProbe {
 	async reach( { questId = null, stepId, timeoutMs = 20000 } = {} ) {
 
 		const { entry, step } = this.#activeStep( questId, stepId );
+		this.#finishReading();
 		const { definition, runtime } = entry;
 		const { kind } = step.target;
 		const started = performance.now();
@@ -815,6 +820,14 @@ export class AutomationProbe {
 	}
 
 	/** The questline `questId` names, else the main story; null when it is not in play. */
+	/** Moving on means finishing the previous read through the card's own action. */
+	#finishReading() {
+
+		const card = this.game.view?.inspection;
+		if ( card && ! card.element.hidden ) card.done.click();
+
+	}
+
 	#questEntry( questId ) {
 
 		const { entries } = this.game.quests;
