@@ -10,6 +10,7 @@ import { hiddenWalkEntry } from './SpawnVisibility.js';
 import { WalkSurface } from './WalkSurface.js';
 import { BODY_RADIUS } from '../physics/PlayerBody.js';
 import { stepIdle } from './IdleVariety.js';
+import { Visits } from './Visits.js';
 
 /** How fast people walk. Everyone has their own pace inside this range. */
 const WALK_SLOWEST = 0.9;
@@ -93,8 +94,9 @@ export class Crowd {
 	 * @param blockers what walkers keep out of now: a function returning solid
 	 * footprints on the pavement, `[{ center: { x, z }, width, depth, yawRadians }]`
 	 * @param surface the WalkSurface outdoor feet stand on
+	 * @param interiorRoutes walks inside buildings (InteriorRoutes) a guest takes to and from a seat, or null for straight lines
 	 */
-	constructor( { assets, routes, signals, sim, places, capacity, spawnRadius = SPAWN_RADIUS, stress = 0, continuity = null, street = streetBodies, lighting = null, blockers = () => [], visibility = null, floorShown = () => true, surface = new WalkSurface() } ) {
+	constructor( { assets, routes, signals, sim, places, capacity, spawnRadius = SPAWN_RADIUS, stress = 0, continuity = null, street = streetBodies, lighting = null, blockers = () => [], visibility = null, floorShown = () => true, surface = new WalkSurface(), interiorRoutes = null } ) {
 
 		this.assets = assets;
 		this.street = street;
@@ -111,6 +113,8 @@ export class Crowd {
 		this.visibility = visibility;
 		this.floorShown = floorShown;
 		this.surface = surface;
+		/** Guests sitting a while, getting up, sitting again and leaving through the door. */
+		this.visits = new Visits( { durations: assets?.durations ?? [], routes: interiorRoutes, spots: ( parcelId ) => this.#spotsAt( parcelId ) } );
 		this.delta = 0;
 		if ( lighting ) for ( let variant = 0; variant < assets.variants.length; variant ++ ) {
 
@@ -361,7 +365,8 @@ export class Crowd {
 
 			member.presence = stepPresence( member.presence ?? 1, member.leaving, delta );
 			if ( member.leaving && member.presence === 0 ) { this.members.delete( member.id ); this.street.leave( member.id ); continue; }
-			if ( ! member.leaving ) this.#advance( member, delta, clock.daySeconds, blocked );
+			// A guest walking out keeps walking while they fade at the door.
+			if ( ! member.leaving || member.visit?.leaving ) this.#advance( member, delta, clock.daySeconds, blocked );
 
 		}
 
@@ -877,7 +882,8 @@ export class Crowd {
 		for ( const [ id, member ] of this.members ) {
 
 			if ( member.frozen ) continue;
-			if ( member.stationary && member.retiring && this.#hidden( member.position ) ) { this.#remove( member ); continue; }
+			// A guest walking out goes when they reach the door, seen or not.
+			if ( member.stationary && member.retiring && ! member.visit?.leaving && this.#hidden( member.position ) ) { this.#remove( member ); continue; }
 
 			const distance = member.position.distanceTo( player );
 			if ( distance > this.spawnRadius + DESPAWN_MARGIN && ( this.#hidden( member.position ) || distance > this.spawnRadius + 70 ) ) this.#remove( member );
@@ -1041,7 +1047,8 @@ export class Crowd {
 
 			for ( const member of this.members.values() ) {
 
-				if ( member.parcelId === parcelId && ! member.quest ) candidates.push( member );
+				// A guest is only ever the guest they came in as, and leaves as that one.
+				if ( member.parcelId === parcelId && ! member.quest && ! member.visit ) candidates.push( member );
 
 			}
 
@@ -1049,6 +1056,12 @@ export class Crowd {
 			const taken = this.#spotsAt( parcelId );
 
 			this.#fit( entries, candidates, ( { agent } ) => this.#post( agent, parcelId, place, taken ) );
+			// A guest whose visit is over gets up and walks out.
+			for ( const member of this.members.values() ) {
+
+				if ( member.parcelId === parcelId && member.visit && ! member.visit.leaving && ! entries.some( ( entry ) => entry.agent.crowdId === member.crowdId ) ) this.visits.leave( member, place );
+
+			}
 
 		}
 
@@ -1188,13 +1201,19 @@ export class Crowd {
 
 		const seed = agent.appearanceSeed ?? hash( agent.crowdId );
 		const anchor = this.#anchorAt( place, taken, agent.activity === 'working' ? POSTS : SEATS, seed );
-		if ( ! anchor || ! this.#hidden( anchor.position ) ) return null;
-		return this.#add( {
+		if ( ! anchor ) return null;
+		// A guest the player could see sit down walks in from the door and sits; anybody else is there already, out of sight.
+		const seated = anchor.spot.startsWith( 'seat:' );
+		const hidden = this.#hidden( anchor.position );
+		if ( ! hidden && ! seated ) return null;
+		const member = this.#add( {
 			...this.#base( agent, seed ),
 			stationary: true,
 			parcelId,
 			...anchor
 		} );
+		if ( seated ) this.visits.seat( member, anchor, place, { arriving: ! hidden } );
+		return member;
 
 	}
 
@@ -1415,6 +1434,7 @@ export class Crowd {
 
 	#advance( member, delta, daySeconds, blocked ) {
 
+		if ( member.visit && this.visits.step( member, delta, this.places.get( member.parcelId ) ) ) return;
 		if ( ! member.stationary && ! member.frozen ) {
 
 			const held = member.waiting && ! this.signals.green( member.pendingSignal, daySeconds );

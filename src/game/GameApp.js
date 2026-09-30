@@ -545,11 +545,12 @@ export class GameApp {
 			doors: () => [ ...city.doors, ...( this.stream.apartmentDoors?.doors ?? [] ) ],
 			elevators: this.elevators
 		} );
+		this.interiorRoutes = new InteriorRoutes( buildings, { findPath } );
 		this.npcContinuity = new NpcContinuity( {
 			simulation: this.sim,
 			routes,
 			places: continuityPlaces,
-			interiorRoutes: this.interiorRoutes = new InteriorRoutes( buildings, { findPath } ),
+			interiorRoutes: this.interiorRoutes,
 			ways: this.passage
 		} );
 		if ( game?.npcState?.continuity ) {
@@ -574,6 +575,8 @@ export class GameApp {
 			floorShown: ( parcel, floor ) => this.stream.floorShown( parcel, floor ),
 			surface: new WalkSurface( atlas.volumetric?.ground ),
 			places: crowdPlaces,
+			// Guests walk to and from their seats, and out through the door, as the building's navigation leads.
+			interiorRoutes: this.interiorRoutes,
 			capacity: config.maxCrowd,
 			spawnRadius: config.crowdRadius,
 			stress: config.stress,
@@ -2457,11 +2460,12 @@ function routePlaces( doors ) {
 
 }
 
-/** Where a building's on-duty staff stand: just inside its entrance. */
+/** Where a building's on-duty staff stand: just inside its entrance, and the step outside it a guest leaves by. */
 function placesOf( doors, buildings ) {
 
 	return new Map( doors.map( ( door ) => [ door.parcelId, {
 		inside: door.inside.clone(),
+		outside: door.outside.clone(),
 		...interiorOccupancy( buildings.get( door.parcelId )?.interior, door.inside ),
 		heading: Math.atan2( door.normal.x, door.normal.z ),
 		anchors: groundAnchors( buildings.get( door.parcelId )?.npc, door.inside.y, buildings.get( door.parcelId )?.interior )
