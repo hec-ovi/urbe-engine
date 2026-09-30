@@ -67,7 +67,7 @@ describe( 'Map3DView', () => {
 		view.setRoute( { path: [ [ 2, 3 ], [ 8, 12 ], [ 15, 20 ] ], label: 'reach p9' } );
 		expect( view.routeLine.name ).toBe( 'objective-route' );
 		expect( view.routeLine.geometry.getAttribute( 'position' ).count ).toBe( 3 );
-		expect( view.objectiveMark.position.toArray() ).toEqual( [ 15, 1.6, 20 ] );
+		expect( view.objectiveMark.position.toArray() ).toEqual( [ 15, 6, 20 ] );
 		expect( view.objectiveMark.visible ).toBe( true );
 
 		view.setRoute( null );

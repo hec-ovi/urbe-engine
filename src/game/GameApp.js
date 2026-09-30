@@ -1105,6 +1105,7 @@ export class GameApp {
 			this.currentLocation = this.locator.location( feet.x, feet.z, this.standing?.parcelId ?? null );
 			this.discoveredLocations.set( this.currentLocation.id, this.currentLocation );
 			this.view.clock.update( this.clock.label, district, this.venues.nameOf( this.currentLocation.id ) ?? '' );
+			if ( this.view.panels.current === 'MAP' ) this.view.map.setLocation( this.venues.nameOf( this.currentLocation.id ) ?? this.currentLocation.name, district );
 			if ( this.details ) this.view.readout.update( feet, district, this.locator.parcel( feet.x, feet.z, this.standing?.parcelId ?? null ) );
 
 		} );

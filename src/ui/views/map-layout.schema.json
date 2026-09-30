@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "City map labels; {name} stands for the value the view puts there",
+  "type": "object",
+  "required": ["title", "eyebrow", "layers", "tools", "north", "objective", "here", "legend", "hint", "walkingSpeed"],
+  "additionalProperties": false,
+  "properties": {
+    "title": { "description": "Screen title.", "$ref": "#/$defs/text" },
+    "eyebrow": { "description": "The small line over the title.", "$ref": "#/$defs/text" },
+    "layers": {
+      "description": "The toggles over the map: the objective's route, the transit lines and stops, the venues.",
+      "type": "object",
+      "required": ["label", "route", "transit", "places"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "$ref": "#/$defs/text" },
+        "route": { "$ref": "#/$defs/text" },
+        "transit": { "$ref": "#/$defs/text" },
+        "places": { "$ref": "#/$defs/text" }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "required": ["label", "zoomIn", "zoomOut", "centre", "whole"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "$ref": "#/$defs/text" },
+        "zoomIn": { "$ref": "#/$defs/text" },
+        "zoomOut": { "$ref": "#/$defs/text" },
+        "centre": { "$ref": "#/$defs/text" },
+        "whole": { "$ref": "#/$defs/text" }
+      }
+    },
+    "north": { "$ref": "#/$defs/text" },
+    "objective": {
+      "description": "The side panel's objective: `minutes` takes {minutes}, `metres` {metres}, `opens` {label}, {start} and {end}.",
+      "type": "object",
+      "required": ["eyebrow", "none", "noneText", "walk", "distance", "minutes", "metres", "opens", "show"],
+      "additionalProperties": false,
+      "properties": {
+        "eyebrow": { "$ref": "#/$defs/text" },
+        "none": { "$ref": "#/$defs/text" },
+        "noneText": { "$ref": "#/$defs/text" },
+        "walk": { "$ref": "#/$defs/text" },
+        "distance": { "$ref": "#/$defs/text" },
+        "minutes": { "$ref": "#/$defs/text" },
+        "metres": { "$ref": "#/$defs/text" },
+        "opens": { "$ref": "#/$defs/text" },
+        "show": { "$ref": "#/$defs/text" }
+      }
+    },
+    "here": { "$ref": "#/$defs/text" },
+    "legend": {
+      "type": "object",
+      "required": ["you", "objective", "open", "shut", "transit"],
+      "additionalProperties": false,
+      "properties": {
+        "you": { "$ref": "#/$defs/text" },
+        "objective": { "$ref": "#/$defs/text" },
+        "open": { "$ref": "#/$defs/text" },
+        "shut": { "$ref": "#/$defs/text" },
+        "transit": { "$ref": "#/$defs/text" }
+      }
+    },
+    "hint": { "$ref": "#/$defs/text" },
+    "walkingSpeed": { "description": "Metres a second the walk time is reckoned at.", "type": "number", "exclusiveMinimum": 0 }
+  },
+  "$defs": { "text": { "type": "string", "minLength": 1 } }
+}

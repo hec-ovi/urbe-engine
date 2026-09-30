@@ -1,0 +1,22 @@
+{
+  "title": "City map",
+  "eyebrow": "Urbe / cartography",
+  "layers": { "label": "Map layers", "route": "Route", "transit": "Transit", "places": "Places" },
+  "tools": { "label": "Map view", "zoomIn": "Zoom in", "zoomOut": "Zoom out", "centre": "Centre on me", "whole": "Show the whole city" },
+  "north": "N",
+  "objective": {
+    "eyebrow": "Current objective",
+    "none": "No objective",
+    "noneText": "Follow a quest in the journal and its way shows here.",
+    "walk": "On foot",
+    "distance": "Distance",
+    "minutes": "{minutes} min",
+    "metres": "{metres} m",
+    "opens": "Opens {label}, {start} to {end}",
+    "show": "Show the way"
+  },
+  "here": "You are here",
+  "legend": { "you": "You", "objective": "Objective", "open": "Open venue", "shut": "Shut venue", "transit": "Transit" },
+  "hint": "Drag to turn · Scroll to zoom",
+  "walkingSpeed": 1.4
+}

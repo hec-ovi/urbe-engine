@@ -4,6 +4,7 @@ import '../components/panels.css';
 import '../components/screens.css';
 import '../components/dock.css';
 import '../components/journal.css';
+import '../components/map.css';
 import '../components/chat.css';
 import '../components/mission.css';
 import '../components/fracture.css';
@@ -227,6 +228,7 @@ export class GameView {
 
 		this.loadingScreen.setPlace( name );
 		this.quests.setPlace( name );
+		this.map.setPlace( name );
 
 	}
 
@@ -273,9 +275,11 @@ export class GameView {
 
 	}
 
+	/** The persistent objective, and the same record beside the city map. */
 	setObjective( objective ) {
 
 		this.objective.setObjective( objective );
+		this.map.setObjective( objective );
 
 	}
 
