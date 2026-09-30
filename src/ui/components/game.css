@@ -22,7 +22,7 @@
 	--ui-warn: #ffb45c;
 	--ui-bad: #ff8f8f;
 	--ui-mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
-	--ui-tabbar: 80px;
+	--ui-dock: 80px;
 
 	position: fixed;
 	inset: 0;
@@ -194,7 +194,7 @@
 .hud-readout {
 	position: absolute;
 	left: 14px;
-	bottom: calc(var(--ui-tabbar) + 10px);
+	bottom: calc(var(--ui-dock) + 10px);
 	font-family: var(--ui-mono);
 	font-size: 11px;
 	line-height: 1.55;
@@ -319,7 +319,7 @@
 .hud-minimap {
 	position: absolute;
 	right: 14px;
-	bottom: calc(var(--ui-tabbar) + 10px);
+	bottom: calc(var(--ui-dock) + 10px);
 	border: 1px solid var(--ui-line);
 	background: #0a0e14;
 	line-height: 0;
@@ -378,7 +378,7 @@
 	.hud-objective {
 		top: auto;
 		right: 8px;
-		bottom: calc(var(--ui-tabbar) + 160px);
+		bottom: calc(var(--ui-dock) + 160px);
 		width: min(260px, calc(100vw - 24px));
 	}
 

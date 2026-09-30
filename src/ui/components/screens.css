@@ -38,7 +38,7 @@
 
 .panel-host {
 	position: absolute;
-	inset: 0 0 var(--ui-tabbar) 0;
+	inset: 0 0 var(--ui-dock) 0;
 }
 
 .panel-host.is-open {

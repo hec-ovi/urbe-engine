@@ -42,7 +42,7 @@ One panel over the game at a time.
 - props: `views: { NAME: view }`, `onOpen( name )`, `onClose()`
 - methods: `open( name )`, `close()`, `toggle( name )`; `current` is the open name or null
 - a view is `{ element, shown?(), hidden?() }`; `shown` runs once the view is on screen, `hidden` as it leaves, so a view stops what it draws
-- a view fills the host above the dock's 80 px (`--ui-tabbar`); it arrives with `is-open` (it rises, slips sideways and two thin cuts cross it, on the compositor) and leaves with `is-closing` (it sinks) before it hides, both still under reduced motion
+- a view fills the host above the dock's 80 px (`--ui-dock`); it arrives with `is-open` (it rises, slips sideways and two thin cuts cross it, on the compositor) and leaves with `is-closing` (it sinks) before it hides; under reduced motion neither moves
 - Escape closes while a panel is open; opening one closes the one before
 - the open view is an accessible dialog, receives focus, and becomes inert immediately when closed; focus returns to the outside control that opened it when that control remains visible
 

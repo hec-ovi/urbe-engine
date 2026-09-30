@@ -109,7 +109,7 @@ const CLOSE_SLACK = 1.5;
 /** Air scattering is wide and weak indoors, tight and small on the street. */
 const INDOOR_HAZE = { spread: 0.55, cap: 3 };
 const OUTDOOR_HAZE = { spread: 0.28, cap: 2.4 };
-/** The HUD panels and the key that opens each, as the tab bar labels them. */
+/** The HUD panels and the key that opens each, as the dock labels them. */
 const PANEL_KEYS = [
 	[ 'KeyJ', 'QUESTS' ], [ 'KeyM', 'MAP' ], [ 'KeyI', 'INVENTORY' ],
 	[ 'KeyX', 'CODEX' ], [ 'KeyO', 'SETTINGS' ], [ 'Slash', 'CONTROLS' ]
