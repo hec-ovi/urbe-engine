@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Conversation panel labels; {name} stands for the person talked to",
   "type": "object",
-  "required": ["log", "from", "story", "topics", "choices", "actions", "free", "talk", "voice", "activity", "tags", "retry", "leave", "leaveKey"],
+  "required": ["log", "from", "story", "hint", "topics", "choices", "actions", "free", "talk", "voice", "activity", "tags", "retry", "leave", "leaveKey"],
   "additionalProperties": false,
   "properties": {
     "log": { "description": "Accessible name of the transcript.", "$ref": "#/$defs/text" },
@@ -22,6 +22,58 @@
         "goal": { "$ref": "#/$defs/text" },
         "stake": { "description": "Label of why the talk matters.", "$ref": "#/$defs/text" },
         "journal": { "$ref": "#/$defs/text" }
+      }
+    },
+    "hint": {
+      "type": "object",
+      "required": [
+        "title",
+        "key",
+        "close",
+        "unread",
+        "sections"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "$ref": "#/$defs/text"
+        },
+        "close": {
+          "$ref": "#/$defs/text"
+        },
+        "unread": {
+          "$ref": "#/$defs/text"
+        },
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Z]$"
+        },
+        "sections": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": [
+              "key",
+              "label"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "enum": [
+                  "objective",
+                  "stake",
+                  "scene",
+                  "hint"
+                ]
+              },
+              "label": {
+                "$ref": "#/$defs/text"
+              }
+            }
+          }
+        }
       }
     },
     "topics": { "$ref": "#/$defs/section" },

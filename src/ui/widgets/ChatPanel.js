@@ -1,6 +1,7 @@
 import { el } from '../components/dom.js';
 import { icon } from '../components/Icon.js';
 import { keyCap } from '../components/KeyCap.js';
+import { ConversationHint } from './ConversationHint.js';
 import { ThinkingOrb } from './ThinkingOrb.js';
 import layout from './chat-layout.json' with { type: 'json' };
 
@@ -18,7 +19,7 @@ const SVG = 'http://www.w3.org/2000/svg';
  * actions as plain values and hears the player's intents through callbacks.
  *
  * Two surfaces over the running world. In the middle of the screen, low, the
- * workflow: the story this talk belongs to, the person's name on its badge,
+ * workflow: the person's name on its badge and an optional context hint,
  * the newest line as a subtitle, then the ways to answer that change the game
  * (numbered story replies, asking the person along, End conversation). In a
  * corner, the talk window, closed until the player opens it: a bowed,
@@ -46,15 +47,16 @@ export class ChatPanel {
 		// The workflow, centred.
 		this.title = el( 'h2', { className: 'chat-name', id: 'conversation-name' } );
 		this.role = el( 'div', { className: 'chat-role' } );
-		this.journal = el( 'button', { type: 'button', className: 'chat-journal' }, icon( 'codex' ), layout.story.journal );
-		this.journal.addEventListener( 'click', onJournal );
-		this.story = el( 'div', { className: 'chat-story' } );
+		this.badge = el( 'div', { className: 'chat-badge' }, this.title );
+		this.hint = new ConversationHint( { anchor: this.badge, onJournal } );
+		this.hint.element.addEventListener( 'hintempty', () => this.#focusFallback() );
+		this.story = this.hint.story;
+		this.journal = this.hint.journal;
 		this.sayWho = el( 'span', { className: 'chat-said-who' } );
 		this.sayText = document.createTextNode( '' );
 		this.said = el( 'p', { className: 'chat-said' }, this.sayWho, this.sayText );
-		this.sayScene = el( 'p', { className: 'chat-said-scene' } );
 		this.orbSlot = el( 'span', { className: 'chat-orb-slot' } );
-		this.subtitle = el( 'div', { className: 'chat-subtitle' }, this.orbSlot, el( 'div', { className: 'chat-said-block' }, this.sayScene, this.said ) );
+		this.subtitle = el( 'div', { className: 'chat-subtitle' }, this.orbSlot, el( 'div', { className: 'chat-said-block' }, this.said ) );
 		// While the talk window is closed, the subtitle is where the newest line is heard.
 		this.subtitle.setAttribute( 'aria-live', 'polite' );
 		this.status = el( 'div', { className: 'chat-status' } );
@@ -79,8 +81,7 @@ export class ChatPanel {
 		// The person and what they say on the left, the ways to answer on the right.
 		this.card = el( 'div', { className: 'chat' },
 			el( 'div', { className: 'chat-speaker' },
-				this.story,
-				el( 'div', { className: 'chat-badge' }, this.title ), this.role,
+				el( 'div', { className: 'chat-identity' }, this.badge, this.hint.element, this.role ),
 				this.subtitle, this.feedback, this.topicSection ),
 			el( 'div', { className: 'chat-options' }, this.choiceSection, this.asks, el( 'div', { className: 'chat-footer' }, this.leave ) )
 		);
@@ -122,6 +123,8 @@ export class ChatPanel {
 		this.plateName.textContent = name;
 		this.role.textContent = role;
 		this.role.hidden = ! role;
+		this.badge.title = role;
+		this.title.setAttribute( 'aria-description', role );
 		this.plateRole.textContent = role;
 		for ( const [ set, template ] of this.named ) set( template.replaceAll( '{name}', name ) );
 	}
@@ -131,21 +134,7 @@ export class ChatPanel {
 	 * part of, the player's goal in it and why the talk matters; null hides it.
 	 */
 	setStory( story ) {
-		this.story.hidden = ! story;
-		this.journal.hidden = ! story || story.journal === false;
-		const line = ( label, text, className ) => text ? [ el( 'div', { className: 'chat-quest-goal' },
-			el( 'span', { className: 'chat-quest-label', textContent: label } ),
-			el( 'span', { className, textContent: text } )
-		) ] : [];
-		this.story.replaceChildren( ...( story ? [
-			el( 'div', { className: 'chat-quest-head' },
-				el( 'span', { className: 'chat-quest-kicker', textContent: layout.story.kicker } ),
-				el( 'span', { className: 'chat-quest-title', textContent: story.title } )
-			),
-			...line( layout.story.goal, story.objective, 'chat-quest-objective' ),
-			...line( layout.story.stake, story.stake, 'chat-quest-stake' ),
-			this.journal
-		] : [] ) );
+		this.hint.setStory( story );
 	}
 
 	setTopics( topics, active = null ) {
@@ -203,17 +192,18 @@ export class ChatPanel {
 			);
 			if ( choice.commits ) {
 				// The mark describes the reply; the reply's words alone name it.
-				const mark = el( 'small', { className: 'chat-choice-commits', id: `chat-commits-${index}`, textContent: layout.choices.commits } );
+				const mark = el( 'small', { className: 'chat-choice-commits chat-sr', id: `chat-commits-${index}`, textContent: layout.choices.commits } );
 				mark.setAttribute( 'aria-hidden', 'true' );
 				button.setAttribute( 'aria-describedby', mark.id );
 				button.append( mark );
+				button.title = layout.choices.commits;
 			}
 			button.append( icon( choice.commits ? 'commit' : 'question' ) );
 			button.addEventListener( 'click', () => this.onChoice( choice.value ?? choice.id ) );
 			return button;
 		} ) );
 		this.#fold();
-		const typing = this.compose.contains( document.activeElement );
+		const typing = this.compose.contains( document.activeElement ) || this.hint.panel.contains( document.activeElement ) && this.hint.open;
 		if ( heldFocus || focus && ! typing ) ( this.choices.querySelector( 'button:not(:disabled)' ) ?? this.leave ).focus();
 	}
 
@@ -264,6 +254,7 @@ export class ChatPanel {
 	setTalkOpen( open, { focus = true } = {} ) {
 		if ( open && ! this.freeAvailable ) return;
 		const inside = this.window.contains( document.activeElement );
+		if ( open ) this.hint.setOpen( false, { focus: false, immediate: true } );
 		this.talkOpen = open;
 		this.window.hidden = ! open;
 		this.trigger.hidden = ! this.freeAvailable || open;
@@ -320,6 +311,8 @@ export class ChatPanel {
 				if ( ! open() ) return;
 				text.data = shown;
 				if ( this.sayLine === line ) this.sayText.data = shown;
+				if ( from === 'scene' ) this.hint.setScene( shown );
+				this.hint.place();
 				this.#follow();
 			},
 			finish: () => {
@@ -330,6 +323,7 @@ export class ChatPanel {
 				if ( ! open() ) return;
 				this.#stream( line, false );
 				line.remove();
+				if ( from === 'scene' ) this.hint.setScene( [ ...this.transcript.children ].findLast( each => each.classList.contains( 'is-scene' ) && ! each.classList.contains( 'is-earlier' ) )?.lastElementChild.textContent ?? '' );
 				if ( this.sayLine === line ) this.#resay();
 			}
 		};
@@ -370,13 +364,14 @@ export class ChatPanel {
 		this.voiced.clear();
 		this.#stream( null, false );
 		this.transcript.replaceChildren();
-		this.turn = null;
+		this.hint.setScene( '' );
 		for ( const message of messages ) this.addMessage( message );
 		this.#resay();
 	}
 
 	/** Opens a fresh conversation with `{ name, role? }`, the talk window closed, or closes the panel with null. */
 	show( npc ) {
+		this.hint.reset();
 		this.element.hidden = ! npc;
 		this.setTalkOpen( false, { focus: false } );
 		if ( ! npc ) return;
@@ -395,6 +390,7 @@ export class ChatPanel {
 	}
 
 	setVisible( visible ) {
+		if ( ! visible ) this.hint.setOpen( false, { focus: false, immediate: true } );
 		this.element.hidden = ! visible;
 		this.#activity();
 	}
@@ -478,11 +474,18 @@ export class ChatPanel {
 		if ( event.key === 'Escape' ) {
 			event.preventDefault();
 			event.stopPropagation();
-			if ( this.trayOpen ) { this.#setTray( false ); this.tab.focus(); } else onClose();
+			if ( this.hint.open ) this.hint.setOpen( false );
+			else if ( this.trayOpen ) { this.#setTray( false ); this.tab.focus(); } else onClose();
 			return;
 		}
-		const typing = event.target === this.input;
+		const typing = event.target.matches?.( 'input, textarea, [contenteditable="true"]' );
 		const plain = ! event.ctrlKey && ! event.metaKey && ! event.altKey;
+		if ( ! typing && plain && event.key?.toUpperCase() === layout.hint.key && ! this.hint.element.hidden ) {
+			event.preventDefault();
+			event.stopPropagation();
+			if ( ! event.repeat ) this.hint.setOpen( ! this.hint.open );
+			return;
+		}
 		if ( ! typing && plain && event.key?.toUpperCase() === layout.talk.key && this.freeAvailable && ! this.talkOpen ) {
 			event.preventDefault();
 			this.setTalkOpen( true );
@@ -495,7 +498,7 @@ export class ChatPanel {
 			return;
 		}
 		if ( event.key !== 'Tab' ) return;
-		const controls = [ ...this.element.querySelectorAll( 'button, input, summary, [tabindex="0"]' ) ].filter( node => ! node.disabled && ! node.closest( '[hidden]' ) &&
+		const controls = [ ...this.element.querySelectorAll( 'button, input, summary, [tabindex="0"]' ) ].filter( node => ! node.disabled && ! node.closest( '[hidden], [inert], [aria-hidden="true"]' ) &&
 			( node.tagName === 'SUMMARY' || ! node.closest( 'details:not([open])' ) ) );
 		const first = controls[ 0 ], last = controls.at( -1 );
 		if ( document.activeElement === this.element ) { event.preventDefault(); ( event.shiftKey ? last : first )?.focus(); }
@@ -547,6 +550,7 @@ export class ChatPanel {
 		}
 		this.card.style.setProperty( '--talk-left', left || '0px' );
 		this.card.style.setProperty( '--talk-right', right || '0px' );
+		this.hint.place();
 	}
 
 	/** The plate moves the window under the pointer, and by the arrow keys. */
@@ -590,31 +594,28 @@ export class ChatPanel {
 		this.subtitle.classList.toggle( 'is-waiting', state === 'thinking' );
 	}
 
-	/**
-	 * The subtitle shows `line`, the newest of the talk, as it reads now, under
-	 * the scene its turn opened on, if it did.
-	 */
+	/** Scenes belong to the hint; the subtitle carries the latest spoken line. */
 	#say( line ) {
+		if ( line?.classList.contains( 'is-scene' ) ) {
+			this.hint.setScene( line.lastElementChild.textContent );
+			this.#resay();
+			return;
+		}
 		this.sayLine = line;
 		const from = line?.className.match( /\bis-(\w+)/ )?.[ 1 ] ?? '';
 		this.said.dataset.from = from;
 		this.sayWho.textContent = from === 'player' ? layout.from.player : '';
 		this.sayText.data = line?.lastElementChild.textContent ?? '';
-		const scene = from === 'npc' && this.turn !== line && this.turn?.parentNode === this.transcript && this.turn.classList.contains( 'is-scene' );
-		this.sayScene.textContent = scene ? this.turn.lastElementChild.textContent : '';
-		this.sayScene.hidden = ! scene;
 		this.subtitle.hidden = ! line;
+		this.hint.place();
 	}
 
-	/** The subtitle falls back on the newest line still shown, earlier ones and free talk aside. */
 	#resay() {
-		this.#say( [ ...this.transcript.children ].findLast( ( line ) => ! line.classList.contains( 'is-earlier' ) && line.dataset.kind !== 'talk' ) ?? null );
+		this.#say( [ ...this.transcript.children ].findLast( line => ! line.classList.contains( 'is-earlier' ) && ! line.classList.contains( 'is-scene' ) && line.dataset.kind !== 'talk' ) ?? null );
 	}
 
 	#line( from, name, kind ) {
 		const line = lineOf( from, name, kind );
-		// A turn starts with the player's line, a scene or the first line; the person's lines carry it on.
-		if ( from !== 'npc' || ! this.transcript.children.length ) this.turn = line;
 		this.transcript.append( line );
 		this.#trim();
 		this.#latest();

@@ -1073,8 +1073,10 @@ export class AutomationProbe {
 			actions: [ ...dialog.actions.children ].map( ( action ) => ( { id: action.dataset.action, label: action.textContent } ) ),
 			story: dialog.story.hidden ? null : {
 				title: dialog.story.querySelector( '.chat-quest-title' )?.textContent ?? null,
-				objective: dialog.story.querySelector( '.chat-quest-objective' )?.textContent ?? null
+				objective: dialog.story.querySelector( '.chat-quest-objective' )?.textContent || null
 			},
+			hint: { available: ! dialog.hint.element.hidden, open: dialog.hint.open, unread: dialog.hint.unread, scene: dialog.hint.sceneText,
+				stake: dialog.story.querySelector( '.chat-quest-stake' )?.textContent || null },
 			choices: [ ...dialog.choices.children ].map( ( choice ) => ( { text: choice.firstElementChild?.textContent ?? '', disabled: choice.disabled } ) ),
 			status: dialog.status.textContent,
 			error: dialog.feedback.classList.contains( 'is-error' ),

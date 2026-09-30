@@ -2,6 +2,30 @@
   "log": "Conversation",
   "from": { "player": "You", "scene": "Scene" },
   "story": { "kicker": "Story", "goal": "Your goal", "stake": "Why it matters", "journal": "Open journal" },
+  "hint": {
+    "title": "Conversation hint",
+    "key": "H",
+    "close": "Close hint",
+    "unread": "Conversation hint, new information",
+    "sections": [
+      {
+        "key": "objective",
+        "label": "Your goal"
+      },
+      {
+        "key": "stake",
+        "label": "Why it matters"
+      },
+      {
+        "key": "scene",
+        "label": "The scene"
+      },
+      {
+        "key": "hint",
+        "label": "Hint"
+      }
+    ]
+  },
   "topics": { "title": "Topics", "hint": "Each one is a different matter with {name}." },
   "choices": {
     "title": "Story replies",

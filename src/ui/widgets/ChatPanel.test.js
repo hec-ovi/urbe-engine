@@ -147,14 +147,13 @@ describe( 'ChatPanel', () => {
 		// What was said before stays in the transcript only.
 		panel.recall( [ { from: 'npc', name: 'Ada', text: 'Last week.' } ] );
 		expect( panel.said.textContent ).toBe( 'YouWhere is the quay?' );
-		// A story talk's scene stands over the person's lines until the player speaks.
+		// Scene context is available in the hint, while speech stays under the badge.
 		panel.addMessage( { from: 'scene', text: 'The office is dark but for one lamp.' } );
-		expect( panel.said.dataset.from ).toBe( 'scene' );
-		expect( panel.sayScene.hidden ).toBe( true );
+		expect( panel.said.dataset.from ).toBe( 'player' );
+		expect( panel.hint.sceneText ).toBe( 'The office is dark but for one lamp.' );
 		panel.addMessage( { from: 'npc', name: 'Ada', text: 'The report is gone.', kind: 'story' } );
-		expect( [ panel.sayScene.hidden, panel.sayScene.textContent, panel.said.textContent ] ).toEqual( [ false, 'The office is dark but for one lamp.', 'The report is gone.' ] );
-		panel.addMessage( { from: 'player', text: 'Who took it?' } );
-		expect( panel.sayScene.hidden ).toBe( true );
+		expect( panel.said.textContent ).toBe( 'The report is gone.' );
+		expect( panel.hint.open ).toBe( false );
 
 	} );
 
@@ -393,7 +392,7 @@ describe( 'ChatPanel', () => {
 		expect( screen.getByText( STORY.objective ).previousElementSibling.textContent ).toBe( 'Your goal' );
 		expect( screen.getByText( STORY.stake ).previousElementSibling.textContent ).toBe( 'Why it matters' );
 		panel.setStory( { title: STORY.title, stake: STORY.stake } );
-		expect( screen.queryByText( 'Your goal' ) ).toBeNull();
+		expect( panel.hint.fields.get( 'objective' ).section.hidden ).toBe( true );
 		const replies = within( screen.getByRole( 'group', { name: 'Story replies' } ) );
 		const first = replies.getByRole( 'button', { name: 'Who needs the report?' } );
 		// Only the reply that commits is marked as moving the story on.
@@ -418,9 +417,39 @@ describe( 'ChatPanel', () => {
 		panel.setChoices( CHOICES, true );
 		expect( document.activeElement ).toBe( screen.getByRole( 'textbox' ) );
 		expect( onSend ).not.toHaveBeenCalled();
+		panel.hint.setOpen( true );
 		await user.click( screen.getByRole( 'button', { name: 'Open journal' } ) );
 		expect( onJournal ).toHaveBeenCalledTimes( 1 );
 
+	} );
+
+	it( 'keeps context folded, handles H and Escape locally, and leaves typed h alone', async () => {
+		const user = userEvent.setup();
+		panel.setStory( STORY );
+		panel.setChoices( CHOICES, true );
+		panel.addMessage( { from: 'scene', text: 'One lamp in the office.' } );
+		expect( panel.subtitle.hidden ).toBe( true );
+		expect( screen.queryByRole( 'button', { name: 'Open journal' } ) ).toBeNull();
+		await user.keyboard( 'h' );
+		expect( panel.hint.open ).toBe( true );
+		expect( document.activeElement ).toBe( panel.hint.close );
+		expect( panel.hint.unread ).toBe( false );
+		panel.setChoices( CHOICES, true );
+		expect( document.activeElement ).toBe( panel.hint.close );
+		await user.keyboard( '{Escape}' );
+		expect( panel.hint.open ).toBe( false );
+		expect( document.activeElement ).toBe( panel.hint.trigger );
+		expect( onClose ).not.toHaveBeenCalled();
+		await user.keyboard( 'h' );
+		await user.keyboard( 'h' );
+		expect( panel.hint.open ).toBe( false );
+		panel.setTalkOpen( true );
+		await user.keyboard( 'hello' );
+		expect( panel.input.value ).toBe( 'hello' );
+		expect( panel.hint.open ).toBe( false );
+		panel.show( { name: 'A passer-by' } );
+		expect( panel.hint.element.hidden ).toBe( true );
+		expect( panel.hint.sceneText ).toBe( '' );
 	} );
 
 	it( 'does not dispatch disabled choices and focuses End conversation when every reply is unavailable', async () => {
@@ -487,11 +516,11 @@ describe( 'ChatPanel', () => {
 		panel.setStory( STORY );
 		panel.setChoices( CHOICES, true );
 		const user = userEvent.setup();
-		const journal = screen.getByRole( 'button', { name: 'Open journal' } );
+		const hint = screen.getByRole( 'button', { name: /Conversation hint/ } );
 		const end = screen.getByRole( 'button', { name: 'End conversation' } );
 		talk().focus();
 		await user.tab();
-		expect( document.activeElement ).toBe( journal );
+		expect( document.activeElement ).toBe( hint );
 		await user.tab( { shift: true } );
 		expect( document.activeElement ).toBe( talk() );
 		panel.setChoices( CHOICES, true );
