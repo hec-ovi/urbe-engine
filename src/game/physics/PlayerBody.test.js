@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Physics } from './Physics.js';
 import { BODY_RADIUS, CROUCH_EYE_HEIGHT, EYE_HEIGHT, PlayerBody } from './PlayerBody.js';
+import { ImpactWorld } from './ImpactWorld.js';
 
 /**
  * Two promises the street depends on: a lamp post is solid, and the push that
@@ -32,6 +33,26 @@ describe( 'PlayerBody against street furniture', () => {
 
 		expect( body.position.y ).toBe( height );
 		expect( body.position.x ).toBeLessThan( 1 - 0.14 - BODY_RADIUS + 0.05 );
+
+	} );
+
+	it( 'stands still while a pedestrian walks past at arm\'s length: their impact sensor is no obstacle and no floor', async () => {
+
+		const { physics, body } = await world();
+		const impacts = new ImpactWorld( physics );
+		step( physics, body, 4 );
+		const start = body.position.clone();
+		// A walker going by beside the player, the crowd's own 0.66 m off their middle, at 1.2 m/s.
+		const walker = { id: 'passer', position: new THREE.Vector3( - 3, 0, 0.66 ) };
+		for ( let frame = 0; frame < 300; frame ++ ) {
+
+			walker.position.x = - 3 + 1.2 * frame / 60;
+			impacts.sync( { people: [ walker ], vehicles: [] } );
+			step( physics, body );
+
+		}
+
+		expect( Math.hypot( body.position.x - start.x, body.position.z - start.z ) ).toBeLessThan( 1e-3 );
 
 	} );
 

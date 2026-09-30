@@ -129,7 +129,7 @@ export class PlayerBody {
 		};
 		if ( Math.hypot( desired.x, desired.y, desired.z ) < MIN_MOVE ) return;
 
-		this.controller.computeColliderMovement( this.collider, desired );
+		this.controller.computeColliderMovement( this.collider, desired, this.physics.rapier.QueryFilterFlags.EXCLUDE_SENSORS );
 		const movement = this.controller.computedMovement();
 
 		this.position.x += movement.x;
@@ -158,7 +158,7 @@ export class PlayerBody {
 
 		if ( this.carried || Math.hypot( offset.x, offset.z ) < MIN_MOVE ) return;
 
-		this.controller.computeColliderMovement( this.collider, { x: offset.x, y: 0, z: offset.z } );
+		this.controller.computeColliderMovement( this.collider, { x: offset.x, y: 0, z: offset.z }, this.physics.rapier.QueryFilterFlags.EXCLUDE_SENSORS );
 		const movement = this.controller.computedMovement();
 
 		this.position.x += movement.x;
