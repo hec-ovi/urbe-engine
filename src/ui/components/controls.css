@@ -1,0 +1,38 @@
+/* controls studio: live keyboard bindings, a static guide and a searchable reference. */
+.hud .view-controls { width: min(1180px, 96vw); height: min(760px, 94%); color: #e6f1ee; background: linear-gradient(115deg, #08252af5, #051419f5); font-family: system-ui, sans-serif; }
+.controls-mast { display: flex; justify-content: space-between; gap: 20px; padding: 22px 28px 0; color: #73ecdf; font: 9px var(--ui-mono); letter-spacing: .13em; }
+.view-controls .panel-header { padding: 15px 28px 22px; background: none; border-color: #73ecdf35; }
+.view-controls .panel-title { color: #e6f1ee; font: 400 36px system-ui, sans-serif; letter-spacing: -.045em; border: 0; text-transform: none; }
+.controls-categories { display: flex; flex: none; overflow: auto; padding: 0 22px; border-bottom: 1px solid #73ecdf35; background: #174c4e20; }
+.controls-categories button { flex: none; min-height: 46px; border: 0; border-bottom: 2px solid transparent; padding: 0 22px; background: none; color: #a6c0c0; font: 12px system-ui, sans-serif; cursor: pointer; }
+.controls-categories button[aria-pressed=true] { color: #73ecdf; border-bottom-color: #73ecdf; background: #58d8d309; }
+.controls-body { display: grid; grid-template-columns: minmax(260px, .85fr) minmax(350px, 1.25fr); flex: 1; min-height: 0; }
+.controls-guide { min-width: 0; min-height: 0; overflow: auto; padding: 25px 28px; border-right: 1px solid #73ecdf35; display: flex; flex-direction: column; scrollbar-width: thin; }
+.controls-eyebrow { color: #73ecdf; font: 9px var(--ui-mono); letter-spacing: .13em; }
+.controls-keyboard { display: grid; gap: 5px; align-self: center; margin: 40px 0 30px; transform: perspective(600px) rotateX(12deg); }
+.controls-keyboard > div { display: flex; gap: 5px; }
+.controls-keyboard > div:nth-child(2) { padding-left: 8px; }
+.controls-drawn-key { display: grid; place-items: center; min-width: 38px; height: 38px; padding: 0 5px; border: 1px solid #78b5b545; border-bottom-width: 3px; color: #8caeb0; background: #0a212a50; font: 10px var(--ui-mono); }
+.controls-drawn-key.is-active { color: #73ecdf; border-color: #73ecdfb0; background: #73ecdf15; transform: translateY(-2px); }
+.controls-guide-title { font-size: 27px; font-weight: 400; letter-spacing: -.03em; margin: 9px 0 12px; overflow-wrap: anywhere; }
+.controls-guide-description { color: #a8c1c2; font-size: 13px; line-height: 1.8; margin: 0; }
+.controls-guide-keys { display: flex; flex-wrap: wrap; gap: 5px; margin: 22px 0; }
+.controls-tip { margin: auto 0 0; padding-top: 18px; border-top: 1px solid #73ecdf35; color: #87a8ac; font-size: 11px; line-height: 1.8; }
+.controls-reference { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 23px 24px 12px; }
+.controls-search-row { display: flex; gap: 12px; align-items: center; }
+.controls-search { flex: 1; min-width: 0; background: #041317b8; padding: 12px; border: 1px solid #73ecdf35; color: #e6f1ee; font: 12px system-ui, sans-serif; }
+.controls-result-count { flex: none; color: #a0c0c1; font: 9px var(--ui-mono); }
+.controls-list-heading { display: flex; justify-content: space-between; padding: 19px 12px 10px; font: 8px var(--ui-mono); color: #79a6aa; letter-spacing: .12em; border-bottom: 1px solid #73ecdf35; }
+.controls-list { min-height: 0; overflow: auto; scrollbar-width: thin; }
+.view-controls .controls-table { width: 100%; border-collapse: collapse; }
+.view-controls .controls-table td { padding: 12px 8px; border-bottom: 1px solid #a4d4d216; }
+.view-controls .controls-table td:first-child { width: 56%; }
+.view-controls .controls-table td:last-child { text-align: right; }
+.controls-action { padding: 0; border: 0; background: none; text-align: left; color: #c5dad8; font: 13px/1.5 system-ui, sans-serif; cursor: pointer; }
+.controls-table .is-selected { background: linear-gradient(100deg, #459e9a20, #255b5d07); }
+.controls-table .is-selected .controls-action { color: #73ecdf; }
+.view-controls .keycap { min-width: 14px; padding: 4px 7px; margin: 2px; border-color: #86bdbc4d; border-bottom-width: 2px; background: #112f345e; color: #c9dfdc; font-size: 10px; text-align: center; }
+.controls-footer { padding: 15px 28px; border-top: 1px solid #73ecdf35; color: #87a8ac; font-size: 11px; }
+.view-controls :is(button,input):focus-visible { outline: 2px solid #73ecdf; outline-offset: 3px; }
+.controls-empty { padding: 18px 0; color: #a0c0c1; }
+@media (max-height: 650px) { .controls-keyboard { margin: 15px 0; } .controls-guide { padding-top: 18px; } }

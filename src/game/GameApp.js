@@ -114,23 +114,23 @@ const PANEL_KEYS = [
 	[ 'KeyX', 'CODEX' ], [ 'KeyO', 'SETTINGS' ], [ 'Slash', 'CONTROLS' ]
 ];
 const BINDINGS = [
-	{ keys: [ 'PgUp', 'PgDn' ], action: 'Select lift floor; E to travel' },
-	{ action: 'walk', keys: [ 'W', 'A', 'S', 'D' ] },
-	{ action: 'jump', keys: [ 'Space' ] },
-	{ action: 'crouch', keys: [ 'C' ] },
-	{ action: 'sprint', keys: [ 'Shift' ] },
-	{ action: 'running speed: normal / double / quadruple', keys: [ '1', '2', '4' ] },
-	{ action: 'hold zoom', keys: [ 'Right mouse' ] },
-	{ action: 'interact, board, leave transit, take, inspect, listen, steal, work, deliver', keys: [ 'E' ] },
-	{ action: 'read quest document', keys: [ 'R' ] },
-	{ action: 'journal', keys: [ 'J' ] },
-	{ action: 'map', keys: [ 'M' ] },
-	{ action: 'inventory', keys: [ 'I' ] },
-	{ action: 'codex', keys: [ 'X' ] },
-	{ action: 'settings', keys: [ 'O' ] },
-	{ action: 'controls', keys: [ '?' ] },
-	{ action: 'pause menu', keys: [ 'Esc', 'N' ] },
-	{ action: 'close the chat or a panel', keys: [ 'Esc' ] }
+	{ keys: [ 'PgUp', 'PgDn' ], category: 'Interaction', action: 'Select lift floor; E to travel' },
+	{ category: 'Movement', action: 'walk', keys: [ 'W', 'A', 'S', 'D' ] },
+	{ category: 'Movement', action: 'jump', keys: [ 'Space' ] },
+	{ category: 'Movement', action: 'crouch', keys: [ 'C' ] },
+	{ category: 'Movement', action: 'sprint', keys: [ 'Shift' ] },
+	{ category: 'Movement', action: 'running speed: normal / double / quadruple', keys: [ '1', '2', '4' ] },
+	{ category: 'Movement', action: 'hold zoom', keys: [ 'Right mouse' ] },
+	{ category: 'Interaction', action: 'interact, board, leave transit, take, inspect, listen, steal, work, deliver', keys: [ 'E' ] },
+	{ category: 'Interaction', action: 'read quest document', keys: [ 'R' ] },
+	{ category: 'Interface', action: 'journal', keys: [ 'J' ] },
+	{ category: 'Interface', action: 'map', keys: [ 'M' ] },
+	{ category: 'Interface', action: 'inventory', keys: [ 'I' ] },
+	{ category: 'Interface', action: 'codex', keys: [ 'X' ] },
+	{ category: 'Interface', action: 'settings', keys: [ 'O' ] },
+	{ category: 'Interface', action: 'controls', keys: [ '?' ] },
+	{ category: 'Interface', action: 'pause menu', keys: [ 'Esc', 'N' ] },
+	{ category: 'Interface', action: 'close the chat or a panel', keys: [ 'Esc' ] }
 ];
 
 /** Standing still: this close to one spot for this long. */
