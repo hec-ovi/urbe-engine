@@ -1,0 +1,82 @@
+import { describe, expect, it } from 'vitest';
+import { Acquaintances, codexEntries, inventoryCards, itemModel } from './ScreenRecords.js';
+
+const QUESTS = [
+	{ id: 'q_main', title: 'The Weir Line', kind: 'main', steps: [ { text: 'Talk to Mira', npcName: 'Mira Chen', place: { kind: 'parcel', id: 'p5', name: 'clinic' } } ] },
+	{ id: 'q_side', title: 'Last Call', kind: 'side', steps: [] }
+];
+const DRIVE = {
+	materials: [ { slot: 'surface', key: 'cyberpunk/metal/mid', variantId: 'paint' }, { slot: 'accent', key: 'cyberpunk/metal/mid', variantId: 'zinc' } ],
+	geometry: { primitives: [
+		{ primitiveId: 'shell', kind: 'box', position: { x: 0, y: 0.01, z: 0 }, rotationRadians: { x: 0, y: 0, z: 0 }, size: { width: 0.09, height: 0.025, depth: 0.075 }, materialSlot: 'surface' },
+		{ primitiveId: 'plug', kind: 'box', position: { x: 0.05, y: 0.01, z: 0 }, rotationRadians: { x: 0, y: 0.5, z: 0 }, size: { width: 0.03, height: 0.015, depth: 0.05 }, materialSlot: 'accent' }
+	] }
+};
+
+describe( 'ScreenRecords', () => {
+
+	it( 'builds an item\'s still model from its mission asset\'s boxes, coloured by variant, else by family', () => {
+
+		expect( itemModel( null ) ).toBeNull();
+		expect( itemModel( DRIVE ) ).toEqual( { parts: [
+			{ size: [ 0.09, 0.025, 0.075 ], position: [ 0, 0.01, 0 ], rotation: [ 0, 0, 0 ], color: '#56656b' },
+			{ size: [ 0.03, 0.015, 0.05 ], position: [ 0.05, 0.01, 0 ], rotation: [ 0, 0.5, 0 ], color: '#b7c1c3' }
+		] } );
+
+	} );
+
+	it( 'gives each carried item its quantity, its stories main or side and its quest model', () => {
+
+		const items = [
+			{ id: 'i_drive', name: 'Sable\'s drive', quantity: 1, state: { kind: 'device', description: 'A data drive.', questlineIds: [ 'q_main', 'q_gone' ] } },
+			{ id: 'coin', name: 'Coin', quantity: 3, state: { kind: 'money' } }
+		];
+		const cards = inventoryCards( items, QUESTS, ( questId, itemId ) => questId === 'q_main' && itemId === 'i_drive' ? DRIVE : null );
+		expect( cards[ 0 ] ).toMatchObject( { id: 'i_drive', kind: 'device', description: 'A data drive.', quantity: 1, quests: [ { id: 'q_main', title: 'The Weir Line', kind: 'main' } ] } );
+		expect( cards[ 0 ].model.parts ).toHaveLength( 2 );
+		expect( cards[ 1 ] ).toEqual( { id: 'coin', name: 'Coin', kind: 'money', description: '', place: '', quantity: 3, quests: [] } );
+
+	} );
+
+	it( 'keeps the people talked to, from this game and from a saved memory, with how often and what they said last', () => {
+
+		const people = new Acquaintances();
+		people.remember( 'a1', [
+			{ atMin: 540, speaker: 'npc', text: 'Morning.' }, { atMin: 541, speaker: 'player', text: 'Hi' }, { atMin: 541, speaker: 'npc', text: 'Fifty-seven.' }
+		], { name: 'Tess Hale', role: 'retiree' } );
+		people.remember( 'nobody', [ { atMin: 1, speaker: 'npc', text: 'x' } ], { name: '' } );
+		people.met( 'a2', { name: 'Mira Chen', role: 'doctor', place: 'clinic', timeMin: 600 } );
+		people.met( 'a2', { name: 'Mira Chen', role: 'doctor', place: 'clinic', timeMin: 640 } );
+		expect( people.size ).toBe( 2 );
+		expect( [ ...people ] ).toEqual( [
+			{ npcId: 'a1', name: 'Tess Hale', role: 'retiree', firstPlace: '', lastPlace: '', talks: 1, lastMin: 541, line: 'Fifty-seven.' },
+			{ npcId: 'a2', name: 'Mira Chen', role: 'doctor', firstPlace: 'clinic', lastPlace: 'clinic', talks: 2, lastMin: 640, line: '' }
+		] );
+
+	} );
+
+	it( 'files items, people and places under their categories with the quests they belong to', () => {
+
+		const people = new Acquaintances();
+		people.met( 'a2', { name: 'Mira Chen', role: 'doctor', place: 'clinic', timeMin: 600 } );
+		const entries = codexEntries( {
+			cards: inventoryCards( [ { id: 'i_drive', name: 'Sable\'s drive', quantity: 1, state: { kind: 'device', questlineIds: [ 'q_main' ] } } ], QUESTS ),
+			people,
+			places: [ { id: 'p5', name: 'clinic', use: 'hospital', district: 'downtown' }, { id: 'd0', name: 'downtown' } ],
+			quests: QUESTS,
+			castOf: ( npcId ) => npcId === 'a2' ? [ 'q_main' ] : []
+		} );
+		expect( entries.map( ( entry ) => [ entry.id, entry.category, entry.title ] ) ).toEqual( [
+			[ 'item:i_drive', 'items', 'Sable\'s drive' ],
+			[ 'person:a2', 'people', 'Mira Chen' ],
+			[ 'place:p5', 'places', 'clinic' ],
+			[ 'place:d0', 'places', 'downtown' ]
+		] );
+		expect( entries[ 0 ].related ).toEqual( [ { quest: 'q_main', title: 'The Weir Line', kind: 'main' } ] );
+		expect( entries[ 1 ] ).toMatchObject( { subtitle: 'doctor', text: 'Mira Chen has a part in The Weir Line.', related: [ { quest: 'q_main', kind: 'main' } ] } );
+		expect( entries[ 2 ] ).toMatchObject( { text: 'A hospital lot in downtown.', related: [ { quest: 'q_main' } ] } );
+		expect( entries[ 3 ] ).toMatchObject( { text: 'A district of the city.', model: { shape: 'map' }, related: [] } );
+
+	} );
+
+} );

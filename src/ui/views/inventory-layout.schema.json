@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Inventory labels and grid; {name} stands for the value the view puts there",
+  "type": "object",
+  "required": ["title", "carried", "count", "countOne", "grid", "emptySlot", "empty", "unselected", "pages", "detail", "questKinds", "columns", "rows", "shapes"],
+  "additionalProperties": false,
+  "properties": {
+    "title": { "description": "Screen title.", "$ref": "#/$defs/text" },
+    "carried": { "description": "The grid's heading.", "$ref": "#/$defs/text" },
+    "count": { "description": "How many items are carried, {count}.", "$ref": "#/$defs/text" },
+    "countOne": { "$ref": "#/$defs/text" },
+    "grid": { "description": "The grid's accessible name.", "$ref": "#/$defs/text" },
+    "emptySlot": { "description": "An empty card's accessible name, {position}.", "$ref": "#/$defs/text" },
+    "empty": { "$ref": "#/$defs/message" },
+    "unselected": { "$ref": "#/$defs/message" },
+    "pages": {
+      "type": "object",
+      "required": ["label", "page", "number", "previous", "next"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "$ref": "#/$defs/text" },
+        "page": { "description": "{page} of {pages}.", "$ref": "#/$defs/text" },
+        "number": { "$ref": "#/$defs/text" },
+        "previous": { "$ref": "#/$defs/text" },
+        "next": { "$ref": "#/$defs/text" }
+      }
+    },
+    "detail": {
+      "type": "object",
+      "required": ["kind", "quantity", "found", "quests", "preview"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "$ref": "#/$defs/text" },
+        "quantity": { "$ref": "#/$defs/text" },
+        "found": { "$ref": "#/$defs/text" },
+        "quests": { "$ref": "#/$defs/text" },
+        "preview": { "description": "Where no model can be drawn.", "$ref": "#/$defs/text" }
+      }
+    },
+    "questKinds": {
+      "type": "object",
+      "required": ["main", "side"],
+      "additionalProperties": false,
+      "properties": { "main": { "$ref": "#/$defs/text" }, "side": { "$ref": "#/$defs/text" } }
+    },
+    "columns": { "type": "integer", "minimum": 1, "maximum": 8 },
+    "rows": { "type": "integer", "minimum": 1, "maximum": 8 },
+    "shapes": {
+      "description": "The model an item of each kind is drawn as when the game hands no model of its own; parcel otherwise.",
+      "type": "object",
+      "additionalProperties": { "enum": ["scanner", "radio", "card", "book", "map", "key", "battery", "parcel"] }
+    }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 },
+    "message": {
+      "type": "object",
+      "required": ["title", "text"],
+      "additionalProperties": false,
+      "properties": { "title": { "$ref": "#/$defs/text" }, "text": { "$ref": "#/$defs/text" } }
+    }
+  }
+}

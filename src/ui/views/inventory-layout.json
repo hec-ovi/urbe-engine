@@ -1,0 +1,28 @@
+{
+  "title": "Inventory",
+  "carried": "Carried items",
+  "count": "{count} items",
+  "countOne": "1 item",
+  "grid": "Carried items. Arrow keys move, Enter inspects.",
+  "emptySlot": "Empty slot {position}",
+  "empty": { "title": "nothing carried yet", "text": "What you pick up on the way lands here." },
+  "unselected": { "title": "Pick an item", "text": "Choose a card to see what it is, where you found it and the stories it belongs to." },
+  "pages": { "label": "Inventory pages", "page": "Page {page} of {pages}", "number": "Page {page}", "previous": "Previous page", "next": "Next page" },
+  "detail": { "kind": "Kind", "quantity": "Quantity", "found": "Found at", "quests": "Linked quests", "preview": "No preview" },
+  "questKinds": { "main": "Main quest", "side": "Side quest" },
+  "columns": 4,
+  "rows": 4,
+  "shapes": {
+    "device": "scanner",
+    "radio": "radio",
+    "tool": "radio",
+    "document": "book",
+    "paper": "card",
+    "pass": "card",
+    "card": "card",
+    "information": "map",
+    "map": "map",
+    "key": "key",
+    "power": "battery"
+  }
+}

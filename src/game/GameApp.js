@@ -12,6 +12,7 @@ import { QuestSession } from './quests/QuestSession.js';
 import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
 import { QuestActions } from './quests/QuestActions.js';
 import { MissionItemAssets } from './quests/MissionItemAssets.js';
+import { inventoryCards } from './ScreenRecords.js';
 import { InvestigationGameplay } from './investigation/index.js';
 import { ScenePlaceResolver, SceneryDirector } from './scenery/index.js';
 import { ObjectiveRouter } from './routes/ObjectiveRouter.js';
@@ -2015,13 +2016,14 @@ export class GameApp {
 
 	#refreshInventory() {
 
-		this.view.inventory.setItems( this.#inventory().map( ( item ) => ( {
-			id: item.id,
-			name: item.quantity > 1 ? `${item.name} ×${item.quantity}` : item.name,
-			kind: item.state.kind ?? '',
-			description: item.state.description ?? '',
-			place: item.state.place ?? 'quest inventory'
-		} ) ) );
+		this.view.inventory.setItems( this.#inventoryCards() );
+
+	}
+
+	/** The carried items as the inventory and the codex show them, a quest item with its mission model. */
+	#inventoryCards() {
+
+		return inventoryCards( this.#inventory(), this.quests.view( this.clock.timeMin ), ( questId, itemId ) => this.missionItems?.get( questId, itemId ) ?? null );
 
 	}
 

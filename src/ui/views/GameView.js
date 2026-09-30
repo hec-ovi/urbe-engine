@@ -5,6 +5,7 @@ import '../components/screens.css';
 import '../components/dock.css';
 import '../components/journal.css';
 import '../components/map.css';
+import '../components/inventory.css';
 import '../components/chat.css';
 import '../components/mission.css';
 import '../components/fracture.css';
@@ -31,6 +32,7 @@ import { PanelHost } from './PanelHost.js';
 import { MinimapView } from './MinimapView.js';
 import { Map3DView } from './Map3DView.js';
 import { InventoryView } from './InventoryView.js';
+import { ItemPreview } from '../components/ItemPreview.js';
 import { QuestsView } from './QuestsView.js';
 import { CodexView } from './CodexView.js';
 import { SettingsView } from './SettingsView.js';
@@ -89,7 +91,16 @@ export class GameView {
 		this.free.hidden = true;
 
 		this.map = new Map3DView( { onClose: close } );
-		this.inventory = new InventoryView( { onClose: close } );
+		// One small 3D stage for the item and codex previews, made when first drawn.
+		this.preview = new ItemPreview();
+		const openQuest = ( questId ) => {
+
+			this.open( 'QUESTS' );
+			this.quests.select( questId );
+			onQuestSelect( questId );
+
+		};
+		this.inventory = new InventoryView( { onClose: close, onQuest: openQuest, preview: this.preview } );
 		this.quests = new QuestsView( { onClose: close, onSelect: onQuestSelect, onTrack: onQuestTrack, onWait: onQuestWait } );
 		this.codex = new CodexView( { onClose: close } );
 		this.settings = new SettingsView( { onChange: onSettingChange, onClose: close } );
