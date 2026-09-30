@@ -3,6 +3,8 @@ import { el } from '../components/dom.js';
 import { menuButton } from '../components/MenuButton.js';
 import { GameLibraryView } from './GameLibraryView.js';
 import { NewGameView } from './NewGameView.js';
+import { fractureLogo } from '../components/FractureLogo.js';
+import '../components/fracture.css';
 
 /** Full-screen front door. It owns display state only and reports every persistence/generation intent. */
 export class MainMenuView {
@@ -25,9 +27,9 @@ export class MainMenuView {
 		} );
 
 		this.continue = menuButton( { label: 'Continue game', detail: 'Resume the latest playthrough', disabled: true, primary: true, onClick: () => this.continueLatest() } );
-		this.games = menuButton( { label: 'Games', detail: 'Cities with interiors and quests', onClick: () => this.openLibrary( 'games' ) } );
-		this.cities = menuButton( { label: 'Cities', detail: 'Generated world directories', onClick: () => this.openLibrary( 'cities' ) } );
-		this.newGame = menuButton( { label: 'New game', detail: 'City, interiors, story, play', onClick: () => this.createNew() } );
+		this.games = menuButton( { label: 'Games', detail: 'Your saved lives in the city', onClick: () => this.openLibrary( 'games' ) } );
+		this.cities = menuButton( { label: 'Cities', detail: 'Worlds ready for a new story', onClick: () => this.openLibrary( 'cities' ) } );
+		this.newGame = menuButton( { label: 'New game', detail: 'Find your place in a new city', onClick: () => this.createNew() } );
 		this.load = menuButton( { label: 'Load game', detail: 'Open a local game file', disabled: ! callbacks.onLoad, onClick: () => this.file.click() } );
 		this.file = el( 'input', { type: 'file', accept: '.json,.urbegame.json,application/json', className: 'menu-file-input', ariaLabel: 'Choose game file' } );
 		this.file.addEventListener( 'change', () => {
@@ -39,31 +41,31 @@ export class MainMenuView {
 		} );
 		this.integration = el( 'p', { className: 'menu-integration' } );
 		this.content = el( 'main', { className: 'main-menu-content' }, this.library.element );
-		this.title = el( 'h1', { id: 'urbe-main-menu-title', textContent: 'URBE' } );
+		this.title = el( 'h1', { id: 'urbe-main-menu-title', ariaLabel: 'URBE' }, fractureLogo( { label: 'URBE' } ) );
+		const identity = el( 'div', { className: 'main-menu-identity' },
+			el( 'p', { className: 'menu-eyebrow', textContent: 'A city of possibilities' } ), this.title,
+			el( 'p', { className: 'main-menu-tagline', textContent: 'Every city has a story.\nThis one is yours.' } ),
+			el( 'p', { className: 'main-menu-subtitle', textContent: 'Return to a life in progress, or begin somewhere new.' } ) );
 		this.element = el( 'div', {
 			className: 'main-menu', role: 'dialog', ariaModal: 'true'
 		},
 			el( 'div', { className: 'main-menu-frame', ariaHidden: 'true' } ),
 			el( 'header', { className: 'main-menu-header' },
-				el( 'div', {},
-					el( 'p', { className: 'menu-eyebrow', textContent: 'World directory' } ),
-					this.title,
-					el( 'p', { className: 'main-menu-subtitle', textContent: 'Continue a game, load one, or build a playable world in isolated stages.' } )
-				),
+				el( 'span', { className: 'menu-eyebrow', textContent: '+  URBE / CITY STORIES' } ),
 				el( 'div', { className: 'main-menu-status' },
 					el( 'span', { className: 'status-pulse', ariaHidden: 'true' } ),
-					el( 'span', { textContent: 'local world system' } )
+					el( 'span', { textContent: 'Your worlds' } )
 				)
 			),
 			el( 'div', { className: 'main-menu-layout' },
 				el( 'aside', { className: 'main-menu-rail' },
-					this.continue, this.games, this.cities, this.newGame, this.load, this.file, this.integration
+					identity, this.continue, this.newGame, this.games, this.cities, this.load, this.file, this.integration
 				),
 				this.content
 			),
 			el( 'footer', { className: 'main-menu-footer' },
-				el( 'span', { textContent: 'City archive' } ),
-				el( 'span', { textContent: 'Game archive = city + interiors + quests + playthrough' } )
+				el( 'span', { textContent: 'URBE / A LIFE IN THE CITY' } ),
+				el( 'span', { textContent: 'Your next chapter starts here.' } )
 			)
 		);
 		this.element.setAttribute( 'aria-labelledby', this.title.id );

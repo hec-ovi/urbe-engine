@@ -1,4 +1,5 @@
 import { el } from '../components/dom.js';
+import { cityDiagram } from '../components/CityDiagram.js';
 
 function count( value ) {
 
@@ -49,7 +50,7 @@ export function gameCard( game, { onContinue, onSave } ) {
 	const quest = game.activeQuest;
 	const card = el( 'article', { className: 'library-card game-library-card' },
 		el( 'div', { className: 'library-card-art', ariaHidden: 'true' },
-			el( 'span', { textContent: game.theme || 'future noir' } )
+			cityDiagram(), el( 'span', { textContent: game.theme || 'future noir' } )
 		),
 		el( 'div', { className: 'library-card-body' },
 			el( 'div', { className: 'library-card-heading' },
@@ -90,7 +91,7 @@ export function cityCard( city, { onSetUp, onExport } ) {
 	const ready = city.status !== 'building' && city.status !== 'failed';
 	return el( 'article', { className: 'library-card city-library-card' },
 		el( 'div', { className: 'library-card-art city-art', ariaHidden: 'true' },
-			el( 'span', { textContent: city.size || 'city' } )
+			cityDiagram(), el( 'span', { textContent: city.size || 'city' } )
 		),
 		el( 'div', { className: 'library-card-body' },
 			el( 'div', { className: 'library-card-heading' },
