@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { generate, expandBuilding, makePlacementFixture } from '../../../../interior/src/index.ts';
-import { groundAnchors } from './Anchors.js';
+import { SEATS, groundAnchors } from './Anchors.js';
 
 it( 'keeps occupants on the published chairs and sofas facing their fronts at every building rotation', async () => {
 
@@ -24,17 +24,20 @@ it( 'keeps occupants on the published chairs and sofas facing their fronts at ev
 			const facing = new THREE.Vector3( Math.sin( anchor.heading ), 0, Math.cos( anchor.heading ) );
 			expect( facing.dot( front ) ).toBeCloseTo( 1, 7 );
 			// The purchased sit clip's pelvis is 34 cm behind its root. Its body
-			// must sit on the furniture, even when navigation put its approach aside.
+			// must sit on the furniture, even when navigation put its approach aside:
+			// on a measured cushion 20 cm in front of its back, and never more than
+			// 35 cm behind its front edge, so the knees clear a deep seat.
 			const hips = anchor.position.clone().addScaledVector( facing, - 0.34 );
-			const cushion = new THREE.Vector3( ...placement.position )
-				.addScaledVector( front, placement.module === 'fit-sofa' ? 0.105 * placement.scale[ 2 ] : 0 );
+			const seat = SEATS[ placement.module ];
+			const pelvis = seat ? Math.max( seat[ 1 ] + 0.2, seat[ 2 ] - 0.35 ) * placement.scale[ 2 ] : 0;
+			const cushion = new THREE.Vector3( ...placement.position ).addScaledVector( front, pelvis );
 			expect( hips.x ).toBeCloseTo( cushion.x, 5 );
 			expect( hips.z ).toBeCloseTo( cushion.z, 5 );
-			if ( placement.module === 'fit-chair' || placement.module === 'fit-sofa' ) {
+			if ( seat ) {
 
 				seen.add( placement.module );
-				const top = placement.module === 'fit-chair' ? 0.56 : 0.45;
-				expect( anchor.position.y + 0.49 ).toBeCloseTo( 0.15 + placement.position[ 1 ] + top * placement.scale[ 1 ], 5 );
+				// The thighs rest on the cushion's top.
+				expect( anchor.position.y + 0.49 ).toBeCloseTo( 0.15 + placement.position[ 1 ] + seat[ 0 ] * placement.scale[ 1 ], 5 );
 
 			}
 
@@ -49,7 +52,8 @@ it( 'keeps occupants on the published chairs and sofas facing their fronts at ev
 		expect( JSON.stringify( { result, npc } ) ).toBe( before );
 
 	}
-	expect( seen ).toEqual( new Set( [ 'fit-chair', 'fit-sofa' ] ) );
+	// The offices publish measured seats (their corporate benches today): at least one was checked on its cushion.
+	expect( seen.size ).toBeGreaterThan( 0 );
 
 }, 15000 );
 

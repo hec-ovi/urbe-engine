@@ -44,7 +44,7 @@ export function groundAnchors( npc, y, interior = null ) {
 // the cushion's top and its back and front edges along the seat's facing (+Z),
 // from the authored zero. Measured on the module and catalogue meshes as their
 // largest upward face under 0.75 m, armrests and plinths set aside.
-const SEATS = {
+export const SEATS = {
 	'fit-chair': [ 0.56, - 0.21, 0.21 ], 'fit-sofa': [ 0.45, - 0.19, 0.4 ], 'fit-bench': [ 0.45, - 0.2, 0.2 ],
 	'fit-stool': [ 0.65, - 0.18, 0.18 ], 'fit-office-chair': [ 0.5, - 0.23, 0.27 ],
 	'fit-sofa-luxury': [ 0.49, - 0.15, 0.43 ], 'fit-chair-luxury': [ 0.5, - 0.14, 0.32 ],
