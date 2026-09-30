@@ -34,7 +34,7 @@ const FACE = 1.55;
  */
 export class Interactor {
 
-	constructor( { crowd, doors, sim, controller, elevators, quests, investigations = null, continuity = null, animations = null, doorColliders = null, interiors = null } ) {
+	constructor( { crowd, doors, sim, controller, elevators, quests, investigations = null, continuity = null, animations = null, doorColliders = null, interiors = null, typeLabels = null } ) {
 
 		this.crowd = crowd;
 		this.doors = doors;
@@ -47,6 +47,8 @@ export class Interactor {
 		this.animations = animations;
 		this.doorColliders = doorColliders;
 		this.interiors = interiors;
+		/** Each NPC type's readable label, which names a person the prompt has no given name for. */
+		this.typeLabels = typeLabels ?? new Map();
 		this.target = null;
 		this.conversation = null;
 		this.onConversation = null;
@@ -94,7 +96,7 @@ export class Interactor {
 			if ( this.controller.input.consume( 'PageDown' ) ) cabin.select( - 1 );
 
 		}
-		return this.target ? prompt( this.target, this.quests ) : null;
+		return this.target ? prompt( this.target, this.quests, this.typeLabels ) : null;
 
 	}
 
@@ -486,7 +488,7 @@ function aimAt( eye, look, position, rise ) {
 }
 
 /** What the prompt says, always naming the thing it will act on. */
-function prompt( target, quests ) {
+function prompt( target, quests, typeLabels = new Map() ) {
 
 	if ( target.kind === 'quest' || target.kind === 'investigation' ) return target.interaction.prompt;
 	if ( target.kind === 'elevator' ) return target.shaft.label( target );
@@ -501,7 +503,15 @@ function prompt( target, quests ) {
 
 	const given = quests?.characterName?.( target.person.npcId )?.given ?? target.person.instance?.name?.given;
 
-	return `E  talk to ${given ?? `the ${target.person.type.replace( /_/g, ' ' )}`}`;
+	return `E  talk to ${given ?? `the ${roleOf( target.person.type, typeLabels )}`}`;
+
+}
+
+/** A person's role in words: their type's label, else its id without the authoring prefix. */
+function roleOf( type, typeLabels ) {
+
+	const label = typeLabels.get( type ) ?? type.replace( /^quest_/, '' ).replace( /_/g, ' ' );
+	return label.toLowerCase();
 
 }
 

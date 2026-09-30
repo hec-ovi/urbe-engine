@@ -740,7 +740,7 @@ export class GameApp {
 			investigations: this.investigations,
 			continuity: this.npcContinuity,
 			animations: this.animations,
-			doorColliders: this.doorColliders, interiors: this.stream
+			doorColliders: this.doorColliders, interiors: this.stream, typeLabels: this.npcTypeLabels
 		} );
 		this.interactor.onConversation = ( conversation ) => this.presentConversation( conversation );
 

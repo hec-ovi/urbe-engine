@@ -88,6 +88,12 @@ it( 'prompts by type, hands the panel the instantiated NPC, and closes on the se
 	const person = [ ...crowd.members.values() ][ 0 ];
 
 	expect( interactor.update( 1 / 60 ) ).toBe( 'E  talk to the shop clerk' );
+	interactor.typeLabels = new Map( [ [ 'shop_clerk', 'Shop Clerk' ] ] );
+	crowd.members.values().next().value.type = 'quest_transit';
+	expect( interactor.update( 1 / 60 ) ).toBe( 'E  talk to the transit' );
+	interactor.typeLabels.set( 'quest_transit', 'Transit Worker' );
+	expect( interactor.update( 1 / 60 ) ).toBe( 'E  talk to the transit worker' );
+	crowd.members.values().next().value.type = 'shop_clerk';
 
 	interactor.activate( CLOCK );
 
