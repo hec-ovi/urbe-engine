@@ -1185,6 +1185,32 @@ describe( 'Crowd around somebody in the way', () => {
 
 	} );
 
+	it( 'turns a walker back once they have stood held up behind somebody for a moment', () => {
+
+		const crowd = onSidewalk( [ walking( 'behind', 0.2, 1 ), walking( 'stuck', 0.4, 1 ) ], 0 );
+		crowd.update( 0, AWAY, clock );
+		const behind = [ ...crowd.members.values() ].find( ( member ) => member.crowdId === 'behind' );
+		const stuck = [ ...crowd.members.values() ].find( ( member ) => member.crowdId === 'stuck' );
+		// Somebody walking who gets nowhere, on a stretch too narrow to pass them.
+		stuck.speed = 0;
+		behind.offset = stuck.offset = 0;
+		const walk = ( gap( behind, stuck ) - 0.6 ) / behind.speed;
+		let closest = Infinity;
+		let turned = null;
+		play( crowd, AWAY, 900, ( frame ) => {
+
+			closest = Math.min( closest, gap( behind, stuck ) );
+			if ( turned === null && behind.direction === - 1 ) turned = frame;
+
+		} );
+
+		// Up to arm's length at their pace, then no more than the two seconds of standing.
+		expect( turned ).not.toBeNull();
+		expect( turned / 60 ).toBeLessThan( walk + 2.5 );
+		expect( closest ).toBeGreaterThanOrEqual( 0.6 - 1e-3 );
+
+	} );
+
 	it( 'steps somebody continuity walks down the pavement around the player, and back onto their line past them', () => {
 
 		const crowd = onSidewalk( [] );

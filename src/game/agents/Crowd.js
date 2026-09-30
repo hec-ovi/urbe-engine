@@ -44,6 +44,8 @@ const BLOCK_LOOK = 1;
 const LOOK_AHEAD = 2.5;
 /** How fast a walker steps across the pavement to pass somebody, metres a second. */
 const STEP_ASIDE = 0.8;
+/** The longest a walker stands held up by somebody they cannot pass before turning back, seconds. */
+const HOLD_UP = 2;
 /** Walkers keep this far from the player's middle: the reach the pushback shoves the player out of. */
 const PLAYER_SPACE = PERSON_RADIUS + BODY_RADIUS;
 /** The paces continuity walks and runs the bodies it controls at, metres a second. */
@@ -1465,7 +1467,22 @@ export class Crowd {
 
 		const ahead = this.#inLine( member, member );
 		const { first, target } = aside( member, ahead );
-		if ( ! first ) return Infinity;
+		const way = ! first ? Infinity : this.#pass( member, first, target, delta );
+		// Held up by anybody but a queue at a crossing, a walker waits a moment, then goes back.
+		member.held = way < 1e-4 && ! first.queue ? ( member.held ?? 0 ) + delta : 0;
+		if ( member.held > HOLD_UP ) {
+
+			member.held = 0;
+			return - 1;
+
+		}
+		return way;
+
+	}
+
+	/** Steps a walker toward `target` and says how far on they may walk past `first`, or -1 to turn back. */
+	#pass( member, first, target, delta ) {
+
 		if ( target !== null ) member.offset = stepToward( member.offset, target, STEP_ASIDE * delta, laneReach( member.edge ) );
 		if ( Math.abs( member.offset - first.line ) >= first.space - CLEAR ) return Infinity;
 		const way = Math.max( 0, first.ahead - first.space );
@@ -1503,10 +1520,10 @@ export class Crowd {
 	/**
 	 * Everybody alongside a body or ahead of it within LOOK_AHEAD on the
 	 * stretch of pavement it could step across to, besides `self`: `{ ahead,
-	 * line, space, standing, oncoming }`, `ahead` how far in front of it they
-	 * stand (negative alongside), `line` the offset across the pavement their
-	 * middle stands at and `space` how far off it the body keeps. The array is
-	 * reused.
+	 * line, space, standing, oncoming, queue }`, `ahead` how far in front of it
+	 * they stand (negative alongside), `line` the offset across the pavement
+	 * their middle stands at, `space` how far off it the body keeps and `queue`
+	 * whether they wait at a crossing. The array is reused.
 	 *
 	 * @param body `{ position, heading, offset, edge, speed }`
 	 */
@@ -1518,7 +1535,7 @@ export class Crowd {
 		const forward = [ Math.sin( body.heading ), Math.cos( body.heading ) ];
 		const across = [ Math.cos( body.heading ), - Math.sin( body.heading ) ];
 		const reach = laneReach( body.edge ) + PLAYER_SPACE;
-		const look = ( position, space, standing, oncoming ) => {
+		const look = ( position, space, standing, oncoming, queue = false ) => {
 
 			if ( Math.abs( position.y - y ) > PERSON_HEIGHT ) return;
 			const dx = position.x - x;
@@ -1528,7 +1545,7 @@ export class Crowd {
 			if ( along <= - space || along > LOOK_AHEAD ) return;
 			const line = body.offset + dx * across[ 0 ] + dz * across[ 1 ];
 			if ( Math.abs( line ) >= reach ) return;
-			found.push( { ahead: along, line, space, standing, oncoming } );
+			found.push( { ahead: along, line, space, standing, oncoming, queue } );
 
 		};
 
@@ -1542,10 +1559,10 @@ export class Crowd {
 			const facing = Math.cos( other.heading - body.heading );
 			// Somebody walking the same way at least as fast only ever gets further ahead.
 			if ( moving && facing > 0 && ( other.continuity ? CONTINUITY_WALK : other.speed ?? 0 ) >= body.speed ) return;
-			look( other.position, PERSONAL_SPACE, ! moving && ! other.waiting, moving && facing < 0 );
+			look( other.position, PERSONAL_SPACE, ! moving && ! other.waiting, moving && facing < 0, Boolean( other.waiting ) );
 
 		} );
-		if ( this.player ) look( this.player, PLAYER_SPACE, true, false );
+		if ( this.player ) look( this.player, PLAYER_SPACE, true, false, false );
 		return found;
 
 	}
