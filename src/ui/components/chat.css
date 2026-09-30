@@ -479,6 +479,7 @@
 .chat-input:disabled { opacity: 0.6; }
 
 /* The conversation takes the name the avatar card would show, and the corner the minimap stands in. */
+.hud:has(.chat-layer:not([hidden])) .hud-clock,
 .hud:has(.chat-layer:not([hidden])) .hud-objective,
 .hud:has(.chat-layer:not([hidden])) .avatar-card { display: none; }
 .hud:has(.chat-layer:not([hidden])) .hud-minimap { visibility: hidden; }

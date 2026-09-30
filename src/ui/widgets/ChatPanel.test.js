@@ -170,6 +170,7 @@ describe( 'ChatPanel', () => {
 		panel.addMessage( { from: 'npc', text: 'Find the courier.', kind: 'story' } );
 		panel.said.focus(); await user.keyboard( ' ' );
 		expect( panel.sayText.data ).toBe( 'Find the courier.' );
+		expect( document.activeElement ).toBe( panel.element );
 		expect( onChoice ).not.toHaveBeenCalled();
 		panel.addMessage( { from: 'npc', text: 'One more thing.' } );
 		panel.show( null );

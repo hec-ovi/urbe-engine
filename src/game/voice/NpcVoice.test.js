@@ -125,6 +125,19 @@ describe( 'NpcVoice', () => {
 
 	} );
 
+	it( 'hands the subtitle a live audio-clock progress callback for the line being heard', async () => {
+		const { voice, client, dialog, context } = rig();
+		voice.said( { conversation: conversation(), line: { id: 'a' }, text: '[sigh] Read this slowly.' } );
+		await flush(); answer( client.lines[ 0 ] ); await flush();
+		const progress = dialog.setSpeaking.mock.calls.find( ( [ , state ] ) => state === 'playing' )[ 2 ];
+		expect( progress() ).toBe( 0 );
+		context().advance( .3 );
+		expect( progress() ).toBeCloseTo( .5 );
+		context().advance( .3 ); await flush();
+		expect( progress() ).toBe( 1 );
+		expect( dialog.setSpeaking.mock.calls.at( -1 ).slice( 0, 2 ) ).toEqual( [ { id: 'a' }, 'idle' ] );
+	} );
+
 	it( 'starts no line while the game is paused and speaks it once the game plays on', async () => {
 
 		const { voice, client, context } = rig();

@@ -235,7 +235,8 @@ describe('explicit quest dialogue through the playable UI',()=>{
   expect(companion.acceptFromTool).toHaveBeenCalledExactlyOnceWith({npcId:'person',kind:'lead',placeId:'p2',timeMin:1260,playerPlaces:[]});
   expect(app.interactor.close).toHaveBeenCalledExactlyOnceWith(app.clock,'player-left',{keep:true});
   expect(app.view.dialog.element.hidden).toBe(true);
-  expect(app.view.toast.element.textContent).toBe('Petra MossKip drinks at the market.');
+  expect(app.view.toast.element.querySelector('.toast-title').textContent).toBe('Petra Moss');
+  expect(app.view.toast.element.querySelector('.toast-text').textContent).toBe('Kip drinks at the market.');
   // The person goes on saying it as they set off: the close silences nothing.
   expect(log.at(-1)).toBe('said: Kip drinks [sigh] at the market.');
   expect(state()).toEqual(initial);
@@ -323,7 +324,7 @@ describe('explicit quest dialogue through the playable UI',()=>{
  const ARRIVAL={kind:'arrival',npcId:'person',guide:GUIDE,relation:'quest',ask:'So this is Market. Tell me about it.',line:'Here it is: Market.'};
  /** One companion frame reporting `signals`, as tick runs it; returns what the companion was asked. */
  const frame=(app,...signals)=>{app.companion.update=vi.fn(()=>signals);app.updateCompanion([4,0,2],[]);return app.companion.update.mock.calls[0][0];};
- const toasts=(app)=>[...app.view.toast.element.children].map(toast=>toast.textContent);
+ const toasts=(app)=>[...app.view.toast.element.children].map(toast=>toast.querySelector('.toast-title').textContent+toast.querySelector('.toast-text').textContent);
 
  it('opens the talk by itself when a leader arrives: the person talks about the place unasked, or says their own line when the model cannot',async()=>{
   const {app,log,companion}=fixture();app.quests.dialoguesFor=()=>[];companion.guide.mockReturnValue(GUIDE);
@@ -367,7 +368,7 @@ describe('explicit quest dialogue through the playable UI',()=>{
   expect(toasts(app).at(-1)).toBe('Petra MossHere it is: Market.');expect(log.at(-1)).toBe('said: Here it is: Market.');
 
   frame(app,{kind:'ended',npcId:'person',reason:'gave-up',notice:'Petra Moss lost you and went back.'},{kind:'ended',npcId:'person',reason:'done'});
-  expect(toasts(app).slice(2)).toEqual(['CompanionPetra Moss lost you and went back.']);
+  expect(toasts(app).at(-1)).toBe('CompanionPetra Moss lost you and went back.');
  });
 
  it('drops a failed half reply, silencing what was heard of it, and offers Retry, but says a refused line cannot be retried',async()=>{

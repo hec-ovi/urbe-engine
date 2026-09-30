@@ -583,6 +583,7 @@ describe( 'story fast-forward', () => {
 		game.view.dialog.setChoices( [ { text: 'What did he see?', value: 'why', disabled: true }, { text: 'I will find him.', value: 'go' } ] );
 		expect( probe.state().chat ).toMatchObject( {
 			story: { title: 'q_pier', objective: 'Complete s_ask.' },
+			hint: { available: true, open: false, unread: true },
 			choices: [ { text: 'What did he see?', disabled: true }, { text: 'I will find him.', disabled: false } ]
 		} );
 		expect( ( await probe.choose( 'What did he see?' ) ).clicked ).toBe( false );

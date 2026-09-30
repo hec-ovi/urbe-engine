@@ -63,7 +63,11 @@ export class ChatPanel {
 			onState: active => {
 				this.said.classList.toggle( 'is-revealing', active );
 				if ( active ) { this.said.tabIndex = 0; this.said.setAttribute( 'role', 'button' ); this.said.setAttribute( 'aria-description', layout.reveal.complete ); }
-				else { this.said.removeAttribute( 'tabindex' ); this.said.removeAttribute( 'role' ); this.said.removeAttribute( 'aria-description' ); }
+				else {
+					const focused = document.activeElement === this.said;
+					this.said.removeAttribute( 'tabindex' ); this.said.removeAttribute( 'role' ); this.said.removeAttribute( 'aria-description' );
+					if ( focused ) this.element?.focus();
+				}
 			} } );
 		this.said.addEventListener( 'click', () => this.reveal.finish() );
 		this.orbSlot = el( 'span', { className: 'chat-orb-slot' } );
