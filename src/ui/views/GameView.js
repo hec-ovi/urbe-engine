@@ -75,7 +75,11 @@ export class GameView {
 		this.toast = new MissionToast();
 		this.dialog = new ChatPanel( { onSend, onClose: onCloseDialog,
 			onChoice: onDialogueChoice, onTopic: onDialogueTopic, onAction: onDialogueAction, onRetry: onDialogueRetry, onJournal: onDialogueJournal, onVoice: onDialogueVoice } );
-		this.summary = new MissionSummary( { onOpen: onSummaryOpen, onClose: ( close ) => { this.summary.setVisible( false ); onSummaryClose( close ); } } );
+		this.summary = new MissionSummary( { onOpen: onSummaryOpen, onClose: ( close ) => {
+			this.summary.setVisible( false );
+			if ( ! this.inspection.element.hidden ) this.inspection.done.focus();
+			onSummaryClose( close );
+		} } );
 		this.transit = new TransitHud( { onSelect: onTransitSelect, onCancel: onTransitCancel } );
 		this.pause = new PauseMenu( { onResume, onOpen: ( name ) => this.open( name ), onSave, onLeave: leave } );
 		this.free = el( 'div', { className: 'hud-free', textContent: menuLabels.free } );

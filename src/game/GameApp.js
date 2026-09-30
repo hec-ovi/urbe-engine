@@ -205,7 +205,7 @@ export class GameApp {
 				if ( this.view.summary.element.hidden ) this.input?.requestLock();
 			},
 			// A click on the card takes the pointer back; Escape leaves it free, where the game stood.
-			onSummaryClose: ( { pointer } ) => { if ( pointer ) this.input?.requestLock(); },
+			onSummaryClose: ( { pointer } ) => { if ( pointer && ! playableModalOpen( this.view, this.interactor ) ) this.input?.requestLock(); },
 			onSummaryOpen: () => { this.#release(); this.view.setPaused( false ); },
 			onSend: ( text ) => this.#say( text ),
 			onOpen: ( name ) => {

@@ -22,6 +22,15 @@ describe( 'GameView', () => {
 
 	} );
 
+	it( 'returns to an inspection when that evidence also opens an ending', async () => {
+		view.inspection.show( { title: 'A sealed note', text: 'The final evidence.' } );
+		view.summary.show( { title: 'Case closed', text: 'The evidence settles the case.' } );
+		await userEvent.setup().click( view.summary.done );
+		expect( view.summary.element.hidden ).toBe( true );
+		expect( view.inspection.element.hidden ).toBe( false );
+		expect( document.activeElement ).toBe( view.inspection.done );
+	} );
+
 	it( 'opens panels from the pause menu, keeps the bar up only while one is open, and opens QUESTS from the objective', async () => {
 
 		const user = userEvent.setup();

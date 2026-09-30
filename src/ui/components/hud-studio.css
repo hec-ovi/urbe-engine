@@ -18,7 +18,7 @@
 .hud-shortcuts { position: absolute; bottom: 26px; left: 30px; display: flex; flex-wrap: wrap; gap: 14px; padding: 8px 10px; background: #04181d8f; border-bottom: 1px solid #6fe3d556; font: 10px system-ui, sans-serif; color: #a0c0c1; }
 .hud-shortcuts > span { display: inline-flex; align-items: center; gap: 6px; }
 .hud-shortcuts .keycap { border-color: #91c8c14a; color: #e6f1ee; font-size: 9px; }
-.hud:has(.chat-layer:not([hidden]), .hud-pause:not([hidden]), .summary-layer:not([hidden]), .inspection-layer:not([hidden]), .hud-tabbar:not([hidden])) .hud-shortcuts { visibility: hidden; }
+.hud:has(.chat-layer:not([hidden]), .hud-pause:not([hidden]), .summary-layer:not([hidden]), .inspection-layer:not([hidden]), .panel-host.is-open) .hud-shortcuts { visibility: hidden; }
 .hud .hud-prompt { bottom: auto; top: calc(50% + 46px); max-width: min(460px, calc(100vw - 48px)); padding: 16px 18px; background: linear-gradient(90deg, #05181ce6, #05181cb8); border: 0; border-top: 1px solid #73ecdf70; color: #e6f1ee; font: 13px/1.9 system-ui, sans-serif; white-space: normal; text-align: center; }
 .hud-prompt::before { content: ''; position: absolute; bottom: 100%; left: 50%; height: 20px; width: 1px; background: #73ecdf70; }
 .hud .hud-prompt .keycap { padding: 2px 7px; margin-right: 5px; border-color: #73ecdf85; background: #173c3e; color: #73ecdf; font-size: 11px; }
