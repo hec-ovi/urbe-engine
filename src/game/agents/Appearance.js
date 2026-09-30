@@ -3,6 +3,9 @@ import { bodyOf, personRecipe } from './avatar/Recipe.js';
 import { AvatarTemplates } from './avatar/Templates.js';
 import { TOP_CUTS } from './avatar/Tops.js';
 import { FOOTWEAR_CUTS, PANTS_CUTS } from './avatar/Lower.js';
+import { PANEL_OF, TOP_PANELS } from './avatar/TopPanels.js';
+
+export { TOP_PANELS };
 
 /** The authored characters the game ships (avatar/templates). */
 export const TEMPLATES = new AvatarTemplates();
@@ -10,17 +13,6 @@ export const TEMPLATES = new AvatarTemplates();
 const COLLARS = {
 	'tech-top': 0.864, 'police-jacket': 0.878, 'office-jacket': 0.86, 'top-tee': 0.853, 'top-tank': 0.85,
 	'top-turtleneck': 0.887, 'jacket-cropped': 0.86, 'vest-tailored': 0.85, 'shirt-utility': 0.854, 'jacket-bomber': 0.86
-};
-/**
- * How the crowd paints a top's second colour, as the top's own panels mostly
- * show it: not at all, in an open front, across the shoulders, or across the
- * shoulders and down the upper sleeves.
- */
-export const TOP_PANELS = { plain: 0, open: 1, yoke: 2, sleeved: 3 };
-const PANEL_OF = {
-	'office-jacket': 'open', 'vest-tailored': 'open', 'top-tank': 'plain',
-	'tech-top': 'yoke', 'police-jacket': 'sleeved', 'top-tee': 'yoke', 'top-turtleneck': 'yoke',
-	'jacket-cropped': 'yoke', 'jacket-bomber': 'yoke', 'shirt-utility': 'yoke'
 };
 /** The tops that go under the trousers' waistband (the patterns' `tucked`). */
 const TUCKED = new Set( [ 'tech-top', 'top-tee', 'top-tank', 'top-turtleneck' ] );

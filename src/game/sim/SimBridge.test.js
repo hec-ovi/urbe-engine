@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TYPE_SET, FIXTURE_BLUEPRINT, FIXTURE_INTERIORS, FIXTURE_THEMED_TYPES } from '../../../../simulation/dist/index.js';
+import { DEFAULT_TYPE_SET, FIXTURE_BLUEPRINT, FIXTURE_HOMES, FIXTURE_INTERIORS, FIXTURE_THEMED_TYPES } from '../../../../simulation/dist/index.js';
 import { SimBridge } from './SimBridge.js';
 
 const buildings = new Map( Object.entries( FIXTURE_INTERIORS ).map( ( [ id, npc ] ) => [ id, { npc } ] ) );
@@ -85,6 +85,30 @@ describe( 'SimBridge', () => {
 
 	} );
 
+
+	it( 'houses the people it establishes in the numbered apartments a furnished building publishes, and keeps the cast\'s names to the cast', () => {
+
+		// The fixture building as Interior publishes it: numbered entrances per floor, rooms by unit, anchors named per floor.
+		const { homes, ...support } = FIXTURE_HOMES.p_r0;
+		const npc = { ...support, anchors: support.anchors.map( ( anchor ) => ( { ...anchor, room: `floor:${anchor.floor}/${anchor.room}` } ) ) };
+		const units = ( floor ) => homes.filter( ( home ) => home.floor === floor ).map( ( home ) => home.id.split( '/' )[ 1 ] );
+		const interior = {
+			building: { floors: [ 0, 1, 2 ].map( ( index ) => ( {
+				index, layout: `l${index}`, elevation: index * 4.5,
+				apartmentEntrances: units( index ).map( ( unit ) => ( { unit, number: homes.find( ( home ) => home.id === `floor:${index}/${unit}` ).number, position: [ 0, 0 ] } ) )
+			} ) ) },
+			layouts: Object.fromEntries( [ 0, 1, 2 ].map( ( index ) => [ `l${index}`, { floor: { rooms: units( index ).flatMap( ( unit ) =>
+				[ 'living', 'bedroom', 'bath' ].map( ( room ) => ( { id: `${unit}-${room}`, unit } ) ) ) } } ] ) )
+		};
+		const housed = new Map( [ ...buildings, [ 'p_r0', { npc, interior } ] ] );
+		const sim = SimBridge.create( FIXTURE_BLUEPRINT, { networks: undefined }, housed, {}, null, null, { family: [ 'Moss' ], full: [ { given: 'Petra', family: 'Moss' } ] } );
+		const worker = sim.getNPCVendor( { parcelId: 'p_cafe', timeMin: 540 } );
+		expect( worker.home.parcelId ).toBe( 'p_r0' );
+		expect( [ '101', '102', '201', '202' ] ).toContain( worker.home.apartment.number );
+		expect( sim.behaviorAt( worker.npcId, 3 * 60 ).interior.at.anchorId ).toMatch( /-bed-[ab]$/ );
+		expect( worker.name.family ).not.toBe( 'Moss' );
+
+	} );
 } );
 
 function errorCode( run ) {

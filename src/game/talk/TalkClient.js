@@ -64,12 +64,15 @@ export class TalkClient {
 	 * @param options.guide the place this person has led the player to, { placeId, kind, name?, notes? }
 	 * @param options.offers what this person may propose, { follow?, places?: [{ placeId, name }] }
 	 * @param options.events what happened around this person, RecentEvents.around
+	 * @param options.look what this person looks like in words, Describe.describeLook
+	 * @param options.here where this person stands, { x, z, parcelId?, floor?, light? }
+	 * @param options.people who this person knows and where they are, quests peopleKnown
 	 */
-	async *stream( conversation, line, timeMin, quests = [], { signal, guide, offers, events } = {} ) {
+	async *stream( conversation, line, timeMin, quests = [], { signal, guide, offers, events, look, here, people } = {} ) {
 
 		await this.#handOver();
 		const prior = this.#prior.npcId === conversation.instance.npcId ? this.#prior.lines : [];
-		const response = await this.#post( { conversation, line, timeMin, quests, guide, offers, events, prior }, signal );
+		const response = await this.#post( { conversation, line, timeMin, quests, guide, offers, events, look, here, people, prior }, signal );
 		const reader = response.body.getReader();
 		const decoder = new TextDecoder();
 		let buffer = '';
@@ -158,7 +161,7 @@ export class TalkClient {
 
 	}
 
-	async #post( { conversation, line, timeMin, quests, guide, offers, events, prior }, signal ) {
+	async #post( { conversation, line, timeMin, quests, guide, offers, events, look, here, people, prior }, signal ) {
 
 		const response = await fetch( '/api/talk/stream', {
 			method: 'POST',
@@ -166,7 +169,8 @@ export class TalkClient {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify( {
 				out: this.out, npc: conversation.instance, behavior: conversation.behavior, line, timeMin, quests,
-				...( guide ? { guide } : {} ), ...( offers ? { offers } : {} ), ...( events?.length ? { events } : {} ), ...( prior.length ? { prior } : {} )
+				...( guide ? { guide } : {} ), ...( offers ? { offers } : {} ), ...( events?.length ? { events } : {} ),
+				...( look ? { look } : {} ), ...( here ? { here } : {} ), ...( people ? { people } : {} ), ...( prior.length ? { prior } : {} )
 			} )
 		} );
 		if ( response.ok ) return response;

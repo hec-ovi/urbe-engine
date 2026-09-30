@@ -80,8 +80,13 @@ describe( 'talk request contract', () => {
 				{ kind: 'struck', atMin: 535, parcelId: 'p_rest', metres: 12, hard: true, down: true },
 				{ kind: 'struck', atMin: 536, parcelId: 'p_rest', metres: 0, self: true },
 				{ kind: 'scene', atMin: 500, parcelId: 'p_cafe', metres: 40, notes: [ 'A body lies on the ground.' ] }
-			]
+			],
+			look: LOOK,
+			here: { x: 12.5, z: -3, parcelId: 'p_cafe', floor: 0, light: 'night outside' },
+			people: PEOPLE
 		} ) ).toBeTruthy();
+		const apartment = { ...npc, home: { ...npc.home, apartment: { id: 'floor:2/f1-home-1', floor: 2, number: '201' } } };
+		expect( boundary.input( { ...request, npc: apartment, guide: { placeId: 'street:3', kind: 'street', name: 'Third Street' } } ) ).toBeTruthy();
 		const said = { speaker: 'npc', text: 'Hm.', atMin: 530 };
 		const struck = { kind: 'struck', atMin: 535, parcelId: 'p_rest', metres: 12 };
 		for ( const invalid of [
@@ -105,7 +110,15 @@ describe( 'talk request contract', () => {
 			{ ...request, events: [ { ...struck, notes: [ 'A body.' ] } ] },
 			{ ...request, events: [ { ...struck, kind: 'scene' } ] },
 			{ ...request, events: [ { ...struck, kind: 'scene', notes: [] } ] },
-			{ ...request, events: [ { kind: 'struck', atMin: 535, metres: 12 } ] }
+			{ ...request, events: [ { kind: 'struck', atMin: 535, metres: 12 } ] },
+			{ ...request, look: { ...LOOK, mood: 'grim' } },
+			{ ...request, look: { ...LOOK, wearing: [] } },
+			{ ...request, here: { x: 1 } },
+			{ ...request, here: { x: 1, z: 2, floor: -1 } },
+			{ ...request, npc: { ...npc, home: { ...npc.home, apartment: { id: 'a', number: '201' } } } },
+			{ ...request, people: { known: [ { ...PEOPLE.known[ 0 ], now: { kind: 'place' } } ], unknown: [] } },
+			{ ...request, people: { known: [ { ...PEOPLE.known[ 0 ], relation: 'rival' } ], unknown: [] } },
+			{ ...request, people: { known: [] } }
 		] ) expect( () => boundary.input( invalid ) ).toThrow( /does not match its contract/ );
 		expect( boundary.input( { ...request, line: 'x'.repeat( 2000 ) } ) ).toBeTruthy();
 
@@ -144,3 +157,17 @@ describe( 'talk request contract', () => {
 	} );
 
 } );
+
+const LOOK = {
+	height: 'tall', build: 'a slim build', face: [ 'a wide jaw' ], hair: 'black hair in dreadlocks', skin: 'deep brown', eyes: 'grey',
+	wearing: [ 'a navy bomber jacket with slate shoulders', 'charcoal joggers', 'navy high-top sneakers' ], fabric: 'leather'
+};
+const PEOPLE = {
+	known: [
+		{ npcId: 'n2', name: { given: 'Mira', family: 'Chen' }, relation: 'coworker', now: { kind: 'here' }, asked: true,
+			job: { place: { kind: 'parcel', id: 'p_cafe' }, role: 'barista', days: [ 0, 1, 2 ], startMin: 480, endMin: 960 } },
+		{ npcId: 'n3', name: { given: 'Ada', family: 'Ruiz' }, relation: 'household', kin: 'partner', now: { kind: 'place', place: { kind: 'parcel', id: 'p_rest' } } }
+	],
+	unknown: [ 'Oskar' ]
+};
+

@@ -53,15 +53,104 @@
       "required": ["placeId", "kind"],
       "properties": {
         "placeId": { "$ref": "#/$defs/id" },
-        "kind": { "enum": ["parcel", "stop"] },
+        "kind": { "enum": ["parcel", "stop", "street"] },
         "name": { "type": "string", "minLength": 1 },
         "notes": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 2000 } }
       }
     },
-    "events": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/event" } }
+    "events": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/event" } },
+    "look": {
+      "description": "What the person looks like, in words taken from the recipe the game draws them in.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["height", "build", "face", "hair", "skin", "eyes", "wearing"],
+      "properties": {
+        "height": { "$ref": "#/$defs/words" },
+        "build": { "$ref": "#/$defs/words" },
+        "face": { "type": "array", "maxItems": 6, "items": { "$ref": "#/$defs/words" } },
+        "hair": { "$ref": "#/$defs/words" },
+        "skin": { "$ref": "#/$defs/words" },
+        "eyes": { "$ref": "#/$defs/words" },
+        "wearing": { "type": "array", "minItems": 1, "maxItems": 6, "items": { "$ref": "#/$defs/words" } },
+        "fabric": { "$ref": "#/$defs/words" }
+      }
+    },
+    "people": {
+      "description": "Who the person knows and where they are now, and the names the player asked about that the person does not know (quests peopleKnown).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["known", "unknown"],
+      "properties": {
+        "known": { "type": "array", "maxItems": 24, "items": { "$ref": "#/$defs/knownPerson" } },
+        "unknown": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/words" } }
+      }
+    },
+    "here": {
+      "description": "Where the person stands: world XZ, the building and floor they are inside, the light there.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "z"],
+      "properties": {
+        "x": { "type": "number" },
+        "z": { "type": "number" },
+        "parcelId": { "$ref": "#/$defs/id" },
+        "floor": { "type": "integer", "minimum": 0 },
+        "light": { "$ref": "#/$defs/words" }
+      }
+    }
   },
   "$defs": {
     "id": { "type": "string", "minLength": 1 },
+    "words": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "knownPerson": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["npcId", "name", "relation", "now"],
+      "properties": {
+        "npcId": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/name" },
+        "relation": { "enum": ["coworker", "household", "neighbour"] },
+        "kin": { "enum": ["partner", "child", "parent", "sibling", "roommate"] },
+        "job": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["place", "role", "days", "startMin", "endMin"],
+          "properties": {
+            "place": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "id"],
+              "properties": { "kind": { "enum": ["parcel", "stop"] }, "id": { "$ref": "#/$defs/id" } }
+            },
+            "role": { "$ref": "#/$defs/id" },
+            "days": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 6 }, "uniqueItems": true },
+            "startMin": { "type": "number" },
+            "endMin": { "type": "number" }
+          }
+        },
+        "now": {
+          "oneOf": [
+            {
+              "type": "object", "additionalProperties": false, "required": ["kind"],
+              "properties": { "kind": { "enum": ["here", "home", "street", "transit", "unknown"] } }
+            },
+            {
+              "type": "object", "additionalProperties": false, "required": ["kind", "place"],
+              "properties": {
+                "kind": { "const": "place" },
+                "place": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "id"],
+                  "properties": { "kind": { "enum": ["parcel", "stop"] }, "id": { "$ref": "#/$defs/id" } }
+                }
+              }
+            }
+          ]
+        },
+        "asked": { "type": "boolean" }
+      }
+    },
     "event": {
       "description": "Something the game saw happen near the conversation: a car hitting someone by a building, or a quest scene standing there.",
       "oneOf": [
@@ -248,7 +337,17 @@
           "required": ["parcelId", "unit"],
           "properties": {
             "parcelId": { "$ref": "#/$defs/id" },
-            "unit": { "type": "integer", "minimum": 0 }
+            "unit": { "type": "integer", "minimum": 0 },
+            "apartment": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "floor"],
+              "properties": {
+                "id": { "$ref": "#/$defs/id" },
+                "floor": { "type": "integer", "minimum": 0 },
+                "number": { "type": "string", "minLength": 1 }
+              }
+            }
           }
         },
         "job": { "$ref": "#/$defs/job" },

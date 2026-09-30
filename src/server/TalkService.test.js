@@ -323,6 +323,32 @@ describe( 'TalkService', () => {
 
 	} );
 
+	it( 'tells the NPC what it looks like, where it stands on the named streets, and who it knows', async () => {
+
+		const model = fakeModel();
+		const streets = { edges: [ { id: 'e0', class: 'road', path: [ [ 0, 0 ], [ 200, 0 ] ], level: 0 }, { id: 'e1', class: 'road', path: [ [ 0, 0 ], [ 0, 100 ] ] } ] };
+		const parcels = [ { ...blueprint.parcels[ 0 ], lot: [ [ 10, 5 ], [ 40, 5 ], [ 40, 30 ], [ 10, 30 ] ], access: { edgeId: 'e0', point: [ 25, 5 ] } } ];
+		const service = new TalkService( model, ( await servedWorld( { 'blueprint.json': { ...blueprint, meta: { seed: 7, gridAngle: 0 }, streets, parcels } } ) ).root );
+		await say( service, 'Is Tess about?', {
+			npc: { ...npc, home: { parcelId: 'p1', unit: 0, apartment: { id: 'floor:3/f1-home-2', floor: 3, number: '302' } } },
+			look: { height: 'short', build: 'a heavy build', face: [], hair: 'grey hair in a buzz cut', skin: 'fair', eyes: 'amber', wearing: [ 'a charcoal tank top', 'charcoal cargo trousers', 'charcoal high-top sneakers' ] },
+			here: { x: 30, z: -3, light: 'night outside, dark but for the street lamps and the neon signs' },
+			people: {
+				known: [ { npcId: 'n2', name: { given: 'Ada', family: 'Ruiz' }, relation: 'coworker', now: { kind: 'unknown' } } ],
+				unknown: [ 'Tess' ]
+			}
+		} );
+		const system = model.system( 0 );
+		expect( system ).toContain( 'you are short, with a heavy build. Your hair: grey hair in a buzz cut.' );
+		expect( system ).toContain( 'You live in apartment 302 on the third floor of The Rusty Anchor, a bar on First Street near the corner of First Avenue, in Old Port.' );
+		expect( system ).toContain( 'You are standing on First Street near the corner of First Avenue, in Old Port.' );
+		expect( system ).toContain( 'You are outside The Rusty Anchor, a bar.' );
+		expect( system ).toContain( 'The light: night outside, dark but for the street lamps and the neon signs.' );
+		expect( system ).toContain( '- Ada Ruiz works with you. Ada Ruiz is not here, and you have not seen them lately: you do not know where they are right now.' );
+		expect( system ).toContain( 'The player asked about "Tess": you know nobody by that name' );
+
+	} );
+
 	it( 'grounds an unnamed world in its game theme and describes places without ids', async () => {
 
 		const model = fakeModel();

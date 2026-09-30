@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
 import { stubCanvas } from '../ui/test-helpers/canvas.js';
-import { GameApp } from './GameApp.js';
+import { Vector3 } from 'three';
+import { GameApp, lightWords } from './GameApp.js';
+import { describeLook } from './agents/avatar/Describe.js';
+import { recipeFor } from './agents/Appearance.js';
 import { QuestSession } from './quests/QuestSession.js';
 import { QuestActions } from './quests/QuestActions.js';
 import { GameClock } from './time/GameClock.js';
@@ -271,6 +274,23 @@ describe('explicit quest dialogue through the playable UI',()=>{
    {kind:'struck',atMin:1250,parcelId:'p1',metres:5,hard:true,down:true},
    {kind:'scene',atMin:1200,parcelId:'p2',metres:58,notes}
   ]);
+ });
+
+ it('tells a talk to a body what the person looks like, where they stand and who they know, the one the player names seen here',async()=>{
+  const {app,person}=fixture();app.quests.dialoguesFor=()=>[];
+  const kip=npc('kip','vendor','p1');kip.name={given:'Kip',family:'Ash'};kip.job.shift={startMin:480,endMin:960,days:[0,1,2,3,4],kind:'day'};
+  app.sim.people.set(kip.npcId,kip);app.sim.findNPCs=()=>[...app.sim.people.values()];
+  app.sky={day:{state:'night'}};app.stream={rooms:[]};
+  app.crowd.members=new Map([['c1',{npcId:kip.npcId,parcelId:'p1',position:new Vector3(3,0,0)}]]);
+  app.interactor.conversation={npcId:person.npcId,instance:person,behavior:null,person:{position:new Vector3(1,0,2),parcelId:'p1'}};
+  app.presentConversation(app.interactor.conversation);app.view.dialog.setTalkOpen(true);
+  await userEvent.setup().type(within(app.view.dialog.element).getByRole('textbox'),'Is Kip around?{Enter}');
+  await vi.waitFor(()=>expect(app.talk.stream).toHaveBeenCalled());
+  const context=app.talk.stream.mock.calls.at(-1)[4];
+  expect(context.look).toEqual(describeLook(recipeFor({gender:person.gender,appearanceSeed:person.appearanceSeed,npcId:person.npcId}).recipe));
+  expect(context.here).toEqual({x:1,z:2,parcelId:'p1',light:lightWords('night',true)});
+  expect(context.people.known).toEqual([expect.objectContaining({npcId:kip.npcId,relation:'coworker',now:{kind:'here'},asked:true})]);
+  expect(context.people.unknown).toEqual([]);
  });
 
  it('tells a talk of a car that hit someone once the fall is taken, and the person who stood by it wherever they talk later',async()=>{

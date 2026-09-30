@@ -63,9 +63,12 @@ describe( 'TalkClient', () => {
 			const guide = { placeId: 'p1', kind: 'parcel' };
 			const offers = { places: [ { placeId: 'p1', name: 'The Rusty Anchor' } ] };
 			const nearby = [ { kind: 'struck', atMin: 40, parcelId: 'p1', metres: 12, down: true } ];
-			expect( await collect( new TalkClient( '/out/w' ).stream( conversation, 'Hello', 42, [], { guide, offers, events: nearby } ) ) ).toEqual( events );
+			const look = { height: 'tall', build: 'a slim build', face: [], hair: 'long and loose', skin: 'fair', eyes: 'grey', wearing: [ 'a navy T-shirt' ] };
+			const here = { x: 1, z: 2, parcelId: 'p1', floor: 0, light: 'night outside' };
+			const people = { known: [], unknown: [ 'Tess' ] };
+			expect( await collect( new TalkClient( '/out/w' ).stream( conversation, 'Hello', 42, [], { guide, offers, events: nearby, look, here, people } ) ) ).toEqual( events );
 			expect( fetch.mock.calls[ 0 ][ 0 ] ).toBe( '/api/talk/stream' );
-			expect( JSON.parse( fetch.mock.calls[ 0 ][ 1 ].body ) ).toMatchObject( { line: 'Hello', guide, offers, events: nearby } );
+			expect( JSON.parse( fetch.mock.calls[ 0 ][ 1 ].body ) ).toMatchObject( { line: 'Hello', guide, offers, events: nearby, look, here, people } );
 
 		}
 

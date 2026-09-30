@@ -6,7 +6,10 @@ import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { RecentEvents } from './talk/RecentEvents.js';
 import { NpcVoice } from './voice/NpcVoice.js';
-import { stripCues } from '../../../quests/dist/runtime.js';
+import { peopleKnown, stripCues } from '../../../quests/dist/runtime.js';
+import { describeLook } from './agents/avatar/Describe.js';
+import { castNames } from './sim/Homes.js';
+import { recipeFor } from './agents/Appearance.js';
 import { findPath } from '../../../interior/dist/nav.js';
 import { QuestSession } from './quests/QuestSession.js';
 import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
@@ -145,6 +148,8 @@ const OBJECTIVE_INTERVAL = 4;
  * reports its own error first.
  */
 const REPLY_IDLE_MS = 90000;
+/** People this near a person in the street are with them: they can see each other. */
+const PRESENT_REACH = 20;
 const REPLY_FAILED = 'The reply could not be reached. Retry, or use a story reply below.';
 const REPLY_REFUSED = 'The dialogue service refused this line because the game sent a request it does not accept. Retry would not help.';
 /** A passer-by without identity only brushes the player off, and the chat says so. */
@@ -502,7 +507,8 @@ export class GameApp {
 			buildings,
 			{ streetDensity: config.streetDensity },
 			npcTypes,
-			game?.npcState?.simulation ?? null
+			game?.npcState?.simulation ?? null,
+			castNames( questlines )
 		);
 		this.quests = QuestSession.create(
 			questlines,
@@ -1207,7 +1213,7 @@ export class GameApp {
 		let reply = null, done = false, whole = null, offer = null;
 		try {
 			listen();
-			const context = { signal: controller.signal, ...this.#talkContext( conversation, ! arrival ) };
+			const context = { signal: controller.signal, ...this.#talkContext( conversation, ! arrival, text ) };
 			for await ( const event of this.talk.stream( conversation, text, this.clock.timeMin, this.quests.snapshot(), context ) ) {
 				if ( ! current() ) return;
 				listen();
@@ -1249,10 +1255,13 @@ export class GameApp {
 
 	/**
 	 * What the talk request adds for this person: the place they have led the
-	 * player to, what happened around them and, when `proposing`, the
-	 * companion offers they may make.
+	 * player to, what happened around them, when `proposing` the companion
+	 * offers they may make, and for the body the player talks to what they
+	 * look like, where they stand and who they know (`line` names who the
+	 * player asks about).
 	 */
-	#talkContext( { npcId }, proposing ) {
+	#talkContext( conversation, proposing, line = '' ) {
+		const { npcId } = conversation;
 		const offers = proposing ? this.companion.talkOffers( this.#offers( npcId ) ) : null;
 		const guide = this.companion.guide( npcId );
 		// Known once the world has loaded.
@@ -1260,7 +1269,58 @@ export class GameApp {
 			position: this.body.feet, timeMin: this.clock.timeMin, npcId, down: ( id ) => Boolean( this.crowd.member( id )?.fallen ),
 			scenes: this.scenery.stagedPlaces(), parcelId: this.standing?.parcelId ?? null, guided: guide?.kind === 'parcel' ? guide.placeId : null
 		} ) ?? [];
-		return { ...( offers ? { offers } : {} ), ...( guide ? { guide } : {} ), ...( events.length ? { events } : {} ) };
+		return {
+			...( offers ? { offers } : {} ), ...( guide ? { guide } : {} ), ...( events.length ? { events } : {} ),
+			...this.#bodyContext( conversation, line )
+		};
+	}
+
+	/**
+	 * What only the body the player talks to tells: the look it is drawn in,
+	 * in words; where it stands (the building and floor it is inside, the
+	 * light there); and the people this person knows with where they are, the
+	 * ones near the body seen as here. Nothing for a conversation without a
+	 * body or an identity.
+	 */
+	#bodyContext( { npcId, instance, person }, line ) {
+		if ( ! person?.position || ! instance ) return {};
+		const position = person.position;
+		const room = this.stream?.rooms?.find( ( candidate ) => candidate.holds( position ) ) ?? null;
+		const parcelId = room?.parcelId ?? person.parcelId ?? null;
+		const here = {
+			x: position.x, z: position.z,
+			...( parcelId ? { parcelId } : {} ), ...( room ? { floor: room.floor } : {} ),
+			light: lightWords( this.sky?.day?.state, Boolean( parcelId ) )
+		};
+		const recipe = person.look?.recipe ?? recipeFor( { gender: instance.gender, appearanceSeed: instance.appearanceSeed, npcId } ).recipe;
+		const context = { look: describeLook( recipe ), here };
+		if ( typeof this.sim?.findNPCs !== 'function' ) return context;
+		const everyone = this.sim.findNPCs( {} );
+		const names = {};
+		for ( const other of everyone ) {
+			const name = this.questGameplay?.characterName( other.npcId );
+			if ( name ) names[ other.npcId ] = name;
+		}
+		const people = peopleKnown( {
+			npc: { ...this.sim.getNPC( npcId ), ...( names[ npcId ] ? { name: names[ npcId ] } : {} ) }, timeMin: this.clock.timeMin, line, people: everyone, names,
+			present: this.#presentAround( npcId, position, parcelId ),
+			behaviorAt: ( id, timeMin ) => this.sim.behaviorAt( id, timeMin )
+		} );
+		return people.known.length || people.unknown.length ? { ...context, people } : context;
+	}
+
+	/**
+	 * The established people whose bodies stand near a person now: in the same
+	 * building on any floor, or within PRESENT_REACH of them outside.
+	 */
+	#presentAround( npcId, position, parcelId ) {
+		const present = new Set();
+		for ( const member of this.crowd?.members?.values() ?? [] ) {
+			if ( ! member.npcId || member.npcId === npcId || member.leaving || member.copy ) continue;
+			const inside = parcelId && ( member.parcelId === parcelId || member.place?.id === parcelId );
+			if ( inside || member.position.distanceTo( position ) <= PRESENT_REACH ) present.add( member.npcId );
+		}
+		return [ ...present ].sort();
 	}
 
 	/**
@@ -2729,5 +2789,17 @@ function rememberedPerson( sim, npcId ) {
 export function playableModalOpen( view, interactor ) {
 
 	return Boolean( interactor?.conversation || view.panels.current || view.transit.open || ! view.summary.element.hidden || view.inspection && ! view.inspection.element.hidden );
+
+}
+
+/**
+ * The light where a person stands, in the words the dialog layer tells them:
+ * the sky's state (DayCycle) and whether they are indoors.
+ */
+export function lightWords( state = 'night', indoors = false ) {
+
+	const sky = { night: 'night outside, dark but for the street lamps and the neon signs', dusk: 'dusk, the light going and the neon coming on',
+		dawn: 'dawn, grey light coming up between the towers', day: 'day, flat daylight between the towers' }[ state ] ?? 'night outside';
+	return indoors ? `indoors under the building's lights; ${sky}` : sky;
 
 }

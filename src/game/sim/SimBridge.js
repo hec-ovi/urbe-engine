@@ -1,4 +1,5 @@
 import { createSimulation, restoreSimulation } from '../../../../simulation/dist/index.js';
+import { homesOf } from './Homes.js';
 
 /**
  * The simulation library (../simulation/CONTRACT.md) hosted by the game. The
@@ -15,14 +16,18 @@ export class SimBridge {
 	 * @param buildings Map<parcelId, { npc }>
 	 * @param params statistical overrides per ../simulation/CONTRACT.md
 	 * @param npcTypes the naming box's typed set for this world, or null for the built-in one
+	 * @param avoidNames the story cast's names nobody else draws (Homes.castNames), or null
 	 */
-	static create( atlas, connections, buildings, params = {}, npcTypes = null, save = null ) {
+	static create( atlas, connections, buildings, params = {}, npcTypes = null, save = null, avoidNames = null ) {
 
 		const interiors = {};
 
 		for ( const [ parcelId, entry ] of buildings ) {
 
-			if ( entry.npc ) interiors[ parcelId ] = entry.npc;
+			if ( ! entry.npc ) continue;
+			// A furnished building's dwellings, so the people who live in it live in a real apartment of it.
+			const homes = homesOf( entry );
+			interiors[ parcelId ] = homes.length ? { ...entry.npc, homes } : entry.npc;
 
 		}
 
@@ -32,7 +37,8 @@ export class SimBridge {
 			networks: connections.networks,
 			interiors,
 			params,
-			...( npcTypes ? { npcTypes } : {} )
+			...( npcTypes ? { npcTypes } : {} ),
+			...( avoidNames?.full?.length ? { avoidNames } : {} )
 		};
 		return new SimBridge( save ? restoreSimulation( input, save ) : createSimulation( input ) );
 

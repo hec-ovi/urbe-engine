@@ -46,13 +46,13 @@ export class TalkService {
 	 * `prior` lines said since the last exchange carry the conversation on up
 	 * to `line`. A completed exchange is remembered, after its prior lines,
 	 * before `done`; a failed or aborted one is not.
-	 * @param request a checked talk request: out, npc, behavior, line, timeMin, quests?, offers?, guide?, events?, prior?
+	 * @param request a checked talk request: out, npc, behavior, line, timeMin, quests?, offers?, guide?, events?, look?, here?, people?, prior?
 	 * @param options.signal aborting it ends the model request
 	 */
-	async *stream( { out, npc, behavior, line, timeMin, quests = [], offers, guide, events, prior = [] }, { signal } = {} ) {
+	async *stream( { out, npc, behavior, line, timeMin, quests = [], offers, guide, events, look, here, people, prior = [] }, { signal } = {} ) {
 
 		const world = await this.#world( out );
-		const context = world.contextFor( npc, behavior, quests, timeMin, { guide, events, prior } );
+		const context = world.contextFor( npc, behavior, quests, timeMin, { guide, events, look, here, people, prior } );
 		const name = `${npc.name.given} ${npc.name.family}`;
 		const sentences = new Sentences();
 		let index = 0;
@@ -139,8 +139,15 @@ class TalkWorld {
 		const types = await readJson( join( dir, 'npc-types.json' ), DEFAULT_TYPE_SET );
 		const questlines = await readJson( join( dir, 'quests', 'questlines.json' ), [] );
 		const naming = blueprint.meta.naming ?? { theme: ( await readJson( join( dir, 'game.json' ), {} ) ).theme ?? FALLBACK_THEME };
-		// Districts and places without names stay unnamed: the dialog layers describe them by kind.
-		const world = { meta: { naming }, districts: blueprint.districts, parcels: blueprint.parcels, transit: blueprint.transit };
+		// Districts and places without names stay unnamed: the dialog layers describe them by kind. The
+		// street edges name the streets people stand on and the buildings on them.
+		const streets = blueprint.streets?.edges && {
+			edges: blueprint.streets.edges.map( ( { id, class: kind, path, level } ) => ( { id, class: kind, path, level } ) )
+		};
+		const world = {
+			meta: { naming, gridAngle: blueprint.meta.gridAngle ?? 0 }, districts: blueprint.districts, parcels: blueprint.parcels,
+			transit: blueprint.transit, ...( streets ? { streets } : {} )
+		};
 		const game = await stat( join( dir, 'game.json' ) ).then( () => true, () => false );
 		const talk = new TalkWorld( { world, types, questlines, file: game ? join( dir, MEMORY_FILE ) : null }, llm );
 		if ( game ) talk.#recall( await readJson( join( dir, MEMORY_FILE ), [] ) );
@@ -163,7 +170,7 @@ class TalkWorld {
 	 * questline the request no longer carries leaves with a fresh context service
 	 * that keeps every NPC's memory.
 	 */
-	contextFor( npc, behavior, quests, timeMin, { guide, events, prior } ) {
+	contextFor( npc, behavior, quests, timeMin, { guide, events, look, here, people, prior } ) {
 
 		this.port.set( npc, behavior );
 		const held = quests.filter( ( quest ) => this.definitions.has( quest.id ) );
@@ -181,7 +188,10 @@ class TalkWorld {
 			this.context.attachQuestline( QuestlineRuntime.restore( this.definitions.get( quest.id ), quest.cast, this.port, quest.state ) );
 
 		}
-		return this.context.contextFor( npc.npcId, timeMin, { ...( guide ? { guide } : {} ), ...( events ? { events } : {} ), prior } );
+		return this.context.contextFor( npc.npcId, timeMin, {
+			...( guide ? { guide } : {} ), ...( events ? { events } : {} ), ...( look ? { look } : {} ), ...( here ? { here } : {} ),
+			...( people ? { people } : {} ), prior
+		} );
 
 	}
 
