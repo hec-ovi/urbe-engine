@@ -1,0 +1,648 @@
+/* The journal: numbered threads on a rail, the picked one read beside it,
+   its objectives on a thin timeline and the follow action in a footer. */
+
+.view-quests {
+	background: linear-gradient(110deg, rgba(8, 38, 44, 0.97), rgba(6, 30, 36, 0.96));
+}
+
+.journal-summary {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 8px;
+	padding-right: 8px;
+}
+
+.journal-summary-line {
+	color: #aec6c8;
+	font-size: 15px;
+}
+
+.journal-records {
+	color: var(--screen-cyan);
+	font: 12px var(--screen-mono);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+}
+
+.journal-tabs {
+	padding-left: 18px;
+}
+
+.journal-tab {
+	min-height: 52px;
+	font-size: 16px;
+}
+
+.journal-body {
+	display: grid;
+	flex: 1;
+	grid-template-columns: clamp(300px, 30%, 460px) minmax(0, 1fr);
+	min-height: 0;
+}
+
+.journal-rail {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	border-right: 1px solid rgba(117, 205, 197, 0.23);
+	background: rgba(5, 39, 45, 0.42);
+}
+
+.journal-rail-heading {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: space-between;
+	padding: 20px 22px 14px;
+	color: #8db0b0;
+	font: 12px var(--screen-mono);
+	letter-spacing: 0.15em;
+	text-transform: uppercase;
+}
+
+.journal-rail-count {
+	color: #6f9a99;
+}
+
+.journal-list {
+	flex: 1;
+	min-height: 0;
+	margin: 0;
+	padding: 0 10px 10px;
+	overflow-y: auto;
+	list-style: none;
+}
+
+.journal-list li + li {
+	margin-top: 4px;
+}
+
+.journal-list .empty {
+	padding: 14px 12px;
+}
+
+.view-quests .journal-row {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 14px;
+	width: 100%;
+	min-height: 104px;
+	padding: 18px 14px 16px;
+	border: 1px solid transparent;
+	border-left: 0;
+	border-bottom: 1px solid transparent;
+	background: transparent;
+	color: var(--screen-text);
+	font: inherit;
+	text-align: left;
+	transition: background 0.18s, border-color 0.18s;
+}
+
+.view-quests .journal-row:hover {
+	border-color: rgba(88, 141, 136, 0.25);
+	background: rgba(40, 112, 107, 0.11);
+}
+
+.view-quests .journal-row.is-active {
+	border-color: rgba(117, 202, 183, 0.27);
+	background: linear-gradient(110deg, rgba(45, 122, 113, 0.32), rgba(34, 99, 94, 0.07));
+	color: var(--screen-text);
+}
+
+.journal-row::before {
+	content: "";
+	position: absolute;
+	top: 14px;
+	bottom: 14px;
+	left: -1px;
+	width: 2px;
+	background: var(--screen-cyan);
+	transform: scaleY(0);
+	transform-origin: top;
+	transition: transform 0.23s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.journal-row.is-active::before {
+	transform: scaleY(1);
+}
+
+.journal-row-number {
+	padding-top: 3px;
+	color: #729d9e;
+	font: 12px var(--screen-mono);
+}
+
+.journal-row.is-active .journal-row-number {
+	color: var(--screen-cyan);
+}
+
+.journal-row-copy {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	transition: transform 0.2s ease;
+}
+
+.journal-row.is-active .journal-row-copy {
+	transform: translateX(3px);
+}
+
+.journal-row-meta {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	min-height: 20px;
+	margin-bottom: 8px;
+}
+
+.journal-row-kind {
+	color: #8eb2b0;
+	font: 11px var(--screen-mono);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+}
+
+.view-quests .quest-list-title {
+	color: #ccddda;
+	font-size: 18px;
+	line-height: 1.3;
+	letter-spacing: -0.015em;
+}
+
+.journal-row.is-active .quest-list-title {
+	color: #f0f5e9;
+}
+
+.journal-row-bottom {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px 12px;
+	margin-top: 10px;
+}
+
+.journal-row-place {
+	color: #93b3b2;
+	font-size: 14px;
+}
+
+.view-quests .badge {
+	padding: 2px 7px;
+	border-color: rgba(121, 179, 163, 0.25);
+	color: #a7c8bd;
+	font: 11px var(--screen-mono);
+	letter-spacing: 0.1em;
+}
+
+.view-quests .badge.is-available {
+	border-color: rgba(231, 200, 110, 0.4);
+	color: var(--screen-side);
+}
+
+.view-quests .badge.is-active {
+	border-color: rgba(115, 236, 223, 0.35);
+	color: var(--screen-cyan);
+}
+
+.view-quests .badge.is-done {
+	border-color: rgba(164, 230, 178, 0.35);
+	color: var(--screen-good);
+}
+
+.view-quests .badge.is-blocked,
+.view-quests .badge.is-failed {
+	border-color: rgba(255, 155, 149, 0.35);
+	color: var(--screen-danger);
+}
+
+.view-quests .quest-following {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--screen-cyan);
+	font: 11px var(--screen-mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.view-quests .quest-following::before {
+	content: "";
+	width: 5px;
+	height: 5px;
+	border: 1px solid currentColor;
+	transform: rotate(45deg);
+}
+
+.journal-row-arrow {
+	align-self: center;
+	color: #5d9891;
+	font-size: 15px;
+	opacity: 0;
+	transform: translateX(-4px);
+	transition: transform 0.2s, opacity 0.2s;
+}
+
+.journal-row.is-active .journal-row-arrow {
+	opacity: 1;
+	transform: none;
+}
+
+.journal-rail-hint {
+	flex: none;
+	margin: 0;
+	padding: 16px 22px;
+	border-top: 1px solid rgba(136, 185, 176, 0.08);
+	color: #799fa0;
+	font-size: 14px;
+}
+
+.journal-detail {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	background: rgba(5, 36, 42, 0.24);
+}
+
+.journal-detail-scroll {
+	flex: 1;
+	min-height: 0;
+	padding: 30px clamp(24px, 3vw, 48px) 24px;
+	overflow-y: auto;
+}
+
+.journal-detail-scroll > .empty {
+	padding: 40px 0;
+	font-size: 18px;
+}
+
+.journal-detail-header {
+	position: relative;
+	padding-right: 60px;
+}
+
+.journal-detail-meta {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+.journal-detail-kind {
+	color: var(--screen-cyan);
+	font: 12px var(--screen-mono);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+
+.view-quests .journal-status {
+	margin: 0;
+	padding: 3px 7px;
+	border: 1px solid rgba(121, 179, 163, 0.3);
+	color: #a7c8bd;
+	font: 11px var(--screen-mono);
+	letter-spacing: 0.1em;
+}
+
+.view-quests .journal-status.is-done {
+	color: var(--screen-good);
+}
+
+.view-quests .journal-status.is-available {
+	color: var(--screen-side);
+	border-color: rgba(231, 200, 110, 0.35);
+}
+
+.view-quests .detail-title {
+	margin: 14px 0 20px;
+	color: #edf4e8;
+	font: 400 clamp(30px, 2.6vw, 40px)/1.15 var(--screen-font);
+	letter-spacing: -0.04em;
+}
+
+.journal-detail-number {
+	position: absolute;
+	top: -4px;
+	right: 0;
+	color: rgba(118, 163, 161, 0.18);
+	font: 36px var(--screen-mono);
+	letter-spacing: -0.06em;
+}
+
+.journal-premise {
+	margin: 0 0 18px;
+	max-width: 72ch;
+}
+
+.journal-premise-label {
+	margin: 0 0 8px;
+	color: #94b5ae;
+	font: 12px var(--screen-mono);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+
+.view-quests .detail-text {
+	margin: 0;
+	color: #c3d6d3;
+	font-size: 17px;
+	line-height: 1.75;
+	max-width: 72ch;
+}
+
+.view-quests .detail-note {
+	margin: 0 0 22px;
+	padding-left: 14px;
+	border-left: 2px solid rgba(231, 200, 110, 0.5);
+	color: #e8d49b;
+	font: 15px/1.6 var(--screen-font);
+}
+
+.journal-facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px 48px;
+	margin: 0 0 24px;
+}
+
+.journal-facts dt {
+	margin-bottom: 7px;
+	color: #7fa6a2;
+	font: 11px var(--screen-mono);
+	letter-spacing: 0.15em;
+	text-transform: uppercase;
+}
+
+.journal-facts dd {
+	margin: 0;
+	color: #d9e6df;
+	font-size: 16px;
+}
+
+.journal-section {
+	padding: 22px 0 6px;
+	border-top: 1px solid rgba(120, 188, 178, 0.17);
+}
+
+.view-quests .quest-section-title {
+	margin: 0 0 18px;
+	color: #94b5ae;
+	font: 12px var(--screen-mono);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+
+.view-quests .quest-steps {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.view-quests .quest-step {
+	position: relative;
+	display: flex;
+	gap: 16px;
+	padding: 0 0 20px;
+	border: 0;
+}
+
+.view-quests .quest-step:not(:last-child)::before {
+	content: "";
+	position: absolute;
+	top: 30px;
+	bottom: 4px;
+	left: 12px;
+	width: 1px;
+	background: rgba(113, 175, 156, 0.2);
+}
+
+.view-quests .quest-step-mark {
+	display: grid;
+	flex: 0 0 25px;
+	place-items: center;
+	width: 25px;
+	height: 25px;
+	margin-top: 1px;
+	border: 1px solid rgba(115, 236, 223, 0.5);
+	background: rgba(45, 154, 133, 0.1);
+	color: var(--screen-cyan);
+	font: 13px var(--screen-mono);
+}
+
+.view-quests .quest-step.is-done .quest-step-mark,
+.view-quests .quest-step.is-cancelled .quest-step-mark {
+	border-color: transparent;
+	background: transparent;
+	color: #8cb3a7;
+}
+
+.view-quests .quest-step.is-locked .quest-step-mark {
+	border-color: rgba(231, 200, 110, 0.45);
+	background: transparent;
+}
+
+.view-quests .quest-step-body {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 5px;
+	min-width: 0;
+}
+
+.view-quests .quest-step-state {
+	color: var(--screen-cyan);
+	font: 11px var(--screen-mono);
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+}
+
+.view-quests .quest-step.is-locked .quest-step-state {
+	color: var(--screen-side);
+}
+
+.view-quests .quest-step.is-done .quest-step-state,
+.view-quests .quest-step.is-cancelled .quest-step-state {
+	color: #749c97;
+}
+
+.quest-step-text {
+	color: #d2e2da;
+	font-size: 17px;
+	line-height: 1.45;
+}
+
+.view-quests .quest-step.is-done .quest-step-text,
+.view-quests .quest-step.is-cancelled .quest-step-text {
+	color: #8dab9f;
+}
+
+.view-quests .quest-step-meta {
+	color: #8fb0a9;
+	font: 14px/1.5 var(--screen-font);
+}
+
+.view-quests .quest-step-closed {
+	color: #e8d49b;
+	font: 14px/1.5 var(--screen-font);
+}
+
+.view-quests .quest-step-stake {
+	color: #c9d9d2;
+	font: 15px/1.5 var(--screen-font);
+}
+
+.view-quests .quest-step-commitment {
+	color: var(--screen-amber);
+	font: 14px/1.5 var(--screen-font);
+}
+
+.view-quests .quest-ending-title {
+	color: var(--screen-text);
+	font: 500 18px/1.3 var(--screen-font);
+}
+
+.view-quests .quest-wait-note,
+.view-quests .quest-choice-note,
+.view-quests .quest-tracking-note {
+	margin: 0;
+	color: #86a8a2;
+	font: 14px/1.5 var(--screen-font);
+}
+
+.view-quests .quest-choice-summary {
+	margin: 0 0 8px;
+	color: var(--screen-text);
+	font: 500 18px/1.4 var(--screen-font);
+}
+
+.view-quests .quest-alternatives {
+	margin-top: 16px;
+}
+
+.view-quests .quest-alternatives .quest-step {
+	padding: 16px;
+	border: 1px solid rgba(119, 185, 170, 0.18);
+	background: rgba(23, 75, 72, 0.14);
+}
+
+.view-quests .quest-alternatives .quest-step::before {
+	display: none;
+}
+
+.view-quests .quest-alternatives .quest-step.is-followed {
+	border-color: rgba(115, 236, 223, 0.5);
+	background: rgba(40, 110, 100, 0.2);
+}
+
+.view-quests .quest-or {
+	padding: 8px 0 8px 16px;
+	color: var(--screen-amber);
+	font: 12px var(--screen-mono);
+	letter-spacing: 0.2em;
+}
+
+.view-quests .quest-lead-track,
+.view-quests .quest-wait {
+	min-height: 34px;
+	margin-top: 6px;
+	padding: 6px 12px;
+	font-size: 14px;
+}
+
+.view-quests .quest-lead-track[aria-pressed="true"] {
+	border-color: var(--screen-cyan);
+	color: var(--screen-cyan);
+	background: rgba(115, 236, 223, 0.08);
+}
+
+.view-quests .quest-history {
+	padding: 4px 0;
+	border-top: 1px solid rgba(120, 188, 178, 0.17);
+}
+
+.view-quests .quest-history summary {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	padding: 16px 0;
+	color: #a4c2b5;
+	font: 16px var(--screen-font);
+	cursor: pointer;
+	list-style: none;
+}
+
+.view-quests .quest-history summary::-webkit-details-marker {
+	display: none;
+}
+
+.view-quests .quest-history summary::after {
+	content: "+";
+	margin-left: auto;
+	color: #7eae9b;
+	font: 18px var(--screen-mono);
+	transition: transform 0.18s;
+}
+
+.view-quests .quest-history[open] summary::after {
+	transform: rotate(45deg);
+}
+
+.view-quests .quest-history .prose {
+	padding-bottom: 12px;
+}
+
+.journal-footer {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: space-between;
+	gap: 20px;
+	padding: 16px 28px;
+	border-top: 1px solid rgba(117, 205, 197, 0.23);
+	background: rgba(5, 35, 40, 0.64);
+}
+
+.journal-footer-note {
+	margin: 0;
+	max-width: 46ch;
+	color: #93b3a7;
+	font-size: 15px;
+	line-height: 1.5;
+}
+
+.quest-track {
+	gap: 12px;
+	padding-inline: 18px;
+}
+
+.quest-track-mark {
+	position: relative;
+	width: 10px;
+	height: 10px;
+	border: 1px solid currentColor;
+	transform: rotate(45deg);
+}
+
+.quest-track[aria-pressed="true"] .quest-track-mark::after {
+	content: "";
+	position: absolute;
+	inset: 2px;
+	background: currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.journal-row,
+	.journal-row::before,
+	.journal-row-copy,
+	.journal-row-arrow {
+		transition: none;
+	}
+
+}

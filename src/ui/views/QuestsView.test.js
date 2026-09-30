@@ -8,11 +8,18 @@ import schema from './quests-layout.schema.json' with { type: 'json' };
 import { QuestsView } from './QuestsView.js';
 
 const QUESTS = [
-	{ id: 'q1', title: 'Salt Wharf', text: 'Find who moved the crates.', state: 'active', steps: [ { text: 'Talk to Ada', done: true }, { text: 'Check the quay', done: false } ] },
-	{ id: 'q2', title: 'Late shift', text: 'Cover the bar.', state: 'done', steps: [] }
+	{ id: 'q1', title: 'Salt Wharf', kind: 'main', text: 'Find who moved the crates.', state: 'active', steps: [ { text: 'Talk to Ada', done: true }, { text: 'Check the quay', done: false } ] },
+	{ id: 'q2', title: 'Late shift', kind: 'side', text: 'Cover the bar.', state: 'done', steps: [] }
 ];
 
-/** The quest log: empty wording, the list, and the picked quest's steps. */
+/** The finished quests sit in their own list. */
+async function finished( user = userEvent.setup() ) {
+
+	await user.click( screen.getByRole( 'tab', { name: /Completed/ } ) );
+
+}
+
+/** The quest log: empty wording, the open and finished lists, and the picked quest's steps. */
 describe( 'QuestsView', () => {
 
 	it( 'reads its labels from a layout that meets its schema', () => {
@@ -33,11 +40,39 @@ describe( 'QuestsView', () => {
 		expect( screen.getByText( 'Talk to Ada' ).closest( 'li' ).classList.contains( 'is-done' ) ).toBe( true );
 		expect( screen.getByText( 'Check the quay' ).closest( 'li' ).classList.contains( 'is-done' ) ).toBe( false );
 
+		expect( screen.queryByRole( 'button', { name: /Late shift/ } ) ).toBeNull();
+		await finished();
 		const lateShift = screen.getByRole( 'button', { name: /Late shift/ } );
 		await userEvent.setup().click( lateShift );
 		expect( screen.getByRole( 'heading', { name: 'Late shift' } ) ).toBeTruthy();
 		expect( screen.getByText( 'Cover the bar.' ) ).toBeTruthy();
 		expect( lateShift.getAttribute( 'aria-pressed' ) ).toBe( 'true' );
+
+	} );
+
+	it( 'tags the main story red and side jobs yellow, counts both lists and names the game in its eyebrow', async () => {
+
+		const view = new QuestsView( { onClose: vi.fn() } );
+		document.body.replaceChildren( view.element );
+		view.setQuests( [ ...QUESTS, { id: 'q3', title: 'Night delivery', kind: 'side', state: 'available', steps: [] } ] );
+		view.setPlace( 'Rain Sector' );
+
+		expect( screen.getByText( 'Personal archive / Rain Sector' ) ).toBeTruthy();
+		expect( screen.getByText( '03 records' ) ).toBeTruthy();
+		const [ active, completed ] = screen.getAllByRole( 'tab' );
+		expect( [ active.textContent, completed.textContent ] ).toEqual( [ 'Active2', 'Completed1' ] );
+		expect( [ active.getAttribute( 'aria-selected' ), completed.getAttribute( 'aria-selected' ) ] ).toEqual( [ 'true', 'false' ] );
+		const salt = screen.getByRole( 'button', { name: /Salt Wharf/ } );
+		expect( salt.querySelector( '.quest-kind.is-main' ).getAttribute( 'aria-label' ) ).toBe( 'Main story' );
+		expect( salt.querySelector( '.quest-kind' ).textContent ).toBe( 'MAIN' );
+		expect( screen.getByRole( 'button', { name: /Night delivery/ } ).querySelector( '.quest-kind.is-side' ) ).toBeTruthy();
+
+		// Opening a finished quest by id turns to its list.
+		view.select( 'q2' );
+		expect( screen.getByRole( 'tab', { name: /Completed/ } ).getAttribute( 'aria-selected' ) ).toBe( 'true' );
+		expect( screen.getByRole( 'heading', { name: 'Late shift' } ) ).toBeTruthy();
+		expect( screen.queryByRole( 'button', { name: 'Follow quest' } ) ).toBeNull();
+		expect( screen.getByText( 'This thread is closed.' ) ).toBeTruthy();
 
 	} );
 
@@ -51,6 +86,7 @@ describe( 'QuestsView', () => {
 		expect( prologue.open ).toBe( false );
 		expect( [ ...prologue.querySelectorAll( 'p' ) ].map( ( p ) => p.textContent ) ).toEqual( [ 'You work the quay.', 'Ada Vance has a ledger for you.' ] );
 
+		await finished();
 		await userEvent.setup().click( screen.getByRole( 'button', { name: /Late shift/ } ) );
 		expect( screen.queryByText( 'Prologue' ) ).toBeNull();
 
@@ -108,8 +144,9 @@ describe( 'QuestsView', () => {
 		expect( screen.getByRole( 'button', { name: /Night delivery/ } ).textContent ).toContain( 'Following' );
 		expect( screen.getByRole( 'button', { name: /Salt Wharf/ } ).textContent ).not.toContain( 'Following' );
 
-		for ( const title of [ 'Late shift', 'Missing contact' ] ) {
+		for ( const [ title, tab ] of [ [ 'Late shift', /Completed/ ], [ 'Missing contact', /Active/ ] ] ) {
 
+			await user.click( screen.getByRole( 'tab', { name: tab } ) );
 			await user.click( screen.getByRole( 'button', { name: new RegExp( title ) } ) );
 			expect( screen.queryByRole( 'button', { name: 'Follow quest' } ) ).toBeNull();
 			expect( view.tracked ).toBe( 'q3' );

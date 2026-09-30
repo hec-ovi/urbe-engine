@@ -3,6 +3,7 @@ import '../components/game.css';
 import '../components/panels.css';
 import '../components/screens.css';
 import '../components/dock.css';
+import '../components/journal.css';
 import '../components/chat.css';
 import '../components/mission.css';
 import '../components/fracture.css';
@@ -221,10 +222,11 @@ export class GameView {
 
 	}
 
-	/** The game's name under the loading crystal; null hides it. */
+	/** The game's name under the loading crystal, after the journal's eyebrow; null hides it. */
 	setLoadingPlace( name ) {
 
 		this.loadingScreen.setPlace( name );
+		this.quests.setPlace( name );
 
 	}
 

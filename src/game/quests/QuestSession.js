@@ -558,6 +558,7 @@ export class QuestSession {
 			return {
 				id: definition.id,
 				title: definition.title,
+				kind: entry.side ? 'side' : 'main',
 				text: status === 'completed' ? runtime.ending()?.epilogue ?? definition.premise : definition.premise,
 				...( definition.prologue ? { prologue: definition.prologue } : {} ),
 				state: this.#state( entry, status, state, 'done' ),

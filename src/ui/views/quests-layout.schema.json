@@ -2,17 +2,47 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Quest log labels; {name} stands for the value the view puts there",
   "type": "object",
-  "required": ["title", "key", "empty", "status", "follow", "sections", "step", "endings"],
+  "required": ["title", "key", "eyebrow", "subtitle", "records", "tabs", "list", "kinds", "facts", "empty", "status", "follow", "sections", "step", "endings"],
   "additionalProperties": false,
   "properties": {
     "title": { "description": "Panel title.", "$ref": "#/$defs/text" },
     "key": { "description": "The key that opens the panel.", "$ref": "#/$defs/text" },
+    "eyebrow": { "description": "The small line over the title; the game's name follows it.", "$ref": "#/$defs/text" },
+    "subtitle": { "$ref": "#/$defs/text" },
+    "records": { "description": "How many quests the journal holds, {count}.", "$ref": "#/$defs/text" },
+    "tabs": {
+      "description": "The two lists: quests still open (available, active, unavailable) and the finished ones (completed, failed).",
+      "type": "object",
+      "required": ["label", "active", "done"],
+      "additionalProperties": false,
+      "properties": { "label": { "$ref": "#/$defs/text" }, "active": { "$ref": "#/$defs/text" }, "done": { "$ref": "#/$defs/text" } }
+    },
+    "list": {
+      "type": "object",
+      "required": ["label", "hint"],
+      "additionalProperties": false,
+      "properties": { "label": { "$ref": "#/$defs/text" }, "hint": { "$ref": "#/$defs/text" } }
+    },
+    "kinds": {
+      "description": "The main story's red tag and a side job's yellow mark, by the quest's `kind`.",
+      "type": "object",
+      "required": ["main", "side"],
+      "additionalProperties": false,
+      "properties": { "main": { "$ref": "#/$defs/kind" }, "side": { "$ref": "#/$defs/kind" } }
+    },
+    "facts": {
+      "description": "The current objective's person and place under the title.",
+      "type": "object",
+      "required": ["contact", "place"],
+      "additionalProperties": false,
+      "properties": { "contact": { "$ref": "#/$defs/text" }, "place": { "$ref": "#/$defs/text" } }
+    },
     "empty": {
       "description": "What the list and the detail say with nothing in them.",
       "type": "object",
-      "required": ["list", "detail"],
+      "required": ["list", "detail", "done"],
       "additionalProperties": false,
-      "properties": { "list": { "$ref": "#/$defs/text" }, "detail": { "$ref": "#/$defs/text" } }
+      "properties": { "list": { "$ref": "#/$defs/text" }, "detail": { "$ref": "#/$defs/text" }, "done": { "$ref": "#/$defs/text" } }
     },
     "status": {
       "description": "Badge per quest state.",
@@ -29,7 +59,7 @@
     },
     "follow": {
       "type": "object",
-      "required": ["quest", "following", "on", "off", "lead", "leading"],
+      "required": ["quest", "following", "on", "off", "lead", "leading", "finished"],
       "additionalProperties": false,
       "properties": {
         "quest": { "$ref": "#/$defs/text" },
@@ -37,7 +67,8 @@
         "on": { "$ref": "#/$defs/text" },
         "off": { "$ref": "#/$defs/text" },
         "lead": { "$ref": "#/$defs/text" },
-        "leading": { "$ref": "#/$defs/text" }
+        "leading": { "$ref": "#/$defs/text" },
+        "finished": { "description": "Where a finished quest's Follow would be.", "$ref": "#/$defs/text" }
       }
     },
     "sections": {
@@ -90,5 +121,13 @@
       }
     }
   },
-  "$defs": { "text": { "type": "string", "minLength": 1 } }
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 },
+    "kind": {
+      "type": "object",
+      "required": ["label", "short"],
+      "additionalProperties": false,
+      "properties": { "label": { "$ref": "#/$defs/text" }, "short": { "$ref": "#/$defs/text" } }
+    }
+  }
 }

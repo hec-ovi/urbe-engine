@@ -1,7 +1,17 @@
 {
-  "title": "Quests",
+  "title": "Journal",
   "key": "J",
-  "empty": { "list": "no quest yet", "detail": "ask around: somebody in the city has work for you" },
+  "eyebrow": "Personal archive",
+  "subtitle": "Stories in progress.",
+  "records": "{count} records",
+  "tabs": { "label": "Quest status", "active": "Active", "done": "Completed" },
+  "list": { "label": "Threads", "hint": "Choose a thread to read its story." },
+  "kinds": {
+    "main": { "label": "Main story", "short": "MAIN" },
+    "side": { "label": "Side job", "short": "SIDE" }
+  },
+  "facts": { "contact": "Contact", "place": "Place" },
+  "empty": { "list": "no quest yet", "detail": "ask around: somebody in the city has work for you", "done": "nothing finished yet" },
   "status": { "available": "available", "active": "in progress", "blocked": "unavailable", "done": "completed", "failed": "failed" },
   "follow": {
     "quest": "Follow quest",
@@ -9,7 +19,8 @@
     "on": "This quest is followed on your HUD and map.",
     "off": "Follow this quest to show its objective on your HUD and map.",
     "lead": "Follow this lead",
-    "leading": "Following this lead"
+    "leading": "Following this lead",
+    "finished": "This thread is closed."
   },
   "sections": {
     "current": "Current objectives",
