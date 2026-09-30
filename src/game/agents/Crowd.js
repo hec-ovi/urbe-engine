@@ -46,8 +46,11 @@ const LOOK_AHEAD = 2.5;
 const STEP_ASIDE = 0.8;
 /** Walkers keep this far from the player's middle: the reach the pushback shoves the player out of. */
 const PLAYER_SPACE = PERSON_RADIUS + BODY_RADIUS;
-/** The pace continuity walks the bodies it controls at, metres a second. */
+/** The paces continuity walks and runs the bodies it controls at, metres a second. */
 const CONTINUITY_WALK = 1.4;
+const RUN_PACE = 2.4;
+/** Nobody in the way. */
+const NOBODY = Object.freeze( [] );
 /** A millimetre: a line this near another's space passes them. */
 const CLEAR = 1e-3;
 /** Walk edges at street grade, whose walkers stand on the ground cover under them. */
@@ -122,6 +125,7 @@ export class Crowd {
 		this.player = null;
 		/** Who stands ahead of the walker being moved, reused every frame. */
 		this.ahead = [];
+		this.dodgeAt = new THREE.Vector3();
 
 	}
 
@@ -157,6 +161,11 @@ export class Crowd {
 		const position = new THREE.Vector3( ...actor.position );
 		// Continuity walks the graph at grade: on the street, feet stand on the ground there.
 		const projection = actor.place.kind === 'edge' ? this.routes.project( actor.position ) : null;
+		// Walking down the street it steps around whoever is in its way. A body a
+		// conversation took stands where the player found it, which that already counts.
+		const dodge = member && projection && actor.mode !== 'conversation'
+			? this.#dodge( member, actor, projection.edge, position, this.delta ) : 0;
+		if ( dodge ) position.set( position.x + Math.cos( actor.heading ) * dodge, position.y, position.z - Math.sin( actor.heading ) * dodge );
 		if ( projection ) position.y = walkY( projection.edge, { x: position.x, y: projection.point[ 1 ], z: position.z }, this.surface );
 		const reservedSpot = member?.parcelId === actor.place.id && member.position.distanceToSquared( position ) < 0.0001
 			? member.spot : null;
@@ -185,6 +194,7 @@ export class Crowd {
 
 		}
 		identify( member, instance );
+		member.dodge = dodge;
 		member.continuity = true;
 		member.quest = true;
 		member.frozen = true;
@@ -1461,6 +1471,32 @@ export class Crowd {
 		const way = Math.max( 0, first.ahead - first.space );
 		if ( target === null && first.standing && way <= BLOCK_LOOK / 4 ) return - 1;
 		return way;
+
+	}
+
+	/**
+	 * How far across its pavement a body continuity walks down the street
+	 * stands off the line continuity walks it on: it steps around whoever is
+	 * in its way as a walker does, and back onto its line once nobody is near.
+	 * Nothing here holds it back; continuity alone says how far it walks.
+	 */
+	#dodge( member, actor, edge, position, delta ) {
+
+		const walking = actor.animation === 'walk' || actor.animation === 'run';
+		const reach = laneReach( edge );
+		const heading = actor.heading;
+		const now = member.dodge ?? 0;
+		const body = {
+			position: this.dodgeAt.set( position.x + Math.cos( heading ) * now, position.y, position.z - Math.sin( heading ) * now ),
+			heading, offset: now, edge, speed: actor.animation === 'run' ? RUN_PACE : CONTINUITY_WALK
+		};
+		const ahead = walking ? this.#inLine( body, member ) : NOBODY;
+		const { first, target } = aside( body, ahead );
+		let near = Boolean( first );
+		if ( ! near ) this.street.forEachNear( body.position, PERSONAL_SPACE * 2, ( other ) => { if ( other !== member && outside( other ) ) near = true; } );
+		const player = this.player;
+		if ( ! near && player ) near = Math.hypot( player.x - body.position.x, player.z - body.position.z ) < PLAYER_SPACE * 2;
+		return stepToward( now, target ?? ( near ? now : 0 ), STEP_ASIDE * delta, reach );
 
 	}
 

@@ -1185,6 +1185,29 @@ describe( 'Crowd around somebody in the way', () => {
 
 	} );
 
+	it( 'steps somebody continuity walks down the pavement around the player, and back onto their line past them', () => {
+
+		const crowd = onSidewalk( [] );
+		const player = new THREE.Vector3( 20, SIDEWALK_HEIGHT, 0 );
+		const actor = { ...persistentActor( talker ), mode: 'resuming', animation: 'walk', heading: Math.PI / 2, place: { kind: 'edge', id: 'side' } };
+		let closest = Infinity;
+		let body = null;
+		for ( let frame = 0; frame < 720; frame ++ ) {
+
+			// Continuity walks them down the middle at 1.4 m/s, straight through where the player stands.
+			const x = 12 + 1.4 * frame / 60;
+			[ body ] = crowd.syncActors( [ { ...actor, position: [ x, 0, 0 ] } ], player, 1 / 60 );
+			crowd.update( 1 / 60, player, clock );
+			closest = Math.min( closest, Math.hypot( body.position.x - player.x, body.position.z - player.z ) );
+
+		}
+
+		expect( closest ).toBeGreaterThanOrEqual( 0.6 );
+		expect( body.position.x ).toBeGreaterThan( 25 );
+		expect( body.position.z ).toBeCloseTo( 0, 3 );
+
+	} );
+
 } );
 
 /** One straight 40 m sidewalk along +x at z = 0, `width` metres wide. */
