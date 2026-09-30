@@ -4,6 +4,7 @@ import { QuestActions } from './QuestActions.js';
 import { QuestActionBoundary } from './QuestActionBoundary.js';
 import { QuestMechanics } from './QuestMechanics.js';
 import { completionEvent } from './QuestEvent.js';
+import { LINGER_SECONDS } from '../agents/NpcContinuity.js';
 
 const PHYSICAL_REACH = { pickup: 2.5, steal: 2, listen: 8 };
 const AREA_REACH = 3.2;
@@ -21,6 +22,8 @@ const FIXED_KINDS = new Set( [ 'rescue', 'access', 'hacking', 'sabotage' ] );
 const PLACE_KINDS = new Set( [ 'goto', 'talk' ] );
 const MARKED_KINDS = new Set( [ 'pickup', 'work', 'deliver', ...PLACE_KINDS, ...FIXED_KINDS ] );
 const ESCORT_REACH = 3.2;
+/** A person the story lets go this close to the player stands a moment turned to them before walking off. */
+const LINGER_REACH = 6;
 
 /**
  * Live projection of QuestActions targets into scene marks and centered
@@ -688,7 +691,7 @@ export class QuestGameplay {
 			if ( wanted.has( npcId ) ) continue;
 			try {
 
-				const actor = this.continuity.releaseHold( { npcId, timeMin } );
+				const actor = this.continuity.releaseHold( { npcId, timeMin, ...this.#lingerBeside( npcId, feet ) } );
 				this.crowd.syncActor( actor, feet );
 
 			} catch ( error ) {
@@ -976,11 +979,19 @@ export class QuestGameplay {
 		if ( ! npcId || this.continuity?.companion?.npcId !== npcId ) return false;
 		try {
 
-			const actor = this.continuity.stopFollow( { timeMin } );
+			const actor = this.continuity.stopFollow( { timeMin, ...this.#lingerBeside( npcId, player ) } );
 			if ( player ) this.crowd.syncActor( actor, player );
 			return true;
 
 		} catch { return false; }
+
+	}
+
+	/** The `linger` of somebody let go beside the player, who does not turn their back on them at once. */
+	#lingerBeside( npcId, player ) {
+
+		const at = player && this.continuity.actor( npcId )?.position;
+		return at && Math.hypot( at[ 0 ] - player.x, at[ 2 ] - player.z ) <= LINGER_REACH ? { linger: LINGER_SECONDS } : {};
 
 	}
 

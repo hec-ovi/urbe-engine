@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Crowd } from '../agents/Crowd.js';
 import { CLIP } from '../agents/CharacterAssets.js';
+import { LINGER_SECONDS } from '../agents/NpcContinuity.js';
 import { Interactor, pick } from './Interactor.js';
 
 /**
@@ -116,7 +117,7 @@ it( 'hands the named body to continuity and to animation composition for the con
 	let controlled = null;
 	const continuity = {
 		beginConversation: vi.fn( ( request ) => ( controlled = continuityActor( request, 'conversation', 'idle' ) ) ),
-		endConversation: vi.fn( () => ( { ...controlled, mode: 'resuming', animation: 'walk' } ) )
+		endConversation: vi.fn( () => ( { ...controlled, mode: 'resuming', animation: 'idle' } ) )
 	};
 	const animations = { beginConversation: vi.fn(), endConversation: vi.fn() };
 	const { interactor, crowd, sim } = street( continuity, animations );
@@ -136,12 +137,13 @@ it( 'hands the named body to continuity and to animation composition for the con
 
 	interactor.close( { ...CLOCK, timeMin: CLOCK.timeMin + 1 } );
 
-	expect( continuity.endConversation ).toHaveBeenCalledWith( { timeMin: CLOCK.timeMin + 1 } );
+	// Left by the player, they stand a moment where the talk left them before walking off.
+	expect( continuity.endConversation ).toHaveBeenCalledWith( { timeMin: CLOCK.timeMin + 1, linger: LINGER_SECONDS } );
 	expect( animations.endConversation ).toHaveBeenCalledWith(
-		conversation, expect.objectContaining( { npcId: 'n1', mode: 'resuming', animation: 'walk' } )
+		conversation, expect.objectContaining( { npcId: 'n1', mode: 'resuming', animation: 'idle' } )
 	);
 	expect( person.position.toArray() ).toEqual( visible );
-	expect( person ).toMatchObject( { npcId: 'n1', clip: CLIP.WALK, controlMode: 'resuming' } );
+	expect( person ).toMatchObject( { npcId: 'n1', clip: CLIP.IDLE, controlMode: 'resuming' } );
 	expect( sim.resumed ).toEqual( [] );
 
 } );
@@ -266,6 +268,11 @@ it( 'opens a conversation with a person by id without aiming, and keeps a person
 	interactor.update( 1 / 60 );
 	interactor.activate( CLOCK );
 	interactor.close( CLOCK );
+	expect( continuity.endConversation ).toHaveBeenLastCalledWith( { timeMin: CLOCK.timeMin, linger: LINGER_SECONDS } );
+	// A talk a fall cuts short leaves nobody standing there.
+	interactor.update( 1 / 60 );
+	interactor.activate( CLOCK );
+	interactor.close( CLOCK, 'physics' );
 	expect( continuity.endConversation ).toHaveBeenLastCalledWith( { timeMin: CLOCK.timeMin } );
 
 	// The player looks away: nobody is aimed at, and the host opens the talk.
@@ -288,7 +295,7 @@ it( 'opens a conversation with a person by id without aiming, and keeps a person
 	crowd.memberForNpc( 'n1' ).retiring = false;
 	crowd.memberForNpc( 'n1' ).fallen = true;
 	expect( interactor.talkTo( 'n1', CLOCK ) ).toBeNull();
-	expect( continuity.beginConversation ).toHaveBeenCalledTimes( 2 );
+	expect( continuity.beginConversation ).toHaveBeenCalledTimes( 3 );
 
 } );
 

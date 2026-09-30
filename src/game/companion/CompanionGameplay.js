@@ -1,6 +1,7 @@
 import { CompanionBoundary } from './CompanionBoundary.js';
 import { CompanionLines } from './CompanionLines.js';
 import { CompanionPlaces, standsIn } from './CompanionPlaces.js';
+import { LINGER_SECONDS } from '../agents/NpcContinuity.js';
 
 /** A companion the player leaves gives up once they stay this far away for this long. */
 const PACE = { giveUpBeyond: 60, giveUpAfterMin: 3 };
@@ -19,6 +20,8 @@ const LEAVE_DISTANCE = 15;
 const WAIT_LINE_MIN = 1;
 const DAY = 1440;
 const MODE = { follow: 'following', lead: 'leading' };
+/** The ends the player is there for, sending the companion off or hearing a leader out at the place. */
+const LINGERING = new Set( [ 'dismissed', 'done' ] );
 
 /**
  * One person the player has asked along: following the player, or leading
@@ -356,12 +359,17 @@ export class CompanionGameplay {
 
 	}
 
-	/** The companion goes back to its day from where it stands, if the continuity still has it. */
+	/**
+	 * The companion goes back to its day from where it stands, if the
+	 * continuity still has it: let go by the player or done talking about the
+	 * place, first standing a moment turned to them.
+	 */
 	#end( reason, timeMin, signals, notice = null ) {
 
 		const { npcId } = this.state;
 		this.state = null;
-		if ( this.continuity.companion?.npcId === npcId ) this.continuity.stopFollow( { timeMin } );
+		const linger = LINGERING.has( reason ) ? { linger: LINGER_SECONDS } : {};
+		if ( this.continuity.companion?.npcId === npcId ) this.continuity.stopFollow( { timeMin, ...linger } );
 		signals.push( { kind: 'ended', npcId, reason, ...( notice ? { notice } : {} ) } );
 
 	}

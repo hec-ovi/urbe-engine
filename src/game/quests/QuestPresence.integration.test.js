@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { FIXTURE_BLUEPRINT, FIXTURE_INTERIORS } from '../../../../simulation/dist/index.js';
 import { SimBridge } from '../sim/SimBridge.js';
 import { Crowd } from '../agents/Crowd.js';
-import { NpcContinuity } from '../agents/NpcContinuity.js';
+import { LINGER_SECONDS, NpcContinuity } from '../agents/NpcContinuity.js';
 import { WalkRoutes } from '../agents/WalkRoutes.js';
 import { QuestSession } from './QuestSession.js';
 import { QuestGameplay } from './QuestGameplay.js';
@@ -103,8 +103,13 @@ describe( 'authored quest appointments with the real population and rendered cro
 		const result = gameplay.perform( { targetKey: candidates[ 0 ].interaction.targetKey, bindingAction: 'interact', timeMin: TIME } );
 		expect( result ).toMatchObject( { ok: true, progressed: true } );
 		expect( session.entries[ 0 ].runtime.status() ).toBe( 'completed' );
+		const release = vi.spyOn( continuity, 'releaseHold' );
 		gameplay.candidates( frame() );
 		expect( continuity.heldNpcIds ).toEqual( [] );
+		// Overheard beside the player, they stand a moment turned to them before walking back into their day.
+		expect( release.mock.calls.map( ( [ request ] ) => request ).sort( ( a, b ) => a.npcId.localeCompare( b.npcId ) ) ).toEqual(
+			[ cast.a, cast.b ].sort().map( ( npcId ) => ( { npcId, timeMin: TIME, linger: LINGER_SECONDS } ) )
+		);
 
 	} );
 

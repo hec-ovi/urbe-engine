@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FIXTURE_BLUEPRINT, FIXTURE_INTERIORS, restoreSimulation } from '../../../../simulation/dist/index.js';
 import { SimBridge } from '../sim/SimBridge.js';
-import { NpcContinuity } from '../agents/NpcContinuity.js';
+import { LINGER_SECONDS, NpcContinuity } from '../agents/NpcContinuity.js';
 import { WalkRoutes } from '../agents/WalkRoutes.js';
 import { CompanionGameplay, freeMinutes } from './CompanionGameplay.js';
 
@@ -116,6 +116,9 @@ describe( 'a companion under way', () => {
 		expect( game.continuity.companion ).toBeNull();
 		expect( game.companion.active ).toBeNull();
 		expect( game.bridge.behaviorAt( mira.npcId, AFTERNOON + 3 ).interrupted ).toBe( false );
+		// Heard out, they stand there a moment turned to the player before walking off.
+		expect( game.continuity.actor( mira.npcId ) ).toMatchObject( { position: at, mode: 'resuming', animation: 'idle' } );
+		expect( game.continuity.serialize().returns ).toEqual( [ expect.objectContaining( { lingerUntilMin: AFTERNOON + 3 + LINGER_SECONDS / 60 } ) ] );
 
 	} );
 
@@ -191,6 +194,9 @@ describe( 'a companion under way', () => {
 		// Out of the place and still far away, the player has left the talk behind.
 		expect( game.frame( AFTERNOON + 1, across ) ).toEqual( [ { kind: 'ended', npcId: mira.npcId, reason: 'left' } ] );
 		expect( game.continuity.companion ).toBeNull();
+		// Nobody is there to stand for: they set off at once.
+		expect( game.continuity.actor( mira.npcId ) ).toMatchObject( { mode: 'resuming', animation: 'walk' } );
+		expect( game.continuity.serialize().returns[ 0 ].lingerUntilMin ).toBeUndefined();
 		expect( game.companion.guide( mira.npcId ) ).toBeNull();
 
 	} );
@@ -232,6 +238,7 @@ describe( 'a companion under way', () => {
 		game.continuity.endConversation( { timeMin: AFTERNOON + 1 } );
 		expect( game.frame( AFTERNOON + 1, at ) ).toEqual( [ { kind: 'ended', npcId: mira.npcId, reason: 'dismissed' } ] );
 		expect( game.continuity.companion ).toBeNull();
+		expect( game.continuity.actor( mira.npcId ) ).toMatchObject( { position: at, mode: 'resuming', animation: 'idle' } );
 
 	} );
 

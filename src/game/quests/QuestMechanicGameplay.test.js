@@ -4,6 +4,7 @@ import { QuestActions } from './QuestActions.js';
 import { QuestGameplay } from './QuestGameplay.js';
 import { QuestMechanics } from './QuestMechanics.js';
 import { QuestSession } from './QuestSession.js';
+import { LINGER_SECONDS } from '../agents/NpcContinuity.js';
 import { MissionItemAssets } from './MissionItemAssets.js';
 import { npc, quest, role, simulation, step } from './quest.test-fixtures.js';
 
@@ -88,7 +89,7 @@ describe( 'live measured quest mechanic hosts', () => {
 			rejected.mechanics.reject( request, 'quest runtime unavailable' ) );
 		expect( rescue( rejected ) ).toMatchObject( { ok: false, code: 'runtime_rejected', progressed: false } );
 		expect( rejected.continuity.startFollow ).toHaveBeenCalledOnce();
-		expect( rejected.continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: TIME } );
+		expect( rejected.continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: TIME, linger: LINGER_SECONDS } );
 		expect( rejected.control.follow ).toBeNull();
 		expect( rejected.session.persistenceView()[ 0 ].completedSteps ).toEqual( [] );
 
@@ -110,7 +111,7 @@ describe( 'live measured quest mechanic hosts', () => {
 		expect( harness.gameplay.drainMechanicResults()[ 0 ] ).toMatchObject( {
 			ok: true, eventKind: 'escorted', progressed: true
 		} );
-		expect( harness.continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: TIME } );
+		expect( harness.continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: TIME, linger: LINGER_SECONDS } );
 
 	} );
 
@@ -140,7 +141,7 @@ describe( 'live measured quest mechanic hosts', () => {
 		harness.gameplay.candidates( frame( P7, [ 10, 0, 0 ], [ 10, 1.3, -2 ] ) );
 		expect( harness.gameplay.drainMechanicResults()[ 0 ] ).toMatchObject( { ok: true, eventKind: 'escorted', progressed: true } );
 		expect( controlAtCompletion ).toEqual( [ 'leading' ] );
-		expect( harness.continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: TIME } );
+		expect( harness.continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: TIME, linger: LINGER_SECONDS } );
 		expect( harness.gameplay.serializeEscort() ).toBeNull();
 
 	} );
@@ -323,7 +324,7 @@ describe( 'live measured quest mechanic hosts', () => {
 		expect( harness.gameplay.drainMechanicResults()[ 0 ] ).toMatchObject( {
 			ok: true, eventKind: 'transported', progressed: true
 		} );
-		expect( harness.continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: TIME } );
+		expect( harness.continuity.stopFollow ).toHaveBeenCalledWith( { timeMin: TIME, linger: LINGER_SECONDS } );
 
 	} );
 

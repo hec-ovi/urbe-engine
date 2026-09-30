@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { CLIP } from '../agents/CharacterAssets.js';
+import { LINGER_SECONDS } from '../agents/NpcContinuity.js';
 
 const TALK_RANGE = 2.5;
 const DOOR_RANGE = 3.2;
@@ -198,7 +199,8 @@ export class Interactor {
 	/**
 	 * Ends the conversation. A person an open quest step still names, or one
 	 * the host `keep`s (somebody who agreed to come along), stays where the
-	 * player found them; everybody else walks back into their day.
+	 * player found them; everybody else walks back into their day, the player
+	 * leaving them standing turned to them for LINGER_SECONDS first.
 	 */
 	close( clock, reason = 'player-left', { keep = false } = {} ) {
 
@@ -215,7 +217,8 @@ export class Interactor {
 			const hold = keep || Boolean( this.quests?.holdsCast?.( npcId ) );
 			try {
 
-				actor = this.continuity.endConversation( { timeMin: clock.exactMin ?? clock.timeMin, ...( hold ? { hold } : {} ) } );
+				const linger = ! hold && reason === 'player-left' ? { linger: LINGER_SECONDS } : {};
+				actor = this.continuity.endConversation( { timeMin: clock.exactMin ?? clock.timeMin, ...( hold ? { hold } : {} ), ...linger } );
 				person = this.crowd.syncActor( actor, this.controller.body.feet ) ?? person;
 
 			} catch ( error ) {
