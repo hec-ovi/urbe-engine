@@ -11,32 +11,32 @@
 @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
 @keyframes notice-arrive { from { opacity: 0; translate: -14px 0; } to { opacity: 1; translate: 0; } }
 
-.summary-layer { position: absolute; inset: 0; z-index: 40; pointer-events: auto; background: rgba(3, 6, 9, .55); }
+/* cinematic: letterbox framing, a large authored story and a persistent action. */
+.summary-layer { position: absolute; inset: 0; z-index: 40; pointer-events: auto; background: linear-gradient(90deg, #031317ed, #03131775 75%); color: #e6f1ee; }
 .summary-layer[hidden] { display: none; }
-
-.summary {
-	position: absolute;
-	z-index: 40;
-	pointer-events: auto;
-	left: 50%;
-	top: 50%;
-	transform: translate(-50%, -50%);
-	width: min(520px, calc(100vw - 24px));
-	max-height: calc(100vh - 24px);
-	overflow-y: auto;
-	display: flex;
-	flex-direction: column;
-	background: var(--ui-panel);
-	border: 1px solid var(--ui-line);
-	box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
-}
-
-.summary-body {
-	padding: 18px 22px;
-}
-
-.summary-footer {
-	display: flex;
-	justify-content: flex-end;
-	padding: 0 22px 18px;
-}
+.summary { position: absolute; inset: 0; display: grid; grid-template-rows: 56px minmax(0, 1fr) auto; font-family: system-ui, sans-serif; }
+.summary-mast { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 5.5%; background: #030c10ef; border-bottom: 1px solid #77dcd33b; color: #b3ceca; font: 9px var(--ui-mono); letter-spacing: .19em; }
+.summary-mast > span:first-child { color: #73ecdf; }
+.summary-body { position: relative; min-height: 0; display: flex; align-items: safe center; gap: 50px; overflow: auto; padding: 36px 7%; scrollbar-width: thin; background: linear-gradient(0deg, #031317c7, transparent 40%); }
+.summary-story { width: min(760px, 80%); flex: none; padding: 15px 0; }
+.summary-body::before { content: ''; position: absolute; left: 3%; top: 24px; width: 19px; height: 19px; border-left: 1px solid #73ecdf70; border-top: 1px solid #73ecdf70; }
+.summary .detail-kind { margin: 0 0 22px; color: #73ecdf; font: 10px var(--ui-mono); letter-spacing: .22em; text-transform: uppercase; }
+.summary .panel-header { padding: 0; border: 0; background: transparent; }
+.summary .panel-title { color: #e6f1ee; font: 300 clamp(38px, 5.5vw, 76px)/1.05 system-ui, sans-serif; letter-spacing: -.05em; text-transform: none; border: 0; overflow-wrap: anywhere; }
+.summary .panel-close { position: fixed; right: 22px; top: 68px; }
+.summary .prose { max-width: 650px; margin-top: 26px; color: #bad0ce; font: 15px/1.85 system-ui, sans-serif; }
+.summary .prose p { margin: 0 0 18px; }
+.summary .quest-steps { margin-top: 24px; font-size: 12px; }
+.summary .badge { border-color: #73ecdf38; background: #0b36374f; color: #73ecdf; padding: 7px 9px; }
+.summary .badge.is-failed { color: #ffb4a4; border-color: #ffb4a455; }
+.summary-signal { position: relative; flex: none; width: 110px; height: 110px; margin: auto; transform: rotate(45deg); color: #73ecdf; }
+.summary-signal span { position: absolute; inset: 0; border: 1px solid currentColor; opacity: .18; }
+.summary-signal span:nth-child(2) { inset: 20px; opacity: .35; }
+.summary-signal span:nth-child(3) { inset: 42px; opacity: .6; background: #73ecdf18; }
+.summary-footer { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px 5.5%; border-top: 1px solid #77dcd33b; background: #030c10ef; }
+.summary-hint { color: #789a9f; font: 9px var(--ui-mono); letter-spacing: .15em; }
+.summary .hud-button.is-primary { display: flex; align-items: center; justify-content: space-between; gap: 35px; min-width: 168px; padding: 13px 17px; background: #c7eae3; border-color: #b5e8df; color: #102327; font: 12px var(--ui-mono); letter-spacing: normal; text-transform: none; }
+.summary .hud-button.is-primary::after { content: '→'; font-size: 18px; }
+@media (prefers-reduced-motion: no-preference) { .summary-layer:not([hidden]) .summary-story { animation: story-arrive 240ms ease-out both; } }
+@keyframes story-arrive { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@media (max-width: 950px) { .summary-story { width: 100%; } .summary-signal { display: none; } }

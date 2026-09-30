@@ -25,9 +25,11 @@ export class MissionSummary {
 		this.done.addEventListener( 'click', click );
 
 		this.card = el( 'div', { className: 'summary' },
-			this.header.element,
-			el( 'div', { className: 'summary-body' }, this.outcome, this.text, this.steps ),
-			el( 'div', { className: 'summary-footer' }, this.done )
+			el( 'div', { className: 'summary-mast', ariaHidden: 'true' }, el( 'span', { textContent: '+  URBE / STORIES' } ), el( 'span', { textContent: 'A LIFE IN THE CITY' } ) ),
+			el( 'div', { className: 'summary-body' },
+				el( 'article', { className: 'summary-story' }, this.outcome, this.header.element, this.text, this.steps ),
+				el( 'div', { className: 'summary-signal', ariaHidden: 'true' }, el( 'span' ), el( 'span' ), el( 'span' ) ) ),
+			el( 'div', { className: 'summary-footer' }, el( 'span', { textContent: 'YOUR STORY CONTINUES', className: 'summary-hint' } ), this.done )
 		);
 		this.element = el( 'div', { className: 'summary-layer', role: 'dialog', ariaLabel: layout.label }, this.card );
 		this.element.tabIndex = - 1;
@@ -54,6 +56,7 @@ export class MissionSummary {
 	show( { kind = 'outcome', title, text, outcome = 'done', steps = [] } ) {
 
 		const labels = layout.kinds[ kind ] ?? layout.kinds.outcome;
+		this.element.dataset.kind = labels === layout.kinds.prologue ? 'prologue' : 'outcome';
 		this.header.setTitle( title );
 		this.outcome.replaceChildren( labels.kicker ?? el( 'span', { className: `badge is-${outcome}`, textContent: outcome } ) );
 		this.text.replaceChildren( ...prose( text ) );
