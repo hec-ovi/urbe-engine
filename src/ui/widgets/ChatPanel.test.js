@@ -138,6 +138,12 @@ describe( 'ChatPanel', () => {
 		expect( panel.said.textContent ).toBe( 'Down the' );
 		reply.discard();
 		expect( panel.said.textContent ).toBe( 'YouWhere is the quay?' );
+		// Free talk stays in the talk window: the subtitle keeps the talk's own lines.
+		panel.addMessage( { from: 'player', text: 'Nice haircut.', kind: 'talk' } );
+		const free = panel.beginMessage( { from: 'npc', name: 'Ada', kind: 'talk' } );
+		free.update( 'Cut it myself.' );
+		expect( panel.said.textContent ).toBe( 'YouWhere is the quay?' );
+		free.finish();
 		// What was said before stays in the transcript only.
 		panel.recall( [ { from: 'npc', name: 'Ada', text: 'Last week.' } ] );
 		expect( panel.said.textContent ).toBe( 'YouWhere is the quay?' );
@@ -352,34 +358,30 @@ describe( 'ChatPanel', () => {
 
 	} );
 
-	it( 'reads a turn taller than the view from its first line, and follows the end once the player reads past it', () => {
+	it( 'follows the end of the transcript as lines arrive, as a chat reads', () => {
 
 		panel.setTalkOpen( true );
 		const box = panel.transcript;
 		const size = ( scrollHeight ) => Object.defineProperties( box, {
 			scrollHeight: { value: scrollHeight, configurable: true }, clientHeight: { value: 100, configurable: true }
 		} );
-		const tops = { 'is-scene': 150, 'is-player': 520 };
-		vi.spyOn( HTMLElement.prototype, 'offsetTop', 'get' ).mockImplementation( function () {
-			return Object.entries( tops ).find( ( [ className ] ) => this.classList.contains( className ) )?.[ 1 ] ?? 0;
-		} );
 		size( 80 );
 		panel.addMessage( { from: 'npc', name: 'Ada', text: 'Evening.' } );
 		expect( box.scrollTop ).toBe( 0 );
-		// The scene and the opening overflow the view: it stops above the scene.
 		size( 400 );
 		panel.addMessage( { from: 'scene', text: 'The office is dark but for one lamp.' } );
 		panel.addMessage( { from: 'npc', name: 'Ada', text: 'The report is gone.', kind: 'story' } );
-		expect( box.scrollTop ).toBe( 138 );
-		// Read past the turn's start, the view follows the end.
-		box.scrollTop = 300;
+		expect( box.scrollTop ).toBe( 300 );
+		// A typed line and its reply keep the newest words in view.
 		size( 460 );
-		panel.beginMessage( { from: 'npc', name: 'Ada' } );
+		panel.addMessage( { from: 'player', text: 'Who took it?', kind: 'talk' } );
 		expect( box.scrollTop ).toBe( 360 );
-		// The player's line starts the next turn.
 		size( 700 );
-		panel.addMessage( { from: 'player', text: 'Who took it?' } );
-		expect( box.scrollTop ).toBe( 508 );
+		const reply = panel.beginMessage( { from: 'npc', name: 'Ada', kind: 'talk' } );
+		expect( box.scrollTop ).toBe( 600 );
+		size( 760 );
+		reply.update( 'Someone who knew the code.' );
+		expect( box.scrollTop ).toBe( 660 );
 
 	} );
 

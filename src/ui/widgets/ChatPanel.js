@@ -5,8 +5,6 @@ import { ThinkingOrb } from './ThinkingOrb.js';
 import layout from './chat-layout.json' with { type: 'json' };
 
 const SPEAKING = new Set( [ 'pending', 'playing', 'idle' ] );
-/** Space kept above the first line of the newest turn when the transcript stops there. */
-const TURN_MARGIN = 12;
 /** Lines the transcript keeps; the oldest leave first. */
 const MAX_LINES = 200;
 /** Icons for an action's kind, the part of its id before a colon unless it names one. */
@@ -297,7 +295,7 @@ export class ChatPanel {
 	addMessage( { from, name, text, kind } ) {
 		const line = this.#line( from, name, kind );
 		line.lastElementChild.textContent = text;
-		this.#say( line );
+		if ( kind !== 'talk' ) this.#say( line );
 		return line;
 	}
 
@@ -312,7 +310,7 @@ export class ChatPanel {
 		const text = line.lastElementChild.appendChild( document.createTextNode( '' ) );
 		line.classList.add( 'is-streaming' );
 		this.#stream( line, true );
-		this.#say( line );
+		if ( kind !== 'talk' ) this.#say( line );
 		const open = () => this.streaming.has( line );
 		return {
 			line,
@@ -606,9 +604,9 @@ export class ChatPanel {
 		this.subtitle.hidden = ! line;
 	}
 
-	/** The subtitle falls back on the newest line still shown, earlier ones aside. */
+	/** The subtitle falls back on the newest line still shown, earlier ones and free talk aside. */
 	#resay() {
-		this.#say( [ ...this.transcript.children ].findLast( ( line ) => ! line.classList.contains( 'is-earlier' ) ) ?? null );
+		this.#say( [ ...this.transcript.children ].findLast( ( line ) => ! line.classList.contains( 'is-earlier' ) && line.dataset.kind !== 'talk' ) ?? null );
 	}
 
 	#line( from, name, kind ) {
@@ -647,15 +645,9 @@ export class ChatPanel {
 		this.transcriptHeight = this.transcript.clientHeight;
 	}
 
-	/**
-	 * Where the newest text shows: the end, unless the newest turn is taller
-	 * than the view, which then stops at the turn's first line so it reads
-	 * from its start. A player already past that line reads on to the end.
-	 */
+	/** Where the newest text shows: the end of the transcript, as a chat reads. */
 	#newest() {
-		const end = Math.max( 0, this.transcript.scrollHeight - this.transcript.clientHeight );
-		const start = this.turn?.parentNode === this.transcript ? this.turn.offsetTop - this.transcript.offsetTop - TURN_MARGIN : end;
-		return this.transcript.scrollTop > start ? end : Math.max( 0, Math.min( end, start ) );
+		return Math.max( 0, this.transcript.scrollHeight - this.transcript.clientHeight );
 	}
 
 	#focusFallback() {
@@ -710,6 +702,7 @@ function lineOf( from, name, kind ) {
 		el( 'div', { className: 'chat-line-text' } )
 	);
 	if ( from === 'npc' ) line.dataset.initials = who.split( /\s+/ ).filter( Boolean ).slice( 0, 2 ).map( ( word ) => word[ 0 ] ).join( '' ).toUpperCase();
+	if ( kind ) line.dataset.kind = kind;
 	if ( layout.tags[ kind ] ) line.dataset.tag = layout.tags[ kind ];
 	return line;
 }
