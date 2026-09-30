@@ -192,6 +192,15 @@ describe( 'automation probe', () => {
 
 	} );
 
+	it( 'reports the visible subtitle separately from its complete line and tracks completion', () => {
+		const { game } = playing();
+		const probe = new AutomationProbe( game );
+		game.view.dialog.addMessage( { from: 'npc', text: 'Read the ledger.', kind: 'story' } );
+		expect( probe.state().chat.subtitle ).toEqual( { text: '', whole: 'Read the ledger.', revealing: true } );
+		game.view.dialog.said.click();
+		expect( probe.state().chat.subtitle ).toEqual( { text: 'Read the ledger.', whole: 'Read the ledger.', revealing: false } );
+	} );
+
 	it( 'waits for the game\'s voice to start a line, fail one or find Voice away, and shows which chat line is voiced', async () => {
 
 		const { game } = playing();

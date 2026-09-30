@@ -1070,6 +1070,7 @@ export class AutomationProbe {
 				text: line.lastElementChild?.textContent ?? '',
 				speaking: line.dataset.speaking ?? null
 			} ) ),
+			subtitle: { text: dialog.sayText.data, whole: dialog.sayAccessible.textContent, revealing: dialog.reveal.active },
 			actions: [ ...dialog.actions.children ].map( ( action ) => ( { id: action.dataset.action, label: action.textContent } ) ),
 			story: dialog.story.hidden ? null : {
 				title: dialog.story.querySelector( '.chat-quest-title' )?.textContent ?? null,

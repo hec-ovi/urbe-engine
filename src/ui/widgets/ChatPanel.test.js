@@ -177,6 +177,61 @@ describe( 'ChatPanel', () => {
 		expect( panel.reveal.active ).toBe( false );
 	} );
 
+	it( 'completes from a focused reply, consumes held Space through release, and types the next line again', async () => {
+		const user = userEvent.setup();
+		panel.addMessage( { from: 'npc', text: 'First, read the report before you decide.', kind: 'story' } );
+		panel.setChoices( CHOICES, true );
+		const choice = panel.choices.firstElementChild;
+		expect( document.activeElement ).toBe( choice );
+		await user.keyboard( '[Space>]' );
+		expect( panel.sayText.data ).toBe( 'First, read the report before you decide.' );
+		expect( document.activeElement ).toBe( choice );
+		const repeat = new KeyboardEvent( 'keydown', { key: ' ', repeat: true, bubbles: true, cancelable: true } );
+		expect( choice.dispatchEvent( repeat ) ).toBe( false );
+		await user.keyboard( '[/Space]' );
+		expect( onChoice ).not.toHaveBeenCalled();
+		await user.keyboard( ' ' );
+		expect( onChoice ).toHaveBeenCalledExactlyOnceWith( CHOICES[ 0 ].value );
+		panel.addMessage( { from: 'npc', text: 'The courier can tell you who signed it.', kind: 'story' } );
+		expect( panel.reveal.active ).toBe( true );
+		expect( panel.sayText.data ).toBe( '' );
+		await user.keyboard( ' ' );
+		expect( panel.sayText.data ).toBe( 'The courier can tell you who signed it.' );
+		expect( onChoice ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'leaves Space to the hint controls and the free-talk composer', async () => {
+		const user = userEvent.setup();
+		panel.addMessage( { from: 'npc', text: 'The names in the register will tell you why the night crew never came home.', kind: 'story' } );
+		panel.setStory( STORY );
+		panel.hint.setOpen( true );
+		panel.hint.journal.focus();
+		await user.keyboard( ' ' );
+		expect( onJournal ).toHaveBeenCalledOnce();
+		expect( panel.reveal.active ).toBe( true );
+		panel.setTalkOpen( true );
+		await user.keyboard( 'a b' );
+		expect( panel.input.value ).toBe( 'a b' );
+		expect( panel.reveal.active ).toBe( true );
+		panel.show( null );
+	} );
+
+	it( 'paces the visible subtitle with voice progress and finishes when playback ends', () => {
+		const frames = new Map(); let id = 0, progress = 0;
+		vi.spyOn( globalThis, 'requestAnimationFrame' ).mockImplementation( callback => { frames.set( ++ id, callback ); return id; } );
+		vi.spyOn( globalThis, 'cancelAnimationFrame' ).mockImplementation( key => frames.delete( key ) );
+		const tick = time => { const pending = [ ...frames.values() ]; frames.clear(); for ( const callback of pending ) callback( time ); };
+		const line = panel.addMessage( { from: 'npc', text: 'abcdefghij', kind: 'story' } );
+		panel.setSpeaking( line, 'playing', () => progress );
+		progress = .4; tick( 1000 ); expect( panel.sayText.data ).toBe( 'abcd' );
+		tick( 2000 ); expect( panel.sayText.data ).toBe( 'abcd' );
+		progress = .7; tick( 2100 ); expect( panel.sayText.data ).toBe( 'abcdefg' );
+		panel.setSpeaking( line, 'idle' );
+		expect( panel.sayText.data ).toBe( 'abcdefghij' );
+		expect( panel.reveal.active ).toBe( false );
+		panel.show( null );
+	} );
+
 	it( 'streams a line as it arrives, finishes or discards it, and ignores calls on a line that is done', () => {
 
 		const log = panel.transcript;

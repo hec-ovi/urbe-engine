@@ -122,6 +122,12 @@ export class ChatPanel {
 		this.element.setAttribute( 'aria-modal', 'true' );
 		this.element.setAttribute( 'aria-labelledby', 'conversation-name' );
 		this.element.addEventListener( 'keydown', event => this.#key( event, onClose ) );
+		this.element.addEventListener( 'keyup', event => {
+			if ( event.key !== ' ' || ! this.skipSpace ) return;
+			this.skipSpace = false;
+			event.preventDefault();
+			event.stopPropagation();
+		} );
 		this.element.hidden = true;
 		this.setStatus( '' );
 		this.setStory( null );
@@ -390,6 +396,7 @@ export class ChatPanel {
 
 	/** Opens a fresh conversation with `{ name, role? }`, the talk window closed, or closes the panel with null. */
 	show( npc ) {
+		this.skipSpace = false;
 		this.reveal.cancel();
 		this.hint.reset();
 		this.element.hidden = ! npc;
@@ -511,9 +518,13 @@ export class ChatPanel {
 			this.setTalkOpen( true );
 			return;
 		}
-		if ( ! typing && plain && this.reveal.active && ( event.target === this.said && [ ' ', 'Enter' ].includes( event.key ) || event.target === this.element && event.key === ' ' ) ) {
+		// Space completes speech from the reply row too; a held key never selects that reply on release.
+		const complete = ! this.hint.open && ! this.trayOpen && ! this.talkOpen && event.key === ' ';
+		if ( ! typing && plain && ( this.skipSpace && event.key === ' ' && event.repeat || this.reveal.active &&
+			( complete || event.target === this.said && [ ' ', 'Enter' ].includes( event.key ) ) ) ) {
 			event.preventDefault();
 			event.stopPropagation();
+			this.skipSpace = event.key === ' ';
 			this.reveal.finish();
 			return;
 		}

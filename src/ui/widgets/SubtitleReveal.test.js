@@ -25,6 +25,15 @@ describe( 'SubtitleReveal', () => {
 		tick( 1000 ); expect( node.data ).toBe( 'A🌒 night.' );
 		expect( frame.size ).toBe( 0 );
 	} );
+	it( 'keeps combining marks and joined emoji whole at each reveal step', () => {
+		const { reveal, node } = fixture();
+		reveal.set( 'e\u0301👩🏽‍🔬!', { animate: true } );
+		tick( 100 ); expect( node.data ).toBe( 'e\u0301' );
+		tick( 200 ); expect( node.data ).toBe( 'e\u0301👩🏽‍🔬' );
+		tick( 300 ); expect( node.data ).toBe( 'e\u0301👩🏽‍🔬!' );
+		expect( frame.size ).toBe( 0 );
+	} );
+
 	it( 'can be skipped, replaced, hidden or detached without an old line resurfacing', () => {
 		const { reveal, node, owner } = fixture();
 		reveal.set( 'Old words', { animate: true } );

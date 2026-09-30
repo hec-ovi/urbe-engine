@@ -1,3 +1,5 @@
+const GRAPHEMES = new Intl.Segmenter( undefined, { granularity: 'grapheme' } );
+
 /** Finite subtitle reveal. The transcript and accessible text always retain the complete line. */
 export class SubtitleReveal {
 
@@ -10,7 +12,7 @@ export class SubtitleReveal {
 	set( text, { animate = false } = {} ) {
 		this.cancel();
 		this.text = text;
-		this.characters = Array.from( text );
+		this.characters = Array.from( GRAPHEMES.segment( text ), part => part.segment );
 		this.shown = 0;
 		this.progress = null;
 		if ( ! animate || ! text || window.matchMedia?.( '(prefers-reduced-motion: reduce)' ).matches ) {
