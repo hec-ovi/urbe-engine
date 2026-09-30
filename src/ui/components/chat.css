@@ -371,8 +371,8 @@
 .chat-line.is-scene .chat-line-from { color: var(--talk-muted); }
 .chat-line-text { font-size: 16px; line-height: 1.5; white-space: pre-line; }
 .chat-line.is-scene .chat-line-text { font-size: 14px; }
-.chat-line[data-tag]::after { content: attr(data-tag); position: absolute; top: 9px; right: 12px; color: var(--talk-muted); font: 9px var(--ui-mono); letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.8; }
-.chat-line[data-tag] .chat-line-from { padding-right: 76px; }
+/* A line's tag closes its bubble on a row of its own, so it never runs over the words. */
+.chat-line[data-tag]::after { content: attr(data-tag); display: block; margin-top: 4px; text-align: right; color: var(--talk-muted); font: 9px var(--ui-mono); letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.8; }
 .chat-line.is-streaming .chat-line-text::after { content: '\258D'; margin-left: 1px; color: var(--talk-accent); }
 .chat-line[data-speaking] .chat-line-from::after { content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 8px; vertical-align: 1px; background: var(--talk-muted); }
 .chat-line[data-speaking=playing] .chat-line-from::after { background: var(--talk-accent); }

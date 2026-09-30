@@ -79,11 +79,11 @@
       "properties": { "thinking": { "$ref": "#/$defs/text" }, "streaming": { "$ref": "#/$defs/text" }, "speaking": { "$ref": "#/$defs/text" } }
     },
     "tags": {
-      "description": "Tag on a transcript line by where it comes from.",
+      "description": "Tag on a transcript line by where it comes from; free talk, the window's own talk, goes untagged.",
       "type": "object",
-      "required": ["story", "talk", "earlier"],
+      "required": ["story", "earlier"],
       "additionalProperties": false,
-      "properties": { "story": { "$ref": "#/$defs/text" }, "talk": { "$ref": "#/$defs/text" }, "earlier": { "description": "A line said before this conversation.", "$ref": "#/$defs/text" } }
+      "properties": { "story": { "$ref": "#/$defs/text" }, "earlier": { "description": "A line said before this conversation.", "$ref": "#/$defs/text" } }
     },
     "retry": { "$ref": "#/$defs/text" },
     "leave": { "$ref": "#/$defs/text" },

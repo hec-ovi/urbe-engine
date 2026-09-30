@@ -28,7 +28,7 @@
   },
   "voice": { "label": "NPC voices", "on": "Voices on: click to mute", "off": "Voices muted: click to hear them" },
   "activity": { "thinking": "Thinking", "streaming": "Replying", "speaking": "Speaking" },
-  "tags": { "story": "story", "talk": "free talk", "earlier": "earlier" },
+  "tags": { "story": "story", "earlier": "earlier" },
   "retry": "Retry reply",
   "leave": "End conversation",
   "leaveKey": "Esc"

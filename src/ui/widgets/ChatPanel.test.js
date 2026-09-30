@@ -258,7 +258,7 @@ describe( 'ChatPanel', () => {
 		const opening = panel.addMessage( { from: 'npc', name: 'Ada', text: 'The report is gone.', kind: 'story' } );
 		const typed = panel.addMessage( { from: 'player', text: 'What report?', kind: 'talk' } );
 		const reply = panel.beginMessage( { from: 'npc', name: 'Ada', kind: 'talk' } );
-		expect( [ greeting, opening, typed, reply.line ].map( ( line ) => line.dataset.tag ) ).toEqual( [ undefined, 'story', 'free talk', 'free talk' ] );
+		expect( [ greeting, opening, typed, reply.line ].map( ( line ) => line.dataset.tag ) ).toEqual( [ undefined, 'story', undefined, undefined ] );
 		expect( opening.textContent ).toBe( 'AdaThe report is gone.' );
 
 	} );
