@@ -66,6 +66,7 @@ export class HeroCharacter {
 	constructor( { animation, warmup = null, textureSize, slice = null, loadModel, loadHair, tailor = new Tailor( { slice } ), street = streetBodies, lighting = null } ) {
 
 		this.animation = animation;
+		this.slice = slice;
 		this.street = street;
 		this.lighting = lighting;
 		this.warmup = warmup;
@@ -186,9 +187,11 @@ export class HeroCharacter {
 			const seeded = personRecipe( { gender, appearanceSeed: PREPARED_SEED } );
 			const recipe = { ...seeded, shape: { ...seeded.shape, height: 1 } };
 			const source = await this.poser.model( recipe );
+			// A transfer is tens of milliseconds: the load's budget is asked between them.
 			for ( const name of [ ...CROWD_CLIP_NAMES, TALK, SIT_TALK ] ) {
 
 				if ( hasClip( this.animation.animations, name ) ) transferredClip( this.animation.animations, source.motions, name );
+				if ( this.slice ) await this.slice.step();
 
 			}
 			const root = this.poser.dress( source, { position: new THREE.Vector3(), heading: 0 }, `prepared-${recipe.body}` );
