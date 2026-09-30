@@ -186,7 +186,7 @@ export class CharacterPoser {
 		this.wardrobe.dress( root, source, body );
 		// A person of their frame's own height stands on the rig as authored.
 		const height = source.recipe.shape.height === 1 ? null : new HeightRig( root, source.recipe.shape.height );
-		this.worn.set( root, { fit: source.fit, height } );
+		this.worn.set( root, { fit: source.fit, height, motions: source.motions } );
 		root.position.copy( person.position );
 		root.rotation.y = person.heading;
 		return root;
@@ -244,6 +244,13 @@ export class CharacterPoser {
 	height( root ) {
 
 		return this.worn.get( root )?.height ?? null;
+
+	}
+
+	/** The clips transferred onto a dressed root's body (CharacterAnimations), or null. */
+	motions( root ) {
+
+		return this.worn.get( root )?.motions ?? null;
 
 	}
 

@@ -76,6 +76,17 @@ export function transferredClip( animations, motions, name ) {
 
 }
 
+/** How long `name` lasts, the library's own clip or the one LAYERED_CLIPS makes, without transferring it; 0 when neither has it. */
+export function clipDuration( animations, name ) {
+
+	const own = AnimationClip.findByName( animations, name );
+	if ( own ) return own.duration;
+	const recipe = LAYERED_CLIPS[ name ];
+	if ( ! recipe ) return 0;
+	return Math.max( clipDuration( animations, recipe.base ), ...recipe.layers.filter( ( layer ) => layer.at === undefined ).map( ( layer ) => clipDuration( animations, layer.clip ) ) );
+
+}
+
 /** Whether the library has `name`, or can make it from its own clips. */
 export function hasClip( animations, name ) {
 

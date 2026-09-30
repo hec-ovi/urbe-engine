@@ -114,6 +114,7 @@ export class SceneryDirector {
 
 		}
 		this.#residency( feet );
+		this.renderer.update?.( delta );
 
 	}
 

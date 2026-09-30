@@ -1,5 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { SceneryError } from './SceneryError.js';
+import { poseOf } from './PoseCatalog.js';
+import { RigIdle } from '../agents/RigIdle.js';
 
 /** A footprint or posed body this much longer one way than the other has a long side. */
 const LONG_SIDE = 0.05;
@@ -72,7 +74,7 @@ export class SceneryRenderer {
 		if ( this.scenes.has( sceneId ) || this.pending.has( sceneId ) ) return false;
 		const token = {};
 		this.pending.set( sceneId, token );
-		const scene = { sceneId, group: new THREE.Group(), visuals: new Map(), colliders: new Map(), bodies: [], geometries: [] };
+		const scene = { sceneId, group: new THREE.Group(), visuals: new Map(), colliders: new Map(), bodies: [], living: [], geometries: [] };
 		scene.group.name = `scenery:${sceneId}`;
 
 		try {
@@ -132,6 +134,18 @@ export class SceneryRenderer {
 			if ( this.pending.get( sceneId ) === token ) this.pending.delete( sceneId );
 
 		}
+
+	}
+
+	/**
+	 * Moves on the bodies that stand alive in the scenes standing: a guard
+	 * rests and fidgets as a guard on duty does, and a person held in a loop
+	 * (searching with a torch, crouched, sitting on the ground, crawling)
+	 * keeps playing it. The dead and the poses caught mid-motion stay still.
+	 */
+	update( delta ) {
+
+		for ( const scene of this.scenes.values() ) for ( const body of scene.living ) body.update( delta );
 
 	}
 
@@ -208,6 +222,17 @@ export class SceneryRenderer {
 		if ( ! actor ) throw new SceneryError( 'E_SCENERY_IDENTITY', `${scene.sceneId} body ${entity.entityId} has no actor` );
 		const root = await this.poser.still( actor, actor.clip, actor.at );
 		scene.bodies.push( root );
+		const rest = actor.poseId ? poseOf( actor.poseId ).rest : null;
+		if ( rest ) {
+
+			scene.living.push( new RigIdle( {
+				root, animation: this.poser.animation, motions: this.poser.motions( root ), height: this.poser.height( root ),
+				rest: rest.loop
+					? { loop: actor.clip, appearanceSeed: actor.appearanceSeed }
+					: { type: rest.type, activity: 'working', appearanceSeed: actor.appearanceSeed }
+			} ) );
+
+		}
 		let bounds = new THREE.Box3().expandByObject( root, true );
 		if ( bounds.isEmpty() ) throw new SceneryError( 'E_SCENERY_ASSET', `${scene.sceneId} body ${entity.entityId} has no geometry` );
 		const size = bounds.getSize( new THREE.Vector3() );
@@ -288,6 +313,8 @@ export class SceneryRenderer {
 
 		for ( const handles of scene.colliders.values() ) for ( const handle of handles ) this.physics?.remove?.( handle );
 		scene.colliders.clear();
+		for ( const body of scene.living ) body.dispose();
+		scene.living = [];
 		for ( const root of scene.bodies ) {
 
 			this.lighting?.releaseRoot( root );
