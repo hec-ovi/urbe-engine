@@ -10,7 +10,7 @@
 .hud-clock-location { display: block; margin-top: 5px; font-size: 10px; color: #a0c0c1; }
 .hud .hud-minimap { right: 30px; bottom: 26px; width: 216px; height: auto; padding: 0; overflow: hidden; background: #06272a; border: 1px solid #6fe3d556; text-align: left; pointer-events: auto; color: #a0c0c1; cursor: pointer; }
 .hud .hud-minimap-canvas { width: 214px; height: 214px; }
-.hud-minimap-top { position: absolute; left: 11px; top: 10px; padding: 4px; background: #061c21c9; color: #73ecdf; font: 8px var(--ui-mono); letter-spacing: .08em; }
+.hud-minimap-top { display: block; padding: 9px 11px; border-bottom: 1px solid #6fe3d52a; background: #061c21c9; color: #73ecdf; font: 8px var(--ui-mono); letter-spacing: .08em; }
 .hud .hud-minimap-label { display: flex; justify-content: space-between; gap: 8px; padding: 10px 11px; border-top: 1px solid #6fe3d556; font: 8px var(--ui-mono); text-align: left; }
 .hud-minimap-label > span:last-child { flex: none; color: #73ecdf; }
 .hud-minimap-route { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -26,3 +26,6 @@
 .hud .has-target .hud-crosshair::after { content: ''; position: absolute; width: 4px; height: 4px; top: 12px; left: 12px; background: #73ecdf; }
 .hud:has(.inspection-layer:not([hidden])) .hud-interaction { visibility: hidden; }
 @media (max-height: 600px) { .hud .hud-clock { top: 18px; } .hud .hud-clock-where { margin-top: 10px; } .hud .hud-minimap { width: 176px; } .hud .hud-minimap-canvas { width: 174px; height: 174px; } }
+
+/* The conversation opens its talk control in this corner. */
+.hud:has(.chat-layer:not([hidden])) .hud-clock { visibility: hidden; }
