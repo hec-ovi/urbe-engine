@@ -1,11 +1,13 @@
 import { el } from '../components/dom.js';
 
-/** Matches the .view transition in panels.css. */
+/** Matches the .view.is-closing animation in screens.css. */
 const CLOSE_MS = 160;
 
 /**
  * Shows one full panel at a time over the game. Opening one closes the
- * others; Escape closes whatever is open. Views are { element, shown?() }.
+ * others; Escape closes whatever is open. Views are { element, shown?(),
+ * hidden?() }: shown runs once a view is on screen, hidden as it leaves, so a
+ * view stops whatever it draws.
  * props: { views: { NAME: view }, onOpen( name ), onClose() }
  */
 export class PanelHost {
@@ -73,6 +75,7 @@ export class PanelHost {
 	#show( view, name ) {
 
 		clearTimeout( this.timers.get( view ) );
+		view.element.classList.remove( 'is-closing' );
 		view.element.hidden = false;
 		view.element.inert = false;
 		view.element.setAttribute( 'role', 'dialog' );
@@ -95,9 +98,16 @@ export class PanelHost {
 	#hide( view ) {
 
 		view.element.classList.remove( 'is-open' );
+		view.element.classList.add( 'is-closing' );
 		view.element.inert = true;
 		view.element.setAttribute( 'aria-hidden', 'true' );
-		this.timers.set( view, setTimeout( () => { view.element.hidden = true; }, CLOSE_MS ) );
+		view.hidden?.();
+		this.timers.set( view, setTimeout( () => {
+
+			view.element.hidden = true;
+			view.element.classList.remove( 'is-closing' );
+
+		}, CLOSE_MS ) );
 
 	}
 

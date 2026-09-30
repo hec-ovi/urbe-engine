@@ -1,0 +1,449 @@
+/* The full screens over the game (journal, map, inventory, codex, settings,
+   controls), the dock under them and the pause menu share this palette and
+   these primitives: dark teal panes, thin cyan edges, an amber accent, red for
+   the main story and yellow for side jobs. Nothing here blurs the world under
+   it, and every entrance moves or glitches on the compositor. */
+
+.hud {
+	--screen-bg: #071216;
+	--screen-surface: linear-gradient(115deg, rgba(8, 28, 32, 0.97), rgba(13, 42, 48, 0.95));
+	--screen-pane: rgba(6, 27, 32, 0.6);
+	--screen-strong: #0b1c23;
+	--screen-card: #0a2128;
+	--screen-edge: rgba(119, 190, 195, 0.25);
+	--screen-line: rgba(152, 204, 207, 0.2);
+	--screen-rule: rgba(120, 203, 208, 0.14);
+	--screen-text: #e6f1ee;
+	--screen-soft: #c0d3d3;
+	--screen-muted: #9fbdc0;
+	--screen-dim: #7c9ea1;
+	--screen-cyan: #73ecdf;
+	--screen-cyan-soft: #8bdfd3;
+	--screen-amber: #efc082;
+	--screen-amber-hot: #f7d4a0;
+	--screen-good: #a4e6b2;
+	--screen-danger: #ff9b95;
+	--screen-main: #ff7979;
+	--screen-side: #e7c86e;
+	--screen-font: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+	--screen-mono: "SFMono-Regular", Consolas, "Liberation Mono", ui-monospace, monospace;
+}
+
+/* The HUD steps aside while a full screen covers the world. */
+.hud:has(.panel-host.is-open) :is(.hud-clock, .hud-objective, .hud-minimap, .hud-prompt, .hud-interaction, .hud-readout, .hud-stats, .hud-free) {
+	visibility: hidden;
+}
+
+/* The host of one full screen, above the dock's reserve. */
+
+.panel-host {
+	position: absolute;
+	inset: 0 0 var(--ui-tabbar) 0;
+}
+
+.panel-host.is-open {
+	pointer-events: auto;
+}
+
+.view {
+	position: absolute;
+	inset: 0;
+	pointer-events: auto;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	background: var(--screen-surface);
+	color: var(--screen-text);
+	font-family: var(--screen-font);
+	font-size: 16px;
+	text-shadow: none;
+	isolation: isolate;
+}
+
+.view.is-open {
+	animation: screen-in 0.34s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.view.is-closing {
+	animation: screen-out 0.16s ease-in both;
+}
+
+/* Two thin cuts slip across as a screen arrives, then leave. */
+.view::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 34%;
+	height: 26px;
+	z-index: 5;
+	pointer-events: none;
+	opacity: 0;
+	background:
+		linear-gradient(90deg, transparent 0 8%, rgba(115, 236, 223, 0.5) 8% 31%, transparent 31% 58%, rgba(239, 192, 130, 0.45) 58% 71%, transparent 71%) 0 0 / 100% 2px no-repeat,
+		linear-gradient(90deg, transparent 0 22%, rgba(115, 236, 223, 0.28) 22% 64%, transparent 64%) 0 22px / 100% 1px no-repeat;
+}
+
+.view.is-open::after {
+	animation: screen-cut 0.42s steps(1, end) both;
+}
+
+@keyframes screen-in {
+	0% { opacity: 0; transform: translate3d(0, 22px, 0) scale(0.985); }
+	46% { opacity: 1; transform: translate3d(0, -2px, 0) scale(1); }
+	54% { transform: translate3d(-6px, -1px, 0); }
+	60% { transform: translate3d(4px, 0, 0); }
+	66%, 100% { opacity: 1; transform: none; }
+}
+
+@keyframes screen-out {
+	from { opacity: 1; transform: none; }
+	to { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.99); }
+}
+
+@keyframes screen-cut {
+	0% { opacity: 0; transform: translate3d(-12%, 0, 0); }
+	22% { opacity: 1; transform: translate3d(9%, -140px, 0) scaleY(1.6); }
+	40% { opacity: 1; transform: translate3d(-5%, 90px, 0); }
+	58% { opacity: 1; transform: translate3d(14%, 210px, 0) scaleY(0.6); }
+	76%, 100% { opacity: 0; transform: none; }
+}
+
+.view button {
+	font-family: inherit;
+	color: inherit;
+	cursor: pointer;
+}
+
+.view button:disabled {
+	cursor: default;
+}
+
+.view :is(button, input, select, summary, [tabindex]):focus-visible {
+	outline: 2px solid var(--screen-cyan);
+	outline-offset: 3px;
+}
+
+.view :is(input, select) {
+	font-family: inherit;
+}
+
+.view * {
+	scrollbar-width: thin;
+	scrollbar-color: rgba(120, 203, 208, 0.4) transparent;
+}
+
+/* Header of every screen: an eyebrow, the title, a line under it, and Close. */
+
+.panel-header {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 24px;
+	padding: 22px 32px 20px;
+	border-bottom: 1px solid var(--screen-edge);
+	background: linear-gradient(90deg, rgba(10, 52, 59, 0.55), rgba(8, 39, 45, 0.2));
+}
+
+.panel-heading {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 6px 22px;
+	min-width: 0;
+}
+
+.panel-heading-copy {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.panel-eyebrow {
+	margin: 0 0 6px;
+	color: var(--screen-cyan);
+	font: 11px/1.4 var(--screen-mono);
+	letter-spacing: 0.17em;
+	text-transform: uppercase;
+}
+
+.panel-title {
+	margin: 0;
+	font-size: 34px;
+	font-weight: 500;
+	line-height: 1.1;
+	letter-spacing: -0.035em;
+	text-transform: none;
+	color: var(--screen-text);
+}
+
+.panel-subtitle {
+	margin: 0;
+	color: var(--screen-muted);
+	font-size: 16px;
+	line-height: 1.5;
+}
+
+.panel-header-spacer {
+	flex: 1;
+}
+
+.panel-header-aside {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+
+.panel-close {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 42px;
+	padding: 8px 12px 8px 16px;
+	border: 1px solid rgba(125, 169, 173, 0.35);
+	background: #133036;
+	color: #d9e8e8;
+	font-size: 16px;
+	line-height: 1;
+}
+
+.panel-close:hover {
+	border-color: var(--screen-cyan);
+	background: #1d454b;
+}
+
+.panel-close .keycap {
+	margin: 0;
+	color: var(--screen-muted);
+}
+
+/* Keys inside a screen. */
+
+.view .keycap,
+.hud-pause .keycap,
+.game-dock .keycap {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 24px;
+	min-height: 24px;
+	margin: 0;
+	padding: 3px 7px;
+	border: 1px solid rgba(134, 189, 188, 0.3);
+	border-bottom-width: 2px;
+	border-radius: 3px;
+	background: rgba(17, 47, 52, 0.37);
+	color: #c9dfdc;
+	font: 12px/1 var(--screen-mono);
+	letter-spacing: 0;
+}
+
+/* Tabs across a screen, the chosen one underlined. */
+
+.screen-tabs {
+	display: flex;
+	flex: none;
+	gap: 4px;
+	padding: 0 22px;
+	border-bottom: 1px solid var(--screen-edge);
+	background: rgba(23, 76, 78, 0.12);
+	overflow-x: auto;
+}
+
+.screen-tab {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	gap: 12px;
+	flex: none;
+	min-height: 58px;
+	padding: 0 18px;
+	border: 0;
+	background: transparent;
+	color: var(--screen-muted);
+	font-size: 17px;
+	font-weight: 500;
+}
+
+.screen-tab:hover {
+	color: var(--screen-text);
+	background: rgba(230, 241, 238, 0.04);
+}
+
+.screen-tab[aria-selected="true"],
+.screen-tab[aria-pressed="true"] {
+	color: var(--screen-tab-accent, var(--screen-cyan));
+	background: rgba(115, 236, 223, 0.05);
+}
+
+.screen-tab::after {
+	content: "";
+	position: absolute;
+	inset: auto 14px 0;
+	height: 3px;
+	background: var(--screen-tab-accent, var(--screen-cyan));
+	transform: scaleX(0);
+	transition: transform 0.18s ease;
+}
+
+.screen-tab[aria-selected="true"]::after,
+.screen-tab[aria-pressed="true"]::after {
+	transform: scaleX(1);
+}
+
+.screen-count {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 26px;
+	height: 26px;
+	padding: 0 6px;
+	border: 1px solid var(--screen-line);
+	border-radius: 3px;
+	color: var(--screen-muted);
+	font: 13px var(--screen-mono);
+}
+
+/* Buttons. */
+
+.screen-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	min-height: 40px;
+	padding: 9px 16px;
+	border: 1px solid rgba(125, 169, 173, 0.35);
+	background: #133036;
+	color: #d9e8e8;
+	font-size: 15px;
+	line-height: 1.2;
+}
+
+.screen-button:hover:not(:disabled) {
+	border-color: var(--screen-cyan);
+	background: #1d454b;
+}
+
+.screen-button.is-primary {
+	border-color: var(--screen-amber);
+	background: var(--screen-amber);
+	color: #1b2b25;
+	font-weight: 600;
+}
+
+.screen-button.is-primary:hover:not(:disabled) {
+	border-color: var(--screen-amber-hot);
+	background: var(--screen-amber-hot);
+}
+
+.screen-button[aria-pressed="true"] {
+	border-color: rgba(121, 187, 150, 0.4);
+	background: rgba(37, 82, 68, 0.3);
+	color: #cfe8d9;
+	font-weight: 500;
+}
+
+.screen-button:disabled {
+	opacity: 0.45;
+}
+
+/* Main story red, side jobs yellow: a tag or a mark, never guessed from words. */
+
+.quest-mark {
+	display: block;
+	flex: none;
+	width: 24px;
+	height: 24px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.4;
+}
+
+.quest-mark.is-main {
+	color: var(--screen-main);
+}
+
+.quest-mark.is-side {
+	color: var(--screen-side);
+}
+
+.quest-kind {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	font: 10px/1 var(--screen-mono);
+	letter-spacing: 0.08em;
+}
+
+.quest-kind.is-main {
+	padding: 4px 6px;
+	border: 1px solid #f36c64;
+	background: #aa3833;
+	color: #ffe4df;
+	box-shadow: inset 2px 0 #ffb4a4;
+}
+
+.quest-kind.is-side {
+	width: 18px;
+	height: 18px;
+}
+
+.quest-kind.is-side::before {
+	content: "";
+	width: 10px;
+	height: 10px;
+	border: 1px solid #fff0ac;
+	background: #efd05b;
+	box-shadow: inset 0 0 0 2px #725d22;
+	transform: rotate(45deg);
+}
+
+/* A readable empty line inside a screen. */
+
+.view .empty {
+	padding: 18px 0;
+	color: var(--screen-muted);
+	font: 16px/1.6 var(--screen-font);
+	letter-spacing: 0;
+}
+
+.screen-sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+@media (max-height: 780px) {
+
+	.panel-header {
+		padding: 14px 28px;
+	}
+
+	.panel-title {
+		font-size: 30px;
+	}
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.view.is-open,
+	.view.is-closing,
+	.view.is-open::after {
+		animation: none;
+	}
+
+	.screen-tab::after {
+		transition: none;
+	}
+
+}

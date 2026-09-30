@@ -1,6 +1,6 @@
-/* HUD chrome: the palette every game panel shares, and the always-on readouts.
-   Panels: panels.css and views.css. Chat, avatar, call: chat.css. Tab bar:
-   tabbar.css. Mission toast and summary: mission.css. */
+/* HUD chrome: the palette the HUD shares, and the always-on readouts. Full
+   screens: screens.css and one sheet each. Chat, avatar, call: chat.css.
+   Dock: dock.css. Mission toast and summary: mission.css. */
 
 /* Several HUD panels set their own display, which would beat the browser's
    own [hidden] rule; hiding must always win. */
@@ -22,7 +22,7 @@
 	--ui-warn: #ffb45c;
 	--ui-bad: #ff8f8f;
 	--ui-mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
-	--ui-tabbar: 76px;
+	--ui-tabbar: 80px;
 
 	position: fixed;
 	inset: 0;

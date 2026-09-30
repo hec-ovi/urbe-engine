@@ -1,17 +1,18 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Game menu labels: the pause menu, the tab bar and the free pointer line",
+  "title": "Game menu labels: the pause menu, the dock under an open panel and the free pointer line",
   "type": "object",
-  "required": ["entries", "tabs", "pause", "free"],
+  "required": ["entries", "dock", "pause", "free"],
   "additionalProperties": false,
   "properties": {
     "entries": {
-      "description": "Every menu entry by id: resume, save, LEAVE and the panel names.",
+      "description": "Every menu entry by id: resume, play (the dock's way back to the street), save, LEAVE and the panel names.",
       "type": "object",
-      "required": ["resume", "QUESTS", "MAP", "INVENTORY", "CODEX", "SETTINGS", "CONTROLS", "save", "LEAVE"],
+      "required": ["resume", "play", "QUESTS", "MAP", "INVENTORY", "CODEX", "SETTINGS", "CONTROLS", "save", "LEAVE"],
       "additionalProperties": false,
       "properties": {
         "resume": { "$ref": "#/$defs/entry" },
+        "play": { "$ref": "#/$defs/entry" },
         "QUESTS": { "$ref": "#/$defs/entry" },
         "MAP": { "$ref": "#/$defs/entry" },
         "INVENTORY": { "$ref": "#/$defs/entry" },
@@ -22,18 +23,31 @@
         "LEAVE": { "$ref": "#/$defs/entry" }
       }
     },
-    "tabs": {
-      "description": "Panels in tab bar order; LEAVE follows them.",
-      "type": "array",
-      "minItems": 1,
-      "uniqueItems": true,
-      "items": { "enum": ["QUESTS", "MAP", "INVENTORY", "CODEX", "SETTINGS", "CONTROLS"] }
+    "dock": {
+      "description": "The labelled dock under an open panel: play and the panels, in groups a thin rule parts.",
+      "type": "object",
+      "required": ["label", "groups"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "$ref": "#/$defs/text" },
+        "groups": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "enum": ["play", "QUESTS", "MAP", "INVENTORY", "CODEX", "SETTINGS", "CONTROLS"] }
+          }
+        }
+      }
     },
     "pause": {
       "type": "object",
-      "required": ["title", "note", "sections", "keys", "save"],
+      "required": ["eyebrow", "title", "note", "sections", "keys", "save"],
       "additionalProperties": false,
       "properties": {
+        "eyebrow": { "description": "The small line over the title.", "$ref": "#/$defs/text" },
         "title": { "$ref": "#/$defs/text" },
         "note": { "$ref": "#/$defs/text" },
         "sections": {

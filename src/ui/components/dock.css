@@ -1,0 +1,194 @@
+/* The labelled dock under an open panel: warm neutral, the amber accent on
+   the current entry, 64 px tall with 8 px of air under and over it. */
+
+.game-dock {
+	--dock-accent: var(--screen-amber);
+	--dock-text: #f0ecdf;
+	--dock-muted: #b5af9e;
+	position: absolute;
+	left: 50%;
+	bottom: 8px;
+	z-index: 3;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: min(1080px, calc(100% - 32px));
+	height: 64px;
+	padding: 5px 12px;
+	transform: translateX(-50%);
+	pointer-events: auto;
+	border: 1px solid color-mix(in srgb, var(--dock-accent) 30%, transparent);
+	border-top-color: color-mix(in srgb, var(--dock-accent) 48%, transparent);
+	border-radius: 3px;
+	background: rgba(20, 24, 22, 0.96);
+	box-shadow: 0 5px 24px rgba(0, 0, 0, 0.33), inset 0 1px 0 rgba(255, 255, 255, 0.02);
+	color: var(--dock-muted);
+	font-family: var(--screen-font);
+	text-shadow: none;
+	animation: dock-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.game-dock::before,
+.game-dock::after {
+	content: "";
+	position: absolute;
+	pointer-events: none;
+	background: var(--dock-accent);
+}
+
+.game-dock::before {
+	top: -1px;
+	left: -1px;
+	width: 14px;
+	height: 4px;
+}
+
+.game-dock::after {
+	right: -1px;
+	bottom: -1px;
+	width: 7px;
+	height: 1px;
+}
+
+.dock-brand {
+	display: flex;
+	flex: 0 0 30px;
+	align-items: center;
+	justify-content: center;
+	color: var(--dock-accent);
+}
+
+.dock-brand .dock-icon {
+	stroke-linecap: square;
+}
+
+.dock-icon {
+	display: block;
+	flex: none;
+	fill: none;
+	stroke: currentColor;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.dock-items {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	gap: 4px;
+	height: 100%;
+	min-width: 0;
+}
+
+.dock-item {
+	position: relative;
+	display: flex;
+	flex: 1 0 78px;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	min-width: 0;
+	height: 52px;
+	padding: 4px 7px;
+	border: 1px solid transparent;
+	border-radius: 2px;
+	background: transparent;
+	color: var(--dock-muted);
+	font-family: inherit;
+	cursor: pointer;
+	transition: color 0.14s, background 0.14s, border-color 0.14s, transform 0.14s;
+}
+
+.dock-label {
+	font-size: 15px;
+	font-weight: 500;
+	line-height: 1.2;
+	letter-spacing: 0.005em;
+	white-space: nowrap;
+}
+
+.game-dock .dock-item .keycap {
+	position: absolute;
+	top: 4px;
+	right: 6px;
+	min-width: 18px;
+	min-height: 18px;
+	padding: 2px 4px;
+	border-color: color-mix(in srgb, var(--dock-muted) 28%, transparent);
+	border-bottom-width: 1px;
+	background: transparent;
+	color: color-mix(in srgb, var(--dock-muted) 80%, transparent);
+	font-size: 10px;
+}
+
+.dock-item:hover {
+	color: var(--dock-text);
+	background: color-mix(in srgb, var(--dock-accent) 9%, transparent);
+	border-color: color-mix(in srgb, var(--dock-accent) 20%, transparent);
+}
+
+.dock-item:active {
+	transform: translateY(1px);
+}
+
+.dock-item:focus-visible {
+	outline: 1px solid var(--dock-accent);
+	outline-offset: -3px;
+}
+
+.dock-item[aria-current="page"] {
+	color: var(--dock-accent);
+	background: linear-gradient(180deg, color-mix(in srgb, var(--dock-accent) 15%, transparent), color-mix(in srgb, var(--dock-accent) 5%, transparent));
+	border-color: color-mix(in srgb, var(--dock-accent) 35%, transparent);
+}
+
+.dock-item::after {
+	content: "";
+	position: absolute;
+	left: 50%;
+	bottom: 1px;
+	width: 18px;
+	height: 2px;
+	background: var(--dock-accent);
+	opacity: 0;
+	transform: translateX(-50%) scaleX(0.3);
+	transition: transform 0.2s, opacity 0.15s;
+}
+
+.dock-item[aria-current="page"]::after {
+	opacity: 1;
+	transform: translateX(-50%) scaleX(1);
+}
+
+.dock-item.is-group-start {
+	margin-left: 6px;
+}
+
+.dock-item.is-group-start::before {
+	content: "";
+	position: absolute;
+	top: 14px;
+	bottom: 14px;
+	left: -6px;
+	width: 1px;
+	background: color-mix(in srgb, var(--dock-accent) 18%, transparent);
+}
+
+@keyframes dock-in {
+	from { opacity: 0; transform: translate3d(-50%, 12px, 0) scale(0.96); }
+	to { opacity: 1; transform: translate3d(-50%, 0, 0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.game-dock {
+		animation: none;
+	}
+
+	.dock-item,
+	.dock-item::after {
+		transition: none;
+	}
+
+}

@@ -5,10 +5,10 @@ import userEvent from '@testing-library/user-event';
 import { stubCanvas } from '../test-helpers/canvas.js';
 import { GameView } from './GameView.js';
 
-/** The overlay wires the bar to the host, keeps the loading surface and the front door. */
+/** The overlay wires the dock to the host, keeps the loading surface and the front door. */
 describe( 'GameView', () => {
 
-	let view, onOpen, onClose, onLeave;
+	let view, onOpen, onClose, onLeave, onResume;
 
 	beforeEach( () => {
 
@@ -17,7 +17,8 @@ describe( 'GameView', () => {
 		onOpen = vi.fn();
 		onClose = vi.fn();
 		onLeave = vi.fn();
-		view = new GameView( { onOpen, onClose, onLeave, menu: { onContinue: vi.fn() } } );
+		onResume = vi.fn();
+		view = new GameView( { onOpen, onClose, onLeave, onResume, menu: { onContinue: vi.fn() } } );
 		view.mount( document.body );
 
 	} );
@@ -31,37 +32,43 @@ describe( 'GameView', () => {
 		expect( document.activeElement ).toBe( view.inspection.done );
 	} );
 
-	it( 'opens panels from the pause menu, keeps the bar up only while one is open, and opens QUESTS from the objective', async () => {
+	it( 'opens panels from the pause menu, keeps the dock up only while one is open, plays on from it, and opens QUESTS from the objective', async () => {
 
 		const user = userEvent.setup();
-		expect( view.tabs.element.hidden ).toBe( true );
+		expect( view.dock.element.hidden ).toBe( true );
 
-		// The panels are reached from the pause menu; the bar comes up with one of them.
+		// The panels are reached from the pause menu; the dock comes up with one of them.
 		view.setPaused( true );
 		expect( view.pause.element.hidden ).toBe( false );
-		expect( view.tabs.element.hidden ).toBe( true );
+		expect( view.dock.element.hidden ).toBe( true );
 		await user.click( screen.getByRole( 'button', { name: 'Map' } ) );
 		expect( view.map.element.hidden ).toBe( false );
 		expect( view.pause.element.hidden ).toBe( true );
-		expect( view.tabs.element.hidden ).toBe( false );
-		const tab = within( view.tabs.element ).getByRole( 'button', { name: /^Map/ } );
-		expect( tab.classList.contains( 'is-active' ) ).toBe( true );
+		expect( view.dock.element.hidden ).toBe( false );
+		const tab = within( view.dock.element ).getByRole( 'button', { name: 'Map' } );
+		expect( tab.getAttribute( 'aria-current' ) ).toBe( 'page' );
 		expect( onOpen ).toHaveBeenCalledWith( 'MAP' );
 
 		await user.click( tab );
-		expect( tab.classList.contains( 'is-active' ) ).toBe( false );
+		expect( tab.getAttribute( 'aria-current' ) ).toBe( 'false' );
 		expect( onClose ).toHaveBeenCalledOnce();
 		expect( view.pause.element.hidden ).toBe( false );
-		expect( view.tabs.element.hidden ).toBe( true );
+		expect( view.dock.element.hidden ).toBe( true );
 
 		view.setPaused( false );
 		expect( view.pause.element.hidden ).toBe( true );
 		view.open( 'INVENTORY' );
 		expect( view.inventory.element.hidden ).toBe( false );
-		expect( view.tabs.element.hidden ).toBe( false );
+		expect( view.dock.element.hidden ).toBe( false );
 		view.close();
 		expect( view.panels.current ).toBeNull();
-		expect( view.tabs.element.hidden ).toBe( true );
+		expect( view.dock.element.hidden ).toBe( true );
+
+		// Play on the dock closes the panel and hands the pointer back to the game.
+		view.open( 'CODEX' );
+		await user.click( within( view.dock.element ).getByRole( 'button', { name: 'Play' } ) );
+		expect( view.panels.current ).toBeNull();
+		expect( onResume ).toHaveBeenCalledOnce();
 
 		// The developer readouts come and go together.
 		view.setDetails( false );

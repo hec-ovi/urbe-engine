@@ -1,8 +1,8 @@
 import '../components/styles.css';
 import '../components/game.css';
-import '../components/tabbar.css';
 import '../components/panels.css';
-import '../components/views.css';
+import '../components/screens.css';
+import '../components/dock.css';
 import '../components/chat.css';
 import '../components/mission.css';
 import '../components/fracture.css';
@@ -24,7 +24,7 @@ import { MissionSummary } from '../widgets/MissionSummary.js';
 import { TransitHud } from '../widgets/TransitHud.js';
 import { PauseMenu } from '../widgets/PauseMenu.js';
 import { LoadingScreen } from '../widgets/LoadingScreen.js';
-import { TabBar } from '../widgets/TabBar.js';
+import { GameDock } from '../widgets/GameDock.js';
 import { PanelHost } from './PanelHost.js';
 import { MinimapView } from './MinimapView.js';
 import { Map3DView } from './Map3DView.js';
@@ -39,8 +39,9 @@ import menuLabels from './game-menu.json' with { type: 'json' };
 const noop = () => {};
 
 /**
- * The whole game overlay: the always-on HUD, the tab bar, one panel at a
- * time over the game, and the chat, avatar, call and mission widgets.
+ * The whole game overlay: the always-on HUD, one full screen at a time over
+ * the game with the labelled dock under it, and the chat, avatar, call and
+ * mission widgets.
  * Presentation only: it is handed values and reports intents through props,
  * all optional and listed in the UI contract.
  */
@@ -93,7 +94,15 @@ export class GameView {
 		this.controls = new ControlsView( { onClose: close } );
 
 		this.mainMenu = new MainMenuView( menu );
-		this.tabs = new TabBar( { onSelect: ( name ) => this.toggle( name ), onLeave: leave } );
+		this.dock = new GameDock( {
+			onSelect: ( name ) => this.toggle( name ),
+			onPlay: () => {
+
+				this.close();
+				onResume();
+
+			}
+		} );
 		this.panels = new PanelHost( {
 			views: {
 				QUESTS: this.quests,
@@ -105,14 +114,14 @@ export class GameView {
 			},
 			onOpen: ( name ) => {
 
-				this.tabs.setActive( name );
+				this.dock.setActive( name );
 				this.#overlays();
 				onOpen( name );
 
 			},
 			onClose: () => {
 
-				this.tabs.setActive( null );
+				this.dock.setActive( null );
 				this.#overlays();
 				onClose();
 
@@ -142,7 +151,7 @@ export class GameView {
 			this.pause.element,
 			this.free,
 			this.panels.element,
-			this.tabs.element,
+			this.dock.element,
 			this.loading,
 			this.mainMenu.element
 		);
@@ -155,8 +164,8 @@ export class GameView {
 
 	/**
 	 * The pause menu, under any panel, chat or summary opened over it. The
-	 * panels are reached from it or by their keys; the tab bar is up only
-	 * while one of them is open, to move between them.
+	 * panels are reached from it or by their keys; the dock is up only while
+	 * one of them is open, to move between them or back to play.
 	 */
 	setPaused( paused ) {
 
@@ -271,7 +280,7 @@ export class GameView {
 	#overlays() {
 
 		this.pause.setVisible( this.paused && ! this.panels.current && this.summary.element.hidden && this.inspection.element.hidden && this.dialog.element.hidden );
-		this.tabs.element.hidden = ! this.panels.current;
+		this.dock.element.hidden = ! this.panels.current;
 
 	}
 
