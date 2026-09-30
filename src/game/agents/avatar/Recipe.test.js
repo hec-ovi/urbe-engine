@@ -14,7 +14,32 @@ describe( 'character recipes', () => {
 		expect( [ recipe.body, recipe.hair, recipe.outfit.top, recipe.outfit.pants, recipe.outfit.footwear, recipe.colors.skin ] ).toEqual( [
 			'regular-male', 'Hairstyles/Rigged to Head Bone/Male/Hair_Buzzed.gltf', 'tech-top', 'pants-tech', 'boots-patrol', '#d8ad8d'
 		] );
-		expect( personRecipe( { gender: 'male', appearanceSeed: 3141592653 } ) ).toEqual( recipe );
+		const person = personRecipe( { gender: 'male', appearanceSeed: 3141592653 } );
+		expect( { ...person, shape: null } ).toEqual( { ...recipe, shape: null } );
+		expect( person.shape.height ).toBe( recipe.shape.height );
+		expect( person.shape.faceWidth ).toBe( recipe.shape.faceWidth );
+
+	} );
+
+	it( 'keeps the people of a street near an ordinary build: no exaggerated seats, hips or thickness', () => {
+
+		const seats = [];
+		for ( let seed = 0; seed < 2000; seed ++ ) {
+
+			const { shape } = personRecipe( { gender: seed % 2 ? 'female' : 'male', appearanceSeed: seed * 2654435761 >>> 0 } );
+			seats.push( shape.glutes );
+			for ( const key of [ 'glutes', 'hips', 'thighs', 'thickness', 'waist', 'build' ] ) {
+
+				expect( shape[ key ] ).toBeGreaterThanOrEqual( 0.8 );
+				expect( shape[ key ] ).toBeLessThanOrEqual( 1.2 );
+
+			}
+
+		}
+		const mean = seats.reduce( ( sum, seat ) => sum + seat, 0 ) / seats.length;
+		expect( Math.abs( mean - 1 ) ).toBeLessThan( 0.03 );
+		expect( Math.max( ...seats ) ).toBeLessThanOrEqual( 1.15 );
+		expect( seats.filter( ( seat ) => seat > 1.1 ).length / seats.length ).toBeLessThan( 0.1 );
 
 	} );
 

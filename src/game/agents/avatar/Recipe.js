@@ -233,6 +233,7 @@ export function personRecipe( { gender, appearanceSeed }, { outfits = [] } = {} 
 	// The studio's body pick: drawn so the rest of the stream stays the studio's.
 	random();
 	const palette = generate( recipe, random, pick, 'all' );
+	streetProportions( recipe.shape );
 	const authored = sharedOutfit( outfits, random() );
 	if ( authored ) recipe.outfit = structuredClone( authored );
 	else if ( nearSkin( recipe.outfit.colors.top.primary, recipe.colors.skin ) ) {
@@ -249,6 +250,32 @@ export function personRecipe( { gender, appearanceSeed }, { outfits = [] } = {} 
 
 	}
 	return recipe;
+
+}
+
+/**
+ * The studio draws across its whole editing range and favours a fuller seat,
+ * which crowds a street with exaggerated figures. People in the city keep the
+ * studio's draw but sit near an ordinary build: every body proportion keeps
+ * STREET_SPREAD of its distance from neutral, and the seat loses the studio's
+ * lift and keeps only SEAT_SPREAD. Height and the face keep their own spread.
+ */
+export const STREET_SPREAD = 0.4;
+/** The seat varies least: the studio's widest control, centred on 1.28 by its +0.35 lift over a 0.8 upper span. */
+const SEAT_SPREAD = 0.28;
+const STUDIO_SEAT_CENTRE = 1.28;
+
+function streetProportions( shape ) {
+
+	for ( const key of BODY_SHAPE_KEYS ) {
+
+		if ( key === 'height' ) continue;
+		const seat = key === 'glutes';
+		const [ min, max ] = SHAPE_LIMITS[ key ];
+		const offset = ( shape[ key ] - ( seat ? STUDIO_SEAT_CENTRE : 1 ) ) * ( seat ? SEAT_SPREAD : STREET_SPREAD );
+		shape[ key ] = round( Math.max( min, Math.min( max, 1 + offset ) ) );
+
+	}
 
 }
 
