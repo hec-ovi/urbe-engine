@@ -15,6 +15,12 @@ const GROUP_INDEX = Object.fromEntries( GROUPS.map( ( group, index ) => [ group,
 const PATTERNS = { top: TOPS, pants: PANTS, footwear: FOOTWEAR };
 /** Triangles, or vertices, between yields: a few milliseconds of the loops below. */
 const BATCH = 1024;
+/**
+ * Triangles, or edges, between yields while a shell is cut: each of its
+ * vertices is shaped, skinned and weighted as it is first met, a few times
+ * the work of a vertex of the loops above, so its stride is a quarter.
+ */
+const SHELL_BATCH = 256;
 
 /**
  * A person's outfit fitted to their shaped body at rest.
@@ -386,17 +392,19 @@ function* createShell( body, descriptor, faces, contexts, welded, seamEdges, und
 
 	for ( let index = 0; index < faces.length; index += 3 ) {
 
+		if ( index && index % ( BATCH * 3 ) === 0 ) yield;
 		const a = faces[ index ], b = faces[ index + 1 ], c = faces[ index + 2 ];
 		edge( a, b, c );
 		edge( b, c, a );
 		edge( c, a, b );
 
 	}
+	yield;
 	alignBoundaryRings( edgeMap, welded, contexts, seamEdges, boundaryPlanes, descriptor );
 	yield;
 	for ( let index = 0; index < faces.length; index += 3 ) {
 
-		if ( index % ( BATCH * 3 ) === 0 ) yield;
+		if ( index % ( SHELL_BATCH * 3 ) === 0 ) yield;
 		indices.push( addVertex( faces[ index ] ), addVertex( faces[ index + 1 ] ), addVertex( faces[ index + 2 ] ) );
 
 	}
@@ -412,9 +420,11 @@ function* createShell( body, descriptor, faces, contexts, welded, seamEdges, und
 	yield;
 	// A short inward wall closes each cuff, collar, hem and sole against the
 	// body. Welding is only for finding edges, so authored UV seams are no hems.
+	let walled = 0;
 	for ( const { a, b, key, count } of edgeMap.values() ) {
 
 		if ( count !== 1 || collarEdges.has( key ) ) continue;
+		if ( ++ walled % SHELL_BATCH === 0 ) yield;
 		const pa = outerPosition( a );
 		const pb = outerPosition( b );
 		const inner = innerPosition( a );
@@ -430,6 +440,7 @@ function* createShell( body, descriptor, faces, contexts, welded, seamEdges, und
 		indices.push( oa, ia, ob, ob, ia, ib );
 
 	}
+	yield;
 
 	const geometry = new BufferGeometry();
 	const height = contexts[ 0 ].height;
