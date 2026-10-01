@@ -131,6 +131,9 @@ export class MaterialBatch {
 	 * Doubling makes that a handful of reallocations over the whole city instead
 	 * of one per plan, and each one copies the vertices already written into the
 	 * new buffers at the same offsets, so the geometry ids stay what they were.
+	 * The draws keep their graphs: the renderer finds the batch holding another
+	 * geometry and draws it from the new buffers, whose attributes are the ones
+	 * the graph reads by name and layout.
 	 */
 	reserveGeometry( vertices, indices ) {
 
@@ -141,15 +144,14 @@ export class MaterialBatch {
 		if ( wantedVertices > this.vertexCapacity ) this.vertexCapacity = Math.max( wantedVertices, this.vertexCapacity * 2 );
 		if ( wantedIndices > this.indexCapacity ) this.indexCapacity = Math.max( wantedIndices, this.indexCapacity * 2 );
 		this.mesh.setGeometrySize( this.vertexCapacity, this.indexCapacity );
-		this.rebuild();
+		this.hitches?.note( `${this.name} geometry grew to ${this.vertexCapacity} vertices` );
 
 	}
 
 	/**
-	 * Drops the draws built against geometry buffers this batch has replaced, or
-	 * built before it carried a colour. The next frame that draws the batch
-	 * builds its graph again, which is the cost the note names; its program
-	 * stays linked, pinned by the warm-up.
+	 * Drops the draws built before the batch carried a colour, which never read
+	 * one. The next frame that draws the batch builds its graph again, which is
+	 * the cost the note names; its program stays linked, pinned by the warm-up.
 	 */
 	rebuild() {
 

@@ -153,7 +153,7 @@ describe( 'the batching class takes primitives as a loader publishes them', () =
 
 	} );
 
-	it( 'rebuilds the draws when it replaces the geometry buffers they were built from or takes its first colour, and grows copies in place', () => {
+	it( 'rebuilds the draws only when it takes its first colour, and grows copies and geometry under the draws it has', () => {
 
 		const material = new THREE.MeshStandardMaterial();
 		const batches = new MaterialBatches( 'growing', { fill: true, uvRepeat: true } )
@@ -178,9 +178,14 @@ describe( 'the batching class takes primitives as a loader publishes them', () =
 		expect( batch.mesh.getMatrixAt( first.instances[ 0 ], new THREE.Matrix4() ).elements[ 12 ] ).toBeCloseTo( 0, 5 );
 		expect( Array.from( batch.fill.texture.image.data.slice( first.instances[ 0 ] * 4, first.instances[ 0 ] * 4 + 4 ) ) ).toEqual( [ 1, 2, 3, 4 ] );
 
-		// Geometry that outgrows its buffers replaces them, and that rebuilds.
+		// Geometry that outgrows its buffers moves the batch to bigger ones, which
+		// the draws it has read from then on, the copies and their places kept.
+		const buffers = batch.mesh.geometry;
 		batches.add( [ { id: 'b', surfaces: [ { bucket: 'stone', geometry: plain( 30 ), material } ] } ] );
-		expect( rebuilt ).toHaveBeenCalledTimes( 2 );
+		expect( batch.mesh.geometry ).not.toBe( buffers );
+		expect( batch.vertexCapacity ).toBeGreaterThanOrEqual( 33 );
+		expect( rebuilt ).toHaveBeenCalledTimes( 1 );
+		expect( batch.mesh.getMatrixAt( first.instances[ 0 ], new THREE.Matrix4() ).elements[ 12 ] ).toBeCloseTo( 0, 5 );
 		batches.dispose();
 
 	} );
