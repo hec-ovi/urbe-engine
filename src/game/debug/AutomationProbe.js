@@ -1191,8 +1191,9 @@ function crowdLook( member ) {
 		seed: member.appearanceSeed ?? null,
 		body: model?.id ?? null,
 		hairStyle: styles ? ( style >= 0 ? styles.paths[ style ] : '' ) : null,
+		// A bald head draws no hair, only the eyebrows in the hair's colour, as the focused body does.
 		...lookValues( {
-			skin: look.skin, shirt: look.shirt, trousers: look.trousers, hair: look.hair, eyebrows: look.hair,
+			skin: look.skin, shirt: look.shirt, trousers: look.trousers, hair: style >= 0 ? look.hair : null, eyebrows: look.hair,
 			sleeve: look.sleeve, hem: look.pantsHem
 		} ),
 		height: typeof look.height === 'number' ? round( look.height ) : null,

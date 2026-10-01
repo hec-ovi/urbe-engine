@@ -154,6 +154,10 @@ describe( 'automation probe', () => {
 		expect( await probe.appearance() ).toBeNull();
 		expect( ( await probe.appearance( { id: 'p1' } ) ).crowd ).toEqual( crowd );
 		expect( await probe.appearance( { id: 'p9' } ) ).toBeNull();
+		// A bald head paints no hair: the crowd reports none, as a focused body with no hairstyle does, and its brows keep the colour.
+		const member = game.crowd.members.get( 'p1' );
+		member.look = { ...member.look, hairStyle: '' };
+		expect( ( await probe.appearance( { id: 'p1' } ) ).crowd ).toMatchObject( { hairStyle: '', hair: null, eyebrows: worn.hair } );
 
 	} );
 
