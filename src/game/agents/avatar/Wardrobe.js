@@ -4,7 +4,7 @@
  * skeleton. The studio rebuilt a live mesh's wardrobe in place; here a fit is
  * made once for a person's shaped body and handed out as geometry.
  */
-import { BufferGeometry, Float32BufferAttribute, Uint16BufferAttribute, Uint32BufferAttribute } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, Float32BufferAttribute, Uint16BufferAttribute, Uint32BufferAttribute } from 'three/webgpu';
 import { appendCollar } from './Collars.js';
 import { TOPS } from './Tops.js';
 import { PANTS, FOOTWEAR } from './Lower.js';
@@ -21,26 +21,39 @@ const BATCH = 1024;
  * the work of a vertex of the loops above, so its stride is a quarter.
  */
 const SHELL_BATCH = 256;
+/** Halvings that find where a garment's edge crosses a body edge: to a thousandth of the edge. */
+const CUT_STEPS = 10;
+/** A cut keeps this share of its edge off either end, so no piece it leaves is a sliver of no area. */
+const CUT_MARGIN = 0.02;
+/** Spans two weld or vertex ids in one edge key, far above any body's count. */
+const SPAN = 2 ** 21;
+const FOOT_KEYS = [ 'footCenterX', 'footHalfWidth', 'footHeelZ', 'footToeZ' ];
 
 /**
  * A person's outfit fitted to their shaped body at rest.
  *
- * Every body triangle a garment covers is hidden, the union of all of them,
- * and the body draws what is left. Each garment is one shell over the
- * triangles it covers, pushed out along the body's normals by its pattern's
- * ease and shaped by it, closed at every cuff, hem and sole by a short wall
- * back to the skin, and at a top's neck by a collar band. Its vertices keep
+ * First the body is cut along every garment's edges (cutAlong): a triangle a
+ * hem, cuff, neckline or armhole crosses is split where it crosses, so each
+ * garment ends on its own contour and the skin it leaves bare starts on the
+ * same points. Every body triangle a garment covers is then hidden, the union
+ * of all of them, and the body draws what is left. Each garment is one shell
+ * over the triangles it covers, pushed out along the body's normals by its
+ * pattern's ease and shaped by it, closed at every cuff, hem and sole by a
+ * thin wall back to the skin, and at a top's neck by a collar band. Its vertices keep
  * their source vertex's four skin influences, so it moves on the body's own
  * skeleton with no rig of its own. Trousers keep their whole high waistband
  * under an outer jacket, which carries the trousers' shaped seat under its own
  * ease; a tucked top ends at the waistband, and boots are the outer layer
  * below the knee.
  *
- * @param geometry the shaped body: position, normal, skinIndex, skinWeight and its full index
+ * @param geometry the shaped body: position, normal, skinIndex, skinWeight and its full index. Its
+ *   attributes are replaced by the cut body's (the source vertices first, as they were), and
+ *   `userData.cut` says what the cut added: `{ vertices, triangles, cuts }`, `cuts` a
+ *   `[ from, to, t ]` triple per added vertex, the edge it lies on and how far along it
  * @param bones the skeleton's bone names, in skin index order
  * @param outfit `{ top, pants, footwear }` garment ids, or 'none' per slot
  * @returns (a generator of work steps ending in) `{ index, groups, hidden, garments }`:
- *   the triangles the body still draws, its material groups over them, how
+ *   the triangles of the cut body it still draws, its material groups over them, how
  *   many it hides, and `{ id, slot, geometry }` per garment worn
  */
 export function* fitOutfit( geometry, bones, outfit ) {
@@ -50,7 +63,6 @@ export function* fitOutfit( geometry, bones, outfit ) {
 	const skinIndex = geometry.getAttribute( 'skinIndex' );
 	const skinWeight = geometry.getAttribute( 'skinWeight' );
 	if ( ! positions || ! normals || ! skinIndex || ! skinWeight || ! geometry.index ) throw new Error( 'a wardrobe needs a skinned, indexed body' );
-	const completeIndex = geometry.index.array;
 	const selected = SLOTS.flatMap( ( slot ) => {
 
 		const id = outfit[ slot ];
@@ -67,6 +79,7 @@ export function* fitOutfit( geometry, bones, outfit ) {
 	const weights = classifyWeights( bones, skinIndex, skinWeight, positions.count );
 	yield;
 	const vertices = yield* vertexContexts( positions, normals, weights, height, bottom );
+	const { index: completeIndex, origins } = yield* cutAlong( geometry, vertices, selected );
 	const welded = vertices.map( ( context ) => context.weld );
 	yield;
 	const triangle = makeContext( height );
@@ -104,9 +117,8 @@ export function* fitOutfit( geometry, bones, outfit ) {
 		}
 
 	}
-	const groups = bodyGroups( geometry.groups, assignments );
+	const groups = bodyGroups( geometry.groups, assignments, origins );
 	yield;
-	const seamEdges = yield* sharedGarmentEdges( byGarment, welded );
 	// Fitted surfaces are prepared once: an outer jacket inherits the shaped
 	// seat of the trousers under it before adding its own ease.
 	const fitted = [];
@@ -123,7 +135,7 @@ export function* fitOutfit( geometry, bones, outfit ) {
 		if ( ! byGarment[ index ].length ) continue;
 		const descriptor = fitted[ index ];
 		const underlayer = index === topIndex && ! descriptor.tucked && pantsIndex >= 0 ? fitted[ pantsIndex ] : null;
-		const shell = yield* createShell( geometry, descriptor, byGarment[ index ], vertices, welded, seamEdges, underlayer );
+		const shell = yield* createShell( geometry, descriptor, byGarment[ index ], vertices, welded, underlayer );
 		garments.push( { id: descriptor.id, slot: descriptor.category, geometry: shell } );
 
 	}
@@ -250,16 +262,22 @@ function setTriangleContext( context, a, b, c ) {
 
 }
 
-/** The body's material groups over the triangles it still draws. */
-function bodyGroups( groups, assignments ) {
+/**
+ * The body's material groups over the triangles it still draws: its source
+ * groups, each over the cut triangles of the source triangles it ran over
+ * (`origins`, in source order).
+ */
+function bodyGroups( groups, assignments, origins ) {
 
 	const result = [];
 	let nextStart = 0;
+	let face = 0;
 	for ( const group of groups ) {
 
 		let count = 0;
-		const end = Math.min( assignments.length, ( group.start + group.count ) / 3 );
-		for ( let index = group.start / 3; index < end; index ++ ) if ( assignments[ index ] < 0 ) count += 3;
+		const first = group.start / 3, end = ( group.start + group.count ) / 3;
+		while ( face < assignments.length && origins[ face ] < first ) face ++;
+		for ( ; face < assignments.length && origins[ face ] < end; face ++ ) if ( assignments[ face ] < 0 ) count += 3;
 		if ( count ) result.push( { start: nextStart, count, materialIndex: group.materialIndex } );
 		nextStart += count;
 
@@ -268,7 +286,239 @@ function bodyGroups( groups, assignments ) {
 
 }
 
-function* createShell( body, descriptor, faces, contexts, welded, seamEdges, underlayer ) {
+/**
+ * The body cut along every garment's edges, so that a garment's shell and the
+ * skin it leaves bare meet on one contour instead of each taking whole
+ * triangles by their middles: each garment's cover is read at every welded
+ * point, and a triangle whose corners it parts is split where its cover
+ * changes along the two edges it crosses, into the corner alone on its side
+ * and the quad left, cut along its shorter diagonal. Where an edge is crossed
+ * is found by halving along it over its ends' interpolated surfaces (rest
+ * point, normal, body-part shares), once per edge between welded points, so
+ * both sides of a UV seam, every garment sharing that contour and the bare
+ * skin all take the same point. A cut point takes its edge's interpolated
+ * rest point, normal and UV and the blend of its ends' skin, the four
+ * strongest influences normalised. Each garment's cut runs over the triangles
+ * the cuts before it left, in slot order: the same body and outfit always
+ * cut the same way.
+ *
+ * The geometry's attributes are replaced by the cut ones, the source vertices
+ * first as they were; `contexts` gains a context per cut point.
+ *
+ * @returns (a generator of work steps ending in) `{ index, origins }`: the cut triangles, in source
+ *   triangle order, and the source triangle each was cut from
+ */
+function* cutAlong( geometry, contexts, selected ) {
+
+	const source = geometry.index.array;
+	const attributes = Object.entries( geometry.attributes );
+	const count = contexts.length;
+	const added = Object.fromEntries( attributes.map( ( [ name ] ) => [ name, [] ] ) );
+	const sizes = Object.fromEntries( attributes.map( ( [ name, attribute ] ) => [ name, attribute.itemSize ] ) );
+	const component = ( name, vertex, slot ) => vertex < count
+		? geometry.attributes[ name ].getComponent( vertex, slot )
+		: added[ name ][ ( vertex - count ) * sizes[ name ] + slot ];
+	const welded = contexts.map( ( context ) => context.weld );
+	// Each weld is read at its first vertex, so every copy of a point is on the same side.
+	const representative = [];
+	for ( let vertex = count - 1; vertex >= 0; vertex -- ) representative[ welded[ vertex ] ] = vertex;
+	let welds = representative.length;
+	let index = source;
+	let origins = Array.from( { length: source.length / 3 }, ( _, face ) => face );
+	const cuts = [];
+	const height = contexts[ 0 ]?.height ?? 1;
+	const between = makeContext( height );
+	const at = [ 0, 0, 0 ];
+	const distance = ( a, b ) => {
+
+		let sum = 0;
+		for ( let axis = 0; axis < 3; axis ++ ) {
+
+			at[ axis ] = component( 'position', a, axis ) - component( 'position', b, axis );
+			sum += at[ axis ] * at[ axis ];
+
+		}
+		return sum;
+
+	};
+
+	for ( const descriptor of selected ) {
+
+		yield;
+		const inside = new Uint8Array( welds );
+		for ( let weld = 0; weld < welds; weld ++ ) {
+
+			if ( weld && weld % BATCH === 0 ) yield;
+			inside[ weld ] = descriptor.includes( contexts[ representative[ weld ] ] ) ? 1 : 0;
+
+		}
+		const crossings = new Map();
+		const points = new Map();
+		const point = ( u, v ) => {
+
+			const key = Math.min( u, v ) * SPAN + Math.max( u, v );
+			const known = points.get( key );
+			if ( known !== undefined ) return known;
+			const low = Math.min( welded[ u ], welded[ v ] ), high = Math.max( welded[ u ], welded[ v ] );
+			let crossing = crossings.get( low * SPAN + high );
+			if ( ! crossing ) {
+
+				crossing = { t: crossingAt( descriptor, contexts[ representative[ low ] ], contexts[ representative[ high ] ], inside[ low ], between ), weld: welds ++ };
+				crossings.set( low * SPAN + high, crossing );
+
+			}
+			const [ from, to ] = welded[ u ] === low ? [ u, v ] : [ v, u ];
+			const t = crossing.t;
+			const vertex = count + added.position.length / 3;
+			for ( const [ name ] of attributes ) {
+
+				if ( name === 'skinIndex' || name === 'skinWeight' ) continue;
+				const size = sizes[ name ];
+				const values = added[ name ];
+				for ( let slot = 0; slot < size; slot ++ ) values.push( component( name, from, slot ) * ( 1 - t ) + component( name, to, slot ) * t );
+				if ( name === 'normal' ) {
+
+					const start = values.length - size;
+					const length = Math.hypot( values[ start ], values[ start + 1 ], values[ start + 2 ] ) || 1;
+					for ( let slot = 0; slot < size; slot ++ ) values[ start + slot ] /= length;
+
+				}
+
+			}
+			if ( added.skinIndex && added.skinWeight ) {
+
+				const skin = blendSkin( component, from, to, t );
+				added.skinIndex.push( ...skin.joints );
+				added.skinWeight.push( ...skin.weights );
+
+			}
+			const context = blendContext( makeContext( height ), contexts[ from ], contexts[ to ], t );
+			const length = Math.hypot( context.nx, context.ny, context.nz ) || 1;
+			context.nx /= length;
+			context.ny /= length;
+			context.nz /= length;
+			context.isFront = context.nz > 0.15;
+			context.weld = crossing.weld;
+			contexts.push( context );
+			welded.push( crossing.weld );
+			if ( representative[ crossing.weld ] === undefined ) representative[ crossing.weld ] = vertex;
+			cuts.push( from, to, t );
+			points.set( key, vertex );
+			return vertex;
+
+		};
+		const next = [];
+		const nextOrigins = [];
+		for ( let offset = 0; offset < index.length; offset += 3 ) {
+
+			if ( offset && offset % ( BATCH * 3 ) === 0 ) yield;
+			const a = index[ offset ], b = index[ offset + 1 ], c = index[ offset + 2 ];
+			const sa = inside[ welded[ a ] ], sb = inside[ welded[ b ] ], sc = inside[ welded[ c ] ];
+			const origin = origins[ offset / 3 ];
+			if ( sa === sb && sb === sc ) {
+
+				next.push( a, b, c );
+				nextOrigins.push( origin );
+				continue;
+
+			}
+			// The corner alone on its side, then the other two in winding order.
+			const [ p, q, r ] = sa !== sb && sa !== sc ? [ a, b, c ] : sa === sb ? [ c, a, b ] : [ b, c, a ];
+			const m = point( p, q ), n = point( p, r );
+			next.push( p, m, n );
+			if ( distance( m, r ) <= distance( q, n ) ) next.push( m, q, r, m, r, n );
+			else next.push( m, q, n, q, r, n );
+			nextOrigins.push( origin, origin, origin );
+
+		}
+		index = next;
+		origins = nextOrigins;
+
+	}
+	yield;
+	const total = contexts.length;
+	if ( total > count ) {
+
+		for ( const [ name, attribute ] of attributes ) {
+
+			const size = attribute.itemSize;
+			const array = new attribute.array.constructor( total * size );
+			const cut = new BufferAttribute( array, size, attribute.normalized );
+			if ( attribute.isInterleavedBufferAttribute ) {
+
+				for ( let vertex = 0; vertex < count; vertex ++ ) for ( let slot = 0; slot < size; slot ++ ) cut.setComponent( vertex, slot, attribute.getComponent( vertex, slot ) );
+
+			} else array.set( attribute.array.subarray( 0, count * size ) );
+			const values = added[ name ];
+			for ( let value = 0; value < values.length; value ++ ) cut.setComponent( count + Math.floor( value / size ), value % size, values[ value ] );
+			cut.setUsage( attribute.usage );
+			cut.gpuType = attribute.gpuType;
+			geometry.setAttribute( name, cut );
+
+		}
+
+	}
+	geometry.userData.cut = { vertices: total - count, triangles: index.length / 3, cuts: Float32Array.from( cuts ) };
+	return {
+		index: total > 65535 || source instanceof Uint32Array ? Uint32Array.from( index ) : Uint16Array.from( index ),
+		origins
+	};
+
+}
+
+/** Where along an edge, from `from`'s end, a garment's cover changes: `inside` says whether it covers `from`. */
+function crossingAt( descriptor, from, to, inside, between ) {
+
+	let low = 0, high = 1;
+	for ( let step = 0; step < CUT_STEPS; step ++ ) {
+
+		const middle = ( low + high ) / 2;
+		if ( ( descriptor.includes( blendContext( between, from, to, middle ) ) ? 1 : 0 ) === inside ) low = middle;
+		else high = middle;
+
+	}
+	return Math.min( 1 - CUT_MARGIN, Math.max( CUT_MARGIN, ( low + high ) / 2 ) );
+
+}
+
+/** `out` the context `t` of the way from `a` to `b`, every share and extent interpolated. */
+function blendContext( out, a, b, t ) {
+
+	const s = 1 - t;
+	out.x = a.x * s + b.x * t;
+	out.y = a.y * s + b.y * t;
+	out.z = a.z * s + b.z * t;
+	out.nx = a.nx * s + b.nx * t;
+	out.ny = a.ny * s + b.ny * t;
+	out.nz = a.nz * s + b.nz * t;
+	for ( let group = 0; group < GROUPS.length; group ++ ) out.weights[ group ] = a.weights[ group ] * s + b.weights[ group ] * t;
+	out.isFront = out.nz > 0.15;
+	out.side = out.x >= 0 ? 'l' : 'r';
+	for ( const key of FOOT_KEYS ) out[ key ] = a[ key ] * s + b[ key ] * t;
+	return out;
+
+}
+
+/** The skin of a point `t` of the way from `from` to `to`: both ends' influences blended, the four strongest normalised. */
+function blendSkin( component, from, to, t ) {
+
+	const influences = new Map();
+	for ( const [ vertex, share ] of [ [ from, 1 - t ], [ to, t ] ] ) for ( let slot = 0; slot < 4; slot ++ ) {
+
+		const weight = component( 'skinWeight', vertex, slot ) * share;
+		if ( weight <= 0 ) continue;
+		const bone = component( 'skinIndex', vertex, slot );
+		influences.set( bone, ( influences.get( bone ) ?? 0 ) + weight );
+
+	}
+	const strongest = [ ...influences ].sort( ( [ boneA, a ], [ boneB, b ] ) => b - a || boneA - boneB ).slice( 0, 4 );
+	const sum = strongest.reduce( ( total, [ , weight ] ) => total + weight, 0 ) || 1;
+	while ( strongest.length < 4 ) strongest.push( [ 0, 0 ] );
+	return { joints: strongest.map( ( [ bone ] ) => bone ), weights: strongest.map( ( [ , weight ] ) => weight / sum ) };
+
+}
+
+function* createShell( body, descriptor, faces, contexts, welded, underlayer ) {
 
 	const sourcePosition = body.attributes.position;
 	const sourceIndex = body.attributes.skinIndex;
@@ -287,7 +537,6 @@ function* createShell( body, descriptor, faces, contexts, welded, seamEdges, und
 	const edgeMap = new Map();
 	const displaced = new Map();
 	const shadedNormals = new Map();
-	const boundaryPlanes = new Map();
 	const delta = [ 0, 0, 0 ];
 	const underneath = [ 0, 0, 0 ];
 	const weldCount = welded.reduce( ( max, weld ) => Math.max( max, weld ), 0 ) + 1;
@@ -324,8 +573,6 @@ function* createShell( body, descriptor, faces, contexts, welded, seamEdges, und
 			sourcePosition.getY( index ) + context.ny * offset + delta[ 1 ] * context.height,
 			sourcePosition.getZ( index ) + context.nz * offset + delta[ 2 ] * context.height
 		];
-		const plane = boundaryPlanes.get( welded[ index ] );
-		if ( plane ) point[ plane.axis ] = sourcePosition.getComponent( index, plane.axis ) + ( plane.value - context[ plane.axis === 0 ? 'x' : 'y' ] ) * context.height;
 		displaced.set( index, point );
 		return point;
 
@@ -333,10 +580,7 @@ function* createShell( body, descriptor, faces, contexts, welded, seamEdges, und
 
 	function innerPosition( index ) {
 
-		const point = [ sourcePosition.getX( index ), sourcePosition.getY( index ), sourcePosition.getZ( index ) ];
-		const plane = boundaryPlanes.get( welded[ index ] );
-		if ( plane?.shared ) point[ plane.axis ] += ( plane.value - contexts[ index ][ plane.axis === 0 ? 'x' : 'y' ] ) * contexts[ index ].height;
-		return point;
+		return [ sourcePosition.getX( index ), sourcePosition.getY( index ), sourcePosition.getZ( index ) ];
 
 	}
 
@@ -400,8 +644,6 @@ function* createShell( body, descriptor, faces, contexts, welded, seamEdges, und
 
 	}
 	yield;
-	alignBoundaryRings( edgeMap, welded, contexts, seamEdges, boundaryPlanes, descriptor );
-	yield;
 	for ( let index = 0; index < faces.length; index += 3 ) {
 
 		if ( index % ( SHELL_BATCH * 3 ) === 0 ) yield;
@@ -418,25 +660,49 @@ function* createShell( body, descriptor, faces, contexts, welded, seamEdges, und
 	// or the neck's (Collars.js).
 	for ( let vertex = collarStart; vertex < positions.length / 3; vertex ++ ) sources.push( - 1 );
 	yield;
-	// A short inward wall closes each cuff, collar, hem and sole against the
-	// body. Welding is only for finding edges, so authored UV seams are no hems.
-	let walled = 0;
-	for ( const { a, b, key, count } of edgeMap.values() ) {
+	// A thin inward wall closes each cuff, hem and sole against the skin, on the
+	// contour the body was cut along, so it meets the bare skin's edge point for
+	// point. Its normal at a point is the mean of the walls meeting there, so the
+	// rim shades round instead of in facets. Welding is only for finding edges,
+	// so authored UV seams are no hems.
+	const walls = [];
+	const rims = new Map();
+	for ( const edge of edgeMap.values() ) {
 
-		if ( count !== 1 || collarEdges.has( key ) ) continue;
-		if ( ++ walled % SHELL_BATCH === 0 ) yield;
-		const pa = outerPosition( a );
-		const pb = outerPosition( b );
-		const inner = innerPosition( a );
+		if ( edge.count !== 1 || collarEdges.has( edge.key ) ) continue;
+		if ( walls.length && walls.length % SHELL_BATCH === 0 ) yield;
+		const pa = outerPosition( edge.a );
+		const pb = outerPosition( edge.b );
+		const inner = innerPosition( edge.a );
 		const edgeX = pb[ 0 ] - pa[ 0 ], edgeY = pb[ 1 ] - pa[ 1 ], edgeZ = pb[ 2 ] - pa[ 2 ];
 		const inX = inner[ 0 ] - pa[ 0 ], inY = inner[ 1 ] - pa[ 1 ], inZ = inner[ 2 ] - pa[ 2 ];
 		const wall = [ edgeY * inZ - edgeZ * inY, edgeZ * inX - edgeX * inZ, edgeX * inY - edgeY * inX ];
 		const length = Math.hypot( ...wall ) || 1;
-		for ( let axis = 0; axis < 3; axis ++ ) wall[ axis ] /= length;
-		const oa = addVertex( a, false, wall );
-		const ob = addVertex( b, false, wall );
-		const ia = addVertex( a, true, wall );
-		const ib = addVertex( b, true, wall );
+		for ( const index of [ edge.a, edge.b ] ) {
+
+			const sum = rims.get( welded[ index ] ) ?? [ 0, 0, 0 ];
+			for ( let axis = 0; axis < 3; axis ++ ) sum[ axis ] += wall[ axis ] / length;
+			rims.set( welded[ index ], sum );
+
+		}
+		walls.push( edge );
+
+	}
+	for ( const sum of rims.values() ) {
+
+		const length = Math.hypot( ...sum ) || 1;
+		for ( let axis = 0; axis < 3; axis ++ ) sum[ axis ] /= length;
+
+	}
+	for ( let wall = 0; wall < walls.length; wall ++ ) {
+
+		if ( wall && wall % SHELL_BATCH === 0 ) yield;
+		const { a, b } = walls[ wall ];
+		const na = rims.get( welded[ a ] ), nb = rims.get( welded[ b ] );
+		const oa = addVertex( a, false, na );
+		const ob = addVertex( b, false, nb );
+		const ia = addVertex( a, true, na );
+		const ib = addVertex( b, true, nb );
 		indices.push( oa, ia, ob, ob, ia, ib );
 
 	}
@@ -469,107 +735,5 @@ function* createShell( body, descriptor, faces, contexts, welded, seamEdges, und
 	geometry.userData.sources = Int32Array.from( sources );
 	geometry.userData.fitted = Float32Array.from( garmentCoordinates );
 	return geometry;
-
-}
-
-/** Edges two garments share: a seam between them, which neither closes with a wall. */
-function* sharedGarmentEdges( garments, welded ) {
-
-	const owners = new Map();
-	const shared = new Set();
-	const size = welded.reduce( ( max, weld ) => Math.max( max, weld ), 0 ) + 1;
-	for ( let owner = 0; owner < garments.length; owner ++ ) {
-
-		const faces = garments[ owner ];
-		for ( let index = 0; index < faces.length; index += 3 ) {
-
-			if ( index % ( BATCH * 3 ) === 0 ) yield;
-			for ( let side = 0; side < 3; side ++ ) {
-
-				const a = welded[ faces[ index + side ] ];
-				const b = welded[ faces[ index + ( side + 1 ) % 3 ] ];
-				const key = Math.min( a, b ) * size + Math.max( a, b );
-				if ( ! owners.has( key ) ) owners.set( key, owner );
-				else if ( owners.get( key ) !== owner ) shared.add( key );
-
-			}
-
-		}
-
-	}
-	return shared;
-
-}
-
-/** Straight cuff and hem rings on the same source joints, keeping the hidden-body mask. */
-function alignBoundaryRings( edges, welded, contexts, seamEdges, planes, descriptor ) {
-
-	const adjacent = new Map();
-	for ( const edge of edges.values() ) {
-
-		if ( edge.count !== 1 ) continue;
-		for ( const index of [ edge.a, edge.b ] ) {
-
-			const key = welded[ index ];
-			if ( ! adjacent.has( key ) ) adjacent.set( key, [] );
-			adjacent.get( key ).push( edge );
-
-		}
-
-	}
-	const visited = new Set();
-	for ( const start of adjacent.keys() ) {
-
-		if ( visited.has( start ) ) continue;
-		const pending = [ start ];
-		const vertices = new Map();
-		const ringEdges = new Set();
-		while ( pending.length ) {
-
-			const key = pending.pop();
-			if ( visited.has( key ) ) continue;
-			visited.add( key );
-			for ( const edge of adjacent.get( key ) ?? [] ) {
-
-				ringEdges.add( edge );
-				for ( const index of [ edge.a, edge.b ] ) {
-
-					const next = welded[ index ];
-					vertices.set( next, contexts[ index ] );
-					if ( ! visited.has( next ) ) pending.push( next );
-
-				}
-
-			}
-
-		}
-		// Only complete contour loops flatten; open or branched authored seams
-		// keep their shape rather than pull unrelated surfaces flat.
-		if ( vertices.size < 4 || [ ...vertices.keys() ].some( ( key ) => adjacent.get( key )?.length !== 2 ) ) continue;
-		const values = [ ...vertices.values() ];
-		const arms = values.reduce( ( sum, context ) => sum + context.weight( 'upperarm' ) + context.weight( 'lowerarm' ) + context.weight( 'hand' ), 0 ) / values.length;
-		const meanY = values.reduce( ( sum, context ) => sum + context.y, 0 ) / values.length;
-		const sideLoop = values.every( ( { x } ) => x > 0.035 ) || values.every( ( { x } ) => x < - 0.035 );
-		const armhole = descriptor.armholeAxis === 'x' && sideLoop && meanY > 0.7 && arms > 0.08;
-		const axis = arms > 0.55 || armhole ? 0 : 1;
-		const coordinate = axis === 0 ? 'x' : 'y';
-		let value = values.reduce( ( sum, context ) => sum + context[ coordinate ], 0 ) / values.length;
-		const span = Math.max( ...values.map( ( context ) => context[ coordinate ] ) ) - Math.min( ...values.map( ( context ) => context[ coordinate ] ) );
-		if ( span > 0.09 ) continue;
-		const shared = [ ...ringEdges ].every( ( edge ) => seamEdges.has( edge.key ) );
-		// An exposed edge extends past every uneven source cut. Its adjacent
-		// garment triangles say which way is inside, for shorts hems, waists,
-		// necks and either sleeve alike, with no garment ids.
-		if ( ! shared ) {
-
-			const interior = [ ...ringEdges ].reduce( ( sum, edge ) => sum + contexts[ edge.inside ][ coordinate ], 0 ) / ringEdges.size;
-			value = interior > value
-				? Math.min( ...values.map( ( context ) => context[ coordinate ] ) )
-				: Math.max( ...values.map( ( context ) => context[ coordinate ] ) );
-
-		}
-		for ( const key of vertices.keys() ) planes.set( key, { axis, value, shared } );
-
-	}
 
 }

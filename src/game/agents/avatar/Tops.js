@@ -108,11 +108,10 @@ export const TOPS = [
 		id: 'top-tank',
 		tucked: true,
 		collar: { height: 0.85, style: 'crew' },
-		armholeAxis: 'x',
 		label: 'Bound edge shell',
 		category: 'top',
 		priority: 20,
-		includes: ( ctx ) => coversUpperBody( ctx, { hem: 0.568, neck: 0.85, sleeveEnd: 0.106 } ),
+		includes: ( ctx ) => coversUpperBody( ctx, { hem: 0.568, neck: 0.85, sleeveEnd: 0.106, armhole: 0.028 } ),
 		offset( ctx ) {
 
 			return 0.0034 + neckShare( ctx ) * 0.0008 + band( ctx.y, 0.568, 0.589, 0.01 ) * 0.0015;
@@ -173,11 +172,10 @@ export const TOPS = [
 		id: 'vest-tailored',
 		tucked: false,
 		collar: { height: 0.85, style: 'open' },
-		armholeAxis: 'x',
 		label: 'Tailored city vest',
 		category: 'top',
 		priority: 20,
-		includes: ( ctx ) => coversUpperBody( ctx, { hem: 0.576, neck: 0.85, sleeveEnd: 0.112 } ),
+		includes: ( ctx ) => coversUpperBody( ctx, { hem: 0.576, neck: 0.85, sleeveEnd: 0.112, armhole: 0.022 } ),
 		offset( ctx ) {
 
 			return 0.0058 + shoulder( ctx ) * 0.0015 + vestOpeningEdge( ctx ) * 0.0023;
@@ -259,6 +257,10 @@ export const TOP_CUTS = {
 	'jacket-bomber': { hem: 0.605, sleeve: 0.336 }
 };
 
+/** A sleeveless armhole's curve runs from the underarm's height to the shoulder's top. */
+const ARMHOLE_FROM = 0.742;
+const ARMHOLE_TO = 0.815;
+
 function sleeveBand( ctx, start, end, feather = 0.008 ) {
 
 	return band( Math.abs( ctx.x ), start, end, feather ) * armShare( ctx );
@@ -272,14 +274,21 @@ function vestOpeningEdge( ctx ) {
 
 }
 
-/** A sleeveless top is the same cut with its sleeve ending at the upper arm's root. */
-function coversUpperBody( ctx, { hem, neck, sleeveEnd = Infinity } ) {
+/**
+ * A sleeveless top is the same cut with its sleeve ending at the upper arm's
+ * root, and an `armhole` that curves that far in over the shoulder: from the
+ * underarm, where it meets the sleeve's end, up to the shoulder's top, where
+ * the strap ends `armhole` short of it (shares of height). The wardrobe cuts
+ * the body along this contour, so it is the armhole's own curve.
+ */
+function coversUpperBody( ctx, { hem, neck, sleeveEnd = Infinity, armhole = 0 } ) {
 
 	if ( ctx.y < hem || ctx.y > neck ) return false;
 	if ( ctx.weight( 'head' ) > 0.2 || ctx.weight( 'hand' ) > 0.12 ) return false;
 	if ( ctx.weight( 'thigh' ) + ctx.weight( 'calf' ) + ctx.weight( 'foot' ) > 0.35 ) return false;
 	const arm = armShare( ctx );
 	if ( arm > 0.12 && Math.abs( ctx.x ) > sleeveEnd ) return false;
+	if ( armhole && ctx.y > ARMHOLE_FROM && Math.abs( ctx.x ) > sleeveEnd - armhole * smoothstep( ARMHOLE_FROM, ARMHOLE_TO, ctx.y ) ) return false;
 	return torsoShare( ctx ) + neckShare( ctx ) + arm > 0.1;
 
 }

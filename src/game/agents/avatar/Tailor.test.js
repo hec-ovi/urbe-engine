@@ -78,9 +78,11 @@ describe.skipIf( ! SOURCE_PRESENT )( 'tailoring the Source bodies', () => {
 		expect( fit.users ).toBe( 1 );
 		expect( fit.garments.map( ( garment ) => [ garment.slot, garment.id ] ) ).toEqual( SLOTS.map( ( slot ) => [ slot, recipe.outfit[ slot ] ] ) );
 		expect( fit.hidden ).toBeGreaterThan( 1000 );
-		expect( fit.body.index.count / 3 + fit.hidden ).toBe( refined.index.count / 3 );
-		const joints = refined.getAttribute( 'skinIndex' );
-		const weights = refined.getAttribute( 'skinWeight' );
+		// The body is cut along the garments' edges: what it draws and what it hides are its cut triangles.
+		expect( fit.body.userData.cut.triangles ).toBeGreaterThan( refined.index.count / 3 );
+		expect( fit.body.index.count / 3 + fit.hidden ).toBe( fit.body.userData.cut.triangles );
+		const joints = fit.body.getAttribute( 'skinIndex' );
+		const weights = fit.body.getAttribute( 'skinWeight' );
 		for ( const { geometry } of fit.garments ) {
 
 			// Seven vertex buffers: WebGPU draws a skinned garment within its eight.
@@ -108,6 +110,130 @@ describe.skipIf( ! SOURCE_PRESENT )( 'tailoring the Source bodies', () => {
 		expect( await tailor.fit( model, { ...recipe, colors: { ...recipe.colors, hair: '#191a20' }, shape: { ...recipe.shape, height: 1.06 } } ) ).toBe( fit );
 		expect( fit.users ).toBe( 2 );
 		expect( tailor.built ).toBe( 1 );
+
+	} );
+
+	it( 'cuts the body along a garment\'s edge, so the sleeve ends on its plane and the bare arm starts on the same points', async () => {
+
+		const model = await body( 'Regular_Male_FullBody.gltf' );
+		const tailor = new Tailor();
+		const shapes = await tailor.prepare( model );
+		const recipe = { ...defaultRecipe( 'regular-male' ), outfit: { ...defaultRecipe( 'regular-male' ).outfit, top: 'top-tee', pants: 'pants-shorts', footwear: 'sneakers-low' } };
+		const fit = await tailor.fit( model, recipe );
+		const cut = fit.body.userData.cut;
+		expect( cut.vertices ).toBeGreaterThan( 50 );
+		expect( fit.body.getAttribute( 'position' ).count ).toBe( shapes.body.geometry.getAttribute( 'position' ).count + cut.vertices );
+		const position = fit.body.getAttribute( 'position' );
+		const joints = fit.body.getAttribute( 'skinIndex' );
+		const weights = fit.body.getAttribute( 'skinWeight' );
+		const original = position.count - cut.vertices;
+		for ( let added = 0; added < cut.vertices; added ++ ) {
+
+			// Each cut point lies on the edge it was cut from, with four normalised influences.
+			const [ from, to, t ] = cut.cuts.slice( added * 3, added * 3 + 3 );
+			const vertex = original + added;
+			for ( let axis = 0; axis < 3; axis ++ ) {
+
+				expect( position.getComponent( vertex, axis ) ).toBeCloseTo( position.getComponent( from, axis ) * ( 1 - t ) + position.getComponent( to, axis ) * t, 5 );
+
+			}
+			expect( t ).toBeGreaterThan( 0 );
+			expect( t ).toBeLessThan( 1 );
+			let sum = 0;
+			for ( let slot = 0; slot < 4; slot ++ ) sum += weights.getComponent( vertex, slot );
+			expect( sum ).toBeCloseTo( 1, 5 );
+			expect( joints.getComponent( vertex, 0 ) ).toBeLessThan( shapes.body.skeleton.bones.length );
+
+		}
+		// The tee's sleeve ends at 0.215 of the height along the outstretched arm.
+		fit.body.computeBoundingBox();
+		const bottom = Math.min( 0, fit.body.boundingBox.min.y );
+		const height = fit.body.boundingBox.max.y - bottom;
+		const key = ( x, y, z ) => `${Math.round( x * 1e5 )},${Math.round( y * 1e5 )},${Math.round( z * 1e5 )}`;
+		const onCuff = ( x, y ) => Math.abs( Math.abs( x ) / height - 0.215 ) < 1e-3 && ( y - bottom ) / height > 0.7;
+		// The bare skin's open edges on the cuff plane: edges of the triangles the body draws used once.
+		const index = fit.body.index.array;
+		const uses = new Map();
+		const point = ( vertex ) => key( position.getX( vertex ), position.getY( vertex ), position.getZ( vertex ) );
+		for ( let offset = 0; offset < index.length; offset += 3 ) for ( let side = 0; side < 3; side ++ ) {
+
+			const a = point( index[ offset + side ] ), b = point( index[ offset + ( side + 1 ) % 3 ] );
+			const edge = a < b ? `${a}|${b}` : `${b}|${a}`;
+			uses.set( edge, ( uses.get( edge ) ?? 0 ) + 1 );
+
+		}
+		const skinEdge = new Set();
+		for ( const [ edge, count ] of uses ) {
+
+			if ( count !== 1 ) continue;
+			for ( const end of edge.split( '|' ) ) {
+
+				const [ x, y ] = end.split( ',' ).map( ( value ) => Number( value ) / 1e5 );
+				if ( onCuff( x, y ) ) skinEdge.add( end );
+
+			}
+
+		}
+		// The tee's rim on the same plane: its inner edge sits on the skin, point for point.
+		const tee = fit.garments.find( ( garment ) => garment.slot === 'top' ).geometry;
+		const teePosition = tee.getAttribute( 'position' );
+		const shares = tee.getAttribute( 'garmentShares' );
+		const rimOnSkin = new Set();
+		let rimOnCuff = 0;
+		for ( let vertex = 0; vertex < teePosition.count; vertex ++ ) {
+
+			if ( shares.getW( vertex ) !== 1 ) continue;
+			const [ x, y, z ] = [ teePosition.getX( vertex ), teePosition.getY( vertex ), teePosition.getZ( vertex ) ];
+			if ( ! onCuff( x, y ) ) continue;
+			rimOnCuff ++;
+			const end = key( x, y, z );
+			if ( skinEdge.has( end ) ) rimOnSkin.add( end );
+
+		}
+		expect( skinEdge.size ).toBeGreaterThan( 12 );
+		expect( rimOnCuff ).toBeGreaterThan( skinEdge.size );
+		expect( [ ...skinEdge ].filter( ( end ) => ! rimOnSkin.has( end ) ) ).toEqual( [] );
+
+		// The same body and outfit cut the same way.
+		const again = await new Tailor().fit( await body( 'Regular_Male_FullBody.gltf' ), recipe );
+		expect( Array.from( again.body.index.array ) ).toEqual( Array.from( fit.body.index.array ) );
+		expect( Array.from( again.garments[ 0 ].geometry.getAttribute( 'position' ).array ) ).toEqual( Array.from( tee.getAttribute( 'position' ).array ) );
+
+	} );
+
+	it( 'cuts a sleeveless top\'s armhole on its curve, in from the underarm to the strap over the shoulder', async () => {
+
+		const model = await body( 'Regular_Female_FullBody.gltf' );
+		const base = defaultRecipe( 'regular-female' );
+		const fit = await new Tailor().fit( model, { ...base, outfit: { ...base.outfit, top: 'top-tank', pants: 'pants-shorts', footwear: 'none' } } );
+		fit.body.computeBoundingBox();
+		const bottom = Math.min( 0, fit.body.boundingBox.min.y );
+		const height = fit.body.boundingBox.max.y - bottom;
+		const tank = fit.garments.find( ( garment ) => garment.slot === 'top' ).geometry;
+		const position = tank.getAttribute( 'position' );
+		const shares = tank.getAttribute( 'garmentShares' );
+		const smooth = ( start, end, value ) => {
+
+			const t = Math.max( 0, Math.min( 1, ( value - start ) / ( end - start ) ) );
+			return t * t * ( 3 - 2 * t );
+
+		};
+		const off = [];
+		let rim = 0;
+		for ( let vertex = 0; vertex < position.count; vertex ++ ) {
+
+			if ( shares.getW( vertex ) !== 1 ) continue;
+			const x = Math.abs( position.getX( vertex ) ) / height, y = ( position.getY( vertex ) - bottom ) / height;
+			// The rim's skin side: on the armhole above the underarm, off the neck.
+			if ( y < 0.76 || y > 0.84 || x < 0.07 ) continue;
+			const curve = 0.106 - 0.028 * smooth( 0.742, 0.815, y );
+			rim ++;
+			if ( Math.abs( x - curve ) > 0.006 ) off.push( [ x, y, curve ].map( ( value ) => Math.round( value * 1000 ) / 1000 ) );
+
+		}
+		expect( rim ).toBeGreaterThan( 20 );
+		// The rim's outer edge stands its ease off the skin, a few thousandths of the height at most.
+		expect( off ).toEqual( [] );
 
 	} );
 
