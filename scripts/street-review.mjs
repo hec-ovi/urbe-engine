@@ -159,8 +159,9 @@ async function shots( world, file ) {
 		const p = nearest( ( q, piece ) => piece?.variant === 'core' && piece.zone === zone && piece.surfaces.includes( surface ) );
 		if ( p ) {
 
+			// Aimed at the middle of the near lanes, clear of any median island.
 			const half = profileWidth( kit, pieces.get( p.piece ) ) / 2;
-			add( name, surface, local( p, [ 2, half + 3 ], 0.2 ), local( p, [ 5, 0 ] ) );
+			add( name, surface, local( p, [ 2, half + 3 ], 0.2 ), local( p, [ 5, half / 2 ] ) );
 
 		}
 
@@ -178,7 +179,7 @@ async function shots( world, file ) {
 
 		const half = profileWidth( kit, pieces.get( court.piece ) ) / 2;
 		add( 'orange-hex-court-under-highway', 'hex-orange', local( court, [ 2, half + 2.5 ], 0.2 ), local( court, [ 6, 0 ] ) );
-		add( 'highway-deck-from-below', 'highway', local( court, [ 2, half + 6 ], 0.2 ), local( court, [ 4, 0 ], 7.5 ) );
+		add( 'highway-deck-from-below', 'highway', local( court, [ -2, half + 2.5 ], 0.2 ), local( court, [ 4, 0 ], 7.5 ) );
 
 	}
 	// Drains: the district inlet's flush grate and its slotted tread cover, from the walk beside them.
@@ -197,15 +198,20 @@ async function shots( world, file ) {
 	if ( stripe ) add( 'crossing-stripes', 'whitePaint', local( stripe, [ 1.35, -6 ], 0.2 ), local( stripe, [ 1.35, 0.25 ] ) );
 	const parking = nearest( ( q ) => q.piece.endsWith( '/parking-slot' ) );
 	if ( parking ) add( 'parking-bay', 'parking slot', local( parking, [ 3, 4 ], 0.2 ), local( parking, [ 3, 1 ] ) );
-	// Facades: each built poor and rich building, from across its street.
+	// Facades: each built poor and rich building, its street front aimed at from the far sidewalk of its street.
 	for ( const parcel of city.parcels.filter( ( q ) => manifest.sources?.[ q.id ] && manifest.sources[ q.id ] !== 'empty' ) ) {
 
 		if ( ! [ 'poor', 'rich', 'high_rich' ].includes( parcel.tier ) || ! parcel.footprint ) continue;
-		const [ cx, cz ] = middle( parcel.footprint ), access = parcel.access?.point ?? [ cx, cz ];
-		const out = [ access[ 0 ] - cx, access[ 1 ] - cz ], length = Math.hypot( ...out ) || 1;
-		const stand = [ access[ 0 ] + out[ 0 ] / length * 14, access[ 1 ] + out[ 1 ] / length * 14 ];
+		const edge = city.streets.edges.find( ( e ) => e.id === parcel.access?.edgeId );
+		if ( ! edge ) continue;
+		const access = parcel.access.point, road = nearestOnPath( edge.path, access );
+		// The footprint side nearest the street, aimed at its middle a storey and a half up.
+		const sides = parcel.footprint.map( ( a, i ) => { const b = parcel.footprint[ ( i + 1 ) % parcel.footprint.length ]; return [ ( a[ 0 ] + b[ 0 ] ) / 2, ( a[ 1 ] + b[ 1 ] ) / 2 ]; } );
+		const front = sides.sort( ( a, b ) => Math.hypot( a[ 0 ] - road[ 0 ], a[ 1 ] - road[ 1 ] ) - Math.hypot( b[ 0 ] - road[ 0 ], b[ 1 ] - road[ 1 ] ) )[ 0 ];
+		const out = [ road[ 0 ] - front[ 0 ], road[ 1 ] - front[ 1 ] ], length = Math.hypot( ...out ) || 1, across = edge.width / 2 + 2.8;
+		const stand = [ road[ 0 ] + out[ 0 ] / length * across, road[ 1 ] + out[ 1 ] / length * across ];
 		add( `${parcel.tier === 'poor' ? 'poor' : 'rich'}-facade-${parcel.id}`, `${parcel.type} ${parcel.tier}`,
-			[ round( stand[ 0 ] ), 0.2, round( stand[ 1 ] ) ], [ round( access[ 0 ] ), 6, round( access[ 1 ] ) ] );
+			[ round( stand[ 0 ] ), 0.2, round( stand[ 1 ] ) ], [ round( front[ 0 ] ), 6, round( front[ 1 ] ) ] );
 
 	}
 	await writeFile( file, `${JSON.stringify( list, null, 2 )}\n` );
@@ -218,6 +224,22 @@ function cornerOf( p, piece, local ) {
 
 	const xs = piece.footprint.flat().map( ( q ) => q[ 0 ] ), zs = piece.footprint.flat().map( ( q ) => q[ 1 ] );
 	return local( p, [ Math.max( ...xs ) + 2.5, Math.max( ...zs ) + 2.5 ], 0.2 );
+
+}
+
+/** The point of a polyline nearest `point`. */
+function nearestOnPath( path, point ) {
+
+	let best = path[ 0 ], distance = Infinity;
+	for ( let i = 1; i < path.length; i ++ ) {
+
+		const [ a, b ] = [ path[ i - 1 ], path[ i ] ], d = [ b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ] ], square = d[ 0 ] ** 2 + d[ 1 ] ** 2 || 1;
+		const t = Math.max( 0, Math.min( 1, ( ( point[ 0 ] - a[ 0 ] ) * d[ 0 ] + ( point[ 1 ] - a[ 1 ] ) * d[ 1 ] ) / square ) );
+		const q = [ a[ 0 ] + d[ 0 ] * t, a[ 1 ] + d[ 1 ] * t ], away = Math.hypot( q[ 0 ] - point[ 0 ], q[ 1 ] - point[ 1 ] );
+		if ( away < distance ) { best = q; distance = away; }
+
+	}
+	return best;
 
 }
 
