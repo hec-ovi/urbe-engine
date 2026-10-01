@@ -78,7 +78,7 @@ export class Interactor {
 
 		if ( this.conversation ) {
 
-			this.#facePlayer( this.conversation.person );
+			if ( this.conversation.person ) this.#facePlayer( this.conversation.person );
 			return null;
 
 		}
@@ -209,6 +209,21 @@ export class Interactor {
 	}
 
 	/**
+	 * A conversation over the phone: the person is wherever their day has
+	 * them and nobody stops, turns or holds their body, which goes on with its
+	 * day; `instance` and `behavior` are the person and what they are doing as
+	 * the talk tells them. Null when somebody is already talked to.
+	 */
+	call( { npcId, instance, behavior } ) {
+
+		if ( this.conversation ) return null;
+		this.conversation = { person: null, npcId, controlled: false, instance, behavior, call: true };
+		this.onConversation?.( this.conversation );
+		return this.conversation;
+
+	}
+
+	/**
 	 * Ends the conversation. A person an open quest step still names, or one
 	 * the host `keep`s (somebody who agreed to come along), stays where the
 	 * player found them; everybody else walks back into their day, the player
@@ -219,6 +234,14 @@ export class Interactor {
 		if ( ! this.conversation ) return;
 
 		const conversation = this.conversation;
+		if ( conversation.call ) {
+
+			// Hanging up leaves the person to the day they never left.
+			this.conversation = null;
+			this.onConversation?.( null );
+			return;
+
+		}
 		const { npcId, controlled } = conversation;
 		let { person } = conversation;
 		let actor = null;

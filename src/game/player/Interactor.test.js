@@ -642,3 +642,30 @@ it( 'closes a door the player opened with E once it has stood open five seconds'
 	expect( door.wanted ).toBe( 0 );
 } );
 
+
+it( 'holds a call as a conversation with nobody here: no body is stopped, turned or sent home, and only one talk at a time', () => {
+	const controller = { body: { feet: new THREE.Vector3() }, eye: new THREE.Vector3( 0, 1.7, 0 ), look: new THREE.Vector3( 0, 0, - 1 ), turnTo: vi.fn() };
+	const sim = { interrupt: vi.fn(), resume: vi.fn() };
+	const continuity = { beginConversation: vi.fn(), endConversation: vi.fn() };
+	const animations = { beginConversation: vi.fn(), endConversation: vi.fn() };
+	const interactor = new Interactor( { crowd: { within: () => [], memberForNpc: () => null }, doors: [], sim, controller, continuity, animations } );
+	const seen = [];
+	interactor.onConversation = ( conversation ) => seen.push( conversation );
+
+	const instance = { npcId: 'npc-ada', name: { given: 'Ada', family: 'Vance' } };
+	const call = interactor.call( { npcId: 'npc-ada', instance, behavior: { activity: 'home' } } );
+	expect( call ).toEqual( { person: null, npcId: 'npc-ada', controlled: false, instance, behavior: { activity: 'home' }, call: true } );
+	expect( interactor.call( { npcId: 'npc-kip', instance, behavior: null } ) ).toBeNull();
+	expect( interactor.talkTo( 'npc-kip', { timeMin: 600 } ) ).toBeNull();
+	expect( interactor.update( 1 / 60 ) ).toBeNull();
+
+	interactor.close( { timeMin: 610 } );
+	expect( interactor.conversation ).toBeNull();
+	expect( seen ).toEqual( [ call, null ] );
+	expect( sim.interrupt ).not.toHaveBeenCalled();
+	expect( sim.resume ).not.toHaveBeenCalled();
+	expect( continuity.beginConversation ).not.toHaveBeenCalled();
+	expect( continuity.endConversation ).not.toHaveBeenCalled();
+	expect( animations.endConversation ).not.toHaveBeenCalled();
+	expect( controller.turnTo ).not.toHaveBeenCalled();
+} );
