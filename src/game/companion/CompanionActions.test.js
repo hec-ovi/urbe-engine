@@ -92,6 +92,23 @@ describe( 'what a person may do for the player', () => {
 
 	} );
 
+	it( 'sends a person to somebody they know, stopping a step short of them on their own side', () => {
+
+		const game = setup();
+		const barista = game.talkTo();
+		const friend = game.continuity.appear( { npcId: game.friend, timeMin: AFTERNOON } );
+		expect( game.companion.acceptFromTool( { ...game.ask( barista ), kind: 'walk', placeId: game.friend } ) ).toMatchObject( { ok: true, kind: 'walk' } );
+		game.continuity.endConversation( { timeMin: AFTERNOON, hold: true } );
+		expect( game.frame( AFTERNOON, barista.position )[ 0 ] ).toMatchObject( { kind: 'errand', action: 'walk', notice: expect.stringContaining( 'Ada Ruiz' ) } );
+		const [ errand ] = game.continuity.serialize().errands;
+		const gap = Math.hypot( errand.target.position[ 0 ] - friend.position[ 0 ], errand.target.position[ 2 ] - friend.position[ 2 ] );
+		expect( gap ).toBeCloseTo( 1.2, 6 );
+		expect( Math.hypot( errand.target.position[ 0 ] - barista.position[ 0 ], errand.target.position[ 2 ] - barista.position[ 2 ] ) )
+			.toBeLessThan( Math.hypot( friend.position[ 0 ] - barista.position[ 0 ], friend.position[ 2 ] - barista.position[ 2 ] ) );
+		expect( game.companion.taskOf( barista.npcId ) ).toEqual( { kind: 'walking', place: 'Ada Ruiz' } );
+
+	} );
+
 	it( 'leads to a person by their target and paces the walk by who the leader is', () => {
 
 		const game = setup();

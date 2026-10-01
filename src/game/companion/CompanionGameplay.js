@@ -23,6 +23,8 @@ const DAY = 1440;
 const MODE = { follow: 'following', lead: 'leading' };
 /** Game minutes a person stays where an errand for the player takes them before going back to their day. */
 const ERRAND_MIN = { walk: 15, home: 60, work: 60, wait: 15, sit: 20 };
+/** How far short of a person someone sent to them stops, metres: a step, face to face. */
+const BESIDE = 1.2;
 /** The actions a person takes on their own for the player, once the talk is done. */
 const ERRANDS = new Set( [ 'walk', 'home', 'work', 'wait', 'sit' ] );
 /** What a person on each errand is doing for the player, as the talk tells them. */
@@ -457,7 +459,7 @@ export class CompanionGameplay {
 		if ( kind === 'work' ) return this.inside?.workSpot?.( npc ) ?? ( npc.job ? point( at( { kind: 'parcel', id: npc.job.parcelId } ) ) : null );
 		if ( ! destination ) return null;
 		const person = destination.target?.npcId ? this.continuity.actor( destination.target.npcId ) : null;
-		if ( person ) return point( person.position, person.place.kind === 'parcel' ? person.place.id : null, person.place.floor );
+		if ( person ) return point( beside( person.position, actor.position ), person.place.kind === 'parcel' ? person.place.id : null, person.place.floor );
 		if ( destination.target?.position ) return point( destination.target.position, destination.target.parcelId, destination.target.floor );
 		return point( at( destination.place ) );
 
@@ -716,5 +718,16 @@ function placeKey( place ) {
 function distance( a, b ) {
 
 	return Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ], b[ 2 ] - a[ 2 ] );
+
+}
+
+/** A step short of `position` on the side `from` comes from, at its height; `position` itself when they stand together. */
+function beside( position, from ) {
+
+	const dx = from[ 0 ] - position[ 0 ];
+	const dz = from[ 2 ] - position[ 2 ];
+	const away = Math.hypot( dx, dz );
+	if ( away <= BESIDE ) return [ ...position ];
+	return [ position[ 0 ] + dx / away * BESIDE, position[ 1 ], position[ 2 ] + dz / away * BESIDE ];
 
 }
