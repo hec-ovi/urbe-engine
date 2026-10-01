@@ -10,6 +10,8 @@ Builds Three.js node materials from the authored street surface catalog.
 
 A photographed surface shows its placement's wear, darker by up to 16 percent and rougher by up to 0.07 at full wear, and requires the wear field. Road paint (`whitePaint`, `yellowPaint`) takes its colour and roughness from the worn paint finish the binding publishes for its marking (`crosswalk-worn`, `lane-worn`, `PAINT_RESPONSE`), read in world metres at that finish's scale and bounded by its own roughness parameters, keeping its own mask, erosion and opacity; without that finish it keeps its tint and scalar roughness.
 
+`build(surfaceId, { worldUv: true })` samples a surface's maps in world metres at its own scale instead of its UVs, as a material of its own, for a part a placement scales.
+
 The [port schema](schema/ports.d.ts) defines optional road roughness, per copy values and geometry attributes. GLBs name the surface with material extras `streetNativeSurface`. The geometry supplies POSITION, NORMAL, TEXCOORD_0 and, where needed, `_STREET_WEAR` and `_STREET_HEIGHT`. GLTFLoader exposes custom attributes as `_street_wear` and `_street_height`. Wear is continuous across asphalt, parking and paint; height is relative to the source road datum. `assertGeometry(material, geometry)` checks required attributes and their vertex counts before admission.
 
 ## Rules

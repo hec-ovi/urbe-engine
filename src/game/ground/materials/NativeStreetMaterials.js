@@ -10,7 +10,7 @@ import { wearStreet } from '../../surface-detail/Weathering.js';
 
 const validate = new Ajv( { strict: true } ).compile( schema );
 const WRAPS = { repeat: RepeatWrapping, clamp: ClampToEdgeWrapping };
-const OPTIONS = [ 'roadRoughness', 'instances', 'scanCells' ];
+const OPTIONS = [ 'roadRoughness', 'instances', 'scanCells', 'worldUv' ];
 export const MATERIAL_RESOURCES = Symbol.for( 'urbe.material-resources' );
 /**
  * Road paint takes its roughness and colour from the worn paint finish the
@@ -52,7 +52,8 @@ export class NativeStreetMaterials {
 		if ( options.instances !== undefined && ( ! options.instances?.tint || ! options.instances.wear ) ) fail( 'Invalid street instance values' );
 		if ( options.scanCells !== undefined && ( ! Array.isArray( options.scanCells ) || ! options.instances?.scan
 			|| options.scanCells.some( id => ! this.binding.surfaces[ id ]?.maps?.basecolor ) ) ) fail( 'Invalid street scan atlas' );
-		const key = `${surfaceId}:${options.roadRoughness ?? ''}:${this.#instanceKey( options.instances )}`;
+		if ( options.worldUv !== undefined && typeof options.worldUv !== 'boolean' ) fail( 'Invalid street world sampling option' );
+		const key = `${surfaceId}:${options.roadRoughness ?? ''}:${this.#instanceKey( options.instances )}:${options.worldUv ? 'world' : ''}`;
 		if ( this.cache.has( key ) ) return this.cache.get( key );
 		const resources = new Map();
 		const samples = new NativeSamples( surface, this.binding.sampling.asphalt, id => {
@@ -60,7 +61,7 @@ export class NativeStreetMaterials {
 			resources.set( id, resource );
 			return resource.texture;
 		}, {
-			instances: options.instances, scanCells: options.scanCells?.map( id => this.binding.surfaces[ id ] ),
+			instances: options.instances, scanCells: options.scanCells?.map( id => this.binding.surfaces[ id ] ), worldUv: options.worldUv === true,
 			response: surface.effect === 'road-paint' ? this.#response( surfaceId ) : null
 		} );
 		const nodes = EFFECTS[ surface.effect ]( samples, surface.parameters, options );

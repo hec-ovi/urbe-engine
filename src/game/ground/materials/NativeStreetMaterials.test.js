@@ -63,6 +63,14 @@ describe( 'NativeStreetMaterials public surface', () => {
 		factory.dispose();
 	} );
 
+	it( 'samples a surface in world metres when a scaled part asks for it, as a material of its own', () => {
+		const factory = new NativeStreetMaterials( binding, loader() );
+		expect( factory.build( 'concrete', { worldUv: true } ) ).not.toBe( factory.build( 'concrete' ) );
+		expect( factory.build( 'concrete', { worldUv: true } ) ).toBe( factory.build( 'concrete', { worldUv: true } ) );
+		expect( () => factory.build( 'concrete', { worldUv: 'yes' } ) ).toThrow( /world sampling/ );
+		factory.dispose();
+	} );
+
 	it( 'lets a photographed surface show its placement wear, and requires the wear field for it', () => {
 		const factory = new NativeStreetMaterials( binding, loader() );
 		const geometry = new BufferGeometry();

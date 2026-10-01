@@ -119,11 +119,13 @@ describe( 'saved street kit runtime', () => {
 
 	it( 'draws a drain hatch as the slotted drain cover and leftover asphalt as patched, at their metre scales', async () => {
 		const binding = MANIFEST.materials.binding;
-		expect( drawnSurface( 'overlay/drain/0.7m', 'tread', binding ) ).toEqual( { surface: 'drainCover', uvScale: 2 } );
-		expect( drawnSurface( 'infill/asphalt', 'asphalt', binding ) ).toEqual( { surface: 'asphalt-patched', uvScale: 1 } );
+		expect( drawnSurface( 'overlay/drain/0.7m', 'tread', binding ) ).toEqual( { surface: 'drainCover', bucket: 'drainCover', uvScale: 2, worldUv: false } );
+		expect( drawnSurface( 'infill/asphalt', 'asphalt', binding ) ).toEqual( { surface: 'asphalt-patched', bucket: 'asphalt-patched', uvScale: 1, worldUv: false } );
+		// A scaled infill prism reads a metre-mapped finish in world metres, in a batch of its own.
+		expect( drawnSurface( 'infill/concrete', 'concrete', binding ) ).toEqual( { surface: 'concrete', bucket: 'concrete@world', uvScale: 1, worldUv: true } );
 		// Other parts keep their own surface, and a binding without the finish keeps the old one.
-		expect( drawnSurface( 'kerb/ordinary/walk', 'tread', binding ) ).toEqual( { surface: 'tread', uvScale: 1 } );
-		expect( drawnSurface( 'overlay/drain/0.7m', 'tread', { surfaces: { tread: {} } } ) ).toEqual( { surface: 'tread', uvScale: 1 } );
+		expect( drawnSurface( 'kerb/ordinary/walk', 'tread', binding ) ).toEqual( { surface: 'tread', bucket: 'tread', uvScale: 1, worldUv: false } );
+		expect( drawnSurface( 'overlay/drain/0.7m', 'tread', { surfaces: { tread: {} } } ) ).toEqual( { surface: 'tread', bucket: 'tread', uvScale: 1, worldUv: false } );
 		const world = bundle(), stream = new NativeStreetStream( world.source, world.materials );
 		await stream.update( { x: 200, z: 200 }, { radius: 16 } );
 		const hatch = stream.pieces.pieces.get( 'overlay/drain/0.7m' )?.surfaces.find( surface => surface.bucket === 'drainCover' );
@@ -386,10 +388,10 @@ describe( 'saved street kit runtime', () => {
 		const world = bundle(), stream = new NativeStreetStream( world.source, world.materials );
 		await stream.update( { x: 200, z: 200 }, { radius: 64 } );
 		const binding = world.manifest.materials.binding;
-		for ( const [ surfaceId, batch ] of stream.pieces.batches.batches ) {
+		for ( const [ bucket, batch ] of stream.pieces.batches.batches ) {
 			const geometry = batch.mesh.geometry;
 			const vertices = geometry.getAttribute( 'position' ).count;
-			for ( const [ name, itemSize ] of Object.entries( requiredAttributes( binding.surfaces[ surfaceId ].effect ) ) ) {
+			for ( const [ name, itemSize ] of Object.entries( requiredAttributes( binding.surfaces[ bucket.replace( /@world$/, '' ) ].effect ) ) ) {
 				expect( geometry.getAttribute( name ) ).toMatchObject( { itemSize, count: vertices } );
 			}
 		}
@@ -417,7 +419,7 @@ describe( 'saved street kit runtime', () => {
 		// What the loading counter counts: one compile per surface, not one per
 		// piece primitive that wears it.
 		expect( warmed ).toHaveLength( SURFACES.size );
-		expect( new Set( warmed ) ).toEqual( SURFACES );
+		expect( new Set( warmed ) ).toEqual( new Set( [ ...SURFACES ].map( bucket => bucket.replace( /@world$/, '' ) ) ) );
 		expect( stream.pieces.copyCount ).toBeGreaterThan( 0 );
 		await stream.update( { x: 232, z: 200 } );
 		expect( prepare ).toHaveBeenCalledOnce();

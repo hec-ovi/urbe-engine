@@ -158,7 +158,7 @@ export class StreetPieces {
 				originals.add( mesh.material );
 				// A part the binding now has a finer finish for draws with it.
 				const drawn = drawnSurface( entry.id, surfaceId, this.source.manifest.materials.binding );
-				const material = this.materials.build( drawn.surface, this.instances.options( drawn.surface ) );
+				const material = this.materials.build( drawn.surface, { ...this.instances.options( drawn.bucket ), ...( drawn.worldUv ? { worldUv: true } : {} ) } );
 				this.materials.assertGeometry( material, mesh.geometry );
 				for ( const resource of this.materials.resources( material ) ) resources.add( resource.ready );
 
@@ -168,7 +168,7 @@ export class StreetPieces {
 				if ( collides && entry.hasCollision ) pieceTriangles( mesh, triangles );
 
 				// Paint and scans lie flat on the road; only bodies cast shadows.
-				surfaces.push( { bucket: drawn.surface, geometry: rebased( mesh, drawn.uvScale ), material, castShadow: collides } );
+				surfaces.push( { bucket: drawn.bucket, geometry: rebased( mesh, drawn.uvScale ), material, castShadow: collides } );
 
 			} );
 

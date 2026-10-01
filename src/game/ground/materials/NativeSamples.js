@@ -3,11 +3,12 @@ import { attribute, clamp, dFdx, dFdy, floor, fract, mix, mx_noise_float, positi
 /** Authored UVs, a shared world-space asphalt sampling frame, and what each copy asks for itself. */
 export class NativeSamples {
 	/** @param response a surface whose maps answer this one's roughness and colour response, read in world metres (road paint) */
-	constructor( surface, asphalt, getTexture, { instances = null, scanCells = null, response = null } = {} ) {
+	/** @param worldUv a metre-mapped surface on a scaled part reads world metres at its own scale instead of its UVs */
+	constructor( surface, asphalt, getTexture, { instances = null, scanCells = null, response = null, worldUv = false } = {} ) {
 		this.surface = surface;
 		this.asphalt = asphalt;
 		this.getTexture = getTexture;
-		this.uv = surface.uv.mode === 'world-xz' ? positionWorld.xz.div( vec2( ...surface.uv.scale ) )
+		this.uv = surface.uv.mode === 'world-xz' || worldUv ? positionWorld.xz.div( vec2( ...( surface.uv.scale ?? [ 1, 1 ] ) ) )
 			: surface.uv.mode === 'metres' ? uv().div( vec2( ...surface.uv.scale ) ) : uv();
 		this.height = attribute( '_street_height', 'float' );
 		// The pieces bake a neutral wear field and each placement carries the

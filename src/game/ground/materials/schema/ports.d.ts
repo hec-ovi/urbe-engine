@@ -26,6 +26,8 @@ export interface NativeMaterialOptions {
 	instances?: NativeInstanceValues;
 	/** The four surfaces whose maps the scan quad picks between; needs `instances.scan`. */
 	scanCells?: string[];
+	/** Sample the maps in world metres at the surface's own scale instead of its UVs, for a part a placement scales. */
+	worldUv?: boolean;
 }
 export interface NativeTextureSourceOptions {
 	baseUrl?: string;
