@@ -7,6 +7,7 @@ import { requiredAttributes } from '../materials/NativeGeometry.js';
 import { NativeStreetStream } from './NativeStreetStream.js';
 import { placementMatrix } from './StreetCells.js';
 import { streetBundle } from './street-bundle.fixture.js';
+import { drawnSurface, drawnSurfaces } from './StreetRoutes.js';
 
 // The real bundle Streets publishes for the fixture city: the shared 187 piece
 // catalogue and this city's own placements over nine cells.
@@ -15,7 +16,7 @@ let ROOT, MANIFEST, SURFACES;
 beforeAll( async () => {
 	const built = await streetBundle();
 	ROOT = built.root; MANIFEST = built.manifest;
-	SURFACES = new Set( MANIFEST.kit.pieces.flatMap( piece => piece.surfaces ) );
+	SURFACES = new Set( MANIFEST.kit.pieces.flatMap( piece => drawnSurfaces( piece, MANIFEST.materials.binding ) ) );
 }, 120_000 );
 
 function bundle( manifest = structuredClone( MANIFEST ) ) {
@@ -116,6 +117,24 @@ describe( 'saved street kit runtime', () => {
 		expect( () => stream.update( { x: 0, z: 0 } ) ).toThrow( /disposed/ );
 	} );
 
+	it( 'draws a drain hatch as the slotted drain cover and leftover asphalt as patched, at their metre scales', async () => {
+		const binding = MANIFEST.materials.binding;
+		expect( drawnSurface( 'overlay/drain/0.7m', 'tread', binding ) ).toEqual( { surface: 'drainCover', uvScale: 2 } );
+		expect( drawnSurface( 'infill/asphalt', 'asphalt', binding ) ).toEqual( { surface: 'asphalt-patched', uvScale: 1 } );
+		// Other parts keep their own surface, and a binding without the finish keeps the old one.
+		expect( drawnSurface( 'kerb/ordinary/walk', 'tread', binding ) ).toEqual( { surface: 'tread', uvScale: 1 } );
+		expect( drawnSurface( 'overlay/drain/0.7m', 'tread', { surfaces: { tread: {} } } ) ).toEqual( { surface: 'tread', uvScale: 1 } );
+		const world = bundle(), stream = new NativeStreetStream( world.source, world.materials );
+		await stream.update( { x: 200, z: 200 }, { radius: 16 } );
+		const hatch = stream.pieces.pieces.get( 'overlay/drain/0.7m' )?.surfaces.find( surface => surface.bucket === 'drainCover' );
+		expect( hatch ).toBeDefined();
+		// The 2 x 2 m hatch's own 0..1 square now runs 0..2 m.
+		const uv = hatch.geometry.getAttribute( 'uv' );
+		expect( Math.max( ...uv.array ) ).toBeCloseTo( 2, 3 );
+		expect( hatch.material.userData.streetNativeSurface ).toBe( 'drainCover' );
+		stream.dispose();
+	} );
+
 	it( 'appends a cell\'s copies to the shared batches and takes them out again', async () => {
 		const world = bundle(), stream = new NativeStreetStream( world.source, world.materials );
 		await stream.update( { x: 200, z: 200 }, { radius: 16 } );
@@ -131,7 +150,7 @@ describe( 'saved street kit runtime', () => {
 			const piece = pieces.get( placement.piece );
 			expect( handle.parts ).toHaveLength( piece.surfaces.length );
 			expect( new Set( handle.parts.map( part => part.batch.name ) ) )
-				.toEqual( new Set( piece.surfaces.map( surface => `street-pieces:${surface}` ) ) );
+				.toEqual( new Set( drawnSurfaces( piece, MANIFEST.materials.binding ).map( surface => `street-pieces:${surface}` ) ) );
 			expect( handle.instances.every( Number.isInteger ) ).toBe( true );
 		}
 

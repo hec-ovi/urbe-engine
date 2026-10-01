@@ -6,6 +6,7 @@ import { MaterialBatches } from '../../city/kit/MaterialBatches.js';
 import { byteHash } from '../native/NativeStreetChecks.js';
 import { StreetInstances } from './StreetInstances.js';
 import { streetPieceBoxes } from './StreetPieceBoxes.js';
+import { drawnSurface } from './StreetRoutes.js';
 
 const LOAD_CONCURRENCY = 8;
 
@@ -155,7 +156,9 @@ export class StreetPieces {
 
 				}
 				originals.add( mesh.material );
-				const material = this.materials.build( surfaceId, this.instances.options( surfaceId ) );
+				// A part the binding now has a finer finish for draws with it.
+				const drawn = drawnSurface( entry.id, surfaceId, this.source.manifest.materials.binding );
+				const material = this.materials.build( drawn.surface, this.instances.options( drawn.surface ) );
 				this.materials.assertGeometry( material, mesh.geometry );
 				for ( const resource of this.materials.resources( material ) ) resources.add( resource.ready );
 
@@ -165,7 +168,7 @@ export class StreetPieces {
 				if ( collides && entry.hasCollision ) pieceTriangles( mesh, triangles );
 
 				// Paint and scans lie flat on the road; only bodies cast shadows.
-				surfaces.push( { bucket: surfaceId, geometry: rebased( mesh ), material, castShadow: collides } );
+				surfaces.push( { bucket: drawn.surface, geometry: rebased( mesh, drawn.uvScale ), material, castShadow: collides } );
 
 			} );
 
@@ -190,12 +193,19 @@ export class StreetPieces {
 
 }
 
-/** One primitive in its piece's own metres: the vertices it draws, dequantized. */
-function rebased( mesh ) {
+/** One primitive in its piece's own metres: the vertices it draws, dequantized, its UVs scaled to the finish it draws with. */
+function rebased( mesh, uvScale = 1 ) {
 
 	const geometry = compact( mesh.geometry );
 	plain( geometry, 'position' );
 	geometry.applyMatrix4( mesh.matrixWorld );
+	if ( uvScale !== 1 && geometry.getAttribute( 'uv' ) ) {
+
+		plain( geometry, 'uv' );
+		const uv = geometry.getAttribute( 'uv' );
+		for ( let index = 0; index < uv.array.length; index ++ ) uv.array[ index ] *= uvScale;
+
+	}
 
 	return geometry;
 

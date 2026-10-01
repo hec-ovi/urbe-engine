@@ -1,4 +1,5 @@
 import { StreetInstanceTable } from './StreetInstanceTable.js';
+import { drawnSurfaces } from './StreetRoutes.js';
 
 /**
  * Which surface reads which placement value, and the table behind each one.
@@ -22,7 +23,8 @@ export class StreetInstances {
 
 		for ( const placement of placements ) {
 
-			const surfaces = pieces.get( placement.piece )?.surfaces ?? [];
+			const piece = pieces.get( placement.piece );
+			const surfaces = piece ? drawnSurfaces( piece, binding ) : [];
 			if ( placement.scan ) for ( const id of surfaces ) scan.add( id );
 			if ( placement.text?.length ) {
 
@@ -36,7 +38,7 @@ export class StreetInstances {
 
 		}
 		this.scanAtlas = kit.scanAtlas;
-		this.tables = new Map( [ ...new Set( kit.pieces.flatMap( piece => piece.surfaces ) ) ]
+		this.tables = new Map( [ ...new Set( kit.pieces.flatMap( piece => drawnSurfaces( piece, binding ) ) ) ]
 			.map( id => [ id, new StreetInstanceTable( { scan: scan.has( id ), glyphs: glyphs.get( id ) ?? 0 } ) ] ) );
 		this.byBatch = new Map();
 
