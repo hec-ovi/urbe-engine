@@ -1,15 +1,13 @@
 import { el } from '../components/dom.js';
-import { keyCap } from '../components/KeyCap.js';
 import { menuButton } from '../components/MenuButton.js';
-import { fractureLogo } from '../components/FractureLogo.js';
 import menu from '../views/game-menu.json' with { type: 'json' };
 
 /**
- * The pause screen, up while the world holds: one sheet over the dimmed city
- * with the Fracture wordmark, a small eyebrow over the title and its note,
- * the sections of [game-menu.json](../views/game-menu.json) as rows of a name
- * and its key (what each does is its tooltip and description), how saving
- * goes, then the keys to play with. It rises in as it opens.
+ * The pause bar, up while the world holds: one slim strip along the top that
+ * leaves the view clear, saying the session is paused and how to play on,
+ * with the entries of [game-menu.json](../views/game-menu.json)'s pause
+ * section (Resume, Save, Leave) as compact buttons with their keys and how
+ * saving goes. The panels are reached from the dock that comes up with it.
  * props: { onResume(), onOpen( name ), onSave(), onLeave() }
  */
 export class PauseMenu {
@@ -20,30 +18,21 @@ export class PauseMenu {
 		this.buttons = new Map();
 		const title = el( 'h2', { className: 'hud-pause-title', id: 'pause-title', textContent: menu.pause.title } );
 		this.status = el( 'p', { className: 'hud-pause-status', role: 'status' } );
+		const entries = menu.pause.sections.flatMap( ( section ) => section.entries );
 
 		this.element = el( 'div', { className: 'hud-pause' },
-			el( 'div', { className: 'hud-pause-card' },
-				el( 'div', { className: 'hud-pause-brand' }, fractureLogo() ),
-				el( 'p', { className: 'hud-pause-eyebrow', textContent: menu.pause.eyebrow } ),
-				title,
-				el( 'p', { className: 'hud-pause-note', textContent: menu.pause.note } ),
-				el( 'div', { className: 'hud-pause-sections' }, ...menu.pause.sections.map( ( section ) => el( 'section', { className: 'hud-pause-section' },
-					el( 'h3', { className: 'hud-pause-heading', textContent: section.title } ),
-					...section.entries.map( ( id ) => this.#entry( id, actions[ id ] ?? ( () => onOpen( id ) ) ) )
-				) ) ),
-				this.status,
-				el( 'p', { className: 'hud-pause-keys' }, ...menu.pause.keys.map( ( { keys, action } ) => el( 'span', {},
-					...keys.map( keyCap ), ` ${action}`
-				) ) )
+			el( 'div', { className: 'hud-pause-bar' },
+				el( 'div', { className: 'hud-pause-head' },
+					el( 'p', { className: 'hud-pause-eyebrow', textContent: menu.pause.eyebrow } ),
+					title,
+					el( 'p', { className: 'hud-pause-note', textContent: menu.pause.note } )
+				),
+				el( 'div', { className: 'hud-pause-actions' }, ...entries.map( ( id ) => this.#entry( id, actions[ id ] ?? ( () => onOpen( id ) ) ) ) ),
+				this.status
 			)
 		);
-		this.element.setAttribute( 'role', 'dialog' );
+		this.element.setAttribute( 'role', 'region' );
 		this.element.setAttribute( 'aria-labelledby', title.id );
-		this.element.addEventListener( 'click', ( event ) => {
-
-			if ( event.target === this.element ) onResume();
-
-		} );
 		this.setSave( 'ready' );
 
 	}

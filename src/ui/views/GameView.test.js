@@ -32,16 +32,16 @@ describe( 'GameView', () => {
 		expect( document.activeElement ).toBe( view.inspection.done );
 	} );
 
-	it( 'opens panels from the pause menu, keeps the dock up with the menu or a panel, plays on from it, and opens QUESTS from the objective', async () => {
+	it( 'opens panels from the dock that comes up with the pause bar, keeps it up with the bar or a panel, plays on from it, and opens QUESTS from the objective', async () => {
 
 		const user = userEvent.setup();
 		expect( view.dock.element.hidden ).toBe( true );
 
-		// The panels are reached from the pause menu and the dock that comes up with it.
+		// The panels are reached from the dock that comes up with the pause bar.
 		view.setPaused( true );
 		expect( view.pause.element.hidden ).toBe( false );
 		expect( view.dock.element.hidden ).toBe( false );
-		await user.click( within( view.pause.element ).getByRole( 'button', { name: 'Map' } ) );
+		await user.click( within( view.dock.element ).getByRole( 'button', { name: 'Map' } ) );
 		expect( view.map.element.hidden ).toBe( false );
 		expect( view.pause.element.hidden ).toBe( true );
 		expect( view.dock.element.hidden ).toBe( false );

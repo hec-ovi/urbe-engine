@@ -1,36 +1,39 @@
-/* The pause menu: one sheet over the dimmed, held city, rows of a name and
-   its key, Resume lit in cyan. It rises in on the compositor; nothing blurs
-   the world under it. */
+/* The pause bar: one slim strip along the top while the city holds, so the
+   view stays clear; Resume lit in cyan, Save and Leave beside it, how saving
+   goes under them. It drops in on the compositor; nothing dims or blurs the
+   world, and only the strip takes the pointer. */
 
 .hud-pause {
 	position: absolute;
-	inset: 0;
-	display: grid;
-	place-items: center;
-	padding: 20px;
-	overflow-y: auto;
-	pointer-events: auto;
-	background: rgba(1, 15, 20, 0.52);
+	top: 18px;
+	left: 50%;
+	z-index: 4;
+	width: max-content;
+	max-width: calc(100% - 32px);
+	transform: translateX(-50%);
+	pointer-events: none;
 	color: var(--screen-text);
 	font-family: var(--screen-font);
 	text-shadow: none;
 }
 
-.hud-pause-card {
+.hud-pause-bar {
 	position: relative;
-	width: min(420px, 100%);
-	max-height: 100%;
-	padding: 26px 26px 20px;
-	overflow-y: auto;
+	display: grid;
+	grid-template-columns: auto auto;
+	align-items: center;
+	gap: 6px 22px;
+	padding: 12px 14px 12px 18px;
 	border: 1px solid rgba(111, 227, 213, 0.34);
 	border-top-color: var(--screen-cyan);
-	background: rgba(5, 34, 38, 0.96);
-	box-shadow: 0 18px 50px rgba(0, 0, 0, 0.3);
-	animation: pause-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+	background: rgba(5, 34, 38, 0.92);
+	box-shadow: 0 12px 34px rgba(0, 0, 0, 0.3);
+	pointer-events: auto;
+	animation: pause-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
-.hud-pause-card::before,
-.hud-pause-card::after {
+.hud-pause-bar::before,
+.hud-pause-bar::after {
 	content: "";
 	position: absolute;
 	width: 7px;
@@ -38,79 +41,66 @@
 	pointer-events: none;
 }
 
-.hud-pause-card::before {
+.hud-pause-bar::before {
 	top: -1px;
 	left: -1px;
 	border-top: 1px solid var(--screen-cyan);
 	border-left: 1px solid var(--screen-cyan);
 }
 
-.hud-pause-card::after {
+.hud-pause-bar::after {
 	right: -1px;
 	bottom: -1px;
 	border-right: 1px solid var(--screen-cyan);
 	border-bottom: 1px solid var(--screen-cyan);
 }
 
-.hud-pause-brand {
-	margin-bottom: 18px;
-	line-height: 0;
-	--fracture-width: 92px;
+.hud-pause-head {
+	display: grid;
+	gap: 2px;
+	min-width: 0;
 }
 
 .hud-pause-eyebrow {
 	margin: 0;
 	color: var(--screen-cyan);
-	font: 11px var(--screen-mono);
+	font: 10px var(--screen-mono);
 	letter-spacing: 0.16em;
 	text-transform: uppercase;
 }
 
 .hud-pause-title {
-	margin: 10px 0 6px;
+	margin: 0;
 	color: var(--screen-text);
-	font: 300 34px/1.1 var(--screen-font);
-	letter-spacing: -0.04em;
+	font: 300 20px/1.1 var(--screen-font);
+	letter-spacing: -0.02em;
 }
 
 .hud-pause-note {
-	margin: 0 0 20px;
+	margin: 0;
 	color: #a0c0c1;
-	font-size: 14px;
-	line-height: 1.5;
+	font-size: 12px;
+	line-height: 1.4;
 }
 
-.hud-pause-sections {
-	display: grid;
-	gap: 14px;
-}
-
-.hud-pause-section {
-	display: grid;
+.hud-pause-actions {
+	display: flex;
 	gap: 6px;
-}
-
-.hud-pause-heading {
-	margin: 0 0 2px;
-	color: #7fa6a2;
-	font: 11px var(--screen-mono);
-	letter-spacing: 0.15em;
-	text-transform: uppercase;
 }
 
 .hud-pause .menu-action {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	min-height: 44px;
-	padding: 10px 12px;
+	gap: 10px;
+	min-height: 36px;
+	padding: 6px 12px;
 	border: 1px solid rgba(152, 204, 207, 0.2);
 	background: rgba(12, 33, 41, 0.7);
 	color: #d9e8e8;
 	clip-path: none;
 	text-shadow: none;
-	transition: background 0.16s, border-color 0.16s, transform 0.16s;
+	white-space: nowrap;
+	transition: background 0.16s, border-color 0.16s;
 }
 
 .hud-pause .menu-action-mark {
@@ -118,7 +108,7 @@
 }
 
 .hud-pause .menu-action-label {
-	font: 400 16px var(--screen-font);
+	font: 400 14px var(--screen-font);
 	letter-spacing: 0;
 	text-transform: none;
 }
@@ -138,7 +128,6 @@
 	border-color: #668f92;
 	background: #17323a;
 	color: var(--screen-text);
-	transform: translateX(2px);
 }
 
 .hud-pause .menu-action:focus-visible {
@@ -170,16 +159,14 @@
 }
 
 .hud-pause .menu-action-chevron {
-	align-self: center;
-	opacity: 0.6;
-	font-size: 20px;
-	line-height: 1;
+	display: none;
 }
 
 .hud-pause-status {
-	margin: 14px 0 0;
+	grid-column: 1 / -1;
+	margin: 0;
 	color: #a0c0c1;
-	font: 13px/1.6 var(--screen-mono);
+	font: 11px/1.4 var(--screen-mono);
 }
 
 .hud-pause-status[data-state="saved"] {
@@ -190,36 +177,28 @@
 	color: var(--screen-danger);
 }
 
-.hud-pause-keys {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px 18px;
-	margin: 16px 0 0;
-	padding-top: 14px;
-	border-top: 1px solid rgba(111, 227, 213, 0.2);
-	color: #a0c0c1;
-	font-size: 13px;
+@keyframes pause-in {
+	0% { opacity: 0; transform: translate3d(0, -12px, 0); }
+	70% { opacity: 1; transform: translate3d(0, 2px, 0); }
+	100% { opacity: 1; transform: none; }
 }
 
-@keyframes pause-in {
-	0% { opacity: 0; transform: translate3d(0, 16px, 0) scale(0.98); }
-	60% { opacity: 1; transform: translate3d(-3px, 0, 0) scale(1); }
-	100% { opacity: 1; transform: none; }
+@media (max-width: 760px) {
+
+	.hud-pause-bar {
+		grid-template-columns: 1fr;
+	}
+
 }
 
 @media (prefers-reduced-motion: reduce) {
 
-	.hud-pause-card {
+	.hud-pause-bar {
 		animation: none;
 	}
 
 	.hud-pause .menu-action {
 		transition: none;
-	}
-
-	.hud-pause .menu-action:hover:not(:disabled),
-	.hud-pause .menu-action:focus-visible {
-		transform: none;
 	}
 
 }

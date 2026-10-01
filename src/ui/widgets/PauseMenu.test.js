@@ -30,36 +30,35 @@ describe( 'PauseMenu', () => {
 
 	} );
 
-	it( 'lays out labelled sections, each entry saying what it does, and focuses Resume when it opens', () => {
+	it( 'is a slim bar of Resume, Save and Leave that says the city waits, each entry saying what it does, and focuses Resume when it opens', () => {
 
 		pause.setVisible( true );
-		const dialog = screen.getByRole( 'dialog', { name: 'Paused' } );
-		expect( [ ...dialog.querySelectorAll( 'h3' ) ].map( ( heading ) => heading.textContent ) ).toEqual( [ 'Play', 'Your story', 'Game' ] );
-		const journal = screen.getByRole( 'button', { name: 'Journal' } );
-		expect( journal.textContent ).toBe( 'JournalYour stories, your current goal and where it is.J' );
+		const bar = screen.getByRole( 'region', { name: 'Paused' } );
+		expect( within( bar ).getAllByRole( 'button' ).map( ( button ) => button.dataset.entry ) ).toEqual( [ 'resume', 'save', 'LEAVE' ] );
+		// The panels live in the dock now: the bar covers none of the view with them.
+		expect( within( bar ).queryByRole( 'button', { name: 'Journal' } ) ).toBeNull();
+		expect( within( bar ).getByText( 'Session paused' ) ).toBeTruthy();
+		expect( within( bar ).getByText( 'The city waits. Click the view or press Esc to play on.' ) ).toBeTruthy();
+		const leave = screen.getByRole( 'button', { name: 'Leave' } );
+		expect( leave.title ).toBe( 'Back to the main menu. A saved game saves first.' );
+		expect( leave.getAttribute( 'aria-describedby' ) ).toBe( 'pause-leave-detail' );
 		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'Resume' } ) );
-		screen.getByRole( 'button', { name: 'Map' } ).focus();
+		leave.focus();
 		pause.setVisible( true );
-		expect( document.activeElement ).toBe( screen.getByRole( 'button', { name: 'Map' } ) );
-		expect( within( dialog ).getByText( 'walk' ) ).toBeTruthy();
-		expect( within( dialog ).getByText( 'Session paused' ) ).toBeTruthy();
-		expect( journal.title ).toBe( 'Your stories, your current goal and where it is.' );
-		expect( journal.getAttribute( 'aria-describedby' ) ).toBe( 'pause-quests-detail' );
+		expect( document.activeElement ).toBe( leave );
 
 	} );
 
-	it( 'reports resume, each panel by name, save and leave, and resumes from a click beside the menu', async () => {
+	it( 'reports resume, save and leave, and leaves a click beside the bar to the world', async () => {
 
 		const user = userEvent.setup();
 		pause.setVisible( true );
 		await user.click( screen.getByRole( 'button', { name: 'Resume' } ) );
-		await user.click( screen.getByRole( 'button', { name: 'Journal' } ) );
-		await user.click( screen.getByRole( 'button', { name: 'Settings' } ) );
 		await user.click( screen.getByRole( 'button', { name: 'Save' } ) );
 		await user.click( screen.getByRole( 'button', { name: 'Leave' } ) );
 		await user.click( pause.element );
-		expect( onResume ).toHaveBeenCalledTimes( 2 );
-		expect( onOpen.mock.calls ).toEqual( [ [ 'QUESTS' ], [ 'SETTINGS' ] ] );
+		expect( onResume ).toHaveBeenCalledOnce();
+		expect( onOpen ).not.toHaveBeenCalled();
 		expect( onSave ).toHaveBeenCalledOnce();
 		expect( onLeave ).toHaveBeenCalledOnce();
 

@@ -18,18 +18,11 @@
   "pause": {
     "eyebrow": "Session paused",
     "title": "Paused",
-    "note": "The city waits. Nothing moves until you resume.",
+    "note": "The city waits. Click the view or press Esc to play on.",
     "sections": [
-      { "title": "Play", "entries": ["resume"] },
-      { "title": "Your story", "entries": ["QUESTS", "MAP", "INVENTORY", "CODEX"] },
-      { "title": "Game", "entries": ["SETTINGS", "CONTROLS", "save", "LEAVE"] }
+      { "title": "Paused", "entries": ["resume", "save", "LEAVE"] }
     ],
-    "keys": [
-      { "keys": ["W", "A", "S", "D"], "action": "walk" },
-      { "keys": ["Shift"], "action": "run" },
-      { "keys": ["E"], "action": "talk, open, use" },
-      { "keys": ["Esc"], "action": "this menu" }
-    ],
+    "keys": [],
     "save": {
       "ready": "Keep your progress now.",
       "saving": "Saving…",
