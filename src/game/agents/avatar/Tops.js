@@ -239,7 +239,7 @@ export const TOPS = [
 
 		}
 	}
-];
+].map( constructTop );
 
 /**
  * Where each top covers, for a body that paints it on (the crowd): its hem
@@ -338,5 +338,255 @@ function smoothstep( start, end, value ) {
 
 	const t = Math.max( 0, Math.min( 1, ( value - start ) / ( end - start ) ) );
 	return t * t * ( 3 - 2 * t );
+
+}
+
+/** Small sewn folds sit inside each cut's ease; tight layers keep a quiet surface. */
+const TOP_CONSTRUCTION = {
+	'tech-top': { hem: 0.57, hemFold: 0.0006, cuff: 0.336, cuffFold: 0.0005, elbow: 0.0006 },
+	'police-jacket': { hem: 0.542, hemFold: 0.0012, cuff: 0.343, cuffFold: 0.001, elbow: 0.0014, pocket: 0.0015 },
+	'office-jacket': { hem: 0.559, hemFold: 0.0008, cuff: 0.304, cuffFold: 0.0005, elbow: 0.0007 },
+	'top-tee': { hem: 0.568, hemFold: 0.002, cuff: 0.215, cuffFold: 0.001 },
+	'top-tank': { hem: 0.568, hemFold: 0.0009 },
+	'top-turtleneck': { hem: 0.573, hemFold: 0.0008, cuff: 0.336, cuffFold: 0.0007, elbow: 0.0008 },
+	'jacket-cropped': { hem: 0.635, hemFold: 0.0015, cuff: 0.3, cuffFold: 0.0014, elbow: 0.0012 },
+	'vest-tailored': { hem: 0.576, hemFold: 0.0005 },
+	'shirt-utility': { hem: 0.547, hemFold: 0.0018, cuff: 0.286, cuffFold: 0.0013, elbow: 0.0013, pocket: 0.0022 },
+	'jacket-bomber': { hem: 0.605, hemFold: 0.0028, cuff: 0.336, cuffFold: 0.0022, elbow: 0.0018 }
+};
+
+/**
+ * Construction belongs to the pattern, so it is fitted once on the existing
+ * vertices and follows their original skin weights. No pose-time deformation.
+ */
+function constructTop( pattern ) {
+
+	const relief = ( context ) => topConstruction( pattern.id, context );
+	const sample = {};
+	return {
+		...pattern,
+		prepare: prepareTopDrape,
+		offset( context ) { return pattern.offset.call( this, context ) + relief( context ); },
+		normal( context, out ) {
+
+			pattern.normal?.call( this, context, out );
+			constructionNormal( context, out, relief, sample );
+
+		}
+	};
+
+}
+
+function topConstruction( id, ctx ) {
+
+	const cut = TOP_CONSTRUCTION[ id ];
+	const ax = Math.abs( ctx.x );
+	const torso = torsoShare( ctx );
+	const arm = armShare( ctx );
+	const facing = Math.abs( ctx.nz );
+	// An angled shallow break above the sewn hem, not horizontal rings round
+	// the anatomy. Side tension shifts it upward, with a smaller return fold.
+	const hemLine = cut.hem + 0.031 + ax * 0.1 + ctx.z * 0.025;
+	let relief = cut.hemFold * torso * facing * band( ctx.y, cut.hem + 0.009, cut.hem + 0.093, 0.012 )
+		* ( softRidge( ctx.y, hemLine, 0.012 ) - 0.38 * softRidge( ctx.y, hemLine + 0.019, 0.014 ) );
+	if ( cut.cuff ) {
+
+		const cuff = cut.cuff - 0.023 + ctx.z * 0.12;
+		relief += cut.cuffFold * arm * band( ax, cut.cuff - 0.062, cut.cuff - 0.005, 0.009 )
+			* ( softRidge( ax, cuff, 0.008 ) - 0.32 * softRidge( ax, cuff - 0.014, 0.009 ) );
+
+	}
+	if ( cut.elbow ) {
+
+		const elbow = 0.252 + ctx.z * 0.15;
+		relief += cut.elbow * arm * ( 0.3 + facing * 0.7 )
+			* ( softRidge( ax, elbow, 0.014 ) - 0.35 * softRidge( ax, elbow + 0.022, 0.015 ) );
+
+	}
+	if ( cut.pocket ) {
+
+		relief += cut.pocket * front( ctx ) * torso * band( ax, 0.03, 0.073, 0.009 )
+			* softRidge( ctx.y, 0.747, 0.006 );
+
+	}
+	return relief;
+
+}
+
+function softRidge( value, center, width ) {
+
+	const distance = ( value - center ) / width;
+	return Math.exp( - distance * distance );
+
+}
+
+/** Normal of the added rest-surface relief, projected into the source tangent plane. */
+function constructionNormal( ctx, out, relief, sample ) {
+
+	// Own properties keep the six finite-difference samples on one stable
+	// object shape. A fresh prototype per vertex made these reads megamorphic.
+	// Each call is synchronous; the descriptor's scratch never crosses a yield.
+	Object.assign( sample, ctx );
+	const step = 0.0002;
+	sample.x = ctx.x + step;
+	const highX = relief( sample );
+	sample.x = ctx.x - step;
+	const dx = ( highX - relief( sample ) ) / ( 2 * step );
+	sample.x = ctx.x;
+	sample.y = ctx.y + step;
+	const highY = relief( sample );
+	sample.y = ctx.y - step;
+	const dy = ( highY - relief( sample ) ) / ( 2 * step );
+	sample.y = ctx.y;
+	sample.z = ctx.z + step;
+	const highZ = relief( sample );
+	sample.z = ctx.z - step;
+	const dz = ( highZ - relief( sample ) ) / ( 2 * step );
+	sample.z = ctx.z;
+	const along = 0 + dx * ctx.nx + dy * ctx.ny + dz * ctx.nz;
+	out[ 0 ] -= dx - ctx.nx * along;
+	out[ 1 ] -= dy - ctx.ny * along;
+	out[ 2 ] -= dz - ctx.nz * along;
+
+}
+
+/** How much a cut hangs from the chest, rather than following each body hollow. */
+const TOP_DRAPE = {
+	'tech-top': { front: 0.3, waist: 0.8 },
+	'police-jacket': { front: 0.94, waist: 0.94 },
+	'office-jacket': { front: 0.82, waist: 0.87 },
+	'top-tee': { front: 0.94, waist: 0.94 },
+	'top-tank': { front: 0.64, waist: 0.84 },
+	'top-turtleneck': { front: 0.5, waist: 0.83 },
+	'jacket-cropped': { front: 0.9, waist: 0.96 },
+	'vest-tailored': { front: 0.76, waist: 0.87 },
+	'shirt-utility': { front: 0.98, waist: 0.96 },
+	'jacket-bomber': { front: 0.96, waist: 0.97 }
+};
+
+/**
+ * Cloth spans the chest and hangs towards its hem. Measure the shaped body's
+ * front envelope once: one front convex section per height, then a gentle
+ * chest-to-hem span under it. It only pushes outward and never changes coverage.
+ * Tight layers retain more of the original figure than woven outer garments.
+ */
+function prepareTopDrape( contexts, faces ) {
+
+	const config = TOP_DRAPE[ this.id ];
+	const hem = TOP_CONSTRUCTION[ this.id ].hem;
+	const source = [ ...new Set( faces ) ].map( ( index ) => contexts[ index ] )
+		.filter( ( ctx ) => torsoShare( ctx ) > 0.55 && armShare( ctx ) < 0.28 && ctx.y > hem && ctx.y < 0.805 );
+	const sections = [];
+	for ( let y = hem + 0.014; y < 0.806; y += 0.012 ) {
+
+		const points = source.filter( ( ctx ) => Math.abs( ctx.y - y ) < 0.019 )
+			.map( ( ctx ) => [ ctx.x, ctx.z ] ).sort( ( a, b ) => a[ 0 ] - b[ 0 ] || b[ 1 ] - a[ 1 ] );
+		if ( points.length < 4 ) continue;
+		const hull = [];
+		for ( const point of points ) {
+
+			while ( hull.length > 1 && frontCross( hull.at( - 2 ), hull.at( - 1 ), point ) >= 0 ) hull.pop();
+			hull.push( point );
+
+		}
+		if ( hull.length > 1 ) sections.push( { y, hull } );
+
+	}
+	if ( sections.length < 3 ) return {};
+	const chest = sections.filter( ( row ) => row.y > 0.69 && row.y < 0.79 );
+	if ( ! chest.length ) return {};
+	const chestWidth = Math.max( ...chest.map( ( row ) => Math.max( Math.abs( row.hull[ 0 ][ 0 ] ), Math.abs( row.hull.at( - 1 )[ 0 ] ) ) ) );
+	const baseShape = this.shape;
+	const baseNormal = this.normal;
+	const offsetFor = this.offset;
+	const depth = ( x, y ) => {
+
+		const local = frontSection( sections, x, y );
+		const supported = Math.max( ...chest.map( ( row ) => frontHull( row.hull, x ) ) );
+		const hemDepth = frontSection( sections, x, hem + 0.032 );
+		const hang = hemDepth + ( supported - hemDepth ) * smoothstep( hem + 0.026, 0.708, y );
+		return Math.max( local, hang );
+
+	};
+	const influence = ( ctx ) => band( ctx.y, hem + 0.013, 0.8, 0.025 ) * torsoShare( ctx )
+		* ( 1 - smoothstep( 0.1, 0.38, armShare( ctx ) ) );
+	return {
+		shape( ctx, out ) {
+
+			baseShape?.( ctx, out );
+			const amount = influence( ctx );
+			if ( amount <= 0 ) return;
+			const offset = offsetFor( ctx );
+			const front = smoothstep( 0.16, 0.7, ctx.nz ) * config.front * amount;
+			const currentZ = ctx.z + ctx.nz * offset + out[ 2 ];
+			out[ 2 ] += Math.max( 0, depth( ctx.x, ctx.y ) + offset - currentZ ) * front;
+			// A tee or work shirt has room at the waist, rather than a corset cut.
+			// Only the lateral panels change; shoulders, sleeve roots and hem stay put.
+			const side = smoothstep( 0.48, 0.88, Math.abs( ctx.nx ) ) * amount * band( ctx.y, hem + 0.025, 0.738, 0.033 );
+			const target = chestWidth * config.waist + offset;
+			const currentX = Math.abs( ctx.x + ctx.nx * offset + out[ 0 ] );
+			out[ 0 ] += Math.sign( ctx.x ) * Math.max( 0, target - currentX ) * side * 0.66;
+
+		},
+		normal( ctx, out ) {
+
+			baseNormal?.( ctx, out );
+			const region = influence( ctx );
+			if ( region <= 0 ) return;
+			const amount = region * smoothstep( 0.16, 0.7, ctx.nz ) * config.front;
+			const span = 0.006;
+			const dx = ( depth( ctx.x + span, ctx.y ) - depth( ctx.x - span, ctx.y ) ) / ( 2 * span );
+			const dy = ( depth( ctx.x, ctx.y + span ) - depth( ctx.x, ctx.y - span ) ) / ( 2 * span );
+			const length = Math.hypot( dx, dy, 1 );
+			// Add the envelope's change to the source normal, keeping the fold
+			// gradient already applied by the construction normal hook.
+			out[ 0 ] += ( - dx / length - ctx.nx ) * amount;
+			out[ 1 ] += ( - dy / length - ctx.ny ) * amount;
+			out[ 2 ] += ( 1 / length - ctx.nz ) * amount;
+			const side = smoothstep( 0.48, 0.88, Math.abs( ctx.nx ) ) * region
+				* band( ctx.y, hem + 0.025, 0.738, 0.033 ) * 0.66;
+			out[ 0 ] += ( Math.sign( ctx.x ) - ctx.nx ) * side;
+			out[ 1 ] -= ctx.ny * side;
+			out[ 2 ] -= ctx.nz * side;
+
+		}
+	};
+
+}
+
+function frontCross( a, b, c ) {
+
+	return ( b[ 0 ] - a[ 0 ] ) * ( c[ 1 ] - a[ 1 ] ) - ( b[ 1 ] - a[ 1 ] ) * ( c[ 0 ] - a[ 0 ] );
+
+}
+
+function frontHull( hull, x ) {
+
+	if ( x <= hull[ 0 ][ 0 ] ) return hull[ 0 ][ 1 ];
+	for ( let index = 1; index < hull.length; index ++ ) {
+
+		const a = hull[ index - 1 ], b = hull[ index ];
+		if ( x > b[ 0 ] ) continue;
+		const t = ( x - a[ 0 ] ) / Math.max( 1e-8, b[ 0 ] - a[ 0 ] );
+		return a[ 1 ] + ( b[ 1 ] - a[ 1 ] ) * t;
+
+	}
+	return hull.at( - 1 )[ 1 ];
+
+}
+
+function frontSection( sections, x, y ) {
+
+	let total = 0, weight = 0;
+	for ( const row of sections ) {
+
+		const distance = Math.abs( row.y - y ) / 0.022;
+		if ( distance > 3 ) continue;
+		const share = Math.exp( - distance * distance );
+		total += frontHull( row.hull, x ) * share;
+		weight += share;
+
+	}
+	return weight > 0 ? total / weight : frontHull( sections[ y < sections[ 0 ].y ? 0 : sections.length - 1 ].hull, x );
 
 }

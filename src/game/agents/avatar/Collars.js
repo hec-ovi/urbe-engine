@@ -59,6 +59,7 @@ export function appendCollar( {
 	// whole upper ring as one affine piece, with no per-frame smoothing.
 	const neckSource = sourceVertices.reduce( ( best, index ) => contexts[ index ].weight( 'neck' ) > contexts[ best ].weight( 'neck' ) ? index : best, sourceVertices[ 0 ] );
 	const bevel = Math.min( rise * 0.6, height * 0.0012 );
+	const sourceTop = Math.max( ...sourceVertices.map( ( index ) => sourcePosition.getY( index ) ) );
 	const outer = [];
 	const shoulder = [];
 	const inner = [];
@@ -75,16 +76,23 @@ export function appendCollar( {
 		const z = point[ 2 ] * 0.75 + ( previous[ 2 ] + next[ 2 ] ) * 0.125 - center[ 2 ];
 		const length = Math.hypot( x, z ) || height * 0.01;
 		const direction = [ x / length, 0, z / length ];
-		const radius = length + height * 0.0012;
-		directions.push( direction );
-		shoulder.push( [ center[ 0 ] + direction[ 0 ] * radius, top - bevel, center[ 2 ] + direction[ 2 ] * radius ] );
-		outer.push( [ center[ 0 ] + direction[ 0 ] * ( radius - bevel * 0.45 ), top, center[ 2 ] + direction[ 2 ] * ( radius - bevel * 0.45 ) ] );
+		const radius = length + height * 0.00045;
 		const source = sourceVertices[ index ];
+		const sourceY = sourcePosition.getY( source ) * 0.5
+			+ ( sourcePosition.getY( sourceVertices[ ( index + count - 1 ) % count ] )
+				+ sourcePosition.getY( sourceVertices[ ( index + 1 ) % count ] ) ) * 0.25;
+		// The shell's boundary is already levelled by the fitter. A crew/open
+		// binding can soften that contour a little; it cannot recover a cut neck.
+		const level = top - ( style === 'stand' ? 0 : Math.min( height * 0.0015, Math.max( 0, sourceTop - sourceY ) ) );
+		directions.push( direction );
+		shoulder.push( [ center[ 0 ] + direction[ 0 ] * radius, level - bevel, center[ 2 ] + direction[ 2 ] * radius ] );
+		outer.push( [ center[ 0 ] + direction[ 0 ] * ( radius - bevel * 0.45 ), level, center[ 2 ] + direction[ 2 ] * ( radius - bevel * 0.45 ) ] );
 		const bodyRadius = Math.hypot( sourcePosition.getX( source ) - center[ 0 ], sourcePosition.getZ( source ) - center[ 2 ] );
-		// Buried inside the neck on purpose: an untouched source vertex here
-		// would bring back the sawtooth of the old rim.
-		const innerRadius = Math.max( 0, Math.min( bodyRadius * 0.45, radius - height * 0.003 ) );
-		inner.push( [ center[ 0 ] + direction[ 0 ] * innerRadius, top, center[ 2 ] + direction[ 2 ] * innerRadius ] );
+		// A narrow cloth binding underlaps the neck, instead of a broad flat
+		// plate that closes more than half the opening. Keep the same skin binding.
+		const underlap = Math.max( height * 0.002, bodyRadius * 0.08 );
+		const innerRadius = Math.max( 0, Math.min( bodyRadius - underlap, radius - height * 0.0025 ) );
+		inner.push( [ center[ 0 ] + direction[ 0 ] * innerRadius, level - bevel * 0.3, center[ 2 ] + direction[ 2 ] * innerRadius ] );
 
 	}
 

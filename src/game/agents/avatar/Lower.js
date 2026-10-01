@@ -173,7 +173,7 @@ export const PANTS = [
 
 		}
 	}
-];
+].map( constructTrousers );
 
 export const FOOTWEAR = [
 	{
@@ -404,6 +404,7 @@ function fitTrouserSeat( contexts, faces ) {
 	if ( profiles.length < 2 ) return {};
 
 	const baseShape = this.shape;
+	const baseNormal = this.normal;
 	const offsetFor = this.offset;
 	const hem = upperSeatBoundary( contexts, faces );
 	const surface = ( x, y ) => {
@@ -440,6 +441,7 @@ function fitTrouserSeat( contexts, faces ) {
 		},
 		normal( ctx, out ) {
 
+			baseNormal?.( ctx, out );
 			const offset = offsetFor( ctx );
 			const gap = ctx.z + ctx.nz * offset - surface( ctx.x, ctx.y ).z + offset;
 			const amount = influence( ctx ) * 0.84 * smoothstep( 0.0005, 0.009, gap );
@@ -631,5 +633,106 @@ function smoothstep( min, max, value ) {
 function band( value, min, max, feather ) {
 
 	return smoothstep( min, min + feather, value ) * ( 1 - smoothstep( max - feather, max, value ) );
+
+}
+
+/** Construction relief is sized in body-height shares, not independent body inflation. */
+const TROUSER_CONSTRUCTION = {
+	'pants-tech': { knee: 0.0008, hem: 0.055, hemFold: 0.0006 },
+	'pants-patrol': { knee: 0.0017, hem: 0.055, hemFold: 0.0015, pocket: 0.0018 },
+	'pants-office': { crease: 0.0015, knee: 0.00035, hem: 0.055, hemFold: 0.0011 },
+	'pants-leggings': { knee: 0.0003, hem: 0.063, hemFold: 0 },
+	'pants-chinos': { crease: 0.0007, knee: 0.001, hem: 0.08, hemFold: 0.0013 },
+	'pants-cargo': { knee: 0.002, hem: 0.063, hemFold: 0.0019, pocket: 0.0024 },
+	'pants-shorts': { hem: 0.355, hemFold: 0.0012 },
+	'pants-joggers': { knee: 0.0017, hem: 0.066, hemFold: 0.0021 }
+};
+
+function constructTrousers( pattern ) {
+
+	const relief = ( context ) => trouserConstruction( pattern.id, context );
+	const sample = {};
+	return {
+		...pattern,
+		offset( context ) { return pattern.offset.call( this, context ) + relief( context ); },
+		normal( context, out ) {
+
+			pattern.normal?.call( this, context, out );
+			constructionNormal( context, out, relief, sample );
+
+		}
+	};
+
+}
+
+function trouserConstruction( id, ctx ) {
+
+	const cut = TROUSER_CONSTRUCTION[ id ];
+	const face = Math.abs( ctx.nz );
+	const hemLine = cut.hem + 0.029 + ctx.z * 0.12;
+	let relief = cut.hemFold * face * band( ctx.y, cut.hem + 0.006, cut.hem + 0.073, 0.012 )
+		* ( softRidge( ctx.y, hemLine, 0.01 ) - 0.32 * softRidge( ctx.y, hemLine + 0.017, 0.013 ) );
+	if ( cut.knee ) {
+
+		// Knee tension changes direction across each leg; the back has a quiet
+		// compression break instead of the front panel's raised articulation.
+		const knee = 0.293 + ( Math.abs( ctx.x ) - Math.abs( ctx.footCenterX ) ) * 0.25;
+		const front = positive( ctx.nz );
+		const back = positive( - ctx.nz );
+		relief += cut.knee * ( front * ( softRidge( ctx.y, knee, 0.016 ) - 0.35 * softRidge( ctx.y, knee + 0.025, 0.016 ) )
+			+ back * 0.55 * ( softRidge( ctx.y, knee - 0.008, 0.012 ) - 0.3 * softRidge( ctx.y, knee + 0.01, 0.012 ) ) );
+
+	}
+	if ( cut.crease ) {
+
+		const center = Math.abs( ctx.footCenterX ) * ( 1 - smoothstep( 0.18, 0.49, ctx.y ) * 0.15 );
+		relief += cut.crease * face * band( ctx.y, cut.hem + 0.022, 0.49, 0.039 )
+			* softRidge( Math.abs( ctx.x ), center, 0.008 );
+
+	}
+	if ( cut.pocket ) {
+
+		const flap = id === 'pants-cargo' ? 0.453 : 0.468;
+		relief += cut.pocket * smoothstep( 0.3, 0.8, outside( ctx ) ) * softRidge( ctx.y, flap, 0.007 );
+
+	}
+	return relief;
+
+}
+
+function softRidge( value, center, width ) {
+
+	const distance = ( value - center ) / width;
+	return Math.exp( - distance * distance );
+
+}
+
+/** Preserve authored smooth skin seams while shading the added cloth relief. */
+function constructionNormal( ctx, out, relief, sample ) {
+
+	// Own properties keep the six finite-difference samples on one stable
+	// object shape. A fresh prototype per vertex made these reads megamorphic.
+	// Each call is synchronous; the descriptor's scratch never crosses a yield.
+	Object.assign( sample, ctx );
+	const step = 0.0002;
+	sample.x = ctx.x + step;
+	const highX = relief( sample );
+	sample.x = ctx.x - step;
+	const dx = ( highX - relief( sample ) ) / ( 2 * step );
+	sample.x = ctx.x;
+	sample.y = ctx.y + step;
+	const highY = relief( sample );
+	sample.y = ctx.y - step;
+	const dy = ( highY - relief( sample ) ) / ( 2 * step );
+	sample.y = ctx.y;
+	sample.z = ctx.z + step;
+	const highZ = relief( sample );
+	sample.z = ctx.z - step;
+	const dz = ( highZ - relief( sample ) ) / ( 2 * step );
+	sample.z = ctx.z;
+	const along = 0 + dx * ctx.nx + dy * ctx.ny + dz * ctx.nz;
+	out[ 0 ] -= dx - ctx.nx * along;
+	out[ 1 ] -= dy - ctx.ny * along;
+	out[ 2 ] -= dz - ctx.nz * along;
 
 }
