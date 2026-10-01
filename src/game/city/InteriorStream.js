@@ -588,7 +588,8 @@ export class InteriorStream {
 
 		};
 
-		const rooms = roomsOf( record, this.modules );
+		// The fixtures the pool will never draw light the room through its fill.
+		const rooms = roomsOf( record, this.modules, this.roomLights?.unseen ? ( fixtures ) => this.roomLights.unseen( fixtures ) : null );
 		const orphans = floorOrphans( record );
 		const fills = new Map( rooms.map( ( room ) => [ room.roomId, room.fill ] ) );
 		const shared = floorFill( rooms, orphans.fixtures );

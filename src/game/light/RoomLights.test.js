@@ -74,6 +74,42 @@ describe( 'RoomLights', () => {
 
 	} );
 
+	it( 'hands the fill what one slot never draws: the coves under their soffits and the fixtures past its share', () => {
+
+		const lights = new RoomLights( factory, { roomSlots: 2, roomSpots: 2, roomStrips: 1 } );
+		const warm = new THREE.Color( 1, 0.6, 0.3 );
+		const fixture = ( kind, lumens, reach, facing, color = new THREE.Color( 1, 1, 1 ) ) => ( {
+			kind, position: new THREE.Vector3( 0, 2.6, 0 ), lumens, reach, facing, color,
+			range: 3, beamDeg: 100, diffuse: 0.4, length: kind === 'spot' ? 0 : 2, angleDeg: 0
+		} );
+		const fixtures = [
+			...[ 900, 800, 700, 600 ].map( ( lumens ) => fixture( 'spot', lumens, 2.6, 'down' ) ),
+			fixture( 'cove', 1500, 0.2, 'up', warm ),
+			fixture( 'cove', 1500, 0.2, 'up', warm ),
+			fixture( 'strip', 300, 2.4, 'down' ),
+			fixture( 'strip', 200, 2.4, 'down' )
+		];
+
+		// Two spots and one strip a slot: the two dimmer spots and the dimmer
+		// strip stay unseen, and both coves, which no light is ever spent on.
+		const unseen = lights.unseen( fixtures );
+		expect( unseen.down ).toBe( 700 + 600 + 200 );
+		expect( unseen.up ).toBe( 3000 );
+		expect( unseen.upColor.equals( warm ) ).toBe( true );
+
+		// Where the tier carries no line sources, the strips compete for the
+		// spots, and the coves still never take one.
+		const plain = new RoomLights( factory, { roomSlots: 2, roomSpots: 2, roomStrips: 0 } );
+		expect( plain.unseen( fixtures ).down ).toBe( 700 + 600 + 300 + 200 );
+		expect( plain.unseen( fixtures ).up ).toBe( 3000 );
+		const hall = room( 'hall', 0, 0 );
+		hall.fixtures = fixtures;
+		plain.update( [ hall ], new THREE.Vector3(), 1 );
+		expect( plain.spots.filter( ( light ) => light.intensity > 0 ).every( ( light ) => light.target.position.y < light.position.y ) ).toBe( true );
+		expect( plain.spots.filter( ( light ) => light.intensity > 0 ) ).toHaveLength( 4 );
+
+	} );
+
 	it( 'gives the nearest rooms a slot, keeping the same light ids', () => {
 
 		const lights = new RoomLights( factory, tier );

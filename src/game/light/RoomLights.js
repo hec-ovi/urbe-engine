@@ -70,6 +70,8 @@ export class RoomLights {
 		/** The shadow map one room light carries, or 0 where the tier pays for none. */
 		this.shadowSize = tier.roomShadow ?? 0;
 		this.timer = RESHUFFLE_INTERVAL;
+		/** What one slot draws of a room: its share when every room in view takes one. */
+		this.budget = { spots: tier.roomSpots ?? 0, strips: tier.roomStrips ?? 0 };
 
 		for ( let i = 0; i < tier.roomSlots; i ++ ) {
 
@@ -142,6 +144,44 @@ export class RoomLights {
 
 	}
 
+	/**
+	 * The light of a room's fixtures that the pool never draws, for the room's
+	 * fill to carry (RoomFill.perCopy): every cove tucked under its soffit, and
+	 * whatever is left past what one slot draws, brightest first, the way the
+	 * pool ranks them. A room the player stands in can take more of the pool
+	 * than one slot, and its few extra lights then add their pools to a floor
+	 * already lit at its own level; a room with no slot at all is lit by the
+	 * fill alone, which is the room's light at the distance it is seen from.
+	 *
+	 * @returns { down, up, downColor, upColor }: lumens facing the floor and the ceiling, and their colours
+	 */
+	unseen( fixtures ) {
+
+		const line = this.strips.length > 0;
+		const drawable = fixtures.filter( ( one ) => ! tucked( one ) );
+		const spots = this.slots.length ? this.budget.spots : 0;
+		const strips = this.slots.length && line ? this.budget.strips : 0;
+		const drawn = new Set( line
+			? [ ...byFlux( drawable.filter( isSpot ) ).slice( 0, spots ), ...byFlux( drawable.filter( ( one ) => ! isSpot( one ) ) ).slice( 0, strips ) ]
+			: byFlux( drawable ).slice( 0, spots ) );
+		const unseen = { down: 0, up: 0, downColor: new THREE.Color( 0, 0, 0 ), upColor: new THREE.Color( 0, 0, 0 ) };
+
+		for ( const fixture of fixtures ) {
+
+			if ( drawn.has( fixture ) ) continue;
+
+			const side = fixture.facing === 'up' ? 'up' : 'down';
+			unseen[ side ] += fixture.lumens;
+			unseen[ `${side}Color` ].add( _weighted.copy( fixture.color ).multiplyScalar( fixture.lumens ) );
+
+		}
+		if ( unseen.down > 0 ) unseen.downColor.multiplyScalar( 1 / unseen.down );
+		if ( unseen.up > 0 ) unseen.upColor.multiplyScalar( 1 / unseen.up );
+
+		return unseen;
+
+	}
+
 	/** Source clones belong to whoever loaded the source; catalog clones stay cached. */
 	releaseSources( sources ) {
 
@@ -191,7 +231,8 @@ export class RoomLights {
 		// stretched highlight is lost, the room's own light is not.
 		const line = this.strips.length > 0;
 
-		place( this.spots, share( this.rooms, this.spots.length, ( room ) => byFlux( line ? room.fixtures.filter( isSpot ) : room.fixtures ) ), aimSpot );
+		// A cove tucked under its soffit is the fill's on either count.
+		place( this.spots, share( this.rooms, this.spots.length, ( room ) => byFlux( room.fixtures.filter( ( one ) => ( line ? isSpot( one ) : true ) && ! tucked( one ) ) ) ), aimSpot );
 		place(
 			this.strips,
 			line ? share( this.rooms, this.strips.length, ( room ) => byReach( room.fixtures.filter( ( one ) => ! isSpot( one ) ), this.position ) ) : [],
@@ -208,6 +249,9 @@ export class RoomLights {
 }
 
 const isSpot = ( fixture ) => fixture.kind === 'spot';
+/** A line source facing the surface it is tucked against: indirect, the fill's (INDIRECT_REACH). */
+const tucked = ( one ) => one.facing === 'up' && one.reach !== undefined && one.reach < INDIRECT_REACH;
+const _weighted = new THREE.Color();
 
 /**
  * How much of the pool each room gets, and which of its fixtures.
@@ -244,7 +288,7 @@ function share( rooms, capacity, rank ) {
 
 }
 
-/** A room's spots, brightest first. */
+/** A room's fixtures, brightest first. */
 function byFlux( fixtures ) {
 
 	return fixtures.slice().sort( ( a, b ) => b.lumens - a.lumens );
@@ -259,7 +303,7 @@ function byFlux( fixtures ) {
 function byReach( fixtures, position ) {
 
 	return fixtures
-		.filter( ( one ) => ! ( one.facing === 'up' && one.reach !== undefined && one.reach < INDIRECT_REACH ) )
+		.filter( ( one ) => ! tucked( one ) )
 		.sort( ( a, b ) => a.position.distanceToSquared( position ) - b.position.distanceToSquared( position ) );
 
 }

@@ -80,19 +80,57 @@ export class RoomFill {
 	}
 
 	/**
-	 * The fill as one copy of a draw carries it: the interreflected irradiance,
-	 * and the floor's reflectance for the half of it that comes back up off the
-	 * floor. A surface facing down reads different from one facing up, which is
-	 * what makes the gradient up a wall look like bounce instead of ambient.
+	 * The fill as one copy of a draw carries it: the irradiance on a surface
+	 * facing up, and the share of it a surface facing down takes. A surface
+	 * facing down reads different from one facing up, which is what makes the
+	 * gradient up a wall look like bounce instead of ambient.
+	 *
+	 * The interreflected light reaches every surface, and the half of it a
+	 * ceiling sees has come back up off the floor once more. Then the fixtures
+	 * no light is drawn for (`unseen`, from RoomLights.unseen): the pool draws a
+	 * handful per room and a sales floor hangs forty downlights, so without
+	 * this their flux would light the room only by its bounce and the floor
+	 * between the drawn ones would sit at a third of its level. Their first
+	 * bounce is not lost: what faces down lands on the floor, what faces up on
+	 * the ceiling, each spread over that surface and the half of the walls
+	 * standing nearest it, which is what a wall reads between the two halves of
+	 * the node. That is the pooled floor under a grid of downlights and the
+	 * washed ceiling over a cove, at the room's own flux.
+	 *
+	 * @param room { area, albedo, floorAlbedo }
+	 * @param unseen { down, up, downColor, upColor }: lumens no light is drawn for, and their colours
 	 */
-	static perCopy( room, flux, color, target = new THREE.Vector4() ) {
+	static perCopy( room, flux, color, unseen = NONE, target = new THREE.Vector4() ) {
 
-		const up = RoomFill.irradiance( room, flux, color, _up );
+		const bounce = RoomFill.irradiance( room, flux, color, _bounce );
+		const landing = RoomFill.landing( room );
+		const floor = luminance( room.floorAlbedo );
 
-		return target.set( up.r, up.g, up.b, luminance( room.floorAlbedo ) );
+		_up.copy( bounce ).add( _direct.copy( unseen.downColor ?? WHITE ).multiplyScalar( ( unseen.down ?? 0 ) / landing ) );
+		_down.copy( bounce ).multiplyScalar( floor ).add( _direct.copy( unseen.upColor ?? WHITE ).multiplyScalar( ( unseen.up ?? 0 ) / landing ) );
+
+		const lit = luminance( _up );
+
+		return target.set( _up.r, _up.g, _up.b, lit > 0 ? luminance( _down ) / lit : floor );
+
+	}
+
+	/**
+	 * The surface a fixture's first bounce lands on: the floor or the ceiling
+	 * it faces, and half the walls. A room's enclosure is its floor, its
+	 * ceiling and its walls, so that comes to half of it whatever its plan.
+	 */
+	static landing( room ) {
+
+		return Math.max( 1, room.area / 2 );
 
 	}
 
 }
 
+const NONE = Object.freeze( { down: 0, up: 0 } );
+const WHITE = new THREE.Color( 1, 1, 1 );
+const _bounce = new THREE.Color();
+const _direct = new THREE.Color();
+const _down = new THREE.Color();
 const _up = new THREE.Color();

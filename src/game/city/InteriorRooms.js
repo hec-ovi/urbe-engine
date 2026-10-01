@@ -23,9 +23,10 @@ const WALKED = /^floor-/;
 /**
  * @param floor one record from `buildingFloors`
  * @param catalog `{ boundsOf, slotsOf }` from the module catalog
+ * @param unseen fixtures -> the light of them no room light draws (RoomLights.unseen), which the fill carries
  * @returns one Room per published room on this floor
  */
-export function roomsOf( floor, catalog ) {
+export function roomsOf( floor, catalog, unseen = null ) {
 
 	const measured = measure( floor, catalog );
 	const fixtures = fixturesByRoom( floor );
@@ -33,7 +34,8 @@ export function roomsOf( floor, catalog ) {
 	return floor.rooms.map( ( room ) => new Room( {
 		floor, room,
 		fixtures: fixtures.get( room.id ) ?? [],
-		surfaces: measured.get( room.id ) ?? []
+		surfaces: measured.get( room.id ) ?? [],
+		unseen
 	} ) );
 
 }
@@ -78,7 +80,7 @@ function measure( floor, catalog ) {
 /** One published room of one floor. */
 export class Room {
 
-	constructor( { floor, room, fixtures, surfaces } ) {
+	constructor( { floor, room, fixtures, surfaces, unseen = null } ) {
 
 		const [ x, z ] = roomFootprintAnchor( room );
 
@@ -122,8 +124,10 @@ export class Room {
 
 		}
 
-		/** What every copy standing in this room carries: its interreflected light. */
-		this.fill = RoomFill.perCopy( this, this.flux, this.color );
+		/** The light of the fixtures no room light draws, which the fill carries instead. */
+		this.unseen = unseen?.( fixtures ) ?? null;
+		/** What every copy standing in this room carries: its interreflected light and the undrawn fixtures' own. */
+		this.fill = RoomFill.perCopy( this, this.flux, this.color, this.unseen ?? undefined );
 
 	}
 
@@ -140,12 +144,20 @@ export class Room {
 /**
  * The fill for a copy standing in no published room, a stair shaft or a lift
  * lobby: the floor's rooms taken together, flux over surface, so it is lit
- * air rather than a hole.
+ * air rather than a hole. A fixture published for a room the floor never built
+ * is drawn by no light, so its light is the fill's whole.
  */
 export function floorFill( rooms, orphans = [] ) {
 
 	const whole = { area: 0, albedo: new THREE.Color( 0, 0, 0 ), floorAlbedo: new THREE.Color( 0, 0, 0 ) };
 	const color = new THREE.Color( 0, 0, 0 );
+	const unseen = { down: 0, up: 0, downColor: new THREE.Color( 0, 0, 0 ), upColor: new THREE.Color( 0, 0, 0 ) };
+	const undrawn = ( side, lumens, tint ) => {
+
+		unseen[ side ] += lumens;
+		addScaled( unseen[ `${side}Color` ], tint, lumens );
+
+	};
 	let flux = 0;
 
 	for ( const room of rooms ) {
@@ -155,6 +167,12 @@ export function floorFill( rooms, orphans = [] ) {
 		addScaled( color, room.color, room.flux );
 		whole.albedo.add( room.albedo );
 		whole.floorAlbedo.add( room.floorAlbedo );
+		if ( room.unseen ) {
+
+			undrawn( 'down', room.unseen.down, room.unseen.downColor );
+			undrawn( 'up', room.unseen.up, room.unseen.upColor );
+
+		}
 
 	}
 	// A fixture published for a room the floor never built still hangs in the
@@ -163,16 +181,19 @@ export function floorFill( rooms, orphans = [] ) {
 
 		flux += fixture.lumens;
 		addScaled( color, fixture.color, fixture.lumens );
+		undrawn( fixture.facing === 'up' ? 'up' : 'down', fixture.lumens, fixture.color );
 
 	}
 
 	if ( ! rooms.length ) return new THREE.Vector4();
 
 	if ( flux > 0 ) color.multiplyScalar( 1 / flux );
+	if ( unseen.down > 0 ) unseen.downColor.multiplyScalar( 1 / unseen.down );
+	if ( unseen.up > 0 ) unseen.upColor.multiplyScalar( 1 / unseen.up );
 	whole.albedo.multiplyScalar( 1 / rooms.length );
 	whole.floorAlbedo.multiplyScalar( 1 / rooms.length );
 
-	return RoomFill.perCopy( whole, flux, color );
+	return RoomFill.perCopy( whole, flux, color, unseen );
 
 }
 
