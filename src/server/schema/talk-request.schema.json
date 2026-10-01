@@ -97,7 +97,7 @@
       "additionalProperties": false,
       "required": ["kind"],
       "properties": {
-        "kind": { "enum": ["following", "leading", "walking", "waiting", "sitting", "home", "work"] },
+        "kind": { "enum": ["following", "leading", "brought", "walking", "waiting", "sitting", "home", "work"] },
         "place": { "$ref": "#/$defs/words" }
       }
     },

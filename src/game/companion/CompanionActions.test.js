@@ -127,6 +127,7 @@ describe( 'what a person may do for the player', () => {
 		expect( game.companion.accept( { ...game.ask( barista ), offerId: home.offerId } ).ok ).toBe( true );
 		game.continuity.endConversation( { timeMin: AFTERNOON, hold: true } );
 		game.frame( AFTERNOON, barista.position );
+		expect( game.companion.taskOf( barista.npcId ) ).toEqual( { kind: 'leading', place: home.destination.name } );
 		for ( let step = 0; step < 4000 && game.continuity.companion?.phase !== 'arrived'; step ++ ) {
 
 			// Shut until the host stands at it.
@@ -139,6 +140,7 @@ describe( 'what a person may do for the player', () => {
 		expect( Math.hypot( ...stood.map( ( value, axis ) => value - apartment.front[ axis ] ) ) ).toBeLessThan( 0.5 );
 		game.frame( AFTERNOON, apartment.front );
 		expect( open ).toHaveBeenCalledExactlyOnceWith( { kind: 'door', parcelId: homeParcel, floor: 1, position: apartment.door } );
+		expect( game.companion.taskOf( barista.npcId ) ).toEqual( { kind: 'brought', place: home.destination.name } );
 
 	} );
 

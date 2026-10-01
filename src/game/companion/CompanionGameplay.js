@@ -205,13 +205,19 @@ export class CompanionGameplay {
 
 	/**
 	 * What this person is doing for the player now, as the talk tells them
-	 * (Quests `DialogTask`): following, leading to a place, or an errand the
+	 * (Quests `DialogTask`): following, leading to a place (`brought` once
+	 * there together), or an errand the
 	 * player asked for while the continuity still runs it; null otherwise.
 	 */
 	taskOf( npcId ) {
 
 		const state = this.state;
-		if ( state?.npcId === npcId ) return state.kind === 'follow' ? { kind: 'following' } : { kind: 'leading', place: state.destination.name };
+		if ( state?.npcId === npcId ) {
+
+			if ( state.kind === 'follow' ) return { kind: 'following' };
+			return { kind: [ 'arrived', 'ready', 'talking' ].includes( state.phase ) ? 'brought' : 'leading', place: state.destination.name };
+
+		}
 		const errand = this.errands.get( npcId );
 		if ( errand && ( this.continuity.errandsUnderway ?? [] ).some( ( entry ) => entry.npcId === npcId ) ) {
 
