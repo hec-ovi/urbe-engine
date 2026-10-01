@@ -5,6 +5,7 @@ import { CROWD_SURFACE } from './CrowdMesh.js';
 import { SPEECH_LIMITS } from './SpeechGesture.js';
 import { StreetBodies } from './StreetBodies.js';
 import { GARMENTS } from './avatar/Recipe.js';
+import { FABRIC_FINISHES } from './avatar/GarmentPanels.js';
 import { Physics } from '../physics/index.js';
 import { ActorLighting } from '../light/ActorLighting.js';
 import { FillChannel } from '../city/kit/FillChannel.js';
@@ -198,7 +199,7 @@ describe( 'focused character', () => {
 		expect( jacket.material ).toBe( hero.poser.wardrobe.garment( 'office-jacket' ) );
 		const panels = dressed.panels.get( 'office-jacket' );
 		expect( panels.palette.slice( 0, 3 ).map( hex ) ).toEqual( [ '#3c4f53', '#dedcd0', '#ac9a76' ] );
-		expect( panels.roughness ).toBe( 0.9 );
+		expect( panels.roughness ).toBe( FABRIC_FINISHES.woven.roughness );
 
 	} );
 
