@@ -202,6 +202,11 @@ What a person says, and what the player reads, when they come along, lead the wa
 - I'll head over to {place}.
 - Fine. I'm going to {place}.
 
+## accept-meet
+
+- I'm coming to you. {place}, right?
+- All right. I'll meet you at {place}.
+
 ## accept-home
 
 - I'm going home.

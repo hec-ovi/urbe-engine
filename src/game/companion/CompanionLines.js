@@ -31,10 +31,11 @@ export class CompanionLines {
 
 	}
 
-	constructor( markdown ) {
+	/** @param keys every key the document must hold: the companion's by default, another box's for its own lines */
+	constructor( markdown, { keys = KEYS } = {} ) {
 
 		this.lines = parse( markdown );
-		const missing = KEYS.filter( ( key ) => ! this.lines.has( key ) );
+		const missing = keys.filter( ( key ) => ! this.lines.has( key ) );
 		if ( missing.length ) throw new CompanionError( 'E_COMPANION_LINES', `companion lines lack ${missing.join( ', ' )}` );
 		for ( const [ key, variants ] of this.lines ) for ( const variant of variants ) {
 

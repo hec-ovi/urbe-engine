@@ -159,8 +159,9 @@ export class CompanionGameplay {
 
 	/**
 	 * The person agreed through a talk tool: `follow_player`, `lead_player_to`
-	 * or `walk_to` a `placeId`, `stop`, `go_home`, `go_to_work`, `wait_here`
-	 * or `sit`. The typed request is the player's consent, so what it names
+	 * or `walk_to` a `placeId`, `stop`, `go_home`, `go_to_work`, `wait_here`,
+	 * `sit`, or on a call `meet_player`, a walk to where the player is
+	 * (`meet`). The typed request is the player's consent, so what it names
 	 * that is available is accepted, to start once the talk is done; anything
 	 * else is refused with the reason the person says.
 	 */
@@ -183,6 +184,15 @@ export class CompanionGameplay {
 			if ( ! actions.stop ) return refuse( 'unknown' );
 			this.pending = { npcId, kind: this.state?.npcId === npcId ? 'dismiss' : 'stop' };
 			return this.boundary.output( 'accept-result', { ok: true, npcId, offerId: 'stop', kind: 'stop', line: this.lines.say( 'accept-stop', {}, seed ) } );
+
+		}
+		if ( kind === 'meet' ) {
+
+			if ( ! actions.walk ) return refuse( this.#why( npcId, timeMin, kind ) );
+			const { position, parcelId, floor, name } = request.meet;
+			const target = { position: [ ...position ], ...( parcelId ? { parcelId } : {} ), ...( Number.isInteger( floor ) ? { floor } : {} ) };
+			this.pending = { npcId, kind: 'walk', destination: { place: { kind: 'spot', id: 'player' }, name, relation: 'person', target }, told: name };
+			return this.boundary.output( 'accept-result', { ok: true, npcId, offerId: 'meet', kind: 'walk', line: this.lines.say( 'accept-meet', { place: name }, seed ) } );
 
 		}
 		if ( ! actions[ kind ] ) return refuse( this.#why( npcId, timeMin, kind ) );

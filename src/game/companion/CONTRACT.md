@@ -8,7 +8,7 @@ Purpose: lets the player ask one person along, to follow them or to lead them to
 - Offers request: [schema/offers-request.schema.json](schema/offers-request.schema.json). The person, the clock, the places the player stands in and `wide`, the talk's longer list.
 - Accept request: [schema/accept-request.schema.json](schema/accept-request.schema.json). The same, plus the chosen `offerId`.
 - Accept request: with `willing`, the person also decides by their disposition (Quests `dispositionOf` and `willingTo`), as when no model can answer for them.
-- Tool request: [schema/tool-request.schema.json](schema/tool-request.schema.json). The same, plus a talk stream offer event: `kind` `follow`, `stop`, `home`, `work`, `wait` or `sit`, or `lead` or `walk` with its `placeId`.
+- Tool request: [schema/tool-request.schema.json](schema/tool-request.schema.json). The same, plus a talk stream offer event: `kind` `follow`, `stop`, `home`, `work`, `wait` or `sit`, `lead` or `walk` with its `placeId`, or `meet` with `meet` `{ position, parcelId?, floor?, name }`, where the player stands, for a person on a call asked to come there.
 - Update request: [schema/update-request.schema.json](schema/update-request.schema.json). The clock, the player's feet and places, and `busy` while the player has a panel, a chooser, a summary or a conversation open.
 - Restore request: [schema/restore-request.schema.json](schema/restore-request.schema.json). The clock and a saved state.
 
@@ -30,6 +30,7 @@ Purpose: lets the player ask one person along, to follow them or to lead them to
 
 ## Actions
 
+- A person on a call asked to come to where the player is (`acceptFromTool` kind `meet`) is accepted as `walk` is, under the same refusals, to the `meet` point (offer id `meet`, line `accept-meet` naming the place), and runs as a `walk` errand once the call is over; `taskOf` tells it as walking to that place.
 - What a person may do on their own for the player (`talkOffers` with `person`, `acceptFromTool`): `stop` while they follow, lead or run an errand for the player; and, unless they are unavailable, kept by a story or at work, `walk` to a place of the wide list, `home`, `work` (when not there), `wait` and `sit` (with a free seat near them). Somebody else walking with the player is no bar to these.
 - An accepted action starts once the person's conversation closes: `stop` ends the companion (a dismissal) or the errand (`endErrand`, lingering 5 s); the others are continuity errands (`sendOnErrand`): `walk` to the place's target or its doorstep (to a person, a step short of where they stand, on the walker's side), `home` to the seat of their own apartment (`inside.homeSpot`) else their building's door, `work` to their post else their workplace's door, `wait` where they stand, `sit` on the nearest free seat, each staying 15, 60, 60, 15 and 20 game minutes. An errand that cannot start is a `refused` signal (`nowhere` for a seat, `unknown` for no way).
 - A follower or leader walks at the person's pace: they run with a running player unless 60 or older or `tired`, and a leader due at work within ten minutes and twenty more is in a hurry.

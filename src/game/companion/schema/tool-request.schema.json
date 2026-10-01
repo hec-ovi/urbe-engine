@@ -6,12 +6,33 @@
   "required": ["npcId", "kind", "timeMin", "playerPlaces"],
   "properties": {
     "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
-    "kind": { "enum": ["follow", "lead", "walk", "stop", "home", "work", "wait", "sit"] },
+    "kind": { "enum": ["follow", "lead", "walk", "stop", "home", "work", "wait", "sit", "meet"] },
     "placeId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
     "timeMin": { "$ref": "urn:urbe:engine:companion:values#/$defs/time" },
-    "playerPlaces": { "$ref": "urn:urbe:engine:companion:values#/$defs/playerPlaces" }
+    "playerPlaces": { "$ref": "urn:urbe:engine:companion:values#/$defs/playerPlaces" },
+    "meet": {
+      "description": "Where the player is, for a person on a call asked to come and meet them there: the point, the building and floor it is in, and the place as the player knows it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position", "name"],
+      "properties": {
+        "position": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+        "parcelId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
+        "floor": { "type": "integer" },
+        "name": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" }
+      }
+    }
   },
-  "if": { "properties": { "kind": { "enum": ["lead", "walk"] } } },
-  "then": { "properties": { "placeId": true }, "required": ["placeId"] },
-  "else": { "properties": { "placeId": false } }
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "enum": ["lead", "walk"] } } },
+      "then": { "properties": { "placeId": true }, "required": ["placeId"] },
+      "else": { "properties": { "placeId": false } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "meet" } } },
+      "then": { "properties": { "meet": true }, "required": ["meet"] },
+      "else": { "properties": { "meet": false } }
+    }
+  ]
 }

@@ -59,6 +59,23 @@ describe( 'what a person may do for the player', () => {
 
 	} );
 
+	it( 'comes to where the player is when asked on a call, as a walk to that spot once the call is over', () => {
+
+		const game = setup();
+		const barista = game.talkTo();
+		const meet = { position: [ 300, 1, 255 ], parcelId: 'p_cafe', floor: 0, name: 'the cafe' };
+		expect( game.companion.acceptFromTool( { ...game.ask( barista ), kind: 'meet', meet } ) ).toMatchObject( {
+			ok: true, kind: 'walk', offerId: 'meet', line: expect.stringContaining( 'the cafe' )
+		} );
+		game.continuity.endConversation( { timeMin: AFTERNOON, hold: game.companion.accepted( barista.npcId ) } );
+		expect( game.frame( AFTERNOON, barista.position )[ 0 ] ).toMatchObject( { kind: 'errand', npcId: barista.npcId, action: 'walk' } );
+		expect( game.continuity.serialize().errands[ 0 ].target ).toMatchObject( { position: [ 300, 1, 255 ], parcelId: 'p_cafe', floor: 0 } );
+		expect( game.companion.taskOf( barista.npcId ) ).toMatchObject( { kind: 'walking', place: 'the cafe' } );
+		expect( () => game.companion.acceptFromTool( { ...game.ask( barista ), kind: 'meet' } ) ).toThrow( /tool-request/ );
+		expect( () => game.companion.acceptFromTool( { ...game.ask( barista ), kind: 'wait', meet } ) ).toThrow( /tool-request/ );
+
+	} );
+
 	it( 'waits where it stands or sits on the nearest free seat, and has nowhere to sit without one', () => {
 
 		const game = setup();
