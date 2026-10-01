@@ -9,12 +9,30 @@ import { ObjectiveRouteError } from './ObjectiveRouteError.js';
 
 const SCHEMAS = [ walkNetwork, routeRequest, routeResult, routePlaces, guideUpdate, guideResult ];
 
+const PREFIX = 'urn:urbe:engine:objective-routes:';
+
+/**
+ * The routes' inputs and outputs held to their schemas: every schema compiled
+ * as the boundary is made, and every value checked until `play()` says the game
+ * plays. From then on what the guide is handed and hands back each frame is
+ * checked only when `play( true )` asks for it, as the `checks=on` query does;
+ * an unknown schema name fails either way.
+ */
 export class ObjectiveRouteBoundary {
 
 	constructor() {
 
 		this.ajv = new Ajv2020( { allErrors: true, strict: true } );
 		for ( const schema of SCHEMAS ) this.ajv.addSchema( schema );
+		this.validators = new Map( SCHEMAS.map( ( schema ) => [ schema.$id.slice( PREFIX.length ), this.ajv.getSchema( schema.$id ) ] ) );
+		this.checked = true;
+
+	}
+
+	/** The game plays: from now on values pass unchecked, unless `checked`. */
+	play( checked = false ) {
+
+		this.checked = checked;
 
 	}
 
@@ -32,9 +50,9 @@ export class ObjectiveRouteBoundary {
 
 	#assert( name, value, code ) {
 
-		const validate = this.ajv.getSchema( `urn:urbe:engine:objective-routes:${name}` );
+		const validate = this.validators.get( name );
 		if ( ! validate ) throw new ObjectiveRouteError( code, `unknown objective route schema ${name}` );
-		if ( validate( value ) ) return value;
+		if ( ! this.checked || validate( value ) ) return value;
 
 		const details = validate.errors.map( ( error ) => `${error.instancePath || '/'} ${error.message}` );
 		throw new ObjectiveRouteError( code, `${name} does not match its schema`, details );

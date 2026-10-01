@@ -27,6 +27,8 @@ Purpose: calculates a repeatable route from the player's current feet to an obje
 - `E_OBJECTIVE_ROUTE_DESTINATION`: the requested published entry does not exist.
 - `E_OBJECTIVE_ROUTE_UNREACHABLE`: no walk path reaches the destination.
 
+The schemas are all compiled when a boundary is made, and every value is checked until `boundary.play(checked)` says the game plays, which a game says of the guide's and its router's boundaries once its load is done. From then on what the guide is handed and hands back each frame is checked only in a game run with `checks=on`; an unknown schema name still raises its error.
+
 ## Dependencies
 
 - Connections walk-network contract, by its public output only.
