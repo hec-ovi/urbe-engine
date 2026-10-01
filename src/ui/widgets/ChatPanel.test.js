@@ -60,7 +60,8 @@ describe( 'ChatPanel', () => {
 		expect( screen.queryByRole( 'textbox' ) ).toBeNull();
 		expect( screen.queryByRole( 'log' ) ).toBeNull();
 		expect( document.activeElement ).toBe( talk() );
-		expect( screen.getByText( 'Free talk' ) ).toBeTruthy();
+		// No talk is labelled free talk anywhere on the chat.
+		expect( screen.queryByText( /free talk/i ) ).toBeNull();
 		expect( panel.input.placeholder ).toBe( 'Say anything to Ada Vance' );
 		panel.show( { name: 'Someone passing by' } );
 		expect( screen.getByRole( 'dialog', { name: 'Someone passing by' } ) ).toBeTruthy();
@@ -68,16 +69,18 @@ describe( 'ChatPanel', () => {
 
 	} );
 
-	it( 'opens the talk window from its button or T, takes it back with its close, and moves it by its plate', async () => {
+	it( 'opens the talk window from its button or T in the top left corner, without a title, and takes it back with its close', async () => {
 
 		const user = userEvent.setup();
 		await user.click( talk() );
-		const window = screen.getByRole( 'region', { name: 'Free talk with Ada Vance' } );
+		const window = screen.getByRole( 'region', { name: 'Conversation with Ada Vance' } );
+		expect( window.querySelector( '.chat-plate' ) ).toBeNull();
+		expect( window.textContent ).not.toMatch( /free talk/i );
 		expect( screen.getByRole( 'log', { name: 'Conversation' } ).getAttribute( 'aria-live' ) ).toBe( 'polite' );
 		expect( document.activeElement ).toBe( screen.getByRole( 'textbox', { name: 'say something' } ) );
 		expect( screen.queryByRole( 'button', { name: 'Talk with Ada Vance' } ) ).toBeNull();
 		await user.click( within( window ).getByRole( 'button', { name: 'Close the talk window' } ) );
-		expect( screen.queryByRole( 'region', { name: 'Free talk with Ada Vance' } ) ).toBeNull();
+		expect( screen.queryByRole( 'region', { name: 'Conversation with Ada Vance' } ) ).toBeNull();
 		expect( document.activeElement ).toBe( talk() );
 		expect( onClose ).not.toHaveBeenCalled();
 
@@ -87,12 +90,8 @@ describe( 'ChatPanel', () => {
 		await user.keyboard( 'tea' );
 		expect( panel.input.value ).toBe( 'tea' );
 
-		const plate = screen.getByRole( 'button', { name: layout.talk.move } );
-		plate.focus();
-		const at = [ panel.x, panel.y ];
-		await user.keyboard( '{ArrowDown}' );
-		expect( panel.y ).toBeGreaterThanOrEqual( at[ 1 ] );
-		expect( panel.window.style.transform ).toMatch( /^translate3d\(/ );
+		expect( [ panel.x, panel.y ] ).toEqual( [ 8, 8 ] );
+		expect( panel.window.style.transform ).toBe( 'translate3d(8px,8px,0)' );
 
 	} );
 
@@ -154,6 +153,38 @@ describe( 'ChatPanel', () => {
 		panel.addMessage( { from: 'npc', name: 'Ada', text: 'The report is gone.', kind: 'story' } );
 		expect( panel.sayAccessible.textContent ).toBe( 'The report is gone.' );
 		expect( panel.hint.open ).toBe( false );
+
+	} );
+
+	it( 'on a call says the person\'s every line once, in the subtitle, keeps the lines before it in the talk window and ends the call', async () => {
+
+		panel.show( { ...ADA, call: true } );
+		panel.setTalkOpen( true );
+		const greeting = panel.addMessage( { from: 'npc', name: 'Ada', text: 'Hello?' } );
+		expect( panel.sayAccessible.textContent ).toBe( 'Hello?' );
+		expect( greeting.classList.contains( 'is-said' ) ).toBe( true );
+		expect( panel.element.classList.contains( 'is-call' ) ).toBe( true );
+
+		// The player's typed line stays in the talk window; the person's typed reply is said in the subtitle, the greeting going to history.
+		panel.addMessage( { from: 'player', text: 'Where are you?', kind: 'talk' } );
+		expect( panel.sayAccessible.textContent ).toBe( 'Hello?' );
+		const reply = panel.beginMessage( { from: 'npc', name: 'Ada', kind: 'talk' } );
+		reply.update( 'At the quay.' );
+		expect( panel.sayAccessible.textContent ).toBe( 'At the quay.' );
+		expect( greeting.classList.contains( 'is-said' ) ).toBe( false );
+		expect( reply.line.classList.contains( 'is-said' ) ).toBe( true );
+		reply.finish();
+
+		const end = screen.getByRole( 'button', { name: 'End call' } );
+		await userEvent.setup().click( end );
+		expect( onClose ).toHaveBeenCalledOnce();
+
+		// A talk in person ends the conversation again, its typed replies kept to the talk window.
+		panel.show( ADA );
+		expect( screen.getByRole( 'button', { name: 'End conversation' } ) ).toBeTruthy();
+		expect( panel.element.classList.contains( 'is-call' ) ).toBe( false );
+		panel.addMessage( { from: 'npc', name: 'Ada', text: 'Hi.', kind: 'talk' } );
+		expect( panel.subtitle.hidden ).toBe( true );
 
 	} );
 
@@ -301,7 +332,7 @@ describe( 'ChatPanel', () => {
 		const input = screen.getByRole( 'textbox', { name: 'say something' } );
 		expect( document.activeElement ).toBe( input );
 		panel.setSending( true );
-		expect( document.activeElement ).toBe( panel.plate );
+		expect( document.activeElement ).toBe( panel.element );
 		panel.setSending( false );
 		expect( document.activeElement ).toBe( input );
 		panel.setSending( true );

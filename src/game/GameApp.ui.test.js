@@ -174,7 +174,9 @@ describe( 'playable game navigation', () => {
 		await vi.waitFor( () => expect( app.talk.stream ).toHaveBeenCalledOnce() );
 		expect( app.talk.stream.mock.calls[ 0 ][ 4 ] ).toMatchObject( { call: { caller: 'player' }, offers: { meet: { name: 'Quay' } } } );
 
-		await user.click( screen.getByRole( 'button', { name: 'End call' } ) );
+		// The chat's own End call ends it as the call screen's does.
+		expect( within( app.view.dialog.element ).getByRole( 'button', { name: 'End call' } ) ).toBeTruthy();
+		await user.click( within( app.view.call.element ).getByRole( 'button', { name: 'End call' } ) );
 		expect( app.interactor.conversation ).toBeNull();
 		expect( app.view.call.element.dataset.status ).toBe( 'ended' );
 

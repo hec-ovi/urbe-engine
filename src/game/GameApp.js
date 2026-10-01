@@ -1017,7 +1017,7 @@ export class GameApp {
 		this.failedDialogueLine = null;
 		this.activeDialogue = null;
 		const speaker = conversation && speakerOf( conversation, this.npcTypeLabels );
-		this.view.dialog.show( speaker );
+		this.view.dialog.show( speaker && conversation.call ? { ...speaker, call: true } : speaker );
 		if ( conversation?.instance && ! conversation.call ) this.acquaintances.met( conversation.npcId, { ...speaker, place: this.#placeName( this.currentLocation ), timeMin: this.clock.timeMin } );
 		this.view.avatar.setVisible( Boolean( conversation ) );
 

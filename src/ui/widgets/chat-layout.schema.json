@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Conversation panel labels; {name} stands for the person talked to",
   "type": "object",
-  "required": ["log", "from", "story", "hint", "topics", "choices", "actions", "free", "talk", "voice", "activity", "tags", "reveal", "retry", "leave", "leaveKey"],
+  "required": ["log", "from", "story", "hint", "topics", "choices", "actions", "free", "talk", "voice", "activity", "tags", "reveal", "retry", "leave", "leaveCall", "leaveKey"],
   "additionalProperties": false,
   "properties": {
     "log": { "description": "Accessible name of the transcript.", "$ref": "#/$defs/text" },
@@ -90,10 +90,9 @@
     "actions": { "$ref": "#/$defs/section" },
     "free": {
       "type": "object",
-      "required": ["title", "hint", "placeholder", "input", "send"],
+      "required": ["hint", "placeholder", "input", "send"],
       "additionalProperties": false,
       "properties": {
-        "title": { "$ref": "#/$defs/text" },
         "hint": { "$ref": "#/$defs/text" },
         "placeholder": { "$ref": "#/$defs/text" },
         "input": { "description": "Accessible name of the text box.", "$ref": "#/$defs/text" },
@@ -101,16 +100,15 @@
       }
     },
     "talk": {
-      "description": "The talk window, closed until the player opens it: free talk, the transcript and the actions tray.",
+      "description": "The talk window, closed until the player opens it, in the top left corner without a title: the text box, the transcript and the actions tray.",
       "type": "object",
-      "required": ["open", "key", "window", "close", "move", "actions", "back", "empty"],
+      "required": ["open", "key", "window", "close", "actions", "back", "empty"],
       "additionalProperties": false,
       "properties": {
         "open": { "description": "The button that opens the window.", "$ref": "#/$defs/text" },
         "key": { "description": "The key that opens it while the text box is not in use.", "type": "string", "pattern": "^[A-Z]$" },
         "window": { "description": "Accessible name of the window.", "$ref": "#/$defs/text" },
         "close": { "$ref": "#/$defs/text" },
-        "move": { "description": "Accessible name of the window's title plate, which moves it.", "$ref": "#/$defs/text" },
         "actions": { "description": "The window's side tab and tray.", "$ref": "#/$defs/text" },
         "back": { "$ref": "#/$defs/text" },
         "empty": { "description": "The tray with nothing to ask.", "$ref": "#/$defs/text" }
@@ -143,6 +141,7 @@
     },
     "retry": { "$ref": "#/$defs/text" },
     "leave": { "$ref": "#/$defs/text" },
+    "leaveCall": { "description": "End conversation on a phone call.", "$ref": "#/$defs/text" },
     "leaveKey": { "description": "The key shown beside End conversation.", "$ref": "#/$defs/text" }
   },
   "$defs": {

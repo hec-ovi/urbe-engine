@@ -34,7 +34,6 @@
   },
   "actions": { "title": "Ask {name} along", "hint": "They walk with you or show you a place." },
   "free": {
-    "title": "Free talk",
     "hint": "Say anything. It does not change the story.",
     "placeholder": "Say anything to {name}",
     "input": "say something",
@@ -43,9 +42,8 @@
   "talk": {
     "open": "Talk with {name}",
     "key": "T",
-    "window": "Free talk with {name}",
+    "window": "Conversation with {name}",
     "close": "Close the talk window",
-    "move": "Move the talk window: drag it, or use the arrow keys",
     "actions": "Actions",
     "back": "Back to the talk",
     "empty": "Nothing to ask {name} right now."
@@ -56,5 +54,6 @@
   "reveal": { "charactersPerSecond": 36, "complete": "Click or press Space to show the whole line" },
   "retry": "Retry reply",
   "leave": "End conversation",
+  "leaveCall": "End call",
   "leaveKey": "Esc"
 }

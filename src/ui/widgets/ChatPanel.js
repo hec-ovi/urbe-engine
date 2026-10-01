@@ -11,8 +11,6 @@ const SPEAKING = new Set( [ 'pending', 'playing', 'idle' ] );
 const MAX_LINES = 200;
 /** Icons for an action's kind, the part of its id before a colon unless it names one. */
 const ACTION_ICONS = new Set( [ 'follow', 'lead', 'dismiss' ] );
-/** Arrow keys on the talk window's plate, and which way each moves it. */
-const NUDGE = { ArrowLeft: [ - 1, 0 ], ArrowRight: [ 1, 0 ], ArrowUp: [ 0, - 1 ], ArrowDown: [ 0, 1 ] };
 const SVG = 'http://www.w3.org/2000/svg';
 
 /**
@@ -90,7 +88,8 @@ export class ChatPanel {
 		this.asks = el( 'details', { className: 'chat-section chat-asks' }, summary, this.actions );
 		const leaveKey = keyCap( layout.leaveKey );
 		leaveKey.setAttribute( 'aria-hidden', 'true' );
-		this.leave = el( 'button', { type: 'button', className: 'chat-leave' }, icon( 'leave' ), el( 'span', { textContent: layout.leave } ), leaveKey );
+		this.leaveLabel = el( 'span', { textContent: layout.leave } );
+		this.leave = el( 'button', { type: 'button', className: 'chat-leave' }, icon( 'leave' ), this.leaveLabel, leaveKey );
 		this.leave.setAttribute( 'aria-label', layout.leave );
 		this.leave.addEventListener( 'click', onClose );
 		// The person and what they say on the left, the ways to answer on the right.
@@ -141,12 +140,10 @@ export class ChatPanel {
 
 	setNpc( { name, role = '' } ) {
 		this.title.textContent = name;
-		this.plateName.textContent = name;
 		this.role.textContent = role;
 		this.role.hidden = ! role;
 		this.badge.title = role;
 		this.title.setAttribute( 'aria-description', role );
-		this.plateRole.textContent = role;
 		for ( const [ set, template ] of this.named ) set( template.replaceAll( '{name}', name ) );
 	}
 
@@ -287,7 +284,7 @@ export class ChatPanel {
 		this.#activity();
 		if ( open ) {
 			this.#latest();
-			if ( focus ) ( this.input.disabled ? this.plate : this.input ).focus();
+			if ( focus ) ( this.input.disabled ? this.element : this.input ).focus();
 		} else if ( focus || inside ) ( this.freeAvailable ? this.trigger : this.leave ).focus();
 	}
 
@@ -309,7 +306,7 @@ export class ChatPanel {
 	addMessage( { from, name, text, kind } ) {
 		const line = this.#line( from, name, kind );
 		line.lastElementChild.textContent = text;
-		if ( kind !== 'talk' ) this.#say( line, { animate: from === 'npc' } );
+		if ( this.#spoken( from, kind ) ) this.#say( line, { animate: from === 'npc' } );
 		return line;
 	}
 
@@ -324,7 +321,7 @@ export class ChatPanel {
 		const text = line.lastElementChild.appendChild( document.createTextNode( '' ) );
 		line.classList.add( 'is-streaming' );
 		this.#stream( line, true );
-		if ( kind !== 'talk' ) this.#say( line );
+		if ( this.#spoken( from, kind ) ) this.#say( line );
 		const open = () => this.streaming.has( line );
 		return {
 			line,
@@ -394,12 +391,22 @@ export class ChatPanel {
 		this.#resay();
 	}
 
-	/** Opens a fresh conversation with `{ name, role? }`, the talk window closed, or closes the panel with null. */
+	/**
+	 * Opens a fresh conversation with `{ name, role?, call? }`, the talk
+	 * window closed, or closes the panel with null. On a call (`call`) the
+	 * person's every line, typed replies too, is said in the subtitle alone,
+	 * the talk window keeping the typed input and the lines before it, and
+	 * End conversation reads End call.
+	 */
 	show( npc ) {
 		this.skipSpace = false;
 		this.reveal.cancel();
 		this.hint.reset();
 		this.element.hidden = ! npc;
+		this.call = Boolean( npc?.call );
+		this.element.classList.toggle( 'is-call', this.call );
+		this.leaveLabel.textContent = this.call ? layout.leaveCall : layout.leave;
+		this.leave.setAttribute( 'aria-label', this.leaveLabel.textContent );
 		this.setTalkOpen( false, { focus: false } );
 		if ( ! npc ) return;
 		this.setNpc( npc );
@@ -422,16 +429,8 @@ export class ChatPanel {
 		this.#activity();
 	}
 
-	/** The talk window: its frame, plate, tray tab and tray, transcript, orb and composer. */
+	/** The talk window, in the top left corner: its frame, tray tab and tray, transcript, orb and composer. */
 	#window() {
-		this.plateName = el( 'strong', { className: 'chat-plate-name' } );
-		this.plateRole = el( 'span', { className: 'chat-plate-role' } );
-		this.plate = el( 'div', { className: 'chat-plate' }, el( 'span', { className: 'chat-plate-kicker', textContent: layout.free.title } ), this.plateName, this.plateRole );
-		this.plate.tabIndex = 0;
-		this.plate.setAttribute( 'role', 'button' );
-		this.plate.setAttribute( 'aria-label', layout.talk.move );
-		this.plate.setAttribute( 'aria-keyshortcuts', 'ArrowUp ArrowDown ArrowLeft ArrowRight' );
-		this.#drag( this.plate );
 		this.closeTalk = el( 'button', { type: 'button', className: 'chat-window-close' }, icon( 'close' ) );
 		this.closeTalk.setAttribute( 'aria-label', layout.talk.close );
 		this.closeTalk.addEventListener( 'click', () => this.setTalkOpen( false ) );
@@ -487,7 +486,7 @@ export class ChatPanel {
 
 		const frame = el( 'div', { className: 'chat-frame' },
 			contour( 'frame' ), el( 'div', { className: 'chat-scan' } ),
-			this.plate, this.closeTalk, this.tab,
+			this.closeTalk, this.tab,
 			el( 'div', { className: 'chat-window-body' }, this.transcript, this.activityRow ),
 			this.tray
 		);
@@ -590,35 +589,6 @@ export class ChatPanel {
 		this.hint.place();
 	}
 
-	/** The plate moves the window under the pointer, and by the arrow keys. */
-	#drag( plate ) {
-		let start = null;
-		plate.addEventListener( 'pointerdown', ( event ) => {
-			if ( event.button !== 0 ) return;
-			start = { id: event.pointerId, x: event.clientX - this.x, y: event.clientY - this.y };
-			plate.setPointerCapture?.( event.pointerId );
-			plate.classList.add( 'is-dragging' );
-			event.preventDefault();
-		} );
-		plate.addEventListener( 'pointermove', ( event ) => {
-			if ( start?.id === event.pointerId ) this.#place( event.clientX - start.x, event.clientY - start.y );
-		} );
-		const end = () => {
-			if ( start ) this.#makeRoom( this.#place() );
-			start = null;
-			plate.classList.remove( 'is-dragging' );
-		};
-		plate.addEventListener( 'pointerup', end );
-		plate.addEventListener( 'pointercancel', end );
-		plate.addEventListener( 'keydown', ( event ) => {
-			const step = NUDGE[ event.key ];
-			if ( ! step ) return;
-			event.preventDefault();
-			const by = event.shiftKey ? 48 : 16;
-			this.#makeRoom( this.#place( this.x + step[ 0 ] * by, this.y + step[ 1 ] * by ) );
-		} );
-	}
-
 	/** The orb and its words: waiting for a reply, taking one in, or hearing it; in the talk window while it is open, else by the subtitle. */
 	#activity() {
 		const state = this.element?.hidden !== false ? 'idle'
@@ -638,7 +608,9 @@ export class ChatPanel {
 			this.#resay();
 			return;
 		}
+		this.sayLine?.classList.remove( 'is-said' );
 		this.sayLine = line;
+		line?.classList.add( 'is-said' );
 		const from = line?.className.match( /\bis-(\w+)/ )?.[ 1 ] ?? '';
 		this.said.dataset.from = from;
 		this.sayWho.textContent = from === 'player' ? layout.from.player : '';
@@ -651,7 +623,12 @@ export class ChatPanel {
 	}
 
 	#resay() {
-		this.#say( [ ...this.transcript.children ].findLast( line => ! line.classList.contains( 'is-earlier' ) && ! line.classList.contains( 'is-scene' ) && line.dataset.kind !== 'talk' ) ?? null );
+		this.#say( [ ...this.transcript.children ].findLast( line => ! line.classList.contains( 'is-earlier' ) && ! line.classList.contains( 'is-scene' ) && ( line.dataset.kind !== 'talk' || this.call && line.classList.contains( 'is-npc' ) ) ) ?? null );
+	}
+
+	/** Whether a line is said in the subtitle: every line but free talk, and on a call the person's free talk too. */
+	#spoken( from, kind ) {
+		return kind !== 'talk' || this.call && from === 'npc';
 	}
 
 	#line( from, name, kind ) {
@@ -695,7 +672,7 @@ export class ChatPanel {
 
 	#focusFallback() {
 		const composing = ! this.compose.hidden && ! this.input.disabled;
-		if ( this.talkOpen ) return ( composing ? this.input : this.plate ).focus();
+		if ( this.talkOpen ) return ( composing ? this.input : this.element ).focus();
 		( this.choices.querySelector( 'button:not(:disabled)' ) ?? ( this.asks.open ? this.actions.querySelector( 'button' ) : null ) ??
 			( this.freeAvailable ? this.trigger : this.leave ) ).focus();
 	}
@@ -740,7 +717,7 @@ export class ChatPanel {
 /** A transcript line from `from`, named `name` or by who it is from, tagged by `kind`; a person's line carries their initials for its portrait. */
 function lineOf( from, name, kind ) {
 	const who = name ?? layout.from[ from ] ?? '';
-	// The person's name is on the plate and the badge already: their bubbles keep it for assistive technology only.
+	// The person's name is on the badge already: their bubbles keep it for assistive technology only.
 	const line = el( 'div', { className: 'chat-line is-' + from },
 		el( 'div', { className: 'chat-line-from' }, el( 'span', { className: 'chat-line-who', textContent: who } ) ),
 		el( 'div', { className: 'chat-line-text' } )

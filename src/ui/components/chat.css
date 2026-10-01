@@ -42,8 +42,7 @@
 }
 .chat-layer button { font: inherit; color: inherit; cursor: pointer; }
 .chat-layer button:focus-visible,
-.chat-layer summary:focus-visible,
-.chat-plate:focus-visible { outline: 1px solid var(--talk-accent); outline-offset: 3px; }
+.chat-layer summary:focus-visible { outline: 1px solid var(--talk-accent); outline-offset: 3px; }
 .chat-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .chat-layer .icon { stroke-linecap: round; stroke-linejoin: round; }
 
@@ -275,32 +274,8 @@
 /* A faint CRT line pattern inside the frame, painted once. */
 .chat-scan { position: absolute; inset: 22px 26px; pointer-events: none; background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(235, 230, 206, 0.035) 3px 4px); }
 
-.chat-plate {
-	position: absolute;
-	z-index: 3;
-	top: 4px;
-	left: 50%;
-	width: min(62%, 300px);
-	margin-left: max(-31%, -150px);
-	display: grid;
-	justify-items: center;
-	gap: 1px;
-	padding: 7px 18px 9px;
-	border: 1px solid var(--talk-border);
-	border-radius: 9px 9px 18px 18px;
-	background: var(--talk-surface-strong);
-	cursor: grab;
-	touch-action: none;
-	user-select: none;
-}
-.chat-plate.is-dragging { cursor: grabbing; }
-.chat-plate > * { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chat-plate-kicker { color: var(--talk-muted); font: 9px var(--ui-mono); letter-spacing: 0.2em; text-transform: uppercase; }
-.chat-plate-name { color: var(--talk-accent); font: 600 14px var(--ui-mono); letter-spacing: 0.1em; text-transform: uppercase; }
-.chat-plate-role { color: var(--talk-muted); font-size: 11px; }
-.chat-plate-role:empty { display: none; }
-/* The name and role stand on the badge already: the plate keeps them for assistive technology only. */
-.chat-plate-name, .chat-plate-role, .chat-line.is-npc .chat-line-who { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* The name stands on the badge already: a bubble keeps it for assistive technology only. */
+.chat-line.is-npc .chat-line-who { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .chat-line.is-npc .chat-line-from { margin-bottom: 0; }
 .chat-window-close {
 	position: absolute;
@@ -354,7 +329,7 @@
 	padding: 18px 6px 8px 0;
 	scrollbar-width: thin;
 	scrollbar-color: var(--talk-line) transparent;
-	/* Lines scrolled up fade under the plate instead of ending on a cut. */
+	/* Lines scrolled up fade at the frame's top edge instead of ending on a cut. */
 	mask-image: linear-gradient(to bottom, transparent, #000 22px);
 }
 .chat-line {
@@ -667,3 +642,6 @@
 	}
 
 }
+
+/* On a phone call the person's line is said once, in the subtitle: the talk window keeps the lines before it and the text box. */
+.chat-layer.is-call .chat-transcript > .chat-line.is-said { display: none; }
