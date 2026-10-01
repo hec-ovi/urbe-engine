@@ -54,6 +54,21 @@ export class Passage {
 	}
 
 	/**
+	 * Opens the door a gate names for good, as a host opens their own door to
+	 * a guest: it stays open, the player's to close, and no walker closes it
+	 * behind them. False when no such door is loaded.
+	 */
+	open( gate ) {
+
+		const door = this.#door( gate );
+		if ( ! door ) return false;
+		door.wanted = 1;
+		this.opened.delete( door );
+		return true;
+
+	}
+
+	/**
 	 * Runs one walker's lift gate: `call` answers `board` once the car stands
 	 * open at the gate's landing, else calls it and answers `wait`; `ride`
 	 * sends the car on to the gate's floor and answers `{ y }`, the car's

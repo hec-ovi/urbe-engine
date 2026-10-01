@@ -109,6 +109,39 @@ describe( 'what a person may do for the player', () => {
 
 	} );
 
+	it( 'takes the player up to their own numbered door and opens it for them', () => {
+
+		const game = setup( {}, { interiorRoutes: straightIndoors() } );
+		const barista = game.talkTo();
+		const npc = game.bridge.getNPC( barista.npcId );
+		const homeParcel = npc.home.parcelId;
+		const parcel = FIXTURE_BLUEPRINT.parcels.find( ( entry ) => entry.id === homeParcel );
+		const [ x, z ] = parcel.access.point;
+		const apartment = { floor: 1, unit: 'u1', number: '101', door: [ x + 2, 5, z + 4 ], front: [ x + 2, 5, z + 3.1 ] };
+		npc.home = { ...npc.home, apartment: { id: 'floor:1/u1', number: '101', floor: 1 } };
+		game.inside.plan.mockImplementation( ( parcelId ) => parcelId === homeParcel ? { floors: [], apartments: [ apartment ] } : null );
+		const open = game.inside.open = vi.fn( () => true );
+
+		const home = game.companion.offers( game.ask( barista ) ).find( ( offer ) => offer.destination?.relation === 'home' );
+		expect( home.destination.target ).toEqual( { position: apartment.front, parcelId: homeParcel, floor: 1 } );
+		expect( game.companion.accept( { ...game.ask( barista ), offerId: home.offerId } ).ok ).toBe( true );
+		game.continuity.endConversation( { timeMin: AFTERNOON, hold: true } );
+		game.frame( AFTERNOON, barista.position );
+		for ( let step = 0; step < 4000 && game.continuity.companion?.phase !== 'arrived'; step ++ ) {
+
+			// Shut until the host stands at it.
+			expect( open ).not.toHaveBeenCalled();
+			const at = game.continuity.companion.position;
+			game.frame( AFTERNOON, [ at[ 0 ] + 1, at[ 1 ], at[ 2 ] ] );
+
+		}
+		const stood = game.continuity.companion.position;
+		expect( Math.hypot( ...stood.map( ( value, axis ) => value - apartment.front[ axis ] ) ) ).toBeLessThan( 0.5 );
+		game.frame( AFTERNOON, apartment.front );
+		expect( open ).toHaveBeenCalledExactlyOnceWith( { kind: 'door', parcelId: homeParcel, floor: 1, position: apartment.door } );
+
+	} );
+
 	it( 'leads to a person by their target and paces the walk by who the leader is', () => {
 
 		const game = setup();
@@ -126,7 +159,14 @@ describe( 'what a person may do for the player', () => {
 
 } );
 
-function setup( overrides = {} ) {
+/** Interior routes over every building: straight from the door to the point. */
+function straightIndoors() {
+
+	return { covers: () => true, route: ( parcelId, from, to ) => ( { path3: [ from, to ] } ) };
+
+}
+
+function setup( overrides = {}, continuityOptions = {} ) {
 
 	const networks = network();
 	const buildings = new Map( Object.entries( FIXTURE_INTERIORS ).map( ( [ id, npc ] ) => [ id, { npc } ] ) );
@@ -135,7 +175,7 @@ function setup( overrides = {} ) {
 	const places = FIXTURE_BLUEPRINT.parcels.map( ( parcel ) => ( {
 		kind: 'parcel', id: parcel.id, position: [ parcel.access.point[ 0 ], 1, parcel.access.point[ 1 ] ], heading: 0
 	} ) );
-	const continuity = new NpcContinuity( { simulation: bridge, routes, places } );
+	const continuity = new NpcContinuity( { simulation: bridge, routes, places, ...continuityOptions } );
 	const friend = bridge.getNPCVendor( { parcelId: 'p_clinic', timeMin: 9 * 60 } );
 	const inside = {
 		plan: vi.fn( ( parcelId ) => parcelId === 'p_cafe' ? CAFE_PLAN : null ),

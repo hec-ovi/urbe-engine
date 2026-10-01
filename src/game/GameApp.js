@@ -695,7 +695,7 @@ export class GameApp {
 		}
 		this.scene.add( this.questGameplay.group );
 		this.probe?.exclude( this.questGameplay.group );
-		const reach = companionReach( { buildings, places: continuityPlaces, interiorRoutes: this.interiorRoutes, continuity: this.npcContinuity } );
+		const reach = companionReach( { buildings, places: continuityPlaces, interiorRoutes: this.interiorRoutes, continuity: this.npcContinuity, ways: this.passage } );
 		const categories = new Map( ( npcTypes?.types ?? [] ).map( ( { type, category } ) => [ type, category ] ) );
 		this.companion = new CompanionGameplay( {
 			continuity: this.npcContinuity, sim: this.sim, routes, places: continuityPlaces, atlas,
@@ -2910,7 +2910,7 @@ export function lightWords( state = 'night', indoors = false ) {
  * nearest a body in its building. Each answers `{ position, parcelId, floor,
  * heading?, seated? }` or null.
  */
-export function companionReach( { buildings, places, interiorRoutes, continuity } ) {
+export function companionReach( { buildings, places, interiorRoutes, continuity, ways = null } ) {
 
 	const plans = new Map();
 	const supports = new Map();
@@ -2929,6 +2929,8 @@ export function companionReach( { buildings, places, interiorRoutes, continuity 
 	const anchorOf = ( parcelId, id ) => anchors.get( parcelId )?.find( ( anchor ) => anchor.id === id ) ?? null;
 	return {
 		plan: ( parcelId ) => plans.get( parcelId ) ?? interiorRoutes?.plan( parcelId ) ?? null,
+		/** Opens the door a gate names for good, the host's own door to a guest (Passage `open`); false when it is not loaded. */
+		open: ( gate ) => ways?.open?.( gate ) ?? false,
 		workSpot( npc ) {
 
 			const parcelId = npc.job?.parcelId;

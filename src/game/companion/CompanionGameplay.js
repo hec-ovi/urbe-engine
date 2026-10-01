@@ -56,7 +56,7 @@ export class CompanionGameplay {
 	 * @param crowd optional `{ memberForNpc(npcId) }`, whose fallen bodies cannot come
 	 */
 	/**
-	 * @param inside optional `{ plan(parcelId), workSpot(npc), homeSpot(npc), seat(actor) }`:
+	 * @param inside optional `{ plan(parcelId), workSpot(npc), homeSpot(npc), seat(actor), open(gate) }`:
 	 *   a building's circulation, the spot a person works at, the seat of
 	 *   their own home, the free seat nearest a body in its building; each a
 	 *   `{ position, parcelId, floor, heading?, seated? }` or null
@@ -465,6 +465,20 @@ export class CompanionGameplay {
 
 	}
 
+	/**
+	 * A host who brought the player to their own apartment door opens it for
+	 * them: the door of the plan's apartment whose front the lead stopped at.
+	 */
+	#openHome( destination ) {
+
+		const target = destination.target;
+		if ( destination.relation !== 'home' || ! target?.position || ! this.inside?.open ) return;
+		const apartment = this.inside.plan?.( target.parcelId )?.apartments
+			.find( ( entry ) => entry.floor === target.floor && entry.front.every( ( value, axis ) => Math.abs( value - target.position[ axis ] ) < 1e-6 ) );
+		if ( apartment ) this.inside.open( { kind: 'door', parcelId: target.parcelId, floor: apartment.floor, position: [ ...apartment.door ] } );
+
+	}
+
 	/** The point inside a lead's place the leader takes the player to, or the person it takes them to, or null. */
 	#leadTarget( destination ) {
 
@@ -588,6 +602,7 @@ export class CompanionGameplay {
 		if ( state.phase === 'walking' || state.phase === 'waiting' ) {
 
 			state.phase = companion.phase;
+			if ( state.phase === 'arrived' ) this.#openHome( state.destination );
 			if ( state.phase === 'waiting' && ! talking && ( state.lineAtMin === undefined || timeMin - state.lineAtMin >= WAIT_LINE_MIN ) ) {
 
 				state.lineAtMin = timeMin;

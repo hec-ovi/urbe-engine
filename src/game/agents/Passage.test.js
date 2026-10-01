@@ -34,6 +34,21 @@ describe( 'Passage', () => {
 
 	} );
 
+	it( 'opens a host\'s own door for good, never closing it behind a walker', () => {
+
+		let now = 0;
+		const home = { parcelId: 'p1', center: point( 10, 4.5, 5 ), open: 0, wanted: 0 };
+		const passage = new Passage( { doors: () => [ home ], seconds: () => now } );
+		const gate = { kind: 'door', parcelId: 'p1', floor: 1, position: [ 10, 4.5, 5 ] };
+		expect( passage.pass( 'n1', gate ) ).toBe( false );
+		expect( passage.open( gate ) ).toBe( true );
+		now = 60;
+		passage.update();
+		expect( home.wanted ).toBe( 1 );
+		expect( passage.open( { ...gate, position: [ 40, 4.5, 5 ] } ) ).toBe( false );
+
+	} );
+
 	it( "calls a lift to the walker's landing, boards it open, sends it to the walker's floor and lets the walker out when it opens there", () => {
 
 		const stops = [ { floor: 0, elevation: 0, open: 0 }, { floor: 3, elevation: 13.5, open: 0 } ];
