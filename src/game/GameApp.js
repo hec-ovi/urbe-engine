@@ -2481,7 +2481,7 @@ export class GameApp {
 		// camera have taken their light slots and are worth reflecting.
 		this.indoors = undefined;
 		// A cut is not a walk: the eye arrives adapted to wherever it was put.
-		this.exposure.settle();
+		this.exposure?.settle();
 
 		return true;
 
