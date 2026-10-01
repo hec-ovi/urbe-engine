@@ -5,6 +5,16 @@ import { fabricDetail } from './Fabric.js';
 
 /** Height steps a crowd body can stand at, across the recipes' range. */
 const STATURES = 31;
+/**
+ * A crowd body's three builds (Recipe.buildsOf) ride in its pose lane above
+ * the row it blends to: BUILD_LEVELS steps each, the middle one neutral,
+ * BUILD_STEP of an amount apart, so the street's range (Recipe.STREET_BUILDS)
+ * is covered with a step of about two hundredths.
+ */
+export const BUILD_LEVELS = 15;
+export const BUILD_STEP = 0.15 / 7;
+/** The pose lane's rows stay below this; the builds are counted in multiples of it. */
+export const ROW_SPAN = 1024;
 /** How wide a cut's edge fades, as a share of body height: about a centimetre. */
 const EDGE = 0.006;
 /** How far a seam's shadow reaches either side of a cut, as a share of height. */
@@ -31,6 +41,7 @@ const packs = new WeakMap();
  * - `shoes`, `panel`: the footwear's and the top's second colour, as sRGB bytes
  * - `figure`: the footwear's top and the collar a byte each, then the top's
  *   panel style (2 bits), whether it is tucked (1) and the height step (5)
+ * - `builds`: the upper, waist and lower build steps, four bits each
  */
 export function packLook( look ) {
 
@@ -42,7 +53,8 @@ export function packLook( look ) {
 		shoes: look.shoes.getHex(),
 		panel: look.panel.getHex(),
 		figure: byte( look.bootTop ) + byte( look.neck ) * 256
-			+ ( ( look.panelStyle & 3 ) | ( look.tucked ? 4 : 0 ) | ( Math.max( 0, Math.min( STATURES, height ) ) << 3 ) ) * 65536
+			+ ( ( look.panelStyle & 3 ) | ( look.tucked ? 4 : 0 ) | ( Math.max( 0, Math.min( STATURES, height ) ) << 3 ) ) * 65536,
+		builds: level( look.builds?.upper ) + level( look.builds?.waist ) * 16 + level( look.builds?.lower ) * 256
 	};
 	packs.set( look, pack );
 	return pack;
@@ -158,6 +170,28 @@ export function paintedColorNode( map, colors, garments, eyeMap = null ) {
 export function clothShare( { top, pants, shoes } ) {
 
 	return max( top, max( pants, shoes ) );
+
+}
+
+/** One build's step: BUILD_LEVELS of them, the middle one neutral. */
+function level( amount ) {
+
+	const middle = ( BUILD_LEVELS - 1 ) / 2;
+	return Math.max( 0, Math.min( BUILD_LEVELS - 1, Math.round( ( amount ?? 0 ) / BUILD_STEP + middle ) ) );
+
+}
+
+/**
+ * How far a crowd body's surface moves out along its normal for its builds,
+ * from the pose lane above its row (vertex stage): the body's per-vertex
+ * builds (`basis`, xyz the upper, waist and lower body's) weighted by the
+ * person's steps.
+ */
+export function buildNode( lane, basis ) {
+
+	const code = floor( lane.div( ROW_SPAN ) );
+	const steps = vec3( mod( code, 16 ), mod( floor( code.div( 16 ) ), 16 ), floor( code.div( 256 ) ) );
+	return basis.xyz.dot( steps.sub( ( BUILD_LEVELS - 1 ) / 2 ).mul( BUILD_STEP ) );
 
 }
 

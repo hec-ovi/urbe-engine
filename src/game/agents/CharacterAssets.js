@@ -7,6 +7,9 @@ import { EVERYONE, HairMesh, crowdHairstyles } from './HairMesh.js';
 import { CharacterAnimations } from './CharacterAnimations.js';
 import { garments } from './Garments.js';
 import { hasClip, transferredClip } from './LayeredClips.js';
+import { BodyShapes } from './avatar/BodyShape.js';
+import { BUILD_KEYS } from './avatar/Recipe.js';
+import { stepped } from './avatar/Steps.js';
 import {
 	ANIMATION_URL, CHARACTER_MANIFEST_URL, CHARACTER_ROOT, CROWD_CLIPS, CROWD_MODELS,
 	assertRigCompatibility
@@ -124,6 +127,8 @@ export class CharacterAssets {
 			] );
 			onProgress( ++ done, total );
 			const baked = mergeBaked( [ bakedBody, bakedEyes ] );
+			// The slim and the broad share the bake: each vertex's builds, out along its normal.
+			baked.builds = crowdBuilds( await stepped( BodyShapes.measure( root ), slice ), baked.vertexCount );
 			const cloth = crowdCloth( bodyCloth, bakedEyes.vertexCount );
 
 			if ( slice ) await slice.step();
@@ -188,7 +193,42 @@ export class CharacterAssets {
 export function vatBytes( baked, head, storageCapable ) {
 
 	const scalar = storageCapable ? 4 : 2;
-	return ( baked.rows * baked.vertexCount * 2 + head.rows * 3 ) * 4 * scalar;
+	return ( baked.rows * baked.vertexCount * 2 + head.rows * 3 + ( baked.builds ? baked.vertexCount : 0 ) ) * 4 * scalar;
+
+}
+
+/**
+ * Each vertex of the merged body draw, how far one unit of each of a
+ * person's builds (Recipe.BUILD_KEYS: upper, waist, lower) moves it out along
+ * its rest normal: the body's shape controls (BodyShape) summed over the
+ * build's controls and laid on the normal, which holds most of a width
+ * control's reach. The eyes, after the body, never move.
+ *
+ * @param shapes the body's BodyShapes
+ * @returns a Float32Array of a vec4 per vertex: upper, waist, lower, 0
+ */
+export function crowdBuilds( shapes, vertexCount ) {
+
+	const builds = new Float32Array( vertexCount * 4 );
+	const normals = shapes.normals;
+	const count = normals.length / 3;
+	Object.values( BUILD_KEYS ).forEach( ( keys, lane ) => {
+
+		for ( const key of keys ) {
+
+			const basis = shapes.basis[ key ];
+			for ( let i = 0; i < count; i ++ ) {
+
+				const x = normals[ i * 3 ], y = normals[ i * 3 + 1 ], z = normals[ i * 3 + 2 ];
+				const length = Math.hypot( x, y, z ) || 1;
+				builds[ i * 4 + lane ] += ( basis[ i * 3 ] * x + basis[ i * 3 + 1 ] * y + basis[ i * 3 + 2 ] * z ) / length;
+
+			}
+
+		}
+
+	} );
+	return builds;
 
 }
 

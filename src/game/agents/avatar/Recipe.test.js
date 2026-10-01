@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-	DEFAULT_SHAPE, GARMENTS, SHAPE_LIMITS, SLOTS, defaultRecipe, hairstylesFor, nearSkin, normalizeRecipe,
-	personRecipe, randomizeRecipe, recipeKey
+	BUILD_KEYS, DEFAULT_SHAPE, GARMENTS, SHAPE_LIMITS, SLOTS, STREET_BUILDS, buildsOf, defaultRecipe, hairstylesFor, nearSkin,
+	normalizeRecipe, personRecipe, randomizeRecipe, recipeKey
 } from './Recipe.js';
 
 describe( 'character recipes', () => {
@@ -17,30 +17,46 @@ describe( 'character recipes', () => {
 		const person = personRecipe( { gender: 'male', appearanceSeed: 3141592653 } );
 		const garments = ( { outfit } ) => ( { ...outfit, colors: null } );
 		expect( { ...person, shape: null, outfit: garments( person ) } ).toEqual( { ...recipe, shape: null, outfit: garments( recipe ) } );
-		expect( person.shape.height ).toBe( recipe.shape.height );
+		// Height is the studio's, spread wider on the street.
+		expect( Math.sign( person.shape.height - 1 ) ).toBe( Math.sign( recipe.shape.height - 1 ) );
+		expect( Math.abs( person.shape.height - 1 ) ).toBeGreaterThanOrEqual( Math.abs( recipe.shape.height - 1 ) );
 		expect( person.shape.faceWidth ).toBe( recipe.shape.faceWidth );
 
 	} );
 
-	it( 'keeps the people of a street near an ordinary build: no exaggerated seats, hips or thickness', () => {
+	it( 'gives a street slim, average and broad people of an ordinary build, never heavy, short and tall, each build moving its controls together', () => {
 
-		const seats = [];
+		const builds = { upper: [], waist: [], lower: [] };
+		const heights = [];
 		for ( let seed = 0; seed < 2000; seed ++ ) {
 
 			const { shape } = personRecipe( { gender: seed % 2 ? 'female' : 'male', appearanceSeed: seed * 2654435761 >>> 0 } );
-			seats.push( shape.glutes );
-			for ( const key of [ 'glutes', 'hips', 'thighs', 'thickness', 'waist', 'build' ] ) {
+			const amounts = buildsOf( shape );
+			for ( const [ build, keys ] of Object.entries( BUILD_KEYS ) ) {
 
-				expect( shape[ key ] ).toBeGreaterThanOrEqual( 0.8 );
-				expect( shape[ key ] ).toBeLessThanOrEqual( 1.2 );
+				const [ least, most ] = STREET_BUILDS[ build ].range;
+				expect( amounts[ build ] ).toBeGreaterThanOrEqual( least - 1e-9 );
+				expect( amounts[ build ] ).toBeLessThanOrEqual( most + 1e-9 );
+				for ( const key of keys ) expect( shape[ key ] ).toBe( shape[ keys[ 0 ] ] );
+				builds[ build ].push( amounts[ build ] );
 
 			}
+			expect( shape.shoulders - 1 ).toBeCloseTo( amounts.upper * 0.6, 2 );
+			heights.push( shape.height );
 
 		}
-		const mean = seats.reduce( ( sum, seat ) => sum + seat, 0 ) / seats.length;
-		expect( Math.abs( mean - 1 ) ).toBeLessThan( 0.03 );
-		expect( Math.max( ...seats ) ).toBeLessThanOrEqual( 1.15 );
-		expect( seats.filter( ( seat ) => seat > 1.1 ).length / seats.length ).toBeLessThan( 0.1 );
+		const quantile = ( list, q ) => [ ...list ].sort( ( a, b ) => a - b )[ Math.floor( q * ( list.length - 1 ) ) ];
+		const mean = ( list ) => list.reduce( ( sum, value ) => sum + value, 0 ) / list.length;
+		// Slim and broad both show: the middle four fifths of the street spread a tenth of a unit and more.
+		expect( quantile( builds.upper, 0.9 ) - quantile( builds.upper, 0.1 ) ).toBeGreaterThan( 0.1 );
+		expect( quantile( builds.lower, 0.9 ) - quantile( builds.lower, 0.1 ) ).toBeGreaterThan( 0.08 );
+		// Short and tall: the middle four fifths span seven hundredths of the frame's height.
+		expect( quantile( heights, 0.9 ) - quantile( heights, 0.1 ) ).toBeGreaterThan( 0.07 );
+		// Slimmer than the pack's athletic to heavy bodies on average, and no bellies.
+		expect( mean( builds.upper ) ).toBeLessThan( 0 );
+		expect( mean( builds.waist ) ).toBeLessThan( - 0.02 );
+		expect( Math.max( ...builds.waist ) ).toBeLessThanOrEqual( 1e-9 );
+		expect( Math.max( ...builds.lower ) ).toBeLessThanOrEqual( 0.01 + 1e-9 );
 
 	} );
 

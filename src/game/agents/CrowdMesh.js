@@ -4,7 +4,7 @@ import { cos, instancedBufferAttribute, int, mix, sin, transformNormalToView, va
 import { FRAMES, clipRows, rowsAt } from './VatBaker.js';
 import { presenceMaterial } from './Presence.js';
 import { PoseBuffer } from './PoseBuffer.js';
-import { packLook, statureNode } from './CrowdLook.js';
+import { ROW_SPAN, buildNode, packLook, statureNode } from './CrowdLook.js';
 
 /** How every crowd surface answers light; a focused rig wears the same, so the swap does not show. */
 export const CROWD_SURFACE = { roughness: 0.9, metalness: 0 };
@@ -61,7 +61,8 @@ export class CrowdMesh {
 		const whole = aRow.floor();
 		const blend = aRow.sub( whole );
 		const row0 = int( whole );
-		const row1 = int( aPose.y.add( 0.5 ) );
+		// Above the second row the lane carries the person's builds (CrowdLook.buildNode).
+		const row1 = int( aPose.y.mod( ROW_SPAN ).add( 0.5 ) );
 		const column = int( vertexIndex );
 
 		const c = cos( aHeading );
@@ -73,8 +74,14 @@ export class CrowdMesh {
 		);
 
 		const posed = this.posed( baked, storageCapable, { row0, row1, blend, column } );
+		// A person's build moves the surface out or in along its posed normal:
+		// a body's builds are almost all across it (BodyShape), so the slim and
+		// the broad share one bake.
+		const built = baked.builds
+			? posed.position.add( posed.normal.normalize().mul( buildNode( aPose.y, new PoseBuffer( baked.builds, baked.vertexCount, 1, storageCapable ).row( int( 0 ), column ) ) ) )
+			: posed.position;
 		// A person stands at their recipe's height: the baked body scaled about its feet.
-		const pose = posed.position.mul( statureNode( aPose.w ) );
+		const pose = built.mul( statureNode( aPose.w ) );
 		const normal = posed.normal;
 
 		const geometry = baked.mesh.geometry.clone();
@@ -173,8 +180,9 @@ export class CrowdMesh {
 	setInstance( slot, position, heading, frame, clip, look, presence = 1 ) {
 
 		const rows = rowsAt( this.clips[ clip ] ?? this.clips[ 0 ], frame, this.rows );
+		const pack = packLook( look );
 		this.motion.setXYZW( slot, position.x, position.y, position.z, heading );
-		this.pose.setXYZW( slot, rows[ 0 ], rows[ 1 ], presence, packLook( look ).figure );
+		this.pose.setXYZW( slot, rows[ 0 ], rows[ 1 ] + pack.builds * ROW_SPAN, presence, pack.figure );
 		this.setLook( slot, look );
 
 	}

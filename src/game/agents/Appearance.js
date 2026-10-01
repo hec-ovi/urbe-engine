@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { bodyOf, personRecipe } from './avatar/Recipe.js';
+import { bodyOf, buildsOf, personRecipe } from './avatar/Recipe.js';
 import { AvatarTemplates } from './avatar/Templates.js';
 import { TOP_CUTS } from './avatar/Tops.js';
 import { FOOTWEAR_CUTS, PANTS_CUTS } from './avatar/Lower.js';
@@ -58,6 +58,8 @@ export function recipeFor( { gender, appearanceSeed, npcId = null }, templates =
  *   above, whether it goes under the trousers, how its second colour shows (TOP_PANELS)
  * - `pantsHem`, `waist`, `bootTop`: where the trousers and footwear end
  * - `height`: the recipe's height, a share of its frame's
+ * - `builds`: how the body differs from its frame's, as the crowd draws it
+ *   (Recipe.buildsOf): `{ upper, waist, lower }` amounts off neutral
  * - `hairStyle`: the recipe's hairstyle, '' for none
  */
 export function appearance( person, templates = TEMPLATES ) {
@@ -96,6 +98,7 @@ export function lookOf( recipe, template = null ) {
 		waist: pants ? PANTS_CUTS[ pants ].waist : 0,
 		bootTop: footwear ? FOOTWEAR_CUTS[ footwear ].top : 0,
 		height: recipe.shape.height,
+		builds: buildsOf( recipe.shape ),
 		hairStyle: recipe.hair
 	};
 

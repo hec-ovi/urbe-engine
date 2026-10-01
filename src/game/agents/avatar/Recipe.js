@@ -219,9 +219,10 @@ export function randomizeRecipe( base = defaultRecipe(), { seed, scope = 'all' }
  * their appearance seed, on the regular body of their gender. The seed is read
  * exactly as the studio's `all` scope reads it, so the person's hairstyle,
  * colouring, face, height and garments are the studio's for that numeric seed
- * wherever the studio picked their gender. Their clothes are coloured from
- * the street's wardrobe (`streetColors`), never a top near their skin, and
- * each of `outfits` dresses its share of the crowd instead.
+ * wherever the studio picked their gender. Their build is read off the
+ * studio's draw into an ordinary street range (`streetBuild`), their clothes
+ * are coloured from the street's wardrobe (`streetColors`), never a top near
+ * their skin, and each of `outfits` dresses its share of the crowd instead.
  *
  * @param outfits `{ outfit, share }`: an authored outfit (`{ top, pants,
  *   footwear, fabric, colors }`) and the share of people who wear it
@@ -234,7 +235,7 @@ export function personRecipe( { gender, appearanceSeed }, { outfits = [] } = {} 
 	// The studio's body pick: drawn so the rest of the stream stays the studio's.
 	random();
 	generate( recipe, random, pick, 'all' );
-	streetProportions( recipe.shape );
+	streetBuild( recipe.shape );
 	const authored = sharedOutfit( outfits, random() );
 	if ( authored ) recipe.outfit = structuredClone( authored );
 	else recipe.outfit.colors = streetColors( recipe.colors.skin, appearanceSeed >>> 0 );
@@ -243,28 +244,76 @@ export function personRecipe( { gender, appearanceSeed }, { outfits = [] } = {} 
 }
 
 /**
- * The studio draws across its whole editing range and favours a fuller seat,
- * which crowds a street with exaggerated figures. People in the city keep the
- * studio's draw but sit near an ordinary build: every body proportion keeps
- * STREET_SPREAD of its distance from neutral, and the seat loses the studio's
- * lift and keeps only SEAT_SPREAD. Height and the face keep their own spread.
+ * Where a person's three builds lie on the street, as amounts off neutral:
+ * the upper body (build, thickness, chest and arms, the shoulders at
+ * SHOULDER_SHARE of it), the waist, and the lower body (hips, seat and
+ * thighs). The pack's bodies stand athletic to heavy at neutral, the
+ * female's hips and thighs the fullest, so the street centres on an
+ * ordinary build below them: slim to broad shoulders, never a fuller waist,
+ * hips or thighs than the pack's own.
  */
-export const STREET_SPREAD = 0.4;
-/** The seat varies least: the studio's widest control, centred on 1.28 by its +0.35 lift over a 0.8 upper span. */
-const SEAT_SPREAD = 0.28;
+export const STREET_BUILDS = Object.freeze( {
+	upper: Object.freeze( { spread: 0.18, centre: - 0.06, range: Object.freeze( [ - 0.15, 0.04 ] ) } ),
+	waist: Object.freeze( { spread: 0.1, centre: - 0.07, range: Object.freeze( [ - 0.15, - 0.01 ] ) } ),
+	lower: Object.freeze( { spread: 0.15, centre: - 0.06, range: Object.freeze( [ - 0.14, 0.01 ] ) } )
+} );
+/** The controls each build moves together, as the crowd's baked bodies take them (CharacterAssets, BodyShape). */
+export const BUILD_KEYS = Object.freeze( {
+	upper: Object.freeze( [ 'build', 'thickness', 'chest', 'arms' ] ),
+	waist: Object.freeze( [ 'waist' ] ),
+	lower: Object.freeze( [ 'hips', 'glutes', 'thighs' ] )
+} );
+const SHOULDER_SHARE = 0.6;
+/** The legs keep this share of the studio's spread. */
+const LEG_SPREAD = 0.4;
+/** Height spreads this much wider than the studio draws it, within its limits: short to tall shows across a street. */
+const HEIGHT_SPREAD = 1.6;
+/** The studio's seat is centred on 1.28 by its +0.35 lift over a 0.8 upper span. */
 const STUDIO_SEAT_CENTRE = 1.28;
 
-function streetProportions( shape ) {
+/**
+ * A person's build on the street, read off the studio's draw. The studio
+ * draws across its whole editing range and favours a fuller seat, which
+ * crowds a street with exaggerated figures; squeezed toward neutral instead,
+ * everybody stands in one build. So each of the three builds (STREET_BUILDS)
+ * takes the mean of the studio's draw over its controls, as a share of each
+ * control's span, and places it in its street range: the controls of a build
+ * then move together, which is also how the crowd's baked bodies take a
+ * person's shape. Height spreads HEIGHT_SPREAD times the studio's, within its
+ * limits; the face keeps the studio's spread.
+ */
+export function streetBuild( shape ) {
 
-	for ( const key of BODY_SHAPE_KEYS ) {
+	for ( const [ build, keys ] of Object.entries( BUILD_KEYS ) ) {
 
-		if ( key === 'height' ) continue;
-		const seat = key === 'glutes';
-		const [ min, max ] = SHAPE_LIMITS[ key ];
-		const offset = ( shape[ key ] - ( seat ? STUDIO_SEAT_CENTRE : 1 ) ) * ( seat ? SEAT_SPREAD : STREET_SPREAD );
-		shape[ key ] = round( Math.max( min, Math.min( max, 1 + offset ) ) );
+		const drawn = keys.reduce( ( sum, key ) => {
+
+			const [ min, max ] = SHAPE_LIMITS[ key ];
+			const centre = key === 'glutes' ? STUDIO_SEAT_CENTRE : 1;
+			const offset = shape[ key ] - centre;
+			return sum + offset / ( offset < 0 ? centre - min : max - centre );
+
+		}, 0 ) / keys.length;
+		const { spread, centre, range } = STREET_BUILDS[ build ];
+		const amount = round( Math.max( range[ 0 ], Math.min( range[ 1 ], centre + drawn * spread ) ) );
+		for ( const key of keys ) shape[ key ] = round( 1 + amount );
+		if ( build === 'upper' ) shape.shoulders = round( 1 + amount * SHOULDER_SHARE );
 
 	}
+	shape.legs = round( 1 + ( shape.legs - 1 ) * LEG_SPREAD );
+	shape.height = round( Math.max( HEIGHT_LIMITS[ 0 ], Math.min( HEIGHT_LIMITS[ 1 ], 1 + ( shape.height - 1 ) * HEIGHT_SPREAD ) ) );
+
+}
+
+/**
+ * How a person's body differs from their frame's, as the three builds the
+ * crowd draws (STREET_BUILDS): each the mean amount off neutral of its controls.
+ */
+export function buildsOf( shape ) {
+
+	return Object.fromEntries( Object.entries( BUILD_KEYS ).map( ( [ build, keys ] ) => [
+		build, keys.reduce( ( sum, key ) => sum + ( ( shape?.[ key ] ?? 1 ) - 1 ), 0 ) / keys.length
+	] ) );
 
 }
 
