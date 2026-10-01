@@ -5,11 +5,12 @@
  */
 import { Color, DoubleSide, MeshStandardNodeMaterial } from 'three/webgpu';
 import { attribute, float, Fn, fwidth, mix, smoothstep, uniform } from 'three/tsl';
+import { garmentWear, textileNormal, textileResponse } from './GarmentTextiles.js';
 
 export const FABRIC_FINISHES = {
-	tech: { roughness: 0.66, metalness: 0.035, grain: 0.014 },
-	woven: { roughness: 0.9, metalness: 0.005, grain: 0.025 },
-	leather: { roughness: 0.4, metalness: 0.018, grain: 0.008 }
+	tech: { roughness: 0.64, metalness: 0, grain: 0.035 },
+	woven: { roughness: 0.82, metalness: 0, grain: 0.055 },
+	leather: { roughness: 0.5, metalness: 0, grain: 0.025 }
 };
 const PANELS = [ 'primary', 'secondary', 'accent', 'trim' ];
 /**
@@ -25,9 +26,9 @@ const DEFAULT_COLORS = [ '#202c3b', '#536377', '#a9bcb7', '#10151d' ];
  * fragment in the finished shell's rest coordinates, so neither the
  * triangulation nor a pose turns a straight stitched edge into a row of
  * coloured teeth. Colours and fabric are uniforms: dressing another person in
- * the same garment rebuilds nothing and compiles nothing, and no image or
- * frame callback is used. The garment's cut picks its panels once, when the
- * material is made.
+ * the same garment rebuilds nothing and compiles nothing. A small shared
+ * textile atlas provides mipmapped dye, roughness and yarn relief; there is
+ * no frame callback. The garment's cut picks its panels once at construction.
  *
  * @param worn when given, `worn(object)` is the panels (`panelsFor`) of the
  *   mesh being drawn, read per draw: one material then dresses everybody
@@ -41,16 +42,24 @@ export function createPanelMaterial( id, palette = null, fabric = 'tech', { worn
 		palette: DEFAULT_COLORS.map( ( value ) => uniform( new Color( value ) ) ),
 		roughness: uniform( 0.66 ),
 		metalness: uniform( 0.035 ),
-		grain: uniform( 0.014 )
+		grain: uniform( 0.014 ),
+		fabric: uniform( 0 )
 	};
 	if ( worn ) {
 
 		controls.palette.forEach( ( node, index ) => node.onObjectUpdate( ( { object } ) => worn( object )?.palette[ index ] ) );
-		for ( const key of [ 'roughness', 'metalness', 'grain' ] ) controls[ key ].onObjectUpdate( ( { object } ) => worn( object )?.[ key ] );
+		for ( const key of [ 'roughness', 'metalness', 'grain', 'fabric' ] ) controls[ key ].onObjectUpdate( ( { object } ) => worn( object )?.[ key ] );
 
 	}
 	material.userData.garment = id;
 	CONTROLS.set( material, controls );
+	const textile = textileResponse( id, controls.fabric );
+	const surface = attribute( 'garmentSurface', 'vec3' );
+	const shares = attribute( 'garmentShares', 'vec4' );
+	const wear = garmentWear( id, surface, shares );
+	const footwear = /^(boots|shoes|sneakers)-/.test( id );
+	const sole = footwear ? smoothstep( 0.022, 0.03, surface.y ).oneMinus() : float( 0 );
+	const construction = constructionHeight( id, surface, shares );
 
 	material.colorNode = Fn( () => {
 
@@ -89,16 +98,28 @@ export function createPanelMaterial( id, palette = null, fabric = 'tech', { worn
 		else if ( id === 'shoes-city' ) paintCityShoes( context );
 		else paintVariantPanels( id, context );
 
-		// Woven microstructure is procedural, restrained and derivative-filtered:
-		// at ordinary framing it resolves to an even surface.
-		out.mulAssign( float( 1 ).add( fabricGrain( p ).mul( controls.grain ) ) );
+		// Mipmapped yarn detail integrates at distance. Contact wear also polishes
+		// the response below, instead of just painting dirt over the whole outfit.
+		out.mulAssign( textile.r.sub( 0.5 ).mul( controls.grain.mul( 4 ) ).add( 1 ) );
+		out.mulAssign( mix( float( 1 ), textile.a, float( 0.4 ) ) );
+		out.assign( mix( out, out.mul( 1.15 ).add( 0.004 ), wear.mul( 0.35 ) ) );
 		paint( rim, trim );
 		return out;
 
 	} )();
 
-	material.roughnessNode = Fn( () => controls.roughness.add( fabricGrain( attribute( 'garmentSurface', 'vec3' ) ).mul( controls.grain ).mul( 0.6 ) ).clamp( 0.16, 0.99 ) )();
+	material.roughnessNode = Fn( () => {
+
+		const fabric = id === 'pants-leggings'
+			? mix( controls.roughness, float( 0.36 ), controls.fabric.equal( 0 ) ) : controls.roughness;
+		const base = footwear ? float( id.startsWith( 'sneakers-' ) ? 0.76 : id === 'shoes-city' ? 0.38 : 0.51 ) : fabric;
+		return mix( base.add( textile.g.sub( 0.5 ).mul( 0.28 ) ).sub( wear.mul( 0.07 ) ), float( 0.94 ), sole ).clamp( 0.24, 0.98 );
+
+	} )();
 	material.metalnessNode = controls.metalness;
+	const yarnHeight = footwear ? float( id.startsWith( 'sneakers-' ) ? 0.0001 : 0.00005 )
+		: mix( float( 0.0001 ), float( 0.000045 ), controls.fabric.equal( 2 ) );
+	material.normalNode = textileNormal( textile.b.mul( yarnHeight ).mul( sole.oneMinus() ).add( construction ) );
 	updatePanelMaterial( material, palette, fabric );
 	return material;
 
@@ -122,7 +143,8 @@ export function panelsFor( palette, fabric = 'tech' ) {
 			: new Color( colors[ index ] ?? DEFAULT_COLORS[ index ] ) ),
 		roughness,
 		metalness: finish?.metalness ?? FABRIC_FINISHES.tech.metalness,
-		grain: finish?.grain ?? ( roughness > 0.8 ? 0.025 : 0.012 )
+		grain: finish?.grain ?? ( roughness > 0.8 ? 0.055 : 0.035 ),
+		fabric: fabric === 'woven' ? 1 : fabric === 'leather' ? 2 : 0
 	};
 
 }
@@ -137,6 +159,7 @@ export function updatePanelMaterial( material, palette, fabric = 'tech' ) {
 	controls.roughness.value = panels.roughness;
 	controls.metalness.value = panels.metalness;
 	controls.grain.value = panels.grain;
+	controls.fabric.value = panels.fabric;
 	// Plain material reads (inspection, copies) see the same finish.
 	material.roughness = panels.roughness;
 	material.metalness = panels.metalness;
@@ -168,6 +191,8 @@ function paintTechTop( { p, ax, arm, neck, body, chest, back, secondary, accent,
 
 function paintPoliceJacket( { p, ax, arm, neck, body, chest, back, side, secondary, accent, trim, paint } ) {
 
+	// The body and sleeves remain separate layers even in subdued work colours.
+	paint( arm, secondary, 0.86 );
 	const shoulder = above( p.y, ax.mul( 0.12 ).add( 0.789 ) ).mul( body );
 	paint( shoulder, secondary, 0.7 );
 	paint( arm.mul( below( ax, 0.184 ) ), secondary, 0.65 );
@@ -357,10 +382,21 @@ function paintVariantPanels( id, context ) {
 
 }
 
-function paintKnitTop( profile, { p, ax, arm, neck, body, chest, side, secondary, accent, trim, paint } ) {
+function paintKnitTop( profile, { p, ax, arm, neck, body, chest, back, side, primary, secondary, accent, trim, paint } ) {
 
 	if ( profile.sleeveless ) {
 
+		// Printed cotton: brick/red colourways carry diagonal stripes. Pale
+		// colourways keep a small back print instead of sharing the same uniform.
+		const red = smoothstep( 0.025, 0.16, primary.r.sub( primary.b ) );
+		const stripes = periodicLine( p.y.add( p.x.mul( 0.65 ) ).mul( 21 ), 0.19 )
+			.mul( body ).mul( band( p.y, profile.hem + 0.018, 0.803 ) ).mul( chest.max( back ) );
+		paint( stripes, trim, red.mul( 0.78 ) );
+		const pale = smoothstep( 0.16, 0.55, primary.r.add( primary.g ).add( primary.b ).div( 3 ) );
+		const print = band( ax, 0.023, 0.033 ).mul( band( p.y, 0.725, 0.792 ) )
+			.max( band( p.x, - 0.036, 0.026 ).mul( band( p.y, 0.745, 0.754 ) ) )
+			.max( band( p.x, - 0.013, 0.036 ).mul( band( p.y, 0.771, 0.781 ) ) ).mul( back );
+		paint( print, secondary, pale.mul( 0.88 ) );
 		// Continuous side inserts and bound armholes mark the athletic tank.
 		paint( above( ax, 0.06 ).mul( body ), secondary, 0.9 );
 		paint( band( ax, 0.093, 0.108 ).mul( arm.max( side.mul( above( p.y, 0.75 ) ) ) ), accent );
@@ -391,8 +427,16 @@ function paintKnitTop( profile, { p, ax, arm, neck, body, chest, side, secondary
 
 }
 
-function paintJacket( profile, { p, ax, arm, neck, body, chest, back, front, side, secondary, accent, trim, paint } ) {
+function paintJacket( profile, { p, ax, arm, neck, body, chest, back, front, side, primary, secondary, accent, trim, paint } ) {
 
+	if ( profile.bomber ) {
+
+		const chevron = periodicLine( p.y.mul( 62 ).add( p.x.mul( 46 ).fract().sub( 0.5 ).abs() ), 0.15 );
+		const printed = smoothstep( 0.025, 0.1, primary.b.sub( primary.r ) )
+			.mul( smoothstep( 0.1, 0.28, secondary.g.sub( primary.g ) ) );
+		paint( chevron.mul( body ).mul( band( p.y, profile.rib + 0.012, profile.yoke ) ), secondary, printed.mul( 0.24 ) );
+
+	}
 	const yokeLine = ax.mul( 0.12 ).add( profile.yoke ).toVar();
 	paint( above( p.y, yokeLine ).mul( body ), secondary, 0.9 );
 	paint( side.mul( body ), secondary, 0.5 );
@@ -615,11 +659,31 @@ function periodicLine( value, width ) {
 
 }
 
-function fabricGrain( p ) {
+function constructionHeight( id, p, shares ) {
 
-	const warp = p.x.add( p.z.mul( 0.37 ) ).mul( 3300 );
-	const weft = p.y.add( p.z.mul( 0.23 ) ).mul( 2800 );
-	const fade = smoothstep( 0.6, 2.3, fwidth( warp ).max( fwidth( weft ) ) ).oneMinus();
-	return warp.sin().mul( weft.sin() ).mul( fade );
+	// These masks feed a height derivative: never use the colour masks' fwidth
+	// here, since differentiating an already differentiated mask is unstable.
+	const below = ( value, boundary ) => smoothstep( boundary - 0.0004, boundary + 0.0004, value ).oneMinus();
+	const band = ( value, start, end ) => below( value, start ).oneMinus().mul( below( value, end ) );
+	const ridge = ( distance, width, height ) => smoothstep( width, width * 2, distance.abs() ).oneMinus().mul( height );
+	const arm = smoothstep( 0.28, 0.72, shares.y );
+	const body = arm.oneMinus().mul( smoothstep( 0.16, 0.58, shares.z ).oneMinus() );
+	if ( id.startsWith( 'pants-' ) ) {
+
+		const hem = id === 'pants-shorts' ? 0.361 : id === 'pants-office' || id === 'pants-chinos' ? 0.086 : 0.073;
+		return ridge( p.y.sub( hem ), 0.0018, 0.00038 )
+			.add( ridge( p.y.sub( 0.608 ), 0.0015, 0.0003 ) )
+			.add( ridge( p.z.add( 0.001 ), 0.0013, 0.00025 ).mul( below( p.y, 0.51 ) ) );
+
+	}
+	if ( /^(boots|shoes|sneakers)-/.test( id ) ) return ridge( p.y.sub( 0.026 ), 0.0013, 0.00065 )
+		.add( ridge( p.z.sub( 0.029 ), 0.001, 0.00025 ).mul( band( p.y, 0.032, 0.068 ) ) );
+	const profile = TOP_PROFILES[ id ];
+	const hem = profile?.hem ?? ( id === 'police-jacket' ? 0.55 : id === 'office-jacket' ? 0.565 : 0.58 );
+	const cuff = profile?.cuff ?? ( id === 'office-jacket' ? 0.284 : 0.329 );
+	const hemSeam = ridge( p.y.sub( hem + 0.005 ), 0.0012, 0.0004 ).mul( body );
+	const cuffSeam = ridge( p.x.abs().sub( cuff ), 0.0015, 0.0004 ).mul( arm );
+	const sideSeam = ridge( p.z, 0.0012, 0.00028 ).mul( body ).mul( band( p.y, hem, 0.78 ) );
+	return hemSeam.add( cuffSeam ).add( sideSeam );
 
 }
