@@ -33,7 +33,8 @@ describe( 'real player collision through furnished stair cores', () => {
 		async ( ...specification ) => {
 			const { source, physics, city } = await building( ...specification );
 			try {
-				expect( source.building.floors ).toHaveLength( specification[ 3 ] );
+				// Every storey, and above them the small floor the roof is reached from.
+				expect( source.building.floors ).toHaveLength( specification[ 3 ] + 1 );
 				expect( Object.values( source.layouts ).some( layout => layout.npc.nav.roofAccess ) ).toBe( true );
 				expect( city.doors.some( door => door.role === 'main' ) ).toBe( true );
 				for ( const door of city.doors.filter( d => d.floor === 0 && d.kind === 'door' ) ) {
@@ -109,12 +110,14 @@ function walkingRoute( source, stairId ) {
 	for ( const floor of source.building.floors ) {
 		const layout = source.layouts[ floor.layout ];
 		const stair = layout.floor.core.stairs.find( entry => entry.id === stairId );
+		// The floor the roof is reached from has no stair of its own: the roof door below leads onto it.
+		if ( ! stair ) continue;
 		const flights = layout.placements.filter( p => p.connector === stairId && p.module?.startsWith( 'stair-flight-' ) ).sort( ( a, b ) => a.position[ 1 ] - b.position[ 1 ] );
-		const door = layout.placements.filter( p => p.module === 'door-header' ).sort( ( a, b ) =>
-			Math.hypot( a.position[ 0 ] - stair.entry[ 0 ], a.position[ 2 ] - stair.entry[ 1 ] )
-			- Math.hypot( b.position[ 0 ] - stair.entry[ 0 ], b.position[ 2 ] - stair.entry[ 1 ] ) )[ 0 ];
+		const reach = ( p ) => Math.hypot( p.position[ 0 ] - stair.entry[ 0 ], p.position[ 2 ] - stair.entry[ 1 ] );
+		// The stair's door, whichever header style the floor uses; an open-plan floor leaves its stair without one.
+		const door = layout.placements.filter( p => p.module?.startsWith( 'door-header' ) && reach( p ) < 4 ).sort( ( a, b ) => reach( a ) - reach( b ) )[ 0 ];
 		const entry = new THREE.Vector3( stair.entry[ 0 ], floor.elevation, stair.entry[ 1 ] );
-		const threshold = new THREE.Vector3( door.position[ 0 ], floor.elevation, door.position[ 2 ] );
+		const threshold = door ? new THREE.Vector3( door.position[ 0 ], floor.elevation, door.position[ 2 ] ) : entry;
 		if ( route.length ) { route.push( threshold, entry, threshold ); } else route.push( entry, threshold );
 		for ( const flight of flights ) {
 			const count = Number( flight.module.split( '-' ).at( - 1 ) );
