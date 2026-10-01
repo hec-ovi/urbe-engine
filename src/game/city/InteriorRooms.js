@@ -2,7 +2,8 @@ import { floorPlacements } from './InteriorLayouts.js';
 import * as THREE from 'three/webgpu';
 import { roomFootprintAnchor, roomFootprintContains } from '../../../../interior/src/core/room-footprint.ts';
 import { RoomFill, albedoOf } from '../light/RoomFill.js';
-import { kelvinColor } from '../light/Color.js';
+import { daylightSpread, planSamples, roomDaylight } from '../light/RoomDaylight.js';
+import { kelvinColor, luminance } from '../light/Color.js';
 
 /**
  * The rooms of one furnished floor, as the game holds them.
@@ -24,9 +25,10 @@ const WALKED = /^floor-/;
  * @param floor one record from `buildingFloors`
  * @param catalog `{ boundsOf, slotsOf }` from the module catalog
  * @param unseen fixtures -> the light of them no room light draws (RoomLights.unseen), which the fill carries
+ * @param daylight { windows, sky }: the storey's glass (light/RoomDaylight.js glazingOf) and the day it is built in
  * @returns one Room per published room on this floor
  */
-export function roomsOf( floor, catalog, unseen = null ) {
+export function roomsOf( floor, catalog, unseen = null, daylight = null ) {
 
 	const measured = measure( floor, catalog );
 	const fixtures = fixturesByRoom( floor );
@@ -35,7 +37,8 @@ export function roomsOf( floor, catalog, unseen = null ) {
 		floor, room,
 		fixtures: fixtures.get( room.id ) ?? [],
 		surfaces: measured.get( room.id ) ?? [],
-		unseen
+		unseen,
+		daylight
 	} ) );
 
 }
@@ -80,7 +83,7 @@ function measure( floor, catalog ) {
 /** One published room of one floor. */
 export class Room {
 
-	constructor( { floor, room, fixtures, surfaces, unseen = null } ) {
+	constructor( { floor, room, fixtures, surfaces, unseen = null, daylight = null } ) {
 
 		const [ x, z ] = roomFootprintAnchor( room );
 
@@ -126,8 +129,63 @@ export class Room {
 
 		/** The light of the fixtures no room light draws, which the fill carries instead. */
 		this.unseen = unseen?.( fixtures ) ?? null;
-		/** What every copy standing in this room carries: its interreflected light and the undrawn fixtures' own. */
-		this.fill = RoomFill.perCopy( this, this.flux, this.color, this.unseen ?? undefined );
+		this.lit = RoomFill.parts( this, this.flux, this.color, this.unseen ?? undefined );
+		/**
+		 * The day through the room's own glass (light/RoomDaylight.js), or null:
+		 * lumens landing on the floor and on the ceiling, their colours, where it
+		 * comes in, and how much of the room's mean lands at a point.
+		 */
+		this.daylit = this.#daylight( daylight );
+		/** What every copy standing in this room carries on average: its interreflected light, the undrawn fixtures' and the day's. */
+		this.fill = this.fillAt();
+		/**
+		 * The grade a room its glass lights asks the eye for, by day, in stops
+		 * under the night's: past a bright room's light the eye closes down,
+		 * so a daylit room reads as a bright one, not as the glare it is.
+		 */
+		this.dayStops = this.daylit ? daylightStops( this.fill ) : 0;
+
+	}
+
+	/**
+	 * The fill a copy carries at a point of the room's plan: the same
+	 * everywhere but for the day, which lands near the glass it came through.
+	 * With no point, the room's mean.
+	 */
+	fillAt( x, z, target = new THREE.Vector4() ) {
+
+		const day = this.daylit;
+		if ( ! day ) return RoomFill.pack( this.lit.up, this.lit.down, target );
+
+		const weight = x === undefined ? 1 : day.spread( x, z );
+		const landing = RoomFill.landing( this );
+
+		_up.copy( this.lit.up ).add( day.bounce.up ).add( _part.copy( day.downColor ).multiplyScalar( day.down / landing * weight ) );
+		_down.copy( this.lit.down ).add( day.bounce.down ).add( _part.copy( day.upColor ).multiplyScalar( day.up / landing * weight ) );
+
+		return RoomFill.pack( _up, _down, target );
+
+	}
+
+	#daylight( daylight ) {
+
+		if ( ! daylight?.windows?.length ) return null;
+
+		const contains = ( x, z ) => roomFootprintContains( this, [ x, z ] );
+		const day = roomDaylight( contains, daylight.windows, daylight.sky );
+		if ( ! day ) return null;
+
+		const total = day.down + day.up;
+		const color = new THREE.Color( 0, 0, 0 );
+		addScaled( color, day.downColor, day.down / total );
+		addScaled( color, day.upColor, day.up / total );
+		// The day bounces round the room as the lamps' light does; where it
+		// first lands is the spread's.
+		day.bounce = RoomFill.parts( this, total, color );
+		day.flux = total;
+		day.spread = daylightSpread( day.sources, planSamples( this.bounds, this.area / 2, contains ) );
+
+		return day;
 
 	}
 
@@ -140,6 +198,28 @@ export class Room {
 	}
 
 }
+
+/**
+ * The mean illuminance a room reads at under the night's grade before the eye
+ * closes down for it, in lux: a bright room, about twice a lit shop floor's.
+ */
+const BRIGHT_ROOM = 400;
+/** The most a room's daylight closes the eye down, in stops. */
+const DAY_STOPS = 6;
+
+/**
+ * The stops under the night's grade a room asks for, from its mean fill:
+ * none until its surfaces average a bright room's light, then the ratio.
+ */
+export function daylightStops( fill ) {
+
+	const lux = luminance( _mean.setRGB( fill.x, fill.y, fill.z ) ) * ( 1 + fill.w ) / 2;
+
+	return - Math.min( DAY_STOPS, Math.max( 0, Math.log2( lux / BRIGHT_ROOM ) ) );
+
+}
+
+const _mean = new THREE.Color();
 
 /**
  * The fill for a copy standing in no published room, a stair shaft or a lift
@@ -315,6 +395,10 @@ class Reflectance {
 	}
 
 }
+
+const _up = new THREE.Color();
+const _down = new THREE.Color();
+const _part = new THREE.Color();
 
 /** Colour accumulation: three.js colours add, but never with a weight. */
 function addScaled( target, color, weight ) {

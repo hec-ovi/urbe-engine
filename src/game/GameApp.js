@@ -479,6 +479,8 @@ export class GameApp {
 			modules: this.interiorModules, props: this.interiorProps, roomLights: this.rooms, elevators: this.elevators,
 			haze: this.tier.haze ? INDOOR_HAZE : null, hitches: this.hitches, budget: slice
 		} );
+		// A floor is built in the day the sky stands at: its rooms take that day through their glass.
+		this.stream.sky = () => this.sky ? { ...this.sky.day, direction: this.sky.direction } : null;
 		if ( this.interiorModules && ! config.off.has( 'interiors' ) ) this.stream.register( buildings, city.centers );
 		this.scene.add( this.stream.group );
 
@@ -2568,7 +2570,7 @@ export class GameApp {
 		this.rooms.update( visible, feet, delta );
 		this.fog.update( air, room ?? null, delta );
 		this.probe?.update( feet, this.#still( feet, delta ) );
-		this.exposure.enter( room ? 'interior' : 'exterior' );
+		this.exposure.enter( room ? 'interior' : 'exterior', room?.dayStops ?? 0 );
 		this.exposure.update( delta );
 
 	}

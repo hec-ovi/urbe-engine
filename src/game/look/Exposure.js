@@ -62,10 +62,15 @@ export class Exposure {
 
 	}
 
-	/** @param volume one of VOLUMES */
-	enter( volume ) {
+	/**
+	 * @param volume one of VOLUMES
+	 * @param stops the grade the place itself asks for, when darker than its
+	 * volume's: a room its glass lights past a bright room's level (city/InteriorRooms.js daylightStops)
+	 */
+	enter( volume, stops = 0 ) {
 
 		this.volume = VOLUMES[ volume ] ?? VOLUMES.exterior;
+		this.place = Math.min( 0, stops );
 
 	}
 
@@ -102,7 +107,10 @@ export class Exposure {
 	/** The stops the eye settles at in the volume it stands in, at this hour. */
 	#target() {
 
-		return this.volume.stops + Math.max( this.volume.daylight, this.daylight );
+		// A place asking for a darker grade than its volume's gets it, never below the street's.
+		const opened = this.volume.stops + Math.max( this.volume.daylight, this.daylight );
+
+		return Math.max( this.daylight, Math.min( opened, this.place ?? 0 ) );
 
 	}
 

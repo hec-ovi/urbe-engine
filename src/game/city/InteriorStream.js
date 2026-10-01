@@ -7,6 +7,7 @@ import { floorBoxes } from './InteriorBoxes.js';
 import { moduleError } from './InteriorModules.js';
 import { standingPeaks } from './InteriorPeaks.js';
 import { floorFill, floorOrphans, roomsOf } from './InteriorRooms.js';
+import { glazingOf } from '../light/RoomDaylight.js';
 import { Haze } from '../light/Haze.js';
 
 /** A building's floors are worth building this close to its footprint. */
@@ -114,6 +115,8 @@ export class InteriorStream {
 		if ( elevators ) elevators.stream = this;
 		this.rooms = [];
 		this.onColliderBand = null;
+		/** The day a floor is built in, `() => { daylight, sunLux, skyLuminance, direction } | null` (sky/NightSky.js). */
+		this.sky = null;
 		this.onDropBand = null;
 		this.changed = false;
 		/** The `ApartmentDoors` registry the shown floors' apartment doors join, once the host has physics. */
@@ -133,6 +136,8 @@ export class InteriorStream {
 			this.pending.set( parcelId, {
 				parcelId,
 				floors: buildingFloors( parcelId, building.interior ),
+				// Its exterior, for the glass each storey's rooms take the day through.
+				blueprint: building.blueprint ?? null,
 				center: centers.get( parcelId ),
 				bounds: footprintBounds( building.blueprint?.bounds?.footprint ?? building.interior.layouts.ground?.floor.rooms.flatMap( room => room.polygon ) )
 			} );
@@ -588,8 +593,14 @@ export class InteriorStream {
 
 		};
 
-		// The fixtures the pool will never draw light the room through its fill.
-		const rooms = roomsOf( record, this.modules, this.roomLights?.unseen ? ( fixtures ) => this.roomLights.unseen( fixtures ) : null );
+		// The fixtures the pool will never draw light the room through its fill,
+		// and so does the day through the storey's own glass.
+		const sky = this.sky?.() ?? null;
+		const rooms = roomsOf( record, this.modules, this.roomLights?.unseen ? ( fixtures ) => this.roomLights.unseen( fixtures ) : null, {
+			windows: sky?.daylight > 0 ? glazingOf( interior.blueprint, record.floor ) : [],
+			sky
+		} );
+		const byId = new Map( rooms.map( ( room ) => [ room.roomId, room ] ) );
 		const orphans = floorOrphans( record );
 		const fills = new Map( rooms.map( ( room ) => [ room.roomId, room.fill ] ) );
 		const shared = floorFill( rooms, orphans.fixtures );
@@ -632,7 +643,7 @@ export class InteriorStream {
 				id: placement.module ?? placement.prop,
 				matrix: matrixOf( placement, record.elevation ),
 				uvRepeat: placement.uvRepeat ?? [ 1, 1 ],
-				fill: fills.get( placement.room ) ?? shared,
+				fill: copyFill( byId.get( placement.room ), placement, this.modules, record.elevation ) ?? fills.get( placement.room ) ?? shared,
 				support: supports( placement )
 			} );
 
@@ -683,9 +694,10 @@ export class InteriorStream {
 /** One building open around the player: its floors as bands, lowest first. */
 class Interior {
 
-	constructor( { parcelId, floors, center, bounds } ) {
+	constructor( { parcelId, floors, center, bounds, blueprint = null } ) {
 
 		this.parcelId = parcelId;
+		this.blueprint = blueprint;
 		this.center = center;
 		this.bounds = bounds;
 		this.floors = floors;
@@ -907,6 +919,27 @@ function reserve( copies ) {
 }
 
 /** One placement's world matrix: scale, then yaw, then position on its floor. */
+/**
+ * A copy's own fill where its room takes daylight, which falls off from the
+ * glass: read at the middle of the module it stands, or at a prop's feet.
+ * Null where the room's fill is the same everywhere in it.
+ */
+function copyFill( room, placement, modules, elevation ) {
+
+	if ( ! room?.daylit ) return null;
+
+	const bounds = placement.module ? modules?.boundsOf?.( placement.module ) : null;
+	const middle = bounds
+		? _middle.set( bounds.size[ 0 ] / 2 - bounds.origin[ 0 ], bounds.size[ 1 ] / 2 - bounds.origin[ 1 ], bounds.size[ 2 ] / 2 - bounds.origin[ 2 ] )
+			.applyMatrix4( matrixOf( placement, elevation ) )
+		: _middle.set( placement.position[ 0 ], 0, placement.position[ 2 ] );
+
+	return room.fillAt( middle.x, middle.z );
+
+}
+
+const _middle = new THREE.Vector3();
+
 function matrixOf( { position, rotationY, scale }, elevation ) {
 
 	return new THREE.Matrix4()

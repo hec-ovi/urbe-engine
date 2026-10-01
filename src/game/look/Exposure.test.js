@@ -88,4 +88,26 @@ describe( 'Exposure', () => {
 
 	} );
 
+	it( 'grades a room its glass lights past a bright room\'s level at its own light, never below the street', () => {
+
+		const renderer = {};
+		const exposure = new Exposure( renderer, 0.024 );
+		exposure.setDaylight( - 8.5 );
+
+		// Less than the volume already takes off asks for nothing more.
+		exposure.enter( 'interior', - 1 );
+		exposure.settle();
+		exposure.update( 0.05 );
+		expect( exposure.stops ).toBe( - 1.5 );
+
+		exposure.enter( 'interior', - 3 );
+		exposure.update( 0.05 );
+		expect( exposure.stops ).toBe( - 3 );
+
+		exposure.enter( 'interior', - 12 );
+		exposure.update( 0.05 );
+		expect( exposure.stops ).toBe( - 8.5 );
+
+	} );
+
 } );
