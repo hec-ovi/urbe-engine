@@ -56,18 +56,29 @@ export class FillChannel {
 
 	}
 
-	/** Room for this many copies; what was written stays at its slot. */
+	/**
+	 * Room for this many copies; what was written stays at its slot. The
+	 * texture stays the object it was, with a bigger image, so a graph built
+	 * against it keeps reading it: disposing it frees its GPU copy and the next
+	 * draw uploads it again at the new size.
+	 */
 	grow( capacity ) {
 
 		const size = Math.ceil( Math.sqrt( Math.max( 1, capacity ) ) );
+		if ( this.texture?.image.width >= size ) return;
+
 		const data = new Float32Array( size * size * 4 );
 		if ( this.texture ) {
 
 			data.set( this.texture.image.data.subarray( 0, Math.min( data.length, this.texture.image.data.length ) ) );
 			this.texture.dispose();
+			this.texture.image = { data, width: size, height: size };
+
+		} else {
+
+			this.texture = new THREE.DataTexture( data, size, size, THREE.RGBAFormat, THREE.FloatType );
 
 		}
-		this.texture = new THREE.DataTexture( data, size, size, THREE.RGBAFormat, THREE.FloatType );
 		this.texture.needsUpdate = true;
 
 	}

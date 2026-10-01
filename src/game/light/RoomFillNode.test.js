@@ -91,8 +91,10 @@ describe( 'room fill texture bindings', () => {
 
 		for ( const texture of graph.draw( mesh ) ) {
 
+			// The channel grows inside the texture the graph was built against.
 			expect( texture ).toBe( channel.texture );
-			expect( texture ).not.toBe( previous );
+			expect( texture ).toBe( previous );
+			expect( texture.image.width ).toBe( 3 );
 			expect( Array.from( texture.image.data.slice( 0, 4 ) ) ).toEqual( [ 3, 6, 9, 0.25 ] );
 			expect( Array.from( texture.image.data.slice( 32, 36 ) ) ).toEqual( [ 8, 16, 24, 0.5 ] );
 

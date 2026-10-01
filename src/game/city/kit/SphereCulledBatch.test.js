@@ -163,11 +163,50 @@ describe( 'a batch that keeps each copy\'s sphere', () => {
 		expect( drawList( batch, other ).map( ( [ copy ] ) => copy ) ).toEqual( [ 0, 2 ] );
 		expect( texture().version ).toBe( uploads + 2 );
 
-		// A new indirect texture is uploaded whatever it holds.
+		// A batch that grows goes up once more at its new size, whatever its list holds.
+		const held = texture().version;
 		batch.setInstanceCount( 8 );
-		const fresh = texture().version;
+		expect( texture().version ).toBe( held + 1 );
 		expect( drawList( batch, other ).map( ( [ copy ] ) => copy ) ).toEqual( [ 0, 2 ] );
-		expect( texture().version ).toBe( fresh + 1 );
+		expect( texture().version ).toBe( held + 1 );
+
+	} );
+
+	it( 'grows inside the textures its draws were built against, keeping every copy where it was', () => {
+
+		const [ , batch ] = pair();
+		batch.setColorAt( 1, new THREE.Color( 1, 0, 0 ) );
+		const textures = [ batch._matricesTexture, batch._indirectTexture, batch._colorsTexture ];
+		const sizes = textures.map( ( texture ) => texture.image.width );
+		const freed = textures.map( ( texture ) => {
+
+			const listener = { count: 0 };
+			texture.addEventListener( 'dispose', () => listener.count ++ );
+			return listener;
+
+		} );
+		const versions = textures.map( ( texture ) => texture.version );
+
+		batch.setInstanceCount( 64 );
+
+		// The same objects, so a graph built against them and filed under the
+		// matrices texture's uuid still reads them; each with a bigger image, its
+		// GPU copy freed and flagged to go up again.
+		expect( [ batch._matricesTexture, batch._indirectTexture, batch._colorsTexture ] ).toEqual( textures );
+		textures.forEach( ( texture, index ) => {
+
+			expect( texture.image.width ).toBeGreaterThan( sizes[ index ] );
+			expect( texture.image.data.length ).toBe( texture.image.width * texture.image.height * ( index === 1 ? 1 : 4 ) );
+			expect( freed[ index ].count ).toBe( 1 );
+			expect( texture.version ).toBe( versions[ index ] + 1 );
+
+		} );
+		expect( batch.getMatrixAt( 2, new THREE.Matrix4() ).elements[ 14 ] ).toBe( 30 );
+		expect( batch.getColorAt( 1, new THREE.Color() ).getHex() ).toBe( 0xff0000 );
+
+		// Room past the old capacity takes copies like any other.
+		for ( let copy = 0; copy < 40; copy ++ ) batch.setMatrixAt( batch.addInstance( 1 ), new THREE.Matrix4().makeTranslation( copy, 0, - 50 ) );
+		expect( batch.getMatrixAt( 43, new THREE.Matrix4() ).elements[ 12 ] ).toBe( 39 );
 
 	} );
 

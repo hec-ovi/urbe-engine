@@ -88,22 +88,38 @@ export class MaterialBatch {
 	/**
 	 * Room for this many more copies, in one reallocation.
 	 *
-	 * Growing hands the mesh new matrix, indirect and colour textures and throws
-	 * the old ones away, and a shader that is already built holds the textures it
-	 * was built against. Three rebuilds a draw when the material it was built
-	 * from is disposed, so the batch disposes its own material and the next frame
-	 * builds every pass again, the shadow pass included, against the live
-	 * textures. The material itself stays exactly as it is and keeps drawing.
+	 * The batch grows inside the textures it already draws from: its matrices,
+	 * draw list and colours ([SphereCulledBatch.js](SphereCulledBatch.js)) and
+	 * its fill and repeat channels ([FillChannel.js](FillChannel.js)) take bigger
+	 * images in the same texture objects. A draw built before the growth keeps
+	 * reading them and nothing is built or linked again; what growing costs is
+	 * copying into the bigger arrays and uploading them on the next draw.
 	 */
 	reserve( copies ) {
 
 		const wanted = this.count + copies;
 		if ( wanted <= this.capacity ) return;
 
-		this.mesh.setInstanceCount( Math.max( wanted, this.capacity * 2 ) );
+		this.#grow( Math.max( wanted, this.capacity * 2 ) );
+
+	}
+
+	/**
+	 * Room for this many copies standing at once, taken exactly: a caller that
+	 * knows the most it will ever stand sizes the batch once, before it draws.
+	 */
+	hold( copies ) {
+
+		if ( copies > this.capacity ) this.#grow( copies );
+
+	}
+
+	#grow( capacity ) {
+
+		this.mesh.setInstanceCount( capacity );
 		this.fill?.grow( this.capacity );
 		this.uvRepeat?.grow( this.capacity );
-		this.rebuild();
+		this.hitches?.note( `${this.name} grew to ${this.capacity}` );
 
 	}
 
@@ -130,9 +146,10 @@ export class MaterialBatch {
 	}
 
 	/**
-	 * Drops the draws built against buffers this batch has replaced. The next
-	 * frame that draws the batch builds its graph again, which is the cost the
-	 * note names; its program stays linked, pinned by the warm-up.
+	 * Drops the draws built against geometry buffers this batch has replaced, or
+	 * built before it carried a colour. The next frame that draws the batch
+	 * builds its graph again, which is the cost the note names; its program
+	 * stays linked, pinned by the warm-up.
 	 */
 	rebuild() {
 

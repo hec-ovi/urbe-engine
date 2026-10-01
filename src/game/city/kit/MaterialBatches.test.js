@@ -153,25 +153,65 @@ describe( 'the batching class takes primitives as a loader publishes them', () =
 
 	} );
 
-	it( 'rebuilds the draws whenever it replaces the buffers they were built from', () => {
+	it( 'rebuilds the draws when it replaces the geometry buffers they were built from or takes its first colour, and grows copies in place', () => {
 
 		const material = new THREE.MeshStandardMaterial();
-		const batches = new MaterialBatches( 'growing' )
+		const batches = new MaterialBatches( 'growing', { fill: true, uvRepeat: true } )
 			.add( [ { id: 'a', surfaces: [ { bucket: 'stone', geometry: plain( 3 ), material } ] } ], { instances: 1 } );
 		const rebuilt = vi.fn();
 		material.addEventListener( 'dispose', rebuilt );
 
-		const first = batches.admit( 'a', new THREE.Matrix4(), new THREE.Color( 1, 0, 0 ) );
+		const first = batches.admit( 'a', new THREE.Matrix4(), new THREE.Color( 1, 0, 0 ), new THREE.Vector4( 1, 2, 3, 4 ) );
 		// The colour texture is born here, and the draws that were built without it.
 		expect( rebuilt ).toHaveBeenCalledTimes( 1 );
 
 		const batch = first.parts[ 0 ].batch;
 		const capacity = batch.capacity;
+		const textures = [ batch.mesh._matricesTexture, batch.mesh._indirectTexture, batch.mesh._colorsTexture, batch.fill.texture, batch.uvRepeat.texture ];
 		batches.admit( 'a', new THREE.Matrix4().setPosition( 9, 0, 0 ), new THREE.Color( 0, 1, 0 ) );
 
+		// More copies than it had room for grow the textures the draws already
+		// read, so nothing is built again.
 		expect( batch.capacity ).toBeGreaterThan( capacity );
-		expect( rebuilt ).toHaveBeenCalledTimes( 2 );
+		expect( rebuilt ).toHaveBeenCalledTimes( 1 );
+		expect( [ batch.mesh._matricesTexture, batch.mesh._indirectTexture, batch.mesh._colorsTexture, batch.fill.texture, batch.uvRepeat.texture ] ).toEqual( textures );
 		expect( batch.mesh.getMatrixAt( first.instances[ 0 ], new THREE.Matrix4() ).elements[ 12 ] ).toBeCloseTo( 0, 5 );
+		expect( Array.from( batch.fill.texture.image.data.slice( first.instances[ 0 ] * 4, first.instances[ 0 ] * 4 + 4 ) ) ).toEqual( [ 1, 2, 3, 4 ] );
+
+		// Geometry that outgrows its buffers replaces them, and that rebuilds.
+		batches.add( [ { id: 'b', surfaces: [ { bucket: 'stone', geometry: plain( 30 ), material } ] } ] );
+		expect( rebuilt ).toHaveBeenCalledTimes( 2 );
+		batches.dispose();
+
+	} );
+
+	it( 'holds the most instances each bucket stands at once, exactly and once', () => {
+
+		const stone = new THREE.MeshStandardMaterial();
+		const metal = new THREE.MeshStandardMaterial();
+		const batches = new MaterialBatches( 'held', { fill: true } ).add( [
+			{ id: 'wall', surfaces: [ { bucket: 'stone', geometry: plain( 3 ), material: stone }, { bucket: 'metal', geometry: plain( 3 ), material: metal } ] },
+			{ id: 'rail', surfaces: [ { bucket: 'metal', geometry: plain( 6 ), material: metal } ] }
+		] );
+		const rebuilt = vi.fn();
+		stone.addEventListener( 'dispose', rebuilt );
+		metal.addEventListener( 'dispose', rebuilt );
+
+		expect( batches.bucketsOf( 'wall' ) ).toEqual( [ 'stone', 'metal' ] );
+		expect( batches.bucketsOf( 'rail' ) ).toEqual( [ 'metal' ] );
+
+		batches.hold( new Map( [ [ 'stone', 300 ], [ 'metal', 500 ], [ 'glass', 9 ] ] ) );
+		const [ stoneBatch, metalBatch ] = [ 'stone', 'metal' ].map( ( bucket ) => batches.batches.get( bucket ) );
+		expect( stoneBatch.capacity ).toBe( 300 );
+		expect( metalBatch.capacity ).toBe( 500 );
+		expect( metalBatch.fill.texture.image.width ).toBe( 23 );
+
+		// Admitting up to what it holds never grows it, and a smaller hold keeps the room it has.
+		for ( let copy = 0; copy < 300; copy ++ ) batches.admit( 'wall', new THREE.Matrix4() );
+		for ( let copy = 0; copy < 200; copy ++ ) batches.admit( 'rail', new THREE.Matrix4() );
+		batches.hold( new Map( [ [ 'metal', 100 ] ] ) );
+		expect( [ stoneBatch.capacity, metalBatch.capacity ] ).toEqual( [ 300, 500 ] );
+		expect( rebuilt ).not.toHaveBeenCalled();
 		batches.dispose();
 
 	} );

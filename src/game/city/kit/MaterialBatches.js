@@ -143,7 +143,7 @@ export class MaterialBatches {
 				const geometryId = batch.addGeometry( surface.geometry );
 				if ( surface.far ) batch.setFar( geometryId, farId( batch, surface.far ) );
 
-				return { batch, geometryId };
+				return { batch, geometryId, bucket: surface.bucket };
 
 			} ) );
 
@@ -194,6 +194,27 @@ export class MaterialBatches {
 
 		}
 		for ( const [ batch, copies ] of wanted ) batch.reserve( copies );
+
+	}
+
+	/** The material buckets one entry's copies take an instance in, one per surface. */
+	bucketsOf( id ) {
+
+		return ( this.entries.get( id ) ?? [] ).map( ( { bucket } ) => bucket );
+
+	}
+
+	/**
+	 * Room for the most instances that will ever stand at once in each bucket,
+	 * one reallocation per batch and none for a batch that already holds that
+	 * many: a kit that can count its copies ahead sizes the batches before they
+	 * draw, so no copy admitted later grows one.
+	 *
+	 * @param instances Map of bucket to the most instances standing in it at once
+	 */
+	hold( instances ) {
+
+		for ( const [ bucket, count ] of instances ) this.batches.get( bucket )?.hold( count );
 
 	}
 

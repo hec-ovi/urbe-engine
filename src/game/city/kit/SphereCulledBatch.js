@@ -185,9 +185,26 @@ export class SphereCulledBatch extends BatchedMesh {
 
 	}
 
+	/**
+	 * Room for this many copies, in the textures the batch already draws from.
+	 *
+	 * A graph three builds for this batch reads its matrices, draw list and
+	 * colours from the texture objects it was built against, and the renderer
+	 * files that graph under the matrices texture's uuid. Three's own growth
+	 * hands the mesh new textures, which leaves every graph built so far reading
+	 * freed ones until each is built again, in every pass it draws in. Here
+	 * the textures stay the objects they were and only take the bigger images
+	 * three made: the growth frees each one's GPU copy, the next draw uploads it
+	 * at its new size and points the graph's binding at it. The shader reads a
+	 * texture's size where it samples it, so one program draws every capacity.
+	 */
 	setInstanceCount( maxInstanceCount ) {
 
+		const kept = [ this._matricesTexture, this._indirectTexture, this._colorsTexture ];
 		super.setInstanceCount( maxInstanceCount );
+		this._matricesTexture = regrown( kept[ 0 ], this._matricesTexture );
+		this._indirectTexture = regrown( kept[ 1 ], this._indirectTexture );
+		this._colorsTexture = regrown( kept[ 2 ], this._colorsTexture );
 		const spheres = new Float32Array( maxInstanceCount * 4 );
 		spheres.set( this.spheres.subarray( 0, Math.min( this.spheres.length, spheres.length ) ) );
 		this.spheres = spheres;
@@ -336,6 +353,22 @@ export class SphereCulledBatch extends BatchedMesh {
 		this.spheres[ instanceId * 4 + 3 ] = _sphere.radius;
 
 	}
+
+}
+
+/**
+ * The texture a draw was built against, holding the image three grew for it.
+ * Three disposed the kept one as it grew, which freed its GPU copy and dropped
+ * the bindings pointing at it, so marking it changed uploads it again at the
+ * new size on the next draw.
+ */
+export function regrown( kept, grown ) {
+
+	if ( ! kept || kept === grown ) return grown;
+	kept.image = grown.image;
+	kept.needsUpdate = true;
+
+	return kept;
 
 }
 
