@@ -273,22 +273,80 @@ export class AutomationProbe {
 	 * What the open conversation's person offers now, in the chat's order:
 	 * `{ offerId, kind, label, available, reason, destination, distance }`,
 	 * `destination` `{ name, relation }` and `distance` the straight metres
-	 * from the person to it for a lead. Empty without a person to ask.
+	 * from the person to it for a lead. With `wide`, the longer list a typed
+	 * request carries. Empty without a person to ask.
 	 */
-	offers() {
+	offers( { wide = false } = {} ) {
 
 		const { companion, npcContinuity, interactor, clock, playerPlaces } = this.game;
 		const npcId = interactor.conversation?.npcId;
 		if ( ! npcId || ! interactor.conversation.instance ) return [];
 		const from = npcContinuity.actor( npcId )?.position ?? null;
 
-		return companion.offers( { npcId, timeMin: clock.timeMin, playerPlaces } ).map( ( offer ) => {
+		return companion.offers( { npcId, timeMin: clock.timeMin, playerPlaces, ...( wide ? { wide } : {} ) } ).map( ( offer ) => {
 
 			const where = offer.destination && this.#placeAt( offer.destination.place );
 			return {
 				offerId: offer.offerId, kind: offer.kind, label: offer.label, available: offer.available, reason: offer.reason ?? null,
 				destination: offer.destination ? { name: offer.destination.name, relation: offer.destination.relation } : null,
 				distance: where && from ? round( flat( from, where ), 1 ) : null
+			};
+
+		} );
+
+	}
+
+	/**
+	 * What a typed request tells the open conversation's person they may
+	 * agree to (the companion's `talkOffers` over the wide list): `{ follow?,
+	 * places?, walk?, stop?, home?, work?, wait?, sit? }`, or null.
+	 */
+	actions() {
+
+		const { companion, interactor, clock, playerPlaces } = this.game;
+		const npcId = interactor.conversation?.npcId;
+		if ( ! npcId || ! interactor.conversation.instance ) return null;
+		const offers = companion.offers( { npcId, timeMin: clock.timeMin, playerPlaces, wide: true } );
+		return companion.talkOffers( offers, { npcId, timeMin: clock.timeMin } );
+
+	}
+
+	/**
+	 * The open conversation's person agrees to `kind` (and `placeId`, a
+	 * place of `actions()`) as their reply would by a talk tool, without a
+	 * model: the companion's rules answer, and an agreement closes the chat
+	 * by its leave button so they set off. After two frames: `{ ok, code,
+	 * line, conversation }`.
+	 */
+	async agree( { kind, placeId } ) {
+
+		const { companion, interactor, clock, playerPlaces } = this.game;
+		const npcId = interactor.conversation?.npcId;
+		if ( ! npcId || ! interactor.conversation.instance ) return { ok: false, code: null, line: null, conversation: null };
+		const result = companion.acceptFromTool( { npcId, kind, ...( placeId ? { placeId } : {} ), timeMin: clock.timeMin, playerPlaces } );
+		if ( result.ok ) this.game.view.dialog.leave.click();
+		await frames( 2 );
+		return { ok: result.ok, code: result.code ?? null, line: result.line ?? null, conversation: this.#conversation() };
+
+	}
+
+	/**
+	 * The people on an errand for the player now: `{ npcId, untilMin, arrived,
+	 * task, mode, animation, place, position, distance }`, `task` what a talk
+	 * tells them they are doing (the companion's `taskOf`), `place` where
+	 * continuity has them (with its floor inside a building).
+	 */
+	errands() {
+
+		const { npcContinuity, companion } = this.game;
+		return ( npcContinuity.errandsUnderway ?? [] ).map( ( errand ) => {
+
+			const actor = npcContinuity.actor( errand.npcId );
+			return {
+				...errand, task: companion.taskOf?.( errand.npcId ) ?? null,
+				mode: actor?.mode ?? null, animation: actor?.animation ?? null, place: actor?.place ?? null,
+				position: actor ? actor.position.map( ( value ) => round( value, 2 ) ) : null,
+				distance: actor ? round( spread( this.game.body.feet.toArray(), actor.position ), 2 ) : null
 			};
 
 		} );

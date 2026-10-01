@@ -283,6 +283,45 @@ describe( 'automation probe', () => {
 
 	} );
 
+	it( 'reads the wide list and the actions a talk carries, agrees to one as a talk tool would and reports the errand under way', async () => {
+
+		const { game } = playing();
+		const probe = new AutomationProbe( game );
+		await probe.converse();
+		const lift = { place: { kind: 'spot', id: 'lift:elev-0' }, name: 'the lift', relation: 'spot' };
+		game.playerPlaces = [];
+		game.companion = {
+			places: { positions: new Map() },
+			offers: vi.fn( ( { wide } ) => wide ? [ { offerId: 'lead:spot:lift:elev-0', kind: 'lead', label: 'Show me the lift', available: true, destination: lift } ] : [] ),
+			talkOffers: vi.fn( () => ( { places: [ { placeId: 'lift:elev-0', name: 'the lift' } ], walk: true, home: true, wait: true } ) ),
+			acceptFromTool: vi.fn( ( { kind } ) => kind === 'sit' ? { ok: false, npcId: 'a301', code: 'nowhere', line: 'There\'s nowhere for that here.' } : { ok: true, npcId: 'a301', kind } ),
+			taskOf: vi.fn( () => ( { kind: 'home' } ) )
+		};
+		game.npcContinuity = {
+			companion: null,
+			actor: () => ( { position: [ 10, 4.2, 5 ], mode: 'errand', animation: 'walk', place: { kind: 'parcel', id: 'p1', floor: 1 }, visible: true } ),
+			errandsUnderway: []
+		};
+		expect( probe.offers( { wide: true } ) ).toMatchObject( [ { offerId: 'lead:spot:lift:elev-0', destination: { name: 'the lift', relation: 'spot' } } ] );
+		expect( game.companion.offers ).toHaveBeenLastCalledWith( { npcId: 'a301', timeMin: 1260, playerPlaces: [], wide: true } );
+		expect( probe.actions() ).toEqual( { places: [ { placeId: 'lift:elev-0', name: 'the lift' } ], walk: true, home: true, wait: true } );
+		expect( game.companion.talkOffers ).toHaveBeenCalledWith( [ expect.objectContaining( { offerId: 'lead:spot:lift:elev-0' } ) ], { npcId: 'a301', timeMin: 1260 } );
+
+		expect( await probe.agree( { kind: 'sit' } ) ).toEqual( { ok: false, code: 'nowhere', line: 'There\'s nowhere for that here.', conversation: expect.objectContaining( { npcId: 'a301' } ) } );
+		const leave = vi.spyOn( game.view.dialog.leave, 'click' );
+		expect( await probe.agree( { kind: 'home' } ) ).toMatchObject( { ok: true, code: null } );
+		expect( game.companion.acceptFromTool ).toHaveBeenLastCalledWith( { npcId: 'a301', kind: 'home', timeMin: 1260, playerPlaces: [] } );
+		expect( leave ).toHaveBeenCalledOnce();
+
+		game.npcContinuity.errandsUnderway = [ { npcId: 'a301', untilMin: 1320, arrived: false } ];
+		game.body.feet.set( 10, 0.2, 5 );
+		expect( probe.errands() ).toEqual( [ {
+			npcId: 'a301', untilMin: 1320, arrived: false, task: { kind: 'home' }, mode: 'errand', animation: 'walk',
+			place: { kind: 'parcel', id: 'p1', floor: 1 }, position: [ 10, 4.2, 5 ], distance: 4
+		} ] );
+
+	} );
+
 	it( 'stands the player on the pavement a set distance from a person, and walks them behind a leader on its own path until the talk opens', async () => {
 
 		const { game } = playing();
