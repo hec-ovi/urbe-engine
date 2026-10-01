@@ -27,17 +27,19 @@ export class KitPieceDraw {
 	/**
 	 * @param surfaces [{ bucket, geometry, material }]
 	 * @param fill whether each copy carries a fill light (FillChannel)
+	 * @param capacity the most copies the caller will stand at once, when it
+	 * knows: the draw is born with room for them (`roomFor`) and never grows
 	 */
-	constructor( name, surfaces, { fill = false } = {} ) {
+	constructor( name, surfaces, { fill = false, capacity = FIRST_CAPACITY } = {} ) {
 
 		this.name = name;
 		this.surfaces = surfaces;
 		this.owners = [];
 		this.count = 0;
-		this.capacity = FIRST_CAPACITY;
-		this.matrices = instanceBuffer( FIRST_CAPACITY, 16 );
-		this.colors = instanceBuffer( FIRST_CAPACITY, 3, 1 );
-		this.fills = fill ? new FillChannel( FIRST_CAPACITY ) : null;
+		this.capacity = roomFor( capacity );
+		this.matrices = instanceBuffer( this.capacity, 16 );
+		this.colors = instanceBuffer( this.capacity, 3, 1 );
+		this.fills = fill ? new FillChannel( this.capacity ) : null;
 		this.group = new THREE.Group();
 		this.group.name = name;
 		this.meshes = surfaces.map( ( surface ) => this.#mesh( surface ) );
@@ -64,6 +66,17 @@ export class KitPieceDraw {
 		this.#published( slot );
 
 		return owner;
+
+	}
+
+	/**
+	 * Room for this many copies standing at once, taken now: a caller that learns
+	 * the most it will stand after the draw was born grows it once, ahead of the
+	 * copies, instead of on the frame they arrive.
+	 */
+	hold( copies ) {
+
+		if ( copies > this.capacity ) this.#grow( roomFor( copies ) );
 
 	}
 
@@ -166,6 +179,17 @@ export class KitPieceDraw {
 		touch( this.colors, slot * 3, 3, this.count * 3 );
 
 	}
+
+}
+
+/**
+ * The capacity a draw takes for this many copies: a power of two, never below
+ * the first. The shader holds the instance buffer's length where the buffer
+ * fits in a uniform block, so draws of one capacity share their programs.
+ */
+export function roomFor( copies ) {
+
+	return Math.max( FIRST_CAPACITY, 2 ** Math.ceil( Math.log2( Math.max( 1, copies ) ) ) );
 
 }
 

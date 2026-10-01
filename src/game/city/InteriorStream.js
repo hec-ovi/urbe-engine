@@ -4,6 +4,7 @@ import { buildingFloors, floorPlacements } from './InteriorLayouts.js';
 import { furnitureBoxes } from './FurnitureBoxes.js';
 import { floorBoxes } from './InteriorBoxes.js';
 import { moduleError } from './InteriorModules.js';
+import { standingPeaks } from './InteriorPeaks.js';
 import { floorFill, floorOrphans, roomsOf } from './InteriorRooms.js';
 import { Haze } from '../light/Haze.js';
 
@@ -36,6 +37,8 @@ const VIEW_KEEP = 36;
 const LIFT_CAR = 'lift-car';
 /** And the landing leaves they slide open. */
 const LIFT_DOORS = 'lift-doors';
+/** What a floor within reach stands on before it is shown: its slabs. */
+const supports = ( placement ) => placement.module?.startsWith( 'floor-' ) === true;
 
 const EMPTY = 'empty';
 const LOADING = 'loading';
@@ -126,6 +129,35 @@ export class InteriorStream {
 			} );
 
 		}
+		this.#hold();
+
+	}
+
+	/**
+	 * Sizes the shared module and furniture draws for the most copies these
+	 * buildings can stand at once around the player (`standingPeaks`), while the
+	 * city loads and before the warm-up prepares them: a floor coming into sight
+	 * then appends into room the draws already have, and none of them grows.
+	 */
+	#hold() {
+
+		if ( ! this.modules?.hold && ! this.props?.hold ) return;
+		const peaks = standingPeaks( [ ...this.pending.values() ], {
+			keysOf: ( placement ) => {
+
+				if ( placement.module === LIFT_CAR || placement.module === LIFT_DOORS ) return [];
+				if ( placement.module ) return this.modules?.bucketsOf?.( placement.module ).map( ( bucket ) => `module:${bucket}` ) ?? [];
+				return placement.prop ? [ `prop:${placement.prop}` ] : [];
+
+			},
+			support: supports,
+			reach: BAND_REACH,
+			view: VIEW_KEEP,
+			drop: DROP_RADIUS
+		} );
+		const of = ( kind ) => new Map( [ ...peaks ].filter( ( [ key ] ) => key.startsWith( kind ) ).map( ( [ key, count ] ) => [ key.slice( kind.length ), count ] ) );
+		this.modules?.hold?.( of( 'module:' ) );
+		this.props?.hold?.( of( 'prop:' ) );
 
 	}
 
@@ -347,7 +379,7 @@ export class InteriorStream {
 		if ( band.placeholder || band.state === FAILED ) return;
 		const token = { handles: [] };
 		band.placeholder = token;
-		const placements = floorPlacements( band.record ).filter( one => one.module?.startsWith( 'floor-' ) );
+		const placements = floorPlacements( band.record ).filter( supports );
 		const boxes = floorBoxes( placements, band.elevation, id => this.modules.boundsOf( id ) );
 		this.admitting ++;
 		Promise.resolve( this.onColliderBand?.( `${band.id}/floor`, { boxes, positions: [] } ) ).then( ready => {
@@ -743,9 +775,10 @@ function disposeContent( content ) {
 
 /**
  * Room for this floor's copies in one reallocation per batch, before the first
- * of them is appended: the module batches are the city's, and a batch that
- * grows is a batch the renderer builds a pipeline for again. The furniture
- * draws keep their own growth.
+ * of them is appended. The draws were sized for the most the city stands at
+ * once when it was registered (`#hold`), so this only grows a batch the peak
+ * missed, such as a lift left waiting in a building the player walked away
+ * from; the furniture draws keep their own growth.
  */
 function reserve( copies ) {
 

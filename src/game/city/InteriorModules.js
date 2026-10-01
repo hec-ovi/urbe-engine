@@ -101,10 +101,30 @@ export class InteriorModules {
 
 	}
 
+	/** The slots whose batches one copy of a module takes an instance in, one per surface. */
+	bucketsOf( id ) {
+
+		return this.batches.bucketsOf( id );
+
+	}
+
 	/** Room for the copies a floor is about to place, one reallocation per batch. */
 	reserve( ids ) {
 
 		this.batches.reserve( ids );
+
+	}
+
+	/**
+	 * Room for the most instances each slot will ever stand at once
+	 * (`standingPeaks`), taken once while the city loads, so admitting a floor
+	 * as it comes into sight never grows a batch.
+	 *
+	 * @param instances Map of slot to instances
+	 */
+	hold( instances ) {
+
+		this.batches.hold( instances );
 
 	}
 

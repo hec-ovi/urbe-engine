@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { KitPieceDraw } from './KitPieceDraw.js';
+import { KitPieceDraw, roomFor } from './KitPieceDraw.js';
 
 /** What a pass's frustum test answers for each surface of the draw. */
 function seen( draw, camera ) {
@@ -46,6 +46,35 @@ describe( 'a furniture draw', () => {
 		expect( seen( draw, camera ) ).toEqual( [ false, false ] );
 		draw.add( at( 0, - 5 ), new THREE.Color(), { slot: - 1 } );
 		expect( seen( draw, camera ) ).toEqual( [ true, true ] );
+		draw.dispose();
+
+	} );
+
+	it( 'is born with room for the copies its caller will stand, and grows once when told of more', () => {
+
+		const material = new THREE.MeshStandardMaterial();
+		const surfaces = [ { bucket: 0, geometry: new THREE.BoxGeometry( 1, 1, 1 ), material } ];
+		expect( [ 1, 64, 65, 692, 1024, 1025 ].map( roomFor ) ).toEqual( [ 64, 64, 128, 1024, 1024, 2048 ] );
+
+		// The same meshes draw every copy up to the room it was born with.
+		const draw = new KitPieceDraw( 'furniture:held', surfaces, { fill: true, capacity: 300 } );
+		const meshes = draw.meshes;
+		expect( draw.capacity ).toBe( 512 );
+		expect( draw.fills.texture.image.width ).toBe( 23 );
+		for ( let i = 0; i < 512; i ++ ) draw.add( new THREE.Matrix4(), new THREE.Color(), { slot: - 1 } );
+		expect( draw.meshes ).toBe( meshes );
+		expect( meshes[ 0 ].instanceMatrix.count ).toBe( 512 );
+
+		// Told of more before they arrive, it moves to bigger buffers then.
+		const fill = draw.fills.texture;
+		draw.hold( 600 );
+		expect( draw.capacity ).toBe( 1024 );
+		expect( draw.meshes ).not.toBe( meshes );
+		expect( draw.meshes[ 0 ].instanceMatrix.count ).toBe( 1024 );
+		expect( draw.fills.texture ).toBe( fill );
+		expect( draw.count ).toBe( 512 );
+		draw.hold( 100 );
+		expect( draw.capacity ).toBe( 1024 );
 		draw.dispose();
 
 	} );

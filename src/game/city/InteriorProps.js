@@ -34,6 +34,8 @@ export class InteriorProps {
 		this.loading = new Map();
 		/** Ids the catalog does not publish that a floor has named, each warned about once. */
 		this.absent = new Set();
+		/** Per id, the most copies the city stands at once (`hold`), which its draw is born with room for. */
+		this.peaks = new Map();
 		this.group = new THREE.Group();
 		this.group.name = 'interior-props';
 
@@ -83,6 +85,25 @@ export class InteriorProps {
 
 	}
 
+	/**
+	 * Room for the most copies of each piece the city will stand at once
+	 * (`standingPeaks`), taken while it loads. A draw is born with that room when
+	 * its model arrives, and one standing already takes it now, so a floor coming
+	 * into sight never moves a draw to bigger buffers and new meshes.
+	 *
+	 * @param copies Map of furniture id to copies
+	 */
+	hold( copies ) {
+
+		for ( const [ id, count ] of copies ) {
+
+			this.peaks.set( id, Math.max( this.peaks.get( id ) ?? 0, count ) );
+			this.props.get( id )?.draw.hold( count );
+
+		}
+
+	}
+
 	/** @param fill Vector4 the fill of the room the copy stands in */
 	admit( id, matrix, fill ) {
 
@@ -127,7 +148,7 @@ export class InteriorProps {
 			.then( ( surfaces ) => {
 
 				const parts = surfaces.map( ( part, index ) => ( { ...part, bucket: index, material: this.roomLights.materialFor( id, part.material ) } ) );
-				const prop = { id, surfaces, draw: new KitPieceDraw( `furniture:${id}`, parts, { fill: true } ) };
+				const prop = { id, surfaces, draw: new KitPieceDraw( `furniture:${id}`, parts, { fill: true, capacity: this.peaks.get( id ) } ) };
 				this.props.set( id, prop );
 				this.group.add( prop.draw.group );
 

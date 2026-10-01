@@ -15,6 +15,7 @@ import { partsOf } from './InteriorBoxes.js';
 import { enclosure, floorOrphans, roomsOf } from './InteriorRooms.js';
 import { Elevators } from './Elevators.js';
 import { FillChannel } from './kit/FillChannel.js';
+import { roomFor } from './kit/KitPieceDraw.js';
 import { RoomLights } from '../light/RoomLights.js';
 import { Warmup } from '../look/Warmup.js';
 
@@ -781,3 +782,49 @@ it( 'stands solid module slabs while furniture is pending and cancels stale admi
 	expect( model.solid.size ).toBe( 0 );
 	model.dispose();
 } );
+
+it( 'sizes the shared draws as the building registers, so no floor it stands, walked or sent for by a lift, grows one', async () => {
+
+	const model = await stream();
+	const batches = [ ...model.modules.batches.batches.values() ];
+	const held = batches.map( ( batch ) => batch.capacity );
+	const most = batches.map( () => 0 );
+	const furnitureMost = new Map();
+	const look = () => {
+
+		batches.forEach( ( batch, index ) => { most[ index ] = Math.max( most[ index ], batch.count ); } );
+		for ( const [ id, { draw } ] of model.props.props ) furnitureMost.set( id, Math.max( furnitureMost.get( id ) ?? 0, draw.count ) );
+
+	};
+	// Room for the fullest floors around the player, before any floor stands.
+	expect( Math.max( ...held ) ).toBeGreaterThan( 64 );
+	expect( model.props.peaks.size ).toBeGreaterThan( 0 );
+
+	for ( const feet of [ { x: 12, y: 0.1, z: - 50 }, { x: 12, y: 0.1, z: - 10 }, ...[ 0, 1, 2, 3, 4, 3, 2, 1, 0 ].map( feetOn ) ] ) {
+
+		await settle( model, feet );
+		look();
+
+	}
+	for ( const [ from, to ] of [ [ 0, 4 ], [ 4, 0 ], [ 1, 3 ] ] ) {
+
+		model.requestFloor( 'p1', to );
+		await settle( model, feetOn( from ) );
+		look();
+		model.releaseFloor( 'p1' );
+
+	}
+
+	// Nothing grew, and something stood in every batch sized for it.
+	expect( batches.map( ( batch ) => batch.capacity ) ).toEqual( held );
+	expect( most.every( ( count, index ) => count <= held[ index ] ) ).toBe( true );
+	expect( most.filter( ( count ) => count > 64 ).length ).toBeGreaterThan( 0 );
+	for ( const [ id, { draw } ] of model.props.props ) {
+
+		expect( draw.capacity ).toBe( roomFor( model.props.peaks.get( id ) ) );
+		expect( furnitureMost.get( id ) ).toBeLessThanOrEqual( model.props.peaks.get( id ) );
+
+	}
+	model.dispose();
+
+}, 60000 );
