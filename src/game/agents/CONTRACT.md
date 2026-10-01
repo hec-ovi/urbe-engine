@@ -84,6 +84,8 @@ The simulation dependency supplies `getNPC`, `continuityAt`, `interrupt` and `re
 
 - `E_NPC_INPUT`: an API request or restore state does not match its schema.
 - `E_NPC_OUTPUT`: an actor or save result does not match its schema.
+
+The continuity's schemas are all compiled when it is made. Its requests and results are checked against them until `boundary.play(checked)` says the game plays, which a game says once its load is done: from then on only a game run with `checks=on` checks what it hands itself every frame, and the others raise these errors only for a schema name the continuity does not know.
 - `E_NPC_UNKNOWN`: the simulation does not hold that instanced npcId.
 - `E_NPC_UNAVAILABLE`: the NPC is dead or unavailable.
 - `E_NPC_PLACE`: the NPC's current scheduled state has no position, including a route without a matching passenger leg or complete Connections path3 and timing facts.

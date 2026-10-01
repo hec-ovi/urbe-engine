@@ -26,6 +26,8 @@ import errandStart from './schema/errand-start.schema.json';
 import errandStop from './schema/errand-stop.schema.json';
 import { NpcContinuityError } from './NpcContinuityError.js';
 
+const PREFIX = 'urn:urbe:engine:npc-agents:';
+
 const SCHEMAS = [
 	values, appearanceRequest, unloadRequest, followStart, leadStart, followerCarry, followUpdate, followStop,
 	crouchStart, crouchStop,
@@ -33,12 +35,33 @@ const SCHEMAS = [
 	visibleUpdate, actorState, actorStateOrNull, actorStates, controlEvents, interiorRoute, continuitySave, places, movementNetwork
 ];
 
+/**
+ * The continuity's inputs and outputs held to their schemas.
+ *
+ * Every schema is compiled as the boundary is made, while the game loads, so
+ * no frame of play compiles one the first time a person does something new.
+ * A boundary checks every value it is handed until `play()` says the game is
+ * playing: from then on what passes through is what the game hands itself, a
+ * frame at a time, and it is checked only when `play( true )` asks for it, as
+ * the `checks=on` query does. An unknown schema name fails either way.
+ */
 export class NpcContinuityBoundary {
 
 	constructor() {
 
 		this.ajv = new Ajv2020( { allErrors: true, strict: true } );
 		for ( const schema of SCHEMAS ) this.ajv.addSchema( schema );
+		/** Schema name to its compiled validator. */
+		this.validators = new Map( SCHEMAS.map( ( schema ) => [ schema.$id.slice( PREFIX.length ), this.ajv.getSchema( schema.$id ) ] ) );
+		/** Whether values are checked: always while the game loads, in play only when asked. */
+		this.checked = true;
+
+	}
+
+	/** The game plays: from now on values pass unchecked, unless `checked`. */
+	play( checked = false ) {
+
+		this.checked = checked;
 
 	}
 
@@ -47,9 +70,9 @@ export class NpcContinuityBoundary {
 
 	#assert( name, value, code ) {
 
-		const validate = this.ajv.getSchema( `urn:urbe:engine:npc-agents:${name}` );
+		const validate = this.validators.get( name );
 		if ( ! validate ) throw new NpcContinuityError( code, `unknown NPC continuity schema ${name}` );
-		if ( validate( value ) ) return value;
+		if ( ! this.checked || validate( value ) ) return value;
 		throw new NpcContinuityError(
 			code,
 			`${name} does not match its schema`,

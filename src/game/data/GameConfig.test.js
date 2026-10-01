@@ -59,7 +59,9 @@ describe( 'game URL configuration', () => {
 		window.history.replaceState( {}, '', '/?mode=game&out=/out/games/night-shift&automation' );
 		expect( GameConfig.fromUrl() ).toMatchObject( { gameId: null, automation: true } );
 		window.history.replaceState( {}, '', '/?mode=game&game=night-shift&automation=1' );
-		expect( GameConfig.fromUrl() ).toMatchObject( { gameId: 'night-shift', automation: false } );
+		expect( GameConfig.fromUrl() ).toMatchObject( { gameId: 'night-shift', automation: false, checks: false } );
+		window.history.replaceState( {}, '', '/?mode=game&game=night-shift&checks=on' );
+		expect( GameConfig.fromUrl().checks ).toBe( true );
 		window.history.replaceState( {}, '', '/?mode=game' );
 		expect( GameConfig.fromUrl().automation ).toBe( false );
 

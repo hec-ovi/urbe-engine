@@ -952,6 +952,8 @@ export class GameApp {
 		// From here every program and map the renderer builds is the frame's own.
 		this.work = new RenderWork( this.renderer.info );
 		this.last = performance.now();
+		// What the continuity hands itself from now on is checked only when asked (`checks=on`).
+		this.npcContinuity.boundary.play?.( config.checks === true );
 		this.renderer.setAnimationLoop( () => this.#frame() );
 		if ( this.probe ) this.#reflect();
 		// A driver's hands on a read-only preview, installed once the city plays.
