@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "producer": "buildHighwayModel(structure) from HighwayModel.js",
+  "renderInvariant": "Existing vertex positions, normals, UVs, vertex/triangle order and material slots are unchanged. This is additive authoring metadata only.",
+  "attributes": {
+    "_highway_source": {
+      "storage": "Float32",
+      "itemSize": 2,
+      "normalized": false,
+      "components": [
+        "Authored horizontal source path station in metres",
+        "Roadway elevation at that source station, in Atlas world Y metres"
+      ],
+      "sweptFaces": "Taken directly from each construction section's distance and y, and propagated through the exact emitted triangle order, including winding reversal.",
+      "loftedSupportsAndBearings": "Computed once from the emitted vertex XZ using the producer's inverse construction frame; deck elevation is evaluated from the original elevation profile. It never comes from texture UV.u or vertex world Y.",
+      "interpolation": "Interpolate normally on a swept face. Stations wrap at the closed route origin; use ownership.pathLength and closedRoute when handling cyclic distance. A support loft crossing that origin can contain the coordinate discontinuity, so its pier-base mask must use the owning support record, not an interpolated station."
+    },
+    "_highway_face": {
+      "storage": "Uint8",
+      "itemSize": 1,
+      "normalized": false,
+      "interpolation": "All three vertices of a triangle carry the same integer mask; preserve raw 0..31 values. Do not normalize to 0..1.",
+      "flags": {
+        "CAP": 1,
+        "CHAMFER": 2,
+        "DRIP": 4,
+        "END": 8,
+        "ROAD_SIDE": 16
+      },
+      "meaning": {
+        "CAP": "Actual upper planar cap/top of an authored section or loft; use the material slot and original geometry normal to select the intended part.",
+        "CHAMFER": "Actual small section bevel, chamfered support corner, or short loft bevel band.",
+        "DRIP": "The two authored sides of the slab drip kerf; never a texture-tile border.",
+        "END": "A closed longitudinal section end or bearing-pocket section step.",
+        "ROAD_SIDE": "A parapet face pointing toward the carriageway, including its battered inner face."
+      }
+    }
+  },
+  "ownership": {
+    "location": "part.geometry.userData.highwayContent.ownership",
+    "fields": {
+      "version": "1",
+      "pathLength": "Complete horizontal source route length in metres",
+      "closedRoute": "True exactly when the source path closes",
+      "sourceAttribute": "_highway_source",
+      "faceAttribute": "_highway_face",
+      "ownerRanges": "Array of {start,count,support}. start/count are vertex units, not float offsets, index offsets or triangle numbers.",
+      "supportTable": "Array of {index,bottom,top,station}, indexed in the original structure.supports order. Bottom/top retain exact Atlas values, including nonzero and negative bases."
+    },
+    "ranges": "Ranges are contiguous, nonoverlapping, cover the complete part and align to whole triangles. support=-1 means explicitly unowned; support=0 is the first real support.",
+    "assignedOwners": "Pier lofts, both steel bearing plates, the elastomer bearing pad and that support's deck diaphragm carry the exact construction owner index. Main slab, route joints and parapets remain unowned.",
+    "consumerPreparation": [
+      "At residency preparation, walk each owner range once and read supportTable[range.support] when support>=0.",
+      "For shaders that need bottom/top/index, expand those constants to only the necessary geometry attributes or the existing instance/owner representation. Do this once before batching, not once per frame.",
+      "Indices are local to one source structure. Resolve or rebase them before merging different structures; copying bottom/top values per vertex avoids a global support lookup.",
+      "Pier-base contact uses worldY - owningSupport.bottom. Never use world zero, a texture repeat coordinate, or the minimum Y of a batch containing several piers.",
+      "Barrier-lower splash can use worldY - _highway_source.y directly. Slot and original face-normal gates still apply.",
+      "Soffit joint logic receives the real station from _highway_source.x and the existing model.detail.joints array. Build a suitable neighbouring-joint representation once during preparation; this module does not add a per-frame search or a new shader.",
+      "Placement weathering remains opt-in. These coordinates do not enable or bake any dirt, base band, wetness or material variation."
+    ]
+  },
+  "gltf": {
+    "attributes": [
+      "_HIGHWAY_SOURCE",
+      "_HIGHWAY_FACE"
+    ],
+    "extras": "primitive.extras.highwayContent.ownership retains the same range/table contract in the review GLB. Three's loader exposes custom attribute names in lowercase.",
+    "caution": "A consumer that reindexes, splits, merges or reorders vertices must carry owner ranges through that operation or expand the required owner fields beforehand."
+  },
+  "cost": {
+    "persistentVertexData": "9 additional bytes per vertex: two Float32 values and one raw Uint8 mask.",
+    "attributeCount": "Two additional buffer attributes; no new draw call or material slot.",
+    "rangeData": "A small run-length owner table per part, plus a small support table; ownerless contiguous geometry collapses to one range."
+  },
+  "apiCorrection": "highwayFrameAt currently returns elevation as .y, not .center.y. The material placement-mask specification's .center.y wording must not be copied into a consumer."
+}

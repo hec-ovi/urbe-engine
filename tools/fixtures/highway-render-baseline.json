@@ -1,0 +1,346 @@
+{
+  "baselineCommit": "b69182c",
+  "purpose": "Measured pre-metadata render streams. New ownership data must not change these positions, normals, UVs, triangle order or slot identities.",
+  "cases": [
+    {
+      "name": "two-pier-base-elevations",
+      "source": {
+        "edgeIds": [
+          "owner-levels"
+        ],
+        "path": [
+          [
+            0,
+            0
+          ],
+          [
+            100,
+            0
+          ]
+        ],
+        "width": 14,
+        "level": 8,
+        "deckThickness": 1,
+        "ramps": {
+          "start": 0,
+          "end": 0
+        },
+        "barriers": {
+          "left": {
+            "height": 1.1,
+            "width": 0.3
+          },
+          "right": {
+            "height": 1.1,
+            "width": 0.3
+          }
+        },
+        "elevationProfile": [
+          {
+            "distance": 0,
+            "level": 8
+          },
+          {
+            "distance": 100,
+            "level": 8
+          }
+        ],
+        "supports": [
+          {
+            "position": [
+              25,
+              0
+            ],
+            "footprint": [
+              [
+                24,
+                -1
+              ],
+              [
+                26,
+                -1
+              ],
+              [
+                26,
+                1
+              ],
+              [
+                24,
+                1
+              ]
+            ],
+            "bottom": 1.5,
+            "top": 7
+          },
+          {
+            "position": [
+              75,
+              0
+            ],
+            "footprint": [
+              [
+                74,
+                -1
+              ],
+              [
+                76,
+                -1
+              ],
+              [
+                76,
+                1
+              ],
+              [
+                74,
+                1
+              ]
+            ],
+            "bottom": -2,
+            "top": 7
+          }
+        ]
+      },
+      "renderStreams": [
+        {
+          "slot": "roadway",
+          "vertices": 42,
+          "hashes": {
+            "position": "7b28572c5a823b6dca3651f56cb0f08a04189c8d2d9bbc0f27d1a5e1e6d2703b",
+            "normal": "c1f58e89daca1b8e4fb1e9e5e4ddad6122c81b8d580691782f9d15f7bfdc47f5",
+            "uv": "475e77ceee56d8f9ca14a94976d050075c55c104fc6f899c005f1623eb17e978"
+          }
+        },
+        {
+          "slot": "deck-concrete",
+          "vertices": 276,
+          "hashes": {
+            "position": "6b5d7a736b42c85a48ae64e2916d76775654c0b712eb10443c403e7d545390ab",
+            "normal": "229a4b8574952b73846fa10a339b83fc2db8f2a995edf0c3dabeb7070eba76de",
+            "uv": "8ea9f4da5f3b434ad6e85f9aa8081e2003909704dbf992a19e1b8569a2852d07"
+          }
+        },
+        {
+          "slot": "soffit-concrete",
+          "vertices": 846,
+          "hashes": {
+            "position": "e8a5e36b461e5495c5f549569026679f2b2378e24aeeec497ce7b38bf29aa054",
+            "normal": "479f89132d00de6198fb0894f9d7f51b7bf4eeb369228a8752fe4f54ddb7c818",
+            "uv": "a85020cbebc5eca371fd64fd4a858fa6d21f0aaeeea3982d7daaadecfec5961b"
+          }
+        },
+        {
+          "slot": "pier-concrete",
+          "vertices": 648,
+          "hashes": {
+            "position": "b1965d779f4090d59b2972c28bd21ab6f88dbd0dba6ef9db3fefacfa36bab4cb",
+            "normal": "ae095fb3457b4b74007dcf0ede32fadaffa751e22cc2551eafc87b3fad6fc7dd",
+            "uv": "ecf77bab4f24128dcd6f11defe8da490ac2883a115a122cb00873784e56bf343"
+          }
+        },
+        {
+          "slot": "barrier-concrete",
+          "vertices": 1896,
+          "hashes": {
+            "position": "276288ffe2d59e55b24460dba5c4bf3b15fdf1f07628b85d28034ba9ffb41223",
+            "normal": "4fad5dbe689a4210e483c63dbf91632f2b8d72d94d29defca4a26d483355ed53",
+            "uv": "0dee853f20efe9e2e26e4e6b361e40998e2b28a9cf309385d35823723ad37f87"
+          }
+        },
+        {
+          "slot": "bearing-steel",
+          "vertices": 144,
+          "hashes": {
+            "position": "3a281d92298e1c7c30d3caf07ea3a7d28d101241dd89e615fa5f37a1e3275a6f",
+            "normal": "9f0b8755771757848ba672ce74695339a1c8337dca778cae1231d3464446c9bc",
+            "uv": "b0009e84c7635dee7573e4b94b2ce6e636340444027e2b525d1190bf0ee24863"
+          }
+        },
+        {
+          "slot": "joint-rubber",
+          "vertices": 2040,
+          "hashes": {
+            "position": "a4331bfb8daeb6ded7124314cd27ddd45959bdb4e50bf7d83c76adbf214e6190",
+            "normal": "2ed7e4ce9afb563cb8c9186d021b840092e9a486df0ff50101cc124a7469d812",
+            "uv": "03ece0758cbf11aec743ba6e0df67b337ec8c2f581ceb5986fbe8d55bc9e3b97"
+          }
+        }
+      ]
+    },
+    {
+      "name": "bend-and-ramp",
+      "source": {
+        "edgeIds": [
+          "owner-bend-ramp"
+        ],
+        "path": [
+          [
+            0,
+            0
+          ],
+          [
+            80,
+            0
+          ],
+          [
+            100,
+            30
+          ],
+          [
+            160,
+            30
+          ]
+        ],
+        "width": 14,
+        "level": 8,
+        "deckThickness": 1,
+        "ramps": {
+          "start": 60,
+          "end": 0
+        },
+        "barriers": {
+          "left": {
+            "height": 1.1,
+            "width": 0.3
+          },
+          "right": {
+            "height": 1.1,
+            "width": 0.3
+          }
+        },
+        "elevationProfile": [
+          {
+            "distance": 0,
+            "level": 0
+          },
+          {
+            "distance": 60,
+            "level": 8
+          },
+          {
+            "distance": 176.0555127546399,
+            "level": 8
+          }
+        ],
+        "supports": [
+          {
+            "position": [
+              30,
+              0
+            ],
+            "footprint": [
+              [
+                29,
+                -1
+              ],
+              [
+                31,
+                -1
+              ],
+              [
+                31,
+                1
+              ],
+              [
+                29,
+                1
+              ]
+            ],
+            "bottom": 0,
+            "top": 2.8666666666666667
+          },
+          {
+            "position": [
+              135,
+              30
+            ],
+            "footprint": [
+              [
+                134,
+                29
+              ],
+              [
+                136,
+                29
+              ],
+              [
+                136,
+                31
+              ],
+              [
+                134,
+                31
+              ]
+            ],
+            "bottom": 2,
+            "top": 7
+          }
+        ]
+      },
+      "renderStreams": [
+        {
+          "slot": "roadway",
+          "vertices": 48,
+          "hashes": {
+            "position": "76151a9c3200995028087eccfd9b51404198ea211fbf921f3fc6a4b6bb3ecb94",
+            "normal": "3668325bb0598f5e26c0a6105347ee1f0bfd15d999ccd830e76e926442bfbc0e",
+            "uv": "75b5f50925e01613260c585daa8508aea3e13bb011ec5d901bee51598bd72fa1"
+          }
+        },
+        {
+          "slot": "deck-concrete",
+          "vertices": 300,
+          "hashes": {
+            "position": "7393b790a6fdb2a69ef14babcf48d26037011908405831e8b6b3e5972c4ce029",
+            "normal": "2bc8af88d06ea0aa139e683643762f941374e5f4638678c3453c82756077f923",
+            "uv": "3f72444980e5af2c1bdba262d2fb016a917614ad60fdfaf1a9477bf146fa7169"
+          }
+        },
+        {
+          "slot": "soffit-concrete",
+          "vertices": 888,
+          "hashes": {
+            "position": "89aada83099549471a2ac030ae3a302af3c2aa7c0edaaa29c16ff0bc0986157d",
+            "normal": "3f633c5bd85b8ac620db7a1d848e35f7459108f24ffd5d7ce92a4fa7807d5f7c",
+            "uv": "b1b3216bf45eed2376a6bc3dcd5767344567ca5ba4d03979ac616660f1db8db4"
+          }
+        },
+        {
+          "slot": "pier-concrete",
+          "vertices": 648,
+          "hashes": {
+            "position": "c08a1e280f8f2801d109f3f89dd9f8ec4ee3b2978292ee570cb39ca1570d219f",
+            "normal": "ae095fb3457b4b74007dcf0ede32fadaffa751e22cc2551eafc87b3fad6fc7dd",
+            "uv": "0ffc174ed29090241cd1e81a13dc21eaf02cb8994d47e5daee15998041749f42"
+          }
+        },
+        {
+          "slot": "barrier-concrete",
+          "vertices": 3240,
+          "hashes": {
+            "position": "d49d22e5b87af58e647737ba9fa0337fe18f15f6143eac1a4651c65891a36e7a",
+            "normal": "2d537c4307294c62808831286783041bab08e444b2a24a909be2eaa91169f6db",
+            "uv": "2d708877a92f821ed7a8cd600abd0067bbe60b172dd0c6e0f239c8637d77d51f"
+          }
+        },
+        {
+          "slot": "bearing-steel",
+          "vertices": 72,
+          "hashes": {
+            "position": "149d4d62d1a5325e553c18b66cc120a9e8f3ca84bd775b1d2f15c3b7a66869a6",
+            "normal": "3f49215bd195f8f0186f2ba2e33f9a2a2a59bb8c7963105445168bb6492112d3",
+            "uv": "d4c3eab8e2acd462632921f622fe089c4b79b880681440e94d89423abc159649"
+          }
+        },
+        {
+          "slot": "joint-rubber",
+          "vertices": 3252,
+          "hashes": {
+            "position": "1b8baeaef9c5182f339f437e6bd87f29bc94173ee22fafeb0d99cfd0b4967b20",
+            "normal": "3381c852b46cdd2a8b0b17ac7379ffe669be12c9be1bf1c8800139ad6df3562d",
+            "uv": "c6bed3a1444b7f250e16cbbeef8fa78d62468e3ae9e9d36c0a6993a5187946e3"
+          }
+        }
+      ]
+    }
+  ]
+}

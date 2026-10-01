@@ -1,4 +1,4 @@
-import { Box3, BufferGeometry, Float32BufferAttribute, ShapeUtils, Vector2 } from 'three';
+import { Box3, BufferGeometry, Float32BufferAttribute, ShapeUtils, Uint8BufferAttribute, Vector2 } from 'three';
 
 /**
  * Authored highway mesh content. Atlas owns route, levels, carriageway width,
@@ -13,12 +13,14 @@ export const HIGHWAY_MATERIAL_SLOTS = Object.freeze( [
 	'roadway', 'deck-concrete', 'soffit-concrete', 'pier-concrete',
 	'barrier-concrete', 'bearing-steel', 'joint-rubber'
 ] );
+export const HIGHWAY_OWNERSHIP_VERSION = 1;
+export const HIGHWAY_FACE_FLAGS = Object.freeze( { CAP: 1, CHAMFER: 2, DRIP: 4, END: 8, ROAD_SIDE: 16 } );
 const EPS = 1e-7, MITRE_LIMIT = 2.5;
 
 export function buildHighwayModel( structure ) {
 
 	const route = routeOf( structure );
-	const writer = new MeshWriter();
+	const writer = new MeshWriter( route );
 	const detail = { bearings: [], omittedBearings: [], joints: [], diaphragms: [], supports: [] };
 	const depth = structure.deckThickness;
 	const seatDepth = Math.min( 0.12, depth * 0.16 );
@@ -39,6 +41,8 @@ export function buildHighwayModel( structure ) {
 		const feasible = flat && joined && station > halfSeat + 0.05 && station < route.length - halfSeat - 0.05;
 		const record = { support: i, station, footprint: ring, bottom: support.bottom, top: support.top };
 		detail.supports.push( record );
+		writer.supports[ i ] = { index: i, bottom: support.bottom, top: support.top, station };
+		writer.owner = i;
 		pier( writer, ring, support.bottom, support.top, i );
 		if ( feasible ) {
 
@@ -67,6 +71,7 @@ export function buildHighwayModel( structure ) {
 		if ( station > 0.5 && station < route.length - 0.5 ) jointStations.push( station );
 
 	}
+	writer.owner = - 1;
 	const joints = unique( jointStations );
 	const stations = unique( [ ...route.knots,
 		...bearingSites.flatMap( ( site ) => [ site.station - site.half, site.station + site.half ] ),
@@ -90,7 +95,9 @@ export function buildHighwayModel( structure ) {
 			return Math.min( Math.abs( p[ 0 ] ), Math.abs( q[ 0 ] ) ) > structure.width / 2 - 0.08
 				? 'deck-concrete' : 'soffit-concrete';
 
-		}, { roadWidth: structure.width, startCap: i === 0, endCap: i === sections.length - 2, capSlot: 'deck-concrete' } );
+		}, { roadWidth: structure.width, startCap: i === 0, endCap: i === sections.length - 2, capSlot: 'deck-concrete',
+			extraFlags: ( p, q ) => ( Math.abs( p[ 1 ] + depth * 0.22 ) < EPS && Math.abs( q[ 1 ] + depth * 0.25 ) < EPS )
+				|| ( Math.abs( q[ 1 ] + depth * 0.22 ) < EPS && Math.abs( p[ 1 ] + depth * 0.25 ) < EPS ) ? HIGHWAY_FACE_FLAGS.DRIP : 0 } );
 
 	}
 	for ( const station of joints ) detail.joints.push( { station, width: 0.05, top: route.at( station ).y } );
@@ -108,7 +115,9 @@ export function buildHighwayModel( structure ) {
 		const p = [ [ - half, upper ], [ half, upper ], [ half, lower + bevel ], [ half - bevel, lower ],
 			[ - half + bevel, lower ], [ - half, lower + bevel ] ];
 		const a = route.at( station - halfLength ), b = route.at( station + halfLength );
+		writer.owner = i;
 		sweep( writer, p, a, b, () => 'soffit-concrete', { caps: true, capSlot: 'soffit-concrete' } );
+		writer.owner = - 1;
 		detail.diaphragms.push( { support: i, station, length: halfLength * 2, depthFraction: - lower / depth } );
 
 	}
@@ -189,7 +198,8 @@ function barrier( writer, route, roadWidth, spec, side, joints ) {
 		const mid = ( a.distance + b.distance ) / 2;
 		const seal = seals.some( ( s ) => Math.abs( s - mid ) < 0.006 + EPS );
 		sweep( writer, profile, a, b, () => seal ? 'joint-rubber' : 'barrier-concrete',
-			{ startCap: i === 1, endCap: i === stations.length - 1, capSlot: seal ? 'joint-rubber' : 'barrier-concrete' } );
+			{ startCap: i === 1, endCap: i === stations.length - 1, capSlot: seal ? 'joint-rubber' : 'barrier-concrete',
+				extraFlags: ( p, q ) => - ( q[ 1 ] - p[ 1 ] ) * direction < - EPS ? HIGHWAY_FACE_FLAGS.ROAD_SIDE : 0 } );
 
 	}
 
@@ -201,7 +211,7 @@ function pier( writer, footprint, bottom, top ) {
 	const ring = chamferRing( footprint, Math.min( 0.06, height * 0.06 ) );
 	if ( height < 0.5 ) {
 
-		loft( writer, 'pier-concrete', [ { ring, y: bottom }, { ring, y: top } ] );
+		loft( writer, 'pier-concrete', [ { ring, y: bottom }, { ring, y: top } ], { cornerBevels: true } );
 		return;
 
 	}
@@ -215,11 +225,11 @@ function pier( writer, footprint, bottom, top ) {
 		{ ring: scaleRing( ring, 0.94 ), y: top - cap },
 		{ ring, y: top - bevel },
 		{ ring: scaleRing( ring, 0.985 ), y: top }
-	] );
+	], { cornerBevels: true } );
 
 }
 
-function sweep( writer, profile, a, b, slotFor, { caps = false, startCap = caps, endCap = caps, capSlot = 'deck-concrete', roadWidth = null } = {} ) {
+function sweep( writer, profile, a, b, slotFor, { caps = false, startCap = caps, endCap = caps, capSlot = 'deck-concrete', roadWidth = null, extraFlags = () => 0 } = {} ) {
 
 	const metricA = sectionRun( profile, a ), metricB = sectionRun( profile, b );
 	const point = ( frame, p ) => [ frame.x + frame.offset[ 0 ] * p[ 0 ], frame.y + p[ 1 ],
@@ -239,7 +249,9 @@ function sweep( writer, profile, a, b, slotFor, { caps = false, startCap = caps,
 		const lateral = - ( q[ 1 ] - p[ 1 ] ), up = q[ 0 ] - p[ 0 ];
 		const expected = [ ( a.offset[ 0 ] + b.offset[ 0 ] ) * lateral, up * 2,
 			( a.offset[ 1 ] + b.offset[ 1 ] ) * lateral ];
-		writer.quad( slot, [ pa, qa, pb, qb ], uv, expected );
+		const flags = sectionFaceFlags( profile, i ) | extraFlags( p, q );
+		writer.quad( slot, [ pa, qa, pb, qb ], uv, expected,
+			[ [ a.distance, a.y ], [ a.distance, a.y ], [ b.distance, b.y ], [ b.distance, b.y ] ], flags );
 
 	}
 	if ( startCap || endCap ) {
@@ -250,7 +262,8 @@ function sweep( writer, profile, a, b, slotFor, { caps = false, startCap = caps,
 			const sign = frame === a ? - 1 : 1;
 			const expected = [ frame.tangent[ 0 ] * sign, 0, frame.tangent[ 1 ] * sign ];
 			for ( const tri of triangles ) writer.triangle( capSlot, tri.map( ( i ) => point( frame, profile[ i ] ) ),
-				tri.map( ( i ) => [ profile[ i ][ 0 ] * Math.hypot( ...frame.offset ), profile[ i ][ 1 ] ] ), expected );
+				tri.map( ( i ) => [ profile[ i ][ 0 ] * Math.hypot( ...frame.offset ), profile[ i ][ 1 ] ] ), expected,
+				tri.map( () => [ frame.distance, frame.y ] ), HIGHWAY_FACE_FLAGS.END );
 
 		}
 
@@ -268,13 +281,14 @@ function sectionStep( writer, before, after, frame ) {
 
 		const j = ( i + 1 ) % before.length;
 		writer.quad( 'soffit-concrete', [ point( before[ i ] ), point( before[ j ] ), point( after[ i ] ), point( after[ j ] ) ],
-			[ before[ i ], before[ j ], after[ i ], after[ j ] ].map( ( p ) => [ p[ 0 ] * Math.hypot( ...frame.offset ), p[ 1 ] ] ), expected );
+			[ before[ i ], before[ j ], after[ i ], after[ j ] ].map( ( p ) => [ p[ 0 ] * Math.hypot( ...frame.offset ), p[ 1 ] ] ), expected,
+			Array.from( { length: 4 }, () => [ frame.distance, frame.y ] ), HIGHWAY_FACE_FLAGS.END );
 
 	}
 
 }
 
-function loft( writer, slot, levels ) {
+function loft( writer, slot, levels, { cornerBevels = false } = {} ) {
 
 	for ( let k = 1; k < levels.length; k ++ ) {
 
@@ -287,7 +301,9 @@ function loft( writer, slot, levels ) {
 			writer.quad( slot, [ [ p[ 0 ], a.y, p[ 1 ] ], [ q[ 0 ], a.y, q[ 1 ] ],
 				[ r[ 0 ], b.y, r[ 1 ] ], [ s[ 0 ], b.y, s[ 1 ] ] ],
 			[ [ runA[ i ], a.y ], [ runA[ i + 1 ], a.y ], [ runB[ i ], b.y ], [ runB[ i + 1 ], b.y ] ],
-			[ q[ 1 ] - p[ 1 ], 0, p[ 0 ] - q[ 0 ] ] );
+			[ q[ 1 ] - p[ 1 ], 0, p[ 0 ] - q[ 0 ] ], null,
+			( cornerBevels && i % 2 === 0 ) || ( b.y - a.y < 0.08 && Math.hypot( ...subtract( p, r ) ) > EPS )
+				? HIGHWAY_FACE_FLAGS.CHAMFER : 0 );
 
 		}
 
@@ -297,43 +313,77 @@ function loft( writer, slot, levels ) {
 		const triangles = ShapeUtils.triangulateShape( level.ring.map( ( p ) => new Vector2( ...p ) ), [] );
 		for ( const tri of triangles ) writer.triangle( slot,
 			tri.map( ( i ) => [ level.ring[ i ][ 0 ], level.y, level.ring[ i ][ 1 ] ] ),
-			tri.map( ( i ) => [ ...level.ring[ i ] ] ), [ 0, level === levels[ 0 ] ? - 1 : 1, 0 ] );
+			tri.map( ( i ) => [ ...level.ring[ i ] ] ), [ 0, level === levels[ 0 ] ? - 1 : 1, 0 ], null,
+			level === levels[ 0 ] ? 0 : HIGHWAY_FACE_FLAGS.CAP );
 
 	}
 
 }
 
+function sectionFaceFlags( profile, edge ) {
+	const p = profile[ edge ], q = profile[ ( edge + 1 ) % profile.length ];
+	const highest = Math.max( ...profile.map( point => point[ 1 ] ) );
+	let flags = Math.abs( p[ 1 ] - highest ) < EPS && Math.abs( q[ 1 ] - highest ) < EPS ? HIGHWAY_FACE_FLAGS.CAP : 0;
+	const dx = Math.abs( p[ 0 ] - q[ 0 ] ), dy = Math.abs( p[ 1 ] - q[ 1 ] );
+	if ( dx > EPS && dy > EPS && Math.hypot( dx, dy ) < 0.16 ) flags |= HIGHWAY_FACE_FLAGS.CHAMFER;
+	return flags;
+}
+
 class MeshWriter {
 
-	constructor() { this.slots = new Map(); }
+	constructor( route ) {
+		this.slots = new Map();
+		this.route = route;
+		this.owner = - 1;
+		this.supports = [];
+		this.sourceCoordinates = new Map();
+	}
 
-	quad( slot, points, uvs, expected ) {
+	sourceAt( point ) {
+		const key = point[ 0 ] + ',' + point[ 2 ];
+		let coordinates = this.sourceCoordinates.get( key );
+		if ( ! coordinates ) {
+			const station = this.route.stationOf( [ point[ 0 ], point[ 2 ] ] );
+			coordinates = [ station, this.route.at( station ).y ];
+			this.sourceCoordinates.set( key, coordinates );
+		}
+		return coordinates;
+	}
 
-		this.triangle( slot, [ points[ 0 ], points[ 1 ], points[ 2 ] ], [ uvs[ 0 ], uvs[ 1 ], uvs[ 2 ] ], expected );
-		this.triangle( slot, [ points[ 1 ], points[ 3 ], points[ 2 ] ], [ uvs[ 1 ], uvs[ 3 ], uvs[ 2 ] ], expected );
+	quad( slot, points, uvs, expected, coordinates = null, flags = 0 ) {
+
+		this.triangle( slot, [ points[ 0 ], points[ 1 ], points[ 2 ] ], [ uvs[ 0 ], uvs[ 1 ], uvs[ 2 ] ], expected, coordinates && [ coordinates[ 0 ], coordinates[ 1 ], coordinates[ 2 ] ], flags );
+		this.triangle( slot, [ points[ 1 ], points[ 3 ], points[ 2 ] ], [ uvs[ 1 ], uvs[ 3 ], uvs[ 2 ] ], expected, coordinates && [ coordinates[ 1 ], coordinates[ 3 ], coordinates[ 2 ] ], flags );
 
 	}
 
-	triangle( slot, points, uv, expected ) {
+	triangle( slot, points, uv, expected, sourceCoordinates = null, flags = 0 ) {
 
 		let normal = cross( subtract( points[ 1 ], points[ 0 ] ), subtract( points[ 2 ], points[ 0 ] ) );
 		const length = Math.hypot( ...normal );
 		if ( length < 1e-10 ) return;
+		const coordinates = sourceCoordinates ?? points.map( point => this.sourceAt( point ) );
 		if ( dot( normal, expected ) < 0 ) {
 
 			[ points[ 1 ], points[ 2 ] ] = [ points[ 2 ], points[ 1 ] ];
 			[ uv[ 1 ], uv[ 2 ] ] = [ uv[ 2 ], uv[ 1 ] ];
+			[ coordinates[ 1 ], coordinates[ 2 ] ] = [ coordinates[ 2 ], coordinates[ 1 ] ];
 			normal = normal.map( ( value ) => - value );
 
 		}
 		normal = normal.map( ( value ) => value / length );
 		let target = this.slots.get( slot );
-		if ( ! target ) this.slots.set( slot, target = { position: [], normal: [], uv: [] } );
+		if ( ! target ) this.slots.set( slot, target = { position: [], normal: [], uv: [], _highway_source: [], _highway_face: [], ownerRanges: [] } );
+		const start = target.position.length / 3, previous = target.ownerRanges.at( - 1 );
+		if ( previous && previous.support === this.owner && previous.start + previous.count === start ) previous.count += 3;
+		else target.ownerRanges.push( { start, count: 3, support: this.owner } );
 		for ( let i = 0; i < 3; i ++ ) {
 
 			target.position.push( ...points[ i ] );
 			target.normal.push( ...normal );
 			target.uv.push( ...uv[ i ] );
+			target._highway_source.push( ...coordinates[ i ] );
+			target._highway_face.push( flags );
 
 		}
 
@@ -342,29 +392,39 @@ class MeshWriter {
 	finish() {
 
 		const parts = [], bounds = new Box3();
-		let triangles = 0, bytes = 0;
+		let triangles = 0, bytes = 0, ownershipBytes = 0, ownerRanges = 0;
 		for ( const slot of HIGHWAY_MATERIAL_SLOTS ) {
 
 			const stream = this.slots.get( slot );
 			if ( ! stream?.position.length ) continue;
 			const geometry = new BufferGeometry();
-			for ( const [ name, values ] of Object.entries( stream ) ) {
+			for ( const [ name, size ] of Object.entries( { position: 3, normal: 3, uv: 2, _highway_source: 2, _highway_face: 1 } ) ) {
 
-				const attribute = new Float32BufferAttribute( values, name === 'uv' ? 2 : 3 );
+				const attribute = name === '_highway_face' ? new Uint8BufferAttribute( stream[ name ], size, false )
+					: new Float32BufferAttribute( stream[ name ], size );
 				geometry.setAttribute( name, attribute );
 				bytes += attribute.array.byteLength;
+				if ( name.startsWith( '_highway_' ) ) ownershipBytes += attribute.array.byteLength;
 
 			}
 			geometry.computeBoundingBox();
 			geometry.computeBoundingSphere();
 			geometry.name = 'highway-content:' + slot;
-			geometry.userData.highwayContent = { version: HIGHWAY_CONTENT_VERSION, slot, uvUnits: 'meters', collision: 'consumer-owned' };
+			geometry.userData.highwayContent = {
+				version: HIGHWAY_CONTENT_VERSION, slot, uvUnits: 'meters', collision: 'consumer-owned',
+				ownership: {
+					version: HIGHWAY_OWNERSHIP_VERSION, pathLength: this.route.length, closedRoute: this.route.closed, sourceAttribute: '_highway_source', faceAttribute: '_highway_face',
+					ownerRanges: stream.ownerRanges.map( range => ( { ...range } ) ),
+					supportTable: this.supports.map( support => ( { ...support } ) )
+				}
+			};
+			ownerRanges += stream.ownerRanges.length;
 			bounds.union( geometry.boundingBox );
 			triangles += geometry.getAttribute( 'position' ).count / 3;
 			parts.push( { slot, geometry } );
 
 		}
-		return { parts, bounds, statistics: { triangles, vertexBytes: bytes, materialParts: parts.length } };
+		return { parts, bounds, statistics: { triangles, vertexBytes: bytes, ownershipBytes, ownerRanges, materialParts: parts.length } };
 
 	}
 
@@ -481,7 +541,7 @@ function routeOf( structure ) {
 		return station;
 	};
 
-	return { at, stationOf, length, knots };
+	return { at, stationOf, length, knots, closed };
 
 }
 
