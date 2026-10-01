@@ -11,6 +11,11 @@ const validate = new Ajv( { strict: true } ).compile( schema );
 const WRAPS = { repeat: RepeatWrapping, clamp: ClampToEdgeWrapping };
 const OPTIONS = [ 'roadRoughness', 'instances', 'scanCells' ];
 export const MATERIAL_RESOURCES = Symbol.for( 'urbe.material-resources' );
+/**
+ * Road paint takes its roughness and colour from the worn paint finish the
+ * binding publishes for its marking, when it publishes one.
+ */
+export const PAINT_RESPONSE = Object.freeze( { whitePaint: 'crosswalk-worn', yellowPaint: 'lane-worn' } );
 
 /** Material-only consumer; the supplied texture port owns image loading and lifetime. */
 export class NativeStreetMaterials {
@@ -50,7 +55,10 @@ export class NativeStreetMaterials {
 			const resource = this.#texture( id );
 			resources.set( id, resource );
 			return resource.texture;
-		}, { instances: options.instances, scanCells: options.scanCells?.map( id => this.binding.surfaces[ id ] ) } );
+		}, {
+			instances: options.instances, scanCells: options.scanCells?.map( id => this.binding.surfaces[ id ] ),
+			response: surface.effect === 'road-paint' ? this.#response( surfaceId ) : null
+		} );
 		const nodes = EFFECTS[ surface.effect ]( samples, surface.parameters, options );
 		const Material = surface.parameters.clearcoat ? MeshPhysicalNodeMaterial : MeshStandardNodeMaterial;
 		const material = new Material( { name: `street-native:${surfaceId}`, metalness: 0 } );
@@ -88,6 +96,12 @@ export class NativeStreetMaterials {
 		this.cache.clear();
 		this.textureCache.clear();
 		this.records = new WeakMap();
+	}
+
+	/** The worn paint finish a road paint surface answers with, when the binding carries it with both maps it reads. */
+	#response( surfaceId ) {
+		const response = this.binding.surfaces[ PAINT_RESPONSE[ surfaceId ] ];
+		return response?.maps?.basecolor && response.maps.roughness ? response : null;
 	}
 
 	#texture( id ) {

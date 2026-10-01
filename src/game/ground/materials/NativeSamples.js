@@ -2,7 +2,8 @@ import { attribute, clamp, dFdx, dFdy, floor, fract, mix, mx_noise_float, positi
 
 /** Authored UVs, a shared world-space asphalt sampling frame, and what each copy asks for itself. */
 export class NativeSamples {
-	constructor( surface, asphalt, getTexture, { instances = null, scanCells = null } = {} ) {
+	/** @param response a surface whose maps answer this one's roughness and colour response, read in world metres (road paint) */
+	constructor( surface, asphalt, getTexture, { instances = null, scanCells = null, response = null } = {} ) {
 		this.surface = surface;
 		this.asphalt = asphalt;
 		this.getTexture = getTexture;
@@ -14,6 +15,8 @@ export class NativeSamples {
 		const baked = attribute( '_street_wear', 'float' );
 		this.wear = instances ? clamp( baked.add( instances.wear ), 0, 1 ) : baked;
 		this.text = instances?.text ?? null;
+		this.response = response ? slot => texture( this.getTexture( response.maps[ slot ] ), positionWorld.xz.div( vec2( ...( response.uv.scale ?? [ 1, 1 ] ) ) ) ) : null;
+		this.responseParameters = response?.parameters ?? null;
 		this.scan = instances?.scan && scanCells ? {
 			uv: this.uv.mul( instances.scan.scale ).add( instances.scan.offset ),
 			cells: scanCells.map( cell => coordinates => texture( this.getTexture( cell.maps.basecolor ), coordinates ) )

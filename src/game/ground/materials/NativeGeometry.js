@@ -4,7 +4,7 @@ export function requiredAttributes( effect ) {
 	return Object.freeze( {
 		position: 3, normal: 3,
 		...( effect !== 'solid' ? { uv: 2 } : {} ),
-		...( [ 'asphalt', 'parking', 'road-paint' ].includes( effect ) ? { _street_wear: 1 } : {} ),
+		...( [ 'asphalt', 'parking', 'road-paint', 'photographed' ].includes( effect ) ? { _street_wear: 1 } : {} ),
 		...( effect === 'cast-concrete' ? { _street_height: 1 } : {} )
 	} );
 }

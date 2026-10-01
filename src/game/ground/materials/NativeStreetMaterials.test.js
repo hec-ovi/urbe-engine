@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { BufferGeometry, ClampToEdgeWrapping, Float32BufferAttribute, NoColorSpace, RepeatWrapping, SRGBColorSpace, Texture } from 'three/webgpu';
 import binding from '../../../../../materials/bindings/street-native.json' with { type: 'json' };
-import { NativeStreetMaterials } from './NativeStreetMaterials.js';
+import { NativeStreetMaterials, PAINT_RESPONSE } from './NativeStreetMaterials.js';
 
 function loader() {
 	return vi.fn( ( id, path, definition ) => ( {
@@ -61,5 +61,31 @@ describe( 'NativeStreetMaterials public surface', () => {
 		expect( () => new NativeStreetMaterials( binding, () => null ).build( 'ordinary' ) ).toThrow( /texture resource/ );
 		expect( () => new NativeStreetMaterials( binding, () => ( { texture: new Texture(), ready: Promise.resolve() } ) ).build( 'ordinary' ) ).toThrow( /sampling disagrees/ );
 		factory.dispose();
+	} );
+
+	it( 'lets a photographed surface show its placement wear, and requires the wear field for it', () => {
+		const factory = new NativeStreetMaterials( binding, loader() );
+		const geometry = new BufferGeometry();
+		for ( const [ name, size ] of Object.entries( { position: 3, normal: 3, uv: 2, _street_wear: 1 } ) ) geometry.setAttribute( name, new Float32BufferAttribute( new Float32Array( 3 * size ), size ) );
+		factory.assertGeometry( factory.build( 'district-panel-dark' ), geometry );
+		geometry.deleteAttribute( '_street_wear' );
+		expect( () => factory.assertGeometry( factory.build( 'district-panel-dark' ), geometry ) ).toThrow( /_street_wear/ );
+		factory.dispose();
+	} );
+
+	it( 'gives road paint the roughness and colour of the worn paint finish the binding publishes for its marking', () => {
+		const load = loader(), factory = new NativeStreetMaterials( binding, load );
+		const names = material => factory.resources( material ).map( resource => resource.texture.name );
+		for ( const [ paint, finish ] of Object.entries( PAINT_RESPONSE ) ) {
+			const maps = binding.surfaces[ finish ].maps;
+			expect( names( factory.build( paint ) ) ).toEqual( expect.arrayContaining( [ maps.basecolor, maps.roughness ].map( id => binding.textures[ id ].path.slice( 'themes/'.length ) ) ) );
+		}
+		// Without the finish the marking keeps its tint and its one roughness.
+		const bare = structuredClone( binding );
+		delete bare.surfaces[ 'crosswalk-worn' ];
+		const plain = new NativeStreetMaterials( bare, loader() );
+		expect( plain.resources( plain.build( 'whitePaint' ) ).map( resource => resource.texture.name ).some( name => name.includes( 'street-paint' ) ) ).toBe( false );
+		factory.dispose();
+		plain.dispose();
 	} );
 } );
