@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:contacts:contacts",
+  "description": "The people whose number the player has, in the order they gave it: who and the game minute they did.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["npcId", "addedMin"],
+    "properties": {
+      "npcId": { "type": "string", "minLength": 1 },
+      "addedMin": { "type": "number", "minimum": 0 }
+    }
+  }
+}

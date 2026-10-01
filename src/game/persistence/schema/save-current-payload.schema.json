@@ -33,7 +33,8 @@
       "items": { "$ref": "urn:urbe:engine:game-persistence:values#/$defs/investigationState" }
     },
     "scenery": { "$ref": "urn:urbe:engine:scenery:saved-scenery" },
-    "dialogueMemory": { "$ref": "urn:urbe:engine:library:dialogue-memory" }
+    "dialogueMemory": { "$ref": "urn:urbe:engine:library:dialogue-memory" },
+    "contacts": { "$ref": "urn:urbe:engine:contacts:contacts" }
   },
   "additionalProperties": false
 }
