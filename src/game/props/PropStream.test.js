@@ -73,19 +73,30 @@ it( 'coalesces updates and cancels obsolete preparation before adding visibility
 	stream.dispose();
 } );
 
-it( 'prepares a model and finish once for the city, however many cells stand it', async () => {
+it( 'prepares every batch it makes before it draws, and none it keeps', async () => {
 	const stream = await dressing().stream( { cellSize: 64 } );
-	const prepared = [];
-	const prepare = vi.fn( async group => { prepared.push( group.name ); } );
+	const prepared = new Set();
+	const prepare = vi.fn( async group => { expect( group.parent ).toBeNull(); prepared.add( group ); } );
+	const drawn = () => [ ...stream.group.children ];
 	await stream.update( { x: 0, z: 0 }, { radius: 100, prepare } );
 	const batches = prepare.mock.calls.length;
 	expect( batches ).toBeGreaterThan( 0 );
-	expect( new Set( prepared ).size ).toBe( batches );
-	// The same models across town stand in batches rebuilt for them: same
-	// geometry, same materials, nothing left to prepare.
+	expect( drawn().every( group => prepared.has( group ) ) ).toBe( true );
+	// A window drawn again over the same props keeps its batches: nothing to prepare.
+	const again = vi.fn( async () => {} );
+	await stream.update( { x: 0, z: 0 }, { radius: 100, prepare: again } );
+	expect( again ).not.toHaveBeenCalled();
+	// The same models across town take their copies in the batches that stand.
 	await stream.update( { x: 1000, z: 0 }, { radius: 100, prepare } );
 	expect( stream.stats.resident ).toBe( 18 );
 	expect( prepare ).toHaveBeenCalledTimes( batches );
+	expect( drawn().every( group => prepared.has( group ) ) ).toBe( true );
+	// A model and finish the window left and finds again stands in a batch
+	// made for it, a draw the renderer builds a graph for: it is prepared first.
+	await stream.update( { x: 0, z: 5000 }, { radius: 100, prepare } );
+	await stream.update( { x: 0, z: 0 }, { radius: 100, prepare } );
+	expect( prepare.mock.calls.length ).toBeGreaterThan( batches );
+	expect( drawn().every( group => prepared.has( group ) ) ).toBe( true );
 	stream.dispose();
 } );
 
