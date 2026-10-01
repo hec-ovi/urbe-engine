@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { cityGltfLoader } from '../data/CityGltfLoader.js';
 import { ImportedModels } from '../props/ImportedModels.js';
 import { KitPieceDraw } from './kit/KitPieceDraw.js';
+import { buildingFloors, floorPlacements } from './InteriorLayouts.js';
 
 const WHITE = new THREE.Color( 1, 1, 1 );
 
@@ -160,6 +161,39 @@ export class InteriorProps {
 		return pending;
 
 	}
+
+}
+
+/**
+ * Every furniture id the floors of these buildings place: what the interior
+ * stream will ever ask `prepare` for once they are registered. A building
+ * whose floors cannot be read adds nothing and leaves the error to the stream
+ * that reads them.
+ *
+ * @param buildings the building sources by parcel id, as the interior stream registers them
+ */
+export function placedProps( buildings ) {
+
+	const ids = new Set();
+
+	for ( const [ parcelId, building ] of buildings ) {
+
+		if ( building.hasInterior === false || ! building.interior ) continue;
+		let floors;
+		try {
+
+			floors = buildingFloors( parcelId, building.interior );
+
+		} catch {
+
+			continue;
+
+		}
+		for ( const floor of floors ) for ( const placement of floorPlacements( floor ) ) if ( placement.prop ) ids.add( placement.prop );
+
+	}
+
+	return ids;
 
 }
 

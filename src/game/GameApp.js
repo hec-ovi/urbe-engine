@@ -46,7 +46,7 @@ import {
 } from './transit/TransitGameplay.js';
 import { InteriorStream } from './city/InteriorStream.js';
 import { InteriorModules, placedModules } from './city/InteriorModules.js';
-import { InteriorProps } from './city/InteriorProps.js';
+import { InteriorProps, placedProps } from './city/InteriorProps.js';
 import { Elevators } from './city/Elevators.js';
 import { Neon } from './city/Neon.js';
 import { StreetLamps } from './city/StreetLamps.js';
@@ -408,7 +408,14 @@ export class GameApp {
 		this.interiorProps = interiorProps
 			? new InteriorProps( { catalog: interiorProps.document, baseUrl: interiorProps.baseUrl, roomLights: this.rooms } )
 			: null;
-		const [ city ] = await Promise.all( [ standing, laying, progress.timed( 'room catalogs', this.interiorModules?.ready ) ] );
+		// So is the furniture those floors place, read now so the load prepares
+		// its draws: a floor coming into sight then never brings a model, its
+		// maps or its programs to the frame. One that fails to read is left to
+		// the floor that places it, which fails as it always has.
+		const furnishing = this.interiorModules && ! config.off.has( 'interiors' )
+			? this.interiorProps?.prepare( placedProps( buildings ) ).catch( ( error ) => console.warn( `interior furniture: ${error?.message ?? error}` ) )
+			: null;
+		const [ city ] = await Promise.all( [ standing, laying, progress.timed( 'room catalogs', Promise.all( [ this.interiorModules?.ready, furnishing ] ) ) ] );
 		this.hydrology = await water;
 		this.scene.add( city.group );
 
