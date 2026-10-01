@@ -44,6 +44,15 @@ export class ObjectiveRouter {
 
 		for ( const links of this.adjacency.values() ) links.sort( compareLinks );
 		this.starts = startNodes( this.nodes, this.adjacency );
+		/** The nodes each published destination ends at, by `kind:ref`. */
+		this.ends = new Map();
+		for ( const node of this.nodes.values() ) {
+
+			const key = `${node.kind}:${node.ref}`;
+			if ( ! this.ends.has( key ) ) this.ends.set( key, new Set() );
+			this.ends.get( key ).add( node.id );
+
+		}
 
 	}
 
@@ -52,7 +61,7 @@ export class ObjectiveRouter {
 
 		this.boundary.input( 'route-request', request );
 		const start = nearestNode( this.starts, request.from );
-		const destinations = destinationNodes( this.nodes, request.destination );
+		const destinations = this.ends.get( `${DESTINATION_NODE_KIND[ request.destination.kind ]}:${request.destination.id}` ) ?? new Set();
 
 		if ( ! destinations.size ) {
 
@@ -90,19 +99,27 @@ export class ObjectiveRouter {
 
 	}
 
+	/**
+	 * Dijkstra over the walk graph, settling the open node nearest the start
+	 * first and, at equal distance, the one whose id sorts first. The open
+	 * nodes wait in a binary heap under the distance each was opened at, and an
+	 * entry a shorter way has since overtaken is passed over, so every node
+	 * settles in the order a full sort of the open set would give, in a
+	 * logarithm of the graph instead of the whole open set for every step.
+	 */
 	#shortest( startId, destinations ) {
 
 		const distance = new Map( [ [ startId, 0 ] ] );
 		const previous = new Map();
-		const open = new Set( [ startId ] );
+		const open = new OpenNodes();
+		open.push( startId, 0 );
 		const settled = new Set();
 		let destinationId = null;
 
 		while ( open.size ) {
 
-			const current = [ ...open ].sort( ( a, b ) => ( distance.get( a ) - distance.get( b ) ) || a.localeCompare( b ) )[ 0 ];
-			open.delete( current );
-			if ( settled.has( current ) ) continue;
+			const [ current, at ] = open.pop();
+			if ( settled.has( current ) || at !== distance.get( current ) ) continue;
 			settled.add( current );
 			if ( destinations.has( current ) ) { destinationId = current; break; }
 
@@ -116,7 +133,7 @@ export class ObjectiveRouter {
 				if ( Math.abs( candidate - known ) <= EPSILON && knownPrevious && compareLinks( leg, knownPrevious ) >= 0 ) continue;
 				distance.set( leg.to, candidate );
 				previous.set( leg.to, { ...leg, from: current } );
-				open.add( leg.to );
+				open.push( leg.to, candidate );
 
 			}
 
@@ -140,12 +157,84 @@ export class ObjectiveRouter {
 
 }
 
-function destinationNodes( nodes, destination ) {
+/** Node ids by the distance they were opened at, the nearest first and, at equal distance, the id that sorts first. */
+class OpenNodes {
 
-	const kind = DESTINATION_NODE_KIND[ destination.kind ];
-	return new Set( [ ...nodes.values() ]
-		.filter( ( node ) => node.kind === kind && node.ref === destination.id )
-		.map( node => node.id ) );
+	constructor() {
+
+		this.ids = [];
+		this.distances = [];
+
+	}
+
+	get size() {
+
+		return this.ids.length;
+
+	}
+
+	push( id, distance ) {
+
+		const { ids, distances } = this;
+		let at = ids.length;
+		ids.push( id );
+		distances.push( distance );
+		while ( at > 0 ) {
+
+			const parent = ( at - 1 ) >> 1;
+			if ( ! this.#before( at, parent ) ) break;
+			this.#swap( at, parent );
+			at = parent;
+
+		}
+
+	}
+
+	/** @returns [ id, distance ] of the first open node */
+	pop() {
+
+		const { ids, distances } = this;
+		const first = [ ids[ 0 ], distances[ 0 ] ];
+		const lastId = ids.pop(), lastDistance = distances.pop();
+		if ( ids.length ) {
+
+			ids[ 0 ] = lastId;
+			distances[ 0 ] = lastDistance;
+			let at = 0;
+			for ( ;; ) {
+
+				const left = 2 * at + 1, right = left + 1;
+				let best = at;
+				if ( left < ids.length && this.#before( left, best ) ) best = left;
+				if ( right < ids.length && this.#before( right, best ) ) best = right;
+				if ( best === at ) break;
+				this.#swap( at, best );
+				at = best;
+
+			}
+
+		}
+		return first;
+
+	}
+
+	#before( a, b ) {
+
+		const { ids, distances } = this;
+		return distances[ a ] < distances[ b ] || ( distances[ a ] === distances[ b ] && ids[ a ].localeCompare( ids[ b ] ) < 0 );
+
+	}
+
+	#swap( a, b ) {
+
+		const { ids, distances } = this;
+		const id = ids[ a ], distance = distances[ a ];
+		ids[ a ] = ids[ b ];
+		distances[ a ] = distances[ b ];
+		ids[ b ] = id;
+		distances[ b ] = distance;
+
+	}
 
 }
 
@@ -180,19 +269,33 @@ function startNodes( nodes, adjacency ) {
 function nearestNode( nodes, point ) {
 
 	if ( nodes.length === 0 ) throw new ObjectiveRouteError( 'E_OBJECTIVE_ROUTE_NETWORK', 'walk network has no nodes' );
-	return nodes.reduce( ( best, node ) => {
+	let best = nodes[ 0 ];
+	let bestDistance = nodeDistance( point, best );
+	for ( let index = 1; index < nodes.length; index ++ ) {
 
-		const distance = pointDistance( point, pointOf( node ) );
-		const bestDistance = pointDistance( point, pointOf( best ) );
-		return distance < bestDistance - EPSILON || ( Math.abs( distance - bestDistance ) <= EPSILON && node.id < best.id ) ? node : best;
+		const node = nodes[ index ];
+		const distance = nodeDistance( point, node );
+		if ( distance < bestDistance - EPSILON || ( Math.abs( distance - bestDistance ) <= EPSILON && node.id < best.id ) ) {
 
-	} );
+			best = node;
+			bestDistance = distance;
+
+		}
+
+	}
+	return best;
 
 }
 
 function compareLinks( left, right ) {
 
 	return left.edge.id.localeCompare( right.edge.id ) || left.to.localeCompare( right.to );
+
+}
+
+function nodeDistance( point, node ) {
+
+	return Math.hypot( point[ 0 ] - node.x, point[ 1 ] - node.y, point[ 2 ] - node.z );
 
 }
 

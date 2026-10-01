@@ -111,3 +111,75 @@ function edge( id, from, to, path3, kind = 'sidewalk' ) {
 	return { id, from, to, kind, path3 };
 
 }
+
+describe( 'the shortest route over a large walk graph', () => {
+
+	/** The route the open set sorted whole at every step gives: nearest first, then the id that sorts first. */
+	function reference( router, from, destination ) {
+
+		const start = router.route( { from, destination } ).nodeIds[ 0 ];
+		const ends = new Set( [ ...router.nodes.values() ].filter( ( one ) => one.kind === 'entry' && one.ref === destination.id ).map( ( one ) => one.id ) );
+		const distance = new Map( [ [ start, 0 ] ] );
+		const previous = new Map();
+		const open = new Set( [ start ] );
+		const settled = new Set();
+		while ( open.size ) {
+
+			const current = [ ...open ].sort( ( a, b ) => ( distance.get( a ) - distance.get( b ) ) || a.localeCompare( b ) )[ 0 ];
+			open.delete( current );
+			if ( settled.has( current ) ) continue;
+			settled.add( current );
+			if ( ends.has( current ) ) break;
+			for ( const leg of router.adjacency.get( current ) ) {
+
+				if ( settled.has( leg.to ) ) continue;
+				const candidate = distance.get( current ) + leg.edge.distance;
+				const known = distance.get( leg.to ) ?? Infinity;
+				const knownPrevious = previous.get( leg.to );
+				if ( candidate > known + 1e-9 ) continue;
+				if ( Math.abs( candidate - known ) <= 1e-9 && knownPrevious && ( leg.edge.id.localeCompare( knownPrevious.edge.id ) || leg.to.localeCompare( knownPrevious.to ) ) >= 0 ) continue;
+				distance.set( leg.to, candidate );
+				previous.set( leg.to, { ...leg, from: current } );
+				open.add( leg.to );
+
+			}
+
+		}
+		return distance;
+
+	}
+
+	/** A street grid of `size` by `size` corners 10 m apart, every block's corner an entry, with many routes of equal length. */
+	function grid( size ) {
+
+		const nodes = [];
+		const edges = [];
+		const id = ( i, j ) => `n${i}-${j}`;
+		for ( let i = 0; i < size; i ++ ) for ( let j = 0; j < size; j ++ ) {
+
+			nodes.push( node( id( i, j ), i * 10, 0, j * 10, ( i + j ) % 7 === 3 ? 'entry' : 'corner', ( i + j ) % 7 === 3 ? `p${i}-${j}` : undefined ) );
+			if ( i ) edges.push( edge( `x${i}-${j}`, id( i - 1, j ), id( i, j ), [ [ i * 10 - 10, 0, j * 10 ], [ i * 10, 0, j * 10 ] ] ) );
+			if ( j ) edges.push( edge( `z${i}-${j}`, id( i, j - 1 ), id( i, j ), [ [ i * 10, 0, j * 10 - 10 ], [ i * 10, 0, j * 10 ] ] ) );
+
+		}
+		return { nodes, edges };
+
+	}
+
+	it( 'settles the walk graph in the order a whole sort of the open nodes would, ties included', () => {
+
+		const router = new ObjectiveRouter( grid( 24 ) );
+		for ( const [ from, to ] of [ [ [ 0, 0, 0 ], 'p23-22' ], [ [ 115, 0, 3 ], 'p0-3' ], [ [ 230, 0, 230 ], 'p1-2' ], [ [ 51, 0, 49 ], 'p12-12' ] ] ) {
+
+			const route = router.route( { from, destination: { kind: 'parcel', id: to } } );
+			const distance = reference( router, from, { kind: 'parcel', id: to } );
+			const end = route.nodeIds.at( - 1 );
+			expect( route.distanceMeters - Math.hypot( from[ 0 ] - router.nodes.get( route.nodeIds[ 0 ] ).x, from[ 2 ] - router.nodes.get( route.nodeIds[ 0 ] ).z ) ).toBeCloseTo( distance.get( end ), 9 );
+			// Among the many equal grid routes, the same one every time: each leg the first by edge id.
+			expect( router.route( { from, destination: { kind: 'parcel', id: to } } ).edgeIds ).toEqual( route.edgeIds );
+
+		}
+
+	} );
+
+} );
