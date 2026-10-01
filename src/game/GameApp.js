@@ -22,7 +22,8 @@ import { ScenePlaceResolver, SceneryDirector } from './scenery/index.js';
 import { ObjectiveRouter } from './routes/ObjectiveRouter.js';
 import { ObjectiveGuide } from './routes/ObjectiveGuide.js';
 import { GamePersistence, mergeInventory, mergeProgress, uniqueLocations } from './persistence/index.js';
-import { groundAnchors } from './agents/Anchors.js';
+import { buildingAnchors, groundAnchors } from './agents/Anchors.js';
+import { Passage } from './agents/Passage.js';
 import { GameView } from '../ui/views/GameView.js';
 import { GameConfig } from './data/GameConfig.js';
 import { LoadProgress } from './LoadProgress.js';
@@ -539,11 +540,17 @@ export class GameApp {
 			}
 		} );
 		const continuityPlaces = npcContinuityPlaces( atlas, city.entrances, buildings, routes, transitRoutes );
+		// People open doors and ride lifts on their way: the same leaves and cars the player uses.
+		this.passage = new Passage( {
+			doors: () => [ ...city.doors, ...( this.stream.apartmentDoors?.doors ?? [] ) ],
+			elevators: this.elevators
+		} );
 		this.npcContinuity = new NpcContinuity( {
 			simulation: this.sim,
 			routes,
 			places: continuityPlaces,
-			interiorRoutes: this.interiorRoutes = new InteriorRoutes( buildings, { findPath } )
+			interiorRoutes: this.interiorRoutes = new InteriorRoutes( buildings, { findPath } ),
+			ways: this.passage
 		} );
 		if ( game?.npcState?.continuity ) {
 
@@ -1037,6 +1044,7 @@ export class GameApp {
 			playerPosition,
 			...( room ? { playerPlace: { kind: 'parcel', id: room.parcelId, floor: room.floor } } : {} )
 		} ) );
+		this.passage?.update();
 		this.updateCompanion( playerPosition, playerPlaces );
 		this.hitches.time( 'crowd', () => {
 
@@ -2511,10 +2519,10 @@ export function npcContinuityPlaces( atlas, doors, buildings, routes, transitRou
 		const position = door
 			? door.inside.toArray()
 			: [ parcel.access.point[ 0 ], SIDEWALK_HEIGHT, parcel.access.point[ 1 ] ];
+		// Every floor's anchors: a person at home sleeps in their own bed upstairs, and works at their own desk.
 		const anchors = door
-			? Object.values( groundAnchors( buildings.get( parcel.id )?.npc, door.inside.y, buildings.get( parcel.id )?.interior ) )
-				.flat()
-				.map( ( anchor ) => ( { id: anchor.id, position: anchor.position.toArray(), heading: anchor.heading } ) )
+			? buildingAnchors( buildings.get( parcel.id )?.npc, buildings.get( parcel.id )?.interior )
+				.map( ( anchor ) => ( { id: anchor.id, kind: anchor.kind, floor: anchor.floor, position: anchor.position.toArray(), heading: anchor.heading } ) )
 			: [];
 		// A leader shows the place from outside its entrance, where the player can see them; without a door,
 		// from where its access path meets the pavement, since its access point lies on the lot line the building may fill.

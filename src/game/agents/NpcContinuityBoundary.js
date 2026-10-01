@@ -22,12 +22,14 @@ import visibleUpdate from './schema/visible-update.schema.json';
 import actorStates from './schema/actor-states.schema.json';
 import controlEvents from './schema/control-events.schema.json';
 import interiorRoute from './schema/interior-route.schema.json';
+import errandStart from './schema/errand-start.schema.json';
+import errandStop from './schema/errand-stop.schema.json';
 import { NpcContinuityError } from './NpcContinuityError.js';
 
 const SCHEMAS = [
 	values, appearanceRequest, unloadRequest, followStart, leadStart, followerCarry, followUpdate, followStop,
 	crouchStart, crouchStop,
-	conversationStart, conversationStop, holdStart, holdRelease,
+	conversationStart, conversationStop, holdStart, holdRelease, errandStart, errandStop,
 	visibleUpdate, actorState, actorStateOrNull, actorStates, controlEvents, interiorRoute, continuitySave, places, movementNetwork
 ];
 

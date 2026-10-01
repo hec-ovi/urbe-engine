@@ -25,6 +25,19 @@ const RETURN_REPLAN = 2;
 const DOOR_REACH = 12;
 /** A follower that found no way to the player inside tries again once the player has moved this far. */
 const INDOOR_RETRY = 2;
+/** A companion with a pace that runs keeps up with a player going faster than this, and jogs here when in a hurry. */
+const PLAYER_RUNNING = 2;
+const JOG_SPEED = 2;
+/** A visible scheduled body whose schedule moves it further than this in one update walks there instead of jumping. */
+const JUMP = 1.5;
+/** A walker asks a door ahead to open from this far, and waits this short of it until it does. */
+const DOOR_LOOK = 2.5;
+const DOOR_SHORT = 0.6;
+/** Game minutes a walker waits in a lift car that does not arrive before it steps out where the shaft lets it. */
+const LIFT_PATIENCE_MIN = 3;
+/** A leader taking the player to a person stops this short of them, and walks on once they have moved this far. */
+const PERSON_REACH = 1.6;
+const PERSON_REPLAN = 1.5;
 /**
  * How long, in seconds, a person the player has just been with stands where
  * they were let go, turned to the player, before walking back into their day:
@@ -43,13 +56,20 @@ export class NpcContinuity {
 
 	/**
 	 * @param interiorRoutes optional walks inside buildings: `covers(parcelId)`
-	 *   and `route(parcelId, from, to)`, a world `{ path3 }` or null
+	 *   and `route(parcelId, from, to)`, a world `{ path3, gates? }` or null
+	 * @param ways optional doors and lifts the walkers pass: `pass(npcId, gate)`
+	 *   asks a door gate open and says whether the body may go through, and
+	 *   `ride(npcId, gate, stage)` runs a lift gate: `call` answers `wait` or
+	 *   `board`, `ride` the car's `{ y }` or `alight`, `done` lets it go; null
+	 *   from either means no such door or lift is there to run, and the walker
+	 *   walks the way as drawn
 	 */
-	constructor( { simulation, routes, places = [], interiorRoutes = null, boundary = new NpcContinuityBoundary() } ) {
+	constructor( { simulation, routes, places = [], interiorRoutes = null, ways = null, boundary = new NpcContinuityBoundary() } ) {
 
 		this.simulation = simulation;
 		this.routes = routes;
 		this.interiorRoutes = interiorRoutes;
+		this.ways = ways;
 		this.boundary = boundary;
 		const networks = this.boundary.input( 'movement-network', routes.networks );
 		this.transitRoutes = new Map( ( networks.transit?.routes ?? [] ).map( ( route ) => [ route.id, route ] ) );
@@ -59,6 +79,12 @@ export class NpcContinuity {
 		this.follow = null;
 		/** Identities walking from where control let them go back into their day, by npcId. */
 		this.returns = new Map();
+		/** Identities on an errand of their own for the player: walking to a spot and staying there, by npcId. */
+		this.errands = new Map();
+		/** The clock and frame of the latest updateFollow, and where the player stood then, for gates and pace. */
+		this.now = 0;
+		this.delta = 0;
+		this.player = null;
 		this.conversation = null;
 		this.pose = null;
 		/** Identities a quest is keeping where they stand, by npcId. */
@@ -107,7 +133,7 @@ export class NpcContinuity {
 
 		this.boundary.input( 'appearance-request', request );
 		const { npcId, timeMin } = request;
-		if ( this.#controls( npcId ) || this.returns.has( npcId ) ) {
+		if ( this.#controls( npcId ) || this.returns.has( npcId ) || this.errands.has( npcId ) ) {
 
 			const actor = this.actors.get( npcId );
 			actor.visible = true;
@@ -159,7 +185,7 @@ export class NpcContinuity {
 
 			}
 			const returning = this.returns.has( npcId );
-			if ( this.holds.has( npcId ) || ( returning && near( actor ) ) ) {
+			if ( this.holds.has( npcId ) || this.errands.has( npcId ) || ( returning && near( actor ) ) ) {
 
 				actor.visible = near( actor );
 				states.push( clone( actor ) );
@@ -170,6 +196,13 @@ export class NpcContinuity {
 			try {
 
 				const scheduled = this.#scheduledActor( npcId, request.timeMin );
+				// A body the player can see is never moved more than a step by its schedule: it walks there, through doors.
+				if ( ! returning && actor.visible && actor.mode === 'schedule' && near( actor ) && this.#walkOver( actor, scheduled ) ) {
+
+					states.push( clone( actor ) );
+					continue;
+
+				}
 				scheduled.visible = ! returning && near( scheduled );
 				this.actors.set( npcId, scheduled );
 				states.push( clone( scheduled ) );
@@ -216,8 +249,12 @@ export class NpcContinuity {
 
 	/**
 	 * Interrupts one NPC and leads the player from where its body is to an
-	 * exact authored place. The companion itself may be asked: it turns to
-	 * leading where it stands, keeping its interruption.
+	 * exact authored place: outside its entrance, or with `target` to a point
+	 * inside it (an apartment door, a work spot, a lift landing), in through
+	 * the door, up the stairs or the lift, once the building can be walked; or
+	 * to a person (`target.npcId`), wherever they are and as they move. The
+	 * companion itself may be asked: it turns to leading where it stands,
+	 * keeping its interruption.
 	 */
 	startLead( request ) {
 
@@ -225,18 +262,72 @@ export class NpcContinuity {
 		this.#assertFree( request.npcId );
 		const actor = this.#body( request.npcId, request.timeMin );
 		if ( actor.place.kind === 'route' ) throw new NpcContinuityError( 'E_NPC_PLACE', `NPC ${request.npcId} cannot lead while aboard transit` );
-		// A leader stops outside the entrance, where the player sees them arrive.
-		const destination = this.places.get( placeKey( request.destination ) )?.doorstep ?? this.#locatePlace( request.destination, null ).position;
-		const route = this.#plan( null, actor, { position: destination }, ARRIVAL_DISTANCE );
-		if ( ! route ) throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${request.npcId} cannot reach the escort destination` );
+		const target = request.target ? clone( request.target ) : null;
+		const plan = this.#leadPlan( actor, request.destination, target );
+		if ( ! plan ) throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${request.npcId} cannot reach the escort destination` );
+		const { route, pending } = plan;
 		this.#take( actor, request.timeMin );
 		actor.mode = 'leading';
 		actor.animation = route.distanceMeters > ARRIVAL_DISTANCE ? 'walk' : 'idle';
 		this.follow = {
 			npcId: actor.npcId, mode: 'leading', phase: 'walking', route, lastTimeMin: request.timeMin,
-			destination: clone( request.destination ), pace: { ...( request.pace ?? LEAD_PACE ) }
+			destination: clone( request.destination ), pace: { ...( request.pace ?? LEAD_PACE ) },
+			...( target ? { target } : {} ), ...( pending ? { pending: true } : {} )
 		};
 		return this.#actorOut( actor );
+
+	}
+
+	/**
+	 * Sends one identity on an errand for the player, once their talk is done:
+	 * it walks from where its body is to `target` (a world point, inside
+	 * `target.parcelId` when given, through its door, stairs and lifts) and
+	 * stays there until `untilMin`, seated with `target.seated`, facing
+	 * `target.heading` or the player, then walks back into its day. The
+	 * companion sent on an errand is the companion no more.
+	 */
+	sendOnErrand( request ) {
+
+		this.boundary.input( 'errand-start', request );
+		const { npcId, timeMin, target, untilMin } = request;
+		if ( this.conversation?.npcId === npcId || this.pose?.npcId === npcId ) {
+
+			throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${npcId} is already under control` );
+
+		}
+		const actor = this.#body( npcId, timeMin );
+		if ( actor.place.kind === 'route' ) throw new NpcContinuityError( 'E_NPC_PLACE', `NPC ${npcId} cannot set off while aboard transit` );
+		const route = this.#plan( null, actor, { position: target.position, ...( target.parcelId ? { parcelId: target.parcelId } : {} ) }, ARRIVAL_DISTANCE );
+		if ( ! route ) throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${npcId} has no way to the errand's place` );
+		const interrupted = this.follow?.npcId === npcId || this.holds.has( npcId ) || this.errands.has( npcId );
+		if ( this.follow?.npcId === npcId ) this.follow = null;
+		this.holds.delete( npcId );
+		this.returns.delete( npcId );
+		if ( ! interrupted ) this.#interrupt( npcId, timeMin );
+		actor.visible = true;
+		actor.mode = 'errand';
+		actor.animation = route.distanceMeters > ARRIVAL_DISTANCE ? 'walk' : target.seated ? 'sit' : 'idle';
+		this.actors.set( npcId, actor );
+		this.errands.set( npcId, { npcId, route, target: clone( target ), untilMin } );
+		return this.#actorOut( actor );
+
+	}
+
+	/** Ends an errand early: the identity walks back into its day from where it stands, after `linger` seconds. */
+	endErrand( request ) {
+
+		this.boundary.input( 'errand-stop', request );
+		if ( ! this.errands.has( request.npcId ) ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${request.npcId} is on no errand` );
+		return this.#finishErrand( this.actors.get( request.npcId ), request.timeMin, request.linger );
+
+	}
+
+	/** The identities on an errand now, each with its place, time and whether it has got there. */
+	get errandsUnderway() {
+
+		return [ ...this.errands.values() ].map( ( errand ) => ( {
+			npcId: errand.npcId, untilMin: errand.untilMin, arrived: errand.route.distanceMeters - errand.route.cursor <= ARRIVAL_DISTANCE
+		} ) );
 
 	}
 
@@ -313,7 +404,9 @@ export class NpcContinuity {
 
 		this.boundary.input( 'follow-update', request );
 		this.events = [];
+		this.#clock( request );
 		for ( const npcId of [ ...this.returns.keys() ].sort() ) this.#advanceReturn( this.actors.get( npcId ), request );
+		for ( const npcId of [ ...this.errands.keys() ].sort() ) this.#advanceErrand( this.actors.get( npcId ), request );
 		if ( ! this.follow ) return this.#actorMaybeOut( null );
 		const actor = this.actors.get( this.follow.npcId );
 		this.follow.lastTimeMin = request.timeMin;
@@ -368,7 +461,8 @@ export class NpcContinuity {
 			throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${npcId} is already under control` );
 
 		}
-		const held = this.holds.has( npcId );
+		// A quest that wants a person on an errand takes them from it, as from a hold.
+		const held = this.holds.has( npcId ) || this.errands.delete( npcId );
 		const actor = held ? this.actors.get( npcId ) : this.#scheduledActor( npcId, timeMin );
 		if ( ! held ) this.#interrupt( npcId, timeMin );
 		this.returns.delete( npcId );
@@ -407,7 +501,8 @@ export class NpcContinuity {
 		this.boundary.input( 'conversation-start', request );
 		if ( this.conversation ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.conversation.npcId} is already in conversation` );
 		if ( this.pose ) throw new NpcContinuityError( 'E_NPC_CONFLICT', `NPC ${this.pose.npcId} has an explicit pose` );
-		const companion = this.follow?.npcId === request.npcId;
+		// The companion and a person on an errand keep their control through a talk and go back to it after.
+		const companion = this.follow?.npcId === request.npcId || this.errands.has( request.npcId );
 		const held = this.holds.has( request.npcId );
 		// The visible body is authoritative at interaction time. Re-projecting
 		// its off-shift schedule here can fail on a distant unloaded place, or
@@ -430,9 +525,10 @@ export class NpcContinuity {
 		this.returns.delete( request.npcId );
 		this.holds.delete( request.npcId );
 		// A companion moved by the dialogue plans its way on from where it now stands.
-		if ( companion && distance( actor.position, request.position ) > ARRIVAL_DISTANCE ) {
+		const record = this.follow?.npcId === request.npcId ? this.follow : this.errands.get( request.npcId );
+		if ( record && distance( actor.position, request.position ) > ARRIVAL_DISTANCE ) {
 
-			this.follow.route = restingRoute( request.position, this.follow.route.destination );
+			record.route = restingRoute( request.position, record.route.destination );
 
 		}
 		actor.position = [ ...request.position ];
@@ -467,8 +563,8 @@ export class NpcContinuity {
 		this.conversation = null;
 		if ( ! conversation.ownsInterruption ) {
 
-			actor.mode = this.follow.mode;
-			actor.animation = 'idle';
+			actor.mode = this.follow?.npcId === actor.npcId ? this.follow.mode : 'errand';
+			actor.animation = actor.mode === 'errand' && this.errands.get( actor.npcId )?.target.seated && actor.animation === 'sit' ? 'sit' : 'idle';
 			return this.#actorOut( actor );
 
 		}
@@ -496,7 +592,8 @@ export class NpcContinuity {
 			conversation: this.conversation ? clone( this.conversation ) : null,
 			pose: this.pose ? clone( this.pose ) : null,
 			holds: [ ...this.holds.values() ].sort( byId ).map( clone ),
-			...( this.posts.size ? { posts: [ ...this.posts.values() ].sort( byId ).map( clone ) } : {} )
+			...( this.posts.size ? { posts: [ ...this.posts.values() ].sort( byId ).map( clone ) } : {} ),
+			...( this.errands.size ? { errands: [ ...this.errands.values() ].sort( byId ).map( clone ) } : {} )
 		} );
 
 	}
@@ -542,7 +639,8 @@ export class NpcContinuity {
 			throw new NpcContinuityError( 'E_NPC_INPUT', 'pose state conflicts with another NPC control state' );
 
 		}
-		if ( save.conversation && ! save.conversation.ownsInterruption && save.follow?.npcId !== save.conversation.npcId ) {
+		if ( save.conversation && ! save.conversation.ownsInterruption && save.follow?.npcId !== save.conversation.npcId &&
+			! ( save.errands ?? [] ).some( ( errand ) => errand.npcId === save.conversation.npcId ) ) {
 
 			throw new NpcContinuityError( 'E_NPC_INPUT', `conversation with ${save.conversation.npcId} leaves no companion to return to` );
 
@@ -560,7 +658,8 @@ export class NpcContinuity {
 		const heldIds = new Set();
 		for ( const [ kind, entry ] of [
 			...( save.holds ?? [] ).map( ( hold ) => [ 'hold', hold ] ),
-			...save.returns.map( ( walk ) => [ 'return', walk ] )
+			...save.returns.map( ( walk ) => [ 'return', walk ] ),
+			...( save.errands ?? [] ).map( ( errand ) => [ 'errand', errand ] )
 		] ) {
 
 			if ( ! ids.has( entry.npcId ) ) throw new NpcContinuityError( 'E_NPC_INPUT', `${kind} state references missing actor ${entry.npcId}` );
@@ -583,6 +682,7 @@ export class NpcContinuity {
 		if ( save.follow ) interrupted.add( save.follow.npcId );
 		if ( save.conversation?.ownsInterruption ) interrupted.add( save.conversation.npcId );
 		if ( save.pose ) interrupted.add( save.pose.npcId );
+		for ( const errand of save.errands ?? [] ) interrupted.add( errand.npcId );
 		for ( const npcId of interrupted ) if ( ! this.simulation.behaviorAt( npcId, 0 )?.interrupted ) {
 
 			throw new NpcContinuityError( 'E_NPC_INPUT', `controlled save actor ${npcId} is not interrupted in the restored simulation` );
@@ -604,15 +704,16 @@ export class NpcContinuity {
 		this.pose = save.pose ? clone( save.pose ) : null;
 		this.holds = new Map( ( save.holds ?? [] ).map( ( hold ) => [ hold.npcId, clone( hold ) ] ) );
 		this.posts = new Map( ( save.posts ?? [] ).map( ( post ) => [ post.npcId, clone( post ) ] ) );
+		this.errands = new Map( ( save.errands ?? [] ).map( ( errand ) => [ errand.npcId, clone( errand ) ] ) );
 		this.events = [];
 		return this.serialize();
 
 	}
 
 	/**
-	 * Walks toward the player over the cached route, running when far and
-	 * stopping short of them, or at the door of a building it has no way into.
-	 * Standing, it faces the player.
+	 * Walks toward the player over the cached route, running when far, or with
+	 * a pace that runs when the player runs, stopping short of them, or at the
+	 * door of a building it has no way into. Standing, it faces the player.
 	 */
 	#advanceFollowing( actor, request ) {
 
@@ -622,10 +723,13 @@ export class NpcContinuity {
 		follow.route = route;
 		const remaining = route.distanceMeters - route.cursor;
 		const toGo = Math.max( 0, remaining - ( door ? 0 : STOPPING_DISTANCE ) );
-		const speed = remaining > RUN_DISTANCE ? RUN_SPEED : toGo > EPSILON ? WALK_SPEED : 0;
-		this.#walk( actor, route, Math.min( toGo, speed * request.deltaSeconds ) );
-		if ( speed === 0 ) actor.heading = headingTo( actor.position, request.playerPosition, actor.heading );
-		actor.animation = selectNpcAnimation( { speed } );
+		const runs = follow.pace?.runs;
+		const hurried = runs === true && this.player?.speed > PLAYER_RUNNING;
+		const far = remaining > RUN_DISTANCE && runs !== false;
+		const speed = toGo > EPSILON ? ( far || hurried ? RUN_SPEED : WALK_SPEED ) : 0;
+		const moved = this.#walk( actor, route, Math.min( toGo, speed * request.deltaSeconds ) );
+		if ( moved === 0 ) actor.heading = headingTo( actor.position, request.playerPosition, actor.heading );
+		actor.animation = selectNpcAnimation( { speed: moved > 0 ? speed : 0 } );
 		actor.mode = 'following';
 		this.#phase( speed > 0 ? 'walking' : 'waiting', request.timeMin );
 
@@ -662,10 +766,13 @@ export class NpcContinuity {
 
 	/**
 	 * Walks ahead of the player to the destination at the player's pace: full
-	 * speed with the player close or ahead on the path, slower as the player
-	 * lags, then stopped and facing them until they catch up. Arrival is
-	 * final: the leader stays where it stands, even where a conversation moved
-	 * it, facing the player until released.
+	 * speed with the player close or ahead on the path (a jog when in a hurry,
+	 * a run when the player runs and the pace runs), slower as the player lags,
+	 * then stopped and facing them until they catch up. A lead into a building
+	 * the interior routes could not walk yet goes on in once they can, from the
+	 * doorstep; a lead to a person follows them as they move and stops a step
+	 * short of them. Arrival is final: the leader stays where it stands, even
+	 * where a conversation moved it, facing the player until released.
 	 */
 	#advanceLeading( actor, request ) {
 
@@ -674,35 +781,108 @@ export class NpcContinuity {
 		actor.mode = 'leading';
 		if ( lead.phase === 'arrived' ) {
 
-			actor.heading = headingTo( actor.position, player, actor.heading );
+			actor.heading = headingTo( actor.position, lead.target?.npcId ? lead.target.position ?? player : player, actor.heading );
 			actor.animation = 'idle';
 			return;
 
 		}
-		const route = this.#plan( lead, actor, { position: lead.route.destination }, ARRIVAL_DISTANCE );
+		let route;
+		const person = lead.target?.npcId ? this.#personPoint( lead.target.npcId ) : null;
+		if ( person ) {
+
+			lead.target.position = person.position;
+			route = this.#plan( lead, actor, { position: person.position, ...( person.parcelId ? { parcelId: person.parcelId } : {} ) }, PERSON_REPLAN );
+
+		} else route = this.#plan( lead, actor, { position: lead.route.destination, ...( lead.route.parcelId ? { parcelId: lead.route.parcelId } : {} ) }, ARRIVAL_DISTANCE );
 		if ( ! route ) return this.#giveUp( actor, request.timeMin, 'unreachable' );
 		lead.route = route;
+		const short = person ? PERSON_REACH : 0;
 		const gap = distance( actor.position, player );
+		const pace = lead.pace ?? LEAD_PACE;
+		const close = pace.runs === true && this.player?.speed > PLAYER_RUNNING ? RUN_SPEED : pace.hurry ? JOG_SPEED : WALK_SPEED;
 		let speed = 0;
-		if ( gap <= LEAD_SLOW_FROM ) speed = WALK_SPEED;
-		else if ( playerAhead( route, player ) ) speed = gap > RUN_DISTANCE ? RUN_SPEED : WALK_SPEED;
+		if ( gap <= LEAD_SLOW_FROM ) speed = close;
+		else if ( playerAhead( route, player ) ) speed = gap > RUN_DISTANCE && pace.runs !== false ? RUN_SPEED : close;
 		else if ( gap <= ( lead.phase === 'waiting' ? LEAD_RESUME_WITHIN : LEAD_WAIT_BEYOND ) ) {
 
 			speed = WALK_SPEED - ( WALK_SPEED - SLOW_SPEED ) * Math.min( 1, ( gap - LEAD_SLOW_FROM ) / ( LEAD_WAIT_BEYOND - LEAD_SLOW_FROM ) );
 
 		}
-		this.#walk( actor, route, Math.min( route.distanceMeters - route.cursor, speed * request.deltaSeconds ) );
-		if ( route.distanceMeters - route.cursor <= ARRIVAL_DISTANCE ) {
+		const moved = this.#walk( actor, route, Math.min( Math.max( 0, route.distanceMeters - route.cursor - short ), speed * request.deltaSeconds ) );
+		if ( route.distanceMeters - route.cursor <= ARRIVAL_DISTANCE + short && ! route.ride ) {
 
-			actor.heading = headingTo( actor.position, player, actor.heading );
+			// Shown the building from its doorstep, a leader taking the player inside goes on in once the building can be walked.
+			if ( lead.pending && this.#leadInside( lead, actor ) ) return;
+			actor.heading = headingTo( actor.position, person ? person.position : player, actor.heading );
 			actor.animation = 'idle';
 			this.#phase( 'arrived', request.timeMin );
 			return;
 
 		}
-		if ( speed === 0 ) actor.heading = headingTo( actor.position, player, actor.heading );
-		actor.animation = selectNpcAnimation( { speed } );
+		if ( moved === 0 ) actor.heading = headingTo( actor.position, player, actor.heading );
+		actor.animation = selectNpcAnimation( { speed: moved > 0 ? speed : 0 } );
 		this.#phase( speed > 0 ? 'walking' : 'waiting', request.timeMin );
+
+	}
+
+	/**
+	 * A lead's first route: to a person where they are; into the building of
+	 * a `target` inside one when the interior routes walk it now, else to its
+	 * doorstep, `pending` the rest; else to the place's doorstep or position.
+	 * @returns `{ route, pending? }` or null
+	 */
+	#leadPlan( actor, destination, target ) {
+
+		if ( target?.npcId ) {
+
+			const person = this.#personPoint( target.npcId );
+			if ( ! person ) return null;
+			target.position = person.position;
+			const route = this.#plan( null, actor, { position: person.position, ...( person.parcelId ? { parcelId: person.parcelId } : {} ) }, PERSON_REPLAN );
+			return route && { route };
+
+		}
+		const known = this.places.get( placeKey( destination ) );
+		const doorstep = known?.doorstep ?? null;
+		if ( target?.position ) {
+
+			const goal = { position: target.position, ...( target.parcelId ? { parcelId: target.parcelId } : {} ) };
+			const inside = target.parcelId ? this.#plan( null, actor, goal, ARRIVAL_DISTANCE, true ) : this.#plan( null, actor, goal, ARRIVAL_DISTANCE );
+			if ( inside ) return { route: inside };
+			if ( ! doorstep ) return null;
+			const outside = this.#plan( null, actor, { position: doorstep }, ARRIVAL_DISTANCE );
+			return outside && { route: outside, pending: true };
+
+		}
+		// A leader stops outside the entrance, where the player sees them arrive.
+		const route = this.#plan( null, actor, { position: doorstep ?? this.#locatePlace( destination, null ).position }, ARRIVAL_DISTANCE );
+		return route && { route };
+
+	}
+
+	/** Takes a lead waiting at the doorstep on into the building, when its interior routes walk there now. */
+	#leadInside( lead, actor ) {
+
+		const goal = { position: lead.target.position, parcelId: lead.target.parcelId };
+		const route = this.interiorRoutes?.covers( lead.target.parcelId ) ? this.#plan( null, actor, goal, ARRIVAL_DISTANCE, true ) : null;
+		if ( ! route ) return false;
+		lead.route = route;
+		delete lead.pending;
+		return true;
+
+	}
+
+	/** Where a person is now: their body as continuity holds it, else their schedule's point; null when neither places them. */
+	#personPoint( npcId ) {
+
+		let actor = this.actors.get( npcId );
+		if ( ! actor ) {
+
+			try { actor = this.#scheduledActor( npcId, this.now ); }
+			catch { return null; }
+
+		}
+		return { position: [ ...actor.position ], ...( actor.place.kind === 'parcel' ? { parcelId: actor.place.id } : {} ) };
 
 	}
 
@@ -718,20 +898,76 @@ export class NpcContinuity {
 		let scheduled;
 		try { scheduled = this.#resumeTarget( actor, request.timeMin ); }
 		catch { return this.#dropReturn( actor ); }
-		if ( distance( actor.position, scheduled.position ) <= ARRIVAL_DISTANCE ) return this.#finishResume( actor, scheduled );
+		if ( ! walk.route?.ride && distance( actor.position, scheduled.position ) <= ARRIVAL_DISTANCE ) return this.#finishResume( actor, scheduled );
 		const route = this.#plan( walk, actor, scheduledGoal( scheduled ), RETURN_REPLAN );
 		if ( ! route ) return this.#dropReturn( actor );
 		walk.route = route;
-		const travel = Math.min( route.distanceMeters - route.cursor, WALK_SPEED * request.deltaSeconds );
-		this.#walk( actor, route, travel );
-		actor.animation = travel > 0 ? 'walk' : scheduled.animation;
+		const moved = this.#walk( actor, route, Math.min( route.distanceMeters - route.cursor, WALK_SPEED * request.deltaSeconds ) );
+		actor.animation = moved > 0 ? 'walk' : route.ride ? 'idle' : scheduled.animation;
 		actor.schedule = scheduled.schedule;
 		actor.mode = 'resuming';
-		if ( route.distanceMeters - route.cursor <= ARRIVAL_DISTANCE && distance( route.destination, scheduled.position ) <= ARRIVAL_DISTANCE ) {
+		if ( ! route.ride && route.distanceMeters - route.cursor <= ARRIVAL_DISTANCE && distance( route.destination, scheduled.position ) <= ARRIVAL_DISTANCE ) {
 
 			this.#finishResume( actor, scheduled );
 
 		}
+
+	}
+
+	/**
+	 * An errand under way: the walk to its place, then the stay there, seated
+	 * or standing facing its heading or the player, until its time is up and
+	 * the body walks back into its day. A talk pauses it where the body stands.
+	 */
+	#advanceErrand( actor, request ) {
+
+		const errand = this.errands.get( actor.npcId );
+		if ( this.conversation?.npcId === actor.npcId ) return;
+		if ( request.timeMin >= errand.untilMin ) return this.#finishErrand( actor, request.timeMin );
+		const route = errand.route;
+		actor.mode = 'errand';
+		if ( route.distanceMeters - route.cursor > ARRIVAL_DISTANCE || route.ride ) {
+
+			const moved = this.#walk( actor, route, Math.min( route.distanceMeters - route.cursor, WALK_SPEED * request.deltaSeconds ) );
+			actor.animation = moved > 0 ? 'walk' : 'idle';
+			return;
+
+		}
+		const { target } = errand;
+		actor.position = [ ...target.position ];
+		if ( target.parcelId ) actor.place = { kind: 'parcel', id: target.parcelId, ...( Number.isInteger( target.floor ) ? { floor: target.floor } : {} ) };
+		actor.heading = target.heading ?? headingTo( actor.position, request.playerPosition, actor.heading );
+		actor.animation = target.seated ? 'sit' : 'idle';
+
+	}
+
+	/** Ends an errand: the simulation resumes and the body walks back into its day from where it stands. */
+	#finishErrand( actor, timeMin, linger = 0 ) {
+
+		this.errands.delete( actor.npcId );
+		try { this.simulation.resume( actor.npcId, timeMin ); } catch {}
+		return this.#walkHome( actor, timeMin, linger );
+
+	}
+
+	/**
+	 * When a visible body's schedule has moved it more than JUMP, from one
+	 * anchor to another or in or out of a building, it walks there instead, as
+	 * a walk home of its own through doors, stairs and lifts. False when the
+	 * way there is a step or there is none, and the schedule takes the body.
+	 */
+	#walkOver( actor, scheduled ) {
+
+		if ( distance( actor.position, scheduled.position ) <= JUMP ) return false;
+		let route = null;
+		try { route = this.#plan( null, actor, scheduledGoal( scheduled ), RETURN_REPLAN ); }
+		catch { route = null; }
+		if ( ! route || route.distanceMeters <= JUMP ) return false;
+		actor.mode = 'resuming';
+		actor.animation = 'walk';
+		actor.schedule = scheduled.schedule;
+		this.returns.set( actor.npcId, { npcId: actor.npcId, route } );
+		return true;
 
 	}
 
@@ -753,16 +989,32 @@ export class NpcContinuity {
 
 	}
 
+	/** The clock and frame of this update, and how fast the player has been moving. */
+	#clock( request ) {
+
+		const dt = request.deltaSeconds;
+		const last = this.player;
+		const raw = last && dt > 0 ? horizontal( last.position, request.playerPosition ) / dt : 0;
+		// A teleport is no run: what a frame could not walk does not count.
+		const step = raw > 12 ? last?.speed ?? 0 : raw;
+		this.player = { position: [ ...request.playerPosition ], speed: last ? last.speed + ( step - last.speed ) * Math.min( 1, dt * 4 ) : 0 };
+		this.now = request.timeMin;
+		this.delta = dt;
+
+	}
+
 	/**
 	 * The record's cached route to `goal`, or a new one planned from the body
 	 * when the goal has moved past `replanBeyond`, changed building, or the
-	 * route has run out short of it. `record` null plans a first route.
+	 * route has run out short of it. `record` null plans a first route. A
+	 * route under way in a lift is kept until the walker is out of it.
 	 * @param goal `{ position, parcelId? }`, parcelId the building it stands in
 	 * @param strict null instead of a way that does not go inside that building
 	 */
 	#plan( record, actor, goal, replanBeyond, strict = false ) {
 
 		const route = record?.route;
+		if ( route?.ride ) return route;
 		if ( route && ( route.parcelId ?? null ) === ( goal.parcelId ?? null ) &&
 			distance( route.destination, goal.position ) <= replanBeyond &&
 			! ( route.distanceMeters - route.cursor <= ARRIVAL_DISTANCE && distance( actor.position, goal.position ) > ARRIVAL_DISTANCE ) ) {
@@ -776,43 +1028,63 @@ export class NpcContinuity {
 	}
 
 	/**
-	 * A walk over Connections path3 from the body to a goal. With interior
-	 * routes, a body inside a building first walks to its door and a goal
-	 * inside one is walked to from its door; a building interior routes do not
-	 * cover, or one they find no way through, is left or entered in a straight
-	 * line from the pavement, unless `strict`.
+	 * A walk over Connections path3 from the body to a goal, through the main
+	 * door of every building it leaves or enters: from inside a building to
+	 * its door, out over the doorstep to the pavement, and in again over the
+	 * goal building's doorstep through its door, each crossing a door gate.
+	 * Inside a building the interior routes walk it (stairs, lifts, apartment
+	 * doors); one they do not cover is crossed straight from its door, and,
+	 * `strict`, a goal they cannot reach inside its building has no way.
 	 */
 	#route( actor, goal, strict ) {
 
 		const from = actor.position;
-		const exitId = actor.place.kind === 'parcel' && this.interiorRoutes?.covers( actor.place.id ) ? actor.place.id : null;
-		const entryId = goal.parcelId && this.interiorRoutes?.covers( goal.parcelId ) ? goal.parcelId : null;
-		if ( ! exitId && ! entryId ) return strict && goal.parcelId ? null : this.routes.route( from, goal.position );
+		const exitId = actor.place.kind === 'parcel' ? actor.place.id : null;
+		const entryId = goal.parcelId ?? null;
 		if ( exitId && exitId === entryId ) {
 
+			// Within one building its own navigation walks a body. A building the
+			// interior routes do not cover now is one out of the player's sight,
+			// whose body the street walk carries over as before.
 			const inside = this.#indoor( exitId, from, goal.position );
-			if ( inside ) return joinLegs( [ { path3: inside, parcelId: exitId } ] );
-			return strict ? null : this.routes.route( from, goal.position );
+			if ( inside ) return joinLegs( [ { ...inside, parcelId: exitId } ] );
+			return strict || this.interiorRoutes?.covers( exitId ) ? null : this.routes.route( from, goal.position );
 
 		}
-		const exit = exitId && this.#indoor( exitId, from, this.#door( exitId ) );
-		const entry = entryId && this.#indoor( entryId, this.#door( entryId ), goal.position );
-		if ( strict && goal.parcelId && ! entry ) return null;
-		const outdoor = this.routes.route( exit ? exit.at( - 1 ) : from, entry ? entry[ 0 ] : goal.position );
+		const legs = [];
+		let start = from;
+		const exit = exitId ? this.#doorway( exitId ) : null;
+		if ( exit ) {
+
+			const inside = this.interiorRoutes?.covers( exitId ) ? this.#indoor( exitId, from, exit.inside ) : null;
+			legs.push( { ...( inside ?? { path3: [ [ ...from ], [ ...exit.inside ] ] } ), parcelId: exitId } );
+			legs.push( { path3: [ [ ...exit.inside ], [ ...exit.outside ] ], parcelId: exitId, gates: doorGate( exitId, exit, exit.inside ) } );
+			start = exit.outside;
+
+		}
+		let end = goal.position;
+		const entering = [];
+		const entry = entryId ? this.#doorway( entryId ) : null;
+		if ( entry ) {
+
+			const inside = this.interiorRoutes?.covers( entryId ) ? this.#indoor( entryId, entry.inside, goal.position ) : null;
+			if ( strict && ! inside ) return null;
+			entering.push( { path3: [ [ ...entry.outside ], [ ...entry.inside ] ], parcelId: entryId, gates: doorGate( entryId, entry, entry.outside ) } );
+			entering.push( { ...( inside ?? { path3: [ [ ...entry.inside ], [ ...goal.position ] ] } ), parcelId: entryId } );
+			end = entry.outside;
+
+		} else if ( strict && entryId ) return null;
+		const outdoor = this.routes.route( start, end );
 		if ( ! outdoor ) return null;
-		return joinLegs( [
-			...( exit ? [ { path3: exit, parcelId: exitId } ] : [] ),
-			{ path3: outdoor.path3 },
-			...( entry ? [ { path3: entry, parcelId: entryId } ] : [] )
-		] );
+		return joinLegs( [ ...legs, { path3: outdoor.path3 }, ...entering ] );
 
 	}
 
-	/** A walk inside one building from the interior routes, or null. */
+	/** A walk inside one building from the interior routes, `{ path3, gates? }`, or null. */
 	#indoor( parcelId, from, to ) {
 
-		if ( ! from || ! to ) return null;
-		return this.boundary.input( 'interior-route', this.interiorRoutes.route( parcelId, [ ...from ], [ ...to ] ) ?? null )?.path3 ?? null;
+		if ( ! from || ! to || ! this.interiorRoutes ) return null;
+		return this.boundary.input( 'interior-route', this.interiorRoutes.route( parcelId, [ ...from ], [ ...to ] ) ?? null );
 
 	}
 
@@ -823,17 +1095,113 @@ export class NpcContinuity {
 
 	}
 
-	/** Moves the body `travel` metres on along its cached route, inside a building while the route is. */
+	/** A building's main door as a walker crosses it: just inside, and the doorstep just outside (the same point where none is known); null for an unknown place. */
+	#doorway( parcelId ) {
+
+		const place = this.places.get( `parcel:${parcelId}` );
+		return place?.position ? { inside: place.position, outside: place.doorstep ?? place.position } : null;
+
+	}
+
+	/**
+	 * Moves the body up to `travel` metres on along its cached route, inside a
+	 * building while the route is, on the floor its anchor or stretch names;
+	 * stopping short of a door until it opens and riding a lift through its
+	 * gate. Returns the metres it moved.
+	 */
 	#walk( actor, route, travel ) {
 
-		if ( ! ( travel > 0 ) ) return;
-		route.cursor = Math.min( route.distanceMeters, route.cursor + travel );
+		const allowed = this.#gates( actor, route, travel );
+		if ( ! ( allowed > 0 ) ) return 0;
+		const before = route.cursor;
+		route.cursor = Math.min( route.distanceMeters, route.cursor + allowed );
 		const moved = pointAtDistance( route.path3, route.cursor );
 		actor.position = moved.position;
 		actor.heading = moved.heading ?? actor.heading;
 		const inside = route.indoor?.find( ( stretch ) => route.cursor >= stretch.from - EPSILON && route.cursor <= stretch.to + EPSILON );
 		if ( inside ) actor.place = { kind: 'parcel', id: inside.parcelId };
 		else this.#putOnWalkGraph( actor );
+		return route.cursor - before;
+
+	}
+
+	/**
+	 * What the gates ahead allow of `travel` metres: a lift under way holds the
+	 * body in its car (placed at the car's height, 0 returned) and walks it in
+	 * and out at a walk whatever the walker's pace; a lift landing reached
+	 * calls the car and stands there until it opens; a door within DOOR_LOOK
+	 * is asked open and stood short of until it is. With no `ways`, or a way
+	 * that runs no such door or lift, the route is walked as drawn.
+	 */
+	#gates( actor, route, travel ) {
+
+		const gates = route.gates;
+		if ( ! gates?.length || ! this.ways ) return travel;
+		const ride = route.ride;
+		if ( ride ) {
+
+			const gate = gates[ ride.gate ];
+			const walking = Math.max( travel, WALK_SPEED * this.delta );
+			if ( ride.stage === 'call' ) {
+
+				const answer = this.ways.ride( actor.npcId, gate, 'call' );
+				if ( answer === null ) {
+
+					delete route.ride;
+					return travel;
+
+				}
+				if ( answer !== 'board' && this.now - ride.sinceMin < LIFT_PATIENCE_MIN ) return 0;
+				ride.stage = 'board';
+
+			}
+			if ( ride.stage === 'board' ) {
+
+				if ( route.cursor + walking < gate.board ) return walking;
+				ride.stage = 'ride';
+				ride.sinceMin = this.now;
+				this.ways.ride( actor.npcId, gate, 'ride' );
+				return gate.board - route.cursor;
+
+			}
+			if ( ride.stage === 'ride' ) {
+
+				const answer = this.ways.ride( actor.npcId, gate, 'ride' );
+				if ( answer && answer !== 'alight' && this.now - ride.sinceMin < LIFT_PATIENCE_MIN ) {
+
+					const car = pointAtDistance( route.path3, gate.board ).position;
+					actor.position = [ car[ 0 ], answer.y, car[ 2 ] ];
+					return 0;
+
+				}
+				// Out of the car where the shaft lets the walker out.
+				route.cursor = gate.alight;
+				ride.stage = 'alight';
+
+			}
+			if ( route.cursor + walking >= gate.to ) {
+
+				delete route.ride;
+				this.ways.ride( actor.npcId, gate, 'done' );
+
+			}
+			return walking;
+
+		}
+		const lift = gates.findIndex( ( gate ) => gate.kind === 'lift' && route.cursor < gate.board - EPSILON && route.cursor + travel >= gate.from - EPSILON );
+		if ( lift >= 0 && this.ways.ride( actor.npcId, gates[ lift ], 'call' ) !== null ) {
+
+			route.ride = { gate: lift, stage: 'call', sinceMin: this.now };
+			return Math.max( 0, gates[ lift ].from - route.cursor );
+
+		}
+		for ( const gate of gates ) {
+
+			if ( gate.kind !== 'door' || gate.at < route.cursor - EPSILON || gate.at - route.cursor > DOOR_LOOK ) continue;
+			if ( ! this.ways.pass( actor.npcId, gate ) ) travel = Math.min( travel, Math.max( 0, gate.at - DOOR_SHORT - route.cursor ) );
+
+		}
+		return travel;
 
 	}
 
@@ -1001,7 +1369,8 @@ export class NpcContinuity {
 	 */
 	#take( actor, timeMin ) {
 
-		if ( ! this.holds.delete( actor.npcId ) && this.follow?.npcId !== actor.npcId ) this.#interrupt( actor.npcId, timeMin );
+		const held = this.holds.delete( actor.npcId ) || this.errands.delete( actor.npcId );
+		if ( ! held && this.follow?.npcId !== actor.npcId ) this.#interrupt( actor.npcId, timeMin );
 		this.returns.delete( actor.npcId );
 		actor.visible = true;
 		this.actors.set( actor.npcId, actor );
@@ -1099,7 +1468,8 @@ export class NpcContinuity {
 
 		}
 		if ( state.behavior.place.kind === 'route' ) return this.#locateTransit( npc, state );
-		return { place: clone( state.behavior.place ), ...this.#locatePlace( state.behavior.place, state.behavior.interior ) };
+		const { floor, ...located } = this.#locatePlace( state.behavior.place, state.behavior.interior );
+		return { place: { ...clone( state.behavior.place ), ...( Number.isInteger( floor ) ? { floor } : {} ) }, ...located };
 
 	}
 
@@ -1129,12 +1499,10 @@ export class NpcContinuity {
 
 		if ( place.kind === 'route' ) throw new NpcContinuityError( 'E_NPC_PLACE', `route ${place.id} has no destination walk position` );
 		const known = this.places.get( placeKey( place ) );
-		if ( interior && 'at' in interior ) {
-
-			const anchor = known?.anchors?.find( ( candidate ) => candidate.id === interior.at.anchorId );
-			if ( anchor ) return { position: [ ...anchor.position ], heading: anchor.heading ?? 0 };
-
-		}
+		// At an anchor, or walking to one: the body is placed where the step has it, on that anchor's floor.
+		const anchorId = interior && ( 'at' in interior ? interior.at.anchorId : interior.walk.toAnchorId );
+		const anchor = anchorId ? known?.anchors?.find( ( candidate ) => candidate.id === anchorId ) : null;
+		if ( anchor ) return { position: [ ...anchor.position ], heading: anchor.heading ?? 0, ...( Number.isInteger( anchor.floor ) ? { floor: anchor.floor } : {} ) };
 		if ( known ) return { position: [ ...known.position ], heading: known.heading ?? 0 };
 		const node = [ ...this.routes.nodes.values() ]
 			.filter( ( candidate ) => candidate.ref === place.id )
@@ -1251,24 +1619,51 @@ function savedRoute( route, goal ) {
 		cursor: 0,
 		destination: [ ...goal.position ],
 		...( goal.parcelId ? { parcelId: goal.parcelId } : {} ),
-		...( route.indoor?.length ? { indoor: route.indoor.map( ( stretch ) => ( { ...stretch } ) ) } : {} )
+		...( route.indoor?.length ? { indoor: route.indoor.map( ( stretch ) => ( { ...stretch } ) ) } : {} ),
+		...( route.gates?.length ? { gates: route.gates.map( ( gate ) => shiftGate( gate, 0 ) ) } : {} )
 	};
 
 }
 
-/** Legs joined into one walk, with the stretches walked inside a building measured along it. */
+/**
+ * Legs joined into one walk, with the stretches walked inside a building and
+ * each leg's gates (measured from the leg's first point) measured along it.
+ */
 function joinLegs( legs ) {
 
 	const path3 = [];
 	const indoor = [];
+	const gates = [];
 	for ( const leg of legs ) {
 
 		const from = pathDistance( path3 );
+		const gap = path3.length && leg.path3.length ? distance( path3.at( - 1 ), leg.path3[ 0 ] ) : 0;
+		const offset = from + ( gap > 1e-9 ? gap : 0 );
 		for ( const point of leg.path3 ) if ( ! path3.length || distance( path3.at( - 1 ), point ) > 1e-9 ) path3.push( [ ...point ] );
-		if ( leg.parcelId ) indoor.push( { parcelId: leg.parcelId, from, to: pathDistance( path3 ) } );
+		const last = indoor.at( - 1 );
+		if ( leg.parcelId && last?.parcelId === leg.parcelId && Math.abs( last.to - from ) < 1e-6 ) last.to = pathDistance( path3 );
+		else if ( leg.parcelId ) indoor.push( { parcelId: leg.parcelId, from, to: pathDistance( path3 ) } );
+		for ( const gate of leg.gates ?? [] ) gates.push( shiftGate( gate, offset ) );
 
 	}
-	return { path3, distanceMeters: pathDistance( path3 ), indoor };
+	return { path3, distanceMeters: pathDistance( path3 ), indoor, ...( gates.length ? { gates } : {} ) };
+
+}
+
+/** A gate measured `offset` metres further along. */
+function shiftGate( gate, offset ) {
+
+	if ( gate.kind === 'door' ) return { ...gate, at: gate.at + offset, position: [ ...gate.position ] };
+	return { ...gate, from: gate.from + offset, board: gate.board + offset, alight: gate.alight + offset, to: gate.to + offset };
+
+}
+
+/** The main door of a building as the gates on the way through it, from `start` (inside or outside): none where inside and out are one point. */
+function doorGate( parcelId, door, start ) {
+
+	if ( distance( door.inside, door.outside ) <= ARRIVAL_DISTANCE ) return [];
+	const middle = lerp( door.inside, door.outside, 0.5 );
+	return [ { kind: 'door', parcelId, floor: 0, at: distance( start, middle ), position: middle } ];
 
 }
 

@@ -40,6 +40,34 @@ export function groundAnchors( npc, y, interior = null ) {
 
 }
 
+/**
+ * Every anchor an interior publishes, on every floor, as continuity places
+ * people at them: its id, kind and floor, its world position at that floor's
+ * elevation (a seat at its cushion, as `groundAnchors` seats it) and heading.
+ */
+export function buildingAnchors( npc, interior = null ) {
+
+	const floors = new Map( ( interior?.building?.floors ?? [] ).map( ( floor ) => [ floor.index, floor ] ) );
+	const out = [];
+	for ( const anchor of npc?.anchors ?? [] ) {
+
+		const floor = floors.get( anchor.floor );
+		if ( ! floor ) continue;
+		const layout = interior.layouts?.[ floor.layout ];
+		const placement = anchor.kind === 'seat' && anchor.furniture
+			? ( layout?.placements ?? [] ).find( ( item ) => item.id === anchor.furniture.replace( /^floor:\d+\//, '' ) ) ?? null
+			: null;
+		const heading = placement?.rotationY ?? THREE.MathUtils.degToRad( anchor.facingDeg );
+		out.push( {
+			id: anchor.id, kind: anchor.kind, floor: anchor.floor, heading,
+			position: placement ? seatedOrigin( placement, floor.elevation, heading ) : new THREE.Vector3( anchor.position[ 0 ], floor.elevation, anchor.position[ 1 ] )
+		} );
+
+	}
+	return out.sort( ( a, b ) => a.id.localeCompare( b.id ) );
+
+}
+
 // The sitting surface of each seat the interiors place, before placement scale:
 // the cushion's top and its back and front edges along the seat's facing (+Z),
 // from the authored zero. Measured on the module and catalogue meshes as their

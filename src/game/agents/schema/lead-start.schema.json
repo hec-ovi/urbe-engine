@@ -8,6 +8,7 @@
     "npcId": { "type": "string", "minLength": 1 },
     "timeMin": { "type": "number", "minimum": 0 },
     "destination": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/place" },
-    "pace": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/pace" }
+    "pace": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/pace" },
+    "target": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/target" }
   }
 }

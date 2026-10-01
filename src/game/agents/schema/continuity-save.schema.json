@@ -25,7 +25,9 @@
                 "lastTimeMin": { "type": "number", "minimum": 0 },
                 "destination": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/place" },
                 "pace": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/pace" },
-                "lostSinceMin": { "type": "number", "minimum": 0 }
+                "lostSinceMin": { "type": "number", "minimum": 0 },
+                "target": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/target" },
+                "pending": { "description": "A lead shown the building from its doorstep that goes on inside once the building can be walked.", "const": true }
               },
               "if": { "properties": { "mode": { "const": "following" } } },
               "then": { "properties": { "phase": { "enum": ["walking", "waiting"] }, "destination": false } },
@@ -49,7 +51,8 @@
         "conversation": { "$ref": "#/$defs/conversation" },
         "pose": { "$ref": "#/$defs/pose" },
         "holds": { "$ref": "#/$defs/holds" },
-        "posts": { "$ref": "#/$defs/posts" }
+        "posts": { "$ref": "#/$defs/posts" },
+        "errands": { "type": "array", "items": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/errand" } }
       }
     },
     "legacy": {

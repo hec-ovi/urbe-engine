@@ -13,7 +13,11 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "id"],
-      "properties": { "kind": { "enum": ["edge", "stop", "parcel", "route"] }, "id": { "type": "string", "minLength": 1 } }
+      "properties": {
+        "kind": { "enum": ["edge", "stop", "parcel", "route"] },
+        "id": { "type": "string", "minLength": 1 },
+        "floor": { "description": "The floor of the building a parcel place stands on, when known.", "type": "integer" }
+      }
     },
     "name": {
       "type": "object",
@@ -47,7 +51,7 @@
         "position": { "$ref": "#/$defs/vec3" },
         "heading": { "type": "number" },
         "animation": { "enum": ["walk", "run", "idle", "sit", "crouch"] },
-        "mode": { "enum": ["schedule", "following", "leading", "resuming", "conversation", "posing", "released"] },
+        "mode": { "enum": ["schedule", "following", "leading", "resuming", "conversation", "posing", "released", "errand"] },
         "schedule": { "$ref": "#/$defs/schedule" },
         "visible": { "type": "boolean" },
         "spot": { "type": "string", "minLength": 1 }
@@ -59,7 +63,9 @@
       "required": ["giveUpBeyond", "giveUpAfterMin"],
       "properties": {
         "giveUpBeyond": { "type": "number", "exclusiveMinimum": 0 },
-        "giveUpAfterMin": { "type": "number", "exclusiveMinimum": 0 }
+        "giveUpAfterMin": { "type": "number", "exclusiveMinimum": 0 },
+        "runs": { "description": "Whether the person runs to keep up with a running player (false: never above a walk).", "type": "boolean" },
+        "hurry": { "description": "A leader in a hurry jogs while the player is close.", "type": "boolean" }
       }
     },
     "gate": {
@@ -105,6 +111,18 @@
         "cursor": { "type": "number", "minimum": 0 },
         "destination": { "$ref": "#/$defs/vec3" },
         "parcelId": { "description": "The building the route was planned into.", "type": "string", "minLength": 1 },
+        "gates": { "type": "array", "items": { "$ref": "#/$defs/gate" } },
+        "ride": {
+          "description": "A lift gate under way: the gate's index, and the stage (calling, boarding, riding, stepping out).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gate", "stage"],
+          "properties": {
+            "gate": { "type": "integer", "minimum": 0 },
+            "stage": { "enum": ["call", "board", "ride", "alight"] },
+            "sinceMin": { "type": "number" }
+          }
+        },
         "indoor": {
           "description": "Stretches of the route walked inside a building, as distances along it.",
           "type": "array",
@@ -130,6 +148,30 @@
         "kind": { "const": "parcel" },
         "id": { "type": "string", "minLength": 1 },
         "floor": { "type": "integer" }
+      }
+    },
+    "target": {
+      "description": "Where a lead or an errand ends: a world point, inside a building when parcelId is given; for a lead, a person by npcId instead.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "position": { "$ref": "#/$defs/vec3" },
+        "parcelId": { "type": "string", "minLength": 1 },
+        "floor": { "type": "integer" },
+        "heading": { "type": "number" },
+        "seated": { "type": "boolean" },
+        "npcId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "errand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["npcId", "route", "target", "untilMin"],
+      "properties": {
+        "npcId": { "type": "string", "minLength": 1 },
+        "route": { "$ref": "#/$defs/route" },
+        "target": { "$ref": "#/$defs/target" },
+        "untilMin": { "type": "number", "minimum": 0 }
       }
     },
     "scheduledPost": {

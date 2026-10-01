@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:npc-agents:errand-start",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["npcId", "timeMin", "target", "untilMin"],
+  "properties": {
+    "npcId": { "type": "string", "minLength": 1 },
+    "timeMin": { "type": "number", "minimum": 0 },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position"],
+      "properties": {
+        "position": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" },
+        "parcelId": { "type": "string", "minLength": 1 },
+        "floor": { "type": "integer" },
+        "heading": { "type": "number" },
+        "seated": { "type": "boolean" }
+      }
+    },
+    "untilMin": { "type": "number", "minimum": 0 }
+  }
+}
