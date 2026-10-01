@@ -3,6 +3,8 @@ import { RendererFactory } from '../app/RendererFactory.js';
 import { MaterialResolver } from '../building/MaterialResolver.js';
 import { TextureSource } from '../building/TextureSource.js';
 import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
+import { DETAIL_BINDING, SurfaceDetail } from './surface-detail/SurfaceDetail.js';
+import { wearExterior } from './surface-detail/Weathering.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { RecentEvents } from './talk/RecentEvents.js';
 import { NpcVoice } from './voice/NpcVoice.js';
@@ -294,6 +296,8 @@ export class GameApp {
 		const rendering = progress.timed( 'renderer', RendererFactory.create( config.backend, { antialias: false } ) );
 		const resolver = new MaterialResolver();
 		const theme = progress.timed( 'material theme', resolver.loadTheme( THEME ) );
+		// The masks the surface-detail layer reads, where Materials publishes them.
+		const detailBinding = config.off.has( 'detail' ) ? null : resolver.loadBindings( DETAIL_BINDING ).catch( () => null );
 		const starting = progress.timed( 'physics', Physics.create() );
 		const cars = progress.timed( 'cars', CarModels.load( config.maxCars ) );
 		const {
@@ -361,6 +365,20 @@ export class GameApp {
 		await theme;
 		this.resolver = resolver;
 		const factory = new PbrMaterialFactory( resolver, this.tier, new TextureSource().detect( this.renderer ) );
+		// Streets, sidewalks and exterior walls wear world-space use: oily
+		// smears, polish, grime and stains, from the Materials surface-detail
+		// masks where the catalog publishes them and procedural stand-ins
+		// drawn on a worker otherwise. `off=detail` leaves it out of a run.
+		if ( ! config.off.has( 'detail' ) ) {
+
+			const detail = this.surfaceDetail = SurfaceDetail.load( {
+				binding: await detailBinding,
+				mapTexture: ( key, variantId, map, options ) => factory.dataMap( key, variantId, map, options ),
+				anisotropy: Math.min( 4, this.tier.textureAnisotropy ?? 4 )
+			} );
+			factory.weathering = { detail, resources: detail.resources, nodes: ( profile ) => wearExterior( detail, profile ) };
+
+		}
 		this.missionItems = new MissionItemAssets( {
 			requests: missionAssetRequests,
 			bindings: missionItemBindings,

@@ -17,7 +17,7 @@ export interface GameQuery {
   /** paint, glow or debug; default paint. */ lanes?: string;
   /** Number 0.005-4, default 0.024. */ exposure?: string;
   /** Number 0-0.05, default 0.0003. */ fog?: string;
-  /** Comma-separated fog,bloom,probe,haze,interiors; default empty. */ off?: string;
+  /** Comma-separated fog,bloom,probe,haze,interiors,detail; default empty. */ off?: string;
   /** `off` starts the run with NPC voices off; anything else leaves them on. */ voice?: string;
   /** `off` hides the developer readouts, anything else shows them; absent, only a preview shows them. */ details?: string;
   /** Present: installs the automation probe on an `out` preview; ignored with game. */ automation?: string;
@@ -44,7 +44,7 @@ export interface GameConfig {
   laneMode: 'paint' | 'glow' | 'debug';
   exposure: number;
   fog: number;
-  off: Set<'fog' | 'bloom' | 'probe' | 'haze' | 'interiors'>;
+  off: Set<'fog' | 'bloom' | 'probe' | 'haze' | 'interiors' | 'detail'>;
   /** Whether NPC lines are spoken from the start; the settings can change it. */
   voice: boolean;
   /** Whether the developer readouts (position, loaded files, frame stats) show from the start; the settings can change it. */
