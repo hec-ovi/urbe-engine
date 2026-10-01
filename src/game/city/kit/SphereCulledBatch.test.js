@@ -210,4 +210,37 @@ describe( 'a batch that keeps each copy\'s sphere', () => {
 
 	} );
 
+	it( 'reuses freed ids lowest first as three does, and their records, however the releases came', () => {
+
+		const [ three, kept ] = pair();
+		const camera = new THREE.PerspectiveCamera( 70, 1, 0.2, 900 );
+		camera.updateMatrixWorld();
+		for ( const batch of [ three, kept ] ) {
+
+			batch.setInstanceCount( 64 );
+			batch.setColorAt( 1, new THREE.Color( 1, 0, 0 ) );
+			for ( let copy = 0; copy < 40; copy ++ ) batch.setMatrixAt( batch.addInstance( copy % 2 ), new THREE.Matrix4().makeTranslation( copy, 0, - 30 ) );
+			// Released out of order, as floors let their copies go.
+			for ( const id of [ 7, 30, 1, 22, 15, 2, 41, 9 ] ) batch.deleteInstance( id );
+
+		}
+		const records = kept._instanceInfo.slice();
+		const ids = ( batch ) => Array.from( { length: 6 }, () => batch.addInstance( 1 ) );
+		const reused = ids( kept );
+		expect( reused ).toEqual( [ 1, 2, 7, 9, 15, 22 ] );
+		expect( reused ).toEqual( ids( three ) );
+		// A freed id comes back with its own record, reset as three makes a new one.
+		expect( kept._instanceInfo[ 1 ] ).toBe( records[ 1 ] );
+		expect( kept._instanceInfo[ 1 ] ).toEqual( three._instanceInfo[ 1 ] );
+		expect( kept.getColorAt( 1, new THREE.Color() ).getHex() ).toBe( 0xffffff );
+		expect( kept.getMatrixAt( 2, new THREE.Matrix4() ).equals( new THREE.Matrix4() ) ).toBe( true );
+		// More releases after some reuse keep the order.
+		for ( const batch of [ three, kept ] ) for ( const id of [ 5, 0 ] ) batch.deleteInstance( id );
+		const next = ids( kept );
+		expect( next ).toEqual( [ 0, 5, 30, 41, 44, 45 ] );
+		expect( next ).toEqual( ids( three ) );
+		expect( drawList( kept, camera ) ).toEqual( drawList( three, camera ) );
+
+	} );
+
 } );

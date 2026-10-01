@@ -1,4 +1,4 @@
-import { BatchedMesh, Box3, Frustum, Matrix4, Sphere, Vector3 } from 'three/webgpu';
+import { BatchedMesh, Box3, Color, Frustum, Matrix4, Sphere, Vector3 } from 'three/webgpu';
 
 /** A copy that draws its own geometry at every distance. */
 export const NEAR_ONLY = - 1;
@@ -11,6 +11,9 @@ const _inverse = new Matrix4();
 const _sphere = new Sphere();
 const _point = new Vector3();
 const _vertex = new Vector3();
+const _identity = new Matrix4();
+const _white = new Color( 1, 1, 1 );
+const descending = ( a, b ) => b - a;
 /**
  * How far, in metres, a pass's camera may stand from the last one's and still
  * keep its list: a player standing still is never quite still, the body
@@ -61,6 +64,8 @@ export class SphereCulledBatch extends BatchedMesh {
 	#lod = false;
 	/** The indirect texture the current draw list was last uploaded into. */
 	#uploaded = null;
+	/** Whether the freed instance ids stand in descending order, the lowest last. */
+	#freeSorted = true;
 
 	constructor( maxInstanceCount, maxVertexCount, maxIndexCount, material ) {
 
@@ -94,9 +99,44 @@ export class SphereCulledBatch extends BatchedMesh {
 
 	}
 
+	/**
+	 * One more copy of a geometry, in the lowest freed instance id when there
+	 * is one, as three's own does. Three sorts the freed ids and shifts the
+	 * lowest off the front for every copy it adds, and makes a new record for
+	 * it, so a floor of a thousand copies going back into a batch that had let
+	 * as many go moved a million ids. Here the freed ids are sorted once, the
+	 * lowest last, whenever a release has put them out of order, and each copy
+	 * pops one and takes back the record that id held.
+	 */
 	addInstance( geometryId ) {
 
-		const instanceId = super.addInstance( geometryId );
+		const free = this._availableInstanceIds;
+		let instanceId;
+		if ( free.length === 0 ) instanceId = super.addInstance( geometryId );
+		else {
+
+			if ( ! this.#freeSorted ) {
+
+				free.sort( descending );
+				this.#freeSorted = true;
+
+			}
+			instanceId = free.pop();
+			const instance = this._instanceInfo[ instanceId ];
+			instance.visible = true;
+			instance.active = true;
+			instance.geometryIndex = geometryId;
+			_identity.toArray( this._matricesTexture.image.data, instanceId * 16 );
+			this._matricesTexture.needsUpdate = true;
+			if ( this._colorsTexture ) {
+
+				_white.toArray( this._colorsTexture.image.data, instanceId * 4 );
+				this._colorsTexture.needsUpdate = true;
+
+			}
+			this._visibilityChanged = true;
+
+		}
 		this.#keep( instanceId );
 		this.#edited = true;
 
@@ -200,6 +240,9 @@ export class SphereCulledBatch extends BatchedMesh {
 	 */
 	setInstanceCount( maxInstanceCount ) {
 
+		// Three sorts the freed ids its own way here.
+		this.#freeSorted = false;
+
 		const kept = [ this._matricesTexture, this._indirectTexture, this._colorsTexture ];
 		super.setInstanceCount( maxInstanceCount );
 		this._matricesTexture = regrown( kept[ 0 ], this._matricesTexture );
@@ -221,6 +264,8 @@ export class SphereCulledBatch extends BatchedMesh {
 
 	deleteInstance( instanceId ) {
 
+		const free = this._availableInstanceIds;
+		if ( free.length && free[ free.length - 1 ] < instanceId ) this.#freeSorted = false;
 		super.deleteInstance( instanceId );
 		this.#edited = true;
 
