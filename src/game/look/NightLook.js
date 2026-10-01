@@ -67,6 +67,8 @@ export class NightLook {
 
 		this.scene = scene;
 		this.sky = new NightSky( scene ).build( hour );
+		// The probe the scene reflects stays at the street's grade indoors.
+		this.exposure.environment = scene;
 		this.fog = new NightFog( scene, {
 			color: SKY_COLOR, density: fog.density ?? LOOK.fog, indoorDensity: fog.indoorDensity
 		} );

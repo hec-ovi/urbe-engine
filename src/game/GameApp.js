@@ -2479,6 +2479,8 @@ export class GameApp {
 		// The probe rebakes itself on the next step, once the rooms around the
 		// camera have taken their light slots and are worth reflecting.
 		this.indoors = undefined;
+		// A cut is not a walk: the eye arrives adapted to wherever it was put.
+		this.exposure.settle();
 
 		return true;
 
