@@ -91,11 +91,20 @@ it( 'prepares every batch it makes before it draws, and none it keeps', async ()
 	expect( stream.stats.resident ).toBe( 18 );
 	expect( prepare ).toHaveBeenCalledTimes( batches );
 	expect( drawn().every( group => prepared.has( group ) ) ).toBe( true );
-	// A model and finish the window left and finds again stands in a batch
-	// made for it, a draw the renderer builds a graph for: it is prepared first.
+	// A model and finish the window leaves is kept, emptied and out of the
+	// scene, and a window that finds it again draws it in that same batch.
+	const standing = drawn();
 	await stream.update( { x: 0, z: 5000 }, { radius: 100, prepare } );
+	expect( stream.group.children ).toHaveLength( 0 );
+	expect( stream.stats ).toMatchObject( { resident: 0, draws: 0 } );
+	await stream.update( { x: 1000, z: 0 }, { radius: 100, prepare } );
+	expect( prepare ).toHaveBeenCalledTimes( batches );
+	expect( new Set( drawn() ) ).toEqual( new Set( standing ) );
+	// One that needs more room than it has is made again, and prepared first.
+	const [ first ] = stream.batches.batches.values();
+	first.capacity = 0;
 	await stream.update( { x: 0, z: 0 }, { radius: 100, prepare } );
-	expect( prepare.mock.calls.length ).toBeGreaterThan( batches );
+	expect( prepare ).toHaveBeenCalledTimes( batches + 1 );
 	expect( drawn().every( group => prepared.has( group ) ) ).toBe( true );
 	stream.dispose();
 } );
