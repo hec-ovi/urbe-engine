@@ -2,6 +2,7 @@ import { CompanionBoundary } from './CompanionBoundary.js';
 import { CompanionLines } from './CompanionLines.js';
 import { CompanionPlaces, standsIn } from './CompanionPlaces.js';
 import { LINGER_SECONDS } from '../agents/NpcContinuity.js';
+import { dispositionOf, willingTo } from '../../../../quests/dist/runtime.js';
 
 /** A companion the player leaves gives up once they stay this far away for this long. */
 const PACE = { giveUpBeyond: 60, giveUpAfterMin: 3 };
@@ -20,6 +21,16 @@ const LEAVE_DISTANCE = 15;
 const WAIT_LINE_MIN = 1;
 const DAY = 1440;
 const MODE = { follow: 'following', lead: 'leading' };
+/** Game minutes a person stays where an errand for the player takes them before going back to their day. */
+const ERRAND_MIN = { walk: 15, home: 60, work: 60, wait: 15, sit: 20 };
+/** The actions a person takes on their own for the player, once the talk is done. */
+const ERRANDS = new Set( [ 'walk', 'home', 'work', 'wait', 'sit' ] );
+/** People this old or tired do not run, whatever the player does. */
+const RUNS_UNDER = 60;
+/** The minutes a lead is reckoned to take when a person weighs it against their next shift. */
+const LEAD_MINUTES = 10;
+/** How private a request is to the person: their home, their work, a follow, or a public place. */
+const PRIVACY = { home: 'home', work: 'work', follow: 'follow', person: 'public', spot: 'public', venue: 'public', stop: 'public', street: 'public', quest: 'public', scene: 'public', haunt: 'public' };
 /** The ends the player is there for, sending the companion off or hearing a leader out at the place. */
 const LINGERING = new Set( [ 'dismissed', 'done' ] );
 
@@ -40,8 +51,18 @@ export class CompanionGameplay {
 	 * @param scenes optional provider of staged scenery places `[{ place, name, relation: 'scene', notes? }]`
 	 * @param crowd optional `{ memberForNpc(npcId) }`, whose fallen bodies cannot come
 	 */
+	/**
+	 * @param inside optional `{ plan(parcelId), workSpot(npc), homeSpot(npc), seat(actor) }`:
+	 *   a building's circulation, the spot a person works at, the seat of
+	 *   their own home, the free seat nearest a body in its building; each a
+	 *   `{ position, parcelId, floor, heading?, seated? }` or null
+	 * @param streets optional Quests StreetNames, for leads to a street
+	 * @param people optional `(npc) => [{ npcId, name, position }]`, the people a person knows whose bodies are placed
+	 * @param categoryOf optional `(type) => category`, the person's kind, which colours how they take to strangers
+	 */
 	constructor( {
 		continuity, sim, routes, places, atlas, quests = null, scenes = null, crowd = null,
+		inside = null, streets = null, people = null, categoryOf = () => undefined,
 		lines = CompanionLines.standard(), boundary = new CompanionBoundary()
 	} ) {
 
@@ -52,7 +73,10 @@ export class CompanionGameplay {
 		this.crowd = crowd;
 		this.lines = lines;
 		this.boundary = boundary;
-		this.places = new CompanionPlaces( { atlas, places, routes, lines } );
+		this.inside = inside;
+		this.categoryOf = categoryOf;
+		this.routes = routes;
+		this.places = new CompanionPlaces( { atlas, places, routes, lines, inside, streets, people } );
 		/** The companion under way, as saved. */
 		this.state = null;
 		/** An accepted offer waiting for its person's conversation to close. */
@@ -81,14 +105,24 @@ export class CompanionGameplay {
 
 	}
 
-	/** The talk request's `offers`: the available follow and places, or null when there is none. */
-	talkOffers( offers ) {
+	/**
+	 * The talk request's `offers`: the available follow and places (a talk's
+	 * wide list, `offers({ wide: true })`), and, with `person`, the actions
+	 * this person may take for the player on their own: walk to one of those
+	 * places, stop what they do for the player, go home or to work, wait, sit.
+	 * Null when there is none.
+	 * @param person `{ npcId, timeMin }`
+	 */
+	talkOffers( offers, person = null ) {
 
 		const follow = offers.some( ( offer ) => offer.kind === 'follow' && offer.available );
 		const places = offers.filter( ( offer ) => offer.kind === 'lead' && offer.available )
 			.map( ( { destination } ) => ( { placeId: destination.place.id, name: destination.offeredAs ?? destination.name } ) );
-		return this.boundary.output( 'talk-offers', follow || places.length
-			? { ...( follow ? { follow: true } : {} ), ...( places.length ? { places } : {} ) }
+		const actions = person ? this.#actions( person.npcId, person.timeMin ) : {};
+		if ( ! places.length ) delete actions.walk;
+		const any = follow || places.length || Object.keys( actions ).length;
+		return this.boundary.output( 'talk-offers', any
+			? { ...( follow ? { follow: true } : {} ), ...( places.length ? { places } : {} ), ...actions }
 			: null );
 
 	}
@@ -96,28 +130,70 @@ export class CompanionGameplay {
 	/**
 	 * The player chose an offer. An available one is accepted and starts once
 	 * this person's conversation closes; `line` is what the person says either
-	 * way.
+	 * way. With `willing` the person also decides as their disposition says
+	 * (`willingTo`), which is how a host decides a chosen offer when no model
+	 * can answer for the person: a hostile person refuses everything, a wary
+	 * one goes only to a public place, a neutral one anywhere but home.
 	 */
 	accept( request ) {
 
 		this.boundary.input( 'accept-request', request );
-		return this.#accept( request, this.#offers( request ).find( ( offer ) => offer.offerId === request.offerId ) );
+		const chosen = this.#offers( { ...request, wide: true } ).find( ( offer ) => offer.offerId === request.offerId );
+		if ( request.willing && chosen?.available && chosen.kind !== 'dismiss' ) {
+
+			const npc = this.#person( request.npcId );
+			const disposition = dispositionOf( npc, this.categoryOf( npc.type ) );
+			const privacy = chosen.kind === 'follow' ? 'follow' : PRIVACY[ chosen.destination.relation ] ?? 'public';
+			if ( ! willingTo( disposition, privacy ) ) return this.#accept( request, { ...chosen, available: false, reason: 'unwilling', disposition } );
+
+		}
+		return this.#accept( request, chosen );
 
 	}
 
 	/**
-	 * The person agreed through a talk tool: `follow_player`, or
-	 * `lead_player_to` a `placeId`. The typed request is the player's consent,
-	 * so an offer it names that is available is accepted as if chosen;
-	 * anything else is refused with the reason the person says.
+	 * The person agreed through a talk tool: `follow_player`, `lead_player_to`
+	 * or `walk_to` a `placeId`, `stop`, `go_home`, `go_to_work`, `wait_here`
+	 * or `sit`. The typed request is the player's consent, so what it names
+	 * that is available is accepted, to start once the talk is done; anything
+	 * else is refused with the reason the person says.
 	 */
 	acceptFromTool( request ) {
 
 		this.boundary.input( 'tool-request', request );
-		const offers = this.#offers( request );
-		return this.#accept( request, request.kind === 'follow'
-			? offers.find( ( offer ) => offer.kind === 'follow' )
-			: offers.find( ( offer ) => offer.kind === 'lead' && offer.destination.place.id === request.placeId ) );
+		const { npcId, timeMin, kind } = request;
+		const lead = ( offers ) => offers.find( ( offer ) => offer.kind === 'lead' && offer.destination.place.id === request.placeId );
+		if ( kind === 'follow' || kind === 'lead' ) {
+
+			const offers = this.#offers( { ...request, wide: true } );
+			return this.#accept( request, kind === 'follow' ? offers.find( ( offer ) => offer.kind === 'follow' ) : lead( offers ) );
+
+		}
+		const actions = this.#actions( npcId, timeMin );
+		const seed = `${npcId}|${Math.floor( timeMin )}`;
+		const refuse = ( code ) => this.boundary.output( 'accept-result', { ok: false, npcId, code, line: this.lines.say( `refuse-${code}`, {}, seed ) } );
+		if ( kind === 'stop' ) {
+
+			if ( ! actions.stop ) return refuse( 'unknown' );
+			this.pending = { npcId, kind: this.state?.npcId === npcId ? 'dismiss' : 'stop' };
+			return this.boundary.output( 'accept-result', { ok: true, npcId, offerId: 'stop', kind: 'stop', line: this.lines.say( 'accept-stop', {}, seed ) } );
+
+		}
+		if ( ! actions[ kind ] ) return refuse( this.#why( npcId, timeMin, kind ) );
+		let destination = null;
+		if ( kind === 'walk' ) {
+
+			const offer = lead( this.#offers( { ...request, wide: true } ) );
+			if ( ! offer?.available ) return refuse( offer?.reason ?? 'unknown' );
+			const { offeredAs, ...chosen } = offer.destination;
+			destination = { ...chosen, told: offeredAs ?? chosen.name };
+
+		}
+		const { told, ...going } = destination ?? {};
+		this.pending = { npcId, kind, ...( destination ? { destination: going, told } : {} ) };
+		return this.boundary.output( 'accept-result', {
+			ok: true, npcId, offerId: kind, kind, line: this.lines.say( `accept-${kind}`, destination ? { place: told } : {}, seed )
+		} );
 
 	}
 
@@ -189,7 +265,7 @@ export class CompanionGameplay {
 
 	}
 
-	#offers( { npcId, timeMin, playerPlaces } ) {
+	#offers( { npcId, timeMin, playerPlaces, wide = false } ) {
 
 		const ours = this.state?.npcId === npcId ? this.state : null;
 		const npc = this.#person( npcId );
@@ -203,7 +279,8 @@ export class CompanionGameplay {
 
 		}
 		const destinations = actor ? this.places.destinations( {
-			npc, from: actor.position, playerPlaces,
+			npc, from: actor.position, playerPlaces, wide,
+			here: actor.place.kind === 'parcel' ? { parcelId: actor.place.id, ...( Number.isInteger( actor.place.floor ) ? { floor: actor.place.floor } : {} ) } : null,
 			quests: this.quests?.places( timeMin ) ?? [],
 			scenes: this.scenes ? this.boundary.input( 'scenes', this.scenes() ) : []
 		} ) : [];
@@ -244,7 +321,8 @@ export class CompanionGameplay {
 		if ( ! chosen?.available ) {
 
 			const code = chosen?.reason ?? 'unknown';
-			return this.boundary.output( 'accept-result', { ok: false, npcId, code, line: this.lines.say( `refuse-${code}`, {}, seed ) } );
+			const key = code === 'unwilling' ? `refuse-unwilling-${chosen.disposition}` : `refuse-${code}`;
+			return this.boundary.output( 'accept-result', { ok: false, npcId, code, line: this.lines.say( key, {}, seed ) } );
 
 		}
 		// Under way the place goes by its own name; the start notice, read where it was offered, keeps the compass point.
@@ -269,10 +347,30 @@ export class CompanionGameplay {
 			return;
 
 		}
+		if ( kind === 'stop' ) {
+
+			try { this.continuity.endErrand( { npcId, timeMin, linger: LINGER_SECONDS } ); }
+			catch { /* The errand is already over. */ }
+			signals.push( { kind: 'errand', npcId, action: 'stop' } );
+			return;
+
+		}
+		if ( ERRANDS.has( kind ) ) return this.#sendOff( npcId, kind, destination, told, timeMin, signals );
+		const npc = this.#person( npcId );
+		// A lead's walk takes a few minutes; a person due at work within them and twenty more is in a hurry.
+		const minutes = destination ? LEAD_MINUTES : undefined;
 		try {
 
-			if ( kind === 'follow' ) this.continuity.startFollow( { npcId, timeMin, playerPosition, pace: PACE } );
-			else this.continuity.startLead( { npcId, timeMin, destination: destination.place, pace: PACE } );
+			if ( kind === 'follow' ) this.continuity.startFollow( { npcId, timeMin, playerPosition, pace: this.#pace( npc, timeMin ) } );
+			else {
+
+				const target = this.#leadTarget( destination );
+				this.continuity.startLead( {
+					npcId, timeMin, destination: this.#wayTo( destination ), pace: this.#pace( npc, timeMin, minutes ),
+					...( target ? { target } : {} )
+				} );
+
+			}
 
 		} catch ( error ) {
 
@@ -285,6 +383,144 @@ export class CompanionGameplay {
 		this.state = { version: '1', npcId, kind, startedAtMin: timeMin, phase: 'walking', ...( destination ? { destination } : {} ) };
 		// Whatever the person said, the player reads where they are being taken, as it was offered.
 		signals.push( { kind: 'started', npcId, mode: kind, ...( destination ? { notice: this.#told( 'notice-lead', npcId, told, timeMin ) } : {} ) } );
+
+	}
+
+	/**
+	 * Sends a person on an errand the player asked for, now the talk is done:
+	 * to the place they agreed to walk to, home to their own seat, to their
+	 * post at work, nowhere (waiting where they stand) or to the free seat
+	 * nearest them; there they stay a while before going back to their day.
+	 */
+	#sendOff( npcId, kind, destination, told, timeMin, signals ) {
+
+		const seed = `${npcId}|${Math.floor( timeMin )}`;
+		const target = this.#errandTarget( kind, npcId, destination );
+		const refused = ( code ) => {
+
+			this.#letGo( npcId, timeMin );
+			signals.push( { kind: 'refused', npcId, code, line: this.lines.say( `refuse-${code}`, {}, seed ) } );
+
+		};
+		if ( ! target ) return refused( kind === 'sit' ? 'nowhere' : 'unknown' );
+		try {
+
+			this.continuity.sendOnErrand( { npcId, timeMin, target, untilMin: timeMin + ERRAND_MIN[ kind ] } );
+
+		} catch ( error ) {
+
+			return refused( error?.code === 'E_NPC_CONFLICT' ? 'conflict' : error?.code === 'E_NPC_PATH' ? 'unknown' : 'unavailable' );
+
+		}
+		signals.push( { kind: 'errand', npcId, action: kind, notice: this.#told( `notice-errand-${kind}`, npcId, told ?? '', timeMin ) } );
+
+	}
+
+	/** Where an errand takes the person: a point, inside a building when it names one; null when there is nowhere. */
+	#errandTarget( kind, npcId, destination ) {
+
+		const npc = this.#person( npcId );
+		const actor = this.continuity.actor( npcId );
+		if ( ! npc || ! actor ) return null;
+		const at = ( place ) => this.places.positions.get( placeKey( place ) ) ?? null;
+		const point = ( position, parcelId = null, floor = null ) => position && {
+			position: [ ...position ], ...( parcelId ? { parcelId } : {} ), ...( Number.isInteger( floor ) ? { floor } : {} )
+		};
+		if ( kind === 'wait' ) return point( actor.position, actor.place.kind === 'parcel' ? actor.place.id : null, actor.place.floor );
+		if ( kind === 'sit' ) return this.inside?.seat?.( actor ) ?? null;
+		if ( kind === 'home' ) return this.inside?.homeSpot?.( npc ) ?? point( at( { kind: 'parcel', id: npc.home.parcelId } ) );
+		if ( kind === 'work' ) return this.inside?.workSpot?.( npc ) ?? ( npc.job ? point( at( { kind: 'parcel', id: npc.job.parcelId } ) ) : null );
+		if ( ! destination ) return null;
+		const person = destination.target?.npcId ? this.continuity.actor( destination.target.npcId ) : null;
+		if ( person ) return point( person.position, person.place.kind === 'parcel' ? person.place.id : null, person.place.floor );
+		if ( destination.target?.position ) return point( destination.target.position, destination.target.parcelId, destination.target.floor );
+		return point( at( destination.place ) );
+
+	}
+
+	/** The point inside a lead's place the leader takes the player to, or the person it takes them to, or null. */
+	#leadTarget( destination ) {
+
+		const target = destination?.target;
+		if ( ! target ) return null;
+		if ( target.npcId ) return { npcId: target.npcId };
+		return { position: [ ...target.position ], ...( target.parcelId ? { parcelId: target.parcelId } : {} ), ...( Number.isInteger( target.floor ) ? { floor: target.floor } : {} ) };
+
+	}
+
+	/** The continuity place a lead's destination is: a building or stop as itself, a spot as its building, a street or person as where they are. */
+	#wayTo( destination ) {
+
+		const { place, target } = destination;
+		if ( place.kind === 'parcel' || place.kind === 'stop' ) return { kind: place.kind, id: place.id };
+		if ( place.kind === 'spot' ) return { kind: 'parcel', id: target.parcelId };
+		if ( place.kind === 'person' ) {
+
+			const person = this.continuity.actor( target.npcId );
+			if ( person?.place.kind === 'parcel' || person?.place.kind === 'edge' ) return { kind: person.place.kind, id: person.place.id };
+
+		}
+		const position = place.kind === 'person' ? this.continuity.actor( target.npcId )?.position : target?.position;
+		const edge = position ? this.routes.project?.( position )?.edge : null;
+		if ( ! edge ) throw Object.assign( new Error( `no way to ${place.kind} ${place.id}` ), { code: 'E_NPC_PATH' } );
+		return { kind: 'edge', id: edge.id };
+
+	}
+
+	/**
+	 * How a person walks with the player: they run with a running player
+	 * unless they are old or tired, and a leader due somewhere soon (its next
+	 * shift within the walk and twenty minutes) is in a hurry.
+	 */
+	#pace( npc, timeMin, minutes ) {
+
+		const runs = ( npc?.age ?? 30 ) < RUNS_UNDER && ! ( npc?.traits ?? [] ).includes( 'tired' );
+		const hurry = minutes !== undefined && npc && freeMinutes( npc, timeMin ) < minutes + 20;
+		return { ...PACE, runs, ...( hurry ? { hurry: true } : {} ) };
+
+	}
+
+	/**
+	 * What this person may do on their own for the player now: stop (while
+	 * they follow, lead or run an errand for the player), walk somewhere, go
+	 * home, go to work (when not there already), wait, and sit (when a seat is
+	 * free near them). A person at work, held by a story or unavailable may
+	 * only stop.
+	 */
+	#actions( npcId, timeMin ) {
+
+		const npc = this.#person( npcId );
+		if ( ! npc ) return {};
+		const actor = this.continuity.actor( npcId );
+		const actions = {};
+		const errand = ( this.continuity.errandsUnderway ?? [] ).some( ( entry ) => entry.npcId === npcId );
+		if ( this.state?.npcId === npcId || errand ) actions.stop = true;
+		if ( this.#errandRefusal( npc, actor, timeMin ) ) return actions;
+		Object.assign( actions, { walk: true, home: true, wait: true } );
+		if ( npc.job && this.sim.behaviorAt( npcId, timeMin )?.activity !== 'working' ) actions.work = true;
+		if ( this.inside?.seat?.( actor ) ) actions.sit = true;
+		return actions;
+
+	}
+
+	/** Why a person will not set off on an errand of their own now, or null: as for coming along, but somebody else walking with the player is no bar. */
+	#errandRefusal( npc, actor, timeMin ) {
+
+		if ( npc.flags.dead || ! actor || actor.place.kind === 'route' || this.crowd?.memberForNpc( npc.npcId )?.fallen ) return 'unavailable';
+		if ( this.state?.npcId === npc.npcId ) return null;
+		if ( this.quests?.holdsCast( npc.npcId ) ) return 'busy';
+		if ( this.sim.behaviorAt( npc.npcId, timeMin )?.activity === 'working' ) return 'on_duty';
+		return null;
+
+	}
+
+	/** The reason an action the person was asked for is not theirs to take now. */
+	#why( npcId, timeMin, kind ) {
+
+		const npc = this.#person( npcId );
+		const refusal = npc ? this.#errandRefusal( npc, this.continuity.actor( npcId ), timeMin ) : 'unavailable';
+		if ( refusal ) return refusal;
+		return kind === 'sit' ? 'nowhere' : 'unknown';
 
 	}
 

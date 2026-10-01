@@ -250,7 +250,7 @@ describe( 'a companion under way', () => {
 		game.continuity.beginConversation( { npcId: mira.npcId, timeMin: AFTERNOON + 1, position: at, heading: 0, place: HOME, seated: false } );
 		const request = { ...game.ask( { npcId: mira.npcId, position: at }, AFTERNOON + 1 ), kind: 'lead', placeId: 'p_cafe' };
 		expect( game.companion.acceptFromTool( request ) ).toMatchObject( { ok: true, kind: 'lead', offerId: 'lead:parcel:p_cafe' } );
-		const unknown = game.companion.acceptFromTool( { ...request, placeId: 'p_factory' } );
+		const unknown = game.companion.acceptFromTool( { ...request, placeId: 'p_nowhere' } );
 		expect( unknown ).toMatchObject( { ok: false, code: 'unknown', line: 'I don\'t know the way there.' } );
 		game.continuity.endConversation( { timeMin: AFTERNOON + 1 } );
 		const [ started ] = game.frame( AFTERNOON + 1, at );

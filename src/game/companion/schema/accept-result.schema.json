@@ -10,7 +10,7 @@
         "ok": { "const": true },
         "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
         "offerId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
-        "kind": { "enum": ["follow", "lead", "dismiss"] },
+        "kind": { "enum": ["follow", "lead", "dismiss", "walk", "stop", "home", "work", "wait", "sit"] },
         "line": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" }
       }
     },

@@ -6,9 +6,9 @@ import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { RecentEvents } from './talk/RecentEvents.js';
 import { NpcVoice } from './voice/NpcVoice.js';
-import { peopleKnown, stripCues } from '../../../quests/dist/runtime.js';
+import { peopleKnown, StreetNames, stripCues } from '../../../quests/dist/runtime.js';
 import { describeLook } from './agents/avatar/Describe.js';
-import { castNames } from './sim/Homes.js';
+import { castNames, homesOf } from './sim/Homes.js';
 import { buildingFacts } from './talk/BuildingFacts.js';
 import { recipeFor } from './agents/Appearance.js';
 import { findPath } from '../../../interior/dist/nav.js';
@@ -81,7 +81,7 @@ import { Crowd } from './agents/Crowd.js';
 import { WalkRoutes } from './agents/WalkRoutes.js';
 import { WalkSurface } from './agents/WalkSurface.js';
 import { NpcContinuity } from './agents/NpcContinuity.js';
-import { InteriorRoutes } from './agents/InteriorRoutes.js';
+import { circulationOf, InteriorRoutes } from './agents/InteriorRoutes.js';
 import { CompanionGameplay } from './companion/CompanionGameplay.js';
 import { CarModels } from './agents/CarModels.js';
 import { Traffic } from './agents/Traffic.js';
@@ -152,6 +152,8 @@ const OBJECTIVE_INTERVAL = 4;
 const REPLY_IDLE_MS = 90000;
 /** People this near a person in the street are with them: they can see each other. */
 const PRESENT_REACH = 20;
+/** A person asked to sit down takes a free seat of their building within this many metres. */
+const SEAT_REACH = 15;
 const REPLY_FAILED = 'The reply could not be reached. Retry, or use a story reply below.';
 const REPLY_REFUSED = 'The dialogue service refused this line because the game sent a request it does not accept. Retry would not help.';
 /** A passer-by without identity only brushes the player off, and the chat says so. */
@@ -693,9 +695,13 @@ export class GameApp {
 		}
 		this.scene.add( this.questGameplay.group );
 		this.probe?.exclude( this.questGameplay.group );
+		const reach = companionReach( { buildings, places: continuityPlaces, interiorRoutes: this.interiorRoutes, continuity: this.npcContinuity } );
+		const categories = new Map( ( npcTypes?.types ?? [] ).map( ( { type, category } ) => [ type, category ] ) );
 		this.companion = new CompanionGameplay( {
 			continuity: this.npcContinuity, sim: this.sim, routes, places: continuityPlaces, atlas,
-			quests: this.questGameplay, scenes: () => companionScenes( this.scenery.stagedPlaces(), this.companion.places ), crowd: this.crowd
+			quests: this.questGameplay, scenes: () => companionScenes( this.scenery.stagedPlaces(), this.companion.places ), crowd: this.crowd,
+			inside: reach, streets: new StreetNames( atlas.streets, atlas.meta.gridAngle ?? 0 ),
+			people: ( npc ) => this.#placedAcquaintances( npc ), categoryOf: ( type ) => categories.get( type )
 		} );
 		// After the continuity and with no conversation open: the escort first,
 		// then the companion, which lets go a follower neither of them owns.
@@ -1209,7 +1215,7 @@ export class GameApp {
 	 * @param options.arrival a leader's arrival: `text` is its unseen question,
 	 *   nothing is proposed, and its own line stands in for a reply that fails
 	 */
-	async #say( text, { retry = false, arrival = null } = {} ) {
+	async #say( text, { retry = false, arrival = null, ask = null, unanswered = null } = {} ) {
 		const conversation = this.interactor?.conversation;
 		if ( ! conversation?.instance || this.dialoguePending || ! text?.trim() ) return;
 		const turn = this.#playerSays( retry || arrival ? null : text, { typed: true } );
@@ -1227,7 +1233,7 @@ export class GameApp {
 		let reply = null, done = false, whole = null, offer = null;
 		try {
 			listen();
-			const context = { signal: controller.signal, ...this.#talkContext( conversation, ! arrival, text ) };
+			const context = { signal: controller.signal, ...this.#talkContext( conversation, ! arrival, text, ask ) };
 			for await ( const event of this.talk.stream( conversation, text, this.clock.timeMin, this.quests.snapshot(), context ) ) {
 				if ( ! current() ) return;
 				listen();
@@ -1254,6 +1260,11 @@ export class GameApp {
 			if ( arrival ) {
 				this.view.dialog.setStatus( '' );
 				this.#npcSays( conversation, arrival.line );
+			} else if ( unanswered ) {
+				// Nobody could answer for the person: they decide the action asked of them by their disposition.
+				this.view.dialog.setStatus( '' );
+				this.failedDialogueLine = null;
+				unanswered();
 			} else this.view.dialog.setStatus( refused ? REPLY_REFUSED : REPLY_FAILED, { error: true, retry: ! refused } );
 		} finally {
 			clearTimeout( quiet );
@@ -1265,6 +1276,8 @@ export class GameApp {
 			}
 		}
 		if ( done && offer ) this.#takeOffer( conversation, offer, whole );
+		// Asked one action and answered in words alone: they would not; the ways to answer stay.
+		else if ( done && ask ) this.#showActions( conversation );
 	}
 
 	/**
@@ -1274,9 +1287,11 @@ export class GameApp {
 	 * look like, where they stand and who they know (`line` names who the
 	 * player asks about).
 	 */
-	#talkContext( conversation, proposing, line = '' ) {
+	#talkContext( conversation, proposing, line = '', ask = null ) {
 		const { npcId } = conversation;
-		const offers = proposing ? this.companion.talkOffers( this.#offers( npcId ) ) : null;
+		// A chosen action asks the person that alone; a typed line lets them agree to anything they may do now.
+		const offers = ask ? this.companion.talkOffers( [ ask ] )
+			: proposing ? this.companion.talkOffers( this.#offers( npcId, { wide: true } ), { npcId, timeMin: this.clock.timeMin } ) : null;
 		const guide = this.companion.guide( npcId );
 		// Known once the world has loaded.
 		const events = this.recentEvents?.around( {
@@ -1480,9 +1495,24 @@ export class GameApp {
 		}, ( error ) => console.warn( 'dialogue memory not shown:', error.message ) );
 	}
 
-	/** What the player may ask of this person now, available or not: the companion's offers. */
-	#offers( npcId ) {
-		return this.companion.offers( { npcId, timeMin: this.clock.timeMin, playerPlaces: this.playerPlaces } );
+	/** What the player may ask of this person now, available or not: the companion's offers, with `wide` the talk's longer list. */
+	#offers( npcId, { wide = false } = {} ) {
+		return this.companion.offers( { npcId, timeMin: this.clock.timeMin, playerPlaces: this.playerPlaces, ...( wide ? { wide: true } : {} ) } );
+	}
+
+	/** The people a person knows whose bodies continuity holds now, by the name they go by, with where they stand. */
+	#placedAcquaintances( npc ) {
+		if ( typeof this.sim?.findNPCs !== 'function' ) return [];
+		const known = peopleKnown( {
+			npc, timeMin: this.clock.timeMin, people: this.sim.findNPCs( {} ),
+			behaviorAt: ( id, timeMin ) => this.sim.behaviorAt( id, timeMin )
+		} ).known;
+		return known.flatMap( ( person ) => {
+			const actor = this.npcContinuity.actor( person.npcId );
+			if ( ! actor ) return [];
+			const name = this.questGameplay?.characterName( person.npcId ) ?? person.name;
+			return [ { npcId: person.npcId, name: `${name.given} ${name.family}`, position: actor.position } ];
+		} );
 	}
 
 	/** The chat's action row: every offer for a person with an identity, whose refusal they say in words. */
@@ -1501,8 +1531,19 @@ export class GameApp {
 		const conversation = this.interactor?.conversation;
 		const label = this.dialogueActions.get( id );
 		if ( ! conversation?.npcId || ! label ) return;
-		const result = this.companion.accept( { npcId: conversation.npcId, offerId: id, timeMin: this.clock.timeMin, playerPlaces: this.playerPlaces } );
-		this.#playerSays( label );
+		const offer = this.#offers( conversation.npcId ).find( ( entry ) => entry.offerId === id );
+		// The person decides a chosen action as they decide a typed one, in their own words; a dismissal, a refusal
+		// the rules make or a person with nobody to answer for them is decided by code, in their own lines.
+		if ( ! offer || offer.kind === 'dismiss' || ! offer.available || ! conversation.instance || ! this.talk ) return this.#decideAction( conversation, id, label );
+		this.#say( label, { ask: offer, unanswered: () => this.#decideAction( conversation, id, null, true ) } );
+	}
+
+	/** Decides a chosen action by the companion's rules, and with `willing` by the person's disposition, and says their line. */
+	#decideAction( conversation, id, label, willing = false ) {
+		const result = this.companion.accept( {
+			npcId: conversation.npcId, offerId: id, timeMin: this.clock.timeMin, playerPlaces: this.playerPlaces, ...( willing ? { willing: true } : {} )
+		} );
+		if ( label ) this.#playerSays( label );
 		this.#npcSays( conversation, result.line );
 		if ( result.ok ) this.#sendAlong( conversation, result.line );
 		else this.#showActions( conversation );
@@ -2859,3 +2900,70 @@ export function lightWords( state = 'night', indoors = false ) {
 	return indoors ? `indoors under the building's lights; ${sky}` : sky;
 
 }
+
+/**
+ * What a companion reaches inside buildings, from what the world published:
+ * each building's circulation (kept from load, so a building streamed out
+ * is still known), the post a person works at (their role's home anchor), the
+ * seat of their own home (in their apartment's rooms) and the free seat
+ * nearest a body in its building. Each answers `{ position, parcelId, floor,
+ * heading?, seated? }` or null.
+ */
+export function companionReach( { buildings, places, interiorRoutes, continuity } ) {
+
+	const plans = new Map();
+	const supports = new Map();
+	for ( const [ parcelId, source ] of buildings ) {
+
+		if ( source?.npc ) supports.set( parcelId, { npc: source.npc, homes: homesOf( source ) } );
+		const plan = source?.interior ? circulationOf( source ) : null;
+		if ( plan ) plans.set( parcelId, plan );
+
+	}
+	const anchors = new Map( places.filter( ( place ) => place.kind === 'parcel' ).map( ( place ) => [ place.id, place.anchors ?? [] ] ) );
+	const spot = ( parcelId, anchor, seated = false ) => anchor && {
+		position: [ ...anchor.position ], parcelId, ...( Number.isInteger( anchor.floor ) ? { floor: anchor.floor } : {} ),
+		...( Number.isFinite( anchor.heading ) ? { heading: anchor.heading } : {} ), ...( seated ? { seated: true } : {} )
+	};
+	const anchorOf = ( parcelId, id ) => anchors.get( parcelId )?.find( ( anchor ) => anchor.id === id ) ?? null;
+	return {
+		plan: ( parcelId ) => plans.get( parcelId ) ?? interiorRoutes?.plan( parcelId ) ?? null,
+		workSpot( npc ) {
+
+			const parcelId = npc.job?.parcelId;
+			const slot = parcelId ? supports.get( parcelId )?.npc.roles?.find( ( role ) => role.role === npc.job.role ) : null;
+			return slot ? spot( parcelId, anchorOf( parcelId, slot.homeAnchor ) ) : null;
+
+		},
+		homeSpot( npc ) {
+
+			const apartment = npc.home?.apartment;
+			const support = apartment ? supports.get( npc.home.parcelId ) : null;
+			const home = support?.homes.find( ( entry ) => entry.id === apartment.id );
+			if ( ! home ) return null;
+			const rooms = new Set( home.rooms );
+			const seat = support.npc.anchors?.find( ( anchor ) => anchor.kind === 'seat' && rooms.has( anchor.room ) );
+			return spot( npc.home.parcelId, seat && anchorOf( npc.home.parcelId, seat.id ), true );
+
+		},
+		seat( actor ) {
+
+			if ( actor?.place.kind !== 'parcel' ) return null;
+			const taken = ( anchor ) => ( continuity?.errandsUnderway ?? [] ).some( ( errand ) => {
+
+				const other = continuity.actor( errand.npcId );
+				return other && Math.hypot( other.position[ 0 ] - anchor.position[ 0 ], other.position[ 2 ] - anchor.position[ 2 ] ) < 0.5;
+
+			} );
+			const free = ( anchors.get( actor.place.id ) ?? [] )
+				.filter( ( anchor ) => anchor.kind === 'seat' && Math.abs( anchor.position[ 1 ] - actor.position[ 1 ] ) < 1.5 && ! taken( anchor ) )
+				.map( ( anchor ) => ( { anchor, metres: Math.hypot( anchor.position[ 0 ] - actor.position[ 0 ], anchor.position[ 2 ] - actor.position[ 2 ] ) } ) )
+				.filter( ( { metres } ) => metres <= SEAT_REACH )
+				.sort( ( a, b ) => a.metres - b.metres || a.anchor.id.localeCompare( b.anchor.id ) )[ 0 ];
+			return free ? spot( actor.place.id, free.anchor, true ) : null;
+
+		}
+	};
+
+}
+

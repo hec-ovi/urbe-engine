@@ -321,7 +321,7 @@ describe('explicit quest dialogue through the playable UI',()=>{
   expect(app.recentEvents.around({position:app.body.feet,timeMin:1260,npcId:'walker'})).toEqual([{kind:'struck',atMin:1260,parcelId:'p1',metres:196,hard:true,self:true}]);
  });
 
- it('answers a chat action by the companion rules: a refusal is said in the chat, an agreement closes it on the person\'s words and keeps them there',async()=>{
+ it('answers a chat action by the companion rules, or as the person decides in a talk that asks it alone: a refusal is said in the chat, an agreement closes it on the person\'s words and keeps them there',async()=>{
   const {app,open,log,companion}=fixture();companion.offers.mockReturnValue(OFFERS);open();
   const user=userEvent.setup();const chat=within(app.view.dialog.element);const actions=()=>within(chat.getByRole('group',{name:'Ask Petra Moss along'}));
   companion.accept.mockReturnValueOnce({ok:false,npcId:'person',code:'on_duty',line:'I\'m working. Not now.'});
@@ -337,12 +337,26 @@ describe('explicit quest dialogue through the playable UI',()=>{
   await vi.waitFor(()=>expect(said(app).getByText('My shift isn\'t over.')).toBeTruthy());
   expect(app.interactor.conversation).not.toBeNull();
 
-  companion.accept.mockImplementationOnce(()=>{companion.accepted.mockReturnValue(true);return{ok:true,npcId:'person',offerId:'lead:parcel:p2',kind:'lead',line:'Follow me to Market.'};});
-  log.length=0;
+  // An action the rules allow is the person's own decision, asked in a talk that offers that alone.
+  companion.talkOffers.mockImplementation((offers)=>offers.length===1?{places:[{placeId:'p2',name:'Market'}]}:null);
+  app.talk.stream.mockImplementationOnce(()=>talkStream([...replyEvents('Follow me to Market.').slice(0,-1),{type:'offer',kind:'lead',placeId:'p2',name:'Market'},{type:'done',reply:'Follow me to Market.'}]));
+  companion.acceptFromTool.mockImplementationOnce(()=>{companion.accepted.mockReturnValue(true);return{ok:true,npcId:'person',offerId:'lead:parcel:p2',kind:'lead',line:'Follow me.'};});
   await user.click(actions().getByRole('button',{name:'Show me Market'}));
-  expect(app.interactor.close).toHaveBeenCalledExactlyOnceWith(app.clock,'player-left',{keep:true});
+  await vi.waitFor(()=>expect(app.interactor.close).toHaveBeenCalledExactlyOnceWith(app.clock,'player-left',{keep:true}));
+  expect(app.talk.stream.mock.calls.at(-1)[1]).toBe('Show me Market');
+  expect(app.talk.stream.mock.calls.at(-1)[4].offers).toEqual({places:[{placeId:'p2',name:'Market'}]});
+  expect(companion.talkOffers).toHaveBeenLastCalledWith([OFFERS[1]]);
   expect(app.view.dialog.element.hidden).toBe(true);expect(app.view.toast.element.textContent).toContain('Petra MossFollow me to Market.');
-  expect(log).toEqual(['silenced','said: Follow me to Market.']);
+ });
+
+ it('decides a chosen action by the person\'s disposition when nobody can answer for them',async()=>{
+  const {app,open,companion}=fixture();companion.offers.mockReturnValue(OFFERS);open();
+  app.talk.stream.mockImplementationOnce(()=>talkStream([],talkError('model unavailable',502)));
+  companion.accept.mockReturnValueOnce({ok:false,npcId:'person',code:'unwilling',line:'I don\'t know you. No.'});
+  await userEvent.setup().click(within(within(app.view.dialog.element).getByRole('group',{name:'Ask Petra Moss along'})).getByRole('button',{name:'Show me Market'}));
+  await vi.waitFor(()=>expect(companion.accept).toHaveBeenCalledWith({npcId:'person',offerId:'lead:parcel:p2',timeMin:1260,playerPlaces:[],willing:true}));
+  expect(lines(app).slice(-2)).toEqual(['Show me Market','I don\'t know you. No.']);
+  expect(app.view.dialog.element.hidden).toBe(false);
  });
 
  const GUIDE={placeId:'p2',kind:'parcel',name:'Market'};

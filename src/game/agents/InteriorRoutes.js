@@ -133,6 +133,13 @@ export class InteriorRoutes {
 
 }
 
+/** A building's circulation (InteriorRoutes `plan`) read straight from its record, or null when it has no navigation or floors. */
+export function circulationOf( building ) {
+
+	return walkable( building )?.plan ?? null;
+
+}
+
 function walkable( { npc, interior } ) {
 
 	const nav = npc?.nav;

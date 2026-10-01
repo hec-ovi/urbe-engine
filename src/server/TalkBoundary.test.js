@@ -73,7 +73,7 @@ describe( 'talk request contract', () => {
 		const npc = sim.getNPCVendor( { parcelId: 'p_cafe', timeMin: 540 } );
 		const request = { out: '/out/w', npc, behavior: sim.behaviorAt( npc.npcId, 540 ), line: 'Hi', timeMin: 540 };
 		expect( boundary.input( { ...request,
-			offers: { follow: true, places: [ { placeId: 'p_rest', name: 'The Rusty Anchor' } ] },
+			offers: { follow: true, places: [ { placeId: 'p_rest', name: 'The Rusty Anchor' } ], walk: true, stop: true, home: true, work: true, wait: true, sit: true },
 			guide: { placeId: 'p_rest', kind: 'parcel', name: 'The Rusty Anchor', notes: [ 'A police line crosses the door.' ] },
 			prior: [ { speaker: 'npc', text: '[sigh] The file closes at nothing.', atMin: 530 }, { speaker: 'player', text: 'x'.repeat( 4000 ), atMin: 531 } ],
 			events: [
@@ -148,10 +148,12 @@ describe( 'talk request contract', () => {
 		for ( const event of [
 			{ type: 'delta', text: 'Ask ' }, { type: 'sentence', index: 0, text: 'Ask at the bar.' },
 			{ type: 'offer', kind: 'follow' }, { type: 'offer', kind: 'lead', placeId: 'p_rest', name: 'The Rusty Anchor' },
+			{ type: 'offer', kind: 'walk', placeId: 'lift:elev-0', name: 'the lift' }, ...[ 'stop', 'home', 'work', 'wait', 'sit' ].map( ( kind ) => ( { type: 'offer', kind } ) ),
 			{ type: 'done', reply: 'Ask at the bar.' }, { type: 'error', error: 'model server 500 at x' }
 		] ) expect( boundary.event( event ) ).toBe( event );
 		for ( const event of [
-			{ type: 'delta', text: '' }, { type: 'offer', kind: 'lead' }, { type: 'done', reply: 'x', offers: [] }, { type: 'usage' }
+			{ type: 'delta', text: '' }, { type: 'offer', kind: 'lead' }, { type: 'offer', kind: 'walk' }, { type: 'offer', kind: 'dance' },
+			{ type: 'done', reply: 'x', offers: [] }, { type: 'usage' }
 		] ) expect( () => boundary.event( event ) ).toThrow( /does not match its contract/ );
 
 	} );

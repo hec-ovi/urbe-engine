@@ -13,12 +13,12 @@
       "maxItems": 3
     },
     "place": {
-      "description": "A place a companion can lead to: a parcel, or a stop or station as its stop.",
+      "description": "A place a companion can lead to: a parcel, or a stop or station as its stop; a street by its StreetNames id, a person by npcId, or a spot inside a building (lift:<id>, stairs:<id>, room:<id>, floor:<index>).",
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "id"],
       "properties": {
-        "kind": { "enum": ["parcel", "stop"] },
+        "kind": { "enum": ["parcel", "stop", "street", "person", "spot"] },
         "id": { "$ref": "#/$defs/id" }
       }
     },
@@ -35,7 +35,7 @@
     "playerPlaces": { "type": "array", "items": { "$ref": "#/$defs/worldPlace" } },
     "relation": {
       "description": "Why this person knows the way: where they work, live or spend free time, an open quest place, or a staged scene.",
-      "enum": ["work", "home", "haunt", "quest", "scene"]
+      "enum": ["work", "home", "haunt", "quest", "scene", "spot", "person", "venue", "stop", "street"]
     },
     "notes": { "type": "array", "items": { "$ref": "#/$defs/text" } },
     "destination": {
@@ -50,6 +50,17 @@
           "$ref": "#/$defs/text"
         },
         "relation": { "$ref": "#/$defs/relation" },
+        "target": {
+          "description": "Where inside the place the person takes the player (an apartment door, a work spot, a lift landing, a room, a floor, a street's pavement), or the person they take them to.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "position": { "$ref": "#/$defs/vec3" },
+            "parcelId": { "$ref": "#/$defs/id" },
+            "floor": { "type": "integer" },
+            "npcId": { "$ref": "#/$defs/id" }
+          }
+        },
         "questId": { "$ref": "#/$defs/id" },
         "stepId": { "$ref": "#/$defs/id" },
         "notes": { "$ref": "#/$defs/notes" }
@@ -58,7 +69,7 @@
     "kind": { "enum": ["follow", "lead"] },
     "reason": {
       "description": "Why a person will not come: dead, fallen or aboard, somebody else is with the player, a story needs them where they are, at work, due at work, or no such offer.",
-      "enum": ["unavailable", "conflict", "busy", "on_duty", "no_time", "unknown"]
+      "enum": ["unavailable", "conflict", "busy", "on_duty", "no_time", "unknown", "unwilling", "nowhere"]
     },
     "state": {
       "type": "object",
@@ -85,7 +96,7 @@
       "required": ["placeId", "kind", "name"],
       "properties": {
         "placeId": { "$ref": "#/$defs/id" },
-        "kind": { "enum": ["parcel", "stop"] },
+        "kind": { "enum": ["parcel", "stop", "street", "person", "spot"] },
         "name": { "$ref": "#/$defs/text" },
         "notes": { "$ref": "#/$defs/notes" }
       }

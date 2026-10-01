@@ -7,6 +7,7 @@
   "properties": {
     "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
     "timeMin": { "$ref": "urn:urbe:engine:companion:values#/$defs/time" },
-    "playerPlaces": { "$ref": "urn:urbe:engine:companion:values#/$defs/playerPlaces" }
+    "playerPlaces": { "$ref": "urn:urbe:engine:companion:values#/$defs/playerPlaces" },
+    "wide": { "description": "The talk's list: more places, the building's spots, people, venues, stops and streets.", "type": "boolean" }
   }
 }

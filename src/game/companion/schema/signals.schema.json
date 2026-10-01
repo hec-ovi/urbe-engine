@@ -17,6 +17,18 @@
         }
       },
       {
+        "description": "The person has set off on an errand the player asked for (walk somewhere, home, to work, wait, sit), or stopped one.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "npcId", "action"],
+        "properties": {
+          "kind": { "const": "errand" },
+          "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
+          "action": { "enum": ["walk", "home", "work", "wait", "sit", "stop"] },
+          "notice": { "description": "What the player reads of it.", "$ref": "urn:urbe:engine:companion:values#/$defs/text" }
+        }
+      },
+      {
         "description": "An accepted offer could not start after all; the person says why.",
         "type": "object",
         "additionalProperties": false,

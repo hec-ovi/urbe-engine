@@ -10,6 +10,12 @@
       "minProperties": 1,
       "properties": {
         "follow": { "const": true },
+        "walk": { "const": true },
+        "stop": { "const": true },
+        "home": { "const": true },
+        "work": { "const": true },
+        "wait": { "const": true },
+        "sit": { "const": true },
         "places": {
           "type": "array",
           "minItems": 1,

@@ -27,7 +27,7 @@
       "required": ["type", "kind"],
       "properties": {
         "type": { "const": "offer" },
-        "kind": { "const": "follow" }
+        "kind": { "enum": ["follow", "stop", "home", "work", "wait", "sit"] }
       }
     },
     {
@@ -36,7 +36,7 @@
       "required": ["type", "kind", "placeId", "name"],
       "properties": {
         "type": { "const": "offer" },
-        "kind": { "const": "lead" },
+        "kind": { "enum": ["lead", "walk"] },
         "placeId": { "type": "string", "minLength": 1 },
         "name": { "type": "string", "minLength": 1 }
       }

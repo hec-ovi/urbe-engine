@@ -5,10 +5,17 @@ import { COMPASS } from './CompanionLines.js';
 const MAX_LEAD = 800;
 /** A place nearer than this along the pavement is where the person already stands. */
 const MIN_LEAD = 10;
-/** Most places one person offers to show. */
+/** Most places one person offers to show; a talk hears of more, any of which the player may ask for by name. */
 const MAX_PLACES = 4;
-/** Open quest places first, then staged scenes, then the person's own life. */
-const RANK = { quest: 0, scene: 1, work: 2, home: 3, haunt: 4 };
+const MAX_TALK_PLACES = 16;
+/** Most of each wider kind a talk hears of: spots in the building, people, venues, stops and streets. */
+const MAX_OF_KIND = { spot: 5, person: 4, venue: 5, stop: 2, street: 4 };
+/** How far off, straight, a venue, stop or street may lie to be one a talk hears of. */
+const NEAR = 450;
+/** Open quest places first, then staged scenes, then the person's own life, then what a talk may also ask for. */
+const RANK = { quest: 0, scene: 1, work: 2, home: 3, haunt: 4, spot: 5, person: 6, venue: 7, stop: 8, street: 9 };
+/** Rooms nobody is led to by name. */
+const UNSHOWN = new Set( [ 'corridor', 'elevator_lobby', 'mechanical_room', 'storage', 'stair', 'shaft' ] );
 
 /**
  * Where one person could take the player: the places of open quest steps and
@@ -24,10 +31,21 @@ export class CompanionPlaces {
 	 * @param routes the WalkRoutes the walk there is measured on
 	 * @param lines CompanionLines, which name what has no name of its own
 	 */
-	constructor( { atlas, places, routes, lines } ) {
+	/**
+	 * @param inside optional `{ plan(parcelId), workSpot(npc) }`: a building's
+	 *   circulation (InteriorRoutes `plan`) and the spot a person works at, a
+	 *   `{ position, parcelId, floor }` inside their workplace, or null
+	 * @param streets optional Quests StreetNames over the city's streets
+	 * @param people optional `(npc) => [{ npcId, name, position }]`, the people this person knows whose bodies are placed now
+	 */
+	constructor( { atlas, places, routes, lines, inside = null, streets = null, people = null } ) {
 
 		this.routes = routes;
 		this.lines = lines;
+		this.inside = inside;
+		this.streets = streets;
+		this.people = people;
+		this.atlas = atlas;
 		this.positions = new Map( places.map( ( place ) => [ keyOf( place ), place.doorstep ?? place.position ] ) );
 		this.parcels = new Map( atlas.parcels.map( ( parcel ) => [ parcel.id, parcel ] ) );
 		const transit = atlas.transit ?? {};
@@ -69,7 +87,7 @@ export class CompanionPlaces {
 	 * @param scenes staged scenery places `{ place, name, relation: 'scene', notes? }`
 	 * @returns `[{ place, name, offeredAs?, relation, distance, questId?, stepId?, notes? }]`
 	 */
-	destinations( { npc, from, playerPlaces, quests = [], scenes = [] } ) {
+	destinations( { npc, from, playerPlaces, quests = [], scenes = [], wide = false, here = null } ) {
 
 		const candidates = new Map();
 		const add = ( place, relation, extra = {} ) => {
@@ -84,9 +102,15 @@ export class CompanionPlaces {
 		};
 		for ( const target of quests ) add( leadPlace( target.place ), 'quest', { questId: target.questId, stepId: target.stepId } );
 		for ( const scene of scenes ) add( scene.place, 'scene', { name: scene.name, ...( scene.notes?.length ? { notes: scene.notes } : {} ) } );
-		if ( npc.job ) add( { kind: 'parcel', id: npc.job.parcelId }, 'work' );
+		if ( npc.job ) {
+
+			const spot = this.inside?.workSpot?.( npc ) ?? null;
+			add( { kind: 'parcel', id: npc.job.parcelId }, 'work', spot ? { target: spot } : {} );
+
+		}
 		if ( npc.transitJob?.place.kind === 'stop' ) add( { kind: 'stop', id: npc.transitJob.place.id }, 'work' );
-		add( { kind: 'parcel', id: npc.home.parcelId }, 'home' );
+		const door = this.#apartmentDoor( npc );
+		add( { kind: 'parcel', id: npc.home.parcelId }, 'home', door ? { target: door } : {} );
 		for ( const entry of npc.routine ) {
 
 			if ( ( entry.activity === 'leisure' || entry.activity === 'shopping' ) && entry.place.kind === 'parcel' ) add( entry.place, 'haunt' );
@@ -96,21 +120,24 @@ export class CompanionPlaces {
 		const found = [];
 		for ( const [ key, candidate ] of candidates ) {
 
+			// A place inside a building is measured to the point inside, through its door: shown whatever the player stands in.
+			const inner = candidate.target?.position ?? null;
 			const position = this.positions.get( key );
-			if ( ! position || standsIn( playerPlaces, candidate.place ) || flat( from, position ) > MAX_LEAD ) continue;
+			if ( ! position || ( ! inner && standsIn( playerPlaces, candidate.place ) ) || flat( from, position ) > MAX_LEAD ) continue;
 			const name = candidate.name ?? this.name( candidate.place );
 			const route = name ? this.routes.route( from, position ) : null;
-			if ( ! route || route.distanceMeters > MAX_LEAD || route.distanceMeters < MIN_LEAD ) continue;
+			if ( ! route || route.distanceMeters > MAX_LEAD || ( route.distanceMeters < MIN_LEAD && ! inner ) ) continue;
 			const distance = route.distanceMeters;
 			found.push( { ...candidate, name, distance, point: bearing( from, position ), metres: Math.round( distance / 10 ) * 10 } );
 
 		}
+		if ( wide ) found.push( ...this.#wider( npc, from, here, new Set( found.map( ( entry ) => keyOf( entry.place ) ) ) ) );
 		found.sort( ( a, b ) => RANK[ a.relation ] - RANK[ b.relation ] || a.distance - b.distance || keyOf( a.place ).localeCompare( keyOf( b.place ) ) );
 		const offered = [];
 		const heard = new Set();
 		for ( const entry of found ) {
 
-			if ( offered.length === MAX_PLACES ) break;
+			if ( offered.length === ( wide ? MAX_TALK_PLACES : MAX_PLACES ) ) break;
 			// A place that reads the same as a better one in name, way and walk is one the player cannot tell apart.
 			const words = `${entry.name}|${entry.point}|${entry.metres}`;
 			if ( heard.has( words ) && entry.relation !== 'quest' ) continue;
@@ -130,6 +157,135 @@ export class CompanionPlaces {
 		} );
 
 	}
+
+	/**
+	 * What else a talk may ask this person to take the player to: inside the
+	 * building they stand in, its lifts, stairs, rooms and floors; the people
+	 * they know whose bodies are placed; and nearby venues, stops and streets,
+	 * each nearest first and only a few of a kind.
+	 */
+	#wider( npc, from, here, taken ) {
+
+		const out = [];
+		const plan = here?.parcelId ? this.inside?.plan?.( here.parcelId ) ?? null : null;
+		if ( plan ) out.push( ...this.#spots( plan, here, from ) );
+		for ( const person of ( this.people?.( npc ) ?? [] ).slice( 0, MAX_OF_KIND.person ) ) {
+
+			out.push( { place: { kind: 'person', id: person.npcId }, name: person.name, relation: 'person', target: { npcId: person.npcId }, distance: flat( from, person.position ) } );
+
+		}
+		const near = ( kind, list ) => list.filter( ( entry ) => ! taken.has( keyOf( entry.place ) ) )
+			.sort( ( a, b ) => a.distance - b.distance || keyOf( a.place ).localeCompare( keyOf( b.place ) ) ).slice( 0, MAX_OF_KIND[ kind ] );
+		const venues = [];
+		for ( const parcel of this.atlas.parcels ) {
+
+			if ( parcel.type === 'residential' && ! parcel.name ) continue;
+			const position = this.positions.get( `parcel:${parcel.id}` );
+			if ( ! position || parcel.id === here?.parcelId || flat( from, position ) > NEAR ) continue;
+			const name = this.name( { kind: 'parcel', id: parcel.id } );
+			if ( name ) venues.push( { place: { kind: 'parcel', id: parcel.id }, name, relation: 'venue', distance: flat( from, position ) } );
+
+		}
+		out.push( ...near( 'venue', venues ) );
+		const stops = [];
+		for ( const [ id ] of this.stops ) {
+
+			const position = this.positions.get( `stop:${id}` );
+			if ( position && flat( from, position ) <= NEAR ) stops.push( { place: { kind: 'stop', id }, name: this.name( { kind: 'stop', id } ), relation: 'stop', distance: flat( from, position ) } );
+
+		}
+		out.push( ...near( 'stop', stops ) );
+		const streets = [];
+		for ( const street of this.streets?.streets ?? [] ) {
+
+			if ( street.kind !== 'street' && street.kind !== 'avenue' ) continue;
+			const at = this.#onStreet( street, from );
+			if ( at && at.distance <= NEAR ) streets.push( { place: { kind: 'street', id: street.id }, name: street.name, relation: 'street', target: { position: at.position }, distance: at.distance } );
+
+		}
+		out.push( ...near( 'street', streets ) );
+		return out.map( ( entry ) => ( { ...entry, point: bearing( from, entry.target?.position ?? from ), metres: Math.round( entry.distance / 10 ) * 10 } ) );
+
+	}
+
+	/** The lift and stairs on the person's floor, the rooms there by kind, and every other floor by its lift landing. */
+	#spots( plan, here, from ) {
+
+		const floor = plan.floors.find( ( entry ) => entry.index === ( here.floor ?? 0 ) ) ?? plan.floors[ 0 ];
+		if ( ! floor ) return [];
+		const at = ( position ) => ( { position, parcelId: here.parcelId, floor: floor.index } );
+		const nearest = ( list ) => [ ...list ].sort( ( a, b ) => flat( from, a.position ) - flat( from, b.position ) )[ 0 ];
+		const spots = [];
+		const lift = nearest( floor.lifts );
+		if ( lift ) spots.push( { place: { kind: 'spot', id: `lift:${lift.id}` }, name: this.lines.say( 'name-lift' ), relation: 'spot', target: at( lift.position ) } );
+		const stairs = nearest( floor.stairs );
+		if ( stairs ) spots.push( { place: { kind: 'spot', id: `stairs:${stairs.id}` }, name: this.lines.say( 'name-stairs' ), relation: 'spot', target: at( stairs.position ) } );
+		const kinds = new Map();
+		for ( const room of floor.rooms ) if ( ! room.unit && ! UNSHOWN.has( room.kind ) && ! kinds.has( room.kind ) ) kinds.set( room.kind, room );
+		for ( const room of kinds.values() ) spots.push( { place: { kind: 'spot', id: `room:${room.id}` }, name: this.lines.say( 'name-room', { word: room.kind.replace( /_/g, ' ' ) } ), relation: 'spot', target: at( room.position ) } );
+		for ( const other of plan.floors ) {
+
+			if ( other.index === floor.index ) continue;
+			const landing = other.lifts[ 0 ] ?? other.stairs[ 0 ];
+			if ( landing ) spots.push( { place: { kind: 'spot', id: `floor:${other.index}` }, name: this.lines.say( 'name-floor', { floor: floorWord( other.index ) } ), relation: 'spot', target: { position: landing.position, parcelId: here.parcelId, floor: other.index } } );
+
+		}
+		return spots.map( ( entry ) => ( { ...entry, distance: flat( from, entry.target.position ) } ) );
+
+	}
+
+	/** The nearest point of a street's pavement to the person, on the walk graph, and how far off it is. */
+	#onStreet( street, from ) {
+
+		let best = null;
+		for ( const edge of this.atlas.streets?.edges ?? [] ) {
+
+			if ( ! street.edgeIds.includes( edge.id ) ) continue;
+			for ( let index = 1; index < edge.path.length; index ++ ) {
+
+				const point = closest( edge.path[ index - 1 ], edge.path[ index ], [ from[ 0 ], from[ 2 ] ] );
+				const distance = Math.hypot( point[ 0 ] - from[ 0 ], point[ 1 ] - from[ 2 ] );
+				if ( ! best || distance < best.distance ) best = { point, distance };
+
+			}
+
+		}
+		if ( ! best ) return null;
+		const pavement = this.routes.project?.( [ best.point[ 0 ], from[ 1 ], best.point[ 1 ] ] );
+		return { position: pavement?.point ? [ ...pavement.point ] : [ best.point[ 0 ], from[ 1 ], best.point[ 1 ] ], distance: best.distance };
+
+	}
+
+	/** The corridor side of the numbered door of a person's own apartment, from the building's plan, or null. */
+	#apartmentDoor( npc ) {
+
+		const apartment = npc.home?.apartment;
+		const plan = apartment ? this.inside?.plan?.( npc.home.parcelId ) ?? null : null;
+		const door = plan?.apartments.find( ( entry ) => entry.floor === apartment.floor && ( apartment.number === undefined || entry.number === apartment.number ) );
+		return door ? { position: [ ...door.front ], parcelId: npc.home.parcelId, floor: apartment.floor } : null;
+
+	}
+
+}
+
+/** "ground", "first", "21st": a floor by its index. */
+function floorWord( index ) {
+
+	const words = [ 'ground', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth', 'eleventh', 'twelfth' ];
+	if ( index < words.length ) return words[ index ];
+	const end = index % 100 >= 11 && index % 100 <= 13 ? 'th' : [ 'th', 'st', 'nd', 'rd' ][ index % 10 ] ?? 'th';
+	return `${index}${end}`;
+
+}
+
+/** The point of segment ab nearest p, in the plane. */
+function closest( a, b, p ) {
+
+	const dx = b[ 0 ] - a[ 0 ];
+	const dz = b[ 1 ] - a[ 1 ];
+	const span = dx * dx + dz * dz;
+	const t = span > 0 ? Math.max( 0, Math.min( 1, ( ( p[ 0 ] - a[ 0 ] ) * dx + ( p[ 1 ] - a[ 1 ] ) * dz ) / span ) ) : 0;
+	return [ a[ 0 ] + dx * t, a[ 1 ] + dz * t ];
 
 }
 

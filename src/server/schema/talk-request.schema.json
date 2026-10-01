@@ -19,6 +19,12 @@
       "additionalProperties": false,
       "properties": {
         "follow": { "type": "boolean" },
+        "walk": { "type": "boolean" },
+        "stop": { "type": "boolean" },
+        "home": { "type": "boolean" },
+        "work": { "type": "boolean" },
+        "wait": { "type": "boolean" },
+        "sit": { "type": "boolean" },
         "places": {
           "type": "array",
           "items": {

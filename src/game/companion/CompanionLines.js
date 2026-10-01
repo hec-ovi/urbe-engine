@@ -15,7 +15,7 @@ const KEYS = [
 	'name-unnamed', 'name-stop', 'name-station',
 	...COMPASS.map( ( point ) => `name-${point}` ), 'name-away'
 ];
-const NAMES = new Set( [ 'place', 'name', 'word', 'metres' ] );
+const NAMES = new Set( [ 'place', 'name', 'word', 'metres', 'floor' ] );
 const FIELD = /\{(\w+)\}/g;
 
 /**

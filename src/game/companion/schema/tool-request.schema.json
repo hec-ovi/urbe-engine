@@ -6,12 +6,12 @@
   "required": ["npcId", "kind", "timeMin", "playerPlaces"],
   "properties": {
     "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
-    "kind": { "enum": ["follow", "lead"] },
+    "kind": { "enum": ["follow", "lead", "walk", "stop", "home", "work", "wait", "sit"] },
     "placeId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
     "timeMin": { "$ref": "urn:urbe:engine:companion:values#/$defs/time" },
     "playerPlaces": { "$ref": "urn:urbe:engine:companion:values#/$defs/playerPlaces" }
   },
-  "if": { "properties": { "kind": { "const": "lead" } } },
+  "if": { "properties": { "kind": { "enum": ["lead", "walk"] } } },
   "then": { "properties": { "placeId": true }, "required": ["placeId"] },
   "else": { "properties": { "placeId": false } }
 }
