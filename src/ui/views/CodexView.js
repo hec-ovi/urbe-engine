@@ -33,6 +33,8 @@ export class CodexView {
 		this.onScreen = false;
 		this.cards = new Map();
 		this.observer = null;
+		/** Each record's own picture, asked for once: entry id -> promise of its URL or null. */
+		this.pictures = new Map();
 
 		this.tabs = el( 'nav', { className: 'screen-tabs codex-tabs' } );
 		this.tabs.setAttribute( 'aria-label', layout.tabs );
@@ -74,11 +76,13 @@ export class CodexView {
 
 	/**
 	 * @param entries [{ id, title, category, kind?, text, summary?, subtitle?, tags?: [string],
-	 *   facts?: [{ label, value }], location?, quote?, source?, model?,
+	 *   facts?: [{ label, value }], location?, quote?, source?, model?, image?,
 	 *   related?: [{ label, title, entry?: id, quest?: questId, kind?: 'main' | 'side' }] }]
-	 * A blank line in `text` starts a paragraph; `model` is the record's own
-	 * preview model, else an item `kind`'s shape as the inventory draws it,
-	 * else its category's shape.
+	 * A blank line in `text` starts a paragraph; `image` is the record's own
+	 * picture, a URL or a loader resolving with one (or null), asked for once as
+	 * its card comes into view while the screen is shown, and shown on the card
+	 * and in the figure; else `model` is its own preview model, else an item
+	 * `kind`'s shape as the inventory draws it, else its category's shape.
 	 */
 	setEntries( entries = [] ) {
 
@@ -205,7 +209,7 @@ export class CodexView {
 		button.dataset.id = entry.id;
 		button.setAttribute( 'aria-label', entry.title );
 		button.addEventListener( 'click', () => this.select( entry.id ) );
-		return { button, image, model: modelOf( entry, category ), requested: false };
+		return { button, image, entry, model: modelOf( entry, category ), requested: false };
 
 	}
 
@@ -239,9 +243,11 @@ export class CodexView {
 		if ( card.requested ) return;
 		card.requested = true;
 		this.observer?.unobserve( card.button );
-		this.preview.thumbnail( card.model ).then( ( url ) => {
+		// The record's own picture when it has one, else its model's thumbnail.
+		this.#picture( card.entry ).then( ( picture ) => picture ?? this.preview.thumbnail( card.model ) ).then( ( url ) => {
 
 			if ( ! url || ! card.button.isConnected ) return;
+			card.image.classList.toggle( 'is-picture', url === this.pictures.get( card.entry.id )?.url );
 			card.image.src = url;
 			card.image.hidden = false;
 
@@ -335,12 +341,59 @@ export class CodexView {
 			) ] : [] ),
 			...( entry.related?.length ? [ el( 'div', { className: 'codex-related' }, ...entry.related.map( ( link ) => this.#link( link ) ) ) ] : [] )
 		) );
-		if ( this.onScreen ) {
+		if ( this.onScreen ) this.#figure( entry, category );
+
+	}
+
+	/** The record's own picture in the figure, else its model turning there. */
+	#figure( entry, category ) {
+
+		const showModel = () => {
 
 			this.preview.attach( this.figure );
 			this.preview.setModel( modelOf( entry, category ), entry.title );
 
+		};
+		if ( ! entry.image ) return showModel();
+		const picture = el( 'img', { className: 'codex-picture', alt: entry.title, draggable: false } );
+		picture.hidden = true;
+		this.figure.replaceChildren( picture );
+		this.preview.setModel( null );
+		this.#picture( entry ).then( ( url ) => {
+
+			if ( this.selected !== entry.id || ! picture.isConnected ) return;
+			if ( ! url ) return showModel();
+			picture.src = url;
+			picture.hidden = false;
+
+		} );
+
+	}
+
+	/** Asks once for a record's own picture (`image`: a URL, or a loader resolving with one or null). */
+	#picture( entry ) {
+
+		if ( ! entry.image ) return Promise.resolve( null );
+		let asked = this.pictures.get( entry.id );
+		if ( ! asked ) {
+
+			const load = typeof entry.image === 'function' ? entry.image : () => entry.image;
+			asked = { url: null, promise: Promise.resolve().then( load ).then( ( url ) => {
+
+				asked.url = typeof url === 'string' ? url : null;
+				if ( ! asked.url ) this.pictures.delete( entry.id );
+				return asked.url;
+
+			}, () => {
+
+				this.pictures.delete( entry.id );
+				return null;
+
+			} ) };
+			this.pictures.set( entry.id, asked );
+
 		}
+		return asked.promise;
 
 	}
 

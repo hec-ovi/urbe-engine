@@ -144,6 +144,30 @@
 	object-fit: contain;
 }
 
+/* A record's own picture (a person's face, a place's building) stands square
+   in the art, which takes its backdrop's edge so the square has no seam. */
+.codex-record-image.is-picture {
+	max-height: none;
+	object-fit: contain;
+}
+
+.codex-record-art:has(.is-picture) {
+	padding: 0;
+	background: #1d2b2f;
+}
+
+.codex-picture {
+	display: block;
+	width: auto;
+	height: 100%;
+	max-width: 100%;
+	margin: 0 auto;
+	aspect-ratio: 1;
+	object-fit: cover;
+	border: 1px solid var(--screen-line);
+	animation: codex-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
 .codex-record-copy {
 	display: flex;
 	flex-direction: column;

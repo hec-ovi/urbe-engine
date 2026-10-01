@@ -64,4 +64,37 @@ describe( 'CodexView', () => {
 
 	} );
 
+
+	it( 'shows a record\'s own picture, asked for once as its card comes into view while the screen is shown, else its model', async () => {
+
+		const face = vi.fn( async () => 'blob:face' );
+		const none = vi.fn( async () => null );
+		const view = new CodexView( { onClose: vi.fn() } );
+		document.body.replaceChildren( view.element );
+		view.setEntries( [
+			{ id: 'p1', title: 'Ada Vance', category: 'people', text: 'Runs the quay office.', image: face },
+			{ id: 'p2', title: 'Denna Roe', category: 'people', text: 'Pours at the Oxide Filter.', image: none }
+		] );
+		view.setCategory( 'people' );
+		expect( face ).not.toHaveBeenCalled();
+
+		view.shown();
+		await vi.waitFor( () => expect( view.cards.get( 'p1' ).image.src ).toBe( 'blob:face' ) );
+		const card = view.cards.get( 'p1' ).image;
+		expect( card.classList.contains( 'is-picture' ) ).toBe( true );
+		expect( card.hidden ).toBe( false );
+		const figure = view.element.querySelector( '.codex-figure .codex-picture' );
+		await vi.waitFor( () => expect( figure.hidden ).toBe( false ) );
+		expect( figure.getAttribute( 'src' ) ).toBe( 'blob:face' );
+		expect( face ).toHaveBeenCalledOnce();
+
+		// No picture: the card and the figure fall back to the model.
+		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Denna Roe' } ) );
+		await vi.waitFor( () => expect( none ).toHaveBeenCalled() );
+		await vi.waitFor( () => expect( view.element.querySelector( '.codex-figure .item-preview' ) ).toBeTruthy() );
+		expect( view.cards.get( 'p2' ).image.classList.contains( 'is-picture' ) ).toBe( false );
+		view.hidden();
+
+	} );
+
 } );
