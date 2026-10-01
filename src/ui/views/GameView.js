@@ -114,6 +114,7 @@ export class GameView {
 		this.mainMenu = new MainMenuView( menu );
 		this.dock = new GameDock( {
 			onSelect: ( name ) => this.toggle( name ),
+			onLeave: leave,
 			onPlay: () => {
 
 				this.close();
@@ -305,6 +306,9 @@ export class GameView {
 		const menu = this.paused && ! this.panels.current && this.summary.element.hidden && this.inspection.element.hidden && this.dialog.element.hidden;
 		this.pause.setVisible( menu );
 		this.dock.element.hidden = ! this.panels.current && ! menu;
+		// Under the pause menu its own Leave stands; under a panel the dock carries it.
+		const leave = this.dock.items.get( 'LEAVE' );
+		if ( leave ) leave.hidden = menu;
 
 	}
 

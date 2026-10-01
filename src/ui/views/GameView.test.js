@@ -104,6 +104,11 @@ describe( 'GameView', () => {
 
 		view.setLibrary( { games: [ { id: 'g1', name: 'Night run', playable: true } ] } );
 		view.setPaused( true );
+		// Under the pause menu one Leave shows, its own; under a panel the dock carries it.
+		expect( screen.getAllByRole( 'button', { name: 'Leave' } ) ).toHaveLength( 1 );
+		view.open( 'SETTINGS' );
+		expect( within( view.dock.element ).getByRole( 'button', { name: 'Leave' } ) ).toBeTruthy();
+		view.close();
 		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Leave' } ) );
 		expect( view.mainMenu.element.hidden ).toBe( false );
 		expect( view.gameplayElements.every( ( element ) => element.inert ) ).toBe( true );

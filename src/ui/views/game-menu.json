@@ -14,7 +14,7 @@
   },
   "dock": {
     "label": "Game panels",
-    "groups": [["play"], ["MAP", "QUESTS", "INVENTORY", "CODEX", "CONTACTS"], ["SETTINGS", "CONTROLS"]]
+    "groups": [["play"], ["MAP", "QUESTS", "INVENTORY", "CODEX", "CONTACTS"], ["SETTINGS", "CONTROLS", "LEAVE"]]
   },
   "pause": {
     "eyebrow": "Session paused",

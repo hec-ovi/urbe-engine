@@ -25,7 +25,7 @@
       }
     },
     "dock": {
-      "description": "The labelled dock under an open panel: play and the panels, in groups a thin rule parts.",
+      "description": "The labelled dock under an open panel: play, the panels and LEAVE (back to the main menu), in groups a thin rule parts.",
       "type": "object",
       "required": ["label", "groups"],
       "additionalProperties": false,
@@ -38,7 +38,7 @@
             "type": "array",
             "minItems": 1,
             "uniqueItems": true,
-            "items": { "enum": ["play", "QUESTS", "MAP", "INVENTORY", "CODEX", "CONTACTS", "SETTINGS", "CONTROLS"] }
+            "items": { "enum": ["play", "QUESTS", "MAP", "INVENTORY", "CODEX", "CONTACTS", "SETTINGS", "CONTROLS", "LEAVE"] }
           }
         }
       }

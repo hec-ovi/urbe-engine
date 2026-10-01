@@ -7,15 +7,16 @@ import { GameDock } from './GameDock.js';
 /** Play and the six panels, each labelled with its key, the open one the current page, arrows moving along. */
 describe( 'GameDock', () => {
 
-	it( 'labels Play and every panel with its key, reports them by name, and marks the open one as the current page', async () => {
+	it( 'labels Play, every panel with its key and Leave, reports them by name, and marks the open one as the current page', async () => {
 
 		const onSelect = vi.fn();
 		const onPlay = vi.fn();
-		const dock = new GameDock( { onSelect, onPlay } );
+		const onLeave = vi.fn();
+		const dock = new GameDock( { onSelect, onPlay, onLeave } );
 		document.body.replaceChildren( dock.element );
 
 		expect( screen.getAllByRole( 'button' ).map( ( b ) => b.textContent ) ).toEqual(
-			[ 'Play', 'MapM', 'JournalJ', 'InventoryI', 'CodexX', 'ContactsP', 'SettingsO', 'Controls?' ]
+			[ 'Play', 'MapM', 'JournalJ', 'InventoryI', 'CodexX', 'ContactsP', 'SettingsO', 'Controls?', 'Leave' ]
 		);
 		expect( screen.getByRole( 'navigation', { name: 'Game panels' } ) ).toBeTruthy();
 
@@ -24,6 +25,10 @@ describe( 'GameDock', () => {
 		await user.click( screen.getByRole( 'button', { name: 'Play' } ) );
 		expect( onSelect ).toHaveBeenCalledExactlyOnceWith( 'CODEX' );
 		expect( onPlay ).toHaveBeenCalledOnce();
+		// Leave is the way back to the main menu, never a panel.
+		await user.click( screen.getByRole( 'button', { name: 'Leave' } ) );
+		expect( onLeave ).toHaveBeenCalledOnce();
+		expect( onSelect ).toHaveBeenCalledOnce();
 
 		dock.setActive( 'MAP' );
 		const map = screen.getByRole( 'button', { name: 'Map' } );

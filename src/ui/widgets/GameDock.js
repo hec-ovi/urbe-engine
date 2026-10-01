@@ -6,14 +6,15 @@ import menu from '../views/game-menu.json' with { type: 'json' };
 /**
  * The labelled dock under an open panel: Play, then every panel in the groups
  * of [game-menu.json](../views/game-menu.json)'s `dock`, each an icon over its
- * name with the key that opens it in the corner. The open panel's entry is the
- * current page. Arrow keys, Home and End move along it. The keys are labels:
- * the game binds them and calls open( name ).
- * props: { onSelect( name ), onPlay() }
+ * name with the key that opens it in the corner, and Leave, the way back to
+ * the main menu. The open panel's entry is the current page. Arrow keys, Home
+ * and End move along it. The keys are labels: the game binds them and calls
+ * open( name ).
+ * props: { onSelect( name ), onPlay(), onLeave() }
  */
 export class GameDock {
 
-	constructor( { onSelect, onPlay } ) {
+	constructor( { onSelect, onPlay, onLeave = () => {} } ) {
 
 		this.items = new Map();
 		this.toolbar = el( 'div', { className: 'dock-items', role: 'toolbar' } );
@@ -21,7 +22,7 @@ export class GameDock {
 
 		menu.dock.groups.forEach( ( group, index ) => group.forEach( ( name, at ) => {
 
-			const item = this.#item( name, name === 'play' ? onPlay : () => onSelect( name ) );
+			const item = this.#item( name, name === 'play' ? onPlay : name === 'LEAVE' ? onLeave : () => onSelect( name ) );
 			if ( index > 0 && at === 0 ) item.classList.add( 'is-group-start' );
 			this.toolbar.append( item );
 
@@ -70,7 +71,7 @@ export class GameDock {
 
 	#move( event ) {
 
-		const items = [ ...this.items.values() ];
+		const items = [ ...this.items.values() ].filter( ( item ) => ! item.hidden );
 		const index = items.indexOf( event.target );
 		if ( index < 0 ) return;
 		const next = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: items.length - 1 }[ event.key ];
