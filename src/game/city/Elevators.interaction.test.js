@@ -449,7 +449,8 @@ function fixture( angle = 0, colliders = null, modules = catalog, mounted = LIFT
 		elevators: [ { id: 'elev-0', rect: { u: 0, v: 0, lu: 3.5, lv: 3.5 } } ]
 	};
 	const builder = new PlacementBuilder();
-	lifts( builder, core, 'floor-slab-stone', 'lobby', 4.5 );
+	// a through car's floors here all keep the back of the core public, so each opens both ends
+	lifts( builder, core, 'floor-slab-stone', 'lobby', 4.5, 4.5, 0, undefined, through );
 
 	const floors = [ 0, 2, 7 ].map( ( floor, index ) => ( {
 		floor, elevation: index * 4.5, height: 4.5, coreAngleDeg: angle,
