@@ -68,9 +68,17 @@
     "caution": "A consumer that reindexes, splits, merges or reorders vertices must carry owner ranges through that operation or expand the required owner fields beforehand."
   },
   "cost": {
-    "persistentVertexData": "9 additional bytes per vertex: two Float32 values and one raw Uint8 mask.",
+    "persistentVertexData": "CPU arrays and glTF storage: 9 additional bytes per vertex, comprising two Float32 values and one raw unnormalized Uint8 mask.",
     "attributeCount": "Two additional buffer attributes; no new draw call or material slot.",
-    "rangeData": "A small run-length owner table per part, plus a small support table; ownerless contiguous geometry collapses to one range."
+    "rangeData": "A small run-length owner table per part, plus a small support table; ownerless contiguous geometry collapses to one range.",
+    "activeWebGpuVertexData": "Three 0.185.1 active WebGPU upload: 12 additional bytes per vertex. createAttribute expands the unnormalized Uint8 mask to Uint32Array; the source vec2 remains two Float32 values. This excludes optional owner fields expanded by the consumer and buffer allocation overhead.",
+    "implementationSource": {
+      "package": "three@0.185.1",
+      "file": "src/renderers/webgpu/utils/WebGPUAttributeUtils.js",
+      "method": "createAttribute",
+      "observedRule": "When normalized is false, Uint8Array and Uint16Array are converted to Uint32Array before upload."
+    },
+    "statisticsNote": "statistics.ownershipBytes reports stored CPU attribute bytes, not active WebGPU upload size. For tiny-check: 31,884 vertices use 286,956 stored attribute bytes and 382,608 active WebGPU attribute bytes before optional expanded owner fields."
   },
   "apiCorrection": "highwayFrameAt currently returns elevation as .y, not .center.y. The material placement-mask specification's .center.y wording must not be copied into a consumer."
 }
