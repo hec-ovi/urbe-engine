@@ -44,7 +44,8 @@ export class PropBatches {
 		}
 	}
 	#create( key, items ) {
-		const capacity = Math.max( 16, 2 ** Math.ceil( Math.log2( items.length ) ) );
+		// Room for 64 at least: the shader holds the length, so every size is a program to link.
+		const capacity = Math.max( 64, 2 ** Math.ceil( Math.log2( items.length ) ) );
 		const group = new Group(); group.name = `props:${key}`;
 		const parts = this.models.get( items[ 0 ].model ).appearances.get( items[ 0 ].finish );
 		parts.forEach( ( part, index ) => {
