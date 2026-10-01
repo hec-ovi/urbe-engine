@@ -5,6 +5,7 @@ import { TextureSource } from '../building/TextureSource.js';
 import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { DETAIL_BINDING, SurfaceDetail } from './surface-detail/SurfaceDetail.js';
 import { wearExterior } from './surface-detail/Weathering.js';
+import { VARIANT_BINDING } from './ground/materials/StreetVariants.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { RecentEvents } from './talk/RecentEvents.js';
 import { NpcVoice } from './voice/NpcVoice.js';
@@ -374,6 +375,8 @@ export class GameApp {
 		const theme = progress.timed( 'material theme', resolver.loadTheme( THEME ) );
 		// The masks the surface-detail layer reads, where Materials publishes them.
 		const detailBinding = config.off.has( 'detail' ) ? null : resolver.loadBindings( DETAIL_BINDING ).catch( () => null );
+		// Whole-bundle panel and tile variants of the street surfaces, where Materials publishes them; `off=variants` leaves them out.
+		const variantBinding = config.off.has( 'variants' ) ? null : resolver.loadBindings( VARIANT_BINDING ).catch( () => null );
 		const starting = progress.timed( 'physics', Physics.create() );
 		const cars = progress.timed( 'cars', CarModels.load( config.maxCars ) );
 		const {
@@ -471,7 +474,7 @@ export class GameApp {
 		progress.step( 'laying the ground' );
 		this.nativeStreets = nativeStreets;
 		const ground = this.groundStream = new GroundScene( atlas, factory, nativeStreets,
-			{ anisotropy: this.tier.textureAnisotropy ?? 8 }, { catalog: shellCatalog, buildings } );
+			{ anisotropy: this.tier.textureAnisotropy ?? 8, variants: await variantBinding }, { catalog: shellCatalog, buildings } );
 		this.scene.add( ground.group );
 		const laying = progress.timed( 'ground', ground.update( spawn.point, { radius: FAR_PLANE, collisionRadius: 256, collision: this.colliders } ) );
 		const water = progress.timed( 'water', HydrologyHost.install( { blueprint: atlas, factory, scene: this.scene } ) );

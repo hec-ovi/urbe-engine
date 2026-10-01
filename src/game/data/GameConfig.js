@@ -24,13 +24,13 @@ const DEFAULTS = {
 };
 
 const LANE_MODES = [ 'paint', 'glow', 'debug' ];
-const OFF_STAGES = [ 'fog', 'bloom', 'probe', 'haze', 'interiors', 'detail' ];
+const OFF_STAGES = [ 'fog', 'bloom', 'probe', 'haze', 'interiors', 'detail', 'variants' ];
 
 /**
  * One game run, described entirely by the URL query:
  * ?mode=game[&game=<catalog-id>][&world=city-urbe-tiny][&out=/out/city-tiny][&backend=webgpu|webgl]
  * [&hour=21][&light=21][&crowd=160][&cars=18][&crowdRadius=90][&carRadius=110][&density=1][&lanes=glow|debug]
- * [&quality=low|medium|high|ultra][&exposure=0.024][&fog=0.0003][&off=fog,bloom,probe,haze,interiors,detail][&voice=off][&details=on|off][&screens=on][&automation][&checks=on]
+ * [&quality=low|medium|high|ultra][&exposure=0.024][&fog=0.0003][&off=fog,bloom,probe,haze,interiors,detail,variants][&voice=off][&details=on|off][&screens=on][&automation][&checks=on]
  *
  * `off` names look stages to leave out of a run, for telling them apart on
  * screen: the street fog, the emissive bloom, the environment probe, the haze

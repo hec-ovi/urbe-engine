@@ -8,7 +8,7 @@ export function castConcrete( s, p ) {
 	const grime = smoothstep( ...p.grimeRange, s.height.add( breakup.add( p.grimeBias ).mul( p.grimeHeight ) ) ).oneMinus();
 	return {
 		colorNode: mix( grey, grey.mul( color( p.grimeTint ) ), grime.mul( p.grimeStrength ) ),
-		normalNode: normal( s.map( 'normal' ), p.normalScale ),
+		normalNode: normal( s.map( 'normal' ), p.normalScale, s.world ),
 		roughnessNode: s.map( 'roughness' ).r.mul( p.roughnessGain ).add( p.roughnessBias ),
 		aoNode: ambient( s.map( 'ao' ), p.aoIntensity )
 	};

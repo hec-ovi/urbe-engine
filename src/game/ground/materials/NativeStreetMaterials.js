@@ -21,10 +21,12 @@ export const PAINT_RESPONSE = Object.freeze( { whitePaint: 'crosswalk-worn', yel
 /** Material-only consumer; the supplied texture port owns image loading and lifetime. */
 export class NativeStreetMaterials {
 	/** @param detail the surface-detail layer the worn surfaces wear ([SurfaceDetail](../../surface-detail/CONTRACT.md)), or null */
-	constructor( binding, loadTexture, { detail = null } = {} ) {
+	/** @param variants `{ binding, arrays }`: the whole-bundle variants ([StreetVariants](StreetVariants.js)) and the port answering a set's texture arrays ([StreetVariantTextures](StreetVariantTextures.js)), or null */
+	constructor( binding, loadTexture, { detail = null, variants = null } = {} ) {
 		if ( ! validate( binding ) ) fail( `Invalid native street catalog: ${validate.errors[ 0 ].instancePath}` );
 		if ( typeof loadTexture !== 'function' ) fail( 'Native street texture port is required' );
 		if ( detail !== null && ! Array.isArray( detail?.resources ) ) fail( 'Invalid street surface detail' );
+		if ( variants !== null && ( typeof variants?.binding?.of !== 'function' || typeof variants.arrays !== 'function' ) ) fail( 'Invalid street variants' );
 		for ( const surface of Object.values( binding.surfaces ) ) {
 			if ( ! EFFECTS[ surface.effect ] ) fail( `Unknown native street effect: ${surface.effect}` );
 			for ( const id of Object.values( surface.maps ) ) if ( ! Object.hasOwn( binding.textures, id ) ) fail( `Unknown street texture: ${id}` );
@@ -35,6 +37,8 @@ export class NativeStreetMaterials {
 		this.binding = structuredClone( binding );
 		this.loadTexture = loadTexture;
 		this.detail = detail;
+		this.variants = variants;
+		this.variantArrays = new Map();
 		this.textureCache = new Map();
 		this.cache = new Map();
 		this.instanceKeys = new WeakMap();
@@ -56,13 +60,15 @@ export class NativeStreetMaterials {
 		const key = `${surfaceId}:${options.roadRoughness ?? ''}:${this.#instanceKey( options.instances )}:${options.worldUv ? 'world' : ''}`;
 		if ( this.cache.has( key ) ) return this.cache.get( key );
 		const resources = new Map();
+		const variant = this.#variant( surfaceId, options );
+		if ( variant ) for ( const resource of variant.arrays.resources ) resources.set( resource.texture.name, resource );
 		const samples = new NativeSamples( surface, this.binding.sampling.asphalt, id => {
 			const resource = this.#texture( id );
 			resources.set( id, resource );
 			return resource.texture;
 		}, {
 			instances: options.instances, scanCells: options.scanCells?.map( id => this.binding.surfaces[ id ] ), worldUv: options.worldUv === true,
-			response: surface.effect === 'road-paint' ? this.#response( surfaceId ) : null
+			response: surface.effect === 'road-paint' ? this.#response( surfaceId ) : null, variant
 		} );
 		const nodes = EFFECTS[ surface.effect ]( samples, surface.parameters, options );
 		// A street is used: world-space wear over what the effect paints, as much as its placement is worn.
@@ -88,14 +94,20 @@ export class NativeStreetMaterials {
 			material.polygonOffsetUnits = 0;
 		}
 		material.userData.streetNativeSurface = surfaceId;
+		if ( variant ) material.userData.streetVariants = variant.set.id;
 		const resourceList = Object.freeze( [ ...resources.values(), ...( worn ? this.detail.resources : [] ) ] );
 		material[ MATERIAL_RESOURCES ] = resourceList;
-		this.records.set( material, { resources: resourceList, attributes: requiredAttributes( surface.effect ) } );
+		// A copy picks a variant per panel from the panels its piece numbers.
+		const panels = variant?.panels === true;
+		const attributes = Object.freeze( { ...requiredAttributes( surface.effect ), ...( panels ? { _street_panel: 1 } : {} ) } );
+		this.records.set( material, { resources: resourceList, attributes, panels } );
 		this.cache.set( key, material );
 		return material;
 	}
 
 	resources( material ) { return this.#record( material ).resources; }
+	/** Whether a material picks its variant per panel, so its geometry must number its panels (`withPanelUnits`). */
+	panelled( material ) { return this.#record( material ).panels; }
 	assertGeometry( material, geometry ) { assertAttributes( geometry, this.#record( material ).attributes ); }
 
 	dispose() {
@@ -104,7 +116,23 @@ export class NativeStreetMaterials {
 		for ( const material of this.cache.values() ) material.dispose();
 		this.cache.clear();
 		this.textureCache.clear();
+		this.variantArrays.clear();
 		this.records = new WeakMap();
+	}
+
+	/**
+	 * The variant set a surface draws its four maps from, its arrays and how a
+	 * fragment picks its layer: per panel when the copy hands over its prefix
+	 * and the surface reads its own UVs, else per world cell of its sampling.
+	 */
+	#variant( surfaceId, options ) {
+		const set = this.variants?.binding.of( surfaceId );
+		if ( ! set ) return null;
+		if ( ! this.variantArrays.has( set.id ) ) this.variantArrays.set( set.id, this.variants.arrays( set ) );
+		const arrays = this.variantArrays.get( set.id );
+		if ( ! arrays?.color?.isTexture || ! arrays.response?.isTexture || typeof arrays.ready?.then !== 'function' || ! Array.isArray( arrays.resources ) ) fail( `Invalid street variant arrays: ${set.id}` );
+		const cells = set.unit === 'world-cell' || options.worldUv === true;
+		return { set, arrays, seed: cells ? this.variants.binding.seed( surfaceId, 'world' ) : 0, panels: ! cells && Boolean( options.instances?.variant ) };
 	}
 
 	/** The worn paint finish a road paint surface answers with, when the binding carries it with both maps it reads. */

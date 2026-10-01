@@ -1,5 +1,6 @@
 import { StreetInstanceTable } from './StreetInstanceTable.js';
 import { drawnSurfaces } from './StreetRoutes.js';
+import { placementId } from '../materials/StreetVariants.js';
 
 /**
  * Which surface reads which placement value, and the table behind each one.
@@ -7,7 +8,8 @@ import { drawnSurfaces } from './StreetRoutes.js';
  * Every surface reads the tint and the wear its placements carry. The two that
  * cost more are asked for by the bundle itself: the surfaces of the pieces a
  * scan placement stands on sample the scan atlas, and a display face on a piece
- * a text placement stands on letters as many glyphs as the longest of them.
+ * a text placement stands on letters as many glyphs as the longest of them. A
+ * surface that picks its variant per panel carries each copy's hash prefix.
  */
 export class StreetInstances {
 
@@ -15,8 +17,9 @@ export class StreetInstances {
 	 * @param kit the manifest's `kit`
 	 * @param placements the manifest's placement table
 	 * @param binding the native material snapshot, for each surface's effect
+	 * @param variants the whole-bundle variants ([StreetVariants](../materials/StreetVariants.js)), or null
 	 */
-	constructor( kit, placements, binding ) {
+	constructor( kit, placements, binding, variants = null ) {
 
 		const pieces = new Map( kit.pieces.map( piece => [ piece.id, piece ] ) );
 		const scan = new Set(), glyphs = new Map();
@@ -38,8 +41,22 @@ export class StreetInstances {
 
 		}
 		this.scanAtlas = kit.scanAtlas;
+		// A batch of world-sampled copies (`<surface>@world`) picks per world cell and needs no prefix.
+		// A copy hashes its prefix once, however often its cell streams back in.
+		const prefix = ( id ) => {
+
+			if ( variants?.of( id )?.unit !== 'panel' ) return null;
+			const known = new WeakMap();
+			return ( placement ) => {
+
+				if ( ! known.has( placement ) ) known.set( placement, variants.seed( id, placementId( placement ) ) );
+				return known.get( placement );
+
+			};
+
+		};
 		this.tables = new Map( [ ...new Set( kit.pieces.flatMap( piece => drawnSurfaces( piece, binding ) ) ) ]
-			.map( id => [ id, new StreetInstanceTable( { scan: scan.has( id ), glyphs: glyphs.get( id ) ?? 0 } ) ] ) );
+			.map( id => [ id, new StreetInstanceTable( { scan: scan.has( id ), glyphs: glyphs.get( id ) ?? 0, variant: prefix( id ) } ) ] ) );
 		this.byBatch = new Map();
 
 	}

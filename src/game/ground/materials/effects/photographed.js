@@ -13,7 +13,7 @@ export function photographed( s, p ) {
 	const use = s.wear;
 	return {
 		colorNode: s.map( 'basecolor' ).rgb.mul( color( p.tint ) ).mul( mix( 1, WORN.color, use ) ),
-		normalNode: normal( s.map( 'normal' ), p.normalScale ),
+		normalNode: normal( s.map( 'normal' ), p.normalScale, s.world ),
 		roughnessNode: bounded( s.map( 'roughness' ).r.mul( p.roughnessGain ).add( p.roughnessBias ).add( use.mul( WORN.roughness ) ), p.roughnessRange ),
 		metalnessNode: float( p.metalness ), aoNode: ambient( s.map( 'ao' ), p.aoIntensity )
 	};

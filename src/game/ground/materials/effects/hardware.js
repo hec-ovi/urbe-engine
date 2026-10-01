@@ -8,7 +8,7 @@ export function hardware( s, p ) {
 	return {
 		colorNode: p.painted ? mix( metalColor, color( p.tint ).mul( base.r.mul( p.paintGain ).add( p.paintBias ) ), paint ) : metalColor,
 		metalnessNode: p.painted ? mix( 1, 0, paint ) : float( 1 ),
-		normalNode: normal( s.map( 'normal' ), p.normalScale ),
+		normalNode: normal( s.map( 'normal' ), p.normalScale, s.world ),
 		roughnessNode: s.map( 'roughness' ).r, aoNode: s.map( 'ao' ).r
 	};
 }

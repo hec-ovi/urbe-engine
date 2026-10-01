@@ -40,19 +40,24 @@ const batchInstance = Fn( ( [ indirect ], builder ) => {
  * Every row starts with the tint and the wear. A surface that samples the scan
  * atlas keeps the placement's UV offset and scale in the texel after it; a
  * display face that letters text keeps its glyph count there and one glyph
- * index per texel from then on.
+ * index per texel from then on. A surface that picks a variant per panel
+ * keeps the placement's hash prefix in a texel of its own before any glyph,
+ * as its high and low 16 bits.
  */
 export class StreetInstanceTable {
 
 	/**
 	 * @param scan whether this surface samples the scan atlas
 	 * @param glyphs how many glyph slots a display face letters, 0 for every other surface
+	 * @param variant `placement => uint32` the variant hash prefix of a copy, for a surface that picks per panel
 	 */
-	constructor( { scan = false, glyphs = 0 } = {} ) {
+	constructor( { scan = false, glyphs = 0, variant = null } = {} ) {
 
 		this.scan = scan;
 		this.glyphs = glyphs;
-		this.header = 1 + ( scan || glyphs ? 1 : 0 );
+		this.variant = variant;
+		this.variantColumn = 1 + ( scan || glyphs ? 1 : 0 );
+		this.header = this.variantColumn + ( variant ? 1 : 0 );
 		this.texels = this.header + glyphs;
 		this.rows = 0;
 		this.image = blank();
@@ -108,6 +113,13 @@ export class StreetInstanceTable {
 			data.set( [ ...offset, ...scale ], at + TEXEL );
 
 		}
+		if ( this.variant ) {
+
+			const prefix = this.variant( placement ) >>> 0;
+			data[ at + this.variantColumn * TEXEL ] = prefix >>> 16;
+			data[ at + this.variantColumn * TEXEL + 1 ] = prefix & 0xffff;
+
+		}
 		if ( this.glyphs ) {
 
 			const text = placement.text ?? [];
@@ -130,13 +142,15 @@ export class StreetInstanceTable {
 	/** What this surface's effect samples, with the defaults a silent placement means. */
 	#ports() {
 
-		const head = this.#texel( int( 0 ) ), tail = this.header > 1 ? this.#texel( int( 1 ) ) : null;
+		const head = this.#texel( int( 0 ) ), tail = this.variantColumn > 1 ? this.#texel( int( 1 ) ) : null;
+		const variant = this.variant ? this.#texel( int( this.variantColumn ) ) : null;
 
 		return {
 			tint: head.rgb,
 			wear: head.a,
 			...( this.scan ? { scan: { offset: tail.xy, scale: tail.zw } } : {} ),
-			...( this.glyphs ? { text: { count: tail.x, glyph: index => this.#texel( int( this.header ).add( index ) ).x } } : {} )
+			...( this.glyphs ? { text: { count: tail.x, glyph: index => this.#texel( int( this.header ).add( index ) ).x } } : {} ),
+			...( variant ? { variant: { hi: variant.x, lo: variant.y } } : {} )
 		};
 
 	}

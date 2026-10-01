@@ -7,6 +7,7 @@ import { byteHash } from '../native/NativeStreetChecks.js';
 import { StreetInstances } from './StreetInstances.js';
 import { streetPieceBoxes } from './StreetPieceBoxes.js';
 import { drawnSurface } from './StreetRoutes.js';
+import { withPanelUnits } from '../materials/StreetVariants.js';
 
 const LOAD_CONCURRENCY = 8;
 
@@ -44,7 +45,7 @@ export class StreetPieces {
 		this.source = source;
 		this.materials = materials;
 		this.loader = loader;
-		this.instances = new StreetInstances( kit, placements, source.manifest.materials.binding );
+		this.instances = new StreetInstances( kit, placements, source.manifest.materials.binding, materials.variants?.binding ?? null );
 		this.pieces = new Map();
 		this.abort = new AbortController();
 		this.batches = new MaterialBatches( 'street-pieces' );
@@ -159,7 +160,6 @@ export class StreetPieces {
 				// A part the binding now has a finer finish for draws with it.
 				const drawn = drawnSurface( entry.id, surfaceId, this.source.manifest.materials.binding );
 				const material = this.materials.build( drawn.surface, { ...this.instances.options( drawn.bucket ), ...( drawn.worldUv ? { worldUv: true } : {} ) } );
-				this.materials.assertGeometry( material, mesh.geometry );
 				for ( const resource of this.materials.resources( material ) ) resources.add( resource.ready );
 
 				const indices = mesh.geometry.index?.count ?? mesh.geometry.getAttribute( 'position' ).count;
@@ -168,7 +168,11 @@ export class StreetPieces {
 				if ( collides && entry.hasCollision ) pieceTriangles( mesh, triangles );
 
 				// Paint and scans lie flat on the road; only bodies cast shadows.
-				surfaces.push( { bucket: drawn.bucket, geometry: rebased( mesh, drawn.uvScale ), material, castShadow: collides } );
+				const geometry = rebased( mesh, drawn.uvScale );
+				surfaces.push( { bucket: drawn.bucket, geometry, material, castShadow: collides } );
+				// A surface that picks a variant per panel numbers this primitive's panels.
+				if ( this.materials.panelled( material ) ) withPanelUnits( geometry );
+				this.materials.assertGeometry( material, geometry );
 
 			} );
 

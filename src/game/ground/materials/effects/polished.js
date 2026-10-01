@@ -5,7 +5,7 @@ export function polished( s, p ) {
 	const smear = s.map( 'smear' ).g;
 	return {
 		colorNode: s.map( 'basecolor' ).rgb.mul( color( p.tint ) ),
-		normalNode: normal( s.map( 'normal' ), p.normalScale ),
+		normalNode: normal( s.map( 'normal' ), p.normalScale, s.world ),
 		metalnessNode: float( p.metalness ),
 		roughnessNode: bounded( smear.mul( p.smearGain ).add( s.map( 'variation', positionWorld.xz.div( p.variationScale ) ).r.mul( p.variationGain ) ), p.roughnessRange ),
 		clearcoatRoughnessNode: bounded( smear.add( p.coatBias ).mul( p.coatGain ), p.coatRange )

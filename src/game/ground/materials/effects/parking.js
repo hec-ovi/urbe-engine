@@ -7,7 +7,7 @@ export function parking( s, p ) {
 	const road = mix( s.road( 'cleanBasecolor' ), s.road( 'basecolor' ), s.wear ).rgb.mul( p.asphaltColorGain );
 	return {
 		colorNode: mix( road, panel.rgb.mul( p.panelColorGain ), entrance ),
-		normalNode: normal( mix( s.road( 'normal' ), s.map( 'parkingNormal' ), entrance ), p.normalScale ),
+		normalNode: mix( normal( s.road( 'normal' ), p.normalScale, true ), normal( s.map( 'parkingNormal' ), p.normalScale, s.world ), entrance ).normalize(),
 		roughnessNode: mix( s.road( 'roughness' ).r, s.map( 'parkingRoughness' ).r, entrance ),
 		aoNode: s.map( 'parkingAo' ).r
 	};

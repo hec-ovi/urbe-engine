@@ -17,6 +17,6 @@ export function roadPaint( s, p ) {
 		colorNode: ( response ? response( 'basecolor' ).rgb : color( p.tint ) ).mul( grain.mul( p.grainGain ).add( p.grainBias ) ),
 		opacityNode: mask.mul( mix( p.opacity, smoothstep( ...p.erosionRange, grain ), s.wear.mul( p.wearStrength ) ) ),
 		roughnessNode: response ? bounded( response( 'roughness' ).r.mul( q.roughnessGain ?? 1 ).add( q.roughnessBias ?? 0 ), q.roughnessRange ?? [ 0, 1 ] ) : float( p.roughness ),
-		normalNode: normal( s.road( 'normal' ), p.normalScale )
+		normalNode: normal( s.road( 'normal' ), p.normalScale, true )
 	};
 }
