@@ -340,4 +340,41 @@ describe( 'Warmup', () => {
 
 	} );
 
+	it( 'names in the hitch log a graph build or a map upload that held the thread, and nothing quicker', async () => {
+
+		const notes = [];
+		const hitches = { note: ( what, ms ) => notes.push( [ what, ms ] ) };
+		let spin = 6;
+		const renderer = {
+			...fakeRenderer( () => {
+
+				const until = performance.now() + spin;
+				while ( performance.now() < until );
+				return Promise.resolve();
+
+			} ),
+			initTexture: () => {
+
+				const until = performance.now() + 5;
+				while ( performance.now() < until );
+
+			}
+		};
+		const warmup = new Warmup( renderer, new THREE.Scene(), new THREE.PerspectiveCamera(), null, null, { hitches, budget: new FrameBudget( { paced: false } ) } );
+		const map = new THREE.Texture();
+		map.name = 'brick';
+		const slow = new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial( { map } ) );
+		slow.name = 'slow-batch';
+		await warmup.warm( slow );
+		expect( notes.map( ( [ what ] ) => what ) ).toEqual( [ 'upload brick', 'warm-up slow-batch' ] );
+		expect( notes.every( ( [ , ms ] ) => ms >= 4 ) ).toBe( true );
+
+		// A sibling for another pass names its work in the same log; a quick one names nothing.
+		spin = 0;
+		notes.length = 0;
+		await warmup.sibling().warm( new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshBasicMaterial() ) );
+		expect( notes ).toEqual( [] );
+
+	} );
+
 } );

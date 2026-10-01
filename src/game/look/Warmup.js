@@ -1,4 +1,6 @@
 import { ColorManagement, NoToneMapping } from 'three/webgpu';
+/** Below this a program's graph or a map's upload is not written in the hitch log. */
+const NOTED_MS = 4;
 import { FrameBudget } from '../../app/FrameBudget.js';
 import { programKey } from './ProgramKey.js';
 import { ProgramPins, plainDraw } from './ProgramPins.js';
@@ -31,9 +33,11 @@ export class Warmup {
 	 *   prepares the same world for another render target
 	 * @param budget the FrameBudget asked between programs and uploads; paced
 	 *   (a frame per turn) unless the caller is still loading
+	 * @param hitches the HitchLog a graph build or a map upload that holds the
+	 *   thread is named in, so a frame it lands in says which it was
 	 */
 	constructor( renderer, scene, camera, mrt = null, renderTarget = null, {
-		uploaded = new WeakSet(), pins = new ProgramPins(), budget = new FrameBudget(), queue = { tail: Promise.resolve() }
+		uploaded = new WeakSet(), pins = new ProgramPins(), budget = new FrameBudget(), queue = { tail: Promise.resolve() }, hitches = null
 	} = {} ) {
 
 		this.renderer = renderer;
@@ -45,6 +49,7 @@ export class Warmup {
 		this.warmed = new Set();
 		this.pins = pins;
 		this.budget = budget;
+		this.hitches = hitches;
 		// One compile at a time for the whole family: each sets the renderer's
 		// target and outputs for as long as its graph builds.
 		this.queue = queue;
@@ -67,7 +72,7 @@ export class Warmup {
 	sibling( { camera = this.camera, renderTarget = this.renderTarget, mrt = this.mrt, budget = this.budget } = {} ) {
 
 		return new Warmup( this.renderer, this.scene, camera, mrt, renderTarget, {
-			uploaded: this.uploaded, pins: this.pins, budget, queue: this.queue
+			uploaded: this.uploaded, pins: this.pins, budget, queue: this.queue, hitches: this.hitches
 		} );
 
 	}
@@ -128,7 +133,12 @@ export class Warmup {
 			}
 			this.renderer.setRenderTarget?.( this.renderTarget );
 			this.renderer.setMRT?.( this.mrt );
-			await this.renderer.compileAsync( object, this.camera, this.scene );
+			// The graphs build before the call returns; the programs link after it.
+			const started = performance.now();
+			const compiling = this.renderer.compileAsync( object, this.camera, this.scene );
+			const held = performance.now() - started;
+			if ( held >= NOTED_MS ) this.hitches?.note( `warm-up ${nameOf( object )}`, held );
+			await compiling;
 			this.pins.pin( this.renderer, plain );
 
 		} finally {
@@ -156,7 +166,10 @@ export class Warmup {
 
 			const { texture, ready } = textures[ index ];
 			await Promise.all( ready );
+			const started = performance.now();
 			this.renderer.initTexture?.( texture );
+			const held = performance.now() - started;
+			if ( held >= NOTED_MS ) this.hitches?.note( `upload ${texture.name || texture.image?.src?.split( '/' ).at( - 1 ) || 'map'}`, held );
 			this.uploaded.add( texture );
 			// A map a dropped floor disposes is uploaded again the next time a
 			// floor wears it, not on the frame that first draws it.
@@ -225,6 +238,17 @@ export class Warmup {
 		return wantedPrograms;
 
 	}
+
+}
+
+/** What a hitch note calls the object a warm-up prepared: its own name, or its first named mesh's. */
+function nameOf( object ) {
+
+	if ( object.name ) return object.name;
+	let named = null;
+	object.traverse?.( ( node ) => { named ??= node.name || null; } );
+
+	return named ?? object.type ?? 'object';
 
 }
 
