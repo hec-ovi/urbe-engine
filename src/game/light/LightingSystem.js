@@ -3,6 +3,7 @@ import { ClusteredLighting } from 'three/addons/lighting/ClusteredLighting.js';
 import { DynamicLighting } from 'three/addons/lighting/DynamicLighting.js';
 import DynamicLightsNode from 'three/addons/tsl/lighting/DynamicLightsNode.js';
 import { RectAreaLightTexturesLib } from 'three/addons/lights/RectAreaLightTexturesLib.js';
+import { ReachedPointLightDataNode } from './LightReach.js';
 
 /**
  * Which lighting system the renderer runs, decided once after `renderer.init()`
@@ -117,7 +118,8 @@ export class LightingSlot extends THREE.Lighting {
 }
 
 /**
- * Batched lights that keep what a material lights itself with.
+ * Batched lights that keep what a material lights itself with, their point
+ * lights costing a fragment only the lights that reach it (LightReach).
  *
  * Three 0.185.1 hands a material's environment, ambient occlusion and light
  * map to its lights node as `materialLightings`, and its own LightsNode builds
@@ -132,6 +134,15 @@ class MaterialLitDynamicLightsNode extends DynamicLightsNode {
 	static get type() {
 
 		return 'MaterialLitDynamicLightsNode';
+
+	}
+
+	constructor( options ) {
+
+		super( options );
+		// Three builds the point lights' data node on first sight of one; this
+		// one stands in its place from the start.
+		this._dataNodes.set( 'PointLight', new ReachedPointLightDataNode( this.maxPointLights ) );
 
 	}
 

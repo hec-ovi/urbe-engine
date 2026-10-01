@@ -60,8 +60,9 @@ describe( 'the night look on a renderer', () => {
 		const built = node.setupLightsNode( { context: { materialLightings: [ environment, occlusion ] }, renderer: { library: null } } );
 
 		expect( built.slice( 0, 2 ) ).toEqual( [ environment, occlusion ] );
-		expect( built.slice( 2 ).map( ( one ) => one.constructor.type ).sort() ).toEqual( [ 'DirectionalLightDataNode', 'PointLightDataNode' ] );
-		expect( built.find( ( one ) => one.constructor.type === 'PointLightDataNode' )._lights ).toEqual( lamps );
+		// The point lights a frame hands its fragments are only those that reach what it sees (LightReach).
+		expect( built.slice( 2 ).map( ( one ) => one.constructor.type ).sort() ).toEqual( [ 'DirectionalLightDataNode', 'ReachedPointLightDataNode' ] );
+		expect( built.find( ( one ) => one.constructor.type === 'ReachedPointLightDataNode' )._lights ).toEqual( lamps );
 
 	} );
 
