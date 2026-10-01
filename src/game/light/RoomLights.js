@@ -25,6 +25,10 @@ const REACH_MARGIN = 2.5;
  * reads against, never get one.
  */
 const INDIRECT_REACH = 0.3;
+/** The nearest a spot counts as standing when ranked by what it lights, in metres: about a storey. */
+const NEAR = 3;
+/** How much brighter a spot not yet drawn has to be at the player to take a drawn one's light. */
+const KEEP = 1.5;
 const UP = new THREE.Vector3( 0, 1, 0 );
 /** Map decode promises ride on a symbol, which a material copy does not carry over. */
 const RESOURCES = Symbol.for( 'urbe.material-resources' );
@@ -99,6 +103,8 @@ export class RoomLights {
 		this.strips = this.slots.flatMap( ( binding ) => binding.strips );
 		this.rooms = [];
 		this.position = new THREE.Vector3();
+		/** The fixtures the spots hold now. */
+		this.drawn = [];
 
 		/** The one lights node every room material wears, and those materials. */
 		this.pool = {
@@ -147,9 +153,10 @@ export class RoomLights {
 	/**
 	 * The light of a room's fixtures that the pool never draws, for the room's
 	 * fill to carry (RoomFill.perCopy): every cove tucked under its soffit, and
-	 * whatever is left past what one slot draws, brightest first, the way the
-	 * pool ranks them. A room the player stands in can take more of the pool
-	 * than one slot, and its few extra lights then add their pools to a floor
+	 * whatever is left past what one slot draws. Which ones a slot draws moves
+	 * with the player, so what it is counted as drawing is its share of the
+	 * brightest. A room the player stands in can take more of the pool than
+	 * one slot, and its few extra lights then add their pools to a floor
 	 * already lit at its own level; a room with no slot at all is lit by the
 	 * fill alone, which is the room's light at the distance it is seen from.
 	 *
@@ -232,7 +239,8 @@ export class RoomLights {
 		const line = this.strips.length > 0;
 
 		// A cove tucked under its soffit is the fill's on either count.
-		place( this.spots, share( this.rooms, this.spots.length, ( room ) => byFlux( room.fixtures.filter( ( one ) => ( line ? isSpot( one ) : true ) && ! tucked( one ) ) ) ), aimSpot );
+		const drawn = new Set( this.drawn );
+		this.drawn = place( this.spots, share( this.rooms, this.spots.length, ( room ) => byLight( room.fixtures.filter( ( one ) => ( line ? isSpot( one ) : true ) && ! tucked( one ) ), this.position, drawn ) ), aimSpot );
 		place(
 			this.strips,
 			line ? share( this.rooms, this.strips.length, ( room ) => byReach( room.fixtures.filter( ( one ) => ! isSpot( one ) ), this.position ) ) : [],
@@ -288,6 +296,21 @@ function share( rooms, capacity, rank ) {
 
 }
 
+/**
+ * A room's spots by the light each sends where the player is: flux over
+ * squared distance, never nearer than a storey, so the pools drawn are the
+ * ones under and around the player and the rest of a grid of downlights is
+ * the fill's (RoomLights.unseen). One already drawn keeps its light against
+ * a near equal, so walking under the grid does not trade pools every step.
+ */
+function byLight( fixtures, position, drawn ) {
+
+	const score = ( one ) => one.lumens / Math.max( NEAR * NEAR, one.position.distanceToSquared( position ) ) * ( drawn.has( one ) ? KEEP : 1 );
+
+	return fixtures.map( ( one ) => [ one, score( one ) ] ).sort( ( a, b ) => b[ 1 ] - a[ 1 ] ).map( ( [ one ] ) => one );
+
+}
+
 /** A room's fixtures, brightest first. */
 function byFlux( fixtures ) {
 
@@ -332,7 +355,7 @@ function slot( spotCount, stripCount ) {
 
 }
 
-/** Assigns chosen fixtures to the pool, darkening whatever is left over. */
+/** Assigns chosen fixtures to the pool, darkening whatever is left over; returns the fixtures drawn. */
 function place( pool, chosen, aim ) {
 
 	for ( let i = 0; i < pool.length; i ++ ) {
@@ -355,6 +378,8 @@ function place( pool, chosen, aim ) {
 		aim( light, fixture );
 
 	}
+
+	return chosen.slice( 0, pool.length );
 
 }
 

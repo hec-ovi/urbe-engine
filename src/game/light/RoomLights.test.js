@@ -110,6 +110,31 @@ describe( 'RoomLights', () => {
 
 	} );
 
+	it( 'draws the downlights of a grid around the player, and keeps them against a near equal', () => {
+
+		const lights = new RoomLights( factory, { roomSlots: 1, roomSpots: 2, roomStrips: 1 } );
+		const hall = room( 'hall', 0, 0 );
+		hall.fixtures = [];
+		for ( let x = 0; x < 5; x ++ ) for ( let z = 0; z < 5; z ++ ) {
+
+			hall.fixtures.push( { ...room( 'cell', 0, 1000 ).fixtures[ 0 ], position: new THREE.Vector3( x * 6, 4, z * 6 ) } );
+
+		}
+		const lit = () => lights.spots.filter( ( light ) => light.intensity > 0 ).map( ( light ) => `${light.position.x},${light.position.z}` ).sort();
+
+		lights.update( [ hall ], new THREE.Vector3( 1, 0, 2 ), 1 );
+		expect( lit() ).toEqual( [ '0,0', '0,6' ] );
+
+		// A step towards the next row is not enough to trade a pool.
+		lights.update( [ hall ], new THREE.Vector3( 1.5, 0, 3.4 ), 1 );
+		expect( lit() ).toEqual( [ '0,0', '0,6' ] );
+
+		// Across the hall, the pools are the ones over the player there.
+		lights.update( [ hall ], new THREE.Vector3( 23, 0, 24 ), 1 );
+		expect( lit() ).toEqual( [ '18,24', '24,24' ] );
+
+	} );
+
 	it( 'gives the nearest rooms a slot, keeping the same light ids', () => {
 
 		const lights = new RoomLights( factory, tier );
