@@ -119,7 +119,16 @@ describe( 'streamed band collision admission', () => {
 			expect( colliders.addBoxes( 'kit:0:0', boxes ) ).toBe( true );
 			expect( colliders.boxes ).toBe( 2 );
 			expect( physics.world.bodies.len() ).toBe( 1 );
-			expect( physics.world.colliders.len() ).toBe( 2 );
+			// One collider, its shape every cuboid: one entry in the broad phase.
+			expect( physics.world.colliders.len() ).toBe( 1 );
+			physics.refresh();
+			const down = ( x, z ) => physics.world.castRay( new physics.rapier.Ray( { x, y: 20, z }, { x: 0, y: - 1, z: 0 } ), 40, true )?.timeOfImpact ?? null;
+			// Each cuboid stands where it was put, the second turned a quarter about its height.
+			expect( down( 0, 0 ) ).toBeCloseTo( 12, 5 );
+			expect( down( 11.5, 0 ) ).toBeCloseTo( 12, 5 );
+			expect( down( 6, 8 ) ).toBeCloseTo( 12, 5 );
+			expect( down( 20, 8 ) ).toBeCloseTo( 12, 5 );
+			expect( down( 6, 20 ) ).toBeNull();
 			expect( colliders.addBoxes( 'kit:0:0', boxes ) ).toBe( true );
 			expect( physics.world.bodies.len() ).toBe( 1 );
 			colliders.dropBand( 'kit:0:0' );

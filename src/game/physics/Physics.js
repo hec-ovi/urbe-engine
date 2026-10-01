@@ -111,36 +111,32 @@ export class Physics {
 	}
 
 	/**
-	 * One fixed body carrying a compound of upright cuboids. Rapier keeps a
-	 * compound as a single broad-phase entry, so a whole cell of kit buildings
-	 * costs one body and no triangle cooking at all.
+	 * One fixed body carrying a compound of upright cuboids: one collider whose
+	 * shape is every cuboid at its place, so Rapier keeps a whole floor or a
+	 * whole cell of kit buildings as a single broad-phase entry and builds it
+	 * in one call, where a collider per cuboid was a thousand calls and a
+	 * thousand entries for the next step to fit into its tree.
 	 * @param boxes [{ center: [x,y,z], halfExtents: [hx,hy,hz], rotationY }]
 	 */
 	addBoxes( boxes ) {
 
-		const body = this.world.createRigidBody( RAPIER.RigidBodyDesc.fixed() );
+		const shapes = [], positions = [], rotations = [];
+		for ( const { center, halfExtents, rotationY = 0 } of boxes ) {
 
-		try {
+			if ( ! finiteTriple( center ) || ! finiteTriple( halfExtents ) || halfExtents.some( ( value ) => value <= 0 ) || ! Number.isFinite( rotationY ) ) {
 
-			for ( const { center, halfExtents, rotationY = 0 } of boxes ) {
-
-				if ( ! finiteTriple( center ) || ! finiteTriple( halfExtents ) || halfExtents.some( ( value ) => value <= 0 ) || ! Number.isFinite( rotationY ) ) {
-
-					throw new Error( 'E_PHYSICS_BOXES: a cuboid needs a finite centre, positive half extents and a finite yaw' );
-
-				}
-				this.world.createCollider(
-					RAPIER.ColliderDesc.cuboid( halfExtents[ 0 ], halfExtents[ 1 ], halfExtents[ 2 ] ).setDensity( 0 )
-						.setTranslation( center[ 0 ], center[ 1 ], center[ 2 ] )
-						.setRotation( { x: 0, y: Math.sin( rotationY / 2 ), z: 0, w: Math.cos( rotationY / 2 ) } ),
-					body
-				);
+				throw new Error( 'E_PHYSICS_BOXES: a cuboid needs a finite centre, positive half extents and a finite yaw' );
 
 			}
+			shapes.push( new RAPIER.Cuboid( halfExtents[ 0 ], halfExtents[ 1 ], halfExtents[ 2 ] ) );
+			positions.push( { x: center[ 0 ], y: center[ 1 ], z: center[ 2 ] } );
+			rotations.push( { x: 0, y: Math.sin( rotationY / 2 ), z: 0, w: Math.cos( rotationY / 2 ) } );
 
-			return { body, boxes: boxes.length, triangles: 0 };
+		}
+		const body = this.world.createRigidBody( RAPIER.RigidBodyDesc.fixed() );
+		if ( shapes.length ) this.world.createCollider( RAPIER.ColliderDesc.compound( shapes, positions, rotations ).setDensity( 0 ), body );
 
-		} catch ( error ) { this.world.removeRigidBody( body ); throw error; }
+		return { body, boxes: boxes.length, triangles: 0 };
 
 	}
 
