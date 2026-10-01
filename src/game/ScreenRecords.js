@@ -139,8 +139,10 @@ export class Acquaintances {
  * @param quests the journal's view, whose steps carry `npcName` and `place`
  * @param castOf( npcId ) the quest ids that cast this person
  * @param personaOf( npcId ) how their story describes them, or null; its first sentence opens their record
+ * @param pictures `{ person( npcId ), place( parcelId ) }`, each the loader of a record's own picture
+ *   (a function resolving with its URL or null), carried as the record's `image`
  */
-export function codexEntries( { cards = [], people = [], places = [], quests = [], castOf = () => [], personaOf = () => null } ) {
+export function codexEntries( { cards = [], people = [], places = [], quests = [], castOf = () => [], personaOf = () => null, pictures = {} } ) {
 
 	const index = questIndex( quests );
 	const story = ( ids ) => [ ...new Set( ids ) ].filter( ( id ) => index.has( id ) )
@@ -182,6 +184,7 @@ export function codexEntries( { cards = [], people = [], places = [], quests = [
 			],
 			...( place.use ? { tags: [ place.use ] } : {} ),
 			...( place.use ? {} : { model: { shape: 'map' } } ),
+			...( place.use && pictures.place ? { image: pictures.place( place.id ) } : {} ),
 			related: story( here )
 		};
 
@@ -210,6 +213,7 @@ export function codexEntries( { cards = [], people = [], places = [], quests = [
 			],
 			...( person.line ? { quote: person.line, source: 'The last thing they said to you' } : {} ),
 			...( person.role ? { tags: [ person.role ] } : {} ),
+			...( pictures.person ? { image: pictures.person( person.npcId ) } : {} ),
 			related: story( cast )
 		};
 

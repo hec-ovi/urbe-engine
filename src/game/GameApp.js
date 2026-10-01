@@ -95,6 +95,9 @@ import { stopsFor } from './time/DayCycle.js';
 import { Locator } from './world/Locator.js';
 import { Bookmarks } from './world/Bookmarks.js';
 import { mapModel, blockWorld } from './world/MapModel.js';
+import { Snapshots } from './portraits/Snapshots.js';
+import { Portraits } from './portraits/Portraits.js';
+import { BuildingShots } from './portraits/BuildingShots.js';
 
 const _push = new THREE.Vector3();
 const THEME = 'cyberpunk';
@@ -603,6 +606,10 @@ export class GameApp {
 			lighting: actorLighting
 		} );
 		this.scene.add( this.hero.group );
+		// Pictures of people and buildings for the codex, drawn only while the world holds still.
+		this.snapshots = new Snapshots( { renderer: this.renderer } );
+		this.portraits = new Portraits( { snapshots: this.snapshots, poser: this.hero.poser, sim: this.sim } );
+		this.buildingShots = new BuildingShots( { snapshots: this.snapshots, pieces: this.shellScene?.pieces ?? null, buildings } );
 		// The people standing near the player are the crowd's, and the probe reflects the city without them.
 		this.probe?.exclude( this.hero.group );
 		this.animations = new GameplayAnimationDirector( {
@@ -1023,6 +1030,8 @@ export class GameApp {
 		const holding = this.pauseState.holds( this.view.panels.current );
 		if ( holding !== this.holding ) this.voice?.setPaused( this.holding = holding );
 		if ( holding ) delta = 0;
+		// A picture a screen asked for is drawn only while nothing moves, one piece a frame.
+		if ( holding ) this.snapshots?.step();
 		this.controller.frozen = ! this.input.locked || playableModalOpen( this.view, this.interactor );
 		this.clock.advance( delta );
 		this.hydrology.update( this.playSeconds += delta );
@@ -2221,7 +2230,12 @@ export class GameApp {
 			places: [ ...this.discoveredLocations.values() ].map( ( location ) => this.#placeRecord( location ) ),
 			quests: this.quests.view( this.clock.timeMin ),
 			castOf: cast,
-			personaOf: ( npcId ) => this.quests.persona( npcId )
+			personaOf: ( npcId ) => this.quests.persona( npcId ),
+			// Each card asks for its picture as it comes into view.
+			pictures: {
+				person: ( npcId ) => () => this.portraits?.portrait( { npcId } ) ?? Promise.resolve( null ),
+				place: ( parcelId ) => () => this.buildingShots?.building( parcelId ) ?? Promise.resolve( null )
+			}
 		} ) );
 
 	}

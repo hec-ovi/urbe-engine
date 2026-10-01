@@ -68,8 +68,10 @@ describe( 'ScreenRecords', () => {
 			],
 			quests: QUESTS,
 			castOf: ( npcId ) => npcId === 'a2' ? [ 'q_main' ] : [],
-			personaOf: ( npcId ) => npcId === 'a2' ? 'Tired, kind and exact. Hides the list.' : null
+			personaOf: ( npcId ) => npcId === 'a2' ? 'Tired, kind and exact. Hides the list.' : null,
+			pictures: { person: ( npcId ) => `face:${npcId}`, place: ( parcelId ) => `building:${parcelId}` }
 		} );
+		expect( entries.map( ( entry ) => entry.image ?? null ) ).toEqual( [ null, 'face:a2', 'building:p5', null, 'building:p7', 'building:p9' ] );
 		expect( entries.map( ( entry ) => [ entry.id, entry.category, entry.title ] ) ).toEqual( [
 			[ 'item:i_drive', 'items', 'Sable\'s drive' ],
 			[ 'person:a2', 'people', 'Mira Chen' ],
