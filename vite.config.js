@@ -54,6 +54,11 @@ export default defineConfig( ( { mode } ) => ( {
 		talkRoute( ROOT ),
 		voiceRoute()
 	],
+	// The dependency scan starts from the app's own pages only: a review or
+	// proof page assembled under out/ is not the app's, and one that imports a
+	// path the scan cannot resolve made it skip pre-bundling, so the first page
+	// load after every restart failed while dependencies were found on demand.
+	optimizeDeps: { entries: [ 'index.html', 'src/**/*.html' ] },
 	server: {
 		// Play mode owns 5175: every recorded play URL names it, and a free
 		// lower port must never move the game.
