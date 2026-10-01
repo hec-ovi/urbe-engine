@@ -35,6 +35,10 @@ describe( 'game URL configuration', () => {
 		clock.advance( 36 * 3600 );
 		expect( clock.timeMin ).toBe( 2880 );
 		expect( config.lightingHour ).toBe( 21 );
+		// The clock's hour leaves the light at its tuned night; `light` relights the city to review a look by day.
+		window.history.replaceState( {}, '', '/?mode=game&hour=12&light=14' );
+		expect( GameConfig.fromUrl().lightingHour ).toBe( 14 );
+		expect( dayCycle( 14 ).state ).toBe( 'day' );
 
 		window.history.replaceState( {}, '', '/' );
 		expect( GameConfig.fromUrl() ).toMatchObject( {
