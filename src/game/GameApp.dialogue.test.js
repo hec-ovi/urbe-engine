@@ -280,7 +280,9 @@ describe('explicit quest dialogue through the playable UI',()=>{
   const {app,person}=fixture();app.quests.dialoguesFor=()=>[];
   const kip=npc('kip','vendor','p1');kip.name={given:'Kip',family:'Ash'};kip.job.shift={startMin:480,endMin:960,days:[0,1,2,3,4],kind:'day'};
   app.sim.people.set(kip.npcId,kip);app.sim.findNPCs=()=>[...app.sim.people.values()];
-  app.sky={day:{state:'night'}};app.stream={rooms:[]};
+  app.sky={day:{state:'night'}};
+  const lobby={parcelId:'p1',floor:0,kind:'lobby',holds:()=>true};app.stream={rooms:[lobby]};
+  app.interiorRoutes={plan:id=>id==='p1'?{floors:[{index:0,lifts:[{id:'elev-0'}],stairs:[{id:'stair-a'}],rooms:[{kind:'lobby'}]},{index:1,lifts:[{id:'elev-0'}],stairs:[{id:'stair-a'}],rooms:[]}],apartments:[{floor:1,number:'101'}]}:null};
   app.crowd.members=new Map([['c1',{npcId:kip.npcId,parcelId:'p1',position:new Vector3(3,0,0)}]]);
   app.interactor.conversation={npcId:person.npcId,instance:person,behavior:null,person:{position:new Vector3(1,0,2),parcelId:'p1'}};
   app.presentConversation(app.interactor.conversation);app.view.dialog.setTalkOpen(true);
@@ -288,7 +290,10 @@ describe('explicit quest dialogue through the playable UI',()=>{
   await vi.waitFor(()=>expect(app.talk.stream).toHaveBeenCalled());
   const context=app.talk.stream.mock.calls.at(-1)[4];
   expect(context.look).toEqual(describeLook(recipeFor({gender:person.gender,appearanceSeed:person.appearanceSeed,npcId:person.npcId}).recipe));
-  expect(context.here).toEqual({x:1,z:2,parcelId:'p1',light:lightWords('night',true)});
+  expect(context.here).toEqual({x:1,z:2,parcelId:'p1',floor:0,light:lightWords('night',true),building:{
+   floors:[{index:0,rooms:['lobby']},{index:1,rooms:[],apartments:['101']}],lifts:1,stairs:1,room:'lobby',
+   people:[{name:'Kip Ash',role:'vendor',floor:0,room:'lobby'}]
+  }});
   expect(context.people.known).toEqual([expect.objectContaining({npcId:kip.npcId,relation:'coworker',now:{kind:'here'},asked:true})]);
   expect(context.people.unknown).toEqual([]);
  });

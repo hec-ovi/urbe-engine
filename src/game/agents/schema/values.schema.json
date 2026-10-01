@@ -62,6 +62,39 @@
         "giveUpAfterMin": { "type": "number", "exclusiveMinimum": 0 }
       }
     },
+    "gate": {
+      "description": "What a walker stops at along a route, measured in metres along its path: a door it waits to see open, or a lift it rides.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "parcelId", "at", "position"],
+          "properties": {
+            "kind": { "const": "door" },
+            "parcelId": { "type": "string", "minLength": 1 },
+            "floor": { "type": "integer" },
+            "at": { "type": "number", "minimum": 0 },
+            "position": { "$ref": "#/$defs/vec3" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "parcelId", "shaft", "fromFloor", "toFloor", "from", "board", "alight", "to"],
+          "properties": {
+            "kind": { "const": "lift" },
+            "parcelId": { "type": "string", "minLength": 1 },
+            "shaft": { "type": "string", "minLength": 1 },
+            "fromFloor": { "type": "integer" },
+            "toFloor": { "type": "integer" },
+            "from": { "type": "number", "minimum": 0 },
+            "board": { "type": "number", "minimum": 0 },
+            "alight": { "type": "number", "minimum": 0 },
+            "to": { "type": "number", "minimum": 0 }
+          }
+        }
+      ]
+    },
     "route": {
       "type": "object",
       "additionalProperties": false,

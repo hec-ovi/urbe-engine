@@ -8,7 +8,8 @@
       "additionalProperties": false,
       "required": ["path3"],
       "properties": {
-        "path3": { "type": "array", "minItems": 2, "items": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" } }
+        "path3": { "type": "array", "minItems": 2, "items": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" } },
+        "gates": { "type": "array", "items": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/gate" } }
       }
     }
   ]

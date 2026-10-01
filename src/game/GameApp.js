@@ -9,6 +9,7 @@ import { NpcVoice } from './voice/NpcVoice.js';
 import { peopleKnown, stripCues } from '../../../quests/dist/runtime.js';
 import { describeLook } from './agents/avatar/Describe.js';
 import { castNames } from './sim/Homes.js';
+import { buildingFacts } from './talk/BuildingFacts.js';
 import { recipeFor } from './agents/Appearance.js';
 import { findPath } from '../../../interior/dist/nav.js';
 import { QuestSession } from './quests/QuestSession.js';
@@ -542,7 +543,7 @@ export class GameApp {
 			simulation: this.sim,
 			routes,
 			places: continuityPlaces,
-			interiorRoutes: new InteriorRoutes( buildings, { findPath } )
+			interiorRoutes: this.interiorRoutes = new InteriorRoutes( buildings, { findPath } )
 		} );
 		if ( game?.npcState?.continuity ) {
 
@@ -1294,7 +1295,13 @@ export class GameApp {
 		};
 		const recipe = person.look?.recipe ?? recipeFor( { gender: instance.gender, appearanceSeed: instance.appearanceSeed, npcId } ).recipe;
 		const context = { look: describeLook( recipe ), here };
-		if ( typeof this.sim?.findNPCs !== 'function' ) return context;
+		const plan = parcelId ? this.interiorRoutes?.plan( parcelId ) ?? null : null;
+		if ( typeof this.sim?.findNPCs !== 'function' ) {
+
+			if ( plan ) here.building = buildingFacts( plan, { room: room?.kind ?? null } );
+			return context;
+
+		}
 		const everyone = this.sim.findNPCs( {} );
 		const names = {};
 		for ( const other of everyone ) {
@@ -1306,7 +1313,42 @@ export class GameApp {
 			present: this.#presentAround( npcId, position, parcelId ),
 			behaviorAt: ( id, timeMin ) => this.sim.behaviorAt( id, timeMin )
 		} );
+		if ( plan ) {
+
+			// Who else stands in the building: by name when this person knows them, else by what they are.
+			const known = new Map( people.known.map( ( other ) => [ other.npcId, `${other.name.given} ${other.name.family}` ] ) );
+			here.building = buildingFacts( plan, { room: room?.kind ?? null, insiders: this.#insiders( npcId, position, parcelId, known ) } );
+
+		}
 		return people.known.length || people.unknown.length ? { ...context, people } : context;
+	}
+
+	/**
+	 * The other bodies in a building as the talk tells them: a name for the
+	 * ones `known`, what they are (their post there, else their kind of
+	 * person), the floor and the kind of room they stand in, and how far off.
+	 */
+	#insiders( npcId, position, parcelId, known ) {
+		const insiders = [];
+		for ( const member of this.crowd?.members?.values() ?? [] ) {
+			if ( member.npcId === npcId || member.leaving || member.copy ) continue;
+			if ( member.parcelId !== parcelId && member.place?.id !== parcelId ) continue;
+			const room = this.stream?.rooms?.find( ( candidate ) => candidate.parcelId === parcelId && candidate.holds( member.position ) ) ?? null;
+			const job = ( member.instance ?? this.#established( member.npcId ) )?.job;
+			insiders.push( {
+				...( known.has( member.npcId ) ? { name: known.get( member.npcId ) } : {} ),
+				role: job?.parcelId === parcelId ? job.role : this.npcTypeLabels?.get( member.type ) ?? 'visitor',
+				floor: room?.floor ?? member.place?.floor ?? 0, ...( room?.kind ? { room: room.kind } : {} ),
+				metres: member.position.distanceTo( position )
+			} );
+		}
+		return insiders;
+	}
+
+	/** The simulation's record of an established person, or null. */
+	#established( npcId ) {
+		if ( ! npcId ) return null;
+		try { return this.sim.getNPC( npcId ); } catch { return null; }
 	}
 
 	/**

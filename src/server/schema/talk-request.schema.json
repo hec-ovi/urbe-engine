@@ -53,7 +53,7 @@
       "required": ["placeId", "kind"],
       "properties": {
         "placeId": { "$ref": "#/$defs/id" },
-        "kind": { "enum": ["parcel", "stop", "street"] },
+        "kind": { "enum": ["parcel", "stop", "street", "person", "spot"] },
         "name": { "type": "string", "minLength": 1 },
         "notes": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 2000 } }
       }
@@ -95,7 +95,41 @@
         "z": { "type": "number" },
         "parcelId": { "$ref": "#/$defs/id" },
         "floor": { "type": "integer", "minimum": 0 },
-        "light": { "$ref": "#/$defs/words" }
+        "light": { "$ref": "#/$defs/words" },
+        "building": {
+          "description": "The building the person stands in: what each floor holds, its lifts and staircases, the room they are in and who is inside.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["floors", "lifts", "stairs"],
+          "properties": {
+            "floors": {
+              "type": "array", "maxItems": 120,
+              "items": {
+                "type": "object", "additionalProperties": false, "required": ["index", "rooms"],
+                "properties": {
+                  "index": { "type": "integer", "minimum": 0 },
+                  "rooms": { "type": "array", "maxItems": 40, "items": { "$ref": "#/$defs/words" } },
+                  "apartments": { "type": "array", "maxItems": 99, "items": { "$ref": "#/$defs/words" } }
+                }
+              }
+            },
+            "room": { "$ref": "#/$defs/words" },
+            "lifts": { "type": "integer", "minimum": 0 },
+            "stairs": { "type": "integer", "minimum": 0 },
+            "people": {
+              "type": "array", "maxItems": 8,
+              "items": {
+                "type": "object", "additionalProperties": false, "required": ["role", "floor"],
+                "properties": {
+                  "name": { "$ref": "#/$defs/words" },
+                  "role": { "$ref": "#/$defs/words" },
+                  "floor": { "type": "integer", "minimum": 0 },
+                  "room": { "$ref": "#/$defs/words" }
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
