@@ -20,7 +20,8 @@ import { hash32 } from './SurfaceDetail.js';
  *   gloss, each slab its own tone and gloss, rims scuffed and a coating
  *   chipped to the concrete along each slab's frame, grime packed into the
  *   seams and corners, walked lines polished down a walking band, white
- *   paint flecks, gum and stains.
+ *   paint flecks, gum and stains, and chips of a coated band's own paint on
+ *   that band alone.
  * - `curb`: the arris chipped to the concrete under the coating, tyre scuffs
  *   low on the face, grime at the foot.
  * - `gutter`: grit gathering against the curb and standing wet along it.
@@ -241,9 +242,11 @@ export function sidewalk( detail, { color, roughness, wear: use = float( 0.4 ) }
 	c = mix( c, vec3( 0.035, 0.034, 0.032 ), spot.mul( 0.9 ) );
 	r = mix( r, float( 0.55 ), spot );
 
-	// Spills and puddle rims lie a metre or two across; gum and paint chips a hand's width.
+	// Spills and puddle rims lie a metre or two across; gum and paint chips a
+	// hand's width. Only a coated band sheds chips of its coating: bare slabs
+	// keep to gum, grime, oil and cracks.
 	let worn = stained( c, r, detail.decal( q, { cell: 2.6, presence: amount.mul( 0.2 ), cells: stains === 'drain' ? [ OIL, WATER ] : [ OIL, WATER, WATER ], seed: 5 } ), 0.6 );
-	if ( stains !== 'drain' ) worn = stained( worn.color, worn.roughness, detail.decal( q.add( 0.31 ), { cell: 0.45, presence: amount.mul( 0.06 ), cells: [ GUM, CHIP ], seed: 19 } ), 0.85 );
+	if ( stains !== 'drain' ) worn = stained( worn.color, worn.roughness, detail.decal( q.add( 0.31 ), { cell: 0.45, presence: amount.mul( 0.06 ), cells: walk ? [ GUM, CHIP ] : [ GUM ], seed: 19 } ), 0.85 );
 
 	return { color: worn.color, roughness: clamp( worn.roughness, 0.04, 1 ) };
 
