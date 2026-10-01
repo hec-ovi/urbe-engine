@@ -11,6 +11,7 @@ import { WalkSurface } from './WalkSurface.js';
 import { BODY_RADIUS } from '../physics/PlayerBody.js';
 import { stepIdle } from './IdleVariety.js';
 import { Visits } from './Visits.js';
+import { IndoorSteer } from './IndoorSteer.js';
 
 /** How fast people walk. Everyone has their own pace inside this range. */
 const WALK_SLOWEST = 0.9;
@@ -65,6 +66,10 @@ const CLEARANCE = 0.02;
 const SCHEDULED = new Set( [ 'schedule', 'resuming', 'released' ] );
 /** Postures a person rests in with the idle variety of their role (IdleVariety.js). */
 const RESTING = new Set( [ CLIP.IDLE, CLIP.SIT ] );
+/** How near the player people indoors keep out of each other, metres. */
+const INDOOR_REACH = 40;
+/** Who goes first indoors where two cannot pass: somebody walking with the player, then an errand, then anybody's day. */
+const INDOOR_PRIORITY = Object.freeze( { following: 3, leading: 3, errand: 2, resuming: 1, schedule: 1, released: 1 } );
 
 /**
  * The people in the world, all of them real. Two sources, both the simulation
@@ -113,8 +118,14 @@ export class Crowd {
 		this.visibility = visibility;
 		this.floorShown = floorShown;
 		this.surface = surface;
+		/**
+		 * People inside buildings keeping out of each other and out of the player: continuity's walkers ask it
+		 * how far they may walk (through NpcContinuity's `ways.travel`), guests walking to their seats as well.
+		 */
+		this.indoor = new IndoorSteer( { walkable: ( parcelId, point ) => interiorRoutes?.stands?.( parcelId, point ) ?? true } );
 		/** Guests sitting a while, getting up, sitting again and leaving through the door. */
-		this.visits = new Visits( { durations: assets?.durations ?? [], routes: interiorRoutes, spots: ( parcelId ) => this.#spotsAt( parcelId ) } );
+		this.visits = new Visits( { durations: assets?.durations ?? [], routes: interiorRoutes, spots: ( parcelId ) => this.#spotsAt( parcelId ),
+			give: ( member, wanted ) => this.indoor.travel( indoorId( member ), wanted ) } );
 		this.delta = 0;
 		if ( lighting ) for ( let variant = 0; variant < assets.variants.length; variant ++ ) {
 
@@ -165,6 +176,13 @@ export class Crowd {
 
 			if ( member ) this.#remove( member );
 			return null;
+
+		}
+		// Last frame's step aside indoors comes off before the body takes continuity's position again.
+		if ( member?.aside ) {
+
+			member.position.sub( member.aside );
+			member.aside = null;
 
 		}
 		const position = new THREE.Vector3( ...actor.position );
@@ -370,6 +388,7 @@ export class Crowd {
 
 		}
 
+		this.#keepApartInside( delta, player );
 		this.#publish();
 		this.#separate( delta );
 		this.#write();
@@ -448,6 +467,38 @@ export class Crowd {
 		} catch {
 
 			return false;
+
+		}
+
+	}
+
+	/**
+	 * Nobody walks through anybody indoors either (IndoorSteer): everybody inside a building near the player,
+	 * walking or standing, is a body the walkers there step around, wait for or step back out of the way of,
+	 * the player too. A walker is drawn stepped aside from the line continuity or its visit walks it on.
+	 */
+	#keepApartInside( delta, player ) {
+
+		const bodies = [], walkers = [];
+		for ( const member of this.members.values() ) {
+
+			if ( ! member.parcelId || member.edge || member.fallen || member.leaving ) continue;
+			if ( player && member.position.distanceToSquared( player ) > INDOOR_REACH * INDOOR_REACH ) continue;
+			const visiting = member.visit?.stage === 'walking';
+			const moving = visiting || ( member.continuity && ( member.clip === CLIP.WALK || member.clip === CLIP.RUN ) );
+			bodies.push( { id: indoorId( member ), parcelId: member.parcelId, position: member.position.toArray(), heading: member.heading,
+				moving, priority: visiting ? 0 : INDOOR_PRIORITY[ member.controlMode ] ?? 1 } );
+			if ( moving || member.continuity ) walkers.push( member );
+
+		}
+		this.indoor.update( bodies, player ? [ player.x, player.y, player.z ] : null, delta );
+		for ( const member of walkers ) {
+
+			const offset = this.indoor.offset( indoorId( member ) );
+			if ( Math.abs( offset ) < 1e-4 ) continue;
+			// Offsets run to the walker's left, as the crowd's lanes do.
+			member.aside = new THREE.Vector3( Math.cos( member.heading ) * offset, 0, - Math.sin( member.heading ) * offset );
+			member.position.add( member.aside );
 
 		}
 
@@ -1881,6 +1932,13 @@ function aside( body, ahead ) {
 function outside( member ) {
 
 	return Boolean( member.edge ) || ! member.parcelId;
+
+}
+
+/** The id a body goes by indoors: its person's, so continuity can ask after them, else the crowd's own. */
+function indoorId( member ) {
+
+	return member.npcId ?? member.id;
 
 }
 

@@ -31,10 +31,14 @@ export class Visits {
 	 * @param durations each baked clip's length in seconds
 	 * @param routes InteriorRoutes, `{ covers, route( parcelId, from, to ) }`, or null
 	 * @param spots the spots taken at a parcel now: `spots( parcelId )` is a Set of `kind:index`
+	 * @param give `( member, wanted ) => metres`, how far a walking guest may walk on of the `wanted` metres
+	 *   this frame: all of it, less, none or a negative distance back along its way (IndoorSteer `travel`)
 	 */
-	constructor( { durations, routes = null, spots } ) {
+	constructor( { durations, routes = null, spots, give = ( member, wanted ) => wanted } ) {
 
 		this.durations = durations;
+		/** How far a walking guest may walk on of what it would (the crowd's IndoorSteer): less, none, or back. */
+		this.give = give;
 		this.routes = routes;
 		this.spots = spots;
 
@@ -236,7 +240,7 @@ export class Visits {
 
 		const visit = member.visit;
 		const total = visit.lengths[ visit.lengths.length - 1 ];
-		visit.at = Math.min( total, visit.at + PACE * delta );
+		visit.at = Math.max( 0, Math.min( total, visit.at + this.give( member, PACE * delta ) ) );
 		along( member, visit.path, visit.lengths, visit.at );
 		member.shown = CLIP.WALK;
 		member.frame = ( member.frame + ( delta / ( this.durations[ CLIP.WALK ] || 1 ) ) * FRAMES ) % FRAMES;

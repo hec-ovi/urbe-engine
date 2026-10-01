@@ -573,7 +573,9 @@ export class GameApp {
 		// People open doors and ride lifts on their way: the same leaves and cars the player uses.
 		this.passage = new Passage( {
 			doors: () => [ ...city.doors, ...( this.stream.apartmentDoors?.doors ?? [] ) ],
-			elevators: this.elevators
+			elevators: this.elevators,
+			// Inside buildings people give way to each other as the crowd draws them.
+			steer: () => this.crowd?.indoor ?? null
 		} );
 		this.interiorRoutes = new InteriorRoutes( buildings, { findPath } );
 		this.npcContinuity = new NpcContinuity( {

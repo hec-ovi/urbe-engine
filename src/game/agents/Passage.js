@@ -26,11 +26,23 @@ export class Passage {
 	 * @param doors returns the door records loaded now: street doors and apartment doors,
 	 *   each `{ parcelId, center, open, wanted }`
 	 * @param elevators the game's Elevators: `byBuilding` parcelId to shafts `{ liftId, stops, at, moving, called, target, selected, press, stopAt }`
+	 * @param steer returns the crowd's IndoorSteer, who indoors gives way to whom, or null
 	 */
-	constructor( { doors = () => [], elevators = null } = {} ) {
+	constructor( { doors = () => [], elevators = null, steer = () => null } = {} ) {
 
 		this.doors = doors;
 		this.elevators = elevators;
+		this.steer = steer;
+
+	}
+
+	/**
+	 * How far a walker inside a building may walk on of the `wanted` metres this frame, as the people around it
+	 * leave it room (the crowd's IndoorSteer): all of it, less, none or a negative distance back along its way.
+	 */
+	travel( npcId, wanted ) {
+
+		return this.steer()?.travel( npcId, wanted ) ?? wanted;
 
 	}
 

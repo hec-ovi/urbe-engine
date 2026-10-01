@@ -106,6 +106,34 @@ export class InteriorRoutes {
 	}
 
 	/**
+	 * Whether a person may stand at a world point inside this building: on a
+	 * walkable cell of Interior's navigation on the floor the point stands on.
+	 * True where the building is not loaded or publishes no such floor, so
+	 * nothing is held back for want of it.
+	 */
+	stands( parcelId, point ) {
+
+		const walkable = this.#walkable( parcelId );
+		if ( ! walkable ) return true;
+		const { floor, x, z } = navPoint( walkable.levels, point );
+		walkable.grids ??= new Map();
+		if ( ! walkable.grids.has( floor ) ) {
+
+			const source = walkable.nav.floors.find( ( entry ) => entry.floor === floor );
+			walkable.grids.set( floor, source ? { ...source, cells: bits( source.walkable ) } : null );
+
+		}
+		const grid = walkable.grids.get( floor );
+		if ( ! grid ) return true;
+		const size = walkable.nav.cellSize;
+		const column = Math.floor( ( x - grid.origin[ 0 ] ) / size ), row = Math.floor( ( z - grid.origin[ 1 ] ) / size );
+		if ( column < 0 || row < 0 || column >= grid.cols || row >= grid.rows ) return false;
+		const index = row * grid.cols + column;
+		return ( ( grid.cells[ index >> 3 ] >> ( index & 7 ) ) & 1 ) === 1;
+
+	}
+
+	/**
 	 * The building's circulation as a guide and the talk read it: per floor its
 	 * elevation, lift landings and stair entries, its rooms by kind (and unit)
 	 * with a point inside each, and the numbered apartment doors with the
@@ -295,6 +323,24 @@ function circulation( nav, floors, levels, layoutOf, doors ) {
 }
 
 /** The navigation floor and XZ of a world point: the highest floor at or just above its feet. */
+const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/** A navigation floor's walkable cells, Interior's row-major bitmask, from its base64. */
+function bits( encoded ) {
+
+	const clean = encoded.replace( /=+$/, '' ), bytes = new Uint8Array( Math.floor( clean.length * 3 / 4 ) );
+	let at = 0;
+	for ( let i = 0; i < clean.length; i += 4 ) {
+
+		const n = ( BASE64.indexOf( clean[ i ] ) << 18 ) | ( BASE64.indexOf( clean[ i + 1 ] ?? 'A' ) << 12 )
+			| ( BASE64.indexOf( clean[ i + 2 ] ?? 'A' ) << 6 ) | BASE64.indexOf( clean[ i + 3 ] ?? 'A' );
+		for ( const shift of [ 16, 8, 0 ] ) if ( at < bytes.length ) bytes[ at ++ ] = ( n >> shift ) & 255;
+
+	}
+	return bytes;
+
+}
+
 function navPoint( levels, [ x, y, z ] ) {
 
 	let floor = null;

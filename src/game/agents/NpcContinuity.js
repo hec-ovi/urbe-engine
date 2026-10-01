@@ -1133,17 +1133,36 @@ export class NpcContinuity {
 	 */
 	#walk( actor, route, travel ) {
 
-		const allowed = this.#gates( actor, route, travel );
-		if ( ! ( allowed > 0 ) ) return 0;
+		const gated = this.#gates( actor, route, travel );
+		const allowed = this.#giveWay( actor, route, gated );
+		if ( ! ( allowed > 0 ) && ! ( allowed < 0 ) ) return 0;
 		const before = route.cursor;
-		route.cursor = Math.min( route.distanceMeters, route.cursor + allowed );
+		route.cursor = Math.max( 0, Math.min( route.distanceMeters, route.cursor + allowed ) );
 		const moved = pointAtDistance( route.path3, route.cursor );
 		actor.position = moved.position;
-		actor.heading = moved.heading ?? actor.heading;
+		// Stepping back out of somebody's way, a walker faces the way it steps.
+		actor.heading = ( allowed < 0 && moved.heading !== undefined ? moved.heading + Math.PI : moved.heading ) ?? actor.heading;
 		const inside = route.indoor?.find( ( stretch ) => route.cursor >= stretch.from - EPSILON && route.cursor <= stretch.to + EPSILON );
 		if ( inside ) actor.place = { kind: 'parcel', id: inside.parcelId };
 		else this.#putOnWalkGraph( actor );
-		return route.cursor - before;
+		return Math.abs( route.cursor - before );
+
+	}
+
+	/**
+	 * Inside a building people give way to each other (`ways.travel`, IndoorSteer): of the metres the gates
+	 * allow, a walker walks what its way leaves it, waits, or steps back out of somebody's way, never back
+	 * through a door or lift it has passed. Outside, in a lift and with no such way, it walks them all.
+	 */
+	#giveWay( actor, route, allowed ) {
+
+		if ( ! this.ways?.travel || route.ride || ! ( allowed >= 0 ) ) return allowed;
+		const indoors = route.indoor?.some( ( stretch ) => route.cursor >= stretch.from - EPSILON && route.cursor <= stretch.to + EPSILON );
+		if ( ! indoors ) return allowed;
+		const given = this.ways.travel( actor.npcId, allowed );
+		if ( ! ( given < 0 ) ) return given;
+		const behind = Math.max( 0, ...( route.gates ?? [] ).map( ( gate ) => gate.to ?? gate.at ).filter( ( at ) => at <= route.cursor + EPSILON ) );
+		return Math.max( given, behind - route.cursor );
 
 	}
 
