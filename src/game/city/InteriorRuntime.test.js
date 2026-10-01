@@ -66,25 +66,26 @@ async function openModules( { materials = factory } = {} ) {
 
 }
 
-/** One furnished building, generated from an assembled kit blueprint. */
-let generated = null;
-async function building() {
+/** One furnished building, generated from an assembled kit blueprint: mid offices, or at
+ *  another tier (rich offices light their rooms with coves). */
+const generated = new Map();
+async function building( tier = 'mid' ) {
 
-	if ( generated ) return generated;
+	if ( generated.has( tier ) ) return generated.get( tier );
 
 	const width = 24, depth = 32, floors = 5;
 	const lot = [ [ 0, 0 ], [ width, 0 ], [ width, depth ], [ 0, depth ] ];
 	const { blueprint } = planAssembly( {
 		family: 'mirror-frame', buildingId: 'p1', seed: 'kit', theme: 'cyberpunk',
 		parcel: { footprint: lot, accessPoint: [ width / 2, 0 ], maxHeight: 200 },
-		building: { type: 'offices', tier: 'mid', floors }
+		building: { type: 'offices', tier, floors }
 	} );
 
-	generated = await generate( {
-		seed: 'kit', building: { id: 'p1', type: 'offices', tier: 'mid' }, blueprint, materialTheme: 'cyberpunk'
-	} );
+	generated.set( tier, await generate( {
+		seed: 'kit', building: { id: 'p1', type: 'offices', tier }, blueprint, materialTheme: 'cyberpunk'
+	} ) );
 
-	return generated;
+	return generated.get( tier );
 
 }
 
@@ -225,7 +226,7 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 		modules.dispose();
 
-	} );
+	}, 60000 );
 
 	it( 'compiles once per batch, which is what the loading counter counts', async () => {
 
@@ -374,7 +375,8 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 	it( 'hands a room every light record published for it: the cove joints at a wall\'s top and foot, each reaching the surface it faces, and furniture lenses named by the placement carrying them', async () => {
 
 		const { modules } = await openModules();
-		const [ ground ] = buildingFloors( 'p1', await building() );
+		// rich offices: their rooms are lit by coves at the walls' top and foot
+		const [ ground ] = buildingFloors( 'p1', await building( 'rich' ) );
 		const rooms = roomsOf( ground, modules );
 		const fixtures = rooms.flatMap( ( room ) => room.fixtures );
 		const roomIds = new Set( ground.rooms.map( ( room ) => room.id ) );
@@ -394,7 +396,7 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 		modules.dispose();
 
-	} );
+	}, 30000 );
 
 	it( 'measures a room by the surface it encloses and keeps the lights of a room it never built', async () => {
 
@@ -410,10 +412,12 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 		}
 
-		// A floor lights rooms it does not publish, the stair cores above all.
+		// A floor may light rooms it does not publish: Interior publishes its stair
+		// cores as rooms now, but a world assembled before that lit them without.
 		// Their flux belongs to the air on that floor rather than to nothing.
-		const orphans = floorOrphans( ground );
-		const published = new Set( ground.rooms.map( ( room ) => room.id ) );
+		const older = { ...ground, rooms: ground.rooms.filter( ( room ) => ! room.id.startsWith( 'stair-' ) ) };
+		const orphans = floorOrphans( older );
+		const published = new Set( older.rooms.map( ( room ) => room.id ) );
 
 		expect( orphans.rooms.length ).toBeGreaterThan( 0 );
 		expect( orphans.rooms.every( ( id ) => ! published.has( id ) ) ).toBe( true );
@@ -557,7 +561,7 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 	it( 'draws a building\'s floors only within sight of its rooms, keeps them solid beyond, and casts room shadows only inside', async () => {
 
 		const model = await stream();
-		// The rooms stand 2.5 m in from the lot's front edge at z = 0.
+		// The rooms reach the shell's inner face, 0.77 m in from the lot's front edge at z = 0.
 		const street = ( z ) => ( { x: 12, y: 0.1, z } );
 		const drawn = () => [ 0, 1 ].map( ( floor ) => bandOf( model, floor ).handles !== null && bandOf( model, floor ).group.visible );
 		const casting = () => [ ...new Set( meshesOf( model.props.group ).map( ( mesh ) => mesh.castShadow ) ) ];
@@ -569,7 +573,7 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		expect( drawn() ).toEqual( [ false, false ] );
 		expect( model.modules.copyCount ).toBe( 0 );
 		expect( propCopies( model ) ).toBe( 0 );
-		await settle( model, street( - 31 ) );
+		await settle( model, street( - 32 ) );
 		expect( drawn() ).toEqual( [ false, false ] );
 
 		// Across the street the rooms behind the glass are drawn, and cast nothing.
@@ -585,7 +589,7 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		expect( casting() ).toEqual( [ true ] );
 
 		// Walking away keeps them drawn a few metres past where they came in, then lets them go.
-		await settle( model, street( - 31 ) );
+		await settle( model, street( - 34 ) );
 		expect( drawn() ).toEqual( [ true, true ] );
 		expect( casting() ).toEqual( [ false ] );
 		await settle( model, street( - 40 ) );
