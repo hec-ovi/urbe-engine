@@ -33,6 +33,8 @@ const JUMP = 1.5;
 /** A walker asks a door ahead to open from this far, and waits this short of it until it does. */
 const DOOR_LOOK = 2.5;
 const DOOR_SHORT = 0.6;
+/** A leader keeps a door it went through asked open while the player is this near it, so it never shuts in their face. */
+const DOOR_HOLD = 4;
 /** Game minutes a walker waits in a lift car that does not arrive before it steps out where the shaft lets it. */
 const LIFT_PATIENCE_MIN = 3;
 /** A leader boards a lift once the player stands this near its landing, so they ride together. */
@@ -1231,8 +1233,15 @@ export class NpcContinuity {
 			return Math.max( 0, gates[ lift ].from - route.cursor );
 
 		}
+		const leads = this.follow?.npcId === actor.npcId && this.follow.mode === 'leading' && this.player;
 		for ( const gate of gates ) {
 
+			if ( leads && gate.kind === 'door' && gate.at < route.cursor - EPSILON ) {
+
+				if ( ! this.#leaving( actor, gate.position, DOOR_HOLD ) ) this.ways.pass( actor.npcId, gate );
+				continue;
+
+			}
 			if ( gate.kind !== 'door' || gate.at < route.cursor - EPSILON || gate.at - route.cursor > DOOR_LOOK ) continue;
 			if ( ! this.ways.pass( actor.npcId, gate ) ) travel = Math.min( travel, Math.max( 0, gate.at - DOOR_SHORT - route.cursor ) );
 

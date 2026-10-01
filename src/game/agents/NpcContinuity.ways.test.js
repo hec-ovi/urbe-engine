@@ -36,6 +36,35 @@ describe( 'NPC continuity through doors and lifts', () => {
 
 	} );
 
+	it( 'keeps a door it led the player through open while the player is still near it', () => {
+
+		const asked = [];
+		const ways = { pass: ( npcId, gate ) => { asked.push( gate.position ); return true; }, ride: () => null };
+		const { bridge, controller } = setup( { ways, interiorRoutes: indoor( [ 'p_cafe' ] ) } );
+		const npc = held( bridge, controller );
+		controller.startLead( { npcId: npc.npcId, timeMin: MON_9, destination: { kind: 'parcel', id: 'p_clinic' } } );
+		// The player walks two metres behind the leader until it is through the door.
+		let gate = null;
+		for ( let step = 0; step < 80; step ++ ) {
+
+			const at = controller.actor( npc.npcId ).position;
+			controller.updateFollow( { timeMin: MON_9, deltaSeconds: 0.5, playerPosition: [ at[ 0 ], at[ 1 ], at[ 2 ] + 2 ] } );
+			const route = controller.serialize().follow.route;
+			gate = route.gates.find( ( entry ) => entry.kind === 'door' );
+			if ( route.cursor > gate.at + 1 ) break;
+
+		}
+		// Through it, the player still at the door: asked again each frame they are near it.
+		const before = asked.length;
+		controller.updateFollow( { timeMin: MON_9, deltaSeconds: 0.5, playerPosition: [ gate.position[ 0 ], 1, gate.position[ 2 ] + 1 ] } );
+		expect( asked.length ).toBe( before + 1 );
+		expect( asked.at( - 1 ) ).toEqual( gate.position );
+		// The player well past it, or far behind: no longer.
+		controller.updateFollow( { timeMin: MON_9, deltaSeconds: 0.5, playerPosition: [ gate.position[ 0 ], 1, gate.position[ 2 ] - 6 ] } );
+		expect( asked.length ).toBe( before + 1 );
+
+	} );
+
 	it( "calls a lift at its landing, waits for it, rides in its car at the car's height and walks out on the floor above", () => {
 
 		const script = { calls: 0, rides: 0, y: 1, done: false };
