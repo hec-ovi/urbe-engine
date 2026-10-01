@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Acquaintances, codexEntries, inventoryCards, itemModel } from './ScreenRecords.js';
+import { Acquaintances, codexEntries, contactCards, inventoryCards, itemModel, timeLabel } from './ScreenRecords.js';
 
 const QUESTS = [
 	{ id: 'q_main', title: 'The Weir Line', kind: 'main', steps: [ { text: 'Talk to Mira', npcName: 'Mira Chen', place: { kind: 'parcel', id: 'p5', name: 'clinic' } } ] },
@@ -51,6 +51,31 @@ describe( 'ScreenRecords', () => {
 		expect( [ ...people ] ).toEqual( [
 			{ npcId: 'a1', name: 'Tess Hale', role: 'retiree', firstPlace: '', lastPlace: '', talks: 1, lastMin: 541, line: 'Fifty-seven.' },
 			{ npcId: 'a2', name: 'Mira Chen', role: 'doctor', firstPlace: 'clinic', lastPlace: 'clinic', talks: 2, lastMin: 640, line: '' }
+		] );
+
+	} );
+
+	it( 'lists the contacts with what they are doing, whether they would pick up, the last thing they said and their portrait', () => {
+
+		const people = new Acquaintances();
+		people.met( 'a1', { name: 'Ada Vance', role: 'Clerk', place: 'Salt Wharf', timeMin: 725 } );
+		people.heard( 'a1', 'Call me if you find the ledger.', 726 );
+		people.heard( 'nobody', 'Who?' );
+		people.met( 'k2', { name: 'Kip Marr', role: 'Dock hand', place: 'Pier', timeMin: 800 } );
+		expect( people.get( 'a1' ) ).toMatchObject( { line: 'Call me if you find the ledger.', lastMin: 726 } );
+		expect( people.get( 'nobody' ) ).toBeNull();
+		expect( timeLabel( 1440 + 13 * 60 + 5 ) ).toBe( 'Tue 13:05' );
+
+		const cards = contactCards( {
+			contacts: [ { npcId: 'a1', addedMin: 726 }, { npcId: 'gone', addedMin: 700 }, { npcId: 'k2', addedMin: 801 } ],
+			people,
+			activityOf: ( npcId ) => npcId === 'k2' ? 'working' : null,
+			answerOf: ( npcId ) => npcId === 'k2' ? 'busy' : 'answered',
+			image: ( npcId ) => `face:${npcId}`
+		} );
+		expect( cards ).toEqual( [
+			{ id: 'a1', name: 'Ada Vance', role: 'Clerk', status: 'online', added: 'Mon 12:06', met: 'Salt Wharf', line: 'Call me if you find the ledger.', lastTalk: 'Mon 12:06', image: 'face:a1' },
+			{ id: 'k2', name: 'Kip Marr', role: 'Dock hand', status: 'busy', activity: 'working', added: 'Mon 13:21', met: 'Pier', lastTalk: 'Mon 13:20', image: 'face:k2' }
 		] );
 
 	} );

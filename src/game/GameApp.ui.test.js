@@ -4,6 +4,7 @@ import { fireEvent, screen, within } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
 import { stubCanvas } from '../ui/test-helpers/canvas.js';
 import { GameApp } from './GameApp.js';
+import { Interactor } from './player/Interactor.js';
 import { replyEvents, talkError, talkStream } from './talk/talk.test-fixtures.js';
 
 describe( 'playable game navigation', () => {
@@ -90,7 +91,8 @@ describe( 'playable game navigation', () => {
 		await user.type( input, 'where is the quay?{Enter}' );
 
 		await vi.waitFor( () => expect( within( app.view.dialog.transcript ).getByText( 'Down the steps.' ) ).toBeTruthy() );
-		expect( app.talk.stream ).toHaveBeenCalledExactlyOnceWith( app.interactor.conversation, 'where is the quay?', 725, [], { signal: expect.any( AbortSignal ) } );
+		// A typed line may get the person's number, while the player lacks it.
+		expect( app.talk.stream ).toHaveBeenCalledExactlyOnceWith( app.interactor.conversation, 'where is the quay?', 725, [], { signal: expect.any( AbortSignal ), offers: { contact: true } } );
 		expect( app.animations.playerDialogueTurn ).toHaveBeenCalledOnce();
 		expect( app.animations.npcDialogueTurn ).toHaveBeenCalledOnce();
 		expect( app.animations.completeDialogueTurn ).not.toHaveBeenCalled();
@@ -105,6 +107,76 @@ describe( 'playable game navigation', () => {
 		await vi.waitFor( () => expect( within( app.view.dialog.transcript ).getAllByText( 'Down the steps.' ) ).toHaveLength( 2 ) );
 		expect( app.talk.stream ).toHaveBeenCalledTimes( 3 );
 		expect( input.disabled ).toBe( false );
+
+	} );
+
+	it( 'asks for a number from the chat: the reply decides it and the book keeps them; with no reply a wary person declines', async () => {
+
+		const app = dialogueApp();
+		const conversation = app.interactor.conversation;
+		app.quests = { snapshot: () => [], dialoguesFor: () => [], conversationRecap: () => null };
+		app.talk.remembered = async () => [];
+		app.companion.accepted = () => false;
+		app.talk.stream.mockImplementationOnce( () => talkStream( [ ...replyEvents( 'Sure. Here.' ).slice( 0, 2 ), { type: 'offer', kind: 'contact' }, { type: 'done', reply: 'Sure. Here.' } ] ) );
+		app.presentConversation( conversation );
+		const user = userEvent.setup();
+
+		await user.click( screen.getAllByRole( 'button', { name: 'Can I have your number?' } )[ 0 ] );
+		await vi.waitFor( () => expect( app.contacts.has( 'npc-ada' ) ).toBe( true ) );
+		expect( app.talk.stream ).toHaveBeenLastCalledWith( conversation, 'Can I have your number?', 725, [], { signal: expect.any( AbortSignal ), offers: { contact: true } } );
+		expect( app.contacts.serialize() ).toEqual( [ { npcId: 'npc-ada', addedMin: 725 } ] );
+		expect( screen.getByText( 'Added to your contacts. Call them from Contacts (P).' ) ).toBeTruthy();
+		expect( screen.queryAllByRole( 'button', { name: 'Can I have your number?' } ) ).toHaveLength( 0 );
+
+		// Nobody can answer for a wary stranger: they keep their number.
+		const wary = { ...conversation, npcId: 'npc-kip', instance: { ...conversation.instance, npcId: 'npc-kip', name: { given: 'Kip', family: 'Marr' }, traits: [ 'wary' ] } };
+		app.sim = { getNPC: () => wary.instance };
+		app.companion.categoryOf = () => 'service';
+		app.talk.stream.mockImplementationOnce( () => talkStream( [], talkError( 'model unavailable', 502 ) ) );
+		app.interactor.conversation = wary;
+		app.presentConversation( wary );
+		await user.click( screen.getAllByRole( 'button', { name: 'Can I have your number?' } )[ 0 ] );
+		await vi.waitFor( () => expect( within( app.view.dialog.transcript ).getByText( /^(I don't hand my number to strangers\.|I don't know you\. No\.)$/ ) ).toBeTruthy() );
+		expect( app.contacts.has( 'npc-kip' ) ).toBe( false );
+		expect( screen.getAllByRole( 'button', { name: 'Can I have your number?' } ).length ).toBeGreaterThan( 0 );
+
+	} );
+
+	it( 'rings a contact from the contacts screen and talks to them over the phone, with nobody\'s body moved', async () => {
+
+		const app = dialogueApp();
+		const conversation = app.interactor.conversation;
+		app.interactor = new Interactor( { crowd: { within: () => [], memberForNpc: () => null }, doors: [], sim: {}, controller: {} } );
+		app.interactor.onConversation = ( opened ) => app.presentConversation( opened );
+		app.quests = { snapshot: () => [], dialoguesFor: () => [], conversationRecap: () => null, characterName: () => null };
+		app.talk.remembered = async () => [];
+		app.sim = { getNPC: () => conversation.instance, behaviorAt: () => ( { activity: 'leisure', mode: 'street' } ) };
+		app.companion = { ...app.companion, categoryOf: () => 'service', accepted: () => false };
+		app.body = { feet: { x: 1, y: 0, z: 2 } };
+		app.locator = { location: () => ( { id: 'p1', name: 'Quay' } ), parcelById: new Map(), district: () => 'Old Quay' };
+		app.acquaintances.met( 'npc-ada', { name: 'Ada Vance', role: 'Clerk', place: 'Salt Wharf', timeMin: 700 } );
+		app.contacts.add( 'npc-ada', 700 );
+
+		app.view.open( 'CONTACTS' );
+		const user = userEvent.setup();
+		await user.click( screen.getAllByRole( 'button', { name: 'Call Ada Vance' } ).at( - 1 ) );
+		expect( app.view.panels.current ).toBeNull();
+		expect( screen.getByRole( 'region', { name: 'Call with Ada Vance' } ) ).toBeTruthy();
+		expect( app.view.call.element.dataset.status ).toBe( 'connecting' );
+
+		app.phone.update( 3 );
+		expect( app.interactor.conversation ).toMatchObject( { npcId: 'npc-ada', call: true, person: null } );
+		expect( within( app.view.dialog.transcript ).getByText( /^(Hello\?|Yeah\? I'm here\.|Hey\. What is it\?)$/ ) ).toBeTruthy();
+		expect( screen.getAllByRole( 'button', { name: 'Can you meet me here?' } ).length ).toBeGreaterThan( 0 );
+
+		const input = screen.getByRole( 'textbox', { name: 'say something' } );
+		await user.type( input, 'where are you?{Enter}' );
+		await vi.waitFor( () => expect( app.talk.stream ).toHaveBeenCalledOnce() );
+		expect( app.talk.stream.mock.calls[ 0 ][ 4 ] ).toMatchObject( { call: { caller: 'player' }, offers: { meet: { name: 'Quay' } } } );
+
+		await user.click( screen.getByRole( 'button', { name: 'End call' } ) );
+		expect( app.interactor.conversation ).toBeNull();
+		expect( app.view.call.element.dataset.status ).toBe( 'ended' );
 
 	} );
 

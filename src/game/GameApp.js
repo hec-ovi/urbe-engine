@@ -8,7 +8,7 @@ import { wearExterior } from './surface-detail/Weathering.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { RecentEvents } from './talk/RecentEvents.js';
 import { NpcVoice } from './voice/NpcVoice.js';
-import { peopleKnown, StreetNames, stripCues } from '../../../quests/dist/runtime.js';
+import { dispositionOf, peopleKnown, StreetNames, stripCues } from '../../../quests/dist/runtime.js';
 import { describeLook } from './agents/avatar/Describe.js';
 import { castNames, homesOf } from './sim/Homes.js';
 import { buildingFacts } from './talk/BuildingFacts.js';
@@ -18,7 +18,10 @@ import { QuestSession } from './quests/QuestSession.js';
 import { QuestGameplay, questGameplayWorld } from './quests/QuestGameplay.js';
 import { QuestActions } from './quests/QuestActions.js';
 import { MissionItemAssets } from './quests/MissionItemAssets.js';
-import { Acquaintances, codexEntries, inventoryCards } from './ScreenRecords.js';
+import { Acquaintances, codexEntries, contactCards, inventoryCards } from './ScreenRecords.js';
+import { ContactBook } from './contacts/ContactBook.js';
+import { answerOf, contactLines, givesNumber } from './contacts/Calls.js';
+import { PhoneCalls } from './contacts/PhoneCalls.js';
 import { InvestigationGameplay } from './investigation/index.js';
 import { ScenePlaceResolver, SceneryDirector } from './scenery/index.js';
 import { ObjectiveRouter } from './routes/ObjectiveRouter.js';
@@ -122,7 +125,7 @@ const OUTDOOR_HAZE = { spread: 0.28, cap: 2.4 };
 /** The HUD panels and the key that opens each, as the dock labels them. */
 const PANEL_KEYS = [
 	[ 'KeyJ', 'QUESTS' ], [ 'KeyM', 'MAP' ], [ 'KeyI', 'INVENTORY' ],
-	[ 'KeyX', 'CODEX' ], [ 'KeyO', 'SETTINGS' ], [ 'Slash', 'CONTROLS' ]
+	[ 'KeyX', 'CODEX' ], [ 'KeyP', 'CONTACTS' ], [ 'KeyO', 'SETTINGS' ], [ 'Slash', 'CONTROLS' ]
 ];
 const BINDINGS = [
 	{ keys: [ 'PgUp', 'PgDn' ], category: 'Interaction', action: 'Select lift floor; E to travel', description: 'In a lift, pick the floor; E takes you there.' },
@@ -138,6 +141,7 @@ const BINDINGS = [
 	{ category: 'Interface', action: 'map', keys: [ 'M' ], description: 'The city, where you stand and the way to your objective.' },
 	{ category: 'Interface', action: 'inventory', keys: [ 'I' ], description: 'What you carry, and the stories it belongs to.' },
 	{ category: 'Interface', action: 'codex', keys: [ 'X' ], description: 'The things, people and places you have come across.' },
+	{ category: 'Interface', action: 'contacts', keys: [ 'P' ], description: 'The people who gave you their number; call one from here.' },
 	{ category: 'Interface', action: 'settings', keys: [ 'O' ], description: 'Picture, crowd, voices and the developer readouts.' },
 	{ category: 'Interface', action: 'controls', keys: [ '?' ], description: 'This reference.' },
 	{ category: 'Interface', action: 'pause menu', keys: [ 'Esc', 'N' ], description: 'Hold the city still and open the menu.' },
@@ -207,6 +211,10 @@ export class GameApp {
 		this.conversationShown = null;
 		/** The people the player has talked to, for the codex. */
 		this.acquaintances = new Acquaintances();
+		/** The people who gave the player their number, which the save keeps. */
+		this.contacts = new ContactBook();
+		/** What people say when asked for their number or called. */
+		this.contactLines = contactLines();
 		/** The chat's action row: offer id to the label the player says. */
 		this.dialogueActions = new Map();
 		/** A leader's arrival while it opens its conversation, or null. */
@@ -230,6 +238,7 @@ export class GameApp {
 				this.#release();
 				if ( name === 'QUESTS' ) this.#refreshQuestState();
 				if ( name === 'CODEX' ) this.#refreshCodex();
+				if ( name === 'CONTACTS' ) this.#refreshContacts();
 				if ( name === 'MAP' ) this.#refreshMapLocation();
 
 			},
@@ -245,10 +254,35 @@ export class GameApp {
 			onClose: () => { if ( ! this.pauseState.paused ) this.input?.requestLock(); },
 			onLeave: () => this.#leave(),
 			onSettingChange: ( change ) => this.#setting( change ),
+			onCall: ( npcId ) => this.#call( npcId ),
+			onHangUp: () => {
+
+				this.phone.hangUp();
+				this.input?.requestLock();
+
+			},
+			onRedial: () => { if ( this.phone.npcId ) this.#call( this.phone.npcId ); },
+			onCallClose: () => this.phone.drop(),
 			onTransitSelect: ( service ) => this.#selectTransit( service ),
 			onTransitCancel: () => this.#cancelTransitSelection()
 		} );
 		this.view.mount( document.body );
+		/** The player's phone: the call ringing, talked on or just over, on the call screen. */
+		this.phone = new PhoneCalls( {
+			view: this.view.call,
+			answerOf: ( npcId ) => this.#answerOf( npcId ),
+			open: ( npcId ) => this.#answered( npcId ),
+			close: () => this.#closeConversation(),
+			contactOf: ( npcId ) => {
+
+				const person = this.acquaintances.get( npcId );
+				return { name: person?.name ?? '', role: person?.role ?? '', handle: handleOf( person?.name ) };
+
+			},
+			portraitOf: ( npcId ) => this.portraits?.portrait( { npcId } ) ?? null,
+			reach: ( npcId ) => this.#reach( npcId ),
+			busyLine: ( npcId ) => this.contactLines.say( 'call-busy', {}, `${npcId}|${Math.floor( this.clock.timeMin )}` )
+		} );
 		// The developer readouts show when the run asks for them (GameConfig `details`) or the settings turn them on.
 		this.view.setDetails( this.details = Boolean( config.details ) );
 		this.stats = {
@@ -640,8 +674,10 @@ export class GameApp {
 		} );
 		/** Each NPC type's label, which the chat shows as the person's role. */
 		this.npcTypeLabels = new Map( ( npcTypes?.types ?? [] ).map( ( { type, label } ) => [ type, label ] ) );
-		// Whoever the saved game remembers talking to is somebody the codex knows.
-		for ( const { npcId, memory } of game?.dialogueMemory ?? [] ) {
+		this.contacts.restore( game?.contacts ?? [] );
+		// Whoever the saved game remembers talking to, or keeps as a contact, is somebody the codex knows.
+		const contactsOnly = this.contacts.list().filter( ( { npcId } ) => ! ( game?.dialogueMemory ?? [] ).some( ( entry ) => entry.npcId === npcId ) );
+		for ( const { npcId, memory } of [ ...( game?.dialogueMemory ?? [] ), ...contactsOnly ] ) {
 
 			const npc = rememberedPerson( this.sim, npcId );
 			if ( ! npc?.name ) continue;
@@ -977,11 +1013,13 @@ export class GameApp {
 		this.activeDialogue = null;
 		const speaker = conversation && speakerOf( conversation, this.npcTypeLabels );
 		this.view.dialog.show( speaker );
-		if ( conversation?.instance ) this.acquaintances.met( conversation.npcId, { ...speaker, place: this.#placeName( this.currentLocation ), timeMin: this.clock.timeMin } );
+		if ( conversation?.instance && ! conversation.call ) this.acquaintances.met( conversation.npcId, { ...speaker, place: this.#placeName( this.currentLocation ), timeMin: this.clock.timeMin } );
 		this.view.avatar.setVisible( Boolean( conversation ) );
 
 		if ( ! conversation ) {
 
+			// The chat closing on a call hangs up.
+			if ( leaving?.call ) this.phone.closed( leaving.npcId );
 			if ( this.pendingDialogueEnding ) this.view.summary.show( this.pendingDialogueEnding );
 			this.pendingDialogueEnding = null;
 			return;
@@ -989,6 +1027,17 @@ export class GameApp {
 		}
 		if ( ! conversation.instance ) this.view.dialog.setFreeChat( false, PASSER_BY.note );
 		else this.#recallTalk( conversation );
+		if ( conversation.call ) {
+
+			// The person picks up and says so; the talk is free, with what they can do from where they are.
+			this.view.dialog.setStory( null );
+			this.#npcSays( conversation, this.contactLines.say( 'call-greeting', {}, `${conversation.npcId}|${Math.floor( this.clock.timeMin )}` ) );
+			this.#showActions( conversation );
+			this.view.dialog.setTalkOpen( true );
+			this.#release();
+			return;
+
+		}
 		const topics = this.quests.dialoguesFor( conversation.npcId, this.clock.timeMin );
 		const preferred = topics.find( topic => topic.questlineId === this.followedQuestId ) ?? topics[ 0 ];
 		const arrival = this.arriving?.npcId === conversation.npcId ? this.arriving : null;
@@ -1064,9 +1113,13 @@ export class GameApp {
 		this.pauseState.update( this.input.locked );
 		const holding = this.pauseState.holds( this.view.panels.current );
 		if ( holding !== this.holding ) this.voice?.setPaused( this.holding = holding );
+		// A call rings and counts in the player's own time, whatever the world does or the frame rate allows.
+		const now = performance.now();
+		this.phone.update( Math.max( 0, now - ( this.phoneClock ?? now ) ) / 1000 );
+		this.phoneClock = now;
 		if ( holding ) delta = 0;
-		// A picture a screen asked for is drawn only while nothing moves, one piece a frame.
-		if ( holding ) this.snapshots?.step();
+		// A picture a screen asked for is drawn only while nothing moves, one piece a frame, or for the face on a call.
+		if ( holding || this.phone.live ) this.snapshots?.step();
 		this.controller.frozen = ! this.input.locked || playableModalOpen( this.view, this.interactor );
 		this.clock.advance( delta );
 		this.hydrology.update( this.playSeconds += delta );
@@ -1339,21 +1392,53 @@ export class GameApp {
 	 * player asks about).
 	 */
 	#talkContext( conversation, proposing, line = '', ask = null ) {
-		const { npcId } = conversation;
+		const { npcId, call } = conversation;
 		// A chosen action asks the person that alone; a typed line lets them agree to anything they may do now.
-		const offers = ask ? this.companion.talkOffers( [ ask ] )
-			: proposing ? this.companion.talkOffers( this.#offers( npcId, { wide: true } ), { npcId, timeMin: this.clock.timeMin } ) : null;
-		const guide = this.companion.guide( npcId );
-		// Known once the world has loaded.
-		const events = this.recentEvents?.around( {
+		const offers = ask ? this.#askOffers( ask ) : proposing ? this.#proposals( conversation ) : null;
+		const guide = call ? null : this.companion.guide( npcId );
+		// Known once the world has loaded; on a call what happened around the player is nothing the person saw.
+		const events = call ? [] : this.recentEvents?.around( {
 			position: this.body.feet, timeMin: this.clock.timeMin, npcId, down: ( id ) => Boolean( this.crowd.member( id )?.fallen ),
 			scenes: this.scenery.stagedPlaces(), parcelId: this.standing?.parcelId ?? null, guided: guide?.kind === 'parcel' ? guide.placeId : null
 		} ) ?? [];
 		const task = this.companion.taskOf?.( npcId ) ?? null;
 		return {
 			...( offers ? { offers } : {} ), ...( guide ? { guide } : {} ), ...( events.length ? { events } : {} ), ...( task ? { task } : {} ),
-			...this.#bodyContext( conversation, line )
+			...( call ? { call: { caller: 'player' } } : {} ),
+			// A person on the phone is where their body is, wherever that is.
+			...this.#bodyContext( call ? { ...conversation, person: this.#remoteBody( npcId ) } : conversation, line )
 		};
+	}
+
+	/** The talk request's `offers` for one chosen ask: their number, a meeting where the player is, or a companion offer. */
+	#askOffers( ask ) {
+		if ( ask.kind === 'contact' ) return { contact: true };
+		if ( ask.kind === 'meet' ) return { meet: { name: ask.meet.name } };
+		return this.companion.talkOffers( [ ask ] );
+	}
+
+	/**
+	 * What a typed line lets the person agree to: anything they may do now,
+	 * and their number while the player lacks it; on a call, only what they
+	 * can do from where they are and coming to where the player is.
+	 */
+	#proposals( conversation ) {
+		const { npcId } = conversation;
+		const timeMin = this.clock.timeMin;
+		if ( conversation.call ) {
+			const actions = { ...this.companion.talkOffers( [], { npcId, timeMin } ) };
+			delete actions.sit;
+			return { ...actions, meet: { name: this.#meetingPoint().name } };
+		}
+		const offers = this.companion.talkOffers( this.#offers( npcId, { wide: true } ), { npcId, timeMin } );
+		return conversation.instance && ! this.contacts.has( npcId ) ? { ...( offers ?? {} ), contact: true } : offers;
+	}
+
+	/** Where a person on the phone stands, as a body there would tell it: the continuity's actor for them, or null. */
+	#remoteBody( npcId ) {
+		const actor = this.npcContinuity?.actor( npcId );
+		if ( ! actor?.position ) return null;
+		return { position: new THREE.Vector3( ...actor.position ), parcelId: actor.place?.kind === 'parcel' ? actor.place.id : null };
 	}
 
 	/**
@@ -1451,10 +1536,12 @@ export class GameApp {
 	 * the chat closes on the reply and they set off. Otherwise they say why not.
 	 */
 	#takeOffer( conversation, { kind, placeId }, reply ) {
+		if ( kind === 'contact' ) return this.#addContact( conversation );
+		const meet = kind === 'meet' ? this.#meetingPoint() : null;
 		const result = this.companion.acceptFromTool( {
-			npcId: conversation.npcId, kind, ...( placeId ? { placeId } : {} ), timeMin: this.clock.timeMin, playerPlaces: this.playerPlaces
+			npcId: conversation.npcId, kind, ...( placeId ? { placeId } : {} ), ...( meet ? { meet } : {} ), timeMin: this.clock.timeMin, playerPlaces: this.playerPlaces
 		} );
-		if ( result.ok ) this.#sendAlong( conversation, reply );
+		if ( result.ok ) this.#sendAlong( conversation, reply ?? result.line );
 		else this.#npcSays( conversation, result.line );
 	}
 
@@ -1523,6 +1610,8 @@ export class GameApp {
 		const speaker = { from: 'npc', name: speakerOf( conversation ).name, kind };
 		const heard = ( line, words ) => {
 			this.lineHeard = true;
+			// The last thing a person said to the player, as the contacts screen reads it.
+			this.acquaintances.heard( conversation.npcId, stripCues( words ), this.clock.timeMin );
 			this.#observe( 'said', { conversation, line, text: words } );
 		};
 		this.animations.npcDialogueTurn( conversation );
@@ -1567,11 +1656,18 @@ export class GameApp {
 		} );
 	}
 
-	/** The chat's action row: every offer for a person with an identity, whose refusal they say in words. */
+	/**
+	 * The chat's action row: every offer for a person with an identity, whose
+	 * refusal they say in words, and asking for their number while the player
+	 * lacks it. On a call, asking them to come to where the player is.
+	 */
 	#showActions( conversation ) {
-		const offers = conversation.instance ? this.#offers( conversation.npcId ) : [];
-		this.dialogueActions = new Map( offers.map( ( offer ) => [ offer.offerId, offer.label ] ) );
-		this.view.dialog.setActions( offers.map( ( offer ) => ( { id: offer.offerId, label: offer.label, icon: offer.kind } ) ) );
+		const offers = conversation.instance && ! conversation.call ? this.#offers( conversation.npcId ) : [];
+		const actions = offers.map( ( offer ) => ( { id: offer.offerId, label: offer.label, icon: offer.kind } ) );
+		if ( conversation.instance && ! conversation.call && ! this.contacts.has( conversation.npcId ) ) actions.push( { id: 'contact', label: this.contactLines.say( 'label-contact' ) } );
+		if ( conversation.call ) actions.push( { id: 'meet', label: this.contactLines.say( 'label-meet' ), icon: 'lead' } );
+		this.dialogueActions = new Map( actions.map( ( action ) => [ action.id, action.label ] ) );
+		this.view.dialog.setActions( actions );
 	}
 
 	/**
@@ -1583,6 +1679,7 @@ export class GameApp {
 		const conversation = this.interactor?.conversation;
 		const label = this.dialogueActions.get( id );
 		if ( ! conversation?.npcId || ! label ) return;
+		if ( id === 'contact' || id === 'meet' ) return this.#ask( conversation, id, label );
 		const offer = this.#offers( conversation.npcId ).find( ( entry ) => entry.offerId === id );
 		// The person decides a chosen action as they decide a typed one, in their own words; a dismissal, a refusal
 		// the rules make or a person with nobody to answer for them is decided by code, in their own lines.
@@ -1599,6 +1696,53 @@ export class GameApp {
 		this.#npcSays( conversation, result.line );
 		if ( result.ok ) this.#sendAlong( conversation, result.line );
 		else this.#showActions( conversation );
+	}
+
+	/**
+	 * The player asks for the person's number, or on a call for them to come
+	 * to where the player is. The person decides in their own words, as they
+	 * decide a typed line; nobody to answer for them decides by code.
+	 */
+	#ask( conversation, kind, label ) {
+		const ask = kind === 'meet' ? { kind, meet: this.#meetingPoint() } : { kind };
+		if ( ! conversation.instance || ! this.talk ) return this.#decideAsk( conversation, ask, label );
+		this.#say( label, { ask, unanswered: () => this.#decideAsk( conversation, ask, null ) } );
+	}
+
+	/** An ask nobody can answer for the person: their number as their disposition says (Calls `givesNumber`), a meeting by the companion's rules. */
+	#decideAsk( conversation, ask, label ) {
+		if ( label ) this.#playerSays( label );
+		if ( ask.kind === 'meet' ) return this.#takeOffer( conversation, { kind: 'meet' }, null );
+		const npc = rememberedPerson( this.sim, conversation.npcId );
+		const disposition = npc ? dispositionOf( npc, this.companion.categoryOf?.( npc.type ) ) : null;
+		const seed = `${conversation.npcId}|${Math.floor( this.clock.timeMin )}`;
+		if ( disposition && givesNumber( disposition ) ) {
+			this.#npcSays( conversation, this.contactLines.say( 'accept-contact', {}, seed ) );
+			return this.#addContact( conversation );
+		}
+		this.#npcSays( conversation, this.contactLines.say( disposition && disposition !== 'friendly' ? `refuse-contact-${disposition}` : 'refuse-contact-unavailable', {}, seed ) );
+		this.#showActions( conversation );
+	}
+
+	/** The person gave the player their number: the book keeps them, a notice says so, and the ask leaves the row. */
+	#addContact( conversation ) {
+		const { npcId } = conversation;
+		if ( ! this.contacts.has( npcId ) ) {
+			this.contacts.add( npcId, this.clock.timeMin );
+			this.view.toast.show( { title: speakerOf( conversation ).name, text: this.contactLines.say( 'notice-contact' ) } );
+		}
+		this.#showActions( conversation );
+	}
+
+	/** Where the player stands, for a person asked on the phone to come and meet them: the point, the building and floor, and its name. */
+	#meetingPoint() {
+		const feet = this.body.feet;
+		const parcelId = this.standing?.parcelId ?? null;
+		const name = this.#placeName( this.locator?.location( feet.x, feet.z, parcelId ) ?? this.currentLocation );
+		return {
+			position: [ feet.x, feet.y, feet.z ], ...( parcelId ? { parcelId } : {} ), ...( Number.isInteger( this.standing?.floor ) ? { floor: this.standing.floor } : {} ),
+			name: name || this.contactLines.say( 'name-here' )
+		};
 	}
 
 	/** Whether this conversation's person agreed to come along and waits for it to close. */
@@ -2194,6 +2338,7 @@ export class GameApp {
 				companion: this.companion.serialize()
 			},
 			...( dialogueMemory ? { dialogueMemory } : {} ),
+			contacts: this.contacts.serialize(),
 			elapsedSeconds: Math.max( 0, ( performance.now() - this.playStartedAt ) / 1000 )
 		} );
 
@@ -2242,6 +2387,81 @@ export class GameApp {
 	#refreshInventory() {
 
 		this.view.inventory.setItems( this.#inventoryCards() );
+
+	}
+
+	/** The contacts screen: each contact with their portrait, what they are doing and whether they would pick up now. */
+	#refreshContacts() {
+
+		this.view.contacts.setContacts( contactCards( {
+			contacts: this.contacts.list(),
+			people: this.acquaintances,
+			activityOf: ( npcId ) => this.#activityOf( npcId ),
+			answerOf: ( npcId ) => this.#answerOf( npcId ),
+			image: ( npcId ) => () => this.portraits?.portrait( { npcId } ) ?? Promise.resolve( null )
+		} ) );
+
+	}
+
+	/** What a person's day has them doing now, or null for somebody the simulation does not hold. */
+	#activityOf( npcId ) {
+
+		try {
+
+			return this.sim.behaviorAt( npcId, this.clock.timeMin )?.activity ?? null;
+
+		} catch {
+
+			return null;
+
+		}
+
+	}
+
+	/** How this person takes a call now (Calls `answerOf`). */
+	#answerOf( npcId ) {
+
+		const npc = rememberedPerson( this.sim, npcId );
+		const disposition = npc ? dispositionOf( npc, this.companion.categoryOf?.( npc.type ) ) : null;
+		return answerOf( { npc, disposition, activity: npc ? this.#activityOf( npcId ) : null } );
+
+	}
+
+	/**
+	 * Rings a contact from the contacts screen: the panels close and the world
+	 * plays on while the phone (PhoneCalls) rings them. Nothing rings while a
+	 * conversation with somebody here is open.
+	 */
+	#call( npcId ) {
+
+		if ( ! this.contacts.has( npcId ) ) return;
+		const open = this.interactor?.conversation;
+		if ( open && ! open.call ) return;
+		this.view.close();
+		this.pauseState.held();
+		this.view.setPaused( false );
+		this.phone.call( npcId );
+
+	}
+
+	/** The person picked up: the conversation opens over the phone, with nobody's body moved; null when it cannot. */
+	#answered( npcId ) {
+
+		const npc = rememberedPerson( this.sim, npcId );
+		if ( ! npc || this.interactor?.conversation ) return null;
+		const name = this.quests.characterName( npcId );
+		return this.interactor.call( { npcId, instance: name ? { ...npc, name } : npc, behavior: this.sim.behaviorAt( npcId, this.clock.timeMin ) } );
+
+	}
+
+	/** Where a call reaches the person (the district they are in) and how clear the line is, falling with the distance. */
+	#reach( npcId ) {
+
+		const position = this.npcContinuity?.actor( npcId )?.position;
+		const feet = this.body?.feet;
+		if ( ! position ) return { relay: '', signal: 0.5 };
+		const metres = feet ? Math.hypot( position[ 0 ] - feet.x, position[ 2 ] - feet.z ) : 0;
+		return { relay: this.locator?.district( position[ 0 ], position[ 2 ] ) ?? '', signal: Math.max( 0.35, 1 - metres / 2400 ) };
 
 	}
 
@@ -2938,6 +3158,15 @@ function rememberedPerson( sim, npcId ) {
 		return null;
 
 	}
+
+}
+
+/** A person's name as the call screen's handle: the given name's initial and the family name, `K. O'CONNELL`. */
+function handleOf( name = '' ) {
+
+	const words = name.trim().split( /\s+/ ).filter( Boolean );
+	if ( words.length < 2 ) return name.toUpperCase();
+	return `${words[ 0 ][ 0 ]}. ${words.slice( 1 ).join( ' ' )}`.toUpperCase();
 
 }
 

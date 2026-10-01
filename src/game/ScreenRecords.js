@@ -115,6 +115,23 @@ export class Acquaintances {
 
 	}
 
+	/** The last thing this person said to the player, and the minute they said it. */
+	heard( npcId, line, timeMin = null ) {
+
+		const known = this.people.get( npcId );
+		if ( ! known || ! line ) return;
+		known.line = line;
+		if ( timeMin !== null ) known.lastMin = timeMin;
+
+	}
+
+	/** One person's record, or null for somebody never talked to. */
+	get( npcId ) {
+
+		return this.people.get( npcId ) ?? null;
+
+	}
+
 	get size() {
 
 		return this.people.size;
@@ -239,5 +256,50 @@ function firstSentence( text ) {
 function capital( text ) {
 
 	return text ? text[ 0 ].toUpperCase() + text.slice( 1 ) : text;
+
+}
+
+const DAYS = [ 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun' ];
+
+/** A game minute as the clock reads it: `Tue 14:05`. */
+export function timeLabel( timeMin ) {
+
+	const whole = Math.max( 0, Math.floor( timeMin ) );
+	const minute = whole % 1440;
+	return `${DAYS[ Math.floor( whole / 1440 ) % 7 ]} ${String( Math.floor( minute / 60 ) ).padStart( 2, '0' )}:${String( minute % 60 ).padStart( 2, '0' )}`;
+
+}
+
+/** Whether a contact would pick up now, as the contacts screen shows it: a call they answer, one they cannot take, or none. */
+const PRESENCE = { answered: 'online', declined: 'online', busy: 'busy', 'no-answer': 'offline' };
+
+/**
+ * The contacts as the contacts screen shows them, in the order added: each
+ * person by the name and role the player knows them by (`people`, the
+ * Acquaintances), what their day has them doing now (`activityOf`) and
+ * whether they would pick up (`answerOf`, Calls `answerOf`), where they were
+ * met, when they were added, the last thing they said and when, and the
+ * loader of their portrait (`image( npcId )`). A contact the player knows no
+ * name for is left out.
+ */
+export function contactCards( { contacts = [], people, activityOf = () => null, answerOf = () => 'answered', image = null } ) {
+
+	return contacts.flatMap( ( { npcId, addedMin } ) => {
+
+		const person = people.get( npcId );
+		if ( ! person?.name ) return [];
+		const activity = activityOf( npcId );
+		return [ {
+			id: npcId, name: person.name, role: person.role ?? '',
+			status: PRESENCE[ answerOf( npcId ) ] ?? 'offline',
+			...( activity ? { activity } : {} ),
+			added: timeLabel( addedMin ),
+			...( person.firstPlace ? { met: person.firstPlace } : {} ),
+			...( person.line ? { line: person.line } : {} ),
+			...( Number.isFinite( person.lastMin ) ? { lastTalk: timeLabel( person.lastMin ) } : {} ),
+			...( image ? { image: image( npcId ) } : {} )
+		} ];
+
+	} );
 
 }

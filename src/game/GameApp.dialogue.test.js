@@ -221,14 +221,14 @@ describe('explicit quest dialogue through the playable UI',()=>{
   companion.talkOffers.mockReturnValue({places:[{placeId:'p2',name:'Market'}]});
   companion.acceptFromTool.mockImplementation(()=>{companion.accepted.mockReturnValue(true);return{ok:true,npcId:'person',offerId:'lead:parcel:p2',kind:'lead',line:'Follow me to Market.'};});
   open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
-  expect(within(chat.getByRole('group',{name:'Ask Petra Moss along'})).getAllByRole('button').map(button=>button.textContent)).toEqual(['Come with me','Show me Market']);
+  expect(within(chat.getByRole('group',{name:'Ask Petra Moss along'})).getAllByRole('button').map(button=>button.textContent)).toEqual(['Come with me','Show me Market','Can I have your number?']);
   expect(companion.offers).toHaveBeenLastCalledWith({npcId:'person',timeMin:1260,playerPlaces:[]});
   let release;const rest=new Promise(done=>{release=done;});
   app.talk.stream.mockImplementationOnce(()=>talkStream([{type:'delta',text:'Kip drinks '},rest,{type:'sentence',index:0,text:'Kip drinks [sigh] at the market.'},
    {type:'offer',kind:'lead',placeId:'p2',name:'Market'},{type:'offer',kind:'follow'},{type:'done',reply:'Kip drinks [sigh] at the market.'}]));
   const initial=structuredClone(state());observer.said.mockClear();
   await user.type(chat.getByRole('textbox'),'take me to Kip{Enter}');
-  expect(app.talk.stream.mock.calls.at(-1)[4]).toEqual({signal:expect.any(AbortSignal),offers:{places:[{placeId:'p2',name:'Market'}]}});
+  expect(app.talk.stream.mock.calls.at(-1)[4]).toEqual({signal:expect.any(AbortSignal),offers:{places:[{placeId:'p2',name:'Market'}],contact:true}});
   await vi.waitFor(()=>expect(said(app).getByText('Kip drinks')).toBeTruthy());
   expect(chat.getByRole('textbox').disabled).toBe(true);expect(chat.queryByText(/Waiting for a reply/)).toBeNull();
   expect(observer.said).not.toHaveBeenCalled();expect(companion.acceptFromTool).not.toHaveBeenCalled();
@@ -328,7 +328,7 @@ describe('explicit quest dialogue through the playable UI',()=>{
   await user.click(actions().getByRole('button',{name:'Come with me'}));
   expect(companion.accept).toHaveBeenLastCalledWith({npcId:'person',offerId:'follow',timeMin:1260,playerPlaces:[]});
   expect(lines(app).slice(-2)).toEqual(['Come with me','I\'m working. Not now.']);
-  expect(app.view.dialog.element.hidden).toBe(false);expect(actions().getAllByRole('button')).toHaveLength(2);
+  expect(app.view.dialog.element.hidden).toBe(false);expect(actions().getAllByRole('button')).toHaveLength(3);
 
   // A typed agreement the rules refuse is said too, and the chat stays open.
   app.talk.stream.mockImplementationOnce(()=>talkStream([...replyEvents('Sure, this way.').slice(0,-1),{type:'offer',kind:'follow'},{type:'done',reply:'Sure, this way.'}]));
