@@ -6,6 +6,7 @@ import { NativeSamples } from './NativeSamples.js';
 import { EFFECTS } from './NativeEffects.js';
 import { assertAttributes, requiredAttributes } from './NativeGeometry.js';
 import { fail } from './NativeMaterialError.js';
+import { wearStreet } from '../../surface-detail/Weathering.js';
 
 const validate = new Ajv( { strict: true } ).compile( schema );
 const WRAPS = { repeat: RepeatWrapping, clamp: ClampToEdgeWrapping };
@@ -19,9 +20,11 @@ export const PAINT_RESPONSE = Object.freeze( { whitePaint: 'crosswalk-worn', yel
 
 /** Material-only consumer; the supplied texture port owns image loading and lifetime. */
 export class NativeStreetMaterials {
-	constructor( binding, loadTexture ) {
+	/** @param detail the surface-detail layer the worn surfaces wear ([SurfaceDetail](../../surface-detail/CONTRACT.md)), or null */
+	constructor( binding, loadTexture, { detail = null } = {} ) {
 		if ( ! validate( binding ) ) fail( `Invalid native street catalog: ${validate.errors[ 0 ].instancePath}` );
 		if ( typeof loadTexture !== 'function' ) fail( 'Native street texture port is required' );
+		if ( detail !== null && ! Array.isArray( detail?.resources ) ) fail( 'Invalid street surface detail' );
 		for ( const surface of Object.values( binding.surfaces ) ) {
 			if ( ! EFFECTS[ surface.effect ] ) fail( `Unknown native street effect: ${surface.effect}` );
 			for ( const id of Object.values( surface.maps ) ) if ( ! Object.hasOwn( binding.textures, id ) ) fail( `Unknown street texture: ${id}` );
@@ -31,6 +34,7 @@ export class NativeStreetMaterials {
 		}
 		this.binding = structuredClone( binding );
 		this.loadTexture = loadTexture;
+		this.detail = detail;
 		this.textureCache = new Map();
 		this.cache = new Map();
 		this.instanceKeys = new WeakMap();
@@ -60,6 +64,10 @@ export class NativeStreetMaterials {
 			response: surface.effect === 'road-paint' ? this.#response( surfaceId ) : null
 		} );
 		const nodes = EFFECTS[ surface.effect ]( samples, surface.parameters, options );
+		// A street is used: world-space wear over what the effect paints, as much as its placement is worn.
+		// Only an effect whose geometry carries the wear field hands it on.
+		const worn = this.detail ? wearStreet( this.detail, surfaceId, nodes, requiredAttributes( surface.effect )._street_wear ? samples.wear : null ) : null;
+		if ( worn ) Object.assign( nodes, worn );
 		const Material = surface.parameters.clearcoat ? MeshPhysicalNodeMaterial : MeshStandardNodeMaterial;
 		const material = new Material( { name: `street-native:${surfaceId}`, metalness: 0 } );
 		Object.assign( material, nodes );
@@ -79,7 +87,7 @@ export class NativeStreetMaterials {
 			material.polygonOffsetUnits = 0;
 		}
 		material.userData.streetNativeSurface = surfaceId;
-		const resourceList = Object.freeze( [ ...resources.values() ] );
+		const resourceList = Object.freeze( [ ...resources.values(), ...( worn ? this.detail.resources : [] ) ] );
 		material[ MATERIAL_RESOURCES ] = resourceList;
 		this.records.set( material, { resources: resourceList, attributes: requiredAttributes( surface.effect ) } );
 		this.cache.set( key, material );

@@ -3,6 +3,7 @@ import { bool, renderGroup, uniform } from 'three/tsl';
 import { pointInRing } from '../ground/Polygons.js';
 
 const EPSILON = 1e-4;
+const RESOURCES = Symbol.for( 'urbe.material-resources' );
 
 /** Scenic rooms belong to the exterior view of their own building. */
 export class ExteriorScenery {
@@ -43,8 +44,11 @@ export class ExteriorScenery {
 		// Basic node materials do not declare this custom scenic shading slot,
 		// so Three's clone omits it even when the source uses it.
 		if ( catalog.emissiveNode !== undefined ) material.emissiveNode = catalog.emissiveNode;
-		// Classic materials can also acquire a floor-slice mask in the viewer.
-		if ( catalog.maskNode !== undefined ) material.maskNode = catalog.maskNode;
+		// Classic materials can also acquire a floor-slice mask in the viewer,
+		// and a worn exterior surface carries its wear as colour and roughness
+		// nodes and the textures they sample.
+		for ( const slot of [ 'maskNode', 'colorNode', 'roughnessNode' ] ) if ( catalog[ slot ] !== undefined && catalog[ slot ] !== null ) material[ slot ] = catalog[ slot ];
+		if ( catalog[ RESOURCES ] ) material[ RESOURCES ] = catalog[ RESOURCES ];
 		return this.attach( material );
 
 	}

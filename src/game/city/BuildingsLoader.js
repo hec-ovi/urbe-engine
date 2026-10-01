@@ -183,7 +183,7 @@ export class BuildingsLoader {
 
 				}
 				triangles += merged.getAttribute( 'position' ).count / 3;
-				const baseMaterial = shellMaterial( this.factory, splitBucket( key ) );
+				const baseMaterial = shellMaterial( this.factory, { ...splitBucket( key ), exterior: true } );
 				let material = scenic ? ScenicSurface.material( baseMaterial ) : baseMaterial;
 				if ( draw.exterior ) material = scenic ? draw.exterior.attach( material ) : draw.exterior.material( material );
 				const mesh = new THREE.Mesh( merged, material );
@@ -236,7 +236,7 @@ export class BuildingsLoader {
 		for ( const door of doors ) {
 
 			const parts = doorParts.get( door );
-			if ( parts.length ) attachLeaves( door, parts, ( key ) => shellMaterial( this.factory, splitBucket( key ) ) );
+			if ( parts.length ) attachLeaves( door, parts, ( key ) => shellMaterial( this.factory, { ...splitBucket( key ), exterior: true } ) );
 			door.motion.validateLeaves( door.pivots );
 
 		}

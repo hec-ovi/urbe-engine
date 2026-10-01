@@ -3,6 +3,7 @@ import { kelvinColor } from '../light/Color.js';
 import { bake } from './GeometryBake.js';
 import { variantFor } from './Variety.js';
 import { ScenicSurface } from './ScenicSurface.js';
+import { exteriorWear } from '../surface-detail/Weathering.js';
 
 const FIXTURE = '/light-fixture/';
 /**
@@ -41,10 +42,17 @@ export function shellVariant( factory, { key, authored, blueprint, parcelId } ) 
 
 }
 
-/** The material for one shell surface; a lit diffuser reads as its own lamp. */
-export function shellMaterial( factory, { key, variantId, doubleSided = false } ) {
+/**
+ * The material for one shell surface; a lit diffuser reads as its own lamp.
+ * A surface a building shows the street (`exterior`) wears the factory's
+ * world-space wear where it lays one, by its profile (surface-detail
+ * `exteriorWear`): weathered concrete and paint, or smudged metal. Room
+ * modules share these materials and ask for none.
+ */
+export function shellMaterial( factory, { key, variantId, doubleSided = false, exterior = false } ) {
 
 	const side = doubleSided ? THREE.DoubleSide : undefined;
+	const weather = exterior && factory.weathering && ! key.includes( FIXTURE ) ? exteriorWear( key, factory.resolver?.resolve( key ) ) : null;
 
 	return key.includes( FIXTURE )
 		? factory.variant( key, {
@@ -53,9 +61,9 @@ export function shellMaterial( factory, { key, variantId, doubleSided = false } 
 			emissive: kelvinColor( FIXTURE_KELVIN ),
 			...( side !== undefined ? { side } : {} )
 		} )
-		: side === undefined
+		: side === undefined && ! weather
 			? factory.build( key, variantId )
-			: factory.variant( key, { variantId, side } );
+			: factory.variant( key, { variantId, ...( side !== undefined ? { side } : {} ), ...( weather ? { weather } : {} ) } );
 
 }
 

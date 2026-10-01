@@ -14,7 +14,7 @@ export class GroundScene {
 		if ( nativeSource ) {
 			this.textures = new NativeTextureSource( textureOptions );
 			this.materials = new NativeStreetMaterials( nativeSource.manifest.materials.binding,
-				( id, path, definition ) => this.textures.load( id, path, definition ) );
+				( id, path, definition ) => this.textures.load( id, path, definition ), { detail: factory?.weathering?.detail ?? null } );
 			this.native = new NativeStreetStream( nativeSource, this.materials );
 			this.streams.push( this.native );
 		}

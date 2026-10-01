@@ -71,6 +71,12 @@ export class PbrMaterialFactory {
 		this.textureBudget = new PbrTextureBudget( profile.textureMaxSize );
 		this.materialMaps = new Set( profile.materialMaps ?? ALL_MAPS );
 		this.textureAnisotropy = profile.textureAnisotropy ?? 8;
+		/**
+		 * World-space wear a tuned copy can ask for (`variant(key, { weather })`):
+		 * `{ nodes(profile) → node material properties, resources }`, or null
+		 * where the run lays none. The game's surface-detail layer supplies it.
+		 */
+		this.weathering = null;
 
 	}
 
@@ -113,11 +119,14 @@ export class PbrMaterialFactory {
 	 * lit diffuser) takes the level, so a materials release that re-authors a
 	 * strength moves what the map looks like and never how bright the game runs
 	 * it. A sign takes the scale, because the database's tiering is the point.
-	 * @param tweaks { variantId, emissiveScale, emissiveLevel, emissive, side }
+	 * `weather` names the wear profile the copy wears in world space, through
+	 * `weathering`; without one the copy wears none.
+	 * @param tweaks { variantId, emissiveScale, emissiveLevel, emissive, side, weather }
 	 */
 	variant( key, tweaks = {} ) {
 
-		const id = `${key}|${tweaks.variantId ?? ''}|${tweaks.emissiveScale ?? 1}|${tweaks.emissiveLevel ?? ''}|${tweaks.emissive?.getHexString() ?? ''}|${tweaks.side ?? ''}`;
+		const weather = this.weathering ? tweaks.weather ?? '' : '';
+		const id = `${key}|${tweaks.variantId ?? ''}|${tweaks.emissiveScale ?? 1}|${tweaks.emissiveLevel ?? ''}|${tweaks.emissive?.getHexString() ?? ''}|${tweaks.side ?? ''}|${weather}`;
 
 		if ( this.cache.has( id ) ) return this.cache.get( id );
 
@@ -129,9 +138,67 @@ export class PbrMaterialFactory {
 		// A lit diffuser reads as the colour of the lamp behind it, not white.
 		if ( tweaks.emissive ) material.emissive = tweaks.emissive.clone();
 		if ( tweaks.side !== undefined ) material.side = tweaks.side;
+		if ( weather && material.isMeshStandardMaterial ) {
+
+			// The renderer carries node properties over when it builds the
+			// material's node form, so the copy stays a plain standard material
+			// to every other reader, and warm-up uploads what the wear samples.
+			Object.assign( material, this.weathering.nodes( weather ) );
+			material[ Symbol.for( 'urbe.material-resources' ) ] = this.weathering.resources;
+
+		}
 		this.cache.set( id, material );
 
 		return material;
+
+	}
+
+	/**
+	 * One map of a key's variant as a data texture of its own: repeating (or
+	 * clamped, `wrap: 'clamp'`), unflipped, at repeat 1, so a shader reads it at coordinates it works out
+	 * itself (the surface-detail masks are read in world metres). Fitted to
+	 * the texture budget like every map. A map that fails to load leaves the
+	 * texture empty, and `ready` still settles.
+	 * @returns `{ texture, ready }`
+	 */
+	dataMap( key, variantId, name, { srgb = false, wrap = 'repeat' } = {} ) {
+
+		const entry = this.resolver.resolve( key );
+		if ( ! entry ) throw new Error( `no material ${key}` );
+		const theme = key.split( '/' )[ 0 ];
+		const variant = this.resolver.variantOf( entry, key, variantId );
+		const image = variant.maps[ name ], compressed = variant.ktx2?.[ name ];
+		if ( ! image && ! compressed ) throw new Error( `${key}#${variant.id} has no ${name} map` );
+
+		let settle;
+		const ready = new Promise( ( resolve ) => { settle = resolve; } );
+		const texture = this.textures.load(
+			{ image: image && this.resolver.mapUrl( theme, image ), ktx2: compressed && this.resolver.mapUrl( theme, compressed ) },
+			( loaded ) => {
+
+				try {
+
+					this.textureBudget.fit( loaded );
+
+				} catch {
+
+					loaded.image = null;
+
+				}
+				settle();
+
+			}, () => settle()
+		);
+		texture[ Symbol.for( 'urbe.texture-ready' ) ] = ready;
+		texture.name = `${key}#${variant.id}:${name}`;
+		texture.flipY = false;
+		texture.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+		texture.wrapS = texture.wrapT = wrap === 'clamp' ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
+		texture.matrixAutoUpdate = false;
+		texture.anisotropy = this.textureAnisotropy;
+		texture.channel = 0;
+
+		return { texture, ready };
 
 	}
 

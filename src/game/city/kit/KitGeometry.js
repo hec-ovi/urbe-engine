@@ -180,7 +180,7 @@ async function merged( buckets, factory, slice, hitches ) {
 		hitches.time( 'plan merge', () => {
 
 			const geometry = mergedGeometry( key, geometries );
-			const base = shellMaterial( factory, splitBucket( key ) );
+			const base = shellMaterial( factory, { ...splitBucket( key ), exterior: true } );
 
 			surfaces.push( { bucket: scenic ? `${key}|scenic` : key, geometry, material: scenic ? ScenicSurface.material( base ) : base } );
 

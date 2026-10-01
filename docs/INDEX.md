@@ -43,6 +43,7 @@
 | `routes` | Objective paths over Connections, carried on to the parcel's door | [Contract and schemas](../src/game/routes/CONTRACT.md) |
 | `transit` | Timetables, boarding and station destinations | [Contract and schemas](../src/game/transit/CONTRACT.md) |
 | `hydro` | Atlas water surfaces with Materials bindings | [Contract and schemas](../src/game/hydro/CONTRACT.md) |
+| `surface-detail` | World-space use over streets, sidewalks, curbs and exterior walls: oily smears, macro variation, grime, tyre tracks, stains, from Materials `cyberpunk/surface-detail/*` masks or procedural stand-ins | [Contract](../src/game/surface-detail/CONTRACT.md) |
 | `light`, `look`, `sky` | Fixture lighting, prepared rendering and fixed night setting | [Light](../src/game/light/CONTRACT.md), [Look](../src/game/look/CONTRACT.md), [Game](../src/game/CONTRACT.md) |
 | `persistence` | Coherent live state and acknowledged Library revisions | [Contract and schemas](../src/game/persistence/CONTRACT.md) |
 | `debug` | Frame/subsystem timing, renderer allocation reports and the automation probe | [Contract](../src/game/debug/CONTRACT.md), [report](../src/game/debug/report.schema.json) |
