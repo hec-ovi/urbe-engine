@@ -60,19 +60,68 @@ const FACIAL_HAIR = /Hair_(Beard|Moustache|MuttonChops)/;
 const SKIN_COLORS = [ '#edc6ac', '#d8ad8d', '#bd8b68', '#a77550', '#895735', '#66452f', '#4b3026' ];
 const HAIR_COLORS = [ '#191a20', '#272321', '#4b3125', '#7f5639', '#b68d54', '#d2c0a0', '#867d79', '#473e55' ];
 const EYE_COLORS = [ '#453c30', '#684a2e', '#81907a', '#65756a', '#738ea1', '#727580', '#afa17e' ];
-// One restrained palette dresses the whole outfit; each garment keeps three
-// channels of its own after generation.
+// Authored separates keep trousers and footwear from being progressively
+// darker copies of a shirt. Each slot still exposes the same three channels.
 const OUTFIT_PALETTES = [
-	[ '#202c3b', '#536377', '#91bfc2' ],
-	[ '#343a3b', '#647572', '#b9aa84' ],
-	[ '#35313d', '#746b7e', '#b4a1bb' ],
-	[ '#3f3d39', '#bdb8aa', '#b99c72' ],
-	[ '#293a46', '#617987', '#a6bac3' ],
-	[ '#402d34', '#75525c', '#b999a3' ],
-	[ '#263c37', '#657b70', '#abbb97' ],
-	[ '#b8b2a4', '#4d5562', '#d4c1a0' ],
-	[ '#29323c', '#dad6cc', '#a5aebc' ],
-	[ '#665344', '#b6a38b', '#aec1b5' ]
+	{ // Work blue, pale collar and stone trousers.
+		top: [ '#3d6787', '#c4c8ba', '#b79b67' ], pants: [ '#b5ad92', '#827c6a', '#d3c9aa' ], footwear: [ '#3b4146', '#72766f', '#bdb49a' ]
+	},
+	{ // Chalk separates with ink-blue trousers.
+		top: [ '#d2cdbd', '#435563', '#a86646' ], pants: [ '#2c3b49', '#687683', '#bdb49a' ], footwear: [ '#625143', '#99836b', '#c2af89' ]
+	},
+	{ // Brick with washed black; colour lives in the cloth, not luminous trim.
+		top: [ '#9b4c42', '#3b3035', '#d0b9a0' ], pants: [ '#34383d', '#6c706f', '#b09874' ], footwear: [ '#3a3430', '#716457', '#baa78b' ]
+	},
+	{
+		top: [ '#74816a', '#394a40', '#c9c0a2' ], pants: [ '#393f47', '#727a7c', '#b0b4a6' ], footwear: [ '#67594a', '#918477', '#c2b596' ]
+	},
+	{
+		top: [ '#586b79', '#bdc4c3', '#b78655' ], pants: [ '#a3987b', '#69634f', '#cbc2a7' ], footwear: [ '#454346', '#797676', '#b7b2a7' ]
+	},
+	{
+		top: [ '#72546b', '#b2a6ae', '#c6b88e' ], pants: [ '#aaaba8', '#717780', '#d0cabe' ], footwear: [ '#483d46', '#7a6d77', '#b7aca3' ]
+	},
+	{
+		top: [ '#b19448', '#514b36', '#d1c49c' ], pants: [ '#4d5c4e', '#83927e', '#bfb69b' ], footwear: [ '#625444', '#95836b', '#c8b899' ]
+	},
+	{ // Washed denim panels with a darker indigo lower half.
+		top: [ '#7396ac', '#c8c3ad', '#465864' ], pants: [ '#354d68', '#708597', '#b7a486' ], footwear: [ '#4f514d', '#84867c', '#c7c1ad' ]
+	},
+	{
+		top: [ '#3f7d79', '#b0bfaf', '#c49a59' ], pants: [ '#937754', '#5e5244', '#c4b08b' ], footwear: [ '#443d36', '#7d6f60', '#bda887' ]
+	},
+	{ // A dark top can contrast through its trousers and trim.
+		top: [ '#323a42', '#b6bdbb', '#a78959' ], pants: [ '#90977c', '#5c6656', '#cac7b0' ], footwear: [ '#5b5149', '#8e8173', '#bcb3a1' ]
+	},
+	{
+		top: [ '#ac6750', '#e0cdb0', '#494742' ], pants: [ '#36455c', '#718192', '#b7ab97' ], footwear: [ '#4b3d35', '#876e58', '#bba37e' ]
+	},
+	{
+		top: [ '#69758c', '#c0c2c5', '#b89d78' ], pants: [ '#c7beaa', '#8e877a', '#585d66' ], footwear: [ '#797266', '#aaa293', '#d2c7ae' ]
+	},
+	{ // Deliberate dark-on-dark remains one choice, with distinct panels.
+		top: [ '#292b30', '#646a70', '#b3b9b6' ], pants: [ '#393b40', '#737676', '#b6aea0' ], footwear: [ '#303438', '#676c70', '#a6aaa4' ]
+	},
+	{
+		top: [ '#9c4148', '#302d36', '#d8c5a6' ], pants: [ '#6e7279', '#444c58', '#b6b7b3' ], footwear: [ '#4b4145', '#87777c', '#c5b6a7' ]
+	}
+];
+// Canvas uppers and rubber soles carry their own colours; boots and city
+// shoes instead retain the leather colours authored above.
+const SNEAKER_PALETTES = [
+	[ '#bdb9a9', '#43586a', '#d6ccb3' ],
+	[ '#6c8492', '#d0cbbb', '#bc8454' ],
+	[ '#974e47', '#c8c1ae', '#443b3e' ],
+	[ '#858c74', '#c6c3ad', '#49534b' ],
+	[ '#484f58', '#c2c4bc', '#aeb9bd' ],
+	[ '#c2b7a2', '#7d6376', '#dad0b9' ]
+];
+// Patrol pieces stay recognisably uniform even when a separate is mixed in.
+const PATROL_PALETTES = [
+	{ top: [ '#354c64', '#879ca8', '#c5bb91' ], pants: [ '#344558', '#697d8a', '#b4b6a5' ] },
+	{ top: [ '#64747b', '#d0cdb8', '#b8a368' ], pants: [ '#414e58', '#869297', '#b3b5a8' ] },
+	{ top: [ '#47594f', '#9da896', '#c8b77e' ], pants: [ '#384a42', '#728477', '#bdb59b' ] },
+	{ top: [ '#a4a898', '#405464', '#c9bb85' ], pants: [ '#3e5060', '#7c8a8f', '#bbb8a4' ] }
 ];
 const OUTFIT_SETS = [
 	{ top: 'tech-top', pants: 'pants-tech', footwear: 'boots-patrol', fabrics: [ 'tech' ] },
@@ -415,7 +464,7 @@ function generate( recipe, random, pick, scope ) {
 		const topStyle = OUTFIT_SETS.find( ( { top } ) => top === recipe.outfit.top ) ?? coordinated;
 		recipe.outfit.fabric = pick( topStyle.fabrics );
 		palette = pick( OUTFIT_PALETTES );
-		recipe.outfit.colors = paletteColors( palette );
+		recipe.outfit.colors = paletteColors( palette, recipe.outfit );
 
 	}
 	return palette;
@@ -436,12 +485,18 @@ function sharedOutfit( outfits, draw ) {
 
 }
 
-function paletteColors( [ primary, secondary, accent ] ) {
+function paletteColors( palette, outfit ) {
+
+	// Reuse the palette draw for family choices: body, shape, garment selection
+	// and authored-outfit shares keep their existing seeded random sequence.
+	const index = OUTFIT_PALETTES.indexOf( palette );
+	const patrol = PATROL_PALETTES[ index % PATROL_PALETTES.length ];
+	const colors = ( [ primary, secondary, accent ] ) => ( { primary, secondary, accent } );
 
 	return {
-		top: { primary, secondary, accent },
-		pants: { primary: shade( primary, 0.88 ), secondary: shade( secondary, 0.8 ), accent },
-		footwear: { primary: shade( primary, 0.6 ), secondary: shade( secondary, 0.62 ), accent }
+		top: colors( outfit.top === 'police-jacket' ? patrol.top : palette.top ),
+		pants: colors( outfit.pants === 'pants-patrol' ? patrol.pants : palette.pants ),
+		footwear: colors( outfit.footwear.startsWith( 'sneakers-' ) ? SNEAKER_PALETTES[ index % SNEAKER_PALETTES.length ] : palette.footwear )
 	};
 
 }
