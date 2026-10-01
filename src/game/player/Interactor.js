@@ -5,6 +5,13 @@ import { LINGER_SECONDS } from '../agents/NpcContinuity.js';
 const TALK_RANGE = 2.5;
 const DOOR_RANGE = 3.2;
 const DOOR_SPEED = 2.2;
+/** Seconds a door stands open, after it opened or was last asked open, before it closes by itself. */
+export const DOOR_CLOSE_AFTER = 5;
+/** Somebody within this of a door's leaf span, at its level, stands in its doorway and keeps it open. */
+const DOORWAY = 0.6;
+const DOORWAY_HEIGHT = 2.2;
+/** The width of a door that does not publish one. */
+const DOOR_WIDTH = 1;
 const NONE = Object.freeze( [] );
 /** Roughly 40 degrees off the crosshair: past that you are not aiming at it. */
 const MIN_AIM = 0.76;
@@ -55,6 +62,8 @@ export class Interactor {
 		this.onConversation = null;
 		/** The doors in reach this frame, gathered into one array kept for every frame. */
 		this.reach = [];
+		/** Seconds this Interactor has run, the clock doors close by. */
+		this.seconds = 0;
 
 	}
 
@@ -63,6 +72,7 @@ export class Interactor {
 
 		// The apartment doors of the floors shown now run beside the street doors.
 		const apartments = this.interiors?.apartmentDoors?.doors ?? NONE;
+		this.seconds += delta;
 		for ( const door of this.doors ) this.#moveDoor( door, delta );
 		for ( const door of apartments ) this.#moveDoor( door, delta );
 
@@ -156,6 +166,8 @@ export class Interactor {
 
 			this.target.door.wanted = this.target.door.wanted > 0.5 ? 0 : 1;
 			if ( this.target.door.wanted ) {
+
+				this.target.door.askedAt = this.seconds;
 
 				this.target.door.loadingFloor = true;
 				this.interiors?.requestFloor( this.target.door.parcelId, this.target.door.floor ?? 0 );
@@ -368,6 +380,7 @@ export class Interactor {
 
 	#moveDoor( door, delta ) {
 
+		this.#closeByItself( door );
 		const requested = door.wanted ?? 0;
 		const ready = ! this.interiors?.pending.has( door.parcelId ) || this.interiors.floorShown( door.parcelId, door.floor ?? 0 );
 		const wanted = ready ? requested : 0;
@@ -382,6 +395,55 @@ export class Interactor {
 
 		door.motion.apply( door.pivots, door.open );
 		this.doorColliders?.sync( door );
+
+	}
+
+	/**
+	 * Every door closes by itself DOOR_CLOSE_AFTER seconds after it stood
+	 * fully open or was last asked open (the player's E, or a walker asking
+	 * it through `asked`), never on somebody standing in its doorway.
+	 */
+	#closeByItself( door ) {
+
+		if ( door.asked ) {
+
+			door.askedAt = this.seconds;
+			door.asked = false;
+
+		}
+		if ( ! ( ( door.wanted ?? 0 ) > 0.5 ) ) {
+
+			door.askedAt = undefined;
+			door.openedAt = undefined;
+			return;
+
+		}
+		door.askedAt ??= this.seconds;
+		if ( door.open < 1 ) {
+
+			door.openedAt = undefined;
+			return;
+
+		}
+		door.openedAt ??= this.seconds;
+		if ( this.seconds - Math.max( door.askedAt, door.openedAt ) < DOOR_CLOSE_AFTER ) return;
+		if ( this.#inDoorway( door ) ) return;
+		door.wanted = 0;
+
+	}
+
+	/** Whether the player or anybody in the crowd stands in a door's doorway. */
+	#inDoorway( door ) {
+
+		const reach = ( door.width ?? DOOR_WIDTH ) / 2 + DOORWAY;
+		const stands = ( position ) => {
+
+			const rise = position.y - door.center.y;
+			return rise > - 0.5 && rise < DOORWAY_HEIGHT && Math.hypot( position.x - door.center.x, position.z - door.center.z ) <= reach;
+
+		};
+		if ( stands( this.controller.body.feet ) ) return true;
+		return ( this.crowd?.within?.( door.center, reach + DOORWAY_HEIGHT ) ?? NONE ).some( ( member ) => stands( member.position ) );
 
 	}
 

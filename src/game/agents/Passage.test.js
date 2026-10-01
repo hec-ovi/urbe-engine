@@ -5,46 +5,31 @@ const point = ( x, y, z ) => ( { x, y, z } );
 
 describe( 'Passage', () => {
 
-	it( "opens the door a walker's gate names, lets the walker through once it is open, and closes it again after them", () => {
+	it( "asks the door a walker's gate names open, marks it asked so it stays open while walkers keep asking, and lets the walker through once it is open", () => {
 
-		let now = 0;
 		const front = { parcelId: 'p1', center: point( 10, 0, 5 ), open: 0, wanted: 0 };
 		const upstairs = { parcelId: 'p1', center: point( 10, 4.5, 5 ), open: 0, wanted: 0 };
-		const passage = new Passage( { doors: () => [ front, upstairs, { parcelId: 'p2', center: point( 10, 0, 5 ), open: 0, wanted: 0 } ], seconds: () => now } );
+		const passage = new Passage( { doors: () => [ front, upstairs, { parcelId: 'p2', center: point( 10, 0, 5 ), open: 0, wanted: 0 } ] } );
 		const gate = { kind: 'door', parcelId: 'p1', at: 3, position: [ 10.4, 0, 5.2 ] };
 		expect( passage.pass( 'n1', gate ) ).toBe( false );
-		expect( front.wanted ).toBe( 1 );
+		expect( front ).toMatchObject( { wanted: 1, asked: true } );
 		expect( upstairs.wanted ).toBe( 0 );
 		front.open = 1;
+		front.asked = false;
 		expect( passage.pass( 'n1', gate ) ).toBe( true );
-		now = 2;
-		passage.update();
-		expect( front.wanted ).toBe( 1 );
-		now = 5;
-		passage.update();
-		expect( front.wanted ).toBe( 0 );
-		// A door the player opened is borrowed, never closed behind the walker.
-		upstairs.wanted = 1;
-		upstairs.open = 1;
-		expect( passage.pass( 'n1', { ...gate, position: [ 10, 4.5, 5 ] } ) ).toBe( true );
-		now = 20;
-		passage.update();
-		expect( upstairs.wanted ).toBe( 1 );
+		expect( front.asked ).toBe( true );
+		// A door nobody loaded is no bar to the walker.
 		expect( passage.pass( 'n1', { ...gate, position: [ 40, 0, 5 ] } ) ).toBe( true );
 
 	} );
 
-	it( 'opens a host\'s own door for good, never closing it behind a walker', () => {
+	it( 'opens a host\'s own door on asking, the door left to close by itself like any other', () => {
 
-		let now = 0;
 		const home = { parcelId: 'p1', center: point( 10, 4.5, 5 ), open: 0, wanted: 0 };
-		const passage = new Passage( { doors: () => [ home ], seconds: () => now } );
+		const passage = new Passage( { doors: () => [ home ] } );
 		const gate = { kind: 'door', parcelId: 'p1', floor: 1, position: [ 10, 4.5, 5 ] };
-		expect( passage.pass( 'n1', gate ) ).toBe( false );
 		expect( passage.open( gate ) ).toBe( true );
-		now = 60;
-		passage.update();
-		expect( home.wanted ).toBe( 1 );
+		expect( home ).toMatchObject( { wanted: 1, asked: true } );
 		expect( passage.open( { ...gate, position: [ 40, 4.5, 5 ] } ) ).toBe( false );
 
 	} );

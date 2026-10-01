@@ -1070,7 +1070,6 @@ export class GameApp {
 			playerPosition,
 			...( room ? { playerPlace: { kind: 'parcel', id: room.parcelId, floor: room.floor } } : {} )
 		} ) );
-		this.passage?.update();
 		this.updateCompanion( playerPosition, playerPlaces );
 		this.hitches.time( 'crowd', () => {
 
@@ -2946,7 +2945,7 @@ export function companionReach( { buildings, places, interiorRoutes, continuity,
 	const anchorOf = ( parcelId, id ) => anchors.get( parcelId )?.find( ( anchor ) => anchor.id === id ) ?? null;
 	return {
 		plan: ( parcelId ) => plans.get( parcelId ) ?? interiorRoutes?.plan( parcelId ) ?? null,
-		/** Opens the door a gate names for good, the host's own door to a guest (Passage `open`); false when it is not loaded. */
+		/** Opens the door a gate names, the host's own door to a guest (Passage `open`); false when it is not loaded. */
 		open: ( gate ) => ways?.open?.( gate ) ?? false,
 		workSpot( npc ) {
 

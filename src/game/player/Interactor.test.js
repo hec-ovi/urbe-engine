@@ -586,3 +586,59 @@ it( 'keeps an entrance sealed until the requested floor is shown', () => {
 	interactor.update( 1 );
 	expect( door.open ).toBeGreaterThan( 0 );
 } );
+
+it( 'closes a door by itself five seconds after it stood open or was last asked, never on somebody in its doorway', () => {
+	const door = { parcelId: 'p1', center: new THREE.Vector3( 0, 0, -6 ), width: 1.2, open: 0, wanted: 0, motion: { apply: vi.fn() }, pivots: [] };
+	const feet = new THREE.Vector3( 0, 0, 10 );
+	const crowd = { members: [], within( position, radius ) { return this.members.filter( ( member ) => member.position.distanceTo( position ) < radius ); } };
+	const interactor = new Interactor( { doors: [ door ], crowd, sim: {},
+		controller: { body: { feet }, eye: new THREE.Vector3( 0, 1.7, 10 ), look: new THREE.Vector3( 0, 0, -1 ) } } );
+	const run = ( seconds ) => { for ( let t = 0; t < seconds; t += 0.25 ) interactor.update( 0.25 ); };
+	door.wanted = 1;
+	run( 1 );
+	expect( door.open ).toBe( 1 );
+	run( 4.5 );
+	expect( door.wanted ).toBe( 1 );
+	run( 1 );
+	expect( door.wanted ).toBe( 0 );
+	run( 1 );
+	expect( door.open ).toBe( 0 );
+
+	// A walker keeps asking it: it stays open while they do, and closes five seconds after the last ask.
+	door.wanted = 1;
+	for ( let t = 0; t < 12; t += 0.25 ) { door.asked = true; interactor.update( 0.25 ); }
+	expect( door.wanted ).toBe( 1 );
+	run( 4.5 );
+	expect( door.wanted ).toBe( 1 );
+	run( 1 );
+	expect( door.wanted ).toBe( 0 );
+
+	// Never on somebody standing in the doorway: the player, then a person, until they step out.
+	run( 1 );
+	door.wanted = 1;
+	feet.set( 0.3, 0, -6.2 );
+	run( 8 );
+	expect( door.wanted ).toBe( 1 );
+	feet.set( 0, 0, 10 );
+	crowd.members.push( { position: new THREE.Vector3( -0.5, 0, -5.8 ) } );
+	run( 3 );
+	expect( door.wanted ).toBe( 1 );
+	crowd.members.length = 0;
+	run( 0.5 );
+	expect( door.wanted ).toBe( 0 );
+} );
+
+it( 'closes a door the player opened with E once it has stood open five seconds', () => {
+	const door = { parcelId: 'p1', center: new THREE.Vector3( 0, 0, -2 ), open: 0, wanted: 0, motion: { apply: vi.fn() }, pivots: [], width: 1 };
+	const interactor = new Interactor( { doors: [ door ], crowd: { within: () => [] }, sim: {},
+		controller: { body: { feet: new THREE.Vector3( 0, 0, 0.8 ) }, eye: new THREE.Vector3( 0, 1.7, 0.8 ), look: new THREE.Vector3( 0, -0.2, -1 ).normalize() } } );
+	interactor.update( 0.1 );
+	expect( interactor.target?.kind ).toBe( 'door' );
+	interactor.activate( { timeMin: 0 } );
+	expect( door.wanted ).toBe( 1 );
+	for ( let t = 0; t < 4; t += 0.25 ) interactor.update( 0.25 );
+	expect( door.wanted ).toBe( 1 );
+	for ( let t = 0; t < 2; t += 0.25 ) interactor.update( 0.25 );
+	expect( door.wanted ).toBe( 0 );
+} );
+
