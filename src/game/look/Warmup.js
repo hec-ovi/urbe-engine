@@ -37,7 +37,7 @@ export class Warmup {
 	 *   thread is named in, so a frame it lands in says which it was
 	 */
 	constructor( renderer, scene, camera, mrt = null, renderTarget = null, {
-		uploaded = new WeakSet(), pins = new ProgramPins(), budget = new FrameBudget(), queue = { tail: Promise.resolve() }, hitches = null
+		uploaded = new WeakSet(), pins = new ProgramPins(), budget = new FrameBudget(), queue = { tail: Promise.resolve() }, hitches = null, shadow = null
 	} = {} ) {
 
 		this.renderer = renderer;
@@ -53,6 +53,13 @@ export class Warmup {
 		// One compile at a time for the whole family: each sets the renderer's
 		// target and outputs for as long as its graph builds.
 		this.queue = queue;
+		/**
+		 * The shadow pass a caster is also drawn by, `() => { camera, target,
+		 * material, shadow } | null` (light/SunShadow.js `pass`): the frame's
+		 * own warm-up builds those programs too, since a caster's first
+		 * daylight frame would otherwise build them mid-play.
+		 */
+		this.shadow = shadow;
 
 	}
 
@@ -140,6 +147,14 @@ export class Warmup {
 			if ( held >= NOTED_MS ) this.hitches?.note( `warm-up ${nameOf( object )}`, held );
 			await compiling;
 			this.pins.pin( this.renderer, plain );
+			// The frame's graphs make the shadow's map, so its pass comes second.
+			const pass = this.shadow?.() ?? null;
+			if ( pass && casts( object ) ) {
+
+				await this.#compileShadow( object, pass );
+				this.pins.pin( this.renderer, plain );
+
+			}
 
 		} finally {
 
@@ -152,6 +167,55 @@ export class Warmup {
 				restore( shown );
 
 			}
+
+		}
+
+	}
+
+	/**
+	 * The object as the shadow pass draws it: its casters alone, every one
+	 * with the pass's material, into the map. The map is not drawn while the
+	 * graphs build: a receiving material's first build would otherwise render it.
+	 */
+	async #compileShadow( object, pass ) {
+
+		const hidden = [];
+		object.traverse( ( node ) => {
+
+			if ( node.material && ! node.castShadow && node.visible ) {
+
+				hidden.push( node );
+				node.visible = false;
+
+			}
+
+		} );
+		const override = this.scene.overrideMaterial;
+		const drawing = pass.shadow.needsUpdate;
+		const tone = this.renderer.toneMapping;
+		const space = this.renderer.outputColorSpace;
+
+		try {
+
+			pass.shadow.needsUpdate = false;
+			this.scene.overrideMaterial = pass.material;
+			this.renderer.toneMapping = NoToneMapping;
+			this.renderer.outputColorSpace = ColorManagement.workingColorSpace;
+			this.renderer.setRenderTarget?.( pass.target );
+			this.renderer.setMRT?.( null );
+			const started = performance.now();
+			const compiling = this.renderer.compileAsync( object, pass.camera, this.scene );
+			const held = performance.now() - started;
+			if ( held >= NOTED_MS ) this.hitches?.note( `warm-up shadow ${nameOf( object )}`, held );
+			await compiling;
+
+		} finally {
+
+			this.scene.overrideMaterial = override;
+			pass.shadow.needsUpdate = drawing;
+			this.renderer.toneMapping = tone;
+			this.renderer.outputColorSpace = space;
+			for ( const node of hidden ) node.visible = true;
 
 		}
 
@@ -238,6 +302,16 @@ export class Warmup {
 		return wantedPrograms;
 
 	}
+
+}
+
+/** Whether anything in the object draws into a shadow map. */
+function casts( object ) {
+
+	let found = false;
+	object.traverse( ( node ) => { found ||= Boolean( node.material && node.castShadow ); } );
+
+	return found;
 
 }
 

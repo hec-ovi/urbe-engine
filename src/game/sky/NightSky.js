@@ -78,6 +78,11 @@ export class NightSky {
 		// two directional lights in one sky would cast two shadows.
 		this.key = new THREE.DirectionalLight( MOON_COLOR, MOON_LUX );
 		this.scene.add( this.key );
+		// The key aims at its target, which the sun's shadow moves with the
+		// camera (light/SunShadow.js); in the scene, its matrix follows.
+		this.scene.add( this.key.target );
+		/** Unit vector towards the key light: the sun by day, the moon by night. */
+		this.direction = new THREE.Vector3( 0, 1, 0 );
 
 		this.stars = buildStars();
 		this.scene.add( this.stars );
@@ -102,7 +107,8 @@ export class NightSky {
 
 		// Above the horizon the key is the sun and stands where it does; below
 		// it, it is the moon, opposite the sun.
-		this.key.position.copy( sun ).multiplyScalar( day.daylight > 0 ? 400 : - 400 );
+		this.direction.copy( sun ).multiplyScalar( day.daylight > 0 ? 1 : - 1 );
+		this.key.position.copy( this.key.target.position ).addScaledVector( this.direction, 400 );
 		this.key.intensity = Math.max( MOON_LUX, day.sunLux );
 		this.key.color.copy( day.daylight > 0 ? kelvinColor( SUN_KELVIN ) : MOON );
 

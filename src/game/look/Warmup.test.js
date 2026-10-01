@@ -377,4 +377,52 @@ describe( 'Warmup', () => {
 
 	} );
 
+	it( 'builds the shadow pass of whatever casts, after the frame\'s, with the pass\'s material and nothing else in it', async () => {
+
+		const scene = new THREE.Scene();
+		const caster = new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshStandardMaterial() );
+		caster.castShadow = true;
+		const ground = new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshStandardMaterial() );
+		const root = new THREE.Group().add( caster, ground );
+		const shadow = { needsUpdate: true };
+		const pass = { camera: new THREE.OrthographicCamera(), target: { name: 'stand-in' }, material: new THREE.MeshBasicMaterial(), shadow };
+		const calls = [];
+		let target = null;
+		const renderer = {
+			compileAsync: async ( object, camera ) => {
+
+				calls.push( {
+					camera, target, override: scene.overrideMaterial, drawing: shadow.needsUpdate,
+					visible: [ caster.visible, ground.visible ]
+				} );
+
+			},
+			getMRT: () => null,
+			setMRT: () => {},
+			getRenderTarget: () => target,
+			setRenderTarget: ( next ) => { target = next; }
+		};
+
+		const warmup = new Warmup( renderer, scene, new THREE.PerspectiveCamera(), null, null, { shadow: () => pass } );
+		await warmup.warm( root );
+
+		expect( calls ).toHaveLength( 2 );
+		expect( calls[ 0 ].override ).toBeNull();
+		expect( calls[ 1 ] ).toMatchObject( { camera: pass.camera, target: pass.target, override: pass.material, drawing: false, visible: [ true, false ] } );
+		// Everything is put back: the scene's own material, the map's schedule, the tree.
+		expect( scene.overrideMaterial ).toBeNull();
+		expect( shadow.needsUpdate ).toBe( true );
+		expect( ground.visible ).toBe( true );
+		expect( target ).toBeNull();
+
+		// An object that casts nothing is never drawn into the map, and a run
+		// without a pass compiles the frame's alone.
+		calls.length = 0;
+		await warmup.warm( new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshStandardMaterial() ) );
+		await new Warmup( renderer, scene, new THREE.PerspectiveCamera() ).warm( caster );
+		expect( calls ).toHaveLength( 2 );
+		expect( calls.every( ( call ) => call.override === null ) ).toBe( true );
+
+	} );
+
 } );

@@ -1,5 +1,6 @@
 import { LightingSystem } from '../light/LightingSystem.js';
 import { NightSky, SKY_COLOR } from '../sky/NightSky.js';
+import { SunShadow } from '../light/SunShadow.js';
 import { QualityTier } from './QualityTier.js';
 import { Exposure } from './Exposure.js';
 import { NightFog } from './NightFog.js';
@@ -50,6 +51,8 @@ export class NightLook {
 		const ratio = Math.min( globalThis.devicePixelRatio ?? 1, tier.maxPixelRatio ?? Infinity );
 		if ( renderer.getPixelRatio?.() !== ratio ) renderer.setPixelRatio?.( ratio );
 		this.lighting = LightingSystem.install( renderer, tier );
+		// Shadow maps are on or off for the run, before the first material compiles.
+		SunShadow.prepare( renderer, tier );
 		this.exposure = new Exposure( renderer, exposure );
 
 	}
@@ -67,6 +70,7 @@ export class NightLook {
 
 		this.scene = scene;
 		this.sky = new NightSky( scene ).build( hour );
+		this.sun = new SunShadow( this.sky.key, this.tier );
 		// The probe the scene reflects stays at the street's grade indoors.
 		this.exposure.environment = scene;
 		this.fog = new NightFog( scene, {
@@ -96,6 +100,13 @@ export class NightLook {
 	static install( renderer, scene, camera, options = {} ) {
 
 		return NightLook.begin( renderer, options ).raise( scene, options ).compose( camera );
+
+	}
+
+	/** Per frame: the sun's map follows the camera while there is a sun to cast. */
+	update( camera = this.camera ) {
+
+		if ( camera ) this.sun?.update( camera, this.sky.direction, this.sky.day.daylight );
 
 	}
 

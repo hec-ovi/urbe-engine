@@ -780,7 +780,7 @@ export class GameApp {
 		// the event loop, not a frame, while nothing is on screen to protect.
 		this.floorWarmup = prepareInteriorStreaming(
 			this.stream, this.renderer, this.scene, this.camera, this.look.pipeline.mrt, this.look.pipeline.renderTarget,
-			{ budget: new FrameBudget( { paced: false } ), hitches: this.hitches }
+			{ budget: new FrameBudget( { paced: false } ), hitches: this.hitches, shadow: () => this.look.sun?.pass() ?? null }
 		);
 		if ( this.shellScene ) this.shellScene.warmup = this.floorWarmup;
 		// A focused character's model and a scene the quests stand are prepared
@@ -1204,6 +1204,7 @@ export class GameApp {
 
 		} );
 
+		this.look.update( this.camera );
 		this.hitches.time( 'render', () => this.look.render() );
 		this.input.endFrame();
 

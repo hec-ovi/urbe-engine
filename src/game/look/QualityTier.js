@@ -14,11 +14,15 @@ const PRESETS = {
 		roomSlots: 3,
 		roomSpots: 4,
 		roomStrips: 0,
-		// A recess between two surfaces facing the same way is invisible without
-		// a shadow, which is why a wall panel's relief reads flat. One spot on
-		// the room the player stands in casts; the tiers that run on WebGL2 pay
-		// for a whole extra depth pass for it, so they do not.
+		// One spot on the room the player stands in may cast (RoomLights), a
+		// whole extra depth pass whose programs no warm-up builds; no tier pays
+		// for it, and the shadow maps the renderer draws are the sun's.
 		roomShadow: 0,
+		// The sun's one map, in texels, and the metres of ground it spans
+		// around the camera (light/SunShadow.js). A whole second draw of the
+		// near city every daylight frame: the WebGL2 tier does without.
+		sunShadow: 0,
+		sunShadowReach: 0,
 		clusteredLights: 512,
 		batchedLights: 32,
 		// Glossy ground and metals need something to reflect on every tier;
@@ -38,6 +42,8 @@ const PRESETS = {
 		roomSpots: 4,
 		roomStrips: 1,
 		roomShadow: 0,
+		sunShadow: 1024,
+		sunShadowReach: 80,
 		clusteredLights: 1024,
 		batchedLights: 48,
 		probeSize: 64,
@@ -54,7 +60,9 @@ const PRESETS = {
 		roomSlots: 4,
 		roomSpots: 4,
 		roomStrips: 2,
-		roomShadow: 1024,
+		roomShadow: 0,
+		sunShadow: 2048,
+		sunShadowReach: 140,
 		clusteredLights: 1024,
 		batchedLights: 48,
 		probeSize: 64,
@@ -71,7 +79,9 @@ const PRESETS = {
 		roomSlots: 6,
 		roomSpots: 4,
 		roomStrips: 2,
-		roomShadow: 1024,
+		roomShadow: 0,
+		sunShadow: 4096,
+		sunShadowReach: 200,
 		clusteredLights: 1024,
 		batchedLights: 48,
 		probeSize: 128,
