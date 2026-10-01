@@ -4,8 +4,9 @@
  * the eyes and brows that move with it. The studio's tint maps are not: the
  * engine tints skin, hair and eyes in their materials (Tints.js).
  */
-import { BufferAttribute, BufferGeometry, Matrix4, Vector3 } from 'three/webgpu';
+import { Matrix4, Vector3 } from 'three/webgpu';
 import { BODY_SHAPE_KEYS, DEFAULT_SHAPE, FACE_SHAPE_KEYS, SHAPE_LIMITS } from './Recipe.js';
+import { vertexNormals } from './Normals.js';
 import { whole } from './Steps.js';
 
 const SURFACE_KEYS = Object.keys( DEFAULT_SHAPE ).filter( ( key ) => key !== 'height' );
@@ -81,23 +82,26 @@ export class BodyShapes {
 			if ( ! amount ) continue;
 			const delta = this.basis[ key ];
 			for ( let i = 0; i < position.length; i ++ ) position[ i ] += delta[ i ] * amount;
+			yield;
 
 		}
 		yield;
-		const normal = SURFACE_KEYS.some( ( key ) => amounts[ key ] ) ? this.#normals( position ) : this.normals.slice();
+		const normal = SURFACE_KEYS.some( ( key ) => amounts[ key ] ) ? yield* this.#normals( position ) : this.normals.slice();
 		yield;
-		const auxiliaries = new Map( this.auxiliaries.map( ( auxiliary ) => [ auxiliary.name, auxiliaryShape( auxiliary, amounts ) ] ) );
+		const auxiliaries = new Map();
+		for ( const auxiliary of this.auxiliaries ) {
+
+			auxiliaries.set( auxiliary.name, yield* auxiliaryShape( auxiliary, amounts ) );
+			yield;
+
+		}
 		return { position, normal, auxiliaries };
 
 	}
 
-	#normals( position ) {
+	* #normals( position ) {
 
-		const scratch = new BufferGeometry();
-		scratch.setAttribute( 'position', new BufferAttribute( position, 3 ) );
-		scratch.setIndex( new BufferAttribute( this.index, 1 ) );
-		scratch.computeVertexNormals();
-		const normal = scratch.getAttribute( 'normal' ).array;
+		const normal = yield* vertexNormals( position, this.index );
 		// Authored face and hand smoothing stays where nothing moved, and a
 		// vertex split at a UV seam keeps one normal with its twin.
 		for ( let i = 0; i < position.length; i += 3 ) {
@@ -130,7 +134,7 @@ export function bodyOf( root ) {
 
 }
 
-function auxiliaryShape( auxiliary, amounts ) {
+function* auxiliaryShape( auxiliary, amounts ) {
 
 	const keys = auxiliary.keys.filter( ( key ) => amounts[ key ] );
 	const position = auxiliary.original.slice();
@@ -141,11 +145,7 @@ function auxiliaryShape( auxiliary, amounts ) {
 
 	}
 	if ( ! keys.length || ! auxiliary.normals ) return { position, normal: auxiliary.normals?.slice() ?? null };
-	const scratch = new BufferGeometry();
-	scratch.setAttribute( 'position', new BufferAttribute( position, 3 ) );
-	if ( auxiliary.index ) scratch.setIndex( new BufferAttribute( auxiliary.index, 1 ) );
-	scratch.computeVertexNormals();
-	const normal = scratch.getAttribute( 'normal' ).array;
+	const normal = yield* vertexNormals( position, auxiliary.index ?? null );
 	// Imported spheres and brows split vertices at UV seams: only authored
 	// smooth seams are averaged, the pack's deliberate edges are kept.
 	for ( let i = 0; i < position.length; i += 3 ) {
