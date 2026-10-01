@@ -6,12 +6,17 @@ import { kelvinColor } from '../light/Color.js';
 
 /** The published modules the shafts own: the car that rides and the leaves that slide. */
 const CAR_MODULE = 'lift-car';
-/** The car's own front, which rides with it: its leaves and its head and sill. */
+/** The car's own front, which rides with it: its leaves and its head and sill. A through car
+ *  carries a back pair of leaves and a back head as well. */
+const THROUGH_CAR = 'lift-car-through';
+const REAR_DOORS = 'lift-rear-doors';
+const CAR_REAR_DOORS = 'lift-car-rear-doors';
+const CAR_REAR_HEAD = 'lift-car-rear-head';
 const CAR_DOORS = 'lift-car-doors';
 const CAR_HEAD = 'lift-car-head';
 const DOORS_MODULE = 'lift-doors';
 /** Every module a shaft draws itself, so none of them enters the shared draws. */
-export const LIFT_MODULES = new Set( [ CAR_MODULE, CAR_DOORS, CAR_HEAD, DOORS_MODULE ] );
+export const LIFT_MODULES = new Set( [ CAR_MODULE, THROUGH_CAR, CAR_DOORS, CAR_HEAD, CAR_REAR_DOORS, CAR_REAR_HEAD, DOORS_MODULE, REAR_DOORS ] );
 /** A car published before it had its own front: the leaves built from a landing's, the depth they run in ahead of the car and their head. */
 const FALLBACK_LEAF_DEPTH = 0.032;
 const FALLBACK_LEAF_AHEAD = 0.023;
@@ -191,13 +196,13 @@ export class Elevators {
 
 		const [ stop ] = stops;
 
-		if ( placement.module === CAR_MODULE ) {
+		if ( placement.module === CAR_MODULE || placement.module === THROUGH_CAR ) {
 
 			stop.shaft.mountCar( placement, modules );
 			return true;
 
 		}
-		if ( placement.module !== DOORS_MODULE ) {
+		if ( placement.module !== DOORS_MODULE && placement.module !== REAR_DOORS ) {
 
 			stop.shaft.mountCarPart( placement, modules );
 			return true;
@@ -205,7 +210,9 @@ export class Elevators {
 		}
 
 		const surfaces = modules.surfacesOf( placement.module );
-		const leaves = stop.mount( placement, surfaces );
+		// a back landing (a through car's) is a second stop at the same floor, sliding with the front one
+		const landing = placement.module === REAR_DOORS ? ( stop.rear ??= new Stop( stop.shaft, { floor: stop.floor, elevation: stop.elevation, height: stop.height }, 'rear' ) ) : stop;
+		const leaves = landing.mount( placement, surfaces );
 
 		if ( leaves.length ) group.add( ...leaves );
 		stop.shaft.fallbackFront( surfaces );
@@ -462,13 +469,13 @@ class Shaft {
 			[ 0, - floor / 2, 0, width, floor, depth ],
 			[ - width / 2 + wall / 2, ceiling / 2, 0, wall, ceiling, depth ],
 			[ width / 2 - wall / 2, ceiling / 2, 0, wall, ceiling, depth ],
-			[ 0, ceiling / 2, depth / 2 - wall / 2, width - 2 * wall, ceiling, wall ],
+			...( this.through ? [] : [ [ 0, ceiling / 2, depth / 2 - wall / 2, width - 2 * wall, ceiling, wall ] ] ),
 			[ 0, ceiling + roof / 2, 0, width, roof, depth ]
 		];
 
 		if ( this.panelled ) {
 
-			for ( const side of [ - 1, 1 ] ) boxes.push( [ side * ( doorWidth / 2 + cheek / 2 ), ceiling / 2, - depth / 2 + wall / 2, cheek, ceiling, wall ] );
+			for ( const front of this.through ? [ - 1, 1 ] : [ - 1 ] ) for ( const side of [ - 1, 1 ] ) boxes.push( [ side * ( doorWidth / 2 + cheek / 2 ), ceiling / 2, front * ( depth / 2 - wall / 2 ), cheek, ceiling, wall ] );
 
 		}
 
@@ -508,6 +515,7 @@ class Shaft {
 		const surfaces = modules.surfacesOf( placement.module );
 		if ( ! bounds || ! surfaces.length ) return;
 
+		this.through = placement.module === THROUGH_CAR;
 		const car = new THREE.Group();
 		this.yaw = placement.rotationY;
 		car.rotation.y = this.yaw;
@@ -559,12 +567,13 @@ class Shaft {
 	mountCarPart( placement, modules ) {
 
 		const id = placement.module;
-		const doors = id === CAR_DOORS;
-		if ( doors ? this.carDoors && ! this.carDoors.fallback : this.carParts.has( id ) ) return;
+		const doors = id === CAR_DOORS || id === CAR_REAR_DOORS;
+		const slot = id === CAR_REAR_DOORS ? 'carRearDoors' : 'carDoors';
+		if ( doors ? this[ slot ] && ! this[ slot ].fallback : this.carParts.has( id ) ) return;
 
 		const surfaces = modules.surfacesOf( id );
 		if ( ! surfaces.length ) return;
-		if ( doors ) this.#dropFallback();
+		if ( id === CAR_DOORS ) this.#dropFallback();
 
 		const pivot = new THREE.Group();
 		pivot.name = `${id}:${this.id}`;
@@ -576,7 +585,7 @@ class Shaft {
 
 			const leaves = this.#carLeaves( surfaces );
 			pivot.add( ...leaves );
-			this.carDoors = { pivot, leaves, fallback: false };
+			this[ slot ] = { pivot, leaves, fallback: false };
 
 		} else {
 
@@ -668,6 +677,9 @@ class Shaft {
 
 		this.carOpen = open;
 		for ( const leaf of this.carDoors?.leaves ?? [] ) placeLeaf( leaf, open );
+		// A through car opens its back only where the floor it stands at has a back landing.
+		const rear = this.#standing()?.rear ? open : 0;
+		for ( const leaf of this.carRearDoors?.leaves ?? [] ) placeLeaf( leaf, rear );
 
 	}
 
@@ -730,9 +742,8 @@ class Shaft {
 
 		}
 
-		return this.stops
-			.filter( ( stop ) => stop.panel && stop.panel.distanceTo( feet ) < radius )
-			.map( ( stop ) => ( { kind: 'elevator', shaft: this, stop, center: stop.panel, inside: false, aimRadius: CALL_AIM } ) );
+		return this.stops.flatMap( ( stop ) => [ stop, stop.rear ].filter( ( landing ) => landing?.panel && landing.panel.distanceTo( feet ) < radius )
+			.map( ( landing ) => ( { kind: 'elevator', shaft: this, stop, center: landing.panel, inside: false, aimRadius: CALL_AIM } ) ) );
 
 	}
 
@@ -956,7 +967,10 @@ class Shaft {
 /** One landing: the published door leaves at one floor, and their slide. */
 class Stop {
 
-	constructor( shaft, floor ) {
+	constructor( shaft, floor, side = 'front' ) {
+
+		this.side = side;
+		this.rear = null;
 
 		this.shaft = shaft;
 		this.floor = floor.floor;
@@ -989,6 +1003,8 @@ class Stop {
 	}
 
 	obstructed( feet ) {
+
+		if ( this.rear?.obstructed( feet ) ) return true;
 
 		if ( ! this.pivot || feet.y < this.elevation - 0.4 || feet.y > this.elevation + 2.2 ) return false;
 		const local = this.pivot.worldToLocal( new THREE.Vector3( feet.x, feet.y, feet.z ) );
@@ -1063,6 +1079,8 @@ class Stop {
 
 	release() {
 
+		this.rear?.release();
+		this.rear = null;
 		this.#seal( false );
 		this.pivot?.traverse( object => { if ( object.isMesh ) object.geometry.dispose(); } );
 		this.pivot?.removeFromParent();
@@ -1080,7 +1098,7 @@ class Stop {
 
 		if ( ! this.solid ) return;
 
-		const id = `lift:${this.shaft.id}@${this.floor}`;
+		const id = `lift:${this.shaft.id}@${this.floor}${this.side === 'rear' ? ':rear' : ''}`;
 
 		if ( shut === this.sealed ) return;
 		this.sealed = shut;
@@ -1090,6 +1108,8 @@ class Stop {
 	}
 
 	setOpen( wanted, delta ) {
+
+		this.rear?.setOpen( wanted, delta );
 
 		const next = wanted ? 1 : 0;
 
