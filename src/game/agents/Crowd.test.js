@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { Crowd, crowdClipForName } from './Crowd.js';
+import { Crowd, crowdClipForName, personLook } from './Crowd.js';
 import { CLIP } from './CharacterAssets.js';
 import { appearance } from './Appearance.js';
 import { StreetBodies } from './StreetBodies.js';
@@ -1245,3 +1245,18 @@ function sidewalk( width ) {
 	} } );
 
 }
+
+describe( 'Crowd personLook', () => {
+
+	it( 'is the look the crowd dresses an established person in, a cast member without a seed by their quest seed', () => {
+
+		const ada = { npcId: 'walker', gender: 'female', appearanceSeed: 7 };
+		expect( personLook( ada ).recipe ).toEqual( appearance( { gender: 'female', appearanceSeed: 7, npcId: 'walker' } ).recipe );
+
+		const cast = personLook( { gender: 'male' }, 'kiro' );
+		expect( cast.recipe ).toEqual( personLook( { gender: 'male' }, 'kiro' ).recipe );
+		expect( cast.recipe ).not.toEqual( personLook( { gender: 'male' }, 'river' ).recipe );
+
+	} );
+
+} );

@@ -283,9 +283,19 @@ export class CharacterPoser {
 	 */
 	async still( { gender, appearanceSeed, npcId = null }, clipName, at ) {
 
+		return this.pose( appearance( { gender, appearanceSeed, npcId } ).recipe, clipName, at );
+
+	}
+
+	/**
+	 * One recipe dressed and held still in a pose of the transferred clip, at
+	 * its height, standing at the origin facing +Z (`still` for a recipe; the
+	 * portraits pose people with it). `release` gives it back.
+	 */
+	async pose( recipe, clipName, at ) {
+
 		const clip = THREE.AnimationClip.findByName( this.animation.animations, clipName );
 		if ( ! clip ) throw new Error( `Pro animation library is missing ${clipName}` );
-		const { recipe } = appearance( { gender, appearanceSeed, npcId } );
 		const source = await this.model( recipe );
 		const root = this.dress( source, { position: new THREE.Vector3(), heading: 0 }, `still-${recipe.body}` );
 		const mixer = new THREE.AnimationMixer( root );

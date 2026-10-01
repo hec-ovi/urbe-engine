@@ -1757,6 +1757,17 @@ function identify( member, instance ) {
 }
 
 /**
+ * The look the crowd dresses an established person in, by who they are: the
+ * simulation's person (`getNPC`), their seed, or the quest seed a cast member
+ * without one takes. Its `recipe` is what a rig of them wears.
+ */
+export function personLook( npc, npcId = npc?.npcId ?? null ) {
+
+	return wearing( null, npc?.gender, npc?.appearanceSeed ?? hash( `quest:${npcId}` ), npcId ).look;
+
+}
+
+/**
  * The body and look one gender, seed and identity give: a known gender picks
  * its mesh, and a body of unknown gender carries the gender of the mesh the
  * seed picks, so a body is always one gender. The look is the person's recipe
