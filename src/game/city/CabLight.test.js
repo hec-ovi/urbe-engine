@@ -184,8 +184,10 @@ describe( 'the lifts\' shared lighting', () => {
 		const warmup = new Warmup( null, new THREE.Scene(), new THREE.PerspectiveCamera() );
 		const wanted = warmup.programsOf( specimen );
 
-		// The car's surfaces, a display stroke, a leaf, the call plate and its button.
-		expect( wanted ).toHaveLength( 3 + 1 + 1 + 2 );
+		// The car's surfaces, a display stroke, a leaf, the head a car without its
+		// own front stands under the leaves it cuts from a landing's, the call
+		// plate and its button.
+		expect( wanted ).toHaveLength( 3 + 1 + 1 + 1 + 2 );
 		for ( const [ , key ] of wanted ) warmup.warmed.add( key );
 
 		const shafts = [ tower( elevators, 'p1', 10 ), tower( elevators, 'p2', 200 ), tower( elevators, 'p3', 400 ) ];
@@ -199,7 +201,8 @@ describe( 'the lifts\' shared lighting', () => {
 		// What the specimen cut for itself goes; what every lift shares stays.
 		const own = meshes( specimen ).filter( ( mesh ) => mesh.userData.specimen ).map( ( mesh ) => vi.spyOn( mesh.geometry, 'dispose' ) );
 		const shared = meshes( specimen ).filter( ( mesh ) => ! mesh.userData.specimen ).map( ( mesh ) => vi.spyOn( mesh.geometry, 'dispose' ) );
-		expect( own ).toHaveLength( 3 );
+		// A landing's leaf and the car leaf cut from it, the head, the plate and its button.
+		expect( own ).toHaveLength( 5 );
 		elevators.discard( specimen );
 		expect( own.every( ( spy ) => spy.mock.calls.length === 1 ) ).toBe( true );
 		expect( shared.every( ( spy ) => spy.mock.calls.length === 0 ) ).toBe( true );

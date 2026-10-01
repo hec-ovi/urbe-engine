@@ -6,7 +6,16 @@ import { kelvinColor } from '../light/Color.js';
 
 /** The published modules the shafts own: the car that rides and the leaves that slide. */
 const CAR_MODULE = 'lift-car';
+/** The car's own front, which rides with it: its leaves and its head and sill. */
+const CAR_DOORS = 'lift-car-doors';
+const CAR_HEAD = 'lift-car-head';
 const DOORS_MODULE = 'lift-doors';
+/** Every module a shaft draws itself, so none of them enters the shared draws. */
+export const LIFT_MODULES = new Set( [ CAR_MODULE, CAR_DOORS, CAR_HEAD, DOORS_MODULE ] );
+/** A car published before it had its own front: the leaves built from a landing's, the depth they run in ahead of the car and their head. */
+const FALLBACK_LEAF_DEPTH = 0.032;
+const FALLBACK_LEAF_AHEAD = 0.023;
+const FALLBACK_HEAD = 2.2;
 /** How far outside its shaft a door leaf may sit and still belong to it. */
 const DOOR_REACH = 0.5;
 
@@ -51,6 +60,12 @@ const FACE_DOWN = new THREE.Quaternion().setFromAxisAngle( new THREE.Vector3( 1,
  * leaves are that module split at its own centre and hung on sliders. Which
  * shaft a placement belongs to is decided by where it stands, not by a
  * convention about edge numbering.
+ *
+ * The car closes itself: its own leaves (`lift-car-doors`) ride with it and run
+ * with the landing's while it stands open at a floor, and are shut whenever it
+ * travels, and its head and sill (`lift-car-head`) close the car front above
+ * and below them, so a rider never sees the shaft. A car published before it
+ * had its own front takes leaves cut from a landing's and a plain head.
  *
  * The call button on a landing's plate calls the cab; a call made while it
  * travels waits until it has arrived and stood unattended for a few seconds.
@@ -159,7 +174,7 @@ export class Elevators {
 	 * published module standing in the group that rides the shaft, and the
 	 * leaves are that module split at its own centre and hung on sliders.
 	 *
-	 * @param placement a `lift-car` or `lift-doors` placement, in its floor's frame
+	 * @param placement a `LIFT_MODULES` placement, in its floor's frame
 	 * @param modules the city module catalog
 	 * @param group the floor's own content, which owns the leaves
 	 * @returns whether a shaft took it
@@ -182,10 +197,18 @@ export class Elevators {
 			return true;
 
 		}
+		if ( placement.module !== DOORS_MODULE ) {
 
-		const leaves = stop.mount( placement, modules.surfacesOf( placement.module ) );
+			stop.shaft.mountCarPart( placement, modules );
+			return true;
+
+		}
+
+		const surfaces = modules.surfacesOf( placement.module );
+		const leaves = stop.mount( placement, surfaces );
 
 		if ( leaves.length ) group.add( ...leaves );
+		stop.shaft.fallbackFront( surfaces );
 
 		return true;
 
@@ -226,16 +249,30 @@ export class Elevators {
 
 		for ( const { geometry, material } of modules.surfacesOf( CAR_MODULE ) ) group.add( new THREE.Mesh( geometry, this.cabs.car( material ) ) );
 		group.add( new THREE.Mesh( this.cabs.display.across, this.cabs.display.material ) );
+		if ( modules.has( CAR_HEAD ) ) for ( const { geometry, material } of modules.surfacesOf( CAR_HEAD ) ) group.add( new THREE.Mesh( geometry, this.cabs.car( material ) ) );
 
-		// What only a landing draws is cut and built for this, as a landing does.
+		// What only a landing or a car's leaves draw is cut and built for this,
+		// as they do: a car without its own front cuts its leaves and head from
+		// a landing's, lit as the car is.
 		const own = [];
+		const half = ( geometry ) => takeTriangles( geometry, halfOf( geometry, 1 ) ) ?? takeTriangles( geometry, halfOf( geometry, - 1 ) );
+		const carLeaves = modules.has( CAR_DOORS ) ? modules.surfacesOf( CAR_DOORS ) : [];
+		for ( const { geometry, material } of carLeaves ) {
+
+			const part = half( geometry );
+			if ( part ) own.push( new THREE.Mesh( part, this.cabs.car( material ) ) );
+
+		}
 		const leaves = modules.has( DOORS_MODULE ) ? modules.surfacesOf( DOORS_MODULE ) : [];
 		for ( const { geometry, material } of leaves ) {
 
-			const part = takeTriangles( geometry, halfOf( geometry, 1 ) ) ?? takeTriangles( geometry, halfOf( geometry, - 1 ) );
+			const part = half( geometry );
 			if ( part ) own.push( new THREE.Mesh( part, this.cabs.landing( material ) ) );
+			const cut = half( geometry );
+			if ( cut && ! carLeaves.length ) own.push( new THREE.Mesh( cut, this.cabs.car( material ) ) );
 
 		}
+		if ( leaves.length && ! carLeaves.length ) own.push( new THREE.Mesh( new THREE.BoxGeometry( 1, 0.2, 0.1 ), this.cabs.car( leaves[ 0 ].material ) ) );
 		if ( leaves.length ) own.push( ...callPlate( leaves[ 0 ].material, this.factory ).children );
 		for ( const mesh of own ) mesh.userData.specimen = true;
 		if ( own.length ) group.add( ...own );
@@ -319,6 +356,14 @@ class Shaft {
 		this.floorReady = false;
 		this.rider = null;
 		this.riderOffset = new THREE.Vector3();
+		/** The car's own leaves, and its head and sill, riding in the cab, and how open its leaves stand. */
+		this.carDoors = null;
+		this.carParts = new Map();
+		this.carOpen = 0;
+		/** Geometry this shaft cut or built for its car's front, which goes with the shaft. */
+		this.carGeometry = [];
+		/** A landing's leaves, kept when one mounts before the car, for a car without its own front. */
+		this.frontSource = null;
 		/** The signed speed the cab is travelling at. */
 		this.velocity = 0;
 		/** Where the cab set off from, and how long it has stood at a floor that is not shown. */
@@ -444,6 +489,10 @@ class Shaft {
 		this.floorVersion ++;
 		for ( const stop of this.stops ) stop.release();
 		this.cab?.removeFromParent();
+		for ( const geometry of this.carGeometry ) geometry.dispose();
+		this.carGeometry = [];
+		this.carDoors = null;
+		this.carParts.clear();
 
 	}
 
@@ -496,6 +545,129 @@ class Shaft {
 		// Replace the conservative bootstrap floor with the authored cabin bounds.
 		this.floorAt = null;
 		this.#standFloor();
+		if ( this.frontSource ) this.fallbackFront( this.frontSource );
+
+	}
+
+	/**
+	 * A module of the car's own front, placed at the car front plane: the leaves
+	 * (`lift-car-doors`) split at their zero and hung on sliders in the cab, or a
+	 * fixed part such as the head and sill. Every floor places the same front at
+	 * the same pose, and only the first rides. A front cut from a landing's leaves
+	 * for an older car gives way to the published one. Lit as the car is.
+	 */
+	mountCarPart( placement, modules ) {
+
+		const id = placement.module;
+		const doors = id === CAR_DOORS;
+		if ( doors ? this.carDoors && ! this.carDoors.fallback : this.carParts.has( id ) ) return;
+
+		const surfaces = modules.surfacesOf( id );
+		if ( ! surfaces.length ) return;
+		if ( doors ) this.#dropFallback();
+
+		const pivot = new THREE.Group();
+		pivot.name = `${id}:${this.id}`;
+		pivot.position.set( placement.position[ 0 ] - this.centre.x, placement.position[ 1 ], placement.position[ 2 ] - this.centre.z );
+		pivot.rotation.y = placement.rotationY;
+		pivot.scale.set( ...placement.scale );
+
+		if ( doors ) {
+
+			const leaves = this.#carLeaves( surfaces );
+			pivot.add( ...leaves );
+			this.carDoors = { pivot, leaves, fallback: false };
+
+		} else {
+
+			for ( const { geometry, material } of surfaces ) pivot.add( this.#carMesh( geometry, material ) );
+			this.carParts.set( id, pivot );
+
+		}
+		this.cab.add( pivot );
+		this.#slideCar( this.carOpen );
+
+	}
+
+	/**
+	 * A car published before it had its own front: leaves cut from a landing's,
+	 * as wide as the car's doorway and a little more, run in a shallow plane just
+	 * ahead of the car front, under a plain head up to the car ceiling. Only the
+	 * authored car has the cheeks such leaves close against.
+	 */
+	fallbackFront( surfaces ) {
+
+		// A landing mounted before the car keeps its leaves for the car to cut its front from.
+		if ( ! this.car && surfaces.length ) this.frontSource ??= surfaces;
+		if ( this.carDoors || ! this.car || ! this.panelled || ! surfaces.length ) return;
+
+		const bounds = new THREE.Box3();
+		for ( const { geometry } of surfaces ) bounds.union( boundsOf( geometry ) );
+		const size = bounds.getSize( new THREE.Vector3() );
+		if ( size.x <= 0 || size.z <= 0 ) return;
+
+		const across = LIFT_CAR.doorWidth + 0.05;
+		const front = LIFT_CAR.depth / 2 * this.carScale.z;
+		const pivot = new THREE.Group();
+		pivot.name = `${CAR_DOORS}:${this.id}`;
+		pivot.position.set( 0, 0, - front - FALLBACK_LEAF_AHEAD ).applyAxisAngle( _up, this.yaw );
+		pivot.rotation.y = this.yaw;
+		pivot.scale.set( across * this.carScale.x / size.x, 1, FALLBACK_LEAF_DEPTH / size.z );
+		const leaves = this.#carLeaves( surfaces );
+		pivot.add( ...leaves );
+
+		// The head closes the car front from the leaves' top to the car ceiling.
+		const ceiling = LIFT_CAR.ceiling * this.carScale.y;
+		const headDepth = FALLBACK_LEAF_AHEAD + FALLBACK_LEAF_DEPTH / 2 + LIFT_CAR.wall * this.carScale.z;
+		if ( ceiling > FALLBACK_HEAD ) {
+
+			const shape = new THREE.BoxGeometry( ( LIFT_CAR.doorWidth + 0.1 ) * this.carScale.x, ceiling - FALLBACK_HEAD, headDepth );
+			this.carGeometry.push( shape );
+			const head = this.#carMesh( shape, surfaces[ 0 ].material );
+			head.position.set( 0, ( FALLBACK_HEAD + ceiling ) / 2, - front - FALLBACK_LEAF_AHEAD - FALLBACK_LEAF_DEPTH / 2 + headDepth / 2 ).applyAxisAngle( _up, this.yaw );
+			head.rotation.y = this.yaw;
+			pivot.userData.head = head;
+			this.cab.add( head );
+
+		}
+		this.carDoors = { pivot, leaves, fallback: true };
+		this.cab.add( pivot );
+		this.#slideCar( this.carOpen );
+
+	}
+
+	/** A surface of the car, lit by this shaft's lens through the car material every shaft shares (CabLight.js). */
+	#carMesh( geometry, material ) {
+
+		const mesh = new THREE.Mesh( geometry, this.cabs.car( material ) );
+		mesh[ CAB ] = this;
+		return mesh;
+
+	}
+
+	/** A pair of leaves split from these surfaces at their zero, lit as the car is, their cut geometry this shaft's. */
+	#carLeaves( surfaces ) {
+
+		const leaves = splitLeaves( surfaces, ( material ) => this.cabs.car( material ), this.carGeometry );
+		for ( const leaf of leaves ) for ( const mesh of leaf.children ) mesh[ CAB ] = this;
+		return leaves;
+
+	}
+
+	#dropFallback() {
+
+		if ( ! this.carDoors?.fallback ) return;
+		this.carDoors.pivot.userData.head?.removeFromParent();
+		this.carDoors.pivot.removeFromParent();
+		this.carDoors = null;
+
+	}
+
+	/** The car's leaves at `open`, 0 shut and 1 fully open, on the landing's easing. */
+	#slideCar( open ) {
+
+		this.carOpen = open;
+		for ( const leaf of this.carDoors?.leaves ?? [] ) placeLeaf( leaf, open );
 
 	}
 
@@ -705,6 +877,9 @@ class Shaft {
 				|| ( this.blocked && stop.open > 0 && stop.obstructed( body.feet ) ), delta );
 
 		}
+		// The car's own leaves run with the landing's it stands at, and are shut
+		// whenever it is between floors.
+		this.#slideCar( this.#standing()?.open ?? 0 );
 
 		if ( ! this.moving && this.#giveUp( delta ) ) return;
 
@@ -723,7 +898,7 @@ class Shaft {
 
 		}
 
-		if ( this.stops.some( stop => stop.open > 0 ) ) return;
+		if ( this.carOpen > 0 || this.stops.some( stop => stop.open > 0 ) ) return;
 
 		if ( ! this.rider && ! body.carried && this.holds( body.feet ) ) {
 

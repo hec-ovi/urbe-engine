@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { Elevators } from './Elevators.js';
+import { Elevators, LIFT_MODULES } from './Elevators.js';
 import { floorBoxes } from './InteriorBoxes.js';
 import { Interactor } from '../player/Interactor.js';
 import { Physics } from '../physics/Physics.js';
@@ -263,6 +263,124 @@ describe( 'a lift ridden through its own controls', () => {
 
 	} );
 
+	it.each( [ 0, 37 ] )( 'shuts the car\'s own leaves whenever it travels and runs them with the landing\'s where it stands, in a %s degree core', ( angle ) => {
+
+		const { shaft, elevators } = fixture( angle );
+		const body = standing( new THREE.Vector3( shaft.centre.x, 0.025, shaft.centre.z ) );
+
+		// The published front rides in the cab: two leaves and the head with its sill, lit by this car's lens.
+		expect( shaft.carDoors.fallback ).toBe( false );
+		expect( shaft.carDoors.leaves ).toHaveLength( 2 );
+		expect( shaft.carDoors.pivot.parent ).toBe( shaft.cab );
+		expect( shaft.carParts.get( 'lift-car-head' ).parent ).toBe( shaft.cab );
+		for ( const leaf of shaft.carDoors.leaves ) for ( const mesh of leaf.children ) expect( mesh[ Symbol.for( 'urbe.lift-cab' ) ] ).toBe( shaft );
+		// Shut, the leaves meet: each stands at the zero it was authored against.
+		for ( const leaf of shaft.carDoors.leaves ) expect( leaf.position.length() ).toBeLessThan( 1e-9 );
+		// The front stands at the car's front, ahead of the car and behind the landing leaves.
+		const front = shaft.localPoint( shaft.carDoors.pivot.getWorldPosition( new THREE.Vector3() ), new THREE.Vector3() );
+		expect( front.z ).toBeCloseTo( - LIFT_CAR.depth / 2 * shaft.carScale.z, 6 );
+
+		shaft.press( { inside: false, stop: shaft.stopAt( 0 ) } );
+		run( elevators, body, 120 );
+		expect( shaft.stopAt( 0 ).open ).toBe( 1 );
+		expect( shaft.carOpen ).toBe( 1 );
+		// Open, each car leaf has run half the pair's width clear of the car's doorway.
+		for ( const leaf of shaft.carDoors.leaves ) expect( Math.abs( leaf.position.x ) ).toBeCloseTo( LIFT_CAR.door.leaf, 6 );
+
+		shaft.select( 1 );
+		shaft.press( { inside: true } );
+		let travelled = 0;
+		for ( let frame = 0; frame < 900 && ( travelled === 0 || shaft.moving ); frame ++ ) {
+
+			const from = shaft.at;
+			elevators.update( STEP, body );
+			// Every leaf of the car closes in step with the landing's.
+			if ( shaft.at === 0 ) expect( shaft.carOpen ).toBeCloseTo( shaft.stopAt( 0 ).open, 9 );
+			// And all of them are shut from before the cab leaves until it stands at a floor again.
+			if ( shaft.at !== from || shaft.stops.every( ( stop ) => Math.abs( stop.elevation - shaft.at ) > 0.05 ) ) {
+
+				travelled ++;
+				expect( shaft.carOpen ).toBe( 0 );
+				expect( shaft.stops.every( ( stop ) => stop.open === 0 ) ).toBe( true );
+				for ( const leaf of shaft.carDoors.leaves ) expect( leaf.position.length() ).toBeLessThan( 1e-9 );
+
+			}
+
+		}
+		expect( travelled ).toBeGreaterThan( 60 );
+		expect( shaft.at ).toBe( 4.5 );
+		run( elevators, body, 120 );
+		expect( shaft.stopAt( 2 ).open ).toBe( 1 );
+		expect( shaft.carOpen ).toBe( 1 );
+
+	} );
+
+	it( 'cuts a car front from the landing\'s leaves for a world published before the car had one, and gives way to the published one', () => {
+
+		const older = new Set( [ 'lift-car', 'lift-doors' ] );
+		const { shaft, elevators, builder } = fixture( 0, null, catalog, older );
+		const body = standing( new THREE.Vector3( shaft.centre.x, 0.025, shaft.centre.z ) );
+
+		expect( shaft.carDoors.fallback ).toBe( true );
+		expect( shaft.carDoors.leaves ).toHaveLength( 2 );
+		expect( shaft.carDoors.pivot.userData.head.parent ).toBe( shaft.cab );
+		// Cut leaves stand in the clearance ahead of the car, clear of the landing's.
+		shaft.cab.updateMatrixWorld( true );
+		const box = new THREE.Box3().setFromObject( shaft.carDoors.pivot );
+		const local = [ box.min, box.max ].map( ( corner ) => shaft.localPoint( corner, new THREE.Vector3() ) );
+		const depth = LIFT_CAR.depth / 2 * shaft.carScale.z;
+		for ( const corner of local ) {
+
+			expect( - corner.z ).toBeGreaterThan( depth );
+			expect( - corner.z ).toBeLessThan( depth + 0.05 );
+
+		}
+		shaft.selected = 1;
+		shaft.press( { inside: true } );
+		let travelled = 0;
+		for ( let frame = 0; frame < 900 && ( travelled === 0 || shaft.moving ); frame ++ ) {
+
+			elevators.update( STEP, body );
+			if ( shaft.at === 0 || ! shaft.moving ) continue;
+			travelled ++;
+			// Cut from a landing published with a seam, the shut pair still meets.
+			const [ left, right ] = shaft.carDoors.leaves;
+			expect( left.position.x ).toBeGreaterThanOrEqual( 0 );
+			expect( right.position.x ).toBeLessThanOrEqual( 0 );
+			expect( left.position.x - right.position.x ).toBeLessThan( 0.02 );
+
+		}
+		expect( travelled ).toBeGreaterThan( 60 );
+		expect( shaft.at ).toBe( 4.5 );
+
+		// The published front, once a floor carries it, takes over.
+		for ( const placement of builder.placements.filter( ( one ) => one.module === 'lift-car-doors' ) ) elevators.mount( 'p', 2, placement, catalog, new THREE.Group() );
+		expect( shaft.carDoors.fallback ).toBe( false );
+		expect( shaft.cab.children.filter( ( child ) => child.name.startsWith( 'lift-car-doors' ) ) ).toHaveLength( 1 );
+		expect( shaft.cab.children.some( ( child ) => child === shaft.carDoors.pivot ) ).toBe( true );
+
+	} );
+
+	it( 'cuts the front for a car whose landing mounted before it, and lets go of what it cut with the shaft', () => {
+
+		const older = new Set( [ 'lift-doors', 'lift-car' ] );
+		const { shaft, elevators } = fixture( 0, null, catalog, older, true );
+		expect( shaft.carDoors?.fallback ).toBe( true );
+		const cut = [ ...shaft.carGeometry ];
+		expect( cut.length ).toBeGreaterThan( 0 );
+		const disposed = cut.map( ( geometry ) => {
+
+			let count = 0;
+			geometry.addEventListener( 'dispose', () => count ++ );
+			return () => count;
+
+		} );
+		elevators.remove( 'p' );
+		expect( disposed.every( ( count ) => count() === 1 ) ).toBe( true );
+		expect( shaft.carDoors ).toBe( null );
+
+	} );
+
 	it( 'still stands the authored car, with its panel, cheeks and display, from a catalog that publishes it', () => {
 
 		const { shaft } = fixture();
@@ -276,8 +394,13 @@ describe( 'a lift ridden through its own controls', () => {
 
 } );
 
-/** One 3.5 m shaft serving floors 0, 2 and 7 of a core turned `angle` degrees, placed as Interior places it. */
-function fixture( angle = 0, colliders = null, modules = catalog ) {
+/**
+ * One 3.5 m shaft serving floors 0, 2 and 7 of a core turned `angle` degrees,
+ * placed as Interior places it; `mounted` picks the lift modules a world
+ * publishes, all of them unless an older world is asked for, and
+ * `landingsFirst` mounts each floor's landing before its car.
+ */
+function fixture( angle = 0, colliders = null, modules = catalog, mounted = LIFT_MODULES, landingsFirst = false ) {
 
 	const core = {
 		frame: makeFrame( angle ), vFace: 0,
@@ -295,7 +418,9 @@ function fixture( angle = 0, colliders = null, modules = catalog ) {
 
 	for ( const floor of floors ) {
 
-		for ( const placement of builder.placements.filter( ( one ) => [ 'lift-car', 'lift-doors' ].includes( one.module ) ) ) {
+		const placements = builder.placements.filter( ( one ) => mounted.has( one.module ) );
+		if ( landingsFirst ) placements.sort( ( a, b ) => Number( b.module === 'lift-doors' ) - Number( a.module === 'lift-doors' ) );
+		for ( const placement of placements ) {
 
 			expect( elevators.mount( 'p', floor.floor, placement, modules, new THREE.Group() ) ).toBe( true );
 

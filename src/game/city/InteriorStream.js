@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { buildApartmentDoors } from './ApartmentDoors.js';
+import { LIFT_MODULES } from './Elevators.js';
 import { buildingFloors, floorPlacements } from './InteriorLayouts.js';
 import { furnitureBoxes } from './FurnitureBoxes.js';
 import { floorBoxes } from './InteriorBoxes.js';
@@ -40,10 +41,6 @@ const VIEW_KEEP = 36;
 const PAINT_MS = 2;
 /** Copies appended between two looks at the clock. */
 const PAINT_STRIDE = 16;
-/** The module the lifts move themselves, one car per shaft. */
-const LIFT_CAR = 'lift-car';
-/** And the landing leaves they slide open. */
-const LIFT_DOORS = 'lift-doors';
 /** What a floor within reach stands on before it is shown: its slabs. */
 const supports = ( placement ) => placement.module?.startsWith( 'floor-' ) === true;
 
@@ -154,7 +151,7 @@ export class InteriorStream {
 		const peaks = standingPeaks( [ ...this.pending.values() ], {
 			keysOf: ( placement ) => {
 
-				if ( placement.module === LIFT_CAR || placement.module === LIFT_DOORS ) return [];
+				if ( LIFT_MODULES.has( placement.module ) ) return [];
 				if ( placement.module ) return this.modules?.bucketsOf?.( placement.module ).map( ( bucket ) => `module:${bucket}` ) ?? [];
 				return placement.prop ? [ `prop:${placement.prop}` ] : [];
 
@@ -597,7 +594,7 @@ export class InteriorStream {
 		for ( const placement of floorPlacements( record ) ) {
 
 			// The lifts move their own copies, so those never enter the shared draws.
-			if ( placement.module === LIFT_CAR || placement.module === LIFT_DOORS ) {
+			if ( LIFT_MODULES.has( placement.module ) ) {
 
 				this.elevators?.mount( interior.parcelId, record.floor, placement, this.modules, content );
 				continue;

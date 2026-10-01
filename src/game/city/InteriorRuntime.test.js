@@ -13,7 +13,7 @@ import { InteriorProps } from './InteriorProps.js';
 import { InteriorStream } from './InteriorStream.js';
 import { partsOf } from './InteriorBoxes.js';
 import { enclosure, floorOrphans, roomsOf } from './InteriorRooms.js';
-import { Elevators } from './Elevators.js';
+import { Elevators, LIFT_MODULES } from './Elevators.js';
 import { FillChannel } from './kit/FillChannel.js';
 import { roomFor } from './kit/KitPieceDraw.js';
 import { RoomLights } from '../light/RoomLights.js';
@@ -363,7 +363,7 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 			expect( partsOf( id, bounds ), id ).toHaveLength( 1 );
 
 		}
-		for ( const id of [ 'ceiling-spot', 'ceiling-spot-cool', 'ceiling-cove-steel', 'ceiling-led-strip', 'ceiling-services', 'wall-screen', 'wall-art', 'wall-shelf', 'lift-car', 'lift-doors' ] ) {
+		for ( const id of [ 'ceiling-spot', 'ceiling-spot-cool', 'ceiling-cove-steel', 'ceiling-led-strip', 'ceiling-services', 'wall-screen', 'wall-art', 'wall-shelf', 'lift-car', 'lift-car-doors', 'lift-car-head', 'lift-doors' ] ) {
 
 			expect( partsOf( id, bounds ), id ).toEqual( [] );
 
@@ -727,10 +727,10 @@ function boxScene( width, height, depth ) {
 
 }
 
-/** The car and its landing leaves, which the lift draws itself. */
+/** The car, its own front and its landing leaves, which the lift draws itself. */
 function liftCopies( placements ) {
 
-	return placements.filter( ( one ) => one.module === 'lift-car' || one.module === 'lift-doors' ).length;
+	return placements.filter( ( one ) => LIFT_MODULES.has( one.module ) ).length;
 
 }
 
