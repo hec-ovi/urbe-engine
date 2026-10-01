@@ -27,7 +27,17 @@
       "required": ["type", "kind"],
       "properties": {
         "type": { "const": "offer" },
-        "kind": { "enum": ["follow", "stop", "home", "work", "wait", "sit"] }
+        "kind": { "enum": ["follow", "stop", "home", "work", "wait", "sit", "contact"] }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "kind", "name"],
+      "properties": {
+        "type": { "const": "offer" },
+        "kind": { "const": "meet" },
+        "name": { "type": "string", "minLength": 1 }
       }
     },
     {

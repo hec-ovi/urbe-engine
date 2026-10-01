@@ -87,6 +87,8 @@ describe( 'talk request contract', () => {
 		} ) ).toBeTruthy();
 		const apartment = { ...npc, home: { ...npc.home, apartment: { id: 'floor:2/f1-home-1', floor: 2, number: '201' } } };
 		expect( boundary.input( { ...request, npc: apartment, guide: { placeId: 'street:3', kind: 'street', name: 'Third Street' } } ) ).toBeTruthy();
+		// A call: the person may give their number and come to where the player is.
+		expect( boundary.input( { ...request, call: { caller: 'player' }, offers: { contact: true, meet: { name: 'Salt Wharf' }, home: true } } ) ).toBeTruthy();
 		const said = { speaker: 'npc', text: 'Hm.', atMin: 530 };
 		const struck = { kind: 'struck', atMin: 535, parcelId: 'p_rest', metres: 12 };
 		for ( const invalid of [
@@ -94,6 +96,9 @@ describe( 'talk request contract', () => {
 			{ ...request, npc: { ...npc, traits: [ 'calm', 'calm' ] } },
 			{ ...request, npc: { ...npc, age: 41.5 } },
 			{ ...request, offers: { follow: true, ride: true } },
+			{ ...request, offers: { meet: {} } },
+			{ ...request, call: { caller: 'npc' } },
+			{ ...request, call: {} },
 			{ ...request, guide: { placeId: 'p_rest', kind: 'route' } },
 			{ ...request, line: 'x'.repeat( 2001 ) },
 			{ ...request, guide: { placeId: 'p_rest', kind: 'parcel', notes: [ 'x'.repeat( 2001 ) ] } },
@@ -148,11 +153,12 @@ describe( 'talk request contract', () => {
 		for ( const event of [
 			{ type: 'delta', text: 'Ask ' }, { type: 'sentence', index: 0, text: 'Ask at the bar.' },
 			{ type: 'offer', kind: 'follow' }, { type: 'offer', kind: 'lead', placeId: 'p_rest', name: 'The Rusty Anchor' },
-			{ type: 'offer', kind: 'walk', placeId: 'lift:elev-0', name: 'the lift' }, ...[ 'stop', 'home', 'work', 'wait', 'sit' ].map( ( kind ) => ( { type: 'offer', kind } ) ),
+			{ type: 'offer', kind: 'walk', placeId: 'lift:elev-0', name: 'the lift' }, ...[ 'stop', 'home', 'work', 'wait', 'sit', 'contact' ].map( ( kind ) => ( { type: 'offer', kind } ) ),
+			{ type: 'offer', kind: 'meet', name: 'Salt Wharf' },
 			{ type: 'done', reply: 'Ask at the bar.' }, { type: 'error', error: 'model server 500 at x' }
 		] ) expect( boundary.event( event ) ).toBe( event );
 		for ( const event of [
-			{ type: 'delta', text: '' }, { type: 'offer', kind: 'lead' }, { type: 'offer', kind: 'walk' }, { type: 'offer', kind: 'dance' },
+			{ type: 'delta', text: '' }, { type: 'offer', kind: 'lead' }, { type: 'offer', kind: 'walk' }, { type: 'offer', kind: 'dance' }, { type: 'offer', kind: 'meet' },
 			{ type: 'done', reply: 'x', offers: [] }, { type: 'usage' }
 		] ) expect( () => boundary.event( event ) ).toThrow( /does not match its contract/ );
 

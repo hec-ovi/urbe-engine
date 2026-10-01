@@ -25,6 +25,14 @@
         "work": { "type": "boolean" },
         "wait": { "type": "boolean" },
         "sit": { "type": "boolean" },
+        "contact": { "description": "The person may give the player their number.", "type": "boolean" },
+        "meet": {
+          "description": "On a call, the person may come to where the player is: that place as the player knows it.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name"],
+          "properties": { "name": { "type": "string", "minLength": 1 } }
+        },
         "places": {
           "type": "array",
           "items": {
@@ -90,6 +98,13 @@
         "known": { "type": "array", "maxItems": 24, "items": { "$ref": "#/$defs/knownPerson" } },
         "unknown": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/words" } }
       }
+    },
+    "call": {
+      "description": "The player is not with the person but called them: they talk on the phone.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caller"],
+      "properties": { "caller": { "const": "player" } }
     },
     "task": {
       "description": "What the person is doing for the player now: following, leading to a place, or an errand the player asked for.",

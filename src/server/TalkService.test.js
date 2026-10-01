@@ -142,6 +142,24 @@ describe( 'TalkService', () => {
 
 	} );
 
+	it( 'tells the person the player called them, and turns their number and a meeting into offers', async () => {
+
+		const model = fakeModel( [
+			{ content: 'Sure, I will come over.' },
+			{ tool_calls: [ { index: 0, id: 'c1', function: { name: 'give_number', arguments: '{}' } } ] },
+			{ tool_calls: [ { index: 1, id: 'c2', function: { name: 'meet_player', arguments: '{}' } } ] }
+		] );
+		const service = new TalkService( model, ( await servedWorld() ).root );
+		const all = await events( service.stream( {
+			out: '/out/w', npc, behavior, line: 'Come to the wharf?', timeMin: 600,
+			call: { caller: 'player' }, offers: { contact: true, meet: { name: 'Salt Wharf' } }
+		} ) );
+		expect( model.system( 0 ) ).toContain( 'you are talking to them on the phone' );
+		expect( model.seen[ 0 ].tools.map( ( tool ) => tool.function.name ) ).toEqual( [ 'give_number', 'meet_player' ] );
+		expect( all.filter( ( e ) => e.type === 'offer' ) ).toEqual( [ { type: 'offer', kind: 'contact' }, { type: 'offer', kind: 'meet', name: 'Salt Wharf' } ] );
+
+	} );
+
 	it( 'remembers nothing of a reply that failed', async () => {
 
 		const model = fakeModel( [ { content: 'Ask' }, new Error( 'model stream ended before [DONE]' ) ], [ { content: 'Yes?' } ] );
