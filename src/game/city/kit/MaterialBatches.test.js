@@ -190,6 +190,32 @@ describe( 'the batching class takes primitives as a loader publishes them', () =
 
 	} );
 
+	it( 'carries a colour per copy from birth when asked, tinting only the surfaces that take one, and builds nothing again for it', () => {
+
+		const paint = new THREE.MeshStandardMaterial();
+		const metal = new THREE.MeshStandardMaterial();
+		const batches = new MaterialBatches( 'tinted', { colored: true } ).add( [ { id: 'bin', surfaces: [
+			{ bucket: 'paint', geometry: plain( 3 ), material: paint, tinted: true },
+			{ bucket: 'metal', geometry: plain( 3 ), material: metal, tinted: false }
+		] } ] );
+		const rebuilt = vi.fn();
+		paint.addEventListener( 'dispose', rebuilt );
+		metal.addEventListener( 'dispose', rebuilt );
+		const [ painted, bare ] = [ 'paint', 'metal' ].map( ( bucket ) => batches.batches.get( bucket ).mesh );
+		// The colour texture stands before any copy, so the first draw is built reading it.
+		expect( painted._colorsTexture ).not.toBeNull();
+		expect( bare._colorsTexture ).not.toBeNull();
+
+		const copy = batches.admit( 'bin', new THREE.Matrix4(), new THREE.Color( 0.25, 0.5, 0.75 ) );
+		expect( rebuilt ).not.toHaveBeenCalled();
+		expect( painted.getColorAt( copy.instances[ 0 ], new THREE.Color() ).toArray() ).toEqual( [ 0.25, 0.5, 0.75 ] );
+		expect( bare.getColorAt( copy.instances[ 1 ], new THREE.Color() ).toArray() ).toEqual( [ 1, 1, 1 ] );
+		// A kit's surfaces stay tinted unless they say otherwise.
+		expect( new MaterialBatches( 'kit' ).add( [ { id: 'a', surfaces: [ { bucket: 'x', geometry: plain( 3 ), material: paint } ] } ] ).entries.get( 'a' )[ 0 ].tinted ).toBe( true );
+		batches.dispose();
+
+	} );
+
 	it( 'holds the most instances each bucket stands at once, exactly and once', () => {
 
 		const stone = new THREE.MeshStandardMaterial();

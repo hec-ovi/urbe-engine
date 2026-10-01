@@ -28,10 +28,12 @@ export class MaterialBatches {
 	 * @param fill whether each copy carries a fill light, for draws standing in rooms
 	 * @param hitches the log a batch names its rebuilds in
 	 * @param lod `{ point, distance }` the far surfaces are chosen by, shared with the caller
+	 * @param colored whether every batch carries a colour per copy from birth (MaterialBatch)
 	 */
-	constructor( name, { fill = false, uvRepeat = false, hitches = null, lod = null } = {} ) {
+	constructor( name, { fill = false, uvRepeat = false, hitches = null, lod = null, colored = false } = {} ) {
 
 		this.name = name;
+		this.colored = colored;
 		this.fill = fill;
 		this.uvRepeat = uvRepeat;
 		this.hitches = hitches;
@@ -76,7 +78,7 @@ export class MaterialBatches {
 	 * beside what is standing. The draw count follows the materials, so entries
 	 * arriving later never add a batch a material already has.
 	 *
-	 * @param entries [{ id, surfaces: [{ bucket, geometry, material, castShadow?, far? }] }]
+	 * @param entries [{ id, surfaces: [{ bucket, geometry, material, castShadow?, far?, tinted? }] }]
 	 * @param castShadow whether this kit's batches cast, unless a surface says otherwise
 	 * @param instances copies each new batch makes room for before the first cell
 	 */
@@ -128,7 +130,8 @@ export class MaterialBatches {
 				fill: this.fill,
 				uvRepeat: this.uvRepeat,
 				hitches: this.hitches,
-				lod: this.lod
+				lod: this.lod,
+				colored: this.colored
 			} );
 			this.batches.set( key, batch );
 			this.group.add( batch.mesh );
@@ -143,7 +146,7 @@ export class MaterialBatches {
 				const geometryId = batch.addGeometry( surface.geometry );
 				if ( surface.far ) batch.setFar( geometryId, farId( batch, surface.far ) );
 
-				return { batch, geometryId, bucket: surface.bucket };
+				return { batch, geometryId, bucket: surface.bucket, tinted: surface.tinted !== false };
 
 			} ) );
 
@@ -218,13 +221,17 @@ export class MaterialBatches {
 
 	}
 
-	/** Draws one more copy of an entry. @returns a handle to hand back to `release` */
+	/**
+	 * Draws one more copy of an entry. A surface added with `tinted: false`
+	 * takes no colour: it stands white under its own material.
+	 * @returns a handle to hand back to `release`
+	 */
 	admit( id, matrix, color = null, fill = null, uvRepeat = [ 1, 1 ] ) {
 
 		const parts = this.entries.get( id );
 		const instances = [];
 
-		for ( const { batch, geometryId } of parts ) instances.push( batch.add( geometryId, matrix, color, fill, uvRepeat ) );
+		for ( const { batch, geometryId, tinted } of parts ) instances.push( batch.add( geometryId, matrix, tinted ? color : null, fill, uvRepeat ) );
 		this.copies ++;
 
 		return { parts, instances };

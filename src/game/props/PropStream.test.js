@@ -31,22 +31,24 @@ it( 'preserves global placements and exact nearby render/collision triangles thr
 	} );
 	await stream.update( { x: 0, z: 0 }, { radius: 100, collisionRadius: 100, prepare, collision: geometry } );
 	expect( stream.stats ).toMatchObject( { resident: 18, collision: 18, pending: false } );
-	const sharedGeometry = stream.group.children[ 0 ].children[ 0 ].geometry;
+	// The models' own geometry is copied into the batches once and stays the models'.
+	const sharedGeometry = [ ...stream.models.models.values() ][ 0 ].parts[ 0 ].geometry;
 	const disposeGeometry = vi.spyOn( sharedGeometry, 'dispose' );
 	expect( rendered( stream.group ) ).toEqual( rendered( complete.group, matrix => matrix.elements[ 12 ] < 200 ) );
 	expect( faces( [ ...geometry.parts.values() ].flat() ) ).toEqual( faces( [ complete.colliders.get( 'props' ).attributes.position.array ], x => x < 200 ) );
-	const nearIds = identities( stream.group );
+	const nearIds = identities( stream );
 	const nearBands = [ ...geometry.parts.keys() ];
 	await stream.update( { x: 1000, z: 0 } );
 	expect( stream.stats ).toMatchObject( { resident: 18, collision: 18 } );
-	expect( identities( stream.group ).some( id => nearIds.includes( id ) ) ).toBe( false );
+	expect( identities( stream ).some( id => nearIds.includes( id ) ) ).toBe( false );
 	for ( const id of nearBands ) expect( geometry.parts.has( id ) ).toBe( false );
 	await stream.update( { x: 0, z: 0 } );
-	expect( identities( stream.group ) ).toEqual( nearIds );
+	expect( identities( stream ) ).toEqual( nearIds );
+	expect( rendered( stream.group ) ).toEqual( rendered( complete.group, matrix => matrix.elements[ 12 ] < 200 ) );
 	// A window over the whole city still leaves out the props a kilometre off:
 	// a metre-tall rail is a speck there.
 	await stream.update( { x: 0, z: 0 }, { radius: 2000 } );
-	expect( identities( stream.group ) ).toEqual( nearIds );
+	expect( identities( stream ) ).toEqual( nearIds );
 	expect( stream.stats.draws ).toBeLessThan( complete.group.children.length );
 	expect( stream.stats.draws ).toBeLessThanOrEqual( 9 );
 	expect( loadAsset ).toHaveBeenCalledTimes( 5 );
@@ -65,47 +67,40 @@ it( 'coalesces updates and cancels obsolete preparation before adding visibility
 	const geometry = collision();
 	const pending = stream.update( { x: 0, z: 0 }, { radius: 100, collisionRadius: 100, prepare, collision: geometry } );
 	await vi.waitFor( () => expect( prepare ).toHaveBeenCalledTimes( 1 ) );
-	expect( stream.group.children ).toHaveLength( 0 );
+	// While its batches are prepared, nothing of the window is drawn.
+	expect( drawnBatches( stream ) ).toHaveLength( 0 );
+	expect( identities( stream ) ).toEqual( [] );
 	const latest = stream.update( { x: 1000, z: 0 } );
 	expect( latest ).toBe( pending ); release(); await pending;
 	expect( stream.stats ).toMatchObject( { resident: 18, collision: 18, pending: false } );
-	expect( identities( stream.group ).every( id => Number( id.split( ':' )[ 1 ] ) >= 6 ) ).toBe( true );
+	expect( identities( stream ).every( id => Number( id.split( ':' )[ 1 ] ) >= 6 ) ).toBe( true );
 	stream.dispose();
 } );
 
-it( 'prepares every batch it makes before it draws, and none it keeps', async () => {
+it( 'draws its props one batch per material, prepared before it first draws, and never again', async () => {
 	const stream = await dressing().stream( { cellSize: 64 } );
 	const prepared = new Set();
-	const prepare = vi.fn( async group => { expect( group.parent ).toBeNull(); prepared.add( group ); } );
-	const drawn = () => [ ...stream.group.children ];
+	const prepare = vi.fn( async group => { expect( group.parent ).toBeNull(); for ( const mesh of group.children ) prepared.add( mesh ); } );
 	await stream.update( { x: 0, z: 0 }, { radius: 100, prepare } );
-	const batches = prepare.mock.calls.length;
-	expect( batches ).toBeGreaterThan( 0 );
-	expect( drawn().every( group => prepared.has( group ) ) ).toBe( true );
-	// A window drawn again over the same props keeps its batches: nothing to prepare.
+	expect( prepare ).toHaveBeenCalledTimes( 1 );
+	const batches = drawnBatches( stream );
+	expect( batches.length ).toBeGreaterThan( 0 );
+	expect( batches.every( mesh => mesh.isBatchedMesh && prepared.has( mesh ) ) ).toBe( true );
+	// One draw per material, whatever the models: no two batches share one.
+	expect( new Set( batches.map( mesh => mesh.material ) ).size ).toBe( batches.length );
+	expect( stream.stats.draws ).toBe( batches.length );
+	// A window drawn again, across town, or left and found again, takes its
+	// copies in the batches that stand: nothing to prepare and no draw added.
 	const again = vi.fn( async () => {} );
 	await stream.update( { x: 0, z: 0 }, { radius: 100, prepare: again } );
-	expect( again ).not.toHaveBeenCalled();
-	// The same models across town take their copies in the batches that stand.
-	await stream.update( { x: 1000, z: 0 }, { radius: 100, prepare } );
+	await stream.update( { x: 1000, z: 0 }, { radius: 100, prepare: again } );
 	expect( stream.stats.resident ).toBe( 18 );
-	expect( prepare ).toHaveBeenCalledTimes( batches );
-	expect( drawn().every( group => prepared.has( group ) ) ).toBe( true );
-	// A model and finish the window leaves is kept, emptied and out of the
-	// scene, and a window that finds it again draws it in that same batch.
-	const standing = drawn();
-	await stream.update( { x: 0, z: 5000 }, { radius: 100, prepare } );
-	expect( stream.group.children ).toHaveLength( 0 );
+	await stream.update( { x: 0, z: 5000 }, { radius: 100, prepare: again } );
 	expect( stream.stats ).toMatchObject( { resident: 0, draws: 0 } );
-	await stream.update( { x: 1000, z: 0 }, { radius: 100, prepare } );
-	expect( prepare ).toHaveBeenCalledTimes( batches );
-	expect( new Set( drawn() ) ).toEqual( new Set( standing ) );
-	// One that needs more room than it has is made again, and prepared first.
-	const [ first ] = stream.batches.batches.values();
-	first.capacity = 0;
-	await stream.update( { x: 0, z: 0 }, { radius: 100, prepare } );
-	expect( prepare ).toHaveBeenCalledTimes( batches + 1 );
-	expect( drawn().every( group => prepared.has( group ) ) ).toBe( true );
+	await stream.update( { x: 0, z: 0 }, { radius: 100, prepare: again } );
+	expect( again ).not.toHaveBeenCalled();
+	expect( drawnBatches( stream ) ).toEqual( batches );
+	expect( stream.stats.resident ).toBe( 18 );
 	stream.dispose();
 } );
 
@@ -121,9 +116,11 @@ it( 'validates stream settings before loading assets and refuses invalid windows
 } );
 
 function serialize( item ) { return { ...item, matrix: item.matrix.toArray() }; }
-function identities( group ) {
-	const ids = new Set(); group.traverse( mesh => { for ( const id of mesh.userData.propIds ?? [] ) ids.add( id ); } );
-	return [ ...ids ].sort();
+function identities( stream ) {
+	return [ ...stream.batches.standing.keys() ].sort();
+}
+function drawnBatches( stream ) {
+	return stream.batches.materials.group.children.filter( mesh => mesh.isBatchedMesh );
 }
 function collision() {
 	const parts = new Map();
@@ -136,6 +133,19 @@ function collision() {
 function rendered( group, include = () => true ) {
 	const parts = [], matrix = new THREE.Matrix4(), vertex = new THREE.Vector3();
 	group.traverse( mesh => {
+		if ( mesh.isBatchedMesh ) {
+			const position = mesh.geometry.attributes.position, index = mesh.geometry.index;
+			mesh._instanceInfo.forEach( ( instance, id ) => {
+				if ( ! instance.active ) return;
+				mesh.getMatrixAt( id, matrix ); if ( ! include( matrix ) ) return;
+				const range = mesh._geometryInfo[ instance.geometryIndex ];
+				const count = index ? range.indexCount : range.vertexCount;
+				const points = new Float32Array( count * 3 );
+				for ( let n = 0; n < count; n ++ ) vertex.fromBufferAttribute( position, index ? index.getX( range.indexStart + n ) : range.vertexStart + n ).applyMatrix4( matrix ).toArray( points, n * 3 );
+				parts.push( points );
+			} );
+			return;
+		}
 		if ( ! mesh.isInstancedMesh ) return;
 		for ( let i = 0; i < mesh.count; i ++ ) {
 			mesh.getMatrixAt( i, matrix ); if ( ! include( matrix ) ) continue;

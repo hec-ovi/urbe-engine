@@ -31,8 +31,11 @@ export class MaterialBatch {
 	 * @param instances copies to make room for before the first cell stands
 	 * @param fill whether each copy carries a fill light (FillChannel)
 	 * @param lod `{ point, distance }` a copy past which draws its primitive's far geometry
+	 * @param colored whether the batch carries a colour per copy from birth, white
+	 *   until a copy is given one, so its draws are built reading it and a first
+	 *   coloured copy builds nothing again
 	 */
-	constructor( name, material, { vertices, indices = 0, instances = FIRST_CAPACITY, castShadow = false, fill = false, uvRepeat = false, hitches = null, lod = null } ) {
+	constructor( name, material, { vertices, indices = 0, instances = FIRST_CAPACITY, castShadow = false, fill = false, uvRepeat = false, hitches = null, lod = null, colored = false } ) {
 
 		this.name = name;
 		this.material = material;
@@ -44,8 +47,11 @@ export class MaterialBatch {
 		this.vertices = 0;
 		this.indices = 0;
 		/** True once a copy has carried a colour, which the shader only reads from then on. */
-		this.coloured = false;
+		this.coloured = colored;
 		this.mesh = new SphereCulledBatch( Math.max( 1, instances ), this.vertexCapacity, this.indexCapacity, material );
+		// Three makes the colour texture, white, with the first coloured copy; a
+		// batch that will carry colours has it from the start.
+		if ( colored ) this.mesh._initColorsTexture();
 		this.mesh.name = name;
 		this.mesh.perObjectFrustumCulled = true;
 		this.mesh.sortObjects = Boolean( material.transparent );
