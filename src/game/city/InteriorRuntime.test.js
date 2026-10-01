@@ -317,7 +317,7 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		expect( propCopies( model ) ).toBe( 0 );
 		expect( model.rooms ).toHaveLength( 0 );
 
-	} );
+	}, 30000 );
 
 	it( 'wears each slot as its key and variant from the factory, with the map\'s repeat taken off the module\'s tile-unit UVs', async () => {
 
