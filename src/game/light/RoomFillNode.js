@@ -30,10 +30,10 @@ class RoomFillTextureNode extends TextureNode {
  * Every module and furniture draw in the city is lit through one lights node,
  * so a fill light in that node would reach every room at once and a sales
  * floor's bounce would light the toilets next door. Instead each copy carries
- * the fill of the room it stands in: irradiance in lux and the floor's own
- * reflectance, the same two numbers a hemisphere light was fed per room. A
- * surface facing up takes the fill, one facing down takes it bounced off the
- * floor once more, which is the gradient up a wall that reads as bounce.
+ * the fill of the room it stands in: the irradiance in lux on a surface
+ * facing up, and the share of it one facing down takes (RoomFill.perCopy),
+ * two numbers like a hemisphere light's. A wall takes the mean of the two,
+ * which is the gradient up it that reads as bounce.
  *
  * The copy's texel is looked up in the vertex stage, where the instance id
  * lives, the way a batch reads its own matrix. A mesh with no channel, such as

@@ -85,33 +85,53 @@ export class RoomFill {
 	 * facing down reads different from one facing up, which is what makes the
 	 * gradient up a wall look like bounce instead of ambient.
 	 *
-	 * The interreflected light reaches every surface, and the half of it a
-	 * ceiling sees has come back up off the floor once more. Then the fixtures
-	 * no light is drawn for (`unseen`, from RoomLights.unseen): the pool draws a
-	 * handful per room and a sales floor hangs forty downlights, so without
-	 * this their flux would light the room only by its bounce and the floor
-	 * between the drawn ones would sit at a third of its level. Their first
-	 * bounce is not lost: what faces down lands on the floor, what faces up on
-	 * the ceiling, each spread over that surface and the half of the walls
-	 * standing nearest it, which is what a wall reads between the two halves of
-	 * the node. That is the pooled floor under a grid of downlights and the
-	 * washed ceiling over a cove, at the room's own flux.
+	 * The interreflected light reaches every surface alike, the ceiling as much
+	 * as the floor: solved as a box of floor, walls and ceiling exchanging
+	 * light, a ceiling over downlights takes about the room's mean bounce
+	 * whatever its own colour. Then the fixtures no light is drawn for
+	 * (`unseen`, from RoomLights.unseen): the pool draws a handful per room and
+	 * a sales floor hangs forty downlights, so without this their flux would
+	 * light the room only by its bounce and the floor between the drawn ones
+	 * would sit at a third of its level. Their first bounce is not lost: what
+	 * faces down lands on the floor, what faces up on the ceiling, each spread
+	 * over that surface and the half of the walls standing nearest it, which is
+	 * what a wall reads between the two halves of the node. That is the pooled
+	 * floor under a grid of downlights and the washed ceiling over a cove, at
+	 * the room's own flux.
 	 *
-	 * @param room { area, albedo, floorAlbedo }
+	 * @param room { area, albedo }
 	 * @param unseen { down, up, downColor, upColor }: lumens no light is drawn for, and their colours
 	 */
 	static perCopy( room, flux, color, unseen = NONE, target = new THREE.Vector4() ) {
 
+		const { up, down } = RoomFill.parts( room, flux, color, unseen );
+
+		return RoomFill.pack( up, down, target );
+
+	}
+
+	/**
+	 * The two halves before they are packed: irradiance in lux on a surface
+	 * facing up and on one facing down, colours that add.
+	 */
+	static parts( room, flux, color, unseen = NONE, into = { up: new THREE.Color(), down: new THREE.Color() } ) {
+
 		const bounce = RoomFill.irradiance( room, flux, color, _bounce );
 		const landing = RoomFill.landing( room );
-		const floor = luminance( room.floorAlbedo );
 
-		_up.copy( bounce ).add( _direct.copy( unseen.downColor ?? WHITE ).multiplyScalar( ( unseen.down ?? 0 ) / landing ) );
-		_down.copy( bounce ).multiplyScalar( floor ).add( _direct.copy( unseen.upColor ?? WHITE ).multiplyScalar( ( unseen.up ?? 0 ) / landing ) );
+		into.up.copy( bounce ).add( _direct.copy( unseen.downColor ?? WHITE ).multiplyScalar( ( unseen.down ?? 0 ) / landing ) );
+		into.down.copy( bounce ).add( _direct.copy( unseen.upColor ?? WHITE ).multiplyScalar( ( unseen.up ?? 0 ) / landing ) );
 
-		const lit = luminance( _up );
+		return into;
 
-		return target.set( _up.r, _up.g, _up.b, lit > 0 ? luminance( _down ) / lit : floor );
+	}
+
+	/** The halves as a copy carries them: the upper's colour and the lower's share of it. */
+	static pack( up, down, target = new THREE.Vector4() ) {
+
+		const lit = luminance( up );
+
+		return target.set( up.r, up.g, up.b, lit > 0 ? luminance( down ) / lit : 1 );
 
 	}
 
@@ -132,5 +152,3 @@ const NONE = Object.freeze( { down: 0, up: 0 } );
 const WHITE = new THREE.Color( 1, 1, 1 );
 const _bounce = new THREE.Color();
 const _direct = new THREE.Color();
-const _down = new THREE.Color();
-const _up = new THREE.Color();
