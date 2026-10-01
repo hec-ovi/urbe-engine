@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Highway PBR material review</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#252e35;color:#e7eeec;font:14px system-ui}
+canvas{display:block}aside{position:absolute;left:16px;top:16px;max-width:670px;background:#111c21eb;padding:14px;border:1px solid #5c6a71}
+button,select,input{font:inherit;margin:4px;padding:4px;background:#273b43;color:#e7eeec;border:1px solid #68767b}
+small{display:block;color:#d7b28c;margin-top:8px;max-width:630px}
+</style>
+<body data-materials="pbr">
+<aside>
+<div>Highway PBR review · candidate material binding</div>
+<div>
+<label>Fixture <select id="fixture"><option>flat</option><option>ramp</option><option>bend</option><option>tiny</option></select></label>
+<label>View <select id="view"><option>under</option><option>side</option><option>pier</option><option>deck</option><option>barrier</option></select></label>
+<label>Finish <select id="materials"><option>pbr</option><option>clay</option></select></label>
+<label>Light <select id="light"><option>day</option><option>grazing</option><option>overcast</option></select></label>
+</div>
+<div>
+<label>Solo <select id="solo"><option>all</option><option>roadway</option><option>deck-concrete</option><option>soffit-concrete</option><option>pier-concrete</option><option>barrier-concrete</option><option>bearing-steel</option><option>joint-rubber</option></select></label>
+<label>Exposure <input id="exposure" type="range" min="0.25" max="2" step="0.05" value="1"></label>
+<label><input id="normal" type="checkbox" checked>Normal</label>
+<label><input id="roughness" type="checkbox" checked>Roughness</label>
+<label><input id="ao" type="checkbox" checked>AO</label>
+<button id="export">Export review GLB</button>
+</div>
+<div id="status">Loading material binding…</div>
+<small>Real PNG map sets at catalogue metre repeats. Appearance is not yet accepted. Base/joint placement weathering is disabled: no baked bands or inferred ownership coordinates.</small>
+<small>Roadway uses a temporary world-XZ UV clone to review native asphalt maps. Native anti-repetition/wear shader and later asphalt variant selection remain delegated. Authored model UVs are unchanged.</small>
+</aside>
+<script type="module" src="./highway-content.js"></script>
+</body></html>
