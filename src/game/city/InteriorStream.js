@@ -33,6 +33,13 @@ const INSIDE = 1;
  */
 const VIEW_RADIUS = 32;
 const VIEW_KEEP = 36;
+/**
+ * Milliseconds of a frame the floors coming into sight may spend putting their
+ * copies into the shared draws; the rest go in on the frames after.
+ */
+const PAINT_MS = 2;
+/** Copies appended between two looks at the clock. */
+const PAINT_STRIDE = 16;
 /** The module the lifts move themselves, one car per shaft. */
 const LIFT_CAR = 'lift-car';
 /** And the landing leaves they slide open. */
@@ -98,6 +105,8 @@ export class InteriorStream {
 		this.live = new Map();
 		this.building = 0;
 		this.admitting = 0;
+		/** Floors drawn whose copies are still going into the shared draws, oldest first. */
+		this.painting = new Set();
 		/** Whether the interior draws cast room shadows: only while the player is in a building. */
 		this.casting = true;
 		this.recast = false;
@@ -179,8 +188,8 @@ export class InteriorStream {
 
 		for ( ;; ) {
 
-			this.update( feet );
-			if ( ! this.loading ) break;
+			this.update( feet, { paint: Infinity } );
+			if ( ! this.loading && ! this.painting.size ) break;
 			await new Promise( resolve => setTimeout( resolve, 0 ) );
 
 		}
@@ -204,11 +213,12 @@ export class InteriorStream {
 	/**
 	 * One pass over what should be open, what should be built and what should
 	 * be in the scene. Cheap to call every frame: a hypot per building and a
-	 * subtraction per floor.
+	 * subtraction per floor, and up to `paint` milliseconds of copies going
+	 * into the shared draws for the floors that came into sight.
 	 *
 	 * @returns whether the set of rooms in memory or in the scene changed
 	 */
-	update( feet ) {
+	update( feet, { paint = PAINT_MS } = {} ) {
 
 		this.changed = false;
 
@@ -247,6 +257,7 @@ export class InteriorStream {
 
 		if ( next && this.building < BUILD_CONCURRENCY ) this.#load( next.interior, next.band );
 
+		this.#paint( paint );
 		this.#cast( inside );
 
 		return this.changed;
@@ -343,7 +354,7 @@ export class InteriorStream {
 
 		for ( const band of interior.bands ) {
 
-			if ( band.draw( interior.inside || interior.near ) ) this.recast = true;
+			if ( band.draw( interior.inside || interior.near ) ) this.painting.add( band );
 
 			const requested = this.requests.get( interior.parcelId );
 			const away = Math.min( Math.abs( band.floor - standing ), requested === undefined ? Infinity : Math.abs( band.floor - requested ) );
@@ -415,10 +426,11 @@ export class InteriorStream {
 
 			const ready = await this.onColliderBand?.( band.id, band.solid );
 			if ( band.admission !== admission || band.state !== LOADED || ready === false ) return;
-			this.#dropPlaceholder( band );
 			band.live = true;
 			band.group.parent.visible = true;
+			// Its slabs stand in for the placeholder's once they are in the draws.
 			band.show();
+			this.painting.add( band );
 			this.apartmentDoors?.show( band.id, band.apartmentDoors );
 			this.changed = true;
 			this.recast = true;
@@ -435,6 +447,31 @@ export class InteriorStream {
 			if ( band.admission === admission ) band.admission = null;
 			this.admitting --;
 			this.hitches?.note( `band ${band.id} collider admission elapsed`, performance.now() - t );
+
+		}
+
+	}
+
+	/**
+	 * Puts the copies of the floors that came into sight into the shared draws,
+	 * oldest floor first, until `ms` milliseconds are spent. A floor of a
+	 * thousand copies is several thousand instances, which in one frame is a
+	 * freeze, so a floor fills in over the frames it takes, its own slabs
+	 * first: the placeholder slabs stand until those are in. A floor that went
+	 * out of sight meanwhile has handed back what it had put in, and leaves the
+	 * queue.
+	 */
+	#paint( ms ) {
+
+		if ( ! this.painting.size ) return;
+		const deadline = performance.now() + ms;
+
+		for ( const band of this.painting ) {
+
+			if ( band.paint( deadline ) ) this.recast = true;
+			if ( band.live && band.supported ) this.#dropPlaceholder( band );
+			if ( band.unpainted ) break;
+			this.painting.delete( band );
 
 		}
 
@@ -523,11 +560,12 @@ export class InteriorStream {
 	async #build( interior, band ) {
 
 		const { record } = band;
-		const started = performance.now();
 
 		await this.props?.prepare( floorPlacements( record ).filter( ( one ) => one.prop ).map( ( one ) => one.prop ) );
 
 		if ( ! this.#wanted( interior, band ) ) return null;
+		// What the note times is the thread this build holds, not the wait for its furniture.
+		const started = performance.now();
 
 		const rooms = roomsOf( record, this.modules );
 		const orphans = floorOrphans( record );
@@ -567,14 +605,18 @@ export class InteriorStream {
 			// and one without this piece's model stands without that piece.
 			if ( placement.prop && ! this.props?.has( placement.prop ) ) continue;
 			copies.push( {
+				placement,
 				draws: placement.module ? this.modules : this.props,
 				id: placement.module ?? placement.prop,
 				matrix: matrixOf( placement, record.elevation ),
 				uvRepeat: placement.uvRepeat ?? [ 1, 1 ],
-				fill: fills.get( placement.room ) ?? shared
+				fill: fills.get( placement.room ) ?? shared,
+				support: supports( placement )
 			} );
 
 		}
+		// The slabs go into the draws first, so the placeholder's can go soonest.
+		copies.sort( ( a, b ) => b.support - a.support );
 
 		const glow = this.haze && Haze.build( [ ...rooms.flatMap( ( room ) => room.fixtures ), ...orphans.fixtures ], this.haze );
 
@@ -660,6 +702,7 @@ class FloorBand {
 		this.live = false;
 		this.content = null;
 		this.copies = [];
+		this.supports = 0;
 		this.handles = null;
 		this.rooms = [];
 		this.solid = { boxes: [], positions: [] };
@@ -678,6 +721,8 @@ class FloorBand {
 		this.content = content;
 		this.rooms = rooms;
 		this.copies = copies;
+		/** How many of them are its slabs, which lead the list. */
+		this.supports = copies.filter( ( copy ) => copy.support ).length;
 		this.solid = solid;
 		this.apartmentDoors = apartmentDoors;
 		this.group.add( content );
@@ -685,10 +730,12 @@ class FloorBand {
 
 	}
 
+	/** @returns whether that put the floor in the draws, its copies to `paint` */
 	show() {
 
 		this.shown = true;
-		this.#paint();
+
+		return this.#paint();
 
 	}
 
@@ -703,7 +750,7 @@ class FloorBand {
 	 * Whether this floor is seen from where the player is. A floor that is not
 	 * keeps its collider and its table, and only its copies leave the draws.
 	 *
-	 * @returns whether that put copies into the draws
+	 * @returns whether that put the floor in the draws, its copies to `paint`
 	 */
 	draw( drawn ) {
 
@@ -714,7 +761,11 @@ class FloorBand {
 
 	}
 
-	/** Copies in the shared draws exactly while the floor is shown and seen. */
+	/**
+	 * Copies in the shared draws exactly while the floor is shown and seen:
+	 * room for all of them is taken at once, and they go in as `paint` is
+	 * given the time.
+	 */
 	#paint() {
 
 		const wanted = this.shown && this.drawn;
@@ -723,7 +774,7 @@ class FloorBand {
 		if ( wanted && ! this.handles ) {
 
 			reserve( this.copies );
-			this.handles = this.copies.map( ( { draws, id, matrix, fill, uvRepeat } ) => ( { draws, handle: draws.admit( id, matrix, fill, uvRepeat ) } ) );
+			this.handles = [];
 			return true;
 
 		}
@@ -735,6 +786,43 @@ class FloorBand {
 		}
 
 		return false;
+
+	}
+
+	/** Whether its slabs are in the draws, or it draws nothing to need them. */
+	get supported() {
+
+		return ! this.handles || this.handles.length >= this.supports;
+
+	}
+
+	/** Copies of a floor in sight still to go into the draws. */
+	get unpainted() {
+
+		return this.handles ? this.copies.length - this.handles.length : 0;
+
+	}
+
+	/**
+	 * Appends this floor's copies to the shared draws in table order until
+	 * `deadline` passes, looking at the clock every few copies.
+	 * @returns how many it appended
+	 */
+	paint( deadline ) {
+
+		const { copies, handles } = this;
+		if ( ! handles ) return 0;
+		const from = handles.length;
+
+		while ( handles.length < copies.length ) {
+
+			const { draws, id, matrix, fill, uvRepeat } = copies[ handles.length ];
+			handles.push( { draws, handle: draws.admit( id, matrix, fill, uvRepeat ) } );
+			if ( ( handles.length - from ) % PAINT_STRIDE === 0 && performance.now() >= deadline ) break;
+
+		}
+
+		return handles.length - from;
 
 	}
 
@@ -752,6 +840,7 @@ class FloorBand {
 		this.admission = null;
 		this.content = null;
 		this.copies = [];
+		this.supports = 0;
 		this.rooms = [];
 		this.solid = { boxes: [], positions: [] };
 		this.apartmentDoors = [];

@@ -142,14 +142,14 @@ async function stream( { props = true, withheld = [], elevators = null, mutate =
 
 const tick = () => new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
 
-/** Frames until the stream asks for nothing more at these feet. */
+/** Frames until the stream asks for nothing more at these feet, each one given the time to draw every floor in sight whole. */
 async function settle( model, feet ) {
 
 	for ( ;; ) {
 
-		model.update( feet );
+		model.update( feet, { paint: Infinity } );
 
-		if ( ! model.loading ) return;
+		if ( ! model.loading && ! model.painting.size ) return;
 
 		while ( model.loading ) await tick();
 
@@ -745,10 +745,7 @@ function neighbours( model, floor ) {
 
 function copyOf( model, band, placement ) {
 
-	const at = floorPlacements( band.record ).indexOf( placement );
-	const before = floorPlacements( band.record ).slice( 0, at ).filter( ( one ) => one.module === 'lift-car' || one.module === 'lift-doors' ).length;
-
-	return band.copies[ at - before ];
+	return band.copies.find( ( copy ) => copy.placement === placement );
 
 }
 
@@ -825,6 +822,52 @@ it( 'sizes the shared draws as the building registers, so no floor it stands, wa
 		expect( furnitureMost.get( id ) ).toBeLessThanOrEqual( model.props.peaks.get( id ) );
 
 	}
+	model.dispose();
+
+}, 60000 );
+
+it( 'puts a floor in sight into the draws a stride of copies a frame, its slabs first, the placeholder slabs standing until they are in', async () => {
+
+	const model = await stream();
+	const feet = feetOn( 0 );
+	model.update( feet, { paint: 0 } );
+	const band = bandOf( model, 0 );
+	let stood = false;
+	let passes = 0;
+
+	// No time to spare in any frame: each pass puts one stride of copies in.
+	for ( ; passes < 5000 && ! ( band.live && ! band.unpainted && ! model.painting.size && ! model.loading ); passes ++ ) {
+
+		const before = band.handles?.length ?? 0;
+		model.update( feet, { paint: 0 } );
+		if ( band.handles ) {
+
+			expect( band.handles.length - before ).toBeLessThanOrEqual( 16 );
+			if ( band.handles.length < band.supports ) {
+
+				// Its own slabs are not all in: the placeholder's still stand.
+				expect( band.placeholder ).not.toBe( null );
+				stood = true;
+
+			} else if ( band.live ) expect( band.placeholder ).toBe( null );
+
+		}
+		await tick();
+
+	}
+
+	expect( stood ).toBe( true );
+	expect( passes ).toBeGreaterThan( band.copies.length / 16 );
+	expect( band.supports ).toBeGreaterThan( 0 );
+	expect( band.copies.slice( 0, band.supports ).every( ( copy ) => copy.support ) ).toBe( true );
+	expect( band.copies.slice( band.supports ).some( ( copy ) => copy.support ) ).toBe( false );
+	expect( band.handles ).toHaveLength( band.copies.length );
+	expect( model.floorShown( 'p1', 0 ) ).toBe( true );
+	expect( model.modules.copyCount + propCopies( model ) ).toBe( band.handles.length + neighbours( model, 0 ) );
+
+	// A building let go hands back every copy its floors put in.
+	model.update( { x: 400, y: 0, z: 400 } );
+	expect( model.modules.copyCount + propCopies( model ) ).toBe( 0 );
 	model.dispose();
 
 }, 60000 );
