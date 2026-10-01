@@ -74,6 +74,42 @@ describe( 'a lift ridden through its own controls', () => {
 		expect( shaft.cabBoxes() ).toHaveLength( 8 );
 	} );
 
+	it.each( [ 0, 37 ] )( 'rides a through car\'s back leaves and head with the cab, shut between floors and open only where a floor has a back landing, at %s degrees', ( angle ) => {
+		const { shaft, elevators } = fixture( angle, null, catalog, LIFT_MODULES, false, true, new Set( [ 0 ] ) );
+		const rearHead = shaft.carParts.get( 'lift-car-rear-head' );
+		expect( rearHead ).toBeDefined();
+		// the back pair and the back head hang in the cab, as the front ones do
+		expect( shaft.cab.children ).toContain( shaft.carRearDoors.pivot );
+		expect( shaft.cab.children ).toContain( rearHead );
+		expect( shaft.stopAt( 0 ).rear ).not.toBeNull();
+		expect( shaft.stopAt( 2 ).rear ).toBeNull();
+		const shut = ( leaves ) => leaves.every( ( leaf ) => leaf.position.distanceTo( leaf.userData.shut ) < 1e-6 );
+		const body = standing( shaft.worldPoint( [ 0, .025, 0 ] ) );
+		shaft.press( { inside: false, stop: shaft.stopAt( 0 ) } );
+		run( elevators, body, 120 );
+		expect( shut( shaft.carRearDoors.leaves ) ).toBe( false );
+		const headAt = rearHead.getWorldPosition( new THREE.Vector3() ).y;
+		shaft.select( 1 );
+		shaft.press( { inside: true, action: 'go' } );
+		let travelling = false;
+		for ( let i = 0; i < 500; i ++ ) {
+			elevators.update( STEP, body );
+			if ( shaft.at > .01 && shaft.at < 4.49 ) {
+				travelling = true;
+				expect( shut( shaft.carRearDoors.leaves ) ).toBe( true );
+				expect( shut( shaft.carDoors.leaves ) ).toBe( true );
+			}
+		}
+		expect( travelling ).toBe( true );
+		expect( shaft.at ).toBe( 4.5 );
+		// the back head rose with the cab
+		expect( rearHead.getWorldPosition( new THREE.Vector3() ).y - headAt ).toBeCloseTo( 4.5, 3 );
+		// floor 2 has no back landing: the front opens, the back pair stays shut
+		expect( shaft.stopAt( 2 ).open ).toBe( 1 );
+		expect( shaft.carOpen ).toBe( 1 );
+		expect( shut( shaft.carRearDoors.leaves ) ).toBe( true );
+	} );
+
 	it.each( [ 0, 37, 90, 135 ] )( 'chooses real stops with the cabin buttons and the floor keys in a %s degree core', ( angle ) => {
 
 		const { shaft, elevators } = fixture( angle );
@@ -442,7 +478,7 @@ describe( 'a lift ridden through its own controls', () => {
  * publishes, all of them unless an older world is asked for, and
  * `landingsFirst` mounts each floor's landing before its car.
  */
-function fixture( angle = 0, colliders = null, modules = catalog, mounted = LIFT_MODULES, landingsFirst = false, through = false ) {
+function fixture( angle = 0, colliders = null, modules = catalog, mounted = LIFT_MODULES, landingsFirst = false, through = false, rearAt = null ) {
 
 	const core = {
 		frame: makeFrame( angle ), vFace: 0, openPlan: through,
@@ -461,7 +497,8 @@ function fixture( angle = 0, colliders = null, modules = catalog, mounted = LIFT
 
 	for ( const floor of floors ) {
 
-		const placements = builder.placements.filter( ( one ) => mounted.has( one.module ) );
+		// `rearAt` names the floors that publish a back landing; the others keep the back of the core closed
+		const placements = builder.placements.filter( ( one ) => mounted.has( one.module ) && ( ! rearAt || one.module !== 'lift-rear-doors' || rearAt.has( floor.floor ) ) );
 		if ( landingsFirst ) placements.sort( ( a, b ) => Number( b.module === 'lift-doors' ) - Number( a.module === 'lift-doors' ) );
 		for ( const placement of placements ) {
 
