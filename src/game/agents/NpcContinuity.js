@@ -35,6 +35,13 @@ const DOOR_LOOK = 2.5;
 const DOOR_SHORT = 0.6;
 /** Game minutes a walker waits in a lift car that does not arrive before it steps out where the shaft lets it. */
 const LIFT_PATIENCE_MIN = 3;
+/** A leader boards a lift once the player stands this near its landing, so they ride together. */
+const LIFT_TOGETHER = 4;
+/** The player is aboard with a leader within this of the car's middle, and a storey's rise of it. */
+const LIFT_ABOARD = 1.4;
+const LIFT_RISE = 1.5;
+/** Game minutes a leader holds the car for the player to step in before riding on alone. */
+const LIFT_HOLD_MIN = 0.5;
 /** A leader taking the player to a person stops this short of them, and walks on once they have moved this far. */
 const PERSON_REACH = 1.6;
 const PERSON_REPLAN = 1.5;
@@ -1095,6 +1102,19 @@ export class NpcContinuity {
 
 	}
 
+	/**
+	 * Whether `actor` leads the player and the player is not yet with them at
+	 * `point` (within `reach` across and a storey's rise): a leader rides a
+	 * lift with the player, not ahead of them.
+	 */
+	#leaving( actor, point, reach ) {
+
+		if ( this.follow?.npcId !== actor.npcId || this.follow.mode !== 'leading' || ! this.player ) return false;
+		const [ x, y, z ] = this.player.position;
+		return Math.hypot( x - point[ 0 ], z - point[ 2 ] ) > reach || Math.abs( y - point[ 1 ] ) > LIFT_RISE;
+
+	}
+
 	/** A building's main door as a walker crosses it: just inside, and the doorstep just outside (the same point where none is known); null for an unknown place. */
 	#doorway( parcelId ) {
 
@@ -1151,6 +1171,13 @@ export class NpcContinuity {
 					return travel;
 
 				}
+				// A leader whose player has not come up to the landing waits for them, patience kept for the car.
+				if ( this.#leaving( actor, pointAtDistance( route.path3, gate.from ).position, LIFT_TOGETHER ) ) {
+
+					ride.sinceMin = this.now;
+					return 0;
+
+				}
 				if ( answer !== 'board' && this.now - ride.sinceMin < LIFT_PATIENCE_MIN ) return 0;
 				ride.stage = 'board';
 
@@ -1160,12 +1187,21 @@ export class NpcContinuity {
 				if ( route.cursor + walking < gate.board ) return walking;
 				ride.stage = 'ride';
 				ride.sinceMin = this.now;
-				this.ways.ride( actor.npcId, gate, 'ride' );
+				// A leader holds the car open for the player to step in before pressing their floor.
+				if ( ! this.#leaving( actor, pointAtDistance( route.path3, gate.board ).position, LIFT_ABOARD ) ) this.ways.ride( actor.npcId, gate, 'ride' );
+				else ride.held = true;
 				return gate.board - route.cursor;
 
 			}
 			if ( ride.stage === 'ride' ) {
 
+				if ( ride.held ) {
+
+					if ( this.#leaving( actor, pointAtDistance( route.path3, gate.board ).position, LIFT_ABOARD ) && this.now - ride.sinceMin < LIFT_HOLD_MIN ) return 0;
+					delete ride.held;
+					ride.sinceMin = this.now;
+
+				}
 				const answer = this.ways.ride( actor.npcId, gate, 'ride' );
 				if ( answer && answer !== 'alight' && this.now - ride.sinceMin < LIFT_PATIENCE_MIN ) {
 

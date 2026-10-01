@@ -80,6 +80,68 @@ describe( 'NPC continuity through doors and lifts', () => {
 
 	} );
 
+	it( 'boards a lift with the player it leads, waiting at the landing for them and holding the car until they step in', () => {
+
+		const script = { calls: 0, rides: 0, y: 1 };
+		const ways = {
+			pass: () => true,
+			ride( npcId, gate, stage ) {
+
+				if ( stage === 'call' ) return ++ script.calls > 1 ? 'board' : 'wait';
+				if ( stage === 'ride' ) {
+
+					script.rides ++;
+					script.y = Math.min( 9, script.y + 2 );
+					return script.y >= 9 ? 'alight' : { y: script.y };
+
+				}
+				return 'done';
+
+			}
+		};
+		const { bridge, controller } = setup( { ways, interiorRoutes: tower() } );
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		// In the tower's lobby, by its door, with the player beside them.
+		const lobby = [ 560, 1, 255 ];
+		controller.hold( { npcId: npc.npcId, timeMin: MON_9, position: lobby, heading: 0, place: { kind: 'parcel', id: 'p_r1' } } );
+		controller.startLead( { npcId: npc.npcId, timeMin: MON_9, destination: { kind: 'parcel', id: 'p_r1' }, target: { position: [ 566, 9, 270 ], parcelId: 'p_r1', floor: 2 } } );
+		const step = ( player, frames = 1 ) => {
+
+			for ( let index = 0; index < frames; index ++ ) controller.updateFollow( { timeMin: MON_9 + index / 600, deltaSeconds: 0.5, playerPosition: player } );
+			return controller.serialize().follow.route;
+
+		};
+		// The player keeps back, 6.8 m from the landing: the leader walks to it and stands there, the car open, not boarding.
+		let route = step( [ 556.5, 1, 255 ], 40 );
+		const lift = route.gates.find( ( gate ) => gate.kind === 'lift' );
+		expect( route.ride ).toMatchObject( { stage: 'call' } );
+		expect( route.cursor ).toBeCloseTo( lift.from, 6 );
+		expect( step( [ 562, 1, 255.5 ], 8 ).ride ).toMatchObject( { stage: 'ride', held: true } );
+		// In the car, holding it: no floor pressed while the player is still on the landing.
+		expect( script.rides ).toBe( 0 );
+		expect( controller.actor( npc.npcId ).position ).toEqual( [ 562, 1, 262 ] );
+		route = step( [ 562.4, 1, 261.6 ] );
+		expect( route.ride.held ).toBeUndefined();
+		expect( script.rides ).toBe( 1 );
+
+	} );
+
+	it( 'rides on alone once the player has not stepped in for half a minute', () => {
+
+		const ways = { pass: () => true, ride: ( npcId, gate, stage ) => stage === 'call' ? 'board' : stage === 'ride' ? 'alight' : 'done' };
+		const { bridge, controller } = setup( { ways, interiorRoutes: tower() } );
+		const npc = bridge.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_9 } );
+		controller.hold( { npcId: npc.npcId, timeMin: MON_9, position: [ 560, 1, 255 ], heading: 0, place: { kind: 'parcel', id: 'p_r1' } } );
+		controller.startLead( { npcId: npc.npcId, timeMin: MON_9, destination: { kind: 'parcel', id: 'p_r1' }, target: { position: [ 566, 9, 270 ], parcelId: 'p_r1', floor: 2 } } );
+		// The player waits on the landing, 3 m from the car's middle.
+		const landing = [ 562, 1, 259 ];
+		for ( let index = 0; index < 20; index ++ ) controller.updateFollow( { timeMin: MON_9, deltaSeconds: 0.5, playerPosition: landing } );
+		expect( controller.serialize().follow.route.ride ).toMatchObject( { stage: 'ride', held: true } );
+		controller.updateFollow( { timeMin: MON_9 + 0.6, deltaSeconds: 0.5, playerPosition: landing } );
+		expect( controller.serialize().follow.route.ride?.held ).toBeUndefined();
+
+	} );
+
 	it( "walks a lift's shaft as drawn where no lift runs there, and through every door where no ways are given", () => {
 
 		for ( const ways of [ { pass: () => true, ride: () => null }, null ] ) {

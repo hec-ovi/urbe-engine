@@ -120,7 +120,8 @@
           "properties": {
             "gate": { "type": "integer", "minimum": 0 },
             "stage": { "enum": ["call", "board", "ride", "alight"] },
-            "sinceMin": { "type": "number" }
+            "sinceMin": { "type": "number" },
+            "held": { "description": "A leader in the car holding it for the player to step in.", "const": true }
           }
         },
         "indoor": {
