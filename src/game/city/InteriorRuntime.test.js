@@ -115,7 +115,7 @@ function interiorProps( interior, withheld = [] ) {
  * furniture its catalog leaves out, the way a world publishes local-only
  * models this machine lacks.
  */
-async function stream( { props = true, withheld = [], elevators = null, mutate = null } = {} ) {
+async function stream( { props = true, withheld = [], elevators = null, mutate = null, budget = null } = {} ) {
 
 	const { modules } = await openModules();
 	const source = structuredClone( await building() );
@@ -124,7 +124,7 @@ async function stream( { props = true, withheld = [], elevators = null, mutate =
 
 	const model = new InteriorStream( {
 		modules, props: props ? interiorProps( source, withheld ) : null,
-		roomLights: { releaseRooms: () => {} }, haze: null, elevators
+		roomLights: { releaseRooms: () => {} }, haze: null, elevators, budget
 	} );
 
 	model.solid = new Map();
@@ -869,5 +869,40 @@ it( 'puts a floor in sight into the draws a stride of copies a frame, its slabs 
 	model.update( { x: 400, y: 0, z: 400 } );
 	expect( model.modules.copyCount + propCopies( model ) ).toBe( 0 );
 	model.dispose();
+
+}, 60000 );
+
+it( 'builds a floor in steps that ask the frame budget between them, and lets one go that stops being wanted halfway', async () => {
+
+	const asked = [];
+	let hold = null;
+	const budget = { step: vi.fn( () => {
+
+		asked.push( performance.now() );
+		return hold ?? Promise.resolve();
+
+	} ) };
+	const model = await stream( { budget } );
+	await settle( model, feetOn( 0 ) );
+	const built = model.live.get( 'p1' ).bands.filter( ( band ) => band.state === 'loaded' ).length;
+	expect( built ).toBeGreaterThan( 0 );
+	// Rooms, doors, copies, haze and boxes: four turns at least for every floor.
+	expect( budget.step.mock.calls.length ).toBeGreaterThanOrEqual( 4 * built );
+
+	// A building walked away from while one of its floors waits for its turn
+	// leaves nothing of that floor standing once the turn comes.
+	const fresh = await stream( { budget } );
+	let release;
+	hold = new Promise( ( resolve ) => { release = resolve; } );
+	fresh.update( feetOn( 0 ) );
+	await vi.waitFor( () => expect( fresh.building ).toBeGreaterThan( 0 ) );
+	fresh.update( { x: 400, y: 0, z: 400 } );
+	hold = null;
+	release();
+	await vi.waitFor( () => expect( fresh.building ).toBe( 0 ) );
+	expect( fresh.liveInteriors ).toBe( 0 );
+	expect( fresh.rooms ).toEqual( [] );
+	model.dispose();
+	fresh.dispose();
 
 }, 60000 );

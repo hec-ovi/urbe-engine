@@ -84,8 +84,10 @@ export class InteriorStream {
 	 * that do not draw it
 	 * @param warmup a `Warmup` (src/game/look/Warmup.js), which builds a landed
 	 * floor's own renderables before it is ever drawn
+	 * @param budget the FrameBudget (src/app/FrameBudget.js) a floor build asks
+	 * between its steps, or null to build a floor in one go
 	 */
-	constructor( { modules, props = null, roomLights, haze, elevators, hitches = null, warmup = null } ) {
+	constructor( { modules, props = null, roomLights, haze, elevators, hitches = null, warmup = null, budget = null } ) {
 
 		this.modules = modules;
 		this.props = props;
@@ -94,6 +96,7 @@ export class InteriorStream {
 		this.elevators = elevators;
 		this.hitches = hitches;
 		this.warmup = warmup;
+		this.budget = budget;
 		this.group = new THREE.Group();
 		this.group.name = 'interiors';
 		if ( modules ) this.group.add( modules.group );
@@ -568,8 +571,22 @@ export class InteriorStream {
 		await this.props?.prepare( floorPlacements( record ).filter( ( one ) => one.prop ).map( ( one ) => one.prop ) );
 
 		if ( ! this.#wanted( interior, band ) ) return null;
-		// What the note times is the thread this build holds, not the wait for its furniture.
-		const started = performance.now();
+		// The build is cut into steps that ask the frame budget between them,
+		// and the note times the thread they hold, not the waits between them.
+		let held = 0;
+		let since = performance.now();
+		const content = new THREE.Group();
+		content.name = `interior:${band.id}`;
+		const step = async () => {
+
+			held += performance.now() - since;
+			await this.budget?.step();
+			since = performance.now();
+			if ( this.#wanted( interior, band ) ) return true;
+			disposeContent( content );
+			return false;
+
+		};
 
 		const rooms = roomsOf( record, this.modules );
 		const orphans = floorOrphans( record );
@@ -581,15 +598,15 @@ export class InteriorStream {
 			this.hitches?.note( `floor ${band.id} lights ${orphans.rooms.join( ', ' )}, which it does not publish as rooms`, 0 );
 
 		}
+		if ( ! await step() ) return null;
 		const copies = [];
-		const content = new THREE.Group();
-		content.name = `interior:${band.id}`;
 		// A door that cannot stand leaves its doorway open; it never fails the floor around it.
 		const apartmentGroup = buildApartmentDoors( record, this.modules, {
 			fills, shared,
 			refused: ( entrance, error ) => console.warn( `floor ${band.id} leaves entrance ${entrance?.id} open: ${error?.message ?? error}` )
 		} );
 		content.add( apartmentGroup );
+		if ( ! await step() ) return null;
 
 		for ( const placement of floorPlacements( record ) ) {
 
@@ -621,12 +638,20 @@ export class InteriorStream {
 		}
 		// The slabs go into the draws first, so the placeholder's can go soonest.
 		copies.sort( ( a, b ) => b.support - a.support );
+		if ( ! await step() ) return null;
 
 		const glow = this.haze && Haze.build( [ ...rooms.flatMap( ( room ) => room.fixtures ), ...orphans.fixtures ], this.haze );
 
 		if ( glow ) content.add( glow );
+		if ( ! await step() ) return null;
 
-		this.hitches?.note( `floor ${band.id} ${copies.length} copies`, performance.now() - started );
+		const solid = {
+			boxes: [ ...floorBoxes( floorPlacements( record ), record.elevation, ( id ) => this.modules.boundsOf( id ) ),
+				...furnitureBoxes( floorPlacements( record ), record.elevation, this.props ) ],
+			positions: []
+		};
+		held += performance.now() - since;
+		this.hitches?.note( `floor ${band.id} ${copies.length} copies`, held );
 
 		// The floor's own renderables are the lift leaves and its haze; the
 		// module and furniture draws were compiled once for the whole city.
@@ -648,14 +673,7 @@ export class InteriorStream {
 
 		}
 
-		return {
-			content, rooms, copies, apartmentDoors: apartmentGroup.userData.apartmentDoors,
-			solid: {
-				boxes: [ ...floorBoxes( floorPlacements( record ), record.elevation, ( id ) => this.modules.boundsOf( id ) ),
-					...furnitureBoxes( floorPlacements( record ), record.elevation, this.props ) ],
-				positions: []
-			}
-		};
+		return { content, rooms, copies, apartmentDoors: apartmentGroup.userData.apartmentDoors, solid };
 
 	}
 

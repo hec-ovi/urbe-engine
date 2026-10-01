@@ -443,7 +443,7 @@ export class GameApp {
 		this.elevators = new Elevators( factory );
 		this.stream = new InteriorStream( {
 			modules: this.interiorModules, props: this.interiorProps, roomLights: this.rooms, elevators: this.elevators,
-			haze: this.tier.haze ? INDOOR_HAZE : null, hitches: this.hitches
+			haze: this.tier.haze ? INDOOR_HAZE : null, hitches: this.hitches, budget: slice
 		} );
 		if ( this.interiorModules && ! config.off.has( 'interiors' ) ) this.stream.register( buildings, city.centers );
 		this.scene.add( this.stream.group );
