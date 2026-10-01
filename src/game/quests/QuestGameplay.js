@@ -14,6 +14,8 @@ const CHEST = 1.3;
 const HEAD = 2.15;
 /** Draw after opaque scenery, retaining ordinary depth occlusion. */
 const MARK_RENDER_ORDER = 12;
+/** The material of every mark over a person (actorMark). */
+let ACTOR_MARK = null;
 /** A mark holds its screen size out to this reach, then stops growing. */
 const MARK_REFERENCE = 16;
 const MARK_MAX_SCALE = 1.6;
@@ -1368,13 +1370,17 @@ function areaMark( target, anchor ) {
 
 }
 
-/** A small hollow diamond over an objective person, occluded by the world. */
+/**
+ * A small hollow diamond over an objective person, occluded by the world, in
+ * the one material every such mark wears: named, so letting a mark go keeps it.
+ */
 function actorMark() {
 
-	const mark = new THREE.Mesh( new THREE.RingGeometry( 0.038, 0.06, 4 ), new THREE.MeshBasicMaterial( {
-		color: 0x8baeb8, side: THREE.DoubleSide, transparent: true, opacity: 0.6,
+	ACTOR_MARK ??= new THREE.MeshBasicMaterial( {
+		name: 'quest-actor-mark', color: 0x8baeb8, side: THREE.DoubleSide, transparent: true, opacity: 0.6,
 		depthTest: true, depthWrite: false
-	} ) );
+	} );
+	const mark = new THREE.Mesh( new THREE.RingGeometry( 0.038, 0.06, 4 ), ACTOR_MARK );
 	mark.renderOrder = MARK_RENDER_ORDER;
 	mark.name = 'quest-actor-mark';
 	return mark;
