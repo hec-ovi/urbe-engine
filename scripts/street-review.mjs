@@ -80,15 +80,17 @@ function lacking( city ) {
 
 }
 
-/** Two poor and two rich buildings, each in its own district where it can, the closest to their district's middle. */
+/** Three poor buildings, homes among them, and two rich ones, each in its own district where it can, the closest to their district's middle. */
 function facadeParcels( city ) {
 
 	const picked = [];
-	for ( const tiers of [ [ 'poor' ], [ 'poor' ], [ 'rich', 'high_rich' ], [ 'rich', 'high_rich' ] ] ) {
+	for ( const tiers of [ [ 'poor' ], [ 'poor' ], [ 'poor' ], [ 'rich', 'high_rich' ], [ 'rich', 'high_rich' ] ] ) {
 
 		const used = new Set( picked.map( ( entry ) => entry.districtId ) );
+		// The third poor building is a home, so the poor facades include housing and not only shops and works.
+		const home = tiers[ 0 ] === 'poor' && picked.length === 2;
 		const candidates = city.parcels.filter( ( p ) => tiers.includes( p.tier ) && p.envelope && p.footprint && ! p.landmark
-			&& ! picked.some( ( entry ) => entry.parcelId === p.id ) );
+			&& ( ! home || p.type === 'residential' ) && ! picked.some( ( entry ) => entry.parcelId === p.id ) );
 		const scored = candidates.map( ( p ) => {
 
 			const district = city.districts.find( ( d ) => d.id === districtOf( city, p ) );
@@ -139,7 +141,8 @@ async function shots( world, file ) {
 
 	};
 	const list = [];
-	const add = ( name, finish, at, target, read = null ) => list.push( { name, finish, at, target, wait: 5, ...( read ? { read } : {} ) } );
+	// Each spot reads back where the player's feet stand, so a report shows they stood on the walk the spot names.
+	const add = ( name, finish, at, target, read = 'urbe.automation.footing()' ) => list.push( { name, finish, at, target, wait: 5, ...( read ? { read } : {} ) } );
 	const has = ( surface ) => ( p, piece ) => piece?.surfaces.includes( surface );
 
 	// Sidewalk finishes: an 8 m kerb walk in each block finish, looked at along the walk from its start.
