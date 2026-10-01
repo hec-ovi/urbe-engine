@@ -242,7 +242,7 @@ export function sidewalk( detail, { color, roughness, wear: use = float( 0.4 ) }
 	r = mix( r, float( 0.55 ), spot );
 
 	// Spills and puddle rims lie a metre or two across; gum and paint chips a hand's width.
-	let worn = stained( c, r, detail.decal( q, { cell: 2.6, presence: amount.mul( 0.2 ), cells: stains === 'drain' ? [ OIL, WATER ] : [ OIL, WATER, WATER ], seed: 5 } ), 0.7 );
+	let worn = stained( c, r, detail.decal( q, { cell: 2.6, presence: amount.mul( 0.2 ), cells: stains === 'drain' ? [ OIL, WATER ] : [ OIL, WATER, WATER ], seed: 5 } ), 0.6 );
 	if ( stains !== 'drain' ) worn = stained( worn.color, worn.roughness, detail.decal( q.add( 0.31 ), { cell: 0.45, presence: amount.mul( 0.06 ), cells: [ GUM, CHIP ], seed: 19 } ), 0.85 );
 
 	return { color: worn.color, roughness: clamp( worn.roughness, 0.04, 1 ) };

@@ -278,12 +278,13 @@ export function resample( pixels, from, size ) {
 /**
  * Linear albedo of each decal row, the roughness the shader gives it, and the
  * tone and saturation it gives an atlas's own colour: a published oil stain is
- * drawn brown on white and lies far darker and greyer, near black, on a street.
+ * drawn brown on white and lies far darker and greyer, near black, on a street,
+ * and a dried water mark is a dull grey rim, never a white one.
  */
 export const DECAL_ROWS = Object.freeze( [
 	{ name: 'oil', color: [ 0.018, 0.016, 0.014 ], roughness: 0.1, tone: 0.3, saturation: 0.3 },
 	{ name: 'crack', color: [ 0.012, 0.012, 0.012 ], roughness: 0.95, tone: 1, saturation: 1 },
-	{ name: 'water', color: [ 0.3, 0.29, 0.27 ], roughness: 0.3, tone: 1, saturation: 1 },
+	{ name: 'water', color: [ 0.3, 0.29, 0.27 ], roughness: 0.3, tone: 0.55, saturation: 0.6 },
 	{ name: 'gum', color: [ 0.03, 0.03, 0.028 ], roughness: 0.72, tone: 1, saturation: 1 }
 ] );
 
