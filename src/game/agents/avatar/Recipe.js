@@ -96,7 +96,7 @@ const DEFAULT_OUTFIT = {
 };
 /**
  * How near a top's main colour may come to the wearer's skin before the
- * generator dresses them in another palette: a street drawn from far away
+ * street's wardrobe leaves it out for them: a street drawn from far away
  * reads a skin-coloured shirt as a bare chest.
  */
 const SKIN_CLEARANCE = 0.16;
@@ -217,10 +217,11 @@ export function randomizeRecipe( base = defaultRecipe(), { seed, scope = 'all' }
 /**
  * The recipe a person of the crowd is drawn with: the studio's generator on
  * their appearance seed, on the regular body of their gender. The seed is read
- * exactly as the studio's `all` scope reads it, so the person is the studio's
- * for that numeric seed wherever the studio picked their gender. A top whose
- * main colour sits within reach of their skin is exchanged for the next
- * palette's, and each of `outfits` dresses its share of the crowd instead.
+ * exactly as the studio's `all` scope reads it, so the person's hairstyle,
+ * colouring, face, height and garments are the studio's for that numeric seed
+ * wherever the studio picked their gender. Their clothes are coloured from
+ * the street's wardrobe (`streetColors`), never a top near their skin, and
+ * each of `outfits` dresses its share of the crowd instead.
  *
  * @param outfits `{ outfit, share }`: an authored outfit (`{ top, pants,
  *   footwear, fabric, colors }`) and the share of people who wear it
@@ -232,23 +233,11 @@ export function personRecipe( { gender, appearanceSeed }, { outfits = [] } = {} 
 	const pick = ( list ) => list[ Math.floor( random() * list.length ) ];
 	// The studio's body pick: drawn so the rest of the stream stays the studio's.
 	random();
-	const palette = generate( recipe, random, pick, 'all' );
+	generate( recipe, random, pick, 'all' );
 	streetProportions( recipe.shape );
 	const authored = sharedOutfit( outfits, random() );
 	if ( authored ) recipe.outfit = structuredClone( authored );
-	else if ( nearSkin( recipe.outfit.colors.top.primary, recipe.colors.skin ) ) {
-
-		const index = OUTFIT_PALETTES.indexOf( palette );
-		for ( let step = 1; step < OUTFIT_PALETTES.length; step ++ ) {
-
-			const next = OUTFIT_PALETTES[ ( index + step ) % OUTFIT_PALETTES.length ];
-			if ( nearSkin( next[ 0 ], recipe.colors.skin ) ) continue;
-			recipe.outfit.colors = paletteColors( next );
-			break;
-
-		}
-
-	}
+	else recipe.outfit.colors = streetColors( recipe.colors.skin, appearanceSeed >>> 0 );
 	return recipe;
 
 }
@@ -276,6 +265,48 @@ function streetProportions( shape ) {
 		shape[ key ] = round( Math.max( min, Math.min( max, 1 + offset ) ) );
 
 	}
+
+}
+
+/**
+ * The colours of the street's clothes: tops from the city's dark blues and
+ * charcoals through slate, olive, rust, teal and burgundy to stone, sand and
+ * off-white; trousers in denim, black, charcoal, grey, khaki, olive and
+ * brown; shoes black, brown, tan, grey or white. The studio's palettes are
+ * near-black almost all of them, so a crowd seen from across the street wore
+ * one dark suit; a top and trousers here are drawn apart.
+ */
+const STREET_TOPS = [
+	'#202c3b', '#2b2b2e', '#343a3b', '#3a2f38', '#4f5d6b', '#5a6b4a', '#6b4b3a', '#3f5f7a', '#6d3036',
+	'#3e6461', '#7a5c2e', '#5b4a6e', '#b9b2a2', '#d9d4c8', '#8f979e', '#b08d57', '#a24a3f', '#c9a23e', '#6f8fa8'
+];
+const STREET_UNDERS = [ '#d9d4c8', '#1d1f24', '#8f979e', '#b9b2a2', '#3a3d42', '#efece4' ];
+const STREET_ACCENTS = [ '#91bfc2', '#b9aa84', '#b4a1bb', '#a6bac3', '#abbb97', '#d4c1a0', '#c97b5c' ];
+const STREET_TROUSERS = [ '#1d1f24', '#2c3e5a', '#41597a', '#3a3d42', '#5f6266', '#7d6f52', '#4f5238', '#4a3a2c', '#a39a86' ];
+const STREET_SHOES = [ '#161618', '#2d2622', '#4a3324', '#8b6a45', '#d6d2c8', '#5e6064' ];
+
+/**
+ * A person's clothes coloured from the street's wardrobe, drawn from their
+ * seed on a stream of its own, so the studio's draw of everything else stays
+ * as it was: a top no nearer their skin than the generator allows, a second
+ * colour that shows against it, trousers that are not the top's colour, and
+ * shoes.
+ */
+export function streetColors( skin, seed ) {
+
+	const random = seededRandom( `street:${seed}` );
+	const pick = ( list ) => list[ Math.floor( random() * list.length ) ];
+	const tops = STREET_TOPS.filter( ( color ) => ! nearSkin( color, skin ) );
+	const top = pick( tops );
+	const under = pick( STREET_UNDERS.filter( ( color ) => Math.abs( luma( color ) - luma( top ) ) > 0.2 ) );
+	const trousers = pick( STREET_TROUSERS.filter( ( color ) => contrast( color, top ) > 0.08 ) );
+	const shoes = pick( STREET_SHOES );
+	const accent = pick( STREET_ACCENTS );
+	return {
+		top: { primary: top, secondary: under, accent },
+		pants: { primary: trousers, secondary: shade( trousers, 0.8 ), accent },
+		footwear: { primary: shoes, secondary: shade( shoes, 0.7 ), accent }
+	};
 
 }
 
@@ -395,6 +426,21 @@ function shade( color, factor ) {
 
 	const channels = color.slice( 1 ).match( /../g ).map( ( channel ) => Math.round( parseInt( channel, 16 ) * factor ) );
 	return `#${channels.map( ( channel ) => channel.toString( 16 ).padStart( 2, '0' ) ).join( '' )}`;
+
+}
+
+/** How far apart two colours sit in the rough perceptual space. */
+function contrast( a, b ) {
+
+	const [ l, x, y ] = lab( a );
+	const [ m, u, v ] = lab( b );
+	return Math.hypot( l - m, x - u, y - v );
+
+}
+
+function luma( color ) {
+
+	return lab( color )[ 0 ];
 
 }
 

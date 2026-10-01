@@ -6,7 +6,7 @@ import {
 
 describe( 'character recipes', () => {
 
-	it( 'draws the studio\'s person for a seed: the same body, hairstyle, outfit and skin it names', () => {
+	it( 'draws the studio\'s person for a seed: the same body, hairstyle, garments, face, height and skin it names', () => {
 
 		// The studio's own generator gives this seed exactly these choices.
 		const recipe = randomizeRecipe( defaultRecipe(), { seed: 3141592653, scope: 'all' } );
@@ -15,7 +15,8 @@ describe( 'character recipes', () => {
 			'regular-male', 'Hairstyles/Rigged to Head Bone/Male/Hair_Buzzed.gltf', 'tech-top', 'pants-tech', 'boots-patrol', '#d8ad8d'
 		] );
 		const person = personRecipe( { gender: 'male', appearanceSeed: 3141592653 } );
-		expect( { ...person, shape: null } ).toEqual( { ...recipe, shape: null } );
+		const garments = ( { outfit } ) => ( { ...outfit, colors: null } );
+		expect( { ...person, shape: null, outfit: garments( person ) } ).toEqual( { ...recipe, shape: null, outfit: garments( recipe ) } );
 		expect( person.shape.height ).toBe( recipe.shape.height );
 		expect( person.shape.faceWidth ).toBe( recipe.shape.faceWidth );
 
@@ -40,6 +41,31 @@ describe( 'character recipes', () => {
 		expect( Math.abs( mean - 1 ) ).toBeLessThan( 0.03 );
 		expect( Math.max( ...seats ) ).toBeLessThanOrEqual( 1.15 );
 		expect( seats.filter( ( seat ) => seat > 1.1 ).length / seats.length ).toBeLessThan( 0.1 );
+
+	} );
+
+	it( 'colours a street\'s clothes apart: tops of many colours, most of them not near-black, trousers unlike the top', () => {
+
+		const lightness = ( hex ) => {
+
+			const [ r, g, b ] = hex.slice( 1 ).match( /../g ).map( ( channel ) => parseInt( channel, 16 ) / 255 );
+			return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+		};
+		const tops = [];
+		for ( let seed = 0; seed < 1000; seed ++ ) {
+
+			const recipe = personRecipe( { gender: seed % 2 ? 'female' : 'male', appearanceSeed: seed * 2654435761 >>> 0 } );
+			const { top, pants } = recipe.outfit.colors;
+			tops.push( top.primary );
+			expect( pants.primary ).not.toBe( top.primary );
+			expect( Math.abs( lightness( top.secondary ) - lightness( top.primary ) ) ).toBeGreaterThan( 0.15 );
+
+		}
+		expect( new Set( tops ).size ).toBeGreaterThan( 15 );
+		expect( tops.filter( ( color ) => lightness( color ) < 0.2 ).length / tops.length ).toBeLessThan( 0.4 );
+		// The same seed dresses the same way.
+		expect( personRecipe( { gender: 'male', appearanceSeed: 77 } ).outfit ).toEqual( personRecipe( { gender: 'male', appearanceSeed: 77 } ).outfit );
 
 	} );
 
