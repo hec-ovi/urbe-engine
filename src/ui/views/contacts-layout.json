@@ -1,0 +1,22 @@
+{
+  "title": "Contacts",
+  "subtitle": "People you can call.",
+  "heading": "Your contacts",
+  "text": "The people who gave you their number.",
+  "entries": "{count} contacts",
+  "entriesOne": "1 contact",
+  "results": "{count} of {total} contacts",
+  "search": "Search contacts",
+  "placeholder": "Search contacts…",
+  "category": "Contact",
+  "presence": { "online": "Available", "busy": "Busy", "offline": "Not answering" },
+  "activities": { "sleeping": "Asleep", "home": "At home", "working": "At work", "commuting": "On the way somewhere", "shopping": "Out shopping", "leisure": "Out", "transit_wait": "Waiting for a ride" },
+  "facts": { "role": "Role", "now": "Now", "added": "In contacts since", "met": "Met at" },
+  "lastTalk": "The last thing they said",
+  "call": "Call {name}",
+  "callShort": "Call",
+  "source": "Ask someone for their number in a conversation; who gives it is up to them.",
+  "empty": { "title": "No contacts yet", "text": "Ask the people you talk to for their number. A friendly person gives it; a wary one wants to know you first." },
+  "noMatch": { "title": "No contact by that name", "text": "Try another name or role." },
+  "clear": "Clear search"
+}

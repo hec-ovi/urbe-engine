@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:ui:contacts-layout",
+  "description": "Labels of the contacts screen; {count}, {total} and {name} are filled in.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "subtitle", "heading", "text", "entries", "entriesOne", "results", "search", "placeholder", "category", "presence", "activities", "facts", "lastTalk", "call", "callShort", "source", "empty", "noMatch", "clear"],
+  "properties": {
+    "title": { "$ref": "#/$defs/text" },
+    "subtitle": { "$ref": "#/$defs/text" },
+    "heading": { "$ref": "#/$defs/text" },
+    "text": { "$ref": "#/$defs/text" },
+    "entries": { "$ref": "#/$defs/text" },
+    "entriesOne": { "$ref": "#/$defs/text" },
+    "results": { "$ref": "#/$defs/text" },
+    "search": { "$ref": "#/$defs/text" },
+    "placeholder": { "$ref": "#/$defs/text" },
+    "category": { "$ref": "#/$defs/text" },
+    "presence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["online", "busy", "offline"],
+      "properties": { "online": { "$ref": "#/$defs/text" }, "busy": { "$ref": "#/$defs/text" }, "offline": { "$ref": "#/$defs/text" } }
+    },
+    "activities": {
+      "description": "What a contact's day has them doing now, by the simulation's activity.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/text" }
+    },
+    "facts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "now", "added", "met"],
+      "properties": { "role": { "$ref": "#/$defs/text" }, "now": { "$ref": "#/$defs/text" }, "added": { "$ref": "#/$defs/text" }, "met": { "$ref": "#/$defs/text" } }
+    },
+    "lastTalk": { "$ref": "#/$defs/text" },
+    "call": { "$ref": "#/$defs/text" },
+    "callShort": { "$ref": "#/$defs/text" },
+    "source": { "$ref": "#/$defs/text" },
+    "empty": { "$ref": "#/$defs/message" },
+    "noMatch": { "$ref": "#/$defs/message" },
+    "clear": { "$ref": "#/$defs/text" }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 },
+    "message": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "text"],
+      "properties": { "title": { "$ref": "#/$defs/text" }, "text": { "$ref": "#/$defs/text" } }
+    }
+  }
+}

@@ -12,6 +12,10 @@ const PATHS = {
 	send: 'M3 11l18-8-8 18-2-8z',
 	close: 'M6 6l12 12M18 6L6 18',
 	hangup: 'M3 14c5-5 13-5 18 0l-2 3-4-1v-2a9 9 0 00-6 0v2l-4 1z',
+	phone: 'M6 4L3 5c-1 6 8 15 14 14l2-3-5-3-2 2-5-5 2-2-3-4z',
+	compact: 'M3 8h5V3M21 8h-5V3M8 21v-5H3M16 21v-5h5',
+	expand: 'M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5',
+	contacts: 'M5 3h12a2 2 0 012 2v14a2 2 0 01-2 2H5zM12 10.5a2.5 2.5 0 100-5 2.5 2.5 0 100 5M8 16c.5-2.5 2-3.5 4-3.5s3.5 1 4 3.5M19 7h2M19 12h2M19 17h2',
 	north: 'M12 3l5 16-5-3-5 3z',
 	// Conversation: talking, the kinds of reply and of asking along, the voices.
 	talk: 'M4 4h16v12H11l-6 4v-4H4zM7 9h10M7 12h6',

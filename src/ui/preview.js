@@ -175,8 +175,14 @@ view.dialog.setActions( [
 // /src/ui/preview.html?talk opens the talk window over the conversation.
 if ( new URLSearchParams( location.search ).has( 'talk' ) ) view.dialog.setTalkOpen( true );
 
-view.call.setName( 'Nadir' );
-view.call.setVisible( true );
+view.call.setContact( { name: 'Nadir Sole', role: 'Bartender', handle: 'N. SOLE' } );
+view.call.setState( { status: 'connected', duration: '2:18', relay: 'Rain Sector', signal: 0.8 } );
+// /src/ui/preview.html?call shows a call with the conversation.
+view.call.setVisible( new URLSearchParams( location.search ).has( 'call' ) );
+view.contacts.setContacts( [
+	{ id: 'nadir', name: 'Nadir Sole', role: 'Bartender', status: 'online', activity: 'working', added: 'Mon 21:10', met: 'Bar Nadir', line: 'Come by after the late shift.', lastTalk: 'Mon 21:12' },
+	{ id: 'ines', name: 'Ines Ferro', role: 'Dock clerk', status: 'offline', activity: 'sleeping', added: 'Tue 09:40', met: 'Quay Office' }
+] );
 view.toast.show( { title: 'New mission', text: 'Salt Wharf: find out who signs for the night containers.' } );
 view.setLibrary( {
 	games: [ {

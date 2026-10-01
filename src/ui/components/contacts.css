@@ -1,0 +1,27 @@
+/* The contacts screen wears the codex's layout (codex.css); these are its own parts: the call on each card and in the read-out, and whether a person would pick up. */
+.contacts-card { position: relative; min-width: 0; }
+.contacts-card[hidden] { display: none; }
+.contacts-record .codex-record-art { height: 168px; padding: 0; background: #1d2b2f; }
+.contacts-record .codex-record-image { max-height: none; object-fit: contain; }
+.contacts-call-quick {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	display: grid;
+	place-items: center;
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	border: 1px solid rgba(125, 169, 173, 0.35);
+	background: rgba(9, 27, 31, 0.86);
+	color: var(--screen-cyan);
+	cursor: pointer;
+}
+.contacts-call-quick:hover, .contacts-call-quick:focus-visible { border-color: var(--screen-cyan); background: #1d454b; }
+.contacts-call-quick .icon, .contacts-call .icon { width: 18px; height: 18px; }
+.contacts-presence { color: #8fe3b0; }
+.contacts-record[data-presence="busy"] .contacts-presence, .contacts-presence-tag[data-presence="busy"] { color: #efc082; }
+.contacts-record[data-presence="offline"] .contacts-presence, .contacts-presence-tag[data-presence="offline"] { color: var(--screen-muted); }
+.contacts-presence-tag[data-presence="online"] { color: #8fe3b0; }
+.contacts-call { margin-top: 18px; }
+.contacts-figure .codex-picture { height: 100%; }

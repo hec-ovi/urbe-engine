@@ -1,0 +1,23 @@
+{
+  "channel": "PRIVATE LINE",
+  "portrait": "PORTRAIT",
+  "signal": "Signal",
+  "contact": "Call with {name}",
+  "footer": "PRIVATE CHANNEL",
+  "audio": "VOICE CHANNEL OPEN",
+  "duration": "SESSION {duration}",
+  "redial": "Call again",
+  "cancel": "Cancel",
+  "hangup": "End call",
+  "close": "Close",
+  "expand": "Expand call",
+  "compact": "Compact call",
+  "status": {
+    "connecting": { "label": "Calling", "detail": "Ringing. Waiting for {name} to pick up.", "tone": "linking" },
+    "connected": { "label": "Connected", "detail": "A clear line through the city.", "tone": "good" },
+    "busy": { "label": "Busy", "detail": "{name} picked up but cannot talk now.", "tone": "linking" },
+    "ended": { "label": "Call ended", "detail": "You can call again whenever you are ready.", "tone": "idle" },
+    "declined": { "label": "Declined", "detail": "{name} let it ring out.", "tone": "error" },
+    "no-answer": { "label": "No answer", "detail": "Nobody picks up. Try again later.", "tone": "error" }
+  }
+}

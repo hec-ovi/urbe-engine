@@ -24,7 +24,7 @@ import { DebugStats } from '../widgets/DebugStats.js';
 import { CurrentObjective } from '../widgets/CurrentObjective.js';
 import { ChatPanel } from '../widgets/ChatPanel.js';
 import { AvatarCard } from '../widgets/AvatarCard.js';
-import { VideoCallPanel } from '../widgets/VideoCallPanel.js';
+import { CallPanel } from '../widgets/CallPanel.js';
 import { MissionToast } from '../widgets/MissionToast.js';
 import { MissionSummary } from '../widgets/MissionSummary.js';
 import { TransitHud } from '../widgets/TransitHud.js';
@@ -38,6 +38,7 @@ import { InventoryView } from './InventoryView.js';
 import { ItemPreview } from '../components/ItemPreview.js';
 import { QuestsView } from './QuestsView.js';
 import { CodexView } from './CodexView.js';
+import { ContactsView } from './ContactsView.js';
 import { SettingsView } from './SettingsView.js';
 import { ControlsView } from './ControlsView.js';
 import { MainMenuView } from './MainMenuView.js';
@@ -56,7 +57,7 @@ export class GameView {
 
 	constructor( {
 		onResume = noop, onSave = noop, onCloseDialog = noop, onSend = noop, onOpen = noop, onClose = noop,
-		onLeave = noop, onSettingChange = noop, onHangUp = noop, onSummaryClose = noop, onSummaryOpen = noop,
+		onLeave = noop, onSettingChange = noop, onHangUp = noop, onCall = noop, onRedial = noop, onCallClose = noop, onSummaryClose = noop, onSummaryOpen = noop,
 		onTransitSelect = noop, onTransitCancel = noop, onQuestSelect = noop, onQuestTrack = noop, onQuestWait = noop,
 		onDialogueChoice = noop, onDialogueTopic = noop, onDialogueAction = noop, onDialogueRetry = noop, onDialogueJournal = noop, onDialogueVoice = noop,
 		menu = {}
@@ -79,7 +80,7 @@ export class GameView {
 		this.objective = new CurrentObjective( { onOpen: () => this.open( 'QUESTS' ) } );
 		this.minimap = new MinimapView( { onOpen: () => this.open( 'MAP' ) } );
 		this.avatar = new AvatarCard();
-		this.call = new VideoCallPanel( { onHangUp } );
+		this.call = new CallPanel( { onHangUp, onRedial, onClose: onCallClose } );
 		this.toast = new MissionToast();
 		this.dialog = new ChatPanel( { onSend, onClose: onCloseDialog,
 			onChoice: onDialogueChoice, onTopic: onDialogueTopic, onAction: onDialogueAction, onRetry: onDialogueRetry, onJournal: onDialogueJournal, onVoice: onDialogueVoice } );
@@ -106,6 +107,7 @@ export class GameView {
 		this.inventory = new InventoryView( { onClose: close, onQuest: openQuest, preview: this.preview } );
 		this.quests = new QuestsView( { onClose: close, onSelect: onQuestSelect, onTrack: onQuestTrack, onWait: onQuestWait } );
 		this.codex = new CodexView( { onClose: close, onQuest: openQuest, preview: this.preview } );
+		this.contacts = new ContactsView( { onClose: close, onCall } );
 		this.settings = new SettingsView( { onChange: onSettingChange, onClose: close } );
 		this.controls = new ControlsView( { onClose: close } );
 
@@ -125,6 +127,7 @@ export class GameView {
 				MAP: this.map,
 				INVENTORY: this.inventory,
 				CODEX: this.codex,
+				CONTACTS: this.contacts,
 				SETTINGS: this.settings,
 				CONTROLS: this.controls
 			},
@@ -211,7 +214,7 @@ export class GameView {
 
 	}
 
-	/** Panel names: QUESTS, MAP, INVENTORY, CODEX, SETTINGS, CONTROLS. */
+	/** Panel names: QUESTS, MAP, INVENTORY, CODEX, CONTACTS, SETTINGS, CONTROLS. */
 	open( name ) {
 
 		this.panels.open( name );

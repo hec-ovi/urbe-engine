@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Call panel labels; {name} stands for the person called, {duration} for the time talked",
+  "type": "object",
+  "required": ["channel", "portrait", "signal", "contact", "footer", "audio", "duration", "redial", "cancel", "hangup", "close", "expand", "compact", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "channel": { "$ref": "#/$defs/text" },
+    "portrait": { "$ref": "#/$defs/text" },
+    "signal": { "$ref": "#/$defs/text" },
+    "contact": { "$ref": "#/$defs/text" },
+    "footer": { "$ref": "#/$defs/text" },
+    "audio": { "$ref": "#/$defs/text" },
+    "duration": { "$ref": "#/$defs/text" },
+    "redial": { "$ref": "#/$defs/text" },
+    "cancel": { "$ref": "#/$defs/text" },
+    "hangup": { "$ref": "#/$defs/text" },
+    "close": { "$ref": "#/$defs/text" },
+    "expand": { "$ref": "#/$defs/text" },
+    "compact": { "$ref": "#/$defs/text" },
+    "status": {
+      "type": "object",
+      "required": ["connecting", "connected", "busy", "ended", "declined", "no-answer"],
+      "additionalProperties": false,
+      "properties": {
+        "connecting": { "$ref": "#/$defs/status" },
+        "connected": { "$ref": "#/$defs/status" },
+        "busy": { "$ref": "#/$defs/status" },
+        "ended": { "$ref": "#/$defs/status" },
+        "declined": { "$ref": "#/$defs/status" },
+        "no-answer": { "$ref": "#/$defs/status" }
+      }
+    }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "object",
+      "required": ["label", "detail", "tone"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "$ref": "#/$defs/text" },
+        "detail": { "$ref": "#/$defs/text" },
+        "tone": { "enum": ["idle", "linking", "good", "error"] }
+      }
+    }
+  }
+}

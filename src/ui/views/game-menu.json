@@ -6,6 +6,7 @@
     "MAP": { "label": "Map", "key": "M", "detail": "The city, where you stand and the way to your goal." },
     "INVENTORY": { "label": "Inventory", "key": "I", "detail": "What you carry." },
     "CODEX": { "label": "Codex", "key": "X", "detail": "The things, people and places you have come across." },
+    "CONTACTS": { "label": "Contacts", "key": "P", "detail": "The people who gave you their number; call them from here." },
     "SETTINGS": { "label": "Settings", "key": "O", "detail": "Picture quality, crowd size, NPC voices and developer details." },
     "CONTROLS": { "label": "Controls", "key": "?", "detail": "Every key and what it does." },
     "save": { "label": "Save", "detail": "Keep your progress now." },
@@ -13,7 +14,7 @@
   },
   "dock": {
     "label": "Game panels",
-    "groups": [["play"], ["MAP", "QUESTS", "INVENTORY", "CODEX"], ["SETTINGS", "CONTROLS"]]
+    "groups": [["play"], ["MAP", "QUESTS", "INVENTORY", "CODEX", "CONTACTS"], ["SETTINGS", "CONTROLS"]]
   },
   "pause": {
     "eyebrow": "Session paused",

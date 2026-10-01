@@ -15,7 +15,7 @@ describe( 'GameDock', () => {
 		document.body.replaceChildren( dock.element );
 
 		expect( screen.getAllByRole( 'button' ).map( ( b ) => b.textContent ) ).toEqual(
-			[ 'Play', 'MapM', 'JournalJ', 'InventoryI', 'CodexX', 'SettingsO', 'Controls?' ]
+			[ 'Play', 'MapM', 'JournalJ', 'InventoryI', 'CodexX', 'ContactsP', 'SettingsO', 'Controls?' ]
 		);
 		expect( screen.getByRole( 'navigation', { name: 'Game panels' } ) ).toBeTruthy();
 
