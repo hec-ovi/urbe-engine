@@ -1,10 +1,16 @@
 import * as THREE from 'three/webgpu';
-import { color, uniform, vec3 } from 'three/tsl';
+import { color, min, uniform, vec3 } from 'three/tsl';
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
 import { luminance, kelvinColor } from '../light/Color.js';
 import { dayCycle, SUN_KELVIN } from '../time/DayCycle.js';
 
 const SKY_SCALE = 45000;
+/**
+ * The sky's radiance ceiling, in cd/m2: the analytic sky scaled to real
+ * daylight reaches past what half-float targets hold around the sun, and an
+ * infinite texel there poisons the frame's bloom and the probe alike.
+ */
+const SKY_LIMIT = 30000;
 /** The colour the air takes where no fixture reaches it: moonlit, cold. */
 export const SKY_COLOR = 0x0b141d;
 const STAR_COUNT = 2200;
@@ -64,7 +70,7 @@ export class NightSky {
 		// Without this every window in the city is a hole cut out of the frame.
 		this.glow = uniform( skyglow() );
 		this.scale = uniform( 1 );
-		sky.material.colorNode = sky.material.colorNode.mul( this.scale ).add( this.glow );
+		sky.material.colorNode = min( sky.material.colorNode.mul( this.scale ).add( this.glow ), vec3( SKY_LIMIT ) );
 		this.sky = sky;
 		this.scene.add( sky );
 

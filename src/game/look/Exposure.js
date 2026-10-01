@@ -60,7 +60,15 @@ export class Exposure {
 	 */
 	setDaylight( stops ) {
 
+		// The first hour a run is lit at is where its eye starts: a city opened by
+		// day is not adapted up from night, which a held world would never finish.
+		const first = ! this.lit;
+		this.lit = true;
 		this.daylight = stops;
+		if ( first ) {
+			this.stops = this.volume + stops;
+			this.renderer.toneMappingExposure = this.base * Math.pow( 2, this.stops );
+		}
 
 	}
 

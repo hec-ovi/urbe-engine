@@ -1,8 +1,17 @@
 import * as THREE from 'three/webgpu';
-import { texture, uv } from 'three/tsl';
+import { min, texture, uv, vec4 } from 'three/tsl';
 
 const NEAR = 1;
 const FAR = 320;
+/**
+ * The brightest radiance a probe face keeps, in cd/m2. Its targets are half
+ * floats: a daylight face (the sky, the sun's highlights) can pass their 65504
+ * ceiling, and one infinite texel turns the whole convolution into NaN, which
+ * every material then shades black. Capped well below, a sunlit city still
+ * reflects as bright as it looks.
+ */
+export const PROBE_LIMIT = 30000;
+
 /** Milliseconds between bakes, whatever asks for one. */
 const COOLDOWN = 2000;
 const FACES = 6;
@@ -85,7 +94,7 @@ export class EnvironmentProbe {
 		this.face2d.texture.name = 'probe face';
 		const material = new THREE.NodeMaterial();
 		material.name = 'probe face copy';
-		material.fragmentNode = texture( this.face2d.texture, uv() );
+		material.fragmentNode = min( texture( this.face2d.texture, uv() ), vec4( PROBE_LIMIT ) );
 		material.depthTest = false;
 		material.depthWrite = false;
 		this.copy = new THREE.QuadMesh( material );
