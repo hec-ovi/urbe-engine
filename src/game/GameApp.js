@@ -1298,8 +1298,9 @@ export class GameApp {
 			position: this.body.feet, timeMin: this.clock.timeMin, npcId, down: ( id ) => Boolean( this.crowd.member( id )?.fallen ),
 			scenes: this.scenery.stagedPlaces(), parcelId: this.standing?.parcelId ?? null, guided: guide?.kind === 'parcel' ? guide.placeId : null
 		} ) ?? [];
+		const task = this.companion.taskOf?.( npcId ) ?? null;
 		return {
-			...( offers ? { offers } : {} ), ...( guide ? { guide } : {} ), ...( events.length ? { events } : {} ),
+			...( offers ? { offers } : {} ), ...( guide ? { guide } : {} ), ...( events.length ? { events } : {} ), ...( task ? { task } : {} ),
 			...this.#bodyContext( conversation, line )
 		};
 	}

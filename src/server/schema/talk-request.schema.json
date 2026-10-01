@@ -91,6 +91,16 @@
         "unknown": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/words" } }
       }
     },
+    "task": {
+      "description": "What the person is doing for the player now: following, leading to a place, or an errand the player asked for.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["following", "leading", "walking", "waiting", "sitting", "home", "work"] },
+        "place": { "$ref": "#/$defs/words" }
+      }
+    },
     "here": {
       "description": "Where the person stands: world XZ, the building and floor they are inside, the light there.",
       "type": "object",

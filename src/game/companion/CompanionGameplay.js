@@ -25,6 +25,8 @@ const MODE = { follow: 'following', lead: 'leading' };
 const ERRAND_MIN = { walk: 15, home: 60, work: 60, wait: 15, sit: 20 };
 /** The actions a person takes on their own for the player, once the talk is done. */
 const ERRANDS = new Set( [ 'walk', 'home', 'work', 'wait', 'sit' ] );
+/** What a person on each errand is doing for the player, as the talk tells them. */
+const TASK = { walk: 'walking', home: 'home', work: 'work', wait: 'waiting', sit: 'sitting' };
 /** People this old or tired do not run, whatever the player does. */
 const RUNS_UNDER = 60;
 /** The minutes a lead is reckoned to take when a person weighs it against their next shift. */
@@ -81,6 +83,8 @@ export class CompanionGameplay {
 		this.state = null;
 		/** An accepted offer waiting for its person's conversation to close. */
 		this.pending = null;
+		/** The errands this companion sent people on, by npcId: the action and the place it told. */
+		this.errands = new Map();
 
 	}
 
@@ -194,6 +198,26 @@ export class CompanionGameplay {
 		return this.boundary.output( 'accept-result', {
 			ok: true, npcId, offerId: kind, kind, line: this.lines.say( `accept-${kind}`, destination ? { place: told } : {}, seed )
 		} );
+
+	}
+
+	/**
+	 * What this person is doing for the player now, as the talk tells them
+	 * (Quests `DialogTask`): following, leading to a place, or an errand the
+	 * player asked for while the continuity still runs it; null otherwise.
+	 */
+	taskOf( npcId ) {
+
+		const state = this.state;
+		if ( state?.npcId === npcId ) return state.kind === 'follow' ? { kind: 'following' } : { kind: 'leading', place: state.destination.name };
+		const errand = this.errands.get( npcId );
+		if ( errand && ( this.continuity.errandsUnderway ?? [] ).some( ( entry ) => entry.npcId === npcId ) ) {
+
+			return { kind: TASK[ errand.action ], ...( errand.told ? { place: errand.told } : {} ) };
+
+		}
+		this.errands.delete( npcId );
+		return null;
 
 	}
 
@@ -412,6 +436,7 @@ export class CompanionGameplay {
 			return refused( error?.code === 'E_NPC_CONFLICT' ? 'conflict' : error?.code === 'E_NPC_PATH' ? 'unknown' : 'unavailable' );
 
 		}
+		this.errands.set( npcId, { action: kind, ...( told ? { told } : {} ) } );
 		signals.push( { kind: 'errand', npcId, action: kind, notice: this.#told( `notice-errand-${kind}`, npcId, told ?? '', timeMin ) } );
 
 	}

@@ -67,12 +67,13 @@ export class TalkClient {
 	 * @param options.look what this person looks like in words, Describe.describeLook
 	 * @param options.here where this person stands, { x, z, parcelId?, floor?, light? }
 	 * @param options.people who this person knows and where they are, quests peopleKnown
+	 * @param options.task what this person is doing for the player now, CompanionGameplay.taskOf
 	 */
-	async *stream( conversation, line, timeMin, quests = [], { signal, guide, offers, events, look, here, people } = {} ) {
+	async *stream( conversation, line, timeMin, quests = [], { signal, guide, offers, events, look, here, people, task } = {} ) {
 
 		await this.#handOver();
 		const prior = this.#prior.npcId === conversation.instance.npcId ? this.#prior.lines : [];
-		const response = await this.#post( { conversation, line, timeMin, quests, guide, offers, events, look, here, people, prior }, signal );
+		const response = await this.#post( { conversation, line, timeMin, quests, guide, offers, events, look, here, people, task, prior }, signal );
 		const reader = response.body.getReader();
 		const decoder = new TextDecoder();
 		let buffer = '';
@@ -161,7 +162,7 @@ export class TalkClient {
 
 	}
 
-	async #post( { conversation, line, timeMin, quests, guide, offers, events, look, here, people, prior }, signal ) {
+	async #post( { conversation, line, timeMin, quests, guide, offers, events, look, here, people, task, prior }, signal ) {
 
 		const response = await fetch( '/api/talk/stream', {
 			method: 'POST',
@@ -170,7 +171,7 @@ export class TalkClient {
 			body: JSON.stringify( {
 				out: this.out, npc: conversation.instance, behavior: conversation.behavior, line, timeMin, quests,
 				...( guide ? { guide } : {} ), ...( offers ? { offers } : {} ), ...( events?.length ? { events } : {} ),
-				...( look ? { look } : {} ), ...( here ? { here } : {} ), ...( people ? { people } : {} ), ...( prior.length ? { prior } : {} )
+				...( look ? { look } : {} ), ...( here ? { here } : {} ), ...( people ? { people } : {} ), ...( task ? { task } : {} ), ...( prior.length ? { prior } : {} )
 			} )
 		} );
 		if ( response.ok ) return response;

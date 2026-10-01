@@ -49,10 +49,10 @@ export class TalkService {
 	 * @param request a checked talk request: out, npc, behavior, line, timeMin, quests?, offers?, guide?, events?, look?, here?, people?, prior?
 	 * @param options.signal aborting it ends the model request
 	 */
-	async *stream( { out, npc, behavior, line, timeMin, quests = [], offers, guide, events, look, here, people, prior = [] }, { signal } = {} ) {
+	async *stream( { out, npc, behavior, line, timeMin, quests = [], offers, guide, events, look, here, people, task, prior = [] }, { signal } = {} ) {
 
 		const world = await this.#world( out );
-		const context = world.contextFor( npc, behavior, quests, timeMin, { guide, events, look, here, people, prior } );
+		const context = world.contextFor( npc, behavior, quests, timeMin, { guide, events, look, here, people, task, prior } );
 		const name = `${npc.name.given} ${npc.name.family}`;
 		const sentences = new Sentences();
 		let index = 0;
@@ -170,7 +170,7 @@ class TalkWorld {
 	 * questline the request no longer carries leaves with a fresh context service
 	 * that keeps every NPC's memory.
 	 */
-	contextFor( npc, behavior, quests, timeMin, { guide, events, look, here, people, prior } ) {
+	contextFor( npc, behavior, quests, timeMin, { guide, events, look, here, people, task, prior } ) {
 
 		this.port.set( npc, behavior );
 		const held = quests.filter( ( quest ) => this.definitions.has( quest.id ) );
@@ -190,7 +190,7 @@ class TalkWorld {
 		}
 		return this.context.contextFor( npc.npcId, timeMin, {
 			...( guide ? { guide } : {} ), ...( events ? { events } : {} ), ...( look ? { look } : {} ), ...( here ? { here } : {} ),
-			...( people ? { people } : {} ), prior
+			...( people ? { people } : {} ), ...( task ? { task } : {} ), prior
 		} );
 
 	}
