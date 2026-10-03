@@ -304,12 +304,12 @@ export class AutomationProbe {
 	 * agree to (the companion's `talkOffers` over the wide list): `{ follow?,
 	 * places?, walk?, stop?, home?, work?, wait?, sit? }`, or null.
 	 */
-	actions() {
+	actions( { line = '' } = {} ) {
 
 		const { companion, interactor, clock, playerPlaces } = this.game;
 		const npcId = interactor.conversation?.npcId;
 		if ( ! npcId || ! interactor.conversation.instance ) return null;
-		const offers = companion.offers( { npcId, timeMin: clock.timeMin, playerPlaces, wide: true } );
+		const offers = companion.offers( { npcId, timeMin: clock.timeMin, playerPlaces, wide: true, ...( line ? { line } : {} ) } );
 		return companion.talkOffers( offers, { npcId, timeMin: clock.timeMin } );
 
 	}
@@ -321,12 +321,12 @@ export class AutomationProbe {
 	 * by its leave button so they set off. After two frames: `{ ok, code,
 	 * line, conversation }`.
 	 */
-	async agree( { kind, placeId } ) {
+	async agree( { kind, placeId, line = '' } ) {
 
 		const { companion, interactor, clock, playerPlaces } = this.game;
 		const npcId = interactor.conversation?.npcId;
 		if ( ! npcId || ! interactor.conversation.instance ) return { ok: false, code: null, line: null, conversation: null };
-		const result = companion.acceptFromTool( { npcId, kind, ...( placeId ? { placeId } : {} ), timeMin: clock.timeMin, playerPlaces } );
+		const result = companion.acceptFromTool( { npcId, kind, ...( placeId ? { placeId } : {} ), timeMin: clock.timeMin, playerPlaces, ...( line ? { line } : {} ) } );
 		if ( result.ok ) this.game.view.dialog.leave.click();
 		await frames( 2 );
 		return { ok: result.ok, code: result.code ?? null, line: result.line ?? null, conversation: this.#conversation() };
