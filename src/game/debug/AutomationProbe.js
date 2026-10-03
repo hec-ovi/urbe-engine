@@ -16,6 +16,7 @@ import { questCompletion } from '../quests/QuestCompletion.js';
 import { completionEvent } from '../quests/QuestEvent.js';
 import { stepView } from '../quests/QuestStepView.js';
 import { nextQuestWindow } from '../quests/QuestWait.js';
+import { dispositionOf } from '../../../../quests/dist/runtime.js';
 
 /** How far from a person the player stands to talk: well inside the talk range. */
 const FACE_DISTANCE = 1.3;
@@ -31,6 +32,8 @@ const TRAIL_BEHIND = 2.5;
 const TRAIL_SLACK = 1.5;
 /** A leader's path is kept as points at least this far apart. */
 const TRAIL_STEP = 0.5;
+/** A trailing player steps into a lift car this far to the side of the leader riding it. */
+const LIFT_SIDE = 0.8;
 /**
  * Where ground is looked for around a point: the point, then a hand's width
  * each way, since a ray down the seam between two ground cuboids meets neither.
@@ -440,9 +443,11 @@ export class AutomationProbe {
 	/**
 	 * Walks the player behind the companion `npcId` along the path it has
 	 * walked, TRAIL_BEHIND metres back, until a conversation opens, the
-	 * companion ends or `timeoutMs` passes; each move is `placePlayer`.
-	 * Samples `companion()` once a second, with `ms` since the start.
-	 * `{ samples, conversation, companion, ms }`.
+	 * companion ends or `timeoutMs` passes; each move is `placePlayer`. A
+	 * leader riding a lift has the player step into the same car beside them
+	 * and ride it with them. Samples `companion()` once a second, with `ms`
+	 * since the start, the leader's height, the lift car they ride and the
+	 * player's. `{ samples, conversation, companion, ms }`.
 	 */
 	async trail( npcId, { timeoutMs = 360000 } = {} ) {
 
@@ -457,11 +462,25 @@ export class AutomationProbe {
 			if ( this.game.interactor.conversation || this.companion()?.npcId !== npcId || body?.npcId !== npcId ) break;
 			const at = body.position;
 			if ( ! path.length || spread( path.at( - 1 ), at ) >= TRAIL_STEP ) path.push( at );
-			if ( spread( this.game.body.feet.toArray(), at ) > TRAIL_BEHIND + TRAIL_SLACK ) this.#standOn( behind( path, TRAIL_BEHIND ), chestOf( at ) );
+			// A leader riding a lift: the player steps into the same car beside them and rides with them.
+			const lift = this.game.elevators?.cabinAt?.( { x: at[ 0 ], y: at[ 1 ], z: at[ 2 ] } ) ?? null;
+			if ( lift ) {
+
+				if ( this.game.elevators.cabinAt( this.game.body.feet ) !== lift ) {
+
+					const side = new THREE.Vector3( LIFT_SIDE, 0, 0 ).applyAxisAngle( new THREE.Vector3( 0, 1, 0 ), lift.yaw );
+					this.game.placePlayer( { x: lift.centre.x + side.x, y: lift.at + FOOTING, z: lift.centre.z + side.z }, chestOf( at ) );
+
+				}
+
+			} else if ( spread( this.game.body.feet.toArray(), at ) > TRAIL_BEHIND + TRAIL_SLACK ) this.#standOn( behind( path, TRAIL_BEHIND ), chestOf( at ) );
 			if ( performance.now() - sampled >= 1000 ) {
 
 				sampled = performance.now();
-				samples.push( { ms: round( sampled - started, 0 ), ...this.companion() } );
+				samples.push( {
+					ms: round( sampled - started, 0 ), ...this.companion(), y: round( at[ 1 ] ), lift: lift?.id ?? null,
+					playerLift: this.game.elevators?.cabinAt?.( this.game.body.feet )?.id ?? null
+				} );
 
 			}
 
@@ -1020,6 +1039,149 @@ export class AutomationProbe {
 		}
 
 		return false;
+
+	}
+
+	/**
+	 * What the player may open: their access cards (`{ id, label, grants,
+	 * issuer, access, how }`), the lock of the door aimed at now
+	 * (`{ scope, place, locked }` or null), the prompt and who caught the
+	 * player lifting a card (`[{ npcId, drop, atMin }]`).
+	 */
+	access() {
+
+		const { items, interactor, regard, view } = this.game;
+		return {
+			cards: items.ofKind( 'access-card' ).map( ( card ) => ( {
+				id: card.id, label: card.label, grants: [ ...( card.data.grants ?? [] ) ], issuer: card.data.issuer?.name ?? null,
+				access: card.data.access ?? null, how: card.data.how ?? null
+			} ) ),
+			lock: interactor.lock ? { ...interactor.lock } : null,
+			prompt: view.prompt.text ?? null,
+			regard: regard.serialize()
+		};
+
+	}
+
+	/** The furnished buildings with addresses: `[{ parcelId, name, apartments, rooms, floors }]`, most dwellings first. */
+	buildings() {
+
+		const out = [];
+		for ( const parcelId of this.game.addresses.buildings.keys() ) {
+
+			const building = this.game.addresses.building( parcelId );
+			if ( ! building ) continue;
+			out.push( {
+				parcelId, name: building.name,
+				apartments: building.units.filter( ( unit ) => unit.kind === 'apartment' ).length,
+				rooms: building.units.filter( ( unit ) => unit.kind === 'room' ).map( ( unit ) => unit.label ),
+				floors: building.floors.size
+			} );
+
+		}
+		return out.sort( ( a, b ) => b.apartments - a.apartments || a.parcelId.localeCompare( b.parcelId ) );
+
+	}
+
+	/**
+	 * The established people who live in a building: who, their address and
+	 * the scope of their door, how they take to the player now, what their day
+	 * has them doing, where continuity has their body and their crowd member
+	 * when it stands near the player.
+	 */
+	residents( parcelId ) {
+
+		const { sim, addresses, npcContinuity, crowd, regard, companion, clock, body } = this.game;
+		const people = typeof sim?.findNPCs === 'function' ? sim.findNPCs( {} ) : [];
+		return people.filter( ( npc ) => npc.home?.parcelId === parcelId && npc.home.apartment && ! npc.flags?.dead ).map( ( npc ) => {
+
+			const home = addresses.home( npc );
+			const actor = npcContinuity?.actor( npc.npcId ) ?? null;
+			const member = crowd.memberForNpc?.( npc.npcId ) ?? null;
+			const disposition = regard.adjust( dispositionOf( npc, companion.categoryOf?.( npc.type ) ), npc.npcId );
+			return {
+				npcId: npc.npcId, name: `${npc.name.given} ${npc.name.family}`, type: npc.type, address: home?.address ?? null,
+				unitId: home?.id ?? null, scope: home?.scope ?? null, disposition,
+				activity: sim.behaviorAt( npc.npcId, clock.timeMin )?.activity ?? null,
+				place: actor?.place ?? null, position: actor?.position ? actor.position.map( ( value ) => round( value ) ) : null,
+				distance: actor?.position ? round( Math.hypot( actor.position[ 0 ] - body.feet.x, actor.position[ 2 ] - body.feet.z ) ) : null,
+				member: member && ! member.retiring ? member.id : null
+			};
+
+		} );
+
+	}
+
+	/** The door of a unit by its address id, as the floors shown now stand it: `{ id, open, wanted, scope, name }`, or null. */
+	door( unitId ) {
+
+		const unit = this.game.addresses.unit( unitId );
+		const door = unit ? this.#unitDoor( unit ) : null;
+		return door ? { id: door.id, open: round( door.open ), wanted: door.wanted, scope: door.scope ?? null, name: door.name ?? null } : null;
+
+	}
+
+	/**
+	 * Stands the player `distance` before a unit's entry door, on its public
+	 * side or inside, facing it, once its floor stands solid: first at the
+	 * building's door, then on the floor once the interior stream has it.
+	 * After two frames: `{ placed, door, lock, prompt, target, ms }`.
+	 */
+	async standAtDoor( unitId, { side = 'outside', distance = 1.3, timeoutMs = 120000 } = {} ) {
+
+		const unit = this.game.addresses.unit( unitId );
+		if ( ! unit ) throw new Error( `no unit ${unitId}` );
+		this.#finishReading();
+		const started = performance.now();
+		const [ door ] = unit.doors;
+		const sign = side === 'inside' ? 1 : - 1;
+		const spot = [ door.at[ 0 ] + door.inward[ 0 ] * distance * sign, door.at[ 1 ], door.at[ 2 ] + door.inward[ 1 ] * distance * sign ];
+		const aim = { x: door.at[ 0 ], y: door.at[ 1 ] + 1.1, z: door.at[ 2 ] };
+		const stream = this.game.stream;
+		const shown = () => stream.floorShown( unit.parcelId, unit.floor ) && this.#unitDoor( unit );
+		if ( ! shown() ) await this.visit( { kind: 'parcel', id: unit.parcelId }, { timeoutMs: Math.min( 30000, timeoutMs ) } );
+		stream.requestFloor( unit.parcelId, unit.floor );
+		while ( ! shown() && performance.now() - started < timeoutMs ) await frames( 1 );
+		let placed = false;
+		while ( ! ( placed = shown() && this.#standOn( spot, aim ) ) && performance.now() - started < timeoutMs ) await frames( 1 );
+		stream.releaseFloor( unit.parcelId );
+		await frames( 2 );
+		return { placed, door: this.door( unitId ), lock: this.game.interactor.lock ? { ...this.game.interactor.lock } : null, prompt: this.game.view.prompt.text ?? null, target: targetOf( this.game.interactor.target ), ms: round( performance.now() - started, 0 ) };
+
+	}
+
+	/**
+	 * Walks the player where they face, as W does, for `frames` frames or
+	 * until they are `metres` past a unit's door: `{ past, feet }`, `past` how
+	 * far beyond the door's plane they stand (negative still before it).
+	 */
+	async walk( { unitId = null, frames: count = 90, metres = 1.5 } = {} ) {
+
+		const unit = unitId ? this.game.addresses.unit( unitId ) : null;
+		const door = unit?.doors[ 0 ] ?? null;
+		const past = () => door ? round( ( this.game.body.feet.x - door.at[ 0 ] ) * door.inward[ 0 ] + ( this.game.body.feet.z - door.at[ 2 ] ) * door.inward[ 1 ] ) : null;
+		const keys = this.game.input.keys;
+		keys.add( 'KeyW' );
+		try {
+
+			for ( let frame = 0; frame < count && ! ( door && past() >= metres ); frame ++ ) await frames( 1 );
+
+		} finally {
+
+			keys.delete( 'KeyW' );
+
+		}
+		await frames( 2 );
+		return { past: past(), feet: point( this.game.body.feet ) };
+
+	}
+
+	/** The door the floors shown now stand at a unit's entry, or null. */
+	#unitDoor( unit ) {
+
+		const [ entry ] = unit.doors;
+		return ( this.game.stream?.apartmentDoors?.doors ?? [] ).find( ( door ) => door.parcelId === unit.parcelId && door.floor === unit.floor &&
+			Math.hypot( door.center.x - entry.at[ 0 ], door.center.z - entry.at[ 2 ] ) < 0.05 ) ?? null;
 
 	}
 
