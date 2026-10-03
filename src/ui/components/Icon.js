@@ -26,7 +26,10 @@ const PATHS = {
 	dismiss: 'M8 4a3 3 0 110 6 3 3 0 010-6zM3 21v-4a5 5 0 0110 0v4M15 12h7M19 9l3 3-3 3',
 	actions: 'M13 2L4 14h7l-1 8 9-12h-7z',
 	voice: 'M4 9h4l5-4v14l-5-4H4zM16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11',
-	mute: 'M4 9h4l5-4v14l-5-4H4zM16 9l5 6M21 9l-5 6'
+	mute: 'M4 9h4l5-4v14l-5-4H4zM16 9l5 6M21 9l-5 6',
+	lock: 'M6 11h12v10H6zM8 11V8a4 4 0 018 0v3M12 15v2',
+	unlock: 'M6 11h12v10H6zM8 11V8a4 4 0 017.5-2M12 15v2',
+	card: 'M3 6h18v12H3zM3 10h18M7 15h4'
 };
 
 /** An inline SVG icon coloured by the surrounding text. */

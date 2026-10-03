@@ -195,6 +195,9 @@ export function buildApartmentDoors( record, modules, { fills = new Map(), share
 					privateRoom: entrance.privateRoom,
 					// At floor level: the Interactor aims at a door's handle height above it.
 					center: new THREE.Vector3( entrance.position[ 0 ], record.elevation, entrance.position[ 1 ] ),
+					// Into the dwelling: its lock never keeps anybody in.
+					...( Array.isArray( entrance.inward ) ? { inward: [ entrance.inward[ 0 ], entrance.inward[ 1 ] ] } : {} ),
+					width: entrance.width,
 					motion,
 					pivots: leaves,
 					open: 0,

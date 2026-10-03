@@ -642,6 +642,54 @@ it( 'closes a door the player opened with E once it has stood open five seconds'
 	expect( door.wanted ).toBe( 0 );
 } );
 
+it( 'keeps a locked door shut and says what it needs until the player carries its card, never locking them in, and lifts a card with R', () => {
+	const door = { parcelId: 'p1', role: 'apartment', floor: 14, unit: 'u7', name: 'apartment 1407', center: new THREE.Vector3( 0, 0, -2 ), inward: [ 0, -1 ], open: 0, wanted: 0, motion: { apply: vi.fn() }, pivots: [], width: 1.6 };
+	const feet = new THREE.Vector3( 0, 0, 0.8 );
+	let carried = false;
+	const access = {
+		lockOf: ( target, at ) => ( { scope: 'home:p1/floor:14/u7', place: 'apartment 1407', locked: ! carried && ( at.z - target.center.z ) * target.inward[ 1 ] <= 0 } ),
+		lockedPrompt: ( lock ) => `Locked: ${lock.place} needs an access card`,
+		liftable: () => null
+	};
+	const interactor = new Interactor( { doors: [ door ], crowd: { within: () => [] }, sim: {}, access,
+		controller: { body: { feet }, eye: new THREE.Vector3( 0, 1.7, 0.8 ), look: new THREE.Vector3( 0, -0.2, -1 ).normalize() } } );
+	const locked = interactor.onLocked = vi.fn();
+	expect( interactor.update( 0.1 ) ).toBe( 'Locked: apartment 1407 needs an access card' );
+	expect( interactor.lock ).toMatchObject( { locked: true } );
+	interactor.activate( { timeMin: 0 } );
+	expect( door.wanted ).toBe( 0 );
+	expect( locked ).toHaveBeenCalledExactlyOnceWith( door, expect.objectContaining( { place: 'apartment 1407' } ) );
+	interactor.update( 1 );
+	expect( door.open ).toBe( 0 );
+
+	// With its card the door opens as any door does, and the prompt says where to.
+	carried = true;
+	expect( interactor.update( 0.1 ) ).toBe( 'E  open the door to apartment 1407' );
+	expect( interactor.lock ).toMatchObject( { locked: false } );
+	interactor.activate( { timeMin: 0 } );
+	expect( door.wanted ).toBe( 1 );
+
+	// From inside, no card is needed.
+	carried = false;
+	door.wanted = 0;
+	door.open = 0;
+	feet.set( 0, 0, -3 );
+	const inside = new Interactor( { doors: [ door ], crowd: { within: () => [] }, sim: {}, access,
+		controller: { body: { feet }, eye: new THREE.Vector3( 0, 1.7, -3 ), look: new THREE.Vector3( 0, -0.2, 1 ).normalize() } } );
+	inside.update( 0.1 );
+	inside.activate( { timeMin: 0 } );
+	expect( door.wanted ).toBe( 1 );
+
+	// R on a person carrying a card the player could lift; E still talks.
+	const person = { position: new THREE.Vector3( 0, 0, -1.5 ), type: 'clerk', npcId: 'npc-ada', instance: { name: { given: 'Ada' } } };
+	const pocket = new Interactor( { doors: [], crowd: { within: () => [ person ] }, sim: {},
+		access: { ...access, liftable: () => 'R  lift Ada\'s key card' },
+		controller: { body: { feet: new THREE.Vector3() }, eye: new THREE.Vector3( 0, 1.7, 0 ), look: new THREE.Vector3( 0, -0.27, -1 ).normalize() } } );
+	const lift = pocket.onLift = vi.fn();
+	expect( pocket.update( 0.1 ) ).toBe( 'E  talk to Ada   R  lift Ada\'s key card' );
+	pocket.activate( CLOCK, 'secondary-interact' );
+	expect( lift ).toHaveBeenCalledExactlyOnceWith( person, CLOCK );
+} );
 
 it( 'holds a call as a conversation with nobody here: no body is stopped, turned or sent home, and only one talk at a time', () => {
 	const controller = { body: { feet: new THREE.Vector3() }, eye: new THREE.Vector3( 0, 1.7, 0 ), look: new THREE.Vector3( 0, 0, - 1 ), turnTo: vi.fn() };

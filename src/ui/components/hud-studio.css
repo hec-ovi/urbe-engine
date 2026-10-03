@@ -22,6 +22,10 @@
 .hud .hud-prompt { bottom: auto; top: calc(50% + 46px); max-width: min(460px, calc(100vw - 48px)); padding: 16px 18px; background: linear-gradient(90deg, #05181ce6, #05181cb8); border: 0; border-top: 1px solid #73ecdf70; color: #e6f1ee; font: 13px/1.9 system-ui, sans-serif; white-space: normal; text-align: center; }
 .hud-prompt::before { content: ''; position: absolute; bottom: 100%; left: 50%; height: 20px; width: 1px; background: #73ecdf70; }
 .hud .hud-prompt .keycap { padding: 2px 7px; margin-right: 5px; border-color: #73ecdf85; background: #173c3e; color: #73ecdf; font-size: 11px; }
+.hud .hud-prompt-lock { display: inline-flex; vertical-align: -3px; margin-right: 8px; color: #73ecdf; }
+.hud .hud-prompt-lock .icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.hud .hud-prompt-lock.is-locked { color: #ff6b5e; }
+.hud .is-locked .hud-prompt { border-top-color: #ff6b5e80; }
 .hud .has-target .hud-crosshair { width: 28px; height: 28px; margin: -15px; border: 1px solid #73ecdfb3; background: transparent; transform: rotate(45deg); }
 .hud .has-target .hud-crosshair::after { content: ''; position: absolute; width: 4px; height: 4px; top: 12px; left: 12px; background: #73ecdf; }
 .hud:has(.inspection-layer:not([hidden])) .hud-interaction { visibility: hidden; }

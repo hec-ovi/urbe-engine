@@ -42,7 +42,13 @@ const FACE = 1.55;
  */
 export class Interactor {
 
-	constructor( { crowd, doors, sim, controller, elevators, quests, investigations = null, continuity = null, animations = null, doorColliders = null, interiors = null, typeLabels = null } ) {
+	/**
+	 * @param access optional locks and pockets: `lockOf(door, feet)` (PlayerAccess: null for a door
+	 *   anyone opens, else `{ scope, place, locked }`), `lockedPrompt(lock)`, the line a locked
+	 *   door shows, and `liftable(person)`, the R line for a person whose card the player could
+	 *   lift, or null
+	 */
+	constructor( { crowd, doors, sim, controller, elevators, quests, investigations = null, continuity = null, animations = null, doorColliders = null, interiors = null, typeLabels = null, access = null } ) {
 
 		this.crowd = crowd;
 		this.doors = doors;
@@ -55,6 +61,13 @@ export class Interactor {
 		this.animations = animations;
 		this.doorColliders = doorColliders;
 		this.interiors = interiors;
+		this.access = access;
+		/** The lock of the door aimed at this frame, `{ scope, place, locked }`, or null: the prompt's lock mark. */
+		this.lock = null;
+		/** Heard when E is pressed on a door locked to the player: `( door, lock )`. */
+		this.onLocked = null;
+		/** Heard when R is pressed on a person who carries a card: `( person, clock )`. */
+		this.onLift = null;
 		/** Each NPC type's readable label, which names a person the prompt has no given name for. */
 		this.typeLabels = typeLabels ?? new Map();
 		this.target = null;
@@ -97,6 +110,7 @@ export class Interactor {
 			this.elevators?.panels( feet, DOOR_RANGE ) ?? [],
 			[ ...this.#candidates( 'quests', questState ), ...this.#candidates( 'investigations', questState ) ]
 		);
+		this.lock = this.target?.kind === 'door' ? this.access?.lockOf( this.target.door, feet ) ?? null : null;
 
 		// Page Up and Page Down choose a floor anywhere inside a car; E still
 		// acts on the button under the crosshair.
@@ -107,7 +121,7 @@ export class Interactor {
 			if ( this.controller.input.consume( 'PageDown' ) ) cabin.select( - 1 );
 
 		}
-		return this.target ? prompt( this.target, this.quests, this.typeLabels ) : null;
+		return this.target ? prompt( this.target, this.quests, this.typeLabels, this.lock, this.access ) : null;
 
 	}
 
@@ -160,10 +174,24 @@ export class Interactor {
 			} );
 
 		}
+		if ( bindingAction === 'secondary-interact' && this.target.kind === 'npc' && this.access?.liftable?.( this.target.person ) ) {
+
+			this.onLift?.( this.target.person, clock );
+			return;
+
+		}
 		if ( bindingAction !== 'interact' ) return;
 
 		if ( this.target.kind === 'door' ) {
 
+			// A locked door stays shut and solid to a player without its card; closing is never locked.
+			const lock = this.access?.lockOf( this.target.door, this.controller.body.feet ) ?? null;
+			if ( ! ( this.target.door.wanted > 0.5 ) && lock?.locked ) {
+
+				this.onLocked?.( this.target.door, lock );
+				return;
+
+			}
 			this.target.door.wanted = this.target.door.wanted > 0.5 ? 0 : 1;
 			if ( this.target.door.wanted ) {
 
@@ -575,23 +603,30 @@ function aimAt( eye, look, position, rise ) {
 
 }
 
-/** What the prompt says, always naming the thing it will act on. */
-function prompt( target, quests, typeLabels = new Map() ) {
+/**
+ * What the prompt says, always naming the thing it will act on: a door
+ * locked to the player says what it needs instead, and a person carrying a
+ * card the player could lift adds the R line.
+ */
+function prompt( target, quests, typeLabels = new Map(), lock = null, access = null ) {
 
 	if ( target.kind === 'quest' || target.kind === 'investigation' ) return target.interaction.prompt;
 	if ( target.kind === 'elevator' ) return target.shaft.label( target );
 
 	if ( target.kind === 'door' ) {
 
-		const name = target.door.name;
+		const open = target.door.open > 0.5 || target.door.wanted > 0.5;
+		if ( lock?.locked && ! open ) return access?.lockedPrompt?.( lock ) ?? `Locked: ${lock.place} needs an access card`;
+		const name = lock?.place ?? target.door.name;
 
 		return `E  ${target.door.open > 0.5 ? 'close' : 'open'} the door${name ? ` to ${name}` : ''}`;
 
 	}
 
 	const given = quests?.characterName?.( target.person.npcId )?.given ?? target.person.instance?.name?.given;
+	const lift = access?.liftable?.( target.person ) ?? null;
 
-	return `E  talk to ${given ?? `the ${roleOf( target.person.type, typeLabels )}`}`;
+	return `E  talk to ${given ?? `the ${roleOf( target.person.type, typeLabels )}`}${lift ? `   ${lift}` : ''}`;
 
 }
 
