@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import Ajv2020 from 'ajv/dist/2020.js';
 import schema from './schema/access.schema.json' with { type: 'json' };
 import {
-	AddressBook, PlayerAccess, PlayerItems, Regard, accessLines, cardFor, describeScope, floorLabel, givesCard, grants,
-	notices, parseScope, roomNumber, scopeOfDoor, scopesOf
+	AddressBook, PlayerAccess, PlayerItems, Regard, accessEvents, accessLines, cardFor, describeScope, doorUnit, floorLabel, givesCard, grants,
+	notices, parseScope, questCards, roomNumber, scopeOfDoor, scopesOf
 } from './index.js';
 
 const square = ( x0, z0, x1, z1 ) => [ [ x0, z0 ], [ x1, z0 ], [ x1, z1 ], [ x0, z1 ] ];
@@ -264,6 +264,38 @@ describe( 'accessLines', () => {
 		expect( lines.say( 'prompt-locked', { place: 'apartment 201' } ) ).toBe( 'Locked: apartment 201 needs an access card' );
 		expect( lines.say( 'notice-card', { label: 'Kessler Block 201 key card' } ) ).toBe( 'Added to your inventory: Kessler Block 201 key card.' );
 		expect( () => accessLines( '## label-access\n\n- x' ) ).toThrow( /E_COMPANION_LINES|lack/ );
+
+	} );
+
+} );
+
+describe( 'QuestDoors', () => {
+
+	it( 'completes a story step at a door by its address when the player gets in, and makes a quest card of an item that opens one', () => {
+
+		const addresses = book();
+		const unitOf = ( parcelId, door ) => doorUnit( addresses, parcelId, door );
+		expect( unitOf( 'p-homes', 'Apartment 201' ).scope ).toBe( 'home:p-homes/floor:2/f1-home-1' );
+		expect( unitOf( 'p-office', 'the archive, 302' ).label ).toBe( 'archive 302' );
+		expect( unitOf( 'p-homes', 'the roof' ) ).toBeNull();
+
+		const step = ( stepId, target ) => ( { stepId, target } );
+		const entries = [ { definition: { id: 'q_main' }, runtime: { activeSteps: () => [
+			step( 's_talk', { kind: 'talk', roleId: 'mara' } ),
+			step( 's_in', { kind: 'access', accessPointId: 'kessler_201', credentialItemId: 'kessler_card', door: 'apartment 201', place: { parcelId: 'p-homes', name: 'Kessler Block' }, completionFlag: 'in' } ),
+			step( 's_terminal', { kind: 'access', accessPointId: 'terminal', credentialItemId: 'code', place: { parcelId: 'p-homes', name: 'Kessler Block' }, completionFlag: 'open' } )
+		] } } ];
+		expect( accessEvents( { entries, parcelId: 'p-homes', scope: 'home:p-homes/floor:2/f1-home-1', unitOf } ) ).toEqual( [ {
+			questId: 'q_main', stepId: 's_in',
+			event: { kind: 'accessed', accessPointId: 'kessler_201', credentialItemId: 'kessler_card', place: { parcelId: 'p-homes' } }
+		} ] );
+		// Another dwelling, or the same number in another building, is not the step's door.
+		expect( accessEvents( { entries, parcelId: 'p-homes', scope: 'home:p-homes/floor:1/f1-home-1', unitOf } ) ).toEqual( [] );
+		expect( accessEvents( { entries, parcelId: 'p-office', scope: 'staff:p-office', unitOf } ) ).toEqual( [] );
+
+		const opens = new Map( [ [ 'kessler_card', { parcelId: 'p-homes', door: 'apartment 201' } ], [ 'lost_card', { parcelId: 'p-homes', door: 'apartment 999' } ] ] );
+		expect( questCards( { held: [ { id: 'kessler_card', name: 'Kessler 201 key card' }, { id: 'ledger', name: 'Ledger' }, { id: 'lost_card', name: 'Lost' } ], opens, unitOf } ) )
+			.toEqual( [ { id: 'kessler_card', name: 'Kessler 201 key card', scope: 'home:p-homes/floor:2/f1-home-1' } ] );
 
 	} );
 

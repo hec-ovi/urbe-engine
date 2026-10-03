@@ -3,3 +3,4 @@ export { PlayerAccess, cardFor, describeScope, givesCard, grants, parseScope, sc
 export { PlayerItems, ITEM_KINDS } from './PlayerItems.js';
 export { Regard, notices } from './Regard.js';
 export { accessLines } from './AccessLines.js';
+export { accessEvents, doorUnit, questCards } from './QuestDoors.js';

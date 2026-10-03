@@ -22,7 +22,10 @@ import { Acquaintances, codexEntries, contactCards, inventoryCards } from './Scr
 import { ContactBook } from './contacts/ContactBook.js';
 import { answerOf, contactLines, givesNumber } from './contacts/Calls.js';
 import { PhoneCalls } from './contacts/PhoneCalls.js';
-import { AddressBook, PlayerAccess, PlayerItems, Regard, accessLines, cardFor, describeScope, givesCard, grants, notices, parseScope, scopesOf } from './access/index.js';
+import {
+	AddressBook, PlayerAccess, PlayerItems, Regard, accessEvents, accessLines, cardFor, describeScope, doorUnit, givesCard, grants, notices, parseScope,
+	questCards, scopesOf
+} from './access/index.js';
 import { InvestigationGameplay } from './investigation/index.js';
 import { ScenePlaceResolver, SceneryDirector } from './scenery/index.js';
 import { ObjectiveRouter } from './routes/ObjectiveRouter.js';
@@ -1866,22 +1869,20 @@ export class GameApp {
 
 	/** The quest items the player holds that open a door, with the scope of that door: Quests `opens`, resolved by address. */
 	#questCards() {
-		const held = this.quests?.inventoryView?.() ?? [];
-		const cards = [];
-		for ( const item of held ) {
-			const opens = this.questDoors?.get( item.id );
-			if ( ! opens ) continue;
-			const unit = this.#doorUnit( opens.parcelId, opens.door );
-			if ( unit ) cards.push( { id: item.id, name: item.name, scope: unit.scope } );
-		}
-		return cards;
+		return questCards( { held: this.quests?.inventoryView?.() ?? [], opens: this.questDoors, unitOf: ( parcelId, door ) => doorUnit( this.addresses, parcelId, door ) } );
 	}
 
-	/** The dwelling or private room a building's door address names (`apartment 1407`, `archive 302`, `1407`), or null. */
-	#doorUnit( parcelId, door ) {
-		const words = String( door ?? '' ).trim().toLowerCase().replace( /\s+/g, ' ' );
-		const units = this.addresses?.building( parcelId )?.units ?? [];
-		return units.find( ( unit ) => unit.label.toLowerCase() === words ) ?? this.addresses?.find( words, [ parcelId ] )[ 0 ] ?? null;
+	/**
+	 * The player stepped into a room. Inside a dwelling or private room a
+	 * story asks them to get into (an `access` step at that `door`), they got
+	 * in, by their card or let in by somebody: the step's `accessed` event
+	 * goes to its questline, which still asks for the credential it needs.
+	 */
+	#enteredRoom( room, feet ) {
+		const unit = this.addresses?.at( room.parcelId, [ feet.x, feet.y, feet.z ] )?.unit ?? null;
+		if ( ! unit?.scope ) return;
+		const found = accessEvents( { entries: this.quests?.entries, parcelId: room.parcelId, scope: unit.scope, unitOf: ( parcelId, door ) => doorUnit( this.addresses, parcelId, door ) } );
+		if ( found.length ) this.#routeQuestEvent( found[ 0 ].event, found.map( ( entry ) => entry.questId ) );
 	}
 
 	/** E on a door locked to the player: a notice says what it needs, once a door until they turn away. */
@@ -2756,6 +2757,12 @@ export class GameApp {
 		const room = this.#inside( visible, feet );
 
 		this.standing = room;
+		if ( ( room?.id ?? null ) !== this.roomEntered ) {
+
+			this.roomEntered = room?.id ?? null;
+			if ( room ) this.#enteredRoom( room, feet );
+
+		}
 		const air = room ? roomAir( room ) : this.lights.airColor( this.camera.position );
 		this.#arrive( room ? this.locator.refs( feet.x, feet.z, room.parcelId ).find( ( place ) => place.kind === 'parcel' )?.id ?? null : null );
 

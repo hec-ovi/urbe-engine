@@ -309,7 +309,8 @@ function assertMechanicBindings( catalogs, questIds, assets, assetById ) {
 	const expected = new Map();
 	for ( const definition of catalogs.questlines ) for ( const step of definition.steps ) {
 
-		if ( [ 'rescue', 'access', 'hacking', 'sabotage' ].includes( step.target?.kind ) ) {
+		// An access step at a locked door by its address is the game's lock, with no mission asset.
+		if ( [ 'rescue', 'access', 'hacking', 'sabotage' ].includes( step.target?.kind ) && ! ( step.target.kind === 'access' && step.target.door ) ) {
 
 			expected.set( `${definition.id}\u0000${step.stepId}`, { definition, step } );
 
