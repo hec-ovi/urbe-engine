@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:access:access",
+  "title": "Access state",
+  "description": "What the save keeps of access besides the cards, which the player's inventory carries: the people who caught the player lifting a card and how many steps their regard has come down.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["regard"],
+  "properties": {
+    "regard": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["npcId", "drop", "atMin"],
+        "properties": {
+          "npcId": { "type": "string", "minLength": 1 },
+          "drop": { "type": "integer", "minimum": 1, "maximum": 3 },
+          "atMin": { "type": "number", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

@@ -10,6 +10,7 @@ import savedScenery from '../../game/scenery/schema/saved-scenery.schema.json' w
 import npcState from '../schema/npc-state.schema.json' with { type: 'json' };
 import dialogueMemory from '../schema/dialogue-memory.schema.json' with { type: 'json' };
 import contacts from '../../game/contacts/schema/contacts.schema.json' with { type: 'json' };
+import access from '../../game/access/schema/access.schema.json' with { type: 'json' };
 
 /**
  * Every schema a game descriptor refers to outside its own file, added once to
@@ -17,5 +18,5 @@ import contacts from '../../game/contacts/schema/contacts.schema.json' with { ty
  */
 export const DESCRIPTOR_SCHEMAS = Object.freeze( [
 	npcValues, continuitySave, simulationSave, questValues, questTransit,
-	companionValues, companionState, sceneState, savedScenery, npcState, dialogueMemory, contacts
+	companionValues, companionState, sceneState, savedScenery, npcState, dialogueMemory, contacts, access
 ] );
