@@ -1101,8 +1101,9 @@ export class AutomationProbe {
 	/**
 	 * The established people who live in a building: who, their address and
 	 * the scope of their door, how they take to the player now, what their day
-	 * has them doing, where continuity has their body and their crowd member
-	 * when it stands near the player.
+	 * has them doing and where (`scheduled`), where continuity last had their
+	 * body (`place`, `position`) and their crowd member when it stands near
+	 * the player.
 	 */
 	residents( parcelId ) {
 
@@ -1114,10 +1115,11 @@ export class AutomationProbe {
 			const actor = npcContinuity?.actor( npc.npcId ) ?? null;
 			const member = crowd.memberForNpc?.( npc.npcId ) ?? null;
 			const disposition = regard.adjust( dispositionOf( npc, companion.categoryOf?.( npc.type ) ), npc.npcId );
+			const behavior = sim.behaviorAt( npc.npcId, clock.timeMin );
 			return {
 				npcId: npc.npcId, name: `${npc.name.given} ${npc.name.family}`, type: npc.type, address: home?.address ?? null,
 				unitId: home?.id ?? null, scope: home?.scope ?? null, disposition,
-				activity: sim.behaviorAt( npc.npcId, clock.timeMin )?.activity ?? null,
+				activity: behavior?.activity ?? null, scheduled: behavior?.place ?? null,
 				place: actor?.place ?? null, position: actor?.position ? actor.position.map( ( value ) => round( value ) ) : null,
 				distance: actor?.position ? round( Math.hypot( actor.position[ 0 ] - body.feet.x, actor.position[ 2 ] - body.feet.z ) ) : null,
 				member: member && ! member.retiring ? member.id : null
