@@ -1144,9 +1144,13 @@ export class AutomationProbe {
 		while ( ! shown() && performance.now() - started < timeoutMs ) await frames( 1 );
 		let placed = false;
 		while ( ! ( placed = shown() && this.#standOn( spot, aim ) ) && performance.now() - started < timeoutMs ) await frames( 1 );
+		const floor = { shown: stream.floorShown( unit.parcelId, unit.floor ), failed: stream.floorFailed( unit.parcelId, unit.floor ), open: stream.live.has( unit.parcelId ) };
 		stream.releaseFloor( unit.parcelId );
 		await frames( 2 );
-		return { placed, door: this.door( unitId ), lock: this.game.interactor.lock ? { ...this.game.interactor.lock } : null, prompt: this.game.view.prompt.text ?? null, target: targetOf( this.game.interactor.target ), ms: round( performance.now() - started, 0 ) };
+		return {
+			placed, door: this.door( unitId ), lock: this.game.interactor.lock ? { ...this.game.interactor.lock } : null, prompt: this.game.view.prompt.text ?? null,
+			target: targetOf( this.game.interactor.target ), floor, feet: point( this.game.body.feet ), ms: round( performance.now() - started, 0 )
+		};
 
 	}
 
