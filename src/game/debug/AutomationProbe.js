@@ -1063,6 +1063,21 @@ export class AutomationProbe {
 
 	}
 
+	/** Frames the page draws a second, counted over `seconds` of the wall clock. */
+	async frameRate( { seconds = 10 } = {} ) {
+
+		const started = performance.now();
+		let count = 0;
+		while ( performance.now() - started < seconds * 1000 ) {
+
+			await frames( 1 );
+			count ++;
+
+		}
+		return round( count * 1000 / ( performance.now() - started ), 2 );
+
+	}
+
 	/** The furnished buildings with addresses: `[{ parcelId, name, apartments, rooms, floors }]`, most dwellings first. */
 	buildings() {
 
