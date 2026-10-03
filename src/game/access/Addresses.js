@@ -1,4 +1,3 @@
-import { roomFootprintAnchor, roomFootprintContains } from '../../../../interior/src/core/room-footprint.ts';
 
 /** A point stands on the highest floor whose walking surface is at most this far above it, in metres. */
 const STEP = 0.5;
@@ -15,7 +14,7 @@ const DOOR_WIDTH = [ 0.7, 2.4 ];
  */
 export const PRIVATE_ROOMS = Object.freeze( {
 	office_private: 'staff', executive_office: 'staff', kitchen: 'staff',
-	storage: 'service', mechanical_room: 'service', locker_room: 'service'
+	storage: 'service', mechanical_room: 'service'
 } );
 const SECURITY = /security|server|control|surveillance|vault/;
 /** What a private room is called in an address, by kind, role or scope. */
@@ -127,7 +126,7 @@ export class AddressBook {
 		}
 		floor ??= [ ...building.floors.values() ].sort( ( a, b ) => a.elevation - b.elevation )[ 0 ];
 		if ( ! floor ) return null;
-		const room = floor.rooms.find( ( candidate ) => candidate.polygon?.length >= 3 && roomFootprintContains( candidate, [ x, z ] ) ) ?? null;
+		const room = floor.rooms.find( ( candidate ) => candidate.polygon?.length >= 3 && contains( candidate, [ x, z ] ) ) ?? null;
 		const unit = room ? building.unitOfRoom( floor.index, room ) : null;
 		const kind = room ? roomWord( room ) : null;
 		const label = unit ? unit.label : kind ?? '';
@@ -374,10 +373,11 @@ function roomDoors( room, floor, byId ) {
 function inwardOf( door, room ) {
 
 	const radians = ( door.angleDeg ?? 0 ) * Math.PI / 180;
-	const normal = [ - Math.sin( radians ), Math.cos( radians ) ];
+	// Plus zero: a wall along an axis has a normal of 0, never -0.
+	const normal = [ - Math.sin( radians ) + 0, Math.cos( radians ) + 0 ];
 	const probe = ( sign ) => [ door.position[ 0 ] + normal[ 0 ] * 0.15 * sign, door.position[ 1 ] + normal[ 1 ] * 0.15 * sign ];
-	if ( roomFootprintContains( room, probe( 1 ) ) ) return normal;
-	if ( roomFootprintContains( room, probe( - 1 ) ) ) return [ - normal[ 0 ], - normal[ 1 ] ];
+	if ( contains( room, probe( 1 ) ) ) return normal;
+	if ( contains( room, probe( - 1 ) ) ) return [ - normal[ 0 ], - normal[ 1 ] ];
 	return null;
 
 }
@@ -395,8 +395,47 @@ function doorRecord( floor, elevation, position, inward, width = 1.6 ) {
 /** Rooms in plan order: by where they stand, front to back, left to right, then by id. */
 function planOrder( a, b ) {
 
-	const [ ax, az ] = roomFootprintAnchor( a );
-	const [ bx, bz ] = roomFootprintAnchor( b );
+	const [ ax, az ] = middle( a.polygon );
+	const [ bx, bz ] = middle( b.polygon );
 	return Math.round( az - bz ) || Math.round( ax - bx ) || a.id.localeCompare( b.id );
+
+}
+
+/**
+ * Whether a room's footprint holds a point: inside its outline, its edge
+ * included, and outside every hole in it. Kept here, apart from Interior's
+ * own footprint test, so the server can read addresses with plain Node.
+ */
+function contains( room, point ) {
+
+	if ( ! within( room.polygon, point, true ) ) return false;
+	return ! ( room.holes ?? [] ).some( ( hole ) => within( hole, point, false ) );
+
+}
+
+/** Even-odd point in polygon; a point on an edge counts as `edge`. */
+function within( ring, [ x, z ], edge ) {
+
+	let inside = false;
+	for ( let i = 0, j = ring.length - 1; i < ring.length; j = i ++ ) {
+
+		const [ xi, zi ] = ring[ i ];
+		const [ xj, zj ] = ring[ j ];
+		const cross = ( xj - xi ) * ( z - zi ) - ( zj - zi ) * ( x - xi );
+		const onSegment = Math.abs( cross ) < 1e-9 && x >= Math.min( xi, xj ) - 1e-9 && x <= Math.max( xi, xj ) + 1e-9
+			&& z >= Math.min( zi, zj ) - 1e-9 && z <= Math.max( zi, zj ) + 1e-9;
+		if ( onSegment ) return edge;
+		if ( ( zi > z ) !== ( zj > z ) && x < ( xj - xi ) * ( z - zi ) / ( zj - zi ) + xi ) inside = ! inside;
+
+	}
+	return inside;
+
+}
+
+/** The mean of a ring's points. */
+function middle( ring = [] ) {
+
+	if ( ! ring.length ) return [ 0, 0 ];
+	return ring.reduce( ( sum, [ x, z ] ) => [ sum[ 0 ] + x / ring.length, sum[ 1 ] + z / ring.length ], [ 0, 0 ] );
 
 }

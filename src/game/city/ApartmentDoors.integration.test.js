@@ -179,6 +179,50 @@ describe( 'private apartment doors through streaming, interaction and physics', 
 
 	} );
 
+	it( 'stands a door the room\'s scope locks in a private room\'s open doorway, shut and solid until opened, then walked through', async () => {
+
+		const modules = await apartmentModules();
+		const storage = { id: 'store', kind: 'storage', polygon: ROOMS[ 1 ].polygon, doors: ROOMS[ 1 ].doors };
+		const interior = {
+			building: { tier: 'rich', floors: [ { index: 1, layout: 'middle', elevation: 4.5 } ] },
+			layouts: { middle: { floor: { kind: 'office', elevation: 0, ceilingElevation: 3, rooms: [ ROOMS[ 0 ], storage ] }, placements: [] } }
+		};
+		const [ record ] = buildingFloors( 'p', interior );
+		expect( record.roomEntrances.map( ( entrance ) => [ entrance.role, entrance.scope, entrance.label, entrance.height ] ) )
+			.toEqual( [ [ 'room', 'service:p', 'storage room 101', 2.5 ] ] );
+		const physics = await Physics.create();
+
+		try {
+
+			physics.addTrimesh( new THREE.PlaneGeometry( 30, 30 ).rotateX( - Math.PI / 2 ).translate( 0, record.elevation, 0 ) );
+			const registry = new ApartmentDoors( physics );
+			const group = buildApartmentDoors( record, modules );
+			group.updateMatrixWorld( true );
+			registry.show( record.id, group.userData.apartmentDoors );
+			const [ door ] = registry.doors;
+			expect( door ).toMatchObject( { role: 'room', scope: 'service:p', name: 'storage room 101', inward: [ 0, 1 ] } );
+
+			const inward = new THREE.Vector3( 0, 0, 1 );
+			const start = door.center.clone().addScaledVector( inward, - 1.1 ).add( new THREE.Vector3( 0, 0.02, 0 ) );
+			const body = new PlayerBody( physics, start );
+			const interactor = controls( registry, new DoorColliders( physics, [] ), start, inward );
+			const walk = () => walkThrough( physics, body, start, inward, door, 100 );
+			expect( walk() ).toBeLessThan( - 0.2 );
+			expect( interactor.update( 0, null ) ).toMatch( /open.*storage room 101/ );
+			interactor.activate( { timeMin: 0 } );
+			interactor.update( FULL_RUN, null );
+			physics.step( STEP );
+			expect( walk() ).toBeGreaterThan( 0.5 );
+			registry.hide( record.id );
+
+		} finally {
+
+			physics.world.free();
+
+		}
+
+	}, 60_000 );
+
 	it( 'refuses an entrance that is not a pair of pocket leaves', () => {
 
 		const [ entrance ] = apartmentEntrances( ROOMS, 1, { 'bay:-2.000:0.000': 1 } );
@@ -253,7 +297,8 @@ describe( 'private apartment doors through streaming, interaction and physics', 
 				const colliders = new DoorColliders( physics, [] );
 				const body = new PlayerBody( physics, new THREE.Vector3( 0, record.elevation + 0.02, 0 ) );
 
-				for ( const [ index, door ] of registry.doors.entries() ) {
+				// The numbered entrances, in the order Interior publishes them; the floor's private rooms stand doors of their own after them.
+				for ( const [ index, door ] of registry.doors.filter( ( one ) => one.role === 'apartment' ).entries() ) {
 
 					const published = record.apartmentEntrances[ index ];
 					const inward = new THREE.Vector3( published.inward[ 0 ], 0, published.inward[ 1 ] );

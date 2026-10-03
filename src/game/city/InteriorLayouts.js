@@ -1,3 +1,5 @@
+import { roomEntrances } from './RoomDoors.js';
+
 /**
  * One furnished building's floors, from its published layouts.
  *
@@ -18,11 +20,15 @@ export function buildingFloors( parcelId, { building, layouts } ) {
 
 	if ( ! building?.floors?.length ) throw layoutError( `${parcelId} publishes no floors` );
 
-	return [ ...building.floors ]
+	const records = [ ...building.floors ]
 		.sort( ( a, b ) => a.index - b.index )
 		.map( ( entry ) => floorOf( parcelId, entry,
 			Object.hasOwn( building.layouts ?? layouts ?? {}, entry.layout ) && Object.hasOwn( layouts ?? {}, entry.layout )
 				? layouts[ entry.layout ] : null ) );
+	// The doors the engine stands in its private rooms' doorways, per floor, derived from the same layouts.
+	const rooms = roomEntrances( parcelId, { building, layouts } );
+	for ( const record of records ) record.roomEntrances = rooms.get( record.floor ) ?? [];
+	return records;
 
 }
 

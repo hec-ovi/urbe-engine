@@ -6,7 +6,7 @@
  * - `home:<parcel>/<home>`: one dwelling's entrance (`floor:<i>/<unit>`, the simulation's `home.apartment.id`);
  * - `homes:<parcel>`: every dwelling's entrance in that building, a building master card;
  * - `staff:<parcel>`: its offices, executive offices, kitchens behind the counter and archives;
- * - `service:<parcel>`: its storage, plant and locker rooms;
+ * - `service:<parcel>`: its storage and plant rooms;
  * - `security:<parcel>`: its security, server and control rooms.
  *
  * Lobbies, galleries, shops, bars, receptions, cafés, corridors, open
@@ -202,7 +202,7 @@ export class PlayerAccess {
 
 		const scope = scopeOfDoor( door );
 		if ( ! scope ) return null;
-		const place = door.place ?? describeScope( scope, this.book )?.place ?? door.name ?? 'this door';
+		const place = door.place ?? door.name ?? describeScope( scope, this.book )?.place ?? 'this door';
 		const inside = Boolean( feet && door.inward && door.center &&
 			( feet.x - door.center.x ) * door.inward[ 0 ] + ( feet.z - door.center.z ) * door.inward[ 1 ] > 0 );
 		return { scope, place, locked: ! inside && ! this.holds( scope ) };

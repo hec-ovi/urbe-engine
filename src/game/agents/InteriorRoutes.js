@@ -1,3 +1,5 @@
+import { roomEntrances } from '../city/RoomDoors.js';
+
 /** A point stands on the highest floor whose walking surface is at most this far above it, in metres. */
 const STEP = 0.5;
 /** Where a body treads a flight: across its width, and how far before its foot and past its top it steps on and off. */
@@ -201,8 +203,18 @@ function walkable( { npc, interior } ) {
 		} );
 
 	}
+	// The doors the engine stands in private rooms' doorways are gates too: a walker opens them as an apartment's.
+	const rooms = new Map();
+	// Only where the doors stand matters to a walk, not whose they are.
+	for ( const [ index, entrances ] of roomEntrances( interior.building.buildingId ?? 'building', interior ) ) rooms.set( index, entrances );
+	const roomGates = [];
+	for ( const floor of floors ) for ( const entrance of rooms.get( floor.index ) ?? [] ) {
+
+		roomGates.push( { floor: floor.index, y: floor.elevation, position: entrance.position, inward: entrance.inward, width: entrance.width } );
+
+	}
 	return {
-		nav, levels, shafts, doors,
+		nav, levels, shafts, doors: [ ...doors, ...roomGates ],
 		flights: ( connector ) => stairWalk( connector, levels, layoutOf ),
 		plan: circulation( nav, floors, levels, layoutOf, doors )
 	};

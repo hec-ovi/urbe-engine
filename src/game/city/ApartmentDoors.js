@@ -153,7 +153,8 @@ export function buildApartmentDoors( record, modules, { fills = new Map(), share
 
 	try {
 
-		for ( const entrance of record.apartmentEntrances ?? [] ) {
+		// Apartment entrances as Interior publishes them, then the doors the engine stands in private rooms' doorways.
+		for ( const entrance of [ ...( record.apartmentEntrances ?? [] ), ...( record.roomEntrances ?? [] ) ] ) {
 
 			const parts = new THREE.Group();
 			let channel = null;
@@ -182,15 +183,16 @@ export function buildApartmentDoors( record, modules, { fills = new Map(), share
 
 				for ( const part of entrance.fixed ) parts.add( mount( part, record.elevation, modules, channel ) );
 
+				const room = entrance.role === 'room';
 				doors.push( {
 					id: `${record.id}:${entrance.id}`,
 					parcelId: record.parcelId,
 					floor: record.floor,
-					role: 'apartment',
-					kind: 'apartment',
-					unit: entrance.unit,
+					role: entrance.role,
+					kind: entrance.role,
+					...( room ? { scope: entrance.scope } : { unit: entrance.unit } ),
 					number: entrance.number,
-					name: `apartment ${entrance.number}`,
+					name: room ? entrance.label : `apartment ${entrance.number}`,
 					corridorRoom: entrance.corridorRoom,
 					privateRoom: entrance.privateRoom,
 					// At floor level: the Interactor aims at a door's handle height above it.
@@ -235,7 +237,7 @@ export function buildApartmentDoors( record, modules, { fills = new Map(), share
 /** An entrance as Interior's contract publishes it: a pair of pocket leaves in a doorway of a door's size. */
 function validate( entrance ) {
 
-	if ( entrance.role !== 'apartment' ) throw apartmentError( `${entrance.id} is not an apartment entrance` );
+	if ( entrance.role !== 'apartment' && entrance.role !== 'room' ) throw apartmentError( `${entrance.id} is not an apartment or room entrance` );
 	if ( entrance.motion?.kind !== 'pocket' ) throw apartmentError( `${entrance.id} does not publish pocket leaves` );
 	if ( ! within( entrance.width, WIDTH ) || ! within( entrance.height, HEIGHT ) ) throw apartmentError( `${entrance.id} is not a door's size` );
 	if ( ! Array.isArray( entrance.leaves ) || entrance.leaves.length !== 2 || entrance.leaves.some( ( leaf ) => ! leaf ) ) {

@@ -313,7 +313,7 @@ export function placedModules( buildings ) {
 
 				for ( const placement of floorPlacements( floor ) ) if ( placement.module ) ids.add( placement.module );
 				// Entrances are published beside the layout, per floor, never as placements.
-				for ( const entrance of floor.apartmentEntrances ) {
+				for ( const entrance of [ ...floor.apartmentEntrances, ...( floor.roomEntrances ?? [] ) ] ) {
 
 					for ( const part of [ ...( entrance.leaves ?? [] ), ...( entrance.fixed ?? [] ) ] ) if ( part?.module ) ids.add( part.module );
 
