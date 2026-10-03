@@ -70,11 +70,11 @@ export class TalkClient {
 	 * @param options.task what this person is doing for the player now, CompanionGameplay.taskOf
 	 * @param options.call `{ caller: 'player' }` when the player talks to this person on the phone
 	 */
-	async *stream( conversation, line, timeMin, quests = [], { signal, guide, offers, events, look, here, people, task, call } = {} ) {
+	async *stream( conversation, line, timeMin, quests = [], { signal, guide, offers, events, look, here, people, task, call, addresses } = {} ) {
 
 		await this.#handOver();
 		const prior = this.#prior.npcId === conversation.instance.npcId ? this.#prior.lines : [];
-		const response = await this.#post( { conversation, line, timeMin, quests, guide, offers, events, look, here, people, task, call, prior }, signal );
+		const response = await this.#post( { conversation, line, timeMin, quests, guide, offers, events, look, here, people, task, call, addresses, prior }, signal );
 		const reader = response.body.getReader();
 		const decoder = new TextDecoder();
 		let buffer = '';
@@ -163,7 +163,7 @@ export class TalkClient {
 
 	}
 
-	async #post( { conversation, line, timeMin, quests, guide, offers, events, look, here, people, task, call, prior }, signal ) {
+	async #post( { conversation, line, timeMin, quests, guide, offers, events, look, here, people, task, call, addresses, prior }, signal ) {
 
 		const response = await fetch( '/api/talk/stream', {
 			method: 'POST',
@@ -172,7 +172,7 @@ export class TalkClient {
 			body: JSON.stringify( {
 				out: this.out, npc: conversation.instance, behavior: conversation.behavior, line, timeMin, quests,
 				...( guide ? { guide } : {} ), ...( offers ? { offers } : {} ), ...( events?.length ? { events } : {} ),
-				...( look ? { look } : {} ), ...( here ? { here } : {} ), ...( people ? { people } : {} ), ...( task ? { task } : {} ), ...( call ? { call } : {} ), ...( prior.length ? { prior } : {} )
+				...( look ? { look } : {} ), ...( here ? { here } : {} ), ...( people ? { people } : {} ), ...( task ? { task } : {} ), ...( call ? { call } : {} ), ...( addresses ? { addresses } : {} ), ...( prior.length ? { prior } : {} )
 			} )
 		} );
 		if ( response.ok ) return response;

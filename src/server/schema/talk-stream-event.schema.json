@@ -43,6 +43,17 @@
     {
       "type": "object",
       "additionalProperties": false,
+      "required": ["type", "kind", "itemId", "name"],
+      "properties": {
+        "type": { "const": "offer" },
+        "kind": { "const": "give" },
+        "itemId": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
       "required": ["type", "kind", "placeId", "name"],
       "properties": {
         "type": { "const": "offer" },

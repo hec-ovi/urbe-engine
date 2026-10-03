@@ -33,6 +33,24 @@
           "required": ["name"],
           "properties": { "name": { "type": "string", "minLength": 1 } }
         },
+        "give": {
+          "description": "Access cards the person may hand the player a copy of: each by its item id and what the player reads it as.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["items"],
+          "properties": {
+            "items": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["itemId", "name"],
+                "properties": { "itemId": { "$ref": "#/$defs/id" }, "name": { "type": "string", "minLength": 1, "maxLength": 400 } }
+              }
+            }
+          }
+        },
         "places": {
           "type": "array",
           "items": {
@@ -106,6 +124,31 @@
       "required": ["caller"],
       "properties": { "caller": { "const": "player" } }
     },
+    "addresses": {
+      "description": "Where the person lives and works by address, where inside a furnished building they stand now, the access cards they carry and how often they caught the player lifting one (Quests DialogAddresses).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "home": { "$ref": "#/$defs/address" },
+        "work": { "$ref": "#/$defs/address" },
+        "here": { "$ref": "#/$defs/address" },
+        "access": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["parcelId", "opens"],
+            "properties": {
+              "parcelId": { "$ref": "#/$defs/id" },
+              "opens": { "$ref": "#/$defs/words" },
+              "tie": { "enum": ["home", "work"] }
+            }
+          }
+        },
+        "caught": { "type": "integer", "minimum": 0 }
+      }
+    },
     "task": {
       "description": "What the person is doing for the player now: following, leading to a place, or an errand the player asked for.",
       "type": "object",
@@ -166,6 +209,18 @@
   },
   "$defs": {
     "id": { "type": "string", "minLength": 1 },
+    "address": {
+      "description": "A place by its address: the building, the floor as its numbers count it (0 the ground floor), and the dwelling or private room and the kind of room on it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parcelId"],
+      "properties": {
+        "parcelId": { "$ref": "#/$defs/id" },
+        "floor": { "type": "integer" },
+        "unit": { "$ref": "#/$defs/words" },
+        "room": { "$ref": "#/$defs/words" }
+      }
+    },
     "words": { "type": "string", "minLength": 1, "maxLength": 200 },
     "knownPerson": {
       "type": "object",
