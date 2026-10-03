@@ -1930,7 +1930,8 @@ export class GameApp {
 
 	/** A building as an address names it: its own name, else what it is and the street it stands on. */
 	#buildingNaming( atlas, parcelId ) {
-		const parcel = this.locator?.parcelById?.get( parcelId ) ?? atlas.parcels.find( ( entry ) => entry.id === parcelId ) ?? null;
+		this.atlasParcels ??= new Map( atlas.parcels.map( ( entry ) => [ entry.id, entry ] ) );
+		const parcel = this.atlasParcels.get( parcelId ) ?? null;
 		const name = this.venues?.places?.get( parcelId )?.name ?? parcel?.name ?? null;
 		const word = VENUES[ parcel?.type ]?.word ?? null;
 		const [ x, z ] = parcel?.access?.point ?? centroidOf( parcel?.ring ?? parcel?.polygon ?? [] ) ?? [ null, null ];
