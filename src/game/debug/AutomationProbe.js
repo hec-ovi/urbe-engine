@@ -1140,11 +1140,23 @@ export class AutomationProbe {
 		const stream = this.game.stream;
 		const shown = () => stream.floorShown( unit.parcelId, unit.floor ) && this.#unitDoor( unit );
 		if ( ! shown() ) await this.visit( { kind: 'parcel', id: unit.parcelId }, { timeoutMs: Math.min( 30000, timeoutMs ) } );
-		stream.requestFloor( unit.parcelId, unit.floor );
-		while ( ! shown() && performance.now() - started < timeoutMs ) await frames( 1 );
+		// An idle lift lets its building's floor request go every frame; the probe holds this one while it waits.
+		const release = stream.releaseFloor;
+		stream.releaseFloor = ( parcelId ) => parcelId === unit.parcelId ? undefined : release.call( stream, parcelId );
 		let placed = false;
-		while ( ! ( placed = shown() && this.#standOn( spot, aim ) ) && performance.now() - started < timeoutMs ) await frames( 1 );
-		const floor = { shown: stream.floorShown( unit.parcelId, unit.floor ), failed: stream.floorFailed( unit.parcelId, unit.floor ), open: stream.live.has( unit.parcelId ) };
+		let floor;
+		try {
+
+			stream.requestFloor( unit.parcelId, unit.floor );
+			while ( ! shown() && performance.now() - started < timeoutMs ) await frames( 1 );
+			while ( ! ( placed = shown() && this.#standOn( spot, aim ) ) && performance.now() - started < timeoutMs ) await frames( 1 );
+			floor = { shown: stream.floorShown( unit.parcelId, unit.floor ), failed: stream.floorFailed( unit.parcelId, unit.floor ), open: stream.live.has( unit.parcelId ) };
+
+		} finally {
+
+			stream.releaseFloor = release;
+
+		}
 		stream.releaseFloor( unit.parcelId );
 		await frames( 2 );
 		return {
