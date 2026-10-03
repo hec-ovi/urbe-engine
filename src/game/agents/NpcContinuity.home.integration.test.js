@@ -7,6 +7,7 @@ import { InteriorRoutes } from './InteriorRoutes.js';
 import { NpcContinuity } from './NpcContinuity.js';
 import { WalkRoutes } from './WalkRoutes.js';
 import { roomAt, roomsOf, streetDoor, walls } from './interior-walls.test-fixtures.js';
+import { AddressBook } from '../access/Addresses.js';
 
 const MON_9 = 9 * 60;
 /** A frame, seconds. */
@@ -53,6 +54,42 @@ describe( 'a person walking home through a real building', () => {
 		for ( const point of riding ) expect( roomAt( roomsOf( tower.interior, 0 ), point ) ).toMatch( /^elev/ );
 		expect( game.calls.doors ).toEqual( expect.arrayContaining( [ home.apartment.door ] ) );
 		expect( game.closedInside ).toBe( 0 );
+
+	} );
+
+	it( 'leads the player to a home by its address: up the lift with them to the public side of its numbered door, never through it', () => {
+
+		// The address the talk names, resolved by the building's own numbering to its entry door.
+		const book = new AddressBook( { buildings: new Map( [ [ 'p_r1', { interior: tower.interior } ] ] ), nameOf: () => ( { name: 'the tower' } ) } );
+		const unit = book.building( 'p_r1' ).units.find( ( entry ) => entry.kind === 'apartment' && entry.floor === 2 );
+		expect( unit.address ).toMatch( /^the tower, floor \d+, apartment \d{3,4}$/ );
+		const [ door ] = unit.doors;
+		const game = setup();
+		const npc = game.held( 'street' );
+		game.continuity.startLead( {
+			npcId: npc.npcId, timeMin: MON_9, destination: { kind: 'parcel', id: 'p_r1' },
+			target: { position: door.front, parcelId: 'p_r1', floor: unit.floor }
+		} );
+		const seen = [];
+		let player = [ ...game.continuity.actor( npc.npcId ).position ];
+		for ( let step = 0; step < 6000 && game.continuity.follow?.phase !== 'arrived'; step ++ ) {
+
+			game.continuity.updateFollow( { timeMin: MON_9 + step * FRAME / 60, deltaSeconds: FRAME, playerPosition: player } );
+			const at = [ ...game.continuity.actor( npc.npcId ).position ];
+			seen.push( at );
+			// The player keeps a step behind the leader, in the car beside them as they ride.
+			player = [ at[ 0 ] - 0.5, at[ 1 ], at[ 2 ] - 0.5 ];
+
+		}
+		expect( game.continuity.follow?.phase ).toBe( 'arrived' );
+		const end = seen.at( - 1 );
+		expect( Math.hypot( end[ 0 ] - door.front[ 0 ], end[ 2 ] - door.front[ 2 ] ) ).toBeLessThan( 1 );
+		expect( end[ 1 ] ).toBeCloseTo( door.front[ 1 ], 3 );
+		expect( game.calls.ride ).toContain( 'call' );
+		expect( game.calls.ride.at( - 1 ) ).toBe( 'done' );
+		walls( tower.interior, seen, `to ${unit.label}` );
+		// Its own door stays shut to the walk: the leader stops on the corridor side.
+		expect( game.calls.doors ).not.toEqual( expect.arrayContaining( [ door.at ] ) );
 
 	} );
 
