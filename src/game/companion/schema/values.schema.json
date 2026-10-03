@@ -13,7 +13,7 @@
       "maxItems": 3
     },
     "place": {
-      "description": "A place a companion can lead to: a parcel, or a stop or station as its stop; a street by its StreetNames id, a person by npcId, or a spot inside a building (lift:<id>, stairs:<id>, room:<id>, floor:<index>).",
+      "description": "A place a companion can lead to: a parcel, or a stop or station as its stop; a street by its StreetNames id, a person by npcId, or a spot inside a building (lift:<id>, stairs:<id>, room:<id>, floor:<index>, or unit:<address id>, the entry door of a dwelling or private room by its address).",
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "id"],
@@ -51,14 +51,16 @@
         },
         "relation": { "$ref": "#/$defs/relation" },
         "target": {
-          "description": "Where inside the place the person takes the player (an apartment door, a work spot, a lift landing, a room, a floor, a street's pavement), or the person they take them to.",
+          "description": "Where inside the place the person takes the player (an apartment door, a work spot, a lift landing, a room, a floor, a street's pavement), or the person they take them to. At an entry door by address, `door` is the door's centre and `scope` the access it needs: a leader holding it opens the door on arrival.",
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "position": { "$ref": "#/$defs/vec3" },
             "parcelId": { "$ref": "#/$defs/id" },
             "floor": { "type": "integer" },
-            "npcId": { "$ref": "#/$defs/id" }
+            "npcId": { "$ref": "#/$defs/id" },
+            "door": { "$ref": "#/$defs/vec3" },
+            "scope": { "$ref": "#/$defs/id" }
           }
         },
         "questId": { "$ref": "#/$defs/id" },

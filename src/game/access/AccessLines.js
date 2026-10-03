@@ -3,7 +3,7 @@ import { CompanionLines } from '../companion/CompanionLines.js';
 
 /** Every key the access lines hold. */
 const KEYS = [
-	'label-access', 'accept-card', 'refuse-card-hostile', 'refuse-card-wary', 'refuse-card-neutral', 'refuse-card-unavailable',
+	'label-access', 'ask-home', 'ask-staff', 'ask-service', 'ask-security', 'ask-homes', 'accept-card', 'refuse-card-hostile', 'refuse-card-wary', 'refuse-card-neutral', 'refuse-card-unavailable',
 	'notice-card', 'notice-lifted', 'notice-caught', 'caught', 'prompt-locked', 'prompt-lift'
 ];
 

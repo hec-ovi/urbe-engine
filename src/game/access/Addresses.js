@@ -25,7 +25,7 @@ const ROOM_WORDS = Object.freeze( {
 } );
 /** What a room people share is called where somebody stands. */
 const SHARED_WORDS = Object.freeze( {
-	elevator_lobby: 'lift lobby', office_open: 'open office', dining_area: 'dining room', counter_area: 'counter',
+	elevator_lobby: 'lift lobby', office_open: 'open office', dining_area: 'dining room', counter_area: 'counter', living: 'living room',
 	sales_floor: 'shop floor', studio_main: 'studio', gym_floor: 'gym', terrace_open: 'terrace', parking_area: 'car park'
 } );
 

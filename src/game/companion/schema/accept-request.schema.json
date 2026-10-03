@@ -9,6 +9,7 @@
     "offerId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
     "timeMin": { "$ref": "urn:urbe:engine:companion:values#/$defs/time" },
     "playerPlaces": { "$ref": "urn:urbe:engine:companion:values#/$defs/playerPlaces" },
-    "willing": { "description": "The person also decides by their disposition, as when no model answers for them.", "type": "boolean" }
+    "willing": { "description": "The person also decides by their disposition, as when no model answers for them.", "type": "boolean" },
+    "line": { "description": "The player's typed line, whose addresses join the places an offer may name.", "type": "string" }
   }
 }

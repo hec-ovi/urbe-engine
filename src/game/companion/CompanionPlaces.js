@@ -9,7 +9,7 @@ const MIN_LEAD = 10;
 const MAX_PLACES = 4;
 const MAX_TALK_PLACES = 16;
 /** Most of each wider kind a talk hears of: spots in the building, people, venues, stops and streets. */
-const MAX_OF_KIND = { spot: 5, person: 4, venue: 5, stop: 2, street: 4 };
+const MAX_OF_KIND = { spot: 5, unit: 4, person: 4, venue: 5, stop: 2, street: 4 };
 /** How far off, straight, a venue, stop or street may lie to be one a talk hears of. */
 const NEAR = 450;
 /** Open quest places first, then staged scenes, then the person's own life, then what a talk may also ask for. */
@@ -37,9 +37,12 @@ export class CompanionPlaces {
 	 *   `{ position, parcelId, floor }` inside their workplace, or null
 	 * @param streets optional Quests StreetNames over the city's streets
 	 * @param people optional `(npc) => [{ npcId, name, position }]`, the people this person knows whose bodies are placed now
+	 * @param addresses optional AddressBook: a person's home and work go by their address, and a
+	 *   talk's line may name a dwelling or private room by its number
 	 */
-	constructor( { atlas, places, routes, lines, inside = null, streets = null, people = null } ) {
+	constructor( { atlas, places, routes, lines, inside = null, streets = null, people = null, addresses = null } ) {
 
+		this.addresses = addresses;
 		this.routes = routes;
 		this.lines = lines;
 		this.inside = inside;
@@ -87,7 +90,7 @@ export class CompanionPlaces {
 	 * @param scenes staged scenery places `{ place, name, relation: 'scene', notes? }`
 	 * @returns `[{ place, name, offeredAs?, relation, distance, questId?, stepId?, notes? }]`
 	 */
-	destinations( { npc, from, playerPlaces, quests = [], scenes = [], wide = false, here = null } ) {
+	destinations( { npc, from, playerPlaces, quests = [], scenes = [], wide = false, here = null, line = '' } ) {
 
 		const candidates = new Map();
 		const add = ( place, relation, extra = {} ) => {
@@ -105,12 +108,15 @@ export class CompanionPlaces {
 		if ( npc.job ) {
 
 			const spot = this.inside?.workSpot?.( npc ) ?? null;
-			add( { kind: 'parcel', id: npc.job.parcelId }, 'work', spot ? { target: spot } : {} );
+			const work = spot ? this.addresses?.work?.( npc ) ?? null : null;
+			add( { kind: 'parcel', id: npc.job.parcelId }, 'work', spot ? { target: spot, ...( work?.label ? { name: work.address } : {} ) } : {} );
 
 		}
 		if ( npc.transitJob?.place.kind === 'stop' ) add( { kind: 'stop', id: npc.transitJob.place.id }, 'work' );
 		const door = this.#apartmentDoor( npc );
-		add( { kind: 'parcel', id: npc.home.parcelId }, 'home', door ? { target: door } : {} );
+		// Home by its address when the person lives in a numbered dwelling: the leader takes the player to its door.
+		const home = door ? this.addresses?.home?.( npc ) ?? null : null;
+		add( { kind: 'parcel', id: npc.home.parcelId }, 'home', door ? { target: door, ...( home ? { name: home.address } : {} ) } : {} );
 		for ( const entry of npc.routine ) {
 
 			if ( ( entry.activity === 'leisure' || entry.activity === 'shopping' ) && entry.place.kind === 'parcel' ) add( entry.place, 'haunt' );
@@ -131,7 +137,7 @@ export class CompanionPlaces {
 			found.push( { ...candidate, name, distance, point: bearing( from, position ), metres: Math.round( distance / 10 ) * 10 } );
 
 		}
-		if ( wide ) found.push( ...this.#wider( npc, from, here, new Set( found.map( ( entry ) => keyOf( entry.place ) ) ) ) );
+		if ( wide ) found.push( ...this.#wider( npc, from, here, new Set( found.map( ( entry ) => keyOf( entry.place ) ) ), line ) );
 		found.sort( ( a, b ) => RANK[ a.relation ] - RANK[ b.relation ] || a.distance - b.distance || keyOf( a.place ).localeCompare( keyOf( b.place ) ) );
 		const offered = [];
 		const heard = new Set();
@@ -164,11 +170,12 @@ export class CompanionPlaces {
 	 * they know whose bodies are placed; and nearby venues, stops and streets,
 	 * each nearest first and only a few of a kind.
 	 */
-	#wider( npc, from, here, taken ) {
+	#wider( npc, from, here, taken, line = '' ) {
 
 		const out = [];
 		const plan = here?.parcelId ? this.inside?.plan?.( here.parcelId ) ?? null : null;
 		if ( plan ) out.push( ...this.#spots( plan, here, from ) );
+		out.push( ...this.#units( npc, from, here, line ).slice( 0, MAX_OF_KIND.unit ) );
 		for ( const person of ( this.people?.( npc ) ?? [] ).slice( 0, MAX_OF_KIND.person ) ) {
 
 			out.push( { place: { kind: 'person', id: person.npcId }, name: person.name, relation: 'person', target: { npcId: person.npcId }, distance: flat( from, person.position ) } );
@@ -234,6 +241,30 @@ export class CompanionPlaces {
 
 	}
 
+	/**
+	 * The dwellings and private rooms the player's line names by number, in
+	 * the building the person stands in, their home's and their work's, each
+	 * by its address and led to the public side of its entry door. The
+	 * person's own home is their home place already.
+	 */
+	#units( npc, from, here, line ) {
+
+		if ( ! this.addresses || ! line ) return [];
+		const parcels = [ ...new Set( [ here?.parcelId, npc.home?.parcelId, npc.job?.parcelId ].filter( Boolean ) ) ];
+		const own = npc.home?.apartment ? `home:${npc.home.parcelId}/${npc.home.apartment.id}` : null;
+		return this.addresses.find( line, parcels ).filter( ( unit ) => unit.scope !== own && unit.doors?.length ).map( ( unit ) => {
+
+			const door = unit.doors[ 0 ];
+			return {
+				place: { kind: 'spot', id: `unit:${unit.id}` }, name: unit.address, relation: 'spot',
+				target: { position: [ ...door.front ], parcelId: unit.parcelId, floor: unit.floor, door: [ ...door.at ], scope: unit.scope },
+				distance: flat( from, door.front )
+			};
+
+		} );
+
+	}
+
 	/** The nearest point of a street's pavement to the person, on the walk graph, and how far off it is. */
 	#onStreet( street, from ) {
 
@@ -262,7 +293,10 @@ export class CompanionPlaces {
 		const apartment = npc.home?.apartment;
 		const plan = apartment ? this.inside?.plan?.( npc.home.parcelId ) ?? null : null;
 		const door = plan?.apartments.find( ( entry ) => entry.floor === apartment.floor && ( apartment.number === undefined || entry.number === apartment.number ) );
-		return door ? { position: [ ...door.front ], parcelId: npc.home.parcelId, floor: apartment.floor } : null;
+		return door ? {
+			position: [ ...door.front ], parcelId: npc.home.parcelId, floor: apartment.floor,
+			door: [ ...door.door ], scope: `home:${npc.home.parcelId}/${apartment.id}`
+		} : null;
 
 	}
 

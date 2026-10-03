@@ -6,6 +6,21 @@ import { stubCanvas } from '../ui/test-helpers/canvas.js';
 import { GameApp } from './GameApp.js';
 import { Interactor } from './player/Interactor.js';
 import { replyEvents, talkError, talkStream } from './talk/talk.test-fixtures.js';
+import { AddressBook } from './access/Addresses.js';
+
+const square = ( x0, z0, x1, z1 ) => [ [ x0, z0 ], [ x1, z0 ], [ x1, z1 ], [ x0, z1 ] ];
+/** A home block's fourteenth floor: apartment 1407 off its corridor. */
+const HOME_BLOCK = {
+	interior: {
+		building: { floors: [ { index: 14, layout: 'middle', elevation: 56, openings: {}, apartmentEntrances: [
+			{ unit: 'f14-home-7', number: '1407', position: [ 5, 2 ], inward: [ 0, 1 ], width: 1.6 }
+		] } ] },
+		layouts: { middle: { floor: { kind: 'apartment', rooms: [
+			{ id: 'f14-corridor', kind: 'corridor', polygon: square( 0, 0, 20, 2 ), doors: [] },
+			{ id: 'f14-r1', kind: 'living', unit: 'f14-home-7', polygon: square( 0, 2, 10, 10 ), doors: [] }
+		] } } }
+	}
+};
 
 describe( 'playable game navigation', () => {
 
@@ -139,6 +154,62 @@ describe( 'playable game navigation', () => {
 		await vi.waitFor( () => expect( within( app.view.dialog.transcript ).getByText( /^(I don't hand my number to strangers\.|I don't know you\. No\.)$/ ) ).toBeTruthy() );
 		expect( app.contacts.has( 'npc-kip' ) ).toBe( false );
 		expect( screen.getAllByRole( 'button', { name: 'Can I have your number?' } ).length ).toBeGreaterThan( 0 );
+
+	} );
+
+	it( 'asks for access from the chat: the reply hands over a copy of the card, the inventory and the save keep it; with no reply only a friendly person gives their home\'s', async () => {
+
+		const app = dialogueApp();
+		const conversation = app.interactor.conversation;
+		app.addresses = new AddressBook( { buildings: new Map( [ [ 'p-homes', HOME_BLOCK ] ] ), nameOf: () => ( { name: 'Kessler Block' } ) } );
+		app.playerAccess.book = app.addresses;
+		conversation.instance.home = { parcelId: 'p-homes', unit: 1, apartment: { id: 'floor:14/f14-home-7', floor: 14, number: '1407' } };
+		app.sim = { getNPC: () => conversation.instance };
+		app.quests = { snapshot: () => [], dialoguesFor: () => [], conversationRecap: () => null, inventoryView: () => [], view: () => [] };
+		app.questItemIds = [];
+		app.talk.remembered = async () => [];
+		app.companion.accepted = () => false;
+		app.contacts.add( 'npc-ada', 700 );
+		const scope = 'home:p-homes/floor:14/f14-home-7';
+		app.talk.stream.mockImplementationOnce( () => talkStream( [
+			...replyEvents( 'Here. Don\'t lose it.' ).slice( 0, 2 ),
+			{ type: 'offer', kind: 'give', itemId: `card:${scope}`, name: 'Kessler Block 1407 key card' },
+			{ type: 'done', reply: 'Here. Don\'t lose it.' }
+		] ) );
+		app.presentConversation( conversation );
+		const user = userEvent.setup();
+
+		await user.click( screen.getAllByRole( 'button', { name: 'Can you give me access to your apartment?' } )[ 0 ] );
+		await vi.waitFor( () => expect( app.items.has( `card:${scope}` ) ).toBe( true ) );
+		// The talk asked that card alone, by what the player reads it as.
+		expect( app.talk.stream.mock.calls.at( - 1 )[ 4 ].offers ).toEqual( { give: { items: [ { itemId: `card:${scope}`, name: 'Kessler Block 1407 key card, which opens Kessler Block, floor 14, apartment 1407' } ] } } );
+		// The person's home, work and cards by address went with it.
+		expect( app.talk.stream.mock.calls.at( - 1 )[ 4 ].addresses ).toEqual( {
+			home: { parcelId: 'p-homes', floor: 14, unit: 'apartment 1407' }, access: [ { parcelId: 'p-homes', opens: 'apartment 1407', tie: 'home' } ]
+		} );
+		expect( screen.getByText( 'Added to your inventory: Kessler Block 1407 key card.' ) ).toBeTruthy();
+		expect( screen.queryAllByRole( 'button', { name: 'Can you give me access to your apartment?' } ) ).toHaveLength( 0 );
+		expect( app.items.get( `card:${scope}` ).data ).toMatchObject( { grants: [ scope ], issuer: { npcId: 'npc-ada', name: 'Ada Vance' }, how: 'given' } );
+		const door = { role: 'apartment', parcelId: 'p-homes', floor: 14, unit: 'f14-home-7', center: { x: 5, y: 56, z: 2 }, inward: [ 0, 1 ] };
+		expect( app.playerAccess.lockOf( door, { x: 5, z: 1 } ).locked ).toBe( false );
+
+		// The inventory reads the card's issuer and what it opens.
+		app.view.open( 'INVENTORY' );
+		await user.click( screen.getAllByRole( 'button', { name: 'Kessler Block 1407 key card' } )[ 0 ] );
+		expect( screen.getAllByText( 'Ada Vance' ).length ).toBeGreaterThan( 0 );
+		expect( screen.getAllByText( 'Kessler Block, floor 14, apartment 1407' ).length ).toBeGreaterThan( 0 );
+		app.view.close();
+
+		// Nobody can answer for a wary stranger: they keep their card; a friendly one hands over their home's.
+		app.items.remove( `card:${scope}` );
+		for ( const [ traits, given ] of [ [ [ 'wary' ], false ], [ [ 'warm', 'kind' ], true ] ] ) {
+			conversation.instance.traits = traits;
+			app.talk.stream.mockImplementationOnce( () => talkStream( [], talkError( 'model unavailable', 502 ) ) );
+			app.presentConversation( conversation );
+			await user.click( screen.getAllByRole( 'button', { name: 'Can you give me access to your apartment?' } )[ 0 ] );
+			await vi.waitFor( () => expect( app.dialoguePending ).toBe( false ) );
+			expect( app.items.has( `card:${scope}` ) ).toBe( given );
+		}
 
 	} );
 

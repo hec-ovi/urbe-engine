@@ -123,7 +123,7 @@ describe( 'AddressBook', () => {
 	it( 'says where a point stands, which home a person lives in and where they work, and finds a unit a line names', () => {
 
 		const addresses = book();
-		expect( addresses.at( 'p-homes', [ 6, 8.1, 6 ] ) ).toMatchObject( { floor: 2, display: 2, floorLabel: 'floor 2', room: 'living', label: 'apartment 201', address: 'Kessler Block, floor 2, apartment 201' } );
+		expect( addresses.at( 'p-homes', [ 6, 8.1, 6 ] ) ).toMatchObject( { floor: 2, display: 2, floorLabel: 'floor 2', room: 'living room', label: 'apartment 201', address: 'Kessler Block, floor 2, apartment 201' } );
 		expect( addresses.at( 'p-homes', [ 6, 4, 1 ] ) ).toMatchObject( { floor: 1, room: 'corridor', address: 'Kessler Block, floor 1, corridor' } );
 		const resident = { home: { parcelId: 'p-homes', unit: 2, apartment: { id: 'floor:2/f1-home-1', floor: 2, number: '201' } } };
 		expect( addresses.home( resident ).address ).toBe( 'Kessler Block, floor 2, apartment 201' );

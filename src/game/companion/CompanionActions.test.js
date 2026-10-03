@@ -140,7 +140,8 @@ describe( 'what a person may do for the player', () => {
 		const open = game.inside.open = vi.fn( () => true );
 
 		const home = game.companion.offers( game.ask( barista ) ).find( ( offer ) => offer.destination?.relation === 'home' );
-		expect( home.destination.target ).toEqual( { position: apartment.front, parcelId: homeParcel, floor: 1 } );
+		// The door's corridor side, the door itself and the access it needs, which the host holds.
+		expect( home.destination.target ).toEqual( { position: apartment.front, parcelId: homeParcel, floor: 1, door: apartment.door, scope: `home:${homeParcel}/floor:1/u1` } );
 		expect( game.companion.accept( { ...game.ask( barista ), offerId: home.offerId } ).ok ).toBe( true );
 		game.continuity.endConversation( { timeMin: AFTERNOON, hold: true } );
 		game.frame( AFTERNOON, barista.position );

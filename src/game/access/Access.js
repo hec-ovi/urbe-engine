@@ -65,11 +65,11 @@ export function scopesOf( npc, book = null ) {
 	if ( job?.parcelId ) {
 
 		const building = book?.building( job.parcelId ) ?? null;
-		const locked = building ? new Set( building.units.map( ( unit ) => parseScope( unit.scope )?.kind === 'home' ? 'homes' : parseScope( unit.scope )?.kind ) ) : null;
+		// A card for doors the building does not have is no card at all: a building with no furnished floors has none.
+		const locked = new Set( ( building?.units ?? [] ).map( ( unit ) => parseScope( unit.scope )?.kind === 'home' ? 'homes' : parseScope( unit.scope )?.kind ) );
 		for ( const kind of ROLE_SCOPES[ job.role ] ?? WORKER ) {
 
-			// A card for doors the building does not have is no card at all.
-			if ( locked && ! locked.has( kind ) ) continue;
+			if ( ! locked.has( kind ) ) continue;
 			scopes.push( `${kind}:${job.parcelId}` );
 
 		}
@@ -92,7 +92,8 @@ export function scopeOfDoor( door ) {
 /**
  * What a scope opens, in words for a card, a prompt and a person's talk:
  * `label` (what a card says on it), `place` (the door's own name, for the
- * prompt and the ask), `access` (what it opens, with the building) and the
+ * prompt), `opens` (what it opens without the building, for a person who
+ * carries it), `access` (what it opens, with the building) and the
  * building it belongs to.
  * @param book the AddressBook the scope's building is in
  */
@@ -107,14 +108,14 @@ export function describeScope( scope, book ) {
 
 		const unit = book?.unit( `apartment:${parsed.parcelId}:${parsed.home}` ) ?? null;
 		const place = unit?.label ?? 'the apartment';
-		return { scope, kind: 'home', parcelId: parsed.parcelId, label: `${unit?.short ?? short} key card`, place, access: unit?.address ?? `${place} in ${name}`, building: name };
+		return { scope, kind: 'home', parcelId: parsed.parcelId, label: `${unit?.short ?? short} key card`, place, opens: place, access: unit?.address ?? `${place} in ${name}`, building: name };
 
 	}
 	const rooms = ( building?.units ?? [] ).filter( ( unit ) => unit.scope === scope ).map( ( unit ) => unit.label );
 	const words = { homes: 'every apartment', staff: 'the staff rooms', service: 'the service rooms', security: 'the security rooms' }[ parsed.kind ];
 	const title = { homes: 'master card', staff: 'staff card', service: 'service card', security: 'security card' }[ parsed.kind ];
 	const which = rooms.length && rooms.length <= 3 ? ` (${rooms.join( ', ' )})` : rooms.length ? ` (${rooms.slice( 0, 3 ).join( ', ' )} and ${rooms.length - 3} more)` : '';
-	return { scope, kind: parsed.kind, parcelId: parsed.parcelId, label: `${short} ${title}`, place: `${words} of ${name}`, access: `${words} of ${name}${which}`, building: name };
+	return { scope, kind: parsed.kind, parcelId: parsed.parcelId, label: `${short} ${title}`, place: `${words} of ${name}`, opens: `${words}${which}`, access: `${words} of ${name}${which}`, building: name };
 
 }
 

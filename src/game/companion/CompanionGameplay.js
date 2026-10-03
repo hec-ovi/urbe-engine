@@ -63,10 +63,13 @@ export class CompanionGameplay {
 	 * @param streets optional Quests StreetNames, for leads to a street
 	 * @param people optional `(npc) => [{ npcId, name, position }]`, the people a person knows whose bodies are placed
 	 * @param categoryOf optional `(type) => category`, the person's kind, which colours how they take to strangers
+	 * @param addresses optional AddressBook: home and work by address, and the dwellings and rooms a line names
+	 * @param holds optional `(npcId, scope) => boolean`, whether a person holds the access a door needs:
+	 *   a leader who does opens the door of the place it brought the player to
 	 */
 	constructor( {
 		continuity, sim, routes, places, atlas, quests = null, scenes = null, crowd = null,
-		inside = null, streets = null, people = null, categoryOf = () => undefined,
+		inside = null, streets = null, people = null, categoryOf = () => undefined, addresses = null, holds = null,
 		lines = CompanionLines.standard(), boundary = new CompanionBoundary()
 	} ) {
 
@@ -80,7 +83,8 @@ export class CompanionGameplay {
 		this.inside = inside;
 		this.categoryOf = categoryOf;
 		this.routes = routes;
-		this.places = new CompanionPlaces( { atlas, places, routes, lines, inside, streets, people } );
+		this.holds = holds;
+		this.places = new CompanionPlaces( { atlas, places, routes, lines, inside, streets, people, addresses } );
 		/** The companion under way, as saved. */
 		this.state = null;
 		/** An accepted offer waiting for its person's conversation to close. */
@@ -307,7 +311,7 @@ export class CompanionGameplay {
 
 	}
 
-	#offers( { npcId, timeMin, playerPlaces, wide = false } ) {
+	#offers( { npcId, timeMin, playerPlaces, wide = false, line = '' } ) {
 
 		const ours = this.state?.npcId === npcId ? this.state : null;
 		const npc = this.#person( npcId );
@@ -321,7 +325,7 @@ export class CompanionGameplay {
 
 		}
 		const destinations = actor ? this.places.destinations( {
-			npc, from: actor.position, playerPlaces, wide,
+			npc, from: actor.position, playerPlaces, wide, line,
 			here: actor.place.kind === 'parcel' ? { parcelId: actor.place.id, ...( Number.isInteger( actor.place.floor ) ? { floor: actor.place.floor } : {} ) } : null,
 			quests: this.quests?.places( timeMin ) ?? [],
 			scenes: this.scenes ? this.boundary.input( 'scenes', this.scenes() ) : []
@@ -483,11 +487,19 @@ export class CompanionGameplay {
 
 	/**
 	 * A host who brought the player to their own apartment door opens it for
-	 * them: the door of the plan's apartment whose front the lead stopped at.
+	 * them: the door of the plan's apartment whose front the lead stopped at;
+	 * and a leader who brought them to a door by its address opens it when
+	 * they hold the access it needs, as anyone with a card would.
 	 */
-	#openHome( destination ) {
+	#openHome( npcId, destination ) {
 
 		const target = destination.target;
+		if ( target?.door && target.scope && this.inside?.open && this.holds?.( npcId, target.scope ) ) {
+
+			this.inside.open( { kind: 'door', parcelId: target.parcelId, floor: target.floor, position: [ ...target.door ] } );
+			return;
+
+		}
 		if ( destination.relation !== 'home' || ! target?.position || ! this.inside?.open ) return;
 		const apartment = this.inside.plan?.( target.parcelId )?.apartments
 			.find( ( entry ) => entry.floor === target.floor && entry.front.every( ( value, axis ) => Math.abs( value - target.position[ axis ] ) < 1e-6 ) );
@@ -618,7 +630,7 @@ export class CompanionGameplay {
 		if ( state.phase === 'walking' || state.phase === 'waiting' ) {
 
 			state.phase = companion.phase;
-			if ( state.phase === 'arrived' ) this.#openHome( state.destination );
+			if ( state.phase === 'arrived' ) this.#openHome( state.npcId, state.destination );
 			if ( state.phase === 'waiting' && ! talking && ( state.lineAtMin === undefined || timeMin - state.lineAtMin >= WAIT_LINE_MIN ) ) {
 
 				state.lineAtMin = timeMin;

@@ -8,7 +8,7 @@ import { wearExterior } from './surface-detail/Weathering.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { RecentEvents } from './talk/RecentEvents.js';
 import { NpcVoice } from './voice/NpcVoice.js';
-import { dispositionOf, peopleKnown, StreetNames, stripCues } from '../../../quests/dist/runtime.js';
+import { dispositionOf, peopleKnown, StreetNames, stripCues, VENUES } from '../../../quests/dist/runtime.js';
 import { describeLook } from './agents/avatar/Describe.js';
 import { castNames, homesOf } from './sim/Homes.js';
 import { buildingFacts } from './talk/BuildingFacts.js';
@@ -22,6 +22,7 @@ import { Acquaintances, codexEntries, contactCards, inventoryCards } from './Scr
 import { ContactBook } from './contacts/ContactBook.js';
 import { answerOf, contactLines, givesNumber } from './contacts/Calls.js';
 import { PhoneCalls } from './contacts/PhoneCalls.js';
+import { AddressBook, PlayerAccess, PlayerItems, Regard, accessLines, cardFor, describeScope, givesCard, grants, notices, parseScope, scopesOf } from './access/index.js';
 import { InvestigationGameplay } from './investigation/index.js';
 import { ScenePlaceResolver, SceneryDirector } from './scenery/index.js';
 import { ObjectiveRouter } from './routes/ObjectiveRouter.js';
@@ -215,6 +216,19 @@ export class GameApp {
 		this.contacts = new ContactBook();
 		/** What people say when asked for their number or called. */
 		this.contactLines = contactLines();
+		/** What the player carries of their own, beside the quest items: access cards now; the save's inventory keeps them. */
+		this.items = new PlayerItems();
+		/** The saved inventory's quest items, as the load took them; the player's own items are in `items`. */
+		this.savedInventory = [];
+		this.questItemIds = [];
+		/** The people who caught the player lifting a card off them, which the save keeps. */
+		this.regard = new Regard();
+		/** What people say when asked for access, and the lock and theft notices. */
+		this.accessLines = accessLines();
+		/** Every dwelling and private room of the furnished buildings by address; the load gives it the city's buildings. */
+		this.addresses = new AddressBook( { buildings: new Map() } );
+		/** The doors the player may open: their cards and the quest items that open one. */
+		this.playerAccess = new PlayerAccess( { items: this.items, book: this.addresses, questCards: () => this.#questCards() } );
 		/** The chat's action row: offer id to the label the player says. */
 		this.dialogueActions = new Map();
 		/** A leader's arrival while it opens its conversation, or null. */
@@ -585,8 +599,16 @@ export class GameApp {
 			game ? [ ...game.quests, ...game.sideJobs ] : [],
 			{ world: atlas, types: npcTypes }
 		);
-		this.savedInventory = game?.player.inventory ?? [];
+		// The player's own items (access cards) come back by kind; the rest of the saved inventory is the quests'.
+		this.savedInventory = this.items.restore( game?.player.inventory ?? [] );
+		this.regard.restore( game?.access?.regard ?? [] );
 		this.questItemIds = questlines.flatMap( ( questline ) => questline.items.map( ( item ) => item.itemId ) );
+		/** The quest items that open a door, by item id: `{ parcelId, door }`, Quests `opens`. */
+		this.questDoors = new Map( questlines.flatMap( ( questline ) => questline.items.filter( ( item ) => item.opens ).map( ( item ) => [ item.itemId, item.opens ] ) ) );
+		this.streetNames = new StreetNames( atlas.streets, atlas.meta.gridAngle ?? 0 );
+		// Every dwelling and private room of the furnished buildings by address, derived from what the world publishes.
+		this.addresses = new AddressBook( { buildings, nameOf: ( parcelId ) => this.#buildingNaming( atlas, parcelId ) } );
+		this.playerAccess.book = this.addresses;
 		this.#refreshInventory();
 		this.view.quests.setQuests( this.quests.view( this.clock.timeMin ) );
 		this.signals = new Signals( connections.networks );
@@ -772,8 +794,9 @@ export class GameApp {
 		this.companion = new CompanionGameplay( {
 			continuity: this.npcContinuity, sim: this.sim, routes, places: continuityPlaces, atlas,
 			quests: this.questGameplay, scenes: () => companionScenes( this.scenery.stagedPlaces(), this.companion.places ), crowd: this.crowd,
-			inside: reach, streets: new StreetNames( atlas.streets, atlas.meta.gridAngle ?? 0 ),
-			people: ( npc ) => this.#placedAcquaintances( npc ), categoryOf: ( type ) => categories.get( type )
+			inside: reach, streets: this.streetNames,
+			people: ( npc ) => this.#placedAcquaintances( npc ), categoryOf: ( type ) => categories.get( type ),
+			addresses: this.addresses, holds: ( npcId, scope ) => this.#holdsAccess( npcId, scope )
 		} );
 		// After the continuity and with no conversation open: the escort first,
 		// then the companion, which lets go a follower neither of them owns.
@@ -852,9 +875,16 @@ export class GameApp {
 			investigations: this.investigations,
 			continuity: this.npcContinuity,
 			animations: this.animations,
-			doorColliders: this.doorColliders, interiors: this.stream, typeLabels: this.npcTypeLabels
+			doorColliders: this.doorColliders, interiors: this.stream, typeLabels: this.npcTypeLabels,
+			access: {
+				lockOf: ( door, feet ) => this.playerAccess.lockOf( door, feet ),
+				lockedPrompt: ( lock ) => this.accessLines.say( 'prompt-locked', { place: lock.place } ),
+				liftable: ( person ) => this.#liftable( person )
+			}
 		} );
 		this.interactor.onConversation = ( conversation ) => this.presentConversation( conversation );
+		this.interactor.onLocked = ( door, lock ) => this.#locked( door, lock );
+		this.interactor.onLift = ( person ) => this.#lift( person );
 
 		this.input.onLockChange = ( locked ) => {
 
@@ -1212,7 +1242,7 @@ export class GameApp {
 
 		}
 		if ( transitFrame.result?.autoDisembarked ) this.#persistTransitState();
-		this.view.prompt.update( this.input.locked ? prompt : null );
+		this.view.prompt.update( this.input.locked ? prompt : null, { lock: prompt && prompt === worldPrompt ? this.interactor.lock : null } );
 
 		const interact = playablePress( this.input, this.pressedActions, 'interact', 'KeyE' );
 		const secondary = playablePress( this.input, this.pressedActions, 'secondary-interact', 'KeyR' );
@@ -1386,7 +1416,7 @@ export class GameApp {
 				this.view.dialog.setSending( false );
 			}
 		}
-		if ( done && offer ) this.#takeOffer( conversation, offer, whole );
+		if ( done && offer ) this.#takeOffer( conversation, offer, whole, text );
 		// Asked one action and answered in words alone: they would not; the ways to answer stay.
 		else if ( done && ask ) this.#showActions( conversation );
 	}
@@ -1401,7 +1431,7 @@ export class GameApp {
 	#talkContext( conversation, proposing, line = '', ask = null ) {
 		const { npcId, call } = conversation;
 		// A chosen action asks the person that alone; a typed line lets them agree to anything they may do now.
-		const offers = ask ? this.#askOffers( ask ) : proposing ? this.#proposals( conversation ) : null;
+		const offers = ask ? this.#askOffers( ask ) : proposing ? this.#proposals( conversation, line ) : null;
 		const guide = call ? null : this.companion.guide( npcId );
 		// Known once the world has loaded; on a call what happened around the player is nothing the person saw.
 		const events = call ? [] : this.recentEvents?.around( {
@@ -1409,17 +1439,20 @@ export class GameApp {
 			scenes: this.scenery.stagedPlaces(), parcelId: this.standing?.parcelId ?? null, guided: guide?.kind === 'parcel' ? guide.placeId : null
 		} ) ?? [];
 		const task = this.companion.taskOf?.( npcId ) ?? null;
+		// Their home and work by address, where inside they stand and the cards they carry, wherever their body is.
+		const addresses = this.#addressContext( call ? { ...conversation, person: this.#remoteBody( npcId ) } : conversation );
 		return {
 			...( offers ? { offers } : {} ), ...( guide ? { guide } : {} ), ...( events.length ? { events } : {} ), ...( task ? { task } : {} ),
-			...( call ? { call: { caller: 'player' } } : {} ),
+			...( call ? { call: { caller: 'player' } } : {} ), ...( addresses ? { addresses } : {} ),
 			// A person on the phone is where their body is, wherever that is.
 			...this.#bodyContext( call ? { ...conversation, person: this.#remoteBody( npcId ) } : conversation, line )
 		};
 	}
 
-	/** The talk request's `offers` for one chosen ask: their number, a meeting where the player is, or a companion offer. */
+	/** The talk request's `offers` for one chosen ask: their number, a copy of one of their cards, a meeting where the player is, or a companion offer. */
 	#askOffers( ask ) {
 		if ( ask.kind === 'contact' ) return { contact: true };
+		if ( ask.kind === 'card' ) return ask.item ? { give: { items: [ ask.item ] } } : null;
 		if ( ask.kind === 'meet' ) return { meet: { name: ask.meet.name } };
 		return this.companion.talkOffers( [ ask ] );
 	}
@@ -1429,7 +1462,7 @@ export class GameApp {
 	 * and their number while the player lacks it; on a call, only what they
 	 * can do from where they are and coming to where the player is.
 	 */
-	#proposals( conversation ) {
+	#proposals( conversation, line = '' ) {
 		const { npcId } = conversation;
 		const timeMin = this.clock.timeMin;
 		if ( conversation.call ) {
@@ -1437,8 +1470,12 @@ export class GameApp {
 			delete actions.sit;
 			return { ...actions, meet: { name: this.#meetingPoint().name } };
 		}
-		const offers = this.companion.talkOffers( this.#offers( npcId, { wide: true } ), { npcId, timeMin } );
-		return conversation.instance && ! this.contacts.has( npcId ) ? { ...( offers ?? {} ), contact: true } : offers;
+		// The addresses the line names by number join the places a person may take the player to.
+		const offers = this.companion.talkOffers( this.#offers( npcId, { wide: true, line } ), { npcId, timeMin } );
+		const contact = conversation.instance && ! this.contacts.has( npcId );
+		// Face to face, a person may hand over a copy of any card they hold that the player lacks.
+		const items = conversation.instance ? this.#cardOffers( npcId ) : [];
+		return contact || items.length ? { ...( offers ?? {} ), ...( contact ? { contact: true } : {} ), ...( items.length ? { give: { items } } : {} ) } : offers;
 	}
 
 	/** Where a person on the phone stands, as a body there would tell it: the continuity's actor for them, or null. */
@@ -1542,11 +1579,13 @@ export class GameApp {
 	 * request is the player's consent, so an offer the rules allow is taken:
 	 * the chat closes on the reply and they set off. Otherwise they say why not.
 	 */
-	#takeOffer( conversation, { kind, placeId }, reply ) {
+	#takeOffer( conversation, { kind, placeId, itemId }, reply, line = '' ) {
 		if ( kind === 'contact' ) return this.#addContact( conversation );
+		if ( kind === 'give' ) return this.#giveCard( conversation, String( itemId ?? '' ).replace( /^card:/, '' ) );
 		const meet = kind === 'meet' ? this.#meetingPoint() : null;
 		const result = this.companion.acceptFromTool( {
-			npcId: conversation.npcId, kind, ...( placeId ? { placeId } : {} ), ...( meet ? { meet } : {} ), timeMin: this.clock.timeMin, playerPlaces: this.playerPlaces
+			npcId: conversation.npcId, kind, ...( placeId ? { placeId } : {} ), ...( meet ? { meet } : {} ), timeMin: this.clock.timeMin, playerPlaces: this.playerPlaces,
+			...( line ? { line } : {} )
 		} );
 		if ( result.ok ) this.#sendAlong( conversation, reply ?? result.line );
 		else this.#npcSays( conversation, result.line );
@@ -1644,8 +1683,8 @@ export class GameApp {
 	}
 
 	/** What the player may ask of this person now, available or not: the companion's offers, with `wide` the talk's longer list. */
-	#offers( npcId, { wide = false } = {} ) {
-		return this.companion.offers( { npcId, timeMin: this.clock.timeMin, playerPlaces: this.playerPlaces, ...( wide ? { wide: true } : {} ) } );
+	#offers( npcId, { wide = false, line = '' } = {} ) {
+		return this.companion.offers( { npcId, timeMin: this.clock.timeMin, playerPlaces: this.playerPlaces, ...( wide ? { wide: true } : {} ), ...( wide && line ? { line } : {} ) } );
 	}
 
 	/** The people a person knows whose bodies continuity holds now, by the name they go by, with where they stand. */
@@ -1672,6 +1711,13 @@ export class GameApp {
 		const offers = conversation.instance && ! conversation.call ? this.#offers( conversation.npcId ) : [];
 		const actions = offers.map( ( offer ) => ( { id: offer.offerId, label: offer.label, icon: offer.kind } ) );
 		if ( conversation.instance && ! conversation.call && ! this.contacts.has( conversation.npcId ) ) actions.push( { id: 'contact', label: this.contactLines.say( 'label-contact' ) } );
+		// Access to the doors they hold a card for and the player does not: their home first, then their work's.
+		if ( conversation.instance && ! conversation.call ) {
+			for ( const scope of this.#lackedScopes( conversation.npcId ).slice( 0, 2 ) ) {
+				const place = this.accessLines.say( `ask-${parseScope( scope ).kind}` );
+				actions.push( { id: `card:${scope}`, label: this.accessLines.say( 'label-access', { place } ), icon: 'card' } );
+			}
+		}
 		if ( conversation.call ) actions.push( { id: 'meet', label: this.contactLines.say( 'label-meet' ), icon: 'lead' } );
 		this.dialogueActions = new Map( actions.map( ( action ) => [ action.id, action.label ] ) );
 		this.view.dialog.setActions( actions );
@@ -1687,6 +1733,7 @@ export class GameApp {
 		const label = this.dialogueActions.get( id );
 		if ( ! conversation?.npcId || ! label ) return;
 		if ( id === 'contact' || id === 'meet' ) return this.#ask( conversation, id, label );
+		if ( id.startsWith( 'card:' ) ) return this.#ask( conversation, 'card', label, id.slice( 'card:'.length ) );
 		const offer = this.#offers( conversation.npcId ).find( ( entry ) => entry.offerId === id );
 		// The person decides a chosen action as they decide a typed one, in their own words; a dismissal, a refusal
 		// the rules make or a person with nobody to answer for them is decided by code, in their own lines.
@@ -1710,8 +1757,10 @@ export class GameApp {
 	 * to where the player is. The person decides in their own words, as they
 	 * decide a typed line; nobody to answer for them decides by code.
 	 */
-	#ask( conversation, kind, label ) {
-		const ask = kind === 'meet' ? { kind, meet: this.#meetingPoint() } : { kind };
+	#ask( conversation, kind, label, scope = null ) {
+		const ask = kind === 'meet' ? { kind, meet: this.#meetingPoint() }
+			: kind === 'card' ? { kind, scope, item: this.#cardOffers( conversation.npcId ).find( ( item ) => item.itemId === `card:${scope}` ) ?? null }
+				: { kind };
 		if ( ! conversation.instance || ! this.talk ) return this.#decideAsk( conversation, ask, label );
 		this.#say( label, { ask, unanswered: () => this.#decideAsk( conversation, ask, null ) } );
 	}
@@ -1721,8 +1770,17 @@ export class GameApp {
 		if ( label ) this.#playerSays( label );
 		if ( ask.kind === 'meet' ) return this.#takeOffer( conversation, { kind: 'meet' }, null );
 		const npc = rememberedPerson( this.sim, conversation.npcId );
-		const disposition = npc ? dispositionOf( npc, this.companion.categoryOf?.( npc.type ) ) : null;
+		const disposition = npc ? this.regard.adjust( dispositionOf( npc, this.companion.categoryOf?.( npc.type ) ), conversation.npcId ) : null;
 		const seed = `${conversation.npcId}|${Math.floor( this.clock.timeMin )}`;
+		if ( ask.kind === 'card' ) {
+			// Nobody can answer for them: only a friendly person hands over a copy of their own home's card.
+			if ( disposition && ask.item && givesCard( disposition, ask.scope ) ) {
+				this.#npcSays( conversation, this.accessLines.say( 'accept-card', { place: describeScope( ask.scope, this.addresses )?.place ?? 'it' }, seed ) );
+				return this.#giveCard( conversation, ask.scope );
+			}
+			this.#npcSays( conversation, this.accessLines.say( disposition && disposition !== 'friendly' ? `refuse-card-${disposition}` : 'refuse-card-unavailable', {}, seed ) );
+			return this.#showActions( conversation );
+		}
 		if ( disposition && givesNumber( disposition ) ) {
 			this.#npcSays( conversation, this.contactLines.say( 'accept-contact', {}, seed ) );
 			return this.#addContact( conversation );
@@ -1739,6 +1797,145 @@ export class GameApp {
 			this.view.toast.show( { title: speakerOf( conversation ).name, text: this.contactLines.say( 'notice-contact' ) } );
 		}
 		this.#showActions( conversation );
+	}
+
+	/**
+	 * The person handed the player a copy of one of their cards: the
+	 * inventory keeps it (once per scope), a notice says so and the ask
+	 * leaves the row. A scope the person does not hold is nothing to give.
+	 */
+	#giveCard( conversation, scope, how = 'given' ) {
+		const { npcId } = conversation;
+		const npc = rememberedPerson( this.sim, npcId );
+		if ( ! npc || ! scopesOf( npc, this.addresses ).includes( scope ) ) return this.#showActions( conversation );
+		const card = cardFor( scope, { book: this.addresses, issuer: { npcId, name: speakerOf( conversation ).name }, how, atMin: this.clock.timeMin } );
+		if ( card && this.items.add( card ) ) {
+			this.view.toast.show( { title: speakerOf( conversation ).name, text: this.accessLines.say( 'notice-card', { label: card.label } ) } );
+			this.#refreshInventory();
+		}
+		this.#showActions( conversation );
+	}
+
+	/** The scopes a person holds that the player has no card for, home first. */
+	#lackedScopes( npcId ) {
+		const npc = rememberedPerson( this.sim, npcId );
+		return npc ? scopesOf( npc, this.addresses ).filter( ( scope ) => ! this.playerAccess.holds( scope ) ) : [];
+	}
+
+	/** The talk request's `give.items`: a copy of each card the person holds that the player lacks, as the player would read it. */
+	#cardOffers( npcId ) {
+		return this.#lackedScopes( npcId ).slice( 0, 8 ).map( ( scope ) => {
+			const words = describeScope( scope, this.addresses );
+			return { itemId: `card:${scope}`, name: `${words.label}, which opens ${words.access}` };
+		} );
+	}
+
+	/** Whether a person holds the access a door's scope needs: their own home's, their post's by role, a master card. */
+	#holdsAccess( npcId, scope ) {
+		const npc = rememberedPerson( this.sim, npcId );
+		return Boolean( npc ) && grants( new Set( scopesOf( npc, this.addresses ) ), scope );
+	}
+
+	/**
+	 * What the talk tells a person by address: their home and work, where
+	 * inside a furnished building their body stands now, the cards they
+	 * carry and how often they caught the player lifting one; null when none
+	 * of it is known.
+	 */
+	#addressContext( { npcId, instance, person } ) {
+		if ( ! npcId || ! instance ) return null;
+		const npc = rememberedPerson( this.sim, npcId ) ?? instance;
+		const out = {};
+		const home = this.addresses.home( npc );
+		if ( home ) out.home = { parcelId: home.parcelId, floor: home.display, unit: home.label };
+		const work = this.addresses.work( npc );
+		if ( work && Number.isInteger( work.display ) ) out.work = addressOf( work );
+		const position = person?.position;
+		const parcelId = position ? this.stream?.rooms?.find( ( room ) => room.holds( position ) )?.parcelId ?? person.parcelId ?? null : null;
+		const here = parcelId ? this.addresses.at( parcelId, [ position.x, position.y, position.z ] ) : null;
+		if ( here ) out.here = addressOf( here );
+		const access = scopesOf( npc, this.addresses ).map( ( scope ) => {
+			const words = describeScope( scope, this.addresses );
+			return { parcelId: words.parcelId, opens: words.opens, tie: words.kind === 'home' ? 'home' : 'work' };
+		} );
+		if ( access.length ) out.access = access;
+		const caught = this.regard.of( npcId );
+		if ( caught ) out.caught = caught;
+		return Object.keys( out ).length ? out : null;
+	}
+
+	/** The quest items the player holds that open a door, with the scope of that door: Quests `opens`, resolved by address. */
+	#questCards() {
+		const held = this.quests?.inventoryView?.() ?? [];
+		const cards = [];
+		for ( const item of held ) {
+			const opens = this.questDoors?.get( item.id );
+			if ( ! opens ) continue;
+			const unit = this.#doorUnit( opens.parcelId, opens.door );
+			if ( unit ) cards.push( { id: item.id, name: item.name, scope: unit.scope } );
+		}
+		return cards;
+	}
+
+	/** The dwelling or private room a building's door address names (`apartment 1407`, `archive 302`, `1407`), or null. */
+	#doorUnit( parcelId, door ) {
+		const words = String( door ?? '' ).trim().toLowerCase().replace( /\s+/g, ' ' );
+		const units = this.addresses?.building( parcelId )?.units ?? [];
+		return units.find( ( unit ) => unit.label.toLowerCase() === words ) ?? this.addresses?.find( words, [ parcelId ] )[ 0 ] ?? null;
+	}
+
+	/** E on a door locked to the player: a notice says what it needs, once a door until they turn away. */
+	#locked( door, lock ) {
+		const key = door.id ?? `${door.parcelId}:${door.center?.x}:${door.center?.z}`;
+		if ( this.lockedNotice === key ) return;
+		this.lockedNotice = key;
+		this.view.toast.show( { title: 'Locked', text: this.accessLines.say( 'prompt-locked', { place: lock.place } ) } );
+		setTimeout( () => { if ( this.lockedNotice === key ) this.lockedNotice = null; }, 4000 );
+	}
+
+	/** The R line for a person whose card the player could lift: an established person carrying a card the player lacks. */
+	#liftable( person ) {
+		if ( ! person?.npcId || person.fallen || this.interactor?.conversation ) return null;
+		if ( ! this.#lackedScopes( person.npcId ).length ) return null;
+		const name = this.questGameplay?.characterName( person.npcId )?.given ?? person.instance?.name?.given ?? 'their';
+		return this.accessLines.say( 'prompt-lift', { name } );
+	}
+
+	/**
+	 * R on a person carrying a card: the player lifts one they lack, their
+	 * home's first. Facing the player they always notice, else by how
+	 * watchful they are; a person who notices says so and thinks less of
+	 * the player from then on (the save's `access.regard`).
+	 */
+	#lift( person ) {
+		const [ scope ] = this.#lackedScopes( person.npcId );
+		if ( ! scope ) return;
+		const npc = rememberedPerson( this.sim, person.npcId );
+		const instance = person.instance ?? npc;
+		const name = TalkClient.nameOf( instance );
+		const card = cardFor( scope, { book: this.addresses, issuer: { npcId: person.npcId, name }, how: 'stolen', atMin: this.clock.timeMin } );
+		if ( ! card || ! this.items.add( card ) ) return;
+		this.#refreshInventory();
+		const disposition = npc ? this.regard.adjust( dispositionOf( npc, this.companion.categoryOf?.( npc.type ) ), person.npcId ) : 'neutral';
+		const feet = this.body.feet;
+		const seed = `${person.npcId}|${Math.floor( this.clock.timeMin )}`;
+		const caught = notices( { disposition, heading: person.heading ?? 0, toPlayer: [ feet.x - person.position.x, feet.z - person.position.z ], seed } );
+		if ( caught ) {
+			this.regard.drop( person.npcId, this.clock.timeMin );
+			this.view.toast.show( { title: name, text: this.accessLines.say( 'caught', {}, seed ) } );
+			this.view.toast.show( { title: 'Access', text: this.accessLines.say( 'notice-caught', { name, label: card.label } ) } );
+		} else this.view.toast.show( { title: 'Access', text: this.accessLines.say( 'notice-lifted', { label: card.label } ) } );
+	}
+
+	/** A building as an address names it: its own name, else what it is and the street it stands on. */
+	#buildingNaming( atlas, parcelId ) {
+		const parcel = this.locator?.parcelById?.get( parcelId ) ?? atlas.parcels.find( ( entry ) => entry.id === parcelId ) ?? null;
+		const name = this.venues?.places?.get( parcelId )?.name ?? parcel?.name ?? null;
+		const word = VENUES[ parcel?.type ]?.word ?? null;
+		const [ x, z ] = parcel?.access?.point ?? centroidOf( parcel?.ring ?? parcel?.polygon ?? [] ) ?? [ null, null ];
+		const spot = Number.isFinite( x ) ? this.streetNames?.near( x, z ) : null;
+		const street = spot && ( spot.street.kind === 'street' || spot.street.kind === 'avenue' ) ? spot.street.name : null;
+		return { name, word, street };
 	}
 
 	/** Where the player stands, for a person asked on the phone to come and meet them: the point, the building and floor, and its name. */
@@ -2346,6 +2543,7 @@ export class GameApp {
 			},
 			...( dialogueMemory ? { dialogueMemory } : {} ),
 			contacts: this.contacts.serialize(),
+			access: { regard: this.regard.serialize() },
 			elapsedSeconds: Math.max( 0, ( performance.now() - this.playStartedAt ) / 1000 )
 		} );
 
@@ -2387,7 +2585,7 @@ export class GameApp {
 
 	#inventory() {
 
-		return mergeInventory( this.savedInventory, this.quests.inventoryView(), this.questItemIds );
+		return mergeInventory( [ ...this.savedInventory, ...this.items.serialize() ], this.quests.inventoryView(), this.questItemIds );
 
 	}
 
@@ -3154,6 +3352,24 @@ export function openingCard( persistence, quests ) {
 }
 
 /** The simulation's person a saved memory of talks names, or null when the city has no such person now. */
+/** A place by address as the talk tells it (Quests `DialogAddress`), from an AddressBook `at`. */
+function addressOf( at ) {
+
+	return {
+		parcelId: at.parcelId, ...( Number.isInteger( at.display ) ? { floor: at.display } : {} ),
+		...( at.unit ? { unit: at.unit.label } : {} ), ...( at.room ? { room: at.room } : {} )
+	};
+
+}
+
+/** The middle of a ring of points, or null. */
+function centroidOf( ring ) {
+
+	if ( ! ring?.length ) return null;
+	return ring.reduce( ( sum, [ x, z ] ) => [ sum[ 0 ] + x / ring.length, sum[ 1 ] + z / ring.length ], [ 0, 0 ] );
+
+}
+
 function rememberedPerson( sim, npcId ) {
 
 	try {

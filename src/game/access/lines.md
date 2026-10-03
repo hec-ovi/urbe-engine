@@ -10,6 +10,26 @@ the code picks one by the person and the minute and fills in `{place}`,
 
 - Can you give me access to {place}?
 
+## ask-home
+
+- your apartment
+
+## ask-staff
+
+- the staff rooms
+
+## ask-service
+
+- the service rooms
+
+## ask-security
+
+- the security rooms
+
+## ask-homes
+
+- every apartment in the building
+
 ## accept-card
 
 - Here, take a copy of my card.

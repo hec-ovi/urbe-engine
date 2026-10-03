@@ -92,7 +92,7 @@ export class InventoryView {
 	}
 
 	/**
-	 * @param items [{ id, name, kind, description, place, quantity?, quests?: [{ id, title, kind: 'main' | 'side' }], model? }]
+	 * @param items [{ id, name, kind, description, place, quantity?, facts?: [{ label, value }], quests?: [{ id, title, kind: 'main' | 'side' }], model? }]
 	 * in carrying order, a page of the layout's columns by rows at a time; `model`
 	 * is the item's own preview model, else the layout draws its kind's shape.
 	 */
@@ -244,6 +244,7 @@ export class InventoryView {
 
 		const facts = item ? [
 			...( item.kind ? [ [ layout.detail.kind, item.kind ] ] : [] ),
+			...( item.facts ?? [] ).map( ( { label, value } ) => [ label, value ] ),
 			...( item.quantity > 1 ? [ [ layout.detail.quantity, String( item.quantity ) ] ] : [] )
 		] : [];
 		this.facts.replaceChildren( ...facts.map( ( [ label, value ] ) => el( 'div', {}, el( 'dt', { textContent: label } ), el( 'dd', { textContent: value } ) ) ) );

@@ -55,18 +55,46 @@ export function inventoryCards( items, quests, assetOf = () => null ) {
 
 		const questIds = item.state?.questlineIds ?? [];
 		const model = questIds.map( ( questId ) => itemModel( assetOf( questId, item.id ) ) ).find( Boolean ) ?? null;
+		const own = ownItem( item );
 		return {
 			id: item.id,
 			name: item.name,
-			kind: item.state?.kind ?? '',
-			description: item.state?.description ?? '',
+			kind: own?.kind ?? item.state?.kind ?? '',
+			description: own?.description ?? item.state?.description ?? '',
 			place: item.state?.place ?? '',
 			quantity: item.quantity ?? 1,
 			quests: [ ...new Set( questIds ) ].filter( ( id ) => index.has( id ) ).map( ( id ) => ( { id, ...index.get( id ) } ) ),
+			...( own?.facts ? { facts: own.facts } : {} ),
 			...( model ? { model } : {} )
 		};
 
 	} );
+
+}
+
+/** How the player came by a card, in words. */
+const HOW = Object.freeze( { given: 'Given to you', stolen: 'Lifted', found: 'Found', quest: 'From a story' } );
+
+/**
+ * One of the player's own items as the inventory reads it: an access card
+ * says what it opens, who issued it and how the player came by it; null for
+ * a quest item or a kind with nothing more to tell.
+ */
+function ownItem( item ) {
+
+	if ( item.state?.kind !== 'access-card' ) return null;
+	const data = item.state.data ?? {};
+	const issuer = data.issuer?.name ?? null;
+	const facts = [
+		...( issuer ? [ { label: 'Issued by', value: issuer } ] : [] ),
+		...( data.access ? [ { label: 'Access', value: data.access } ] : [] ),
+		...( HOW[ data.how ] ? [ { label: 'How', value: HOW[ data.how ] } ] : [] )
+	];
+	return {
+		kind: 'access card',
+		description: `A key card${issuer ? ` of ${issuer}'s` : ''}. It opens ${data.access ?? 'one locked door'}.`,
+		facts
+	};
 
 }
 
@@ -174,6 +202,7 @@ export function codexEntries( { cards = [], people = [], places = [], quests = [
 		text: card.description,
 		facts: [
 			...( card.kind ? [ { label: 'Kind', value: card.kind } ] : [] ),
+			...( card.facts ?? [] ),
 			{ label: 'Carried', value: String( card.quantity ?? 1 ) }
 		],
 		...( card.place ? { location: card.place } : {} ),

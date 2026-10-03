@@ -235,7 +235,8 @@ describe('explicit quest dialogue through the playable UI',()=>{
   release({type:'delta',text:'[sigh] at the market.'});
   await vi.waitFor(()=>expect(app.interactor.conversation).toBeNull());
   expect(observer.said).toHaveBeenCalledExactlyOnceWith({conversation:expect.objectContaining({npcId:'person'}),line:expect.any(HTMLElement),text:'Kip drinks [sigh] at the market.'});
-  expect(companion.acceptFromTool).toHaveBeenCalledExactlyOnceWith({npcId:'person',kind:'lead',placeId:'p2',timeMin:1260,playerPlaces:[]});
+  // The typed line goes with the agreement, so the addresses it names are places the tool may name.
+  expect(companion.acceptFromTool).toHaveBeenCalledExactlyOnceWith({npcId:'person',kind:'lead',placeId:'p2',timeMin:1260,playerPlaces:[],line:'take me to Kip'});
   expect(app.interactor.close).toHaveBeenCalledExactlyOnceWith(app.clock,'player-left',{keep:true});
   expect(app.view.dialog.element.hidden).toBe(true);
   expect(app.view.toast.element.querySelector('.toast-title').textContent).toBe('Petra Moss');
