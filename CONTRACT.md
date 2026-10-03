@@ -1,6 +1,6 @@
 # Engine contract
 
-Version 0.27.5. Loads assembled city artifacts into a first-person game and exposes catalog, creation, preview, dialogue and save adapters.
+Version 0.28.0. Loads assembled city artifacts into a first-person game and exposes catalog, creation, preview, dialogue and save adapters.
 
 ## Inputs and outputs
 
@@ -11,7 +11,7 @@ Version 0.27.5. Loads assembled city artifacts into a first-person game and expo
 | `?mode=game` | [Query and parsed settings](src/game/data/schema/game-config.d.ts) | Playable session through [Game](src/game/CONTRACT.md) |
 | Assembly CLIs | [Assembly requests and flags](src/assembly/CONTRACT.md) | [World manifest](src/assembly/schema/world-manifest.schema.json), [kit placement tables](src/assembly/kit/kit-placements.schema.json), GLBs and floor documents |
 | `POST /api/building` | [Building request](src/server/schema/building-build-request.schema.json) | [Building result](src/server/schema/building-build-result.schema.json) |
-| `POST /api/talk/stream` | [NPC, behavior, line, time, optional quests, offers, guide, events, look, whereabouts, people and prior lines](src/server/schema/talk-request.schema.json) | NDJSON [talk stream events](src/server/schema/talk-stream-event.schema.json): deltas, sentences, companion offers, done |
+| `POST /api/talk/stream` | [NPC, behavior, line, time, optional quests, offers (an access card to hand over among them), guide, events, look, whereabouts, addresses, people and prior lines](src/server/schema/talk-request.schema.json) | NDJSON [talk stream events](src/server/schema/talk-stream-event.schema.json): deltas, sentences, companion and card offers, done |
 | `GET /api/talk/memory?out=`, `PUT /api/talk/memory` | [World out and dialogue memory](src/server/schema/talk-memory.schema.json): at most 200 people, 24 notes and 24 turns each | `{ out, memory }` or 204 |
 | `GET /api/voice`, `POST /api/voice`, `POST /api/voice/prefetch` | [Speaker facts, text and priority](src/server/schema/voice-request.schema.json) | Capability, then streamed WAV PCM16 24 kHz from the Voice box; `enabled:false` when Voice is not running ([server contract](src/server/CONTRACT.md)) |
 | `/api/exteriors` | [Capability and exact-blueprint jobs](src/server/CONTRACT.md) | [Capability](src/server/schema/exterior-capability.schema.json) or [job](src/server/schema/exterior-build-job.schema.json) |

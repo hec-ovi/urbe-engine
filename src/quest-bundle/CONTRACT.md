@@ -31,7 +31,7 @@ Purpose: validates and selects the complete Quests engine handoff without breaki
 - Objective rows are the byte-equivalent quest and step ordered projection of each authored target.
 - A selected bundle contains no record owned by an omitted quest and no mission asset without a selected item or fixed mechanic binding or selected scene.
 - A scene names its own quest's steps, flags and roles and assets the bundle requests, asks only for what the host scenery capability declares, and a bundle with scenes declares that capability. A 1.2 investigation and the scene it stands over name each other, and every element its evidence shows on is that scene's.
-- Every rescue, access, hacking and sabotage step binds its exact authored target to a fixed asset interaction. Engine admits measured `public-transit` transportation with at most one controlled passenger.
+- Every rescue, access, hacking and sabotage step binds its exact authored target to a fixed asset interaction, except an access step at a locked `door` by its address, which the game's lock plays ([access](../game/access/CONTRACT.md)) and which binds none. Engine admits measured `public-transit` transportation with at most one controlled passenger.
 - Filenames stay in one directory and counts describe the exact returned arrays.
 - Unknown or mismatched cross-file references fail before gameplay starts.
 
