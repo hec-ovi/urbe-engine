@@ -100,7 +100,109 @@ describe( 'saved world location', () => {
 
 	} );
 
+	it( 'answers from its grid exactly what a walk over every footprint and lot answers, overlaps, holes and edges included', () => {
+
+		let seed = 7;
+		const random = () => ( seed = ( seed * 16807 ) % 2147483647 ) / 2147483647;
+		const box = ( x, z, w, d ) => [ [ x, z ], [ x + w, z ], [ x + w, z + d ], [ x, z + d ] ];
+		const parcels = [], buildingFootprints = [];
+		for ( let i = 0; i < 300; i ++ ) {
+
+			// Lots and footprints of all sizes, some straddling many cells, many overlapping.
+			const x = Math.round( random() * 600 ) / 2, z = Math.round( random() * 600 ) / 2;
+			const w = 4 + Math.round( random() * 160 ) / 2, d = 4 + Math.round( random() * 160 ) / 2;
+			parcels.push( { id: `p${i}`, type: 'lot', lot: box( x, z, w, d ) } );
+			if ( i % 3 === 0 ) continue;
+			const footprint = { parcelId: `p${( i * 7 ) % 300}`, outline: [ [ x + 1, z + 1 ], [ x + w - 1, z + 2 ], [ x + w / 2, z + d - 1 ] ] };
+			if ( i % 5 === 0 ) footprint.holes = [ box( x + w / 2 - 1, z + 3, 2, 2 ) ];
+			buildingFootprints.push( footprint );
+
+		}
+		const city = { districts: atlas.districts, parcels };
+		const locator = new Locator( city, [], [], { buildingFootprints } );
+		const walked = new WalkedLocator( city, locator.buildingFootprints );
+		const points = [];
+		for ( let i = 0; i < 4000; i ++ ) points.push( [ random() * 400 - 20, random() * 400 - 20 ] );
+		// Every corner and edge midpoint, and the grid's own cell edges.
+		for ( const footprint of buildingFootprints ) for ( const [ index, [ x, z ] ] of footprint.outline.entries() ) {
+
+			const [ nx, nz ] = footprint.outline[ ( index + 1 ) % footprint.outline.length ];
+			points.push( [ x, z ], [ ( x + nx ) / 2, ( z + nz ) / 2 ] );
+
+		}
+		for ( let x = 0; x <= 384; x += 32 ) for ( let z = 0; z <= 384; z += 32 ) points.push( [ x, z ] );
+		let occupied = 0;
+		for ( const [ x, z ] of points ) {
+
+			expect( locator.occupiedParcelId( x, z ) ).toBe( walked.occupiedParcelId( x, z ) );
+			expect( locator.location( x, z ) ).toEqual( walked.location( x, z ) );
+			if ( walked.occupiedParcelId( x, z ) ) occupied ++;
+
+		}
+		expect( occupied ).toBeGreaterThan( 500 );
+
+	} );
+
 } );
+
+/** What the locator answered when it walked every footprint and lot in order. */
+class WalkedLocator {
+
+	constructor( city, footprints ) {
+
+		this.parcels = city.parcels.map( ( p ) => ( { id: p.id, label: `${p.id} ${p.type}`.replace( /_/g, ' ' ), ring: p.lot ?? p.footprint } ) );
+		this.footprints = footprints;
+		this.districts = city.districts.map( ( d ) => ( { id: d.id, label: `${d.kind} · ${d.tier}`.replace( /_/g, ' ' ), ring: d.boundary } ) );
+
+	}
+
+	occupiedParcelId( x, z ) {
+
+		return this.footprints.find( ( footprint ) => ( inRing( footprint.outline, x, z ) || onEdge( footprint.outline, x, z ) ) &&
+			! ( footprint.holes ?? [] ).some( ( hole ) => inRing( hole, x, z ) || onEdge( hole, x, z ) ) )?.parcelId ?? null;
+
+	}
+
+	location( x, z ) {
+
+		const id = this.occupiedParcelId( x, z );
+		const parcel = id ? this.parcels.find( ( candidate ) => candidate.id === id ) : this.parcels.find( ( candidate ) => inRing( candidate.ring, x, z ) );
+		if ( parcel ) return { id: parcel.id, name: parcel.label };
+		const district = this.districts.find( ( candidate ) => inRing( candidate.ring, x, z ) );
+		return district ? { id: district.id, name: district.label } : { id: 'outskirts', name: 'outskirts' };
+
+	}
+
+}
+
+function inRing( ring, x, z ) {
+
+	let hit = false;
+	for ( let i = 0, j = ring.length - 1; i < ring.length; j = i ++ ) {
+
+		const [ xi, zi ] = ring[ i ], [ xj, zj ] = ring[ j ];
+		if ( ( zi > z ) !== ( zj > z ) && x < ( ( xj - xi ) * ( z - zi ) ) / ( zj - zi ) + xi ) hit = ! hit;
+
+	}
+	return hit;
+
+}
+
+function onEdge( ring, x, z ) {
+
+	const epsilon = 1e-7;
+	for ( let i = 0, j = ring.length - 1; i < ring.length; j = i ++ ) {
+
+		const [ ax, az ] = ring[ j ], [ bx, bz ] = ring[ i ];
+		const dx = bx - ax, dz = bz - az, length = Math.hypot( dx, dz );
+		if ( length === 0 || Math.abs( dx * ( z - az ) - dz * ( x - ax ) ) > epsilon * length ) continue;
+		const along = ( x - ax ) * dx + ( z - az ) * dz;
+		if ( along >= - epsilon * length && along <= length * length + epsilon * length ) return true;
+
+	}
+	return false;
+
+}
 
 function mergedParcels() {
 

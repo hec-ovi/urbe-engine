@@ -1,7 +1,18 @@
+/** Side of the grid cells the footprints and lots are filed under, in metres. */
+const CELL = 32;
+/** How far past its outline a ring is filed, covering the on-edge test's tolerance. */
+const MARGIN = 1e-3;
+
 /**
  * Where a world point is: a streamed room or published building footprint
  * owns occupied space, with the original parcel lots as the outdoor fallback.
  * One kit building may intentionally stand across more than one Atlas lot.
+ *
+ * The HUD, the quests and the save ask this several times a frame, and a city
+ * holds thousands of footprints and lots, so each is filed once in the grid
+ * cells its bounds cover. A point tests only the rings filed in its own cell,
+ * in their published order, so the first one that holds it is the one a walk
+ * over the whole list finds.
  */
 export class Locator {
 
@@ -25,6 +36,8 @@ export class Locator {
 		// outside the occupied outline retain their original geography.
 		this.buildingFootprints = buildingFootprints.filter( footprint =>
 			this.parcelById.has( footprint.parcelId ) && footprint.outline?.length >= 3 );
+		this.footprintGrid = new RingGrid( this.buildingFootprints.map( footprint => footprint.outline ) );
+		this.parcelGrid = new RingGrid( this.parcels.map( parcel => parcel.ring ) );
 
 		const busLevels = new Map();
 		for ( const route of transitRoutes.filter( ( candidate ) => candidate.kind === 'bus' ) ) {
@@ -79,9 +92,14 @@ export class Locator {
 	/** The actual standing building at this point, excluding lot setbacks and holes. */
 	occupiedParcelId( x, z ) {
 
-		return this.buildingFootprints.find( footprint =>
-			( inside( footprint.outline, x, z ) || onRing( footprint.outline, x, z ) ) &&
-			! ( footprint.holes ?? [] ).some( hole => inside( hole, x, z ) || onRing( hole, x, z ) ) )?.parcelId ?? null;
+		for ( const index of this.footprintGrid.at( x, z ) ) {
+
+			const footprint = this.buildingFootprints[ index ];
+			if ( ( inside( footprint.outline, x, z ) || onRing( footprint.outline, x, z ) ) &&
+				! ( footprint.holes ?? [] ).some( hole => inside( hole, x, z ) || onRing( hole, x, z ) ) ) return footprint.parcelId;
+
+		}
+		return null;
 
 	}
 
@@ -116,7 +134,63 @@ export class Locator {
 		if ( room ) return room;
 		const buildingId = this.occupiedParcelId( x, z );
 		if ( buildingId ) return this.parcelById.get( buildingId );
-		return this.parcels.find( parcel => inside( parcel.ring, x, z ) );
+		for ( const index of this.parcelGrid.at( x, z ) ) if ( inside( this.parcels[ index ].ring, x, z ) ) return this.parcels[ index ];
+		return undefined;
+
+	}
+
+}
+
+/**
+ * Rings filed by the grid cells their bounds cover: `at(x, z)` lists, in
+ * ascending order, the indices of the rings whose bounds hold that point.
+ */
+class RingGrid {
+
+	constructor( rings ) {
+
+		this.cells = new Map();
+		this.bounds = new Float64Array( rings.length * 4 );
+		rings.forEach( ( ring, index ) => {
+
+			if ( ! ring?.length ) return;
+			let minX = Infinity, minZ = Infinity, maxX = - Infinity, maxZ = - Infinity;
+			for ( const [ x, z ] of ring ) {
+
+				minX = Math.min( minX, x ); maxX = Math.max( maxX, x );
+				minZ = Math.min( minZ, z ); maxZ = Math.max( maxZ, z );
+
+			}
+			const bounds = [ minX - MARGIN, minZ - MARGIN, maxX + MARGIN, maxZ + MARGIN ];
+			this.bounds.set( bounds, index * 4 );
+			for ( let cx = Math.floor( bounds[ 0 ] / CELL ); cx <= Math.floor( bounds[ 2 ] / CELL ); cx ++ ) {
+
+				for ( let cz = Math.floor( bounds[ 1 ] / CELL ); cz <= Math.floor( bounds[ 3 ] / CELL ); cz ++ ) {
+
+					const key = `${cx},${cz}`;
+					let cell = this.cells.get( key );
+					if ( ! cell ) this.cells.set( key, cell = [] );
+					cell.push( index );
+
+				}
+
+			}
+
+		} );
+
+	}
+
+	* at( x, z ) {
+
+		const cell = this.cells.get( `${Math.floor( x / CELL )},${Math.floor( z / CELL )}` );
+		if ( ! cell ) return;
+		const bounds = this.bounds;
+		for ( const index of cell ) {
+
+			const at = index * 4;
+			if ( x >= bounds[ at ] && z >= bounds[ at + 1 ] && x <= bounds[ at + 2 ] && z <= bounds[ at + 3 ] ) yield index;
+
+		}
 
 	}
 
