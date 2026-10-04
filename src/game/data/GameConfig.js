@@ -9,11 +9,12 @@ const DEFAULTS = {
 	lightingHour: LOOK.hour,
 	timeScale: 1,
 	// Inspecting a city (`out` alone) keeps its streets empty; playing a
-	// catalog game fills them.
+	// catalog game fills them, as a believable night street rather than a
+	// packed one: up to 90 people within the crowd's reach and 8 cars.
 	crowd: 0,
 	cars: 0,
-	playCrowd: 200,
-	playCars: 18,
+	playCrowd: 90,
+	playCars: 8,
 	crowdRadius: 90,
 	carRadius: 110,
 	stress: 0,

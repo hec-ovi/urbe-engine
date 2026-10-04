@@ -8,8 +8,8 @@ export interface GameQuery {
   /** Only webgl selects the fallback; otherwise webgpu. */ backend?: string;
   /** low, medium, high or ultra; unknown/absent follows backend. */ quality?: string;
   /** Integer 0-23; absent, a new story starts during its first client appointment, else 21. */ hour?: string;
-  /** Integer 0-600, default 0. */ crowd?: string;
-  /** Integer 0-600, default 0. */ cars?: string;
+  /** Integer 0-600, default 0, or 90 in a catalog game. */ crowd?: string;
+  /** Integer 0-600, default 0, or 8 in a catalog game. */ cars?: string;
   /** Metres 1-10000, default 90. */ crowdRadius?: string;
   /** Metres 1-10000, default 110. */ carRadius?: string;
   /** Number 0-8, default 1. */ density?: string;
