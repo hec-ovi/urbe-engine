@@ -2,6 +2,8 @@ import { chatDeltas } from '../../../quests/dist/index.js';
 
 const DEFAULT_BASE_URL = 'http://localhost:8080/v1';
 const DEFAULT_TIMEOUT_MS = 60000;
+/** A model server on this machine, or the host of the container the server runs in. */
+const LOCAL = /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\]|host\.docker\.internal)(?::\d+)?(?:\/|$)/;
 
 /**
  * The quests StreamingLLMPort over an OpenAI-compatible Chat Completions
@@ -14,16 +16,19 @@ export class OpenAIPort {
 
 	/**
 	 * The port the environment names: LLM_BASE_URL, LLM_MODEL (empty: the first
-	 * model the server lists), LLM_API_KEY (sent as a bearer token when set) and
-	 * LLM_TIMEOUT_MS.
+	 * model the server lists), LLM_API_KEY (sent as a bearer token when set),
+	 * LLM_TIMEOUT_MS and LLM_CACHE_PROMPT (`1` or `0`; unset, on for a model
+	 * server on this machine, which is llama.cpp's own).
 	 */
 	static fromEnv( env = process.env ) {
 
 		const timeoutMs = Number( env.LLM_TIMEOUT_MS );
-		return new OpenAIPort( env.LLM_BASE_URL || DEFAULT_BASE_URL, {
+		const baseUrl = env.LLM_BASE_URL || DEFAULT_BASE_URL;
+		return new OpenAIPort( baseUrl, {
 			model: env.LLM_MODEL,
 			apiKey: env.LLM_API_KEY,
-			timeoutMs: timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS
+			timeoutMs: timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS,
+			cachePrompt: env.LLM_CACHE_PROMPT === undefined || env.LLM_CACHE_PROMPT === '' ? LOCAL.test( baseUrl ) : env.LLM_CACHE_PROMPT === '1'
 		} );
 
 	}
@@ -31,11 +36,17 @@ export class OpenAIPort {
 	#headers;
 
 	/** @param timeoutMs a request fails once the server has sent nothing for this long */
-	constructor( baseUrl, { model = null, apiKey = null, timeoutMs = DEFAULT_TIMEOUT_MS } = {} ) {
+	/**
+	 * @param cachePrompt ask a llama.cpp server to keep each request's prompt
+	 *   and reuse its longest shared start for the next (`cache_prompt`); a
+	 *   hosted API would refuse the field, so it is sent only when asked
+	 */
+	constructor( baseUrl, { model = null, apiKey = null, timeoutMs = DEFAULT_TIMEOUT_MS, cachePrompt = false } = {} ) {
 
 		this.baseUrl = baseUrl.replace( /\/+$/, '' );
 		this.model = model || null;
 		this.timeoutMs = timeoutMs;
+		this.cachePrompt = cachePrompt;
 		this.#headers = { 'Content-Type': 'application/json', ...( apiKey ? { Authorization: `Bearer ${apiKey}` } : {} ) };
 		/** Server-reported token totals across calls; completion includes any thinking the server does not return. */
 		this.usage = { calls: 0, promptTokens: 0, completionTokens: 0 };
@@ -67,7 +78,7 @@ export class OpenAIPort {
 			const model = this.model ??= await this.#firstModel( idle.signal );
 			const response = await this.#fetch( '/chat/completions', idle.signal, {
 				method: 'POST',
-				body: JSON.stringify( { model, ...chat, stream: true, stream_options: { include_usage: true } } )
+				body: JSON.stringify( { model, ...chat, stream: true, stream_options: { include_usage: true }, ...( this.cachePrompt ? { cache_prompt: true } : {} ) } )
 			} );
 			this.usage.calls += 1;
 			yield* chatDeltas( response.body && idle.watch( response.body ), ( usage ) => {

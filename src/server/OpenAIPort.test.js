@@ -67,6 +67,26 @@ describe( 'OpenAI-compatible dialogue port', () => {
 
 	} );
 
+	it( 'asks a model server on this machine to keep and reuse its prompts, and a hosted one only when told', async () => {
+
+		const bodies = [];
+		vi.stubGlobal( 'fetch', vi.fn( async ( url, init ) => {
+
+			if ( init.body ) bodies.push( JSON.parse( init.body ) );
+			return url.endsWith( '/models' ) ? Response.json( { data: [ { id: 'm' } ] } ) : sse( [ text( 'Hi.' ) ] );
+
+		} ) );
+		expect( OpenAIPort.fromEnv( {} ).cachePrompt ).toBe( true );
+		expect( OpenAIPort.fromEnv( { LLM_BASE_URL: 'http://host.docker.internal:8080/v1' } ).cachePrompt ).toBe( true );
+		expect( OpenAIPort.fromEnv( { LLM_BASE_URL: 'https://api.example.com/v1' } ).cachePrompt ).toBe( false );
+		expect( OpenAIPort.fromEnv( { LLM_BASE_URL: 'https://api.example.com/v1', LLM_CACHE_PROMPT: '1' } ).cachePrompt ).toBe( true );
+		expect( OpenAIPort.fromEnv( { LLM_CACHE_PROMPT: '0' } ).cachePrompt ).toBe( false );
+		await OpenAIPort.fromEnv( {} ).complete( { system: 'S', prompt: 'P' } );
+		await OpenAIPort.fromEnv( { LLM_BASE_URL: 'https://api.example.com/v1' } ).complete( { system: 'S', prompt: 'P' } );
+		expect( bodies.map( ( body ) => body.cache_prompt ) ).toEqual( [ true, undefined ] );
+
+	} );
+
 	it( 'streams tools out and tool-call fragments back', async () => {
 
 		let body = null;
