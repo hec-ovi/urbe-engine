@@ -89,6 +89,17 @@ describe( 'game URL configuration', () => {
 
 	} );
 
+	it( 'leaves the facades\' picture screens out unless the run asks for them', () => {
+
+		for ( const [ query, screens ] of [ [ '', false ], [ '&screens=off', false ], [ '&screens=1', false ], [ '&screens=on', true ] ] ) {
+
+			window.history.replaceState( {}, '', `/?mode=game&game=night-shift${query}` );
+			expect( GameConfig.fromUrl().screens ).toBe( screens );
+
+		}
+
+	} );
+
 	it( 'refuses a game id that could escape the game directory', () => {
 
 		window.history.replaceState( {}, '', '/?mode=game&game=../outside' );

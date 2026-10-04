@@ -418,6 +418,9 @@ export class GameApp {
 		await theme;
 		this.resolver = resolver;
 		const factory = new PbrMaterialFactory( resolver, this.tier, new TextureSource().detect( this.renderer ) );
+		// Every shell reader and the neon read it: the facades' picture screens
+		// stand only when the run asks for them (city/FacadeScreens.js).
+		factory.pictureScreens = config.screens;
 		// Streets, sidewalks and exterior walls wear world-space use: oily
 		// smears, polish, grime and stains, from the Materials surface-detail
 		// masks where the catalog publishes them and procedural stand-ins

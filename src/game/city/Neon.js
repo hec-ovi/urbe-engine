@@ -3,6 +3,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { Rng } from '../../city/Rng.js';
 import { signedArea } from '../ground/Polygons.js';
 import { GLOW, parcelSeed, shellGlows } from './ShellFixtures.js';
+import { screensShown } from './FacadeScreens.js';
 
 // An ad screen is a large dim panel; its flux is in lumens like every other
 // fixture the city lights itself with.
@@ -43,8 +44,11 @@ const SCREEN_ASPECT = 16 / 9;
 /**
  * Street-level light on the facades. Two jobs:
  *
- * - it hangs flat ad screens on the facade each parcel's street access faces,
- *   textured and lit by the materials database's own emissive entries;
+ * - where the run asks for picture screens (`factory.pictureScreens`,
+ *   [FacadeScreens.js](FacadeScreens.js)), it hangs flat ad screens on the
+ *   facade each parcel's street access faces, textured and lit by the
+ *   materials database's own emissive entries; otherwise it hangs none, and
+ *   the wall they stood off is whole;
  * - it registers a fixture, in lumens, for every emitter the city actually
  *   built: the screens hung here, plus everything the building carries itself
  *   (ShellFixtures.js). A building with no sign gets no sign light, which is
@@ -72,6 +76,7 @@ export class Neon {
 
 		const screens = new Map();
 		const glows = [];
+		const shown = screensShown( this.factory );
 
 		for ( const parcel of this.atlas.parcels ) {
 
@@ -85,7 +90,7 @@ export class Neon {
 				parcelId: parcel.id, blueprint: building.blueprint, hasInterior: building.hasInterior, rng
 			} ) );
 
-			const facade = frontFacade( building.blueprint, parcel );
+			const facade = shown ? frontFacade( building.blueprint, parcel ) : null;
 
 			if ( facade ) {
 
