@@ -172,6 +172,22 @@
         }
       }
     },
+    "overheard": {
+      "description": "What a person along with the player (following or leading them) heard the player say to other people and those people say back, oldest first (Quests DialogOverheard).",
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "player", "reply"],
+        "properties": {
+          "name": { "$ref": "#/$defs/words" },
+          "role": { "$ref": "#/$defs/words" },
+          "player": { "type": "string", "minLength": 1, "maxLength": 600 },
+          "reply": { "type": "string", "minLength": 1, "maxLength": 600 }
+        }
+      }
+    },
     "task": {
       "description": "What the person is doing for the player now: following, leading to a place, or an errand the player asked for.",
       "type": "object",

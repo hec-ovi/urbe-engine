@@ -124,6 +124,10 @@ const AUTOSAVE_SECONDS = 180;
 const AUTOSAVE_DELAY_MS = 1500;
 /** Most places a talk tells the way to, the walking pace that times them (m/s) and how much longer a walk is than the straight line when no route is known. */
 const MAX_WAYS = 5;
+/** The exchanges with others a person along with the player keeps, tells in one talk, and how long each line of them may be. */
+const OVERHEARD_KEPT = 16;
+const OVERHEARD_TOLD = 6;
+const OVERHEARD_CHARS = 600;
 const WALK_PACE = 1.4;
 const DETOUR = 1.25;
 /** Game minutes a person someone tried to lift a card off stays on guard. */
@@ -1506,6 +1510,7 @@ export class GameApp {
 				this.view.dialog.setSending( false );
 			}
 		}
+		if ( done && whole && ! arrival ) this.#overhear( conversation, text, whole );
 		if ( done && offer ) this.#takeOffer( conversation, offer, whole, text );
 		// Asked one action and answered in words alone: they would not; the ways to answer stay.
 		else if ( done && ask ) this.#showActions( conversation );
@@ -1529,14 +1534,35 @@ export class GameApp {
 			scenes: this.scenery.stagedPlaces(), parcelId: this.standing?.parcelId ?? null, guided: guide?.kind === 'parcel' ? guide.placeId : null
 		} ) ?? [];
 		const task = this.companion.taskOf?.( npcId ) ?? null;
+		// A person along with the player heard what the player said to others meanwhile.
+		const overheard = call ? [] : ( this.overheard ?? [] ).filter( ( entry ) => entry.by === npcId ).slice( - OVERHEARD_TOLD ).map( ( { by, ...entry } ) => entry );
 		// Their home and work by address, where inside they stand and the cards they carry, wherever their body is.
 		const addresses = this.#addressContext( call ? { ...conversation, person: this.#remoteBody( npcId ) } : conversation, line );
 		return {
 			...( offers ? { offers } : {} ), ...( guide ? { guide } : {} ), ...( events.length ? { events } : {} ), ...( task ? { task } : {} ),
-			...( call ? { call: { caller: 'player' } } : {} ), ...( addresses ? { addresses } : {} ),
+			...( call ? { call: { caller: 'player' } } : {} ), ...( addresses ? { addresses } : {} ), ...( overheard.length ? { overheard } : {} ),
 			// A person on the phone is where their body is, wherever that is.
 			...this.#bodyContext( call ? { ...conversation, person: this.#remoteBody( npcId ) } : conversation, line )
 		};
+	}
+
+	/**
+	 * Notes an exchange the player had with somebody while a person was along
+	 * with them, following, leading or walking with them on a story's escort:
+	 * that person heard it, and a talk with them carries it as overheard.
+	 */
+	#overhear( conversation, line, reply ) {
+		if ( conversation.call ) return;
+		const along = [ this.companion?.state?.npcId, this.questGameplay?.escort?.target?.actorIds?.[ 0 ] ].filter( ( id ) => id && id !== conversation.npcId );
+		if ( ! along.length ) return;
+		const instance = conversation.instance;
+		const role = instance?.job?.role ?? this.npcTypeLabels?.get( instance?.type ) ?? null;
+		const cut = ( text ) => stripCues( String( text ) ).trim().slice( 0, OVERHEARD_CHARS );
+		const player = cut( line ), said = cut( reply );
+		if ( ! player || ! said ) return;
+		for ( const by of new Set( along ) ) {
+			this.overheard = [ ...( this.overheard ?? [] ), { by, name: speakerOf( conversation ).name, ...( role ? { role: String( role ).replace( /_/g, ' ' ).slice( 0, 200 ) } : {} ), player, reply: said } ].slice( - OVERHEARD_KEPT );
+		}
 	}
 
 	/** The talk request's `offers` for one chosen ask: their number, a copy of one of their cards, a meeting where the player is, or a companion offer. */

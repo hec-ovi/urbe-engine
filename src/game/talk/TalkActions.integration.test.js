@@ -177,6 +177,25 @@ describe( 'what a person agrees to in words happens', () => {
 
 	} );
 
+	it( 'lets a person who follows the player hear what the player says to somebody else, and tell it as overheard', async () => {
+
+		const { app, world, npc, frame, model, say } = await chat( 'Fine, you lead.', 'Nobody since spring.', 'She said nobody has rented it since spring.' );
+		await say( 'Come with me' );
+		frame();
+		expect( world.companion.state ).toMatchObject( { npcId: npc.npcId, kind: 'follow' } );
+		// The player talks to the person's friend while the follower is along.
+		const friend = world.bridge.getNPC( world.friend );
+		app.interactor.conversation = { npcId: friend.npcId, instance: friend, behavior: { mode: 'street', activity: 'leisure', place: { kind: 'parcel', id: 'p_clinic' }, interrupted: true } };
+		await say( 'Who rents 1407?' );
+		app.interactor.conversation = { npcId: npc.npcId, instance: app.sim.getNPC( npc.npcId ), behavior: { mode: 'street', activity: 'leisure', place: { kind: 'parcel', id: 'p_cafe' }, interrupted: true } };
+		await say( 'What did they say?' );
+		const name = `${friend.name.given} ${friend.name.family}`;
+		expect( model.seen[ 2 ].messages[ 0 ].content ).toContain( `You overheard the player talking to ${name}` );
+		expect( model.seen[ 2 ].messages[ 0 ].content ).toContain( 'The player said: "Who rents 1407?"' );
+		expect( model.seen[ 1 ].messages[ 0 ].content ).not.toContain( 'You overheard' );
+
+	} );
+
 	it( 'leads the player home when they say "Fine, follow me" to "show me where you live"', async () => {
 
 		const { app, world, npc, frame, model, say } = await chat( 'Fine, follow me. It is not far.' );
