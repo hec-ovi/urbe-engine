@@ -161,6 +161,26 @@ describe( 'Crowd walking surface', () => {
 
 	} );
 
+	it( 'fades somebody whose walk goes into a building that shows no floor at its door, where the player sees them, rather than walking them into an empty shell', () => {
+
+		const crowd = crowdOn( { floorShown: () => false, visibility: { hidden: () => false } } );
+		const player = new THREE.Vector3();
+		// Walking home on the pavement, then over the doorstep of the shop: from there continuity has them in it.
+		const walking = crowd.syncActor( { ...persistentActor( instance ), mode: 'resuming', place: { kind: 'edge', id: 'e3' }, position: [ 4, 0.2, 0 ] }, player );
+		expect( walking ).toMatchObject( { npcId: 'walker' } );
+		for ( const mode of [ 'resuming', 'released', 'schedule' ] ) {
+
+			expect( crowd.syncActor( { ...persistentActor( instance ), mode, place: { kind: 'parcel', id: 'shop' }, position: [ 4, 0.2, 1 ] }, player ) ).toBeNull();
+
+		}
+		// The body stands where it crossed and fades out there: it never walks on into the building.
+		expect( walking ).toMatchObject( { leaving: true, frozen: true } );
+		expect( walking.position.toArray() ).toEqual( [ 4, expect.any( Number ), 0 ] );
+		crowd.update( 2, player, { timeMin: 600, daySeconds: 36000 } );
+		expect( crowd.members.has( walking.id ) ).toBe( false );
+
+	} );
+
 } );
 
 describe( 'Crowd population window', () => {
