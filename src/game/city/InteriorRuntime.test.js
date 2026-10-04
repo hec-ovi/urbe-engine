@@ -558,26 +558,37 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 
 	} );
 
-	it( 'draws a building\'s floors only within sight of its rooms, keeps them solid beyond, and casts room shadows only inside', async () => {
+	it( 'draws a building\'s floors only from inside it or at a way in, keeps them built and solid from the street, and casts room shadows only inside', async () => {
 
 		const model = await stream();
-		// The rooms reach the shell's inner face, 0.77 m in from the lot's front edge at z = 0.
-		const street = ( z ) => ( { x: 12, y: 0.1, z } );
+		const street = ( x, z ) => ( { x, y: 0.1, z } );
 		const drawn = () => [ 0, 1 ].map( ( floor ) => bandOf( model, floor ).handles !== null && bandOf( model, floor ).group.visible );
+		const nothing = () => model.modules.copyCount === 0 && propCopies( model ) === 0;
 		const casting = () => [ ...new Set( meshesOf( model.props.group ).map( ( mesh ) => mesh.castShadow ) ) ];
 
 		// 50 m out the floors are built and solid, and nothing of them is drawn.
-		await settle( model, street( - 50 ) );
+		await settle( model, street( 12, - 50 ) );
 		expect( bands( model ) ).toEqual( [ 'p1:0', 'p1:1' ] );
 		expect( model.floorShown( 'p1', 0 ) ).toBe( true );
 		expect( drawn() ).toEqual( [ false, false ] );
-		expect( model.modules.copyCount ).toBe( 0 );
-		expect( propCopies( model ) ).toBe( 0 );
-		await settle( model, street( - 32 ) );
-		expect( drawn() ).toEqual( [ false, false ] );
+		expect( nothing() ).toBe( true );
 
-		// Across the street the rooms behind the glass are drawn, and cast nothing.
-		await settle( model, street( - 10 ) );
+		// The street door is where the layouts reserve it, on the ground floor.
+		const doors = model.live.get( 'p1' ).entries.filter( ( entry ) => entry.y === 0 && ! entry.open );
+		expect( doors.length ).toBeGreaterThan( 0 );
+		const [ door ] = doors;
+		const out = ( metres ) => street( door.x, door.z - metres );
+
+		// Across the street, and along a wall a step from the facade, the rooms behind the glass are not drawn.
+		await settle( model, out( 10 ) );
+		expect( drawn() ).toEqual( [ false, false ] );
+		expect( nothing() ).toBe( true );
+		await settle( model, street( - 2.5, 16 ) );
+		expect( drawn() ).toEqual( [ false, false ] );
+		expect( nothing() ).toBe( true );
+
+		// At the door the floors it opens into are drawn whole, and cast nothing.
+		await settle( model, out( 3.5 ) );
 		expect( drawn() ).toEqual( [ true, true ] );
 		expect( model.modules.copyCount ).toBeGreaterThan( 0 );
 		expect( propCopies( model ) ).toBeGreaterThan( 0 );
@@ -588,16 +599,34 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		expect( drawn() ).toEqual( [ true, true ] );
 		expect( casting() ).toEqual( [ true ] );
 
-		// Walking away keeps them drawn a few metres past where they came in, then lets them go.
-		await settle( model, street( - 34 ) );
+		// Stepping back out keeps them drawn a metre past where they came in, then lets them go.
+		await settle( model, out( 4.5 ) );
 		expect( drawn() ).toEqual( [ true, true ] );
 		expect( casting() ).toEqual( [ false ] );
-		await settle( model, street( - 40 ) );
+		await settle( model, out( 6 ) );
 		expect( drawn() ).toEqual( [ false, false ] );
-		expect( model.modules.copyCount ).toBe( 0 );
-		expect( propCopies( model ) ).toBe( 0 );
+		expect( nothing() ).toBe( true );
 		expect( bands( model ) ).toEqual( [ 'p1:0', 'p1:1' ] );
 
+		model.dispose();
+
+	}, 30000 );
+
+	it( 'draws a building from as far as its rooms are seen through an open shopfront', async () => {
+
+		const model = await stream( { mutate: ( source ) => {
+
+			const ground = source.layouts[ source.building.floors.find( ( floor ) => floor.index === 0 ).layout ].floor;
+			for ( const opening of ground.openingReservations ) if ( opening.kind === 'door' ) opening.kind = 'openFront';
+
+		} } );
+		await settle( model, { x: 12, y: 0.1, z: - 50 } );
+		const [ front ] = model.live.get( 'p1' ).entries.filter( ( entry ) => entry.open );
+		expect( front ).toBeDefined();
+		await settle( model, { x: front.x, y: 0.1, z: front.z - 20 } );
+		expect( bandOf( model, 0 ).handles ).not.toBe( null );
+		await settle( model, { x: front.x, y: 0.1, z: front.z - 40 } );
+		expect( bandOf( model, 0 ).handles ).toBe( null );
 		model.dispose();
 
 	}, 30000 );
@@ -672,7 +701,10 @@ describe( 'the city draws every furnished floor from shared modules', () => {
 		expect( landings.length ).toBeGreaterThan( 0 );
 		expect( landings.every( ( mesh ) => warmup.programsOf( mesh ).length === 0 ) ).toBe( true );
 
+		// From across the street the cars stay out of sight; inside they are drawn, and they ride either way.
 		await settle( model, street( - 10 ) );
+		expect( shown().every( ( visible ) => visible === false ) ).toBe( true );
+		await settle( model, feetOn( 0 ) );
 		expect( shown().every( ( visible ) => visible === true ) ).toBe( true );
 		await settle( model, street( - 40 ) );
 		expect( shown().every( ( visible ) => visible === false ) ).toBe( true );
@@ -784,6 +816,23 @@ it( 'stands solid module slabs while furniture is pending and cancels stale admi
 	model.dispose();
 } );
 
+it( 'stands the placeholder slabs solid from the street, and puts them in the draws only once the building is drawn', async () => {
+	const model = await stream();
+	let release;
+	model.props.prepare = () => new Promise( resolve => { release = resolve; } );
+	model.update( { x: 12, y: 0.1, z: - 20 } );
+	await tick();
+	expect( model.solid.get( 'p1:0/floor' ).boxes.length ).toBeGreaterThan( 0 );
+	expect( model.modules.copyCount ).toBe( 0 );
+	model.update( feetOn( 0 ) );
+	expect( model.modules.copyCount ).toBeGreaterThan( 0 );
+	model.update( { x: 12, y: 0.1, z: - 20 } );
+	expect( model.modules.copyCount ).toBe( 0 );
+	expect( model.solid.has( 'p1:0/floor' ) ).toBe( true );
+	release();
+	model.dispose();
+} );
+
 it( 'sizes the shared draws as the building registers, so no floor it stands, walked or sent for by a lift, grows one', async () => {
 
 	const model = await stream();
@@ -801,7 +850,7 @@ it( 'sizes the shared draws as the building registers, so no floor it stands, wa
 	expect( Math.max( ...held ) ).toBeGreaterThan( 64 );
 	expect( model.props.peaks.size ).toBeGreaterThan( 0 );
 
-	for ( const feet of [ { x: 12, y: 0.1, z: - 50 }, { x: 12, y: 0.1, z: - 10 }, ...[ 0, 1, 2, 3, 4, 3, 2, 1, 0 ].map( feetOn ) ] ) {
+	for ( const feet of [ { x: 12, y: 0.1, z: - 50 }, { x: 12, y: 0.1, z: - 10 }, { x: 12, y: 0.1, z: - 2 }, ...[ 0, 1, 2, 3, 4, 3, 2, 1, 0 ].map( feetOn ) ] ) {
 
 		await settle( model, feet );
 		look();

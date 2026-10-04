@@ -27,14 +27,32 @@ const KEEP_REACH = BAND_REACH + 1;
  */
 const INSIDE = 1;
 /**
- * Another building's floors are drawn only this close, where its rooms are
- * seen through the glass and the game lights them (its room view reaches
- * 32 m), and let go past the second distance so a walk along the boundary
- * cannot thrash. Further out they stay built and solid, out of the draws:
- * the loading radius is for walking in, not for looking.
+ * A building's floors are drawn only while the player is in it or at one of
+ * its ways in: this close to a door, an aperture or a shopfront, on that
+ * opening's own floor, and let go a metre further out so a step back and
+ * forth on the threshold cannot thrash. From the street the exterior's own
+ * glazing and window scenery stand for the rooms; the floors behind it are
+ * built and solid from the loading radius on, so walking in finds them ready.
+ */
+const ENTRY_RADIUS = 4;
+const ENTRY_KEEP = 5;
+/** How far above or below an opening's floor the feet may be and still stand at it. */
+const ENTRY_RISE = 3;
+/**
+ * A shopfront has no glass or scenery of its own to stand for the rooms, so
+ * its building's floors are drawn from as far as they are seen through it,
+ * and let go past the second distance.
  */
 const VIEW_RADIUS = 32;
 const VIEW_KEEP = 36;
+/** The openings a body walks into a building by. */
+const ENTRIES = new Set( [ 'door', 'aperture', 'openFront' ] );
+/**
+ * Milliseconds the frame a building's floors are first drawn may spend putting
+ * them into the draws: they are built, and only their copies go in, so the
+ * floor at the threshold is whole on the frame the player first sees it.
+ */
+const ENTRY_PAINT_MS = 6;
 /**
  * Milliseconds of a frame the floors coming into sight may spend putting their
  * copies into the shared draws; the rest go in on the frames after.
@@ -67,9 +85,10 @@ const FAILED = 'failed';
  * - those same floors are in the scene and in the physics world, one more
  *   above and below stays built, and a floor further away than that drops its
  *   instances. Walking up the stairs moves the window;
- * - those floors are drawn only in a building within sight of its rooms,
- *   and cast room shadows only in the building the player is in; further
- *   out they stay built and solid, so walking in never waits for them;
+ * - those floors are drawn only in the building the player is in or at a
+ *   way into (`ENTRY_RADIUS`), and cast room shadows only in the one they are
+ *   in; everywhere else they stay built and solid, out of the draws, so
+ *   walking in never waits for them and the street draws no room;
  * - past a wider radius the whole building is let go.
  *
  * The shells are not here: they load once for the whole city (BuildingsLoader,
@@ -138,6 +157,8 @@ export class InteriorStream {
 				floors: buildingFloors( parcelId, building.interior ),
 				// Its exterior, for the glass each storey's rooms take the day through.
 				blueprint: building.blueprint ?? null,
+				// Its ways in, from the openings its own layouts reserve.
+				entries: entriesOf( building.interior ),
 				center: centers.get( parcelId ),
 				bounds: footprintBounds( building.blueprint?.bounds?.footprint ?? building.interior.layouts.ground?.floor.rooms.flatMap( room => room.polygon ) )
 			} );
@@ -242,6 +263,7 @@ export class InteriorStream {
 
 		let next = null;
 		let inside = false;
+		let entered = false;
 
 		for ( const [ parcelId, interior ] of this.live ) {
 
@@ -255,9 +277,12 @@ export class InteriorStream {
 			}
 
 			interior.inside = distance <= INSIDE || this.requests.has( parcelId );
-			interior.near = distance < ( interior.near ? VIEW_KEEP : VIEW_RADIUS );
+			interior.entering = atEntry( interior, feet );
+			const drawn = interior.inside || interior.entering;
+			entered ||= drawn && ! interior.drawn;
+			interior.drawn = drawn;
 			inside ||= interior.inside;
-			this.elevators?.draw?.( parcelId, interior.inside || interior.near );
+			this.elevators?.draw?.( parcelId, drawn );
 
 			const want = this.#band( interior, feet );
 
@@ -269,7 +294,7 @@ export class InteriorStream {
 
 		if ( next && this.building < BUILD_CONCURRENCY ) this.#load( next.interior, next.band );
 
-		this.#paint( paint );
+		this.#paint( entered ? Math.max( paint, ENTRY_PAINT_MS ) : paint );
 		this.#cast( inside );
 
 		return this.changed;
@@ -366,7 +391,8 @@ export class InteriorStream {
 
 		for ( const band of interior.bands ) {
 
-			if ( band.draw( interior.inside || interior.near ) ) this.painting.add( band );
+			if ( band.draw( interior.drawn ) ) this.painting.add( band );
+			if ( band.placeholder ) this.#placeholderCopies( band );
 
 			const requested = this.requests.get( interior.parcelId );
 			const away = Math.min( Math.abs( band.floor - standing ), requested === undefined ? Infinity : Math.abs( band.floor - requested ) );
@@ -396,25 +422,47 @@ export class InteriorStream {
 
 	}
 
-	/** Real module slabs hold the floor while furniture and light programs load. */
+	/**
+	 * Real module slabs hold the floor while furniture and light programs load:
+	 * solid at once, and in the draws while the building is drawn.
+	 */
 	#placeholder( band ) {
 
 		if ( band.placeholder || band.state === FAILED ) return;
-		const token = { handles: [] };
-		band.placeholder = token;
 		const placements = floorPlacements( band.record ).filter( supports );
+		const token = { handles: [], placements, solid: false };
+		band.placeholder = token;
 		const boxes = floorBoxes( placements, band.elevation, id => this.modules.boundsOf( id ) );
 		this.admitting ++;
 		Promise.resolve( this.onColliderBand?.( `${band.id}/floor`, { boxes, positions: [] } ) ).then( ready => {
 
 			if ( band.placeholder !== token || ready === false ) return;
-			this.modules.reserve?.( placements.map( one => one.module ) );
-			for ( const placement of placements ) token.handles.push( this.modules.admit( placement.module,
-				matrixOf( placement, band.elevation ), new THREE.Vector4( 0, 0, 0, 0 ), placement.uvRepeat ) );
-			this.recast = true;
+			token.solid = true;
+			this.#placeholderCopies( band );
 
 		} ).catch( error => { console.warn( `floor ${band.id} support: ${error.message}` ); this.#dropPlaceholder( band ); } )
 			.finally( () => { this.admitting --; } );
+
+	}
+
+	/** A solid placeholder's slabs into the draws while its building is drawn, and out of them while it is not. */
+	#placeholderCopies( band ) {
+
+		const token = band.placeholder;
+		if ( ! token.solid || band.drawn === ( token.handles.length > 0 ) ) return;
+		if ( band.drawn ) {
+
+			this.modules.reserve?.( token.placements.map( one => one.module ) );
+			for ( const placement of token.placements ) token.handles.push( this.modules.admit( placement.module,
+				matrixOf( placement, band.elevation ), new THREE.Vector4( 0, 0, 0, 0 ), placement.uvRepeat ) );
+			this.recast = true;
+
+		} else {
+
+			for ( const handle of token.handles ) this.modules.release( handle );
+			token.handles = [];
+
+		}
 
 	}
 
@@ -694,7 +742,7 @@ export class InteriorStream {
 /** One building open around the player: its floors as bands, lowest first. */
 class Interior {
 
-	constructor( { parcelId, floors, center, bounds, blueprint = null } ) {
+	constructor( { parcelId, floors, center, bounds, blueprint = null, entries = [] } ) {
 
 		this.parcelId = parcelId;
 		this.blueprint = blueprint;
@@ -705,9 +753,12 @@ class Interior {
 		this.group.name = `interior:${parcelId}`;
 		this.group.visible = false;
 		this.bands = floors.map( ( record ) => new FloorBand( record ) );
-		/** Whether the player is in this building, and whether it is close enough for its rooms to be seen. */
+		/** Whether the player is in this building, at one of its ways in, and so whether its floors are drawn. */
 		this.inside = false;
-		this.near = false;
+		this.entering = false;
+		this.drawn = false;
+		/** Its doors, apertures and shopfronts: `{ x, y, z, open }`, y the floor they open on, open for a shopfront. */
+		this.entries = entries;
 
 		for ( const band of this.bands ) this.group.add( band.group );
 
@@ -985,6 +1036,51 @@ function footprintBounds( outline ) {
 	if ( ! outline?.length ) return null;
 	const xs = outline.map( p => p[ 0 ] ), zs = outline.map( p => p[ 1 ] );
 	return { x0: Math.min( ...xs ), x1: Math.max( ...xs ), z0: Math.min( ...zs ), z1: Math.max( ...zs ) };
+
+}
+
+/**
+ * A building's ways in, from the openings its layouts reserve on each floor:
+ * every door, aperture and shopfront, where it stands and the floor it opens
+ * on. A layout every middle floor shares opens on each of them.
+ */
+function entriesOf( interior ) {
+
+	const entries = [];
+	const seen = new Set();
+	for ( const floor of interior?.building?.floors ?? [] ) {
+
+		for ( const opening of interior.layouts?.[ floor.layout ]?.floor?.openingReservations ?? [] ) {
+
+			if ( ! ENTRIES.has( opening.kind ) || ! opening.position ) continue;
+			const key = `${opening.position[ 0 ]},${opening.position[ 1 ]},${floor.elevation}`;
+			if ( seen.has( key ) ) continue;
+			seen.add( key );
+			entries.push( { x: opening.position[ 0 ], y: floor.elevation, z: opening.position[ 1 ], open: opening.kind === 'openFront' } );
+
+		}
+
+	}
+	return entries;
+
+}
+
+/**
+ * Whether the feet stand at one of the building's ways in: a metre further
+ * out to keep a drawn building drawn than to start drawing it, coming in or
+ * walking back out.
+ */
+function atEntry( interior, feet ) {
+
+	const keep = interior.drawn;
+	for ( const { x, y, z, open } of interior.entries ) {
+
+		if ( Math.abs( feet.y - y ) > ENTRY_RISE ) continue;
+		const reach = open ? ( keep ? VIEW_KEEP : VIEW_RADIUS ) : ( keep ? ENTRY_KEEP : ENTRY_RADIUS );
+		if ( Math.hypot( feet.x - x, feet.z - z ) <= reach ) return true;
+
+	}
+	return false;
 
 }
 
