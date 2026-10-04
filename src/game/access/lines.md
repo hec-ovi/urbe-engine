@@ -55,14 +55,6 @@ the code picks one by the person and the minute and fills in `{place}`,
 
 - Not now.
 
-## notice-card
-
-- Added to your inventory: {label}.
-
-## notice-lifted
-
-- You lifted the {label}.
-
 ## notice-caught
 
 - {name} caught you taking the {label}.

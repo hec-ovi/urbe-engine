@@ -288,7 +288,7 @@ describe( 'accessLines', () => {
 		const lines = accessLines();
 		expect( lines.say( 'label-access', { place: 'apartment 201' } ) ).toBe( 'Can you give me access to apartment 201?' );
 		expect( lines.say( 'prompt-locked', { place: 'apartment 201' } ) ).toBe( 'Locked: apartment 201 needs an access card' );
-		expect( lines.say( 'notice-card', { label: 'Kessler Block 201 key card' } ) ).toBe( 'Added to your inventory: Kessler Block 201 key card.' );
+		expect( lines.say( 'notice-fumbled', { name: 'Ada' } ) ).toBe( 'Your hand came away empty; Ada did not feel it.' );
 		expect( () => accessLines( '## label-access\n\n- x' ) ).toThrow( /E_COMPANION_LINES|lack/ );
 
 	} );
