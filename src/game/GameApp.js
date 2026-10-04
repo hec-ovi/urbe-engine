@@ -874,7 +874,7 @@ export class GameApp {
 		await this.hero.prepare( ( done, total ) => heroes.at( done, total ) );
 
 		this.interactor = new Interactor( {
-			crowd: this.crowd, doors: city.doors, sim: this.sim,
+			crowd: this.crowd, doors: city.doors, closed: city.closedEntrances ?? [], sim: this.sim,
 			controller: this.controller, elevators: this.elevators, quests: this.questGameplay,
 			investigations: this.investigations,
 			continuity: this.npcContinuity,
@@ -883,11 +883,13 @@ export class GameApp {
 			access: {
 				lockOf: ( door, feet ) => this.playerAccess.lockOf( door, feet ),
 				lockedPrompt: ( lock ) => this.accessLines.say( 'prompt-locked', { place: lock.place } ),
+				closedPrompt: ( entrance ) => this.accessLines.say( 'prompt-closed', { place: this.#buildingName( entrance.parcelId ) } ),
 				liftable: ( person ) => this.#liftable( person )
 			}
 		} );
 		this.interactor.onConversation = ( conversation ) => this.presentConversation( conversation );
 		this.interactor.onLocked = ( door, lock ) => this.#locked( door, lock );
+		this.interactor.onClosed = ( entrance ) => this.#closed( entrance );
 		this.interactor.onLift = ( person ) => this.#lift( person );
 
 		this.input.onLockChange = ( locked ) => {
@@ -1941,6 +1943,20 @@ export class GameApp {
 		this.lockedNotice = key;
 		this.view.toast.show( { title: 'Locked', text: this.accessLines.say( 'prompt-locked', { place: lock.place } ) } );
 		setTimeout( () => { if ( this.lockedNotice === key ) this.lockedNotice = null; }, 4000 );
+	}
+
+	/** E on the entrance of a building nobody opens: it stays shut, and a notice says so once while the player stays at it. */
+	#closed( entrance ) {
+		const key = `closed:${entrance.parcelId}`;
+		if ( this.lockedNotice === key ) return;
+		this.lockedNotice = key;
+		this.view.toast.show( { title: 'Closed', text: this.accessLines.say( 'notice-closed', { place: this.#buildingName( entrance.parcelId ) } ) } );
+		setTimeout( () => { if ( this.lockedNotice === key ) this.lockedNotice = null; }, 4000 );
+	}
+
+	/** A building as the player reads it: its own name, else what it is (`the restaurant`). */
+	#buildingName( parcelId ) {
+		return this.companion?.places?.name( { kind: 'parcel', id: parcelId } ) ?? 'this building';
 	}
 
 	/** The R line for a person whose card the player could lift: an established person carrying a card the player lacks. */

@@ -13,6 +13,7 @@ import { interiorOpenings } from './KitOpenings.js';
 import { mainDoor, swingLeaves } from './KitDoors.js';
 import { tintFor } from './KitTint.js';
 import { ExteriorScenery } from '../ExteriorScenery.js';
+import { closedEntrance } from '../DoorGeometry.js';
 
 /** Placement records are pure reads, so a cell asks for all of them at once. */
 const READ_CONCURRENCY = 8;
@@ -203,6 +204,13 @@ export class KitCellLoader {
 
 				} );
 
+				if ( ! source.hasInterior ) {
+
+					// Nobody opens a building with nothing behind its facade: E finds it closed.
+					const entrance = source.blueprint ? closedEntrance( source.blueprint ) : null;
+					if ( entrance ) ( base.closedEntrances ??= [] ).push( entrance );
+
+				}
 				if ( ! swinging ) continue;
 
 				for ( const leaf of door.pivots ) group.add( leaf.pivot );
@@ -358,6 +366,7 @@ function empty() {
 		group: new THREE.Group(),
 		doors: [],
 		entrances: [],
+		closedEntrances: [],
 		shellColliders: new Map(),
 		centers: new Map(),
 		triangles: 0,

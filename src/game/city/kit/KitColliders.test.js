@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu';
 import { KitPlacement } from './KitPlacement.js';
 import { buildingBoxes } from './KitColliders.js';
 import { interiorOpenings } from './KitOpenings.js';
+import { closedEntrance } from '../DoorGeometry.js';
 
 /**
  * What a kit building is to the player's body, from the records assembly
@@ -180,6 +181,19 @@ describe( 'kit building colliders', () => {
 		expect( solidAt( placement, closed, 12, 1, FOOTPRINT.v0 + 0.25 ) ).toBe( true );
 		expect( solidAt( placement, open, 12, top - 0.2, 15 ) ).toBe( false );
 		expect( solidAt( placement, closed, 12, top - 0.2, 15 ) ).toBe( true );
+
+	} );
+
+	it( 'names a closed building\'s shopfront as the entrance E finds closed, facing the street', () => {
+
+		const placement = placementOf();
+		const entrance = closedEntrance( { buildingId: 'p1', ...shopfront() } );
+		const middle = placement.point( 12, 0, FOOTPRINT.v0 );
+
+		expect( entrance ).toMatchObject( { parcelId: 'p1', kind: 'openFront', width: 10, height: 3.5 } );
+		expect( entrance.center.distanceTo( middle ) ).toBeLessThan( 1e-6 );
+		// A step outside it is out on the street side of the facade.
+		expect( placement.point( 12, 0, FOOTPRINT.v0 - 1.4 ).distanceTo( entrance.outside ) ).toBeLessThan( 1e-6 );
 
 	} );
 

@@ -4,7 +4,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { FrameBudget } from '../../app/FrameBudget.js';
 import { HitchLog } from '../debug/HitchLog.js';
 import { cityGltfLoader } from '../data/CityGltfLoader.js';
-import { doorFrames, doorLeafFrame } from './DoorGeometry.js';
+import { closedEntrance, doorFrames, doorLeafFrame } from './DoorGeometry.js';
 import { takeTriangles, centroidAt } from './Triangles.js';
 import { bucketFor, splitBucket } from './Variety.js';
 import { ScenicSurface } from './ScenicSurface.js';
@@ -110,6 +110,7 @@ export class BuildingsLoader {
 		const surfaces = [];
 		const doors = [];
 		const entrances = [];
+		const closedEntrances = [];
 		const unsupportedDoors = [];
 		const shellColliders = new Map();
 		const centers = new Map();
@@ -158,6 +159,9 @@ export class BuildingsLoader {
 				if ( door.role === 'main' ) entrances.push( door );
 
 			}
+			// A shell with nothing behind its facade keeps its entrance shut: E finds it closed.
+			const closed = building.hasInterior ? null : closedEntrance( building.blueprint );
+			if ( closed ) closedEntrances.push( closed );
 
 		}
 
@@ -197,7 +201,7 @@ export class BuildingsLoader {
 
 		}
 
-		return { group, doors, entrances, shellColliders, centers, triangles, unsupportedDoors, surfaces };
+		return { group, doors, entrances, closedEntrances, shellColliders, centers, triangles, unsupportedDoors, surfaces };
 
 	}
 
@@ -244,6 +248,7 @@ export class BuildingsLoader {
 		return {
 			parcelId,
 			blueprint,
+			hasInterior,
 			windowScenery,
 			unsupportedDoors,
 			exterior,

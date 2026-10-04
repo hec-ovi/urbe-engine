@@ -45,13 +45,16 @@ export class Interactor {
 	/**
 	 * @param access optional locks and pockets: `lockOf(door, feet)` (PlayerAccess: null for a door
 	 *   anyone opens, else `{ scope, place, locked }`), `lockedPrompt(lock)`, the line a locked
-	 *   door shows, and `liftable(person)`, the R line for a person whose card the player could
-	 *   lift, or null
+	 *   door shows, `closedPrompt(entrance)`, the line a closed building's entrance shows, and
+	 *   `liftable(person)`, the R line for a person whose card the player could lift, or null
+	 * @param closed the street entrances of the buildings nobody opens (DoorGeometry `closedEntrance`),
+	 *   a live array the city keeps as its cells stand and drop
 	 */
-	constructor( { crowd, doors, sim, controller, elevators, quests, investigations = null, continuity = null, animations = null, doorColliders = null, interiors = null, typeLabels = null, access = null } ) {
+	constructor( { crowd, doors, closed = NONE, sim, controller, elevators, quests, investigations = null, continuity = null, animations = null, doorColliders = null, interiors = null, typeLabels = null, access = null } ) {
 
 		this.crowd = crowd;
 		this.doors = doors;
+		this.closed = closed;
 		this.sim = sim;
 		this.controller = controller;
 		this.elevators = elevators;
@@ -66,6 +69,8 @@ export class Interactor {
 		this.lock = null;
 		/** Heard when E is pressed on a door locked to the player: `( door, lock )`. */
 		this.onLocked = null;
+		/** Heard when E is pressed on the entrance of a building nobody opens: `( entrance )`. */
+		this.onClosed = null;
 		/** Heard when R is pressed on a person who carries a card: `( person, clock )`. */
 		this.onLift = null;
 		/** Each NPC type's readable label, which names a person the prompt has no given name for. */
@@ -75,6 +80,8 @@ export class Interactor {
 		this.onConversation = null;
 		/** The doors in reach this frame, gathered into one array kept for every frame. */
 		this.reach = [];
+		/** And the closed entrances in reach. */
+		this.reachClosed = [];
 		/** Seconds this Interactor has run, the clock doors close by. */
 		this.seconds = 0;
 
@@ -101,6 +108,10 @@ export class Interactor {
 		reach.length = 0;
 		for ( const door of this.doors ) if ( door.center.distanceTo( feet ) <= DOOR_RANGE ) reach.push( door );
 		for ( const door of apartments ) if ( door.center.distanceTo( feet ) <= DOOR_RANGE ) reach.push( door );
+		const shut = this.reachClosed;
+		shut.length = 0;
+		// A shopfront is wide: its threshold is in reach from anywhere in front of it.
+		for ( const entrance of this.closed ) if ( entrance.center.distanceTo( feet ) <= DOOR_RANGE + entrance.width / 2 ) shut.push( entrance );
 
 		this.target = pick(
 			this.controller.eye,
@@ -108,7 +119,8 @@ export class Interactor {
 			reach,
 			this.crowd.within( feet, TALK_RANGE ),
 			this.elevators?.panels( feet, DOOR_RANGE ) ?? [],
-			[ ...this.#candidates( 'quests', questState ), ...this.#candidates( 'investigations', questState ) ]
+			[ ...this.#candidates( 'quests', questState ), ...this.#candidates( 'investigations', questState ) ],
+			shut
 		);
 		this.lock = this.target?.kind === 'door' ? this.access?.lockOf( this.target.door, feet ) ?? null : null;
 
@@ -182,6 +194,13 @@ export class Interactor {
 		}
 		if ( bindingAction !== 'interact' ) return;
 
+		if ( this.target.kind === 'closed' ) {
+
+			// Nothing stands behind it: the entrance stays shut and solid, and a notice says so.
+			this.onClosed?.( this.target.entrance );
+			return;
+
+		}
 		if ( this.target.kind === 'door' ) {
 
 			// A locked door stays shut and solid to a player without its card; closing is never locked.
@@ -534,15 +553,23 @@ function personPlace( person ) {
  * be in reach. Pure so the tie rule can be tested without a world around it.
  *
  * @param eye the camera position, @param look the unit crosshair ray
- * @returns { kind: 'door'|'npc', door?, person?, aim } or null
+ * @param closed the entrances of buildings nobody opens, aimed at as a door is
+ * @returns { kind: 'door'|'closed'|'npc', door?, entrance?, person?, aim } or null
  */
-export function pick( eye, look, doors, people, panels = [], questTargets = [] ) {
+export function pick( eye, look, doors, people, panels = [], questTargets = [], closed = [] ) {
 
 	const candidates = [];
 
 	for ( const door of doors ) {
 
 		candidates.push( { kind: 'door', door, aim: aimAt( eye, look, door.center, HANDLE ) } );
+
+	}
+
+	for ( const entrance of closed ) {
+
+		// Aimed at the nearest point of its threshold: a shopfront is metres wide.
+		candidates.push( { kind: 'closed', entrance, aim: aimAt( eye, look, nearestAlong( entrance, eye ), HANDLE ) } );
 
 	}
 
@@ -582,10 +609,21 @@ export function pick( eye, look, doors, people, panels = [], questTargets = [] )
 
 	if ( ! best ) return null;
 
-	// An aim too close to call goes to the door.
-	const door = candidates.find( ( c ) => c.kind === 'door' && c.aim > best.aim - TIE );
+	// An aim too close to call goes to the door, an open one before a closed one.
+	const door = candidates.find( ( c ) => c.kind === 'door' && c.aim > best.aim - TIE ) ??
+		candidates.find( ( c ) => c.kind === 'closed' && c.aim > best.aim - TIE );
 
 	return door ?? best;
+
+}
+
+/** The point of a closed entrance's threshold nearest the eye, along its width. */
+function nearestAlong( entrance, eye ) {
+
+	const { center, normal, width } = entrance;
+	// Along the threshold is the normal turned a quarter in the ground plane.
+	const along = THREE.MathUtils.clamp( ( eye.x - center.x ) * - normal.z + ( eye.z - center.z ) * normal.x, - width / 2, width / 2 );
+	return ALONG.set( center.x - normal.z * along, center.y, center.z + normal.x * along );
 
 }
 
@@ -612,6 +650,7 @@ function prompt( target, quests, typeLabels = new Map(), lock = null, access = n
 
 	if ( target.kind === 'quest' || target.kind === 'investigation' ) return target.interaction.prompt;
 	if ( target.kind === 'elevator' ) return target.shaft.label( target );
+	if ( target.kind === 'closed' ) return access?.closedPrompt?.( target.entrance ) ?? 'Closed';
 
 	if ( target.kind === 'door' ) {
 
@@ -639,3 +678,4 @@ function roleOf( type, typeLabels ) {
 }
 
 const TMP = new THREE.Vector3();
+const ALONG = new THREE.Vector3();

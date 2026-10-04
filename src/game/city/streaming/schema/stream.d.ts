@@ -34,6 +34,8 @@ export interface ShellCell {
   group: unknown;
   doors: unknown[];
   entrances: unknown[];
+  /** The street entrances of the buildings in the cell nobody opens (DoorGeometry `closedEntrance`). */
+  closedEntrances?: unknown[];
   shellColliders: Map<string, unknown>;
   triangles: number;
   unresolvedModelInstances?: {parcelId: string; index: number; kind: string}[];
@@ -44,6 +46,7 @@ export declare class ShellStream {
   readonly group: unknown;
   readonly doors: unknown[];
   readonly entrances: unknown[];
+  readonly closedEntrances: unknown[];
   readonly centers: Map<string, unknown>;
   readonly shellColliders: Map<string, unknown>;
   readonly triangles: number;

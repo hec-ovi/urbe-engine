@@ -40,6 +40,38 @@ export function doorFrames( blueprint ) {
 
 }
 
+/** Openings the street enters a building by. */
+const STREET_ENTRANCES = new Set( [ 'door', 'openFront', 'aperture' ] );
+
+/**
+ * The street entrance of a building nobody opens, which E finds closed: its
+ * main ground-floor opening, a door or a shopfront alike, as the threshold's
+ * middle (`center`), the way out (`normal`), the point a step outside it
+ * (`outside`) and its size. Null for a blueprint with no main entrance.
+ */
+export function closedEntrance( blueprint ) {
+
+	const floors = blueprint?.floors ?? [];
+	const ground = floors.find( ( floor ) => floor.index === 0 ) ?? floors[ 0 ];
+	const opening = ground?.openings?.find( ( entry ) => STREET_ENTRANCES.has( entry.kind ) &&
+		( entry.accessRole === 'main' || entry.doorRole === 'main' ) );
+	const rect = opening ? openingRect( ground, opening ) : null;
+	if ( ! rect ) return null;
+
+	const mid = rect.start.clone().add( rect.end ).multiplyScalar( 0.5 );
+	return {
+		id: opening.id,
+		parcelId: blueprint.buildingId,
+		kind: opening.kind,
+		center: new THREE.Vector3( mid.x, rect.y0, mid.z ),
+		normal: rect.normal,
+		outside: mid.clone().addScaledVector( rect.normal, 1.4 ),
+		width: rect.width,
+		height: rect.height
+	};
+
+}
+
 /** Finds the named leaf ancestor, retaining its authored origin and index. */
 export function doorLeafFrame( node, frames ) {
 

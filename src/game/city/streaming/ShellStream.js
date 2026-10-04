@@ -45,6 +45,8 @@ export class ShellStream {
 		this.group.name = 'streamed-city';
 		this.doors = [];
 		this.entrances = [];
+		/** The street entrances of the standing buildings nobody opens. */
+		this.closedEntrances = [];
 		this.shellColliders = new Map();
 		this.centers = new Map( catalog.buildings.map( record => [ record.id, new THREE.Vector3( ...record.center ) ] ) );
 		this.pinned = new Set( [ ...buildings ].filter( ( [ , source ] ) => source.hasInterior ).map( ( [ id ] ) => id ) );
@@ -195,6 +197,7 @@ export class ShellStream {
 			for ( const [ id, geometry ] of cell.shellColliders ) this.shellColliders.set( id, geometry );
 			this.doors.push( ...cell.doors );
 			this.entrances.push( ...cell.entrances );
+			this.closedEntrances.push( ...( cell.closedEntrances ?? [] ) );
 			this.resident.set( cell.id, cell );
 			cell.group.visible = false;
 			this.group.add( cell.group );
@@ -250,6 +253,7 @@ export class ShellStream {
 		}
 		removeEntries( this.doors, new Set( cell.doors ) );
 		removeEntries( this.entrances, new Set( cell.entrances ) );
+		removeEntries( this.closedEntrances, new Set( cell.closedEntrances ?? [] ) );
 		this.resident.delete( cell.id );
 		releaseShell( cell );
 

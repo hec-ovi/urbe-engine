@@ -26,6 +26,43 @@ it( 'takes whichever target the centre of the screen is on, and the door when th
 
 } );
 
+/**
+ * The user walked through a glassless shopfront into an empty shell. A
+ * building nobody opens now keeps its entrance shut: aimed at, wherever along
+ * a wide front, it says it is closed, and E leaves it shut with a notice.
+ */
+it( 'finds the entrance of a building nobody opens closed, all along its front, and leaves it shut on E', () => {
+
+	const controller = {
+		body: { feet: new THREE.Vector3( 4, 0, 0 ) }, eye: new THREE.Vector3( 4, 1.7, 0 ), look: new THREE.Vector3( 0, 0, - 1 )
+	};
+	// A ten metre front facing +Z two metres ahead, its middle 4 m to the player's left.
+	const entrance = { parcelId: 'p2032', center: new THREE.Vector3( 0, 0, - 2 ), normal: new THREE.Vector3( 0, 0, 1 ), width: 10, height: 3.5 };
+	const closed = [ entrance ];
+	const interactor = new Interactor( {
+		crowd: { within: () => [] }, doors: [], closed, sim: {}, controller,
+		access: { closedPrompt: ( shut ) => `Closed: ${shut.parcelId}` }
+	} );
+	const heard = [];
+	interactor.onClosed = ( shut ) => heard.push( shut );
+
+	expect( interactor.update( 1 / 60 ) ).toBe( 'Closed: p2032' );
+	expect( interactor.target ).toMatchObject( { kind: 'closed', entrance } );
+	interactor.activate( CLOCK );
+	expect( heard ).toEqual( [ entrance ] );
+	expect( interactor.conversation ).toBe( null );
+
+	// Without the access lines it still says so; looking away it says nothing.
+	expect( new Interactor( { crowd: { within: () => [] }, doors: [], closed, sim: {}, controller } ).update( 1 / 60 ) ).toBe( 'Closed' );
+	controller.look = new THREE.Vector3( 0, 0, 1 );
+	expect( interactor.update( 1 / 60 ) ).toBe( null );
+
+	// A door that opens, aimed at as squarely, comes first.
+	const door = { center: new THREE.Vector3( 4, 0, - 2 ), open: 0 };
+	expect( pick( controller.eye, new THREE.Vector3( 0, 0, - 1 ), [ door ], [], [], [], closed ).kind ).toBe( 'door' );
+
+} );
+
 /** Quests and investigations share one crosshair route and both symbolic bindings. */
 it( 'offers the quest action when stealing and talking aim at the same person', () => {
 

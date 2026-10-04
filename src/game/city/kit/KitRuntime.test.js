@@ -600,11 +600,14 @@ describe( 'the city draws every building from its shared plan', () => {
 		expect( solidAt( closed.boxColliders, 2, top - 0.2, 2 ) ).toBe( true );
 		expect( stairHead( closed.boxColliders ) ).toBe( true );
 
-		// A closed building is solid at its doorway.
+		// A closed building is solid at its doorway, which it publishes as the
+		// entrance E finds closed.
 		const door = doorOf( flat );
 		const at = ( boxes ) => solidAt( boxes, door.center.x, door.center.y + 1, door.center.z );
 
 		expect( at( closed.boxColliders ) ).toBe( true );
+		expect( closed.closedEntrances ).toEqual( [ expect.objectContaining( { parcelId: 'p1', width: door.width } ) ] );
+		expect( closed.closedEntrances[ 0 ].center.distanceTo( door.center ) ).toBeLessThan( 1e-6 );
 
 		// A parcel that swings its own door has the doorway as a real hole
 		// through the wall while the wall beside it stands, and the stair head
@@ -614,6 +617,7 @@ describe( 'the city draws every building from its shared plan', () => {
 		expect( at( open.boxColliders ) ).toBe( false );
 		expect( solidAt( open.boxColliders, 0.25, 1, 16 ) ).toBe( true );
 		expect( stairHead( open.boxColliders ) ).toBe( false );
+		expect( open.closedEntrances ?? [] ).toEqual( [] );
 
 		// Both stand on ground of their own under the footprint, where the
 		// street's cover stops.

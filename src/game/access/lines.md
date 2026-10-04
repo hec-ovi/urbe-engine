@@ -77,6 +77,14 @@ the code picks one by the person and the minute and fills in `{place}`,
 
 - Locked: {place} needs an access card
 
+## prompt-closed
+
+- Closed: {place}
+
+## notice-closed
+
+- Nobody opens {place} to the street.
+
 ## prompt-lift
 
 - R  lift {name}'s key card
