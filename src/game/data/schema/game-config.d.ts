@@ -29,6 +29,7 @@ export interface GameConfig {
   world: string;
   gameId: string | null;
   outBase: string;
+  /** The Atlas sample `world` names, read only for an older world that carries no blueprint of its own. */
   blueprintUrl: string;
   backend: 'webgpu' | 'webgl';
   quality: 'low' | 'medium' | 'high' | 'ultra' | null;

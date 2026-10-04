@@ -352,7 +352,7 @@ export class GameApp {
 		const starting = progress.timed( 'physics', Physics.create() );
 		const cars = progress.timed( 'cars', CarModels.load( config.maxCars ) );
 		const {
-			atlas, connections, nativeStreets, rooftopSpans, buildings, unbuilt, npcTypes, questlines, investigations, scenery,
+			atlas, blueprintUrl, connections, nativeStreets, rooftopSpans, buildings, unbuilt, npcTypes, questlines, investigations, scenery,
 			mechanicTargetBindings, missionAssetRequests, missionItemBindings, game, shellCatalog, kit,
 			interiorModules, interiorProps, loadBuildings
 		} = await reading;
@@ -909,7 +909,7 @@ export class GameApp {
 		} );
 		this.view.controls.setBindings( BINDINGS );
 		this.view.readout.setAbout( [
-			config.blueprintUrl,
+			blueprintUrl,
 			`${config.outBase}/ (${buildings.size} built${unbuilt.length ? `, ${unbuilt.length} unbuilt` : ''})`,
 			`/materials/${THEME}`,
 			'/models/quaternius'

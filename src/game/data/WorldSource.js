@@ -81,12 +81,17 @@ export class WorldSource {
 		// loading hundreds of building files.
 		const game = this.gameId ? await this.#json( `${this.outBase}/game.json` ) : null;
 		const manifest = await this.#manifest();
+		// The world's own blueprint, or, for an older world that names none and
+		// carries none, the Atlas sample the query names: whichever is read is
+		// the one the readouts name.
+		let blueprintUrl = `${this.outBase}/${manifest.blueprint?.file ?? BLUEPRINT_FILE}`;
 		const blueprint = await this.#document(
-			`${this.outBase}/${manifest.blueprint?.file ?? BLUEPRINT_FILE}`,
+			blueprintUrl,
 			{ ...manifest.blueprint, projection: manifest.connections ? blueprintProjection : undefined }
 		).catch( ( error ) => {
 
 			if ( manifest.blueprint || Object.hasOwn( manifest, 'connections' ) || Object.hasOwn( manifest, 'streets' ) ) throw error;
+			blueprintUrl = this.blueprintUrl;
 			return this.#document( this.blueprintUrl );
 
 		} );
@@ -123,6 +128,7 @@ export class WorldSource {
 
 		return {
 			atlas,
+			blueprintUrl,
 			connections,
 			nativeStreets,
 			rooftopSpans: manifest.rooftopSpans ?? emptyRooftopSpans( atlas.meta.seed ),

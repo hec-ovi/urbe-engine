@@ -104,6 +104,25 @@ describe( 'WorldSource selective interiors', () => {
 		expect( world.buildings.get( 'p1' ) ).toMatchObject( { hasInterior: true, npc: { buildingId: 'p1' }, interior } );
 		expect( requested.some( ( url ) => url.includes( '/p0/interior/' ) ) ).toBe( false );
 		expect( world.unbuilt ).toEqual( [] );
+		expect( world.blueprintUrl ).toBe( '/out/city/blueprint.json' );
+
+	} );
+
+	it( 'names the Atlas sample it read for an older world that carries no blueprint of its own', async () => {
+
+		const documents = new Map( [
+			[ '/atlas/city.json', atlas ],
+			[ '/out/city/manifest.json', { ...manifest, interiors: [] } ],
+			[ '/out/city/interior-modules/modules.json', modules ],
+			[ '/out/city/p0/p0.blueprint.json', { buildingId: 'p0' } ],
+			[ '/out/city/p1/p1.blueprint.json', { buildingId: 'p1' } ]
+		] );
+		vi.stubGlobal( 'fetch', vi.fn( async ( url ) => documents.has( url ) ? response( 200, documents.get( url ) ) : response( 404, null ) ) );
+
+		const world = await new WorldSource( { blueprintUrl: '/atlas/city.json', outBase: '/out/city' } ).load();
+
+		expect( world.blueprintUrl ).toBe( '/atlas/city.json' );
+		expect( world.atlas ).toEqual( atlas );
 
 	} );
 
