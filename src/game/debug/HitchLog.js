@@ -18,6 +18,8 @@ export class HitchLog {
 
 		this.threshold = threshold;
 		this.notes = [];
+		/** Milliseconds each timed step has taken since `drainSpent`, however small. */
+		this.spent = new Map();
 		this.count = 0;
 		/** The longest gap of the run, which is what "did it stall" means. */
 		this.worst = 0;
@@ -38,9 +40,20 @@ export class HitchLog {
 		const result = work();
 		const elapsed = performance.now() - started;
 
+		this.spent.set( what, ( this.spent.get( what ) ?? 0 ) + elapsed );
 		if ( elapsed >= threshold ) this.note( what, elapsed );
 
 		return result;
+
+	}
+
+	/** What each timed step took since the last call, per frame over `frames` frames. */
+	drainSpent( frames = 1 ) {
+
+		const out = {};
+		for ( const [ what, ms ] of this.spent ) out[ what ] = Math.round( ms / Math.max( 1, frames ) * 100 ) / 100;
+		this.spent.clear();
+		return out;
 
 	}
 

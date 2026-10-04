@@ -14,6 +14,15 @@
       "required": ["count", "median", "p95", "worst"],
       "properties": {"count": {"type": "integer", "minimum": 1}, "median": {"type": "number"}, "p95": {"type": "number"}, "worst": {"type": "number"}}
     },
+    "profile": {
+      "description": "Main-thread milliseconds per frame since the last report: each timed tick section, the time inside the WebGL calls that can hold the thread, and what the scene holds.",
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "sections": {"type": "object", "additionalProperties": {"type": "number"}},
+        "gl": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": false, "required": ["ms", "calls"], "properties": {"ms": {"type": "number"}, "calls": {"type": "number"}}}},
+        "scene": {"type": "object", "additionalProperties": {"type": "number"}}
+      }
+    },
     "hitches": {
       "type": "array", "maxItems": 20,
       "items": {

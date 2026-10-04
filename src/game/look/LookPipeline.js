@@ -62,6 +62,18 @@ export class LookPipeline {
 		this.pipeline.outputNode = noirGrade( lit ).add( dither );
 
 		this.bloom = bloomPass;
+		/** Milliseconds the scene pass and the post chain have taken since `drainSpent`. */
+		this.spent = { scene: 0, post: 0 };
+
+	}
+
+	/** The scene pass's and the post chain's milliseconds per frame over `frames` frames, then zero again. */
+	drainSpent( frames = 1 ) {
+
+		const per = Math.max( 1, frames );
+		const out = { 'render: scene': Math.round( this.spent.scene / per * 100 ) / 100, 'render: post': Math.round( this.spent.post / per * 100 ) / 100 };
+		this.spent.scene = this.spent.post = 0;
+		return out;
 
 	}
 
@@ -81,12 +93,16 @@ export class LookPipeline {
 			renderer.toneMapping = THREE.NoToneMapping;
 			renderer.outputColorSpace = THREE.ColorManagement.workingColorSpace;
 			// Scene preparation and drawing share the same top-level render context.
+			const started = performance.now();
 			renderer.render( this.scene, this.camera );
+			const drawn = performance.now();
+			this.spent.scene += drawn - started;
 			renderer.setRenderTarget( null );
 			renderer.setMRT( null );
 			renderer.toneMapping = this.outputToneMapping;
 			renderer.outputColorSpace = this.outputColorSpace;
 			this.pipeline.render();
+			this.spent.post += performance.now() - drawn;
 
 		} finally {
 

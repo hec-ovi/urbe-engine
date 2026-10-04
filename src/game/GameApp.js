@@ -75,6 +75,7 @@ import { Haze } from './light/Haze.js';
 import { HitchLog } from './debug/HitchLog.js';
 import { RenderWork } from './debug/RenderWork.js';
 import { FrameReports } from './debug/FrameReports.js';
+import { GlTimes } from './debug/GlTimes.js';
 import { Warmup } from './look/Warmup.js';
 import { Physics, WorldColliders, DoorColliders, PlayerBody, BODY_RADIUS, ImpactWorld, FallGuard } from './physics/index.js';
 import { FrameBudget } from '../app/FrameBudget.js';
@@ -975,15 +976,30 @@ export class GameApp {
 		window.addEventListener( 'resize', () => this.#resize() );
 
 		if ( import.meta.env.DEV ) window.__game = this;
-		if ( import.meta.hot ) this.frameReports = new FrameReports(
-			report => import.meta.hot.send( 'urbe:performance', report ),
-			() => ( {
-				game: config.gameId ?? null,
-				stats: { ...this.stats, pointerLocked: Boolean( document.pointerLockElement ), hidden: document.hidden, loadingFloors: this.stream.loading },
-				memory: { ...this.renderer.info.memory },
-				position: this.body.feet.toArray()
-			} )
-		);
+		if ( import.meta.hot ) {
+
+			// Where each frame's main thread goes, sent with the report: the timed
+			// steps, the scene and post passes, and the WebGL calls that can wait
+			// on a GPU busy with other work.
+			this.glTimes = this.renderer.backend?.gl ? new GlTimes( this.renderer.backend.gl ) : null;
+			let reported = 0;
+			this.frameReports = new FrameReports(
+				report => import.meta.hot.send( 'urbe:performance', report ),
+				( frames ) => ( {
+					game: config.gameId ?? null,
+					stats: { ...this.stats, pointerLocked: Boolean( document.pointerLockElement ), hidden: document.hidden, loadingFloors: this.stream.loading },
+					memory: { ...this.renderer.info.memory },
+					position: this.body.feet.toArray(),
+					profile: {
+						sections: { ...this.hitches.drainSpent( frames ), ...this.look.pipeline?.drainSpent?.( frames ) },
+						gl: this.glTimes?.drain( frames ) ?? {},
+						// Counting the scene walks it, so only every tenth report does.
+						...( reported ++ % 10 === 0 ? { scene: sceneCensus( this.scene ) } : {} )
+					}
+				} )
+			);
+
+		}
 
 		this.baseTriangles = city.triangles + links.triangles + ( this.hydrology.summary?.triangles ?? 0 );
 		// From here every program and map the renderer builds is the frame's own.
@@ -1123,7 +1139,7 @@ export class GameApp {
 		if ( built ) this.hitches.note( built );
 		this.frameReports?.frame( now, now - this.last, this.hitches.notes );
 		this.hitches.frame( now - this.last );
-		this.tick( Math.min( 0.05, ( now - this.last ) / 1000 ) );
+		this.hitches.time( 'tick', () => this.tick( Math.min( 0.05, ( now - this.last ) / 1000 ) ), Infinity );
 		this.last = now;
 		this.#measure( performance.now() - now );
 
@@ -1173,10 +1189,10 @@ export class GameApp {
 		this.phoneClock = now;
 		if ( holding ) delta = 0;
 		// A picture a screen asked for is drawn only while nothing moves, one piece a frame, or for the face on a call.
-		if ( holding || this.phone.live ) this.snapshots?.step();
+		if ( holding || this.phone.live ) this.hitches.time( 'snapshots', () => this.snapshots?.step() );
 		this.controller.frozen = ! this.input.locked || playableModalOpen( this.view, this.interactor );
 		this.clock.advance( delta );
-		this.hydrology.update( this.playSeconds += delta );
+		this.hitches.time( 'water', () => this.hydrology.update( this.playSeconds += delta ) );
 
 		const day = this.sky.day;
 		this.night.set( day.lampsOn );
@@ -1190,11 +1206,15 @@ export class GameApp {
 		for ( const impact of this.impactWorld.drain() ) this.ragdoll( impact );
 
 		const feet = this.body.feet;
-		this.spawnVisibility.update();
-		this.safetyGround.update( this.camera );
-		this.shellScene?.update( feet );
-		this.groundStream?.update( feet ).catch( error => console.error( 'ground streaming', error ) );
-		this.propsStream?.update( feet ).catch( error => console.error( 'prop streaming', error ) );
+		this.hitches.time( 'streams', () => {
+
+			this.spawnVisibility.update();
+			this.safetyGround.update( this.camera );
+			this.shellScene?.update( feet );
+			this.groundStream?.update( feet ).catch( error => console.error( 'ground streaming', error ) );
+			this.propsStream?.update( feet ).catch( error => console.error( 'prop streaming', error ) );
+
+		} );
 
 		this.hitches.time( 'interior stream', () => {
 
@@ -1202,8 +1222,8 @@ export class GameApp {
 
 		} );
 
-		this.lights.update( this.camera.position, delta );
-		const playerPlaces = this.playerPlaces = questPlayerPlaces( this.locator, feet, this.standing?.parcelId ?? null );
+		this.hitches.time( 'city lights', () => this.lights.update( this.camera.position, delta ) );
+		const playerPlaces = this.playerPlaces = this.hitches.time( 'player places', () => questPlayerPlaces( this.locator, feet, this.standing?.parcelId ?? null ) );
 		const room = this.standing;
 		const playerPosition = feet.toArray();
 		this.hitches.time( 'follow', () => this.npcContinuity.updateFollow( {
@@ -1228,24 +1248,28 @@ export class GameApp {
 		this.hitches.time( 'scenery', () => this.scenery.update( { timeMin: this.clock.timeMin, feet }, delta ) );
 		this.hitches.time( 'close people', () => this.hero.near( this.#closePeople() ) );
 		// Whoever the player talks to looks at them, seated or standing.
-		this.hero.lookAt( this.interactor.conversation?.person ?? null, this.camera.position );
-		this.hero.update( delta );
+		this.hitches.time( 'hero', () => {
+
+			this.hero.lookAt( this.interactor.conversation?.person ?? null, this.camera.position );
+			this.hero.update( delta );
+
+		} );
 		this.hitches.time( 'traffic', () => this.traffic.update( delta, feet, this.clock.daySeconds ) );
-		this.impactWorld.sync( {
+		this.hitches.time( 'impacts', () => this.impactWorld.sync( {
 			people: [ ...this.crowd.members.values() ],
 			vehicles: this.traffic.cars
-		} );
-		this.transit.update( feet, this.clock.daySeconds, delta, this.spawnVisibility );
-		this.venues.update( delta, feet, this.clock.timeMin, this.sim, this.lights );
+		} ) );
+		this.hitches.time( 'transit', () => this.transit.update( feet, this.clock.daySeconds, delta, this.spawnVisibility ) );
+		this.hitches.time( 'venues', () => this.venues.update( delta, feet, this.clock.timeMin, this.sim, this.lights ) );
 		this.hitches.time( 'relight', () => this.#relight( feet, delta ) );
 
-		const worldPrompt = this.interactor.update( delta, {
+		const worldPrompt = this.hitches.time( 'interaction', () => this.interactor.update( delta, {
 			timeMin: this.clock.timeMin,
 			playerPlaces,
 			feet: { x: feet.x, y: feet.y, z: feet.z },
 			eye: { x: this.controller.eye.x, y: this.controller.eye.y, z: this.controller.eye.z },
 			look: { x: this.controller.look.x, y: this.controller.look.y, z: this.controller.look.z }
-		} );
+		} ) );
 		for ( const result of this.questGameplay.drainMechanicResults() ) this.questActionResult( result );
 		if ( ! transitFrame ) transitFrame = this.transitGameplay.update( {
 			daySeconds: this.clock.daySeconds,
@@ -1293,12 +1317,16 @@ export class GameApp {
 
 		this.view.setPaused( this.pauseState.paused && free );
 		this.view.setPointerFree( this.pauseState.free( { locked: this.input.locked, open: ! free } ) );
-		this.#updateObjectiveRoute( delta );
-		// The clock opens and closes places while the player stands still, so
-		// the objective line is asked again on its own cadence.
-		this.objectiveTimer += delta;
-		if ( this.objectiveTimer >= OBJECTIVE_INTERVAL ) this.#refreshCurrentObjective();
-		this.view.minimap.update( feet, this.controller.yaw );
+		this.hitches.time( 'objective', () => {
+
+			this.#updateObjectiveRoute( delta );
+			// The clock opens and closes places while the player stands still, so
+			// the objective line is asked again on its own cadence.
+			this.objectiveTimer += delta;
+			if ( this.objectiveTimer >= OBJECTIVE_INTERVAL ) this.#refreshCurrentObjective();
+
+		} );
+		this.hitches.time( 'minimap', () => this.view.minimap.update( feet, this.controller.yaw ) );
 		if ( this.view.panels.current === 'MAP' ) this.view.map.setPlayer( feet, this.controller.yaw );
 		this.hitches.time( 'location HUD', () => {
 
@@ -1311,7 +1339,7 @@ export class GameApp {
 
 		} );
 
-		this.look.update( this.camera );
+		this.hitches.time( 'look', () => this.look.update( this.camera ) );
 		this.hitches.time( 'render', () => this.look.render() );
 		this.input.endFrame();
 
@@ -3328,6 +3356,24 @@ function objectivePlace( active, venues, route, local ) {
 /** Ground occupation comes from the building that was published, including
  * merged kit buildings, rather than the older Atlas subdivision beneath it.
  */
+/** How many objects, meshes and drawn meshes the scene holds, and how many copies its batches hold. */
+export function sceneCensus( scene ) {
+
+	const census = { objects: 0, meshes: 0, visibleMeshes: 0, batchCopies: 0, instances: 0 };
+	scene.traverse( ( object ) => {
+
+		census.objects ++;
+		if ( ! object.isMesh && ! object.isPoints && ! object.isLine ) return;
+		census.meshes ++;
+		if ( object.isBatchedMesh ) census.batchCopies += object.instanceCount ?? 0;
+		else if ( object.isInstancedMesh ) census.instances += object.count;
+
+	} );
+	scene.traverseVisible( ( object ) => { if ( object.isMesh || object.isPoints || object.isLine ) census.visibleMeshes ++; } );
+	return census;
+
+}
+
 export function occupiedBuildingFootprints( shellCatalog, buildings = new Map() ) {
 
 	if ( shellCatalog ) return shellCatalog.buildings.flatMap( ( building ) => {

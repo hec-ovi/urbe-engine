@@ -26,7 +26,7 @@ export class FrameReports {
 		try {
 
 			this.send( {
-				...this.snapshot(), at: Date.now(),
+				...this.snapshot( gaps.length ), at: Date.now(),
 				frames: { count: gaps.length, median: gaps[ Math.floor( gaps.length * 0.5 ) ], p95: gaps[ Math.floor( gaps.length * 0.95 ) ], worst: gaps.at( - 1 ) },
 				hitches: this.hitches
 			} );
