@@ -9,6 +9,7 @@ import { ExteriorWorkers } from './ExteriorWorkers.js';
 import { StreetsAhead } from './StreetsAhead.js';
 import { OutDir, MANIFEST_FILE } from './OutDir.js';
 import { interiorPlan, parseCityArgs } from './CityPlan.js';
+import { countedPopulation } from './Population.js';
 import { collectShellArtifacts } from './ShellArtifacts.js';
 import { ConnectionsArtifact } from './ConnectionsArtifact.js';
 import { loadBlueprint } from './BlueprintInput.js';
@@ -454,6 +455,7 @@ const totals = {
 	interiorsRequested: interiorTarget,
 	interiorsReady: readyInteriors.length,
 	interiorsFailed: interiorFailures.length,
+	population: countedPopulation( outDir, readyInteriors ),
 	wallMs: Math.round( performance.now() - started ),
 	bytes: results.reduce( ( sum, r ) => sum + ( r.bytes ?? 0 ), 0 )
 };
@@ -482,6 +484,8 @@ const manifest = await out.publishManifest( atlas, shells, readyInteriors, {
 streets.dispose();
 
 console.log( `\n${totals.passed}/${totals.parcels} buildings passed (${totals.kit} kit from ${totals.plans} plans, ${totals.generated} generated), ${totals.empty} empty lots; ${totals.interiorsReady}/${totals.interiorsRequested} interiors ready; ${( totals.wallMs / 1000 ).toFixed( 1 )} s, ${( totals.bytes / 1e6 ).toFixed( 1 )} MB in the world and ${( totals.planBytes / 1e6 ).toFixed( 1 )} MB of shared plans` );
+const people = totals.population;
+console.log( `population counted from ${people.interiors} interiors: ${people.residents} residents in ${people.dwellings} dwellings (${people.beds} beds), ${people.posts} posts worked as ${people.jobs} shift jobs` );
 for ( const r of failed ) console.log( `  ${r.parcelId}  ${r.error}` );
 for ( const r of interiorFailures ) console.log( `  ${r.parcelId} interior kept closed  ${r.error}` );
 if ( exterior.governor.summary() ) console.log( `heat: ${exterior.governor.summary()}` );
