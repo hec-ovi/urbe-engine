@@ -20,7 +20,8 @@
       "properties": {
         "sections": {"type": "object", "additionalProperties": {"type": "number"}},
         "gl": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": false, "required": ["ms", "calls"], "properties": {"ms": {"type": "number"}, "calls": {"type": "number"}}}},
-        "scene": {"type": "object", "additionalProperties": {"type": "number"}}
+        "scene": {"type": "object", "additionalProperties": {"type": "number"}},
+        "draws": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": false, "required": ["ms", "calls"], "properties": {"ms": {"type": "number"}, "calls": {"type": "number"}}}}
       }
     },
     "hitches": {

@@ -7,6 +7,7 @@ import { FrameReports } from './FrameReports.js';
 import { hitchReportPlugin } from './hitchReportPlugin.js';
 import { HitchLog } from './HitchLog.js';
 import { GlTimes } from './GlTimes.js';
+import { DrawTimes } from './DrawTimes.js';
 
 const snapshot = () => ( { game: 'review', stats: { gpuMs: 7 }, memory: { textures: 4 }, position: [ 1, 2, 3 ] } );
 
@@ -86,5 +87,29 @@ it( 'times the WebGL calls that can hold the thread, the multi-draw extension\'s
 	expect( drained.multiDrawElementsWEBGL.calls ).toBe( 0.5 );
 	expect( drained.bufferSubData ).toBeUndefined();
 	expect( times.drain( 2 ) ).toEqual( {} );
+
+} );
+
+it( 'times one frame\'s draws by what they draw when asked, and only that frame', () => {
+
+	let drawn = null;
+	const renderer = {
+		renderObject( object ) { drawn = object.name; },
+		getRenderObjectFunction() { return this.function ?? null; },
+		setRenderObjectFunction( call ) { this.function = call; }
+	};
+	const draws = new DrawTimes( renderer );
+	draws.begin();
+	expect( renderer.function ).toBeUndefined();
+	draws.sample();
+	draws.begin();
+	for ( const name of [ 'kit:brick:3', 'kit:brick:4', 'props', '' ] ) renderer.function( { name, type: 'Mesh' } );
+	draws.end( 50 );
+	expect( drawn ).toBe( '' );
+	expect( renderer.function ).toBeNull();
+	expect( draws.last[ 'kit:brick' ].calls ).toBe( 2 );
+	expect( draws.last.props.calls ).toBe( 1 );
+	expect( draws.last.Mesh.calls ).toBe( 1 );
+	expect( draws.last[ '(outside the draws)' ].ms ).toBeGreaterThan( 45 );
 
 } );

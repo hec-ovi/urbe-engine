@@ -64,6 +64,8 @@ export class LookPipeline {
 		this.bloom = bloomPass;
 		/** Milliseconds the scene pass and the post chain have taken since `drainSpent`. */
 		this.spent = { scene: 0, post: 0 };
+		/** A development DrawTimes the scene pass is sampled with, or null. */
+		this.draws = null;
 
 	}
 
@@ -94,8 +96,10 @@ export class LookPipeline {
 			renderer.outputColorSpace = THREE.ColorManagement.workingColorSpace;
 			// Scene preparation and drawing share the same top-level render context.
 			const started = performance.now();
+			this.draws?.begin();
 			renderer.render( this.scene, this.camera );
 			const drawn = performance.now();
+			this.draws?.end( drawn - started );
 			this.spent.scene += drawn - started;
 			renderer.setRenderTarget( null );
 			renderer.setMRT( null );

@@ -76,6 +76,7 @@ import { HitchLog } from './debug/HitchLog.js';
 import { RenderWork } from './debug/RenderWork.js';
 import { FrameReports } from './debug/FrameReports.js';
 import { GlTimes } from './debug/GlTimes.js';
+import { DrawTimes } from './debug/DrawTimes.js';
 import { Warmup } from './look/Warmup.js';
 import { Physics, WorldColliders, DoorColliders, PlayerBody, BODY_RADIUS, ImpactWorld, FallGuard } from './physics/index.js';
 import { FrameBudget } from '../app/FrameBudget.js';
@@ -984,21 +985,31 @@ export class GameApp {
 			// steps, the scene and post passes, and the WebGL calls that can wait
 			// on a GPU busy with other work.
 			this.glTimes = this.renderer.backend?.gl ? new GlTimes( this.renderer.backend.gl ) : null;
+			const draws = this.look.pipeline ? this.look.pipeline.draws = new DrawTimes( this.renderer ) : null;
 			let reported = 0;
 			this.frameReports = new FrameReports(
 				report => import.meta.hot.send( 'urbe:performance', report ),
-				( frames ) => ( {
-					game: config.gameId ?? null,
-					stats: { ...this.stats, pointerLocked: Boolean( document.pointerLockElement ), hidden: document.hidden, loadingFloors: this.stream.loading },
-					memory: { ...this.renderer.info.memory },
-					position: this.body.feet.toArray(),
-					profile: {
-						sections: { ...this.hitches.drainSpent( frames ), ...this.look.pipeline?.drainSpent?.( frames ) },
-						gl: this.glTimes?.drain( frames ) ?? {},
-						// Counting the scene walks it, so only every tenth report does.
-						...( reported ++ % 10 === 0 ? { scene: sceneCensus( this.scene ) } : {} )
-					}
-				} )
+				( frames ) => {
+
+					// Counting the scene walks it, and timing every draw costs a frame
+					// its own time, so one report in ten counts the scene and asks for
+					// the next frame's draws, and the report after it carries them.
+					const turn = reported ++ % 10;
+					if ( turn === 0 ) draws?.sample();
+					return {
+						game: config.gameId ?? null,
+						stats: { ...this.stats, pointerLocked: Boolean( document.pointerLockElement ), hidden: document.hidden, loadingFloors: this.stream.loading },
+						memory: { ...this.renderer.info.memory },
+						position: this.body.feet.toArray(),
+						profile: {
+							sections: { ...this.hitches.drainSpent( frames ), ...this.look.pipeline?.drainSpent?.( frames ) },
+							gl: this.glTimes?.drain( frames ) ?? {},
+							...( turn === 0 ? { scene: sceneCensus( this.scene ) } : {} ),
+							...( turn === 1 && draws?.last ? { draws: draws.last } : {} )
+						}
+					};
+
+				}
 			);
 
 		}
