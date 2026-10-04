@@ -109,14 +109,15 @@ export class CompanionPlaces {
 
 			const spot = this.inside?.workSpot?.( npc ) ?? null;
 			const work = spot ? this.addresses?.work?.( npc ) ?? null : null;
-			add( { kind: 'parcel', id: npc.job.parcelId }, 'work', spot ? { target: spot, ...( work?.label ? { name: work.address } : {} ) } : {} );
+			const target = targetOf( spot );
+			add( { kind: 'parcel', id: npc.job.parcelId }, 'work', target ? { target, ...( work?.address ? { name: work.address } : {} ) } : {} );
 
 		}
 		if ( npc.transitJob?.place.kind === 'stop' ) add( { kind: 'stop', id: npc.transitJob.place.id }, 'work' );
-		const door = this.#apartmentDoor( npc );
+		const door = targetOf( this.#apartmentDoor( npc ) );
 		// Home by its address when the person lives in a numbered dwelling: the leader takes the player to its door.
 		const home = door ? this.addresses?.home?.( npc ) ?? null : null;
-		add( { kind: 'parcel', id: npc.home.parcelId }, 'home', door ? { target: door, ...( home ? { name: home.address } : {} ) } : {} );
+		add( { kind: 'parcel', id: npc.home.parcelId }, 'home', door ? { target: door, ...( home?.address ? { name: home.address } : {} ) } : {} );
 		for ( const entry of npc.routine ) {
 
 			if ( ( entry.activity === 'leisure' || entry.activity === 'shopping' ) && entry.place.kind === 'parcel' ) add( entry.place, 'haunt' );
@@ -147,13 +148,18 @@ export class CompanionPlaces {
 			// A place that reads the same as a better one in name, way and walk is one the player cannot tell apart.
 			const words = `${entry.name}|${entry.point}|${entry.metres}`;
 			if ( heard.has( words ) && entry.relation !== 'quest' ) continue;
+			// A point inside that is no point at all is no place to be taken to.
+			if ( entry.target && ! targetOf( entry.target ) ) continue;
 			heard.add( words );
 			offered.push( entry );
 
 		}
 		return offered.map( ( entry ) => {
 
-			const { point, metres, ...destination } = entry;
+			const { point, metres, target: spot, ...rest } = entry;
+			// Every target as offers carry it, whatever its source put in it.
+			const target = targetOf( spot );
+			const destination = target ? { ...rest, target } : rest;
 			const alike = offered.filter( ( other ) => other !== entry && other.name === entry.name );
 			if ( ! alike.length ) return destination;
 			const toward = this.lines.say( `name-${point}`, { place: entry.name } );
@@ -252,14 +258,11 @@ export class CompanionPlaces {
 		if ( ! this.addresses || ! line ) return [];
 		const parcels = [ ...new Set( [ here?.parcelId, npc.home?.parcelId, npc.job?.parcelId ].filter( Boolean ) ) ];
 		const own = npc.home?.apartment ? `home:${npc.home.parcelId}/${npc.home.apartment.id}` : null;
-		return this.addresses.find( line, parcels ).filter( ( unit ) => unit.scope !== own && unit.doors?.length ).map( ( unit ) => {
+		return this.addresses.find( line, parcels ).filter( ( unit ) => unit.scope !== own && unit.doors?.length && unit.address ).flatMap( ( unit ) => {
 
 			const door = unit.doors[ 0 ];
-			return {
-				place: { kind: 'spot', id: `unit:${unit.id}` }, name: unit.address, relation: 'spot',
-				target: { position: [ ...door.front ], parcelId: unit.parcelId, floor: unit.floor, door: [ ...door.at ], scope: unit.scope },
-				distance: flat( from, door.front )
-			};
+			const target = targetOf( { position: door.front, parcelId: unit.parcelId, floor: unit.floor, door: door.at, scope: unit.scope } );
+			return target ? [ { place: { kind: 'spot', id: `unit:${unit.id}` }, name: unit.address, relation: 'spot', target, distance: flat( from, door.front ) } ] : [];
 
 		} );
 
@@ -299,6 +302,30 @@ export class CompanionPlaces {
 		} : null;
 
 	}
+
+}
+
+/**
+ * A destination's target as offers carry it: the point, the building, its
+ * floor, a person, an entry door and the access it needs, and nothing else a
+ * spot holds (a work spot's heading, a seat's `seated`); a point that is not
+ * three finite numbers makes no target. Null for none.
+ */
+export function targetOf( spot ) {
+
+	if ( ! spot ) return null;
+	const point = ( value ) => Array.isArray( value ) && value.length === 3 && value.every( Number.isFinite ) ? [ ...value ] : null;
+	const position = spot.position === undefined ? null : point( spot.position );
+	if ( spot.position !== undefined && ! position ) return null;
+	const door = spot.door === undefined ? null : point( spot.door );
+	const target = {
+		...( position ? { position } : {} ),
+		...( typeof spot.parcelId === 'string' && spot.parcelId ? { parcelId: spot.parcelId } : {} ),
+		...( Number.isInteger( spot.floor ) ? { floor: spot.floor } : {} ),
+		...( typeof spot.npcId === 'string' && spot.npcId ? { npcId: spot.npcId } : {} ),
+		...( door && typeof spot.scope === 'string' && spot.scope ? { door, scope: spot.scope } : {} )
+	};
+	return Object.keys( target ).length ? target : null;
 
 }
 

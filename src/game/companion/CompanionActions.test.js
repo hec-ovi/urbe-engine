@@ -4,6 +4,7 @@ import { StreetNames } from '../../../../quests/dist/runtime.js';
 import { SimBridge } from '../sim/SimBridge.js';
 import { NpcContinuity } from '../agents/NpcContinuity.js';
 import { WalkRoutes } from '../agents/WalkRoutes.js';
+import { targetOf } from './CompanionPlaces.js';
 import { CompanionGameplay } from './CompanionGameplay.js';
 
 const AFTERNOON = 16 * 60;
@@ -38,6 +39,26 @@ describe( 'what a person may do for the player', () => {
 		const talk = game.companion.talkOffers( game.companion.offers( { ...game.ask( barista ), wide: true } ), { npcId: barista.npcId, timeMin: AFTERNOON } );
 		expect( talk ).toMatchObject( { follow: true, walk: true, home: true, wait: true, sit: true } );
 		expect( talk.places.map( ( place ) => place.placeId ) ).toContain( 'lift:elev-0' );
+
+	} );
+
+	it( 'offers a worker\'s own spot at work with what a target holds, whatever else the spot carries, and drops a point that is not one', () => {
+
+		// An anchor's work spot carries the way it faces and a seat flag; offers carry neither.
+		const game = setup( { workSpot: vi.fn( ( npc ) => ( { position: [ 303, 1, 259 ], parcelId: npc.job.parcelId, floor: 0, heading: 1.57, seated: true } ) ) } );
+		const barista = game.talkTo();
+		const offers = game.companion.offers( { npcId: barista.npcId, timeMin: AFTERNOON, playerPlaces: [] } );
+		const work = offers.find( ( offer ) => offer.destination?.relation === 'work' );
+		expect( work.destination.target ).toEqual( { position: [ 303, 1, 259 ], parcelId: 'p_cafe', floor: 0 } );
+		expect( offers.some( ( offer ) => offer.kind === 'follow' ) ).toBe( true );
+		expect( targetOf( { position: [ 1, Number.NaN, 2 ], parcelId: 'p' } ) ).toBeNull();
+		expect( targetOf( { position: [ 1, 2 ], parcelId: 'p' } ) ).toBeNull();
+		expect( targetOf( { npcId: 'a1', heading: 0 } ) ).toEqual( { npcId: 'a1' } );
+		expect( targetOf( { position: [ 1, 2, 3 ], door: [ 1, 2, 4 ] } ) ).toEqual( { position: [ 1, 2, 3 ] } );
+
+		// A work spot whose point is no point leaves the work place without one, and the offers still hold.
+		game.inside.workSpot.mockImplementation( ( npc ) => ( { position: [ 303, Number.NaN, 259 ], parcelId: npc.job.parcelId, floor: 0 } ) );
+		expect( () => game.companion.offers( { npcId: barista.npcId, timeMin: AFTERNOON, playerPlaces: [] } ) ).not.toThrow();
 
 	} );
 
