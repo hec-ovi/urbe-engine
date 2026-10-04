@@ -46,7 +46,7 @@ describe( 'game URL configuration', () => {
 		} );
 		// Inspecting a city keeps its streets empty; a catalog game fills them.
 		window.history.replaceState( {}, '', '/?mode=game&game=canal-ward' );
-		expect( GameConfig.fromUrl() ).toMatchObject( { maxCrowd: 90, maxCars: 8 } );
+		expect( GameConfig.fromUrl() ).toMatchObject( { maxCrowd: 35, maxCars: 4 } );
 		window.history.replaceState( {}, '', '/?crowd=900&cars=900&crowdRadius=-1&carRadius=20000' );
 		expect( GameConfig.fromUrl() ).toMatchObject( {
 			maxCrowd: 600, maxCars: 600, crowdRadius: 1, carRadius: 10000

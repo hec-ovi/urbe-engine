@@ -13,8 +13,8 @@ const DEFAULTS = {
 	// packed one: up to 90 people within the crowd's reach and 8 cars.
 	crowd: 0,
 	cars: 0,
-	playCrowd: 90,
-	playCars: 8,
+	playCrowd: 35,
+	playCars: 4,
 	crowdRadius: 90,
 	carRadius: 110,
 	stress: 0,
