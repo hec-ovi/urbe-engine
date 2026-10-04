@@ -3,7 +3,7 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import schema from './schema/access.schema.json' with { type: 'json' };
 import {
 	AddressBook, PlayerAccess, PlayerItems, Regard, accessEvents, accessLines, cardFor, cardId, describeScope, doorUnit, floorLabel, givesCard, grants,
-	notices, parseScope, questCards, roomNumber, scopeOfDoor, scopesOf
+	notices, parseScope, pickpocket, questCards, roomNumber, scopeOfDoor, scopesOf
 } from './index.js';
 
 const square = ( x0, z0, x1, z1 ) => [ [ x0, z0 ], [ x1, z0 ], [ x1, z1 ], [ x0, z1 ] ];
@@ -257,6 +257,25 @@ describe( 'Regard', () => {
 		const caught = ( disposition ) => Array.from( { length: 400 }, ( _, i ) => behind( `s${i}`, disposition ) ).filter( Boolean ).length;
 		expect( caught( 'hostile' ) ).toBeGreaterThan( caught( 'friendly' ) );
 		expect( behind( 'same', 'neutral' ) ).toBe( behind( 'same', 'neutral' ) );
+
+	} );
+
+	it( 'makes lifting a card a risk: rarely in front, and seen there; better from behind or while the person is busy; a failed try mostly felt', () => {
+
+		const tries = ( toPlayer, distracted = false, disposition = 'neutral' ) => Array.from( { length: 2000 }, ( _, i ) => pickpocket( { disposition, heading: 0, toPlayer, distracted, seed: `t${i}` } ) );
+		const rate = ( list, key ) => list.filter( ( entry ) => entry[ key ] ).length / list.length;
+		const front = tries( [ 0, 1 ] ), side = tries( [ 1, 0.2 ] ), behind = tries( [ 0, - 1 ] ), busy = tries( [ 0, - 1 ], true );
+		expect( rate( front, 'lifted' ) ).toBeLessThan( 0.06 );
+		expect( front.every( ( entry ) => entry.noticed ) ).toBe( true );
+		expect( rate( side, 'lifted' ) ).toBeLessThan( rate( behind, 'lifted' ) );
+		expect( rate( behind, 'lifted' ) ).toBeGreaterThan( 0.2 );
+		expect( rate( behind, 'lifted' ) ).toBeLessThan( 0.4 );
+		expect( rate( busy, 'lifted' ) ).toBeGreaterThan( rate( behind, 'lifted' ) + 0.1 );
+		const failed = behind.filter( ( entry ) => ! entry.lifted );
+		expect( rate( failed, 'noticed' ) ).toBeGreaterThan( 0.7 );
+		// Of every try from behind, most end with the person knowing.
+		expect( rate( behind, 'noticed' ) ).toBeGreaterThan( 0.6 );
+		expect( pickpocket( { disposition: 'wary', toPlayer: [ 0, - 1 ], seed: 'same' } ) ).toEqual( pickpocket( { disposition: 'wary', toPlayer: [ 0, - 1 ], seed: 'same' } ) );
 
 	} );
 

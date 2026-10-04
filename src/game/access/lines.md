@@ -67,6 +67,20 @@ the code picks one by the person and the minute and fills in `{place}`,
 
 - {name} caught you taking the {label}.
 
+## notice-fumbled
+
+- Your hand came away empty; {name} did not feel it.
+
+## notice-felt
+
+- {name} felt your hand and caught it empty.
+
+## caught-empty
+
+- Hands off my pockets!
+- Hey! What do you think you're doing?
+- Try that again and I call someone.
+
 ## caught
 
 - Hey! That's my card!

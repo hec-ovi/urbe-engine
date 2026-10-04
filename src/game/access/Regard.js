@@ -80,6 +80,43 @@ export function notices( { disposition, heading = 0, toPlayer = [ 0, 0 ], seed =
 
 }
 
+/** The odds a hand gets a card out unfelt: from behind, from the side, and in front of the person, where they see it. */
+const LIFTS = Object.freeze( { behind: 0.3, side: 0.12, front: 0.03 } );
+/** A person busy with something else (talking, working, on the phone) is easier: this much better odds, this much less watchful. */
+const DISTRACTED = 0.15;
+/** A failed try is a hand felt: noticed this often from behind or the side, always in front. */
+const FUMBLE = 0.8;
+/** Beside the person's own watchfulness, how often the side or the front gives the hand away when it works. */
+const SEEN = Object.freeze( { side: 0.6, front: 1 } );
+
+/**
+ * One try at lifting a card off a person: whether the card comes out
+ * (`lifted`) and whether they feel or see it (`noticed`). The odds are low
+ * and worst in front of them, better from behind or while they are busy
+ * with something else; a failed try is noticed most of the time, a lifted
+ * card by how watchful they are, the side and the front giving it away.
+ * Decided by a seed (the person and the minute), so a reload of the same
+ * moment goes the same way.
+ * @param heading the person's heading (radians, three's +Y convention: 0 faces +Z)
+ * @param toPlayer `[dx, dz]` from the person to the player
+ * @param distracted the person is busy with something else
+ */
+export function pickpocket( { disposition, heading = 0, toPlayer = [ 0, 0 ], distracted = false, seed = '' } ) {
+
+	const facing = [ Math.sin( heading ), Math.cos( heading ) ];
+	const length = Math.hypot( toPlayer[ 0 ], toPlayer[ 1 ] );
+	const angle = length > 1e-6
+		? Math.acos( Math.max( - 1, Math.min( 1, ( facing[ 0 ] * toPlayer[ 0 ] + facing[ 1 ] * toPlayer[ 1 ] ) / length ) ) )
+		: Math.PI;
+	const side = angle < SEES / 2 ? 'front' : angle < Math.PI * 2 / 3 ? 'side' : 'behind';
+	const lifted = chance( `${seed}|lift` ) < LIFTS[ side ] + ( distracted ? DISTRACTED : 0 );
+	const watchful = Math.max( 0.05, ( WATCHFUL[ disposition ] ?? 0.5 ) - ( distracted ? DISTRACTED : 0 ) );
+	const felt = chance( `${seed}|felt` );
+	const noticed = side === 'front' || ( lifted ? felt < Math.max( watchful, SEEN[ side ] ?? 0 ) : felt < FUMBLE );
+	return { lifted, noticed, side };
+
+}
+
 /** A stable number in [0, 1) from a string. */
 function chance( seed ) {
 

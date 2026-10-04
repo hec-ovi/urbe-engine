@@ -23,7 +23,7 @@ import { ContactBook } from './contacts/ContactBook.js';
 import { answerOf, contactLines, givesNumber } from './contacts/Calls.js';
 import { PhoneCalls } from './contacts/PhoneCalls.js';
 import {
-	AddressBook, PlayerAccess, PlayerItems, Regard, accessEvents, accessLines, cardFor, describeScope, doorUnit, givesCard, grants, notices, parseScope,
+	AddressBook, PlayerAccess, PlayerItems, Regard, accessEvents, accessLines, cardFor, describeScope, doorUnit, givesCard, grants, parseScope, pickpocket,
 	questCards, scopesOf
 } from './access/index.js';
 import { InvestigationGameplay } from './investigation/index.js';
@@ -121,6 +121,10 @@ const NPC_VISIBLE_RADIUS = 115;
 const AUTOSAVE_SECONDS = 180;
 /** How long a save a change asks for waits for more changes, which it then saves too. */
 const AUTOSAVE_DELAY_MS = 1500;
+/** Game minutes a person someone tried to lift a card off stays on guard. */
+const LIFT_RETRY_MIN = 30;
+/** The `events` a companion's signals make, by signal kind. */
+const COMPANION_EVENTS = Object.freeze( { started: 'companion-started', arrival: 'companion-arrived', ended: 'companion-ended', errand: 'companion-errand' } );
 /**
  * How near the player's eye a person stands to wear their whole recipe
  * (HeroCharacter.near), the companion from further off, and how much further
@@ -227,6 +231,8 @@ export class GameApp {
 		this.heldItems = new Set();
 		/** What people say when asked for their number or called. */
 		this.contactLines = contactLines();
+		/** What just happened, for whoever listens (the HUD, a probe): see `#emit`. */
+		this.events = new EventTarget();
 		/** What the player carries of their own, beside the quest items: access cards now; the save's inventory keeps them. */
 		this.items = new PlayerItems();
 		/** The saved inventory's quest items, as the load took them; the player's own items are in `items`. */
@@ -1882,6 +1888,8 @@ export class GameApp {
 				kind: 'contact', title: speakerOf( conversation ).name, text: this.contactLines.say( 'notice-contact' ),
 				image: this.portraits?.portrait( { npcId } ) ?? null
 			} );
+			this.#emit( 'contact-added', { npcId, name: speakerOf( conversation ).name } );
+			this.#autosave( 'contact' );
 		}
 		this.#showActions( conversation );
 	}
@@ -1899,6 +1907,7 @@ export class GameApp {
 		// The inventory announces the card it takes in.
 		if ( card && this.items.add( card ) ) {
 			this.#refreshInventory();
+			this.#emit( 'item-acquired', { itemId: card.id, kind: card.kind, label: card.label, how, issuer: { npcId, name: speakerOf( conversation ).name } } );
 			this.#autosave( 'item' );
 		}
 		this.#showActions( conversation );
@@ -1997,15 +2006,20 @@ export class GameApp {
 	#liftable( person ) {
 		if ( ! person?.npcId || person.fallen || this.interactor?.conversation ) return null;
 		if ( ! this.#lackedScopes( person.npcId ).length ) return null;
+		// A person tried once is on guard for a while.
+		if ( this.clock.timeMin - ( this.liftTries?.get( person.npcId ) ?? - Infinity ) < LIFT_RETRY_MIN ) return null;
 		const name = this.questGameplay?.characterName( person.npcId )?.given ?? person.instance?.name?.given ?? 'their';
 		return this.accessLines.say( 'prompt-lift', { name } );
 	}
 
 	/**
-	 * R on a person carrying a card: the player lifts one they lack, their
-	 * home's first. Facing the player they always notice, else by how
-	 * watchful they are; a person who notices says so and thinks less of
-	 * the player from then on (the save's `access.regard`).
+	 * R on a person carrying a card: the player tries to lift one they lack,
+	 * their home's first. It is a risk (Access `pickpocket`): the odds are
+	 * low, worst in front of them and better from behind or while they are
+	 * busy; a failed try is felt most of the time. A person who notices says
+	 * so and thinks less of the player from then on (the save's
+	 * `access.regard`), and anyone tried is on guard for LIFT_RETRY_MIN.
+	 * Asking is the way to a card: people hand copies over with give_item.
 	 */
 	#lift( person ) {
 		const [ scope ] = this.#lackedScopes( person.npcId );
@@ -2013,19 +2027,43 @@ export class GameApp {
 		const npc = rememberedPerson( this.sim, person.npcId );
 		const instance = person.instance ?? npc;
 		const name = TalkClient.nameOf( instance );
-		const card = cardFor( scope, { book: this.addresses, issuer: { npcId: person.npcId, name }, how: 'stolen', atMin: this.clock.timeMin } );
-		if ( ! card || ! this.items.add( card ) ) return;
-		this.#refreshInventory();
-		this.#autosave( 'item' );
+		( this.liftTries ??= new Map() ).set( person.npcId, this.clock.timeMin );
 		const disposition = npc ? this.regard.adjust( dispositionOf( npc, this.companion.categoryOf?.( npc.type ) ), person.npcId ) : 'neutral';
 		const feet = this.body.feet;
 		const seed = `${person.npcId}|${Math.floor( this.clock.timeMin )}`;
-		const caught = notices( { disposition, heading: person.heading ?? 0, toPlayer: [ feet.x - person.position.x, feet.z - person.position.z ], seed } );
-		if ( caught ) {
-			this.regard.drop( person.npcId, this.clock.timeMin );
-			this.view.toast.show( { title: name, text: this.accessLines.say( 'caught', {}, seed ) } );
-			this.view.toast.show( { title: 'Access', text: this.accessLines.say( 'notice-caught', { name, label: card.label } ) } );
+		const busy = this.#distracted( person.npcId );
+		const { lifted, noticed } = pickpocket( { disposition, heading: person.heading ?? 0, toPlayer: [ feet.x - person.position.x, feet.z - person.position.z ], distracted: busy, seed } );
+		const card = lifted ? cardFor( scope, { book: this.addresses, issuer: { npcId: person.npcId, name }, how: 'stolen', atMin: this.clock.timeMin } ) : null;
+		if ( card && this.items.add( card ) ) {
+			this.#refreshInventory();
+			this.#emit( 'item-acquired', { itemId: card.id, kind: card.kind, label: card.label, how: 'stolen', issuer: { npcId: person.npcId, name } } );
 		}
+		if ( noticed ) this.regard.drop( person.npcId, this.clock.timeMin );
+		this.#autosave( 'item' );
+		if ( noticed ) this.view.toast.show( { title: name, text: this.accessLines.say( card ? 'caught' : 'caught-empty', {}, seed ) } );
+		// A card lifted unseen is announced by the inventory; the rest says how it went.
+		const notice = card ? ( noticed ? 'notice-caught' : null ) : ( noticed ? 'notice-felt' : 'notice-fumbled' );
+		if ( notice ) this.view.toast.show( { title: 'Access', text: this.accessLines.say( notice, { name: instance?.name?.given ?? name, label: card?.label ?? '' } ) } );
+		this.#emit( 'theft', { npcId: person.npcId, lifted: Boolean( card ), noticed } );
+	}
+
+	/** Whether a person is busy with something besides the player now: talking to somebody, at their work, shopping or out for their own leisure. */
+	#distracted( npcId ) {
+		const member = this.crowd?.memberForNpc?.( npcId ) ?? null;
+		if ( member?.talking || member?.phone ) return true;
+		let activity = null;
+		try { activity = this.sim?.behaviorAt?.( npcId, this.clock.timeMin )?.activity ?? null; } catch { activity = null; }
+		return activity === 'working' || activity === 'shopping' || activity === 'leisure';
+	}
+
+	/**
+	 * Tells whoever listens on `events` (the HUD, a probe) what just
+	 * happened: `contact-added`, `item-acquired`, `theft`, `companion-started`,
+	 * `companion-arrived`, `companion-ended`, `companion-errand`, `save-failed`,
+	 * each a CustomEvent with its `detail`.
+	 */
+	#emit( type, detail ) {
+		this.events.dispatchEvent( new CustomEvent( type, { detail } ) );
 	}
 
 	/** A building as an address names it: its own name, else what it is and the street it stands on. */
@@ -2081,6 +2119,8 @@ export class GameApp {
 			timeMin: this.clock.timeMin, playerPosition, playerPlaces, busy: playableModalOpen( this.view, this.interactor )
 		} ) );
 		for ( const signal of signals ) {
+			const event = COMPANION_EVENTS[ signal.kind ];
+			if ( event ) this.#emit( event, { ...signal } );
 			if ( signal.kind === 'arrival' ) this.#arrival( signal );
 			else if ( signal.kind === 'line' || signal.kind === 'refused' ) this.#companionSays( signal.npcId, signal.line );
 			// What a companion does reads as a notice with their face: following, leading somewhere and how far, there, gone.
@@ -2595,6 +2635,7 @@ export class GameApp {
 
 		console.error( `save (${reason}) failed: ${error?.message ?? error}`, ...( error?.details ? [ error.details ] : [] ) );
 		this.view.toast.show( { title: 'Save failed', text: error?.message ?? String( error ) } );
+		this.#emit( 'save-failed', { reason, message: error?.message ?? String( error ), details: error?.details ?? [] } );
 
 	}
 
