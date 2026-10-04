@@ -15,12 +15,12 @@ Purpose: restores one cataloged game and saves its live player and quest state t
 ## Events
 
 - `unplayed` is true while the loaded game has no saved play time: a new game.
-- `save(liveState)` posts one `saveCurrent` request to `/api/launcher`. Saves are serialized so a later request uses the revision returned by the previous one. An optional field the live state leaves out is sent as the loaded or last returned descriptor holds it ([SavedFields.js](SavedFields.js)), the same rule the launcher applies to what it stores.
+- `save(liveState, { keepalive? })` posts one `saveCurrent` request to `/api/launcher`; with `keepalive`, a request under 60 KB may outlive the page, as a page being hidden or left needs. Saves are serialized so a later request uses the revision returned by the previous one. An optional field the live state leaves out is sent as the loaded or last returned descriptor holds it ([SavedFields.js](SavedFields.js)), the same rule the launcher applies to what it stores.
 
 ## Errors
 
 - `E_GAME_STATE`: the loaded descriptor or its requested id is invalid.
-- `E_LIVE_STATE`: the state supplied by the game is invalid.
+- `E_LIVE_STATE`: the state supplied by the game is invalid. Every schema error names its field: the message holds the first three (`live game state does not match its schema: /inventory/0/id must match pattern …`) and `details` all of them.
 - `E_SAVE_PAYLOAD`: the constructed request is invalid.
 - `E_SAVE_RESPONSE`: the launcher response is invalid.
 - `E_SAVE_HTTP`: the launcher refused or could not process the request.
