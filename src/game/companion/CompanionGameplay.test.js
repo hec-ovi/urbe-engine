@@ -91,7 +91,7 @@ describe( 'a companion under way', () => {
 		expect( game.companion.accepted( mira.npcId ) ).toBe( true );
 		game.continuity.endConversation( { timeMin: AFTERNOON, hold: game.companion.accepted( mira.npcId ) } );
 		// Whatever the person said, the player reads where they are being taken.
-		expect( game.frame( AFTERNOON, mira.position ) ).toEqual( [ { kind: 'started', npcId: mira.npcId, mode: 'lead', notice: 'Mira leads you to the back room.' } ] );
+		expect( game.frame( AFTERNOON, mira.position ) ).toEqual( [ { kind: 'started', npcId: mira.npcId, mode: 'lead', notice: expect.stringMatching( /^Mira leads you to the back room \(\d+0 m\)\.$/ ) } ] );
 		expect( game.continuity.companion ).toMatchObject( { npcId: mira.npcId, mode: 'leading' } );
 		expect( game.bridge.simulation.serialize().events.filter( ( event ) => event.npcId === mira.npcId ).map( ( event ) => event.k ) )
 			.toEqual( [ 'interrupt' ] );
@@ -137,7 +137,7 @@ describe( 'a companion under way', () => {
 		const accepted = game.companion.accept( { ...game.ask( mira ), offerId: 'lead:parcel:p_rest' } );
 		expect( [ 'Follow me to the back room to the west.', 'This way. Keep close.', 'Come on. It isn\'t far.' ] ).toContain( accepted.line );
 		game.continuity.endConversation( { timeMin: AFTERNOON, hold: true } );
-		expect( game.frame( AFTERNOON, mira.position ) ).toEqual( [ { kind: 'started', npcId: mira.npcId, mode: 'lead', notice: 'Mira leads you to the back room to the west.' } ] );
+		expect( game.frame( AFTERNOON, mira.position ) ).toEqual( [ { kind: 'started', npcId: mira.npcId, mode: 'lead', notice: expect.stringMatching( /^Mira leads you to the back room to the west \(\d+0 m\)\.$/ ) } ] );
 		expect( game.companion.active.destination ).toEqual( SCENE );
 
 		const signals = game.walkBeside( AFTERNOON + 1, () => game.companion.active.phase === 'ready' );
@@ -149,7 +149,7 @@ describe( 'a companion under way', () => {
 		const asked = tool.talkTo( 'p_cafe', AFTERNOON );
 		expect( tool.companion.acceptFromTool( { ...tool.ask( asked ), kind: 'lead', placeId: 'p_shop' } ) ).toMatchObject( { ok: true, offerId: 'lead:parcel:p_shop' } );
 		tool.continuity.endConversation( { timeMin: AFTERNOON, hold: true } );
-		expect( tool.frame( AFTERNOON, asked.position ) ).toEqual( [ { kind: 'started', npcId: asked.npcId, mode: 'lead', notice: 'Mira leads you to the back room to the east.' } ] );
+		expect( tool.frame( AFTERNOON, asked.position ) ).toEqual( [ { kind: 'started', npcId: asked.npcId, mode: 'lead', notice: expect.stringMatching( /^Mira leads you to the back room to the east \(\d+0 m\)\.$/ ) } ] );
 		expect( tool.continuity.companion ).toMatchObject( { npcId: asked.npcId, mode: 'leading' } );
 		expect( tool.companion.active.destination.place ).toEqual( twin.place );
 
@@ -226,6 +226,7 @@ describe( 'a companion under way', () => {
 
 		const game = setup();
 		const mira = game.start( 'follow' );
+		expect( game.started.notice ).toBe( 'Mira follows you.' );
 		expect( game.continuity.companion ).toMatchObject( { npcId: mira.npcId, mode: 'following' } );
 		const at = game.continuity.companion.position;
 		game.continuity.beginConversation( { npcId: mira.npcId, timeMin: AFTERNOON + 1, position: at, heading: 0, place: HOME, seated: false } );
@@ -257,7 +258,8 @@ describe( 'a companion under way', () => {
 		expect( game.continuity.companion ).toMatchObject( { npcId: mira.npcId, mode: 'leading', position: at } );
 		expect( game.companion.active ).toMatchObject( { kind: 'lead', destination: { place: { kind: 'parcel', id: 'p_cafe' }, relation: 'work' } } );
 		// The place the tool named is the place the notice names and the leader walks to.
-		expect( started ).toEqual( { kind: 'started', npcId: mira.npcId, mode: 'lead', notice: `Mira leads you to ${game.companion.active.destination.name}.` } );
+		expect( started ).toEqual( { kind: 'started', npcId: mira.npcId, mode: 'lead', notice: expect.stringMatching( /^Mira leads you to .+ \(\d+0 m\)\.$/ ) } );
+		expect( started.notice.startsWith( `Mira leads you to ${game.companion.active.destination.name} (` ) ).toBe( true );
 
 	} );
 
@@ -411,7 +413,9 @@ function setup( quests = {}, crowd = null, restored = null, scenes = [ SCENE ] )
 			const actor = game.talkTo( 'p_cafe', AFTERNOON );
 			expect( companion.accept( { ...game.ask( actor ), offerId } ).ok ).toBe( true );
 			continuity.endConversation( { timeMin: AFTERNOON, hold: true } );
-			expect( game.frame( AFTERNOON, actor.position ).map( ( signal ) => signal.kind ) ).toEqual( [ 'started' ] );
+			const signals = game.frame( AFTERNOON, actor.position );
+			expect( signals.map( ( signal ) => signal.kind ) ).toEqual( [ 'started' ] );
+			game.started = signals[ 0 ];
 			return actor;
 
 		},

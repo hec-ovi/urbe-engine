@@ -427,8 +427,12 @@ export class CompanionGameplay {
 
 		}
 		this.state = { version: '1', npcId, kind, startedAtMin: timeMin, phase: 'walking', ...( destination ? { destination } : {} ) };
-		// Whatever the person said, the player reads where they are being taken, as it was offered.
-		signals.push( { kind: 'started', npcId, mode: kind, ...( destination ? { notice: this.#told( 'notice-lead', npcId, told, timeMin ) } : {} ) } );
+		// Whatever the person said, the player reads that they follow, or where they are being taken, as it was offered, and how far.
+		const metres = destination ? this.#metresTo( npcId, destination ) : null;
+		const notice = ! destination ? this.lines.say( 'notice-follow', { name: this.#given( npcId ) }, `${npcId}|${Math.floor( timeMin )}` )
+			: metres === null ? this.#told( 'notice-lead-unmeasured', npcId, told, timeMin )
+			: this.lines.say( 'notice-lead', { name: this.#given( npcId ), place: told, metres: String( metres ) }, `${npcId}|${Math.floor( timeMin )}` );
+		signals.push( { kind: 'started', npcId, mode: kind, notice } );
 
 	}
 
@@ -514,6 +518,18 @@ export class CompanionGameplay {
 		if ( ! target ) return null;
 		if ( target.npcId ) return { npcId: target.npcId };
 		return { position: [ ...target.position ], ...( target.parcelId ? { parcelId: target.parcelId } : {} ), ...( Number.isInteger( target.floor ) ? { floor: target.floor } : {} ) };
+
+	}
+
+	/** How far a leader stands from where they take the player, straight, to the nearest 10 m; null when either end cannot be placed. */
+	#metresTo( npcId, destination ) {
+
+		const from = this.continuity.actor( npcId )?.position;
+		const target = destination.target;
+		const to = target?.npcId ? this.continuity.actor( target.npcId )?.position
+			: target?.position ?? this.places.positions.get( placeKey( destination.place ) ) ?? null;
+		if ( ! from || ! to ) return null;
+		return Math.max( 10, Math.round( Math.hypot( to[ 0 ] - from[ 0 ], to[ 2 ] - from[ 2 ] ) / 10 ) * 10 );
 
 	}
 

@@ -121,7 +121,15 @@ What a person says, and what the player reads, when they come along, lead the wa
 
 - {name} could not find a way and went back.
 
+## notice-follow
+
+- {name} follows you.
+
 ## notice-lead
+
+- {name} leads you to {place} ({metres} m).
+
+## notice-lead-unmeasured
 
 - {name} leads you to {place}.
 

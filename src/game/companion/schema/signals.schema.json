@@ -13,7 +13,7 @@
           "kind": { "const": "started" },
           "npcId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
           "mode": { "$ref": "urn:urbe:engine:companion:values#/$defs/kind" },
-          "notice": { "description": "For a lead, where the person is taking the player.", "$ref": "urn:urbe:engine:companion:values#/$defs/text" }
+          "notice": { "description": "What the player reads: that the person follows, or where they are taking the player and how far.", "$ref": "urn:urbe:engine:companion:values#/$defs/text" }
         }
       },
       {
