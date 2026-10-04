@@ -1,3 +1,5 @@
+import { districtLabel } from './Locator.js';
+
 /**
  * The atlas blueprint reduced to what a top-down map needs: city bounds, the
  * street centrelines with their widths, block outlines and active transit.
@@ -16,15 +18,45 @@ export function mapModel( atlas, networks ) {
 
 }
 
-/** The city as blocks and exact 3D transit paths for the full map. */
-export function blockWorld( atlas, networks ) {
+/**
+ * The city as blocks and exact 3D transit paths for the full map, with each
+ * named street's centrelines (`streetOf( edgeId )`, Quests StreetNames, names
+ * the grid's streets and avenues; alleys and the highway go unnamed) and each
+ * district's name over its centre.
+ */
+export function blockWorld( atlas, networks, { streetOf = () => null } = {} ) {
 
+	const streets = new Map();
+	for ( const edge of atlas.streets?.edges ?? [] ) {
+
+		const street = streetOf( edge.id );
+		if ( ! street || ( street.kind !== 'street' && street.kind !== 'avenue' ) || edge.path.length < 2 ) continue;
+		if ( ! streets.has( street.id ) ) streets.set( street.id, { name: street.name, paths: [] } );
+		streets.get( street.id ).paths.push( edge.path.map( ( [ x, z ] ) => [ x, z ] ) );
+
+	}
 	return {
 		bounds: atlas.meta.bounds,
 		buildings: atlas.volumetric.buildings.map( ( building ) => ( { ring: building.footprint, height: building.height } ) ),
 		ground: atlas.volumetric.ground,
-		transit: transitModel( atlas, networks, ( point ) => [ ...point ] )
+		transit: transitModel( atlas, networks, ( point ) => [ ...point ] ),
+		streets: [ ...streets.values() ],
+		districts: ( atlas.districts ?? [] ).flatMap( ( district ) => {
+
+			const center = district.center ?? centreOf( district.boundary ?? [] );
+			return center ? [ { name: districtLabel( district ), center: [ center[ 0 ], center[ 1 ] ] } ] : [];
+
+		} )
 	};
+
+}
+
+/** The middle of a ring's extent, or null for none. */
+function centreOf( ring ) {
+
+	if ( ! ring.length ) return null;
+	const xs = ring.map( ( [ x ] ) => x ), zs = ring.map( ( [ , z ] ) => z );
+	return [ ( Math.min( ...xs ) + Math.max( ...xs ) ) / 2, ( Math.min( ...zs ) + Math.max( ...zs ) ) / 2 ];
 
 }
 

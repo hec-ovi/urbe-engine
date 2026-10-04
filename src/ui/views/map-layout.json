@@ -2,7 +2,7 @@
   "title": "City map",
   "eyebrow": "Urbe / cartography",
   "layers": { "label": "Map layers", "route": "Route", "transit": "Transit", "places": "Places" },
-  "tools": { "label": "Map view", "zoomIn": "Zoom in", "zoomOut": "Zoom out", "centre": "Centre on me", "whole": "Show the whole city" },
+  "tools": { "label": "Map view", "zoomIn": "Zoom in", "zoomOut": "Zoom out", "centre": "Centre on me (C)", "whole": "Show the whole city" },
   "north": "N",
   "objective": {
     "eyebrow": "Current objective",
@@ -17,6 +17,6 @@
   },
   "here": "You are here",
   "legend": { "you": "You", "objective": "Objective", "open": "Open venue", "shut": "Shut venue", "transit": "Transit" },
-  "hint": "Drag to turn · Scroll to zoom",
+  "hint": "Drag or WASD to move · Right-drag or Q E to turn · Scroll to zoom · C to centre",
   "walkingSpeed": 1.4
 }

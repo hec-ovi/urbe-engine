@@ -80,4 +80,44 @@ describe( 'Map3DView', () => {
 
 	} );
 
+	it( 'pans the ground across the view and inside the city, turns it, follows keys while open and centres on the player with C', () => {
+
+		const view = new Map3DView( { onClose: () => {} } );
+		view.setWorld( world );
+		view.setPlayer( { x: 20, y: 0, z: 20 }, 0 );
+		view.orbit.yaw = 0;
+
+		// Facing -Z, right is +X and ahead is -Z.
+		view.pan( 10, 5 );
+		expect( view.target.x ).toBeCloseTo( 30 );
+		expect( view.target.z ).toBeCloseTo( 15 );
+		expect( view.follow ).toBe( false );
+		view.pan( 500, - 500 );
+		expect( [ view.target.x, view.target.z ] ).toEqual( [ 100, 100 ] );
+
+		view.turn( 0.5 );
+		expect( view.orbit.yaw ).toBeCloseTo( 0.5 );
+
+		// The map's keys move it while it is open: a tap moves at once, and C goes back to the player.
+		view.shown();
+		const before = view.target.clone();
+		window.dispatchEvent( new KeyboardEvent( 'keydown', { code: 'KeyA' } ) );
+		expect( view.target.distanceTo( before ) ).toBeGreaterThan( 0 );
+		window.dispatchEvent( new KeyboardEvent( 'keyup', { code: 'KeyA' } ) );
+		expect( view.held.size ).toBe( 0 );
+		window.dispatchEvent( new KeyboardEvent( 'keydown', { code: 'KeyE' } ) );
+		expect( view.orbit.yaw ).toBeLessThan( 0.5 );
+		window.dispatchEvent( new KeyboardEvent( 'keyup', { code: 'KeyE' } ) );
+		window.dispatchEvent( new KeyboardEvent( 'keydown', { code: 'KeyC' } ) );
+		expect( view.follow ).toBe( true );
+		expect( [ view.target.x, view.target.z ] ).toEqual( [ 20, 20 ] );
+		expect( view.key( 'KeyM' ) ).toBe( false );
+
+		// Off screen its keys do nothing.
+		view.hidden();
+		window.dispatchEvent( new KeyboardEvent( 'keydown', { code: 'KeyD' } ) );
+		expect( [ view.target.x, view.target.z ] ).toEqual( [ 20, 20 ] );
+
+	} );
+
 } );

@@ -56,4 +56,37 @@ describe( 'map models', () => {
 
 	} );
 
+	it( 'gives the full map each named street\'s lines and each district\'s name over its centre', () => {
+
+		const grid = {
+			...atlas,
+			streets: { edges: [
+				{ id: 'e1', class: 'local', path: [ [ 0, 5 ], [ 50, 5 ] ] },
+				{ id: 'e2', class: 'local', path: [ [ 50, 5 ], [ 100, 5 ] ] },
+				{ id: 'e3', class: 'local', path: [ [ 20, 0 ], [ 20, 100 ] ] },
+				{ id: 'e4', class: 'alley', path: [ [ 0, 60 ], [ 10, 60 ] ] }
+			] },
+			districts: [
+				{ id: 'd0', kind: 'downtown', tier: 'high_rich', center: [ 40, 40 ], boundary: [ [ 0, 0 ], [ 80, 0 ], [ 80, 80 ] ] },
+				{ id: 'd1', kind: 'industrial', tier: 'poor', boundary: [ [ 80, 80 ], [ 100, 80 ], [ 100, 100 ], [ 80, 100 ] ] }
+			]
+		};
+		const named = {
+			e1: { id: 'street:1', name: 'First Street', kind: 'street' }, e2: { id: 'street:1', name: 'First Street', kind: 'street' },
+			e3: { id: 'avenue:1', name: 'First Avenue', kind: 'avenue' }, e4: { id: 'alley:e4', name: 'an alley', kind: 'alley' }
+		};
+		const world = blockWorld( grid, networks, { streetOf: ( id ) => named[ id ] } );
+		expect( world.streets ).toEqual( [
+			{ name: 'First Street', paths: [ [ [ 0, 5 ], [ 50, 5 ] ], [ [ 50, 5 ], [ 100, 5 ] ] ] },
+			{ name: 'First Avenue', paths: [ [ [ 20, 0 ], [ 20, 100 ] ] ] }
+		] );
+		expect( world.districts ).toEqual( [
+			{ name: 'downtown · high rich', center: [ 40, 40 ] },
+			{ name: 'industrial · poor', center: [ 90, 90 ] }
+		] );
+		// Without names nothing is written on the streets.
+		expect( blockWorld( grid, networks ).streets ).toEqual( [] );
+
+	} );
+
 } );

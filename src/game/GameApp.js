@@ -167,7 +167,10 @@ const BINDINGS = [
 	{ category: 'Interface', action: 'contacts', keys: [ 'T' ], description: 'The people who gave you their number; call one from here.' },
 	{ category: 'Interface', action: 'settings', keys: [ 'Esc' ], description: 'On the street, opens the settings and holds the city still: picture, crowd, voices, the developer readouts, Save and Leave. Esc again goes back to the street.' },
 	{ category: 'Interface', action: 'controls', keys: [ '?' ], description: 'This reference.' },
-	{ category: 'Interface', action: 'close the chat or a panel', keys: [ 'Esc' ], description: 'Back to the street; click the view to look around again.' }
+	{ category: 'Interface', action: 'close the chat or a panel', keys: [ 'Esc' ], description: 'Back to the street; click the view to look around again.' },
+	{ category: 'Map', action: 'move the map', keys: [ 'W', 'A', 'S', 'D' ], description: 'With the map open, pan across the city; the arrows and a drag with the left mouse do too.' },
+	{ category: 'Map', action: 'turn the map', keys: [ 'Q', 'E' ], description: 'With the map open, turn the city; a drag with the right mouse turns and tilts it.' },
+	{ category: 'Map', action: 'centre the map on you', keys: [ 'C' ], description: 'With the map open, back on where you stand, following you again.' }
 ];
 
 /** Standing still: this close to one spot for this long. */
@@ -932,7 +935,7 @@ export class GameApp {
 		const map = mapModel( atlas, connections.networks );
 		this.view.minimap.setMap( map );
 		this.view.minimap.setVenues( this.venues.marks );
-		this.view.map.setWorld( blockWorld( atlas, connections.networks ) );
+		this.view.map.setWorld( blockWorld( atlas, connections.networks, { streetOf: ( edgeId ) => this.streetNames.ofEdge( edgeId ) } ) );
 		this.view.map.setVenues( this.venues.marks );
 		this.#updateObjectiveRoute( 0, true );
 		this.view.settings.setValues( {

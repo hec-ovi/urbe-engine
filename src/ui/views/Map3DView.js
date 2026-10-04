@@ -3,6 +3,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { el } from '../components/dom.js';
 import { PanelHeader } from '../components/PanelHeader.js';
 import layout from './map-layout.json' with { type: 'json' };
+import { placeLabels } from './MapLabels.js';
 
 const WHEEL_STEP = 1.15;
 const BUTTON_STEP = WHEEL_STEP * WHEEL_STEP;
@@ -16,6 +17,21 @@ const COLORS = {
 };
 /** The objective's diamond stands this high, over the roofs of a low street. */
 const OBJECTIVE_HEIGHT = 6;
+/** Streets are named once a block spans this many pixels; further out, the districts are. */
+const STREET_NAMES_AT = 120;
+/** A block's side when the world has none to measure, in metres. */
+const BLOCK_SIDE = 80;
+/** The keys that move the map while it is open: pan, turn, and C back on the player. */
+const PAN_KEYS = { KeyW: [ 0, 1 ], ArrowUp: [ 0, 1 ], KeyS: [ 0, - 1 ], ArrowDown: [ 0, - 1 ], KeyA: [ - 1, 0 ], ArrowLeft: [ - 1, 0 ], KeyD: [ 1, 0 ], ArrowRight: [ 1, 0 ] };
+const TURN_KEYS = { KeyQ: 1, KeyE: - 1 };
+/** How far a held key pans in a second, as a share of the view's distance, and how fast it turns (radians). */
+const PAN_SPEED = 0.9;
+const TURN_SPEED = 1.6;
+/** The names' type: a street's along it, a district's over its centre, each with a dark halo. */
+const FONTS = {
+	street: { font: '500 13px system-ui, sans-serif', color: '#dcefe9', height: 16, spacing: '0px' },
+	district: { font: '600 11px ui-monospace, "JetBrains Mono", Menlo, monospace', color: '#8fd6cd', height: 14, spacing: '2px' }
+};
 
 /** A ring of [x, z] as a three Shape lying in the ground plane once rotated onto XZ. */
 function shapeOf( ring ) {
@@ -51,8 +67,11 @@ export function plateGeometry( ground, surface, y ) {
  * volumetrics, orbited around the player, framed as a full screen: layer
  * toggles and the zoom stack over it, a compass that turns with it, the
  * current objective and where the player stands beside it, the legend under
- * it. Drag turns, wheel or the stack zooms; the frame is rendered only on a
- * change and never on its own. Labels come from [map-layout.json](map-layout.json)
+ * it. Drag (or W A S D and the arrows) moves the ground, the right button
+ * (or Q and E) turns it, wheel or the stack zooms, C centres on the player;
+ * close in each street's name runs along it, further out each district's
+ * name stands over it. The frame is rendered only on a change and while a
+ * map key is held, never on its own. Labels come from [map-layout.json](map-layout.json)
  * ([schema](map-layout.schema.json)).
  * props: { onClose }
  */
@@ -96,6 +115,13 @@ export class Map3DView {
 		this.scene.add( sun );
 
 		this.canvas = el( 'canvas', { className: 'map-canvas' } );
+		this.labelCanvas = el( 'canvas', { className: 'map-labels', ariaHidden: 'true' } );
+		this.streets = [];
+		this.districts = [];
+		this.blockSide = BLOCK_SIDE;
+		this.labels = [];
+		this.held = new Set();
+		this.keyFrame = 0;
 		this.layers = {
 			route: this.#layer( 'route', layout.layers.route, [ () => this.routeLine, () => this.route && this.objectiveMark ] ),
 			transit: this.#layer( 'transit', layout.layers.transit, [ () => this.transitRoutes, () => this.transitPlaces ] ),
@@ -105,6 +131,7 @@ export class Map3DView {
 		this.centreButton = this.#tool( '⌖', layout.tools.centre, () => this.centre() );
 		this.stage = el( 'div', { className: 'map-stage' },
 			this.canvas,
+			this.labelCanvas,
 			el( 'div', { className: 'map-layers', role: 'group', ariaLabel: layout.layers.label }, ...Object.values( this.layers ).map( ( layer ) => layer.button ) ),
 			el( 'div', { className: 'map-tools', role: 'group', ariaLabel: layout.tools.label },
 				el( 'div', { className: 'map-compass' }, this.needle, el( 'span', { textContent: layout.north } ) ),
@@ -160,9 +187,14 @@ export class Map3DView {
 
 	/**
 	 * @param world { bounds: { min: [x,z], max: [x,z] }, buildings: [{ ring: [[x,z]], height }],
-	 *   ground: [{ surface, polygon: [[x,z]] }], transit: { routes, places } }
+	 *   ground: [{ surface, polygon: [[x,z]] }], transit: { routes, places },
+	 *   streets?: [{ name, paths: [[[x,z]]] }], districts?: [{ name, center: [x,z] }] }
 	 */
-	setWorld( { bounds, buildings, ground, transit } ) {
+	setWorld( { bounds, buildings, ground, transit, streets = [], districts = [] } ) {
+
+		this.streets = streets;
+		this.districts = districts;
+		this.blockSide = blockSide( ground );
 
 		for ( const old of [ this.blocks, this.edges, ...this.plates ] ) {
 
@@ -331,6 +363,64 @@ export class Map3DView {
 
 	}
 
+	/**
+	 * Moves the view's centre across the ground, no longer following: `right`
+	 * and `ahead` in metres, as the view faces.
+	 */
+	pan( right, ahead ) {
+
+		const { yaw } = this.orbit;
+		this.follow = false;
+		this.target.x += Math.cos( yaw ) * right - Math.sin( yaw ) * ahead;
+		this.target.z += - Math.sin( yaw ) * right - Math.cos( yaw ) * ahead;
+		if ( this.bounds ) {
+
+			const { min, max } = this.bounds;
+			this.target.x = Math.min( max[ 0 ], Math.max( min[ 0 ], this.target.x ) );
+			this.target.z = Math.min( max[ 1 ], Math.max( min[ 1 ], this.target.z ) );
+
+		}
+		this.redraw();
+
+	}
+
+	/** Turns the view about its centre, `radians` to the left. */
+	turn( radians ) {
+
+		this.orbit.yaw += radians;
+		this.redraw();
+
+	}
+
+	/** A key while the map is open: W A S D and the arrows pan, Q and E turn, C centres on the player. Returns whether it was the map's. */
+	key( code, down = true ) {
+
+		if ( code === 'KeyC' ) {
+
+			if ( down ) this.centre();
+			return true;
+
+		}
+		if ( ! PAN_KEYS[ code ] && ! TURN_KEYS[ code ] ) return false;
+		if ( ! down ) {
+
+			this.held.delete( code );
+			return true;
+
+		}
+		if ( ! this.held.has( code ) ) {
+
+			this.held.add( code );
+			// A tap moves at once; held, it goes on every frame until let go.
+			this.#move( 1 / 20 );
+			this.last = performance.now();
+			this.#keyLoop();
+
+		}
+		return true;
+
+	}
+
 	/** Back on the player, following again. */
 	centre() {
 
@@ -369,9 +459,21 @@ export class Map3DView {
 
 	}
 
-	/** The panel is on screen: the renderer exists from here on, sized to the stage. */
+	/** The panel is on screen: the renderer exists from here on, sized to the stage, and the map's keys move it. */
 	shown() {
 
+		if ( ! this.keyHandlers ) {
+
+			const handle = ( down ) => ( event ) => {
+
+				if ( event.ctrlKey || event.metaKey || event.altKey || ( down && event.repeat ) ) return;
+				if ( this.key( event.code, down ) ) event.preventDefault();
+
+			};
+			this.keyHandlers = { keydown: handle( true ), keyup: handle( false ), blur: () => this.held.clear() };
+			for ( const [ type, handler ] of Object.entries( this.keyHandlers ) ) window.addEventListener( type, handler );
+
+		}
 		if ( ! this.renderer ) {
 
 			// No WebGL here (a test DOM, a blocked GPU): the panel stays a frame-less scene.
@@ -391,6 +493,17 @@ export class Map3DView {
 
 	}
 
+	/** Off screen: its keys let go and nothing moves on. */
+	hidden() {
+
+		if ( this.keyHandlers ) for ( const [ type, handler ] of Object.entries( this.keyHandlers ) ) window.removeEventListener( type, handler );
+		this.keyHandlers = null;
+		this.held.clear();
+		if ( this.keyFrame ) cancelAnimationFrame( this.keyFrame );
+		this.keyFrame = 0;
+
+	}
+
 	redraw() {
 
 		const { yaw, pitch, distance } = this.orbit;
@@ -403,7 +516,107 @@ export class Map3DView {
 			this.target.z + Math.cos( yaw ) * Math.cos( pitch ) * distance
 		);
 		this.camera.lookAt( this.target );
+		this.camera.updateMatrixWorld();
 		this.renderer.render( this.scene, this.camera );
+		this.#drawLabels();
+
+	}
+
+	/** Pixels one metre of ground spans at the view's centre. */
+	pixelsPerMetre( height = this.labelCanvas.clientHeight || this.canvas.clientHeight || 1 ) {
+
+		return height / ( 2 * this.orbit.distance * Math.tan( THREE.MathUtils.degToRad( this.camera.fov ) / 2 ) );
+
+	}
+
+	/** Street names close in, district names further out, on the overlay over the frame. */
+	#drawLabels() {
+
+		const width = this.labelCanvas.clientWidth, height = this.labelCanvas.clientHeight;
+		const context = width && height ? this.labelCanvas.getContext( '2d' ) : null;
+		if ( ! context ) return;
+		const ratio = Math.min( window.devicePixelRatio || 1, 2 );
+		if ( this.labelCanvas.width !== Math.round( width * ratio ) || this.labelCanvas.height !== Math.round( height * ratio ) ) {
+
+			this.labelCanvas.width = Math.round( width * ratio );
+			this.labelCanvas.height = Math.round( height * ratio );
+
+		}
+		context.setTransform( ratio, 0, 0, ratio, 0, 0 );
+		context.clearRect( 0, 0, width, height );
+		const mode = this.blockSide * this.pixelsPerMetre( height ) >= STREET_NAMES_AT ? 'street' : 'district';
+		const point = new THREE.Vector3();
+		const project = ( [ x, z ] ) => {
+
+			point.set( x, 0.3, z ).project( this.camera );
+			if ( point.z < - 1 || point.z > 1 ) return null;
+			return { x: ( point.x + 1 ) / 2 * width, y: ( 1 - point.y ) / 2 * height };
+
+		};
+		const measure = ( text, kind ) => {
+
+			type( context, kind );
+			return context.measureText( text ).width;
+
+		};
+		this.labels = placeLabels( {
+			mode, streets: this.streets, districts: this.districts, project, measure, size: { width, height },
+			heights: { street: FONTS.street.height, district: FONTS.district.height }
+		} );
+		context.textAlign = 'center';
+		context.textBaseline = 'middle';
+		context.lineJoin = 'round';
+		for ( const label of this.labels ) {
+
+			type( context, label.kind );
+			context.save();
+			context.translate( label.x, label.y );
+			context.rotate( label.angle );
+			context.lineWidth = 3;
+			context.strokeStyle = 'rgba(7, 28, 33, 0.92)';
+			context.strokeText( label.text, 0, 0 );
+			context.fillStyle = FONTS[ label.kind ].color;
+			context.fillText( label.text, 0, 0 );
+			context.restore();
+
+		}
+
+	}
+
+	/** One step of the held keys: `seconds` of panning and turning. */
+	#move( seconds ) {
+
+		let right = 0, ahead = 0, turn = 0;
+		for ( const code of this.held ) {
+
+			if ( PAN_KEYS[ code ] ) {
+
+				right += PAN_KEYS[ code ][ 0 ];
+				ahead += PAN_KEYS[ code ][ 1 ];
+
+			}
+			turn += TURN_KEYS[ code ] ?? 0;
+
+		}
+		const step = this.orbit.distance * PAN_SPEED * seconds;
+		if ( right || ahead ) this.pan( right * step, ahead * step );
+		if ( turn ) this.turn( turn * TURN_SPEED * seconds );
+
+	}
+
+	/** While a map key is held, the view moves on every frame by the time since the last. */
+	#keyLoop() {
+
+		if ( this.keyFrame || ! this.held.size || typeof requestAnimationFrame !== 'function' ) return;
+		this.keyFrame = requestAnimationFrame( () => {
+
+			this.keyFrame = 0;
+			const now = performance.now();
+			this.#move( Math.min( 0.1, ( now - this.last ) / 1000 ) );
+			this.last = now;
+			this.#keyLoop();
+
+		} );
 
 	}
 
@@ -461,21 +674,31 @@ export class Map3DView {
 
 	#bindPointer() {
 
+		// The left button drags the ground under the pointer; the right one turns and tilts the view.
 		this.canvas.addEventListener( 'pointerdown', ( event ) => {
 
-			this.drag = { x: event.clientX, y: event.clientY };
+			this.drag = { x: event.clientX, y: event.clientY, turn: event.button === 2 };
 			this.stage.classList.add( 'is-dragging' );
 			this.canvas.setPointerCapture?.( event.pointerId );
 
 		} );
+		this.canvas.addEventListener( 'contextmenu', ( event ) => event.preventDefault() );
 		this.canvas.addEventListener( 'pointermove', ( event ) => {
 
 			if ( ! this.drag ) return;
 
-			this.orbit.yaw -= ( event.clientX - this.drag.x ) * 0.006;
-			this.orbit.pitch = Math.min( PITCH.max, Math.max( PITCH.min, this.orbit.pitch + ( event.clientY - this.drag.y ) * 0.004 ) );
-			this.drag = { x: event.clientX, y: event.clientY };
-			this.redraw();
+			const dx = event.clientX - this.drag.x, dy = event.clientY - this.drag.y;
+			this.drag = { ...this.drag, x: event.clientX, y: event.clientY };
+			if ( this.drag.turn ) {
+
+				this.orbit.yaw -= dx * 0.006;
+				this.orbit.pitch = Math.min( PITCH.max, Math.max( PITCH.min, this.orbit.pitch + dy * 0.004 ) );
+				this.redraw();
+				return;
+
+			}
+			const metres = 1 / this.pixelsPerMetre( this.canvas.clientHeight || 1 );
+			this.pan( - dx * metres, dy * metres / Math.max( 0.3, Math.sin( this.orbit.pitch ) ) );
 
 		} );
 		const release = () => {
@@ -499,6 +722,27 @@ export class Map3DView {
 		} );
 
 	}
+
+}
+
+/** The side of a typical block: the median of the shorter sides of the block covers, in metres. */
+function blockSide( ground = [] ) {
+
+	const sides = ground.filter( ( cover ) => cover.surface === 'block' && cover.polygon.length >= 3 ).map( ( cover ) => {
+
+		const xs = cover.polygon.map( ( [ x ] ) => x ), zs = cover.polygon.map( ( [ , z ] ) => z );
+		return Math.min( Math.max( ...xs ) - Math.min( ...xs ), Math.max( ...zs ) - Math.min( ...zs ) );
+
+	} ).filter( ( side ) => side > 0 ).sort( ( a, b ) => a - b );
+	return sides.length ? sides[ Math.floor( sides.length / 2 ) ] : BLOCK_SIDE;
+
+}
+
+/** Sets the context's type for a kind of name. */
+function type( context, kind ) {
+
+	context.font = FONTS[ kind ].font;
+	if ( 'letterSpacing' in context ) context.letterSpacing = FONTS[ kind ].spacing;
 
 }
 

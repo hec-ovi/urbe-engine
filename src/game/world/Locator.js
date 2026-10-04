@@ -21,7 +21,7 @@ export class Locator {
 
 		this.districts = atlas.districts.map( ( d ) => ( {
 			id: d.id,
-			label: `${d.kind} · ${d.tier}`.replace( /_/g, ' ' ),
+			label: districtLabel( d ),
 			ring: d.boundary
 		} ) );
 
@@ -254,5 +254,12 @@ function onRing( ring, x, z ) {
 
 	}
 	return false;
+
+}
+
+/** A district as the player reads it, by its kind and tier: `downtown · rich`. */
+export function districtLabel( district ) {
+
+	return `${district.kind} · ${district.tier}`.replace( /_/g, ' ' );
 
 }
