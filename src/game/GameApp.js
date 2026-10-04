@@ -1701,7 +1701,14 @@ export class GameApp {
 
 	/** What the player may ask of this person now, available or not: the companion's offers, with `wide` the talk's longer list. */
 	#offers( npcId, { wide = false, line = '' } = {} ) {
-		return this.companion.offers( { npcId, timeMin: this.clock.timeMin, playerPlaces: this.playerPlaces, ...( wide ? { wide: true } : {} ), ...( wide && line ? { line } : {} ) } );
+		try {
+			return this.companion.offers( { npcId, timeMin: this.clock.timeMin, playerPlaces: this.playerPlaces, ...( wide ? { wide: true } : {} ), ...( wide && line ? { line } : {} ) } );
+		} catch ( error ) {
+			// An offer that breaks its schema costs this person their offers, never the conversation.
+			if ( error?.name !== 'CompanionError' ) throw error;
+			console.warn( `companion offers for ${npcId} dropped: ${error.message}`, error.details );
+			return [];
+		}
 	}
 
 	/** The people a person knows whose bodies continuity holds now, by the name they go by, with where they stand. */
