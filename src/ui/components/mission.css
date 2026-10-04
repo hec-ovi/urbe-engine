@@ -10,6 +10,24 @@
 @media (prefers-reduced-motion: no-preference) { .toast.is-in:not(.is-out) { animation: notice-arrive .24s ease-out both; } }
 @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
 @keyframes notice-arrive { from { opacity: 0; translate: -14px 0; } to { opacity: 1; translate: 0; } }
+/* A gain (an item, a contact, a companion): a square tile with its picture beside the words, arriving with one sweep of light. */
+.toast.is-gain { display: flex; align-items: center; gap: 13px; width: min(330px, calc(100vw - 60px)); padding: 12px 34px 12px 12px; }
+.toast-copy { min-width: 0; flex: 1; }
+.toast.is-gain .toast-title { margin-top: 4px; font-size: 14px; }
+.toast-tile { position: relative; flex: none; display: grid; place-items: center; width: 52px; height: 52px; overflow: hidden; border: 1px solid #73ecdf55; background: radial-gradient(circle at 50% 40%, #1a3a3f, #0b2024 75%); color: #73ecdf; }
+.toast-tile .icon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.toast-picture { display: block; width: 100%; height: 100%; object-fit: cover; }
+.toast.is-item .toast-picture { object-fit: contain; padding: 3px; box-sizing: border-box; }
+.toast.is-contact .toast-tile, .toast.is-companion .toast-tile { border-radius: 50%; }
+.toast-tile::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(115deg, transparent 35%, #73ecdf55 50%, transparent 65%); opacity: 0; }
+@media (prefers-reduced-motion: no-preference) {
+	.toast.is-gain.is-in:not(.is-out) .toast-tile { animation: gain-tile .42s cubic-bezier(.2, .9, .3, 1.25) both; }
+	.toast.is-gain.is-in:not(.is-out) .toast-tile::after { animation: gain-sweep .9s ease-out .18s 1 both; }
+	.toast-tile.has-picture .toast-picture { animation: gain-picture .3s ease-out both; }
+}
+@keyframes gain-tile { from { transform: scale(.72); box-shadow: 0 0 0 0 #73ecdf66; } 60% { box-shadow: 0 0 0 6px #73ecdf22; } to { transform: none; box-shadow: 0 0 0 0 #73ecdf00; } }
+@keyframes gain-sweep { from { opacity: 1; transform: translateX(-100%); } to { opacity: 0; transform: translateX(100%); } }
+@keyframes gain-picture { from { opacity: 0; transform: scale(1.08); } to { opacity: 1; transform: none; } }
 
 /* cinematic: letterbox framing, a large authored story and a persistent action. */
 .summary-layer { position: absolute; inset: 0; z-index: 40; pointer-events: auto; background: linear-gradient(90deg, #031317ed, #03131775 75%); color: #e6f1ee; }

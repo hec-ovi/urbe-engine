@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Conversation panel labels; {name} stands for the person talked to",
   "type": "object",
-  "required": ["log", "from", "story", "hint", "topics", "choices", "actions", "free", "talk", "voice", "activity", "tags", "reveal", "retry", "leave", "leaveCall", "leaveKey"],
+  "required": ["log", "from", "story", "hint", "topics", "choices", "actions", "free", "talk", "voice", "activity", "tags", "notes", "reveal", "retry", "leave", "leaveCall", "leaveKey"],
   "additionalProperties": false,
   "properties": {
     "log": { "description": "Accessible name of the transcript.", "$ref": "#/$defs/text" },
@@ -134,6 +134,13 @@
       "required": ["story", "earlier"],
       "additionalProperties": false,
       "properties": { "story": { "$ref": "#/$defs/text" }, "earlier": { "description": "A line said before this conversation.", "$ref": "#/$defs/text" } }
+    },
+    "notes": {
+      "description": "The kicker of a gain set apart in the transcript: an item handed over, a person added to the contacts.",
+      "type": "object",
+      "required": ["item", "contact"],
+      "additionalProperties": false,
+      "properties": { "item": { "$ref": "#/$defs/text" }, "contact": { "$ref": "#/$defs/text" } }
     },
     "reveal": {
       "type": "object", "required": ["charactersPerSecond", "complete"], "additionalProperties": false,

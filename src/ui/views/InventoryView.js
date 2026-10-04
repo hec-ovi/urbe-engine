@@ -312,7 +312,7 @@ export class InventoryView {
 }
 
 /** The item's own model, else its kind's shape from [item-shapes.json](item-shapes.json). */
-function modelOf( item ) {
+export function modelOf( item ) {
 
 	return item.model ?? { shape: shapes[ item.kind ] ?? 'parcel' };
 

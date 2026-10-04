@@ -645,3 +645,11 @@
 
 /* On a phone call the person's line is said once, in the subtitle: the talk window keeps the lines before it and the text box. */
 .chat-layer.is-call .chat-transcript > .chat-line.is-said { display: none; }
+
+/* A gain set apart in the transcript: an item handed over or a new contact, with its picture. */
+.chat-line.is-note { align-self: center; display: flex; align-items: center; gap: 10px; max-width: 86%; padding: 6px 12px 6px 6px; border: 1px dashed var(--talk-line); background: var(--talk-surface); color: var(--talk-text); font-size: 14px; }
+.chat-note-tile { flex: none; width: 34px; height: 34px; overflow: hidden; border: 1px solid var(--talk-border); background: var(--talk-window); }
+.chat-line.is-contact .chat-note-tile { border-radius: 50%; }
+.chat-note-tile img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.chat-note-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.chat-note-kicker { color: var(--talk-accent); font: 9px var(--ui-mono); letter-spacing: .14em; text-transform: uppercase; }

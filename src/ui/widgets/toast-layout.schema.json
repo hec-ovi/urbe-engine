@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Notice labels: the dismiss button and, per kind of notice, its kicker and the line it reads when the game gives none",
+  "type": "object",
+  "required": ["dismiss", "kinds"],
+  "additionalProperties": false,
+  "properties": {
+    "dismiss": { "$ref": "#/$defs/text" },
+    "kinds": {
+      "type": "object",
+      "required": ["update", "item", "contact", "companion"],
+      "additionalProperties": false,
+      "properties": {
+        "update": { "$ref": "#/$defs/kind" },
+        "item": { "$ref": "#/$defs/kind" },
+        "contact": { "$ref": "#/$defs/kind" },
+        "companion": { "$ref": "#/$defs/kind" }
+      }
+    }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 },
+    "kind": {
+      "type": "object",
+      "required": ["kicker"],
+      "additionalProperties": false,
+      "properties": { "kicker": { "$ref": "#/$defs/text" }, "text": { "$ref": "#/$defs/text" } }
+    }
+  }
+}

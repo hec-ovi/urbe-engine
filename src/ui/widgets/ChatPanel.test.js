@@ -137,12 +137,20 @@ describe( 'ChatPanel', () => {
 		expect( panel.sayAccessible.textContent ).toBe( 'Down the' );
 		reply.discard();
 		expect( panel.sayAccessible.textContent ).toBe( 'Where is the quay?' );
-		// Free talk stays in the talk window: the subtitle keeps the talk's own lines.
+		// Free talk stays in the talk window while it is open: the subtitle keeps the talk's own lines.
+		panel.setTalkOpen( true, { focus: false } );
 		panel.addMessage( { from: 'player', text: 'Nice haircut.', kind: 'talk' } );
 		const free = panel.beginMessage( { from: 'npc', name: 'Ada', kind: 'talk' } );
 		free.update( 'Cut it myself.' );
 		expect( panel.sayAccessible.textContent ).toBe( 'Where is the quay?' );
 		free.finish();
+		// With the talk window closed no reply is out of sight: the person's free talk is said in the subtitle.
+		panel.setTalkOpen( false, { focus: false } );
+		const unseen = panel.beginMessage( { from: 'npc', name: 'Ada', kind: 'talk' } );
+		unseen.update( 'Mind the steps.' );
+		expect( panel.sayAccessible.textContent ).toBe( 'Mind the steps.' );
+		unseen.discard();
+		expect( panel.sayAccessible.textContent ).toBe( 'Where is the quay?' );
 		// What was said before stays in the transcript only.
 		panel.recall( [ { from: 'npc', name: 'Ada', text: 'Last week.' } ] );
 		expect( panel.sayAccessible.textContent ).toBe( 'Where is the quay?' );
@@ -183,8 +191,21 @@ describe( 'ChatPanel', () => {
 		panel.show( ADA );
 		expect( screen.getByRole( 'button', { name: 'End conversation' } ) ).toBeTruthy();
 		expect( panel.element.classList.contains( 'is-call' ) ).toBe( false );
+		panel.setTalkOpen( true, { focus: false } );
 		panel.addMessage( { from: 'npc', name: 'Ada', text: 'Hi.', kind: 'talk' } );
 		expect( panel.subtitle.hidden ).toBe( true );
+
+	} );
+
+	it( 'sets a gain apart in the transcript with its kicker, name and picture, never in the subtitle', async () => {
+
+		panel.addMessage( { from: 'npc', name: 'Ada', text: 'Here, take it.' } );
+		const line = panel.note( { kind: 'item', title: 'Kessler Block key card', image: Promise.resolve( 'blob:card' ) } );
+		expect( line.parentNode ).toBe( panel.transcript );
+		expect( line.textContent ).toBe( 'Item acquiredKessler Block key card' );
+		await vi.waitFor( () => expect( line.querySelector( 'img' )?.getAttribute( 'src' ) ).toBe( 'blob:card' ) );
+		expect( panel.sayAccessible.textContent ).toBe( 'Here, take it.' );
+		expect( panel.note( { kind: 'contact', title: 'Ada Vance' } ).textContent ).toBe( 'New contactAda Vance' );
 
 	} );
 

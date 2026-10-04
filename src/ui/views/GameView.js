@@ -34,7 +34,7 @@ import { GameDock } from '../widgets/GameDock.js';
 import { PanelHost } from './PanelHost.js';
 import { MinimapView } from './MinimapView.js';
 import { Map3DView } from './Map3DView.js';
-import { InventoryView } from './InventoryView.js';
+import { InventoryView, modelOf } from './InventoryView.js';
 import { ItemPreview } from '../components/ItemPreview.js';
 import { QuestsView } from './QuestsView.js';
 import { CodexView } from './CodexView.js';
@@ -290,6 +290,21 @@ export class GameView {
 	setCreationState( state ) {
 
 		this.mainMenu.setCreationState( state );
+
+	}
+
+	/**
+	 * A gain shown where the eye is: a notice with its picture and, while a
+	 * conversation is open, the same gain set apart in its transcript.
+	 * `{ kind: 'item' | 'contact' | 'companion', title, text?, image?, item? }`:
+	 * `image` is a URL or a promise of one; an `item` (an inventory card) is
+	 * pictured by its thumbnail, drawn now.
+	 */
+	announce( { kind, title, text, image = null, item = null } ) {
+
+		const picture = image ?? ( item ? this.preview.thumbnail( modelOf( item ), { now: true } ) : null );
+		this.toast.show( { kind, title, text, image: picture } );
+		if ( ( kind === 'item' || kind === 'contact' ) && ! this.dialog.element.hidden ) this.dialog.note( { kind, title, image: picture } );
 
 	}
 

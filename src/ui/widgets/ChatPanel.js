@@ -306,7 +306,7 @@ export class ChatPanel {
 	addMessage( { from, name, text, kind } ) {
 		const line = this.#line( from, name, kind );
 		line.lastElementChild.textContent = text;
-		if ( this.#spoken( from, kind ) ) this.#say( line, { animate: from === 'npc' } );
+		if ( this.#spoken( from, kind ) ) this.#say( this.#marked( line ), { animate: from === 'npc' } );
 		return line;
 	}
 
@@ -321,7 +321,7 @@ export class ChatPanel {
 		const text = line.lastElementChild.appendChild( document.createTextNode( '' ) );
 		line.classList.add( 'is-streaming' );
 		this.#stream( line, true );
-		if ( this.#spoken( from, kind ) ) this.#say( line );
+		if ( this.#spoken( from, kind ) ) this.#say( this.#marked( line ) );
 		const open = () => this.streaming.has( line );
 		return {
 			line,
@@ -364,6 +364,25 @@ export class ChatPanel {
 		this.voiced[ state === 'playing' ? 'add' : 'delete' ]( line );
 		this.#activity();
 		return true;
+	}
+
+	/**
+	 * A gain set apart in the transcript, `{ kind: 'item' | 'contact', title,
+	 * image? }`: its kicker and name, and its picture (a URL or a promise of
+	 * one) once it arrives. It is never said in the subtitle. Returns the line.
+	 */
+	note( { kind, title, image = null } ) {
+		const tile = el( 'span', { className: 'chat-note-tile', ariaHidden: 'true' } );
+		const line = el( 'div', { className: `chat-line is-note is-${kind}` }, tile,
+			el( 'div', { className: 'chat-note-text' }, el( 'span', { className: 'chat-note-kicker', textContent: layout.notes[ kind ] ?? '' } ), el( 'span', { textContent: title } ) )
+		);
+		Promise.resolve( image ).then( ( url ) => {
+			if ( typeof url === 'string' && url && line.isConnected ) tile.replaceChildren( el( 'img', { src: url, alt: '', draggable: false } ) );
+		}, () => {} );
+		this.transcript.append( line );
+		this.#trim();
+		this.#latest();
+		return line;
 	}
 
 	/**
@@ -623,12 +642,22 @@ export class ChatPanel {
 	}
 
 	#resay() {
-		this.#say( [ ...this.transcript.children ].findLast( line => ! line.classList.contains( 'is-earlier' ) && ! line.classList.contains( 'is-scene' ) && ( line.dataset.kind !== 'talk' || this.call && line.classList.contains( 'is-npc' ) ) ) ?? null );
+		this.#say( [ ...this.transcript.children ].findLast( line => ! line.classList.contains( 'is-earlier' ) && ! line.classList.contains( 'is-scene' ) && line.dataset.spoken ) ?? null );
 	}
 
-	/** Whether a line is said in the subtitle: every line but free talk, and on a call the person's free talk too. */
+	/**
+	 * Whether a line is said in the subtitle: every line but free talk, and the
+	 * person's free talk too on a call or while the talk window is closed, so
+	 * no reply is ever out of sight.
+	 */
 	#spoken( from, kind ) {
-		return kind !== 'talk' || this.call && from === 'npc';
+		return kind !== 'talk' || from === 'npc' && ( this.call || ! this.talkOpen );
+	}
+
+	/** A line said in the subtitle, marked so the subtitle can come back to it. */
+	#marked( line ) {
+		line.dataset.spoken = 'true';
+		return line;
 	}
 
 	#line( from, name, kind ) {

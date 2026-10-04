@@ -84,8 +84,12 @@ export class ItemPreview {
 
 	}
 
-	/** A bitmap URL of the model, drawn once and kept; null without WebGL. */
-	thumbnail( model ) {
+	/**
+	 * A bitmap URL of the model, drawn once and kept; null without WebGL.
+	 * Drawn while the preview is shown, or with `now` (a gain's notice) on the
+	 * next frame whether it is shown or not.
+	 */
+	thumbnail( model, { now = false } = {} ) {
 
 		const key = keyOf( model );
 		if ( this.cache.has( key ) ) {
@@ -101,9 +105,9 @@ export class ItemPreview {
 
 			let resolve;
 			const promise = new Promise( ( done ) => { resolve = done; } );
-			this.queue.set( key, { model, promise, resolve } );
+			this.queue.set( key, { model, promise, resolve, now } );
 
-		}
+		} else if ( now ) this.queue.get( key ).now = true;
 		this.#schedule();
 		return this.queue.get( key ).promise;
 
@@ -184,21 +188,24 @@ export class ItemPreview {
 
 	#schedule() {
 
-		if ( this.frame || ! this.visible || ! this.renderer ) return;
-		if ( ! this.dirty && ! this.queue.size ) return;
+		if ( this.frame || ! this.renderer ) return;
+		// Hidden, only a thumbnail wanted now is drawn.
+		const wanted = this.visible ? this.dirty || this.queue.size > 0 : [ ...this.queue.values() ].some( ( job ) => job.now );
+		if ( ! wanted ) return;
 		this.frame = requestAnimationFrame( () => {
 
 			this.frame = 0;
-			if ( ! this.visible || document.hidden ) return;
+			if ( document.hidden ) return;
 			const start = performance.now();
 			for ( const [ key, job ] of this.queue ) {
 
+				if ( ! this.visible && ! job.now ) continue;
 				this.queue.delete( key );
 				this.#thumbnail( key, job );
 				if ( performance.now() - start > FRAME_BUDGET_MS ) break;
 
 			}
-			if ( this.dirty ) this.#hero();
+			if ( this.dirty && this.visible ) this.#hero();
 			this.#schedule();
 
 		} );
