@@ -25,7 +25,9 @@ export class SchemaBoundary {
 		if ( validate( value ) ) return value;
 
 		const details = validate.errors.map( ( error ) => `${error.instancePath || '/'} ${error.message}` );
-		throw new PersistenceError( code, `${subject} does not match its schema`, details );
+		// The fields that failed, by path, so a refused save says what to fix.
+		const shown = details.slice( 0, 3 ).join( '; ' ) + ( details.length > 3 ? `; and ${details.length - 3} more` : '' );
+		throw new PersistenceError( code, `${subject} does not match its schema: ${shown}`, details );
 
 	}
 

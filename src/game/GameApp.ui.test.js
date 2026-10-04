@@ -7,6 +7,9 @@ import { GameApp } from './GameApp.js';
 import { Interactor } from './player/Interactor.js';
 import { replyEvents, talkError, talkStream } from './talk/talk.test-fixtures.js';
 import { AddressBook } from './access/Addresses.js';
+import { cardFor, cardId } from './access/Access.js';
+import { GamePersistence } from './persistence/GamePersistence.js';
+import gameFixture from '../library/fixtures/out/games/night-shift/game.json';
 
 const square = ( x0, z0, x1, z1 ) => [ [ x0, z0 ], [ x1, z0 ], [ x1, z1 ], [ x0, z1 ] ];
 /** A home block's fourteenth floor: apartment 1407 off its corridor. */
@@ -73,6 +76,65 @@ describe( 'playable game navigation', () => {
 		await vi.waitFor( () => expect( app.persistence.save ).toHaveBeenCalledTimes( 2 ) );
 		expect( app.persistence.save.mock.calls[ 1 ][ 0 ] ).not.toHaveProperty( 'dialogueMemory' );
 		expect( console.warn ).toHaveBeenCalledWith( 'dialogue memory not saved:', 'talk 502' );
+
+	} );
+
+	it( 'saves a given card, the regard of a person who caught a theft, contacts and memory through the real save schema when a talk ends, a reload takes them back, and a refused save names its field in a toast', async () => {
+
+		const sent = [];
+		const fetcher = vi.fn( async ( url, options ) => {
+
+			const input = JSON.parse( options.body ).input;
+			sent.push( input );
+			const carried = Object.fromEntries( [ 'npcState', 'scenery', 'dialogueMemory', 'contacts', 'access' ].filter( ( key ) => key in input ).map( ( key ) => [ key, input[ key ] ] ) );
+			return { ok: true, status: 200, json: async () => ( {
+				...gameFixture, player: input.player, quests: input.quests, sideJobs: input.sideJobs,
+				currentLocation: input.currentLocation, discoveredLocations: input.discoveredLocations, ...carried,
+				save: { ...gameFixture.save, revision: input.expectedRevision + 1, updatedAt: input.updatedAt, playTimeSeconds: input.playTimeSeconds }
+			} ) };
+
+		} );
+		const { app } = savingApp();
+		app.persistence = new GamePersistence( { game: structuredClone( gameFixture ), gameId: gameFixture.id, fetcher } );
+		app.quests = { persistenceView: () => [], inventoryView: () => [] };
+		app.sim = { serialize: () => ( { version: '1', seed: 'fixture-seed', events: [] } ) };
+		app.npcContinuity = { serialize: () => ( { version: '2', actors: [], follow: null, returns: [], conversation: null } ) };
+		app.companion.accepted = () => false;
+		app.transitGameplay = { state: { status: 'waiting', clock: { dayOffset: 0, lastDaySeconds: 43500 } } };
+		app.playStartedAt = performance.now();
+		app.talk = { memory: vi.fn( async () => MEMORY ) };
+		const book = new AddressBook( { buildings: new Map(), nameOf: () => ( { name: 'Kessler Block' } ) } );
+		const scope = 'home:p1724/floor:7/f7-unit-1';
+		app.items.add( cardFor( scope, { book, issuer: { npcId: 'a59987', name: 'Pearl Vance' }, how: 'given', atMin: 1101 } ) );
+		app.items.add( cardFor( 'homes:p1724', { book, issuer: { npcId: 'a103907', name: 'Lane Ito' }, how: 'stolen', atMin: 1102 } ) );
+		app.regard.drop( 'a103907', 1102 );
+		app.contacts.add( 'a59987', 1101 );
+
+		// The talk ends: a moment later the game saves on its own.
+		app.conversationShown = { npcId: 'a59987', instance: { npcId: 'a59987' } };
+		app.presentConversation( null );
+		await vi.waitFor( () => expect( fetcher ).toHaveBeenCalledOnce(), { timeout: 4000 } );
+		const saved = await app.persistence.pending;
+
+		// A reload takes the cards, the regard and the memory back.
+		const reloaded = new GamePersistence( { game: JSON.parse( JSON.stringify( saved ) ), gameId: gameFixture.id, fetcher } );
+		const back = new GameApp( {} );
+		back.items.restore( reloaded.game.player.inventory );
+		back.regard.restore( reloaded.game.access.regard );
+		expect( back.items.get( cardId( scope ) ).data ).toMatchObject( { grants: [ scope ], issuer: { npcId: 'a59987', name: 'Pearl Vance' }, how: 'given' } );
+		expect( back.items.has( cardId( 'homes:p1724' ) ) ).toBe( true );
+		expect( back.regard.adjust( 'friendly', 'a103907' ) ).not.toBe( 'friendly' );
+		expect( reloaded.game.dialogueMemory ).toEqual( MEMORY );
+		expect( reloaded.game.contacts ).toEqual( [ { npcId: 'a59987', addedMin: 1101 } ] );
+
+		// A save the schema refuses says so, with the field it failed on.
+		vi.spyOn( console, 'error' ).mockImplementation( () => {} );
+		app.items.add( { id: 'Bad Id', kind: 'access-card', label: 'Odd card', data: {} } );
+		app.conversationShown = { npcId: 'a59987', instance: { npcId: 'a59987' } };
+		app.presentConversation( null );
+		await vi.waitFor( () => expect( screen.getByText( /live game state does not match its schema: \/inventory\/\d+\/id must match pattern/ ) ).toBeTruthy(), { timeout: 4000 } );
+		expect( screen.getAllByText( 'Save failed' ).length ).toBeGreaterThan( 0 );
+		expect( fetcher ).toHaveBeenCalledOnce();
 
 	} );
 
@@ -186,7 +248,7 @@ describe( 'playable game navigation', () => {
 		const user = userEvent.setup();
 
 		await user.click( screen.getAllByRole( 'button', { name: 'Can you give me access to your apartment?' } )[ 0 ] );
-		await vi.waitFor( () => expect( app.items.has( `card:${scope}` ) ).toBe( true ) );
+		await vi.waitFor( () => expect( app.items.has( cardId( scope ) ) ).toBe( true ) );
 		// The talk asked that card alone, by what the player reads it as.
 		expect( app.talk.stream.mock.calls.at( - 1 )[ 4 ].offers ).toEqual( { give: { items: [ { itemId: `card:${scope}`, name: 'Kessler Block 1407 key card, which opens Kessler Block, floor 14, apartment 1407' } ] } } );
 		// The person's home, work and cards by address went with it.
@@ -200,7 +262,7 @@ describe( 'playable game navigation', () => {
 		expect( notice.querySelector( '.toast-tile' ) ).toBeTruthy();
 		expect( within( app.view.dialog.transcript ).getByText( 'Item acquired' ).parentElement.textContent ).toBe( 'Item acquiredKessler Block 1407 key card' );
 		expect( screen.queryAllByRole( 'button', { name: 'Can you give me access to your apartment?' } ) ).toHaveLength( 0 );
-		expect( app.items.get( `card:${scope}` ).data ).toMatchObject( { grants: [ scope ], issuer: { npcId: 'npc-ada', name: 'Ada Vance' }, how: 'given' } );
+		expect( app.items.get( cardId( scope ) ).data ).toMatchObject( { grants: [ scope ], issuer: { npcId: 'npc-ada', name: 'Ada Vance' }, how: 'given' } );
 		const door = { role: 'apartment', parcelId: 'p-homes', floor: 14, unit: 'f14-home-7', center: { x: 5, y: 56, z: 2 }, inward: [ 0, 1 ] };
 		expect( app.playerAccess.lockOf( door, { x: 5, z: 1 } ).locked ).toBe( false );
 
@@ -212,14 +274,14 @@ describe( 'playable game navigation', () => {
 		app.view.close();
 
 		// Nobody can answer for a wary stranger: they keep their card; a friendly one hands over their home's.
-		app.items.remove( `card:${scope}` );
+		app.items.remove( cardId( scope ) );
 		for ( const [ traits, given ] of [ [ [ 'wary' ], false ], [ [ 'warm', 'kind' ], true ] ] ) {
 			conversation.instance.traits = traits;
 			app.talk.stream.mockImplementationOnce( () => talkStream( [], talkError( 'model unavailable', 502 ) ) );
 			app.presentConversation( conversation );
 			await user.click( screen.getAllByRole( 'button', { name: 'Can you give me access to your apartment?' } )[ 0 ] );
 			await vi.waitFor( () => expect( app.dialoguePending ).toBe( false ) );
-			expect( app.items.has( `card:${scope}` ) ).toBe( given );
+			expect( app.items.has( cardId( scope ) ) ).toBe( given );
 		}
 
 	} );

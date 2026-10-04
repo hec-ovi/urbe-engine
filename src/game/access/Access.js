@@ -119,6 +119,27 @@ export function describeScope( scope, book ) {
 
 }
 
+/** The save's ids are lower-case words of letters, digits, dots, dashes and underscores, at most 64 long. */
+const ID_LENGTH = 64;
+
+/**
+ * The inventory id of the card for one scope, as the save takes ids:
+ * `card-` and the scope in its own words (`card-home-p1724-floor-4-f1-unit-1`),
+ * cut and finished with a hash of the whole scope when it would run past 64.
+ * The same scope is always the same id.
+ */
+export function cardId( scope ) {
+
+	const words = String( scope ).toLowerCase().replace( /[^a-z0-9._-]+/g, '-' ).replace( /^[^a-z0-9]+|[^a-z0-9]+$/g, '' );
+	const id = `card-${words}`;
+	if ( id.length <= ID_LENGTH ) return id;
+	let hash = 2166136261;
+	for ( const char of String( scope ) ) hash = Math.imul( hash ^ char.charCodeAt( 0 ), 16777619 );
+	const tail = ( hash >>> 0 ).toString( 36 );
+	return `${id.slice( 0, ID_LENGTH - tail.length - 1 ).replace( /[^a-z0-9]+$/, '' )}-${tail}`;
+
+}
+
 /**
  * The card a person hands over, or the player lifts or finds, for one scope:
  * an inventory item of kind `access-card` whose data names its grants, who
@@ -133,7 +154,7 @@ export function cardFor( scope, { book, issuer = null, how = 'given', atMin = nu
 	const words = describeScope( scope, book );
 	if ( ! words ) return null;
 	return {
-		id: `card:${scope}`, kind: 'access-card', label: words.label,
+		id: cardId( scope ), kind: 'access-card', label: words.label,
 		data: {
 			grants: [ scope ], access: words.access,
 			...( issuer ? { issuer: { ...( issuer.npcId ? { npcId: issuer.npcId } : {} ), name: issuer.name } } : {} ),

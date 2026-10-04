@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import Ajv2020 from 'ajv/dist/2020.js';
 import schema from './schema/access.schema.json' with { type: 'json' };
 import {
-	AddressBook, PlayerAccess, PlayerItems, Regard, accessEvents, accessLines, cardFor, describeScope, doorUnit, floorLabel, givesCard, grants,
+	AddressBook, PlayerAccess, PlayerItems, Regard, accessEvents, accessLines, cardFor, cardId, describeScope, doorUnit, floorLabel, givesCard, grants,
 	notices, parseScope, questCards, roomNumber, scopeOfDoor, scopesOf
 } from './index.js';
 
@@ -171,10 +171,17 @@ describe( 'Access', () => {
 		const addresses = book();
 		const card = cardFor( 'home:p-homes/floor:2/f1-home-1', { book: addresses, issuer: { npcId: 'npc-mara', name: 'Mara Kessler' }, atMin: 600 } );
 		expect( card ).toEqual( {
-			id: 'card:home:p-homes/floor:2/f1-home-1', kind: 'access-card', label: 'Kessler Block 201 key card',
+			id: 'card-home-p-homes-floor-2-f1-home-1', kind: 'access-card', label: 'Kessler Block 201 key card',
 			data: { grants: [ 'home:p-homes/floor:2/f1-home-1' ], access: 'Kessler Block, floor 2, apartment 201', issuer: { npcId: 'npc-mara', name: 'Mara Kessler' }, how: 'given', atMin: 600 }
 		} );
 		expect( describeScope( 'security:p-office', addresses ) ).toMatchObject( { label: 'Third Street security card', access: 'the security rooms of the office building on Third Street (server room 303)' } );
+		// A card's id is one the save takes: lower-case words, at most 64 long, the same for the same scope.
+		const SAVE_ID = /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/;
+		const long = `home:p1724/floor:12/${'f12-unit-'.repeat( 8 )}1`;
+		expect( cardId( long ) ).toMatch( SAVE_ID );
+		expect( cardId( long ) ).toBe( cardId( long ) );
+		expect( cardId( long ) ).not.toBe( cardId( `${long}2` ) );
+		expect( cardId( 'security:P-Office' ) ).toBe( 'card-security-p-office' );
 		expect( givesCard( 'friendly', 'home:p-homes/floor:2/f1-home-1' ) ).toBe( true );
 		expect( givesCard( 'friendly', 'staff:p-office' ) ).toBe( false );
 		for ( const disposition of [ 'neutral', 'wary', 'hostile' ] ) expect( givesCard( disposition, 'home:p-homes/floor:2/f1-home-1' ) ).toBe( false );
@@ -206,12 +213,12 @@ describe( 'PlayerItems', () => {
 	it( 'carries general items once each and saves them beside the quest items, taking back only its own kinds', () => {
 
 		const items = new PlayerItems();
-		const card = { id: 'card:staff:p-office', kind: 'access-card', label: 'Third Street staff card', data: { grants: [ 'staff:p-office' ] } };
+		const card = { id: 'card-staff-p-office', kind: 'access-card', label: 'Third Street staff card', data: { grants: [ 'staff:p-office' ] } };
 		expect( items.add( card ) ).toBe( true );
 		expect( items.add( { ...card, label: 'again' } ) ).toBe( false );
 		expect( items.get( card.id ).label ).toBe( 'Third Street staff card' );
 		const saved = items.serialize();
-		expect( saved ).toEqual( [ { id: 'card:staff:p-office', name: 'Third Street staff card', quantity: 1, state: { kind: 'access-card', data: { grants: [ 'staff:p-office' ] } } } ] );
+		expect( saved ).toEqual( [ { id: 'card-staff-p-office', name: 'Third Street staff card', quantity: 1, state: { kind: 'access-card', data: { grants: [ 'staff:p-office' ] } } } ] );
 		const quest = { id: 'ledger', name: 'Ledger', quantity: 1, state: { kind: 'document' } };
 		const back = new PlayerItems();
 		expect( back.restore( [ quest, ...saved ] ) ).toEqual( [ quest ] );

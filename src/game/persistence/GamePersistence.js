@@ -2,6 +2,8 @@ import { PersistenceError } from './PersistenceError.js';
 import { carriedFields } from './SavedFields.js';
 import { SchemaBoundary } from './SchemaBoundary.js';
 
+const KEEPALIVE_BYTES = 60000;
+
 /** A loaded catalog game plus its revision-safe browser save transport. */
 export class GamePersistence {
 
@@ -27,16 +29,20 @@ export class GamePersistence {
 
 	}
 
-	/** Serializes saves so every request uses the last confirmed revision. */
-	save( live ) {
+	/**
+	 * Serializes saves so every request uses the last confirmed revision.
+	 * `keepalive` lets the request outlive the page, as a page being left
+	 * needs, when its body is small enough for the browser to keep it.
+	 */
+	save( live, { keepalive = false } = {} ) {
 
-		const run = () => this.#save( live );
+		const run = () => this.#save( live, keepalive );
 		this.pending = this.pending.catch( () => undefined ).then( run );
 		return this.pending;
 
 	}
 
-	async #save( live ) {
+	async #save( live, keepalive = false ) {
 
 		this.boundary.assert( 'live-state', live, 'E_LIVE_STATE', 'live game state' );
 		const payload = {
@@ -60,10 +66,13 @@ export class GamePersistence {
 		let response;
 		try {
 
+			const body = JSON.stringify( { method: 'saveCurrent', input: payload } );
 			response = await Reflect.apply( this.fetcher, globalThis, [ '/api/launcher', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify( { method: 'saveCurrent', input: payload } )
+				body,
+				// A browser keeps at most 64 KiB in flight for a page that is going away.
+				...( keepalive && body.length < KEEPALIVE_BYTES ? { keepalive: true } : {} )
 			} ] );
 
 		} catch ( error ) {

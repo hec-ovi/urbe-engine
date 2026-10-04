@@ -117,6 +117,10 @@ const LOAD_STEPS = 15;
 /** Past this a room is behind opaque walls and haze, so it is not drawn. */
 const ROOM_VISIBLE_RADIUS = 32;
 const NPC_VISIBLE_RADIUS = 115;
+/** Seconds of play between the saves a catalog game makes on its own. */
+const AUTOSAVE_SECONDS = 180;
+/** How long a save a change asks for waits for more changes, which it then saves too. */
+const AUTOSAVE_DELAY_MS = 1500;
 /**
  * How near the player's eye a person stands to wear their whole recipe
  * (HeroCharacter.near), the companion from further off, and how much further
@@ -984,6 +988,9 @@ export class GameApp {
 			if ( ! playableModalOpen( this.view, this.interactor ) ) this.input.requestLock();
 		} );
 		window.addEventListener( 'resize', () => this.#resize() );
+		// A page hidden or left saves where the game stands, as far as the page lives to send it.
+		document.addEventListener( 'visibilitychange', () => { if ( document.hidden ) this.#autosave( 'hidden', { now: true, keepalive: true } ); } );
+		window.addEventListener( 'pagehide', () => this.#autosave( 'left', { now: true, keepalive: true } ) );
 
 		if ( import.meta.env.DEV ) window.__game = this;
 		if ( import.meta.hot ) {
@@ -1096,6 +1103,8 @@ export class GameApp {
 
 		if ( ! conversation ) {
 
+			// A talk that ended is saved: what was said, what was handed over, who came along.
+			if ( leaving?.instance ) this.#autosave( 'talk' );
 			// The chat closing on a call hangs up.
 			if ( leaving?.call ) this.phone.closed( leaving.npcId );
 			if ( this.pendingDialogueEnding ) this.view.summary.show( this.pendingDialogueEnding );
@@ -1213,6 +1222,8 @@ export class GameApp {
 		this.controller.frozen = ! this.input.locked || playableModalOpen( this.view, this.interactor );
 		this.clock.advance( delta );
 		this.hitches.time( 'water', () => this.hydrology.update( this.playSeconds += delta ) );
+		// Every few minutes of play, the game saves itself.
+		if ( this.persistence && ( this.sinceAutosave = ( this.sinceAutosave ?? 0 ) + delta ) >= AUTOSAVE_SECONDS ) this.#autosave( 'timer', { now: true } );
 
 		const day = this.sky.day;
 		this.night.set( day.lampsOn );
@@ -1886,7 +1897,10 @@ export class GameApp {
 		if ( ! npc || ! scopesOf( npc, this.addresses ).includes( scope ) ) return this.#showActions( conversation );
 		const card = cardFor( scope, { book: this.addresses, issuer: { npcId, name: speakerOf( conversation ).name }, how, atMin: this.clock.timeMin } );
 		// The inventory announces the card it takes in.
-		if ( card && this.items.add( card ) ) this.#refreshInventory();
+		if ( card && this.items.add( card ) ) {
+			this.#refreshInventory();
+			this.#autosave( 'item' );
+		}
 		this.#showActions( conversation );
 	}
 
@@ -2002,6 +2016,7 @@ export class GameApp {
 		const card = cardFor( scope, { book: this.addresses, issuer: { npcId: person.npcId, name }, how: 'stolen', atMin: this.clock.timeMin } );
 		if ( ! card || ! this.items.add( card ) ) return;
 		this.#refreshInventory();
+		this.#autosave( 'item' );
 		const disposition = npc ? this.regard.adjust( dispositionOf( npc, this.companion.categoryOf?.( npc.type ) ), person.npcId ) : 'neutral';
 		const feet = this.body.feet;
 		const seed = `${person.npcId}|${Math.floor( this.clock.timeMin )}`;
@@ -2552,6 +2567,37 @@ export class GameApp {
 
 	}
 
+	/**
+	 * Saves a catalog game on its own: a moment after its items change or a
+	 * talk ends (changes close together make one save), every few minutes of
+	 * play, and at once when the page is hidden or left (`keepalive`, so the
+	 * request may outlive the page). A save that fails says so in a toast,
+	 * with the field it was refused on.
+	 */
+	#autosave( reason, { now = false, keepalive = false } = {} ) {
+
+		if ( ! this.persistence || ! this.body || ! this.controller || ! this.quests ) return null;
+		clearTimeout( this.autosaveTimer );
+		this.autosaveTimer = null;
+		if ( ! now ) {
+
+			this.autosaveTimer = setTimeout( () => this.#autosave( reason, { now: true } ), AUTOSAVE_DELAY_MS );
+			return null;
+
+		}
+		this.sinceAutosave = 0;
+		return this.#saveCurrent( { keepalive } ).catch( ( error ) => this.#saveFailed( error, reason ) );
+
+	}
+
+	/** A save that failed: the console keeps every field it was refused on, the player reads why. */
+	#saveFailed( error, reason ) {
+
+		console.error( `save (${reason}) failed: ${error?.message ?? error}`, ...( error?.details ? [ error.details ] : [] ) );
+		this.view.toast.show( { title: 'Save failed', text: error?.message ?? String( error ) } );
+
+	}
+
 	/** Saves from the pause menu, which says how it went. */
 	async #saveFromPause() {
 
@@ -2602,7 +2648,7 @@ export class GameApp {
 	 * or the server cannot take the loaded save's memory yet, the save keeps
 	 * the memory it holds.
 	 */
-	async #saveCurrent() {
+	async #saveCurrent( { keepalive = false } = {} ) {
 
 		const dialogueMemory = await this.#dialogueMemory();
 		const feet = this.body.feet;
@@ -2633,7 +2679,7 @@ export class GameApp {
 			contacts: this.contacts.serialize(),
 			access: { regard: this.regard.serialize() },
 			elapsedSeconds: Math.max( 0, ( performance.now() - this.playStartedAt ) / 1000 )
-		} );
+		}, { keepalive } );
 
 	}
 

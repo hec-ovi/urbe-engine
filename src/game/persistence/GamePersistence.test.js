@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import gameFixture from '../../library/fixtures/out/games/night-shift/game.json';
 import { GamePersistence, mergeInventory, mergeProgress } from './GamePersistence.js';
+import { AddressBook, PlayerAccess, PlayerItems, Regard, cardFor } from '../access/index.js';
 
 const activeQuest = {
 	...gameFixture.quests[ 0 ],
@@ -223,6 +224,54 @@ describe( 'playable game persistence', () => {
 		await expect( persistence.save( { ...liveState(), investigations: [ { sceneId: 'missing-state' } ] } ) )
 			.rejects.toMatchObject( { code: 'E_LIVE_STATE' } );
 		await expect( persistence.save( liveState() ) ).rejects.toMatchObject( { code: 'E_SAVE_RESPONSE' } );
+
+	} );
+
+	it( 'saves a given card, a lifted card, the regard of a person who caught the theft and what people remember, and a reload brings them all back', async () => {
+
+		const book = new AddressBook( { buildings: new Map(), nameOf: () => ( { name: 'Kessler Block' } ) } );
+		const items = new PlayerItems();
+		items.add( cardFor( 'home:p1724/floor:4/f1-unit-1', { book, issuer: { npcId: 'a43295', name: 'Drew Thorn' }, how: 'given', atMin: 1085.5 } ) );
+		items.add( cardFor( 'homes:p1724', { book, issuer: { npcId: 'a26407', name: 'Pearl Vance' }, how: 'stolen', atMin: 1101 } ) );
+		const regard = new Regard();
+		regard.drop( 'a26407', 1101 );
+		const memory = [ { npcId: 'a43295', memory: { digest: [], turns: [
+			{ speaker: 'player', text: 'Can you give me access to your apartment?', atMin: 1085 },
+			{ speaker: 'npc', text: 'Fine. Here is a card for apartment 401.', atMin: 1085 }
+		] } } ];
+		// The server keeps what the save sends, as LauncherService.saveCurrent does.
+		const fetcher = vi.fn( async ( url, options ) => {
+
+			const input = JSON.parse( options.body ).input;
+			return response( 200, {
+				...gameFixture, player: input.player, quests: input.quests, sideJobs: input.sideJobs,
+				currentLocation: input.currentLocation, discoveredLocations: input.discoveredLocations,
+				...Object.fromEntries( [ 'npcState', 'dialogueMemory', 'contacts', 'access' ].filter( ( key ) => key in input ).map( ( key ) => [ key, input[ key ] ] ) ),
+				save: { ...gameFixture.save, revision: input.expectedRevision + 1, updatedAt: input.updatedAt, playTimeSeconds: input.playTimeSeconds }
+			} );
+
+		} );
+		const persistence = new GamePersistence( { game: structuredClone( gameFixture ), gameId: 'night-shift', fetcher } );
+		const live = {
+			...liveState(), inventory: mergeInventory( [ ...liveState().inventory, ...items.serialize() ], [], [] ),
+			dialogueMemory: memory, contacts: [ { npcId: 'a43295', addedMin: 1086 } ], access: { regard: regard.serialize() }
+		};
+		const saved = await persistence.save( live );
+
+		// A reload: the saved descriptor loads through the same schemas, and the game takes its items and regard back.
+		const reloaded = new GamePersistence( { game: JSON.parse( JSON.stringify( saved ) ), gameId: 'night-shift', fetcher } );
+		const back = new PlayerItems();
+		const questItems = back.restore( reloaded.game.player.inventory );
+		expect( questItems ).toEqual( liveState().inventory );
+		expect( back.list() ).toEqual( items.list() );
+		expect( new PlayerAccess( { items: back, book } ).holds( 'home:p1724/floor:9/f1-unit-1' ) ).toBe( true );
+		expect( new Regard().restore( reloaded.game.access.regard ).adjust( 'friendly', 'a26407' ) ).toBe( 'neutral' );
+		expect( reloaded.game.dialogueMemory ).toEqual( memory );
+		expect( reloaded.game.contacts ).toEqual( [ { npcId: 'a43295', addedMin: 1086 } ] );
+
+		// An item the save cannot take names the field it failed on.
+		await expect( persistence.save( { ...live, inventory: [ { ...live.inventory.at( - 1 ), id: 'card:home:p1724/floor:4/f1-unit-1' } ] } ) )
+			.rejects.toThrow( /live game state does not match its schema: \/inventory\/0\/id must match pattern/ );
 
 	} );
 
