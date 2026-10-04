@@ -29,7 +29,7 @@ export function straightIndoors() {
 
 }
 
-export function setup( overrides = {}, continuityOptions = {} ) {
+export function setup( overrides = {}, continuityOptions = {}, companionOptions = {} ) {
 
 	const networks = network();
 	const buildings = new Map( Object.entries( FIXTURE_INTERIORS ).map( ( [ id, npc ] ) => [ id, { npc } ] ) );
@@ -51,7 +51,8 @@ export function setup( overrides = {}, continuityOptions = {} ) {
 		continuity, sim: bridge, routes, places, atlas: FIXTURE_BLUEPRINT, inside,
 		streets: new StreetNames( FIXTURE_BLUEPRINT.streets ),
 		people: () => [ { npcId: friend.npcId, name: 'Ada Ruiz', position: [ 250, 1, 405 ] } ],
-		quests: { holdsCast: () => false, escorts: () => false, places: () => [], characterName: () => null }
+		quests: { holdsCast: () => false, escorts: () => false, places: () => [], characterName: () => null },
+		...companionOptions
 	} );
 	const game = {
 		bridge, continuity, companion, inside, friend: friend.npcId,

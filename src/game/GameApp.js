@@ -94,6 +94,7 @@ import { WalkSurface } from './agents/WalkSurface.js';
 import { NpcContinuity } from './agents/NpcContinuity.js';
 import { circulationOf, InteriorRoutes } from './agents/InteriorRoutes.js';
 import { CompanionGameplay } from './companion/CompanionGameplay.js';
+import { COMPASS } from './companion/CompanionLines.js';
 import { CarModels } from './agents/CarModels.js';
 import { Traffic } from './agents/Traffic.js';
 import { SimBridge } from './sim/SimBridge.js';
@@ -121,6 +122,10 @@ const NPC_VISIBLE_RADIUS = 115;
 const AUTOSAVE_SECONDS = 180;
 /** How long a save a change asks for waits for more changes, which it then saves too. */
 const AUTOSAVE_DELAY_MS = 1500;
+/** Most places a talk tells the way to, the walking pace that times them (m/s) and how much longer a walk is than the straight line when no route is known. */
+const MAX_WAYS = 5;
+const WALK_PACE = 1.4;
+const DETOUR = 1.25;
 /** Game minutes a person someone tried to lift a card off stays on guard. */
 const LIFT_RETRY_MIN = 30;
 /** The `events` a companion's signals make, by signal kind. */
@@ -818,7 +823,9 @@ export class GameApp {
 			quests: this.questGameplay, scenes: () => companionScenes( this.scenery.stagedPlaces(), this.companion.places ), crowd: this.crowd,
 			inside: reach, streets: this.streetNames,
 			people: ( npc ) => this.#placedAcquaintances( npc ), categoryOf: ( type ) => categories.get( type ),
-			addresses: this.addresses, holds: ( npcId, scope ) => this.#holdsAccess( npcId, scope )
+			addresses: this.addresses, holds: ( npcId, scope ) => this.#holdsAccess( npcId, scope ),
+			// A building without an interior is shut: no venue or haunt to walk or lead anybody to.
+			opened: ( parcelId ) => buildings.get( parcelId )?.hasInterior !== false
 		} );
 		// After the continuity and with no conversation open: the escort first,
 		// then the companion, which lets go a follower neither of them owns.
@@ -1523,7 +1530,7 @@ export class GameApp {
 		} ) ?? [];
 		const task = this.companion.taskOf?.( npcId ) ?? null;
 		// Their home and work by address, where inside they stand and the cards they carry, wherever their body is.
-		const addresses = this.#addressContext( call ? { ...conversation, person: this.#remoteBody( npcId ) } : conversation );
+		const addresses = this.#addressContext( call ? { ...conversation, person: this.#remoteBody( npcId ) } : conversation, line );
 		return {
 			...( offers ? { offers } : {} ), ...( guide ? { guide } : {} ), ...( events.length ? { events } : {} ), ...( task ? { task } : {} ),
 			...( call ? { call: { caller: 'player' } } : {} ), ...( addresses ? { addresses } : {} ),
@@ -1939,7 +1946,7 @@ export class GameApp {
 	 * carry and how often they caught the player lifting one; null when none
 	 * of it is known.
 	 */
-	#addressContext( { npcId, instance, person } ) {
+	#addressContext( { npcId, instance, person }, line = '' ) {
 		if ( ! npcId || ! instance ) return null;
 		const npc = rememberedPerson( this.sim, npcId ) ?? instance;
 		const out = {};
@@ -1958,7 +1965,54 @@ export class GameApp {
 		if ( access.length ) out.access = access;
 		const caught = this.regard.of( npcId );
 		if ( caught ) out.caught = caught;
+		const ways = this.#ways( npc, person, here, line );
+		if ( ways.length ) out.ways = ways;
 		return Object.keys( out ).length ? out : null;
+	}
+
+	/**
+	 * How far the places that matter in a talk lie from where a person stands
+	 * (Quests DialogWay): their home and their work by their doors, the place
+	 * the story the player follows points to, and the addresses the line
+	 * names, each as the walk there, the way it lies, the minutes on foot and
+	 * a lift ride at the end when it is on another floor.
+	 */
+	#ways( npc, person, here, line ) {
+		const actor = this.npcContinuity?.actor?.( npc.npcId ) ?? null;
+		const from = person?.position ? [ person.position.x, person.position.y, person.position.z ] : actor?.position ?? null;
+		if ( ! from ) return [];
+		const floor = here?.floor ?? ( Number.isInteger( actor?.place?.floor ) ? actor.place.floor : 0 );
+		const parcelAt = ( parcelId ) => this.companion?.places?.positions?.get( `parcel:${parcelId}` ) ?? null;
+		const ways = [];
+		const add = ( what, to, toFloor, name = null ) => {
+			if ( ! to || ways.length >= MAX_WAYS ) return;
+			const straight = Math.hypot( to[ 0 ] - from[ 0 ], to[ 2 ] - from[ 2 ] );
+			let walk = null;
+			try { walk = this.companion?.places?.routes?.route?.( from, to )?.distanceMeters ?? null; } catch { walk = null; }
+			const metres = Number.isFinite( walk ) ? walk : straight * DETOUR;
+			const lift = toFloor !== floor && Number.isInteger( toFloor ) ? ( toFloor > floor ? 'up' : 'down' ) : null;
+			ways.push( {
+				what, ...( name ? { name } : {} ),
+				metres: metres < 100 ? Math.round( metres / 10 ) * 10 : Math.round( metres / 50 ) * 50,
+				point: compassPoint( from, to ), minutes: Math.max( 1, Math.round( metres / WALK_PACE / 60 ) ), ...( lift ? { lift } : {} )
+			} );
+		};
+		const unitWay = ( what, unit, name = null ) => unit?.doors?.length ? add( what, unit.doors[ 0 ].front, unit.floor, name ) : false;
+		const home = this.addresses.home( npc );
+		if ( unitWay( 'home', home ) === false && npc.home?.parcelId ) add( 'home', parcelAt( npc.home.parcelId ), 0 );
+		// Work: the door of a private room the post is in, else the post itself, else the building.
+		const work = this.addresses.work( npc );
+		const post = work?.unit ? null : this.companion?.inside?.workSpot?.( npc ) ?? null;
+		if ( unitWay( 'work', work?.unit ) === false && npc.job?.parcelId ) add( 'work', post?.position ?? parcelAt( npc.job.parcelId ), post && Number.isInteger( post.floor ) ? post.floor : 0 );
+		let quests = [];
+		try { quests = this.questGameplay?.places?.( this.clock.timeMin ) ?? []; } catch { quests = []; }
+		const followed = quests.find( ( target ) => target.questId === this.followedQuestId && target.stepId === this.followedStepId && target.place ) ?? quests.find( ( target ) => target.place?.kind === 'parcel' );
+		if ( followed?.place?.kind === 'parcel' ) add( 'quest', parcelAt( followed.place.id ), 0, followed.venue ?? this.companion?.places?.name?.( followed.place ) ?? null );
+		const parcels = [ ...new Set( [ here?.parcelId, npc.home?.parcelId, npc.job?.parcelId, person?.parcelId ].filter( Boolean ) ) ];
+		for ( const unit of line ? this.addresses.find( line, parcels ).slice( 0, 2 ) : [] ) {
+			if ( unit.scope !== home?.scope && unit.id !== work?.unit?.id ) unitWay( 'named', unit, unit.address ?? null );
+		}
+		return ways;
 	}
 
 	/** The quest items the player holds that open a door, with the scope of that door: Quests `opens`, resolved by address. */
@@ -3558,6 +3612,12 @@ function speakerOf( { instance }, labels = null ) {
 	if ( ! instance ) return { name: 'Someone passing by', role: '' };
 	return { name: TalkClient.nameOf( instance ), role: labels?.get( instance.type ) ?? ( instance.type ?? '' ).replace( /^quest[ _]/i, '' ).replace( /_/g, ' ' ) };
 
+}
+
+/** The compass point `to` lies toward from `from`, north being -z: "north-east". */
+function compassPoint( from, to ) {
+	const turns = Math.atan2( to[ 0 ] - from[ 0 ], from[ 2 ] - to[ 2 ] ) / ( 2 * Math.PI );
+	return COMPASS[ ( Math.round( turns * COMPASS.length ) + COMPASS.length ) % COMPASS.length ];
 }
 
 /** A new game opens on its story's prologue card: the main questline's, while the save has no play time; else null. */

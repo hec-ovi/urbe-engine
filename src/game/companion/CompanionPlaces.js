@@ -39,10 +39,13 @@ export class CompanionPlaces {
 	 * @param people optional `(npc) => [{ npcId, name, position }]`, the people this person knows whose bodies are placed now
 	 * @param addresses optional AddressBook: a person's home and work go by their address, and a
 	 *   talk's line may name a dwelling or private room by its number
+	 * @param opened optional `(parcelId) => boolean`, whether anybody can go into the building on a
+	 *   parcel: a venue or a haunt nobody can go into is no place to walk or lead to
 	 */
-	constructor( { atlas, places, routes, lines, inside = null, streets = null, people = null, addresses = null } ) {
+	constructor( { atlas, places, routes, lines, inside = null, streets = null, people = null, addresses = null, opened = null } ) {
 
 		this.addresses = addresses;
+		this.opened = opened;
 		this.routes = routes;
 		this.lines = lines;
 		this.inside = inside;
@@ -120,7 +123,7 @@ export class CompanionPlaces {
 		add( { kind: 'parcel', id: npc.home.parcelId }, 'home', door ? { target: door, ...( home?.address ? { name: home.address } : {} ) } : {} );
 		for ( const entry of npc.routine ) {
 
-			if ( ( entry.activity === 'leisure' || entry.activity === 'shopping' ) && entry.place.kind === 'parcel' ) add( entry.place, 'haunt' );
+			if ( ( entry.activity === 'leisure' || entry.activity === 'shopping' ) && entry.place.kind === 'parcel' && this.#open( entry.place.id ) ) add( entry.place, 'haunt' );
 
 		}
 
@@ -193,6 +196,7 @@ export class CompanionPlaces {
 		for ( const parcel of this.atlas.parcels ) {
 
 			if ( parcel.type === 'residential' && ! parcel.name ) continue;
+			if ( ! this.#open( parcel.id ) ) continue;
 			const position = this.positions.get( `parcel:${parcel.id}` );
 			if ( ! position || parcel.id === here?.parcelId || flat( from, position ) > NEAR ) continue;
 			const name = this.name( { kind: 'parcel', id: parcel.id } );
@@ -287,6 +291,13 @@ export class CompanionPlaces {
 		if ( ! best ) return null;
 		const pavement = this.routes.project?.( [ best.point[ 0 ], from[ 1 ], best.point[ 1 ] ] );
 		return { position: pavement?.point ? [ ...pavement.point ] : [ best.point[ 0 ], from[ 1 ], best.point[ 1 ] ], distance: best.distance };
+
+	}
+
+	/** Whether anybody can go into the building on a parcel; every one can without `opened`. */
+	#open( parcelId ) {
+
+		return ! this.opened || this.opened( parcelId );
 
 	}
 

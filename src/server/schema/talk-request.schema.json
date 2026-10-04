@@ -151,7 +151,25 @@
             }
           }
         },
-        "caught": { "type": "integer", "minimum": 0 }
+        "caught": { "type": "integer", "minimum": 0 },
+        "ways": {
+          "description": "How far the places that matter lie from where the person stands: their home, their work, the place the player's story points to, an address the talk named (Quests DialogWay).",
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["what", "metres", "point", "minutes"],
+            "properties": {
+              "what": { "enum": ["home", "work", "quest", "named"] },
+              "name": { "$ref": "#/$defs/words" },
+              "metres": { "type": "number", "minimum": 0 },
+              "point": { "enum": ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"] },
+              "minutes": { "type": "integer", "minimum": 0 },
+              "lift": { "enum": ["up", "down"] }
+            }
+          }
+        }
       }
     },
     "task": {

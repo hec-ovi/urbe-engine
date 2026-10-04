@@ -138,7 +138,9 @@ describe( 'TalkService', () => {
 			{ type: 'offer', kind: 'follow' },
 			{ type: 'done', reply: 'Ask at the bar. Then go.' }
 		] );
-		expect( model.seen[ 0 ].tools.map( ( tool ) => tool.function.name ) ).toEqual( [ 'follow_player' ] );
+		// Every tool each turn, for the prompt cache; what the person may do now is in the message.
+		expect( model.seen[ 0 ].tools.map( ( tool ) => tool.function.name ) ).toContain( 'follow_player' );
+		expect( model.seen[ 0 ].messages[ 1 ].content ).toContain( 'What you can do for the player right now: follow_player.' );
 
 	} );
 
@@ -155,7 +157,7 @@ describe( 'TalkService', () => {
 			call: { caller: 'player' }, offers: { contact: true, meet: { name: 'Salt Wharf' } }
 		} ) );
 		expect( model.system( 0 ) ).toContain( 'you are talking to them on the phone' );
-		expect( model.seen[ 0 ].tools.map( ( tool ) => tool.function.name ) ).toEqual( [ 'give_number', 'meet_player' ] );
+		expect( model.seen[ 0 ].messages[ 1 ].content ).toContain( 'What you can do for the player right now: give_number, meet_player.' );
 		expect( all.filter( ( e ) => e.type === 'offer' ) ).toEqual( [ { type: 'offer', kind: 'contact' }, { type: 'offer', kind: 'meet', name: 'Salt Wharf' } ] );
 
 	} );
@@ -364,6 +366,28 @@ describe( 'TalkService', () => {
 		expect( system ).toContain( 'The light: night outside, dark but for the street lamps and the neon signs.' );
 		expect( system ).toContain( '- Ada Ruiz works with you. Ada Ruiz is not here, and you have not seen them lately: you do not know where they are right now.' );
 		expect( system ).toContain( 'The player asked about "Tess": you know nobody by that name' );
+
+	} );
+
+	it( 'names only the buildings the world opened as places around a person', async () => {
+
+		const streets = { edges: [ { id: 'e0', class: 'road', path: [ [ 0, 0 ], [ 200, 0 ] ], level: 0 } ] };
+		const lot = ( x ) => [ [ x, 5 ], [ x + 20, 5 ], [ x + 20, 25 ], [ x, 25 ] ];
+		const parcels = [
+			{ ...blueprint.parcels[ 0 ], lot: lot( 100 ), access: { edgeId: 'e0', point: [ 110, 5 ] } },
+			{ id: 'p2', districtId: 'd1', type: 'restaurant', name: 'Noodle Saint', lot: lot( 40 ), access: { edgeId: 'e0', point: [ 50, 5 ] } }
+		];
+		const world = { 'blueprint.json': { ...blueprint, meta: { seed: 7, gridAngle: 0 }, streets, parcels } };
+		const around = async ( files ) => {
+
+			const model = fakeModel();
+			await say( new TalkService( model, ( await servedWorld( { ...world, ...files } ) ).root ), 'What is around?', { here: { x: 70, z: -3 } } );
+			return model.system( 0 );
+
+		};
+		expect( await around( {} ) ).toContain( 'Noodle Saint, a restaurant' );
+		expect( await around( { 'manifest.json': { interiors: [ 'p2' ] } } ) ).toContain( 'Noodle Saint, a restaurant' );
+		expect( await around( { 'manifest.json': { interiors: [ 'p1' ] } } ) ).not.toContain( 'Noodle Saint' );
 
 	} );
 

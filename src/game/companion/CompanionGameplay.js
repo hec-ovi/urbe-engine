@@ -66,10 +66,11 @@ export class CompanionGameplay {
 	 * @param addresses optional AddressBook: home and work by address, and the dwellings and rooms a line names
 	 * @param holds optional `(npcId, scope) => boolean`, whether a person holds the access a door needs:
 	 *   a leader who does opens the door of the place it brought the player to
+	 * @param opened optional `(parcelId) => boolean`: only a building anybody can go into is a venue or haunt to walk or lead to
 	 */
 	constructor( {
 		continuity, sim, routes, places, atlas, quests = null, scenes = null, crowd = null,
-		inside = null, streets = null, people = null, categoryOf = () => undefined, addresses = null, holds = null,
+		inside = null, streets = null, people = null, categoryOf = () => undefined, addresses = null, holds = null, opened = null,
 		lines = CompanionLines.standard(), boundary = new CompanionBoundary()
 	} ) {
 
@@ -84,7 +85,7 @@ export class CompanionGameplay {
 		this.categoryOf = categoryOf;
 		this.routes = routes;
 		this.holds = holds;
-		this.places = new CompanionPlaces( { atlas, places, routes, lines, inside, streets, people, addresses } );
+		this.places = new CompanionPlaces( { atlas, places, routes, lines, inside, streets, people, addresses, opened } );
 		/** The companion under way, as saved. */
 		this.state = null;
 		/** An accepted offer waiting for its person's conversation to close. */

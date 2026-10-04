@@ -179,8 +179,10 @@ describe( 'what a person agrees to in words happens', () => {
 
 	it( 'leads the player home when they say "Fine, follow me" to "show me where you live"', async () => {
 
-		const { app, world, npc, frame, say } = await chat( 'Fine, follow me. It is not far.' );
+		const { app, world, npc, frame, model, say } = await chat( 'Fine, follow me. It is not far.' );
 		await say( 'Show me where you live' );
+		// The person knew how far their home lies, and that it is up a lift.
+		expect( model.seen[ 0 ].messages[ 0 ].content ).toMatch( /- your home: about \d+ metres to the [a-z-]+, (?:a minute|\d+ minutes) on foot, then the lift up/ );
 		expect( app.interactor.close ).toHaveBeenCalled();
 		expect( frame() ).toContainEqual( expect.objectContaining( { type: 'companion-started', npcId: npc.npcId, mode: 'lead' } ) );
 		expect( world.companion.state ).toMatchObject( { npcId: npc.npcId, kind: 'lead', destination: { relation: 'home', place: { id: npc.home.parcelId } } } );

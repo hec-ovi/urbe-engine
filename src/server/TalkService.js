@@ -13,7 +13,7 @@ const MEMORY_PEOPLE = 200;
 const MEMORY_NOTES = 24;
 const MEMORY_TURNS = 24;
 /** The files a world's dialogue is built from; a change to any of them builds it again. */
-const WORLD_FILES = [ 'blueprint.json', 'npc-types.json', join( 'quests', 'questlines.json' ) ];
+const WORLD_FILES = [ 'blueprint.json', 'npc-types.json', join( 'quests', 'questlines.json' ), 'manifest.json' ];
 /** Where a game keeps what people remember, beside its save, as each exchange completes. */
 const MEMORY_FILE = 'dialogue-memory.json';
 
@@ -146,9 +146,12 @@ class TalkWorld {
 		const streets = blueprint.streets?.edges && {
 			edges: blueprint.streets.edges.map( ( { id, class: kind, path, level } ) => ( { id, class: kind, path, level } ) )
 		};
+		// A world assembled with interiors opens those buildings alone: the rest are no place to go.
+		const opened = ( await readJson( join( dir, 'manifest.json' ), {} ) ).interiors;
+		const closed = Array.isArray( opened ) ? blueprint.parcels.map( ( parcel ) => parcel.id ).filter( ( id ) => ! opened.includes( id ) ) : null;
 		const world = {
 			meta: { naming, gridAngle: blueprint.meta.gridAngle ?? 0 }, districts: blueprint.districts, parcels: blueprint.parcels,
-			transit: blueprint.transit, ...( streets ? { streets } : {} )
+			transit: blueprint.transit, ...( streets ? { streets } : {} ), ...( closed ? { closed } : {} )
 		};
 		const game = await stat( join( dir, 'game.json' ) ).then( () => true, () => false );
 		const talk = new TalkWorld( { world, types, questlines, file: game ? join( dir, MEMORY_FILE ) : null }, llm );

@@ -47,6 +47,20 @@ describe( 'what a person may do for the player', () => {
 
 	} );
 
+	it( 'offers no venue or haunt in a building nobody can go into', () => {
+
+		const all = setup();
+		const barista = all.talkTo();
+		const leads = ( game, npcId ) => game.companion.offers( { npcId, timeMin: AFTERNOON, playerPlaces: [], wide: true } ).filter( ( offer ) => offer.kind === 'lead' );
+		const venues = leads( all, barista.npcId ).filter( ( offer ) => offer.destination.relation === 'venue' || offer.destination.relation === 'haunt' );
+		expect( venues.length ).toBeGreaterThan( 0 );
+		const shut = new Set( venues.map( ( offer ) => offer.destination.place.id ) );
+		const some = setup( {}, {}, { opened: ( parcelId ) => ! shut.has( parcelId ) } );
+		const barista2 = some.talkTo();
+		expect( leads( some, barista2.npcId ).filter( ( offer ) => shut.has( offer.destination.place.id ) && offer.destination.relation !== 'work' && offer.destination.relation !== 'home' ) ).toEqual( [] );
+
+	} );
+
 	it( 'sends a person home to their own seat once the talk is done, says where they went, and stops the errand when asked', () => {
 
 		const game = setup();
