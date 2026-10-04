@@ -10,6 +10,7 @@ import { bucketFor, splitBucket } from './Variety.js';
 import { ScenicSurface } from './ScenicSurface.js';
 import { ExteriorScenery } from './ExteriorScenery.js';
 import { isSceneryNode, shellMaterial, shellScenery, shellVariant } from './ShellSurface.js';
+import { facadeScreen, screenFill, screensShown } from './FacadeScreens.js';
 import { cutPlate, interiorStoreys, storeyIndex } from './StoreyPlates.js';
 import { BuildingModels } from './BuildingModels.js';
 import { ShellBatches } from './ShellBatches.js';
@@ -264,6 +265,19 @@ export class BuildingsLoader {
 
 		const name = node.name ?? '';
 		const key = node.material?.name ?? '';
+		// A picture screen stands only where the run asks for them; its facade
+		// is whole without it (FacadeScreens.js).
+		const screen = facadeScreen( node, key, screensShown( this.factory ) );
+
+		if ( screen === 'drop' ) return;
+		if ( screen === 'fill' ) {
+
+			const fill = screenFill( node, blueprint );
+			if ( fill ) push( exterior, bucketFor( fill.key, fill.variantId ), fill.geometry );
+			return;
+
+		}
+
 		const leafFrame = doorLeafFrame( node, frames );
 		const surface = bucketFor(
 			key,

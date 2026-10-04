@@ -8,6 +8,7 @@ import { doorFrames, doorLeafFrame } from '../DoorGeometry.js';
 import { ScenicSurface } from '../ScenicSurface.js';
 import { ShellBatches } from '../ShellBatches.js';
 import { isSceneryNode, shellMaterial, shellScenery, shellVariant } from '../ShellSurface.js';
+import { facadeScreen, screenFill, screensShown } from '../FacadeScreens.js';
 import { storeyIndex } from '../StoreyPlates.js';
 import { HitchLog } from '../../debug/HitchLog.js';
 import { FAR_ROOM_CELL } from './FarSurfaces.js';
@@ -58,6 +59,7 @@ export async function readShell( scene, factory, blueprint, slice, hitches = new
 	const leaves = new Map();
 	const plates = new Map();
 	const meshes = [];
+	const screens = screensShown( factory );
 
 	scene.traverse( ( node ) => {
 
@@ -72,6 +74,19 @@ export async function readShell( scene, factory, blueprint, slice, hitches = new
 		hitches.time( 'plan surface', () => {
 
 			const key = node.material?.name ?? '';
+			// A picture screen stands only where the run asks for them; its
+			// facade is whole without it (../FacadeScreens.js).
+			const screen = facadeScreen( node, key, screens );
+
+			if ( screen === 'drop' ) return;
+			if ( screen === 'fill' ) {
+
+				const fill = screenFill( node, blueprint, { indexed: true } );
+				if ( fill ) push( shell, bucketFor( fill.key, fill.variantId ), fill.geometry );
+				return;
+
+			}
+
 			const bucket = bucketFor(
 				key,
 				shellVariant( factory, { key, authored: node.material?.userData?.materialVariant, blueprint } ),
