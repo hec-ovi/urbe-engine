@@ -219,6 +219,8 @@ export class GameApp {
 		this.acquaintances = new Acquaintances();
 		/** The people who gave the player their number, which the save keeps. */
 		this.contacts = new ContactBook();
+		/** The inventory's item ids at its last look, so each new one is announced once; null takes the next look as it stands. */
+		this.heldItems = new Set();
 		/** What people say when asked for their number or called. */
 		this.contactLines = contactLines();
 		/** What the player carries of their own, beside the quest items: access cards now; the save's inventory keeps them. */
@@ -617,6 +619,8 @@ export class GameApp {
 		// Every dwelling and private room of the furnished buildings by address, derived from what the world publishes.
 		this.addresses = new AddressBook( { buildings, nameOf: ( parcelId ) => this.#buildingNaming( atlas, parcelId ) } );
 		this.playerAccess.book = this.addresses;
+		// What the save carried is held already, nothing gained.
+		this.heldItems = null;
 		this.#refreshInventory();
 		this.view.quests.setQuests( this.quests.view( this.clock.timeMin ) );
 		this.signals = new Signals( connections.networks );
@@ -1204,8 +1208,8 @@ export class GameApp {
 		this.phone.update( Math.max( 0, now - ( this.phoneClock ?? now ) ) / 1000 );
 		this.phoneClock = now;
 		if ( holding ) delta = 0;
-		// A picture a screen asked for is drawn only while nothing moves, one piece a frame, or for the face on a call.
-		if ( holding || this.phone.live ) this.hitches.time( 'snapshots', () => this.snapshots?.step() );
+		// A picture a screen asked for is drawn only while nothing moves, one piece a frame, or for a face on a call or in a talk.
+		if ( holding || this.phone.live || this.interactor?.conversation ) this.hitches.time( 'snapshots', () => this.snapshots?.step() );
 		this.controller.frozen = ! this.input.locked || playableModalOpen( this.view, this.interactor );
 		this.clock.advance( delta );
 		this.hitches.time( 'water', () => this.hydrology.update( this.playSeconds += delta ) );
@@ -1442,7 +1446,8 @@ export class GameApp {
 				if ( event.type === 'delta' && reply ) reply.append( event.text );
 				else if ( event.type === 'delta' ) {
 					this.view.dialog.setStatus( '' );
-					reply = this.#npcSays( conversation, event.text, { streaming: true } );
+					// The answer to a chosen action is said where the eye is, in the subtitle; a typed line's stays in the talk window.
+					reply = this.#npcSays( conversation, event.text, { streaming: true, ...( ask ? { kind: null } : {} ) } );
 				} else if ( event.type === 'sentence' ) reply?.hear( event.text );
 				else if ( event.type === 'offer' ) offer ??= event;
 				else if ( event.type === 'done' ) whole = event.reply;
@@ -1862,7 +1867,10 @@ export class GameApp {
 		const { npcId } = conversation;
 		if ( ! this.contacts.has( npcId ) ) {
 			this.contacts.add( npcId, this.clock.timeMin );
-			this.view.toast.show( { title: speakerOf( conversation ).name, text: this.contactLines.say( 'notice-contact' ) } );
+			this.view.announce( {
+				kind: 'contact', title: speakerOf( conversation ).name, text: this.contactLines.say( 'notice-contact' ),
+				image: this.portraits?.portrait( { npcId } ) ?? null
+			} );
 		}
 		this.#showActions( conversation );
 	}
@@ -1877,10 +1885,8 @@ export class GameApp {
 		const npc = rememberedPerson( this.sim, npcId );
 		if ( ! npc || ! scopesOf( npc, this.addresses ).includes( scope ) ) return this.#showActions( conversation );
 		const card = cardFor( scope, { book: this.addresses, issuer: { npcId, name: speakerOf( conversation ).name }, how, atMin: this.clock.timeMin } );
-		if ( card && this.items.add( card ) ) {
-			this.view.toast.show( { title: speakerOf( conversation ).name, text: this.accessLines.say( 'notice-card', { label: card.label } ) } );
-			this.#refreshInventory();
-		}
+		// The inventory announces the card it takes in.
+		if ( card && this.items.add( card ) ) this.#refreshInventory();
 		this.#showActions( conversation );
 	}
 
@@ -2004,7 +2010,7 @@ export class GameApp {
 			this.regard.drop( person.npcId, this.clock.timeMin );
 			this.view.toast.show( { title: name, text: this.accessLines.say( 'caught', {}, seed ) } );
 			this.view.toast.show( { title: 'Access', text: this.accessLines.say( 'notice-caught', { name, label: card.label } ) } );
-		} else this.view.toast.show( { title: 'Access', text: this.accessLines.say( 'notice-lifted', { label: card.label } ) } );
+		}
 	}
 
 	/** A building as an address names it: its own name, else what it is and the street it stands on. */
@@ -2062,7 +2068,8 @@ export class GameApp {
 		for ( const signal of signals ) {
 			if ( signal.kind === 'arrival' ) this.#arrival( signal );
 			else if ( signal.kind === 'line' || signal.kind === 'refused' ) this.#companionSays( signal.npcId, signal.line );
-			if ( signal.notice ) this.view.toast.show( { title: 'Companion', text: signal.notice } );
+			// What a companion does reads as a notice with their face: following, leading somewhere and how far, there, gone.
+			if ( signal.notice ) this.view.announce( { kind: 'companion', title: signal.notice, image: this.portraits?.portrait( { npcId: signal.npcId } ) ?? null } );
 		}
 	}
 
@@ -2672,7 +2679,23 @@ export class GameApp {
 
 	#refreshInventory() {
 
-		this.view.inventory.setItems( this.#inventoryCards() );
+		const cards = this.#inventoryCards();
+		this.view.inventory.setItems( cards );
+		// What the player did not hold at the last look is a gain, announced once with its card's picture.
+		const held = new Set( cards.map( ( card ) => card.id ) );
+		if ( this.heldItems ) for ( const card of cards ) if ( ! this.heldItems.has( card.id ) ) this.view.announce( { kind: 'item', title: card.name, item: card } );
+		this.heldItems = held;
+
+	}
+
+	/**
+	 * Something the player now holds that the inventory has not shown yet (an
+	 * item-acquired event, as the access agent raises it): the inventory takes
+	 * it in, and each new item is announced where the eye is.
+	 */
+	itemAcquired() {
+
+		this.#refreshInventory();
 
 	}
 

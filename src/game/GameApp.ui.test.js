@@ -142,6 +142,12 @@ describe( 'playable game navigation', () => {
 		expect( app.contacts.serialize() ).toEqual( [ { npcId: 'npc-ada', addedMin: 725 } ] );
 		expect( screen.getByText( 'Added to your contacts. Call them from Contacts (P).' ) ).toBeTruthy();
 		expect( screen.queryAllByRole( 'button', { name: 'Can I have your number?' } ) ).toHaveLength( 0 );
+		// The answer to the chosen action is said where the eye is, the talk window closed: in the subtitle.
+		expect( app.view.dialog.talkOpen ).toBe( false );
+		expect( app.view.dialog.sayAccessible.textContent ).toBe( 'Sure. Here.' );
+		// The new contact is announced as one, and set apart in the conversation.
+		expect( app.view.toast.element.querySelector( '.toast.is-contact .toast-kicker' ).textContent ).toBe( 'NEW CONTACT' );
+		expect( within( app.view.dialog.transcript ).getByText( 'New contact' ).parentElement.textContent ).toBe( 'New contactAda Vance' );
 
 		// Nobody can answer for a wary stranger: they keep their number.
 		const wary = { ...conversation, npcId: 'npc-kip', instance: { ...conversation.instance, npcId: 'npc-kip', name: { given: 'Kip', family: 'Marr' }, traits: [ 'wary' ] } };
@@ -187,7 +193,12 @@ describe( 'playable game navigation', () => {
 		expect( app.talk.stream.mock.calls.at( - 1 )[ 4 ].addresses ).toEqual( {
 			home: { parcelId: 'p-homes', floor: 14, unit: 'apartment 1407' }, access: [ { parcelId: 'p-homes', opens: 'apartment 1407', tie: 'home' } ]
 		} );
-		expect( screen.getByText( 'Added to your inventory: Kessler Block 1407 key card.' ) ).toBeTruthy();
+		// The card is announced where the eye is, with its picture's tile, and set apart in the conversation.
+		const notice = app.view.toast.element.querySelector( '.toast.is-item' );
+		expect( notice.querySelector( '.toast-kicker' ).textContent ).toBe( 'ITEM ACQUIRED' );
+		expect( notice.querySelector( '.toast-title' ).textContent ).toBe( 'Kessler Block 1407 key card' );
+		expect( notice.querySelector( '.toast-tile' ) ).toBeTruthy();
+		expect( within( app.view.dialog.transcript ).getByText( 'Item acquired' ).parentElement.textContent ).toBe( 'Item acquiredKessler Block 1407 key card' );
 		expect( screen.queryAllByRole( 'button', { name: 'Can you give me access to your apartment?' } ) ).toHaveLength( 0 );
 		expect( app.items.get( `card:${scope}` ).data ).toMatchObject( { grants: [ scope ], issuer: { npcId: 'npc-ada', name: 'Ada Vance' }, how: 'given' } );
 		const door = { role: 'apartment', parcelId: 'p-homes', floor: 14, unit: 'f14-home-7', center: { x: 5, y: 56, z: 2 }, inward: [ 0, 1 ] };
