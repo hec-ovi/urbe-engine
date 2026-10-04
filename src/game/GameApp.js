@@ -76,7 +76,7 @@ import { HitchLog } from './debug/HitchLog.js';
 import { RenderWork } from './debug/RenderWork.js';
 import { FrameReports } from './debug/FrameReports.js';
 import { Warmup } from './look/Warmup.js';
-import { Physics, WorldColliders, DoorColliders, PlayerBody, BODY_RADIUS, ImpactWorld } from './physics/index.js';
+import { Physics, WorldColliders, DoorColliders, PlayerBody, BODY_RADIUS, ImpactWorld, FallGuard } from './physics/index.js';
 import { FrameBudget } from '../app/FrameBudget.js';
 import { frameYield } from '../app/FrameYield.js';
 import { Input } from './player/Input.js';
@@ -933,6 +933,8 @@ export class GameApp {
 		// and the player starts standing on the ground there.
 		this.physics.refresh();
 		this.body.settle();
+		// Where the player starts is the first point a fall out of the world comes back to.
+		this.fallGuard = new FallGuard( { physics: this.physics, body: this.body, floor: this.safetyGround.elevation } );
 		this.tick( 0 );
 		if ( this.probe ) {
 
@@ -1136,7 +1138,8 @@ export class GameApp {
 	 * One step of the player's body and view: physics, the crowd and traffic
 	 * pushing it out of anyone it walked into, the lifts carrying it, and then
 	 * the camera placed where all that left it, so no correction shows a frame late
-	 * and a rider's eye stays at one height in the moving car.
+	 * and a rider's eye stays at one height in the moving car. A body that fell
+	 * out of the world stands again where it last stood on the street.
 	 */
 	stepPlayer( delta ) {
 
@@ -1144,6 +1147,17 @@ export class GameApp {
 		this.body.push( _push.copy( this.crowd.pushback( this.body.feet, BODY_RADIUS ) ).add( this.traffic.pushback( this.body.feet, BODY_RADIUS ) ) );
 		this.elevators.update( delta, this.body );
 		this.controller.update( delta );
+		const back = this.fallGuard?.update( ! this.standing );
+		if ( back ) this.#fellOut( back );
+
+	}
+
+	/** Stands the player again at the last street point the fall guard kept, and says where the world let them through. */
+	#fellOut( back ) {
+
+		const { x, y, z } = this.body.position;
+		console.warn( `fell out of the world at ${x.toFixed( 1 )}, ${( y - this.body.centreOffset ).toFixed( 1 )}, ${z.toFixed( 1 )}; standing again at ${back.x.toFixed( 1 )}, ${back.y.toFixed( 1 )}, ${back.z.toFixed( 1 )}` );
+		this.placePlayer( back );
 
 	}
 
@@ -2901,6 +2915,8 @@ export class GameApp {
 	placePlayer( feet, target = null ) {
 
 		if ( ! this.body.teleport( feet ) ) return false;
+		// Where the player is put is a point a fall comes back to.
+		this.fallGuard?.placed( feet.x, feet.y, feet.z );
 
 		if ( target ) {
 
