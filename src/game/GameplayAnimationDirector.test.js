@@ -5,6 +5,7 @@ import { GameplayAnimationDirector } from './GameplayAnimationDirector.js';
 import { CLIP } from './agents/CharacterAssets.js';
 import { crowdClipForName } from './agents/Crowd.js';
 import { HeroCharacter } from './agents/HeroCharacter.js';
+import { FRAMES } from './agents/VatBaker.js';
 import { animation as library, heroRigs, outfit, rootTurn } from './agents/HeroCharacter.test-fixtures.js';
 
 const CATALOG = Object.freeze( {
@@ -307,6 +308,82 @@ describe( 'live gameplay animation composition', () => {
 		}
 		expect( turns[ 0 ] ).toBeCloseTo( 0, 6 );
 		turns.forEach( ( turn, frame ) => expect( turn ).toBeLessThanOrEqual( frame / 60 + 1e-6 ) );
+
+	} );
+
+	it( 'has the rig a talk showed walk, run and stand with its person as they go back into their day', () => {
+
+		const rig = setup();
+		const scheduled = actor( { animation: 'idle', mode: 'schedule' } );
+		rig.director.update( [ scheduled ], 0 );
+		const conversation = { npcId: scheduled.npcId };
+		rig.director.beginConversation( conversation, { ...scheduled, mode: 'conversation' } );
+		// Let go, they first stand turned to the player, in the rig the talk showed.
+		const lingering = { ...scheduled, mode: 'resuming', animation: 'idle' };
+		rig.director.endConversation( conversation, lingering );
+		expect( lastSegments( rig.hero ) ).toEqual( [ 'Idle_Loop' ] );
+		const shown = rig.hero.show.mock.calls.length;
+		// Then they set off: the rig walks, and the body under it takes the walk at once.
+		rig.director.update( [ { ...lingering, animation: 'walk' } ], 0.1 );
+		expect( rig.hero.show.mock.calls.length ).toBe( shown + 1 );
+		expect( lastSegments( rig.hero ) ).toEqual( [ 'Walk_Loop' ] );
+		expect( rig.crowd.setAnimationClip ).toHaveBeenLastCalledWith( 'npc-1', 'Walk_Loop' );
+		rig.director.update( [ { ...lingering, animation: 'run' } ], 0.1 );
+		expect( lastSegments( rig.hero ) ).toEqual( [ 'Sprint_Loop' ] );
+		rig.director.update( [ { ...scheduled, animation: 'idle' } ], 0.1 );
+		expect( lastSegments( rig.hero ) ).toEqual( [ 'Idle_Loop' ] );
+		expect( rig.crowd.setAnimationClip ).toHaveBeenLastCalledWith( 'npc-1', 'Idle_Loop' );
+
+	} );
+
+	it( 'walks or sprints the focused rig by how fast its person moves, whatever it was last asked to play, and hands its stride back to the body', async () => {
+
+		// A walker stops to talk, is let go and is drawn on by its day while the rig still stands in the talk's idle.
+		const walking = focusedRig( CLIP.WALK );
+		walking.director.update( [ actor( { animation: 'walk' } ) ], 0 );
+		const conversation = { npcId: 'npc-1' };
+		walking.director.beginConversation( conversation, actor( { mode: 'conversation' } ) );
+		await vi.waitFor( () => expect( walking.person.clip ).toBe( CLIP.IDLE ) );
+		walking.director.endConversation( conversation, actor( { mode: 'resuming', animation: 'idle' } ) );
+		const { hero, person } = walking;
+		const step = ( pace, seconds ) => {
+
+			for ( let frame = 0; frame < seconds * 30; frame ++ ) {
+
+				person.position.z += pace / 30;
+				hero.update( 1 / 30 );
+
+			}
+
+		};
+		step( 0, 0.5 );
+		expect( hero.active.currentClip ).toBe( 'Idle_Loop' );
+		step( 1.3, 0.6 );
+		expect( hero.active.currentClip ).toBe( 'Walk_Loop' );
+		step( 3, 0.6 );
+		expect( hero.active.currentClip ).toBe( 'Sprint_Loop' );
+		step( 1.2, 0.6 );
+		expect( hero.active.currentClip ).toBe( 'Walk_Loop' );
+		// Stopped, it stands as it stood before; put somewhere far in one frame, it is not walking.
+		step( 0, 0.6 );
+		expect( hero.active.currentClip ).toBe( 'Idle_Loop' );
+		person.position.x += 40;
+		hero.update( 1 / 30 );
+		expect( hero.active.currentClip ).toBe( 'Idle_Loop' );
+		// A clip the rig is asked to play wins until the person moves again.
+		walking.director.update( [ actor( { mode: 'resuming', animation: 'walk' } ) ], 0 );
+		expect( hero.active.currentClip ).toBe( 'Walk_Loop' );
+
+		// Let go back to the crowd body mid stride, the body walks on from the rig's place in the walk.
+		step( 1.3, 0.37 );
+		person.clip = CLIP.WALK;
+		person.frame = 0;
+		const action = hero.active.currentAction;
+		const phase = ( action.time % action.getClip().duration ) / action.getClip().duration;
+		hero.hide();
+		expect( hero.active ).toBeNull();
+		expect( person.frame / FRAMES ).toBeCloseTo( phase, 6 );
+		expect( phase ).toBeGreaterThan( 0.05 );
 
 	} );
 

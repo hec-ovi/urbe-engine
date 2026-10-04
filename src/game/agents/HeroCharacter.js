@@ -22,6 +22,19 @@ const SIT_TALK = 'Sitting_Talking_Loop';
 const BLEND_MS = 160;
 /** Whose recipe a prepared body wears while its programs are built: anybody's does. */
 const PREPARED_SEED = 1;
+/** A focused person moving faster than this walks, metres a second, and faster than RUN_FROM sprints. */
+const WALK_FROM = 0.35;
+const RUN_FROM = 2;
+/** Slower than this, a rig that took to walking by itself goes back to what it played. */
+const STOP_BELOW = 0.15;
+/** Seconds over which a focused person's measured pace settles. */
+const PACE_EASE = 0.2;
+/** Further than this in one frame, a body was put somewhere rather than walked there, metres. */
+const JUMP = 2.5;
+const WALK = 'Walk_Loop';
+const RUN = 'Sprint_Loop';
+/** Clips a person plays moving: a rig playing one is never made to walk over it. */
+const MOVING = /^(Walk|Sprint|Jog|Run|Crouch_Fwd)/;
 
 /**
  * One full-quality skinned person while the player is talking to them, and
@@ -344,6 +357,7 @@ export class HeroCharacter {
 		const { person, root, mixer, gesture, gaze, height } = this.active;
 		if ( root.userData.dressed ) root.userData.dressed.presence = person.presence ?? 1;
 		if ( person.look !== this.active.look ) this.#wear();
+		this.#pace( delta );
 		root.position.copy( person.position );
 		root.rotation.y = person.heading;
 		this.lighting?.writeRoot( root, person.position );
@@ -354,6 +368,40 @@ export class HeroCharacter {
 		height?.afterPose();
 		gaze.update( delta, samePerson( this.watched, person ) ? this.watchPoint : null );
 		gesture.update( delta, person.npcId && this.speech?.npcId === person.npcId ? this.speech : null );
+
+	}
+
+	/**
+	 * Whatever it was last asked to play, the focused rig walks or sprints by
+	 * how fast its person moves: a body let go after a talk walks back into its
+	 * day, or is drawn on to its post, while the clip the talk left stood still.
+	 * Moving faster than WALK_FROM it takes the walk (RUN_FROM the sprint), and
+	 * once slower than STOP_BELOW it goes back to what it played before. A clip
+	 * of moving already playing, or what the rig is asked next, is left alone.
+	 */
+	#pace( delta ) {
+
+		const active = this.active;
+		const at = active.person.position;
+		active.at ??= at.clone();
+		const moved = Math.hypot( at.x - active.at.x, at.z - active.at.z );
+		active.at.copy( at );
+		if ( ! ( delta > 0 ) || moved > JUMP ) return;
+		active.pace = ( active.pace ?? 0 ) + ( moved / delta - ( active.pace ?? 0 ) ) * Math.min( 1, delta / PACE_EASE );
+		const pace = active.pace > RUN_FROM ? RUN : active.pace > WALK_FROM ? WALK : null;
+		if ( pace ) {
+
+			if ( active.stride ? active.currentClip === pace : MOVING.test( active.currentClip ?? '' ) ) return;
+			const rest = active.stride?.rest ?? active.currentClip;
+			this.#play( this.#resolveSegments( [ { clipName: pace, loop: true } ] ), null );
+			active.stride = { rest };
+
+		} else if ( active.stride && active.pace < STOP_BELOW ) {
+
+			const rest = active.stride.rest && ! MOVING.test( active.stride.rest ) ? active.stride.rest : 'Idle_Loop';
+			this.#play( this.#resolveSegments( [ { clipName: rest, loop: true } ] ), null );
+
+		}
 
 	}
 
@@ -429,6 +477,7 @@ export class HeroCharacter {
 		if ( ! this.active ) return;
 
 		const { person, root, mixer } = this.active;
+		this.#keepPhase();
 		// A person still close when the talk ends stays in the rig they wore.
 		if ( this.nearby.has( person ) && ! this.close.has( person ) ) {
 
@@ -444,6 +493,20 @@ export class HeroCharacter {
 		this.lighting?.releaseRoot( root );
 		this.poser.release( root );
 		this.active = null;
+
+	}
+
+	/**
+	 * The crowd body taking the person back carries on the stride the rig was
+	 * in: playing the same clip, it starts at the rig's place in it, not at its
+	 * own, so a walk goes on without a pose jump.
+	 */
+	#keepPhase() {
+
+		const { person, currentAction: action, currentClip } = this.active;
+		if ( ! action || CROWD_CLIP_NAMES[ person.shown ?? person.clip ] !== currentClip ) return;
+		const duration = action.getClip().duration || 1;
+		person.frame = ( ( action.time % duration ) / duration ) * FRAMES;
 
 	}
 
@@ -593,6 +656,8 @@ export class HeroCharacter {
 
 		const active = this.active;
 		if ( ! active ) return;
+		// What the rig is asked to play is its own again; #pace takes the walk back up if it still moves.
+		active.stride = null;
 		active.sequence ++;
 		active.playback = { segments, index: 0, onFinished, sequence: active.sequence };
 		this.#playCurrent();

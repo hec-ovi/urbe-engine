@@ -427,17 +427,30 @@ export class GameplayAnimationDirector {
 
 	#render( result, focusNpcId, focusKind ) {
 
-		const person = focusNpcId ? this.crowd.memberForNpc( focusNpcId ) : null;
-		const focused = person
-			? result.transitions.find( ( candidate ) => this.actualIds.get( candidate.actorId ) === focusNpcId )
+		// A routine change for whoever the focused rig still shows (after a talk, as they walk back into their
+		// day) is theirs too: the rig plays it, or it slides along in the clip it last played.
+		const lasting = ! focusNpcId && this.focus ? this.focus.npcId : null;
+		const focusId = focusNpcId ?? lasting;
+		const person = focusId ? this.crowd.memberForNpc( focusId ) : null;
+		const showing = person && ( ! lasting || ! this.hero.active || this.hero.active.person === person );
+		const focused = showing
+			? result.transitions.find( ( candidate ) => this.actualIds.get( candidate.actorId ) === focusId )
 			: null;
 		for ( const transition of result.transitions ) {
 
 			const npcId = this.actualIds.get( transition.actorId );
-			if ( npcId && transition !== focused ) this.#crowdClip( npcId, transition.terminalClip );
+			if ( npcId && ( transition !== focused || lasting ) ) this.#crowdClip( npcId, transition.terminalClip );
 
 		}
 		if ( ! focused ) return;
+		if ( lasting ) {
+
+			// The rig has the slot already: its body takes the clip at once, the rig plays the way into it.
+			Promise.resolve( this.hero.show( person, focused.segments ) )
+				.catch( ( error ) => console.warn( 'focused character:', error.message ) );
+			return;
+
+		}
 		this.focus = { npcId: focusNpcId, kind: focusKind };
 		// The focused body shows what it shows until the rig has its slot, so
 		// the rig starts from that pose and plays its segments whole. The body
