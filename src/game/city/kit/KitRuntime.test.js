@@ -580,7 +580,7 @@ describe( 'the city draws every building from its shared plan', () => {
 
 	} );
 
-	it( 'gives every building a cuboid compound with a hole wherever its blueprint is open', async () => {
+	it( 'gives every building a cuboid compound on ground of its own, with a hole wherever a furnished blueprint is open', async () => {
 
 		const { pieces } = openWorld();
 		const flat = building( 'p1', { origin: [ 0, 0, 0 ], rotationY: 0 } );
@@ -592,25 +592,37 @@ describe( 'the city draws every building from its shared plan', () => {
 			&& box.halfExtents.length === 3 && box.halfExtents.every( ( half ) => half > 0 )
 			&& Number.isFinite( box.rotationY ) ) ).toBe( true );
 
-		// The roof reads solid from above, and the stair head comes through it.
+		// The roof reads solid from above. Nothing stands under a closed
+		// building's stair head, so its roof stands whole over it.
 		const top = flat.bounds.max[ 1 ];
 		const { bulkhead } = parcelBlueprint( blueprints.get( flat.plan ), flat ).roof;
+		const stairHead = ( boxes ) => solidAt( boxes, bulkhead.center[ 0 ], top - 0.2, bulkhead.center[ 1 ] );
 		expect( solidAt( closed.boxColliders, 2, top - 0.2, 2 ) ).toBe( true );
-		expect( solidAt( closed.boxColliders, bulkhead.center[ 0 ], top - 0.2, bulkhead.center[ 1 ] ) ).toBe( false );
+		expect( stairHead( closed.boxColliders ) ).toBe( true );
 
-		// A closed building fills its own doorway with the leaf it never opens.
+		// A closed building is solid at its doorway.
 		const door = doorOf( flat );
 		const at = ( boxes ) => solidAt( boxes, door.center.x, door.center.y + 1, door.center.z );
 
 		expect( at( closed.boxColliders ) ).toBe( true );
 
-		// A parcel that swings its own door loses that cuboid, and the doorway is
-		// a real hole through the lot wall while the wall beside it stands.
+		// A parcel that swings its own door has the doorway as a real hole
+		// through the wall while the wall beside it stands, and the stair head
+		// comes through its roof.
 		const open = await loader.load( new Map( [ source( flat, true ) ] ) );
 
-		expect( open.boxColliders.length ).toBe( closed.boxColliders.length - 1 );
 		expect( at( open.boxColliders ) ).toBe( false );
 		expect( solidAt( open.boxColliders, 0.25, 1, 16 ) ).toBe( true );
+		expect( stairHead( open.boxColliders ) ).toBe( false );
+
+		// Both stand on ground of their own under the footprint, where the
+		// street's cover stops.
+		for ( const cell of [ closed, open ] ) {
+
+			expect( solidAt( cell.boxColliders, 12, - 0.1, 16 ) ).toBe( true );
+			expect( solidAt( cell.boxColliders, 12, 0.1, 16 ) ).toBe( false );
+
+		}
 
 	} );
 

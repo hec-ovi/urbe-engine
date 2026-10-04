@@ -21,6 +21,18 @@
  * floor the interior does not reach and the player falls through it. That band
  * gets a plate.
  *
+ * What a building stands on is its own: the street's cover stops at every
+ * standing building's ground-floor outline, so nothing lies under the footprint
+ * but the safety floor far below. Every building gets a ground slab under its
+ * whole footprint, its top at the lowest floor it stands, so an entrance whose
+ * floor has not streamed in yet, or never will, is still ground.
+ *
+ * A building with no interior is closed: nothing stands behind its facade, so
+ * its walls stand whole however open the plan draws it (a shopfront with no
+ * glass is still a wall to the body) and its roof has no stair head to fall
+ * through. Only its ground band keeps the entrance cut, so the steps up to the
+ * door it never opens stay walkable.
+ *
  * None of these cost a triangle.
  */
 
@@ -32,6 +44,8 @@ const CAP = 0.4;
 const PLATE = 0.2;
 /** A closed building's entrance leaf fills its own opening. */
 const LEAF = 0.12;
+/** And the ground slab, under the lowest floor a building stands. */
+const GROUND = 0.5;
 
 /**
  * @param placement KitPlacement
@@ -39,9 +53,11 @@ const LEAF = 0.12;
  * @param leaf the entrance door frame when nothing is going to move it, else null
  * @param storeys [{ elevation, rect }] in the lot frame, one per furnished
  *   floor: the rectangle that floor's own modules fill
+ * @param closed whether nothing stands behind the facade: a building with no
+ *   interior, whose walls and roof then stand whole
  * @returns [{ center: [x,y,z], halfExtents: [hx,hy,hz], rotationY }]
  */
-export function buildingBoxes( placement, { openings = null, leaf = null, storeys = [] } = {} ) {
+export function buildingBoxes( placement, { openings = null, leaf = null, storeys = [], closed = false } = {} ) {
 
 	const boxes = [];
 	const { height, base } = placement;
@@ -52,12 +68,13 @@ export function buildingBoxes( placement, { openings = null, leaf = null, storey
 
 	for ( let face = 0; face < 4; face ++ ) {
 
-		boxes.push( ...pierced( placement, placement.edge( face ), base, top, holes[ face ] ) );
+		boxes.push( ...pierced( placement, placement.edge( face ), base, top, closed ? [] : holes[ face ] ) );
 
 	}
 
 	boxes.push( ...bands( placement, base, holes ) );
-	boxes.push( ...cap( placement, top, openings?.roof ?? [] ) );
+	boxes.push( ...cap( placement, top, closed ? [] : openings?.roof ?? [] ) );
+	boxes.push( ground( placement, storeys.reduce( ( lowest, { elevation } ) => Math.min( lowest, elevation ), base ) ) );
 	boxes.push( ...storeyPlates( placement, storeys ) );
 
 	if ( leaf ) {
@@ -210,6 +227,22 @@ function storeyPlates( placement, storeys ) {
 	}
 
 	return boxes;
+
+}
+
+/**
+ * The slab under the whole footprint, its top at `floor`: the building's own
+ * ground, which the street's cover leaves to it.
+ */
+function ground( placement, floor ) {
+
+	const { u0, v0, u1, v1 } = placement.footprint;
+
+	return {
+		center: placement.point( ( u0 + u1 ) / 2, floor - GROUND / 2, ( v0 + v1 ) / 2 ).toArray(),
+		halfExtents: [ ( u1 - u0 ) / 2, GROUND / 2, ( v1 - v0 ) / 2 ],
+		rotationY: placement.rotationY
+	};
 
 }
 

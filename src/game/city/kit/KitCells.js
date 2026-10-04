@@ -182,7 +182,10 @@ export class KitCellLoader {
 					boxColliders.push( ...buildingBoxes( placement, {
 						openings: interiorOpenings( placement, blueprint ),
 						leaf: swinging ? null : door,
-						storeys: [ ...storeys.values() ].map( ( { elevation, rect } ) => ( { elevation, rect: placement.lotRect( rect ) } ) )
+						storeys: [ ...storeys.values() ].map( ( { elevation, rect } ) => ( { elevation, rect: placement.lotRect( rect ) } ) ),
+						// Nothing stands behind a facade with no interior, so the body
+						// meets it whole, open front and stair head alike.
+						closed: ! source.hasInterior
 					} ) );
 					base.centers.set( source.parcelId, placement.center );
 					standing.push( {

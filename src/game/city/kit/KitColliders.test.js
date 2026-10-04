@@ -65,6 +65,21 @@ function blueprint() {
 
 }
 
+/** The same building drawn as a shop: a glassless front ten metres wide, and a stair head through its roof. */
+function shopfront() {
+
+	const [ x, z ] = world( 12, 15 );
+
+	return {
+		floors: [ {
+			index: 0, elevation: 0, outline: ring().map( ( [ u, v ] ) => world( u, v ) ),
+			openings: [ { kind: 'openFront', accessRole: 'main', edge: 0, offset: 5, width: 10, height: 3.5, sill: 0 } ]
+		} ],
+		roof: { bulkhead: { center: [ x, z ], axis: [ 1, 0 ], width: 3, depth: 4 } }
+	};
+
+}
+
 function placementOf( { surfaces = [] } = {} ) {
 
 	return new KitPlacement( 'p1', record(), { ...PLAN, surfaces } );
@@ -121,6 +136,62 @@ describe( 'kit building colliders', () => {
 		// The opening sits 8.5 m along the facade, which is 10.5 m across the lot.
 		expect( solidAt( placement, boxes, 12, 1, FOOTPRINT.v0 + 0.25 ) ).toBe( false );
 		expect( solidAt( placement, boxes, 4, 1, FOOTPRINT.v0 + 0.25 ) ).toBe( true );
+
+	} );
+
+	it( 'stands every building on a slab of its own under the whole footprint, the street\'s cover stopping at it', () => {
+
+		const placement = placementOf();
+		const boxes = buildingBoxes( placement, { openings: interiorOpenings( placement, shopfront() ) } );
+
+		for ( const [ u, v ] of [ [ 12, 15 ], [ FOOTPRINT.u0 + 0.6, FOOTPRINT.v0 + 0.6 ], [ FOOTPRINT.u1 - 0.6, FOOTPRINT.v1 - 0.6 ] ] ) {
+
+			expect( solidAt( placement, boxes, u, - 0.05, v ) ).toBe( true );
+			expect( solidAt( placement, boxes, u, 0.05, v ) ).toBe( false );
+
+		}
+		// Not under the paving between the facade and the lot line, which is the street's.
+		expect( solidAt( placement, boxes, 12, - 0.05, FOOTPRINT.v0 - 0.5 ) ).toBe( false );
+
+	} );
+
+	it( 'lays that slab under the lowest floor a furnished building stands', () => {
+
+		const placement = placementOf();
+		const rect = { ...FOOTPRINT };
+		const boxes = buildingBoxes( placement, { storeys: [ { elevation: 0, rect }, { elevation: - 4.5, rect } ] } );
+
+		expect( solidAt( placement, boxes, 12, - 4.6, 15 ) ).toBe( true );
+		expect( solidAt( placement, boxes, 12, - 0.05, 15 ) ).toBe( false );
+
+	} );
+
+	it( 'closes a building with no interior: its open front and its stair head stand whole', () => {
+
+		const placement = placementOf();
+		const openings = interiorOpenings( placement, shopfront() );
+		const open = buildingBoxes( placement, { openings } );
+		const closed = buildingBoxes( placement, { openings, closed: true } );
+		const top = placement.base + placement.height;
+
+		// The front stands 5 to 15 m along face 0, 7 to 17 m across the lot,
+		// and the stair head comes up through the middle of the roof.
+		expect( solidAt( placement, open, 12, 1, FOOTPRINT.v0 + 0.25 ) ).toBe( false );
+		expect( solidAt( placement, closed, 12, 1, FOOTPRINT.v0 + 0.25 ) ).toBe( true );
+		expect( solidAt( placement, open, 12, top - 0.2, 15 ) ).toBe( false );
+		expect( solidAt( placement, closed, 12, top - 0.2, 15 ) ).toBe( true );
+
+	} );
+
+	it( 'keeps a closed building\'s entrance cut out of its ground band, so its steps stay walkable up to the wall', () => {
+
+		const steps = new THREE.BoxGeometry( 20, 0.43, 1.65 ).translate( 12, 0.215, 1.175 );
+		const placement = placementOf( { surfaces: [ { geometry: steps } ] } );
+		const boxes = buildingBoxes( placement, { openings: interiorOpenings( placement, shopfront() ), closed: true } );
+
+		expect( solidAt( placement, boxes, 12, 0.2, 1 ) ).toBe( false );
+		expect( solidAt( placement, boxes, 4, 0.2, 1 ) ).toBe( true );
+		expect( solidAt( placement, boxes, 12, 0.2, FOOTPRINT.v0 + 0.25 ) ).toBe( true );
 
 	} );
 
