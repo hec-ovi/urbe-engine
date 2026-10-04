@@ -48,8 +48,12 @@ export class OpenAIPort {
 		this.timeoutMs = timeoutMs;
 		this.cachePrompt = cachePrompt;
 		this.#headers = { 'Content-Type': 'application/json', ...( apiKey ? { Authorization: `Bearer ${apiKey}` } : {} ) };
-		/** Server-reported token totals across calls; completion includes any thinking the server does not return. */
-		this.usage = { calls: 0, promptTokens: 0, completionTokens: 0 };
+		/**
+		 * Server-reported token totals across calls (completion includes any
+		 * thinking the server does not return), the prompt tokens a prompt
+		 * cache served, where the server says, and the last call's own.
+		 */
+		this.usage = { calls: 0, promptTokens: 0, completionTokens: 0, cachedTokens: 0, last: null };
 
 	}
 
@@ -83,8 +87,11 @@ export class OpenAIPort {
 			this.usage.calls += 1;
 			yield* chatDeltas( response.body && idle.watch( response.body ), ( usage ) => {
 
+				const cached = usage.prompt_tokens_details?.cached_tokens ?? 0;
 				this.usage.promptTokens += usage.prompt_tokens ?? 0;
 				this.usage.completionTokens += usage.completion_tokens ?? 0;
+				this.usage.cachedTokens += cached;
+				this.usage.last = { promptTokens: usage.prompt_tokens ?? 0, cachedTokens: cached, completionTokens: usage.completion_tokens ?? 0 };
 
 			} );
 

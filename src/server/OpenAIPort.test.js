@@ -33,7 +33,7 @@ describe( 'OpenAI-compatible dialogue port', () => {
 
 			requests.push( { url, init } );
 			if ( url.endsWith( '/models' ) ) return Response.json( { data: [ { id: 'local-model' } ] } );
-			return sse( [ text( 'Rea' ), text( 'dy.' ), { choices: [], usage: { prompt_tokens: 12, completion_tokens: 3 } } ] );
+			return sse( [ text( 'Rea' ), text( 'dy.' ), { choices: [], usage: { prompt_tokens: 12, completion_tokens: 3, prompt_tokens_details: { cached_tokens: 8 } } } ] );
 
 		} ) );
 		const port = new OpenAIPort( 'http://models/v1/', { model: '' } );
@@ -46,7 +46,7 @@ describe( 'OpenAI-compatible dialogue port', () => {
 			stream_options: { include_usage: true }
 		} );
 		expect( requests[ 1 ].init.headers.Authorization ).toBeUndefined();
-		expect( port.usage ).toEqual( { calls: 1, promptTokens: 12, completionTokens: 3 } );
+		expect( port.usage ).toEqual( { calls: 1, promptTokens: 12, completionTokens: 3, cachedTokens: 8, last: { promptTokens: 12, cachedTokens: 8, completionTokens: 3 } } );
 
 	} );
 
