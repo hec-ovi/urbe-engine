@@ -25,9 +25,40 @@ const RETURN_REPLAN = 2;
 const DOOR_REACH = 12;
 /** A follower that found no way to the player inside tries again once the player has moved this far. */
 const INDOOR_RETRY = 2;
-/** A companion with a pace that runs keeps up with a player going faster than this, and jogs here when in a hurry. */
-const PLAYER_RUNNING = 2;
+/** A leader in a hurry jogs at this. */
 const JOG_SPEED = 2;
+/** A companion going faster than this runs; slower, it walks; GAIT_SLACK either side of it keeps the one it has. */
+const RUN_FROM = 1.75;
+const GAIT_SLACK = 0.15;
+/**
+ * A companion matches the player's pace up to the player's sprint (PlayerController RUN_SPEED), and more
+ * than CATCH_UP_FROM behind where it should be it goes CATCH_UP times the player's pace until it is back.
+ */
+const PLAYER_SPRINT = 8;
+const CATCH_UP_FROM = 4;
+const CATCH_UP = 1.2;
+/** A follower more than RUN_DISTANCE behind runs at least this, so it is with the player again soon, metres a second. */
+const FAR_PACE = 4;
+/** Closer than CATCH_UP_FROM, how fast a follower closes the rest, metres a second for each metre left. */
+const CLOSE_GAIN = 1.5;
+/** The slowest a follower still short of its place walks, metres a second. */
+const CREEP = 0.4;
+/** Seconds a companion's pace takes to rise, and to fall, to what it wants. */
+const PACE_RISE = 0.4;
+const PACE_FALL = 0.2;
+/** A follower walks this far to the player's side, level with them, where the floor holds it there. */
+const BESIDE = 1;
+/** Within this of its place beside the player, in the same place as the player, a follower steps straight there. */
+const BESIDE_DIRECT = 3;
+/** Seconds between a follower's looks at which side of the player has room. */
+const SIDE_LOOK = 0.5;
+/** Faster than this the player's way is the way they walk; slower, the way they face. */
+const PLAYER_MOVING = 0.5;
+/** Radians a second a follower standing beside the player turns to face the way they face. */
+const TURN_RATE = 4;
+/** Half the pavement of a walk edge that says nothing of its width, and a body's radius, metres. */
+const PAVEMENT_REACH = 1.2;
+const BODY_RADIUS = 0.3;
 /** A visible scheduled body whose schedule moves it further than this in one update walks there instead of jumping. */
 const JUMP = 1.5;
 /** A walker asks a door ahead to open from this far, and waits this short of it until it does. */
@@ -94,6 +125,9 @@ export class NpcContinuity {
 		this.now = 0;
 		this.delta = 0;
 		this.player = null;
+		/** npcId to a companion's eased pace, `{ speed }`; and the side the follower walks the player on, `{ npcId, side, lookedMin }`. */
+		this.paces = new Map();
+		this.beside = null;
 		this.conversation = null;
 		this.pose = null;
 		/** Identities a quest is keeping where they stand, by npcId. */
@@ -246,6 +280,7 @@ export class NpcContinuity {
 		const route = this.#followRoute( null, actor, request ).route;
 		if ( ! route ) throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${request.npcId} cannot reach the player` );
 		this.#take( actor, request.timeMin );
+		this.paces.delete( actor.npcId );
 		actor.mode = 'following';
 		actor.animation = route.distanceMeters > STOPPING_DISTANCE ? 'walk' : 'idle';
 		this.follow = {
@@ -276,6 +311,7 @@ export class NpcContinuity {
 		if ( ! plan ) throw new NpcContinuityError( 'E_NPC_PATH', `NPC ${request.npcId} cannot reach the escort destination` );
 		const { route, pending } = plan;
 		this.#take( actor, request.timeMin );
+		this.paces.delete( actor.npcId );
 		actor.mode = 'leading';
 		actor.animation = route.distanceMeters > ARRIVAL_DISTANCE ? 'walk' : 'idle';
 		this.follow = {
@@ -720,27 +756,166 @@ export class NpcContinuity {
 	}
 
 	/**
-	 * Walks toward the player over the cached route, running when far, or with
-	 * a pace that runs when the player runs, stopping short of them, or at the
-	 * door of a building it has no way into. Standing, it faces the player.
+	 * Walks with the player: beside them (#besidePlace), level and about a
+	 * metre to the side with more room, or behind them where the floor is too
+	 * narrow for two (a doorway, a corridor, stairs, a lift) or the player's
+	 * way is unknown, stopping short of them then. Its pace matches the
+	 * player's up to their sprint, CATCH_UP faster while more than
+	 * CATCH_UP_FROM behind, and eases into theirs as it closes in, never past
+	 * its place (#followPace). Near its place beside them, in the same place,
+	 * it steps straight there instead of along a route; at the door of a
+	 * building it has no way into it waits. Standing beside the player it
+	 * turns the way they face; behind them it faces them.
 	 */
 	#advanceFollowing( actor, request ) {
 
 		const follow = this.follow;
-		const { route, door } = this.#followRoute( follow, actor, request );
-		if ( ! route ) return this.#giveUp( actor, request.timeMin, 'unreachable' );
-		follow.route = route;
-		const remaining = route.distanceMeters - route.cursor;
-		const toGo = Math.max( 0, remaining - ( door ? 0 : STOPPING_DISTANCE ) );
-		const runs = follow.pace?.runs;
-		const hurried = runs === true && this.player?.speed > PLAYER_RUNNING;
-		const far = remaining > RUN_DISTANCE && runs !== false;
-		const speed = toGo > EPSILON ? ( far || hurried ? RUN_SPEED : WALK_SPEED ) : 0;
-		const moved = this.#walk( actor, route, Math.min( toGo, speed * request.deltaSeconds ) );
-		if ( moved === 0 ) actor.heading = headingTo( actor.position, request.playerPosition, actor.heading );
-		actor.animation = selectNpcAnimation( { speed: moved > 0 ? speed : 0 } );
+		const beside = this.#besidePlace( actor, request );
+		const dt = request.deltaSeconds;
+		let moved;
+		let speed;
+		const straight = beside && this.#straightTo( actor, beside, request.playerPlace );
+		if ( straight ) {
+
+			const toGo = horizontal( actor.position, beside.position );
+			speed = toGo > ARRIVAL_DISTANCE ? this.#followPace( follow.npcId, toGo, follow.pace, dt ) : this.#followPace( follow.npcId, 0, follow.pace, dt );
+			moved = this.#stepTo( actor, beside.position, Math.min( toGo, speed * dt ), request.playerPlace );
+			follow.route = restingRoute( actor.position, beside.position );
+			if ( moved > 0 ) actor.heading = headingTo( actor.position, beside.position, actor.heading );
+
+		} else {
+
+			const { route, door } = this.#followRoute( follow, actor, request, beside );
+			if ( ! route ) return this.#giveUp( actor, request.timeMin, 'unreachable' );
+			follow.route = route;
+			const remaining = route.distanceMeters - route.cursor;
+			const toGo = Math.max( 0, remaining - ( door || beside ? 0 : STOPPING_DISTANCE ) );
+			speed = this.#followPace( follow.npcId, toGo > EPSILON ? toGo : 0, follow.pace, dt );
+			moved = this.#walk( actor, route, Math.min( toGo, speed * dt ) );
+
+		}
+		if ( moved === 0 ) {
+
+			const facing = beside ? this.player?.facing ?? this.player?.heading : null;
+			actor.heading = facing !== null && facing !== undefined
+				? turnToward( actor.heading, facing, TURN_RATE * dt )
+				: headingTo( actor.position, request.playerPosition, actor.heading );
+
+		}
+		actor.animation = gait( actor.animation, moved, speed );
 		actor.mode = 'following';
-		this.#phase( speed > 0 ? 'walking' : 'waiting', request.timeMin );
+		this.#phase( moved > 0 || speed > 0 ? 'walking' : 'waiting', request.timeMin );
+
+	}
+
+	/**
+	 * Where a follower walks beside the player: `{ position, parcelId? }`, a
+	 * metre to their left or right of the way they go (or face, standing),
+	 * level with them, on the side where the floor holds a body there and
+	 * further, the one nearer the follower when both do; null when neither
+	 * does, or the player's way is unknown, and the follower walks behind.
+	 * Looked at every SIDE_LOOK seconds, not every frame.
+	 */
+	#besidePlace( actor, request ) {
+
+		const heading = this.player?.heading;
+		if ( heading === null || heading === undefined ) return null;
+		const player = request.playerPosition;
+		const parcelId = request.playerPlace?.kind === 'parcel' ? request.playerPlace.id : null;
+		const state = this.beside?.npcId === actor.npcId ? this.beside : ( this.beside = { npcId: actor.npcId, side: 0, lookedMin: - Infinity } );
+		const at = ( side, reach ) => [
+			player[ 0 ] - Math.cos( heading ) * side * reach, player[ 1 ], player[ 2 ] + Math.sin( heading ) * side * reach
+		];
+		if ( ( this.now - state.lookedMin ) * 60 >= SIDE_LOOK ) {
+
+			state.lookedMin = this.now;
+			const room = ( side ) => this.#roomAt( at( side, BESIDE ), at( side, BESIDE / 2 ), parcelId )
+				? 1 + ( this.#roomAt( at( side, BESIDE * 1.8 ), null, parcelId ) ? 1 : 0 ) : 0;
+			const right = room( 1 ), left = room( - 1 );
+			// The side with more room; on a tie the one nearer the follower, so it never crosses the player for nothing.
+			const nearer = horizontal( actor.position, at( 1, BESIDE ) ) <= horizontal( actor.position, at( - 1, BESIDE ) ) ? 1 : - 1;
+			state.side = right === 0 && left === 0 ? 0 : right === left ? nearer : right > left ? 1 : - 1;
+
+		}
+		if ( ! state.side ) return null;
+		return { position: at( state.side, BESIDE ), ...( parcelId ? { parcelId } : {} ) };
+
+	}
+
+	/**
+	 * Whether a body may stand at `point` (and `between`, the way to it from the player, when given): inside a
+	 * building on its walkable floor, as the interior routes have it; outside on the pavement of the walk edge
+	 * nearest it.
+	 */
+	#roomAt( point, between, parcelId ) {
+
+		if ( parcelId ) {
+
+			if ( ! this.interiorRoutes?.covers( parcelId ) || ! this.interiorRoutes.stands ) return false;
+			return this.interiorRoutes.stands( parcelId, point ) && ( ! between || this.interiorRoutes.stands( parcelId, between ) );
+
+		}
+		const projection = this.routes.project( point );
+		if ( ! projection ) return false;
+		const half = projection.edge.width > 0 ? projection.edge.width / 2 : PAVEMENT_REACH;
+		return projection.gap <= Math.max( 0.3, half - BODY_RADIUS ) && Math.abs( projection.point[ 1 ] - point[ 1 ] ) < 1;
+
+	}
+
+	/** Whether a follower may step straight to its place beside the player: near it, in the same place, the floor holding the way. */
+	#straightTo( actor, beside, playerPlace ) {
+
+		if ( horizontal( actor.position, beside.position ) > BESIDE_DIRECT || Math.abs( actor.position[ 1 ] - beside.position[ 1 ] ) > 0.6 ) return false;
+		if ( this.follow.route?.ride ) return false;
+		const parcelId = playerPlace?.kind === 'parcel' ? playerPlace.id : null;
+		if ( parcelId ) {
+
+			if ( actor.place.kind !== 'parcel' || actor.place.id !== parcelId ) return false;
+			for ( const t of [ 0.25, 0.5, 0.75 ] ) if ( ! this.#roomAt( lerp( actor.position, beside.position, t ), null, parcelId ) ) return false;
+			return true;
+
+		}
+		return actor.place.kind === 'edge';
+
+	}
+
+	/** Steps a body `travel` metres straight toward `target`, in the place the player stands in; the metres stepped. */
+	#stepTo( actor, target, travel, playerPlace ) {
+
+		const left = horizontal( actor.position, target );
+		if ( ! ( travel > 0 ) || left < EPSILON ) return 0;
+		const t = Math.min( 1, travel / left );
+		actor.position = lerp( actor.position, target, t );
+		if ( playerPlace?.kind === 'parcel' ) actor.place = { kind: 'parcel', id: playerPlace.id, ...( Number.isInteger( playerPlace.floor ) ? { floor: playerPlace.floor } : {} ) };
+		else this.#putOnWalkGraph( actor );
+		return left * t;
+
+	}
+
+	/**
+	 * A companion's pace with `toGo` metres left to its place: the player's own
+	 * up to their sprint, CATCH_UP faster than them while more than
+	 * CATCH_UP_FROM behind (and FAR_PACE at least past RUN_DISTANCE, a walk nearer),
+	 * nearer in CLOSE_GAIN for each metre left on top of the player's pace and
+	 * no faster than catching up, never slower than CREEP while short of its
+	 * place; eased, rising over PACE_RISE and falling over PACE_FALL seconds.
+	 * A `pace` that does not run walks at most.
+	 */
+	#followPace( npcId, toGo, pace, dt ) {
+
+		const player = Math.max( 0, this.player?.speed ?? 0 );
+		const runs = pace?.runs !== false;
+		const top = runs ? PLAYER_SPRINT * CATCH_UP : WALK_SPEED;
+		let wanted = 0;
+		if ( toGo > CATCH_UP_FROM ) wanted = Math.max( player * CATCH_UP, toGo > RUN_DISTANCE && runs ? FAR_PACE : WALK_SPEED );
+		else if ( toGo > EPSILON ) wanted = Math.max( CREEP, Math.min( player + toGo * CLOSE_GAIN, Math.max( player * CATCH_UP, WALK_SPEED ) ) );
+		wanted = Math.min( top, wanted );
+		const state = this.paces.get( npcId ) ?? { speed: 0 };
+		const ease = wanted > state.speed ? PACE_RISE : PACE_FALL;
+		state.speed += ( wanted - state.speed ) * Math.min( 1, dt / ease );
+		if ( wanted === 0 && state.speed < CREEP ) state.speed = 0;
+		this.paces.set( npcId, state );
+		return state.speed;
 
 	}
 
@@ -750,16 +925,16 @@ export class NpcContinuity {
 	 * that door when the player is upstairs or more than DOOR_REACH inside.
 	 * @returns {{ route, door: boolean }} route null when there is no way at all
 	 */
-	#followRoute( record, actor, { playerPosition, playerPlace } ) {
+	#followRoute( record, actor, { playerPosition, playerPlace }, beside = null ) {
 
-		const player = { position: playerPosition };
+		const player = { position: beside?.position ?? playerPosition };
 		const door = playerPlace ? this.#door( playerPlace.id ) : null;
 		if ( ! door ) return { route: this.#plan( record, actor, player, FOLLOW_REPLAN ), door: false };
 		const miss = this.indoorMiss;
 		const missed = miss?.parcelId === playerPlace.id && distance( miss.position, playerPosition ) <= INDOOR_RETRY;
 		if ( this.interiorRoutes?.covers( playerPlace.id ) && ! missed ) {
 
-			const route = this.#plan( record, actor, { position: playerPosition, parcelId: playerPlace.id }, FOLLOW_REPLAN, true );
+			const route = this.#plan( record, actor, { position: player.position, parcelId: playerPlace.id }, FOLLOW_REPLAN, true );
 			if ( route ) return { route, door: false };
 			this.indoorMiss = { parcelId: playerPlace.id, position: [ ...playerPosition ] };
 
@@ -808,10 +983,12 @@ export class NpcContinuity {
 		const short = person ? PERSON_REACH : 0;
 		const gap = distance( actor.position, player );
 		const pace = lead.pace ?? LEAD_PACE;
-		const close = pace.runs === true && this.player?.speed > PLAYER_RUNNING ? RUN_SPEED : pace.hurry ? JOG_SPEED : WALK_SPEED;
+		// Close to the player or with them ahead, a leader goes at least the player's own pace, up to their sprint.
+		const base = pace.hurry ? JOG_SPEED : WALK_SPEED;
+		const close = pace.runs === false ? base : Math.max( base, Math.min( PLAYER_SPRINT, this.player?.speed ?? 0 ) );
 		let speed = 0;
 		if ( gap <= LEAD_SLOW_FROM ) speed = close;
-		else if ( playerAhead( route, player ) ) speed = gap > RUN_DISTANCE && pace.runs !== false ? RUN_SPEED : close;
+		else if ( playerAhead( route, player ) ) speed = gap > RUN_DISTANCE && pace.runs !== false ? Math.max( RUN_SPEED, close ) : close;
 		else if ( gap <= ( lead.phase === 'waiting' ? LEAD_RESUME_WITHIN : LEAD_WAIT_BEYOND ) ) {
 
 			speed = WALK_SPEED - ( WALK_SPEED - SLOW_SPEED ) * Math.min( 1, ( gap - LEAD_SLOW_FROM ) / ( LEAD_WAIT_BEYOND - LEAD_SLOW_FROM ) );
@@ -829,7 +1006,7 @@ export class NpcContinuity {
 
 		}
 		if ( moved === 0 ) actor.heading = headingTo( actor.position, player, actor.heading );
-		actor.animation = selectNpcAnimation( { speed: moved > 0 ? speed : 0 } );
+		actor.animation = gait( actor.animation, moved, speed );
 		this.#phase( speed > 0 ? 'walking' : 'waiting', request.timeMin );
 
 	}
@@ -1006,7 +1183,11 @@ export class NpcContinuity {
 		const raw = last && dt > 0 ? horizontal( last.position, request.playerPosition ) / dt : 0;
 		// A teleport is no run: what a frame could not walk does not count.
 		const step = raw > 12 ? last?.speed ?? 0 : raw;
-		this.player = { position: [ ...request.playerPosition ], speed: last ? last.speed + ( step - last.speed ) * Math.min( 1, dt * 4 ) : 0 };
+		const speed = last ? last.speed + ( step - last.speed ) * Math.min( 1, dt * 4 ) : 0;
+		// The way the player goes while they walk, else the way they face (`playerHeading`), else unknown.
+		const moving = last && raw > PLAYER_MOVING && raw <= 12 ? Math.atan2( request.playerPosition[ 0 ] - last.position[ 0 ], request.playerPosition[ 2 ] - last.position[ 2 ] ) : null;
+		const heading = moving ?? ( Number.isFinite( request.playerHeading ) ? request.playerHeading : null );
+		this.player = { position: [ ...request.playerPosition ], speed, heading, facing: Number.isFinite( request.playerHeading ) ? request.playerHeading : null };
 		this.now = request.timeMin;
 		this.delta = dt;
 
@@ -1859,6 +2040,25 @@ function headingTo( from, to, fallback ) {
 	const dx = to[ 0 ] - from[ 0 ];
 	const dz = to[ 2 ] - from[ 2 ];
 	return Math.hypot( dx, dz ) > 1e-6 ? Math.atan2( dx, dz ) : fallback;
+
+}
+
+/**
+ * A companion's animation for a frame it moved `moved` metres at `speed`: a run past RUN_FROM, kept a little
+ * below it once running and taken a little above it from a walk, so a pace near it does not flick between them.
+ */
+function gait( animation, moved, speed ) {
+
+	if ( ! ( moved > 0 ) ) return 'idle';
+	return speed > RUN_FROM + ( animation === 'run' ? - GAIT_SLACK : GAIT_SLACK ) ? 'run' : 'walk';
+
+}
+
+/** `from` turned toward `to` by at most `step` radians, the short way round. */
+function turnToward( from, to, step ) {
+
+	const turn = Math.atan2( Math.sin( to - from ), Math.cos( to - from ) );
+	return from + Math.max( - step, Math.min( step, turn ) );
 
 }
 

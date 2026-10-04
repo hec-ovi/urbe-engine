@@ -151,7 +151,8 @@ describe( 'NPC continuity integration', () => {
 		let actor = controller.startFollow( { npcId: npc.npcId, timeMin: MON_9, playerPosition: player } );
 		const start = actor.position;
 		actor = controller.updateFollow( { timeMin: MON_9, deltaSeconds: 1, playerPosition: player } );
-		expect( separation( start, actor.position ) ).toBeLessThanOrEqual( 2.4 + 1e-9 );
+		// Far from the player it runs to them.
+		expect( separation( start, actor.position ) ).toBeLessThanOrEqual( 4 + 1e-9 );
 		expect( actor.animation ).toBe( 'run' );
 
 		for ( let step = 0; step < 300 && actor.animation !== 'idle'; step ++ ) {
@@ -718,11 +719,19 @@ describe( 'NPC continuity integration', () => {
 		expect( actor.heading ).toBeCloseTo( Math.atan2( start[ 0 ] - actor.position[ 0 ], start[ 2 ] - actor.position[ 2 ] ) );
 		expect( step( start ).position ).toEqual( actor.position );
 
-		// The player comes within reach: the leader walks on, at full pace while they keep up.
-		step( actor.position );
+		// The player walks up within reach: the leader walks on, at a walk while they keep up at one.
+		let player = [ ...start ];
+		const walkUp = () => {
+
+			const left = separation( player, actor.position );
+			player = player.map( ( value, axis ) => value + ( actor.position[ axis ] - value ) * Math.min( 1, 1.4 / Math.max( left, 1e-6 ) ) );
+			return step( player );
+
+		};
+		for ( let index = 0; index < 60 && controller.companion.phase !== 'walking'; index ++ ) walkUp();
 		expect( controller.companion.phase ).toBe( 'walking' );
 		expect( actor.animation ).toBe( 'walk' );
-		for ( let index = 0; index < 1000 && controller.companion.phase !== 'arrived'; index ++ ) step( actor.position );
+		for ( let index = 0; index < 1000 && controller.companion.phase !== 'arrived'; index ++ ) walkUp();
 		// Arrived, the leader stands on the street at the place, not inside it.
 		expect( actor ).toMatchObject( { mode: 'leading', animation: 'idle', place: { kind: 'edge' } } );
 		for ( let index = 0; index < 5; index ++ ) step( actor.position );

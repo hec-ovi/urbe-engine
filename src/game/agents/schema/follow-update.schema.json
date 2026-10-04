@@ -8,6 +8,7 @@
     "timeMin": { "type": "number", "minimum": 0 },
     "deltaSeconds": { "type": "number", "minimum": 0, "maximum": 1 },
     "playerPosition": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/vec3" },
-    "playerPlace": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/playerPlace" }
+    "playerPlace": { "$ref": "urn:urbe:engine:npc-agents:values#/$defs/playerPlace" },
+    "playerHeading": { "type": "number", "description": "the way the player faces, radians, forward (sin, cos) in x and z as an NPC heading" }
   }
 }

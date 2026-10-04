@@ -1280,6 +1280,8 @@ export class GameApp {
 			timeMin: this.clock.exactMin,
 			deltaSeconds: delta,
 			playerPosition,
+			// The way the player faces as a body's heading: the camera looks down -Z turned by its yaw.
+			playerHeading: this.controller.yaw + Math.PI,
 			...( room ? { playerPlace: { kind: 'parcel', id: room.parcelId, floor: room.floor } } : {} )
 		} ) );
 		this.updateCompanion( playerPosition, playerPlaces );
