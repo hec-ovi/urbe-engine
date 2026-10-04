@@ -332,6 +332,26 @@ describe( 'TalkService', () => {
 
 	} );
 
+	it( 'keeps what the witnesses of an exchange overheard in each one\'s own memory, on disk, and their own talk later tells it', async () => {
+
+		const model = fakeModel( [ { content: '[sigh] Nobody since spring.' } ], [ { content: 'Upstairs.' } ] );
+		const { root, dir } = await servedWorld( { 'game.json': { theme: 'noir' } } );
+		const service = new TalkService( model, root );
+		await say( service, 'Who rents 1407?', { witnesses: [ 'w1', 'n1', 'w2' ] } );
+		const kept = JSON.parse( await readFile( join( dir, 'dialogue-memory.json' ), 'utf8' ) );
+		const note = 'Overheard, not said to you: you were there when the player talked to Mara Voss, the ' + DEFAULT_TYPE_SET.types[ 0 ].label.toLowerCase() +
+			'. The player said: "Who rents 1407?" Mara Voss said: "Nobody since spring."';
+		expect( kept.map( ( record ) => record.npcId ) ).toEqual( [ 'n1', 'w1', 'w2' ] );
+		expect( kept[ 1 ] ).toEqual( { npcId: 'w1', memory: { digest: [ note ], turns: [], heardAtMin: 600 } } );
+		expect( kept[ 0 ].memory.digest ).toEqual( [] );
+
+		// The witness's own talk, after a restart, carries what they overheard.
+		const again = new TalkService( model, root );
+		await say( again, 'What did you hear?', { npc: { ...npc, npcId: 'w1', name: { given: 'Ada', family: 'Ruiz' } } } );
+		expect( model.system( 1 ) ).toContain( `You remember:\n- ${note}` );
+
+	} );
+
 	it( 'tells the NPC what happened near where it stands', async () => {
 
 		const model = fakeModel();

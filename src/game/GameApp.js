@@ -124,12 +124,12 @@ const AUTOSAVE_SECONDS = 180;
 const AUTOSAVE_DELAY_MS = 1500;
 /** Most places a talk tells the way to, the walking pace that times them (m/s) and how much longer a walk is than the straight line when no route is known. */
 const MAX_WAYS = 5;
-/** The exchanges with others a person along with the player keeps, tells in one talk, and how long each line of them may be. */
-const OVERHEARD_KEPT = 16;
-const OVERHEARD_TOLD = 6;
-const OVERHEARD_CHARS = 600;
 const WALK_PACE = 1.4;
 const DETOUR = 1.25;
+/** How far on the street a talk carries to somebody who hears it (m), how far up or down a floor stops it (m), and the most people one exchange is heard by. */
+const EARSHOT = 7;
+const FLOOR_GAP = 2.2;
+const MAX_WITNESSES = 8;
 /** Game minutes a person someone tried to lift a card off stays on guard. */
 const LIFT_RETRY_MIN = 30;
 /** The `events` a companion's signals make, by signal kind. */
@@ -1512,7 +1512,6 @@ export class GameApp {
 				this.view.dialog.setSending( false );
 			}
 		}
-		if ( done && whole && ! arrival ) this.#overhear( conversation, text, whole );
 		if ( done && offer ) this.#takeOffer( conversation, offer, whole, text );
 		// Asked one action and answered in words alone: they would not; the ways to answer stay.
 		else if ( done && ask ) this.#showActions( conversation );
@@ -1536,35 +1535,54 @@ export class GameApp {
 			scenes: this.scenery.stagedPlaces(), parcelId: this.standing?.parcelId ?? null, guided: guide?.kind === 'parcel' ? guide.placeId : null
 		} ) ?? [];
 		const task = this.companion.taskOf?.( npcId ) ?? null;
-		// A person along with the player heard what the player said to others meanwhile.
-		const overheard = call ? [] : ( this.overheard ?? [] ).filter( ( entry ) => entry.by === npcId ).slice( - OVERHEARD_TOLD ).map( ( { by, ...entry } ) => entry );
+		// Whoever is there to hear this exchange remembers it as overheard.
+		const witnesses = this.#witnesses( conversation );
 		// Their home and work by address, where inside they stand and the cards they carry, wherever their body is.
 		const addresses = this.#addressContext( call ? { ...conversation, person: this.#remoteBody( npcId ) } : conversation, line );
 		return {
 			...( offers ? { offers } : {} ), ...( guide ? { guide } : {} ), ...( events.length ? { events } : {} ), ...( task ? { task } : {} ),
-			...( call ? { call: { caller: 'player' } } : {} ), ...( addresses ? { addresses } : {} ), ...( overheard.length ? { overheard } : {} ),
+			...( call ? { call: { caller: 'player' } } : {} ), ...( addresses ? { addresses } : {} ), ...( witnesses.length ? { witnesses } : {} ),
 			// A person on the phone is where their body is, wherever that is.
 			...this.#bodyContext( call ? { ...conversation, person: this.#remoteBody( npcId ) } : conversation, line )
 		};
 	}
 
 	/**
-	 * Notes an exchange the player had with somebody while a person was along
-	 * with them, following, leading or walking with them on a story's escort:
-	 * that person heard it, and a talk with them carries it as overheard.
+	 * The people there to hear the player talk to a person face to face, who
+	 * remember it as overheard (the talk's `witnesses`), nearest first: the
+	 * person following or leading the player or walking with them on a
+	 * story's escort, wherever they are; indoors, anybody in the same building
+	 * on the player's floor (by the room each stands in, else within a
+	 * FLOOR_GAP of the player's height); on the street, anybody out on it too
+	 * within EARSHOT and no floor apart. Nobody hears a call.
 	 */
-	#overhear( conversation, line, reply ) {
-		if ( conversation.call ) return;
-		const along = [ this.companion?.state?.npcId, this.questGameplay?.escort?.target?.actorIds?.[ 0 ] ].filter( ( id ) => id && id !== conversation.npcId );
-		if ( ! along.length ) return;
-		const instance = conversation.instance;
-		const role = instance?.job?.role ?? this.npcTypeLabels?.get( instance?.type ) ?? null;
-		const cut = ( text ) => stripCues( String( text ) ).trim().slice( 0, OVERHEARD_CHARS );
-		const player = cut( line ), said = cut( reply );
-		if ( ! player || ! said ) return;
-		for ( const by of new Set( along ) ) {
-			this.overheard = [ ...( this.overheard ?? [] ), { by, name: speakerOf( conversation ).name, ...( role ? { role: String( role ).replace( /_/g, ' ' ).slice( 0, 200 ) } : {} ), player, reply: said } ].slice( - OVERHEARD_KEPT );
+	#witnesses( conversation ) {
+		if ( conversation.call || ! this.body ) return [];
+		const feet = this.body.feet;
+		const roomOf = ( position ) => this.stream?.rooms?.find( ( room ) => room.holds( position ) ) ?? null;
+		const mine = roomOf( feet );
+		const parcelId = mine?.parcelId ?? this.standing?.parcelId ?? null;
+		const heard = new Map();
+		for ( const member of this.crowd?.members?.values() ?? [] ) {
+			if ( ! member.npcId || member.leaving || member.copy || member.fallen ) continue;
+			const position = member.position;
+			const metres = Math.hypot( position.x - feet.x, position.z - feet.z );
+			const theirs = roomOf( position );
+			if ( parcelId ) {
+				const inside = theirs?.parcelId ?? ( member.edge ? null : member.parcelId ?? null );
+				if ( inside !== parcelId ) continue;
+				const apart = mine && theirs ? theirs.floor !== mine.floor : Math.abs( position.y - feet.y ) > FLOOR_GAP;
+				if ( apart ) continue;
+			} else {
+				const indoors = Boolean( theirs ) || Boolean( member.parcelId && ! member.edge );
+				if ( indoors || metres > EARSHOT || Math.abs( position.y - feet.y ) > FLOOR_GAP ) continue;
+			}
+			heard.set( member.npcId, Math.min( heard.get( member.npcId ) ?? Infinity, metres ) );
 		}
+		// Somebody along with the player hears every talk of theirs.
+		for ( const along of [ this.companion?.state?.npcId, this.questGameplay?.escort?.target?.actorIds?.[ 0 ] ] ) if ( along ) heard.set( along, - 1 );
+		heard.delete( conversation.npcId );
+		return [ ...heard ].sort( ( a, b ) => a[ 1 ] - b[ 1 ] || a[ 0 ].localeCompare( b[ 0 ] ) ).slice( 0, MAX_WITNESSES ).map( ( [ npcId ] ) => npcId );
 	}
 
 	/** The talk request's `offers` for one chosen ask: their number, a copy of one of their cards, a meeting where the player is, or a companion offer. */
@@ -2034,7 +2052,11 @@ export class GameApp {
 		if ( unitWay( 'work', work?.unit ) === false && npc.job?.parcelId ) add( 'work', post?.position ?? parcelAt( npc.job.parcelId ), post && Number.isInteger( post.floor ) ? post.floor : 0 );
 		let quests = [];
 		try { quests = this.questGameplay?.places?.( this.clock.timeMin ) ?? []; } catch { quests = []; }
-		const followed = quests.find( ( target ) => target.questId === this.followedQuestId && target.stepId === this.followedStepId && target.place ) ?? quests.find( ( target ) => target.place?.kind === 'parcel' );
+		// The place a story points to, told only to a person that story casts: nobody else knows the player's business.
+		let casting = [];
+		try { casting = ( this.quests?.snapshot?.() ?? [] ).filter( ( entry ) => Object.values( entry.cast ?? {} ).includes( npc.npcId ) ).map( ( entry ) => entry.id ); } catch { casting = []; }
+		const theirs = quests.filter( ( target ) => casting.includes( target.questId ) && target.place?.kind === 'parcel' );
+		const followed = theirs.find( ( target ) => target.questId === this.followedQuestId && target.stepId === this.followedStepId ) ?? theirs[ 0 ];
 		if ( followed?.place?.kind === 'parcel' ) add( 'quest', parcelAt( followed.place.id ), 0, followed.venue ?? this.companion?.places?.name?.( followed.place ) ?? null );
 		const parcels = [ ...new Set( [ here?.parcelId, npc.home?.parcelId, npc.job?.parcelId, person?.parcelId ].filter( Boolean ) ) ];
 		for ( const unit of line ? this.addresses.find( line, parcels ).slice( 0, 2 ) : [] ) {

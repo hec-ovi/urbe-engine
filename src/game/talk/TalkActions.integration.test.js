@@ -107,6 +107,8 @@ async function chat( ...replies ) {
 	const app = new GameApp( {} );
 	app.clock = { timeMin: AFTERNOON };
 	app.hitches = { time: ( name, run ) => run() };
+	// The player stands with the person, out on the street.
+	app.body = { feet: { x: barista.position[ 0 ], y: barista.position[ 1 ], z: barista.position[ 2 ] } };
 	app.quests = { snapshot: () => [], dialoguesFor: () => [], conversationRecap: () => null, inventoryView: () => [], view: () => [] };
 	app.questGameplay = { places: vi.fn( () => [] ), characterName: () => null };
 	app.animations = { playerDialogueTurn: vi.fn(), npcDialogueTurn: vi.fn(), completeDialogueTurn: vi.fn() };
@@ -177,7 +179,7 @@ describe( 'what a person agrees to in words happens', () => {
 
 	} );
 
-	it( 'lets a person who follows the player hear what the player says to somebody else, and tell it as overheard', async () => {
+	it( 'lets a person who follows the player hear what the player says to somebody else wherever they are, and keep it in their memory as overheard', async () => {
 
 		const { app, world, npc, frame, model, say } = await chat( 'Fine, you lead.', 'Nobody since spring.', 'She said nobody has rented it since spring.' );
 		await say( 'Come with me' );
@@ -190,9 +192,59 @@ describe( 'what a person agrees to in words happens', () => {
 		app.interactor.conversation = { npcId: npc.npcId, instance: app.sim.getNPC( npc.npcId ), behavior: { mode: 'street', activity: 'leisure', place: { kind: 'parcel', id: 'p_cafe' }, interrupted: true } };
 		await say( 'What did they say?' );
 		const name = `${friend.name.given} ${friend.name.family}`;
-		expect( model.seen[ 2 ].messages[ 0 ].content ).toContain( `You overheard the player talking to ${name}` );
-		expect( model.seen[ 2 ].messages[ 0 ].content ).toContain( 'The player said: "Who rents 1407?"' );
-		expect( model.seen[ 1 ].messages[ 0 ].content ).not.toContain( 'You overheard' );
+		const note = new RegExp( `Overheard, not said to you: you were there when the player talked to ${name}, [^.]+\\. The player said: "Who rents 1407\\?" ${name} said: "Nobody since spring\\."` );
+		expect( model.seen[ 2 ].messages[ 0 ].content ).toMatch( note );
+		expect( model.seen[ 1 ].messages[ 0 ].content ).not.toContain( 'Overheard' );
+		// It is the follower's own memory, which a save reads and keeps.
+		const kept = ( await app.talk.memory() ).find( ( record ) => record.npcId === npc.npcId );
+		expect( kept.memory.digest.some( ( text ) => note.test( text ) ) ).toBe( true );
+		expect( kept.memory.heardAtMin ).toBe( AFTERNOON );
+
+	} );
+
+	it( 'lets a bystander in the same room hear the player and remember it as overheard, and nobody on another floor', async () => {
+
+		const { app, npc, say } = await chat( 'Nobody since spring.' );
+		const at = ( x, y, z ) => ( { x, y, z } );
+		const feet = app.body.feet;
+		// The player and the person stand in the cafe's dining room; upstairs is the office.
+		const room = ( floor, y ) => ( { parcelId: 'p_cafe', floor, holds: ( p ) => Math.abs( p.x - feet.x ) < 12 && Math.abs( p.z - feet.z ) < 12 && Math.abs( p.y - y ) < 1.5 } );
+		app.stream = { rooms: [ room( 0, feet.y ), room( 1, feet.y + 4 ) ] };
+		app.standing = { parcelId: 'p_cafe' };
+		app.crowd = { members: new Map( [
+			[ 1, { npcId: 'a-diner', parcelId: 'p_cafe', position: at( feet.x + 9, feet.y, feet.z ) } ],
+			[ 2, { npcId: 'a-upstairs', parcelId: 'p_cafe', position: at( feet.x + 1, feet.y + 4, feet.z ) } ],
+			[ 3, { npcId: 'a-passer', parcelId: null, edge: true, position: at( feet.x + 3, feet.y, feet.z + 14 ) } ],
+			[ 4, { npcId: npc.npcId, parcelId: 'p_cafe', position: at( feet.x + 1, feet.y, feet.z ) } ]
+		] ) };
+		await say( 'Who rents 1407?' );
+		const memory = new Map( ( await app.talk.memory() ).map( ( record ) => [ record.npcId, record.memory ] ) );
+		expect( memory.get( 'a-diner' ).digest ).toEqual( [ expect.stringMatching( /^Overheard, not said to you: you were there when the player talked to .+ The player said: "Who rents 1407\?" .+ said: "Nobody since spring\."$/ ) ] );
+		expect( memory.has( 'a-upstairs' ) ).toBe( false );
+		expect( memory.has( 'a-passer' ) ).toBe( false );
+		// The person talked to remembers it as their own talk, not as overheard.
+		expect( memory.get( npc.npcId ).digest ).toEqual( [] );
+		expect( memory.get( npc.npcId ).turns.map( ( turn ) => turn.text ) ).toEqual( [ 'Who rents 1407?', 'Nobody since spring.' ] );
+
+	} );
+
+	it( 'lets a passer-by within earshot on the street hear the player, and nobody 20 m off or behind a wall', async () => {
+
+		const { app, say } = await chat( 'Down the steps.' );
+		const feet = app.body.feet;
+		const at = ( dx, dz ) => ( { x: feet.x + dx, y: feet.y, z: feet.z + dz } );
+		app.crowd = { members: new Map( [
+			[ 1, { npcId: 'a-near', parcelId: null, position: at( 4, 3 ) } ],
+			[ 2, { npcId: 'a-far', parcelId: null, edge: true, position: at( 20, 0 ) } ],
+			[ 3, { npcId: 'a-inside', parcelId: 'p_cafe', position: at( 0, 5 ) } ],
+			[ 4, { npcId: 'a-gone', parcelId: null, leaving: true, position: at( 1, 1 ) } ]
+		] ) };
+		await say( 'Where is the quay?' );
+		const remembered = ( await app.talk.memory() ).map( ( record ) => record.npcId );
+		expect( remembered ).toContain( 'a-near' );
+		expect( remembered ).not.toContain( 'a-far' );
+		expect( remembered ).not.toContain( 'a-inside' );
+		expect( remembered ).not.toContain( 'a-gone' );
 
 	} );
 

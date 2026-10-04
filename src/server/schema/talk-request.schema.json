@@ -172,21 +172,12 @@
         }
       }
     },
-    "overheard": {
-      "description": "What a person along with the player (following or leading them) heard the player say to other people and those people say back, oldest first (Quests DialogOverheard).",
+    "witnesses": {
+      "description": "The people who were there to hear this exchange besides the person the player talks to: in the same room or on the same floor indoors, within earshot on the street, and whoever follows or leads the player. Each remembers it as overheard (Quests recordOverheard).",
       "type": "array",
       "maxItems": 8,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["name", "player", "reply"],
-        "properties": {
-          "name": { "$ref": "#/$defs/words" },
-          "role": { "$ref": "#/$defs/words" },
-          "player": { "type": "string", "minLength": 1, "maxLength": 600 },
-          "reply": { "type": "string", "minLength": 1, "maxLength": 600 }
-        }
-      }
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
     },
     "task": {
       "description": "What the person is doing for the player now: following, leading to a place, or an errand the player asked for.",

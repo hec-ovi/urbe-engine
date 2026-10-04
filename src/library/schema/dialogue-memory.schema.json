@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:urbe:engine:library:dialogue-memory",
   "title": "What each person remembers of talking with the player",
-  "description": "One record per person, as Quests' dialog memory serializes it: folded notes, oldest first, then the recent turns verbatim.",
+  "description": "One record per person, as Quests' dialog memory serializes it: folded notes, oldest first, among them what the person overheard of the player talking to others, then the recent turns verbatim, and the minute they last overheard the player.",
   "type": "array",
   "items": {
     "type": "object",
@@ -28,7 +28,8 @@
                 "atMin": { "type": "number", "minimum": 0 }
               }
             }
-          }
+          },
+          "heardAtMin": { "type": "number", "minimum": 0 }
         }
       }
     }

@@ -46,13 +46,13 @@ export class TalkService {
 	 * `prior` lines said since the last exchange carry the conversation on up
 	 * to `line`. A completed exchange is remembered, after its prior lines,
 	 * before `done`; a failed or aborted one is not.
-	 * @param request a checked talk request: out, npc, behavior, line, timeMin, quests?, offers?, guide?, events?, look?, here?, people?, task?, call?, addresses?, overheard?, prior?
+	 * @param request a checked talk request: out, npc, behavior, line, timeMin, quests?, offers?, guide?, events?, look?, here?, people?, task?, call?, addresses?, witnesses?, prior?
 	 * @param options.signal aborting it ends the model request
 	 */
-	async *stream( { out, npc, behavior, line, timeMin, quests = [], offers, guide, events, look, here, people, task, call, addresses, overheard, prior = [] }, { signal } = {} ) {
+	async *stream( { out, npc, behavior, line, timeMin, quests = [], offers, guide, events, look, here, people, task, call, addresses, witnesses = [], prior = [] }, { signal } = {} ) {
 
 		const world = await this.#world( out );
-		const context = world.contextFor( npc, behavior, quests, timeMin, { guide, events, look, here, people, task, call, addresses, overheard, prior } );
+		const context = world.contextFor( npc, behavior, quests, timeMin, { guide, events, look, here, people, task, call, addresses, prior } );
 		const name = `${npc.name.given} ${npc.name.family}`;
 		const sentences = new Sentences();
 		let index = 0;
@@ -75,6 +75,8 @@ export class TalkService {
 			} else {
 
 				world.remember( npc.npcId, { line, reply: event.reply, atMin: timeMin, prior } );
+				// Whoever was there heard it too, and remembers it as overheard.
+				world.overhear( witnesses.filter( ( id ) => id !== npc.npcId ), npc, [ ...prior, { speaker: 'player', text: line }, { speaker: 'npc', text: event.reply } ], timeMin );
 				yield { type: 'done', reply: event.reply };
 
 			}
@@ -175,7 +177,7 @@ class TalkWorld {
 	 * questline the request no longer carries leaves with a fresh context service
 	 * that keeps every NPC's memory.
 	 */
-	contextFor( npc, behavior, quests, timeMin, { guide, events, look, here, people, task, call, addresses, overheard, prior } ) {
+	contextFor( npc, behavior, quests, timeMin, { guide, events, look, here, people, task, call, addresses, prior } ) {
 
 		this.port.set( npc, behavior );
 		const held = quests.filter( ( quest ) => this.definitions.has( quest.id ) );
@@ -195,8 +197,7 @@ class TalkWorld {
 		}
 		return this.context.contextFor( npc.npcId, timeMin, {
 			...( guide ? { guide } : {} ), ...( events ? { events } : {} ), ...( look ? { look } : {} ), ...( here ? { here } : {} ),
-			...( people ? { people } : {} ), ...( task ? { task } : {} ), ...( call ? { call } : {} ), ...( addresses ? { addresses } : {} ),
-			...( overheard?.length ? { overheard } : {} ), prior
+			...( people ? { people } : {} ), ...( task ? { task } : {} ), ...( call ? { call } : {} ), ...( addresses ? { addresses } : {} ), prior
 		} );
 
 	}
@@ -234,6 +235,21 @@ class TalkWorld {
 
 		const kept = this.context.serializeMemory()[ npcId ]?.turns ?? [];
 		return [ ...kept, ...prior ].map( ( { speaker, text } ) => ( { speaker, text } ) );
+
+	}
+
+	/**
+	 * Each of the `witnesses` overheard the player talking to `npc` and keeps
+	 * it as one short note of that talk (Quests `recordOverheard`), naming the
+	 * person by their name and their post or kind; kept in the game's file now.
+	 */
+	overhear( witnesses, npc, lines, atMin ) {
+
+		if ( ! witnesses.length ) return;
+		const role = npc.job?.role ?? npc.transitJob?.role ?? this.input.types.types?.find( ( type ) => type.type === npc.type )?.label?.toLowerCase() ?? null;
+		const heard = { name: `${npc.name.given} ${npc.name.family}`, ...( role ? { role } : {} ), lines: lines.map( ( { speaker, text } ) => ( { speaker, text } ) ), atMin };
+		for ( const npcId of new Set( witnesses ) ) this.context.recordOverheard( npcId, heard );
+		this.#keep();
 
 	}
 
@@ -308,17 +324,20 @@ function bounded( records ) {
 	return records.filter( ( { memory } ) => memory.digest.length || memory.turns.length )
 		.sort( ( a, b ) => lastAt( b ) - lastAt( a ) || a.npcId.localeCompare( b.npcId ) )
 		.slice( 0, MEMORY_PEOPLE )
-		.map( ( { npcId, memory } ) => ( { npcId, memory: { digest: memory.digest.slice( - MEMORY_NOTES ), turns: memory.turns.slice( - MEMORY_TURNS ) } } ) )
+		.map( ( { npcId, memory } ) => ( { npcId, memory: {
+			digest: memory.digest.slice( - MEMORY_NOTES ), turns: memory.turns.slice( - MEMORY_TURNS ),
+			...( Number.isFinite( memory.heardAtMin ) ? { heardAtMin: memory.heardAtMin } : {} )
+		} } ) )
 		.sort( ( a, b ) => a.npcId.localeCompare( b.npcId ) );
 
 }
 
 const fileText = ( memory ) => `${JSON.stringify( memory )}\n`;
 
-/** The minute of a person's latest remembered turn. */
+/** The minute of a person's latest remembered turn, or of the last talk they overheard. */
 function lastAt( { memory } ) {
 
-	return memory.turns.at( - 1 )?.atMin ?? - Infinity;
+	return Math.max( memory.turns.at( - 1 )?.atMin ?? - Infinity, memory.heardAtMin ?? - Infinity );
 
 }
 
