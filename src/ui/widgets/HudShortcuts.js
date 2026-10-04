@@ -5,7 +5,7 @@ import { keyCap } from '../components/KeyCap.js';
 export class HudShortcuts {
 	constructor() {
 		this.element = el( 'div', { className: 'hud-shortcuts', ariaLabel: 'Gameplay shortcuts' },
-			... [ [ 'E', 'Interact' ], [ 'J', 'Journal' ], [ 'M', 'Map' ], [ '?', 'Controls' ] ].map( ( [ key, label ] ) =>
+			... [ [ 'E', 'Interact' ], [ 'Tab', 'Journal' ], [ 'M', 'Map' ], [ 'Esc', 'Settings' ], [ '?', 'Controls' ] ].map( ( [ key, label ] ) =>
 				el( 'span', {}, keyCap( key ), label ) ) );
 	}
 }

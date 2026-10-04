@@ -11,7 +11,8 @@ describe( 'PauseState', () => {
 		state.update( true );
 		expect( state.paused ).toBe( false );
 		expect( state.holds( null ) ).toBe( false );
-		state.lost( false );
+		// The player's own loss pauses, and says so for the host to open the settings.
+		expect( state.lost( false ) ).toBe( true );
 		expect( state.paused ).toBe( true );
 		state.held();
 		expect( state.paused ).toBe( false );
@@ -28,18 +29,20 @@ describe( 'PauseState', () => {
 		state.update( false );
 		expect( state.paused ).toBe( false );
 		expect( state.free( { locked: false, open: true } ) ).toBe( false );
-		// The chat closed and the pointer was not taken back: the world plays on.
-		state.lost( false );
+		// The chat closed and the pointer was not taken back: the world plays on, and nothing opens.
+		expect( state.lost( false ) ).toBe( false );
 		expect( state.paused ).toBe( false );
 		expect( state.free( { locked: false, open: false } ) ).toBe( true );
 		expect( state.ask( false ) ).toBe( false );
 		expect( state.paused ).toBe( true );
 		expect( state.released ).toBe( false );
-		expect( state.free( { locked: false, open: false } ) ).toBe( false );
+		// Paused or not, a free pointer with nothing open says how to take it back.
+		expect( state.free( { locked: false, open: false } ) ).toBe( true );
+		expect( state.free( { locked: true, open: false } ) ).toBe( false );
 
 	} );
 
-	it( 'lets the held pointer go when the player asks for the menu, and pauses on its loss', () => {
+	it( 'lets the held pointer go when the player asks for the settings, and pauses on its loss', () => {
 
 		const state = new PauseState();
 		state.held();
@@ -50,7 +53,7 @@ describe( 'PauseState', () => {
 
 	} );
 
-	it( 'returns to the pause menu from a panel opened on it, and holds the world while any panel is open', () => {
+	it( 'pauses on a loss with nothing open, never on one the game made, and holds the world while any panel is open', () => {
 
 		const state = new PauseState();
 		state.held();

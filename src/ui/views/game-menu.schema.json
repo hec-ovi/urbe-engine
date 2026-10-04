@@ -1,17 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Game menu labels: the pause menu, the dock under an open panel and the free pointer line",
+  "title": "Game menu labels: the dock under an open panel and the free pointer line",
   "type": "object",
-  "required": ["entries", "dock", "pause", "free"],
+  "required": ["entries", "dock", "free"],
   "additionalProperties": false,
   "properties": {
     "entries": {
-      "description": "Every menu entry by id: resume, play (the dock's way back to the street), save, LEAVE and the panel names.",
+      "description": "Every dock entry by id: play (the dock's way back to the street) and the panel names.",
       "type": "object",
-      "required": ["resume", "play", "QUESTS", "MAP", "INVENTORY", "CODEX", "CONTACTS", "SETTINGS", "CONTROLS", "save", "LEAVE"],
+      "required": ["play", "QUESTS", "MAP", "INVENTORY", "CODEX", "CONTACTS", "SETTINGS", "CONTROLS"],
       "additionalProperties": false,
       "properties": {
-        "resume": { "$ref": "#/$defs/entry" },
         "play": { "$ref": "#/$defs/entry" },
         "QUESTS": { "$ref": "#/$defs/entry" },
         "MAP": { "$ref": "#/$defs/entry" },
@@ -19,13 +18,11 @@
         "CODEX": { "$ref": "#/$defs/entry" },
         "CONTACTS": { "$ref": "#/$defs/entry" },
         "SETTINGS": { "$ref": "#/$defs/entry" },
-        "CONTROLS": { "$ref": "#/$defs/entry" },
-        "save": { "$ref": "#/$defs/entry" },
-        "LEAVE": { "$ref": "#/$defs/entry" }
+        "CONTROLS": { "$ref": "#/$defs/entry" }
       }
     },
     "dock": {
-      "description": "The labelled dock under an open panel: play, the panels and LEAVE (back to the main menu), in groups a thin rule parts.",
+      "description": "The labelled dock under an open panel: play and the panels, in groups a thin rule parts.",
       "type": "object",
       "required": ["label", "groups"],
       "additionalProperties": false,
@@ -38,65 +35,12 @@
             "type": "array",
             "minItems": 1,
             "uniqueItems": true,
-            "items": { "enum": ["play", "QUESTS", "MAP", "INVENTORY", "CODEX", "CONTACTS", "SETTINGS", "CONTROLS", "LEAVE"] }
+            "items": { "enum": ["play", "QUESTS", "MAP", "INVENTORY", "CODEX", "CONTACTS", "SETTINGS", "CONTROLS"] }
           }
         }
       }
     },
-    "pause": {
-      "type": "object",
-      "required": ["eyebrow", "title", "note", "sections", "keys", "save"],
-      "additionalProperties": false,
-      "properties": {
-        "eyebrow": { "description": "The small line over the title.", "$ref": "#/$defs/text" },
-        "title": { "$ref": "#/$defs/text" },
-        "note": { "$ref": "#/$defs/text" },
-        "sections": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "required": ["title", "entries"],
-            "additionalProperties": false,
-            "properties": {
-              "title": { "$ref": "#/$defs/text" },
-              "entries": {
-                "type": "array",
-                "minItems": 1,
-                "items": { "enum": ["resume", "save", "LEAVE", "QUESTS", "MAP", "INVENTORY", "CODEX", "CONTACTS", "SETTINGS", "CONTROLS"] }
-              }
-            }
-          }
-        },
-        "keys": {
-          "description": "The reminder line under the menu: keys and what they do.",
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["keys", "action"],
-            "additionalProperties": false,
-            "properties": {
-              "keys": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/text" } },
-              "action": { "$ref": "#/$defs/text" }
-            }
-          }
-        },
-        "save": {
-          "description": "The Save entry's detail line in each state.",
-          "type": "object",
-          "required": ["ready", "saving", "saved", "failed", "unavailable"],
-          "additionalProperties": false,
-          "properties": {
-            "ready": { "$ref": "#/$defs/text" },
-            "saving": { "$ref": "#/$defs/text" },
-            "saved": { "$ref": "#/$defs/text" },
-            "failed": { "$ref": "#/$defs/text" },
-            "unavailable": { "$ref": "#/$defs/text" }
-          }
-        }
-      }
-    },
-    "free": { "description": "Shown while the pointer is free and the world plays on.", "$ref": "#/$defs/text" }
+    "free": { "description": "Shown while the pointer is free on the street with nothing open.", "$ref": "#/$defs/text" }
   },
   "$defs": {
     "text": { "type": "string", "minLength": 1 },

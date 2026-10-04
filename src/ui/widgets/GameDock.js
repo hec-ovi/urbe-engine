@@ -3,18 +3,20 @@ import { dockIcon } from '../components/DockIcon.js';
 import { keyCap } from '../components/KeyCap.js';
 import menu from '../views/game-menu.json' with { type: 'json' };
 
+/** A key's label as `aria-keyshortcuts` names it, where the two differ. */
+const SHORTCUTS = { '?': 'Shift+Slash', Esc: 'Escape' };
+
 /**
  * The labelled dock under an open panel: Play, then every panel in the groups
  * of [game-menu.json](../views/game-menu.json)'s `dock`, each an icon over its
- * name with the key that opens it in the corner, and Leave, the way back to
- * the main menu. The open panel's entry is the current page. Arrow keys, Home
- * and End move along it. The keys are labels: the game binds them and calls
- * open( name ).
- * props: { onSelect( name ), onPlay(), onLeave() }
+ * name with the key that opens it in the corner. The open panel's entry is the
+ * current page. Arrow keys, Home and End move along it. The keys are labels:
+ * the game binds them and calls open( name ).
+ * props: { onSelect( name ), onPlay() }
  */
 export class GameDock {
 
-	constructor( { onSelect, onPlay, onLeave = () => {} } ) {
+	constructor( { onSelect, onPlay } ) {
 
 		this.items = new Map();
 		this.toolbar = el( 'div', { className: 'dock-items', role: 'toolbar' } );
@@ -22,7 +24,7 @@ export class GameDock {
 
 		menu.dock.groups.forEach( ( group, index ) => group.forEach( ( name, at ) => {
 
-			const item = this.#item( name, name === 'play' ? onPlay : name === 'LEAVE' ? onLeave : () => onSelect( name ) );
+			const item = this.#item( name, name === 'play' ? onPlay : () => onSelect( name ) );
 			if ( index > 0 && at === 0 ) item.classList.add( 'is-group-start' );
 			this.toolbar.append( item );
 
@@ -62,7 +64,7 @@ export class GameDock {
 		);
 		item.dataset.dockItem = name;
 		item.setAttribute( 'aria-label', label );
-		if ( key ) item.setAttribute( 'aria-keyshortcuts', key === '?' ? 'Shift+Slash' : key );
+		if ( key ) item.setAttribute( 'aria-keyshortcuts', SHORTCUTS[ key ] ?? key );
 		item.addEventListener( 'click', onClick );
 		this.items.set( name, item );
 		return item;

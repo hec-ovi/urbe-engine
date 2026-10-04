@@ -3,7 +3,6 @@ import '../components/game.css';
 import '../components/panels.css';
 import '../components/screens.css';
 import '../components/dock.css';
-import '../components/pause.css';
 import '../components/journal.css';
 import '../components/map.css';
 import '../components/inventory.css';
@@ -28,7 +27,6 @@ import { CallPanel } from '../widgets/CallPanel.js';
 import { MissionToast } from '../widgets/MissionToast.js';
 import { MissionSummary } from '../widgets/MissionSummary.js';
 import { TransitHud } from '../widgets/TransitHud.js';
-import { PauseMenu } from '../widgets/PauseMenu.js';
 import { LoadingScreen } from '../widgets/LoadingScreen.js';
 import { GameDock } from '../widgets/GameDock.js';
 import { PanelHost } from './PanelHost.js';
@@ -90,7 +88,6 @@ export class GameView {
 			onSummaryClose( close );
 		} } );
 		this.transit = new TransitHud( { onSelect: onTransitSelect, onCancel: onTransitCancel } );
-		this.pause = new PauseMenu( { onResume, onOpen: ( name ) => this.open( name ), onSave, onLeave: leave } );
 		this.free = el( 'div', { className: 'hud-free', textContent: menuLabels.free } );
 		this.free.hidden = true;
 
@@ -108,13 +105,12 @@ export class GameView {
 		this.quests = new QuestsView( { onClose: close, onSelect: onQuestSelect, onTrack: onQuestTrack, onWait: onQuestWait } );
 		this.codex = new CodexView( { onClose: close, onQuest: openQuest, preview: this.preview } );
 		this.contacts = new ContactsView( { onClose: close, onCall } );
-		this.settings = new SettingsView( { onChange: onSettingChange, onClose: close } );
+		this.settings = new SettingsView( { onChange: onSettingChange, onClose: close, onSave, onLeave: leave } );
 		this.controls = new ControlsView( { onClose: close } );
 
 		this.mainMenu = new MainMenuView( menu );
 		this.dock = new GameDock( {
 			onSelect: ( name ) => this.toggle( name ),
-			onLeave: leave,
 			onPlay: () => {
 
 				this.close();
@@ -168,7 +164,6 @@ export class GameView {
 			this.dialog.element,
 			this.summary.element,
 			this.transit.element,
-			this.pause.element,
 			this.free,
 			this.panels.element,
 			this.dock.element,
@@ -177,24 +172,11 @@ export class GameView {
 		);
 		this.gameplayElements = [ ...this.element.children ].filter( ( element ) => element !== this.mainMenu.element );
 
-		this.paused = false;
 		this.#overlays();
 
 	}
 
-	/**
-	 * The pause menu, under any panel, chat or summary opened over it. The
-	 * panels are reached from it, from the dock under it or by their keys; the
-	 * dock is up while the menu or a panel is, to move between them or back to play.
-	 */
-	setPaused( paused ) {
-
-		this.paused = paused;
-		this.#overlays();
-
-	}
-
-	/** The pointer is free while the world plays on: a line says how to take it back. */
+	/** The pointer is free on the street with nothing open: a line says how to take it back, and that Escape opens the settings. */
 	setPointerFree( free ) {
 
 		this.free.hidden = ! free;
@@ -316,14 +298,10 @@ export class GameView {
 
 	}
 
+	/** The dock is up under an open panel, to move between the panels or back to play. */
 	#overlays() {
 
-		const menu = this.paused && ! this.panels.current && this.summary.element.hidden && this.inspection.element.hidden && this.dialog.element.hidden;
-		this.pause.setVisible( menu );
-		this.dock.element.hidden = ! this.panels.current && ! menu;
-		// Under the pause menu its own Leave stands; under a panel the dock carries it.
-		const leave = this.dock.items.get( 'LEAVE' );
-		if ( leave ) leave.hidden = menu;
+		this.dock.element.hidden = ! this.panels.current;
 
 	}
 

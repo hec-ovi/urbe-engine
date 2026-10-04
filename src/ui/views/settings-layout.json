@@ -1,6 +1,6 @@
 {
   "title": "Settings",
-  "key": "O",
+  "key": "Esc",
   "eyebrow": "System / preferences",
   "subtitle": "A city at your own pace.",
   "tabs": "Settings sections",
@@ -9,8 +9,19 @@
   "session": {
     "eyebrow": "This visit",
     "title": "Make yourself at home.",
-    "text": "These settings hold until you leave the city. Picture quality reloads the city at the new level."
+    "text": "These settings hold until you leave the city. Picture quality reloads the city at the new level. Esc goes back to the street."
   },
+  "save": {
+    "label": "Save",
+    "states": {
+      "ready": "Keep your progress now.",
+      "saving": "Saving…",
+      "saved": "Saved.",
+      "failed": "Could not save. Try again.",
+      "unavailable": "A preview is not saved."
+    }
+  },
+  "leave": { "label": "Leave", "text": "Back to the main menu. A saved game saves first." },
   "sections": [
     {
       "number": "01", "label": "Display", "title": "The city, in detail", "text": "How much the city draws and how the air and light sit on it.",

@@ -4,16 +4,18 @@ import { SettingField } from '../components/SettingField.js';
 import layout from './settings-layout.json' with { type: 'json' };
 
 /**
- * The run's settings as a card over the paused city: one tab per section of
- * [settings-layout.json](settings-layout.json), its fields in lettered groups,
- * and beside it the card reading out the setting in focus or under the pointer.
- * Every edit reports one change at once; the game applies it and hands the
- * values back through setValues.
- * props: { onChange({ key, value }), onClose }
+ * The run's settings as a card over the paused city, what Escape on the
+ * street opens: one tab per section of [settings-layout.json](settings-layout.json),
+ * its fields in lettered groups, and beside it the card reading out the
+ * setting in focus or under the pointer, and this visit's card with Save
+ * (the line under it says how the last save went) and Leave. Every edit
+ * reports one change at once; the game applies it and hands the values back
+ * through setValues.
+ * props: { onChange({ key, value }), onClose, onSave(), onLeave() }
  */
 export class SettingsView {
 
-	constructor( { onChange, onClose } ) {
+	constructor( { onChange, onClose, onSave = () => {}, onLeave = () => {} } ) {
 
 		this.fields = new Map();
 		this.specs = new Map();
@@ -49,6 +51,11 @@ export class SettingsView {
 		this.detailIndex = el( 'span', { className: 'settings-detail-index', ariaHidden: 'true' } );
 		this.detailTitle = el( 'h4', { className: 'settings-detail-title' } );
 		this.detailText = el( 'p', { className: 'settings-detail-text' } );
+		this.save = el( 'button', { className: 'screen-button is-primary settings-save', type: 'button', textContent: layout.save.label } );
+		this.save.addEventListener( 'click', () => onSave() );
+		this.leave = el( 'button', { className: 'screen-button settings-leave', type: 'button', textContent: layout.leave.label, title: layout.leave.text } );
+		this.leave.addEventListener( 'click', () => onLeave() );
+		this.saveStatus = el( 'p', { className: 'settings-save-status', role: 'status' } );
 		this.header = new PanelHeader( { title: layout.title, eyebrow: layout.eyebrow, subtitle: layout.subtitle, onClose } );
 		this.element = el( 'div', { className: 'view view-settings' },
 			el( 'div', { className: 'settings-frame' },
@@ -69,12 +76,34 @@ export class SettingsView {
 						el( 'span', { className: 'settings-session-mark', ariaHidden: 'true' }, ...Array.from( { length: 5 }, () => el( 'span' ) ) ),
 						el( 'p', { className: 'settings-eyebrow', textContent: layout.session.eyebrow } ),
 						el( 'h4', { textContent: layout.session.title } ),
-						el( 'p', { textContent: layout.session.text } )
+						el( 'p', { textContent: layout.session.text } ),
+						el( 'div', { className: 'settings-session-actions' }, this.save, this.leave ),
+						this.saveStatus
 					)
 				)
 			)
 		);
 		this.showSection( 0 );
+		this.setSave( 'ready' );
+
+	}
+
+	/** Save as the game has it: `ready`, `saving`, `saved`, `failed`, or `unavailable` for a game that is not saved, which disables it. */
+	setSave( state ) {
+
+		const text = layout.save.states[ state ];
+		if ( ! text ) throw new TypeError( `unknown save state: ${state}` );
+		this.saved = state;
+		this.saveStatus.textContent = text;
+		this.saveStatus.dataset.state = state;
+		this.save.disabled = state === 'saving' || state === 'unavailable';
+
+	}
+
+	/** Shown again, it forgets how the last save went. */
+	shown() {
+
+		if ( this.saved === 'saved' || this.saved === 'failed' ) this.setSave( 'ready' );
 
 	}
 

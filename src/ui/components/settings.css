@@ -324,12 +324,31 @@
 	font-weight: 400;
 }
 
-.settings-session p:last-child {
+.settings-session h4 + p {
 	margin: 0;
 	color: #91b2b0;
 	font-size: 14px;
 	line-height: 1.6;
 }
+
+/* Save and Leave, this visit's own: Escape opens the settings where the pause bar used to stand. */
+.settings-session-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin-top: 18px;
+}
+
+.settings-session-actions .screen-button { flex: 1 1 120px; }
+
+.settings-session p.settings-save-status {
+	margin: 10px 0 0;
+	color: #91b2b0;
+	font: 13px var(--screen-mono, monospace);
+}
+
+.settings-save-status[data-state="saved"] { color: #8fe3b0; }
+.settings-save-status[data-state="failed"] { color: #eaaa9d; }
 
 @keyframes settings-in {
 	from { opacity: 0; transform: translate3d(0, 6px, 0); }

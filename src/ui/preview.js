@@ -134,14 +134,13 @@ view.controls.setBindings( [
 	{ action: 'walk', keys: [ 'W', 'A', 'S', 'D' ] },
 	{ action: 'run', keys: [ 'Shift' ] },
 	{ action: 'doors and people', keys: [ 'E' ] },
-	{ action: 'release the mouse', keys: [ 'Esc' ] },
-	{ action: 'quests', keys: [ 'J' ] },
+	{ action: 'settings, save and leave', keys: [ 'Esc' ] },
+	{ action: 'quests', keys: [ 'Tab' ] },
 	{ action: 'map', keys: [ 'M' ] },
 	{ action: 'inventory', keys: [ 'I' ] },
 	{ action: 'codex', keys: [ 'X' ] },
-	{ action: 'settings', keys: [ 'O' ] },
-	{ action: 'controls', keys: [ '?' ] },
-	{ action: 'leave', keys: [ 'N' ] }
+	{ action: 'contacts', keys: [ 'T' ] },
+	{ action: 'controls', keys: [ '?' ] }
 ] );
 
 const portrait = document.createElement( 'canvas' );
@@ -197,14 +196,14 @@ view.setLibrary( {
 		availableBuildings: [ { id: 'p11', label: 'Quay Office', type: 'office' }, { id: 'p64', label: 'Bar Nadir', type: 'business' } ]
 	} ]
 } );
-// ?prologue opens on the story card a new game starts with, ?chat or ?talk on the conversation, ?paused on the pause menu.
+// ?prologue opens on the story card a new game starts with, ?chat or ?talk on the conversation, ?paused on the settings Escape opens.
 const query = new URLSearchParams( location.search );
 if ( query.has( 'prologue' ) ) view.summary.show( { kind: 'prologue', title: 'Salt Wharf', text: PROLOGUE } );
 else if ( query.has( 'paused' ) ) {
 
 	view.dialog.show( null );
 	view.call.setVisible( false );
-	view.setPaused( true );
+	view.open( 'SETTINGS' );
 
 } else if ( ! query.has( 'chat' ) && ! query.has( 'talk' ) ) view.showMainMenu();
 window.view = view;

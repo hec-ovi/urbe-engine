@@ -147,8 +147,8 @@ const INDOOR_HAZE = { spread: 0.55, cap: 3 };
 const OUTDOOR_HAZE = { spread: 0.28, cap: 2.4 };
 /** The HUD panels and the key that opens each, as the dock labels them. */
 const PANEL_KEYS = [
-	[ 'KeyJ', 'QUESTS' ], [ 'KeyM', 'MAP' ], [ 'KeyI', 'INVENTORY' ],
-	[ 'KeyX', 'CODEX' ], [ 'KeyP', 'CONTACTS' ], [ 'KeyO', 'SETTINGS' ], [ 'Slash', 'CONTROLS' ]
+	[ 'Tab', 'QUESTS' ], [ 'KeyM', 'MAP' ], [ 'KeyI', 'INVENTORY' ],
+	[ 'KeyX', 'CODEX' ], [ 'KeyT', 'CONTACTS' ], [ 'Slash', 'CONTROLS' ]
 ];
 const BINDINGS = [
 	{ keys: [ 'PgUp', 'PgDn' ], category: 'Interaction', action: 'Select lift floor; E to travel', description: 'In a lift, pick the floor; E takes you there.' },
@@ -160,15 +160,14 @@ const BINDINGS = [
 	{ category: 'Movement', action: 'hold zoom', keys: [ 'Right mouse' ], description: 'Look closer while the button is held.' },
 	{ category: 'Interaction', action: 'interact, board, leave transit, take, inspect, listen, steal, work, deliver', keys: [ 'E' ], description: 'Talk to the person in front of you, open a door, board or leave a ride, or do what the prompt names.' },
 	{ category: 'Interaction', action: 'read quest document', keys: [ 'R' ], description: 'Read a document a story hands you.' },
-	{ category: 'Interface', action: 'journal', keys: [ 'J' ], description: 'Your stories, the one you follow and where it goes next.' },
+	{ category: 'Interface', action: 'journal', keys: [ 'Tab' ], description: 'Your stories, the one you follow and where it goes next.' },
 	{ category: 'Interface', action: 'map', keys: [ 'M' ], description: 'The city, where you stand and the way to your objective.' },
 	{ category: 'Interface', action: 'inventory', keys: [ 'I' ], description: 'What you carry, and the stories it belongs to.' },
 	{ category: 'Interface', action: 'codex', keys: [ 'X' ], description: 'The things, people and places you have come across.' },
-	{ category: 'Interface', action: 'contacts', keys: [ 'P' ], description: 'The people who gave you their number; call one from here.' },
-	{ category: 'Interface', action: 'settings', keys: [ 'O' ], description: 'Picture, crowd, voices and the developer readouts.' },
+	{ category: 'Interface', action: 'contacts', keys: [ 'T' ], description: 'The people who gave you their number; call one from here.' },
+	{ category: 'Interface', action: 'settings', keys: [ 'Esc' ], description: 'On the street, opens the settings and holds the city still: picture, crowd, voices, the developer readouts, Save and Leave. Esc again goes back to the street.' },
 	{ category: 'Interface', action: 'controls', keys: [ '?' ], description: 'This reference.' },
-	{ category: 'Interface', action: 'pause menu', keys: [ 'Esc', 'N' ], description: 'Hold the city still and open the menu.' },
-	{ category: 'Interface', action: 'close the chat or a panel', keys: [ 'Esc' ], description: 'Back to the street, or to the menu a panel was opened from.' }
+	{ category: 'Interface', action: 'close the chat or a panel', keys: [ 'Esc' ], description: 'Back to the street; click the view to look around again.' }
 ];
 
 /** Standing still: this close to one spot for this long. */
@@ -264,14 +263,14 @@ export class GameApp {
 		this.talk = new TalkClient( config.outBase );
 		this.view = new GameView( {
 			onResume: () => this.input?.requestLock(),
-			onSave: () => this.#saveFromPause(),
+			onSave: () => this.#saveFromSettings(),
 			onCloseDialog: () => {
 				this.#closeConversation();
 				if ( this.view.summary.element.hidden ) this.input?.requestLock();
 			},
 			// A click on the card takes the pointer back; Escape leaves it free, where the game stood.
 			onSummaryClose: ( { pointer } ) => { if ( pointer && ! playableModalOpen( this.view, this.interactor ) ) this.input?.requestLock(); },
-			onSummaryOpen: () => { this.#release(); this.view.setPaused( false ); },
+			onSummaryOpen: () => this.#release(),
 			onSend: ( text ) => this.#say( text ),
 			onOpen: ( name ) => {
 
@@ -290,8 +289,8 @@ export class GameApp {
 			onDialogueRetry: () => this.#say( this.failedDialogueLine, { retry: true } ),
 			onDialogueJournal: () => { this.#closeConversation(); this.view.open( 'QUESTS' ); },
 			onDialogueVoice: ( on ) => this.#setting( { key: 'voice', value: on ? 'on' : 'off' } ),
-			// A panel opened from the pause menu goes back to it.
-			onClose: () => { if ( ! this.pauseState.paused ) this.input?.requestLock(); },
+			// Closing a panel goes back to the street: the pointer is asked for again, and a click takes it when the browser holds it back.
+			onClose: () => this.input?.requestLock(),
 			onLeave: () => this.#leave(),
 			onSettingChange: ( change ) => this.#setting( change ),
 			onCall: ( npcId ) => this.#call( npcId ),
@@ -925,7 +924,8 @@ export class GameApp {
 
 			this.controller.frozen = ! locked;
 			if ( locked ) this.pauseState.held();
-			else this.pauseState.lost( playableModalOpen( this.view, this.interactor ) );
+			// The player let the pointer go on the street (Escape): the settings open, the city held.
+			else if ( this.pauseState.lost( playableModalOpen( this.view, this.interactor ) ) ) this.view.open( 'SETTINGS' );
 
 		};
 
@@ -994,8 +994,7 @@ export class GameApp {
 		// program from here on gives the frame its turn instead of holding it.
 		slice.pace();
 		this.floorWarmup.pace();
-		this.view.setPaused( true );
-		this.view.pause.setSave( this.persistence ? 'ready' : 'unavailable' );
+		this.view.settings.setSave( this.persistence ? 'ready' : 'unavailable' );
 		this.view.ready();
 		progress.finish();
 		const opening = openingCard( this.persistence, this.quests );
@@ -1073,7 +1072,7 @@ export class GameApp {
 	 * frame's multisampling the opening bake borrowed (EnvironmentProbe). A
 	 * graph holds the main thread for a good part of a second, so the next
 	 * one, and the bake, only go while nothing on screen needs the frame: the
-	 * world holds (the pause menu a game opens on, a panel) or the player has
+	 * world holds (the pause a game opens on, a panel) or the player has
 	 * stood still for a moment.
 	 */
 	async #reflect() {
@@ -1356,14 +1355,17 @@ export class GameApp {
 		if ( free ) {
 
 			for ( const [ code, panel ] of PANEL_KEYS ) if ( this.input.consume( code ) ) this.view.toggle( panel );
-			// Escape or N asks for the pause menu; an Escape that closed a panel this frame was spent on it.
-			const escape = this.input.consume( 'Escape' ) && this.wasFree;
-			if ( ( this.input.consume( 'KeyN' ) || escape ) && this.pauseState.ask( this.input.locked ) ) this.input.exitLock();
+			// Escape on the street opens the settings (letting a held pointer go opens them on its loss); an Escape that closed a panel this frame was spent on it.
+			if ( this.input.consume( 'Escape' ) && this.wasFree ) {
+
+				if ( this.pauseState.ask( this.input.locked ) ) this.input.exitLock();
+				else this.view.open( 'SETTINGS' );
+
+			}
 
 		}
 		this.wasFree = free;
 
-		this.view.setPaused( this.pauseState.paused && free );
 		this.view.setPointerFree( this.pauseState.free( { locked: this.input.locked, open: ! free } ) );
 		this.hitches.time( 'objective', () => {
 
@@ -2719,20 +2721,20 @@ export class GameApp {
 
 	}
 
-	/** Saves from the pause menu, which says how it went. */
-	async #saveFromPause() {
+	/** Saves from the settings, which say how it went. */
+	async #saveFromSettings() {
 
 		if ( ! this.persistence ) return;
-		this.view.pause.setSave( 'saving' );
+		this.view.settings.setSave( 'saving' );
 		try {
 
 			await this.#saveCurrent();
-			this.view.pause.setSave( 'saved' );
+			this.view.settings.setSave( 'saved' );
 
 		} catch ( error ) {
 
 			console.error( error );
-			this.view.pause.setSave( 'failed' );
+			this.view.settings.setSave( 'failed' );
 
 		}
 
@@ -2915,7 +2917,6 @@ export class GameApp {
 		if ( open && ! open.call ) return;
 		this.view.close();
 		this.pauseState.held();
-		this.view.setPaused( false );
 		this.phone.call( npcId );
 
 	}

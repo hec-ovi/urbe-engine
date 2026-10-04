@@ -32,18 +32,16 @@ describe( 'GameView', () => {
 		expect( document.activeElement ).toBe( view.inspection.done );
 	} );
 
-	it( 'opens panels from the dock that comes up with the pause bar, keeps it up with the bar or a panel, plays on from it, and opens QUESTS from the objective', async () => {
+	it( 'opens panels from the dock that comes up under a panel, plays on from it, and opens QUESTS from the objective', async () => {
 
 		const user = userEvent.setup();
 		expect( view.dock.element.hidden ).toBe( true );
-
-		// The panels are reached from the dock that comes up with the pause bar.
-		view.setPaused( true );
-		expect( view.pause.element.hidden ).toBe( false );
+		// There is no pause bar: Escape opens the settings, and the dock comes up under them.
+		expect( document.querySelector( '.hud-pause' ) ).toBeNull();
+		view.open( 'SETTINGS' );
 		expect( view.dock.element.hidden ).toBe( false );
 		await user.click( within( view.dock.element ).getByRole( 'button', { name: 'Map' } ) );
 		expect( view.map.element.hidden ).toBe( false );
-		expect( view.pause.element.hidden ).toBe( true );
 		expect( view.dock.element.hidden ).toBe( false );
 		const tab = within( view.dock.element ).getByRole( 'button', { name: 'Map' } );
 		expect( tab.getAttribute( 'aria-current' ) ).toBe( 'page' );
@@ -52,11 +50,6 @@ describe( 'GameView', () => {
 		await user.click( tab );
 		expect( tab.getAttribute( 'aria-current' ) ).toBe( 'false' );
 		expect( onClose ).toHaveBeenCalledOnce();
-		expect( view.pause.element.hidden ).toBe( false );
-		expect( view.dock.element.hidden ).toBe( false );
-
-		view.setPaused( false );
-		expect( view.pause.element.hidden ).toBe( true );
 		expect( view.dock.element.hidden ).toBe( true );
 		view.open( 'INVENTORY' );
 		expect( view.inventory.element.hidden ).toBe( false );
@@ -79,7 +72,7 @@ describe( 'GameView', () => {
 
 		view.setPointerFree( true );
 		expect( view.free.hidden ).toBe( false );
-		expect( view.free.textContent ).toBe( 'Click the view to look around. Esc opens the menu.' );
+		expect( view.free.textContent ).toBe( 'Click the view to look around. Esc opens the settings.' );
 		view.setPointerFree( false );
 		expect( view.free.hidden ).toBe( true );
 
@@ -90,7 +83,7 @@ describe( 'GameView', () => {
 
 	} );
 
-	it( 'reports loading steps, ready and failure, then opens the game directory from Leave with gameplay inert', async () => {
+	it( 'reports loading steps, ready and failure, then opens the game directory from the settings\' Leave with gameplay inert', async () => {
 
 		view.step( 'laying the ground' );
 		expect( screen.getByText( 'laying the ground' ) ).toBeTruthy();
@@ -103,12 +96,10 @@ describe( 'GameView', () => {
 		expect( screen.getByText( 'no manifest' ) ).toBeTruthy();
 
 		view.setLibrary( { games: [ { id: 'g1', name: 'Night run', playable: true } ] } );
-		view.setPaused( true );
-		// Under the pause menu one Leave shows, its own; under a panel the dock carries it.
-		expect( screen.getAllByRole( 'button', { name: 'Leave' } ) ).toHaveLength( 1 );
+		// Leave stands in the settings, once; the dock carries none.
 		view.open( 'SETTINGS' );
-		expect( within( view.dock.element ).getByRole( 'button', { name: 'Leave' } ) ).toBeTruthy();
-		view.close();
+		expect( screen.getAllByRole( 'button', { name: 'Leave' } ) ).toHaveLength( 1 );
+		expect( within( view.dock.element ).queryByRole( 'button', { name: 'Leave' } ) ).toBeNull();
 		await userEvent.setup().click( screen.getByRole( 'button', { name: 'Leave' } ) );
 		expect( view.mainMenu.element.hidden ).toBe( false );
 		expect( view.gameplayElements.every( ( element ) => element.inert ) ).toBe( true );

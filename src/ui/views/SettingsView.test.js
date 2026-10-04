@@ -59,4 +59,28 @@ describe( 'SettingsView', () => {
 
 	} );
 
+	it( 'saves from this visit\'s card, saying how it went, and leaves from it', async () => {
+
+		const onSave = vi.fn(), onLeave = vi.fn();
+		const view = new SettingsView( { onChange: vi.fn(), onClose: vi.fn(), onSave, onLeave } );
+		document.body.replaceChildren( view.element );
+		const user = userEvent.setup();
+		expect( view.saveStatus.textContent ).toBe( 'Keep your progress now.' );
+		await user.click( screen.getByRole( 'button', { name: 'Save' } ) );
+		expect( onSave ).toHaveBeenCalledOnce();
+		view.setSave( 'saving' );
+		expect( screen.getByRole( 'button', { name: 'Save' } ).disabled ).toBe( true );
+		view.setSave( 'saved' );
+		expect( view.saveStatus.textContent ).toBe( 'Saved.' );
+		// Shown again, it forgets how the last save went; a game that is not saved cannot.
+		view.shown();
+		expect( view.saveStatus.textContent ).toBe( 'Keep your progress now.' );
+		view.setSave( 'unavailable' );
+		expect( screen.getByRole( 'button', { name: 'Save' } ).disabled ).toBe( true );
+		expect( () => view.setSave( 'lost' ) ).toThrow( /unknown save state/ );
+		await user.click( screen.getByRole( 'button', { name: 'Leave' } ) );
+		expect( onLeave ).toHaveBeenCalledOnce();
+
+	} );
+
 } );

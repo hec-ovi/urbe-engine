@@ -2,11 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Settings screen: its header, the sections as tabs, their groups of fields and the details beside them",
   "type": "object",
-  "required": ["title", "key", "eyebrow", "subtitle", "tabs", "details", "status", "session", "sections"],
+  "required": ["title", "key", "eyebrow", "subtitle", "tabs", "details", "status", "session", "save", "leave", "sections"],
   "additionalProperties": false,
   "properties": {
     "title": { "$ref": "#/$defs/text" },
-    "key": { "description": "The key that opens the panel.", "$ref": "#/$defs/text" },
+    "key": { "description": "The key that opens and closes the panel: Escape on the street.", "$ref": "#/$defs/text" },
     "eyebrow": { "$ref": "#/$defs/text" },
     "subtitle": { "$ref": "#/$defs/text" },
     "tabs": { "description": "The section tabs' accessible name.", "$ref": "#/$defs/text" },
@@ -23,6 +23,31 @@
       "required": ["eyebrow", "title", "text"],
       "additionalProperties": false,
       "properties": { "eyebrow": { "$ref": "#/$defs/text" }, "title": { "$ref": "#/$defs/text" }, "text": { "$ref": "#/$defs/text" } }
+    },
+    "save": {
+      "description": "Saving the game from the settings: the button and the line that says how the last save went.",
+      "type": "object",
+      "required": ["label", "states"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "$ref": "#/$defs/text" },
+        "states": {
+          "type": "object",
+          "required": ["ready", "saving", "saved", "failed", "unavailable"],
+          "additionalProperties": false,
+          "properties": {
+            "ready": { "$ref": "#/$defs/text" }, "saving": { "$ref": "#/$defs/text" }, "saved": { "$ref": "#/$defs/text" },
+            "failed": { "$ref": "#/$defs/text" }, "unavailable": { "$ref": "#/$defs/text" }
+          }
+        }
+      }
+    },
+    "leave": {
+      "description": "Leaving for the main menu from the settings.",
+      "type": "object",
+      "required": ["label", "text"],
+      "additionalProperties": false,
+      "properties": { "label": { "$ref": "#/$defs/text" }, "text": { "$ref": "#/$defs/text" } }
     },
     "sections": {
       "description": "One tab each.",

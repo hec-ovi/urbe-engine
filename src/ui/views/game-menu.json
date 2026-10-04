@@ -1,36 +1,17 @@
 {
   "entries": {
-    "resume": { "label": "Resume", "key": "Esc", "detail": "Back to the street. Click the view to look around." },
     "play": { "label": "Play", "detail": "Back to the street." },
-    "QUESTS": { "label": "Journal", "key": "J", "detail": "Your stories, your current goal and where it is." },
+    "QUESTS": { "label": "Journal", "key": "Tab", "detail": "Your stories, your current goal and where it is." },
     "MAP": { "label": "Map", "key": "M", "detail": "The city, where you stand and the way to your goal." },
     "INVENTORY": { "label": "Inventory", "key": "I", "detail": "What you carry." },
     "CODEX": { "label": "Codex", "key": "X", "detail": "The things, people and places you have come across." },
-    "CONTACTS": { "label": "Contacts", "key": "P", "detail": "The people who gave you their number; call them from here." },
-    "SETTINGS": { "label": "Settings", "key": "O", "detail": "Picture quality, crowd size, NPC voices and developer details." },
-    "CONTROLS": { "label": "Controls", "key": "?", "detail": "Every key and what it does." },
-    "save": { "label": "Save", "detail": "Keep your progress now." },
-    "LEAVE": { "label": "Leave", "detail": "Back to the main menu. A saved game saves first." }
+    "CONTACTS": { "label": "Contacts", "key": "T", "detail": "The people who gave you their number; call them from here." },
+    "SETTINGS": { "label": "Settings", "key": "Esc", "detail": "Picture quality, crowd size, NPC voices and developer details; Save and Leave." },
+    "CONTROLS": { "label": "Controls", "key": "?", "detail": "Every key and what it does." }
   },
   "dock": {
     "label": "Game panels",
-    "groups": [["play"], ["MAP", "QUESTS", "INVENTORY", "CODEX", "CONTACTS"], ["SETTINGS", "CONTROLS", "LEAVE"]]
+    "groups": [["play"], ["MAP", "QUESTS", "INVENTORY", "CODEX", "CONTACTS"], ["SETTINGS", "CONTROLS"]]
   },
-  "pause": {
-    "eyebrow": "Session paused",
-    "title": "Paused",
-    "note": "The city waits. Click the view or press Esc to play on.",
-    "sections": [
-      { "title": "Paused", "entries": ["resume", "save", "LEAVE"] }
-    ],
-    "keys": [],
-    "save": {
-      "ready": "Keep your progress now.",
-      "saving": "Saving…",
-      "saved": "Saved.",
-      "failed": "Could not save. Try again.",
-      "unavailable": "A preview is not saved."
-    }
-  },
-  "free": "Click the view to look around. Esc opens the menu."
+  "free": "Click the view to look around. Esc opens the settings."
 }

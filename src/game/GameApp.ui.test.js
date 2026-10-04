@@ -45,7 +45,7 @@ describe( 'playable game navigation', () => {
 
 		const navigate = vi.fn();
 		const app = new GameApp( {}, { navigate } );
-		app.view.setPaused( true );
+		app.view.open( 'SETTINGS' );
 
 		await userEvent.setup().click( screen.getByRole( 'button', { name: /leave/i } ) );
 
@@ -59,7 +59,7 @@ describe( 'playable game navigation', () => {
 		const navigate = vi.fn();
 		const { app, escort, companion, scenery } = savingApp( { navigate } );
 		app.talk = { memory: vi.fn( async () => MEMORY ) };
-		app.view.setPaused( true );
+		app.view.open( 'SETTINGS' );
 		const user = userEvent.setup();
 
 		await user.click( screen.getByRole( 'button', { name: /leave/i } ) );

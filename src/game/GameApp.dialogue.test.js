@@ -446,7 +446,8 @@ describe('explicit quest dialogue through the playable UI',()=>{
   expect(app.view.summary.element.hidden).toBe(true);
   await user.click(chat.getByRole('button',{name:'End conversation'}));
   expect(app.view.summary.element.hidden).toBe(false);expect(app.input.requestLock).not.toHaveBeenCalled();
-  app.view.setPaused(true);expect(app.view.pause.element.hidden).toBe(true);
+  // The settings are not over the outcome: no panel opens while it is up.
+  expect(app.view.panels.current).toBeNull();
   await user.click(within(app.view.summary.element).getByRole('button',{name:'continue'}));
   expect(app.view.summary.element.hidden).toBe(true);expect(app.input.requestLock).toHaveBeenCalledOnce();
  });
