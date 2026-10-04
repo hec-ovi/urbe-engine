@@ -25,7 +25,8 @@
             "required": ["placeId", "name"],
             "properties": {
               "placeId": { "$ref": "urn:urbe:engine:companion:values#/$defs/id" },
-              "name": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" }
+              "name": { "$ref": "urn:urbe:engine:companion:values#/$defs/text" },
+              "relation": { "$ref": "urn:urbe:engine:companion:values#/$defs/relation" }
             }
           }
         }

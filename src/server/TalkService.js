@@ -56,7 +56,9 @@ export class TalkService {
 		const name = `${npc.name.given} ${npc.name.family}`;
 		const sentences = new Sentences();
 		let index = 0;
-		for await ( const event of this.converse.replyStream( { context, name, line, offers, signal } ) ) {
+		// The talk so far, up to the line: what the person offered or was asked a moment ago is read from it.
+		const turns = world.turnsOf( npc.npcId, prior );
+		for await ( const event of this.converse.replyStream( { context, name, line, offers, signal, turns } ) ) {
 
 			if ( event.type === 'delta' ) {
 
@@ -220,6 +222,14 @@ class TalkWorld {
 
 		this.#join( memory );
 		this.#keep();
+
+	}
+
+	/** What this person and the player said, oldest first, as the memory holds it verbatim, then the `prior` lines shown since. */
+	turnsOf( npcId, prior = [] ) {
+
+		const kept = this.context.serializeMemory()[ npcId ]?.turns ?? [];
+		return [ ...kept, ...prior ].map( ( { speaker, text } ) => ( { speaker, text } ) );
 
 	}
 

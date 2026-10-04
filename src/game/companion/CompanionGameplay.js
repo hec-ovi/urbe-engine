@@ -127,7 +127,7 @@ export class CompanionGameplay {
 
 		const follow = offers.some( ( offer ) => offer.kind === 'follow' && offer.available );
 		const places = offers.filter( ( offer ) => offer.kind === 'lead' && offer.available )
-			.map( ( { destination } ) => ( { placeId: destination.place.id, name: destination.offeredAs ?? destination.name } ) );
+			.map( ( { destination } ) => ( { placeId: destination.place.id, name: destination.offeredAs ?? destination.name, relation: destination.relation } ) );
 		const actions = person ? this.#actions( person.npcId, person.timeMin ) : {};
 		if ( ! places.length ) delete actions.walk;
 		const any = follow || places.length || Object.keys( actions ).length;

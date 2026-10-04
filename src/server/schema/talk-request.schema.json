@@ -59,7 +59,12 @@
             "required": ["placeId", "name"],
             "properties": {
               "placeId": { "$ref": "#/$defs/id" },
-              "name": { "type": "string", "minLength": 1 }
+              "name": { "type": "string", "minLength": 1 },
+              "relation": {
+                "description": "What the place is to the person: home, work, haunt, quest, scene, spot, person, venue, stop or street, so an agreement in words to \"show me where you live\" finds it.",
+                "type": "string",
+                "minLength": 1
+              }
             }
           }
         }

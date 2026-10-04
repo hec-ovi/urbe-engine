@@ -33,8 +33,8 @@ describe( 'companion offers', () => {
 		expect( game.companion.talkOffers( offers ) ).toEqual( {
 			follow: true,
 			places: [
-				{ placeId: 'p_clinic', name: 'the clinic' }, { placeId: 'p_rest', name: 'the back room' },
-				{ placeId: 'p_cafe', name: 'the coffee shop' }, { placeId: 'p_mall', name: 'the mall' }
+				{ placeId: 'p_clinic', name: 'the clinic', relation: 'quest' }, { placeId: 'p_rest', name: 'the back room', relation: 'scene' },
+				{ placeId: 'p_cafe', name: 'the coffee shop', relation: 'work' }, { placeId: 'p_mall', name: 'the mall', relation: 'haunt' }
 			]
 		} );
 		expect( game.companion.talkOffers( offers.map( ( offer ) => ( { ...offer, available: false, reason: 'on_duty' } ) ) ) ).toBeNull();
@@ -132,7 +132,7 @@ describe( 'a companion under way', () => {
 			[ 'lead:parcel:p_rest', 'Show me the back room to the west' ],
 			[ 'lead:parcel:p_shop', 'Show me the back room to the east' ]
 		] );
-		expect( game.companion.talkOffers( offers ).places ).toContainEqual( { placeId: 'p_rest', name: 'the back room to the west' } );
+		expect( game.companion.talkOffers( offers ).places ).toContainEqual( expect.objectContaining( { placeId: 'p_rest', name: 'the back room to the west' } ) );
 
 		const accepted = game.companion.accept( { ...game.ask( mira ), offerId: 'lead:parcel:p_rest' } );
 		expect( [ 'Follow me to the back room to the west.', 'This way. Keep close.', 'Come on. It isn\'t far.' ] ).toContain( accepted.line );
