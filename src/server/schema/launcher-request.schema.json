@@ -10,6 +10,13 @@
       "additionalProperties": false
     },
     {
+      "description": "What this server takes: answers { saveFields }, the optional fields a save may carry.",
+      "type": "object",
+      "required": ["method"],
+      "properties": { "method": { "const": "abilities" } },
+      "additionalProperties": false
+    },
+    {
       "type": "object",
       "required": ["method", "input"],
       "properties": {

@@ -1,3 +1,4 @@
+import * as dialog from '../../../quests/dist/runtime.js';
 import { OpenAIPort } from './OpenAIPort.js';
 import { closing, messageOf, readJson, sendJson } from './routeHttp.js';
 import { TalkBoundary } from './TalkBoundary.js';
@@ -21,7 +22,7 @@ export function talkRoute( outRoot, providedService = null ) {
 	let service = providedService;
 	const boundary = new TalkBoundary();
 	const talk = () => service ??= new TalkService( OpenAIPort.fromEnv(), outRoot );
-	const routes = { 'POST /stream': stream, 'GET /memory': memory, 'PUT /memory': restoreMemory };
+	const routes = { 'POST /stream': stream, 'GET /memory': memory, 'PUT /memory': restoreMemory, 'GET /abilities': abilities };
 
 	return {
 		name: 'talk-route',
@@ -37,6 +38,17 @@ export function talkRoute( outRoot, providedService = null ) {
 
 		}
 	};
+
+	/**
+	 * 200 with what the loaded Quests build can talk about beyond the tools
+	 * every build has, `{ abilities }` (Quests `DIALOG_ABILITIES`, none for a
+	 * build without them), so a page asks before it sends anything new.
+	 */
+	async function abilities( req, res ) {
+
+		sendJson( res, 200, { abilities: dialogAbilities() } );
+
+	}
 
 	/** 200 with the world's memory, or one person's, as `{ out, memory }`. */
 	async function memory( req, res ) {
@@ -131,5 +143,13 @@ export function talkRoute( outRoot, providedService = null ) {
 		if ( service.llm?.usage ) console.info( 'talk tokens', service.llm.usage );
 
 	}
+
+}
+
+/** The abilities of the Quests build this server loaded: `DIALOG_ABILITIES`, or none for a build that has no such list. */
+export function dialogAbilities( runtime = dialog ) {
+
+	const abilities = runtime?.DIALOG_ABILITIES;
+	return Array.isArray( abilities ) ? abilities.filter( ( ability ) => typeof ability === 'string' ) : [];
 
 }

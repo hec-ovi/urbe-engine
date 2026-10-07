@@ -136,6 +136,52 @@ describe( 'launcher HTTP boundary', () => {
 
 	} );
 
+	it( 'says which optional fields a save may carry, and keeps a save\'s economy and a story item handed to somebody through the real route and library', async () => {
+
+		const root = mkdtempSync( join( tmpdir(), 'urbe-launcher-economy-' ) );
+		const outDir = join( root, 'out' );
+		cpSync( FIXTURE, outDir, { recursive: true } );
+		const base = await serve( launcherRoute( root, null, new LauncherService( { outDir } ) ) );
+		cleanups.push( () => rmSync( root, { recursive: true, force: true } ) );
+		const call = async ( body ) => ( await fetch( `${base}/api/launcher`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( body ) } ) );
+		const abilities = await ( await call( { method: 'abilities' } ) ).json();
+		expect( abilities.saveFields ).toEqual( expect.arrayContaining( [ 'contacts', 'access', 'economy' ] ) );
+		const ajv = new Ajv2020( { strict: true } );
+		ajv.addSchema( schemaAt( '../launcher/schema/catalog.schema.json' ) );
+		ajv.addSchema( schemaAt( '../launcher/schema/launcher-api.schema.json' ) );
+		expect( ajv.validate( 'urbe/engine/launcher/api#/$defs/abilitiesResult', abilities ), JSON.stringify( ajv.errors ) ).toBe( true );
+
+		const api = new HttpLauncherApi( ( url, options ) => fetch( base + url, options ) );
+		const exported = await api.exportGame( 'night-shift' );
+		const economy = {
+			credits: 22, paidWeek: 0, settled: [ 'shift:main/sort' ],
+			people: [ { npcId: 'npc.witness', credits: 19, gone: [ 'phone' ], got: [ { id: 'goods-whisky', name: 'Glass of whisky', kind: 'goods', atMin: 1560 } ], dealt: [ { what: 'got-thing', name: 'Glass of whisky', atMin: 1560 } ] } ],
+			log: [ { atMin: 1559, what: 'bought', amount: - 18, name: 'Wren\'s' } ]
+		};
+		const [ quest ] = exported.quests;
+		const handedQuest = { ...quest, runtime: { cast: {}, state: { activeStepIds: [], completedStepIds: [], flags: [], handed: [ { itemId: 'DRINK_WHISKY_KESSEL', npcId: 'npc.witness' } ] } } };
+		const saved = await api.saveCurrent( {
+			gameId: exported.id, expectedRevision: exported.save.revision, updatedAt: '2026-09-03T12:00:00Z',
+			playTimeSeconds: exported.save.playTimeSeconds + 1, player: exported.player, quests: [ handedQuest, ...exported.quests.slice( 1 ) ], sideJobs: exported.sideJobs,
+			currentLocation: exported.currentLocation, discoveredLocations: exported.discoveredLocations, economy
+		} );
+		expect( saved.economy ).toEqual( economy );
+		expect( saved.quests[ 0 ].runtime.state.handed ).toEqual( [ { itemId: 'DRINK_WHISKY_KESSEL', npcId: 'npc.witness' } ] );
+		const kept = await api.saveCurrent( {
+			gameId: saved.id, expectedRevision: saved.save.revision, updatedAt: '2026-09-03T12:05:00Z',
+			playTimeSeconds: saved.save.playTimeSeconds + 1, player: saved.player, quests: saved.quests, sideJobs: saved.sideJobs,
+			currentLocation: saved.currentLocation, discoveredLocations: saved.discoveredLocations
+		} );
+		expect( kept.economy ).toEqual( economy );
+		expect( JSON.parse( readFileSync( join( outDir, 'games', 'night-shift', 'game.json' ), 'utf8' ) ).economy ).toEqual( economy );
+		await expect( api.saveCurrent( {
+			gameId: kept.id, expectedRevision: kept.save.revision, updatedAt: '2026-09-03T12:06:00Z',
+			playTimeSeconds: kept.save.playTimeSeconds + 1, player: kept.player, quests: kept.quests, sideJobs: kept.sideJobs,
+			currentLocation: kept.currentLocation, discoveredLocations: kept.discoveredLocations, economy: { ...economy, credits: - 1 }
+		} ) ).rejects.toThrow( 'saveCurrent request is invalid' );
+
+	} );
+
 	it( 'queues creation stages as jobs that run in submission order and keep their result or error', async () => {
 
 		const order = [];

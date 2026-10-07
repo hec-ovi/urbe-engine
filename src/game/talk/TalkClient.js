@@ -70,12 +70,13 @@ export class TalkClient {
 	 * @param options.task what this person is doing for the player now, CompanionGameplay.taskOf
 	 * @param options.call `{ caller: 'player' }` when the player talks to this person on the phone
 	 * @param options.witnesses the npcIds of the people there to hear this exchange, who remember it as overheard
+	 * @param options.carry what this person has on them, Economy `carryContext`, sent only to a server that takes it
 	 */
-	async *stream( conversation, line, timeMin, quests = [], { signal, guide, offers, events, look, here, people, task, call, addresses, witnesses } = {} ) {
+	async *stream( conversation, line, timeMin, quests = [], { signal, guide, offers, events, look, here, people, task, call, addresses, witnesses, carry } = {} ) {
 
 		await this.#handOver();
 		const prior = this.#prior.npcId === conversation.instance.npcId ? this.#prior.lines : [];
-		const response = await this.#post( { conversation, line, timeMin, quests, guide, offers, events, look, here, people, task, call, addresses, witnesses, prior }, signal );
+		const response = await this.#post( { conversation, line, timeMin, quests, guide, offers, events, look, here, people, task, call, addresses, witnesses, carry, prior }, signal );
 		const reader = response.body.getReader();
 		const decoder = new TextDecoder();
 		let buffer = '';
@@ -164,7 +165,7 @@ export class TalkClient {
 
 	}
 
-	async #post( { conversation, line, timeMin, quests, guide, offers, events, look, here, people, task, call, addresses, witnesses, prior }, signal ) {
+	async #post( { conversation, line, timeMin, quests, guide, offers, events, look, here, people, task, call, addresses, witnesses, carry, prior }, signal ) {
 
 		const response = await fetch( '/api/talk/stream', {
 			method: 'POST',
@@ -173,7 +174,7 @@ export class TalkClient {
 			body: JSON.stringify( {
 				out: this.out, npc: conversation.instance, behavior: conversation.behavior, line, timeMin, quests,
 				...( guide ? { guide } : {} ), ...( offers ? { offers } : {} ), ...( events?.length ? { events } : {} ),
-				...( look ? { look } : {} ), ...( here ? { here } : {} ), ...( people ? { people } : {} ), ...( task ? { task } : {} ), ...( call ? { call } : {} ), ...( addresses ? { addresses } : {} ), ...( witnesses?.length ? { witnesses } : {} ), ...( prior.length ? { prior } : {} )
+				...( look ? { look } : {} ), ...( here ? { here } : {} ), ...( people ? { people } : {} ), ...( task ? { task } : {} ), ...( call ? { call } : {} ), ...( addresses ? { addresses } : {} ), ...( witnesses?.length ? { witnesses } : {} ), ...( carry ? { carry } : {} ), ...( prior.length ? { prior } : {} )
 			} )
 		} );
 		if ( response.ok ) return response;

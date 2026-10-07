@@ -58,6 +58,19 @@
                 "activeStepIds": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
                 "completedStepIds": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
                 "flags": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
+                "handed": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["itemId", "npcId"],
+                    "properties": {
+                      "itemId": { "type": "string", "minLength": 1, "maxLength": 64 },
+                      "npcId": { "$ref": "#/$defs/id" }
+                    }
+                  }
+                },
                 "endingId": { "$ref": "#/$defs/id" }
               },
               "additionalProperties": false

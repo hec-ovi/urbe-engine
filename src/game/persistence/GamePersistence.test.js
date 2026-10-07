@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import gameFixture from '../../library/fixtures/out/games/night-shift/game.json';
 import { GamePersistence, mergeInventory, mergeProgress, saveItemId } from './GamePersistence.js';
+import { OPTIONAL_SAVE_FIELDS, carriedFields } from './SavedFields.js';
+import { SchemaBoundary } from './SchemaBoundary.js';
 import { AddressBook, PlayerAccess, PlayerItems, Regard, cardFor } from '../access/index.js';
 
 const activeQuest = {
@@ -164,6 +166,44 @@ describe( 'playable game persistence', () => {
 		await resumed.save( earlier );
 		expect( sent[ 1 ] ).toMatchObject( { scenery, dialogueMemory } );
 		await expect( resumed.save( { ...earlier, scenery: [ { contractVersion: '1.0', sceneId: 'roof-wake', status: 'staged' } ] } ) )
+			.rejects.toMatchObject( { code: 'E_LIVE_STATE' } );
+
+	} );
+
+	it( 'saves the economy and a story item handed to somebody, keeps the economy a save leaves out, and loads a save made before both', async () => {
+
+		const economy = {
+			credits: 22, paidWeek: 0, settled: [ 'shift:main/s_sort' ],
+			people: [ { npcId: 'npc-1', credits: 7, gone: [ 'effect' ], got: [ { id: 'drink_whisky_kessel', name: 'amber whisky', kind: 'story', atMin: 770 } ] } ],
+			log: [ { atMin: 760, what: 'bought', amount: - 18, name: 'Tomas Wren' } ]
+		};
+		const handed = { ...activeQuest, runtime: { ...activeQuest.runtime, state: { ...activeQuest.runtime.state, handed: [ { itemId: 'DRINK_WHISKY_KESSEL', npcId: 'npc-1' } ] } } };
+		const sent = [];
+		const fetcher = vi.fn( async ( _url, options ) => {
+
+			const input = JSON.parse( options.body ).input;
+			sent.push( input );
+			const { gameId, expectedRevision, updatedAt, playTimeSeconds, ...fields } = input;
+			return response( 200, { ...gameFixture, ...fields, save: { ...gameFixture.save, revision: expectedRevision + 1, updatedAt, playTimeSeconds } } );
+
+		} );
+		const boundary = new SchemaBoundary();
+		expect( OPTIONAL_SAVE_FIELDS ).toContain( 'economy' );
+		// A save made before credits loads as it is.
+		expect( boundary.assert( 'game-state', structuredClone( gameFixture ), 'E_GAME_STATE', 'game' ) ).toBeTruthy();
+		const persistence = new GamePersistence( { game: structuredClone( gameFixture ), gameId: 'night-shift', fetcher } );
+		const saved = await persistence.save( { ...liveState(), quests: [ handed ], economy } );
+		expect( sent[ 0 ] ).toMatchObject( { economy, quests: [ { runtime: { state: { handed: [ { itemId: 'DRINK_WHISKY_KESSEL', npcId: 'npc-1' } ] } } } ] } );
+		expect( boundary.assert( 'game-state', saved, 'E_GAME_STATE', 'game' ) ).toBe( saved );
+		// A save that leaves it out carries the one saved before.
+		await persistence.save( liveState() );
+		expect( sent[ 1 ].economy ).toEqual( economy );
+		expect( carriedFields( {}, { economy } ) ).toEqual( { economy } );
+		expect( carriedFields( { economy: { ...economy, credits: 1 } }, { economy } ).economy.credits ).toBe( 1 );
+		for ( const invalid of [
+			{ ...economy, credits: - 1 }, { ...economy, people: [ { npcId: 'npc-1', credits: 1, gone: [] } ] }, { ...economy, log: [ { atMin: 1, what: 'gift', amount: 1 } ] }
+		] ) await expect( persistence.save( { ...liveState(), economy: invalid } ) ).rejects.toMatchObject( { code: 'E_LIVE_STATE' } );
+		await expect( persistence.save( { ...liveState(), quests: [ { ...handed, runtime: { ...handed.runtime, state: { ...handed.runtime.state, handed: [ { itemId: 'X' } ] } } } ] } ) )
 			.rejects.toMatchObject( { code: 'E_LIVE_STATE' } );
 
 	} );

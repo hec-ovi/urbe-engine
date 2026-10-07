@@ -129,6 +129,48 @@ describe( 'talk request contract', () => {
 
 	} );
 
+	it( 'takes what a person carries, the transfers on offer and a story item handed to somebody, and closes their shapes', () => {
+
+		const sim = createSimulation( { seed: 'talk-drift', blueprint: FIXTURE_BLUEPRINT, interiors: FIXTURE_INTERIORS } );
+		const npc = sim.getNPCVendor( { parcelId: 'p_cafe', timeMin: 540 } );
+		const request = { out: '/out/w', npc, behavior: sim.behaviorAt( npc.npcId, 540 ), line: 'Here, take this.', timeMin: 540 };
+		const carry = {
+			credits: 23, means: 'getting-by',
+			items: [ { name: 'a phone' }, { name: 'a photo of Mia' }, { name: 'Beer', from: 'stranger', atMin: 530 } ],
+			dealings: [ { what: 'got-thing', name: 'Beer', atMin: 530 }, { what: 'gave-credits', amount: 5, atMin: 531 } ],
+			asked: 10
+		};
+		const offers = {
+			give: { items: [ { itemId: 'card:home:p1/floor:2/u1', name: 'Kessler Block key card', copy: true }, { itemId: 'carry:effect', name: 'a photo of Mia' } ] },
+			take: { items: [ { itemId: 'own:goods-beer', name: 'Beer' }, { itemId: 'quest:DRINK_WHISKY_KESSEL', name: 'amber whisky' } ] },
+			credits: { carried: 23, purse: 40, offered: 10 },
+			sell: { items: [ { itemId: 'coffee', name: 'cup of coffee', price: 3 } ] },
+			buy: { items: [ { itemId: 'own:goods-beer', name: 'Beer', price: 4 } ] }
+		};
+		const handed = { id: 'main', cast: { r_dorn: npc.npcId }, state: { activeStepIds: [], completedStepIds: [ 's_press' ], flags: [], handed: [ { itemId: 'DRINK_WHISKY_KESSEL', npcId: npc.npcId } ] } };
+		expect( boundary.input( { ...request, carry, offers, quests: [ handed ] } ) ).toBeTruthy();
+		expect( boundary.input( { ...request, carry: { credits: 0, means: 'short', items: [] } } ) ).toBeTruthy();
+		const twelve = Array.from( { length: 12 }, ( _, n ) => ( { itemId: `carry:t${n}`, name: `thing ${n}` } ) );
+		expect( boundary.input( { ...request, offers: { give: { items: twelve } } } ) ).toBeTruthy();
+		for ( const invalid of [
+			{ ...request, carry: { credits: 1, means: 'rich', items: [] } },
+			{ ...request, carry: { credits: - 1, means: 'short', items: [] } },
+			{ ...request, carry: { credits: 1, means: 'short' } },
+			{ ...request, carry: { ...carry, items: [ { name: 'x', from: 'friend' } ] } },
+			{ ...request, carry: { ...carry, dealings: [ { what: 'stole', atMin: 1 } ] } },
+			{ ...request, carry: { ...carry, asked: 0 } },
+			{ ...request, offers: { credits: { carried: 1 } } },
+			{ ...request, offers: { credits: { carried: 1, purse: 2, offered: 0 } } },
+			{ ...request, offers: { sell: { items: [ { itemId: 'coffee', name: 'cup of coffee', price: 0 } ] } } },
+			{ ...request, offers: { buy: { items: [ { itemId: 'own:x', name: 'x' } ] } } },
+			{ ...request, offers: { take: { items: [ { itemId: 'own:x' } ] } } },
+			{ ...request, offers: { give: { items: [ ...twelve, twelve[ 0 ] ] } } },
+			{ ...request, quests: [ { ...handed, state: { ...handed.state, handed: [ { itemId: 'X' } ] } } ] },
+			{ ...request, quests: [ { ...handed, state: { ...handed.state, handed: [ { itemId: 'x'.repeat( 65 ), npcId: 'n1' } ] } } ] }
+		] ) expect( () => boundary.input( invalid ) ).toThrow( /does not match its contract/ );
+
+	} );
+
 	it( 'takes in any save\'s dialogue memory and answers with what the server keeps', () => {
 
 		const turn = { speaker: 'npc', text: 'Hi.', atMin: 1 };
@@ -155,10 +197,15 @@ describe( 'talk request contract', () => {
 			{ type: 'offer', kind: 'follow' }, { type: 'offer', kind: 'lead', placeId: 'p_rest', name: 'The Rusty Anchor' },
 			{ type: 'offer', kind: 'walk', placeId: 'lift:elev-0', name: 'the lift' }, ...[ 'stop', 'home', 'work', 'wait', 'sit', 'contact' ].map( ( kind ) => ( { type: 'offer', kind } ) ),
 			{ type: 'offer', kind: 'meet', name: 'Salt Wharf' },
+			{ type: 'offer', kind: 'give', itemId: 'carry:effect', name: 'a photo of Mia' }, { type: 'offer', kind: 'take', itemId: 'own:goods-beer', name: 'Beer' },
+			{ type: 'offer', kind: 'sell', itemId: 'coffee', name: 'cup of coffee', price: 3 }, { type: 'offer', kind: 'buy', itemId: 'own:goods-beer', name: 'Beer', amount: 4 },
+			...[ 'pay', 'accept', 'ask' ].map( ( kind ) => ( { type: 'offer', kind, amount: 5 } ) ),
 			{ type: 'done', reply: 'Ask at the bar.' }, { type: 'error', error: 'model server 500 at x' }
 		] ) expect( boundary.event( event ) ).toBe( event );
 		for ( const event of [
 			{ type: 'delta', text: '' }, { type: 'offer', kind: 'lead' }, { type: 'offer', kind: 'walk' }, { type: 'offer', kind: 'dance' }, { type: 'offer', kind: 'meet' },
+			{ type: 'offer', kind: 'pay' }, { type: 'offer', kind: 'accept', amount: 0 }, { type: 'offer', kind: 'ask', amount: 2.5 }, { type: 'offer', kind: 'take', itemId: 'own:x' },
+			{ type: 'offer', kind: 'sell', itemId: 'coffee', name: 'cup of coffee' }, { type: 'offer', kind: 'buy', itemId: 'own:x', name: 'x', price: 3 },
 			{ type: 'done', reply: 'x', offers: [] }, { type: 'usage' }
 		] ) expect( () => boundary.event( event ) ).toThrow( /does not match its contract/ );
 

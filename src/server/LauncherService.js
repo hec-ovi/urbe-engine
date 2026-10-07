@@ -1,7 +1,7 @@
 import { createLibrary, LibraryError } from '../library/index.js';
 import AjvModule from 'ajv/dist/2020.js';
 import { DESCRIPTOR_SCHEMAS } from '../library/src/DescriptorSchemas.js';
-import { carriedFields } from '../game/persistence/SavedFields.js';
+import { OPTIONAL_SAVE_FIELDS, carriedFields } from '../game/persistence/SavedFields.js';
 import persistenceValues from '../game/persistence/schema/values.schema.json' with { type: 'json' };
 import saveCurrentPayload from '../game/persistence/schema/save-current-payload.schema.json' with { type: 'json' };
 
@@ -23,6 +23,13 @@ export class LauncherService {
 	async catalog() {
 
 		return presentCatalog( await this.library.discover() );
+
+	}
+
+	/** What this server takes: the optional fields a save may carry, so a page asks before it sends a new one. */
+	abilities() {
+
+		return { saveFields: [ ...OPTIONAL_SAVE_FIELDS ] };
 
 	}
 

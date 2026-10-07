@@ -48,13 +48,13 @@ export class TalkService {
 	 * `prior` lines said since the last exchange carry the conversation on up
 	 * to `line`. A completed exchange is remembered, after its prior lines,
 	 * before `done`; a failed or aborted one is not.
-	 * @param request a checked talk request: out, npc, behavior, line, timeMin, quests?, offers?, guide?, events?, look?, here?, people?, task?, call?, addresses?, witnesses?, prior?
+	 * @param request a checked talk request: out, npc, behavior, line, timeMin, quests?, offers?, guide?, events?, look?, here?, people?, task?, call?, addresses?, carry?, witnesses?, prior?
 	 * @param options.signal aborting it ends the model request
 	 */
-	async *stream( { out, npc, behavior, line, timeMin, quests = [], offers, guide, events, look, here, people, task, call, addresses, witnesses = [], prior = [] }, { signal } = {} ) {
+	async *stream( { out, npc, behavior, line, timeMin, quests = [], offers, guide, events, look, here, people, task, call, addresses, carry, witnesses = [], prior = [] }, { signal } = {} ) {
 
 		const world = await this.#world( out );
-		const context = world.contextFor( npc, behavior, quests, timeMin, { guide, events, look, here, people, task, call, addresses, prior } );
+		const context = world.contextFor( npc, behavior, quests, timeMin, { guide, events, look, here, people, task, call, addresses, carry, prior } );
 		const name = `${npc.name.given} ${npc.name.family}`;
 		const sentences = new Sentences();
 		let index = 0;
@@ -180,7 +180,7 @@ class TalkWorld {
 	 * questline the request no longer carries leaves with a fresh context service
 	 * that keeps every NPC's memory.
 	 */
-	contextFor( npc, behavior, quests, timeMin, { guide, events, look, here, people, task, call, addresses, prior } ) {
+	contextFor( npc, behavior, quests, timeMin, { guide, events, look, here, people, task, call, addresses, carry, prior } ) {
 
 		this.port.set( npc, behavior );
 		const held = quests.filter( ( quest ) => this.definitions.has( quest.id ) );
@@ -200,7 +200,8 @@ class TalkWorld {
 		}
 		return this.context.contextFor( npc.npcId, timeMin, {
 			...( guide ? { guide } : {} ), ...( events ? { events } : {} ), ...( look ? { look } : {} ), ...( here ? { here } : {} ),
-			...( people ? { people } : {} ), ...( task ? { task } : {} ), ...( call ? { call } : {} ), ...( addresses ? { addresses } : {} ), prior
+			...( people ? { people } : {} ), ...( task ? { task } : {} ), ...( call ? { call } : {} ), ...( addresses ? { addresses } : {} ),
+			...( carry ? { carry } : {} ), prior
 		} );
 
 	}

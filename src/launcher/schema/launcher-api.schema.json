@@ -16,6 +16,13 @@
       "required": [ "playUrl" ],
       "properties": { "playUrl": { "$ref": "#/$defs/playUrl" } }
     },
+    "abilitiesResult": {
+      "description": "What the server takes: the optional fields a save may carry.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "saveFields" ],
+      "properties": { "saveFields": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } } }
+    },
     "exportResult": { "$ref": "#/$defs/jsonDocument" },
     "importInput": { "$ref": "#/$defs/jsonDocument" },
     "generateCityInput": {

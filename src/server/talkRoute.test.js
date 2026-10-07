@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createServer } from 'node:http';
 import { sendBytes } from './routeHttp.test-fixtures.js';
-import { talkRoute } from './talkRoute.js';
+import { dialogAbilities, talkRoute } from './talkRoute.js';
 
 describe( 'NPC dialogue HTTP boundary', () => {
 
@@ -157,6 +157,21 @@ describe( 'NPC dialogue HTTP boundary', () => {
 		const failed = await fetch( `${failing}/api/talk/memory?out=${encodeURIComponent( out )}` );
 		expect( failed.status ).toBe( 502 );
 		expect( await failed.json() ).toEqual( { error: 'no world at /out/games/night-shift' } );
+
+	} );
+
+	it( 'says what the loaded Quests build can talk about, none for a build without the list', async () => {
+
+		const origin = await serve( { stream: vi.fn() } );
+		const response = await fetch( `${origin}/api/talk/abilities` );
+		expect( response.status ).toBe( 200 );
+		const body = await response.json();
+		expect( Array.isArray( body.abilities ) ).toBe( true );
+		expect( body.abilities.every( ( ability ) => typeof ability === 'string' ) ).toBe( true );
+		expect( dialogAbilities( { DIALOG_ABILITIES: Object.freeze( [ 'economy' ] ) } ) ).toEqual( [ 'economy' ] );
+		expect( dialogAbilities( {} ) ).toEqual( [] );
+		expect( dialogAbilities( { DIALOG_ABILITIES: 'economy' } ) ).toEqual( [] );
+		expect( ( await post( origin, '/api/talk/abilities', '{}' ) ).status ).toBe( 404 );
 
 	} );
 

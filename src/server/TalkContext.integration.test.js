@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import { FIXTURE_BLUEPRINT, FIXTURE_HOMES, FIXTURE_INTERIORS } from '../../../simulation/dist/index.js';
-import { peopleKnown } from '../../../quests/dist/runtime.js';
+import * as dialog from '../../../quests/dist/runtime.js';
+import { DialogContextService } from '../../../quests/dist/index.js';
 import { SimBridge } from '../game/sim/SimBridge.js';
 import { recipeFor } from '../game/agents/Appearance.js';
 import { describeLook } from '../game/agents/avatar/Describe.js';
@@ -25,7 +26,7 @@ describe( 'what a person knows of themselves in a talk', () => {
 		const npc = sim.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_10 } );
 		const coworker = sim.getNPCVendor( { parcelId: 'p_cafe', timeMin: 20 * 60 } );
 		const look = describeLook( recipeFor( { gender: npc.gender, appearanceSeed: npc.appearanceSeed, npcId: npc.npcId } ).recipe );
-		const people = peopleKnown( {
+		const people = dialog.peopleKnown( {
 			npc, timeMin: MON_10, line: `Is ${coworker.name.given} in?`, people: [ npc, coworker ],
 			behaviorAt: ( id, timeMin ) => sim.behaviorAt( id, timeMin )
 		} );
@@ -57,6 +58,33 @@ describe( 'what a person knows of themselves in a talk', () => {
 		expect( system ).toContain( 'Outside it is night; you are indoors.' );
 		expect( system ).toContain( `${coworker.name.given} ${coworker.name.family} works with you.` );
 		expect( system ).toMatch( /(You do not like strangers|You are wary of strangers|You take strangers as they come|You are friendly with strangers)/ );
+
+	} );
+
+} );
+
+describe( 'what a person carries in a talk', () => {
+
+	it( 'hands what they carry to the dialog layers, told in what changes every turn where the Quests build tells it', async () => {
+
+		const sim = housedCity();
+		const npc = sim.getNPCVendor( { parcelId: 'p_cafe', timeMin: MON_10 } );
+		const carry = { credits: 23, means: 'getting-by', items: [ { name: 'a phone' }, { name: 'Beer', from: 'stranger', atMin: 590 } ] };
+		const contexts = vi.spyOn( DialogContextService.prototype, 'contextFor' );
+		const service = new TalkService( fakeModel(), await servedWorld() );
+		for await ( const event of service.stream( {
+			out: '/out/w', npc, behavior: sim.behaviorAt( npc.npcId, MON_10 ), line: 'Have you got a light?', timeMin: MON_10, carry
+		} ) ) if ( event.type === 'done' ) break;
+		expect( contexts.mock.calls.at( - 1 )[ 2 ] ).toMatchObject( { carry } );
+		// A Quests build that tells it, tells it with the turn: never in what stays the same between turns.
+		if ( dialog.DIALOG_ABILITIES?.includes( 'economy' ) ) {
+
+			const { segments } = contexts.mock.results.at( - 1 ).value;
+			expect( segments.find( ( segment ) => segment.id === 'turns' ).text ).toContain( '23 credits' );
+			expect( segments.filter( ( segment ) => segment.id !== 'turns' ).some( ( segment ) => segment.text.includes( '23 credits' ) ) ).toBe( false );
+
+		}
+		contexts.mockRestore();
 
 	} );
 

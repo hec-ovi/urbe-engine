@@ -91,6 +91,25 @@ describe( 'city and game library contract', () => {
 
 	} );
 
+	it( 'keeps a game\'s economy and a story item handed to somebody, and refuses an economy its schema does not take', async () => {
+
+		const outDir = fixtureOut();
+		const library = createLibrary( { outDir } );
+		const economy = {
+			credits: 40, paidWeek: 1, settled: [ 'reward:sq_one' ],
+			people: [ { npcId: 'a59987', credits: 12, gone: [ 'card:home:p1/floor:2/u1' ], got: [] } ]
+		};
+		const quest = {
+			id: 'main', title: 'Main', objective: 'Talk to Dorn', state: 'active', totalSteps: 2, completedSteps: [ 's_press' ],
+			runtime: { cast: { r_dorn: 'a59987' }, state: { activeStepIds: [ 's_stamp' ], completedStepIds: [ 's_press' ], flags: [], handed: [ { itemId: 'DRINK_WHISKY_KESSEL', npcId: 'a59987' } ] } }
+		};
+		const game = { ...savedGame(), id: 'economy-save', quests: [ quest ], economy };
+		await library.saveGame( { game, expectedRevision: null } );
+		expect( await library.loadGame( { id: 'economy-save' } ) ).toMatchObject( { economy, quests: [ { runtime: { state: { handed: quest.runtime.state.handed } } } ] } );
+		await expectError( library.saveGame( { game: { ...game, id: 'bad-economy', economy: { ...economy, people: [ { npcId: 'a1', credits: 1.5, gone: [], got: [] } ] } }, expectedRevision: null } ), 'E_INVALID_REQUEST' );
+
+	} );
+
 	it( 'fails closed on invalid requests, unsafe paths, absent records and malformed or dangling descriptors', async () => {
 
 		const outDir = fixtureOut();

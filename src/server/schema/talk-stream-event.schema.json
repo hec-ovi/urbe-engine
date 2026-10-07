@@ -54,6 +54,51 @@
     {
       "type": "object",
       "additionalProperties": false,
+      "required": ["type", "kind", "itemId", "name"],
+      "properties": {
+        "type": { "const": "offer" },
+        "kind": { "const": "take" },
+        "itemId": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "kind", "itemId", "name", "price"],
+      "properties": {
+        "type": { "const": "offer" },
+        "kind": { "const": "sell" },
+        "itemId": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "price": { "type": "integer", "minimum": 1 }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "kind", "itemId", "name", "amount"],
+      "properties": {
+        "type": { "const": "offer" },
+        "kind": { "const": "buy" },
+        "itemId": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "amount": { "type": "integer", "minimum": 1 }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "kind", "amount"],
+      "properties": {
+        "type": { "const": "offer" },
+        "kind": { "enum": ["pay", "accept", "ask"] },
+        "amount": { "type": "integer", "minimum": 1 }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
       "required": ["type", "kind", "placeId", "name"],
       "properties": {
         "type": { "const": "offer" },

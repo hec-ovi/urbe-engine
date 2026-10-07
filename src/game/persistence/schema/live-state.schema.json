@@ -25,7 +25,8 @@
     "scenery": { "$ref": "urn:urbe:engine:scenery:saved-scenery" },
     "dialogueMemory": { "$ref": "urn:urbe:engine:library:dialogue-memory" },
     "contacts": { "$ref": "urn:urbe:engine:contacts:contacts" },
-    "access": { "$ref": "urn:urbe:engine:access:access" }
+    "access": { "$ref": "urn:urbe:engine:access:access" },
+    "economy": { "$ref": "urn:urbe:engine:economy:economy" }
   },
   "additionalProperties": false
 }

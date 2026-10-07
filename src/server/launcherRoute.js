@@ -5,7 +5,7 @@ import { LauncherService, LauncherServiceError } from './LauncherService.js';
 import { BodyError, readJson, sendJson } from './routeHttp.js';
 
 const METHODS = new Set( [
-	'catalog', 'continueGame', 'exportGame', 'importGame', 'exportCity', 'saveCurrent', ...CREATION_METHODS
+	'catalog', 'abilities', 'continueGame', 'exportGame', 'importGame', 'exportCity', 'saveCurrent', ...CREATION_METHODS
 ] );
 /** The largest launcher or creation request body: an imported game descriptor. */
 const MAX_BYTES = 128 * 1024 * 1024;
@@ -36,8 +36,8 @@ export function launcherRoute( engineRoot, creation = null, service = null, jobs
 
 					}
 					const input = request.input;
-					const result = request.method === 'catalog'
-						? await launcher().catalog()
+					const result = request.method === 'catalog' || request.method === 'abilities'
+						? await launcher()[ request.method ]()
 						: await launcher()[ request.method ]( input );
 					sendJson( res, 200, result );
 

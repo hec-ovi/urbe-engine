@@ -142,6 +142,7 @@
     "dialogueMemory": { "$ref": "urn:urbe:engine:library:dialogue-memory" },
     "contacts": { "$ref": "urn:urbe:engine:contacts:contacts" },
     "access": { "$ref": "urn:urbe:engine:access:access" },
+    "economy": { "$ref": "urn:urbe:engine:economy:economy" },
     "save": {
       "type": "object",
       "required": ["revision", "createdAt", "updatedAt", "playTimeSeconds"],
@@ -257,6 +258,20 @@
                       "type": "array",
                       "items": { "$ref": "#/$defs/id" },
                       "uniqueItems": true
+                    },
+                    "handed": {
+                      "description": "Story items handed to a person and kept by them, by the story's own item id: a person's own to keep, or no step needed them any more.",
+                      "type": "array",
+                      "maxItems": 64,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["itemId", "npcId"],
+                        "properties": {
+                          "itemId": { "type": "string", "minLength": 1, "maxLength": 64 },
+                          "npcId": { "$ref": "#/$defs/id" }
+                        }
+                      }
                     },
                     "endingId": {
                       "$ref": "#/$defs/id"

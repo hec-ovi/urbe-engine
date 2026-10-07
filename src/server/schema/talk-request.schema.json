@@ -34,7 +34,54 @@
           "properties": { "name": { "type": "string", "minLength": 1 } }
         },
         "give": {
-          "description": "Access cards the person may hand the player a copy of: each by its item id and what the player reads it as.",
+          "description": "What the person may hand the player: a copy of an access card (card:<scope>, copy true) or one of their own things (carry:<slot>), each by its item id and what the player reads it as.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["items"],
+          "properties": {
+            "items": {
+              "type": "array",
+              "maxItems": 12,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["itemId", "name"],
+                "properties": { "itemId": { "$ref": "#/$defs/id" }, "name": { "type": "string", "minLength": 1, "maxLength": 400 }, "copy": { "type": "boolean" } }
+              }
+            }
+          }
+        },
+        "take": {
+          "description": "What the player may hand the person: their own items (own:<id>) and story items a story lets them hand over (quest:<itemId>).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["items"],
+          "properties": {
+            "items": {
+              "type": "array",
+              "maxItems": 12,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["itemId", "name"],
+                "properties": { "itemId": { "$ref": "#/$defs/id" }, "name": { "type": "string", "minLength": 1, "maxLength": 400 } }
+              }
+            }
+          }
+        },
+        "credits": {
+          "description": "Credits on either side: what the person carries, what the player carries, and what the player holds out to them now.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["carried", "purse"],
+          "properties": {
+            "carried": { "type": "integer", "minimum": 0 },
+            "purse": { "type": "integer", "minimum": 0 },
+            "offered": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "sell": {
+          "description": "At the counter the person works: what they sell and its price in credits.",
           "type": "object",
           "additionalProperties": false,
           "required": ["items"],
@@ -42,12 +89,20 @@
             "items": {
               "type": "array",
               "maxItems": 8,
-              "items": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["itemId", "name"],
-                "properties": { "itemId": { "$ref": "#/$defs/id" }, "name": { "type": "string", "minLength": 1, "maxLength": 400 } }
-              }
+              "items": { "$ref": "#/$defs/pricedItem" }
+            }
+          }
+        },
+        "buy": {
+          "description": "The player's things the person may buy and what they would pay, in credits.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["items"],
+          "properties": {
+            "items": {
+              "type": "array",
+              "maxItems": 12,
+              "items": { "$ref": "#/$defs/pricedItem" }
             }
           }
         },
@@ -172,6 +227,46 @@
         }
       }
     },
+    "carry": {
+      "description": "What the person has on them right now, and nothing else: their credits, their household's means, their things but their cards (addresses tell those), what passed between them and the player, and a sum they asked for and were not paid.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["credits", "means", "items"],
+      "properties": {
+        "credits": { "type": "integer", "minimum": 0 },
+        "means": { "enum": ["short", "getting-by", "comfortable", "well-off"] },
+        "items": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "properties": {
+              "name": { "$ref": "#/$defs/words" },
+              "from": { "const": "stranger" },
+              "atMin": { "type": "number" }
+            }
+          }
+        },
+        "dealings": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["what", "atMin"],
+            "properties": {
+              "what": { "enum": ["gave-credits", "got-credits", "gave-thing", "got-thing", "lifted", "bribe-refused", "lent"] },
+              "amount": { "type": "integer", "minimum": 1 },
+              "name": { "$ref": "#/$defs/words" },
+              "atMin": { "type": "number" }
+            }
+          }
+        },
+        "asked": { "type": "integer", "minimum": 1 }
+      }
+    },
     "witnesses": {
       "description": "The people who were there to hear this exchange besides the person the player talks to: in the same room or on the same floor indoors, within earshot on the street, and whoever follows or leads the player. Each remembers it as overheard (Quests recordOverheard).",
       "type": "array",
@@ -249,6 +344,16 @@
         "floor": { "type": "integer" },
         "unit": { "$ref": "#/$defs/words" },
         "room": { "$ref": "#/$defs/words" }
+      }
+    },
+    "pricedItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["itemId", "name", "price"],
+      "properties": {
+        "itemId": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "price": { "type": "integer", "minimum": 1 }
       }
     },
     "words": { "type": "string", "minLength": 1, "maxLength": 200 },
@@ -585,6 +690,20 @@
             "activeStepIds": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
             "completedStepIds": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
             "flags": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
+            "handed": {
+              "description": "Story items handed to a person and kept by them, by the story's own item id.",
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["itemId", "npcId"],
+                "properties": {
+                  "itemId": { "type": "string", "minLength": 1, "maxLength": 64 },
+                  "npcId": { "$ref": "#/$defs/id" }
+                }
+              }
+            },
             "endingId": { "$ref": "#/$defs/id" }
           }
         }
