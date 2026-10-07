@@ -122,6 +122,18 @@ export class SimBridge {
 	}
 
 
+	/**
+	 * Establishes a person the simulation names as somebody's family (a household
+	 * member, a sibling living elsewhere) by their id, as a save replays it: the
+	 * same person every time. Throws as the simulation does (`E_CAPACITY` once it
+	 * holds all the people it may).
+	 */
+	relative( npcId ) {
+
+		return this.simulation.instantiate( { npcId } );
+
+	}
+
 	/** The story-side slice of the port (../../../../quests/CONTRACT.md SimulationPort): who exists, who is on duty, what the story did to them. */
 	getNPC( npcId ) { return this.simulation.getNPC( npcId ); }
 	findNPCs( query ) { return this.simulation.findNPCs( query ); }

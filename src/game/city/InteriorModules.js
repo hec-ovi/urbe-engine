@@ -6,6 +6,7 @@ import { shellMaterial } from './ShellSurface.js';
 import { MaterialBatches } from './kit/MaterialBatches.js';
 import { moduleUvContext } from './kit/UvRepeatChannel.js';
 import { buildingFloors, floorPlacements } from './InteriorLayouts.js';
+import { GARMENTS } from './HomeDressing.js';
 
 const LOAD_CONCURRENCY = 8;
 /** A catalog key is theme, kind and tier; a slot is a key and the variant it wears. */
@@ -312,6 +313,8 @@ export function placedModules( buildings ) {
 			for ( const floor of buildingFloors( parcelId, building.interior ) ) {
 
 				for ( const placement of floorPlacements( floor ) ) if ( placement.module ) ids.add( placement.module );
+				// A resident's hook takes the coat of their trade, whichever it is.
+				if ( floorPlacements( floor ).some( ( placement ) => placement.module === 'personal-c8-hook' ) ) for ( const id of Object.values( GARMENTS ) ) ids.add( id );
 				// Entrances are published beside the layout, per floor, never as placements.
 				for ( const entrance of [ ...floor.apartmentEntrances, ...( floor.roomEntrances ?? [] ) ] ) {
 

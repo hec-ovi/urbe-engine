@@ -111,6 +111,7 @@ import { Bookmarks } from './world/Bookmarks.js';
 import { mapModel, blockWorld } from './world/MapModel.js';
 import { Snapshots } from './portraits/Snapshots.js';
 import { Portraits } from './portraits/Portraits.js';
+import { HomeDressing } from './city/HomeDressing.js';
 import { BuildingShots } from './portraits/BuildingShots.js';
 
 /** The sheets of tags poor walls and highway piers are sprayed with. */
@@ -396,7 +397,8 @@ export class GameApp {
 		this.transitJourney = new TransitJourney( {
 			atlas, routes: transitRoutes, ...( game?.transitJourney ? { state: game.transitJourney } : {} )
 		} );
-		this.persistence = game ? new GamePersistence( { game, gameId: config.gameId } ) : null;
+		// A resumed preview restores the game's state and never saves it.
+		this.persistence = game && config.gameId ? new GamePersistence( { game, gameId: config.gameId } ) : null;
 		// The dialogue server keeps what people remember in the game as each
 		// talk completes; the save's memory joins it beside the load, or before
 		// the first talk or save that finds it has not.
@@ -730,6 +732,13 @@ export class GameApp {
 		// Pictures of people and buildings for the codex, drawn only while the world holds still.
 		this.snapshots = new Snapshots( { renderer: this.renderer } );
 		this.portraits = new Portraits( { snapshots: this.snapshots, poser: this.hero.poser, sim: this.sim } );
+		// The homes Interior authored as scenes wear their residents' names, faces and trades.
+		if ( this.stream ) {
+
+			const trades = new Map( ( npcTypes?.types ?? [] ).map( ( { type, category } ) => [ type, category ] ) );
+			this.stream.homes = new HomeDressing( { sim: this.sim, portraits: this.portraits, roomLights: this.rooms, categoryOf: ( type ) => trades.get( type ) ?? null } );
+
+		}
 		this.buildingShots = new BuildingShots( { snapshots: this.snapshots, pieces: this.shellScene?.pieces ?? null, buildings } );
 		// The people standing near the player are the crowd's, and the probe reflects the city without them.
 		this.probe?.exclude( this.hero.group );

@@ -696,6 +696,18 @@ export class InteriorStream {
 			} );
 
 		}
+		// A home authored as a scene wears its resident's own things: their name by the door,
+		// a face in the photo, their work coat on the hook.
+		if ( this.homes ) {
+
+			const dressed = this.homes.dress( interior.parcelId, record, {
+				fills, shared, matrixOf,
+				fillOf: ( placement ) => copyFill( byId.get( placement.room ), placement, this.modules, record.elevation ) ?? fills.get( placement.room ) ?? shared
+			} );
+			for ( const copy of dressed.copies ) if ( this.modules.has( copy.id ) ) copies.push( { ...copy, draws: this.modules, support: false } );
+			content.add( dressed.group );
+
+		}
 		// The slabs go into the draws first, so the placeholder's can go soonest.
 		copies.sort( ( a, b ) => b.support - a.support );
 		if ( ! await step() ) return null;
