@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { buildHighwayModel, highwayFrameAt, HIGHWAY_MATERIAL_SLOTS } from '../src/game/ground/HighwayModel.js';
+import { test } from 'vitest';
+import { buildHighwayModel, highwayFrameAt, HIGHWAY_MATERIAL_SLOTS } from './HighwayModel.js';
 
 const flat = () => ( {
 	edgeIds: [ 'test-highway' ], path: [ [ 0, 0 ], [ 120, 0 ] ], width: 14, level: 8,

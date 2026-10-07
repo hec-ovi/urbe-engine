@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import test from 'node:test';
-import { buildHighwayModel, highwayFrameAt, HIGHWAY_FACE_FLAGS } from '../src/game/ground/HighwayModel.js';
+import { test } from 'vitest';
+import { buildHighwayModel, highwayFrameAt, HIGHWAY_FACE_FLAGS } from './HighwayModel.js';
 
 const baseline = JSON.parse( readFileSync( new URL( './fixtures/highway-render-baseline.json', import.meta.url ), 'utf8' ) );
 const hash = array => createHash( 'sha256' ).update( Buffer.from( array.buffer, array.byteOffset, array.byteLength ) ).digest( 'hex' );

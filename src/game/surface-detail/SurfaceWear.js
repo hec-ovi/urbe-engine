@@ -1,5 +1,6 @@
 import { abs, cameraPosition, clamp, dFdx, dFdy, exp, float, floor, fract, fwidth, max, min, mix, normalWorldGeometry, positionGeometry, positionWorld, select, smoothstep, uv, varying, vec2, vec3 } from 'three/tsl';
 import { hash32 } from './SurfaceDetail.js';
+import { HIGHWAY_PROFILES } from './HighwayWear.js';
 
 /**
  * Where a city's surfaces are used: world-space wear laid over whatever a
@@ -30,6 +31,8 @@ import { hash32 } from './SurfaceDetail.js';
  * - `wall` and `metal`: exterior faces streaked by rain, grimed and splashed
  *   along the base, smudged at hand height, soot at city scale; metal keeps
  *   its colour and takes the smudges harder.
+ * - `highway-pier`, `highway-soffit`, `highway-deck`, `highway-barrier`: an
+ *   elevated highway's concrete, worn where the structure says ([HighwayWear](HighwayWear.js)).
  */
 
 /** Dark, slightly warm grime (linear). */
@@ -381,4 +384,4 @@ export const metal = ( detail, surface ) => facade( detail, surface, { metal: tr
 export const keptWall = ( detail, surface ) => facade( detail, surface, { metal: false, kept: true } );
 export const keptMetal = ( detail, surface ) => facade( detail, surface, { metal: true, kept: true } );
 
-export const PROFILES = Object.freeze( { road, sidewalk, curb, gutter, joint, paint, wall, metal, 'kept-wall': keptWall, 'kept-metal': keptMetal } );
+export const PROFILES = Object.freeze( { road, sidewalk, curb, gutter, joint, paint, wall, metal, 'kept-wall': keptWall, 'kept-metal': keptMetal, ...HIGHWAY_PROFILES } );

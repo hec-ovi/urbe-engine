@@ -1,4 +1,4 @@
-import { Box3, BufferGeometry, Float32BufferAttribute, ShapeUtils, Uint8BufferAttribute, Vector2 } from 'three';
+import { Box3, BufferGeometry, Float32BufferAttribute, ShapeUtils, Uint8BufferAttribute, Vector2 } from 'three/webgpu';
 
 /**
  * Authored highway mesh content. Atlas owns route, levels, carriageway width,

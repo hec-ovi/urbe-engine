@@ -2,7 +2,12 @@ import * as THREE from 'three/webgpu';
 
 import { frameYield } from '../../app/FrameYield.js';
 
-/** Exact indexed world geometry, expanded cooperatively into ordinary material meshes. */
+/**
+ * Exact indexed world geometry, expanded cooperatively into ordinary material
+ * meshes. A vertex attribute every mesh of one material carries beyond
+ * position, normal and UV (a highway part's structure coordinates, which its
+ * wear reads) is carried over as it stands, untransformed.
+ */
 export async function groundPageGeometry( tiles, wanted ) {
 
 	const materials = new Map();
@@ -38,6 +43,15 @@ export async function groundPageGeometry( tiles, wanted ) {
 			geometry.setAttribute( 'normal', new THREE.BufferAttribute( normals, 3 ) );
 			geometry.setAttribute( 'uv', new THREE.BufferAttribute( uvs, 2 ) );
 			geometry.setIndex( new THREE.BufferAttribute( indices, 1 ) );
+			const carried = Object.entries( bucket.source.geometry.attributes )
+				.filter( ( [ name, attribute ] ) => ! STANDARD.has( name ) && bucket.meshes.every( ( mesh ) => mesh.geometry.getAttribute( name )?.itemSize === attribute.itemSize ) )
+				.map( ( [ name, attribute ] ) => {
+
+					const values = new Float32Array( bucket.vertices * attribute.itemSize );
+					geometry.setAttribute( name, new THREE.BufferAttribute( values, attribute.itemSize ) );
+					return { name, size: attribute.itemSize, values };
+
+				} );
 			const mesh = new THREE.Mesh( geometry, bucket.source.material );
 			mesh.name = `ground:page:${bucket.source.material.name || bucket.source.material.uuid}`;
 			mesh.castShadow = bucket.source.castShadow;
@@ -50,6 +64,7 @@ export async function groundPageGeometry( tiles, wanted ) {
 
 				const p = source.geometry.getAttribute( 'position' ), n = source.geometry.getAttribute( 'normal' ), uv = source.geometry.getAttribute( 'uv' );
 				const sourceIndex = source.geometry.index;
+				const extras = carried.map( ( entry ) => [ entry, source.geometry.getAttribute( entry.name ) ] );
 				for ( let copy = 0; copy < ( source.isInstancedMesh ? source.count : 1 ); copy ++ ) {
 
 					transform.copy( source.matrixWorld );
@@ -69,6 +84,7 @@ export async function groundPageGeometry( tiles, wanted ) {
 						normals[ offset + 1 ] = nm[ 1 ] * nx + nm[ 4 ] * ny + nm[ 7 ] * nz;
 						normals[ offset + 2 ] = nm[ 2 ] * nx + nm[ 5 ] * ny + nm[ 8 ] * nz;
 						uvs[ vertex * 2 ] = uv.getX( i ); uvs[ vertex * 2 + 1 ] = uv.getY( i );
+						for ( const [ { size, values }, from ] of extras ) for ( let c = 0; c < size; c ++ ) values[ vertex * size + c ] = from.getComponent( i, c );
 						if ( ( vertex & 1023 ) === 0 && performance.now() >= deadline && ! await checkpoint() ) { disposePageGeometry( group ); return null; }
 
 					}
@@ -92,6 +108,8 @@ export async function groundPageGeometry( tiles, wanted ) {
 	} catch ( error ) { disposePageGeometry( group ); throw error; }
 
 }
+
+const STANDARD = new Set( [ 'position', 'normal', 'uv' ] );
 
 export function disposePageGeometry( group ) {
 

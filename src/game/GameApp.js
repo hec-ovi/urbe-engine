@@ -6,6 +6,7 @@ import { PbrMaterialFactory } from '../building/PbrMaterialFactory.js';
 import { DETAIL_BINDING, SurfaceDetail } from './surface-detail/SurfaceDetail.js';
 import { wearExterior } from './surface-detail/Weathering.js';
 import { VARIANT_BINDING } from './ground/materials/StreetVariants.js';
+import { highwayGlows } from './ground/HighwayFixtures.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { RecentEvents } from './talk/RecentEvents.js';
 import { NpcVoice } from './voice/NpcVoice.js';
@@ -553,7 +554,7 @@ export class GameApp {
 		// Tens of thousands of fixtures stand in a streamed city (every window's
 		// room lights among them), so the list is built by concatenation and
 		// refilled in place: a spread of that many arguments overflows the stack.
-		const stableFixtures = ( this.shellScene?.pinnedGlows ?? neon.glows ).concat( lamps.glows, this.transit.glows );
+		const stableFixtures = ( this.shellScene?.pinnedGlows ?? neon.glows ).concat( lamps.glows, this.transit.glows, highwayGlows( atlas ) );
 		const fixtures = stableFixtures.concat( this.shellScene?.streamedGlows ?? [] );
 		this.lights = new CityLights( fixtures, this.lighting.capacity, { streamed: Boolean( spatial ) } );
 		if ( this.shellScene ) this.shellScene.onFixturesChanged = () => this.hitches.time( 'fixtures', () => {

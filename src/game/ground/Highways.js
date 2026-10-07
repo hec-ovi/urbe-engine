@@ -1,22 +1,51 @@
 import * as THREE from 'three/webgpu';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
-import { skirt } from './Polygons.js';
+import { materialColor, materialRoughness } from 'three/tsl';
+import binding from '../../../../materials/bindings/highway-materials.json' with { type: 'json' };
+import { buildHighwayModel, HIGHWAY_MATERIAL_SLOTS } from './HighwayModel.js';
+import { graffiti } from '../surface-detail/HighwayWear.js';
+import { highwayFixtures } from './HighwayFixtures.js';
 
 const ROAD_KEY = 'cyberpunk/road/high_rich';
 const STRUCTURE_KEY = 'cyberpunk/concrete/rich';
 const MITRE_LIMIT = 2.5;
+/** The wear each concrete part wears ([HighwayWear](../surface-detail/HighwayWear.js)). */
+const WEAR = Object.freeze( {
+	'deck-concrete': 'highway-deck', 'soffit-concrete': 'highway-soffit',
+	'pier-concrete': 'highway-pier', 'barrier-concrete': 'highway-barrier'
+} );
+/** What a worn part reads besides its geometry; the other parts drop it. */
+const WORN_ATTRIBUTES = [ '_highway_source', '_highway_face', '_highway_context' ];
+/** The sheets of tags the piers are sprayed with. */
+const GRAFFITI = { key: 'cyberpunk/graffiti-atlas/poor', variant: 'markers' };
+const RESOURCES = Symbol.for( 'urbe.material-resources' );
+const FAR = 1e6;
 
 /**
- * Atlas highway structures turned into the deck, ramp and support geometry
- * they describe. Atlas owns every dimension and location. This consumer only
- * interpolates its path and elevation profile, including profile breakpoints
- * that fall inside a centerline segment.
+ * Atlas highway structures drawn as their authored model
+ * ([HighwayModel](HighwayModel.js)): a box-girder deck with its drip kerf and
+ * fascia, the soffit, chamfered piers with their bearing seats and
+ * diaphragms, expansion joints over every support and a parapet each side,
+ * one mesh per material part for the whole city. Atlas owns every dimension
+ * and location; the model only shapes them. The parapets stand outside the
+ * carriageway width Atlas publishes, a barrier's width each side.
+ *
+ * Each part wears the Materials highway binding
+ * (`materials/bindings/highway-materials.json`): the lane-marked highway road
+ * on the carriageway, the formed, soffit and pier concretes, brushed steel
+ * bearings and rubber joints. A theme that lacks the highway concrete keeps
+ * the city's plain concrete. Where the factory wears exteriors, the concrete
+ * parts wear the structure's own weathering: splash at each pier's foot,
+ * deposits under the joints, runoff down the fascia and parapets, tyre spray
+ * and scuffs on the road face of the parapets. Where the theme has the
+ * graffiti atlas, most piers are sprayed with tags at chest height.
  */
 export class Highways {
 
 	constructor( atlas, factory ) {
 
 		this.structures = atlas.streets?.highwayStructures ?? [];
+		this.ground = atlas.volumetric?.ground ?? [];
 		this.factory = factory;
 
 	}
@@ -26,56 +55,192 @@ export class Highways {
 
 		const group = new THREE.Group();
 		group.name = 'highways';
-		const tops = [];
-		const concrete = [];
+		const parts = new Map( HIGHWAY_MATERIAL_SLOTS.map( ( slot ) => [ slot, [] ] ) );
 
 		for ( let i = 0; i < this.structures.length; i ++ ) {
 
 			const structure = this.structures[ i ];
 			const label = `highwayStructures[${i}]`;
-			const sections = sectionsOf( structure, label );
-			tops.push( topOf( sections, structure.width ) );
-			concrete.push( slabOf( sections, structure.deckThickness ) );
-
-			for ( let j = 0; j < structure.supports.length; j ++ ) {
-
-				const support = structure.supports[ j ];
-				validateSupport( support, `${label}.supports[${j}]` );
-				concrete.push( skirt( support.footprint, support.top, support.bottom ) );
-
-			}
+			sectionsOf( structure, label );
+			structure.supports.forEach( ( support, j ) => validateSupport( support, `${label}.supports[${j}]` ) );
+			const model = buildHighwayModel( structure );
+			const joints = model.detail.joints.map( ( joint ) => joint.station ).sort( ( a, b ) => a - b );
+			for ( const part of model.parts ) parts.get( part.slot ).push( prepared( part, joints, structure ) );
 
 		}
 
-		const road = merge( tops );
-		const frame = merge( concrete );
+		const solid = [];
+		let triangles = 0;
+		for ( const [ slot, geometries ] of parts ) {
 
-		if ( road ) {
-
-			const mesh = new THREE.Mesh( road, this.factory.build( ROAD_KEY, 'highway' ) );
-			mesh.name = 'highway:roadway';
+			const merged = merge( geometries );
+			if ( ! merged ) continue;
+			const mesh = new THREE.Mesh( merged, this.#material( slot ) );
+			mesh.name = slot === 'roadway' ? 'highway:roadway' : `highway:${slot}`;
 			mesh.receiveShadow = true;
+			mesh.castShadow = slot !== 'roadway';
 			group.add( mesh );
+			solid.push( merged );
+			triangles += merged.getAttribute( 'position' ).count / 3;
 
 		}
 
-		if ( frame ) {
-
-			const mesh = new THREE.Mesh( frame, this.factory.build( STRUCTURE_KEY ) );
-			mesh.name = 'highway:structure';
-			mesh.castShadow = true;
-			mesh.receiveShadow = true;
-			group.add( mesh );
-
-		}
-
-		const pieces = [ road, frame ].filter( Boolean );
-		const colliderGeometry = pieces.length ? BufferGeometryUtils.mergeGeometries( pieces.map( positionsOnly ), false ) : null;
-		const triangles = pieces.reduce( ( count, geometry ) => count + geometry.getAttribute( 'position' ).count / 3, 0 );
+		const colliderGeometry = solid.length ? BufferGeometryUtils.mergeGeometries( solid.map( positionsOnly ), false ) : null;
+		// Lamps, conduits, drain pipes, puddles and cables on and under the piers (HighwayFixtures).
+		if ( this.structures.length ) for ( const mesh of highwayFixtures( this.structures, this.factory, ( x, z ) => this.#groundAt( x, z ) ) ) group.add( mesh );
 
 		return { group, colliderGeometry, triangles };
 
 	}
+
+	/** One part's material: the binding's finish with its tuning, worn where the factory wears exteriors. */
+	#material( slot ) {
+
+		if ( slot === 'roadway' ) return this.factory.build( ROAD_KEY, 'highway' );
+		const definition = binding.slots[ slot ];
+		const { key, variant } = definition?.source ?? {};
+		// A theme without the highway finishes keeps the plain concrete it always had.
+		if ( ! key || ( this.factory.resolver && ! this.factory.resolver.resolve( key ) ) ) return this.factory.build( STRUCTURE_KEY );
+		if ( typeof this.factory.variant !== 'function' ) return this.factory.build( key, variant );
+		const material = this.factory.variant( key, { variantId: variant, ...( WEAR[ slot ] ? { weather: WEAR[ slot ] } : {} ) } );
+		const tune = definition.tuning;
+		if ( tune && ! material.userData.highwayTuned ) {
+
+			material.normalScale?.set( ...tune.normalScale );
+			material.aoMapIntensity = tune.aoIntensity;
+			material.color?.multiply( new THREE.Color().setRGB( ...tune.colorGain, THREE.LinearSRGBColorSpace ) );
+			material.userData.highwayTuned = true;
+			if ( slot === 'pier-concrete' ) this.#spray( material );
+
+		}
+
+		return material;
+
+	}
+
+	/** The top of the authored ground at a point, the carriageway's level where none is known. */
+	#groundAt( x, z ) {
+
+		let top = null;
+		for ( const cover of this.ground ) if ( inside( cover.polygon, x, z ) ) top = Math.max( top ?? - Infinity, cover.top ?? 0 );
+		return top ?? 0;
+
+	}
+
+	/** Tags sprayed over a pier material's own colour and roughness, worn or not. */
+	#spray( material ) {
+
+		if ( ! this.factory.resolver?.resolve( GRAFFITI.key ) || typeof this.factory.dataMap !== 'function' ) return;
+		const atlas = this.factory.dataMap( GRAFFITI.key, GRAFFITI.variant, 'basecolor', { srgb: true, wrap: 'clamp' } );
+		const sprayed = graffiti( atlas.texture, {
+			color: material.colorNode ?? materialColor.rgb, roughness: material.roughnessNode ?? materialRoughness
+		} );
+		material.colorNode = sprayed.color;
+		material.roughnessNode = sprayed.roughness;
+		material[ RESOURCES ] = [ ...( material[ RESOURCES ] ?? [] ), atlas ];
+		material.userData.highwayGraffiti = GRAFFITI.key;
+
+	}
+
+}
+
+/**
+ * A model part made ready to merge with the same part of other structures:
+ * its face flags as floats, and `_highway_context` (owning support base and
+ * top, the joints either side) worked out once here, so no shader searches the
+ * supports or joints. A part no wear reads keeps only what it draws with.
+ */
+function prepared( part, joints, structure ) {
+
+	const geometry = part.geometry;
+	if ( ! WEAR[ part.slot ] ) {
+
+		for ( const name of WORN_ATTRIBUTES ) geometry.deleteAttribute( name );
+		return geometry;
+
+	}
+	const source = geometry.getAttribute( '_highway_source' ), face = geometry.getAttribute( '_highway_face' );
+	const count = source.count;
+	const flags = new Float32Array( count );
+	for ( let i = 0; i < count; i ++ ) flags[ i ] = face.getX( i );
+	const context = new Float32Array( count * 4 );
+	// Unowned concrete (deck, soffit, parapets) has no support base.
+	for ( let i = 0; i < count; i ++ ) { context[ i * 4 ] = - FAR; context[ i * 4 + 1 ] = - FAR; }
+	const ownership = geometry.userData.highwayContent?.ownership;
+	for ( const range of ownership?.ownerRanges ?? [] ) {
+
+		const support = range.support >= 0 ? ownership.supportTable[ range.support ] : null;
+		if ( ! support ) continue;
+		for ( let i = range.start; i < range.start + range.count; i ++ ) { context[ i * 4 ] = support.bottom; context[ i * 4 + 1 ] = support.top; }
+
+	}
+	// Each triangle keeps one pair of joints, bracketing its mean station, so
+	// a vertex standing on a joint does not pick a side of its own; a face
+	// that spans a joint (a diaphragm over its pier) keeps that joint both ways.
+	for ( let i = 0; i < count; i += 3 ) {
+
+		const stations = [ source.getX( i ), source.getX( i + 1 ), source.getX( i + 2 ) ];
+		const [ low, high ] = [ Math.min( ...stations ), Math.max( ...stations ) ];
+		const spanned = joints.find( ( joint ) => joint > low + 1e-4 && joint < high - 1e-4 );
+		const [ left, right ] = spanned === undefined ? bracket( joints, ( stations[ 0 ] + stations[ 1 ] + stations[ 2 ] ) / 3 ) : [ spanned, spanned ];
+		for ( let j = i; j < i + 3; j ++ ) { context[ j * 4 + 2 ] = left; context[ j * 4 + 3 ] = right; }
+
+	}
+	geometry.setAttribute( '_highway_face', new THREE.Float32BufferAttribute( flags, 1 ) );
+	geometry.setAttribute( '_highway_context', new THREE.Float32BufferAttribute( context, 4 ) );
+	// A pier's faces are sprayed about its own centre.
+	if ( part.slot === 'pier-concrete' ) {
+
+		const centres = new Float32Array( count * 2 );
+		for ( const range of ownership?.ownerRanges ?? [] ) {
+
+			const support = structure.supports[ range.support ];
+			if ( ! support ) continue;
+			const [ x, z ] = support.position ?? centreOf( support.footprint );
+			for ( let i = range.start; i < range.start + range.count; i ++ ) { centres[ i * 2 ] = x; centres[ i * 2 + 1 ] = z; }
+
+		}
+		geometry.setAttribute( '_highway_pier', new THREE.Float32BufferAttribute( centres, 2 ) );
+
+	}
+
+	return geometry;
+
+}
+
+function inside( ring, x, z ) {
+
+	let crossed = false;
+	for ( let i = 0, j = ring.length - 1; i < ring.length; j = i ++ ) {
+
+		const [ xi, zi ] = ring[ i ], [ xj, zj ] = ring[ j ];
+		if ( ( zi > z ) !== ( zj > z ) && x < ( xj - xi ) * ( z - zi ) / ( zj - zi ) + xi ) crossed = ! crossed;
+
+	}
+	return crossed;
+
+}
+
+/** The mean of a footprint's corners. */
+function centreOf( ring ) {
+
+	return [ 0, 1 ].map( ( axis ) => ring.reduce( ( sum, point ) => sum + point[ axis ], 0 ) / ring.length );
+
+}
+
+/** The joints either side of a station, far away where there is none. */
+function bracket( joints, station ) {
+
+	let low = 0, high = joints.length;
+	while ( low < high ) {
+
+		const mid = ( low + high ) >> 1;
+		if ( joints[ mid ] <= station ) low = mid + 1;
+		else high = mid;
+
+	}
+
+	return [ low > 0 ? joints[ low - 1 ] : - FAR, low < joints.length ? joints[ low ] : FAR ];
 
 }
 
@@ -116,70 +281,6 @@ function sectionsOf( structure, label ) {
 		};
 
 	} );
-
-}
-
-function topOf( sections, width ) {
-
-	const positions = [];
-	const uvs = [];
-
-	for ( let i = 0; i < sections.length - 1; i ++ ) {
-
-		const a = sections[ i ];
-		const b = sections[ i + 1 ];
-		push( positions, a.left, b.left, a.right, a.right, b.left, b.right );
-		uvs.push(
-			0, a.distance, 0, b.distance, width, a.distance,
-			width, a.distance, 0, b.distance, width, b.distance
-		);
-
-	}
-
-	return geometry( positions, uvs );
-
-}
-
-/** The underside, both fascia faces and end caps. The road surface closes the top. */
-function slabOf( sections, thickness ) {
-
-	const positions = [];
-	const uvs = [];
-	const bottom = ( point ) => [ point[ 0 ], point[ 1 ] - thickness, point[ 2 ] ];
-
-	for ( let i = 0; i < sections.length - 1; i ++ ) {
-
-		const a = sections[ i ];
-		const b = sections[ i + 1 ];
-		const al = bottom( a.left );
-		const ar = bottom( a.right );
-		const bl = bottom( b.left );
-		const br = bottom( b.right );
-
-		push( positions, al, ar, bl, ar, br, bl );
-		push( positions, a.left, al, b.left, al, bl, b.left );
-		push( positions, a.right, b.right, ar, ar, b.right, br );
-
-		for ( let face = 0; face < 3; face ++ ) {
-
-			uvs.push(
-				a.distance, a.y, a.distance, a.y - thickness, b.distance, b.y,
-				a.distance, a.y - thickness, b.distance, b.y - thickness, b.distance, b.y
-			);
-
-		}
-
-	}
-
-	const first = sections[ 0 ];
-	const last = sections.at( - 1 );
-	push( positions,
-		first.left, first.right, bottom( first.left ), first.right, bottom( first.right ), bottom( first.left ),
-		last.left, bottom( last.left ), last.right, last.right, bottom( last.left ), bottom( last.right )
-	);
-	uvs.push( ...new Array( 24 ).fill( 0 ) );
-
-	return geometry( positions, uvs );
 
 }
 
@@ -314,17 +415,6 @@ function uniqueSorted( values ) {
 	const sorted = [ ...values ].sort( ( a, b ) => a - b );
 
 	return sorted.filter( ( value, i ) => i === 0 || Math.abs( value - sorted[ i - 1 ] ) > 1e-8 );
-
-}
-
-function geometry( positions, uvs ) {
-
-	const result = new THREE.BufferGeometry();
-	result.setAttribute( 'position', new THREE.Float32BufferAttribute( positions, 3 ) );
-	result.setAttribute( 'uv', new THREE.Float32BufferAttribute( uvs, 2 ) );
-	result.computeVertexNormals();
-
-	return result;
 
 }
 
