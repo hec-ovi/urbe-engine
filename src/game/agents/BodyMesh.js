@@ -9,8 +9,10 @@ import { clothShare, crowdGarments, packLook, paintedColorNode } from './CrowdLo
  * vertex and the rest pose how high it is and how far out along the arm, and
  * every person carries their own skin, top, trousers and footwear colours, the
  * top's second colour and where each garment ends, cut as the garment's own
- * pattern cuts it (CrowdLook.js). Nothing is added to the mesh, so a whole
- * city of people still costs one draw call per model.
+ * pattern cuts it (CrowdLook.js). The clothes' thickness is the body's own
+ * surface pushed out by the worn garments' ease, layered as their fitted
+ * shells are (CharacterAssets.crowdEase, CrowdLook.wornEase). Nothing is added
+ * to the mesh, so a whole city of people still costs one draw call per model.
  */
 export class BodyMesh extends CrowdMesh {
 

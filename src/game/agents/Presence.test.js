@@ -25,20 +25,23 @@ it( 'shares opaque dither coverage across vehicle body and lamps', () => {
 it.each( [ false, true ] )( 'packs crowd coverage into the pose buffer with storage=%s', async storage => {
 	const { BodyMesh } = await import( './BodyMesh.js' );
 	const { lookOf } = await import( './Appearance.js' );
-	const { packLook } = await import( './CrowdLook.js' );
+	const { EASE_ROWS, packLook } = await import( './CrowdLook.js' );
 	const { defaultRecipe } = await import( './avatar/Recipe.js' );
 	const { FRAMES } = await import( './VatBaker.js' );
 	const geometry = new THREE.PlaneGeometry();
 	const count = geometry.getAttribute( 'position' ).count;
 	const baked = { mesh: new THREE.Mesh( geometry ), vertexCount: count, rows: FRAMES,
-		position: new Float32Array( count * FRAMES * 4 ), normal: new Float32Array( count * FRAMES * 4 ) };
+		position: new Float32Array( count * FRAMES * 4 ), normal: new Float32Array( count * FRAMES * 4 ),
+		builds: new Float32Array( count * 4 ), ease: new Float32Array( count * EASE_ROWS * 4 ) };
 	const body = new BodyMesh( baked, 2, storage, { map: new THREE.Texture(), cloth: new THREE.Float32BufferAttribute( new Float32Array( count * 4 ), 4 ), height: 1.8, bottom: 0 } );
 	const look = lookOf( defaultRecipe( 'regular-female' ) );
 	body.setInstance( 0, new THREE.Vector3( 1, 2, 3 ), 0, 5, 0, look, 0.25 );
 	body.commit( 1 );
-	// Frame, clip and coverage, and the figure the look packs in the fourth lane.
+	// Frame, clip and coverage, the garments worn above it, and the figure the look packs in the fourth lane.
 	expect( body.pose.itemSize ).toBe( 4 );
-	expect( body.pose.getZ( 0 ) ).toBe( 0.25 );
+	expect( body.pose.getZ( 0 ) % 2 ).toBe( 0.25 );
+	expect( Math.floor( body.pose.getZ( 0 ) / 2 ) ).toBe( packLook( look ).garments );
+	expect( packLook( look ).garments ).toBeGreaterThan( 0 );
 	expect( body.pose.getW( 0 ) ).toBe( packLook( look ).figure );
 	expect( body.attributes.length + Object.keys( body.mesh.geometry.attributes ).length ).toBeLessThanOrEqual( 8 );
 	expect( body.mesh.castShadow ).toBe( true );

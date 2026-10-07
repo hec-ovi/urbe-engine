@@ -1,5 +1,5 @@
-import { attribute, float, floor, max, mix, mod, positionGeometry, pow, smoothstep, step, texture, varying, vec3, vec4 } from 'three/tsl';
-import { HEIGHT_LIMITS } from './avatar/Recipe.js';
+import { add, attribute, float, floor, int, max, mix, mod, mul, positionGeometry, pow, smoothstep, step, sub, texture, varying, vec3, vec4 } from 'three/tsl';
+import { GARMENTS, HEIGHT_LIMITS, SLOTS } from './avatar/Recipe.js';
 import { skinNode } from './avatar/Tints.js';
 import { fabricDetail } from './Fabric.js';
 
@@ -15,6 +15,15 @@ export const BUILD_LEVELS = 15;
 export const BUILD_STEP = 0.15 / 7;
 /** The pose lane's rows stay below this; the builds are counted in multiples of it. */
 export const ROW_SPAN = 1024;
+/**
+ * A crowd body's ease: each garment of the wardrobe (Recipe.GARMENTS, in slot
+ * order) has a lane of a vec4 row per vertex, so every garment fits in this
+ * many rows.
+ */
+const EASE_BASE = Object.fromEntries( SLOTS.map( ( slot, index ) => [ slot, SLOTS.slice( 0, index ).reduce( ( sum, before ) => sum + GARMENTS[ before ].length, 0 ) ] ) );
+export const EASE_ROWS = Math.ceil( SLOTS.reduce( ( sum, slot ) => sum + GARMENTS[ slot ].length, 0 ) / 4 );
+/** Each slot's garment code takes this many values in the presence lane: 0 for none, then the slot's garments. */
+const GARMENT_SPAN = 16;
 /** How wide a cut's edge fades, as a share of body height: about a centimetre. */
 const EDGE = 0.006;
 /** How far a seam's shadow reaches either side of a cut, as a share of height. */
@@ -42,6 +51,8 @@ const packs = new WeakMap();
  * - `figure`: the footwear's top and the collar a byte each, then the top's
  *   panel style (2 bits), whether it is tucked (1) and the height step (5)
  * - `builds`: the upper, waist and lower build steps, four bits each
+ * - `garments`: the top, trousers and footwear worn, four bits each, each its
+ *   place in its slot's Recipe.GARMENTS counted from 1, 0 for none
  */
 export function packLook( look ) {
 
@@ -54,10 +65,102 @@ export function packLook( look ) {
 		panel: look.panel.getHex(),
 		figure: byte( look.bootTop ) + byte( look.neck ) * 256
 			+ ( ( look.panelStyle & 3 ) | ( look.tucked ? 4 : 0 ) | ( Math.max( 0, Math.min( STATURES, height ) ) << 3 ) ) * 65536,
-		builds: level( look.builds?.upper ) + level( look.builds?.waist ) * 16 + level( look.builds?.lower ) * 256
+		builds: level( look.builds?.upper ) + level( look.builds?.waist ) * 16 + level( look.builds?.lower ) * 256,
+		garments: SLOTS.reduce( ( code, slot, index ) => code + ( GARMENTS[ slot ].indexOf( look.recipe?.outfit?.[ slot ] ) + 1 ) * GARMENT_SPAN ** index, 0 )
 	};
 	packs.set( look, pack );
 	return pack;
+
+}
+
+/**
+ * The presence lane of a crowd instance: its coverage, 0 to 1, with the worn
+ * garments' code (packLook) above it, two apart, a whole number well inside
+ * what a float holds exactly.
+ */
+export function presenceLane( presence, pack ) {
+
+	return Math.max( 0, Math.min( 1, presence ) ) + pack.garments * 2;
+
+}
+
+/** A crowd instance's coverage, from its presence lane (vertex stage). */
+export function presenceNode( lane ) {
+
+	return mod( lane, 2 );
+
+}
+
+/**
+ * Where a garment's ease sits in a crowd body's ease rows (`crowdEase`): its
+ * lane counted over the rows, or -1 for none or a garment the wardrobe does
+ * not hold.
+ */
+export function easeLane( slot, id ) {
+
+	const index = GARMENTS[ slot ]?.indexOf( id ) ?? - 1;
+	return index < 0 ? - 1 : EASE_BASE[ slot ] + index;
+
+}
+
+/**
+ * How far a crowd body's surface stands out along its normal for the clothes
+ * its person wears (vertex stage), from the presence lane's garments and the
+ * figure lane's tuck: each worn garment's ease at this vertex, layered as
+ * `wornEase` layers the fitted shells.
+ *
+ * @param lane the instance's presence lane (`presenceLane`)
+ * @param figure the instance's figure lane (`packLook`)
+ * @param ease the body's ease rows as a PoseBuffer of EASE_ROWS rows
+ * @param column the vertex
+ */
+export function easeNode( lane, figure, ease, column ) {
+
+	const code = floor( lane.div( 2 ) );
+	const lanes = vec4( 0, 1, 2, 3 );
+	const [ top, pants, footwear ] = SLOTS.map( ( slot, index ) => {
+
+		const worn = mod( floor( code.div( GARMENT_SPAN ** index ) ), GARMENT_SPAN );
+		const at = max( worn.add( EASE_BASE[ slot ] - 1 ), 0 );
+		const row = floor( at.div( 4 ) );
+		const pick = float( 1 ).sub( step( 0.5, lanes.sub( at.sub( row.mul( 4 ) ) ).abs() ) );
+		return ease.row( int( row ), column ).dot( pick ).mul( step( 0.5, worn ) );
+
+	} );
+	const tucked = step( 0.5, mod( floor( figure.div( 65536 * 4 ) ), 2 ) );
+	return wornEase( top, pants, footwear, tucked, NODES );
+
+}
+
+/** The least ease a garment gives a vertex it covers (`crowdEase`), so any ease above none says it covers it. */
+export const EASE_COVERS = 0.001;
+
+/** `wornEase` on numbers. */
+const NUMBERS = {
+	add: ( a, b ) => a + b, mul: ( a, b ) => a * b, sub: ( a, b ) => a - b, max: Math.max,
+	mix: ( a, b, t ) => a + ( b - a ) * t, step: ( edge, x ) => ( x < edge ? 0 : 1 )
+};
+/** `wornEase` in the vertex stage. */
+const NODES = { add, mul, sub, max, mix, step };
+
+/**
+ * The ease a vertex takes from the clothes worn, as the close rig's fitted
+ * shells stand there (Wardrobe.fitOutfit): from each slot's own ease at the
+ * vertex, none where that slot is bare or does not reach, the outermost
+ * layer. Footwear that covers the vertex is worn over the trousers, which do
+ * not reach under it; a tucked top goes under the trousers' waistband and
+ * shows only above it; a top worn out over trousers sits on their shaped seat
+ * with its own ease on theirs. One rule for the vertex stage and for numbers,
+ * by the operations it is handed (`NUMBERS`, or TSL's).
+ *
+ * @param tucked 1 for a top worn under the trousers' waistband, else 0
+ */
+export function wornEase( top, pants, footwear, tucked, { add, mul, sub, max, mix, step } = NUMBERS ) {
+
+	const covers = ( ease ) => step( EASE_COVERS / 2, ease );
+	const lower = mix( pants, footwear, covers( footwear ) );
+	const over = mix( add( top, mul( pants, covers( top ) ) ), mul( top, sub( 1, covers( pants ) ) ), tucked );
+	return max( lower, over );
 
 }
 

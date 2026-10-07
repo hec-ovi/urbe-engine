@@ -8,8 +8,11 @@ import { CharacterAnimations } from './CharacterAnimations.js';
 import { garments } from './Garments.js';
 import { hasClip, transferredClip } from './LayeredClips.js';
 import { BodyShapes } from './avatar/BodyShape.js';
-import { BUILD_KEYS } from './avatar/Recipe.js';
+import { refineSurface } from './avatar/BodySurface.js';
+import { BUILD_KEYS, GARMENTS, SLOTS } from './avatar/Recipe.js';
 import { stepped } from './avatar/Steps.js';
+import { fitOutfit } from './avatar/Wardrobe.js';
+import { EASE_COVERS, EASE_ROWS, easeLane } from './CrowdLook.js';
 import {
 	ANIMATION_URL, CHARACTER_MANIFEST_URL, CHARACTER_ROOT, CROWD_CLIPS, CROWD_MODELS,
 	assertRigCompatibility
@@ -91,9 +94,9 @@ export class CharacterAssets {
 
 		}
 
-		// Two bakes per model, the body's two surfaces and the head that
-		// carries the hair, are the parts the load counts.
-		const total = CROWD_MODELS.length * 2;
+		// Three parts per model, the bake of the body's two surfaces, the head
+		// that carries the hair and the clothes' ease, are what the load counts.
+		const total = CROWD_MODELS.length * 3;
 		let done = 0;
 		const variants = [];
 
@@ -129,6 +132,9 @@ export class CharacterAssets {
 			const baked = mergeBaked( [ bakedBody, bakedEyes ] );
 			// The slim and the broad share the bake: each vertex's builds, out along its normal.
 			baked.builds = crowdBuilds( await stepped( BodyShapes.measure( root ), slice ), baked.vertexCount );
+			// And so do all the clothes: how far each garment stands off each vertex.
+			baked.ease = await stepped( crowdEase( body, baked.vertexCount ), slice );
+			onProgress( ++ done, total );
 			const cloth = crowdCloth( bodyCloth, bakedEyes.vertexCount );
 
 			if ( slice ) await slice.step();
@@ -187,13 +193,14 @@ export class CharacterAssets {
 
 /**
  * The pose buffers of one body on the GPU: its rows of position and normal,
- * a vec4 per vertex (float on WebGPU, half float in WebGL's textures), and the
- * three vec4s a row the head carries its hair on.
+ * a vec4 per vertex (float on WebGPU, half float in WebGL's textures), the
+ * three vec4s a row the head carries its hair on, and the vertex's builds and
+ * ease rows.
  */
 export function vatBytes( baked, head, storageCapable ) {
 
 	const scalar = storageCapable ? 4 : 2;
-	return ( baked.rows * baked.vertexCount * 2 + head.rows * 3 + ( baked.builds ? baked.vertexCount : 0 ) ) * 4 * scalar;
+	return ( baked.rows * baked.vertexCount * 2 + head.rows * 3 + ( baked.builds ? baked.vertexCount : 0 ) + ( baked.ease ? baked.vertexCount * EASE_ROWS : 0 ) ) * 4 * scalar;
 
 }
 
@@ -229,6 +236,70 @@ export function crowdBuilds( shapes, vertexCount ) {
 
 	} );
 	return builds;
+
+}
+
+/**
+ * Each vertex of the merged body draw, how far each garment of the wardrobe
+ * stands off it: the crowd paints its clothes on the bare body, and this is
+ * the thickness the close rig's fitted shells have there. The rest body is
+ * refined and fitted with each garment alone exactly as a person's fit is
+ * (Tailor, Wardrobe.fitOutfit), and every shell vertex says which body vertex
+ * it is fitted over (`userData.sources`): the furthest of them out along that
+ * vertex's rest normal is the garment's ease there, at least EASE_COVERS, so
+ * a vertex it covers always says so. A vertex a garment does not cover, the
+ * refinement's and the cut's added points and the eyes after the body take
+ * none.
+ *
+ * @param body the crowd body's source SkinnedMesh, before any refinement
+ * @param vertexCount the merged draw's vertices, the body's first
+ * @returns (a generator of work steps ending in) a Float32Array of EASE_ROWS
+ *   rows of a vec4 per vertex, each garment in its lane (CrowdLook.easeLane)
+ */
+export function* crowdEase( body, vertexCount ) {
+
+	const ease = new Float32Array( EASE_ROWS * vertexCount * 4 );
+	const refined = yield* refineSurface( body );
+	const bones = body.skeleton.bones.map( ( bone ) => bone.name );
+	const rest = refined.getAttribute( 'position' );
+	const normals = refined.getAttribute( 'normal' );
+	const count = Math.min( vertexCount, body.geometry.getAttribute( 'position' ).count );
+	for ( const slot of SLOTS ) for ( const id of GARMENTS[ slot ] ) {
+
+		yield;
+		// fitOutfit replaces the attributes of the geometry it cuts, never their arrays.
+		const geometry = new THREE.BufferGeometry();
+		for ( const name of [ 'position', 'normal', 'skinIndex', 'skinWeight' ] ) geometry.setAttribute( name, refined.getAttribute( name ) );
+		geometry.setIndex( refined.index );
+		const outfit = { top: 'none', pants: 'none', footwear: 'none', [ slot ]: id };
+		const { garments } = yield* fitOutfit( geometry, bones, outfit );
+		const lane = easeLane( slot, id );
+		const offset = Math.floor( lane / 4 ) * vertexCount * 4 + lane % 4;
+		for ( const { geometry: shell } of garments ) {
+
+			const sources = shell.userData.sources;
+			const position = shell.getAttribute( 'position' );
+			for ( let vertex = 0; vertex < sources.length; vertex ++ ) {
+
+				const source = sources[ vertex ];
+				if ( source < 0 || source >= count ) continue;
+				const nx = normals.getX( source ), ny = normals.getY( source ), nz = normals.getZ( source );
+				const length = Math.hypot( nx, ny, nz ) || 1;
+				const along = ( ( position.getX( vertex ) - rest.getX( source ) ) * nx
+					+ ( position.getY( vertex ) - rest.getY( source ) ) * ny
+					+ ( position.getZ( vertex ) - rest.getZ( source ) ) * nz ) / length;
+				const at = offset + source * 4;
+				ease[ at ] = Math.max( ease[ at ], along, EASE_COVERS );
+
+			}
+			shell.dispose();
+
+		}
+		geometry.dispose();
+
+	}
+	if ( refined !== body.geometry ) refined.dispose();
+	return ease;
 
 }
 

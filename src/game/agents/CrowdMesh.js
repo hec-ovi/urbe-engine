@@ -4,7 +4,7 @@ import { cos, instancedBufferAttribute, int, mix, sin, transformNormalToView, va
 import { FRAMES, clipRows, rowsAt } from './VatBaker.js';
 import { presenceMaterial } from './Presence.js';
 import { PoseBuffer } from './PoseBuffer.js';
-import { ROW_SPAN, buildNode, packLook, statureNode } from './CrowdLook.js';
+import { EASE_ROWS, ROW_SPAN, buildNode, easeNode, packLook, presenceLane, presenceNode, statureNode } from './CrowdLook.js';
 
 /** How every crowd surface answers light; a focused rig wears the same, so the swap does not show. */
 export const CROWD_SURFACE = { roughness: 0.9, metalness: 0 };
@@ -45,6 +45,8 @@ export class CrowdMesh {
 		// pipeline, so the per-instance data is packed: where a person stands
 		// and faces in one vec4, the two pose rows their frame of their clip
 		// blends with presence and their figure (CrowdLook.packLook) in another.
+		// The presence lane carries the garments worn above the coverage
+		// (CrowdLook.presenceLane).
 		this.motion = this.attribute( 4 );
 		this.pose = this.attribute( 4 );
 
@@ -76,12 +78,21 @@ export class CrowdMesh {
 		const posed = this.posed( baked, storageCapable, { row0, row1, blend, column } );
 		// A person's build moves the surface out or in along its posed normal:
 		// a body's builds are almost all across it (BodyShape), so the slim and
-		// the broad share one bake.
-		const built = baked.builds
-			? posed.position.add( posed.normal.normalize().mul( buildNode( aPose.y, new PoseBuffer( baked.builds, baked.vertexCount, 1, storageCapable ).row( int( 0 ), column ) ) ) )
+		// the broad share one bake. Their clothes stand off it along the same
+		// normal by the ease of the garments worn there, layered as the fitted
+		// shells the close rig wears stand off its skin, so a person keeps
+		// their bulk when the rig takes over.
+		const outward = [
+			baked.builds && buildNode( aPose.y, new PoseBuffer( baked.builds, baked.vertexCount, 1, storageCapable ).row( int( 0 ), column ) ),
+			baked.ease && easeNode( aPose.z, aPose.w, new PoseBuffer( baked.ease, baked.vertexCount, EASE_ROWS, storageCapable ), column )
+		].filter( Boolean );
+		const built = outward.length
+			? posed.position.add( posed.normal.normalize().mul( outward.reduce( ( sum, amount ) => sum.add( amount ) ) ) )
 			: posed.position;
-		// A person stands at their recipe's height: the baked body scaled about its feet.
-		const pose = built.mul( statureNode( aPose.w ) );
+		// A person stands at their recipe's height: the baked body stretched up
+		// from its feet, its width kept, as the rig's height lengthens legs and
+		// torso and never scales the body (HeightRig).
+		const pose = built.mul( vec3( 1, statureNode( aPose.w ), 1 ) );
 		const normal = posed.normal;
 
 		const geometry = baked.mesh.geometry.clone();
@@ -97,7 +108,7 @@ export class CrowdMesh {
 		}
 		geometry.boundingSphere = new THREE.Sphere( new THREE.Vector3(), 1e6 );
 
-		const material = presenceMaterial( new MeshStandardNodeMaterial( CROWD_SURFACE ), aPose.z );
+		const material = presenceMaterial( new MeshStandardNodeMaterial( CROWD_SURFACE ), presenceNode( aPose.z ) );
 		material.positionNode = turn( pose ).add( aOrigin );
 		// normalNode is consumed in view space. The baked vector first follows
 		// the same per-person heading as the position. Sample in the vertex
@@ -182,7 +193,7 @@ export class CrowdMesh {
 		const rows = rowsAt( this.clips[ clip ] ?? this.clips[ 0 ], frame, this.rows );
 		const pack = packLook( look );
 		this.motion.setXYZW( slot, position.x, position.y, position.z, heading );
-		this.pose.setXYZW( slot, rows[ 0 ], rows[ 1 ] + pack.builds * ROW_SPAN, presence, pack.figure );
+		this.pose.setXYZW( slot, rows[ 0 ], rows[ 1 ] + pack.builds * ROW_SPAN, presenceLane( presence, pack ), pack.figure );
 		this.setLook( slot, look );
 
 	}
