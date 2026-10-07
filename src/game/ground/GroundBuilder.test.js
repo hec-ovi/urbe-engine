@@ -62,8 +62,11 @@ describe( 'GroundBuilder', () => {
 				.filter( object => object.isMesh ).map( object => object.material.userData );
 			const selected = build();
 			expect( build() ).toEqual( selected );
-			expect( new Set( selected.map( material => material.variantId ) ).size ).toBe( 1 );
-			variants.add( selected[ 0 ].variantId );
+			// The road and curb name the family; its lot paving is the family's photographed concrete.
+			const road = selected.find( material => material.key.includes( 'street-road' ) );
+			expect( selected.find( material => material.key.includes( 'street-curb' ) ).variantId ).toBe( road.variantId );
+			expect( selected.some( material => /street-sidewalk|street-precast/.test( material.key ) ) ).toBe( true );
+			variants.add( road.variantId );
 		}
 		expect( variants ).toEqual( new Set( [ 'maintained', 'salvaged', 'industrial' ] ) );
 

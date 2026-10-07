@@ -113,6 +113,9 @@ import { Snapshots } from './portraits/Snapshots.js';
 import { Portraits } from './portraits/Portraits.js';
 import { BuildingShots } from './portraits/BuildingShots.js';
 
+/** The sheets of tags poor walls and highway piers are sprayed with. */
+const GRAFFITI_ATLAS = Object.freeze( { key: 'cyberpunk/graffiti-atlas/poor', variant: 'markers' } );
+
 const _push = new THREE.Vector3();
 const THEME = 'cyberpunk';
 /** Named steps one load runs through, the counter's own first units. */
@@ -459,7 +462,10 @@ export class GameApp {
 				mapTexture: ( key, variantId, map, options ) => factory.dataMap( key, variantId, map, options ),
 				anisotropy: Math.min( 4, this.tier.textureAnisotropy ?? 4 )
 			} );
-			factory.weathering = { detail, resources: detail.resources, nodes: ( profile ) => wearExterior( detail, profile ) };
+			// Poor walls' blank stretches are sprayed with the theme's graffiti atlas, where the theme has it.
+			const graffiti = resolver.resolve( GRAFFITI_ATLAS.key ) ? factory.dataMap( GRAFFITI_ATLAS.key, GRAFFITI_ATLAS.variant, 'basecolor', { srgb: true, wrap: 'clamp' } ) : null;
+			if ( graffiti ) detail.graffiti = graffiti.texture;
+			factory.weathering = { detail, resources: [ ...detail.resources, ...( graffiti ? [ graffiti ] : [] ) ], nodes: ( profile ) => wearExterior( detail, profile ) };
 
 		}
 		this.missionItems = new MissionItemAssets( {

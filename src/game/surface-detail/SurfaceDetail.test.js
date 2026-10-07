@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ClampToEdgeWrapping, MeshStandardMaterial, NoColorSpace, RepeatWrapping, SRGBColorSpace, Texture } from 'three/webgpu';
+import { ClampToEdgeWrapping, DataTexture, MeshStandardMaterial, NoColorSpace, RepeatWrapping, SRGBColorSpace, Texture } from 'three/webgpu';
 import binding from '../../../../materials/bindings/street-native.json' with { type: 'json' };
 import { DECAL_GRID, decals, frames, masks } from './DetailMasks.js';
 import { pack } from './DetailPack.js';
@@ -249,6 +249,42 @@ describe( 'weathering', () => {
 		expect( zinc.roughnessNode ).toBe( wearExterior( detail, 'metal' ).roughnessNode );
 		expect( glass ).toBe( factory.build( 'cyberpunk/paired-window-glass/mid' ) );
 		expect( () => wearExterior( detail, 'nothing' ) ).toThrow( /unknown profile/ );
+
+	} );
+
+	it( 'sprays a poor wall with the graffiti atlas the layer carries, and never a rich wall or a metal', () => {
+
+		const sprayed = ( detail ) => {
+
+			const textures = new Set(), seen = new Set(), stack = [ wearExterior( detail, 'wall' ).colorNode ];
+			while ( stack.length ) {
+
+				const node = stack.pop();
+				if ( ! node?.isNode || seen.has( node ) ) continue;
+				seen.add( node );
+				if ( node.isTextureNode ) textures.add( node.value );
+				for ( const child of node.getChildren() ) stack.push( child );
+
+			}
+			return textures;
+
+		};
+		const plain = inPlace();
+		const atlas = new DataTexture( new Uint8Array( 4 ), 1, 1 );
+		expect( sprayed( plain ).has( atlas ) ).toBe( false );
+		const tagged = inPlace();
+		tagged.graffiti = atlas;
+		expect( sprayed( tagged ).has( atlas ) ).toBe( true );
+		const kept = new Set(), stack = [ wearExterior( tagged, 'kept-wall' ).colorNode, wearExterior( tagged, 'metal' ).colorNode ];
+		while ( stack.length ) {
+
+			const node = stack.pop();
+			if ( ! node?.isNode || kept.has( node ) ) continue;
+			kept.add( node );
+			for ( const child of node.getChildren() ) stack.push( child );
+
+		}
+		expect( [ ...kept ].some( ( node ) => node.isTextureNode && node.value === atlas ) ).toBe( false );
 
 	} );
 

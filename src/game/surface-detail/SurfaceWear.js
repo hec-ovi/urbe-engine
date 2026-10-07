@@ -1,4 +1,4 @@
-import { abs, cameraPosition, clamp, dFdx, dFdy, exp, float, floor, fract, fwidth, max, min, mix, normalWorldGeometry, positionGeometry, positionWorld, select, smoothstep, uv, varying, vec2, vec3 } from 'three/tsl';
+import { abs, cameraPosition, clamp, dFdx, dFdy, exp, float, floor, fract, fwidth, max, min, mix, normalWorldGeometry, positionGeometry, positionWorld, select, smoothstep, texture, uv, varying, vec2, vec3 } from 'three/tsl';
 import { hash32 } from './SurfaceDetail.js';
 import { HIGHWAY_PROFILES } from './HighwayWear.js';
 
@@ -30,7 +30,9 @@ import { HIGHWAY_PROFILES } from './HighwayWear.js';
  * - `paint`: road paint dirtied and polished by the traffic crossing it.
  * - `wall` and `metal`: exterior faces streaked by rain, grimed and splashed
  *   along the base, smudged at hand height, soot at city scale; metal keeps
- *   its colour and takes the smudges harder.
+ *   its colour and takes the smudges harder. Where the layer carries the
+ *   graffiti atlas (`detail.graffiti`), a poor wall's blank stretches are
+ *   sprayed at street level, one 4.5 m cell in five.
  * - `lot`: the retained ground's lot, plaza and sidewalk paving, laid in
  *   metres: a sidewalk's smears, stains, gum and cracks with no slab frame.
  * - `highway-pier`, `highway-soffit`, `highway-deck`, `highway-barrier`: an
@@ -376,8 +378,46 @@ function facade( detail, { color, roughness }, { metal, kept } ) {
 	if ( kept ) return { color: c, roughness: clamp( r, 0.04, 1 ) };
 	const mark = detail.decal( q, { cell: 2.9, presence: 0.16, cells: [ CRACK ], seed: 13 } );
 	const worn = stained( c, r, { ...mark, alpha: mark.alpha.mul( select( upright, float( 1 ), float( 0.5 ) ) ) }, metal ? 0.3 : 0.55 );
+	// Blank stretches of a poor wall are sprayed at street level.
+	if ( detail.graffiti && ! metal ) {
+
+		const tags = wallGraffiti( detail.graffiti, n, p, select( upright, float( 1 ), float( 0 ) ), base );
+		return { color: mix( worn.color, tags.color, tags.alpha ), roughness: clamp( mix( worn.roughness, float( 0.5 ), tags.alpha ), 0.04, 1 ) };
+
+	}
 
 	return { color: worn.color, roughness: clamp( worn.roughness, 0.04, 1 ) };
+
+}
+
+/** Graffiti atlas rows: two marker sheets, then two thin tag sheets, each 2 x 1 m. */
+const SHEETS = 4;
+
+/**
+ * Sheets of tags on a wall at street level: the wall is cut into 4.5 m cells
+ * along its run, and one cell in five carries a sheet between knee and head
+ * height at its own offset, reading left to right as one faces it. The paint
+ * dirties with the grime at the wall's foot.
+ * @param atlas the graffiti atlas (`cyberpunk/graffiti-atlas/poor`), its alpha the coverage
+ */
+function wallGraffiti( atlas, n, p, upright, foot ) {
+
+	const along = abs( n.x ).greaterThan( abs( n.z ) );
+	// Left to right as one faces the wall, along the run it lies on.
+	const facing = select( along, n.x.negate().sign(), n.z.sign() );
+	const a = select( along, p.z, p.x ).mul( facing ).toConst();
+	const plane = select( along, p.x, p.z );
+	const cell = floor( a.div( 4.5 ) );
+	const pick = hash32( vec2( cell, floor( plane.div( 3 ) ) ).add( 7.3 ) ).toConst();
+	const roll = fract( pick.z.mul( 13.7 ) );
+	const row = select( roll.lessThan( 0.75 ), floor( roll.div( 0.375 ) ), floor( roll.sub( 0.75 ).div( 0.125 ) ).add( 2 ) );
+	const u = a.sub( cell.mul( 4.5 ) ).sub( pick.y.mul( 2.3 ) ).div( 2 );
+	const v = p.y.sub( pick.z.mul( 0.45 ).add( 0.45 ) ).oneMinus();
+	const inside = u.greaterThan( 0 ).and( u.lessThan( 1 ) ).and( v.greaterThan( 0 ) ).and( v.lessThan( 1 ) ).and( pick.x.lessThan( 0.2 ) );
+	const paint = texture( atlas, vec2( u.clamp( 0.002, 0.998 ), row.add( v.clamp( 0.01, 0.99 ) ).div( SHEETS ) ) );
+	const alpha = select( inside, paint.a.pow( 0.6 ), float( 0 ) ).mul( upright ).mul( 0.92 );
+
+	return { color: mix( paint.rgb, paint.rgb.mul( vec3( 0.55, 0.52, 0.48 ) ), foot.mul( 0.6 ) ), alpha };
 
 }
 
