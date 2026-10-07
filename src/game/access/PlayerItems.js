@@ -1,15 +1,19 @@
 /**
  * What the player carries of their own, apart from the quest items a story
  * hands out: general items, each `{ id, kind, label, data, quantity }`, where
- * `kind` names what it is (`access-card` now; pen drives, headsets and drinks
- * later), `label` is what the inventory calls it and `data` is the kind's own
+ * `kind` names what it is (`access-card`, `goods` bought at a counter or an
+ * `effect` a person handed over), `label` is what the inventory calls it and `data` is the kind's own
  * record. They are saved in the descriptor's `player.inventory` beside the
  * quest items, as `{ id, name: label, quantity, state: { kind, data } }`, and
  * taken back from it by kind.
  */
 
-/** The kinds of item the player's own store holds; any other saved item stays the quests'. */
-export const ITEM_KINDS = Object.freeze( [ 'access-card' ] );
+/**
+ * The kinds of item the player's own store holds; any other saved item stays
+ * the quests'. `goods` are bought at a counter, `effect` is anything a person
+ * handed over or the player lifted off them. None is a quest item kind.
+ */
+export const ITEM_KINDS = Object.freeze( [ 'access-card', 'goods', 'effect' ] );
 
 export class PlayerItems {
 
@@ -26,6 +30,28 @@ export class PlayerItems {
 		if ( this.items.has( item.id ) ) return false;
 		this.items.set( item.id, { id: item.id, kind: item.kind, label: item.label, data: structuredClone( item.data ?? {} ), quantity: item.quantity ?? 1 } );
 		return true;
+
+	}
+
+	/** Adds `count` of an item: one more of an id the player carries (the first record kept, its data updated), else the item. */
+	stack( item, count = 1 ) {
+
+		const held = this.items.get( item?.id );
+		if ( ! held ) return this.add( { ...item, quantity: count } );
+		held.quantity += count;
+		if ( item.data ) held.data = { ...held.data, ...structuredClone( item.data ) };
+		return true;
+
+	}
+
+	/** Takes `count` of an item away: one unit as `{ ...item, quantity: count }`, the entry gone at none left; null when the player has not as many. */
+	take( id, count = 1 ) {
+
+		const held = this.items.get( id );
+		if ( ! held || held.quantity < count ) return null;
+		held.quantity -= count;
+		if ( held.quantity <= 0 ) this.items.delete( id );
+		return { ...held, data: structuredClone( held.data ), quantity: count };
 
 	}
 

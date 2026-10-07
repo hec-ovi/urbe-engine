@@ -229,6 +229,29 @@ describe( 'PlayerItems', () => {
 
 	} );
 
+	it( 'stacks goods, takes them one at a time and keeps goods and effects as its own on a reload', () => {
+
+		const items = new PlayerItems();
+		const beer = { id: 'goods-beer', kind: 'goods', label: 'Beer', data: { goodId: 'beer', price: 4 } };
+		expect( items.stack( beer ) ).toBe( true );
+		expect( items.stack( { ...beer, data: { goodId: 'beer', price: 6 } } ) ).toBe( true );
+		expect( items.get( 'goods-beer' ) ).toMatchObject( { quantity: 2, data: { price: 6 } } );
+		expect( items.take( 'goods-beer' ) ).toMatchObject( { id: 'goods-beer', quantity: 1, label: 'Beer' } );
+		expect( items.get( 'goods-beer' ).quantity ).toBe( 1 );
+		expect( items.take( 'goods-beer', 2 ) ).toBeNull();
+		expect( items.take( 'goods-beer' ) ).not.toBeNull();
+		expect( items.has( 'goods-beer' ) ).toBe( false );
+		expect( items.take( 'goods-beer' ) ).toBeNull();
+		items.stack( beer, 3 );
+		items.add( { id: 'effect-a1-effect', kind: 'effect', label: 'Photo of Mia', data: { sort: 'photo', how: 'given' } } );
+		const quest = { id: 'access_card_clerk', name: 'Clerk card', quantity: 1, state: { kind: 'key', itemId: 'ACCESS_CARD_CLERK' } };
+		const back = new PlayerItems();
+		expect( back.restore( [ quest, ...items.serialize() ] ) ).toEqual( [ quest ] );
+		expect( back.get( 'goods-beer' ).quantity ).toBe( 3 );
+		expect( back.get( 'effect-a1-effect' ).kind ).toBe( 'effect' );
+
+	} );
+
 } );
 
 describe( 'Regard', () => {

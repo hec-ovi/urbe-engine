@@ -1,0 +1,19 @@
+{
+  "tierRates": { "poor": 0.7, "mid": 1, "rich": 1.5, "high_rich": 2.2 },
+  "goods": [
+    { "id": "ration-drink", "name": "ration drink", "base": 2, "fixed": true, "sort": "drink", "menus": [ "restaurant", "coffee_shop", "park" ] },
+    { "id": "coffee", "name": "cup of coffee", "base": 3, "sort": "drink", "menus": [ "coffee_shop", "hotel", "mall", "park" ] },
+    { "id": "tea", "name": "glass of tea", "base": 2, "sort": "drink", "menus": [ "coffee_shop" ] },
+    { "id": "pastry", "name": "pastry", "base": 3, "sort": "goods", "menus": [ "coffee_shop" ] },
+    { "id": "sandwich", "name": "sandwich", "base": 4, "sort": "goods", "menus": [ "restaurant", "hotel" ] },
+    { "id": "hot-meal", "name": "hot meal", "base": 9, "sort": "goods", "menus": [ "restaurant" ] },
+    { "id": "beer", "name": "beer", "base": 4, "sort": "drink", "menus": [ "restaurant", "hotel" ] },
+    { "id": "whisky", "name": "glass of whisky", "base": 12, "sort": "drink", "menus": [ "restaurant", "hotel" ] },
+    { "id": "cigarettes", "name": "pack of cigarettes", "base": 5, "sort": "goods", "menus": [ "commerce", "mall", "park" ] },
+    { "id": "bulletin", "name": "evening Bulletin", "base": 1, "fixed": true, "sort": "papers", "menus": [ "commerce", "mall", "park" ] },
+    { "id": "bread", "name": "loaf of bread", "base": 2, "sort": "goods", "menus": [ "commerce", "mall" ] },
+    { "id": "pen-drive", "name": "blank pen drive", "base": 8, "sort": "pen drive", "menus": [ "commerce", "mall" ] }
+  ],
+  "fares": { "ride": 2, "station": 3 },
+  "wage": { "week": 60, "fee": 4, "shift": 12, "start": 40 }
+}

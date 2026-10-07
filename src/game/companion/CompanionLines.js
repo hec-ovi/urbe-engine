@@ -31,8 +31,11 @@ export class CompanionLines {
 
 	}
 
-	/** @param keys every key the document must hold: the companion's by default, another box's for its own lines */
-	constructor( markdown, { keys = KEYS } = {} ) {
+	/**
+	 * @param keys every key the document must hold: the companion's by default, another box's for its own lines
+	 * @param names the `{fields}` its lines may name: the companion's by default, another box's for its own
+	 */
+	constructor( markdown, { keys = KEYS, names = NAMES } = {} ) {
 
 		this.lines = parse( markdown );
 		const missing = keys.filter( ( key ) => ! this.lines.has( key ) );
@@ -41,7 +44,7 @@ export class CompanionLines {
 
 			for ( const [ , name ] of variant.matchAll( FIELD ) ) {
 
-				if ( ! NAMES.has( name ) ) throw new CompanionError( 'E_COMPANION_LINES', `${key} names an unknown {${name}}` );
+				if ( ! names.has( name ) ) throw new CompanionError( 'E_COMPANION_LINES', `${key} names an unknown {${name}}` );
 
 			}
 

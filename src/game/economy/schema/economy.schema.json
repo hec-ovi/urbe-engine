@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbe:engine:economy:economy",
+  "title": "Economy state",
+  "description": "What the save keeps of credits and of what people carry: the player's credits and the paydays paid, the rewards and shifts already paid, every person whose holdings changed (a whole snapshot of them) and the wallet's latest entries. A person who never changed carries what is worked out for them, and is not saved.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["credits", "people"],
+  "properties": {
+    "credits": { "type": "integer", "minimum": 0, "maximum": 999999 },
+    "paidWeek": { "description": "How many paydays have been paid.", "type": "integer", "minimum": 0 },
+    "settled": {
+      "description": "What has been paid once and is never paid again: reward:<questId> and shift:<questId>/<stepId>.",
+      "type": "array",
+      "maxItems": 400,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 160 }
+    },
+    "people": {
+      "type": "array",
+      "maxItems": 300,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["npcId", "credits", "gone", "got"],
+        "properties": {
+          "npcId": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "credits": { "type": "integer", "minimum": 0 },
+          "gone": {
+            "description": "The slots of what left them: given away or lifted.",
+            "type": "array",
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+          },
+          "got": {
+            "description": "What they took from the player.",
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "name", "kind"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+                "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+                "kind": { "type": "string", "maxLength": 32 },
+                "atMin": { "type": "number", "minimum": 0 }
+              }
+            }
+          },
+          "dealt": {
+            "description": "The latest dealings between them and the player, told from their side: gave-credits they paid the player, got-thing they took a thing from the player.",
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["what", "atMin"],
+              "properties": {
+                "what": { "enum": ["gave-credits", "got-credits", "gave-thing", "got-thing", "lifted", "bribe-refused", "lent"] },
+                "amount": { "type": "integer", "minimum": 1 },
+                "name": { "type": "string", "maxLength": 120 },
+                "atMin": { "type": "number", "minimum": 0 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "log": {
+      "description": "The wallet's latest entries, amount signed: spent is negative.",
+      "type": "array",
+      "maxItems": 40,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["atMin", "what", "amount"],
+        "properties": {
+          "atMin": { "type": "number", "minimum": 0 },
+          "what": { "enum": ["wage", "shift", "reward", "paid", "received", "bought", "sold", "fare", "bribe", "lifted"] },
+          "amount": { "type": "integer" },
+          "npcId": { "type": "string", "maxLength": 64 },
+          "name": { "type": "string", "maxLength": 120 }
+        }
+      }
+    }
+  }
+}

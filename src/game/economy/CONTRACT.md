@@ -1,0 +1,44 @@
+# CONTRACT: economy
+
+Purpose: credits and what people carry. The player's wallet and pay, every person's fixed set of things and credits, prices and fares, and the transfers between the player and a person: handing a thing over, paying, being paid, buying at a counter, selling and lifting.
+
+## In
+
+- `carryOf(npc, { tier, scopes, describe, jobType })` ([Carry.js](Carry.js)): the simulation's person, the wealth tier of their home's parcel, their access scopes (Access `scopesOf`), `describe(scope)` (Access `describeScope`) and their workplace's parcel type. `meansOf(npc, { tier })`; `draw(npcId, slot)`, FNV-1a of `npcId|slot` over 2^32, the formula of Quests `LifeHistory`.
+- `Holdings({ base })` ([Holdings.js](Holdings.js)): `base(npcId)` is what a person carries before any change (`carryOf`, or null for nobody the city holds).
+- `Wallet({ credits, paidWeek, log })` ([Wallet.js](Wallet.js)); `Wallet.restore(saved, t)`.
+- `Trades({ wallet, holdings, items, quests, now, nameOf, card })` ([Trades.js](Trades.js)): the player's PlayerItems, the QuestSession (`hand`), the game minute, how the player names a person and Access `cardFor`.
+- `TalkTerms({ holdings, wallet, items })` ([TalkTerms.js](TalkTerms.js)).
+- `Economy.restore(saved, { timeMin, completedSettled, base, items, quests, now, nameOf, card })` ([Economy.js](Economy.js)): the save's `economy`, or undefined for a save made before it.
+- `probe(fetcher)` ([EconomyGate.js](EconomyGate.js)): asks the launcher (`POST /api/launcher {method:'abilities'}`) and the talk route (`GET /api/talk/abilities`) what they take.
+- `economyLines(markdown?)` ([lines.md](lines.md), [EconomyLines.js](EconomyLines.js) `KEYS`), read as the companion's lines are.
+- [prices.json](prices.json): tier rates, goods with their menus, fares and the wage.
+
+## Out
+
+- Currency: whole credits (`cr`), paid in Bureau notes. A new game, or a save made before credits, starts with 40 cr and owes no pay for the weeks already gone.
+- Pay ([Wallet.js](Wallet.js)): paydays are Friday 17:00 (`PAYDAY_MIN` 6780, a week `WEEK_MIN` 10080; minute 0 is Monday 00:00). `paydaysBy(t)` counts the paydays come by `t`; `payday(t)` books every one not paid yet, at most 2 at once, 60 cr a week less a 4 cr file fee, `{ weeks, gross, fee, net }` or null. `spend(n, entry)` is false and moves nothing when the wallet is short; `log` keeps the 40 latest `{ atMin, what, amount, npcId?, name? }`, `amount` signed.
+- Prices ([Prices.js](Prices.js)): `priceOf(goodId, tier)` is a fixed good's price, else `max(1, round(base × rate))` with rates poor 0.7, mid 1, rich 1.5, high_rich 2.2 (a glass of whisky is 18 at a rich bar; a ration drink 2 anywhere). `menuOf(venueType, tier)` is `[{ goodId, name, price }]` for restaurant, coffee_shop, hotel, commerce, mall and park (a square's kiosks). `goodOfItem(name)` is the good a story item's name is: exact, else the good whose last word the name holds (`amber whisky` is whisky). `FARES` a ride 2, station travel 3; `WAGE` week 60, fee 4, shift 12, start 40.
+- What a person carries (`carryOf`), the same for the same person every time: `{ credits, means, things }`. Means from the home tier (poor 0, mid 1, rich 2, high_rich 3), one less for an adult with no post, one less for a poor household with a child, one more for an executive: `short`, `getting-by`, `comfortable`, `well-off`. Credits drawn in 2-18, 10-45, 30-120 or 80-300 by means, 0-6 under 14 and 0-15 under 18. Things, at most 7, each `{ slot, kind, name, worth, giftable, sort, label? }` (`name` as the person tells it, `label` as anyone else would): a card per scope (`card:<scope>`, given only as a copy), a phone from 12 (not giftable), residence papers from 16 (not giftable), the kit of their post, one effect (a photo of their child, a note from their partner, a letter from where they grew up when Quests' `roots` draw is 0.7 or more and they are 18 or over, else drawn: a ration book, cigarettes for adults, a paperback, a comb, a lighter, a Bulletin, a pawn ticket when short, a pocket watch when comfortable or well off), a flask now and then from 18 and a pen drive now and then, more often at a desk.
+- `Holdings`: `of(npcId)` is what a person carries now, `{ credits, means, things, gone, got, dealt }`, with what left them taken out and what they got from the player in (`got:<id>`, `from: 'stranger'`; a card or a story's item they keep). A person is kept only from their first change: `debit`, `credit`, `remove(npcId, slot)`, `add(npcId, thing)`, `deal(npcId, entry)` (8 latest). `ask`/`asked`/`settle` hold a sum a person asked for, for the session only. `serialize()` is the save's `people`, by npcId, the 300 changed last.
+- `Trades`: `hand(npcId, 'own:<id>' | 'quest:<itemId>', place)`, `pay(npcId, n, what)`, `receive(npcId, n, what)` (no more than they carry), `receiveThing(npcId, slot)`, `buy(counter, goodId)` (one stack per good, `goods-<goodId>`), `sell(npcId, id, n, till)`, `lift(npcId, seed, lackedScopes)`; each `{ ok, kind: paid | received | given | got | bought | sold | lifted, amount?, name?, thing?, moved?, reason? }`. A thing a person hands over or the player lifts becomes the player's `effect` item `{ sort, from, how: given | stolen, worth }`. A lift draws credits 0.5, a card the player lacks 0.25 and a pocket thing (phone, pen drive, flask, effect) 0.25, renormalised over what they have, by `draw(seed, 'what')`; credits come out as `max(1, ceil(credits × (0.3 + 0.4 × draw(seed, 'fold'))))`.
+- Decisions with no model ([Decide.js](Decide.js)), after regard: `acceptsThing`, `acceptsCredits`, `bribe` (friendly 0.5, neutral 0.35, wary 0.15, hostile 0; +0.15 for 20 cr or more, +0.15 when short, by `draw(seed, 'bribe')`), `paysCredits` (up to 2, 5, 15 or 40 by means for a friendly person, half for a neutral one), `buysThing`, `sells`, `isOfficial` (category `authority`, or a security, clerk, office, front desk or executive post at police, military or offices).
+- `TalkTerms.carryContext(npcId)` is the talk's `carry`: `{ credits, means, items: [{ name, from?, atMin? }], dealings?, asked? }`, without their cards (the talk's `addresses` tell those). `tradeOffers({ npcId, cards, questItems, counter, offered })` is the talk's `give` (card copies and `carry:<slot>` things), `take` (`own:<id>`, `quest:<itemId>`), `credits` (`{ carried, purse, offered? }`), at a counter `sell` (its menu, 8 at most) and `buy` (the player's things with a worth: goods what they cost, an effect its own; half at a shop's or a mall's till, else up to what the person carries).
+- `Economy.serialize()` is the save's `economy`, [schema/economy.schema.json](schema/economy.schema.json) (`urn:urbe:engine:economy:economy`): `{ credits, paidWeek, settled, people, log }`. `settle(key)` is true once per `reward:<questId>` or `shift:<questId>/<stepId>`. A dealing's `what` is told from the person's side: `gave-credits` they paid the player, `got-thing` they took a thing from the player, `lifted` they caught the player lifting from them, `bribe-refused` they refused credits held out to them.
+- `probe` is `{ saves, talk }`: `saves` when the launcher's `saveFields` include `economy`, `talk` when the talk route's `abilities` do. A 404, a 400, the page fallback, broken JSON or no answer within 5 s is false.
+
+## The game
+
+- Both switches off, the game plays as before: no wallet on the HUD, no trade actions, no `carry` or new offers in a talk, no `economy` in a save.
+- `saves` on: the wallet shows on the HUD clock and the inventory, paydays book, a story's `work` step pays a shift (12 cr) once, a side story that ends pays a reward from the person it was for (5, 10, 20 or 40 cr by their means, no more than they carry), fares are charged, a story's drink at a venue with a menu is bought, R lifts what a person carries, and the save carries `economy`.
+- `talk` on as well: a talk face to face carries `carry` and the trade offers, the chat's action row has `Hand over…`, a `Pay N cr` for a sum asked and, at a counter, `Buy` and `Sell…`.
+
+## Errors
+
+- `Wallet.add` throws for an amount that is not a whole number of 0 or more.
+- `E_COMPANION_LINES` from `economyLines` for a document that lacks a key or names an unknown field.
+- A transfer that cannot happen returns `ok: false` with its `reason` (`short`, `empty`, `missing`, `refused`, `nobody`) and changes nothing.
+
+## Depends on
+
+[Access](../access/CONTRACT.md) (`PlayerItems`, `cardFor`, scopes), [Persistence](../persistence/CONTRACT.md) `saveItemId`, [Companion lines](../companion/CONTRACT.md) (`CompanionLines`), Quests `QuestlineRuntime.handable`/`hand` through the QuestSession, the launcher and talk routes' `abilities` by HTTP.
