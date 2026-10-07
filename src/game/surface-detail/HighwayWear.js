@@ -78,16 +78,16 @@ export function highwayPier( detail, { color, roughness } ) {
 	const m = fields( detail, q );
 	// The foot's edge rises and falls along the pier, never a ruled band:
 	// splash to knee height, soaked darkest in the first hand's width.
-	const contact = smoothstep( 0.1, 1.05, above.add( m.dirt.sub( 0.5 ).mul( 0.55 ) ) ).oneMinus().mul( h.upright ).toConst();
-	const soaked = smoothstep( 0.02, 0.18, above ).oneMinus().mul( h.upright ).toConst();
+	const contact = smoothstep( 0.1, 1.4, above.add( m.dirt.sub( 0.5 ).mul( 0.7 ) ) ).oneMinus().mul( h.upright ).toConst();
+	const soaked = smoothstep( 0.02, 0.3, above.add( m.smudge.sub( 0.5 ).mul( 0.12 ) ) ).oneMinus().mul( h.upright ).toConst();
 	const damp = contact.mul( smoothstep( 0.6, 0.85, m.smudge ) ).toConst();
 	// Water from the bearing seat runs down from the top, rust-tinted on some faces.
 	const run = streaks( detail, h.run, positionWorld.y, h.top.sub( positionWorld.y ) ).mul( h.upright ).mul( smoothstep( 0.25, 0.65, m.macro ) ).toConst();
 	const rusty = smoothstep( 0.55, 0.8, m.edge );
 
 	let c = color.mul( m.macro.sub( 0.5 ).mul( 0.22 ).add( 0.88 ) );
-	c = mix( c, c.mul( vec3( 0.62, 0.59, 0.55 ) ), contact.mul( m.dirt.mul( 0.4 ).add( 0.6 ) ) );
-	c = mix( c, c.mul( 0.55 ), soaked.mul( 0.6 ) );
+	c = mix( c, c.mul( vec3( 0.46, 0.43, 0.39 ) ), contact.mul( m.dirt.mul( 0.4 ).add( 0.6 ) ) );
+	c = mix( c, c.mul( 0.45 ), soaked.mul( 0.7 ) );
 	c = mix( c, mix( mix( c, GRIME, 0.5 ), vec3( 0.12, 0.06, 0.03 ), rusty.mul( 0.5 ) ), run.mul( 0.75 ) );
 	let r = roughness.add( contact.mul( 0.1 ) );
 	r = mix( r, r.mul( 0.65 ), damp );
@@ -136,17 +136,17 @@ export function highwayBarrier( detail, { color, roughness } ) {
 	const road = flag( h.face, 16 ), cap = max( flag( h.face, 1 ), flag( h.face, 2 ) ).mul( select( abs( normalWorldGeometry.y ).greaterThan( 0.3 ), float( 1 ), float( 0.4 ) ) );
 	const m = fields( detail, vec2( h.station, above ) );
 	// Tyre spray and road dirt climb the road face to the knee, thickest at its foot.
-	const splash = smoothstep( 0.04, 0.45, above.add( m.dirt.sub( 0.5 ).mul( 0.2 ) ) ).oneMinus().mul( h.upright ).mul( road.mul( 0.7 ).add( 0.3 ) ).toConst();
+	const splash = smoothstep( 0.04, 0.5, above.add( m.dirt.sub( 0.5 ).mul( 0.25 ) ) ).oneMinus().mul( h.upright ).mul( road.mul( 0.6 ).add( 0.4 ) ).toConst();
 	// Wheels brush the road face between ankle and knee, in long black smears.
-	const scuff = smoothstep( 0.56, 0.8, detail.sample( 'edge', vec2( h.station.mul( 0.15 ), above.mul( 2.4 ) ).add( 9.4 ) ) )
+	const scuff = smoothstep( 0.5, 0.74, detail.sample( 'edge', vec2( h.station.mul( 0.15 ), above.mul( 2.4 ) ).add( 9.4 ) ) )
 		.mul( smoothstep( 0.06, 0.14, above ) ).mul( smoothstep( 0.42, 0.66, above ).oneMinus() ).mul( road ).mul( h.upright ).toConst();
 	const polish = cap.mul( smoothstep( 0.35, 0.75, m.smudge ) ).toConst();
 	// Rain runs down both faces from the cap, the outer one most.
 	const run = streaks( detail, h.station, above, float( 1.1 ).sub( above ) ).mul( h.upright ).mul( road.mul( - 0.45 ).add( 0.85 ) ).toConst();
 
-	let c = color.mul( m.macro.sub( 0.5 ).mul( 0.2 ).add( 0.82 ) );
-	c = mix( c, c.mul( vec3( 0.5, 0.48, 0.45 ) ), splash );
-	c = mix( c, RUBBER, scuff.mul( 0.8 ) );
+	let c = color.mul( m.macro.sub( 0.5 ).mul( 0.24 ).add( 0.74 ) );
+	c = mix( c, c.mul( vec3( 0.4, 0.38, 0.35 ) ), splash );
+	c = mix( c, RUBBER, scuff.mul( 0.85 ) );
 	c = mix( c, mix( c, GRIME, 0.5 ), run );
 	let r = roughness.add( splash.mul( 0.08 ) );
 	r = r.sub( polish.mul( 0.08 ) );
@@ -188,21 +188,22 @@ export function graffiti( atlas, { color, roughness } ) {
 	const more = hash32( centre.add( face.mul( 5.9 ).add( 3.7 ) ) ).toConst();
 	const band = ( chance, lift, roll, shift ) => {
 
-		const row = floor( roll.mul( SHEETS ) );
+		// The two marker sheets three times in four, the thin tag sheets the rest.
+		const row = select( roll.lessThan( 0.75 ), floor( roll.div( 0.375 ) ), floor( roll.sub( 0.75 ).div( 0.125 ) ).add( 2 ) );
 		const u = across.add( shift ).mul( 0.5 ).add( 0.5 );
 		const v = above.sub( lift ).oneMinus();
 		const inside = u.greaterThan( 0 ).and( u.lessThan( 1 ) ).and( v.greaterThan( 0 ) ).and( v.lessThan( 1 ) );
 		const paint = texture( atlas, vec2( u.clamp( 0.002, 0.998 ), row.add( v.clamp( 0.01, 0.99 ) ).div( SHEETS ) ) );
-		return { rgb: paint.rgb, alpha: select( inside.and( chance ), paint.a, float( 0 ) ) };
+		return { rgb: paint.rgb, alpha: select( inside.and( chance ), paint.a.pow( 0.6 ), float( 0 ) ) };
 
 	};
-	// Chest height on three faces in four, a second sheet higher on one in four.
-	const low = band( pick.x.lessThan( 0.75 ), pick.y.mul( 0.5 ).add( 0.35 ), pick.z, more.x.sub( 0.5 ).mul( 0.3 ) );
-	const high = band( more.y.lessThan( 0.25 ), pick.y.mul( 0.5 ).add( 1.45 ), fract( pick.z.add( 0.5 ) ), more.z.sub( 0.5 ).mul( 0.4 ) );
+	// At chest height on four faces in five, a second sheet higher on one in three.
+	const low = band( pick.x.lessThan( 0.8 ), pick.y.mul( 0.45 ).add( 0.3 ), pick.z, more.x.sub( 0.5 ).mul( 0.3 ) );
+	const high = band( more.y.lessThan( 0.35 ), pick.y.mul( 0.45 ).add( 1.4 ), fract( pick.z.add( 0.5 ) ), more.z.sub( 0.5 ).mul( 0.4 ) );
 	const coverage = max( low.alpha, high.alpha ).mul( h.upright ).mul( 0.95 ).toConst();
 	const paint = mix( high.rgb, low.rgb, select( low.alpha.greaterThan( high.alpha ), float( 1 ), float( 0 ) ) );
 	// The foot's splash and dirt lie over the paint too.
-	const dirt = smoothstep( 0.08, 0.65, above ).oneMinus().mul( 0.45 );
+	const dirt = smoothstep( 0.1, 1.2, above ).oneMinus().mul( 0.5 );
 	const sprayed = mix( paint, paint.mul( vec3( 0.55, 0.52, 0.48 ) ), dirt );
 
 	return {
