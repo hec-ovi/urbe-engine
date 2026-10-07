@@ -5,6 +5,11 @@ import { StreetFixtureIndex } from './StreetFixtureIndex.js';
 
 /** Atlas publishes a tree anchor point, not a crown radius. */
 const TREE_HEAD_CLEARANCE = 0;
+/**
+ * A trunk stands in a pit the Streets kit covers with a 1.8 m grate: a pole's
+ * base keeps out of the circle round its corners, however the grate is turned.
+ */
+const TREE_GRATE = 0.9 * Math.SQRT2;
 /** Pedestrians and street vehicles occupy at most this much air above their route. */
 const MOVEMENT_ENVELOPE_HEIGHT = 3;
 
@@ -51,9 +56,14 @@ export class StreetLampClearance {
 
 	}
 
-	/** A furnishing seat must also leave crossing landings and walking ribbons clear. */
+	/** A furnishing seat must also leave tree grates, crossing landings and walking ribbons clear. */
 	allowsBase( x, z, radius ) {
 
+		for ( const tree of this.trees.near( x, z, radius + TREE_GRATE ) ) {
+
+			if ( Math.hypot( x - tree.position[ 0 ], z - tree.position[ 1 ] ) < radius + TREE_GRATE ) return false;
+
+		}
 		for ( const ring of this.landings.near( x, z, radius ) ) {
 
 			if ( segmentToRing( [ [ x, z ], [ x, z ] ], ring ) < radius ) return false;

@@ -1,23 +1,37 @@
 import { GroundBuilder } from '../ground/GroundBuilder.js';
 import { StreetFixtureIndex } from './StreetFixtureIndex.js';
 
-/** Fits a pole's complete circular base in authored furnishing land. */
+/**
+ * Fits a pole's complete circular base in street land. Where Atlas publishes
+ * paving that is the authored furnishing band; a city built from street
+ * modules publishes no bands, and there it is the sidewalk covers themselves
+ * and the plazas a walk route crosses. Lots, courtyards, the fringe past the
+ * outer streets, kerbs, gutters and the roadway never seat a pole. A world
+ * that publishes no street land at all has nothing to judge a seat against,
+ * and every seat stands.
+ */
 export class StreetLampSeats {
 
-	constructor( atlas ) {
+	constructor( atlas, plazas = [] ) {
 
-		this.active = Boolean( atlas.streets?.construction?.paving );
 		this.covers = new StreetFixtureIndex();
-		if ( ! this.active ) return;
-		for ( const { covers } of GroundBuilder.regionFootprints( atlas, 'furnishing' ) ) {
-			for ( const { polygon } of covers ) this.covers.add( polygon, polygon );
+		if ( atlas.streets?.construction?.paving ) {
+
+			for ( const { covers } of GroundBuilder.regionFootprints( atlas, 'furnishing' ) ) {
+				for ( const { polygon } of covers ) this.covers.add( polygon, polygon );
+			}
+			return;
+
 		}
+		for ( const cover of atlas.volumetric?.ground ?? [] ) if ( cover.surface === 'sidewalk' ) this.covers.add( cover.polygon, cover.polygon );
+		for ( const ring of plazas ) this.covers.add( ring, ring );
+		this.unchecked = this.covers.count === 0;
 
 	}
 
 	allows( x, z, radius ) {
 
-		if ( ! this.active ) return true;
+		if ( this.unchecked ) return true;
 		let area = 0;
 		for ( const polygon of this.covers.near( x, z, radius ) ) {
 
