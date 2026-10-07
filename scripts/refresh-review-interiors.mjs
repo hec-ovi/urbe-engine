@@ -2,6 +2,8 @@
 // Refresh authored interiors through the normal producer boundary, retaining
 // shell bytes, quests, saves and world identities. Paths must name assembled
 // worlds with manifests. One world publishes only after every interior succeeds.
+// `--only=p1724,p0402` refreshes just those interiors; the others keep their
+// floors and draw their modules from the newly published shared kit.
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
@@ -13,7 +15,9 @@ import { OutDir } from '../src/assembly/OutDir.js';
 import { PlanLibrary, worldExteriorVersion } from '../src/assembly/kit/index.js';
 import { validateWorldManifest } from '../src/assembly/validators.js';
 
-const worlds = process.argv.slice( 2 ).map( directory => resolve( directory ) );
+const flags = process.argv.slice( 2 ).filter( argument => argument.startsWith( '--only=' ) );
+const only = flags.length ? new Set( flags.flatMap( flag => flag.slice( 7 ).split( ',' ) ).filter( Boolean ) ) : null;
+const worlds = process.argv.slice( 2 ).filter( argument => ! argument.startsWith( '--' ) ).map( directory => resolve( directory ) );
 if ( ! worlds.length ) throw new Error( 'Pass one or more assembled world directories.' );
 process.env.URBE_ASSEMBLY_WORKERS = '4';
 process.env.URBE_ASSEMBLY_MAX_TEMP = '88';
@@ -23,6 +27,8 @@ for ( const directory of worlds ) await refresh( directory );
 async function refresh( directory ) {
 	const manifestPath = join( directory, 'manifest.json' );
 	const manifest = JSON.parse( await readFile( manifestPath, 'utf8' ) );
+	const ids = only ? manifest.interiors.filter( id => only.has( id ) ) : manifest.interiors;
+	if ( only && ids.length !== only.size ) throw new Error( `${directory} has no interior ${[ ...only ].filter( id => ! ids.includes( id ) ).join( ', ' )}` );
 	const atlas = JSON.parse( await readFile( join( directory, 'blueprint.json' ), 'utf8' ) );
 	const library = new PlanLibrary( { version: worldExteriorVersion( directory ) || undefined } );
 	const blueprints = new BuildingBlueprints( directory, library );
@@ -40,7 +46,7 @@ async function refresh( directory ) {
 			}
 		} );
 		const requests = new Map();
-		for ( const id of manifest.interiors ) {
+		for ( const id of ids ) {
 			const requestFile = join( directory, id, `${id}.request.json` );
 			if ( existsSync( requestFile ) ) requests.set( id, JSON.parse( await readFile( requestFile, 'utf8' ) ) );
 			for ( const file of [ `${id}.glb`, `${id}.blueprint.json`, `${id}.placements.json` ] ) {
@@ -53,12 +59,12 @@ async function refresh( directory ) {
 		}
 		const stagedOut = new OutDir( staged );
 		const updated = { ...manifest, interiorModules: resources.modules, interiorProps: resources.props,
-			floors: Object.fromEntries( manifest.interiors.map( id => [ id, stagedOut.floorsOf( id ) ] ) ) };
+			floors: { ...( only ? manifest.floors : {} ), ...Object.fromEntries( ids.map( id => [ id, stagedOut.floorsOf( id ) ] ) ) } };
 		const errors = validateWorldManifest( updated );
 		if ( errors.length ) throw new Error( JSON.stringify( errors ) );
 		for ( const [ path, hash ] of originalShells ) if ( digest( await readFile( path ) ) !== hash ) throw new Error( `Shell changed during interior refresh: ${path}` );
 		await writeFile( join( staged, 'manifest.json' ), JSON.stringify( updated, null, 2 ) + '\n' );
-		for ( const id of manifest.interiors ) {
+		for ( const id of ids ) {
 			const target = join( directory, id, 'interior' );
 			const backup = join( staged, id, 'previous' );
 			await rename( target, backup );
@@ -67,7 +73,7 @@ async function refresh( directory ) {
 		}
 		await rename( join( staged, 'manifest.json' ), manifestPath );
 		promoted.length = 0;
-		console.log( `Refreshed ${directory}: ${manifest.interiors.length} interiors; shell hashes unchanged.` );
+		console.log( `Refreshed ${directory}: ${ids.length} of ${manifest.interiors.length} interiors; shell hashes unchanged.` );
 	} catch ( error ) {
 		for ( const { target, backup } of promoted.reverse() ) {
 			await rm( target, { recursive: true, force: true } );
