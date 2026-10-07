@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three/webgpu';
 import { PbrMaterialFactory } from '../../building/PbrMaterialFactory.js';
 import { fakeResolver } from '../../building/material-resolver.test-fixtures.js';
 import { Links, ROOFTOP_WIRE_SIDES } from './Links.js';
@@ -219,6 +220,22 @@ describe( 'Links', () => {
 		expect( names.length ).toBeLessThan( doc.links.length );
 		// Batched and not thinned: every triangle a link draws alone is in there.
 		expect( built.triangles ).toBe( alone );
+
+	} );
+
+	it( 'weathers a bridge and a duct shell like the facades around them, never the glass or a wire', () => {
+
+		const calls = [];
+		const worn = {
+			weathering: { nodes: () => ( {} ), resources: [] },
+			resolver: { resolve: ( key ) => ( { physical: {}, variants: [ { id: 'one', maps: {} } ], key } ) },
+			build: ( key ) => new THREE.MeshStandardMaterial( { name: key } ),
+			variant: ( key, tweaks ) => { calls.push( [ key, tweaks.weather ?? null ] ); return new THREE.MeshStandardMaterial( { name: key } ); }
+		};
+		new Links( doc, worn ).build();
+		expect( Object.fromEntries( calls ) ).toEqual( {
+			'cyberpunk/concrete/mid': 'wall', 'cyberpunk/metal/mid': 'metal', 'cyberpunk/window-glass/mid': null
+		} );
 
 	} );
 

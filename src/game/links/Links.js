@@ -4,6 +4,7 @@ import { cutPlanes } from './Apertures.js';
 import { framesAlong } from './PathFrames.js';
 import { glazedBridge, rectTube, roundTube } from './Sections.js';
 import { sweep } from './Sweep.js';
+import { exteriorWear } from '../surface-detail/Weathering.js';
 
 // One material per kind of surface, never per link: an air duct is sheet
 // metal, a skybridge and a service tunnel are the same cast concrete, a
@@ -191,11 +192,16 @@ export class Links {
 	 * bridge's glazing is seen from the corridor as well as from the street.
 	 * The cable is a closed tube and keeps its back faces culled.
 	 */
+	/**
+	 * A link's shell wears the city's weathering like the facades it spans
+	 * between (streaked concrete, smudged sheet metal), so a bridge or a duct
+	 * seen against the sky is never a flat box. Glass and cable wear none.
+	 */
 	#material( key ) {
 
-		return key === KEYS.wire.shell
-			? this.factory.build( key )
-			: this.factory.variant( key, { side: THREE.DoubleSide } );
+		if ( key === KEYS.wire.shell ) return this.factory.build( key );
+		const weather = this.factory.weathering ? exteriorWear( key, this.factory.resolver?.resolve( key ) ) : null;
+		return this.factory.variant( key, { side: THREE.DoubleSide, ...( weather ? { weather } : {} ) } );
 
 	}
 
