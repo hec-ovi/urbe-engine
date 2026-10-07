@@ -97,13 +97,47 @@ export class GamePersistence {
 
 }
 
-/** Retains ordinary items and replaces quest-owned items with the runtime inventory. */
+/** The save's ids are lower-case words of letters, digits, dots, dashes and underscores, at most 64 long. */
+const ID_LENGTH = 64;
+
+/**
+ * A quest item's id as the save takes it: lower case, anything but letters,
+ * digits, dots, dashes and underscores a dash, no punctuation at either end,
+ * `q-` before one that would not start with a letter or digit, and past 64
+ * characters cut and finished with a hash of the whole id (the scheme of
+ * Access `cardId`). `ACCESS_CARD_CLERK` is `access_card_clerk`; the same id
+ * is always the same save id.
+ */
+export function saveItemId( itemId ) {
+
+	const raw = String( itemId ?? '' );
+	let words = raw.toLowerCase().replace( /[^a-z0-9._-]+/g, '-' ).replace( /^[^a-z0-9]+|[^a-z0-9]+$/g, '' );
+	// An id of punctuation alone has no word left to start with.
+	if ( ! /^[a-z0-9]/.test( words ) ) words = words ? `q-${words}` : 'q-item';
+	if ( words.length <= ID_LENGTH ) return words;
+	let hash = 2166136261;
+	for ( const char of raw ) hash = Math.imul( hash ^ char.charCodeAt( 0 ), 16777619 );
+	const tail = ( hash >>> 0 ).toString( 36 );
+	return `${words.slice( 0, ID_LENGTH - tail.length - 1 ).replace( /[^a-z0-9]+$/, '' )}-${tail}`;
+
+}
+
+/**
+ * Retains ordinary items and replaces quest-owned items with the runtime
+ * inventory. A quest item is saved by its `saveItemId`, its own id kept in
+ * `state.itemId`; a saved entry under either id is the quests'.
+ */
 export function mergeInventory( saved, questItems, questItemIds ) {
 
-	const managed = new Set( questItemIds );
+	const managed = new Set( [ ...questItemIds, ...questItemIds.map( saveItemId ) ] );
 	const merged = new Map();
 	for ( const item of saved ) if ( ! managed.has( item.id ) ) merged.set( item.id, item );
-	for ( const item of questItems ) merged.set( item.id, item );
+	for ( const item of questItems ) {
+
+		const id = saveItemId( item.id );
+		merged.set( id, { ...item, id, state: { ...item.state, itemId: item.id } } );
+
+	}
 	return [ ...merged.values() ];
 
 }

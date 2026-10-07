@@ -38,6 +38,23 @@ describe( 'ScreenRecords', () => {
 
 	} );
 
+	it( 'looks a saved quest item\'s model up by the story\'s own id', () => {
+
+		const asked = [];
+		const cards = inventoryCards( [
+			{ id: 'access_card_clerk', name: 'Clerk card', quantity: 1, state: { kind: 'key', itemId: 'ACCESS_CARD_CLERK', questlineIds: [ 'q_main' ] } }
+		], QUESTS, ( questId, itemId ) => {
+
+			asked.push( itemId );
+			return itemId === 'ACCESS_CARD_CLERK' ? DRIVE : null;
+
+		} );
+		expect( asked ).toEqual( [ 'ACCESS_CARD_CLERK' ] );
+		expect( cards[ 0 ] ).toMatchObject( { id: 'access_card_clerk', kind: 'key' } );
+		expect( cards[ 0 ].model.parts ).toHaveLength( 2 );
+
+	} );
+
 	it( 'keeps the people talked to, from this game and from a saved memory, with how often and what they said last', () => {
 
 		const people = new Acquaintances();

@@ -1,2 +1,2 @@
-export { GamePersistence, mergeInventory, mergeProgress, uniqueLocations } from './GamePersistence.js';
+export { GamePersistence, mergeInventory, mergeProgress, saveItemId, uniqueLocations } from './GamePersistence.js';
 export { PersistenceError } from './PersistenceError.js';

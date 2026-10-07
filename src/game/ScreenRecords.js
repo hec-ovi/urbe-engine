@@ -54,7 +54,8 @@ export function inventoryCards( items, quests, assetOf = () => null ) {
 	return items.map( ( item ) => {
 
 		const questIds = item.state?.questlineIds ?? [];
-		const model = questIds.map( ( questId ) => itemModel( assetOf( questId, item.id ) ) ).find( Boolean ) ?? null;
+		// A quest item is saved under its save id; its mission asset is bound to the story's own id.
+		const model = questIds.map( ( questId ) => itemModel( assetOf( questId, item.state?.itemId ?? item.id ) ) ).find( Boolean ) ?? null;
 		const own = ownItem( item );
 		return {
 			id: item.id,

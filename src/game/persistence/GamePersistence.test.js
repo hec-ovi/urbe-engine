@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import gameFixture from '../../library/fixtures/out/games/night-shift/game.json';
-import { GamePersistence, mergeInventory, mergeProgress } from './GamePersistence.js';
+import { GamePersistence, mergeInventory, mergeProgress, saveItemId } from './GamePersistence.js';
 import { AddressBook, PlayerAccess, PlayerItems, Regard, cardFor } from '../access/index.js';
 
 const activeQuest = {
@@ -285,11 +285,72 @@ describe( 'playable game persistence', () => {
 			{ id: 'signal-note', name: 'Old Signal Note', quantity: 1, state: {} }
 		];
 		const liveItems = [ { id: 'signal-note', name: 'Signal Note', quantity: 2, state: { kind: 'information' } } ];
-		expect( mergeInventory( savedItems, liveItems, [ 'signal-note', 'spent-pass' ] ) ).toEqual( [ savedItems[ 0 ], liveItems[ 0 ] ] );
+		expect( mergeInventory( savedItems, liveItems, [ 'signal-note', 'spent-pass' ] ) ).toEqual( [ savedItems[ 0 ], { ...liveItems[ 0 ], state: { kind: 'information', itemId: 'signal-note' } } ] );
 
 		const progress = mergeProgress( gameFixture, [ activeQuest ] );
 		expect( progress.quests ).toEqual( [ activeQuest ] );
 		expect( progress.sideJobs ).toEqual( gameFixture.sideJobs );
+
+	} );
+
+} );
+
+describe( 'quest item ids in the save', () => {
+
+	it( 'lower-cases a story id into the save id and keeps every result within the save pattern', () => {
+
+		expect( saveItemId( 'ACCESS_CARD_CLERK' ) ).toBe( 'access_card_clerk' );
+		expect( saveItemId( 'DRINK_WHISKY_KESSEL' ) ).toBe( 'drink_whisky_kessel' );
+		expect( saveItemId( 'signal-note' ) ).toBe( 'signal-note' );
+		expect( saveItemId( 'Pen Drive #2' ) ).toBe( 'pen-drive-2' );
+		expect( saveItemId( '__Hidden__' ) ).toBe( 'hidden' );
+		expect( saveItemId( '***' ) ).toBe( 'q-item' );
+		const long = `ITEM_${'X'.repeat( 90 )}`;
+		expect( saveItemId( long ) ).toHaveLength( 64 );
+		expect( saveItemId( long ) ).toBe( saveItemId( long ) );
+		expect( saveItemId( long ) ).not.toBe( saveItemId( `${long}Y` ) );
+		for ( const id of [ 'ACCESS_CARD_CLERK', 'Pen Drive #2', '__Hidden__', '***', long, 'a', '9-LIVES' ] ) {
+
+			expect( saveItemId( id ) ).toMatch( /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/ );
+
+		}
+
+	} );
+
+	it( 'saves a quest item by its save id with its story id in state, and takes a saved entry under either id as the quests\'', () => {
+
+		const held = [ { id: 'ACCESS_CARD_CLERK', name: 'Clerk access card', quantity: 1, state: { kind: 'key', questlineIds: [ 'main' ] } } ];
+		const saved = [
+			{ id: 'access_card_clerk', name: 'Old copy', quantity: 1, state: { kind: 'key', itemId: 'ACCESS_CARD_CLERK' } },
+			{ id: 'drink_whisky_kessel', name: 'Spent whisky', quantity: 1, state: { kind: 'substance', itemId: 'DRINK_WHISKY_KESSEL' } },
+			{ id: 'car-key', name: 'Car Key', quantity: 1, state: {} }
+		];
+		expect( mergeInventory( saved, held, [ 'ACCESS_CARD_CLERK', 'DRINK_WHISKY_KESSEL' ] ) ).toEqual( [
+			saved[ 2 ],
+			{ id: 'access_card_clerk', name: 'Clerk access card', quantity: 1, state: { kind: 'key', questlineIds: [ 'main' ], itemId: 'ACCESS_CARD_CLERK' } }
+		] );
+
+	} );
+
+	it( 'saves a live state holding a story\'s upper-case card through the real schemas', async () => {
+
+		const fetcher = vi.fn( async ( url, options ) => {
+
+			const input = JSON.parse( options.body ).input;
+			return response( 200, {
+				...gameFixture, player: input.player, quests: input.quests, sideJobs: input.sideJobs,
+				currentLocation: input.currentLocation, discoveredLocations: input.discoveredLocations,
+				save: { ...gameFixture.save, revision: input.expectedRevision + 1, updatedAt: input.updatedAt, playTimeSeconds: input.playTimeSeconds }
+			} );
+
+		} );
+		const persistence = new GamePersistence( { game: structuredClone( gameFixture ), gameId: 'night-shift', fetcher } );
+		const held = [ { id: 'ACCESS_CARD_CLERK', name: 'Clerk access card', quantity: 1, state: { kind: 'key', questlineIds: [ 'main' ] } } ];
+		const inventory = mergeInventory( [], held, [ 'ACCESS_CARD_CLERK' ] );
+		const saved = await persistence.save( { ...liveState(), inventory } );
+		expect( saved.player.inventory ).toEqual( [ expect.objectContaining( { id: 'access_card_clerk', state: expect.objectContaining( { itemId: 'ACCESS_CARD_CLERK' } ) } ) ] );
+		// The story's own id, as the runtime holds it, is what the schema would refuse.
+		await expect( persistence.save( { ...liveState(), inventory: held } ) ).rejects.toThrow( /\/inventory\/0\/id must match pattern/ );
 
 	} );
 
