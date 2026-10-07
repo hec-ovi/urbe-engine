@@ -29,7 +29,11 @@ const PATHS = {
 	mute: 'M4 9h4l5-4v14l-5-4H4zM16 9l5 6M21 9l-5 6',
 	lock: 'M6 11h12v10H6zM8 11V8a4 4 0 018 0v3M12 15v2',
 	unlock: 'M6 11h12v10H6zM8 11V8a4 4 0 017.5-2M12 15v2',
-	card: 'M3 6h18v12H3zM3 10h18M7 15h4'
+	card: 'M3 6h18v12H3zM3 10h18M7 15h4',
+	// Money and things changing hands: a Bureau note, a hand passing something on, a bag from a counter.
+	credits: 'M3 7h18v10H3zM12 9.5a2.5 2.5 0 100 5 2.5 2.5 0 100-5M6 10v4M18 10v4',
+	give: 'M2 15h4l4 2h6a2 2 0 000-4h-4M2 20h13l7-5M15 4l3 3-3 3M9 7h9',
+	buy: 'M5 8h14l-1 12H6zM9 8V6a3 3 0 016 0v2'
 };
 
 /** An inline SVG icon coloured by the surrounding text. */

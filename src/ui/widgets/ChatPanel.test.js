@@ -8,6 +8,7 @@ import layout from './chat-layout.json' with { type: 'json' };
 import schema from './chat-layout.schema.json' with { type: 'json' };
 import { ChatPanel } from './ChatPanel.js';
 import { ThinkingOrb } from './ThinkingOrb.js';
+import { icon } from '../components/Icon.js';
 
 const ADA = { name: 'Ada Vance', role: 'office worker' };
 
@@ -460,6 +461,18 @@ describe( 'ChatPanel', () => {
 		expect( document.activeElement ).toBe( tab );
 		expect( onClose ).not.toHaveBeenCalled();
 		expect( onChoice ).not.toHaveBeenCalled();
+
+		// A card, a hand-over, credits and a purchase each wear their own icon; an unknown kind talks.
+		panel.setActions( [
+			{ id: 'card:home:p1/floor:1/u1', label: 'Ask for access', icon: 'card' }, { id: 'hand', label: 'Hand over…', icon: 'give' },
+			{ id: 'pay:5', label: 'Pay 5 cr', icon: 'credits' }, { id: 'buy:coffee', label: 'Buy cup of coffee · 3 cr', icon: 'buy' }, { id: 'odd', label: 'Odd' }
+		] );
+		const paths = [ ...document.querySelectorAll( '.chat-action svg path' ) ].map( ( path ) => path.getAttribute( 'd' ) );
+		expect( paths ).toHaveLength( 5 );
+		expect( new Set( paths ).size ).toBe( 5 );
+		expect( paths.every( Boolean ) ).toBe( true );
+		expect( paths[ 4 ] ).toBe( icon( 'talk' ).querySelector( 'path' ).getAttribute( 'd' ) );
+		panel.setActions( [ { id: 'follow', label: 'Bring Ada along' }, { id: 'lead:p9', label: 'Go with Ada to the Blue Lantern', icon: 'lead' } ] );
 
 		panel.setTalkOpen( false );
 		panel.setChoices( [] );

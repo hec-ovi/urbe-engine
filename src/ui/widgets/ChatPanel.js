@@ -10,7 +10,7 @@ const SPEAKING = new Set( [ 'pending', 'playing', 'idle' ] );
 /** Lines the transcript keeps; the oldest leave first. */
 const MAX_LINES = 200;
 /** Icons for an action's kind, the part of its id before a colon unless it names one. */
-const ACTION_ICONS = new Set( [ 'follow', 'lead', 'dismiss' ] );
+const ACTION_ICONS = new Set( [ 'follow', 'lead', 'dismiss', 'card', 'give', 'credits', 'buy' ] );
 const SVG = 'http://www.w3.org/2000/svg';
 
 /**
