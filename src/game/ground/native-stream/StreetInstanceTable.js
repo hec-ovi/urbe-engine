@@ -1,5 +1,6 @@
 import { DataTexture, FloatType, InterpolationSamplingMode, InterpolationSamplingType, NearestFilter, RGBAFormat, RedIntegerFormat, UnsignedIntType } from 'three/webgpu';
 import { Fn, drawIndex, float, instanceIndex, int, ivec2, texture, textureLoad, textureSize, varying } from 'three/tsl';
+import { packColors, packedLayer } from '../materials/VariantColoring.js';
 
 /** Four floats per texel; the tint and the wear are the row every surface starts with. */
 const TEXEL = 4;
@@ -41,23 +42,26 @@ const batchInstance = Fn( ( [ indirect ], builder ) => {
  * atlas keeps the placement's UV offset and scale in the texel after it; a
  * display face that letters text keeps its glyph count there and one glyph
  * index per texel from then on. A surface that picks a variant per panel
- * keeps the placement's hash prefix in a texel of its own before any glyph,
- * as its high and low 16 bits.
+ * keeps each panel's variant in texels of their own before any glyph, three
+ * bits per panel, eight panels to a float ([VariantColoring](../materials/VariantColoring.js)).
  */
 export class StreetInstanceTable {
 
 	/**
 	 * @param scan whether this surface samples the scan atlas
 	 * @param glyphs how many glyph slots a display face letters, 0 for every other surface
-	 * @param variant `placement => uint32` the variant hash prefix of a copy, for a surface that picks per panel
+	 * @param variant `{ capacity, fallback, colors }` for a surface that picks its variant per panel:
+	 *   room for `capacity` panels a part, the set's fallback variant, and `colors(placement, part)`
+	 *   the variants of a copy's panels, or null when it has none coloured
 	 */
 	constructor( { scan = false, glyphs = 0, variant = null } = {} ) {
 
 		this.scan = scan;
 		this.glyphs = glyphs;
 		this.variant = variant;
+		this.unpainted = variant ? new Uint8Array( variant.capacity ).fill( variant.fallback ) : null;
 		this.variantColumn = 1 + ( scan || glyphs ? 1 : 0 );
-		this.header = this.variantColumn + ( variant ? 1 : 0 );
+		this.header = this.variantColumn + ( variant ? Math.ceil( variant.capacity / 32 ) : 0 );
 		this.texels = this.header + glyphs;
 		this.rows = 0;
 		this.image = blank();
@@ -99,7 +103,7 @@ export class StreetInstanceTable {
 	 * The values one copy draws with, at the slot its batch handed it.
 	 * A slot is reused once its copy is dropped, so every texel is written.
 	 */
-	write( instance, placement ) {
+	write( instance, placement, part = 0 ) {
 
 		this.#fit();
 
@@ -115,9 +119,9 @@ export class StreetInstanceTable {
 		}
 		if ( this.variant ) {
 
-			const prefix = this.variant( placement ) >>> 0;
-			data[ at + this.variantColumn * TEXEL ] = prefix >>> 16;
-			data[ at + this.variantColumn * TEXEL + 1 ] = prefix & 0xffff;
+			const from = at + this.variantColumn * TEXEL;
+			data.fill( 0, from, at + this.header * TEXEL );
+			packColors( this.variant.colors( placement, part ) ?? this.unpainted, data, from, this.variant.capacity );
 
 		}
 		if ( this.glyphs ) {
@@ -143,14 +147,13 @@ export class StreetInstanceTable {
 	#ports() {
 
 		const head = this.#texel( int( 0 ) ), tail = this.variantColumn > 1 ? this.#texel( int( 1 ) ) : null;
-		const variant = this.variant ? this.#texel( int( this.variantColumn ) ) : null;
 
 		return {
 			tint: head.rgb,
 			wear: head.a,
 			...( this.scan ? { scan: { offset: tail.xy, scale: tail.zw } } : {} ),
 			...( this.glyphs ? { text: { count: tail.x, glyph: index => this.#texel( int( this.header ).add( index ) ).x } } : {} ),
-			...( variant ? { variant: { hi: variant.x, lo: variant.y } } : {} )
+			...( this.variant ? { variant: { layer: ( panel ) => packedLayer( ( column ) => this.#texel( column ), this.variantColumn, panel ) } } : {} )
 		};
 
 	}

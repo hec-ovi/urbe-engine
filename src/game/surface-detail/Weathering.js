@@ -29,7 +29,7 @@ const STREET = Object.freeze( {
 	damaged: { profile: 'sidewalk', panel: true },
 	service: { profile: 'sidewalk', panel: true },
 	polished: { profile: 'sidewalk', panel: true },
-	terracotta: { profile: 'sidewalk', panel: true },
+	terracotta: { profile: 'sidewalk', panel: false },
 	basalt: { profile: 'sidewalk', panel: false },
 	concrete: { profile: 'sidewalk', panel: false },
 	'district-panel-dark': { profile: 'sidewalk', panel: true },

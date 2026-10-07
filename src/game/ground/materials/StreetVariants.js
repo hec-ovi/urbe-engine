@@ -181,7 +181,7 @@ function described( binding, id ) {
 			maps[ slot ] = Object.freeze( { path: texture.path, sha256: texture.sha256 } );
 
 		}
-		layers.push( Object.freeze( { id: variant.id, maps: Object.freeze( maps ) } ) );
+		layers.push( Object.freeze( { id: variant.id, condition: variant.condition ?? variant.id, maps: Object.freeze( maps ) } ) );
 
 	}
 	const total = set.variants.reduce( ( sum, variant ) => sum + variant.weight, 0 );
@@ -195,11 +195,10 @@ function described( binding, id ) {
 }
 
 /**
- * The layer a fragment draws, as the shader reproduces `StreetVariants.select`:
- * `seed` is the placement's prefix as a uint node, `words` the unit's 32-bit
- * words as uint nodes.
+ * A unit's hash as a fraction of 2^32, as the shader reproduces `fnvWords`:
+ * `seed` the prefix as a uint node, `words` the unit's 32-bit words as uint nodes.
  */
-export function variantLayer( set, seed, words ) {
+export function variantFraction( seed, words ) {
 
 	let hash = seed;
 	for ( const word of words ) {
@@ -207,7 +206,13 @@ export function variantLayer( set, seed, words ) {
 		for ( let shift = 0; shift < 32; shift += 8 ) hash = hash.bitXor( word.shiftRight( uint( shift ) ).bitAnd( uint( 255 ) ) ).mul( uint( PRIME ) );
 
 	}
-	const u = float( hash ).mul( 1 / 4294967296 ).toConst();
+
+	return float( hash ).mul( 1 / 4294967296 ).toConst();
+
+}
+
+/** The layer a hash fraction `u` picks by the set's own weights, as `choose` does. */
+export function variantLayer( set, u ) {
 
 	return set.cdf.slice( 0, - 1 ).reduce( ( layer, edge ) => layer.add( select( u.greaterThanEqual( edge ), int( 1 ), int( 0 ) ) ), int( 0 ) );
 
@@ -303,6 +308,17 @@ export function withPanelUnits( geometry ) {
 	copies.forEach( ( { panel }, n ) => { units[ position.count + n ] = panel; } );
 	geometry.setIndex( new BufferAttribute( total > 65535 ? corner : new Uint16Array( corner ), 1 ) );
 	geometry.setAttribute( '_street_panel', new BufferAttribute( units, 1 ) );
+	// Each panel's chart in the piece's metres, in panel order: where its UV is
+	// 0, 0 and the metres one unit of U and of V runs, for the panel graph.
+	const charts = new Float64Array( panels.length * 9 );
+	order.forEach( ( panel, rank ) => {
+
+		// A chart that repeats across a primitive starts each repeat a whole U or V on.
+		const [ x, y, z, ru, rv, ux, uy, uz, vx, vy, vz ] = panels[ panel ];
+		charts.set( [ x + ux * ru + vx * rv, y + uy * ru + vy * rv, z + uz * ru + vz * rv, ux, uy, uz, vx, vy, vz ], rank * 9 );
+
+	} );
+	geometry.userData.streetPanels = charts;
 
 	return geometry;
 

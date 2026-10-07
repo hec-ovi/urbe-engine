@@ -3,12 +3,13 @@ import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, DataArrayTexture,
 import binding from '../../../../../materials/bindings/street-native.json' with { type: 'json' };
 import { NativeStreetMaterials } from './NativeStreetMaterials.js';
 import { choose, fnv1a, fnvWords, placementId, StreetVariants, withPanelUnits } from './StreetVariants.js';
+import { cellHalves, colorGraph, selectCell } from './VariantColoring.js';
 import { packVariants } from './VariantPack.js';
 import { StreetInstanceTable } from '../native-stream/StreetInstanceTable.js';
 
 const map = ( name, colorSpace = 'linear', resolution = [ 4, 4 ] ) => ( { path: `themes/cyberpunk/assets/variants/${name}.png`, sha256: '0'.repeat( 64 ), resolution, colorSpace, wrap: [ 'repeat', 'repeat' ] } );
-const bundle = ( set, id, weight, resolution ) => ( {
-	id, condition: id, weight, material: { key: 'cyberpunk/street-sidewalk/mid', variant: id },
+const bundle = ( set, id, weight, resolution, condition = id ) => ( {
+	id, condition, weight, material: { key: 'cyberpunk/street-sidewalk/mid', variant: id },
 	maps: Object.fromEntries( [ 'basecolor', 'normal', 'roughness', 'ao' ].map( ( slot ) => [ slot, `${set}-${id}-${slot}` ] ) ),
 	resolution
 } );
@@ -20,7 +21,8 @@ function variantBinding() {
 		'concrete-slabs': { worldSize: [ 2, 2 ], selection: { unit: 'panel', salt: 'precast-variants-v1', fallback: 'clean', uvTransform: 'identity' },
 			variants: [ bundle( 'concrete', 'clean', 0.55 ), bundle( 'concrete', 'stained', 0.28 ), bundle( 'concrete', 'cracked', 0.1 ), bundle( 'concrete', 'patched', 0.07 ) ] },
 		'hex-grey': { worldSize: [ 1.2, 1.385640646 ], selection: { unit: 'world-cell', salt: 'street-hex-grey-v1', fallback: 'clean-a', uvTransform: 'identity' },
-			variants: [ bundle( 'hex', 'clean-a', 0.5, [ 4, 6 ] ), bundle( 'hex', 'stained-a', 0.5, [ 4, 6 ] ) ] }
+			variants: [ bundle( 'hex', 'clean-a', 0.3, [ 4, 6 ], 'clean' ), bundle( 'hex', 'clean-b', 0.3, [ 4, 6 ], 'clean' ),
+				bundle( 'hex', 'stained-a', 0.2, [ 4, 6 ], 'stained' ), bundle( 'hex', 'stained-b', 0.2, [ 4, 6 ], 'stained' ) ] }
 	};
 	const textures = {};
 	for ( const set of Object.values( sets ) ) {
@@ -190,7 +192,7 @@ describe( 'street variants', () => {
 		const load = loader(), port = arrays();
 		const variants = new StreetVariants( variantBinding(), { base: binding, worldSeed: 'w' } );
 		const factory = new NativeStreetMaterials( binding, load, { variants: { binding: variants, arrays: port } } );
-		const table = new StreetInstanceTable( { variant: () => 0x12345678 } );
+		const table = new StreetInstanceTable( { variant: { capacity: 96, fallback: 0, colors: () => null } } );
 		const copies = factory.build( 'ordinary', { instances: table.ports } );
 		expect( factory.panelled( copies ) ).toBe( true );
 		expect( factory.resources( copies ).map( ( resource ) => resource.texture.name ) ).toEqual( [ 'concrete-slabs:color', 'concrete-slabs:response' ] );
@@ -241,17 +243,69 @@ describe( 'street variants', () => {
 
 	} );
 
-	it( 'keeps a copy\'s hash prefix in a texel of its own, ahead of any glyphs', () => {
+	it( 'keeps each panel\'s variant in three bits of the copy\'s row, ahead of any glyphs, and the fallback where none was coloured', () => {
 
-		const table = new StreetInstanceTable( { glyphs: 2, variant: () => 0xdeadbeef } );
-		expect( table.header ).toBe( 3 );
-		table.bind( { mesh: { _indirectTexture: null }, capacity: 1 } );
-		table.write( 0, { tint: [ 1, 1, 1 ], wear: 0, text: [ 7, 8 ] } );
+		const colors = new Map( [ [ 1, Uint8Array.from( { length: 40 }, ( _, panel ) => panel % 8 ) ] ] );
+		const table = new StreetInstanceTable( { glyphs: 2, variant: { capacity: 64, fallback: 3, colors: ( placement, part ) => ( placement.coloured ? colors.get( part ) : null ) } } );
+		expect( table.header ).toBe( 4 );
+		table.bind( { mesh: { _indirectTexture: null }, capacity: 2 } );
+		table.write( 0, { tint: [ 1, 1, 1 ], wear: 0, text: [ 7, 8 ], coloured: true }, 1 );
+		table.write( 1, { tint: [ 1, 1, 1 ], wear: 0, text: [] } );
 		const data = table.image.image.data;
-		expect( [ data[ 8 ], data[ 9 ] ] ).toEqual( [ 0xdead, 0xbeef ] );
-		expect( [ data[ 12 ], data[ 16 ] ] ).toEqual( [ 7, 8 ] );
-		expect( table.ports.variant ).toBeDefined();
+		// Read back the way the shader does: texel by 32 panels, float by 8, three bits each.
+		const read = ( row, panel ) => Math.floor( data[ row * table.texels * 4 + ( table.variantColumn + Math.floor( panel / 32 ) ) * 4 + Math.floor( panel / 8 ) % 4 ] / 8 ** ( panel % 8 ) ) % 8;
+		for ( let panel = 0; panel < 40; panel ++ ) expect( read( 0, panel ), `${panel}` ).toBe( panel % 8 );
+		for ( let panel = 0; panel < 64; panel ++ ) expect( read( 1, panel ) ).toBe( 3 );
+		expect( [ data[ 16 ], data[ 20 ] ] ).toEqual( [ 7, 8 ] );
+		expect( typeof table.ports.variant.layer ).toBe( 'function' );
 		table.dispose();
+
+	} );
+
+	it( 'never gives two panels that share an edge the same variant, while a shared corner alone joins nothing', () => {
+
+		// A 6 x 3 run of 2 m slabs laid by three placements, a row each, the middle row turned round.
+		const weights = [ 0.55, 0.28, 0.1, 0.07, 0, 0, 0, 0 ].map( ( w ) => w / 2 ).map( ( w, i, all ) => w || all[ i - 4 ] );
+		const count = 18, corners = new Float64Array( count * 12 ), prefix = new Uint32Array( count ), panel = new Uint16Array( count );
+		for ( let row = 0; row < 3; row ++ ) for ( let k = 0; k < 6; k ++ ) {
+
+			const unit = row * 6 + k, x = row === 1 ? 10 - k * 2 : k * 2, z = row * 2;
+			const square = row === 1 ? [ x, z, x - 2, z, x - 2, z + 2, x, z + 2 ] : [ x, z, x + 2, z, x + 2, z + 2, x, z + 2 ];
+			for ( let c = 0; c < 4; c ++ ) corners.set( [ square[ c * 2 ] + ( row === 1 ? 2 : 0 ), 0, square[ c * 2 + 1 ] ], unit * 12 + c * 3 );
+			prefix[ unit ] = fnv1a( `row-${row}` );
+			panel[ unit ] = k;
+
+		}
+		const result = colorGraph( weights, { count, corners: corners.slice(), prefix, panel } );
+		expect( result.edges ).toBe( 3 * 5 + 2 * 6 );
+		expect( result.conflicts ).toBe( 0 );
+		const at = ( row, k ) => result.colors[ row * 6 + ( row === 1 ? 5 - k : k ) ];
+		for ( let row = 0; row < 3; row ++ ) for ( let k = 0; k < 6; k ++ ) {
+
+			if ( k < 5 ) expect( at( row, k ), `${row},${k}` ).not.toBe( at( row, k + 1 ) );
+			if ( row < 2 ) expect( at( row, k ), `${row},${k} up` ).not.toBe( at( row + 1, k ) );
+
+		}
+		// The same graph colours the same way.
+		expect( colorGraph( weights, { count, corners: corners.slice(), prefix, panel } ).colors ).toEqual( result.colors );
+
+	} );
+
+	it( 'draws a world cell from the half of its set its parity names, so cells sharing an edge always differ', () => {
+
+		const variants = new StreetVariants( variantBinding(), { base: binding, worldSeed: 'w' } );
+		const set = variants.of( 'district-hex' );
+		const [ even, odd ] = cellHalves( set );
+		// Each condition's two takes split between the halves.
+		expect( even.layers ).toEqual( [ 0, 2 ] );
+		expect( odd.layers ).toEqual( [ 1, 3 ] );
+		const prefix = variants.seed( 'district-hex', 'world' );
+		for ( let cx = - 6; cx < 6; cx ++ ) for ( let cz = - 6; cz < 6; cz ++ ) {
+
+			expect( selectCell( set, prefix, cx, cz ) ).not.toBe( selectCell( set, prefix, cx + 1, cz ) );
+			expect( selectCell( set, prefix, cx, cz ) ).not.toBe( selectCell( set, prefix, cx, cz + 1 ) );
+
+		}
 
 	} );
 

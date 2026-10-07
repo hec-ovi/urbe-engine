@@ -1,6 +1,7 @@
 import { InterpolationSamplingMode, InterpolationSamplingType } from 'three/webgpu';
 import { attribute, clamp, dFdx, dFdy, floor, fract, int, max, mix, mx_noise_float, positionWorld, sin, smoothstep, texture, uint, varying, vec2, vec4, uv } from 'three/tsl';
-import { VARIANT_MAPS, variantLayer } from './StreetVariants.js';
+import { VARIANT_MAPS, variantFraction } from './StreetVariants.js';
+import { cellLayer } from './VariantColoring.js';
 
 /** Authored UVs, a shared world-space asphalt sampling frame, and what each copy asks for itself. */
 export class NativeSamples {
@@ -48,21 +49,22 @@ export class NativeSamples {
 
 	/**
 	 * The four maps of one variant, the one this fragment's panel or world cell
-	 * draws: a panel hashes its placement's prefix (`instances.variant`) with
-	 * its `_street_panel` number, a world cell the surface's `world` prefix
-	 * with floor of its sample coordinate. Without either it draws the set's
-	 * fallback. Basecolor comes from the colour array; the normal's X and Y,
-	 * roughness and AO from the packed response array, the normal's Z rebuilt.
+	 * draws: a panel the variant coloured for it, which its copy's row carries
+	 * by its `_street_panel` number; a world cell the half of the set its
+	 * parity draws from, by the surface's `world` prefix hashed with floor of
+	 * its sample coordinate ([VariantColoring](VariantColoring.js)). Without
+	 * either it draws the set's fallback. Basecolor comes from the colour
+	 * array; the normal's X and Y, roughness and AO from the packed response
+	 * array, the normal's Z rebuilt.
 	 */
 	#variant( { set, arrays, seed }, instances ) {
 		let layer = int( set.fallback );
 		if ( set.unit === 'world-cell' || this.world ) {
-			const cell = floor( this.uv );
-			layer = variantLayer( set, uint( seed ), [ uint( int( cell.x ) ), uint( int( cell.y ) ) ] );
+			const cell = floor( this.uv ).toConst();
+			layer = cellLayer( set, variantFraction( uint( seed ), [ uint( int( cell.x ) ), uint( int( cell.y ) ) ] ), cell.x, cell.y );
 		} else if ( instances?.variant ) {
-			const prefix = uint( instances.variant.hi.add( 0.5 ) ).shiftLeft( uint( 16 ) ).bitOr( uint( instances.variant.lo.add( 0.5 ) ) );
 			const panel = varying( attribute( '_street_panel', 'float' ) ).setInterpolation( InterpolationSamplingType.FLAT, InterpolationSamplingMode.EITHER );
-			layer = variantLayer( set, prefix, [ uint( panel.add( 0.5 ) ) ] );
+			layer = instances.variant.layer( floor( panel.add( 0.5 ) ) );
 		}
 		layer = layer.toConst();
 		return ( slot, coordinates ) => {

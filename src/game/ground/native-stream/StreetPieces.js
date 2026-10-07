@@ -118,6 +118,8 @@ export class StreetPieces {
 		const loaded = await mapConcurrent( this.kit.pieces, LOAD_CONCURRENCY, entry => this.#piece( entry ) );
 
 		for ( const piece of loaded ) this.pieces.set( piece.id, piece );
+		// Every panel of the city takes its variant before the first copy stands.
+		await this.instances.colour( this.pieces );
 		this.batches.add( loaded );
 		this.instances.bind( this.batches.batches );
 
@@ -169,9 +171,10 @@ export class StreetPieces {
 
 				// Paint and scans lie flat on the road; only bodies cast shadows.
 				const geometry = rebased( mesh, drawn.uvScale );
-				surfaces.push( { bucket: drawn.bucket, geometry, material, castShadow: collides } );
-				// A surface that picks a variant per panel numbers this primitive's panels.
-				if ( this.materials.panelled( material ) ) withPanelUnits( geometry );
+				const surface = { bucket: drawn.bucket, geometry, material, castShadow: collides };
+				surfaces.push( surface );
+				// A surface that picks a variant per panel numbers this primitive's panels and keeps their charts.
+				if ( this.materials.panelled( material ) ) surface.panels = withPanelUnits( geometry ).userData.streetPanels;
 				this.materials.assertGeometry( material, geometry );
 
 			} );
