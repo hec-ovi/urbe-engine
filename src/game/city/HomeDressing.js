@@ -33,7 +33,7 @@ export const isPersonal = ( id ) => typeof id === 'string' && id.startsWith( 'pe
 
 /** Where each holder's face lies in its module's frame: centre, size, the side it faces. */
 const FACES = {
-	'personal-c8-nameplate': { at: [ 0, .03, .0095 ], size: [ .14, .044 ], kind: 'name' },
+	'personal-c8-nameplate': { at: [ 0, .045, .0095 ], size: [ .21, .07 ], kind: 'name' },
 	'personal-c8-mailbox': { at: [ 0, .1, .0825 ], size: [ .14, .04 ], kind: 'mail' },
 	'personal-c8-photo': { at: [ 0, .05, .0009 ], size: [ .068, .098 ], kind: 'photo' }
 };
@@ -207,7 +207,9 @@ export class HomeDressing {
 		let texture = this.textures.get( key );
 		if ( ! texture ) {
 
-			texture = new THREE.Texture();
+			// A snapshot of them stands in at once (who, in their own hand), the portrait replaces it once drawn.
+			const stand = snapshotOf( this.#nameOf( home.pictured ) );
+			texture = stand ? new THREE.CanvasTexture( stand ) : new THREE.Texture();
 			texture.colorSpace = THREE.SRGBColorSpace;
 			this.textures.set( key, texture );
 			Promise.resolve( this.portraits.portrait( { npcId: home.pictured } ) ).then( ( url ) => {
@@ -221,6 +223,20 @@ export class HomeDressing {
 
 		}
 		return this.#plane( face, texture, key );
+
+	}
+
+	#nameOf( npcId ) {
+
+		try {
+
+			return this.sim?.getNPC?.( npcId )?.name?.given ?? null;
+
+		} catch {
+
+			return null;
+
+		}
 
 	}
 
@@ -257,6 +273,31 @@ function labelTexture( kind, home ) {
 	const texture = new THREE.CanvasTexture( canvas );
 	texture.colorSpace = THREE.SRGBColorSpace;
 	return texture;
+
+}
+
+/** The photo before the portrait is drawn: a faded print of somebody against a warm wall, their name on it in pen. */
+function snapshotOf( name ) {
+
+	if ( typeof document === 'undefined' ) return null;
+	const canvas = document.createElement( 'canvas' );
+	canvas.width = 280; canvas.height = 400;
+	const g = canvas.getContext( '2d' );
+	g.fillStyle = '#efeadc'; g.fillRect( 0, 0, 280, 400 );
+	const sky = g.createLinearGradient( 0, 15, 0, 335 );
+	sky.addColorStop( 0, '#c98b5a' ); sky.addColorStop( 1, '#5b3c2c' );
+	g.fillStyle = sky; g.fillRect( 15, 15, 250, 320 );
+	g.fillStyle = '#2a1c18';
+	g.beginPath(); g.ellipse( 140, 150, 48, 60, 0, 0, Math.PI * 2 ); g.fill();
+	g.beginPath(); g.ellipse( 140, 330, 105, 120, 0, Math.PI, Math.PI * 2 ); g.fill();
+	g.fillStyle = 'rgba(255,220,180,0.18)'; g.fillRect( 15, 15, 250, 320 );
+	if ( name ) {
+
+		g.fillStyle = '#1d2a6a'; g.font = 'italic 34px "DejaVu Serif", serif'; g.textAlign = 'center';
+		g.fillText( name, 140, 380 );
+
+	}
+	return canvas;
 
 }
 
