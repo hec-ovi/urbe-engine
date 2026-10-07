@@ -1,4 +1,4 @@
-import { abs, atan, attribute, clamp, float, floor, fract, max, min, mix, mod, normalWorldGeometry, positionWorld, select, smoothstep, texture, vec2, vec3 } from 'three/tsl';
+import { abs, attribute, clamp, float, floor, fract, max, min, mix, mod, normalWorldGeometry, positionWorld, select, smoothstep, texture, vec2, vec3 } from 'three/tsl';
 import { hash32 } from './SurfaceDetail.js';
 
 /**
@@ -182,7 +182,8 @@ export function graffiti( atlas, { color, roughness } ) {
 	const local = positionWorld.xz.sub( centre );
 	// Across the face, left to right as one faces it.
 	const across = local.x.mul( n.z ).sub( local.y.mul( n.x ) );
-	const face = mod( floor( atan( n.z, n.x ).div( Math.PI / 2 ).add( 4.5 ) ), 4 );
+	// Which of the four faces, by its dominant axis: an angle would flicker where it wraps.
+	const face = select( abs( n.x ).greaterThan( abs( n.z ) ), select( n.x.greaterThan( 0 ), float( 0 ), float( 2 ) ), select( n.z.greaterThan( 0 ), float( 1 ), float( 3 ) ) );
 	const above = positionWorld.y.sub( h.base );
 	const pick = hash32( centre.add( face.mul( 17.3 ) ) ).toConst();
 	const more = hash32( centre.add( face.mul( 5.9 ).add( 3.7 ) ) ).toConst();
