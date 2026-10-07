@@ -4,10 +4,15 @@ import { StationTravel } from './StationTravel.js';
 /** Game-facing transit interaction, kept separate from rendering and DOM. */
 export class TransitGameplay {
 
-	constructor( { atlas, routes, state, journey, locator, controller } ) {
+	/**
+	 * @param fare what a ride costs, or null when rides are free: `{ ride, station }` the fares,
+	 * `can( n )` whether the player can pay and `charge( n, what )` taking it, `what` `ride` or `station`
+	 */
+	constructor( { atlas, routes, state, journey, locator, controller, fare = null } ) {
 
 		this.locator = locator;
 		this.controller = controller;
+		this.fare = fare;
 		this.stationTravel = new StationTravel( atlas, routes );
 		this.destinations = [];
 		this.offeredDestinations = [];
@@ -101,6 +106,7 @@ export class TransitGameplay {
 		if ( ! this.latest?.place ) return { action: 'board', result: { ok: false, error: 'E_TRANSIT_WRONG_PLACE' } };
 		const allowed = [ ...this.services, ...this.offered ].some( ( candidate ) => sameService( candidate, service ) );
 		if ( ! allowed ) return { action: 'board', result: { ok: false, error: 'E_TRANSIT_INVALID_DATA' } };
+		if ( this.fare && ! this.fare.can( this.fare.ride ) ) return { action: 'board', result: { ok: false, error: 'E_TRANSIT_FARE' } };
 		const { position, place, daySeconds } = this.latest;
 		const result = this.journey.board( {
 			position,
@@ -114,6 +120,7 @@ export class TransitGameplay {
 		this.offered = [];
 		if ( result.ok ) {
 
+			this.fare?.charge( this.fare.ride, 'ride' );
 			const ride = this.journey.update( { daySeconds } );
 			if ( ride.ok ) this.controller.beginRide( ride.position, ride.heading );
 
@@ -133,9 +140,11 @@ export class TransitGameplay {
 		if ( this.aboard ) return { action: 'station-travel', result: { ok: false, error: 'E_TRANSIT_ALREADY_ABOARD' } };
 		const allowed = this.offeredDestinations.some( choice => selection && Object.keys( choice ).every( key => choice[ key ] === selection[ key ] ) );
 		const feet = this.controller.body.feet;
-		const result = allowed ? this.stationTravel.travel( selection, [ feet.x, feet.y, feet.z ] ) : { ok: false, error: 'E_TRANSIT_INVALID_DATA' };
+		const short = allowed && this.fare && ! this.fare.can( this.fare.station );
+		const result = ! allowed ? { ok: false, error: 'E_TRANSIT_INVALID_DATA' }
+			: short ? { ok: false, error: 'E_TRANSIT_FARE' } : this.stationTravel.travel( selection, [ feet.x, feet.y, feet.z ] );
 		this.offeredDestinations = []; this.destinations = [];
-		if ( result.ok ) { this.controller.endRide( result.position ); this.controller.yaw = result.heading; }
+		if ( result.ok ) { this.fare?.charge( this.fare.station, 'station' ); this.controller.endRide( result.position ); this.controller.yaw = result.heading; }
 		return { action: 'station-travel', result };
 	}
 
@@ -206,7 +215,8 @@ export function transitErrorMessage( code ) {
 		E_TRANSIT_MOVING_VEHICLE: 'Wait until the vehicle stops.',
 		E_TRANSIT_OUT_OF_REACH: 'Move closer to the stop or platform.',
 		E_TRANSIT_ALREADY_ABOARD: 'You are already aboard.',
-		E_TRANSIT_NOT_ABOARD: 'You are not aboard.'
+		E_TRANSIT_NOT_ABOARD: 'You are not aboard.',
+		E_TRANSIT_FARE: 'You cannot pay the fare.'
 	}[ code ] ?? 'Transit is unavailable.';
 
 }

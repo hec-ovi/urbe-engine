@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { TransitGameplay } from './TransitGameplay.js';
+import { TransitGameplay, transitErrorMessage } from './TransitGameplay.js';
 import { TransitJourneyBoundary } from './TransitJourneyBoundary.js';
 import { Locator } from '../world/Locator.js';
 
@@ -70,6 +70,46 @@ describe( 'TransitGameplay', () => {
 
 	} );
 
+	it( 'charges the fare once on boarding and on station travel, and keeps a player who cannot pay where they stand', () => {
+
+		let purse = 1;
+		const charged = [];
+		const fare = { ride: 2, station: 3, can: ( n ) => n <= purse, charge: ( n, what ) => { purse -= n; charged.push( [ n, what ] ); } };
+		const { gameplay, controller } = harness( city(), [ transitRoute( mode ) ], [ 0, mode.y, mode.z ], undefined, fare );
+		gameplay.update( { daySeconds: 1005 } );
+		expect( gameplay.activate().result ).toEqual( { ok: false, error: 'E_TRANSIT_FARE' } );
+		expect( controller.movementLocked ).toBe( false );
+		expect( gameplay.state.status ).toBe( 'waiting' );
+		expect( transitErrorMessage( 'E_TRANSIT_FARE' ) ).toBe( 'You cannot pay the fare.' );
+		expect( new TransitJourneyBoundary().valid( 'gameplay-action', { action: 'board', result: { ok: false, error: 'E_TRANSIT_FARE' } } ) ).toBe( true );
+		purse = 10;
+		gameplay.update( { daySeconds: 1005 } );
+		expect( gameplay.activate().result.ok ).toBe( true );
+		gameplay.update( { daySeconds: 1060 } );
+		expect( charged ).toEqual( [ [ 2, 'ride' ] ] );
+
+		// Between stations: the same, at the station fare.
+		const station = harness( city(), [ transitRoute( mode ) ], [ 0, mode.y, mode.z ], undefined, fare );
+		const choice = { stationId: 's1', destinationId: 's2', name: 'Ost' };
+		station.gameplay.stationTravel = { near: () => true, choices: () => [ choice ], travel: () => ( { ok: true, position: [ 9, 0, 9 ], heading: 1 } ) };
+		purse = 2;
+		station.gameplay.update( { daySeconds: 1005 } );
+		station.gameplay.activate();
+		expect( station.gameplay.selectDestination( choice ).result ).toEqual( { ok: false, error: 'E_TRANSIT_FARE' } );
+		purse = 3;
+		station.gameplay.update( { daySeconds: 1005 } );
+		station.gameplay.activate();
+		expect( station.gameplay.selectDestination( choice ).result.ok ).toBe( true );
+		expect( charged.at( - 1 ) ).toEqual( [ 3, 'station' ] );
+		expect( purse ).toBe( 0 );
+
+		// No fare, as before credits: every ride is free.
+		const free = harness( city(), [ transitRoute( mode ) ], [ 0, mode.y, mode.z ] );
+		free.gameplay.update( { daySeconds: 1005 } );
+		expect( free.gameplay.activate().result.ok ).toBe( true );
+
+	} );
+
 	it( 'rejects a stale or clock-less aboard restore without moving the player', () => {
 
 		const route = transitRoute( mode );
@@ -95,7 +135,7 @@ describe( 'TransitGameplay', () => {
 
 } );
 
-function harness( atlas, routes, position, state ) {
+function harness( atlas, routes, position, state, fare = null ) {
 
 	const body = { feet: new THREE.Vector3().fromArray( position ) };
 	const controller = {
@@ -117,7 +157,7 @@ function harness( atlas, routes, position, state ) {
 	};
 	return {
 		controller,
-		gameplay: new TransitGameplay( { atlas, routes, state, locator: new Locator( atlas, routes ), controller } )
+		gameplay: new TransitGameplay( { atlas, routes, state, locator: new Locator( atlas, routes ), controller, fare } )
 	};
 
 }

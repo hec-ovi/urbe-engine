@@ -463,6 +463,68 @@ export class QuestSession {
 
 	}
 
+	/**
+	 * Whether the player may hand a story item to a person now, and how its
+	 * story takes it (Quests `handable`): `deliver` completes a step that
+	 * brings it to them or to where they stand, `theirs` is theirs to keep for
+	 * a talk that needs it, `free` once no step still needs it. The followed
+	 * questline is asked first, then the others in order. `{ questId, how }`,
+	 * or null when no story lets it go, or the Quests build cannot hand items.
+	 * @param place `{ parcelId }` where the person stands in their own home or post, else null
+	 */
+	handable( itemId, npcId, place = null, followed = null ) {
+
+		for ( const { definition, runtime } of this.#followedFirst( followed ) ) {
+
+			if ( typeof runtime.handable !== 'function' || ! definition.items.some( ( item ) => item.itemId === itemId ) ) continue;
+			let how;
+			try {
+
+				how = runtime.handable( itemId, npcId, place ?? undefined );
+
+			} catch {
+
+				how = undefined;
+
+			}
+			if ( how ) return { questId: definition.id, how };
+
+		}
+		return null;
+
+	}
+
+	/**
+	 * Hands a story item to a person through the story that takes it
+	 * (`handable`): `{ questId, how, name, moved }`, `moved` what changed as
+	 * `advanceFor` tells it, or null when no story lets it go.
+	 */
+	hand( itemId, npcId, place = null, timeMin = 0, followed = null ) {
+
+		const found = this.handable( itemId, npcId, place, followed );
+		if ( ! found ) return null;
+		const { definition, runtime } = this.entries.find( ( entry ) => entry.definition.id === found.questId );
+		const result = runtime.hand( itemId, npcId, place ?? undefined, timeMin );
+		const steps = new Map( definition.steps.map( ( step ) => [ step.stepId, step ] ) );
+		const completed = ( result?.completedStepIds ?? [] ).map( ( id ) => steps.get( id ) ).filter( Boolean );
+		const ending = definition.endings.find( ( entry ) => entry.endingId === result?.endingId ) ?? null;
+		return {
+			questId: definition.id, how: result?.how ?? found.how,
+			name: definition.items.find( ( item ) => item.itemId === itemId )?.name ?? itemId,
+			moved: completed.length || ending ? [ { definition, completed, ending } ] : []
+		};
+
+	}
+
+	/** The questlines on offer, the one the player follows first. */
+	#followedFirst( followed ) {
+
+		const entries = this.entries;
+		const first = entries.find( ( entry ) => entry.definition.id === followed );
+		return first ? [ first, ...entries.filter( ( entry ) => entry !== first ) ] : entries;
+
+	}
+
 	/** Every questline on offer as it stands, for whoever else needs to know its part: [{ id, cast, state }]. */
 	snapshot() {
 

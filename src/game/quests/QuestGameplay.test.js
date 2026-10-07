@@ -43,6 +43,39 @@ describe( 'live quest target projection', () => {
 
 	} );
 
+	it( 'offers a story\'s drink where it is sold at its price, keeps it there when the player cannot pay and books the price once it is taken', () => {
+
+		const target = questTarget( 'pickup', [ action( 'take', 'Take' ) ] );
+		target.item = { ...target.item, name: 'amber whisky', kind: 'substance' };
+		const actions = fakeActions( target );
+		let purse = 10;
+		const sale = {
+			priceOf: vi.fn( ( candidate, actionId ) => candidate.item?.kind === 'substance' && actionId === 'take' ? { price: 18, name: candidate.item.name } : null ),
+			can: vi.fn( ( price ) => price <= purse ),
+			paid: vi.fn(),
+			prompt: ( { key, name, price } ) => `${key}  buy ${name} · ${price} cr`,
+			refusal: ( { price } ) => `It costs ${price} cr; you have ${purse} cr.`
+		};
+		const gameplay = setup( actions, { sale } );
+		const candidate = gameplay.candidates( frame( pointLook( 0, 0.2, - 2 ) ) )[ 0 ];
+		expect( candidate.interaction.prompt ).toBe( 'E  buy amber whisky · 18 cr' );
+
+		const short = gameplay.perform( perform( candidate ) );
+		expect( short ).toMatchObject( { ok: false, code: 'unavailable', message: 'It costs 18 cr; you have 10 cr.', progressed: false } );
+		expect( actions.perform ).not.toHaveBeenCalled();
+		expect( sale.paid ).not.toHaveBeenCalled();
+
+		purse = 40;
+		gameplay.candidates( frame( pointLook( 0, 0.2, - 2 ) ) );
+		expect( gameplay.perform( perform( candidate ) ).ok ).toBe( true );
+		expect( sale.paid ).toHaveBeenCalledExactlyOnceWith( target, 18 );
+
+		// Nothing sold where it lies: the prompt and the take are as ever.
+		const free = setup( fakeActions( questTarget( 'pickup', [ action( 'take', 'Take' ) ] ) ), { sale } );
+		expect( free.candidates( frame( pointLook( 0, 0.2, - 2 ) ) )[ 0 ].interaction.prompt ).toBe( 'E  take target pickup' );
+
+	} );
+
 	it( 'lays a pickup on the entrance room\'s free floor the place resolver finds, else at the parcel anchor', () => {
 
 		const target = questTarget( 'pickup', [ action( 'take', 'Take' ) ] );
@@ -350,7 +383,7 @@ describe( 'explicit quest NPC control', () => {
 
 function setup( actions, {
 	crowd = { questMember: () => null }, blocked = false, session = null, continuity = null, animations = null,
-	physics = null, playerCollider = {}, materialFactory = null, missionItems = missionItemAssets(), itemPlaces = null
+	physics = null, playerCollider = {}, materialFactory = null, missionItems = missionItemAssets(), itemPlaces = null, sale = null
 } = {} ) {
 
 	class Ray {
@@ -366,7 +399,7 @@ function setup( actions, {
 		physics: physics ?? { rapier: { Ray }, world: { castRay: () => blocked ? { toi: 0.5 } : null } },
 		playerCollider,
 		materialFactory: materialFactory ?? { build: () => new THREE.MeshStandardMaterial( { color: 0x223344 } ) },
-		missionItems, itemPlaces
+		missionItems, itemPlaces, sale
 	} );
 
 }

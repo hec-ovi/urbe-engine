@@ -39,6 +39,34 @@ describe( 'QuestSession', () => {
 
 	} );
 
+	it( 'hands a story item to a person through the story that takes it, the followed one first, and none from a build that cannot', () => {
+
+		const session = QuestSession.create( [ definition ], sim(), 600 );
+		session.advance( { kind: 'talkedTo', npcId: 'n1' }, 601 );
+		const [ entry ] = session.all;
+		const runtime = entry.runtime;
+		if ( typeof runtime.handable !== 'function' ) {
+
+			// A Quests build without handing takes nothing.
+			expect( session.handable( 'clue', 'n1' ) ).toBeNull();
+			expect( session.hand( 'clue', 'n1', null, 602 ) ).toBeNull();
+
+		}
+		runtime.handable = vi.fn( ( itemId, npcId ) => itemId === 'clue' && npcId === 'n1' ? 'deliver' : undefined );
+		runtime.hand = vi.fn( () => ( { completedStepIds: [ 's_return' ], endingId: 'done', how: 'deliver' } ) );
+		expect( session.handable( 'clue', 'n2' ) ).toBeNull();
+		expect( session.handable( 'other', 'n1' ) ).toBeNull();
+		expect( session.handable( 'clue', 'n1', { parcelId: 'p1' }, 'q1' ) ).toEqual( { questId: 'q1', how: 'deliver' } );
+		const handed = session.hand( 'clue', 'n1', { parcelId: 'p1' }, 602, 'q1' );
+		expect( runtime.hand ).toHaveBeenCalledWith( 'clue', 'n1', { parcelId: 'p1' }, 602 );
+		expect( handed ).toMatchObject( { questId: 'q1', how: 'deliver', name: 'Recorded clue' } );
+		expect( handed.moved ).toEqual( [ { definition, completed: [ definition.steps[ 1 ] ], ending: definition.endings[ 0 ] } ] );
+		runtime.hand.mockReturnValueOnce( { completedStepIds: [], how: 'theirs' } );
+		expect( session.hand( 'clue', 'n1', null, 603 ) ).toMatchObject( { how: 'theirs', moved: [] } );
+		expect( runtime.hand ).toHaveBeenLastCalledWith( 'clue', 'n1', undefined, 603 );
+
+	} );
+
 	it( 'projects each step once for the HUD and the log, and keeps an untouched side job on offer', () => {
 
 		const window = { label: 'during the slow hour', days: [ 0, 1, 2, 3, 4, 5, 6 ], startMin: 1080, endMin: 1380 };

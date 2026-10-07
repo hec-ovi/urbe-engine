@@ -38,10 +38,15 @@ export class QuestGameplay {
 	 * @param itemPlaces where a mission assembly laid inside a parcel stands,
 	 * `entrySpot( parcelId, { width, depth } )` as the scene place resolver
 	 * answers it; without one, or where it has no spot, at the parcel's anchor
+	 * @param sale what a story's item costs where it is sold, or null when
+	 * nothing is: `priceOf( target, action ) => { price, name } | null`,
+	 * `can( price )`, `paid( target, price )`, `prompt( { key, name, price } )`
+	 * the prompt that offers it and `refusal( { name, price } )` the message
+	 * when the player cannot pay
 	 */
 	constructor( {
 		session, actions, world, crowd, physics, playerCollider, materialFactory, missionItems,
-		continuity = null, animations = null, mechanics = null, itemPlaces = null
+		continuity = null, animations = null, mechanics = null, itemPlaces = null, sale = null
 	} ) {
 
 		this.boundary = new QuestActionBoundary();
@@ -57,6 +62,7 @@ export class QuestGameplay {
 		this.materialFactory = materialFactory;
 		this.missionItems = missionItems;
 		this.itemPlaces = itemPlaces;
+		this.sale = sale;
 		this.group = new THREE.Group();
 		this.group.name = 'quest-targets';
 		this.anchors = new Map( world.parcels.map( ( parcel ) => [ parcel.id, new THREE.Vector3( ...parcel.anchor ) ] ) );
@@ -232,6 +238,8 @@ export class QuestGameplay {
 			if ( ! target.availability.available || this.changedTargets.has( target.targetKey ) ) continue;
 			const interaction = this.#interaction( target, { timeMin, playerPlaces, feet, eye, look } );
 			if ( ! interaction ) continue;
+			// A story's item sold where it lies is bought, at its price.
+			if ( this.sale ) interaction.prompt = promptFor( target, this.sale );
 			this.liveInteractions.set( target.targetKey, interaction );
 			candidates.push( {
 				kind: 'quest', aim: Math.max( - 1, Math.min( 1, interaction.aim ) ),
@@ -268,6 +276,17 @@ export class QuestGameplay {
 		if ( ! offered ) return null;
 		if ( interaction.mechanic ) return this.#performMechanic( interaction, offered, request.timeMin );
 
+		// A price the player cannot pay leaves the item where it is, and says what it costs.
+		const price = this.sale?.priceOf( interaction.target, offered.action ) ?? null;
+		if ( price && ! this.sale.can( price.price ) ) {
+
+			return this.boundary.output( 'interaction-result', {
+				ok: false, targetKey: interaction.target.targetKey, action: offered.action, progressed: false,
+				message: this.sale.refusal?.( price ) ?? `It costs ${price.price} cr.`, code: 'unavailable',
+				completed: [], inventory: this.session?.inventoryView?.() ?? [], worldChanges: []
+			} );
+
+		}
 		const result = this.actions.perform( {
 			targetKey: interaction.target.targetKey,
 			action: offered.action,
@@ -280,6 +299,7 @@ export class QuestGameplay {
 			action: offered.action,
 			members: interaction.members ?? []
 		} );
+		if ( result.ok && price ) this.sale.paid( interaction.target, price.price );
 
 		for ( const change of result.worldChanges ) this.#applyWorldChange( change );
 		return result;
@@ -1209,11 +1229,14 @@ function interaction( target, playerPlaces, aim, focus, members = [] ) {
 
 }
 
-function promptFor( target ) {
+/** What the prompt offers: each action on the target, an action with a price as buying it. */
+function promptFor( target, sale = null ) {
 
 	return target.presentation.actions.map( ( action ) => {
 
 		const key = action.bindingAction === 'secondary-interact' ? 'R' : 'E';
+		const price = sale?.priceOf( target, action.action ) ?? null;
+		if ( price ) return sale.prompt?.( { key, ...price } ) ?? `${key}  buy ${price.name} · ${price.price} cr`;
 		return `${key}  ${action.label.toLowerCase()} ${target.presentation.name}`;
 
 	} ).join( '   ' );

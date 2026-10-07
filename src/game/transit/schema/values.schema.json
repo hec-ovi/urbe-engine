@@ -71,7 +71,8 @@
         "E_TRANSIT_MOVING_VEHICLE",
         "E_TRANSIT_OUT_OF_REACH",
         "E_TRANSIT_ALREADY_ABOARD",
-        "E_TRANSIT_NOT_ABOARD"
+        "E_TRANSIT_NOT_ABOARD",
+        "E_TRANSIT_FARE"
       ]
     },
     "errorResult": {

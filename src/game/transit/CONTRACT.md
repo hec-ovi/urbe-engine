@@ -58,6 +58,7 @@ Every journey method returns either `ok: true` or `ok: false` with one code from
 - `E_TRANSIT_OUT_OF_REACH`: boarding was attempted more than 3 m from the published place.
 - `E_TRANSIT_ALREADY_ABOARD`: listing or boarding was requested during a journey.
 - `E_TRANSIT_NOT_ABOARD`: update or disembark was requested while waiting.
+- `E_TRANSIT_FARE`: `TransitGameplay` with a `fare` (the game's credits) refused boarding or station travel the player cannot pay for; a fare is charged once, after boarding or travel succeeds (a ride 2 cr, station travel 3 cr).
 
 Renderer construction throws no transit error. Empty optional collections build nothing.
 
