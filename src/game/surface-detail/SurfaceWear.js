@@ -31,6 +31,8 @@ import { HIGHWAY_PROFILES } from './HighwayWear.js';
  * - `wall` and `metal`: exterior faces streaked by rain, grimed and splashed
  *   along the base, smudged at hand height, soot at city scale; metal keeps
  *   its colour and takes the smudges harder.
+ * - `lot`: the retained ground's lot, plaza and sidewalk paving, laid in
+ *   metres: a sidewalk's smears, stains, gum and cracks with no slab frame.
  * - `highway-pier`, `highway-soffit`, `highway-deck`, `highway-barrier`: an
  *   elevated highway's concrete, worn where the structure says ([HighwayWear](HighwayWear.js)).
  */
@@ -384,4 +386,7 @@ export const metal = ( detail, surface ) => facade( detail, surface, { metal: tr
 export const keptWall = ( detail, surface ) => facade( detail, surface, { metal: false, kept: true } );
 export const keptMetal = ( detail, surface ) => facade( detail, surface, { metal: true, kept: true } );
 
-export const PROFILES = Object.freeze( { road, sidewalk, curb, gutter, joint, paint, wall, metal, 'kept-wall': keptWall, 'kept-metal': keptMetal, ...HIGHWAY_PROFILES } );
+/** Lot and plaza paving the retained ground lays in metres: a sidewalk's use with no panel frame. */
+export const lot = ( detail, surface ) => sidewalk( detail, surface, { panel: false } );
+
+export const PROFILES = Object.freeze( { road, sidewalk, curb, gutter, joint, paint, wall, metal, 'kept-wall': keptWall, 'kept-metal': keptMetal, lot, ...HIGHWAY_PROFILES } );

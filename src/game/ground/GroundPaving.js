@@ -101,7 +101,9 @@ export class GroundPaving {
 
 			const geometry = vertices.geometry();
 			if ( ! geometry ) continue;
-			const mesh = new THREE.Mesh( geometry, factory.build( binding.key, binding.variantId ) );
+			// Fitted paving wears the street's use like the lots around it.
+			const worn = finish === 'pavingBody' && factory.weathering && typeof factory.variant === 'function';
+			const mesh = new THREE.Mesh( geometry, worn ? factory.variant( binding.key, { variantId: binding.variantId, weather: 'lot' } ) : factory.build( binding.key, binding.variantId ) );
 			mesh.name = `ground:construction:${familyId}:${finish}`;
 			mesh.userData.groundConstruction = { familyId, finish };
 			mesh.receiveShadow = true;

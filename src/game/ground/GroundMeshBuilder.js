@@ -104,7 +104,7 @@ export class GroundMeshBuilder {
 			fills.forEach( ( g ) => g.dispose() );
 
 			const material = surface === 'roadway' && roadFinish ? roadFinish : this.palette.surface( surface, modules.active );
-			const mesh = new THREE.Mesh( merged, this.factory.build( material.key, material.variantId ) );
+			const mesh = new THREE.Mesh( merged, this.#surface( material, surface ) );
 			mesh.name = `ground:${surface}`;
 			if ( surface === 'roadway' && roadFinish ) mesh.userData.groundConstruction = { familyId: regions.roadwayLayout.familyId, finish: 'road' };
 			mesh.receiveShadow = true;
@@ -172,6 +172,19 @@ export class GroundMeshBuilder {
 		physical.colliderGeometry?.dispose();
 		highways.colliderGeometry?.dispose();
 		return { group, colliderGeometry, bounds };
+
+	}
+
+	/**
+	 * A cover's material. Lot, plaza and sidewalk paving wears the street's use
+	 * (the surface-detail `lot` wear) where the factory wears exteriors, so the
+	 * ground between buildings is smeared, stained and cracked like the pavement
+	 * beside it rather than a clean grey field.
+	 */
+	#surface( material, surface ) {
+
+		const worn = surface !== 'roadway' && surface !== 'curb' && this.factory.weathering && typeof this.factory.variant === 'function';
+		return worn ? this.factory.variant( material.key, { variantId: material.variantId, weather: 'lot' } ) : this.factory.build( material.key, material.variantId );
 
 	}
 

@@ -44,6 +44,15 @@ describe( 'GroundBuilder', () => {
 
 	} );
 
+	it( 'wears lot, plaza and sidewalk paving like the street where the factory wears exteriors, and leaves the carriageway and curb as they are', () => {
+
+		const worn = { ...factory, weathering: {}, variant: ( key, tweaks ) => Object.assign( new THREE.MeshStandardMaterial(), { userData: { key, ...tweaks } } ) };
+		const { group } = new GroundBuilder( { volumetric: { ground: [ ROAD, STRIP, rect( 'sidewalk', 10.15, 14 ), rect( 'block', 14, 30 ), rect( 'open', 30, 40 ) ] } }, worn ).build();
+		for ( const surface of [ 'sidewalk', 'block', 'open' ] ) expect( group.getObjectByName( `ground:${surface}` ).material.userData.weather, surface ).toBe( 'lot' );
+		for ( const surface of [ 'roadway', 'curb' ] ) expect( group.getObjectByName( `ground:${surface}` ).material.userData.weather, surface ).toBeUndefined();
+
+	} );
+
 	it( 'selects reproducible complete material families from the city seed', () => {
 
 		const variants = new Set();
