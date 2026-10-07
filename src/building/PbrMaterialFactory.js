@@ -145,6 +145,11 @@ export class PbrMaterialFactory {
 			// to every other reader, and warm-up uploads what the wear samples.
 			Object.assign( material, this.weathering.nodes( weather ) );
 			material[ Symbol.for( 'urbe.material-resources' ) ] = this.weathering.resources;
+			// The renderer keys a plain material's program by its maps and flags,
+			// never by its nodes, so two keys' copies wearing different profiles
+			// over the same maps would share whichever program compiled first.
+			// Naming the profile keeps their programs apart.
+			material.wearProfile = weather;
 
 		}
 		this.cache.set( id, material );

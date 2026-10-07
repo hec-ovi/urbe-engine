@@ -147,6 +147,18 @@ describe( 'PbrMaterialFactory', () => {
 
 	} );
 
+	it( 'names the wear profile a copy wears, so copies of the same maps under different wear never share a program', () => {
+
+		const factory = surfaceFactory();
+		factory.weathering = { resources: [], nodes: ( profile ) => ( { colorNode: { profile }, roughnessNode: { profile } } ) };
+		const deck = factory.variant( 'known/metal/mid', { weather: 'highway-deck' } );
+		const parapet = factory.variant( 'known/metal/mid', { weather: 'highway-barrier' } );
+		expect( deck ).not.toBe( parapet );
+		expect( [ deck.wearProfile, parapet.wearProfile ] ).toEqual( [ 'highway-deck', 'highway-barrier' ] );
+		expect( factory.variant( 'known/metal/mid', {} ).wearProfile ).toBeUndefined();
+
+	} );
+
 	it( 'takes emission as authored or scaled, fits decals on receiver depth, and names what it cannot serve', () => {
 
 		expect( factoryFor( 3 ).variant( 'known/light-fixture/mid', { emissiveLevel: 180 } ).emissiveIntensity ).toBe( 180 );

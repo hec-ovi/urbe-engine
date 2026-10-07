@@ -101,6 +101,8 @@ describe( 'highway structures', () => {
 		expect( material( 'barrier-concrete' ) ).toMatchObject( { variantId: 'formed', weather: 'highway-barrier' } );
 		expect( material( 'bearing-steel' ) ).toMatchObject( { key: 'cyberpunk/service-alloy/poor', variantId: 'brushed' } );
 		expect( material( 'bearing-steel' ).weather ).toBeUndefined();
+		// The deck and the parapets share the formed maps; a sprayed pier names its paint, so none shares a program.
+		expect( built.group.getObjectByName( 'highway:pier-concrete' ).material.wearProfile ).toMatch( /\+graffiti$/ );
 		expect( material( 'roadway' ) ).toEqual( { key: 'cyberpunk/road/high_rich', variantId: 'highway' } );
 		expect( built.group.getObjectByName( 'highway:pier-concrete' ).material.normalScale.x ).toBeCloseTo( 0.6 );
 		// The piers are sprayed with the theme's graffiti, which the renderer prepares with them.

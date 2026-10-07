@@ -137,6 +137,8 @@ export class Highways {
 		} );
 		material.colorNode = sprayed.color;
 		material.roughnessNode = sprayed.roughness;
+		// A sprayed pier compiles its own program, not one of the same maps without the paint.
+		material.wearProfile = `${material.wearProfile ?? ''}+graffiti`;
 		material[ RESOURCES ] = [ ...( material[ RESOURCES ] ?? [] ), atlas ];
 		material.userData.highwayGraffiti = GRAFFITI.key;
 
