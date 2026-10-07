@@ -22,11 +22,12 @@ const SCENERY_FILE = 'quests/scenery.json';
 /** Loads source-bound world documents and manifest-owned building sources. */
 export class WorldSource {
 
-	constructor( { blueprintUrl, outBase, gameId = null, sharedBase = SHARED_BASE } ) {
+	constructor( { blueprintUrl, outBase, gameId = null, resume = false, sharedBase = SHARED_BASE } ) {
 
 		this.blueprintUrl = blueprintUrl;
 		this.outBase = outBase;
 		this.gameId = gameId;
+		this.resume = resume;
 		// The piece kit, the street kit and the interior modules are the same
 		// bytes for every city, so they stand in one store every world reads.
 		this.sharedBase = sharedBase;
@@ -79,7 +80,7 @@ export class WorldSource {
 
 		// Refuse a missing catalog descriptor before starting connections or
 		// loading hundreds of building files.
-		const game = this.gameId ? await this.#json( `${this.outBase}/game.json` ) : null;
+		const game = this.gameId || this.resume ? await this.#json( `${this.outBase}/game.json` ) : null;
 		const manifest = await this.#manifest();
 		// The world's own blueprint, or, for an older world that names none and
 		// carries none, the Atlas sample the query names: whichever is read is

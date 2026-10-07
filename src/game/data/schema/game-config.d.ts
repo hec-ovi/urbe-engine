@@ -21,6 +21,7 @@ export interface GameQuery {
   /** `off` starts the run with NPC voices off; anything else leaves them on. */ voice?: string;
   /** `off` hides the developer readouts, anything else shows them; absent, only a preview shows them. */ details?: string;
   /** Present: installs the automation probe on an `out` preview; ignored with game. */ automation?: string;
+  /** Present: an `out` preview of a game's folder restores what its game.json saved and never saves; ignored with game. */ resume?: string;
   /** `on` keeps checking the NPC continuity's inputs and outputs against their schemas in play; the load always checks them. */ checks?: string;
 }
 
@@ -52,6 +53,7 @@ export interface GameConfig {
   /** Whether the developer readouts (position, loaded files, frame stats) show from the start; the settings can change it. */
   details: boolean;
   automation: boolean;
+  resume: boolean;
   /** Whether the NPC continuity's values are held to their schemas in play, not only while the game loads. */
   checks: boolean;
 }

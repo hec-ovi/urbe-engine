@@ -112,6 +112,9 @@ export class GameConfig {
 			// Debug only: a driver's probe (debug/CONTRACT.md). A catalog game
 			// saves, so only an `out` preview can be driven.
 			automation: q.has( 'automation' ) && ! gameId,
+			// Debug only: an `out` preview of a game's folder (a review copy) restores the people,
+			// clock and story its game.json saved, and still never saves.
+			resume: q.has( 'resume' ) && ! gameId,
 			// Debug only: hold what the NPC continuity is handed and hands back to
 			// its schemas in play too, as the load always does.
 			checks: q.get( 'checks' ) === 'on'
