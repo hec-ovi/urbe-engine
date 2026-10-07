@@ -203,4 +203,27 @@ describe( 'street dressing contract', () => {
 		for ( const dispose of resources ) expect( dispose ).toHaveBeenCalledTimes( 1 );
 		borrowed.dispose();
 	} );
+	it( 'gathers camps, carts, hoards and shrines at the feet of highway piers with headroom, over the carriageway under the deck, clear of the piers', async () => {
+		const atlas = world( 'underpass' );
+		atlas.parcels = [];
+		atlas.volumetric.ground = [ { polygon: rect( - 40, - 200, 80, 400 ), surface: 'roadway', bottom: - 0.2, top: 0 } ];
+		const pier = ( z, top ) => ( { position: [ 0, z ], footprint: rect( - 1, z - 1, 2, 2 ), bottom: 0, top } );
+		atlas.streets.highwayStructures = [ { supports: [ ...Array.from( { length: 12 }, ( _, i ) => pier( - 150 + i * 27, 7 ) ), pier( 180, 2.5 ) ] } ];
+		const result = await build( atlas );
+		const underpass = result.placements.filter( ( p ) => p.arrangement.startsWith( 'hw0:' ) );
+		expect( underpass.length ).toBeGreaterThan( 4 );
+		expect( new Set( underpass.map( ( p ) => p.arrangement.split( ':' ).at( - 1 ) ) ).size ).toBeGreaterThan( 1 );
+		for ( const p of underpass ) {
+			expect( p.bottom ).toBeGreaterThanOrEqual( - 1e-6 );
+			// Off every pier face, and none at the low pier the ramp stands on.
+			for ( const [ x, z ] of p.footprint ) {
+				const inside = Math.abs( x ) < 1 && atlas.streets.highwayStructures[ 0 ].supports.some( ( s ) => Math.abs( z - s.position[ 1 ] ) < 1 );
+				expect( inside ).toBe( false );
+				expect( Math.abs( z - 180 ) ).toBeGreaterThan( 3 );
+			}
+		}
+		const models = new Set( underpass.map( ( p ) => p.model ) );
+		expect( [ 'tarp-shelter', 'street-stall', 'oil-drum', 'memorial-shrine', 'pallet' ].some( ( id ) => models.has( id ) ) ).toBe( true );
+		result.dispose();
+	} );
 } );

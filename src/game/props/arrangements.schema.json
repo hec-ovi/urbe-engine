@@ -42,7 +42,8 @@
               "enum": [
                 "gap",
                 "corner",
-                "yard"
+                "yard",
+                "underpass"
               ]
             }
           },

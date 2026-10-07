@@ -54,6 +54,10 @@
     "polymer-face": {
       "key": "cyberpunk/prop-polymer-face/poor",
       "variant": "scored"
+    },
+    "fabric": {
+      "key": "cyberpunk/fabric/poor",
+      "variant": "1"
     }
   },
   "models": [
@@ -368,6 +372,57 @@
         "#7e8786",
         "#8c8777",
         "#8e979a"
+      ]
+    },
+    {
+      "id": "tarp-shelter",
+      "kind": "ornament",
+      "shape": "shelter",
+      "size": [
+        2.2,
+        1.45,
+        1.7
+      ],
+      "open": false,
+      "tints": [
+        "#3e5d7a",
+        "#55663c",
+        "#6f4a36",
+        "#56585c"
+      ]
+    },
+    {
+      "id": "street-stall",
+      "kind": "ornament",
+      "shape": "stall",
+      "size": [
+        1.6,
+        2.25,
+        0.95
+      ],
+      "open": true,
+      "tints": [
+        "#8a3f33",
+        "#3f6e6a",
+        "#8f7a3e",
+        "#4c5560"
+      ]
+    },
+    {
+      "id": "oil-drum",
+      "kind": "ornament",
+      "shape": "drum",
+      "size": [
+        0.58,
+        0.88,
+        0.58
+      ],
+      "open": false,
+      "tints": [
+        "#3f5d48",
+        "#6d3a2b",
+        "#2f3f5c",
+        "#5b5b52"
       ]
     }
   ],

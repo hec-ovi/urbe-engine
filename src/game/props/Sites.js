@@ -3,9 +3,32 @@ import { pointDistance, SpatialIndex } from './Footprints.js';
 import { Rng } from '../../city/Rng.js';
 import { seedOf } from './Placement.js';
 
-/** Authored planting points and usable lengths of rear facades. */
+/** A pier needs this much room under the deck before anyone camps or trades at its foot. */
+const UNDERPASS_HEADROOM = 4;
+
+/** Authored planting points, usable lengths of rear facades and the feet of highway piers. */
 export class Sites {
 	constructor( atlas ) { this.atlas = atlas; }
+	/**
+	 * One site off each face of every highway pier standing on the ground with
+	 * headroom under the deck, facing out from the pier: where the city's
+	 * leftovers gather, a camp, a cart, a shrine.
+	 */
+	underpasses() {
+		const sites = [];
+		( this.atlas.streets.highwayStructures ?? [] ).forEach( ( structure, s ) => structure.supports.forEach( ( support, i ) => {
+			if ( Math.abs( support.bottom ) > 0.5 || support.top - support.bottom < UNDERPASS_HEADROOM ) return;
+			const ring = support.footprint, sign = signedArea( ring ) > 0 ? 1 : - 1;
+			ring.forEach( ( a, k ) => {
+				const b = ring[ ( k + 1 ) % ring.length ];
+				const length = Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ] );
+				if ( length < 0.5 ) return;
+				const nx = ( b[ 1 ] - a[ 1 ] ) / length * sign, nz = - ( b[ 0 ] - a[ 0 ] ) / length * sign;
+				sites.push( { id: `hw${s}:${i}:${k}`, owner: `hw${s}:${i}`, kind: 'underpass', x: ( a[ 0 ] + b[ 0 ] ) / 2 + nx * 0.15, z: ( a[ 1 ] + b[ 1 ] ) / 2 + nz * 0.15, nx, nz } );
+			} );
+		} ) );
+		return sites;
+	}
 	all() {
 		const medianTrees = ( this.atlas.streets.construction?.medians ?? [] ).flatMap( median => median.ornaments.filter( item => item.kind === 'tree' ).map( item => ( { ...item, edgeId: median.edgeId } ) ) );
 		const trees = [ ...( this.atlas.streets.planting ?? [] ), ...medianTrees ].filter( point => point.kind === 'tree' ).map( ( point, i ) => ( { id: `tree:${point.edgeId}:${i}`, kind: 'tree', x: point.position[ 0 ], z: point.position[ 1 ], nx: 0, nz: 1 } ) );
@@ -37,6 +60,6 @@ export class Sites {
 				}
 			}
 		}
-		return [ ...trees, ...yards, ...pockets ];
+		return [ ...trees, ...yards, ...pockets, ...this.underpasses() ];
 	}
 }

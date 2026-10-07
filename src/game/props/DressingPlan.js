@@ -16,7 +16,7 @@ export async function planDressing( atlas, walk, factory, options ) {
 		for ( const site of new Sites( atlas ).all() ) {
 			const items = arrange.at( site, new Rng( seedOf( `${atlas.meta.seed}:${site.id}` ) ) );
 			if ( ! items.length ) continue;
-			const elevation = clearance.claim( items, site.kind === 'yard' );
+			const elevation = clearance.claim( items, site.kind );
 			if ( elevation === null ) continue;
 			for ( const item of items ) { item.matrix.elements[ 13 ] += elevation; item.bottom += elevation; item.top += elevation; placements.push( item ); }
 		}

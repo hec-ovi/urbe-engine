@@ -3,6 +3,8 @@ import { area, distance, intersectionArea, SpatialIndex } from './Footprints.js'
 
 export const CLEARANCE = { door: 3.5, walk: 0.25, pile: 1.8 };
 const LAND = new Set( [ 'sidewalk', 'block', 'open' ] );
+/** The ground at a pier's foot may be the carriageway the deck spans. */
+const UNDERPASS = new Set( [ ...LAND, 'roadway' ] );
 
 /** Admits complete arrangements against authored land, solid volumes and route widths. */
 export class Clearance {
@@ -28,23 +30,25 @@ export class Clearance {
 		}
 	}
 	block( ring, bottom, top, margin, kind = 'solid' ) { this.obstacles.add( ring, { ring, bottom, top, margin, kind }, margin ); }
-	support( ring, yard ) {
-		const covered = new Map(), target = area( ring );
+	/** @param kind the site's kind: a yard stands on block or open land, an underpass on any ground under the deck */
+	support( ring, kind ) {
+		const covered = new Map(), target = area( ring ), yard = kind === 'yard' || kind === true;
 		for ( const cover of this.ground.query( ring ) ) {
-			if ( ! LAND.has( cover.surface ) || ( yard && ! [ 'block', 'open' ].includes( cover.surface ) ) ) continue;
+			if ( ! ( kind === 'underpass' ? UNDERPASS : LAND ).has( cover.surface ) || ( yard && ! [ 'block', 'open' ].includes( cover.surface ) ) ) continue;
 			covered.set( cover.top, ( covered.get( cover.top ) ?? 0 ) + intersectionArea( cover.polygon, ring ) );
 		}
 		for ( const [ top, value ] of covered ) if ( Math.abs( target - value ) <= Math.max( 1e-7, target * 1e-7 ) ) return top;
 		return null;
 	}
-	claim( placements, yard = false ) {
+	/** @param kind the site's kind (`yard`, `underpass` or another), or `true` for a yard */
+	claim( placements, kind = false ) {
 		let elevation = null;
 		for ( let i = 0; i < placements.length; i ++ ) for ( let j = i + 1; j < placements.length; j ++ ) {
 			const a = placements[ i ], b = placements[ j ];
 			if ( Math.min( a.top, b.top ) - Math.max( a.bottom, b.bottom ) > 1e-7 && intersectionArea( a.footprint, b.footprint ) > 1e-8 ) return null;
 		}
 		for ( const item of placements ) {
-			const top = this.support( item.support, yard );
+			const top = this.support( item.support, kind );
 			if ( top === null || ( elevation !== null && Math.abs( elevation - top ) > 1e-6 ) ) return null;
 			elevation = top;
 			const obstacles = new Set( [ ...this.obstacles.query( item.footprint ), ...this.obstacles.query( item.support ) ] );

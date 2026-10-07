@@ -107,7 +107,10 @@
               "polymer",
               "cabinet",
               "bench",
-              "memorial"
+              "memorial",
+              "shelter",
+              "stall",
+              "drum"
             ]
           },
           "size": {
