@@ -8,11 +8,12 @@ const HOLD_MS = 3600;
 const OUT_MS = 600;
 
 /** The icon a gain's tile shows until, or instead of, its picture. */
-const ICONS = { item: 'inventory', contact: 'phone', companion: 'follow' };
+const ICONS = { item: 'inventory', contact: 'phone', companion: 'follow', paid: 'credits', received: 'credits', given: 'give' };
 
 /**
  * A line under the clock that slides in, holds, and fades out on its own.
- * A gain (`kind` item, contact or companion) carries a square tile with its
+ * A gain (`kind` item, contact, companion, or credits paid, received or a
+ * thing handed over) carries a square tile with its
  * picture, an item's card or a person's face, that arrives with a short
  * sweep; labels come from [toast-layout.json](toast-layout.json).
  */
@@ -27,7 +28,7 @@ export class MissionToast {
 
 	/**
 	 * @param toast { title, text?, kind?, image? }: `kind` is update (the
-	 * default), item, contact or companion, `text` falls back to the kind's own
+	 * default), item, contact, companion, paid, received or given, `text` falls back to the kind's own
 	 * line, and `image` is the gain's picture, a URL or a promise of one (or
 	 * null), shown in the tile once it arrives while the notice is up.
 	 * @returns the notice element

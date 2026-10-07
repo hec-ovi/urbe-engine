@@ -51,7 +51,7 @@
   "voice": { "label": "NPC voices", "on": "Voices on: click to mute", "off": "Voices muted: click to hear them" },
   "activity": { "thinking": "Thinking", "streaming": "Replying", "speaking": "Speaking" },
   "tags": { "story": "story", "earlier": "earlier" },
-  "notes": { "item": "Item acquired", "contact": "New contact" },
+  "notes": { "item": "Item acquired", "contact": "New contact", "paid": "Paid", "received": "Received", "given": "Handed over" },
   "reveal": { "charactersPerSecond": 36, "complete": "Click or press Space to show the whole line" },
   "retry": "Retry reply",
   "leave": "End conversation",

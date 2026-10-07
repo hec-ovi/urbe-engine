@@ -28,6 +28,24 @@ describe( 'InventoryView', () => {
 
 	} );
 
+	it( 'shows the credits carried and the latest dealings beside the pack, and none for null', () => {
+
+		const view = new InventoryView( { onClose: vi.fn() } );
+		document.body.replaceChildren( view.element );
+		expect( view.credits.hidden ).toBe( true );
+		view.setCredits( 40 );
+		expect( view.credits.hidden ).toBe( false );
+		expect( view.credits.textContent ).toBe( 'Credits40 cr' );
+		expect( view.recent.hidden ).toBe( true );
+		view.setCredits( 22, [ { amount: - 18, name: 'Wren\'s bar' }, { amount: 56, name: 'pay' }, { amount: - 2, name: 'fare' }, { amount: 5, name: 'Ada Vance' } ] );
+		expect( [ ...view.recent.children ].map( ( line ) => line.textContent ) ).toEqual( [ '−18 cr · Wren\'s bar', '+56 cr · pay', '−2 cr · fare' ] );
+		expect( view.recent.firstElementChild.classList.contains( 'is-down' ) ).toBe( true );
+		expect( view.recent.getAttribute( 'aria-label' ) ).toBe( 'Last dealings' );
+		view.setCredits( null );
+		expect( view.credits.hidden && view.recent.hidden ).toBe( true );
+
+	} );
+
 	it( 'shows sixteen cards, names the carried items on them, and details the one picked by click or by index', async () => {
 
 		const onQuest = vi.fn();

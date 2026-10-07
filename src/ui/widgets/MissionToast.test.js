@@ -84,4 +84,20 @@ describe( 'MissionToast', () => {
 
 	} );
 
+	it( 'marks credits paid and received and a thing handed over with their kicker and icon', () => {
+
+		const paid = toast.show( { kind: 'paid', title: '−18 cr paid to Tomas Wren', text: 'glass of whisky' } );
+		expect( paid.classList.contains( 'is-paid' ) ).toBe( true );
+		expect( paid.querySelector( '.toast-kicker' ).textContent ).toBe( 'PAID' );
+		expect( paid.querySelector( '.toast-tile svg' ) ).toBeTruthy();
+		const received = toast.show( { kind: 'received', title: '+56 cr pay booked' } );
+		expect( received.querySelector( '.toast-kicker' ).textContent ).toBe( 'CREDITS' );
+		expect( received.querySelector( '.toast-text' ) ).toBeNull();
+		const given = toast.show( { kind: 'given', title: 'Beer handed to Ada Vance' } );
+		expect( given.querySelector( '.toast-kicker' ).textContent ).toBe( 'HANDED OVER' );
+		const icons = [ received, given ].map( ( notice ) => notice.querySelector( '.toast-tile path' ).getAttribute( 'd' ) );
+		expect( icons[ 0 ] ).not.toBe( icons[ 1 ] );
+
+	} );
+
 } );

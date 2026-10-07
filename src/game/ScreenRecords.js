@@ -73,16 +73,50 @@ export function inventoryCards( items, quests, assetOf = () => null ) {
 
 }
 
+/** Goods that are a drink, drawn as one. */
+const GOODS_SORTS = new Set( [ 'ration-drink', 'coffee', 'tea', 'beer', 'whisky' ] );
 /** How the player came by a card, in words. */
 const HOW = Object.freeze( { given: 'Given to you', stolen: 'Lifted', found: 'Found', quest: 'From a story' } );
 
+/** How the player came by somebody's thing, in words. */
+const CAME = Object.freeze( { given: 'Given', stolen: 'Lifted', bought: 'Bought' } );
+
 /**
  * One of the player's own items as the inventory reads it: an access card
- * says what it opens, who issued it and how the player came by it; null for
- * a quest item or a kind with nothing more to tell.
+ * says what it opens, who issued it and how the player came by it; goods
+ * where they were bought and what they cost; somebody's thing whose it was
+ * and how the player came by it; null for a quest item or a kind with
+ * nothing more to tell.
  */
 function ownItem( item ) {
 
+	if ( item.state?.kind === 'goods' ) {
+
+		const data = item.state.data ?? {};
+		return {
+			kind: GOODS_SORTS.has( data.goodId ) ? 'drink' : 'goods',
+			description: `${item.name}, bought${data.at ? ` at ${data.at}` : ''}.`,
+			facts: [
+				...( data.at ? [ { label: 'Bought at', value: data.at } ] : [] ),
+				...( Number.isFinite( data.price ) ? [ { label: 'Paid', value: `${data.price} cr` } ] : [] )
+			]
+		};
+
+	}
+	if ( item.state?.kind === 'effect' ) {
+
+		const data = item.state.data ?? {};
+		const from = data.from?.name ?? null;
+		return {
+			kind: data.sort ?? 'effect',
+			description: from ? `${item.name}. It was ${from}'s.` : `${item.name}.`,
+			facts: [
+				...( from ? [ { label: 'From', value: from } ] : [] ),
+				...( CAME[ data.how ] ? [ { label: 'How', value: CAME[ data.how ] } ] : [] )
+			]
+		};
+
+	}
 	if ( item.state?.kind !== 'access-card' ) return null;
 	const data = item.state.data ?? {};
 	const issuer = data.issuer?.name ?? null;

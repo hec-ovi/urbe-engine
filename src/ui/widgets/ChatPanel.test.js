@@ -207,6 +207,16 @@ describe( 'ChatPanel', () => {
 		await vi.waitFor( () => expect( line.querySelector( 'img' )?.getAttribute( 'src' ) ).toBe( 'blob:card' ) );
 		expect( panel.sayAccessible.textContent ).toBe( 'Here, take it.' );
 		expect( panel.note( { kind: 'contact', title: 'Ada Vance' } ).textContent ).toBe( 'New contactAda Vance' );
+		// Credits and a thing handed over: their kicker, and their kind's icon in the tile.
+		for ( const [ kind, kicker ] of [ [ 'paid', 'Paid' ], [ 'received', 'Received' ], [ 'given', 'Handed over' ] ] ) {
+
+			const note = panel.note( { kind, title: 'Ada Vance' } );
+			expect( note.textContent ).toBe( `${kicker}Ada Vance` );
+			expect( note.classList.contains( `is-${kind}` ) ).toBe( true );
+			expect( note.querySelector( '.chat-note-tile svg' ) ).toBeTruthy();
+
+		}
+		expect( panel.note( { kind: 'item', title: 'x' } ).querySelector( '.chat-note-tile svg' ) ).toBeNull();
 
 	} );
 

@@ -11,6 +11,8 @@ const SPEAKING = new Set( [ 'pending', 'playing', 'idle' ] );
 const MAX_LINES = 200;
 /** Icons for an action's kind, the part of its id before a colon unless it names one. */
 const ACTION_ICONS = new Set( [ 'follow', 'lead', 'dismiss', 'card', 'give', 'credits', 'buy' ] );
+/** The icon a note's tile shows without a picture: credits paid or received, a thing handed over. */
+const NOTE_ICONS = Object.freeze( { paid: 'credits', received: 'credits', given: 'give' } );
 const SVG = 'http://www.w3.org/2000/svg';
 
 /**
@@ -367,12 +369,14 @@ export class ChatPanel {
 	}
 
 	/**
-	 * A gain set apart in the transcript, `{ kind: 'item' | 'contact', title,
-	 * image? }`: its kicker and name, and its picture (a URL or a promise of
-	 * one) once it arrives. It is never said in the subtitle. Returns the line.
+	 * A gain set apart in the transcript, `{ kind: 'item' | 'contact' | 'paid' |
+	 * 'received' | 'given', title, image? }`: its kicker and name, and its
+	 * picture (a URL or a promise of one) once it arrives, else for credits or
+	 * a thing handed over its kind's icon. It is never said in the subtitle.
+	 * Returns the line.
 	 */
 	note( { kind, title, image = null } ) {
-		const tile = el( 'span', { className: 'chat-note-tile', ariaHidden: 'true' } );
+		const tile = el( 'span', { className: 'chat-note-tile', ariaHidden: 'true' }, ...( NOTE_ICONS[ kind ] ? [ icon( NOTE_ICONS[ kind ] ) ] : [] ) );
 		const line = el( 'div', { className: `chat-line is-note is-${kind}` }, tile,
 			el( 'div', { className: 'chat-note-text' }, el( 'span', { className: 'chat-note-kicker', textContent: layout.notes[ kind ] ?? '' } ), el( 'span', { textContent: title } ) )
 		);

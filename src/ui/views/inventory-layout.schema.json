@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Inventory labels and grid; {name} stands for the value the view puts there",
   "type": "object",
-  "required": ["title", "carried", "count", "countOne", "grid", "emptySlot", "empty", "unselected", "pages", "detail", "questKinds", "columns", "rows"],
+  "required": ["title", "carried", "count", "countOne", "grid", "emptySlot", "empty", "unselected", "pages", "detail", "questKinds", "credits", "creditsValue", "recent", "recentLine", "columns", "rows"],
   "additionalProperties": false,
   "properties": {
     "title": { "description": "Screen title.", "$ref": "#/$defs/text" },
@@ -43,6 +43,10 @@
       "additionalProperties": false,
       "properties": { "main": { "$ref": "#/$defs/text" }, "side": { "$ref": "#/$defs/text" } }
     },
+    "credits": { "description": "The credits row's label.", "$ref": "#/$defs/text" },
+    "creditsValue": { "description": "The credits carried, {credits}.", "$ref": "#/$defs/text" },
+    "recent": { "description": "The latest changes' accessible name.", "$ref": "#/$defs/text" },
+    "recentLine": { "description": "One change: {amount} signed, {name} who or what it was with.", "$ref": "#/$defs/text" },
     "columns": { "type": "integer", "minimum": 1, "maximum": 8 },
     "rows": { "type": "integer", "minimum": 1, "maximum": 8 }
   },

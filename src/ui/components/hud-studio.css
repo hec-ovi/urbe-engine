@@ -4,6 +4,10 @@
 .hud-clock-time { font-size: 40px; font-weight: 300; line-height: 1; letter-spacing: -.065em; font-variant-numeric: tabular-nums; }
 .hud-clock-calendar { display: grid; gap: 5px; padding-left: 12px; border-left: 1px solid #6fe3d556; font: 9px var(--ui-mono); letter-spacing: .09em; color: #a0c0c1; text-transform: uppercase; }
 .hud-clock-phase { color: #73ecdf; }
+.hud-clock-credits { color: #e6f1ee; font-variant: small-caps; font-variant-numeric: tabular-nums; letter-spacing: .06em; transition: color .4s ease-out; }
+.hud-clock-credits[hidden] { display: none; }
+.hud-clock-credits[data-change=down] { color: #ff6b5e; }
+.hud-clock-credits[data-change=up] { color: #73ecdf; }
 .hud-clock-where { display: flex; gap: 9px; margin-top: 20px; }
 .hud-clock-where > span { color: #73ecdf; font: 19px/18px var(--ui-mono); }
 .hud .hud-clock-place { display: block; margin: 0; font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: .03em; color: #e6f1ee; }

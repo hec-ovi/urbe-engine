@@ -10,5 +10,12 @@
   "information": "map",
   "map": "map",
   "key": "key",
-  "power": "battery"
+  "power": "battery",
+  "goods": "parcel",
+  "drink": "parcel",
+  "phone": "radio",
+  "papers": "card",
+  "photo": "card",
+  "pen drive": "key",
+  "flask": "parcel"
 }

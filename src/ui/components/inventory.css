@@ -92,6 +92,37 @@
 	line-height: 1.4;
 }
 
+.inv-credits {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	margin-left: auto;
+}
+
+.inv-credits-value {
+	color: #e0eeee;
+	font-size: 18px;
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+}
+
+.inv-recent {
+	display: grid;
+	flex: none;
+	gap: 4px;
+	margin: -10px 0 0;
+	padding: 0;
+	list-style: none;
+	justify-items: end;
+	color: #a8c5c8;
+	font-size: 13px;
+	font-variant-numeric: tabular-nums;
+}
+
+.inv-credits[hidden], .inv-recent[hidden] { display: none; }
+.inv-recent-line.is-down { color: #ff8f8f; }
+.inv-recent-line.is-up { color: #73ecdf; }
+
 .inv-grid-wrap {
 	position: relative;
 	flex: 1;

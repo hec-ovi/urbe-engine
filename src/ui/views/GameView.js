@@ -43,6 +43,8 @@ import { MainMenuView } from './MainMenuView.js';
 import menuLabels from './game-menu.json' with { type: 'json' };
 
 const noop = () => {};
+/** The notices also set apart in an open conversation's transcript. */
+const NOTED = new Set( [ 'item', 'contact', 'paid', 'received', 'given' ] );
 
 /**
  * The whole game overlay: the always-on HUD, one full screen at a time over
@@ -277,8 +279,9 @@ export class GameView {
 
 	/**
 	 * A gain shown where the eye is: a notice with its picture and, while a
-	 * conversation is open, the same gain set apart in its transcript.
-	 * `{ kind: 'item' | 'contact' | 'companion', title, text?, image?, item? }`:
+	 * conversation is open, the same gain set apart in its transcript (an
+	 * item, a contact, credits paid or received, a thing handed over).
+	 * `{ kind: 'item' | 'contact' | 'companion' | 'paid' | 'received' | 'given', title, text?, image?, item? }`:
 	 * `image` is a URL or a promise of one; an `item` (an inventory card) is
 	 * pictured by its thumbnail, drawn now.
 	 */
@@ -286,7 +289,7 @@ export class GameView {
 
 		const picture = image ?? ( item ? this.preview.thumbnail( modelOf( item ), { now: true } ) : null );
 		this.toast.show( { kind, title, text, image: picture } );
-		if ( ( kind === 'item' || kind === 'contact' ) && ! this.dialog.element.hidden ) this.dialog.note( { kind, title, image: picture } );
+		if ( NOTED.has( kind ) && ! this.dialog.element.hidden ) this.dialog.note( { kind, title, image: picture } );
 
 	}
 

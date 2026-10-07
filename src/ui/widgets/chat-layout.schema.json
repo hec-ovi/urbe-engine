@@ -136,11 +136,14 @@
       "properties": { "story": { "$ref": "#/$defs/text" }, "earlier": { "description": "A line said before this conversation.", "$ref": "#/$defs/text" } }
     },
     "notes": {
-      "description": "The kicker of a gain set apart in the transcript: an item handed over, a person added to the contacts.",
+      "description": "The kicker of a change set apart in the transcript: an item handed over, a person added to the contacts, credits paid or received, a thing the player handed over.",
       "type": "object",
-      "required": ["item", "contact"],
+      "required": ["item", "contact", "paid", "received", "given"],
       "additionalProperties": false,
-      "properties": { "item": { "$ref": "#/$defs/text" }, "contact": { "$ref": "#/$defs/text" } }
+      "properties": {
+        "item": { "$ref": "#/$defs/text" }, "contact": { "$ref": "#/$defs/text" },
+        "paid": { "$ref": "#/$defs/text" }, "received": { "$ref": "#/$defs/text" }, "given": { "$ref": "#/$defs/text" }
+      }
     },
     "reveal": {
       "type": "object", "required": ["charactersPerSecond", "complete"], "additionalProperties": false,

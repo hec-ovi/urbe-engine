@@ -8,13 +8,16 @@
     "dismiss": { "$ref": "#/$defs/text" },
     "kinds": {
       "type": "object",
-      "required": ["update", "item", "contact", "companion"],
+      "required": ["update", "item", "contact", "companion", "paid", "received", "given"],
       "additionalProperties": false,
       "properties": {
         "update": { "$ref": "#/$defs/kind" },
         "item": { "$ref": "#/$defs/kind" },
         "contact": { "$ref": "#/$defs/kind" },
-        "companion": { "$ref": "#/$defs/kind" }
+        "companion": { "$ref": "#/$defs/kind" },
+        "paid": { "description": "Credits the player paid out.", "$ref": "#/$defs/kind" },
+        "received": { "description": "Credits the player was paid.", "$ref": "#/$defs/kind" },
+        "given": { "description": "A thing the player handed to a person.", "$ref": "#/$defs/kind" }
       }
     }
   },

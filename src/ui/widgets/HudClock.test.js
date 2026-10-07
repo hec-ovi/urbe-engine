@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { HudClock } from './HudClock.js';
 import { InteractPrompt } from './InteractPrompt.js';
 
@@ -29,4 +29,25 @@ it( 'preserves the whole prompt and both authored action keys without rebuilding
 	prompt.update( null );
 	expect( prompt.prompt.hidden ).toBe( true );
 	expect( prompt.prompt.textContent ).toBe( '' );
+} );
+
+it( 'shows the credits carried, marks a change up or down for a moment and hides them for null', () => {
+	vi.useFakeTimers();
+	const clock = new HudClock();
+	expect( clock.credits.hidden ).toBe( true );
+	clock.setCredits( 40 );
+	expect( clock.credits.hidden ).toBe( false );
+	expect( clock.credits.textContent ).toBe( '40 cr' );
+	expect( clock.credits.getAttribute( 'aria-label' ) ).toBe( 'Credits: 40' );
+	expect( clock.credits.dataset.change ).toBeUndefined();
+	expect( clock.element.querySelector( '.hud-clock-calendar .hud-clock-credits' ) ).toBe( clock.credits );
+	clock.setCredits( 22 );
+	expect( clock.credits.dataset.change ).toBe( 'down' );
+	vi.advanceTimersByTime( 1300 );
+	expect( clock.credits.dataset.change ).toBeUndefined();
+	clock.setCredits( 78 );
+	expect( clock.credits.dataset.change ).toBe( 'up' );
+	clock.setCredits( null );
+	expect( clock.credits.hidden ).toBe( true );
+	vi.useRealTimers();
 } );

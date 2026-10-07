@@ -38,6 +38,19 @@ describe( 'ScreenRecords', () => {
 
 	} );
 
+	it( 'tells bought goods where they were bought and what they cost, and somebody\'s thing whose it was and how it came', () => {
+
+		const [ whisky, photo, watch ] = inventoryCards( [
+			{ id: 'goods-whisky', name: 'Glass of whisky', quantity: 2, state: { kind: 'goods', data: { goodId: 'whisky', price: 18, at: 'Wren\'s' } } },
+			{ id: 'effect-a1-effect', name: 'Photo of Mia', quantity: 1, state: { kind: 'effect', data: { sort: 'photo', from: { npcId: 'a1', name: 'Ada Vance' }, how: 'given', worth: 1 } } },
+			{ id: 'effect-a2-effect', name: 'Pocket watch', quantity: 1, state: { kind: 'effect', data: { sort: 'goods', from: { npcId: 'a2', name: 'Lane Ito' }, how: 'stolen', worth: 15 } } }
+		], QUESTS );
+		expect( whisky ).toMatchObject( { kind: 'drink', quantity: 2, description: 'Glass of whisky, bought at Wren\'s.', facts: [ { label: 'Bought at', value: 'Wren\'s' }, { label: 'Paid', value: '18 cr' } ] } );
+		expect( photo ).toMatchObject( { kind: 'photo', description: 'Photo of Mia. It was Ada Vance\'s.', facts: [ { label: 'From', value: 'Ada Vance' }, { label: 'How', value: 'Given' } ] } );
+		expect( watch.facts ).toEqual( [ { label: 'From', value: 'Lane Ito' }, { label: 'How', value: 'Lifted' } ] );
+
+	} );
+
 	it( 'looks a saved quest item\'s model up by the story\'s own id', () => {
 
 		const asked = [];

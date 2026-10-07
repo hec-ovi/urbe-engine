@@ -4,6 +4,9 @@
     "update": { "kicker": "UPDATE" },
     "item": { "kicker": "ITEM ACQUIRED", "text": "In your inventory." },
     "contact": { "kicker": "NEW CONTACT", "text": "Call them from Contacts (P)." },
-    "companion": { "kicker": "COMPANION" }
+    "companion": { "kicker": "COMPANION" },
+    "paid": { "kicker": "PAID" },
+    "received": { "kicker": "CREDITS" },
+    "given": { "kicker": "HANDED OVER" }
   }
 }

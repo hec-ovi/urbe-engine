@@ -74,12 +74,19 @@ export class InventoryView {
 			this.detailName, this.detailText, this.hero, this.facts, this.found, this.quests
 		);
 
+		this.creditsValue = el( 'strong', { className: 'inv-credits-value' } );
+		this.credits = el( 'div', { className: 'inv-credits', hidden: true },
+			el( 'span', { className: 'inv-field-label', textContent: layout.credits } ), this.creditsValue );
+		this.recent = el( 'ul', { className: 'inv-recent', hidden: true } );
+		this.recent.setAttribute( 'aria-label', layout.recent );
+
 		this.header = new PanelHeader( { title: layout.title, onClose } );
 		this.element = el( 'div', { className: 'view view-inventory' },
 			this.header.element,
 			el( 'div', { className: 'inv-body' },
 				el( 'section', { className: 'inv-pack' },
-					el( 'div', { className: 'inv-pack-heading' }, el( 'h3', { textContent: layout.carried } ), this.count ),
+					el( 'div', { className: 'inv-pack-heading' }, el( 'h3', { textContent: layout.carried } ), this.count, this.credits ),
+					this.recent,
 					el( 'div', { className: 'inv-grid-wrap' }, this.grid, this.gridEmpty ),
 					this.pager
 				),
@@ -105,6 +112,25 @@ export class InventoryView {
 		this.gridEmpty.hidden = count > 0;
 		const index = items.findIndex( ( item ) => item.id === picked );
 		this.select( index >= 0 ? index : count ? Math.min( Math.max( this.selected, 0 ), count - 1 ) : - 1 );
+
+	}
+
+	/**
+	 * The credits the player has on them (`Credits 40 cr`) and up to three of
+	 * the latest changes, newest first, each `{ amount, name }` with `amount`
+	 * signed (`−18 cr · Wren's bar`); null shows none.
+	 */
+	setCredits( credits, recent = [] ) {
+
+		const shown = credits !== null && credits !== undefined;
+		this.credits.hidden = ! shown;
+		this.recent.hidden = ! shown || ! recent.length;
+		if ( ! shown ) return;
+		this.creditsValue.textContent = layout.creditsValue.replace( '{credits}', credits );
+		this.recent.replaceChildren( ...recent.slice( 0, 3 ).map( ( { amount, name } ) => el( 'li', {
+			className: `inv-recent-line ${amount < 0 ? 'is-down' : 'is-up'}`,
+			textContent: layout.recentLine.replace( '{amount}', `${amount < 0 ? '−' : '+'}${Math.abs( amount )}` ).replace( '{name}', name )
+		} ) ) );
 
 	}
 

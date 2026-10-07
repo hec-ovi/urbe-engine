@@ -10,6 +10,10 @@
   "pages": { "label": "Inventory pages", "page": "Page {page} of {pages}", "number": "Page {page}", "previous": "Previous page", "next": "Next page" },
   "detail": { "kind": "Kind", "quantity": "Quantity", "found": "Found at", "quests": "Linked quests", "preview": "No preview" },
   "questKinds": { "main": "Main quest", "side": "Side quest" },
+  "credits": "Credits",
+  "creditsValue": "{credits} cr",
+  "recent": "Last dealings",
+  "recentLine": "{amount} cr · {name}",
   "columns": 4,
   "rows": 4
 }
