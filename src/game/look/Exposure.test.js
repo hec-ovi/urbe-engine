@@ -59,12 +59,14 @@ describe( 'Exposure', () => {
 		expect( scene.environmentIntensity ).toBe( 1 );
 
 		// Seven stops opened up indoors, so the daylit city it reflects is turned
-		// down by seven: on screen it reads exactly as it did on the street.
+		// down by seven: on screen it reads as it did on the street, less what the
+		// room's walls keep out of it (a third reaches in), eased in as the eye adapts.
 		exposure.enter( 'interior' );
 		exposure.update( 0.3 );
-		expect( scene.environmentIntensity * renderer.toneMappingExposure ).toBeCloseTo( 0.024 * 2 ** - 8.5, 12 );
+		expect( scene.environmentIntensity * renderer.toneMappingExposure ).toBeCloseTo( 0.024 * 2 ** - 8.5 * exposure.enclosure, 12 );
+		expect( exposure.enclosure ).toBeCloseTo( 0.5, 9 );
 		for ( let i = 0; i < 40; i ++ ) exposure.update( 0.25 );
-		expect( scene.environmentIntensity ).toBeCloseTo( 2 ** - 7, 12 );
+		expect( scene.environmentIntensity ).toBeCloseTo( 2 ** - 7 * 0.35, 12 );
 
 		// Put somewhere rather than walked there, the eye arrives adapted.
 		// The volume is known a few frames after the cut, and the eye follows it at once.

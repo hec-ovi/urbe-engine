@@ -21,8 +21,11 @@ import * as THREE from 'three/webgpu';
  * makes itself gains what the open eye gives it.
  */
 const VOLUMES = {
-	exterior: { stops: 0, daylight: - Infinity },
-	interior: { stops: 0, daylight: - 1.5 }
+	exterior: { stops: 0, daylight: - Infinity, environment: 1 },
+	// A room's walls stand between the street and its surfaces: indoors the probe, baked on the
+	// street, lights a room at about a third of its weight, so a lamp's pool falls off into the
+	// room's own dark instead of a street-lit floor.
+	interior: { stops: 0, daylight: - 1.5, environment: .35 }
 };
 /** Eye adaptation, in seconds, for the whole cross-fade. */
 const ADAPT = 0.6;
@@ -54,6 +57,8 @@ export class Exposure {
 		this.stops = 0;
 		this.volume = VOLUMES.exterior;
 		this.daylight = 0;
+		/** How much of the street's probe reaches where the eye stands, eased as the eye adapts. */
+		this.enclosure = 1;
 		/** What carries the environment's weight, the scene (`environmentIntensity`), once there is one. */
 		this.environment = null;
 
@@ -122,6 +127,8 @@ export class Exposure {
 		const gap = target - this.stops;
 
 		if ( gap !== 0 ) this.stops = Math.abs( gap ) <= step ? target : this.stops + Math.sign( gap ) * step;
+		const wall = this.volume.environment ?? 1, through = wall - this.enclosure;
+		if ( through !== 0 ) this.enclosure = Math.abs( through ) <= step ? wall : this.enclosure + Math.sign( through ) * step;
 
 		this.#apply();
 
@@ -131,7 +138,8 @@ export class Exposure {
 
 		this.renderer.toneMappingExposure = this.base * Math.pow( 2, this.stops );
 		// The probe at the street's own grade: down by what the eye opened past it.
-		if ( this.environment ) this.environment.environmentIntensity = Math.min( 1, Math.pow( 2, this.daylight - this.stops ) );
+		// Indoors, only what the walls let through of it.
+		if ( this.environment ) this.environment.environmentIntensity = Math.min( 1, Math.pow( 2, this.daylight - this.stops ) ) * this.enclosure;
 
 	}
 

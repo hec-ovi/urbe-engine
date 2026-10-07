@@ -13,9 +13,6 @@ const ALBEDO = {
 	ceiling: 0.7,
 	plaster: 0.55,
 	wall: 0.5,
-	// a coat of colour (the poor buildings' teal, olive and mauve, a smoke-stained ceiling) returns
-	// less than bare plaster: the paints the worn interiors wear are dark ones
-	paint: 0.25,
 	tile: 0.4,
 	concrete: 0.35,
 	metal: 0.35,
