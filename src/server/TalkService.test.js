@@ -126,7 +126,7 @@ describe( 'TalkService', () => {
 
 		const model = fakeModel( [
 			{ content: '<think>She should stall.</think>Ask at' }, { content: ' the bar. Then' },
-			{ content: ' go.', tool_calls: [ { index: 0, id: 'c1', function: { name: 'follow_player', arguments: '{}' } } ] }
+			{ content: ' go.', tool_calls: [ { index: 0, id: 'c1', function: { name: 'come_along', arguments: '{}' } } ] }
 		] );
 		const service = new TalkService( model, ( await servedWorld() ).root );
 		const all = await events( service.stream( { out: '/out/w', npc, behavior, line: 'Help me.', timeMin: 600, offers: { follow: true } } ) );
@@ -139,8 +139,8 @@ describe( 'TalkService', () => {
 			{ type: 'done', reply: 'Ask at the bar. Then go.' }
 		] );
 		// Every tool each turn, for the prompt cache; what the person may do now is in the message.
-		expect( model.seen[ 0 ].tools.map( ( tool ) => tool.function.name ) ).toContain( 'follow_player' );
-		expect( model.seen[ 0 ].messages[ 1 ].content ).toContain( 'What you can do for the player right now: follow_player.' );
+		expect( model.seen[ 0 ].tools.map( ( tool ) => tool.function.name ) ).toContain( 'come_along' );
+		expect( model.seen[ 0 ].messages[ 1 ].content ).toContain( 'What you can do for them right now: come_along.' );
 
 	} );
 
@@ -149,15 +149,15 @@ describe( 'TalkService', () => {
 		const model = fakeModel( [
 			{ content: 'Sure, I will come over.' },
 			{ tool_calls: [ { index: 0, id: 'c1', function: { name: 'give_number', arguments: '{}' } } ] },
-			{ tool_calls: [ { index: 1, id: 'c2', function: { name: 'meet_player', arguments: '{}' } } ] }
+			{ tool_calls: [ { index: 1, id: 'c2', function: { name: 'meet_them', arguments: '{}' } } ] }
 		] );
 		const service = new TalkService( model, ( await servedWorld() ).root );
 		const all = await events( service.stream( {
 			out: '/out/w', npc, behavior, line: 'Come to the wharf?', timeMin: 600,
 			call: { caller: 'player' }, offers: { contact: true, meet: { name: 'Salt Wharf' } }
 		} ) );
-		expect( model.system( 0 ) ).toContain( 'you are talking to them on the phone' );
-		expect( model.seen[ 0 ].messages[ 1 ].content ).toContain( 'What you can do for the player right now: give_number, meet_player.' );
+		expect( model.system( 0 ) ).toContain( 'they called you, and you are talking on the phone' );
+		expect( model.seen[ 0 ].messages[ 1 ].content ).toContain( 'What you can do for them right now: give_number, meet_them.' );
 		expect( all.filter( ( e ) => e.type === 'offer' ) ).toEqual( [ { type: 'offer', kind: 'contact' }, { type: 'offer', kind: 'meet', name: 'Salt Wharf' } ] );
 
 	} );
@@ -208,11 +208,11 @@ describe( 'TalkService', () => {
 		const prior = [ { speaker: 'npc', text: '[sigh] The file closes at nothing.', atMin: 590 }, { speaker: 'player', text: 'And if she is alive?', atMin: 591 } ];
 
 		await say( service, 'What are you talking about?', { prior } );
-		expect( model.system( 0 ) ).toContain( 'The conversation so far:\nYou: The file closes at nothing.\nPlayer: And if she is alive?' );
+		expect( model.system( 0 ) ).toContain( 'The conversation so far ("Them" is the person you are talking with):\nYou: The file closes at nothing.\nThem: And if she is alive?' );
 		expect( model.seen[ 0 ].messages[ 1 ].content ).toContain( '"What are you talking about?"' );
 
 		await say( service, 'Go on.' );
-		expect( model.system( 1 ) ).toContain( 'You: The file closes at nothing.\nPlayer: And if she is alive?\nPlayer: What are you talking about?\nYou: Hm.' );
+		expect( model.system( 1 ) ).toContain( 'You: The file closes at nothing.\nThem: And if she is alive?\nThem: What are you talking about?\nYou: Hm.' );
 		expect( ( await service.memory( '/out/w' ) )[ 0 ].memory.turns.map( ( { text, atMin } ) => [ text, atMin ] ) ).toEqual( [
 			[ 'The file closes at nothing.', 590 ], [ 'And if she is alive?', 591 ], [ 'What are you talking about?', 600 ], [ 'Hm.', 600 ], [ 'Go on.', 600 ], [ 'Hm.', 600 ]
 		] );
@@ -240,7 +240,7 @@ describe( 'TalkService', () => {
 		await say( service, 'Where is the lift?' );
 		expect( await service.memory( '/out/w' ) ).toEqual( [ { npcId: 'n1', memory: { digest: [], turns: [
 			{ speaker: 'player', text: 'Where is the lift?', atMin: 600 }, { speaker: 'npc', text: 'Hm.', atMin: 600 }
-		] } } ] );
+		], life: expect.stringMatching( /^Your life so far/ ) } } ] );
 
 		// Turns a failed fold left pile up verbatim: they are bounded like the notes.
 		const notes = Array.from( { length: 30 }, ( _, at ) => `note ${at}` );
@@ -311,13 +311,13 @@ describe( 'TalkService', () => {
 		await say( new TalkService( model, root ), 'Where is the lift?' );
 		expect( await kept() ).toEqual( [ { npcId: 'n1', memory: { digest: [], turns: [
 			{ speaker: 'player', text: 'Where is the lift?', atMin: 600 }, { speaker: 'npc', text: 'Hm.', atMin: 600 }
-		] } } ] );
+		], life: expect.stringMatching( /^Your life so far/ ) } } ] );
 
 		// The window closed without a save, and the server started again: the save's older memory joins it.
 		const service = new TalkService( model, root );
 		await service.restoreMemory( '/out/w', [] );
 		await say( service, 'Remember me?' );
-		expect( model.system( 1 ) ).toContain( 'Player: Where is the lift?' );
+		expect( model.system( 1 ) ).toContain( 'Them: Where is the lift?' );
 		expect( ( await kept() )[ 0 ].memory.turns ).toHaveLength( 4 );
 
 		// Another world never hears it, and a world that is not a game keeps nothing on disk.
@@ -339,8 +339,8 @@ describe( 'TalkService', () => {
 		const service = new TalkService( model, root );
 		await say( service, 'Who rents 1407?', { witnesses: [ 'w1', 'n1', 'w2' ] } );
 		const kept = JSON.parse( await readFile( join( dir, 'dialogue-memory.json' ), 'utf8' ) );
-		const note = 'Overheard, not said to you: you were there when the player talked to Mara Voss, the ' + DEFAULT_TYPE_SET.types[ 0 ].label.toLowerCase() +
-			'. The player said: "Who rents 1407?" Mara Voss said: "Nobody since spring."';
+		const note = 'Overheard, not said to you: you were there when the stranger talked to Mara Voss, the ' + DEFAULT_TYPE_SET.types[ 0 ].label.toLowerCase() +
+			'. The stranger said: "Who rents 1407?" Mara Voss said: "Nobody since spring."';
 		expect( kept.map( ( record ) => record.npcId ) ).toEqual( [ 'n1', 'w1', 'w2' ] );
 		expect( kept[ 1 ] ).toEqual( { npcId: 'w1', memory: { digest: [ note ], turns: [], heardAtMin: 600 } } );
 		expect( kept[ 0 ].memory.digest ).toEqual( [] );
@@ -358,7 +358,7 @@ describe( 'TalkService', () => {
 		const service = new TalkService( model, ( await servedWorld() ).root );
 
 		await say( service, 'Did you see that?', { events: [ { kind: 'struck', atMin: 599, parcelId: 'p1', metres: 22, hard: true, down: true } ] } );
-		expect( model.system( 0 ) ).toContain( 'What has happened around you lately' );
+		expect( model.system( 0 ) ).toContain( 'Something that happened near here lately' );
 		expect( model.system( 0 ) ).toContain( '- A car ran someone down at speed in the street by The Rusty Anchor in Old Port, about 20 metres from where you stand, a moment ago. They still lie there.' );
 
 	} );
@@ -372,7 +372,7 @@ describe( 'TalkService', () => {
 		await say( service, 'Is Tess about?', {
 			npc: { ...npc, home: { parcelId: 'p1', unit: 0, apartment: { id: 'floor:3/f1-home-2', floor: 3, number: '302' } } },
 			look: { height: 'short', build: 'a heavy build', face: [], hair: 'grey hair in a buzz cut', skin: 'fair', eyes: 'amber', wearing: [ 'a charcoal tank top', 'charcoal cargo trousers', 'charcoal high-top sneakers' ] },
-			here: { x: 30, z: -3, light: 'night outside, dark but for the street lamps and the neon signs' },
+			here: { x: 30, z: -3, light: 'night' },
 			people: {
 				known: [ { npcId: 'n2', name: { given: 'Ada', family: 'Ruiz' }, relation: 'coworker', now: { kind: 'unknown' } } ],
 				unknown: [ 'Tess' ]
@@ -383,9 +383,9 @@ describe( 'TalkService', () => {
 		expect( system ).toContain( 'You live in apartment 302 on the third floor of The Rusty Anchor, a bar on First Street near the corner of First Avenue, in Old Port.' );
 		expect( system ).toContain( 'You are standing on First Street near the corner of First Avenue, in Old Port.' );
 		expect( system ).toContain( 'You are outside The Rusty Anchor, a bar.' );
-		expect( system ).toContain( 'The light: night outside, dark but for the street lamps and the neon signs.' );
+		expect( system ).toContain( 'Outside it is night.' );
 		expect( system ).toContain( '- Ada Ruiz works with you. Ada Ruiz is not here, and you have not seen them lately: you do not know where they are right now.' );
-		expect( system ).toContain( 'The player asked about "Tess": you know nobody by that name' );
+		expect( system ).toContain( 'They asked about "Tess": you know nobody by that name' );
 
 	} );
 

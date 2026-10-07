@@ -33,7 +33,7 @@ describe( 'what a person knows of themselves in a talk', () => {
 		const service = new TalkService( model, await servedWorld() );
 		for await ( const event of service.stream( {
 			out: '/out/w', npc, behavior: sim.behaviorAt( npc.npcId, MON_10 ), line: 'Who are you?', timeMin: MON_10, look, people,
-			here: { x: 305, z: 254, parcelId: 'p_cafe', floor: 0, light: 'indoors under the building\'s lights; night outside' },
+			here: { x: 305, z: 254, parcelId: 'p_cafe', floor: 0, light: 'night; you are indoors' },
 			task: { kind: 'leading', place: 'the clinic' }
 		} ) ) if ( event.type === 'done' ) break;
 		const system = model.seen[ 0 ].messages[ 0 ].content;
@@ -51,10 +51,10 @@ describe( 'what a person knows of themselves in a talk', () => {
 		expect( system ).toMatch( /You work at a coffee shop on \w+ (Street|Avenue)[^.]*, in a [a-z ]+ district as barista,/ );
 		expect( system ).toContain( 'Your day today, Monday: ' );
 		expect( system ).toContain( 'It is Monday 10:00; right now you are at work.' );
-		expect( system ).toContain( 'You are taking the player to the clinic, because they asked and you agreed.' );
+		expect( system ).toContain( 'You are taking them to the clinic, because they asked and you agreed.' );
 		expect( system ).toMatch( /You are standing on \w+ (Street|Avenue)/ );
 		expect( system ).toContain( 'You are inside a coffee shop, on the ground floor.' );
-		expect( system ).toContain( 'The light: indoors under the building\'s lights; night outside.' );
+		expect( system ).toContain( 'Outside it is night; you are indoors.' );
 		expect( system ).toContain( `${coworker.name.given} ${coworker.name.family} works with you.` );
 		expect( system ).toMatch( /(You do not like strangers|You are wary of strangers|You take strangers as they come|You are friendly with strangers)/ );
 

@@ -1,9 +1,13 @@
 /** How near a conversation something happened for the person in it to have seen it or heard of it, in metres. */
-const NEAR = 80;
+const NEAR = 30;
+/** How near a staged story scene in the street is still in sight, in metres. */
+const SCENE_NEAR = 80;
+/** How near a car hitting someone a person standing saw it, in metres. */
+const WITNESS = 60;
 /** How long a car hitting someone stays news, in world minutes. */
-const NEWS = 120;
-/** The most events one conversation carries, the newest. */
-const MOST = 8;
+const NEWS = 30;
+/** The most events one conversation carries: the newest impact and the newest scene, no list of small things. */
+const MOST = 2;
 /** The most impacts kept, the newest. */
 const KEPT = 32;
 
@@ -39,7 +43,7 @@ export class RecentEvents {
 		const witnesses = [];
 		for ( const person of people ) {
 
-			if ( person.npcId && ! person.fallen && Math.hypot( person.position.x - point.x, person.position.z - point.z ) <= NEAR ) witnesses.push( person.npcId );
+			if ( person.npcId && ! person.fallen && Math.hypot( person.position.x - point.x, person.position.z - point.z ) <= WITNESS ) witnesses.push( person.npcId );
 
 		}
 		this.#struck = [ ...this.#struck, { personId, npcId, x: point.x, z: point.z, parcelId: door.parcelId, hard, atMin, witnesses } ].slice( - KEPT );
@@ -48,11 +52,12 @@ export class RecentEvents {
 
 	/**
 	 * What a person talking at `position` at minute `timeMin` knows happened
-	 * around them, newest first, at most MOST: the cars that hit someone in
-	 * the last NEWS minutes within NEAR metres, or farther when the car hit
-	 * this person or they saw it (a leader who walked the player on since);
-	 * and the quest scenes standing in the street within NEAR metres or in
-	 * the building the talk stands in. A scene at the place the person has
+	 * around them that would still be on their mind, newest first: the newest
+	 * car that hit someone in the last NEWS minutes, when it hit this person,
+	 * they saw it (a leader who walked the player on since), or it hit hard
+	 * or left somebody lying within NEAR metres; and the newest quest scene
+	 * standing in the street within SCENE_NEAR metres or in the building the
+	 * talk stands in. A scene at the place the person has
 	 * led the player to is left to that place's notes.
 	 * @param npcId the person talked to, told when the car hit them
 	 * @param down whether the crowd person `personId` still lies where they fell
@@ -64,9 +69,11 @@ export class RecentEvents {
 
 		const metres = ( at ) => Math.round( Math.hypot( at.x - position.x, at.z - position.z ) );
 		const self = ( event ) => Boolean( npcId ) && event.npcId === npcId;
+		// Only what would stay on anyone's mind: the person was hit, saw it, or it was hard or left somebody lying there close by.
 		const struck = this.#struck
 			.filter( ( event ) => timeMin - event.atMin <= NEWS &&
-				( metres( event ) <= NEAR || self( event ) || event.witnesses.includes( npcId ) ) )
+				( self( event ) || event.witnesses.includes( npcId ) || ( metres( event ) <= NEAR && ( event.hard || down( event.personId ) ) ) ) )
+			.sort( ( a, b ) => b.atMin - a.atMin ).slice( 0, 1 )
 			.map( ( event ) => ( {
 				kind: 'struck', atMin: event.atMin, parcelId: event.parcelId, metres: metres( event ),
 				...( event.hard ? { hard: true } : {} ),
@@ -74,10 +81,10 @@ export class RecentEvents {
 			} ) );
 		const staged = scenes
 			.filter( ( { place, frame, notes } ) => notes.length && place.parcelId !== guided &&
-				( frame.kind === 'street' ? metres( frame.origin ) <= NEAR : place.parcelId === parcelId ) )
+				( frame.kind === 'street' ? metres( frame.origin ) <= SCENE_NEAR : place.parcelId === parcelId ) )
 			.map( ( { place, frame, notes, stagedAtMin } ) => ( {
 				kind: 'scene', atMin: stagedAtMin, parcelId: place.parcelId, metres: metres( frame.origin ), notes
-			} ) );
+			} ) ).sort( ( a, b ) => b.atMin - a.atMin ).slice( 0, 1 );
 		return [ ...struck, ...staged ].sort( ( a, b ) => b.atMin - a.atMin ).slice( 0, MOST );
 
 	}

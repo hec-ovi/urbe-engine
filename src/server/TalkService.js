@@ -13,7 +13,9 @@ const MEMORY_PEOPLE = 200;
 const MEMORY_NOTES = 24;
 const MEMORY_TURNS = 24;
 /** The files a world's dialogue is built from; a change to any of them builds it again. */
-const WORLD_FILES = [ 'blueprint.json', 'npc-types.json', join( 'quests', 'questlines.json' ), 'manifest.json' ];
+const WORLD_FILES = [ 'blueprint.json', 'npc-types.json', join( 'quests', 'questlines.json' ), 'manifest.json', 'setting.md' ];
+/** A world's own words for what its city is, beside its blueprint; the talk tells people that in place of a bare theme word. */
+const SETTING_FILE = 'setting.md';
 /** Where a game keeps what people remember, beside its save, as each exchange completes. */
 const MEMORY_FILE = 'dialogue-memory.json';
 
@@ -151,8 +153,9 @@ class TalkWorld {
 		// A world assembled with interiors opens those buildings alone: the rest are no place to go.
 		const opened = ( await readJson( join( dir, 'manifest.json' ), {} ) ).interiors;
 		const closed = Array.isArray( opened ) ? blueprint.parcels.map( ( parcel ) => parcel.id ).filter( ( id ) => ! opened.includes( id ) ) : null;
+		const setting = ( await readFile( join( dir, SETTING_FILE ), 'utf8' ).catch( () => '' ) ).trim();
 		const world = {
-			meta: { naming, gridAngle: blueprint.meta.gridAngle ?? 0 }, districts: blueprint.districts, parcels: blueprint.parcels,
+			meta: { naming, gridAngle: blueprint.meta.gridAngle ?? 0, ...( setting ? { setting } : {} ) }, districts: blueprint.districts, parcels: blueprint.parcels,
 			transit: blueprint.transit, ...( streets ? { streets } : {} ), ...( closed ? { closed } : {} )
 		};
 		const game = await stat( join( dir, 'game.json' ) ).then( () => true, () => false );
@@ -321,12 +324,13 @@ class TalkWorld {
  */
 function bounded( records ) {
 
-	return records.filter( ( { memory } ) => memory.digest.length || memory.turns.length )
+	return records.filter( ( { memory } ) => memory.digest.length || memory.turns.length || memory.life )
 		.sort( ( a, b ) => lastAt( b ) - lastAt( a ) || a.npcId.localeCompare( b.npcId ) )
 		.slice( 0, MEMORY_PEOPLE )
 		.map( ( { npcId, memory } ) => ( { npcId, memory: {
 			digest: memory.digest.slice( - MEMORY_NOTES ), turns: memory.turns.slice( - MEMORY_TURNS ),
-			...( Number.isFinite( memory.heardAtMin ) ? { heardAtMin: memory.heardAtMin } : {} )
+			...( Number.isFinite( memory.heardAtMin ) ? { heardAtMin: memory.heardAtMin } : {} ),
+			...( memory.life ? { life: memory.life } : {} )
 		} } ) )
 		.sort( ( a, b ) => a.npcId.localeCompare( b.npcId ) );
 

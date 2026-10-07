@@ -29,7 +29,8 @@
               }
             }
           },
-          "heardAtMin": { "type": "number", "minimum": 0 }
+          "heardAtMin": { "type": "number", "minimum": 0 },
+          "life": { "description": "The person's life so far, told once from their simulation record and kept as it was (Quests lifeHistory).", "type": "string", "minLength": 1, "maxLength": 4000 }
         }
       }
     }

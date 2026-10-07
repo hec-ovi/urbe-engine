@@ -239,7 +239,7 @@ describe( 'playable game persistence', () => {
 			{ speaker: 'player', text: 'Can you give me access to your apartment?', atMin: 1085 },
 			{ speaker: 'npc', text: 'Fine. Here is a card for apartment 401.', atMin: 1085 }
 		] } }, { npcId: 'a50001', memory: {
-			digest: [ 'Overheard, not said to you: you were there when the player talked to Drew Thorn, the resident. The player said: "Can you give me access?" Drew Thorn said: "Fine."' ],
+			digest: [ 'Overheard, not said to you: you were there when the stranger talked to Drew Thorn, the resident. The stranger said: "Can you give me access?" Drew Thorn said: "Fine."' ],
 			turns: [], heardAtMin: 1085
 		} } ];
 		// The server keeps what the save sends, as LauncherService.saveCurrent does.

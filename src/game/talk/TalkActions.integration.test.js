@@ -172,7 +172,7 @@ describe( 'what a person agrees to in words happens', () => {
 
 		const { app, world, npc, frame, model, say } = await chat( 'Fine, you lead. Just keep your distance.' );
 		await say( 'Come with me' );
-		expect( model.seen[ 0 ].tools.map( ( tool ) => tool.function.name ) ).toContain( 'follow_player' );
+		expect( model.seen[ 0 ].tools.map( ( tool ) => tool.function.name ) ).toContain( 'come_along' );
 		expect( app.interactor.close ).toHaveBeenCalled();
 		expect( frame() ).toContainEqual( expect.objectContaining( { type: 'companion-started', npcId: npc.npcId, mode: 'follow' } ) );
 		expect( world.companion.state ).toMatchObject( { npcId: npc.npcId, kind: 'follow' } );
@@ -192,7 +192,7 @@ describe( 'what a person agrees to in words happens', () => {
 		app.interactor.conversation = { npcId: npc.npcId, instance: app.sim.getNPC( npc.npcId ), behavior: { mode: 'street', activity: 'leisure', place: { kind: 'parcel', id: 'p_cafe' }, interrupted: true } };
 		await say( 'What did they say?' );
 		const name = `${friend.name.given} ${friend.name.family}`;
-		const note = new RegExp( `Overheard, not said to you: you were there when the player talked to ${name}, [^.]+\\. The player said: "Who rents 1407\\?" ${name} said: "Nobody since spring\\."` );
+		const note = new RegExp( `Overheard, not said to you: you were there when the stranger talked to ${name}, [^.]+\\. The stranger said: "Who rents 1407\\?" ${name} said: "Nobody since spring\\."` );
 		expect( model.seen[ 2 ].messages[ 0 ].content ).toMatch( note );
 		expect( model.seen[ 1 ].messages[ 0 ].content ).not.toContain( 'Overheard' );
 		// It is the follower's own memory, which a save reads and keeps.
@@ -219,7 +219,7 @@ describe( 'what a person agrees to in words happens', () => {
 		] ) };
 		await say( 'Who rents 1407?' );
 		const memory = new Map( ( await app.talk.memory() ).map( ( record ) => [ record.npcId, record.memory ] ) );
-		expect( memory.get( 'a-diner' ).digest ).toEqual( [ expect.stringMatching( /^Overheard, not said to you: you were there when the player talked to .+ The player said: "Who rents 1407\?" .+ said: "Nobody since spring\."$/ ) ] );
+		expect( memory.get( 'a-diner' ).digest ).toEqual( [ expect.stringMatching( /^Overheard, not said to you: you were there when the stranger talked to .+ The stranger said: "Who rents 1407\?" .+ said: "Nobody since spring\."$/ ) ] );
 		expect( memory.has( 'a-upstairs' ) ).toBe( false );
 		expect( memory.has( 'a-passer' ) ).toBe( false );
 		// The person talked to remembers it as their own talk, not as overheard.

@@ -3737,9 +3737,9 @@ export function playableModalOpen( view, interactor ) {
  */
 export function lightWords( state = 'night', indoors = false ) {
 
-	const sky = { night: 'night outside, dark but for the street lamps and the neon signs', dusk: 'dusk, the light going and the neon coming on',
-		dawn: 'dawn, grey light coming up between the towers', day: 'day, flat daylight between the towers' }[ state ] ?? 'night outside';
-	return indoors ? `indoors under the building's lights; ${sky}` : sky;
+	// Plain words for the hour's light, with nothing for a person to dwell on.
+	const sky = { night: 'night', dusk: 'dusk', dawn: 'early morning', day: 'daylight' }[ state ] ?? 'night';
+	return indoors ? `${sky}; you are indoors` : sky;
 
 }
 
