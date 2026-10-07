@@ -151,16 +151,13 @@ export class HeroCharacter {
 		const gesture = new SpeechGesture( root );
 		const gaze = new LookAt( root );
 		this.lighting?.attachRoot( root, person.position );
-		root.visible = false;
-
-		const mixer = new THREE.AnimationMixer( root );
-		this.group.add( root );
+		// Warmed out of the scene: a warm-up shows what it compiles until its
+		// programs link, frames later, and the rig stands in its rest pose,
+		// the T-pose, until a clip poses it.
 		await this.warmup?.warm( root );
 
 		if ( request !== this.request ) {
 
-			this.group.remove( root );
-			mixer.stopAllAction();
 			this.lighting?.releaseRoot( root );
 			this.poser.release( root );
 			return false;
@@ -170,7 +167,7 @@ export class HeroCharacter {
 		this.#dropActive();
 		this.#dropClose( person );
 		person.hero = true;
-		root.visible = true;
+		const mixer = new THREE.AnimationMixer( root );
 		this.active = {
 			person, look, recipe, root, mixer, gesture, gaze, descriptor: source.descriptor, key: source.key,
 			height: this.poser.height( root ), motions: source.motions,
@@ -179,6 +176,9 @@ export class HeroCharacter {
 		mixer.addEventListener( 'finished', ( event ) => this.#finished( mixer, event ) );
 		this.#handOff( person );
 		this.#play( sequence, onFinished );
+		// Posed before it joins the scene: in the crowd's clip at the crowd's frame.
+		poseNow( mixer, this.active.height );
+		this.group.add( root );
 
 		return true;
 
@@ -536,12 +536,10 @@ export class HeroCharacter {
 		}
 		const root = this.poser.dress( source, person, `close-${recipe.body}` );
 		this.lighting?.attachRoot( root, person.position );
-		root.visible = false;
-		this.group.add( root );
+		// Warmed out of the scene, as a talk's rig is (`show`): unposed, it stands in the T-pose.
 		await this.warmup?.warm( root );
 		if ( this.close.get( person ) !== entry || person.hero ) {
 
-			this.group.remove( root );
 			this.lighting?.releaseRoot( root );
 			this.poser.release( root );
 			if ( this.close.get( person ) === entry ) this.close.delete( person );
@@ -554,8 +552,9 @@ export class HeroCharacter {
 		} );
 		entry.mixer.addEventListener( 'finished', ( event ) => this.#finished( entry.mixer, event ) );
 		person.hero = true;
-		root.visible = true;
+		// Posed before it joins the scene: where the crowd body is, in its clip at its frame.
 		this.#follow( entry, 0 );
+		this.group.add( root );
 
 	}
 
@@ -745,6 +744,15 @@ function crowdFrame( animation, motions, person ) {
 	const clip = transferredClip( animation.animations, motions, name );
 	if ( ! clip ) throw new Error( `Pro animation library is missing ${name}` );
 	return { name, clip, time: ( ( person.frame ?? 0 ) % FRAMES / FRAMES ) * clip.duration };
+
+}
+
+/** Poses a new rig in what its mixer plays now, at the rig's height, without moving its clips on. */
+function poseNow( mixer, height ) {
+
+	height?.beforePose();
+	mixer.update( 0 );
+	height?.afterPose();
 
 }
 
