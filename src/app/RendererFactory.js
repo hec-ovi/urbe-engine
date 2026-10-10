@@ -37,6 +37,19 @@ export class RendererFactory {
 
 		installStaticTextureNodes();
 		const webgpu = backend !== 'webgl' && WebGPU.isAvailable();
+		const renderer = await RendererFactory.#open( webgpu, antialias );
+		skipEmptyDraws( renderer );
+		return renderer;
+
+	}
+
+	/**
+	 * Opens the renderer. `navigator.gpu` can exist while no adapter is free
+	 * (the talk model holds the GPU, or the browser has none). Three throws
+	 * then and the city never draws, so the same run opens again on WebGL.
+	 */
+	static async #open( webgpu, antialias ) {
+
 		const renderer = new THREE.WebGPURenderer( {
 			antialias,
 			trackTimestamp: webgpu,
@@ -46,9 +59,19 @@ export class RendererFactory {
 		renderer.setSize( window.innerWidth, window.innerHeight );
 		// The render lists init builds hold the lighting the renderer has now.
 		LightingSystem.prepare( renderer );
-		await renderer.init();
-		skipEmptyDraws( renderer );
-		return renderer;
+		try {
+
+			await renderer.init();
+			return renderer;
+
+		} catch ( error ) {
+
+			try { renderer.dispose(); } catch { /* init failed before a device */ }
+			if ( ! webgpu ) throw error;
+			console.warn( 'WebGPU has no adapter; drawing with WebGL instead.', error instanceof Error ? error.message : error );
+			return RendererFactory.#open( false, antialias );
+
+		}
 
 	}
 
