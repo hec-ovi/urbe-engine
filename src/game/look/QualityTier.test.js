@@ -11,10 +11,10 @@ describe( 'QualityTier', () => {
 
 	it( 'lets the backend choose only when the run does not, and keeps the look at every tier', () => {
 
-		expect( QualityTier.describe( null, 'webgpu' ).name ).toBe( 'high' );
+		expect( QualityTier.describe( null, 'webgpu' ).name ).toBe( 'medium' );
 		expect( QualityTier.describe( null, 'webgl' ).name ).toBe( 'low' );
 		expect( QualityTier.describe( 'ultra', 'webgl' ).name ).toBe( 'ultra' );
-		expect( QualityTier.describe( 'nonsense', 'webgpu' ).name ).toBe( 'high' );
+		expect( QualityTier.describe( 'nonsense', 'webgpu' ).name ).toBe( 'medium' );
 
 
 		const low = QualityTier.describe( 'low', 'webgl' );
@@ -22,7 +22,11 @@ describe( 'QualityTier', () => {
 
 		// low is the fallback backend's tier: no bloom chain, but a room fill is on; haze quads are off on every tier.
 		expect( low.bloom.strength ).toBe( 0 );
-		expect( low.roomShadow ).toBe( 0 );
+		expect( low.roomShadow ).toBe( 512 );
+		expect( low.sunShadow ).toBe( 512 );
+		expect( QualityTier.describe( 'medium' ).roomShadow ).toBe( 1024 );
+		expect( QualityTier.describe( 'high' ).roomShadow ).toBe( 0 );
+		expect( QualityTier.describe( 'ultra' ).roomShadow ).toBe( 0 );
 		expect( low.haze ).toBe( false );
 		// Enough slots that one live floor's rooms are lit from their own fixtures.
 		expect( low.roomSlots ).toBe( QualityTier.describe( 'medium' ).roomSlots );

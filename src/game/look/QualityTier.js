@@ -14,15 +14,14 @@ const PRESETS = {
 		roomSlots: 3,
 		roomSpots: 4,
 		roomStrips: 0,
-		// One spot on the room the player stands in may cast (RoomLights), a
-		// whole extra depth pass whose programs no warm-up builds; no tier pays
-		// for it, and the shadow maps the renderer draws are the sun's.
-		roomShadow: 0,
+		// One spot on the room the player stands in may cast (RoomLights).
+		// Low and medium pay a small map. High and ultra do not: the pass is
+		// one the warm-up does not build, so it would compile in play.
+		roomShadow: 512,
 		// The sun's one map, in texels, and the metres of ground it spans
-		// around the camera (light/SunShadow.js). A whole second draw of the
-		// near city every daylight frame: the WebGL2 tier does without.
-		sunShadow: 0,
-		sunShadowReach: 0,
+		// around the camera (light/SunShadow.js). Low keeps a short square.
+		sunShadow: 512,
+		sunShadowReach: 48,
 		clusteredLights: 512,
 		batchedLights: 32,
 		// Glossy ground and metals need something to reflect on every tier;
@@ -41,7 +40,7 @@ const PRESETS = {
 		roomSlots: 3,
 		roomSpots: 4,
 		roomStrips: 1,
-		roomShadow: 0,
+		roomShadow: 1024,
 		sunShadow: 1024,
 		sunShadowReach: 80,
 		clusteredLights: 1024,
@@ -103,7 +102,7 @@ export class QualityTier {
 	/** The tier a backend defaults to when the run did not name one. */
 	static defaultFor( backend ) {
 
-		return backend === 'webgpu' ? 'high' : 'low';
+		return backend === 'webgpu' ? 'medium' : 'low';
 
 	}
 
