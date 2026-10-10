@@ -593,12 +593,31 @@ export class GameApp {
 		const stableFixtures = ( this.shellScene?.pinnedGlows ?? neon.glows ).concat( lamps.glows, this.transit.glows, highwayGlows( atlas ) );
 		const fixtures = stableFixtures.concat( this.shellScene?.streamedGlows ?? [] );
 		this.lights = new CityLights( fixtures, this.lighting.capacity, { streamed: Boolean( spatial ) } );
-		if ( this.shellScene ) this.shellScene.onFixturesChanged = () => this.hitches.time( 'fixtures', () => {
+		// A cell that finishes after the player has stopped still has to join the
+		// lights. Copying every glow already standing, once per cell, is what
+		// freezes a quiet street: the new cell's own glows append, and a cell
+		// that leaves gives only those back.
+		if ( this.shellScene ) this.shellScene.onFixturesChanged = ( cell, added ) => this.hitches.time( 'fixtures', () => {
 
-			fixtures.length = 0;
-			for ( const fixture of stableFixtures ) fixtures.push( fixture );
-			for ( const fixture of this.shellScene.streamedGlows ) fixtures.push( fixture );
-			this.lights.setFixtures( fixtures );
+			const glows = cell?.glows ?? [];
+			if ( glows.length === 0 ) return;
+
+			if ( added ) {
+
+				// Pinned cells already standing were snapshotted into stableFixtures.
+				// A pinned cell that arrives later is a building with an interior:
+				// its glows belong with the others, or the block it stands in goes dark.
+				for ( const glow of glows ) fixtures.push( glow );
+				this.lights.addFixtures( glows );
+				return;
+
+			}
+
+			const drop = new Set( glows );
+			let write = 0;
+			for ( let read = 0; read < fixtures.length; read ++ ) if ( ! drop.has( fixtures[ read ] ) ) fixtures[ write ++ ] = fixtures[ read ];
+			fixtures.length = write;
+			this.lights.removeFixtures( glows );
 
 		} );
 		this.scene.add( this.lights.group );

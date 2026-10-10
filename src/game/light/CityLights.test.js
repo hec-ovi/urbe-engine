@@ -72,6 +72,28 @@ describe( 'CityLights', () => {
 
 	} );
 
+	it( 'adds a cell\'s fixtures beside the ones standing, and drops just those when the cell leaves', () => {
+
+		const standing = fixture( 0, 9000, 0xff0000 );
+		const arrived = fixture( 3, 1000, 0x0000ff );
+		const lights = new CityLights( [ standing ], 4, { streamed: true } );
+		const grid = lights.grid;
+
+		lights.addFixtures( [ arrived ] );
+
+		expect( lights.grid ).toBe( grid );
+		expect( lights.fixtures ).toEqual( [ standing, arrived ] );
+		expect( lights.airColor( new THREE.Vector3() ).color.b ).toBeGreaterThan( 0 );
+
+		lights.removeFixtures( [ standing ] );
+
+		expect( lights.fixtures[ 0 ] ).toBeNull();
+		expect( lights.fixtures[ 1 ] ).toBe( arrived );
+		expect( lights.airColor( new THREE.Vector3() ).color.r ).toBe( 0 );
+		expect( lights.grid ).toBe( grid );
+
+	} );
+
 	it( 'replaces streamed fixtures in the same slots and keeps per-fixture dimming', () => {
 
 		const a = fixture( 0, 1000 ), b = fixture( 10, 2000 ), c = fixture( 20, 3000 );

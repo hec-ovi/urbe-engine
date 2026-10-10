@@ -39,8 +39,9 @@ import { FAR_ROOM_CELL } from './FarSurfaces.js';
  * carries its closed-pose origin, which is what a swinging copy is rebased on.
  *
  * A plan is the largest piece of work a cell brings, so this is a step at a
- * time: one surface baked, or one material merged, between asks of the frame
- * budget. Nothing here holds the main thread for longer than one of those.
+ * time: one surface baked, or one pair of a material's primitives merged,
+ * between asks of the frame budget. Nothing here holds the main thread for
+ * longer than one of those.
  *
  * @param blueprint the plan's own blueprint, which names its doors
  * @param slice the frame budget this work is paced by
@@ -168,8 +169,7 @@ export async function readShell( scene, factory, blueprint, slice, hitches = new
 
 	for ( const { key, scenic, geometries } of batchesOf( farScenery ).values() ) {
 
-		await slice.step();
-		const far = hitches.time( 'plan merge', () => mergedGeometry( key, geometries ) );
+		const far = await mergedGeometry( key, geometries, slice, hitches );
 		const near = scenery.find( ( surface ) => surface.bucket === ( scenic ? `${key}|scenic` : key ) );
 		if ( near ) near.far = far;
 
@@ -190,16 +190,10 @@ async function merged( buckets, factory, slice, hitches ) {
 
 	for ( const { key, scenic, geometries } of batchesOf( buckets ).values() ) {
 
-		await slice.step();
+		const geometry = await mergedGeometry( key, geometries, slice, hitches );
+		const base = shellMaterial( factory, { ...splitBucket( key ), exterior: true } );
 
-		hitches.time( 'plan merge', () => {
-
-			const geometry = mergedGeometry( key, geometries );
-			const base = shellMaterial( factory, { ...splitBucket( key ), exterior: true } );
-
-			surfaces.push( { bucket: scenic ? `${key}|scenic` : key, geometry, material: scenic ? ScenicSurface.material( base ) : base } );
-
-		} );
+		surfaces.push( { bucket: scenic ? `${key}|scenic` : key, geometry, material: scenic ? ScenicSurface.material( base ) : base } );
 
 	}
 
@@ -217,13 +211,63 @@ function batchesOf( buckets ) {
 
 }
 
-/** One geometry of every primitive in a merge, with its bounding box. */
-function mergedGeometry( key, geometries ) {
+/**
+ * One geometry of every primitive in a merge, with its bounding box.
+ *
+ * A material worn by a whole facade is hundreds of primitives. Merging them in
+ * one call holds the frame for a quarter second while the player is only
+ * standing there, waiting on a cell that was already asked for. Each primitive
+ * is prepared on its own step, then pairs are merged, so one step is a pair.
+ */
+async function mergedGeometry( key, geometries, slice, hitches ) {
 
-	const parts = geometries.length === 1 ? geometries : prepare( geometries );
-	const geometry = parts.length === 1 ? parts[ 0 ] : BufferGeometryUtils.mergeGeometries( parts, false );
-	if ( ! geometry ) throw placementError( `${key}: shell primitives do not merge` );
-	if ( parts.length > 1 ) for ( const part of parts ) part.dispose();
+	if ( geometries.length === 1 ) {
+
+		const geometry = geometries[ 0 ];
+		if ( ! geometry.boundingBox ) geometry.computeBoundingBox();
+		return geometry;
+
+	}
+
+	const ready = [];
+
+	for ( const source of geometries ) {
+
+		await slice.step();
+		ready.push( hitches.time( 'plan merge', () => prepare( [ source ] )[ 0 ] ) );
+
+	}
+
+	await slice.step();
+	let parts = hitches.time( 'plan merge', () => prepare( ready ) );
+
+	while ( parts.length > 1 ) {
+
+		const next = [];
+
+		for ( let index = 0; index < parts.length; index += 2 ) {
+
+			await slice.step();
+			const pair = parts.slice( index, index + 2 );
+			next.push( hitches.time( 'plan merge', () => {
+
+				if ( pair.length === 1 ) return pair[ 0 ];
+
+				const geometry = BufferGeometryUtils.mergeGeometries( pair, false );
+				if ( ! geometry ) throw placementError( `${key}: shell primitives do not merge` );
+				for ( const part of pair ) part.dispose();
+
+				return geometry;
+
+			} ) );
+
+		}
+
+		parts = next;
+
+	}
+
+	const geometry = parts[ 0 ];
 	geometry.computeBoundingBox();
 
 	return geometry;

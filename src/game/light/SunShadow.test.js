@@ -62,10 +62,19 @@ describe( 'SunShadow', () => {
 		const dawn = sun.key.shadow.intensity;
 		expect( dawn ).toBeGreaterThan( 0 );
 		expect( dawn ).toBeLessThan( 1 );
+		expect( sun.key.shadow.needsUpdate ).toBe( true );
 
+		// Full day at the same square only changes the weight. The map stays.
 		sun.update( camera( 100, 200 ), noon, 1 );
 		expect( sun.key.shadow.intensity ).toBe( 1 );
+		expect( sun.key.shadow.needsUpdate ).toBe( false );
+
+		// The fitted square has not moved, so the near city is not drawn again.
+		sun.update( camera( 100, 200 ), noon, 1 );
+		expect( sun.key.shadow.needsUpdate ).toBe( false );
+		sun.update( camera( 160, 260 ), noon, 1 );
 		expect( sun.key.shadow.needsUpdate ).toBe( true );
+		sun.update( camera( 100, 200 ), noon, 1 );
 
 		// The key stands along the sun from the ground ahead of the camera.
 		const along = sun.key.position.clone().sub( sun.key.target.position ).normalize();

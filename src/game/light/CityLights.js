@@ -41,6 +41,8 @@ export class CityLights {
 		);
 		this.selection = this.lights.map( ( _, index ) => index );
 		this.fixtureDim = fixtures.map( () => 1 );
+		/** Fixture object to its index, so a cell can join or leave without a scan of the city. */
+		this.byFixture = new Map( this.fixtures.map( ( fixture, index ) => [ fixture, index ] ) );
 		this.grid = new FixtureGrid( this.fixtures );
 		this.timer = RESHUFFLE_INTERVAL;
 		this.dim = 1;
@@ -67,6 +69,7 @@ export class CityLights {
 		const retained = this.selection.map( index => this.fixtures[ index ] );
 		this.fixtures = [ ...fixtures ];
 		this.fixtureDim = fixtures.map( fixture => dim.get( fixture ) ?? 1 );
+		this.byFixture = new Map( this.fixtures.map( ( fixture, index ) => [ fixture, index ] ) );
 		this.grid = new FixtureGrid( this.fixtures );
 		this.timer = RESHUFFLE_INTERVAL;
 		const indices = new Map( fixtures.map( ( fixture, index ) => [ fixture, index ] ) );
@@ -75,6 +78,71 @@ export class CityLights {
 			this.weights[ slot ] = 1;
 			this.#assign( slot, indices.get( retained[ slot ] ) ?? -1 );
 		}
+
+	}
+
+	/**
+	 * The fixtures of one cell that just stood. They append, and the grid gains
+	 * only their cells: a block finishing while the player stands still does not
+	 * copy every glow already in the city.
+	 */
+	addFixtures( incoming ) {
+
+		let added = false;
+
+		for ( const fixture of incoming ) {
+
+			if ( ! fixture || this.byFixture.has( fixture ) ) continue;
+
+			const index = this.fixtures.length;
+			this.fixtures.push( fixture );
+			this.fixtureDim.push( 1 );
+			this.byFixture.set( fixture, index );
+			this.grid.add( index, fixture );
+			added = true;
+
+		}
+
+		if ( added ) this.timer = RESHUFFLE_INTERVAL;
+
+	}
+
+	/**
+	 * The fixtures of a cell that left. Their slots stay, holding nothing, so
+	 * every index a caller kept (a venue sign, a slot) still names the same
+	 * fixture. The grid forgets only those cells.
+	 */
+	removeFixtures( outgoing ) {
+
+		let removed = false;
+
+		for ( const fixture of outgoing ) {
+
+			const index = this.byFixture.get( fixture );
+			if ( index === undefined ) continue;
+
+			this.grid.remove( index, fixture );
+			this.byFixture.delete( fixture );
+			this.fixtures[ index ] = null;
+			this.fixtureDim[ index ] = 0;
+			removed = true;
+
+			for ( let slot = 0; slot < this.lights.length; slot ++ ) {
+
+				if ( this.selection[ slot ] === index ) this.#assign( slot, - 1 );
+				if ( this.handoffs[ slot ]?.index === index ) {
+
+					this.handoffs[ slot ] = null;
+					this.weights[ slot ] = 1;
+					this.#power( slot );
+
+				}
+
+			}
+
+		}
+
+		if ( removed ) this.timer = RESHUFFLE_INTERVAL;
 
 	}
 
@@ -196,6 +264,7 @@ export class CityLights {
 			this.grid.ring( position, ring, ( index ) => {
 
 				const fixture = this.fixtures[ index ];
+				if ( ! fixture ) return;
 				const light = lightAt( fixture, position );
 				read.push( index );
 				lights.push( light );
@@ -269,6 +338,7 @@ export class CityLights {
 		this.grid.near( position, AIR_RADIUS, ( index ) => {
 
 			const fixture = this.fixtures[ index ];
+			if ( ! fixture ) return;
 
 			if ( fixture.position.distanceToSquared( position ) > AIR_RADIUS * AIR_RADIUS ) return;
 
@@ -357,6 +427,40 @@ class FixtureGrid {
 		const i = cellOf( position.x ), j = cellOf( position.z );
 
 		return i0 <= i1 && ring <= Math.max( i - i0, i1 - i, j - j0, j1 - j, 0 );
+
+	}
+
+	/** One fixture that just arrived, binned with the cells it stands in. */
+	add( index, fixture ) {
+
+		const i = cellOf( fixture.position.x ), j = cellOf( fixture.position.z );
+		const key = keyOf( i, j );
+		const list = this.cells.get( key );
+
+		if ( list ) list.push( index );
+		else this.cells.set( key, [ index ] );
+
+		this.peak = Math.max( this.peak, fixture.lumens );
+		this.bounds.i0 = Math.min( this.bounds.i0, i );
+		this.bounds.i1 = Math.max( this.bounds.i1, i );
+		this.bounds.j0 = Math.min( this.bounds.j0, j );
+		this.bounds.j1 = Math.max( this.bounds.j1, j );
+
+	}
+
+	/** Drops one fixture from the cell it was binned in. The city's other cells stay. */
+	remove( index, fixture ) {
+
+		const key = keyOf( cellOf( fixture.position.x ), cellOf( fixture.position.z ) );
+		const list = this.cells.get( key );
+		if ( ! list ) return;
+
+		const at = list.indexOf( index );
+		if ( at < 0 ) return;
+
+		list[ at ] = list[ list.length - 1 ];
+		list.pop();
+		if ( list.length === 0 ) this.cells.delete( key );
 
 	}
 

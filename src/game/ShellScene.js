@@ -51,7 +51,7 @@ export class ShellScene {
 			loader: this.pieces ? new KitCellLoader( { pieces: this.pieces, factory, signs: this.signs, slice, hitches, shells } ) : shells,
 			...( this.pieces ? { loadRadius: KIT_LOAD_RADIUS, dropRadius: KIT_DROP_RADIUS } : {} ),
 			prepare: cell => this.#prepare( cell ),
-			added: cell => { this.cells.set( cell.id, cell ); this.onFixturesChanged?.(); },
+			added: cell => { this.cells.set( cell.id, cell ); this.onFixturesChanged?.( cell, true ); },
 			removed: cell => this.#remove( cell )
 		} );
 		// The kit draws belong to the whole city, not to any one cell, so they
@@ -161,7 +161,7 @@ export class ShellScene {
 
 		}
 		this.cells.delete( cell.id );
-		this.onFixturesChanged?.();
+		this.onFixturesChanged?.( cell, false );
 
 	}
 

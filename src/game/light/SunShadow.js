@@ -57,6 +57,10 @@ export class SunShadow {
 		this.enabled = this.size > 0 && this.reach > 0;
 		this.focus = new THREE.Vector3();
 		this.weight = 0;
+		/** Whether `focus` is a map that has already been drawn. */
+		this.placed = false;
+		this.direction = new THREE.Vector3();
+		this.scratch = new THREE.Vector3();
 		if ( ! this.enabled ) return;
 
 		const { shadow } = key;
@@ -108,7 +112,20 @@ export class SunShadow {
 
 		}
 
-		fit( this.focus, camera, this.reach, this.size, direction );
+		// The map is a second draw of the near city. Standing still, and a look
+		// that stays inside the same texel, have nothing new to draw: asking for
+		// the pass anyway is a freeze on every quiet frame.
+		const next = fit( this.scratch, camera, this.reach, this.size, direction );
+		if ( this.placed && next.distanceToSquared( this.focus ) < 1e-8 && this.direction.distanceToSquared( direction ) < 1e-12 ) {
+
+			shadow.needsUpdate = false;
+			return;
+
+		}
+
+		this.placed = true;
+		this.focus.copy( next );
+		this.direction.copy( direction );
 		this.key.target.position.copy( this.focus );
 		this.key.position.copy( this.focus ).addScaledVector( direction, DEPTH );
 		this.key.target.updateMatrixWorld();
