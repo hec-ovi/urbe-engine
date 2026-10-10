@@ -119,7 +119,7 @@ credits, written `cr`; the minus sign is U+2212.
 
 - Thank you. I'll keep it.
 - For me? All right.
-- That's kind of you.
+- Nobody gives anything away any more. Thank you.
 
 ## refuse-thing-hostile
 
@@ -139,7 +139,8 @@ credits, written `cr`; the minus sign is U+2212.
 ## accept-credits
 
 - Thank you.
-- That's good of you.
+- I won't pretend I don't need it.
+- That's bread for a day or two. Thank you.
 
 ## refuse-credits-hostile
 
@@ -150,11 +151,13 @@ credits, written `cr`; the minus sign is U+2212.
 
 - I don't need that.
 - What is it for? No.
+- Money from a stranger costs more later. No.
 
 ## refuse-bribe
 
 - Put that away. I did not see it.
 - I will note that you offered.
+- People have gone missing for less. Put it away.
 
 ## accept-bribe
 
@@ -177,6 +180,7 @@ credits, written `cr`; the minus sign is U+2212.
 
 - I'm not serving you.
 - Find somewhere else.
+- Not you. Go.
 
 ## thanks-paid
 

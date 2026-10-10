@@ -262,6 +262,26 @@ describe( 'the economy in the save', () => {
 
 	} );
 
+	it( 'pays a story\'s shift once from the Bureau and a side job\'s reward once from the person it was for, no more than they carry', () => {
+
+		const economy = Economy.restore( undefined, { timeMin: 486, completedSettled: [ 'shift:main/s_sort' ], base, items: new PlayerItems(), now: () => 700, nameOf: () => 'Ada Vance' } );
+		expect( economy.owe( { kind: 'shift', key: 'shift:main/s_sort' } ) ).toBeNull();
+		expect( economy.owe( { kind: 'shift', key: 'shift:main/s_late' } ) ).toEqual( { kind: 'shift', amount: 12 } );
+		expect( economy.owe( { kind: 'shift', key: 'shift:main/s_late' } ) ).toBeNull();
+		const carried = economy.holdings.of( 'a1001' );
+		const reward = Math.min( { short: 5, 'getting-by': 10, comfortable: 20, 'well-off': 40 }[ carried.means ], carried.credits );
+		expect( economy.owe( { kind: 'reward', key: 'reward:sq', npcId: 'a1001' } ) ).toEqual( { kind: 'reward', amount: reward, npcId: 'a1001', name: 'Ada Vance' } );
+		expect( economy.wallet.credits ).toBe( 40 + 12 + reward );
+		expect( economy.holdings.of( 'a1001' ) ).toMatchObject( { credits: carried.credits - reward, dealt: [ { what: 'gave-credits', amount: reward, atMin: 700 } ] } );
+		expect( economy.wallet.log.map( ( entry ) => entry.what ) ).toEqual( [ 'shift', 'reward' ] );
+		// Somebody with nothing on them pays nothing, and the reward is settled all the same.
+		economy.holdings.debit( 'a1002', 1000 );
+		expect( economy.owe( { kind: 'reward', key: 'reward:sq2', npcId: 'a1002' } ) ).toBeNull();
+		expect( economy.settle( 'reward:sq2' ) ).toBe( false );
+		expect( economy.owe( { kind: 'reward', key: 'reward:sq3' } ) ).toBeNull();
+
+	} );
+
 	it( 'reads every key it needs from its lines and refuses an unknown field', () => {
 
 		const lines = economyLines();

@@ -3,9 +3,12 @@ import { Holdings } from './Holdings.js';
 import { TalkTerms } from './TalkTerms.js';
 import { Trades } from './Trades.js';
 import { Wallet, paydaysBy } from './Wallet.js';
+import { WAGE } from './Prices.js';
 
 /** Most payments the save remembers having made. */
 const MAX_SETTLED = 400;
+/** What a side story's person pays the player when it ends, by their means, never more than they carry. */
+export const REWARD = Object.freeze( { short: 5, 'getting-by': 10, comfortable: 20, 'well-off': 40 } );
 
 /**
  * Everything credits in one game: the player's wallet, what every person
@@ -34,6 +37,33 @@ export class Economy {
 		if ( this.settled.has( key ) ) return false;
 		this.settled.add( key );
 		return true;
+
+	}
+
+	/**
+	 * Pays what a story owes once (QuestSession `settlements`): a `shift`
+	 * booked by the Bureau, a `reward` from the person the side job was for,
+	 * by their means and no more than they carry. `{ kind, amount, npcId?, name? }`,
+	 * or null when it was paid before or there is nothing to pay; either way
+	 * it is settled from then on.
+	 */
+	owe( due ) {
+
+		if ( ! due?.key || ! this.settle( due.key ) ) return null;
+		const atMin = this.trades.now();
+		if ( due.kind === 'shift' ) {
+
+			this.wallet.add( WAGE.shift, { atMin, what: 'shift', name: 'the Bureau' } );
+			return { kind: 'shift', amount: WAGE.shift };
+
+		}
+		const now = due.npcId ? this.holdings.of( due.npcId ) : null;
+		const amount = this.holdings.debit( due.npcId, Math.min( REWARD[ now?.means ] ?? 0, now?.credits ?? 0 ) );
+		if ( ! amount ) return null;
+		const name = this.trades.nameOf( due.npcId );
+		this.wallet.add( amount, { atMin, what: 'reward', npcId: due.npcId, name } );
+		this.holdings.deal( due.npcId, { what: 'gave-credits', amount, atMin } );
+		return { kind: 'reward', amount, npcId: due.npcId, name };
 
 	}
 

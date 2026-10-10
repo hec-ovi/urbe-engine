@@ -1063,6 +1063,23 @@ export class AutomationProbe {
 
 	}
 
+	/**
+	 * Credits once the servers take them, else null: the wallet
+	 * (`credits`), the paydays paid (`paidWeek`), how many people carry
+	 * something other than what they started with, the latest log entry
+	 * and whether each server said yes (`gate`).
+	 */
+	economy() {
+
+		const { economy, economyGate } = this.game;
+		if ( ! economy ) return null;
+		return {
+			credits: economy.wallet.credits, paidWeek: economy.wallet.paidWeek, changedPeople: economy.holdings.changed,
+			lastLog: economy.wallet.log.at( - 1 ) ?? null, gate: { ...economyGate }
+		};
+
+	}
+
 	/** Frames the page draws a second, counted over `seconds` of the wall clock. */
 	async frameRate( { seconds = 10 } = {} ) {
 

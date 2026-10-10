@@ -11,6 +11,8 @@ import { TalkClient } from './talk/TalkClient.js';
 import { RecentEvents } from './talk/RecentEvents.js';
 import { NpcVoice } from './voice/NpcVoice.js';
 import { dispositionOf, peopleKnown, StreetNames, stripCues, VENUES } from '../../../quests/dist/runtime.js';
+// Read by name where used, so a Quests build without the transfer tools still loads.
+import * as dialogRuntime from '../../../quests/dist/runtime.js';
 import { describeLook } from './agents/avatar/Describe.js';
 import { castNames, homesOf } from './sim/Homes.js';
 import { buildingFacts } from './talk/BuildingFacts.js';
@@ -33,6 +35,10 @@ import { ScenePlaceResolver, SceneryDirector } from './scenery/index.js';
 import { ObjectiveRouter } from './routes/ObjectiveRouter.js';
 import { ObjectiveGuide } from './routes/ObjectiveGuide.js';
 import { GamePersistence, mergeInventory, mergeProgress, uniqueLocations } from './persistence/index.js';
+import {
+	Economy, FARES, POCKET_SLOTS, acceptsCredits, acceptsThing, bribe, buysThing, carryOf, goodOfItem, hasMenu, hasTill, isOfficial, menuOf, offerPrice,
+	priceOf, probe as probeEconomy, sells
+} from './economy/index.js';
 import { buildingAnchors, groundAnchors } from './agents/Anchors.js';
 import { Passage } from './agents/Passage.js';
 import { GameView } from '../ui/views/GameView.js';
@@ -138,6 +144,20 @@ const FLOOR_GAP = 2.2;
 const MAX_WITNESSES = 8;
 /** Game minutes a person someone tried to lift a card off stays on guard. */
 const LIFT_RETRY_MIN = 30;
+/** The posts that serve at a counter. */
+const COUNTER_ROLES = new Set( [ 'vendor', 'barista', 'waiter', 'cook' ] );
+/** The sums the player may hold out to a person, as far as their credits go. */
+const HAND_CREDITS = Object.freeze( [ 5, 10, 20, 50 ] );
+/** Most things the Hand over menu lists. */
+const HAND_ITEMS = 8;
+/** Most people whose starting pockets the session keeps worked out at once. */
+const CARRIED_KEPT = 4096;
+/** The order transfers in one reply commit in, before any movement. */
+const TRANSFER_ORDER = Object.freeze( [ 'give', 'take', 'sell', 'buy', 'pay', 'accept', 'ask', 'contact' ] );
+/** The kinds a person's moving with or for the player offers. */
+const MOVEMENTS = new Set( [ 'follow', 'lead', 'walk', 'stop', 'home', 'work', 'wait', 'sit', 'meet' ] );
+/** What the wallet's latest changes are called when no person names them. */
+const LOG_NAMES = Object.freeze( { wage: 'pay', shift: 'shift', fare: 'fare', reward: 'reward', bribe: 'an offer' } );
 /** The `events` a companion's signals make, by signal kind. */
 const COMPANION_EVENTS = Object.freeze( { started: 'companion-started', arrival: 'companion-arrived', ended: 'companion-ended', errand: 'companion-errand' } );
 /**
@@ -257,6 +277,12 @@ export class GameApp {
 		this.questItemIds = [];
 		/** The people who caught the player lifting a card off them, which the save keeps. */
 		this.regard = new Regard();
+		/** Credits and what people carry (Economy), once the servers take them; null until then, and the game plays as before. */
+		this.economy = null;
+		/** Whether the launcher takes a save's `economy` and the talk route the transfer tools (Economy `probe`). */
+		this.economyGate = { saves: false, talk: false };
+		/** What each person carried before anything changed hands, worked out once a session (Economy `carryOf`). */
+		this.carried = new Map();
 		/** What people say when asked for access, and the lock and theft notices. */
 		this.accessLines = accessLines();
 		/** Every dwelling and private room of the furnished buildings by address; the load gives it the city's buildings. */
@@ -399,6 +425,8 @@ export class GameApp {
 		} );
 		// A resumed preview restores the game's state and never saves it.
 		this.persistence = game && config.gameId ? new GamePersistence( { game, gameId: config.gameId } ) : null;
+		// Asked while the city is read: whether the servers take credits and transfers yet.
+		const gating = probeEconomy( globalThis.fetch );
 		// The dialogue server keeps what people remember in the game as each
 		// talk completes; the save's memory joins it beside the load, or before
 		// the first talk or save that finds it has not.
@@ -659,6 +687,11 @@ export class GameApp {
 		this.signals = new Signals( connections.networks );
 		const routes = new WalkRoutes( connections.networks );
 		if ( ! game?.npcState && ! config.explicitHour ) this.clock.seconds = storyStartMinute( this.quests, this.sim, this.clock.timeMin ) * 60;
+		this.atlasParcels = new Map( atlas.parcels.map( ( entry ) => [ entry.id, entry ] ) );
+		// Credits, once the launcher can save them: the save's, else the starting credits with the past paid.
+		this.economyGate = await gating;
+		if ( this.economyGate.saves ) this.economy = this.#restoreEconomy( game?.economy );
+		this.#showCredits();
 		const crowdPlaces = placesOf( city.entrances, buildings );
 		this.spawnVisibility = new SpawnVisibility( this.camera, {
 			fog: this.fog,
@@ -796,7 +829,8 @@ export class GameApp {
 			...( game?.transitJourney ? { state: game.transitJourney } : {} ),
 			journey: this.transitJourney,
 			locator: this.locator,
-			controller: this.controller
+			controller: this.controller,
+			fare: this.economy ? this.#fare() : null
 		} );
 		if ( this.transitGameplay.restoreRejected ) console.warn( 'transit journey: saved trip is no longer valid' );
 		this.currentLocation = this.locator.location( spawn.point.x, spawn.point.z );
@@ -815,7 +849,8 @@ export class GameApp {
 			missionItems: this.missionItems,
 			continuity: this.npcContinuity,
 			animations: this.animations,
-			itemPlaces: new ScenePlaceResolver( { buildings, doors: city.entrances, atlas } )
+			itemPlaces: new ScenePlaceResolver( { buildings, doors: city.entrances, atlas } ),
+			sale: this.economy ? this.#sale() : null
 		} );
 		const savedTransitQuest = game && Object.hasOwn( game, 'questTransit' ) ? game.questTransit : undefined;
 		const transitState = this.transitJourney.state;
@@ -1408,6 +1443,8 @@ export class GameApp {
 			this.currentLocation = this.locator.location( feet.x, feet.z, this.standing?.parcelId ?? null );
 			this.discoveredLocations.set( this.currentLocation.id, this.currentLocation );
 			this.view.clock.update( this.clock.label, district, this.venues.nameOf( this.currentLocation.id ) ?? '' );
+			// Friday 17:00 books the week's pay; a wait that ran past it is paid on the next frame.
+			if ( this.economy ) this.#payday();
 			if ( this.view.panels.current === 'MAP' ) this.view.map.setLocation( this.#placeName( this.currentLocation ), district );
 			if ( this.details ) this.view.readout.update( feet, district, this.locator.parcel( feet.x, feet.z, this.standing?.parcelId ?? null ) );
 
@@ -1490,7 +1527,8 @@ export class GameApp {
 		this.view.dialog.setSending( true );
 		this.view.dialog.setStatus( 'Waiting for a reply… Your story choices remain available.' );
 		this.animations.playerDialogueTurn( conversation );
-		let reply = null, done = false, whole = null, offer = null;
+		let reply = null, done = false, whole = null;
+		const offers = [];
 		try {
 			listen();
 			const context = { signal: controller.signal, ...this.#talkContext( conversation, ! arrival, text, ask ) };
@@ -1503,7 +1541,7 @@ export class GameApp {
 					// The answer to a chosen action is said where the eye is, in the subtitle; a typed line's stays in the talk window.
 					reply = this.#npcSays( conversation, event.text, { streaming: true, ...( ask ? { kind: null } : {} ) } );
 				} else if ( event.type === 'sentence' ) reply?.hear( event.text );
-				else if ( event.type === 'offer' ) offer ??= event;
+				else if ( event.type === 'offer' ) offers.push( event );
 				else if ( event.type === 'done' ) whole = event.reply;
 			}
 			if ( ! current() ) return;
@@ -1536,9 +1574,44 @@ export class GameApp {
 				this.view.dialog.setSending( false );
 			}
 		}
-		if ( done && offer ) this.#takeOffer( conversation, offer, whole, text );
-		// Asked one action and answered in words alone: they would not; the ways to answer stay.
-		else if ( done && ask ) this.#showActions( conversation );
+		if ( done && offers.length ) this.#takeOffers( conversation, offers, whole, text, ask );
+		else if ( done && ask ) {
+			// Asked one action and answered in words alone: they would not; the ways to answer stay.
+			this.#refusedHeldOut( conversation, [], whole, text, ask );
+			this.#showActions( conversation );
+		} else if ( done ) this.#refusedHeldOut( conversation, [], whole, text, ask );
+	}
+
+	/**
+	 * Everything a reply agreed to: while the talk takes transfers, every
+	 * transfer first (each once, in TRANSFER_ORDER), then at most one
+	 * movement, else the ways to answer again; credits held out to an
+	 * official and refused in words are noted against the player. A talk
+	 * without transfers takes the first offer alone, as it always has.
+	 */
+	#takeOffers( conversation, offers, reply, line, ask = null ) {
+		if ( ! this.#carrying( conversation ) ) return this.#takeOffer( conversation, offers[ 0 ], reply, line );
+		const seen = new Set();
+		const unique = offers.filter( ( offer ) => {
+			const key = `${offer.kind}|${offer.itemId ?? ''}`;
+			if ( seen.has( key ) ) return false;
+			seen.add( key );
+			return true;
+		} );
+		const transfers = unique.filter( ( offer ) => TRANSFER_ORDER.includes( offer.kind ) )
+			.sort( ( a, b ) => TRANSFER_ORDER.indexOf( a.kind ) - TRANSFER_ORDER.indexOf( b.kind ) );
+		for ( const offer of transfers ) this.#transfer( conversation, offer, { line, ask } );
+		this.#refusedHeldOut( conversation, unique, reply, line, ask );
+		const movement = unique.find( ( offer ) => MOVEMENTS.has( offer.kind ) );
+		if ( movement ) this.#takeOffer( conversation, movement, reply, line );
+		else this.#showActions( conversation );
+	}
+
+	/** One transfer a reply agreed to: a contact, a card's copy, or credits and things changing hands. */
+	#transfer( conversation, offer, options = {} ) {
+		if ( offer.kind === 'contact' ) return this.#addContact( conversation );
+		if ( offer.kind === 'give' && ! String( offer.itemId ?? '' ).startsWith( 'carry:' ) ) return this.#giveCard( conversation, String( offer.itemId ?? '' ).replace( /^card:/, '' ) );
+		return this.#trade( conversation, offer, options );
 	}
 
 	/**
@@ -1563,7 +1636,10 @@ export class GameApp {
 		const witnesses = this.#witnesses( conversation );
 		// Their home and work by address, where inside they stand and the cards they carry, wherever their body is.
 		const addresses = this.#addressContext( call ? { ...conversation, person: this.#remoteBody( npcId ) } : conversation, line );
+		// What they have on them, face to face or on the phone, so they never give what they do not carry.
+		const carry = this.#carrying( conversation ) ? this.economy.terms.carryContext( npcId ) : null;
 		return {
+			...( carry ? { carry } : {} ),
 			...( offers ? { offers } : {} ), ...( guide ? { guide } : {} ), ...( events.length ? { events } : {} ), ...( task ? { task } : {} ),
 			...( call ? { call: { caller: 'player' } } : {} ), ...( addresses ? { addresses } : {} ), ...( witnesses.length ? { witnesses } : {} ),
 			// A person on the phone is where their body is, wherever that is.
@@ -1612,6 +1688,10 @@ export class GameApp {
 	/** The talk request's `offers` for one chosen ask: their number, a copy of one of their cards, a meeting where the player is, or a companion offer. */
 	#askOffers( ask ) {
 		if ( ask.kind === 'contact' ) return { contact: true };
+		if ( ask.kind === 'hand-item' ) return ask.item ? { take: { items: [ ask.item ] } } : null;
+		if ( ask.kind === 'hand-credits' ) return { credits: { carried: ask.carried ?? 0, purse: this.economy?.wallet.credits ?? 0, offered: ask.amount } };
+		// A payment the person asked for and got is answered in words alone.
+		if ( ask.kind === 'paid' ) return null;
 		if ( ask.kind === 'card' ) return ask.item ? { give: { items: [ ask.item ] } } : null;
 		if ( ask.kind === 'meet' ) return { meet: { name: ask.meet.name } };
 		return this.companion.talkOffers( [ ask ] );
@@ -1635,6 +1715,11 @@ export class GameApp {
 		const contact = conversation.instance && ! this.contacts.has( npcId );
 		// Face to face, a person may hand over a copy of any card they hold that the player lacks.
 		const items = conversation.instance ? this.#cardOffers( npcId ) : [];
+		// While the talk takes transfers: their things too, the player's to hand them, credits either way and a counter's goods.
+		if ( this.#trading( conversation ) ) {
+			const trade = this.economy.terms.tradeOffers( { npcId, cards: items, questItems: this.#handableQuestItems( conversation ), counter: this.#counter( npcId ) } );
+			return { ...( offers ?? {} ), ...( contact ? { contact: true } : {} ), ...trade };
+		}
 		return contact || items.length ? { ...( offers ?? {} ), ...( contact ? { contact: true } : {} ), ...( items.length ? { give: { items } } : {} ) } : offers;
 	}
 
@@ -1739,9 +1824,12 @@ export class GameApp {
 	 * request is the player's consent, so an offer the rules allow is taken:
 	 * the chat closes on the reply and they set off. Otherwise they say why not.
 	 */
-	#takeOffer( conversation, { kind, placeId, itemId }, reply, line = '' ) {
+	#takeOffer( conversation, offer, reply, line = '' ) {
+		const { kind, placeId, itemId } = offer;
 		if ( kind === 'contact' ) return this.#addContact( conversation );
+		if ( kind === 'give' && String( itemId ?? '' ).startsWith( 'carry:' ) ) return this.#trade( conversation, offer, { line } );
 		if ( kind === 'give' ) return this.#giveCard( conversation, String( itemId ?? '' ).replace( /^card:/, '' ) );
+		if ( [ 'take', 'pay', 'accept', 'ask', 'sell', 'buy' ].includes( kind ) ) return this.#trade( conversation, offer, { line } );
 		const meet = kind === 'meet' ? this.#meetingPoint() : null;
 		const result = this.companion.acceptFromTool( {
 			npcId: conversation.npcId, kind, ...( placeId ? { placeId } : {} ), ...( meet ? { meet } : {} ), timeMin: this.clock.timeMin, playerPlaces: this.playerPlaces,
@@ -1874,7 +1962,9 @@ export class GameApp {
 	 * refusal they say in words, and asking for their number while the player
 	 * lacks it. On a call, asking them to come to where the player is.
 	 */
-	#showActions( conversation ) {
+	#showActions( conversation, menu = null ) {
+		// Handing something over or selling: the row is that menu alone, with the way back.
+		if ( menu && this.#trading( conversation ) ) return this.#setActions( this.#tradeMenu( conversation, menu ) );
 		const offers = conversation.instance && ! conversation.call ? this.#offers( conversation.npcId ) : [];
 		const actions = offers.map( ( offer ) => ( { id: offer.offerId, label: offer.label, icon: offer.kind } ) );
 		if ( conversation.instance && ! conversation.call && ! this.contacts.has( conversation.npcId ) ) actions.push( { id: 'contact', label: this.contactLines.say( 'label-contact' ) } );
@@ -1886,8 +1976,54 @@ export class GameApp {
 			}
 		}
 		if ( conversation.call ) actions.push( { id: 'meet', label: this.contactLines.say( 'label-meet' ), icon: 'lead' } );
+		if ( this.#trading( conversation ) ) actions.push( ...this.#tradeActions( conversation ) );
+		this.#setActions( actions );
+	}
+
+	#setActions( actions ) {
 		this.dialogueActions = new Map( actions.map( ( action ) => [ action.id, action.label ] ) );
 		this.view.dialog.setActions( actions );
+	}
+
+	/**
+	 * The row's trade actions: at a counter its first goods to buy, handing
+	 * something over, paying a sum the person asked for, and at a shop's or a
+	 * mall's till selling the player's things.
+	 */
+	#tradeActions( conversation ) {
+		const { npcId } = conversation;
+		const lines = this.economy.lines;
+		const counter = this.#counter( npcId );
+		const actions = ( counter?.menu ?? [] ).slice( 0, 3 ).map( ( good ) => ( {
+			id: `buy:${good.goodId}`, label: lines.say( 'label-buy', { name: good.name, price: good.price } ), icon: 'buy'
+		} ) );
+		if ( this.#handables( conversation ).length || this.economy.wallet.credits >= HAND_CREDITS[ 0 ] ) actions.push( { id: 'hand', label: lines.say( 'label-hand' ), icon: 'give' } );
+		const asked = this.economy.holdings.asked( npcId );
+		if ( asked ) actions.push( { id: `pay:${asked}`, label: lines.say( 'label-pay', { amount: asked } ), icon: 'credits' } );
+		if ( hasTill( counter ) && this.#sellable().length ) actions.push( { id: 'sell', label: lines.say( 'label-sell' ), icon: 'credits' } );
+		return actions;
+	}
+
+	/** The Hand over menu (the player's things, the story items a story lets go to this person, sums of credits) or the Sell menu, each with the way back. */
+	#tradeMenu( conversation, menu ) {
+		const lines = this.economy.lines;
+		const back = { id: 'hand:back', label: lines.say( 'label-back' ) };
+		if ( menu === 'sell' ) {
+			return [ ...this.#sellable().map( ( { item, price } ) => ( {
+				id: `sell:${item.id}`, label: lines.say( 'label-sell-item', { name: item.label, price } ), icon: 'credits'
+			} ) ), back ];
+		}
+		const things = this.#handables( conversation ).map( ( thing ) => ( { id: `hand:item:${thing.itemId}`, label: thing.name, icon: 'give' } ) );
+		const purse = this.economy.wallet.credits;
+		const credits = HAND_CREDITS.filter( ( amount ) => amount <= purse ).map( ( amount ) => ( {
+			id: `hand:cr:${amount}`, label: lines.say( 'label-credits', { amount } ), icon: 'credits'
+		} ) );
+		return [ ...things, ...credits, back ];
+	}
+
+	/** The player's things a shop's or a mall's till takes, at half their worth: `[{ item, price }]`. */
+	#sellable() {
+		return this.items.list().map( ( item ) => ( { item, price: offerPrice( item, { till: true } ) } ) ).filter( ( { price } ) => price >= 1 );
 	}
 
 	/**
@@ -1901,11 +2037,95 @@ export class GameApp {
 		if ( ! conversation?.npcId || ! label ) return;
 		if ( id === 'contact' || id === 'meet' ) return this.#ask( conversation, id, label );
 		if ( id.startsWith( 'card:' ) ) return this.#ask( conversation, 'card', label, id.slice( 'card:'.length ) );
+		if ( this.#trading( conversation ) && this.#tradeAction( conversation, id ) ) return;
 		const offer = this.#offers( conversation.npcId ).find( ( entry ) => entry.offerId === id );
 		// The person decides a chosen action as they decide a typed one, in their own words; a dismissal, a refusal
 		// the rules make or a person with nobody to answer for them is decided by code, in their own lines.
 		if ( ! offer || offer.kind === 'dismiss' || ! offer.available || ! conversation.instance || ! this.talk ) return this.#decideAction( conversation, id, label );
 		this.#say( label, { ask: offer, unanswered: () => this.#decideAction( conversation, id, null, true ) } );
+	}
+
+	/**
+	 * A trade action from the row, true when it was one: a menu opened or
+	 * closed; something handed over or credits held out, which the person
+	 * answers in their own words; a sum they asked for, paid at once; a good
+	 * bought or a thing sold at a counter, decided by code.
+	 */
+	#tradeAction( conversation, id ) {
+		const lines = this.economy.lines;
+		if ( id === 'hand' || id === 'sell' ) return this.#showActions( conversation, id ) ?? true;
+		if ( id === 'hand:back' ) return this.#showActions( conversation ) ?? true;
+		if ( id.startsWith( 'hand:item:' ) ) {
+			const itemId = id.slice( 'hand:item:'.length );
+			const name = this.dialogueActions.get( id );
+			this.#ask( conversation, 'hand-item', lines.say( 'say-thing', { name } ), { itemId, name } );
+			return true;
+		}
+		if ( id.startsWith( 'hand:cr:' ) ) {
+			const amount = Number( id.slice( 'hand:cr:'.length ) );
+			this.#ask( conversation, 'hand-credits', lines.say( 'say-credits', { amount } ), { amount } );
+			return true;
+		}
+		if ( id.startsWith( 'pay:' ) ) return this.#payAsked( conversation, Number( id.slice( 'pay:'.length ) ) ) ?? true;
+		if ( id.startsWith( 'buy:' ) ) return this.#buyAt( conversation, id.slice( 'buy:'.length ) ) ?? true;
+		if ( id.startsWith( 'sell:' ) ) return this.#sellTo( conversation, id.slice( 'sell:'.length ) ) ?? true;
+		return false;
+	}
+
+	/** The player pays a sum the person asked for: it moves at once, and they answer with it in what passed between them. */
+	#payAsked( conversation, amount ) {
+		const lines = this.economy.lines;
+		const result = this.#trade( conversation, { kind: 'accept', amount }, { asked: true } );
+		if ( ! result?.ok ) {
+			this.view.toast.show( { title: lines.say( 'label-pay', { amount } ), text: lines.say( 'notice-cannot-afford', { price: amount, credits: this.economy.wallet.credits } ) } );
+			return this.#showActions( conversation );
+		}
+		const seed = `${conversation.npcId}|${Math.floor( this.clock.timeMin )}`;
+		const thanks = () => {
+			this.#npcSays( conversation, lines.say( 'thanks-paid', {}, seed ) );
+			this.#showActions( conversation );
+		};
+		this.#say( lines.say( 'say-pay', { amount } ), { ask: { kind: 'paid' }, unanswered: thanks } );
+	}
+
+	/** The player buys a good off the counter the person works: they serve anyone not hostile, and the price is paid at once. */
+	#buyAt( conversation, goodId ) {
+		const { npcId } = conversation;
+		const counter = this.#counter( npcId );
+		const good = counter?.menu.find( ( entry ) => entry.goodId === goodId );
+		if ( ! good ) return this.#showActions( conversation );
+		const lines = this.economy.lines;
+		const seed = `${npcId}|${Math.floor( this.clock.timeMin )}`;
+		this.#playerSays( lines.say( 'say-buy', { name: good.name.charAt( 0 ).toUpperCase() + good.name.slice( 1 ) } ) );
+		if ( ! sells( this.#disposition( npcId ) ?? 'neutral' ) ) {
+			this.#npcSays( conversation, lines.say( 'refuse-serve', {}, seed ) );
+			return this.#showActions( conversation );
+		}
+		// Short of the price, nothing moves and the notice says what it costs; else they name it as it changes hands.
+		if ( ! this.economy.wallet.can( good.price ) ) {
+			this.view.toast.show( { title: good.name, text: lines.say( 'notice-cannot-afford', { price: good.price, credits: this.economy.wallet.credits } ) } );
+			return this.#showActions( conversation );
+		}
+		this.#npcSays( conversation, lines.say( 'sold', { price: lines.say( 'label-credits', { amount: good.price } ) }, seed ) );
+		this.#trade( conversation, { kind: 'sell', itemId: goodId, name: good.name, price: good.price } );
+		this.#showActions( conversation );
+	}
+
+	/** The player sells one of their things to a shop's or a mall's till, at half its worth. */
+	#sellTo( conversation, inventoryId ) {
+		const { npcId } = conversation;
+		const lines = this.economy.lines;
+		const entry = this.#sellable().find( ( { item } ) => item.id === inventoryId );
+		if ( ! entry || ! hasTill( this.#counter( npcId ) ) ) return this.#showActions( conversation );
+		const seed = `${npcId}|${Math.floor( this.clock.timeMin )}`;
+		this.#playerSays( lines.say( 'say-sell', { name: entry.item.label.charAt( 0 ).toLowerCase() + entry.item.label.slice( 1 ), price: lines.say( 'label-credits', { amount: entry.price } ) } ) );
+		if ( ! buysThing( this.#disposition( npcId ) ?? 'neutral', { price: entry.price, till: true } ) ) {
+			this.#npcSays( conversation, lines.say( 'refuse-buy', {}, seed ) );
+			return this.#showActions( conversation );
+		}
+		this.#npcSays( conversation, lines.say( 'bought', { amount: lines.say( 'label-credits', { amount: entry.price } ) }, seed ) );
+		this.#trade( conversation, { kind: 'buy', itemId: `own:${inventoryId}`, name: entry.item.label, amount: entry.price } );
+		this.#showActions( conversation );
 	}
 
 	/** Decides a chosen action by the companion's rules, and with `willing` by the person's disposition, and says their line. */
@@ -1924,21 +2144,23 @@ export class GameApp {
 	 * to where the player is. The person decides in their own words, as they
 	 * decide a typed line; nobody to answer for them decides by code.
 	 */
-	#ask( conversation, kind, label, scope = null ) {
+	#ask( conversation, kind, label, detail = null ) {
 		const ask = kind === 'meet' ? { kind, meet: this.#meetingPoint() }
-			: kind === 'card' ? { kind, scope, item: this.#cardOffers( conversation.npcId ).find( ( item ) => item.itemId === `card:${scope}` ) ?? null }
-				: { kind };
+			: kind === 'card' ? { kind, scope: detail, item: this.#cardOffers( conversation.npcId ).find( ( item ) => item.itemId === `card:${detail}` ) ?? null }
+				: kind === 'hand-item' ? { kind, item: { itemId: detail.itemId, name: detail.name } }
+					: kind === 'hand-credits' ? { kind, amount: detail.amount, carried: this.economy?.holdings.of( conversation.npcId )?.credits ?? 0 }
+						: { kind };
 		if ( ! conversation.instance || ! this.talk ) return this.#decideAsk( conversation, ask, label );
 		this.#say( label, { ask, unanswered: () => this.#decideAsk( conversation, ask, null ) } );
 	}
 
-	/** An ask nobody can answer for the person: their number as their disposition says (Calls `givesNumber`), a meeting by the companion's rules. */
+	/** An ask nobody can answer for the person: their number as their disposition says (Calls `givesNumber`), a meeting by the companion's rules, a thing or credits held out by Economy `Decide`. */
 	#decideAsk( conversation, ask, label ) {
 		if ( label ) this.#playerSays( label );
 		if ( ask.kind === 'meet' ) return this.#takeOffer( conversation, { kind: 'meet' }, null );
-		const npc = rememberedPerson( this.sim, conversation.npcId );
-		const disposition = npc ? this.regard.adjust( dispositionOf( npc, this.companion.categoryOf?.( npc.type ) ), conversation.npcId ) : null;
+		const disposition = this.#disposition( conversation.npcId );
 		const seed = `${conversation.npcId}|${Math.floor( this.clock.timeMin )}`;
+		if ( ask.kind === 'hand-item' || ask.kind === 'hand-credits' ) return this.#decideHanding( conversation, ask, disposition, seed );
 		if ( ask.kind === 'card' ) {
 			// Nobody can answer for them: only a friendly person hands over a copy of their own home's card.
 			if ( disposition && ask.item && givesCard( disposition, ask.scope ) ) {
@@ -1979,7 +2201,7 @@ export class GameApp {
 	#giveCard( conversation, scope, how = 'given' ) {
 		const { npcId } = conversation;
 		const npc = rememberedPerson( this.sim, npcId );
-		if ( ! npc || ! scopesOf( npc, this.addresses ).includes( scope ) ) return this.#showActions( conversation );
+		if ( ! npc || ! this.#heldScopes( npcId, npc ).includes( scope ) ) return this.#showActions( conversation );
 		const card = cardFor( scope, { book: this.addresses, issuer: { npcId, name: speakerOf( conversation ).name }, how, atMin: this.clock.timeMin } );
 		// The inventory announces the card it takes in.
 		if ( card && this.items.add( card ) ) {
@@ -1993,7 +2215,387 @@ export class GameApp {
 	/** The scopes a person holds that the player has no card for, home first. */
 	#lackedScopes( npcId ) {
 		const npc = rememberedPerson( this.sim, npcId );
-		return npc ? scopesOf( npc, this.addresses ).filter( ( scope ) => ! this.playerAccess.holds( scope ) ) : [];
+		return npc ? this.#heldScopes( npcId, npc ).filter( ( scope ) => ! this.playerAccess.holds( scope ) ) : [];
+	}
+
+	/** The scopes a person carries a card for: those their home and post give them, but a card lifted off them. */
+	#heldScopes( npcId, npc ) {
+		const gone = new Set( this.economy?.holdings.of( npcId )?.gone ?? [] );
+		return scopesOf( npc, this.addresses ).filter( ( scope ) => ! gone.has( `card:${scope}` ) );
+	}
+
+	/**
+	 * Whether a talk tells the person what they have on them (`carry`): once
+	 * the talk route takes transfers (Economy `probe`), for a person with an
+	 * identity, face to face or on the phone, so they never give what they do
+	 * not carry.
+	 */
+	#carrying( conversation ) {
+		return Boolean( this.economy && this.economyGate.talk && conversation?.npcId && conversation.instance );
+	}
+
+	/** Whether things and credits may change hands in this talk: as `#carrying`, and face to face. */
+	#trading( conversation ) {
+		return this.#carrying( conversation ) && ! conversation.call;
+	}
+
+	/** A person's disposition toward the player after what they hold against them (Access `Regard`), or null for nobody known. */
+	#disposition( npcId ) {
+		const npc = rememberedPerson( this.sim, npcId );
+		return npc ? this.regard.adjust( dispositionOf( npc, this.companion?.categoryOf?.( npc.type ) ), npcId ) : null;
+	}
+
+	/** A person as the player names them: the story's name for a character, else their own. */
+	#personName( npcId ) {
+		const name = this.questGameplay?.characterName?.( npcId ) ?? rememberedPerson( this.sim, npcId )?.name ?? null;
+		return name?.given ? [ name.given, name.family ].filter( Boolean ).join( ' ' ) : 'someone';
+	}
+
+	/**
+	 * The economy the save carries, or for a save made before it the starting
+	 * credits with the past paid: every shift and reward the stories owe at
+	 * load counted as settled, so an old save is paid nothing for the past.
+	 */
+	#restoreEconomy( saved ) {
+		const followed = () => this.followedQuestId ?? null;
+		this.carried.clear();
+		return Economy.restore( saved, {
+			timeMin: this.clock.timeMin,
+			completedSettled: this.quests.settlements?.().map( ( due ) => due.key ) ?? [],
+			base: ( npcId ) => this.#carryBase( npcId ),
+			items: this.items,
+			quests: {
+				handable: ( itemId, npcId, place ) => this.quests.handable( itemId, npcId, place, followed() ),
+				hand: ( itemId, npcId, place, timeMin ) => this.quests.hand( itemId, npcId, place, timeMin, followed() )
+			},
+			now: () => this.clock.timeMin,
+			nameOf: ( npcId ) => this.#personName( npcId ),
+			card: ( scope, { npcId, name, how, atMin } ) => cardFor( scope, { book: this.addresses, issuer: { npcId, name }, how, atMin } )
+		} );
+	}
+
+	/** What a person carried before anything changed hands (Economy `carryOf`): from their record, their home's tier, their post and their cards; null for nobody known. */
+	#carryBase( npcId ) {
+		if ( ! npcId ) return null;
+		const known = this.carried.get( npcId );
+		if ( known ) return known;
+		const npc = rememberedPerson( this.sim, npcId );
+		if ( ! npc ) return null;
+		const base = carryOf( npc, {
+			tier: this.atlasParcels?.get( npc.home?.parcelId )?.tier ?? 'mid',
+			scopes: this.addresses ? scopesOf( npc, this.addresses ) : [],
+			describe: ( scope ) => describeScope( scope, this.addresses ),
+			jobType: this.atlasParcels?.get( npc.job?.parcelId )?.type ?? null
+		} );
+		if ( this.carried.size >= CARRIED_KEPT ) this.carried.clear();
+		this.carried.set( npcId, base );
+		return base;
+	}
+
+	/** The wallet on the HUD clock and in the inventory with its latest changes, or neither while credits are off. */
+	#showCredits() {
+		const wallet = this.economy?.wallet ?? null;
+		const recent = wallet ? wallet.log.filter( ( entry ) => entry.amount ).slice( - 3 ).reverse()
+			.map( ( entry ) => ( { amount: entry.amount, name: entry.name ?? LOG_NAMES[ entry.what ] ?? entry.what } ) ) : [];
+		this.view.clock.setCredits?.( wallet ? wallet.credits : null );
+		this.view.inventory.setCredits?.( wallet ? wallet.credits : null, recent );
+	}
+
+	/** Friday 17:00: the week's pay, less the file fee, is booked and said once; a long wait books two weeks at most. */
+	#payday() {
+		const pay = this.economy.wallet.payday( this.clock.timeMin );
+		if ( ! pay ) return;
+		const lines = this.economy.lines;
+		this.view.toast.show( { kind: 'received', title: lines.say( 'notice-wage', pay ), text: lines.say( pay.weeks > 1 ? 'notice-wage-weeks-text' : 'notice-wage-text', pay ) } );
+		this.#showCredits();
+		this.#emit( 'payday', { ...pay, credits: this.economy.wallet.credits } );
+		this.#autosave( 'pay' );
+	}
+
+	/** What the stories owe the player and have not paid (QuestSession `settlements`): a shift's pay and a side job's reward, each once, with a notice. */
+	#settle() {
+		if ( ! this.economy || typeof this.quests?.settlements !== 'function' ) return;
+		const lines = this.economy.lines;
+		let paid = false;
+		for ( const due of this.quests.settlements() ) {
+			if ( this.economy.settled.has( due.key ) ) continue;
+			const payment = this.economy.owe( due );
+			if ( ! payment ) continue;
+			paid = true;
+			this.view.toast.show( { kind: 'received', title: payment.kind === 'shift'
+				? lines.say( 'notice-shift', { amount: payment.amount } ) : lines.say( 'notice-reward', { amount: payment.amount, name: payment.name } ) } );
+			this.#emit( 'trade', { kind: payment.kind, amount: payment.amount, ...( payment.npcId ? { npcId: payment.npcId, name: payment.name } : {} ) } );
+		}
+		if ( ! paid ) return;
+		this.#showCredits();
+		this.#autosave( 'pay' );
+	}
+
+	/** The parcel the player stands in: the room's, else the one under their feet. */
+	#playerParcel() {
+		return this.standing?.parcelId ?? this.currentLocation?.id ?? null;
+	}
+
+	/** Whether a person is at their post now, by their schedule. */
+	#working( npcId ) {
+		try {
+			return this.sim?.behaviorAt?.( npcId, this.clock.timeMin )?.activity === 'working';
+		} catch {
+			return false;
+		}
+	}
+
+	/**
+	 * The counter a person serves now, or null: a vendor, barista, waiter or
+	 * cook at work in a venue with a menu (a square's kiosks sell the park's),
+	 * with the player standing in it. `{ venueType, tier, parcelId, menu, npcId, payee, name }`.
+	 */
+	#counter( npcId ) {
+		if ( ! this.economy ) return null;
+		const npc = rememberedPerson( this.sim, npcId );
+		const job = npc?.job;
+		if ( ! job || ! COUNTER_ROLES.has( job.role ) ) return null;
+		const parcel = this.atlasParcels?.get( job.parcelId );
+		if ( ! parcel || ! hasMenu( parcel.type ) || this.#playerParcel() !== job.parcelId || ! this.#working( npcId ) ) return null;
+		const tier = parcel.tier ?? 'mid';
+		return {
+			venueType: parcel.type, tier, parcelId: parcel.id, menu: menuOf( parcel.type, tier ), npcId,
+			payee: this.#personName( npcId ), name: this.venues?.nameOf?.( parcel.id ) ?? parcel.name ?? this.#buildingName( parcel.id )
+		};
+	}
+
+	/** Where a person stands for a story item handed to them: `{ parcelId }` in their own home or at their post, else null. */
+	#handPlace( conversation ) {
+		const npc = rememberedPerson( this.sim, conversation.npcId ) ?? conversation.instance;
+		const position = conversation.person?.position;
+		const room = position ? this.stream?.rooms?.find( ( entry ) => entry.holds( position ) )?.parcelId ?? null : null;
+		const place = conversation.behavior?.place;
+		const parcelId = room ?? ( place?.kind === 'parcel' ? place.id : null ) ?? conversation.person?.parcelId ?? null;
+		return parcelId && ( parcelId === npc?.home?.parcelId || parcelId === npc?.job?.parcelId ) ? { parcelId } : null;
+	}
+
+	/** The story items the player holds that a story lets go to this person now (QuestSession `handable`): `[{ itemId, name }]`. */
+	#handableQuestItems( conversation ) {
+		if ( ! this.economy || typeof this.quests?.handable !== 'function' ) return [];
+		const place = this.#handPlace( conversation );
+		return ( this.quests.inventoryView?.() ?? [] )
+			.filter( ( item ) => this.quests.handable( item.id, conversation.npcId, place, this.followedQuestId ?? null ) )
+			.map( ( item ) => ( { itemId: item.id, name: item.name } ) );
+	}
+
+	/** What the Hand over menu lists: the player's own things and the story items this person may take, `[{ itemId, name }]`. */
+	#handables( conversation ) {
+		return [
+			...this.items.list().map( ( item ) => ( { itemId: `own:${item.id}`, name: item.label } ) ),
+			...this.#handableQuestItems( conversation ).map( ( item ) => ( { itemId: `quest:${item.itemId}`, name: item.name } ) )
+		].slice( 0, HAND_ITEMS );
+	}
+
+	/** Credits the player's line holds out (Quests `heldOut`), within the wallet; null for none, or a Quests build that cannot tell. */
+	#heldOut( line ) {
+		const heldOut = dialogRuntime.heldOut;
+		if ( typeof heldOut !== 'function' || ! this.economy ) return null;
+		return heldOut( line ?? '', { carried: 0, purse: this.economy.wallet.credits } ) ?? null;
+	}
+
+	/** Whether credits held out to a person would bribe them (Economy `isOfficial`). */
+	#official( npcId ) {
+		const npc = rememberedPerson( this.sim, npcId );
+		return Boolean( npc ) && isOfficial( npc, this.companion?.categoryOf?.( npc.type ), this.atlasParcels?.get( npc.job?.parcelId )?.type ?? null );
+	}
+
+	/**
+	 * Credits the player held out to an official who refused them in words
+	 * (Quests `stanceOf`) and took nothing: a bribe that backfired, noted.
+	 */
+	#refusedHeldOut( conversation, offers, reply, line, ask ) {
+		if ( ! this.#trading( conversation ) || offers.some( ( offer ) => offer.kind === 'accept' ) ) return;
+		const stance = dialogRuntime.stanceOf;
+		if ( typeof stance !== 'function' || stance( reply ?? '' ) !== 'refuse' ) return;
+		const held = ask?.kind === 'hand-credits' ? ask.amount : ask ? null : this.#heldOut( line );
+		if ( held && this.#official( conversation.npcId ) ) this.#bribeRefused( conversation );
+	}
+
+	/** An official refused credits held out to them: they think less of the player, it stands between them, and a notice says so. */
+	#bribeRefused( conversation ) {
+		const { npcId } = conversation;
+		const atMin = this.clock.timeMin;
+		const name = speakerOf( conversation ).name;
+		this.regard.drop( npcId, atMin );
+		this.economy.holdings.deal( npcId, { what: 'bribe-refused', atMin } );
+		this.economy.wallet.note( { atMin, what: 'bribe', npcId, name } );
+		this.view.toast.show( { title: this.economy.lines.say( 'notice-bribe-refused', { name } ) } );
+		this.#emit( 'trade', { kind: 'bribe-refused', npcId, name } );
+		this.#autosave( 'trade' );
+	}
+
+	/**
+	 * A thing or credits held out from the action row, decided by Economy
+	 * `Decide` when nobody can answer for the person: a thing as their
+	 * disposition takes it, credits as they take money, an official's as a
+	 * bribe that is taken in silence or refused and noted.
+	 */
+	#decideHanding( conversation, ask, disposition, seed ) {
+		if ( ! this.economy ) return this.#showActions( conversation );
+		const { npcId } = conversation;
+		const lines = this.economy.lines;
+		const mood = disposition ?? 'neutral';
+		if ( ask.kind === 'hand-item' ) {
+			const itemId = String( ask.item?.itemId ?? '' );
+			const story = itemId.startsWith( 'quest:' );
+			const own = story ? null : this.items.get( itemId.replace( /^own:/, '' ) );
+			const npc = rememberedPerson( this.sim, npcId );
+			const held = npc ? this.#heldScopes( npcId, npc ) : [];
+			const theirs = own?.kind === 'access-card' && ( own.data?.grants ?? [] ).some( ( scope ) => held.includes( scope ) );
+			if ( acceptsThing( mood, { kind: own?.kind ?? '', story, theirs } ) ) {
+				this.#npcSays( conversation, lines.say( 'accept-thing', {}, seed ) );
+				this.#trade( conversation, { kind: 'take', itemId, name: ask.item.name } );
+			} else this.#npcSays( conversation, lines.say( mood === 'hostile' || mood === 'wary' ? `refuse-thing-${mood}` : 'refuse-thing-neutral', {}, seed ) );
+			return this.#showActions( conversation );
+		}
+		const means = this.economy.holdings.of( npcId )?.means ?? 'getting-by';
+		if ( this.#official( npcId ) ) {
+			if ( bribe( mood, { amount: ask.amount, means, seed } ).taken ) {
+				this.#npcSays( conversation, lines.say( 'accept-bribe', {}, seed ) );
+				this.#trade( conversation, { kind: 'accept', amount: ask.amount }, { ask } );
+			} else {
+				this.#npcSays( conversation, lines.say( 'refuse-bribe', {}, seed ) );
+				this.#bribeRefused( conversation );
+			}
+		} else if ( acceptsCredits( mood, { amount: ask.amount, means, seed } ) ) {
+			this.#npcSays( conversation, lines.say( 'accept-credits', {}, seed ) );
+			this.#trade( conversation, { kind: 'accept', amount: ask.amount }, { ask } );
+		} else this.#npcSays( conversation, lines.say( mood === 'hostile' ? 'refuse-credits-hostile' : 'refuse-credits-wary', {}, seed ) );
+		return this.#showActions( conversation );
+	}
+
+	/**
+	 * One transfer agreed in a talk or chosen from the row, committed by
+	 * Economy `Trades` within what is on the table: a thing or credits the
+	 * player hands over, a thing or credits the person hands back, a sum
+	 * they ask for, a counter's good bought, one of the player's things
+	 * sold. A notice and a chat line say it, listeners hear `trade` and the
+	 * game saves; when a check fails (the wallet, what they carry, the
+	 * story) nothing moves and the result says why.
+	 * @param options.line the player's typed line, which may hold credits out
+	 * @param options.ask the action that asked it
+	 * @param options.asked the player pays a sum the person asked for
+	 */
+	#trade( conversation, offer, { line = '', ask = null, asked = false } = {} ) {
+		if ( ! this.economy ) return null;
+		const { npcId } = conversation;
+		const { trades, holdings } = this.economy;
+		const amount = Math.floor( Number( offer.amount ?? offer.price ?? 0 ) );
+		const itemId = String( offer.itemId ?? '' );
+		let result = null;
+		if ( offer.kind === 'take' ) result = trades.hand( npcId, itemId, itemId.startsWith( 'quest:' ) ? this.#handPlace( conversation ) : null );
+		else if ( offer.kind === 'give' ) result = trades.receiveThing( npcId, itemId.replace( /^carry:/, '' ) );
+		else if ( offer.kind === 'pay' ) result = trades.receive( npcId, amount );
+		else if ( offer.kind === 'accept' ) {
+			// Never more than was held out: the sum asked and paid, the sum offered from the row, or the sum the line names.
+			const limit = asked ? holdings.asked( npcId ) : ask?.kind === 'hand-credits' ? ask.amount : this.#heldOut( line );
+			result = limit >= 1 ? trades.pay( npcId, Math.min( amount, limit ) ) : { ok: false, kind: 'paid', reason: 'refused' };
+		} else if ( offer.kind === 'ask' ) {
+			holdings.ask( npcId, amount );
+			return { ok: amount >= 1, kind: 'asked', amount };
+		} else if ( offer.kind === 'sell' ) result = trades.buy( this.#counter( npcId ), itemId );
+		else if ( offer.kind === 'buy' ) {
+			const counter = this.#counter( npcId );
+			const item = this.items.get( itemId.replace( /^own:/, '' ) );
+			const price = Math.min( amount, offerPrice( item, { till: hasTill( counter ), carried: holdings.of( npcId )?.credits ?? 0 } ) );
+			result = trades.sell( npcId, itemId, price, hasTill( counter ) );
+		}
+		if ( ! result?.ok ) return result;
+		this.#noticeTrade( conversation, result );
+		if ( result.questId ) {
+			for ( const { definition, completed, ending } of result.moved ?? [] ) {
+				for ( const step of completed ) this.view.toast.show( { title: definition.title, text: step.narrative.description } );
+				if ( ending ) this.view.summary.show( { title: ending.title, text: ending.epilogue, outcome: 'done' } );
+			}
+			this.#refreshQuestState();
+		} else this.#refreshInventory();
+		this.#emit( 'trade', {
+			npcId, kind: result.kind, ...( result.amount ? { amount: result.amount } : {} ), ...( result.name ? { name: result.name } : {} ),
+			...( result.itemId ? { itemId: result.itemId } : {} ), ...( result.questId ? { questId: result.questId, how: result.how } : {} )
+		} );
+		this.#autosave( 'trade' );
+		return result;
+	}
+
+	/** The notice of a transfer, set apart in the open chat too: credits paid or received, a thing handed over; a thing taken in is announced by the inventory. */
+	#noticeTrade( conversation, result ) {
+		const lines = this.economy.lines;
+		const name = speakerOf( conversation ).name;
+		const notice = result.kind === 'paid' ? { kind: 'paid', title: lines.say( 'notice-paid', { amount: result.amount, name } ), ...( result.what ? { text: result.what } : {} ) }
+			: result.kind === 'bought' ? { kind: 'paid', title: lines.say( 'notice-paid', { amount: result.amount, name } ), text: result.name }
+				: result.kind === 'received' ? { kind: 'received', title: lines.say( 'notice-received', { amount: result.amount, name } ) }
+					: result.kind === 'sold' ? { kind: 'received', title: lines.say( 'notice-received', { amount: result.amount, name } ), text: result.name }
+						: result.kind === 'given' ? { kind: 'given', title: lines.say( 'notice-given', { item: result.name, name } ) } : null;
+		if ( notice ) this.view.announce( notice );
+	}
+
+	/** What a story's item costs where it lies: a drink or other substance taken off a venue with a menu, at that venue's tier; null when it is free. */
+	#storyPrice( target, action ) {
+		if ( ! this.economy || action !== 'take' || target?.kind !== 'pickup' || target.item?.kind !== 'substance' || target.place?.kind !== 'parcel' ) return null;
+		const parcel = this.atlasParcels?.get( target.place.id );
+		if ( ! parcel || ! hasMenu( parcel.type ) ) return null;
+		const price = priceOf( goodOfItem( target.item.name ) ?? 'beer', parcel.tier ?? 'mid' );
+		return price ? { price, name: target.item.name } : null;
+	}
+
+	/** A story's item bought where it lies: the price goes to whoever serves there, else the venue, and a notice says so. */
+	#storyPaid( target, price ) {
+		const parcelId = target.place?.id ?? null;
+		const server = this.#serverAt( parcelId );
+		const payee = server ? this.#personName( server.npcId ) : this.venues?.nameOf?.( parcelId ) ?? this.#buildingName( parcelId );
+		if ( ! this.economy.wallet.spend( price, { atMin: this.clock.timeMin, what: 'bought', ...( server ? { npcId: server.npcId } : {} ), name: payee } ) ) return;
+		this.view.announce( { kind: 'paid', title: this.economy.lines.say( 'notice-paid', { amount: price, name: payee } ), text: target.item?.name ?? '' } );
+		this.#showCredits();
+		this.#emit( 'trade', { kind: 'bought', amount: price, name: target.item?.name ?? '', payee } );
+	}
+
+	/** Somebody who serves in a parcel and is at work there now, or null. */
+	#serverAt( parcelId ) {
+		if ( ! parcelId ) return null;
+		let people = [];
+		try {
+			people = this.sim?.findNPCs?.( { parcelId } ) ?? [];
+		} catch {
+			people = [];
+		}
+		return people.find( ( npc ) => npc.job?.parcelId === parcelId && ( COUNTER_ROLES.has( npc.job.role ) || this.companion?.categoryOf?.( npc.type ) === 'vendor' ) && this.#working( npc.npcId ) ) ?? null;
+	}
+
+	/** What a ride costs, charged from the wallet with a notice that stays out of the chat. */
+	#fare() {
+		return {
+			ride: FARES.ride, station: FARES.station,
+			can: ( n ) => this.economy.wallet.can( n ),
+			charge: ( n, what ) => {
+				if ( ! this.economy.wallet.spend( n, { atMin: this.clock.timeMin, what: 'fare' } ) ) return;
+				this.view.toast.show( { kind: 'paid', title: this.economy.lines.say( 'notice-fare', { amount: n } ) } );
+				this.#showCredits();
+				this.#emit( 'trade', { kind: 'fare', amount: n, what } );
+			}
+		};
+	}
+
+	/** A story's drink sold where it lies, bought at its price: QuestGameplay's `sale`. */
+	#sale() {
+		return {
+			priceOf: ( target, action ) => this.#storyPrice( target, action ),
+			can: ( price ) => this.economy.wallet.can( price ),
+			paid: ( target, price ) => this.#storyPaid( target, price ),
+			prompt: ( { name, price } ) => this.economy.lines.say( 'prompt-buy', { name, price } ),
+			refusal: ( { price } ) => this.economy.lines.say( 'notice-cannot-afford', { price, credits: this.economy.wallet.credits } )
+		};
+	}
+
+	/** Whether a person has anything a hand could lift: a card the player lacks, or with credits on their credits or a thing in their pockets. */
+	#pocketed( npcId ) {
+		if ( this.#lackedScopes( npcId ).length ) return true;
+		const now = this.economy?.holdings.of( npcId ) ?? null;
+		return Boolean( now ) && ( now.credits > 0 || now.things.some( ( thing ) => POCKET_SLOTS.includes( thing.slot ) ) );
 	}
 
 	/** The talk request's `give.items`: a copy of each card the person holds that the player lacks, as the player would read it. */
@@ -2028,7 +2630,7 @@ export class GameApp {
 		const parcelId = position ? this.stream?.rooms?.find( ( room ) => room.holds( position ) )?.parcelId ?? person.parcelId ?? null : null;
 		const here = parcelId ? this.addresses.at( parcelId, [ position.x, position.y, position.z ] ) : null;
 		if ( here ) out.here = addressOf( here );
-		const access = scopesOf( npc, this.addresses ).map( ( scope ) => {
+		const access = this.#heldScopes( npcId, npc ).map( ( scope ) => {
 			const words = describeScope( scope, this.addresses );
 			return { parcelId: words.parcelId, opens: words.opens, tie: words.kind === 'home' ? 'home' : 'work' };
 		} );
@@ -2130,14 +2732,18 @@ export class GameApp {
 		return this.companion?.places?.name( { kind: 'parcel', id: parcelId } ) ?? 'this building';
 	}
 
-	/** The R line for a person whose card the player could lift: an established person carrying a card the player lacks. */
+	/**
+	 * The R line for a person the player could lift from: an established
+	 * person carrying a card the player lacks or, with credits on, credits or
+	 * a thing in their pockets.
+	 */
 	#liftable( person ) {
 		if ( ! person?.npcId || person.fallen || this.interactor?.conversation ) return null;
-		if ( ! this.#lackedScopes( person.npcId ).length ) return null;
+		if ( ! this.#pocketed( person.npcId ) ) return null;
 		// A person tried once is on guard for a while.
 		if ( this.clock.timeMin - ( this.liftTries?.get( person.npcId ) ?? - Infinity ) < LIFT_RETRY_MIN ) return null;
-		const name = this.questGameplay?.characterName( person.npcId )?.given ?? person.instance?.name?.given ?? 'their';
-		return this.accessLines.say( 'prompt-lift', { name } );
+		const given = this.questGameplay?.characterName( person.npcId )?.given ?? person.instance?.name?.given ?? null;
+		return this.economy ? this.economy.lines.say( 'prompt-lift', { name: given ?? 'someone' } ) : this.accessLines.say( 'prompt-lift', { name: given ?? 'their' } );
 	}
 
 	/**
@@ -2150,6 +2756,7 @@ export class GameApp {
 	 * Asking is the way to a card: people hand copies over with give_item.
 	 */
 	#lift( person ) {
+		if ( this.economy ) return this.#liftPockets( person );
 		const [ scope ] = this.#lackedScopes( person.npcId );
 		if ( ! scope ) return;
 		const npc = rememberedPerson( this.sim, person.npcId );
@@ -2175,6 +2782,53 @@ export class GameApp {
 		this.#emit( 'theft', { npcId: person.npcId, lifted: Boolean( card ), noticed } );
 	}
 
+	/**
+	 * R with credits on: the same risk (Access `pickpocket`), and a hand that
+	 * gets in comes out with what the person carries (Economy `Trades.lift`):
+	 * credits, a card the player lacks or a thing from their pockets. A person
+	 * who notices thinks less of the player and remembers it (`lifted`).
+	 */
+	#liftPockets( person ) {
+		const { npcId } = person;
+		if ( ! this.#pocketed( npcId ) ) return;
+		const lacked = this.#lackedScopes( npcId );
+		const instance = person.instance ?? rememberedPerson( this.sim, npcId );
+		const name = TalkClient.nameOf( instance );
+		const given = instance?.name?.given ?? name;
+		const atMin = this.clock.timeMin;
+		( this.liftTries ??= new Map() ).set( npcId, atMin );
+		const feet = this.body.feet;
+		const seed = `${npcId}|${Math.floor( atMin )}`;
+		const { lifted, noticed } = pickpocket( {
+			disposition: this.#disposition( npcId ) ?? 'neutral', heading: person.heading ?? 0,
+			toPlayer: [ feet.x - person.position.x, feet.z - person.position.z ], distracted: this.#distracted( npcId ), seed
+		} );
+		const took = lifted ? this.economy.trades.lift( npcId, seed, lacked ) : null;
+		const got = took?.ok ? took : null;
+		const lines = this.economy.lines;
+		if ( got?.amount ) this.view.toast.show( { kind: 'received', title: lines.say( 'notice-lifted-credits', { amount: got.amount, name } ) } );
+		if ( got?.thing ) {
+			// A thing lifted is said as lifted, not as found: the inventory takes it in without its own notice.
+			this.heldItems?.add( got.itemId );
+			const card = this.#inventoryCards().find( ( entry ) => entry.id === got.itemId ) ?? null;
+			this.view.announce( { kind: 'item', title: lines.say( 'notice-lifted-thing', { item: got.name, name } ), ...( card ? { item: card } : {} ) } );
+		}
+		if ( got ) {
+			this.#refreshInventory();
+			if ( got.itemId ) this.#emit( 'item-acquired', { itemId: got.itemId, kind: got.card ? 'access-card' : 'effect', label: got.name, how: 'stolen', issuer: { npcId, name } } );
+		}
+		if ( noticed ) {
+			this.regard.drop( npcId, atMin );
+			this.economy.holdings.deal( npcId, { what: 'lifted', ...( got?.amount ? { amount: got.amount } : {} ), ...( got?.name ? { name: got.name } : {} ), atMin } );
+			this.view.toast.show( { title: name, text: this.accessLines.say( got?.card ? 'caught' : 'caught-empty', {}, seed ) } );
+		}
+		this.#autosave( 'item' );
+		// Credits or a thing lifted unseen are told above; the rest says how it went.
+		const notice = got ? ( noticed ? 'notice-caught' : null ) : ( noticed ? 'notice-felt' : 'notice-fumbled' );
+		if ( notice ) this.view.toast.show( { title: 'Access', text: this.accessLines.say( notice, { name: given, label: got?.amount ? 'credits' : got?.name ?? '' } ) } );
+		this.#emit( 'theft', { npcId, lifted: Boolean( got ), noticed, ...( got?.amount ? { credits: got.amount } : {} ), ...( got?.itemId ? { itemId: got.itemId } : {} ) } );
+	}
+
 	/** Whether a person is busy with something besides the player now: talking to somebody, at their work, shopping or out for their own leisure. */
 	#distracted( npcId ) {
 		const member = this.crowd?.memberForNpc?.( npcId ) ?? null;
@@ -2186,9 +2840,10 @@ export class GameApp {
 
 	/**
 	 * Tells whoever listens on `events` (the HUD, a probe) what just
-	 * happened: `contact-added`, `item-acquired`, `theft`, `companion-started`,
-	 * `companion-arrived`, `companion-ended`, `companion-errand`, `save-failed`,
-	 * each a CustomEvent with its `detail`.
+	 * happened: `contact-added`, `item-acquired`, `theft`, `trade` (credits or
+	 * a thing changed hands, a fare, a story's pay, a bribe refused), `payday`,
+	 * `companion-started`, `companion-arrived`, `companion-ended`,
+	 * `companion-errand`, `save-failed`, each a CustomEvent with its `detail`.
 	 */
 	#emit( type, detail ) {
 		this.events.dispatchEvent( new CustomEvent( type, { detail } ) );
@@ -2637,6 +3292,7 @@ export class GameApp {
 		this.scenery.refresh( this.clock.timeMin );
 		this.view.quests.setQuests( this.quests.view( this.clock.timeMin ) );
 		this.#refreshCurrentObjective();
+		this.#settle();
 		this.#refreshInventory();
 		this.#updateObjectiveRoute( 0, true );
 
@@ -2847,6 +3503,7 @@ export class GameApp {
 			...( dialogueMemory ? { dialogueMemory } : {} ),
 			contacts: this.contacts.serialize(),
 			access: { regard: this.regard.serialize() },
+			...( this.economy ? { economy: this.economy.serialize() } : {} ),
 			elapsedSeconds: Math.max( 0, ( performance.now() - this.playStartedAt ) / 1000 )
 		}, { keepalive } );
 
@@ -2900,6 +3557,7 @@ export class GameApp {
 		const held = new Set( cards.map( ( card ) => card.id ) );
 		if ( this.heldItems ) for ( const card of cards ) if ( ! this.heldItems.has( card.id ) ) this.view.announce( { kind: 'item', title: card.name, item: card } );
 		this.heldItems = held;
+		this.#showCredits();
 
 	}
 

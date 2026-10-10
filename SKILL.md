@@ -19,7 +19,7 @@ Creation asks no model. A named story game is authored by an agent through the N
 4. The author writes the story with Quests' `npm run author` against the draft `out/drafts/<id>`: `--world` its `blueprint.json`, `--types` its `npc-types.json`, `--handoff` its `quests/handoff-input.json`, `--parcels` the opened interiors, `--profile` the city size, `--mechanics` the creation's `PLAYABLE_MECHANICS`, `--external` an author dir and `--out` a story folder.
 5. `importStory {cityId, recording: <story folder>, sideJobs}` replays it against the opened interiors, and `createGame` makes the game.
 
-Launcher JSON has `method` (required, no default) and `input` (omitted only for `catalog`). `continueGame`, `exportGame` and `exportCity` take an existing ID. `importGame` takes a game descriptor; `saveCurrent` takes a live save payload. All creation fields and defaults are linked from the [request schema](src/server/schema/launcher-request.schema.json).
+Launcher JSON has `method` (required, no default) and `input` (omitted only for `catalog` and `abilities`). `abilities` returns `{saveFields}`, the optional fields a save may carry (`economy`, the player's credits and what people carry once something changed hands). `continueGame`, `exportGame` and `exportCity` take an existing ID. `importGame` takes a game descriptor; `saveCurrent` takes a live save payload. All creation fields and defaults are linked from the [request schema](src/server/schema/launcher-request.schema.json).
 
 ## Play parameters
 

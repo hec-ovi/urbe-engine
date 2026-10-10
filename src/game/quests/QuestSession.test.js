@@ -67,6 +67,29 @@ describe( 'QuestSession', () => {
 
 	} );
 
+	it( 'owes a shift for each work step done and a reward for each side job ended, from the person it was for', () => {
+
+		const work = { kind: 'work', atParcelId: 'p1' };
+		const main = { definition: { id: 'main', roles: [ { roleId: 'chief' } ], steps: [ { stepId: 's_sort', target: work }, { stepId: 's_card', target: { kind: 'pickup' } } ] } };
+		const side = { definition: { id: 'sq', roles: [ { roleId: 'giver' }, { roleId: 'kessel' } ], steps: [
+			{ stepId: 's_ask', target: { kind: 'talk' }, wantedByRoleId: 'kessel' }, { stepId: 's_take', target: { kind: 'pickup' } }
+		] }, side: true };
+		const runtime = ( completedStepIds, status, cast ) => ( { serialize: () => ( { completedStepIds, activeStepIds: [] } ), status: () => status, cast } );
+		const session = new QuestSession( [
+			{ ...main, runtime: runtime( [ 's_sort' ], 'active', { chief: 'n0' } ) },
+			{ ...side, runtime: runtime( [ 's_ask', 's_take' ], 'completed', { giver: 'n1', kessel: 'n2' } ) }
+		], null );
+		expect( session.settlements() ).toEqual( [
+			{ kind: 'shift', key: 'shift:main/s_sort' }, { kind: 'reward', key: 'reward:sq', npcId: 'n2' }
+		] );
+		// No step wanted by anyone: the first role cast pays; a side job still under way owes nothing.
+		side.definition.steps[ 0 ].wantedByRoleId = undefined;
+		expect( session.settlements().at( - 1 ) ).toEqual( { kind: 'reward', key: 'reward:sq', npcId: 'n1' } );
+		session.all[ 1 ].runtime = runtime( [ 's_ask' ], 'active', { giver: 'n1' } );
+		expect( session.settlements() ).toEqual( [ { kind: 'shift', key: 'shift:main/s_sort' } ] );
+
+	} );
+
 	it( 'projects each step once for the HUD and the log, and keeps an untouched side job on offer', () => {
 
 		const window = { label: 'during the slow hour', days: [ 0, 1, 2, 3, 4, 5, 6 ], startMin: 1080, endMin: 1380 };

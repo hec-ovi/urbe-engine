@@ -1,4 +1,4 @@
-export { Economy } from './Economy.js';
+export { Economy, REWARD } from './Economy.js';
 export { probe } from './EconomyGate.js';
 export { economyLines } from './EconomyLines.js';
 export { Wallet, paydaysBy, PAYDAY_MIN, WEEK_MIN } from './Wallet.js';

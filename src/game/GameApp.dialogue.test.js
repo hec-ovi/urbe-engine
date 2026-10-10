@@ -15,6 +15,7 @@ import { npc, quest, role, simulation, step } from './quests/quest.test-fixtures
 import { replyEvents, talkError, talkStream } from './talk/talk.test-fixtures.js';
 import { TalkClient } from './talk/TalkClient.js';
 import { RecentEvents } from './talk/RecentEvents.js';
+import { Economy, carryOf } from './economy/index.js';
 
 function fixture( { ending = false, errand = false } = {} ) {
  const opening = step('ask', { kind:'talk', roleId:'giver', atParcelId:'p1' }, { gives:['lead'], next:[{toStepId:'visit',when:[]}] });
@@ -450,6 +451,23 @@ describe('explicit quest dialogue through the playable UI',()=>{
   expect(app.view.panels.current).toBeNull();
   await user.click(within(app.view.summary.element).getByRole('button',{name:'continue'}));
   expect(app.view.summary.element.hidden).toBe(true);expect(app.input.requestLock).toHaveBeenCalledOnce();
+ });
+
+ it('pays a side job\'s reward once from the person it was for when it ends, as their means allow, while credits are on',async()=>{
+  const {app,open,person}=fixture({errand:true});
+  app.economyGate={saves:true,talk:false};
+  app.economy=Economy.restore(undefined,{timeMin:1260,base:(id)=>id===person.npcId?carryOf(person,{tier:'mid'}):null,items:app.items,now:()=>app.clock.timeMin,nameOf:()=>'Petra Moss'});
+  const carried=app.economy.holdings.of(person.npcId).credits;
+  open();const user=userEvent.setup();const chat=within(app.view.dialog.element);
+  await user.click(within(chat.getByRole('group',{name:'Topics'})).getByRole('button',{name:'errand'}));
+  await user.click(chat.getByRole('button',{name:'I will take it.'}));
+  expect(app.economy.wallet.credits).toBe(50);
+  expect(app.economy.holdings.of(person.npcId).credits).toBe(carried-10);
+  expect(app.view.toast.element.textContent).toContain('+10 cr from Petra Moss');
+  expect(app.economy.settled.has('reward:errand')).toBe(true);
+  // Settled once: the next change to the stories pays nothing more.
+  app.questActionResult({ok:true,progressed:true,completed:[]});
+  expect(app.economy.wallet.credits).toBe(50);
  });
 
  it('waits forward to an authored opening without completing the objective or rewinding time',async()=>{

@@ -47,6 +47,7 @@ Game composes native ordinary streets with retained ground, highways and station
 | Persistent identities and physical NPC representation, walks inside buildings over Interior navigation | [Simulation adapter](sim/CONTRACT.md), [Agents](agents/CONTRACT.md) |
 | One person asked along to follow or lead the player, and the talk at the place | [Companion](companion/CONTRACT.md) |
 | Addresses of private spaces, door locks, who holds access, access cards, the player's own items | [Access](access/CONTRACT.md) |
+| Credits, pay, prices and fares, what each person carries, and things and credits changing hands | [Economy](economy/CONTRACT.md), [schema/economy](economy/schema/economy.schema.json) |
 | Typed dialogue, its offers, place, nearby events, the person's look, whereabouts and acquaintances, and what people remember | [Talk routes and client](../server/CONTRACT.md), [schema/talk-memory](../server/schema/talk-memory.schema.json) |
 | NPC speech | [Voice](voice/CONTRACT.md) |
 | Validated story actions and evidence state | [Quests](quests/CONTRACT.md), [Investigations](investigation/CONTRACT.md) |

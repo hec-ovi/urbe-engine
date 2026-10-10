@@ -525,6 +525,36 @@ export class QuestSession {
 
 	}
 
+	/**
+	 * What the stories owe the player so far, each once by its `key`: a shift
+	 * for every `work` step done (`{ kind: 'shift', key: 'shift:<questId>/<stepId>' }`)
+	 * and a reward for every side job that has ended, from the person it was
+	 * for (`{ kind: 'reward', key: 'reward:<questId>', npcId }`): the one cast
+	 * in the last completed step's `wantedByRoleId`, else the first role cast.
+	 */
+	settlements() {
+
+		const dues = [];
+		for ( const { definition, side, runtime } of this.all ) {
+
+			const { completedStepIds = [] } = runtime.serialize();
+			const steps = new Map( definition.steps.map( ( step ) => [ step.stepId, step ] ) );
+			for ( const stepId of completedStepIds ) {
+
+				if ( steps.get( stepId )?.target?.kind === 'work' ) dues.push( { kind: 'shift', key: `shift:${definition.id}/${stepId}` } );
+
+			}
+			if ( ! side || runtime.status() !== 'completed' ) continue;
+			const wanted = [ ...completedStepIds ].reverse().map( ( id ) => steps.get( id )?.wantedByRoleId ).find( Boolean );
+			const roleId = wanted ?? definition.roles?.find( ( role ) => runtime.cast?.[ role.roleId ] )?.roleId;
+			const npcId = roleId ? runtime.cast?.[ roleId ] ?? null : null;
+			dues.push( { kind: 'reward', key: `reward:${definition.id}`, ...( npcId ? { npcId } : {} ) } );
+
+		}
+		return dues;
+
+	}
+
 	/** Every questline on offer as it stands, for whoever else needs to know its part: [{ id, cast, state }]. */
 	snapshot() {
 
