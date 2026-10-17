@@ -29,7 +29,7 @@ const PREPARE_BUDGET_MS = 15000;
 
 /**
  * One building viewer run, described by the URL query:
- * ?mode=building&parcel=p1640[&out=/out/small][&source=shell|interior][&backend=webgpu|webgl][&quality=high].
+ * ?mode=building&parcel=p1640[&out=/out/small][&source=shell|interior][&backend=webgpu|webgl][&quality=high][&materials=off].
  * W A S D walk, Q and E go down and up, drag to look, Shift is fast; nothing zooms.
  *
  * It loads the assembled building from /out/<parcel>/ and shows it the way the
@@ -52,6 +52,8 @@ export class BuildingViewerApp {
 			// Unset follows the backend, exactly as a played run does.
 			quality: QualityTier.names().includes( params.get( 'quality' ) ) ? params.get( 'quality' ) : null,
 			view: params.get( 'view' ) === 'walk' ? 'walk' : 'inspect',
+			// Off keeps each material's colour and drops its texture maps, so a building opens fast for a look at its shape.
+			materials: params.get( 'materials' ) !== 'off',
 			brightness: previewBrightness( params.get( 'brightness' ) )
 		};
 
@@ -170,7 +172,7 @@ export class BuildingViewerApp {
 			const resolver = this.resolver = new MaterialResolver();
 			await resolver.loadTheme( DEFAULT_THEME );
 
-			return new PbrMaterialFactory( resolver, look.tier );
+			return new PbrMaterialFactory( resolver, this.config.materials ? look.tier : { ...look.tier, materialMaps: [] } );
 
 		} );
 
